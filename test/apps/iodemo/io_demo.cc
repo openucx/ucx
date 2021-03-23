@@ -23,6 +23,7 @@
 #include <limits>
 #include <malloc.h>
 #include <dlfcn.h>
+#include <set>
 
 #ifdef HAVE_CUDA
 #include <cuda.h>
@@ -734,12 +735,6 @@ protected:
         validate(msg, iomsg_size);
     }
 
-    static double get_time() {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        return tv.tv_sec + (tv.tv_usec * 1e-6);
-    }
-
 private:
     bool send_io_message(UcxConnection *conn, IoMessage *msg) {
         VERBOSE_LOG << "sending IO " << io_op_names[msg->msg()->op] << ", sn "
@@ -833,10 +828,6 @@ public:
         _curr_state.write_count  = 0;
         _curr_state.active_conns = 0;
         save_prev_state();
-    }
-
-    virtual ~DemoServer() {
-        destroy_connections();
     }
 
     void run() {
@@ -966,6 +957,7 @@ public:
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "deleting connection with status "
             << ucs_status_string(conn->ucx_status());
+        assert(conn->is_established());
         --_curr_state.active_conns;
         delete conn;
     }
@@ -1042,11 +1034,36 @@ public:
     typedef struct {
         UcxConnection* conn;
         long           retry_count;               /* Connect retry counter */
+        double         prev_connect_time;         /* timestamp of last connect attempt */
         long           num_sent;                  /* Total number of sent operations */
         size_t         active_index;              /* Index in active vector */
         long           num_completed[IO_OP_MAX];  /* Number of completed operations */
         long           prev_completed[IO_OP_MAX]; /* Completed in last report */
     } server_info_t;
+
+    class ConnectCallback : public UcxCallback {
+    public:
+        ConnectCallback(DemoClient &client, size_t server_idx) :
+            _client(client), _server_idx(server_idx)
+        {
+        }
+
+        virtual void operator()(ucs_status_t status)
+        {
+            if (status == UCS_OK) {
+                _client.connect_succeed(_server_idx);
+            } else {
+                _client.connect_failed(_server_idx);
+            }
+
+            _client._connecting_servers.erase(_server_idx);
+            delete this;
+        }
+
+    private:
+        DemoClient   &_client;
+        const size_t _server_idx;
+    };
 
     class IoReadResponseCallback : public UcxCallback {
     public:
@@ -1125,18 +1142,12 @@ public:
     DemoClient(const options_t &test_opts) :
         P2pDemoCommon(test_opts),
         _num_active_servers_to_use(0),
-        _prev_connect_time(0),
         _num_sent(0),
         _num_completed(0),
         _status(OK),
         _start_time(get_time()),
-        _read_callback_pool(opts().iomsg_size, "read callbacks",
-                            UCS_MEMORY_TYPE_HOST)
+        _read_callback_pool(opts().iomsg_size, "read callbacks")
     {
-    }
-
-    virtual ~DemoClient() {
-        destroy_connections();
     }
 
     typedef enum {
@@ -1167,6 +1178,7 @@ public:
     }
 
     void handle_operation_completion(size_t server_index, io_op_t op) {
+        assert(server_index < _server_info.size());
         server_info_t& server_info = _server_info[server_index];
 
         assert(get_num_uncompleted(server_info) <= opts().conn_window_size);
@@ -1346,7 +1358,7 @@ public:
         }
     }
 
-    long get_num_uncompleted(const server_info_t& server_info) const {
+    static long get_num_uncompleted(const server_info_t& server_info) {
         long num_uncompleted;
 
         num_uncompleted = server_info.num_sent -
@@ -1434,7 +1446,9 @@ public:
         }
     }
 
-    UcxConnection* connect(const char* server) {
+    void connect(size_t server_index)
+    {
+        const char *server = opts().servers[server_index];
         struct sockaddr_in connect_addr;
         std::string server_addr;
         int port_num;
@@ -1458,11 +1472,19 @@ public:
         int ret = inet_pton(AF_INET, server_addr.c_str(), &connect_addr.sin_addr);
         if (ret != 1) {
             LOG << "invalid address " << server_addr;
-            return NULL;
+            abort();
         }
 
-        return UcxContext::connect((const struct sockaddr*)&connect_addr,
-                                   sizeof(connect_addr));
+        if (!_connecting_servers.insert(server_index).second) {
+            LOG << server_name(server_index) << " is already connecting";
+            abort();
+        }
+
+        UcxConnection *conn = new UcxConnection(*this, opts().use_am);
+        _server_info[server_index].conn = conn;
+        conn->connect((const struct sockaddr*)&connect_addr,
+                      sizeof(connect_addr),
+                      new ConnectCallback(*this, server_index));
     }
 
     const std::string server_name(size_t server_index) {
@@ -1471,8 +1493,22 @@ public:
         return ss.str();
     }
 
+    void connect_succeed(size_t server_index)
+    {
+        server_info_t &server_info = _server_info[server_index];
+
+        server_info.retry_count                = 0;
+        server_info.prev_connect_time          = 0.;
+        _server_index_lookup[server_info.conn] = server_index;
+        active_servers_add(server_index);
+        LOG << "Connected to " << server_name(server_index);
+    }
+
     void connect_failed(size_t server_index) {
         server_info_t& server_info = _server_info[server_index];
+
+        // The connection should close itself calling error handler
+        server_info.conn = NULL;
 
         ++server_info.retry_count;
 
@@ -1504,16 +1540,11 @@ public:
         }
 
         double curr_time = get_time();
-        if (curr_time < (_prev_connect_time + opts().retry_interval)) {
-            // Not enough time elapsed since previous connection attempt
-            return;
-        }
-
         for (size_t server_index = 0; server_index < _server_info.size();
              ++server_index) {
             server_info_t& server_info = _server_info[server_index];
             if (server_info.conn != NULL) {
-                // Server is already connected
+                // Already connecting to this server
                 continue;
             }
 
@@ -1522,23 +1553,17 @@ public:
             assert(_status == OK);
             assert(server_info.retry_count < opts().retries);
 
-            server_info.conn = connect(opts().servers[server_index]);
-            if (server_info.conn == NULL) {
-                connect_failed(server_index);
-                if (_status != OK) {
-                    break;
-                }
+            if (curr_time < (server_info.prev_connect_time +
+                             opts().retry_interval)) {
+                // Not enough time elapsed since previous connection attempt
                 continue;
             }
 
-            server_info.retry_count                = 0;
-            _server_index_lookup[server_info.conn] = server_index;
-            active_servers_add(server_index);
-
-            LOG << "Connected to " << server_name(server_index);
+            connect(server_index);
+            server_info.prev_connect_time = curr_time;
+            assert(server_info.conn != NULL);
+            assert(_status == OK);
         }
-
-        _prev_connect_time = curr_time;
     }
 
     size_t pick_server_index() const {
@@ -1583,10 +1608,14 @@ public:
             }
 
             if (_active_servers.empty()) {
-                LOG << "All remote servers are down, reconnecting in "
-                    << opts().retry_interval << " seconds";
-                sleep(opts().retry_interval);
-                check_time_limit(get_time());
+                if (_connecting_servers.empty()) {
+                    LOG << "All remote servers are down, reconnecting in "
+                        << opts().retry_interval << " seconds";
+                    sleep(opts().retry_interval);
+                    check_time_limit(get_time());
+                } else {
+                    progress();
+                }
                 continue;
             }
 
@@ -1664,7 +1693,7 @@ public:
 
         for (size_t server_index = 0; server_index < _server_info.size();
              ++server_index) {
-            LOG << "Disconnecting from server " << server_name(server_index);
+            LOG << "Disconnecting from " << server_name(server_index);
             delete _server_info[server_index].conn;
             _server_info[server_index].conn = NULL;
         }
@@ -1822,10 +1851,14 @@ private:
 
 private:
     std::vector<server_info_t>              _server_info;
+    // Connection establishment is in progress
+    std::set<size_t>                        _connecting_servers;
+    // Active servers is the list of communicating servers
     std::vector<size_t>                     _active_servers;
+    // Num active servers to use handles window size, server becomes "unused" if
+    // its window is full
     size_t                                  _num_active_servers_to_use;
     std::map<const UcxConnection*, size_t>  _server_index_lookup;
-    double                                  _prev_connect_time;
     long                                    _num_sent;
     long                                    _num_completed;
     status_t                                _status;
