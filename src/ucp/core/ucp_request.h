@@ -94,7 +94,7 @@ enum {
                                                          memory pool or UCT */
     UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS = UCS_BIT(9)  /* Descriptor should not be released,
                                                          because UCT AM callback is still in
-                                                         the call stack and desciptor is not
+                                                         the call stack and descriptor is not
                                                          initialized yet. */
 };
 
