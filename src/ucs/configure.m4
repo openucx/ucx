@@ -244,6 +244,14 @@ AS_IF([test "x$enable_builtin_memcpy" != xno],
 	  [AC_DEFINE([ENABLE_BUILTIN_MEMCPY], [0], [Enable builtin memcpy])]
   )
 
+#
+# Check for specific glibc version
+#
+AC_CHECK_HEADERS([gnu/libc-version.h],
+                 [AC_CHECK_DECLS([gnu_get_libc_version], [], [],
+                                 [[#include <gnu/libc-version.h>]])]
+                 )
+
 AC_CHECK_FUNCS([__clear_cache], [], [])
 AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])
 

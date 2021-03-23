@@ -8,7 +8,9 @@
 #  include "config.h"
 #endif
 
-#include <gnu/libc-version.h>
+#if HAVE_DECL_GNU_GET_LIBC_VERSION
+#  include <gnu/libc-version.h>
+#endif
 
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
@@ -1008,6 +1010,7 @@ static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache) {
  */
 static void ucs_rcache_glibc_check()
 {
+#if HAVE_DECL_GNU_GET_LIBC_VERSION
     static ucs_init_once_t init = UCS_INIT_ONCE_INITIALIZER;
     char *save_ptr              = NULL;
     char *version, *version_str;
@@ -1028,6 +1031,7 @@ static void ucs_rcache_glibc_check()
                      gnu_get_libc_version());
         }
     }
+#endif
 }
 
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
