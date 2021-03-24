@@ -382,7 +382,7 @@ typedef struct ucp_ep {
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
 #if ENABLE_DEBUG_DATA
-    char                          peer_name[UCP_WORKER_NAME_MAX];
+    char                          peer_name[UCP_WORKER_ADDRESS_NAME_MAX];
 #endif
 
 #if UCS_ENABLE_ASSERT

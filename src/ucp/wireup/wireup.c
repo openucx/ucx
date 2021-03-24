@@ -1523,7 +1523,8 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                                 UCP_ADDRESS_PACK_FLAG_NO_TRACE,
                                 &unpacked_address);
     if (status != UCS_OK) {
-        strncpy(unpacked_address.name, "<malformed address>", UCP_WORKER_NAME_MAX);
+        strncpy(unpacked_address.name, "<malformed address>",
+                UCP_WORKER_ADDRESS_NAME_MAX);
         unpacked_address.uuid          = 0;
         unpacked_address.address_count = 0;
         unpacked_address.address_list  = NULL;

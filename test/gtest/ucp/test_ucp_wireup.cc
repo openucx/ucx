@@ -435,7 +435,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
 #if ENABLE_DEBUG_DATA
-    EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())),
+    EXPECT_EQ(std::string(ucp_worker_get_address_name(sender().worker())),
               std::string(unpacked_address.name));
 #endif
     EXPECT_LE(unpacked_address.address_count,
@@ -502,7 +502,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
 #if ENABLE_DEBUG_DATA
-    EXPECT_EQ(std::string(ucp_worker_get_name(sender().worker())),
+    EXPECT_EQ(std::string(ucp_worker_get_address_name(sender().worker())),
               std::string(unpacked_address.name));
 #endif
     EXPECT_EQ(0u, unpacked_address.address_count);

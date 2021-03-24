@@ -77,8 +77,8 @@ typedef struct ucp_context_config {
     int                                    tm_sw_rndv;
     /** Pack debug information in worker address */
     int                                    address_debug_info;
-    /** Maximal size of worker name for debugging */
-    unsigned                               max_worker_name;
+    /** Maximal size of worker address name for debugging */
+    unsigned                               max_worker_address_name;
     /** Atomic mode */
     ucp_atomic_mode_t                      atomic_mode;
     /** If use mutex for MT support or not */

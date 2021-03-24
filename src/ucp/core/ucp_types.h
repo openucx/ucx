@@ -14,8 +14,8 @@
 #include <stdint.h>
 
 
-#define UCP_WORKER_NAME_MAX          32   /* Worker name for debugging */
-#define UCP_MIN_BCOPY                64   /* Minimal size for bcopy */
+#define UCP_WORKER_ADDRESS_NAME_MAX  32 /* Worker address name for debugging */
+#define UCP_MIN_BCOPY                64 /* Minimal size for bcopy */
 #define UCP_FEATURE_AMO              (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)
 
 /* Resources */

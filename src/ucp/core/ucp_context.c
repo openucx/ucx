@@ -210,10 +210,15 @@ static ucs_config_field_t ucp_config_table[] = {
    "Add debugging information to worker address.",
    ucs_offsetof(ucp_config_t, ctx.address_debug_info), UCS_CONFIG_TYPE_BOOL},
 
-  {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
-   "Maximal length of worker name. Sent to remote peer as part of worker address\n"
-   "if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
-   ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
+  {"MAX_WORKER_NAME", NULL, "",
+   ucs_offsetof(ucp_config_t, ctx.max_worker_address_name),
+   UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_WORKER_ADDRESS_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_ADDRESS_NAME_MAX),
+   "Maximal length of worker address name. Sent to remote peer as part of\n"
+   "worker address if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
+   ucs_offsetof(ucp_config_t, ctx.max_worker_address_name),
+   UCS_CONFIG_TYPE_UINT},
 
   {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
    "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
