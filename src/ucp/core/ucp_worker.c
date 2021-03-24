@@ -2050,10 +2050,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         worker->user_data = NULL;
     }
 
-    name_length = ucs_min(UCP_WORKER_NAME_MAX,
-                          context->config.ext.max_worker_name + 1);
-    ucs_snprintf_zero(worker->name, name_length, "%s:%d", ucs_get_host_name(),
-                      getpid());
+    name_length = ucs_min(UCP_WORKER_ADDRESS_NAME_MAX,
+                          context->config.ext.max_worker_address_name + 1);
+    ucs_snprintf_zero(worker->address_name, name_length, "%s:%d",
+                      ucs_get_host_name(), getpid());
 
     status = ucs_ptr_map_init(&worker->ptr_map);
     if (status != UCS_OK) {
@@ -2658,7 +2658,7 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     fprintf(stream, "#\n");
-    fprintf(stream, "# UCP worker '%s'\n", ucp_worker_get_name(worker));
+    fprintf(stream, "# UCP worker '%s'\n", ucp_worker_get_address_name(worker));
     fprintf(stream, "#\n");
 
     status = ucp_worker_get_address(worker, &address, &address_length);

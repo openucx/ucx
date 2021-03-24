@@ -144,12 +144,13 @@ static uint64_t ucp_worker_iface_can_connect(uct_iface_attr_t *attrs)
 }
 
 /* Pack a string and return a pointer to storage right after the string */
-static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest)
+static void *
+ucp_address_pack_worker_address_name(ucp_worker_h worker, void *dest)
 {
     const char *s;
     size_t length;
 
-    s      = ucp_worker_get_name(worker);
+    s      = ucp_worker_get_address_name(worker);
     length = strlen(s);
     ucs_assert(length <= UINT8_MAX);
     *(uint8_t*)dest = length;
@@ -158,13 +159,13 @@ static void* ucp_address_pack_worker_name(ucp_worker_h worker, void *dest)
 }
 
 /* Unpack a string and return pointer to next storage byte */
-static const void*
-ucp_address_unpack_worker_name(const void *src, char *s)
+static const void *
+ucp_address_unpack_worker_address_name(const void *src, char *s)
 {
     size_t length, avail;
 
     length   = *(const uint8_t*)src;
-    avail    = ucs_min(length, UCP_WORKER_NAME_MAX - 1);
+    avail    = ucs_min(length, UCP_WORKER_ADDRESS_NAME_MAX - 1);
     memcpy(s, UCS_PTR_TYPE_OFFSET(src, uint8_t), avail);
     s[avail] = '\0';
     return UCS_PTR_TYPE_OFFSET(UCS_PTR_BYTE_OFFSET(src, length), uint8_t);
@@ -286,7 +287,7 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
 
     if ((worker->context->config.ext.address_debug_info) &&
         (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME)) {
-        size += strlen(ucp_worker_get_name(worker)) + 1;
+        size += strlen(ucp_worker_get_address_name(worker)) + 1;
     }
 
     if (num_devices == 0) {
@@ -644,7 +645,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         *address_header_p |= UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO;
 
         if (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME) {
-            ptr            = ucp_address_pack_worker_name(worker, ptr);
+            ptr            = ucp_address_pack_worker_address_name(worker, ptr);
         }
     }
 
@@ -964,7 +965,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
     if ((address_header & UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO) &&
         (unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME)) {
-        ptr = ucp_address_unpack_worker_name(ptr, unpacked_address->name);
+        ptr = ucp_address_unpack_worker_address_name(ptr,
+                                                     unpacked_address->name);
     } else {
         ucs_strncpy_safe(unpacked_address->name, UCP_WIREUP_EMPTY_PEER_NAME,
                          sizeof(unpacked_address->name));

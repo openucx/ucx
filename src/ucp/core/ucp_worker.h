@@ -236,7 +236,8 @@ typedef struct ucp_worker {
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;
-    char                             name[UCP_WORKER_NAME_MAX]; /* Worker name */
+    /* Worker address name composed of host name and process id */
+    char                             address_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     unsigned                         flush_ops_count;     /* Number of pending operations */
 

@@ -36,9 +36,9 @@ KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t
  * @return Worker name
  */
 static UCS_F_ALWAYS_INLINE const char*
-ucp_worker_get_name(ucp_worker_h worker)
+ucp_worker_get_address_name(ucp_worker_h worker)
 {
-    return worker->name;
+    return worker->address_name;
 }
 
 /**

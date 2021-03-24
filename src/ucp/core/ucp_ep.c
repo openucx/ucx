@@ -181,7 +181,8 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     }
 
 #if ENABLE_DEBUG_DATA
-    ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
+    ucs_snprintf_zero(ep->peer_name, UCP_WORKER_ADDRESS_NAME_MAX, "%s",
+                      peer_name);
 #endif
 
     /* Create statistics */
@@ -397,7 +398,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
-    char ep_name[UCP_WORKER_NAME_MAX];
+    char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_HOST(mem_type) ||
@@ -421,8 +422,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_free_address_buffer;
         }
 
-        ucs_snprintf_zero(ep_name, UCP_WORKER_NAME_MAX, "mem_type_ep:%s",
-                          ucs_memory_type_names[mem_type]);
+        ucs_snprintf_zero(ep_name, UCP_WORKER_ADDRESS_NAME_MAX,
+                          "mem_type_ep:%s", ucs_memory_type_names[mem_type]);
 
         /* create memtype UCP EPs after blocking async context, because they set
          * INTERNAL flag (setting EP flags is expected to be guarded) */
