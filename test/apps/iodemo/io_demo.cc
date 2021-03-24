@@ -955,11 +955,10 @@ public:
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
-        LOG << "deleting connection with status "
+        LOG << "disconnecting connection with status "
             << ucs_status_string(conn->ucx_status());
-        assert(conn->is_established());
         --_curr_state.active_conns;
-        delete conn;
+        conn->disconnect(new UcxDisconnectCallback(*conn));
     }
 
     virtual void dispatch_io_message(UcxConnection* conn, const void *buffer,
@@ -1030,6 +1029,37 @@ private:
 
 
 class DemoClient : public P2pDemoCommon {
+private:
+    class DisconnectCallback : public UcxCallback {
+    public:
+        DisconnectCallback(DemoClient &client, UcxConnection &conn) :
+            _client(client), _conn(&conn) {
+        }
+
+        virtual ~DisconnectCallback() {
+            delete _conn;
+        }
+
+        virtual void operator()(ucs_status_t status) {
+            server_info_t &server_info = _client.get_server_info(_conn);
+
+            _client._num_sent -= get_num_uncompleted(server_info);
+
+            // Remove connection pointer
+            _client._server_index_lookup.erase(_conn);
+
+            // Remove active servers entry
+            _client.active_servers_remove(server_info.active_index);
+
+            reset_server_info(server_info);
+            delete this;
+        }
+
+    private:
+        DemoClient    &_client;
+        UcxConnection *_conn;
+    };
+
 public:
     typedef struct {
         UcxConnection* conn;
@@ -1165,6 +1195,13 @@ public:
                i->second;
     }
 
+    server_info_t &get_server_info(const UcxConnection *conn) {
+        const size_t server_index = get_server_index(conn);
+
+        assert(server_index < _server_info.size());
+        return _server_info[server_index];
+    }
+
     void commit_operation(size_t server_index) {
         server_info_t& server_info = _server_info[server_index];
 
@@ -1286,7 +1323,7 @@ public:
         return data_size;
     }
 
-    void close_uncompleted_servers(const char *reason) {
+    void disconnect_uncompleted_servers(const char *reason) {
         std::vector<size_t> server_idxs;
         server_idxs.reserve(_active_servers.size());
 
@@ -1297,7 +1334,7 @@ public:
         }
 
         while (!server_idxs.empty()) {
-            close_server(server_idxs.back(), reason);
+            disconnect_server(server_idxs.back(), reason);
             server_idxs.pop_back();
         }
     }
@@ -1371,6 +1408,7 @@ public:
     }
 
     long get_num_uncompleted(size_t server_index) const {
+        assert(server_index < _server_info.size());
         return get_num_uncompleted(_server_info[server_index]);
     }
 
@@ -1386,30 +1424,24 @@ public:
     virtual void dispatch_connection_error(UcxConnection *conn) {
         size_t server_index = get_server_index(conn);
         if (server_index < _server_info.size()) {
-            close_server(server_index, ucs_status_string(conn->ucx_status()));
+            disconnect_server(server_index,
+                              ucs_status_string(conn->ucx_status()));
         }
     }
 
-    void close_server(size_t server_index, const char *reason) {
+    void disconnect_server(size_t server_index, const char *reason) {
         server_info_t& server_info = _server_info[server_index];
-        std::map<const UcxConnection*, size_t>::key_type key = server_info.conn;
 
-        LOG << "terminate connection " << server_info.conn << " due to "
+        if (server_info.conn->is_disconnecting()) {
+            return;
+        }
+
+        LOG << "disconnecting connection " << server_info.conn << " due to "
             << reason;
 
         // Destroying the connection will complete its outstanding operations
-        delete server_info.conn;
-
-        // Don't wait for any more completions on this connection
-        _num_sent -= get_num_uncompleted(server_info);
-
-        // Remove connection pointer
-        _server_index_lookup.erase(key);
-
-        // Remove active servers entry
-        active_servers_remove(server_info.active_index);
-
-        reset_server_info(server_info);
+        server_info.conn->disconnect(new DisconnectCallback(*this,
+                                                            *server_info.conn));
     }
 
     void wait_for_responses(long max_outstanding) {
@@ -1439,7 +1471,7 @@ public:
             if (elapsed_time > _test_opts.client_timeout) {
                 LOG << "timeout waiting for " << (_num_sent - _num_completed)
                     << " replies";
-                close_uncompleted_servers("timeout for replies");
+                disconnect_uncompleted_servers("timeout for replies");
                 timer_finished = true;
             }
             check_time_limit(curr_time);
@@ -1694,11 +1726,19 @@ public:
         for (size_t server_index = 0; server_index < _server_info.size();
              ++server_index) {
             LOG << "Disconnecting from " << server_name(server_index);
-            delete _server_info[server_index].conn;
-            _server_info[server_index].conn = NULL;
+            UcxConnection& conn = *_server_info[server_index].conn;
+            conn.disconnect(new DisconnectCallback(*this, conn));
         }
-        _server_index_lookup.clear();
-        _active_servers.clear();
+
+        if (!_active_servers.empty()) {
+            LOG << "Waiting for " << _active_servers.size()
+                << " disconnects to complete";
+            do {
+                progress();
+            } while (!_active_servers.empty());
+        }
+
+        assert(_server_index_lookup.empty());
 
         return _status;
     }

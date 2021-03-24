@@ -9,15 +9,16 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/algorithm/crc.h>
+#include <ucs/datastruct/list.h>
 #include <ucs/sys/sock.h>
 #include <deque>
 #include <exception>
 #include <iostream>
+#include <list>
 #include <map>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <ucs/datastruct/list.h>
 
 #define MAX_LOG_PREFIX_SIZE   64
 
@@ -84,6 +85,19 @@ class UcxContext {
     private:
         UcxContext    &_context;
         UcxConnection &_connection;
+    };
+
+protected:
+    class UcxDisconnectCallback : public UcxCallback {
+    public:
+        UcxDisconnectCallback(UcxConnection &conn);
+
+        virtual ~UcxDisconnectCallback();
+
+        virtual void operator()(ucs_status_t status);
+
+    private:
+        UcxConnection *_conn;
     };
 
 public:
@@ -170,6 +184,8 @@ private:
 
     void progress_failed_connections();
 
+    void progress_disconnected_connections();
+
     wait_status_t wait_completion(ucs_status_ptr_t status_ptr, const char *title,
                                   double timeout = 1e6);
 
@@ -180,6 +196,8 @@ private:
     void remove_connection(UcxConnection *conn);
 
     void remove_connection_inprogress(UcxConnection *conn);
+
+    void move_connection_to_disconnecting(UcxConnection *conn);
 
     void handle_connection_error(UcxConnection *conn);
 
@@ -199,6 +217,7 @@ private:
     std::deque<conn_req_t>      _conn_requests;
     timeout_conn_t              _conns_in_progress; // ordered in time
     std::deque<UcxConnection *> _failed_conns;
+    std::list<UcxConnection *>  _disconnecting_conns;
     ucx_request                 *_iomsg_recv_request;
     std::string                 _iomsg_buffer;
     double                      _connect_timeout;
@@ -216,6 +235,10 @@ public:
                  UcxCallback *callback);
 
     void accept(ucp_conn_request_h conn_req, UcxCallback *callback);
+
+    void disconnect(UcxCallback *callback);
+
+    bool disconnect_progress();
 
     bool send_io_message(const void *buffer, size_t length,
                          UcxCallback* callback = EmptyCallback::get());
@@ -245,6 +268,10 @@ public:
 
     bool is_established() const {
         return _establish_cb == NULL;
+    }
+
+    bool is_disconnecting() const {
+        return _disconnect_cb != NULL;
     }
 
     void handle_connection_error(ucs_status_t status);
@@ -298,6 +325,7 @@ private:
 
     UcxContext      &_context;
     UcxCallback     *_establish_cb;
+    UcxCallback     *_disconnect_cb;
     uint64_t        _conn_id;
     uint64_t        _remote_conn_id;
     char            _log_prefix[MAX_LOG_PREFIX_SIZE];
