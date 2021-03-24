@@ -669,7 +669,6 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     status = ucp_proto_select_elem_init(worker, ep_cfg_index, rkey_cfg_index,
                                         select_param, &tmp_select_elem);
     if (status != UCS_OK) {
-        kh_del(ucp_proto_select_hash, &proto_select->hash, khiter);
         return NULL;
     }
 
