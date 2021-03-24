@@ -70,6 +70,9 @@
         /* will never put it into mpool */ \
         uint32_t _flags = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
         (_req)->status = (_status); \
+        \
+        ucp_request_id_check(_req, ==, UCP_REQUEST_ID_INVALID); \
+        \
         if (ucs_likely((_req)->flags & UCP_REQUEST_FLAG_CALLBACK)) { \
             (_req)->_cb((_req) + 1, (_status), ## __VA_ARGS__); \
         } \
@@ -176,7 +179,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
     ucs_trace_req("put request %p", req);
-    ucp_request_id_reset(req);
+    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
     UCS_PROFILE_REQUEST_FREE(req);
     ucs_mpool_put_inline(req);
 }

@@ -511,7 +511,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     ucs_status_t status;
     ucp_request_t *req;
 
-    UCP_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
+    UCP_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 1, return UCS_OK,
                           "RTR %p", rtr);
 
     if (rtr->address == 0) {
