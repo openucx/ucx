@@ -849,6 +849,24 @@ static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
     ucs_bug("pending request %p on ep %p should have been flushed", self, arg);
 }
 
+void
+ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
+                   void *purge_arg)
+{
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = ep->uct_eps[lane];
+        if ((lane == ucp_ep_get_cm_lane(ep)) || (uct_ep == NULL)) {
+            continue;
+        }
+
+        ucs_debug("ep %p: purge uct_ep[%d]=%p", ep, lane, uct_ep);
+        uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
+    }
+}
+
 void ucp_ep_destroy_internal(ucp_ep_h ep)
 {
     ucs_debug("ep %p: destroy", ep);
@@ -926,7 +944,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
             continue;
         }
 
-        ucs_debug("ep %p: purge & destroy uct_ep[%d]=%p", ep, lane, uct_ep);
+        ucs_debug("ep %p: pending & destroy uct_ep[%d]=%p", ep, lane, uct_ep);
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
         /* coverity wrongly resolves ucp_failed_tl_ep's no-op EP destroy
          * function to 'ucp_proxy_ep_destroy' */
@@ -1075,15 +1093,6 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
         ucp_worker_discard_uct_ep(ep, uct_ep, UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
                                   UCS_STATUS_PTR(status));
-        /* UCT CM lane mustn't be scheduled on worker progress when discarding,
-         * since UCP EP will be destroyed due to peer failure and
-         * ucp_cm_disconnect_cb() could be invoked on async thread after UCP EP
-         * is destroyed and before UCT CM EP is destroyed from discarding
-         * functionality. So, UCP EP will passed as a corrupted argument to
-         * ucp_cm_disconnect_cb() */
-        if (lane == ucp_ep_get_cm_lane(ep)) {
-            ucs_assert(!ucp_worker_is_uct_ep_discarding(ep->worker, uct_ep));
-        }
     }
 }
 

@@ -179,37 +179,33 @@ protected:
 
         void *flush_req = sender().flush_worker_nb(0);
 
-        if (ep_flush_func != (void*)ucs_empty_function_return_success) {
-            /* If uct_ep_flush() returns UCS_OK from the first call, the request
-             * is not scheduled on a worker progress (it completes in-place) */
-            ASSERT_FALSE(flush_req == NULL);
-            ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
+        ASSERT_FALSE(flush_req == NULL);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
 
-            do {
-                progress();
+        do {
+            progress();
 
-                if (!m_flush_comps.empty()) {
-                    uct_completion_t *comp = m_flush_comps.back();
+            if (!m_flush_comps.empty()) {
+                uct_completion_t *comp = m_flush_comps.back();
 
-                    m_flush_comps.pop_back();
-                    uct_invoke_completion(comp, UCS_OK);
+                m_flush_comps.pop_back();
+                uct_invoke_completion(comp, UCS_OK);
+            }
+
+            if (!m_pending_reqs.empty()) {
+                uct_pending_req_t *req = m_pending_reqs.back();
+
+                status = req->func(req);
+                if (status == UCS_OK) {
+                    m_pending_reqs.pop_back();
+                } else {
+                    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
                 }
+            }
+        } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);
 
-                if (!m_pending_reqs.empty()) {
-                    uct_pending_req_t *req = m_pending_reqs.back();
-
-                    status = req->func(req);
-                    if (status == UCS_OK) {
-                        m_pending_reqs.pop_back();
-                    } else {
-                        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
-                    }
-                }
-            } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);
-
-            EXPECT_UCS_OK(ucp_request_check_status(flush_req));
-            ucp_request_release(flush_req);
-        }
+        EXPECT_UCS_OK(ucp_request_check_status(flush_req));
+        ucp_request_release(flush_req);
 
         EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
         EXPECT_EQ(m_created_ep_count, total_ep_count);
