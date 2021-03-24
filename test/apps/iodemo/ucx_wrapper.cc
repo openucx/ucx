@@ -751,11 +751,13 @@ void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
     ucx_request *r      = reinterpret_cast<ucx_request*>(request);
     UcxConnection *conn = r->conn;
 
-    assert(conn->_establish_cb == r->callback);
+    if (!conn->is_established()) {
+        assert(conn->_establish_cb == r->callback);
+        conn->established(status);
+    } else {
+        assert(UCS_STATUS_IS_ERR(conn->ucx_status()));
+    }
 
-    // need to check connection status first since it's already can be failed or
-    // disconnecting
-    conn->established(status);
     conn->request_completed(r);
     UcxContext::request_release(r);
 }
