@@ -1432,7 +1432,7 @@ struct ucp_tag_recv_info {
  *         .op_attr_mask               = UCP_OP_ATTR_FIELD_CALLBACK |
  *                                       UCP_OP_ATTR_FIELD_REQUEST,
  *         .request                    = request,
- *         .cb.ucp_send_nbx_callback_t = custom_send_callback_f,
+ *         .cb.send                    = custom_send_callback_f,
  *         .user_data                  = pointer_to_user_context_passed_to_cb
  *     };
  *
