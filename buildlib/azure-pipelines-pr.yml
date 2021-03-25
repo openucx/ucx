@@ -142,7 +142,9 @@ stages:
               ${WORKSPACE}/contrib/configure-release
 
               export PATH="`csclng --print-path-to-wrap`:`cscppc --print-path-to-wrap`:`cswrap --print-path-to-wrap`:$PATH"
+              set -o pipefail
               make -j`nproc` 2>&1 | tee compile.log
+              set +o pipefail
 
               cs_errors="cs.err"
               cslinker --quiet compile.log \
