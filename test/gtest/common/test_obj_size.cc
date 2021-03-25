@@ -70,7 +70,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
 #  endif
 #  if HAVE_CUDA
-    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 16);
+    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 24);
 #  endif
 #endif
 }

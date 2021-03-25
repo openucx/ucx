@@ -108,7 +108,8 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
-    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
+    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+                                               ep_status);
 
     ucs_log(log_lvl,
             "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",
