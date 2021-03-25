@@ -28,6 +28,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
@@ -845,9 +846,10 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucp_request_send_state_ff(req, status);
 }
 
-static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
+void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
 {
-    ucs_bug("pending request %p on ep %p should have been flushed", self, arg);
+    ucs_bug("pending request %p (%s) on ep %p should have been flushed",
+            self, ucs_debug_get_symbol_name(self->func), arg);
 }
 
 void
@@ -899,7 +901,6 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
         /* EP is used, so reference count is the number of outstanding flush
          * operations and discards plus 1 */
         ucs_assert(ep->refcount == (num_inprog + 1));
-        ucs_assert(ep->discard_refcount == 0);
     }
 #endif
 }
@@ -1093,7 +1094,9 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
         ucp_worker_discard_uct_ep(ep, uct_ep, UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
-                                  UCS_STATUS_PTR(status));
+                                  UCS_STATUS_PTR(status),
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
     }
 }
 

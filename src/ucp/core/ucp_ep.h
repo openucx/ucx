@@ -565,6 +565,8 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
 
+void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg);
+
 void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
