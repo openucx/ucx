@@ -302,7 +302,7 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
                  " ep_id 0x%"PRIx64" op %d]",
                  atomich->address, atomich->length, atomich->req.req_id,
                  atomich->req.ep_id, atomich->opcode);
-        header_len = sizeof(*atomich);;
+        header_len = sizeof(*atomich);
         break;
     case UCP_AM_ID_ATOMIC_REP:
         reph = data;
