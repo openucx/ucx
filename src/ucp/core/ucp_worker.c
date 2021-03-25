@@ -504,6 +504,7 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         goto out_ok;
     }
 
+    /* Release EP ID here to prevent protocols from sending reply */
     ucp_ep_release_id(ucp_ep);
     ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_FAILED, 0);
 

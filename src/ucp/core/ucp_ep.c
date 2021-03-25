@@ -330,12 +330,12 @@ static void ucp_ep_delete(ucp_ep_h ep)
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucp_worker_keepalive_remove_ep(ep);
         ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    }
 
-    if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
-        ucp_ep_release_id(ep);
-    } else if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
-        /* If FAILED flag set, EP ID was already released */
+        /* If FAILED flag set, EP ID must be already released */
+        if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
+            ucp_ep_release_id(ep);
+        }
+
         ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
     }
 
@@ -2603,6 +2603,7 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     struct iovec wireup_msg_iov[2];
     ucp_wireup_msg_t wireup_msg;
 
+    ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
     ucs_assert((rsc_idx == UCP_NULL_RESOURCE) ||
                (ucp_worker_iface(ucp_ep->worker, rsc_idx)->attr.cap.flags &
                 UCT_IFACE_FLAG_EP_CHECK));

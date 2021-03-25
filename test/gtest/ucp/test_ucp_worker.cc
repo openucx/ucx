@@ -39,6 +39,7 @@ protected:
         m_destroyed_ep_count = 0;
         m_fake_ep.flags      = UCP_EP_FLAG_REMOTE_CONNECTED;
 
+        sender().connect(&receiver(), get_ep_params());
         m_flush_comps.clear();
         m_pending_reqs.clear();
         m_ep_test_info_map.clear();
@@ -86,8 +87,7 @@ protected:
         ASSERT_LE(wireup_ep_count, ep_count);
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 
-        status = ucp_ep_create_base(sender().worker(), "peer", "", &ucp_ep);
-        ASSERT_UCS_OK(status);
+        ucp_ep = sender().ep();
 
         ops.ep_flush         = (uct_ep_flush_func_t)ep_flush_func;
         ops.ep_pending_add   = (uct_ep_pending_add_func_t)ep_pending_add_func;
@@ -170,7 +170,7 @@ protected:
         }
 
         if (!wait_for_comp) {
-            ucp_ep_remove_ref(ucp_ep);
+            disconnect(sender());
             /* destroy sender's entity here to have an access to the valid
              * pointers */
             sender().cleanup();
@@ -238,7 +238,7 @@ protected:
 
         EXPECT_EQ(1u, ucp_ep->refcount);
 
-        ucp_ep_remove_ref(ucp_ep);
+        disconnect(sender());
     }
 
     static void ep_destroy_func(uct_ep_h ep) {

@@ -482,6 +482,9 @@ void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep, ucp_ep_h ucp_ep)
         }
     }
 
+    /* TMP EP is not an owner of local EP ID */
+    ucs_assert(ucp_ep_local_id(tmp_ep) == ucp_ep_local_id(ucp_ep));
+    ucp_ep_ext_control(tmp_ep)->local_ep_id = UCP_EP_ID_INVALID;
     ucp_ep_remove_ref(tmp_ep); /* not needed anymore */
     wireup_cm_ep->tmp_ep = NULL;
 }
