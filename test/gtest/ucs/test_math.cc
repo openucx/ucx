@@ -302,9 +302,9 @@ UCS_TEST_F(test_math, linear_func) {
 }
 
 UCS_TEST_F(test_math, double_to_sizet) {
-    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet(1e20));
-    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet(1e30));
-    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet((double)SIZE_MAX));
-    EXPECT_EQ(10, ucs_double_to_sizet(10.0));
-    EXPECT_EQ(UCS_MBYTE, ucs_double_to_sizet(UCS_MBYTE));
+    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet(1e20, SIZE_MAX));
+    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet(1e30, SIZE_MAX));
+    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet((double)SIZE_MAX, SIZE_MAX));
+    EXPECT_EQ(10, ucs_double_to_sizet(10.0, SIZE_MAX));
+    EXPECT_EQ(UCS_MBYTE, ucs_double_to_sizet(UCS_MBYTE, SIZE_MAX));
 }

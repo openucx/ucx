@@ -99,7 +99,8 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
         lpriv->weight   = ucs_proto_multi_calc_weight(lanes_bandwidth[lane],
                                                       total_bandwidth);
         lpriv->max_frag = ucs_double_to_sizet(lanes_bandwidth[lane] /
-                                              max_frag_ratio);
+                                                      max_frag_ratio,
+                                              SIZE_MAX);
         ucs_assert(lpriv->max_frag <= lanes_max_frag[lane]);
         ucs_assert(lpriv->max_frag > 0);
     }

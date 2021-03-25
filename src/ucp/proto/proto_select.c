@@ -191,7 +191,8 @@ ucp_proto_thresholds_select_best(ucp_proto_id_mask_t proto_mask,
                  * otherwise best.proto_id is better than curr.proto_id at
                  * 'end' as well as at 'start'.
                  */
-                midpoint = ucs_min(ucs_double_to_sizet(x_intersect), midpoint);
+                midpoint = ucs_min(ucs_double_to_sizet(x_intersect, SIZE_MAX),
+                                   midpoint);
                 ucs_memunits_to_str(midpoint, num_str, sizeof(num_str));
                 ucs_trace("intersects with %s at %.2f, midpoint is %s",
                           ucp_proto_id_field(curr.proto_id, name), x_intersect,
