@@ -1632,6 +1632,19 @@ void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
     }
 }
 
+ucs_status_t ucp_lib_query(ucp_lib_attr_t *attr)
+{
+    if (attr->field_mask & UCP_LIB_ATTR_FIELD_MAX_THREAD_LEVEL) {
+#if ENABLE_MT
+        attr->max_thread_level = UCS_THREAD_MODE_MULTI;
+#else
+        attr->max_thread_level = UCS_THREAD_MODE_SERIALIZED;
+#endif
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
 {
     if (attr->field_mask & UCP_ATTR_FIELD_REQUEST_SIZE) {

@@ -9,6 +9,8 @@
 
 ## Current
 ### Features:
+#### UCP
+* Added API for querying UCP library attributes
 ### Bugfixes:
 
 ## 1.10.0 (March 9, 2021)
