@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -eE
 #
 # Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 #
@@ -12,6 +12,7 @@
 #
 
 CC=${CC:-gcc}
+CXX=${CXX:-g++}
 
 cd ${1:-.}
 
@@ -27,9 +28,12 @@ do
 	fi
 
 	# try to compile a test program (from stdin) which includes hfile
-	${CC} -I. -x c -c - -o /dev/null -DHAVE_CONFIG_H=1 <<EOF || exit $?
+	for compile in "${CC} -x c" "${CXX} -x c++"
+	do
+		${compile} -I. -c - -o /dev/null -DHAVE_CONFIG_H=1 <<EOF
 #include "${hfile}"
 EOF
+	done
 
 	echo "OK $hfile"
 done
