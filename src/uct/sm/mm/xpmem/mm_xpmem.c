@@ -70,6 +70,12 @@ static ucs_config_field_t uct_xpmem_md_config_table[] = {
   {NULL}
 };
 
+static ucs_config_field_t uct_xpmem_iface_config_table[] = {
+  {"MM_", "", NULL, 0, UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
+
+  {NULL}
+};
+
 UCS_STATIC_INIT {
     ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
     kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
@@ -552,4 +558,4 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
 };
 
 UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
-                 uct_xpmem_rkey_release, "XPMEM_")
+                 uct_xpmem_rkey_release, "XPMEM_", uct_xpmem_iface_config_table)

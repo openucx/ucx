@@ -155,6 +155,8 @@ typedef struct uct_mm_component {
  * @param _var          Variable for MM component.
  * @param _name         String which is the component name.
  * @param _md_ops       Mapper operations, of type uct_mm_mapper_ops_t.
+ * @param _rkey_unpack  Remote key unpack function.
+ * @param _rkey_release Remote key release function.
  * @param _cfg_prefix   Prefix for configuration environment vars.
  */
 #define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _rkey_unpack, \

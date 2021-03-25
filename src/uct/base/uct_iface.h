@@ -307,6 +307,9 @@ typedef struct uct_tl {
  * @param _name           Name of the transport (should be a token, not a string)
  * @param _query_devices  Function to query the list of available devices
  * @param _iface_class    Struct type defining the uct_iface class
+ * @param _cfg_prefix     Prefix for configuration variables
+ * @param _cfg_table      Transport configuration table
+ * @param _cfg_struct     Struct type defining transport configuration
  */
 #define UCT_TL_DEFINE(_component, _name, _query_devices, _iface_class, \
                       _cfg_prefix, _cfg_table, _cfg_struct) \

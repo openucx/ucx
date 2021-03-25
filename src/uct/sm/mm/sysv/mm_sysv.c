@@ -34,6 +34,12 @@ static ucs_config_field_t uct_sysv_md_config_table[] = {
   {NULL}
 };
 
+static ucs_config_field_t uct_sysv_iface_config_table[] = {
+  {"MM_", "", NULL, 0, UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
+
+  {NULL}
+};
+
 static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, 1);
@@ -203,4 +209,4 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
 };
 
 UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,
-                 uct_sysv_rkey_release, "SYSV_")
+                 uct_sysv_rkey_release, "SYSV_", uct_sysv_iface_config_table)

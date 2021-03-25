@@ -229,13 +229,14 @@ typedef struct uct_mm_iface {
  * Define a memory-mapper transport for MM.
  *
  * @param _name         Component name token
- * @param _md_ops       Memory domain operations, of type uct_mm_md_ops_t.
+ * @param _md_ops       Memory domain operations, of type uct_mm_md_ops_t
  * @param _rkey_unpack  Remote key unpack function
  * @param _rkey_release Remote key release function
- * @param _cfg_prefix   Prefix for configuration variables.
+ * @param _cfg_prefix   Prefix for configuration variables
+ * @param _cfg_table    Configuration table
  */
 #define UCT_MM_TL_DEFINE(_name, _md_ops, _rkey_unpack, _rkey_release, \
-                         _cfg_prefix) \
+                         _cfg_prefix, _cfg_table) \
     \
     UCT_MM_COMPONENT_DEFINE(uct_##_name##_component, _name, _md_ops, \
                             _rkey_unpack, _rkey_release, _cfg_prefix) \
@@ -244,8 +245,8 @@ typedef struct uct_mm_iface {
                   _name, \
                   uct_sm_base_query_tl_devices, \
                   uct_mm_iface_t, \
-                  "MM_", \
-                  uct_mm_iface_config_table, \
+                  _cfg_prefix, \
+                  _cfg_table, \
                   uct_mm_iface_config_t);
 
 
