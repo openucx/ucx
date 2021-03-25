@@ -178,9 +178,8 @@ struct ucp_request {
                 } msg_proto;
 
                 struct {
-                    ucs_ptr_map_key_t sreq_id;     /* Send request ID */
-                    uint64_t          remote_addr; /* Remote address */
-                    ucp_rkey_h        rkey;        /* Remote memory key */
+                    uint64_t   remote_addr; /* Remote address */
+                    ucp_rkey_h rkey; /* Remote memory key */
                 } rma;
 
                 struct {
