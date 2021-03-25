@@ -1471,18 +1471,13 @@ static ucs_status_t uct_ib_iface_get_numa_latency(uct_ib_iface_t *iface,
 ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uct_ib_md_t     *md  = uct_ib_iface_md(iface);
-    static const unsigned ib_port_widths[] = {
-        [0] = 1,
-        [1] = 4,
-        [2] = 8,
-        [3] = 12,
-        [4] = 16
-    };
-    uint8_t active_width, active_speed, active_mtu, width_idx;
+    static const uint8_t ib_port_widths[] =
+            {[1] = 1, [2] = 4, [4] = 8, [8] = 12, [16] = 2};
+    uct_ib_device_t *dev                 = uct_ib_iface_device(iface);
+    uct_ib_md_t *md                      = uct_ib_iface_md(iface);
+    uint8_t active_width, active_speed, active_mtu, width;
     double encoding, signal_rate, wire_speed;
-    size_t mtu, width, extra_pkt_len;
+    size_t mtu, extra_pkt_len;
     ucs_status_t status;
     double numa_latency;
 
@@ -1492,14 +1487,18 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
 
-    /* Get active width */
-    width_idx = ucs_ilog2(active_width);
-    if (!ucs_is_pow2(active_width) ||
-        (active_width < 1) || (width_idx > 4))
-    {
-        ucs_error("Invalid active_width on %s:%d: %d",
-                  UCT_IB_IFACE_ARG(iface), active_width);
-        return UCS_ERR_IO_ERROR;
+    /*
+     * Parse active width.
+     * See IBTA section 14.2.5.6 "PortInfo", Table 164, field "LinkWidthEnabled"
+     */
+    if ((active_width >= ucs_static_array_size(ib_port_widths)) ||
+        (ib_port_widths[active_width] == 0)) {
+        ucs_warn("invalid active width on " UCT_IB_IFACE_FMT ": %d, "
+                 "assuming 1x",
+                 UCT_IB_IFACE_ARG(iface), active_width);
+        width = 1;
+    } else {
+        width = ib_port_widths[active_width];
     }
 
     iface_attr->device_addr_len = iface->addr_size;
@@ -1543,7 +1542,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         signal_rate           = 25.78125e9;
         encoding              = 64.0/66.0;
         break;
-    case 64: /* 50g Eth */
+    case 64: /* HDR / HDR100 / 50g Eth */
         iface_attr->latency.c = 600e-9;
         signal_rate           = 25.78125e9 * 2;
         encoding              = 64.0/66.0;
@@ -1563,12 +1562,11 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->latency.m  = 0;
 
     /* Wire speed calculation: Width * SignalRate * Encoding */
-    width                 = ib_port_widths[width_idx];
-    wire_speed            = (width * signal_rate * encoding) / 8.0;
+    wire_speed = (width * signal_rate * encoding) / 8.0;
 
     /* Calculate packet overhead  */
-    mtu                   = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
-                                    iface->config.seg_size);
+    mtu = ucs_min(uct_ib_mtu_value((enum ibv_mtu)active_mtu),
+                  iface->config.seg_size);
 
     extra_pkt_len = UCT_IB_BTH_LEN + xport_hdr_len +  UCT_IB_ICRC_LEN + UCT_IB_VCRC_LEN + UCT_IB_DELIM_LEN;
 
