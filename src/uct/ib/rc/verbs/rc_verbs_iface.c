@@ -63,13 +63,16 @@ static unsigned uct_rc_verbs_get_tx_res_count(uct_rc_verbs_ep_t *ep,
     return wc->wr_id - ep->txcnt.ci;
 }
 
-static void uct_rc_verbs_update_tx_res(uct_rc_iface_t *iface,
-                                       uct_rc_verbs_ep_t *ep, unsigned count)
+static UCS_F_ALWAYS_INLINE void
+uct_rc_verbs_update_tx_res(uct_rc_iface_t *iface, uct_rc_verbs_ep_t *ep,
+                           unsigned count)
 {
     ep->txcnt.ci += count;
     uct_rc_txqp_available_add(&ep->super.txqp, count);
     iface->tx.cq_available += count;
     uct_rc_iface_update_reads(iface);
+    ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending,
+                         NULL);
 }
 
 static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
@@ -91,6 +94,9 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     count = uct_rc_verbs_get_tx_res_count(ep, wc);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status,
                                   ep->txcnt.ci + count, 0);
+
+    /* Don't need to invoke UCT pending requests for a given UCT EP */
+    ucs_arbiter_group_desched(&iface->tx.arbiter, &ep->super.arb_group);
     uct_rc_verbs_update_tx_res(iface, ep, count);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
@@ -150,12 +156,9 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
 
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci + count);
-        uct_rc_verbs_update_tx_res(&iface->super, ep, count);
-
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
                                    &ep->super.arb_group);
-        ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1,
-                             uct_rc_ep_process_pending, NULL);
+        uct_rc_verbs_update_tx_res(&iface->super, ep, count);
     }
 
     return num_wcs;
