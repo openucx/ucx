@@ -304,7 +304,7 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
 
         status = uct_tcp_cm_handle_incoming_conn(iface, &peer_addr, fd);
         if (status != UCS_OK) {
-            close(fd);
+            ucs_close_fd(&fd);
             return;
         }
     }
@@ -442,7 +442,7 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
     return UCS_OK;
 
 err_close_sock:
-    close(iface->listen_fd);
+    ucs_close_fd(&iface->listen_fd);
 err:
     return status;
 }
