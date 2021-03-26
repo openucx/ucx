@@ -947,6 +947,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_tcp_sockcm_ep_t)
     UCS_ASYNC_UNBLOCK(tcp_sockcm->super.iface.worker->async);
 }
 
-UCS_CLASS_DEFINE(uct_tcp_sockcm_ep_t, uct_base_ep_t);
+UCS_CLASS_DEFINE(uct_tcp_sockcm_ep_t, uct_cm_base_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_sockcm_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_sockcm_ep_t, uct_ep_t);
