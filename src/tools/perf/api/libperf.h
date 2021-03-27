@@ -1,7 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) The University of Tennessee and The University 
+* Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -16,12 +16,8 @@ BEGIN_C_DECLS
 
 /** @file libperf.h */
 
-#include <sys/uio.h>
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
-#include <ucs/sys/math.h>
-#include <ucs/sys/stubs.h>
-#include <ucs/type/status.h>
 
 
 typedef enum {

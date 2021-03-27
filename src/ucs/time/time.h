@@ -9,7 +9,6 @@
 
 #include <ucs/arch/cpu.h>
 #include <ucs/time/time_def.h>
-#include <ucs/sys/math.h>
 #include <sys/time.h>
 #include <limits.h>
 
