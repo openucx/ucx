@@ -663,7 +663,7 @@ uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
                                    &create_time);
     if (ucs_unlikely((status != UCS_OK) || (ka->start_time != create_time))) {
         return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
-                                       UCS_ERR_ENDPOINT_TIMEOUT);;
+                                       UCS_ERR_ENDPOINT_TIMEOUT);
     }
 
     return UCS_OK;

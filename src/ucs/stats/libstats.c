@@ -36,7 +36,7 @@ static ucs_status_t ucs_stats_name_check(const char *name)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    return UCS_OK;;
+    return UCS_OK;
 }
 
 ucs_status_t ucs_stats_node_initv(ucs_stats_node_t *node, ucs_stats_class_t *cls,

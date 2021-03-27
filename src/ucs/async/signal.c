@@ -67,7 +67,7 @@ static pid_t ucs_async_signal_context_tid(ucs_async_context_t *async)
     if (pid == -1) {
         pid = getpid();
     }
-    return (async == NULL) ? pid : async->signal.tid;;
+    return (async == NULL) ? pid : async->signal.tid;
 }
 
 static ucs_status_t

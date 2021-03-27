@@ -16,7 +16,7 @@ extern "C" {
 class test_ucp_dt_iov : public ucs::test {
 protected:
     size_t calc_iov_offset(const ucp_dt_iov_t *iov, size_t iov_indx, size_t iov_offs) {
-        size_t offset = iov_offs;;
+        size_t offset = iov_offs;
         for (size_t i = 0; i < iov_indx; ++i) {
             offset += iov[i].length;
         }
