@@ -314,7 +314,7 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-diag-disable 269],
 # Set default datatype alignment to 16 bytes.
 # Some compilers (LLVM based, clang) expects allocation of datatypes by 32 bytes
 # to optimize operations memset/memcpy/etc using vectorized processor instructions
-# which requires aligment of memory buffer by 32 or higer bytes. Default malloc method
+# which requires alignment of memory buffer by 32 or higer bytes. Default malloc method
 # guarantee alignment for 16 bytes only. Force using compiler 16-bytes alignment
 # by default if option is supported.
 #
@@ -322,7 +322,7 @@ UCX_ALLOC_ALIGN=16
 ADD_COMPILER_FLAG_IF_SUPPORTED([-fmax-type-align=$UCX_ALLOC_ALIGN],
                                [-fmax-type-align=$UCX_ALLOC_ALIGN],
                                [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                               [AC_DEFINE_UNQUOTED([UCX_ALLOC_ALIGN], $UCX_ALLOC_ALIGN, [Set aligment assumption for compiler])],
+                               [AC_DEFINE_UNQUOTED([UCX_ALLOC_ALIGN], $UCX_ALLOC_ALIGN, [Set alignment assumption for compiler])],
                                [])
 
 
