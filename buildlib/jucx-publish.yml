@@ -5,22 +5,22 @@ parameters:
 
 jobs:
   - job: jucx_release
-    condition: eq(variables['Build.Reason'], 'IndividualCI')
-    container: centos7
-
+    condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
+    container: ubuntu20_cuda11_2
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
     steps:
       - checkout: self
+        fetchDepth: 100
         clean: true
 
       - bash: |
-          set -eE
+          set -eEx
           gcc --version
           ./autogen.sh
           ./contrib/configure-release --with-java
-        displayName: Configure
-
-      - bash: |
-          set -eE
           make -s -j`nproc`
         displayName: Build ucx
 
