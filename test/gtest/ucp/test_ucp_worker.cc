@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_worker.inl>
 #include <ucp/core/ucp_request.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
@@ -67,6 +68,16 @@ protected:
         }
     }
 
+    static void
+    discarded_cb(void *request, ucs_status_t status, void *user_data)
+    {
+        /* Make Coverity happy */
+        ucs_assert(user_data != NULL);
+
+        unsigned *discarded_count_p = static_cast<unsigned*>(user_data);
+        (*discarded_count_p)++;
+    }
+
     void test_worker_discard(void *ep_flush_func,
                              void *ep_pending_add_func,
                              void *ep_pending_purge_func,
@@ -77,6 +88,7 @@ protected:
         uct_iface_ops_t ops                  = {0};
         unsigned created_wireup_aux_ep_count = 0;
         unsigned total_ep_count              = ep_count + wireup_aux_ep_count;
+        unsigned discarded_count             = 0;
         ucp_ep_h ucp_ep;
         uct_iface_t iface;
         std::vector<uct_ep_t> eps(total_ep_count);
@@ -95,6 +107,9 @@ protected:
         ops.ep_destroy       = ep_destroy_func;
         iface.ops            = ops;
 
+        ucp_rsc_index_t rsc_index  = UCS_BITMAP_FFS(sender().ucph()->tl_bitmap);
+        ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(),
+                                                      rsc_index);
         std::vector<uct_ep_h> eps_to_discard;
 
         for (unsigned i = 0; i < ep_count; i++) {
@@ -117,9 +132,12 @@ protected:
                 if (i < wireup_aux_ep_count) {
                     eps[ep_count + created_wireup_aux_ep_count].iface = &iface;
 
+                    ucp_worker_iface_progress_ep(wiface);
+
                     /* coverity[escape] */
-                    wireup_ep->aux_ep = &eps[ep_count +
-                                             created_wireup_aux_ep_count];
+                    wireup_ep->aux_ep        =
+                            &eps[ep_count + created_wireup_aux_ep_count];
+                    wireup_ep->aux_rsc_index = rsc_index;
 
                     created_wireup_aux_ep_count++;
                     m_created_ep_count++;
@@ -157,9 +175,11 @@ protected:
             unsigned purged_reqs_count = 0;
 
             UCS_ASYNC_BLOCK(&sender().worker()->async);
+            ucp_worker_iface_progress_ep(wiface);
             ucp_worker_discard_uct_ep(ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
-                                      &purged_reqs_count);
+                                      &purged_reqs_count, discarded_cb,
+                                      static_cast<void*>(&discarded_count));
             UCS_ASYNC_UNBLOCK(&sender().worker()->async);
 
             if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
@@ -209,6 +229,9 @@ protected:
 
         EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
         EXPECT_EQ(m_created_ep_count, total_ep_count);
+        /* discarded_cb is called only for UCT EPs passed to
+         * ucp_worker_discard_uct_ep() */
+        EXPECT_EQ(ep_count, discarded_count);
 
         for (unsigned i = 0; i < m_created_ep_count; i++) {
             ep_test_info_t &test_info = ep_test_info_get(&eps[i]);

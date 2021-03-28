@@ -177,6 +177,17 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
     request_wait(request, worker_index);
 }
 
+void ucp_test::flush_workers()
+{
+    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+         iter != entities().end(); ++iter) {
+        const entity &e = **iter;
+        for (int i = 0; i < e.get_num_workers(); i++) {
+            flush_worker(e, i);
+        }
+    }
+}
+
 void ucp_test::disconnect(entity& e) {
     bool has_failed_entity = false;
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();

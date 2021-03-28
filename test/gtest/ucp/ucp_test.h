@@ -227,6 +227,7 @@ protected:
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
+    void flush_workers();
     void disconnect(entity& entity);
     ucs_status_t request_wait(void *req, int worker_index = 0);
     ucs_status_t requests_wait(const std::vector<void*> &reqs, int worker_index = 0);

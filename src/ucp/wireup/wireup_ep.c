@@ -318,6 +318,38 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     return UCS_OK;
 }
 
+static void ucp_wireup_ep_aux_ep_discarded(void *request, ucs_status_t status,
+                                           void *user_data)
+{
+    ucp_worker_iface_t *wiface = (ucp_worker_iface_t*)user_data;
+
+    /* Make Coverity happy */
+    ucs_assert(user_data != NULL);
+
+    ucp_worker_iface_unprogress_ep(wiface);
+}
+
+void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
+                                  unsigned ep_flush_flags,
+                                  uct_pending_purge_callback_t purge_cb,
+                                  void *purge_arg)
+{
+    ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
+    ucp_worker_h worker = ucp_ep->worker;
+    uct_ep_h aux_ep     = wireup_ep->aux_ep;
+    ucp_worker_iface_t *wiface;
+
+    if (aux_ep == NULL) {
+        return;
+    }
+
+    wiface = ucp_worker_iface(worker, wireup_ep->aux_rsc_index);
+    ucp_wireup_ep_disown(&wireup_ep->super.super, aux_ep);
+    ucp_worker_discard_uct_ep(ucp_ep, aux_ep, ep_flush_flags, purge_cb,
+                              purge_arg, ucp_wireup_ep_aux_ep_discarded,
+                              wiface);
+}
+
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
                                         uct_completion_t *comp)
 {
@@ -466,12 +498,15 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 
     uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
     if (self->aux_ep != NULL) {
-        ucp_worker_iface_unprogress_ep(ucp_worker_iface(worker,
-                                                        self->aux_rsc_index));
         ucs_queue_head_init(&tmp_pending_queue);
-        uct_ep_pending_purge(self->aux_ep, ucp_wireup_pending_purge_cb,
-                             &tmp_pending_queue);
-        uct_ep_destroy(self->aux_ep);
+        /* Discard AUX UCT EP to purge all outstanding/pending operations.
+         * Normally, WIREUP EP should complete all outstanding operations prior
+         * destroying WIREUP EP - so, doing flush(CANCEL) won't take any affect,
+         * but it will make sure that no completions will be received if some
+         * error was detected */
+        ucp_wireup_ep_discard_aux_ep(self, UCT_FLUSH_FLAG_CANCEL,
+                                     ucp_wireup_pending_purge_cb,
+                                     &tmp_pending_queue);
         self->aux_ep = NULL;
         ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
     }

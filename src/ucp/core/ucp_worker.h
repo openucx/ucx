@@ -357,7 +357,9 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
-                               void *purge_arg);
+                               void *purge_arg,
+                               ucp_send_nbx_callback_t discarded_cb,
+                               void *discarded_cb_arg);
 
 char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                 ucp_context_h context,

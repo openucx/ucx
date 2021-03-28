@@ -1228,10 +1228,10 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         if (reuse_lane == UCP_NULL_RESOURCE) {
             if (ep->uct_eps[lane] != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
-                ucp_worker_discard_uct_ep(ep, ep->uct_eps[lane],
-                                          UCT_FLUSH_FLAG_LOCAL,
-                                          ucp_wireup_pending_purge_cb,
-                                          replay_pending_queue);
+                ucp_worker_discard_uct_ep(
+                        ep, ep->uct_eps[lane], UCT_FLUSH_FLAG_LOCAL,
+                        ucp_wireup_pending_purge_cb, replay_pending_queue,
+                        (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
                 ep->uct_eps[lane] = NULL;
             }
         } else if (ep->uct_eps[lane] != NULL) {
