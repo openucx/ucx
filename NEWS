@@ -7,6 +7,10 @@
 ##
 #
 
+## 1.10.1 (TBD)
+### Bugfixes:
+* Fix Infiniband port speed detection for HDR100
+
 ## 1.10.0 (March 9, 2021)
 ### Features:
 #### Core
