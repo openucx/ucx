@@ -84,6 +84,7 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
     if (UCS_OK != status) {
         return UCS_ERR_IO_ERROR;
     }
+    cuda_event->id = ucs_profile_range_start("cuda_copy");
     ucs_queue_push(&iface->outstanding_event_q[id], &cuda_event->queue);
     cuda_event->comp = comp;
 

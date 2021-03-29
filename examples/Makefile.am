@@ -64,6 +64,12 @@ uct_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la \
                            $(EXAMPLE_CUDA_LIBS)
 
+if HAVE_NVTX
+uct_hello_world_LDADD   += \
+    $(NVTX_LIBS) \
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 ucp_client_server_SOURCES  = ucp_client_server.c
 ucp_client_server_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_PEDANTIC)
 ucp_client_server_CPPFLAGS = $(BASE_CPPFLAGS)

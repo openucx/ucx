@@ -14,6 +14,9 @@
 
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
+#include <ucs/profile/profile.h>
+#include <ucs/datastruct/khash.h>
+#include <inttypes.h>
 
 void uct_rc_verbs_txcnt_init(uct_rc_verbs_txcnt_t *txcnt)
 {
@@ -89,6 +92,9 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     struct ibv_sge sge[UCT_IB_MAX_IOV];
     struct ibv_send_wr wr;
     size_t sge_cnt;
+    khiter_t it;
+    uint64_t id;
+    int ret;
 
     ucs_assertv(iovcnt <= ucs_min(UCT_IB_MAX_IOV, iface->config.max_send_sge),
                 "iovcnt %zu, maxcnt (%zu, %zu)",
@@ -103,6 +109,18 @@ uct_rc_verbs_ep_rdma_zcopy(uct_rc_verbs_ep_t *ep, const uct_iov_t *iov,
     wr.next = NULL;
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, IBV_SEND_SIGNALED, INT_MAX);
+
+    id = ucs_profile_range_start("rc_rdma");
+    it = kh_put(uct_ib_wr_hash, &iface->super.super.wr_hash, wr.wr_id, &ret);
+    if (ret == UCS_KH_PUT_KEY_PRESENT) {
+    } else if (ret == UCS_KH_PUT_BUCKET_EMPTY) {
+    } else if (ret == UCS_KH_PUT_FAILED) {
+        ucs_error("failed to create hash entry for fc hard req");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    kh_value(&iface->super.super.wr_hash, it) = id;
+
     uct_rc_txqp_add_send_comp(&iface->super, &ep->super.txqp, handler, comp,
                               ep->txcnt.pi,
                               op_flags | UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY,

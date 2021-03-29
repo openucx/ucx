@@ -49,6 +49,7 @@ typedef struct uct_scopy_tx {
     ucs_arbiter_elem_t              arb_elem;           /* TX arbiter group element */
     uct_scopy_tx_op_t               op;                 /* TX operation identifier */
     uint64_t                        remote_addr;        /* The remote address */
+    uint64_t                        id;
     uct_rkey_t                      rkey;               /* User-passed UCT rkey */
     uct_completion_t                *comp;              /* The pointer to the user's passed completion */
     ucs_iov_iter_t                  iov_iter;           /* UCT IOVs iterator */

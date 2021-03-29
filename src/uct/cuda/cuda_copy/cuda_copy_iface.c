@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/async/async.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/profile/profile.h>
 
 
 static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
@@ -159,6 +160,7 @@ uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
 
     ucs_queue_for_each_extract(cuda_event, queue_head, queue,
                                cudaEventQuery(cuda_event->event) == cudaSuccess) {
+        ucs_profile_range_stop(cuda_event->id);
         ucs_queue_remove(queue_head, &cuda_event->queue);
         if (cuda_event->comp != NULL) {
             ucs_trace_data("cuda_copy event %p completed", cuda_event);

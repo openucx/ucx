@@ -11,6 +11,7 @@
 #include "scopy_ep.h"
 
 #include <uct/base/uct_iov.inl>
+#include <ucs/profile/profile.h>
 
 
 const char* uct_scopy_tx_op_str[] = {
@@ -43,6 +44,7 @@ uct_scopy_ep_tx_init_common(uct_scopy_tx_t *tx, uct_scopy_tx_op_t tx_op,
     tx->comp = comp;
     tx->op   = tx_op;
     ucs_arbiter_elem_init(&tx->arb_elem);
+    tx->id = ucs_profile_range_start("scopy");
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -170,6 +172,7 @@ ucs_arbiter_cb_result_t uct_scopy_ep_progress_tx(ucs_arbiter_t *arbiter,
                (tx->op != UCT_SCOPY_TX_FLUSH_COMP));
     if (tx->comp != NULL) {
         uct_invoke_completion(tx->comp, status);
+        ucs_profile_range_stop(tx->id);
     }
 
     ucs_mpool_put_inline(tx);

@@ -44,7 +44,9 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
 
     ucs_assert(rts_hdr->super.flags & UCP_RNDV_RTS_FLAG_TAG);
 
+    ucs_profile_range_push("search match");
     rreq = ucp_tag_exp_search(&worker->tm, rts_hdr->tag.tag);
+    ucs_profile_range_pop();
     if (rreq != NULL) {
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */

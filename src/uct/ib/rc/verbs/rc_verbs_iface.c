@@ -20,7 +20,9 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
+#include <ucs/datastruct/khash.h>
 #include <string.h>
+#include <inttypes.h>
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
 
@@ -133,6 +135,7 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
     int i;
     unsigned num_wcs = iface->super.super.config.tx_max_poll;
     struct ibv_wc wc[num_wcs];
+    khiter_t it;
     ucs_status_t status;
 
     UCT_RC_VERBS_IFACE_FOREACH_TXWQE(&iface->super, i, wc, num_wcs) {
@@ -148,6 +151,12 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         count = uct_rc_verbs_get_tx_res_count(ep, &wc[i]);
         ucs_trace_poll("rc_verbs iface %p tx_wc wrid 0x%lx ep %p qpn 0x%x count %d",
                        iface, wc[i].wr_id, ep, wc[i].qp_num, count);
+
+        it = kh_get(uct_ib_wr_hash, &iface->super.super.wr_hash, wc[i].wr_id);
+        if (it == kh_end(&iface->super.super.wr_hash)) {
+        } else {
+            ucs_profile_range_stop((uint64_t)kh_value(&iface->super.super.wr_hash, it));
+        }
 
         uct_rc_txqp_completion_desc(&ep->super.txqp, ep->txcnt.ci + count);
         uct_rc_verbs_update_tx_res(&iface->super, ep, count);
@@ -166,7 +175,9 @@ static unsigned uct_rc_verbs_iface_progress(void *arg)
     uct_rc_verbs_iface_t *iface = arg;
     unsigned count;
 
+    ucs_profile_range_push("verbs_progress_rx", 4);
     count = uct_rc_verbs_iface_poll_rx_common(iface);
+    ucs_profile_range_pop();
     if (!uct_rc_iface_poll_tx(&iface->super, count)) {
         return count;
     }
