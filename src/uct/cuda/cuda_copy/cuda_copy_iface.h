@@ -24,6 +24,7 @@ typedef struct uct_cuda_copy_iface {
     struct {
         unsigned                max_poll;
         unsigned                max_entries;
+        unsigned                num_descs;
     } config;
     struct {
         void                    *event_arg;
@@ -36,6 +37,7 @@ typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     unsigned                max_entries;
+    unsigned                num_descs;
 } uct_cuda_copy_iface_config_t;
 
 
