@@ -570,10 +570,15 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     ucp_dt_generic_t *dt_gen;
     ucs_status_t status;
 
-    ucs_assert(req->status == UCS_OK);
+    ucp_trace_req(req,
+                  "unpack recv_data req_len %zu data_len %zu offset %zu "
+                  "last %s status %s",
+                  req->recv.length, length, offset, last ? "yes" : "no",
+                  ucs_status_string(req->status));
 
-    ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
-                  req->recv.length, length, offset, last ? "yes" : "no");
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(req->status))) {
+        return req->status;
+    }
 
     if (ucs_unlikely((length + offset) > req->recv.length)) {
         return ucp_request_recv_msg_truncated(req, length, offset);
