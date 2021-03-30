@@ -1212,7 +1212,14 @@ run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
 
+	# Test transport selection
 	../test/apps/test_ucx_tls.py -p $ucx_inst
+
+	# Test setting many lanes
+	UCX_IB_NUM_PATHS=8 \
+		UCX_MAX_EAGER_LANES=4 \
+		UCX_MAX_RNDV_LANES=4 \
+		./src/tools/info/ucx_info -u t -e
 
 	if [ $? -ne 0 ]; then
 		echo "not ok 1" >> ucx_tl_check.tap
@@ -1247,8 +1254,7 @@ run_tests() {
 	$MAKEP
 	$MAKEP install
 
-	run_ucx_tl_check
-
+	do_distributed_task 2 4 run_ucx_tl_check
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
