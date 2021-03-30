@@ -1,4 +1,5 @@
 /**
+ * Copyright (C) NVIDIA Corporation. 2021.  ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -611,3 +612,26 @@ void ucs_profile_global_cleanup()
     ucs_profile_check_active_threads();
     pthread_key_delete(ucs_profile_global_ctx.tls_key);
 }
+
+#ifndef HAVE_NVTX
+uint64_t ucs_profile_range_start(const char *format, ...)
+{
+    return 0;
+}
+
+void ucs_profile_range_stop(uint64_t id)
+{
+}
+
+void ucs_profile_range_add_marker(const char *format, ...)
+{
+}
+
+void ucs_profile_range_push(const char *format, ...)
+{
+}
+
+void ucs_profile_range_pop()
+{
+}
+#endif
