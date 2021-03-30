@@ -1206,29 +1206,24 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
                                                 uct_dc_mlx5_iface_t);
     ucs_status_t status;
 
-    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
-        return UCS_ARBITER_CB_RESULT_STOP;
-    }
-
     status = uct_rc_iface_invoke_pending_cb(&iface->super.super, req);
     if (status == UCS_OK) {
         return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     } else if (status == UCS_INPROGRESS) {
         return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    } else if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
+        return UCS_ARBITER_CB_RESULT_STOP;
     }
 
     /* No any other pending operations (except no-op, flush(CANEL), and others
-     * which don't consume TX resources) operations are allowed to be still
-     * scheduled on an arbiter group for which flush(CANCEL) was done */
+     * which don't consume TX resources) allowed to be still scheduled on an
+     * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL));
 
-    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
-        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
-    }
-
-    ucs_assertv(!uct_dc_mlx5_iface_has_tx_resources(iface),
-                "pending callback returned error but send resources are available");
-    return UCS_ARBITER_CB_RESULT_STOP;
+    ucs_assertv(!uct_dc_mlx5_iface_dci_ep_can_send(ep),
+                "pending callback returned error, but send resources are"
+                " available");
+    return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
 /**
