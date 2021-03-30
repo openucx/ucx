@@ -6,6 +6,10 @@
 #ifndef UCS_PROFILE_RANGE_H_
 #define UCS_PROFILE_RANGE_H_
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
