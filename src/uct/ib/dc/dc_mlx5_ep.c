@@ -630,7 +630,6 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
         UCT_DC_MLX5_CHECK_RES(iface, ep);
 
-        ucs_assert(ucs_arbiter_group_is_empty(&ep->arb_group));
         if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
             return UCS_ERR_UNSUPPORTED;
         }
