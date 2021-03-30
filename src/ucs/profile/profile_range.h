@@ -6,6 +6,9 @@
 #ifndef UCS_PROFILE_RANGE_H_
 #define UCS_PROFILE_RANGE_H_
 
+#include <ucs/sys/compiler_def.h>
+#include <stdint.h>
+
 BEGIN_C_DECLS
 
 /** @file profile_range.h */
