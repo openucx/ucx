@@ -69,18 +69,16 @@ ucs_status_t uct_p2p_rma_test::get_zcopy(uct_ep_h ep, const mapped_buffer &sendb
 void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
                                  unsigned flags, ucs_memory_type_t mem_type)
 {
-    static std::vector<ucs_memory_type_t> src_mem_types;
+    std::vector<ucs_memory_type_t> src_mem_types;
     ucs_memory_type_t src_mem_type = UCS_MEMORY_TYPE_HOST;
 
     /* for cuda_copy test with non-host src_mem_type */
     if (has_transport("cuda_copy")) {
-        for (int src_mem_type = 0; src_mem_type < UCS_MEMORY_TYPE_LAST; src_mem_type++) {
-            if (!((sender().md_attr().cap.access_mem_types & UCS_BIT(src_mem_type)) &&
-                  (sender().md_attr().cap.reg_mem_types & UCS_BIT(src_mem_type)))) {
-                continue;
+        for (int add_mem_type = 0; add_mem_type < UCS_MEMORY_TYPE_LAST; add_mem_type++) {
+            if ((sender().md_attr().cap.access_mem_types & UCS_BIT(add_mem_type)) &&
+                (sender().md_attr().cap.reg_mem_types & UCS_BIT(add_mem_type))) {
+                src_mem_types.push_back((ucs_memory_type_t)add_mem_type);
             }
-
-            src_mem_types.push_back((ucs_memory_type_t)src_mem_type);
         }
     }
 
