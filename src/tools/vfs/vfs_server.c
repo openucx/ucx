@@ -205,13 +205,13 @@ static void vfs_server_mount(int idx, pid_t pid)
 
     if (pid < 0) {
         vfs_error("received invalid pid: %d", pid);
-        vfs_server_close_fd(idx);
+        vfs_server_remove_fd(idx);
         return;
     }
 
     fuse_fd = vfs_mount(pid);
     if (fuse_fd < 0) {
-        vfs_server_close_fd(idx);
+        vfs_server_remove_fd(idx);
         return;
     }
 

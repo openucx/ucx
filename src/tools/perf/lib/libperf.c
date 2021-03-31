@@ -169,7 +169,6 @@ uct_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
     status = uct_iface_mem_alloc(perf->uct.iface, length,
                                  flags, "perftest", alloc_mem);
     if (status != UCS_OK) {
-        ucs_free(alloc_mem);
         ucs_error("failed to allocate memory: %s", ucs_status_string(status));
         return status;
     }
@@ -1421,7 +1420,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     for (i = 0; i < perf->params.thread_count; i++) {
         status = ucp_worker_flush(perf->ucp.tctx[i].perf.ucp.worker);
         if (status != UCS_OK) {
-            ucs_warn("ucp_worker_flush() failed on theread %d: %s",
+            ucs_warn("ucp_worker_flush() failed on thread %d: %s",
                      i, ucs_status_string(status));
         }
     }
@@ -1624,7 +1623,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
     }
 
     /* Enable progress before `uct_iface_flush` and `uct_worker_progress` called
-     * to give a chance to finish connection for some tranports (ib/ud, tcp).
+     * to give a chance to finish connection for some transports (ib/ud, tcp).
      * They may return UCS_INPROGRESS from `uct_iface_flush` when connections are
      * in progress */
     uct_iface_progress_enable(perf->uct.iface,

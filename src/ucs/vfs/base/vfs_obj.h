@@ -14,7 +14,48 @@ BEGIN_C_DECLS
 
 /* This header file defines API for manipulating VFS object tree structure */
 
+/**
+ * Structure to describe the vfs node.
+ */
+typedef struct {
+    /**
+     * Size of the content in case of read-only file, and number of child
+     * directories if node is directory.
+     */
+    size_t size;
+    /**
+     * File mode can be either regular file (S_IFREG) or directory (S_IFDIR)
+     * depending of the type of the vfs node.
+     */
+    int    mode;
+} ucs_vfs_path_info_t;
+
+
+/**
+ * Function to fill buffer @a strb with the information about @a obj.
+ * 
+ * @param [in]    obj  Pointer to the object to be described.
+ * @param [inout] strb String buffer to be filled by the description of the
+ *                     object @a obj.
+ */
 typedef void (*ucs_vfs_file_show_cb_t)(void *obj, ucs_string_buffer_t *strb);
+
+
+/**
+ * Function to update representation of object in VFS.
+ * 
+ * @param [in] obj Pointer to the object to be updated.
+ */
+typedef void (*ucs_vfs_refresh_cb_t)(void *obj);
+
+
+/**
+ * Function to process VFS nodes during reading of the parent directory.
+ * 
+ * @param [in] name Path to directory.
+ * @param [in] arg  Pointer to the arguments.
+ */
+typedef void (*ucs_vfs_list_dir_cb_t)(const char *name, void *arg);
 
 
 /**
@@ -52,6 +93,67 @@ void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
  *                 VFS.
  */
 void ucs_vfs_obj_remove(void *obj);
+
+
+/**
+ * Invalidate VFS node and set method to update the node.
+ * 
+ * @param [in] obj        Pointer to the object to be invalidate.
+ * @param [in] refresh_cb Method to update the node associated with the object.
+ */
+void ucs_vfs_obj_set_dirty(void *obj, ucs_vfs_refresh_cb_t refresh_cb);
+
+
+/**
+ * Fill information about VFS node corresponding to the specified path.
+ *
+ * @param [in]  path       String wich specifies path to find the node in VFS.
+ * @param [out] info       VFS object information.
+ *
+ * @return UCS_OK          VFS node corresponding to specified path exists.
+ *         UCS_ERR_NO_ELEM Otherwise.
+ * 
+ * @note The content of the file defined by ucs_vfs_file_show_cb_t of the node.
+ *       The method initiates refresh of the node defined by
+ *       ucs_vfs_refresh_cb_t of the node.
+ */
+ucs_status_t ucs_vfs_path_get_info(const char *path, ucs_vfs_path_info_t *info);
+
+
+/**
+ * Read the content of VFS node corresponding to the specified path. The content
+ * of the file defined by ucs_vfs_file_show_cb_t of the node.
+ *
+ * @param [in]    path     String wich specifies path to find the node in VFS.
+ * @param [inout] strb     String buffer to be filled by the content of the
+ *                         file.
+ *
+ * @return UCS_OK          VFS node corresponding to specified path exists and
+ *                         the node is a file.
+ * @return UCS_ERR_NO_ELEM Otherwise.
+ */
+ucs_status_t
+ucs_vfs_path_read_file(const char *path, ucs_string_buffer_t *strb);
+
+
+/**
+ * Invoke callback @a dir_cb for children of VFS node corresponding to the
+ * specified path.
+ * 
+ * @param [in] path        String wich specifies path to find the node in VFS.
+ * @param [in] dir_cb      Callback method to be invoked for each child of the
+ *                         VFS node.
+ * @param [in] arg         Arguments to be passed to the callback method.
+ * 
+ * @return UCS_OK          VFS node corresponding to specified path exists and
+ *                         the node is a directory.
+ *         UCS_ERR_NO_ELEM Otherwise.
+ * 
+ * @note The method initiates refresh of the node defined by
+ *       ucs_vfs_refresh_cb_t of the node.
+ */
+ucs_status_t ucs_vfs_path_list_dir(const char *path,
+                                   ucs_vfs_list_dir_cb_t dir_cb, void *arg);
 
 END_C_DECLS
 

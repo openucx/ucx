@@ -86,25 +86,25 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     dt_count, 0, req->send.length, msg_config,
                                     proto);
-    if (ucs_unlikely(status != UCS_OK)) {
-        if (status == UCS_ERR_NO_PROGRESS) {
-            /* RMA/AM rendezvous */
-            ucs_assert(req->send.length >= rndv_thresh);
-            status = ucp_tag_send_start_rndv(req);
-            if (status != UCS_OK) {
-                return UCS_STATUS_PTR(status);
-            }
-
-            UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
+    if (ucs_likely(status == UCS_OK)) {
+        /* Eager send initialized successfuly */
+        if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+            ucp_request_id_alloc(req);
+            UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
         } else {
+            UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
+        }
+    } else if (status == UCS_ERR_NO_PROGRESS) {
+        /* RMA/AM rendezvous */
+        ucs_assert(req->send.length >= rndv_thresh);
+        status = ucp_tag_send_start_rndv(req);
+        if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }
-    }
 
-    if (req->flags & UCP_REQUEST_FLAG_SYNC) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
+        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
     } else {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
+        return UCS_STATUS_PTR(status);
     }
 
     /*
@@ -128,11 +128,11 @@ ucp_tag_send_req_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
                       uintptr_t datatype, size_t count, ucp_tag_t tag,
                       uint32_t flags, const ucp_request_param_t *param)
 {
-    req->flags                  = flags | UCP_REQUEST_FLAG_SEND_TAG;
-    req->send.ep                = ep;
-    req->send.buffer            = (void*)buffer;
-    req->send.datatype          = datatype;
-    req->send.msg_proto.tag.tag = tag;
+    req->flags              = flags | UCP_REQUEST_FLAG_SEND_TAG;
+    req->send.ep            = ep;
+    req->send.buffer        = (void*)buffer;
+    req->send.datatype      = datatype;
+    req->send.msg_proto.tag = tag;
     ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
@@ -277,7 +277,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     });
 
     if (worker->context->config.ext.proto_enable) {
-        req->send.msg_proto.tag.tag = tag;
+        req->send.msg_proto.tag = tag;
 
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
@@ -331,7 +331,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                                  goto out;});
 
     if (worker->context->config.ext.proto_enable) {
-        req->send.msg_proto.tag.tag = tag;
+        req->send.msg_proto.tag = tag;
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_TAG_SEND_SYNC, buffer, count,

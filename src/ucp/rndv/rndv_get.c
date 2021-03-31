@@ -14,10 +14,11 @@
 static ucs_status_t
 ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
 {
+    static const uint64_t rndv_modes     = UCS_BIT(UCP_RNDV_MODE_GET_ZCOPY);
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
         .super.super         = *init_params,
-        .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
         .super.cfg_priority  = 0,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
@@ -37,8 +38,10 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW
     };
 
-    UCP_PROTO_RNDV_CHECK_PARAMS(init_params, UCP_OP_ID_RNDV_RECV,
-                                UCP_RNDV_MODE_GET_ZCOPY);
+    if ((init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return ucp_proto_rndv_bulk_init(&params);
 }

@@ -623,7 +623,8 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
 
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
-        ucs_debug("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
+        ucs_diag("ibv_open_device(%s) failed: %m",
+                 ibv_get_device_name(ibv_device));
         status = UCS_ERR_UNSUPPORTED;
         goto err;
     }

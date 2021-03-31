@@ -984,11 +984,10 @@ err:
     return status;
 }
 
-void uct_rc_mlx5_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx)
+unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg)
 {
     uct_rc_mlx5_ep_cleanup_ctx_t *ep_cleanup_ctx
-                                      = ucs_derived_of(wait_ctx,
-                                                       uct_rc_mlx5_ep_cleanup_ctx_t);
+                                      = arg;
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep_cleanup_ctx->super.iface,
                                                        uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
@@ -1016,6 +1015,7 @@ void uct_rc_mlx5_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx)
     uct_ib_mlx5_qp_mmio_cleanup(&ep_cleanup_ctx->qp, ep_cleanup_ctx->reg);
     uct_ib_mlx5_destroy_qp(md, &ep_cleanup_ctx->qp);
     uct_rc_ep_cleanup_qp_done(&ep_cleanup_ctx->super, ep_cleanup_ctx->qp.qp_num);
+    return 1;
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)

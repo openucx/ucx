@@ -172,7 +172,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
 
 out_free_req:
     ucs_free(req->send.buffer);
-    ucs_free(req);
+    ucp_request_mem_free(req);
 out:
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
     return status;
@@ -224,7 +224,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     /* We cannot allocate from memory pool because it's not thread safe
      * and this function may be called from any thread
      */
-    req = ucs_malloc(sizeof(*req), "wireup_msg_req");
+    req = ucp_request_mem_alloc("wireup_msg_req");
     if (req == NULL) {
         ucs_error("failed to allocate request for sending WIREUP message");
         return UCS_ERR_NO_MEMORY;
@@ -240,7 +240,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
                                     &req->send.wireup, &req->send.buffer,
                                     &req->send.length);
     if (status != UCS_OK) {
-        ucs_free(req);
+        ucp_request_mem_free(req);
         return status;
     }
 
@@ -259,7 +259,7 @@ ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
         if (ucp_ep_get_rsc_index(ep, lane) == UCP_NULL_RESOURCE) {
             continue;
         }
-        
+
         UCS_BITMAP_SET(tl_bitmap, ucp_ep_get_rsc_index(ep, lane));
     }
 
@@ -679,6 +679,9 @@ static UCS_F_NOINLINE void
 ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
+    /* Request a peer failure detection support from a reply EP to be able to do
+     * discarding of lanes when destroying all UCP EPs in UCP worker destroy */
+    unsigned ep_init_flags = UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     ucs_status_t status;
     ucp_ep_h reply_ep;
     unsigned addr_indices[UCP_MAX_LANES];
@@ -686,21 +689,22 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     /* if endpoint does not exist - create a temporary endpoint to send a
      * UCP_WIREUP_MSG_EP_REMOVED reply */
-    status = ucp_worker_create_ep(worker, 0, remote_address->name,
+    status = ucp_worker_create_ep(worker, ep_init_flags, remote_address->name,
                                   "wireup ep_check reply", &reply_ep);
     if (status != UCS_OK) {
         ucs_error("failed to create EP: %s", ucs_status_string(status));
         return;
     }
 
-    /* Initialize lanes (possible destroy existing lanes) */
-    status = ucp_wireup_init_lanes_by_request(worker, reply_ep, 0,
+    /* Initialize lanes of the reply EP */
+    status = ucp_wireup_init_lanes_by_request(worker, reply_ep, ep_init_flags,
                                               remote_address, addr_indices);
     if (status != UCS_OK) {
         goto destroy_ep;
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
+    ucp_ep_flush_state_reset(reply_ep);
     status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED,
                                  &ucp_tl_bitmap_min, NULL);
     if (status != UCS_OK) {
@@ -1005,7 +1009,6 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
                                     ucp_rsc_index_t cm_index,
                                     ucs_log_level_t log_level)
 {
-    char lane_info[128] = {0};
     char am_lane_str[8];
     char wireup_msg_lane_str[8];
     char cm_lane_str[8];
@@ -1029,15 +1032,14 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
             key->reachable_md_map, key->ep_check_map);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
+        UCS_STRING_BUFFER_ONSTACK(strb, 128);
         if (lane == key->cm_lane) {
-            ucp_ep_config_cm_lane_info_str(worker, key, lane, cm_index,
-                                           lane_info, sizeof(lane_info));
+            ucp_ep_config_cm_lane_info_str(worker, key, lane, cm_index, &strb);
         } else {
             ucp_ep_config_lane_info_str(worker, key, addr_indices, lane,
-                                        UCP_NULL_RESOURCE, lane_info,
-                                        sizeof(lane_info));
+                                        UCP_NULL_RESOURCE, &strb);
         }
-        ucs_log(log_level, "%s: %s", title, lane_info);
+        ucs_log(log_level, "%s: %s", title, ucs_string_buffer_cstr(&strb));
     }
 }
 
@@ -1227,10 +1229,10 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         if (reuse_lane == UCP_NULL_RESOURCE) {
             if (ep->uct_eps[lane] != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
-                ucp_worker_discard_uct_ep(ep, ep->uct_eps[lane],
-                                          UCT_FLUSH_FLAG_LOCAL,
-                                          ucp_wireup_pending_purge_cb,
-                                          replay_pending_queue);
+                ucp_worker_discard_uct_ep(
+                        ep, ep->uct_eps[lane], UCT_FLUSH_FLAG_LOCAL,
+                        ucp_wireup_pending_purge_cb, replay_pending_queue,
+                        (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
                 ep->uct_eps[lane] = NULL;
             }
         } else if (ep->uct_eps[lane] != NULL) {
@@ -1522,7 +1524,8 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                                 UCP_ADDRESS_PACK_FLAG_NO_TRACE,
                                 &unpacked_address);
     if (status != UCS_OK) {
-        strncpy(unpacked_address.name, "<malformed address>", UCP_WORKER_NAME_MAX);
+        strncpy(unpacked_address.name, "<malformed address>",
+                UCP_WORKER_ADDRESS_NAME_MAX);
         unpacked_address.uuid          = 0;
         unpacked_address.address_count = 0;
         unpacked_address.address_list  = NULL;

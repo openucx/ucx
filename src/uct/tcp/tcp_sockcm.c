@@ -130,6 +130,7 @@ void uct_tcp_sa_data_handler(int fd, ucs_event_set_types_t events, void *arg)
 
 static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
     .ep_pending_purge         = (uct_ep_pending_purge_func_t)ucs_empty_function,
+    .ep_connect               = uct_tcp_sockcm_ep_connect,
     .ep_disconnect            = uct_tcp_sockcm_ep_disconnect,
     .cm_ep_conn_notify        = uct_tcp_sockcm_cm_ep_conn_notify,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_tcp_sockcm_ep_t),

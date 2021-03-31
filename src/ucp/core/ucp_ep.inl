@@ -231,17 +231,17 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
                ((flush_state->send_sn == 0) &&
                 (flush_state->cmpl_sn == 0) &&
-                ucs_queue_is_empty(&flush_state->reqs)));
+                ucs_hlist_is_empty(&flush_state->reqs)));
 
     flush_state->send_sn = 0;
     flush_state->cmpl_sn = 0;
-    ucs_queue_head_init(&flush_state->reqs);
+    ucs_hlist_head_init(&flush_state->reqs);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }
 
 static inline void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
 {
-    ucs_assert(ucs_queue_is_empty(&ucp_ep_flush_state(ep)->reqs));
+    ucs_assert(ucs_hlist_is_empty(&ucp_ep_flush_state(ep)->reqs));
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
 }
 
@@ -289,4 +289,5 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
     UCS_STATIC_ASSERT(sizeof(ep->flags) <= sizeof(int));
     return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
 }
+
 #endif

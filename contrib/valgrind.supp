@@ -299,3 +299,8 @@
    ...
    fun:rdma_bind_addr
 }
+{
+   xpmem_get
+   Memcheck:Cond
+   fun:xpmem_get
+}

@@ -80,7 +80,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     ucp_request_t *sreq                 = arg;
     ucp_tag_rndv_rts_hdr_t *tag_rts_hdr = dest;
 
-    tag_rts_hdr->tag.tag = sreq->send.msg_proto.tag.tag;
+    tag_rts_hdr->tag.tag = sreq->send.msg_proto.tag;
 
     return ucp_rndv_rts_pack(sreq, &tag_rts_hdr->super, sizeof(*tag_rts_hdr),
                              UCP_RNDV_RTS_FLAG_TAG);
@@ -110,7 +110,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
         return status;
     }
 
-    ucp_send_request_set_id(sreq);
+    ucp_request_id_alloc(sreq);
 
     if (ucp_ep_config_key_has_tag_lane(&ucp_ep_config(ep)->key)) {
         status = ucp_tag_offload_start_rndv(sreq);
@@ -129,7 +129,7 @@ static size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg)
     ucp_request_t *req              = arg;
 
     tag_rts->super.flags = UCP_RNDV_RTS_FLAG_TAG;
-    tag_rts->tag.tag     = req->send.msg_proto.tag.tag;
+    tag_rts->tag.tag     = req->send.msg_proto.tag;
 
     return ucp_proto_rndv_rts_pack(req, &tag_rts->super, sizeof(*tag_rts));
 }

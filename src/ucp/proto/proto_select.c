@@ -191,9 +191,8 @@ ucp_proto_thresholds_select_best(ucp_proto_id_mask_t proto_mask,
                  * otherwise best.proto_id is better than curr.proto_id at
                  * 'end' as well as at 'start'.
                  */
-                if (x_intersect < (double)SIZE_MAX) {
-                    midpoint = ucs_min((size_t)x_intersect, midpoint);
-                }
+                midpoint = ucs_min(ucs_double_to_sizet(x_intersect, SIZE_MAX),
+                                   midpoint);
                 ucs_memunits_to_str(midpoint, num_str, sizeof(num_str));
                 ucs_trace("intersects with %s at %.2f, midpoint is %s",
                           ucp_proto_id_field(curr.proto_id, name), x_intersect,
@@ -671,7 +670,6 @@ ucp_proto_select_lookup_slow(ucp_worker_h worker,
     status = ucp_proto_select_elem_init(worker, ep_cfg_index, rkey_cfg_index,
                                         select_param, &tmp_select_elem);
     if (status != UCS_OK) {
-        kh_del(ucp_proto_select_hash, &proto_select->hash, khiter);
         return NULL;
     }
 

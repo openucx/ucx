@@ -11,8 +11,6 @@ pr:
 
 resources:
   containers:
-    - container: centos7
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.x-cuda11.1:1
     - container: centos7_cuda10_1
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
     - container: centos7_cuda10_2
@@ -54,13 +52,17 @@ stages:
               set -eEx
               echo "Get commit message target $(system.pullRequest.sourceCommitId)"
               title=`git log -1 --format="%s" $(system.pullRequest.sourceCommitId)`
+              run_by_title=No
               if [[ "$title" == "AZP/RELEASE: "* ]]
               then
-                  echo Yes
-                  echo "##vso[task.setvariable variable=Title;isOutput=true]Yes"
+                  run_by_title=Yes
+              fi
+
+              if [[ ( "$(Build.Reason)" == "IndividualCI" ) || ( "${run_by_title}" == "Yes" && "$(Build.Reason)" == "PullRequest" ) ]]
+              then
+                  echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
               else
-                  echo No
-                  echo "##vso[task.setvariable variable=Title;isOutput=true]No"
+                  echo "##vso[task.setvariable variable=Launch;isOutput=true]No"
               fi
             name: Commit
   # Create an empty draft to avoid race condition in distro releases
@@ -68,8 +70,8 @@ stages:
     dependsOn: Check_Commit
     jobs:
       - job: DraftRelease
-        condition: or(eq(variables['Build.Reason'], 'ResourceTrigger'), and(eq(stageDependencies.Check_Commit.Check.outputs['Commit.Title'], 'Yes'), eq(variables['Build.Reason'], 'PullRequest')))
-        container: centos7
+        condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
+        container: centos7_cuda11_2
         pool:
           name: MLNX
           demands:
@@ -91,7 +93,7 @@ stages:
           displayName: Build tarball
 
         - task: GithubRelease@0
-          condition: eq(variables['Build.Reason'], 'ResourceTrigger')
+          condition: eq(variables['Build.Reason'], 'IndividualCI')
           displayName: Create/edit GitHub Draft Release
           inputs:
             githubConnection: release
@@ -109,8 +111,13 @@ stages:
 
   - stage: Release
     dependsOn: Check_Commit
+    variables:
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+        TARGET: publish-release
+      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+        TARGET: package
     jobs:
       - template: az-distro-release.yml
       - template: jucx/jucx-publish.yml
         parameters:
-          target: publish-release
+          target: $(TARGET)

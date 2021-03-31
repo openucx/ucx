@@ -122,7 +122,9 @@ libucp_la_SOURCES = \
 	rma/rma_sw.c \
 	rma/flush.c \
 	rndv/proto_rndv.c \
+	rndv/rndv_am.c \
 	rndv/rndv_get.c \
+	rndv/rndv_rtr.c \
 	rndv/rndv.c \
 	tag/eager_multi.c \
 	tag/eager_rcv.c \

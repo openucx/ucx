@@ -19,9 +19,10 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
 
@@ -43,10 +44,11 @@ static const char * ucp_device_type_names[] = {
     [UCT_DEVICE_TYPE_SELF] = "loopback",
 };
 
-static const char * ucp_rndv_modes[] = {
+static const char *ucp_rndv_modes[] = {
+    [UCP_RNDV_MODE_AUTO]      = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY] = "get_zcopy",
     [UCP_RNDV_MODE_PUT_ZCOPY] = "put_zcopy",
-    [UCP_RNDV_MODE_AUTO]      = "auto",
+    [UCP_RNDV_MODE_AM]        = "am",
     [UCP_RNDV_MODE_LAST]      = NULL,
 };
 
@@ -55,6 +57,7 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND_SYNC] = "tag_send_sync",
     [UCP_OP_ID_PUT]           = "put",
     [UCP_OP_ID_GET]           = "get",
+    [UCP_OP_ID_RNDV_SEND]     = "rndv_send",
     [UCP_OP_ID_RNDV_RECV]     = "rndv_recv",
     [UCP_OP_ID_LAST]          = NULL
 };
@@ -207,10 +210,15 @@ static ucs_config_field_t ucp_config_table[] = {
    "Add debugging information to worker address.",
    ucs_offsetof(ucp_config_t, ctx.address_debug_info), UCS_CONFIG_TYPE_BOOL},
 
-  {"MAX_WORKER_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_NAME_MAX),
-   "Maximal length of worker name. Sent to remote peer as part of worker address\n"
-   "if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
-   ucs_offsetof(ucp_config_t, ctx.max_worker_name), UCS_CONFIG_TYPE_UINT},
+  {"MAX_WORKER_NAME", NULL, "",
+   ucs_offsetof(ucp_config_t, ctx.max_worker_address_name),
+   UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_WORKER_ADDRESS_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_ADDRESS_NAME_MAX),
+   "Maximal length of worker address name. Sent to remote peer as part of\n"
+   "worker address if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
+   ucs_offsetof(ucp_config_t, ctx.max_worker_address_name),
+   UCS_CONFIG_TYPE_UINT},
 
   {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
    "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
@@ -1338,8 +1346,7 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
         ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%s",
                           params->name);
     } else {
-        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%s",
-                          "context_name");
+        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%p", context);
     }
 }
 
@@ -1548,6 +1555,9 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
+    ucs_vfs_obj_add_dir(NULL, context, "ucp/context/%s-%p", context->name,
+                        context);
+
     ucs_debug("created ucp context %s %p [%d mds %d tls] features 0x%" PRIx64
               " tl bitmap " UCT_TL_BITMAP_FMT,
               context->name, context, context->num_mds, context->num_tls,
@@ -1570,6 +1580,7 @@ err:
 
 void ucp_cleanup(ucp_context_h context)
 {
+    ucs_vfs_obj_remove(context);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
@@ -1619,6 +1630,19 @@ void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
         atomic->atomic64.op_flags  = 0;
         atomic->atomic64.fop_flags = 0;
     }
+}
+
+ucs_status_t ucp_lib_query(ucp_lib_attr_t *attr)
+{
+    if (attr->field_mask & UCP_LIB_ATTR_FIELD_MAX_THREAD_LEVEL) {
+#if ENABLE_MT
+        attr->max_thread_level = UCS_THREAD_MODE_MULTI;
+#else
+        attr->max_thread_level = UCS_THREAD_MODE_SERIALIZED;
+#endif
+    }
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)

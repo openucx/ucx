@@ -35,25 +35,25 @@
 
 #if ENABLE_MT
 
-#define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)                 \
-    do {                                                                \
-        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
-            UCS_ASYNC_BLOCK(&(_worker)->async);                         \
-        }                                                               \
+#define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker) \
+    do { \
+        if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
+            UCS_ASYNC_BLOCK(&(_worker)->async); \
+        } \
     } while (0)
 
 
-#define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)                  \
-    do {                                                                \
-        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
-            UCS_ASYNC_UNBLOCK(&(_worker)->async);                       \
-        }                                                               \
+#define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker) \
+    do { \
+        if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
+            UCS_ASYNC_UNBLOCK(&(_worker)->async); \
+        } \
     } while (0)
 
 
 #define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(_worker) \
     do { \
-        if ((_worker)->flags & UCP_WORKER_FLAG_MT) { \
+        if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
             UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker); \
         } \
     } while (0)
@@ -75,17 +75,24 @@ enum {
      * flags specified when worker is created */
     UCP_WORKER_INTERNAL_FLAGS_SHIFT = 32,
 
-    /** MT locking is required */
-    UCP_WORKER_FLAG_MT =
+    /** The worker can be accessed from multiple threads at the same time, so
+        locking is required */
+    UCP_WORKER_FLAG_THREAD_MULTI =
             UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 0),
+
+    /** The worker can be accessed from multiple threads, but only by one thread
+        at a time, so locking is not required, but IO flush may be required.
+        This flag is mutually exclusive with UCP_WORKER_FLAG_THREAD_MULTI. */
+    UCP_WORKER_FLAG_THREAD_SERIALIZED =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 1),
 
     /** Events are edge-triggered */
     UCP_WORKER_FLAG_EDGE_TRIGGERED =
-            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 1),
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 2),
 
     /** Worker event fd is external */
     UCP_WORKER_FLAG_EXTERNAL_EVENT_FD =
-            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 2)
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 3)
 };
 
 
@@ -236,7 +243,8 @@ typedef struct ucp_worker {
     ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;
-    char                             name[UCP_WORKER_NAME_MAX]; /* Worker name */
+    /* Worker address name composed of host name and process id */
+    char                             address_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     unsigned                         flush_ops_count;     /* Number of pending operations */
 
@@ -349,7 +357,9 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
-                               void *purge_arg);
+                               void *purge_arg,
+                               ucp_send_nbx_callback_t discarded_cb,
+                               void *discarded_cb_arg);
 
 char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                 ucp_context_h context,

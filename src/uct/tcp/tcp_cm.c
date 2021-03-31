@@ -423,7 +423,7 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     ucs_assertv(connect_ep->events == 0,
                 "Requested epoll events must be 0-ed for ep=%p", connect_ep);
 
-    close(connect_ep->fd);
+    ucs_close_fd(&connect_ep->fd);
     connect_ep->fd = accept_ep->fd;
 
     /* 2. Migrate RX from the EP allocated during accepting connection to

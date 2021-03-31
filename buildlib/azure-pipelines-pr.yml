@@ -9,10 +9,14 @@ pr:
 resources:
   containers:
     - container: centos7
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.x-cuda11.1:1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
       options: --privileged
+    - container: fedora34
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
+      options: --privileged -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
@@ -110,50 +114,15 @@ stages:
               fi
             condition: eq(variables['Build.Reason'], 'PullRequest')
 
-
-  - stage: Build
+  - stage: Static_check
+    dependsOn: [Codestyle]
     jobs:
-      - job: build_source
-        workspace:
-          clean: all
-        pool:
-          name: MLNX
-          demands:
-            - ucx_docker -equals yes
-        strategy:
-          matrix:
-            rhel76:
-              CONTAINER: rhel76
-            rhel76_mofed47:
-              CONTAINER: rhel76_mofed47
-            ubuntu2004:
-              CONTAINER: ubuntu2004
-            ubuntu1804:
-              CONTAINER: ubuntu1804
-            sles15sp2:
-              CONTAINER: sles15sp2
-            #sles12sp5:
-            #  CONTAINER: sles12sp5
-            rhel82:
-              CONTAINER: rhel82
-        container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 240
-
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
-
-          - bash: |
-              ./buildlib/tools/builds.sh
-            displayName: Build
-
       - job: static_checks
         displayName: Static checks
         pool:
           name: MLNX
           demands:
-          - ucx_docker -equals yes
+          - ucx_docker_fast -equals yes
         container: fedora
         steps:
           - checkout: self
@@ -165,26 +134,17 @@ stages:
 
           - bash: |
               set -eE
-              mkdir build && cd build
+              . buildlib/tools/common.sh
+              prepare_build
               clang --version
               gcc --version
               cppcheck --version
-              ../contrib/configure-release
-            displayName: Configure
-
-          - bash: |
-              set -eE
-
-              cd build
+              ${WORKSPACE}/contrib/configure-release
 
               export PATH="`csclng --print-path-to-wrap`:`cscppc --print-path-to-wrap`:`cswrap --print-path-to-wrap`:$PATH"
+              set -o pipefail
               make -j`nproc` 2>&1 | tee compile.log
-            displayName: Build
-
-          - bash: |
-              set -eE
-
-              cd build
+              set +o pipefail
 
               cs_errors="cs.err"
               cslinker --quiet compile.log \
@@ -202,8 +162,51 @@ stages:
                 echo "No errors reported by static checkers"
               fi
             displayName: cstools reports
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
 
-      # Perform test builds on relevant distributions.
+  - stage: Build
+    dependsOn: [Static_check]
+    jobs:
+      - job: build_source
+        pool:
+          name: MLNX
+          demands:
+            - ucx_docker -equals yes
+        strategy:
+          matrix:
+            rhel76:
+              CONTAINER: rhel76
+            rhel76_mofed47:
+              CONTAINER: rhel76_mofed47
+            ubuntu2004:
+              CONTAINER: ubuntu2004
+            ubuntu1804:
+              CONTAINER: ubuntu1804
+            sles15sp2:
+              CONTAINER: sles15sp2
+            rhel82:
+              CONTAINER: rhel82
+            fedora34:
+              CONTAINER: fedora34
+        container: $[ variables['CONTAINER'] ]
+        timeoutInMinutes: 240
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+
+  - stage: Distro
+    dependsOn: [Static_check]
+    jobs:
+       # Perform test builds on relevant distributions.
       - job: Distros
         displayName: Build for
         pool:
@@ -221,25 +224,15 @@ stages:
             clean: true
             fetchDepth: 100
 
-          - bash: ./autogen.sh
-            displayName: Setup autotools
-
           - bash: |
               set -eE
-              mkdir build && cd build
-              ../configure $(CONFIGURE_OPTS)
-            displayName: Configure
-
-          - bash: |
-              set -eE
-              cd build
+              . buildlib/tools/common.sh
+              prepare_build
+              ${WORKSPACE}/configure $(CONFIGURE_OPTS)
               gcc -v
               make -s -j `nproc`
-            displayName: Build for $(CONTAINER)
-
-          - bash: |
+              set +eE
               set -x
-              cd build
               ./src/tools/info/ucx_info -e -u t 2>&1 | tee info.txt
               grep -i error info.txt
               retVal=$?
@@ -249,38 +242,8 @@ stages:
               exit 0;
             displayName: Test ucx_info
 
-      # Test RPM build
-      - job: build_rpm
-        displayName: Build tarball and source rpm
-        pool:
-          name: MLNX
-          demands:
-          - ucx_docker -equals yes
-        container: fedora
-        steps:
-          - checkout: self
-            clean: true
-            fetchDepth: 100
-
-          - bash: ./autogen.sh
-            displayName: Setup autotools
-
-          - bash: |
-              set -eE
-              gcc --version
-              ./contrib/configure-release
-              stdbuf -e0 -o0 ./contrib/buildrpm.sh -s -t -b |& tee rpmbuild.log
-              pattern='^warning: '
-              if grep -q "$pattern" rpmbuild.log; then
-                echo "rpm build generated warnings:"
-                grep "$pattern" rpmbuild.log
-                echo "##vso[task.logissue type=error]rpm build generated warnings"
-                echo "##vso[task.complete result=Failed;]"
-              fi
-            displayName: Configure source and build RPM
-
   - stage: Coverity
-    dependsOn: [Codestyle]
+    dependsOn: [Static_check]
     jobs:
       - template: coverity.yml
         parameters:
@@ -288,7 +251,7 @@ stages:
           container: coverity_rh7
 
   - stage: Tests
-    dependsOn: [Codestyle]
+    dependsOn: [Static_check]
     jobs:
     - template: tests.yml
       parameters:
@@ -317,12 +280,12 @@ stages:
         test_perf: 0
 
   - stage: io_demo
-    dependsOn: [Codestyle]
+    dependsOn: [Static_check]
     jobs:
     - template: io_demo/io-demo.yml
 
   - stage: jucx
-    dependsOn: [Codestyle]
+    dependsOn: [Static_check]
     jobs:
       - template: jucx/jucx-test.yml
         parameters:

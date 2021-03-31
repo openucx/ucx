@@ -12,6 +12,7 @@
 #include "ucx_info.h"
 
 #include <ucs/sys/sys.h>
+#include <ucs/sys/math.h>
 #include <ucs/time/time.h>
 #include <ucs/config/parser.h>
 #include <ucs/config/global_opts.h>

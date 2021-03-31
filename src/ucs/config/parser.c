@@ -16,7 +16,7 @@
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/time/time.h>
 #include <fnmatch.h>
 #include <ctype.h>

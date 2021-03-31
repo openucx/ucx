@@ -428,14 +428,17 @@ public:
     {
         se.connect(&receiver(), get_ep_params());
         // Need to send twice:
-        // 1. to ensure that wireup's UCT iface has been closed and
-        //    it is not considered for num_active_iface on worker
-        //    (message has to be less than `UCX_TM_THRESH` value)
+        // 1. to ensure that wireup's UCT iface has been closed and it is not
+        //    considered for num_active_iface on worker (message has to be less
+        //    than `UCX_TM_THRESH` value) + UCP workers have to be flushed prior
+        //    to ensure that UCT ifaces were deactivated at the end of auxiliary
+        //    UCT EP discarding
         // 2. to activate tag ofload
-        //    (num_active_ifaces on worker is increased when any message
-        //     is received on any iface. Tag hashing is done when we have
-        //     more than 1 active ifaces and message has to be greater
-        //     than `UCX_TM_THRESH` value)
+        //    (num_active_ifaces on worker is increased when any message is
+        //    received on any iface. Tag hashing is done when we have more than
+        //    1 active ifaces and message has to be greater than `UCX_TM_THRESH`
+        //    value)
+        flush_workers();
         send_recv(se, tag, 8);
         send_recv(se, tag, 2048);
     }

@@ -13,7 +13,7 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/datastruct/list.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
@@ -67,7 +67,7 @@ static pid_t ucs_async_signal_context_tid(ucs_async_context_t *async)
     if (pid == -1) {
         pid = getpid();
     }
-    return (async == NULL) ? pid : async->signal.tid;;
+    return (async == NULL) ? pid : async->signal.tid;
 }
 
 static ucs_status_t

@@ -229,6 +229,8 @@ protected:
                                uct_ep_disconnect_cb_t disconnect_cb,
                                void *user_data)
     {
+        ucs::scoped_async_lock listen_lock(m_server->async());
+        ucs::scoped_async_lock accept_lock(server->async());
         accept(server->cm(), conn_request, notify_cb, disconnect_cb, user_data);
     }
 
@@ -751,7 +753,7 @@ UCS_TEST_P(test_uct_sockaddr, ep_disconnect_err_codes)
     listen_and_connect();
 
     {
-        entity::scoped_async_lock lock(*m_client);
+        ucs::scoped_async_lock lock(m_client->async());
         if (m_state & TEST_STATE_CLIENT_CONNECTED) {
             UCS_TEST_MESSAGE << "EXP: " << ucs_status_string(UCS_OK);
             EXPECT_EQ(UCS_OK, uct_ep_disconnect(m_client->ep(0), 0));
@@ -768,7 +770,7 @@ UCS_TEST_P(test_uct_sockaddr, ep_disconnect_err_codes)
                                              TEST_STATE_CLIENT_CONNECTED)));
 
     {
-        entity::scoped_async_lock lock(*m_client);
+        ucs::scoped_async_lock lock(m_client->async());
         if (disconnecting) {
             scoped_log_handler slh(detect_double_disconnect_error_logger);
             if (m_state & TEST_STATE_CLIENT_DISCONNECTED) {
@@ -937,6 +939,8 @@ public:
                        uct_cm_ep_server_conn_notify_callback_t notify_cb,
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data) {
+        ucs::scoped_async_lock listen_lock(m_server->async());
+        ucs::scoped_async_lock accept_lock(server->async());
         test_uct_sockaddr::accept(server->cm(), conn_request, notify_cb,
                                   disconnect_cb, user_data);
     }
@@ -1116,6 +1120,8 @@ public:
                        uct_ep_disconnect_cb_t disconnect_cb,
                        void *user_data)
     {
+        ucs::scoped_async_lock listen_lock(m_server->async());
+        ucs::scoped_async_lock accept_lock(*m_test_async);
         accept(m_test_cm, conn_request, notify_cb, disconnect_cb, user_data);
     }
 

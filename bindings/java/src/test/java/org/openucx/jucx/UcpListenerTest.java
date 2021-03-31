@@ -6,6 +6,7 @@ package org.openucx.jucx;
 
 import org.junit.Test;
 import org.openucx.jucx.ucp.*;
+import org.openucx.jucx.ucs.UcsConstants;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -23,32 +24,6 @@ import static org.junit.Assert.*;
 public class UcpListenerTest  extends UcxTest {
     static final int port = Integer.parseInt(
         System.getenv().getOrDefault("JUCX_TEST_PORT", "55321"));
-
-    @Test
-    public void testCreateUcpListener() {
-        UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
-        UcpWorker worker = context.newWorker(new UcpWorkerParams());
-        InetSocketAddress ipv4 = new InetSocketAddress("0.0.0.0", port);
-        try {
-            UcpListener ipv4Listener = worker.newListener(
-                new UcpListenerParams().setSockAddr(ipv4));
-
-            assertNotNull(ipv4Listener);
-            ipv4Listener.close();
-        } catch (UcxException ignored) { }
-
-        try {
-            InetSocketAddress ipv6 = new InetSocketAddress("::", port);
-            UcpListener ipv6Listener = worker.newListener(
-                new UcpListenerParams().setSockAddr(ipv6));
-
-            assertNotNull(ipv6Listener);
-            ipv6Listener.close();
-        } catch (UcxException ignored) { }
-
-        worker.close();
-        context.close();
-    }
 
     static Stream<NetworkInterface> getInterfaces() {
         try {
@@ -74,14 +49,22 @@ public class UcpListenerTest  extends UcxTest {
         List<InetAddress> addresses = getInterfaces().flatMap(iface ->
             Collections.list(iface.getInetAddresses()).stream())
             .collect(Collectors.toList());
+        Collections.reverse(addresses);
         for (InetAddress address : addresses) {
-            try {
-                result = worker.newListener(
-                    params.setSockAddr(new InetSocketAddress(address, port)));
-                break;
-            } catch (UcxException ignored) { }
+            for (int i = 0; i < 10; i++) {
+                try {
+                    result = worker.newListener(
+                        params.setSockAddr(new InetSocketAddress(address, port + i)));
+                    break;
+                } catch (UcxException ex) {
+                    if (ex.getStatus() != UcsConstants.STATUS.UCS_ERR_BUSY) {
+                        break;
+                    }
+                }
+            }
         }
         assertNotNull("Could not find socket address to start UcpListener", result);
+        System.out.println("Bound UcpListner on: " + result.getAddress());
         return result;
     }
 
@@ -104,7 +87,9 @@ public class UcpListenerTest  extends UcxTest {
         UcpListener clientListener = tryBindListener(clientWorker, listenerParams);
 
         UcpEndpoint clientToServer = clientWorker.newEndpoint(new UcpEndpointParams()
-            .setSocketAddress(serverListener.getAddress()));
+            .setErrorHandler((ep, status, errorMsg) ->
+                System.err.println("clientToServer error: " + errorMsg))
+            .setPeerErrorHandlingMode().setSocketAddress(serverListener.getAddress()));
 
         while (conRequest.get() == null) {
             serverWorker1.progress();
@@ -115,7 +100,9 @@ public class UcpListenerTest  extends UcxTest {
         UcpEndpoint serverToClientListener = serverWorker2.newEndpoint(
             new UcpEndpointParams().setSocketAddress(conRequest.get().getClientAddress())
                                    .setPeerErrorHandlingMode()
-                                   .setErrorHandler((errEp, status, errorMsg) -> { }));
+                                   .setErrorHandler((errEp, status, errorMsg) ->
+                                       System.err.println("serverToClientListener error: " +
+                                           errorMsg)));
         serverWorker2.progressRequest(serverToClientListener.closeNonBlockingForce());
 
         // Create endpoint from another worker from pool.
@@ -127,9 +114,8 @@ public class UcpListenerTest  extends UcxTest {
             conRequest.set(null);
             UcpEndpoint tmpEp = clientWorker.newEndpoint(new UcpEndpointParams()
                 .setSocketAddress(serverListener.getAddress()).setPeerErrorHandlingMode()
-                .setErrorHandler((ep, status, errorMsg) -> {
-
-                }));
+                .setErrorHandler((ep, status, errorMsg) ->
+                    System.err.println("tmpEp error: " + errorMsg)));
 
             while (conRequest.get() == null) {
                 serverWorker1.progress();
@@ -138,7 +124,8 @@ public class UcpListenerTest  extends UcxTest {
             }
 
             UcpEndpoint tmpEp2 = serverWorker2.newEndpoint(
-                new UcpEndpointParams().setConnectionRequest(conRequest.get()));
+                new UcpEndpointParams().setPeerErrorHandlingMode()
+                    .setConnectionRequest(conRequest.get()));
 
             UcpRequest close1 = tmpEp.closeNonBlockingFlush();
             UcpRequest close2 = tmpEp2.closeNonBlockingFlush();
@@ -168,6 +155,7 @@ public class UcpListenerTest  extends UcxTest {
 
         while (!sent.isCompleted() || !recv.isCompleted()) {
             serverWorker1.progress();
+            serverWorker2.progress();
             clientWorker.progress();
         }
 

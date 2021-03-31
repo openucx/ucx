@@ -26,7 +26,7 @@
 #include <ucp/core/ucp_worker.h>
 
 
-#define UCP_REQUEST_ID_INVALID      0
+#define UCP_REQUEST_ID_INVALID ((ucs_ptr_map_key_t)0)
 
 
 #define ucp_trace_req(_sreq, _message, ...) \
@@ -55,12 +55,10 @@ enum {
     UCP_REQUEST_FLAG_RECV_TAG             = UCS_BIT(17),
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(18),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19),
-    UCP_REQUEST_FLAG_IN_PTR_MAP           = UCS_BIT(20)
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
-    UCP_REQUEST_FLAG_IN_PTR_MAP           = 0
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0
 #endif
 };
 
@@ -81,20 +79,23 @@ enum {
  * Receive descriptor flags.
  */
 enum {
-    UCP_RECV_DESC_FLAG_UCT_DESC       = UCS_BIT(0), /* Descriptor allocated by UCT */
-    UCP_RECV_DESC_FLAG_EAGER          = UCS_BIT(1), /* Eager tag message */
-    UCP_RECV_DESC_FLAG_EAGER_ONLY     = UCS_BIT(2), /* Eager tag message with single fragment */
-    UCP_RECV_DESC_FLAG_EAGER_SYNC     = UCS_BIT(3), /* Eager tag message which requires reply */
-    UCP_RECV_DESC_FLAG_EAGER_OFFLOAD  = UCS_BIT(4), /* Eager tag from offload */
-    UCP_RECV_DESC_FLAG_EAGER_LAST     = UCS_BIT(5), /* Last fragment of eager tag message.
-                                                       Used by tag offload protocol. */
-    UCP_RECV_DESC_FLAG_RNDV           = UCS_BIT(6), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_RNDV_STARTED   = UCS_BIT(7), /* Rendezvous receive was initiated
-                                                       (in AM API) */
-    UCP_RECV_DESC_FLAG_MALLOC         = UCS_BIT(8), /* Descriptor was allocated with malloc
-                                                       and must be freed, not returned to the
-                                                       memory pool or UCT */
-    UCP_RECV_DESC_FLAG_COMPLETED      = UCS_BIT(9)  /* Descriptor is no longer needed */
+    UCP_RECV_DESC_FLAG_UCT_DESC         = UCS_BIT(0), /* Descriptor allocated by UCT */
+    UCP_RECV_DESC_FLAG_EAGER            = UCS_BIT(1), /* Eager tag message */
+    UCP_RECV_DESC_FLAG_EAGER_ONLY       = UCS_BIT(2), /* Eager tag message with single fragment */
+    UCP_RECV_DESC_FLAG_EAGER_SYNC       = UCS_BIT(3), /* Eager tag message which requires reply */
+    UCP_RECV_DESC_FLAG_EAGER_OFFLOAD    = UCS_BIT(4), /* Eager tag from offload */
+    UCP_RECV_DESC_FLAG_EAGER_LAST       = UCS_BIT(5), /* Last fragment of eager tag message.
+                                                         Used by tag offload protocol. */
+    UCP_RECV_DESC_FLAG_RNDV             = UCS_BIT(6), /* Rendezvous request */
+    UCP_RECV_DESC_FLAG_RECV_STARTED     = UCS_BIT(7), /* Receive operation on this descriptor
+                                                         was initiated by ucp_am_recv_data_nbx */
+    UCP_RECV_DESC_FLAG_MALLOC           = UCS_BIT(8), /* Descriptor was allocated with malloc
+                                                         and must be freed, not returned to the
+                                                         memory pool or UCT */
+    UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS = UCS_BIT(9)  /* Descriptor should not be released,
+                                                         because UCT AM callback is still in
+                                                         the call stack and descriptor is not
+                                                         initialized yet. */
 };
 
 
@@ -111,8 +112,13 @@ enum {
  * Request in progress.
  */
 struct ucp_request {
-    ucs_status_t                  status;     /* Operation status */
-    uint32_t                      flags;      /* Request flags */
+    /* Operation status */
+    ucs_status_t      status;
+    /* Request flags */
+    uint32_t          flags;
+    /* Local request ID taken from PTR MAP */
+    ucs_ptr_map_key_t id;
+
     union {
         void                      *user_data; /* Completion user data */
         ucp_request_t             *super_req; /* Super request that is used
@@ -125,10 +131,15 @@ struct ucp_request {
          * operations */
         struct {
             ucp_ep_h                ep;
-            void                    *buffer;    /* Send buffer */
-            ucp_datatype_t          datatype;   /* Send type */
-            size_t                  length;     /* Total length, in bytes */
-            ucp_send_nbx_callback_t cb;         /* Completion callback */
+            union {
+                void                   *buffer; /* Send buffer */
+                ucp_request_callback_t flushed_cb; /* Called when flushed */
+            };
+            ucp_datatype_t          datatype; /* Send type */
+            size_t                  length; /* Total length, in bytes */
+            ucp_send_nbx_callback_t cb; /* Completion callback */
+            ucs_hlist_link_t        list; /* Element in the per-EP list of UCP
+                                             flush/proto requests */
 
             const ucp_proto_config_t *proto_config; /* Selected protocol for the request */
 
@@ -147,16 +158,10 @@ struct ucp_request {
                 ucp_wireup_msg_t  wireup;
 
                 struct {
-                    uint64_t               message_id;  /* used to identify matching parts
-                                                           of a large message */
-                    ucs_ptr_map_key_t      sreq_id;     /* send request ID on the
-                                                           sender side */
-
+                    /* Used to identify matching parts of a large message */
+                    uint64_t message_id;
                     union {
-                        struct {
-                            ucp_tag_t         tag;
-                            ucs_ptr_map_key_t req_id;
-                        } tag;
+                        ucp_tag_t tag;
 
                         struct {
                             union {
@@ -175,9 +180,8 @@ struct ucp_request {
                 } msg_proto;
 
                 struct {
-                    ucs_ptr_map_key_t sreq_id;     /* Send request ID */
-                    uint64_t          remote_addr; /* Remote address */
-                    ucp_rkey_h        rkey;        /* Remote memory key */
+                    uint64_t   remote_addr; /* Remote address */
+                    ucp_rkey_h rkey; /* Remote memory key */
                 } rma;
 
                 struct {
@@ -203,9 +207,16 @@ struct ucp_request {
                     ucs_ptr_map_key_t remote_req_id;
                     ucp_rkey_h        rkey;            /* key for remote send/receive buffer for
                                                           the GET/PUT operation */
-                    ucp_lane_map_t    lanes_map_all;   /* actual lanes map */
-                    uint8_t           lanes_count;     /* actual lanes count */
-                    uint8_t           rkey_index[UCP_MAX_LANES];
+                    union {
+                        struct {
+                            ucp_lane_map_t lanes_map_all; /* actual lanes map */
+                            uint8_t        lanes_count; /* actual lanes count */
+                            uint8_t        rkey_index[UCP_MAX_LANES];
+                        };
+                        struct {
+                            ucs_ptr_map_key_t rreq_id; /* id of receive request */
+                        } rtr;
+                    };
                 } rndv;
 
                 struct {
@@ -223,8 +234,6 @@ struct ucp_request {
                 } rkey_ptr;
 
                 struct {
-                    /* Remote request ID received from a peer */
-                    ucs_ptr_map_key_t remote_req_id;
                     /* The length of the data that should be fetched from sender
                      * side */
                     size_t            length;
@@ -233,21 +242,15 @@ struct ucp_request {
                 } rndv_rtr;
 
                 struct {
-                    ucp_request_callback_t flushed_cb;/* Called when flushed */
-                    ucs_queue_elem_t       queue;     /* Queue element in proto_status */
-                    unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
-                    uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
-                    uint32_t               cmpl_sn;   /* Sequence number of the remote completion
-                                                         this request is waiting for */
-                    uint8_t                sw_started;
-                    uint8_t                sw_done;
-                    uint8_t                num_lanes; /* How many lanes are being flushed */
-                    ucp_lane_map_t         started_lanes;/* Which lanes need were flushed */
+                    unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
+                    uct_worker_cb_id_t prog_id; /* Progress callback ID */
+                    uint32_t           cmpl_sn; /* Sequence number of the remote completion
+                                                   this request is waiting for */
+                    uint8_t            sw_started;
+                    uint8_t            sw_done;
+                    uint8_t            num_lanes; /* How many lanes are being flushed */
+                    ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
                 } flush;
-
-                struct {
-                    uct_worker_cb_id_t        prog_id;/* Slow-path callback */
-                } disconnect;
 
                 struct {
                     uct_ep_h              uct_ep;         /* UCT EP that should be flushed and
@@ -257,7 +260,6 @@ struct ucp_request {
                 } discard_uct_ep;
 
                 struct {
-                    ucs_ptr_map_key_t     sreq_id;     /* Send request ID */
                     uint64_t              remote_addr; /* Remote address */
                     ucp_rkey_h            rkey;        /* Remote memory key */
                     uint64_t              value;       /* Atomic argument */
@@ -311,8 +313,8 @@ struct ucp_request {
             ssize_t               remaining;  /* How much more data
                                                * to be received */
 
-            /* Local request ID taken from PTR MAP */
-            ucs_ptr_map_key_t     rreq_id;
+            /* Remote request ID received from a peer */
+            ucs_ptr_map_key_t     remote_req_id;
 
             union {
                 struct {

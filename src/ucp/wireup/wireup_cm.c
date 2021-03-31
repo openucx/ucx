@@ -17,6 +17,28 @@
 #include <ucs/sys/string.h>
 
 
+/**
+ * @brief Check whether CM callback should be called or not.
+ *
+ * @param [in] _ucp_ep        UCP Endpoint for which CM callback is called.
+ * @param [in] _uct_cm_ep     UCT CM Endpoint which calls CM callback.
+ * @param [in] _failed_action Action to do if UCP EP is in a FAILED state.
+ *                            This actions should stop macro execution.
+ */
+#define UCP_EP_CM_CALLBACK_ENTER(_ucp_ep, _uct_cm_ep, _failed_action) \
+    do { \
+        ucs_assert(ucs_async_is_blocked(&(_ucp_ep)->worker->async)); \
+        if ((_ucp_ep)->flags & UCP_EP_FLAG_FAILED) { \
+            _failed_action; \
+        } \
+        \
+        ucs_assertv_always((_uct_cm_ep) == ucp_ep_get_cm_uct_ep(_ucp_ep), \
+                           "%p: uct_cm_ep=%p vs found_uct_ep=%p", \
+                           _ucp_ep, _uct_cm_ep, \
+                           ucp_ep_get_cm_uct_ep(_ucp_ep)); \
+    } while (0)
+
+
 unsigned
 ucp_cm_ep_init_flags(const ucp_ep_params_t *params)
 {
@@ -98,13 +120,12 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
         cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
         ucs_assert_always(cm_wireup_ep != NULL);
 
-        ucs_error("client ep %p failed to connect to %s using %s cms, set "
-                  "UCX_LOG_LEVEL=diag for more details",
-                  ep,
-                  ucs_sockaddr_str(
-                          (struct sockaddr*)&cm_wireup_ep->cm_remote_sockaddr,
-                          addr_str, sizeof(addr_str)),
-                  ucs_string_buffer_cstr(&cms_strb));
+        ucs_diag("client ep %p failed to connect to %s using %s cms",
+                 ep,
+                 ucs_sockaddr_str(
+                         (struct sockaddr*)&cm_wireup_ep->cm_remote_sockaddr,
+                         addr_str, sizeof(addr_str)),
+                 ucs_string_buffer_cstr(&cms_strb));
 
         return 0;
     }
@@ -331,6 +352,14 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
 
     /* At this point the ep has only CM lane */
     ucs_assert((ucp_ep_num_lanes(ep) == 1) && ucp_ep_has_cm_lane(ep));
+
+    UCP_EP_CM_CALLBACK_ENTER(ep, ucp_ep_get_cm_uct_ep(ep),
+                             {
+                                 ucs_assert(ep->flags & UCP_EP_FLAG_CLOSED);
+                                 status = UCS_ERR_CANCELED;
+                                 goto out;
+                             });
+
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucs_assert(cm_wireup_ep != NULL);
 
@@ -360,6 +389,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucp_ep_ext_control(cm_wireup_ep->tmp_ep)->local_ep_id =
             ucp_ep_ext_control(ep)->local_ep_id;
 
+    ucp_ep_flush_state_reset(cm_wireup_ep->tmp_ep);
     ucp_ep_update_flags(cm_wireup_ep->tmp_ep, UCP_EP_FLAG_INTERNAL, 0);
     ucs_debug("ep %p: created tmp_ep %p", ep, cm_wireup_ep->tmp_ep);
 
@@ -453,7 +483,7 @@ void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep, ucp_ep_h ucp_ep)
         }
     }
 
-    ucp_ep_destroy_base(tmp_ep); /* not needed anymore */
+    ucp_ep_remove_ref(tmp_ep); /* not needed anymore */
     wireup_cm_ep->tmp_ep = NULL;
 }
 
@@ -617,6 +647,8 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     ucs_debug("ep %p flags 0x%x cfg_index %d: client connected status %s",
               ucp_ep, ucp_ep->flags, ucp_ep->cfg_index,
               ucs_status_string(status));
+
+    UCP_EP_CM_CALLBACK_ENTER(ucp_ep, uct_cm_ep, return);
 
     if (((status == UCS_ERR_NOT_CONNECTED) || (status == UCS_ERR_UNREACHABLE) ||
          (status == UCS_ERR_CONNECTION_RESET)) &&
@@ -794,6 +826,8 @@ static void ucp_cm_disconnect_cb(uct_ep_h uct_cm_ep, void *arg)
     ucs_trace("ep %p flags 0x%x: remote disconnect callback invoked", ucp_ep,
               ucp_ep->flags);
 
+    UCP_EP_CM_CALLBACK_ENTER(ucp_ep, uct_cm_ep, return);
+
     uct_ep = ucp_ep_get_cm_uct_ep(ucp_ep);
     ucs_assertv_always(uct_cm_ep == uct_ep,
                        "%p: uct_cm_ep=%p vs found_uct_ep=%p",
@@ -877,8 +911,6 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
     if (status != UCS_OK) {
         return status;
     }
-
-    ucp_ep_flush_state_reset(ucp_ep);
 
     return UCS_OK;
 }
@@ -1137,6 +1169,12 @@ static ssize_t ucp_cm_server_priv_pack_cb(void *arg,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    UCP_EP_CM_CALLBACK_ENTER(ep, ucp_ep_get_cm_uct_ep(ep),
+                             {
+                                 status = UCS_ERR_NOT_CONNECTED;
+                                 goto out;
+                             });
+
     tl_bitmap = ucp_ep_get_tl_bitmap(ep);
     /* make sure that all lanes are created on correct device */
     ucs_assert_always(pack_args->field_mask &
@@ -1202,7 +1240,7 @@ static unsigned ucp_cm_server_conn_notify_progress(void *arg)
  * Async callback on a server side which notifies that client is connected.
  */
 static void ucp_cm_server_conn_notify_cb(
-        uct_ep_h ep, void *arg,
+        uct_ep_h uct_cm_ep, void *arg,
         const uct_cm_ep_server_conn_notify_args_t *notify_args)
 {
     ucp_ep_h ucp_ep            = arg;
@@ -1217,6 +1255,8 @@ static void ucp_cm_server_conn_notify_cb(
     ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_SERVER_NOTIFY_CB, 0);
     ucs_trace("ep %p flags 0x%x: notify callback invoked, status %s", ucp_ep,
               ucp_ep->flags, ucs_status_string(status));
+
+    UCP_EP_CM_CALLBACK_ENTER(ucp_ep, uct_cm_ep, return);
 
     if (status == UCS_OK) {
         uct_worker_progress_register_safe(ucp_ep->worker->uct,

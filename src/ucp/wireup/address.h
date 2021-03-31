@@ -107,10 +107,11 @@ struct ucp_address_entry {
  * Unpacked remote address
  */
 struct ucp_unpacked_address {
-    uint64_t                   uuid;            /* Remote worker UUID */
-    char                       name[UCP_WORKER_NAME_MAX]; /* Remote worker name */
-    unsigned                   address_count;   /* Length of address list */
-    ucp_address_entry_t        *address_list;   /* Pointer to address list */
+    uint64_t                    uuid;           /* Remote worker UUID */
+    /* Remote worker address name */
+    char                        name[UCP_WORKER_ADDRESS_NAME_MAX];
+    unsigned                    address_count;  /* Length of address list */
+    ucp_address_entry_t         *address_list;  /* Pointer to address list */
 };
 
 

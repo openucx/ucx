@@ -11,18 +11,10 @@
 #  include "config.h"
 #endif
 
-#define __STDC_FORMAT_MACROS 1
-#include <inttypes.h>
-#include <tools/perf/lib/libperf_int.h>
-
-extern "C" {
-#include <ucs/debug/log.h>
-#include <ucs/sys/preprocessor.h>
-#include <ucs/sys/math.h>
-#include <ucs/sys/sys.h>
-}
+#include "libperf_int.h"
 
 #include <limits>
+
 
 template <ucx_perf_cmd_t CMD, ucx_perf_test_type_t TYPE, uct_perf_data_layout_t DATA, bool ONESIDED>
 class uct_perf_test_runner {

@@ -268,7 +268,8 @@ static unsigned uct_dc_mlx5_iface_progress_tm(void *arg)
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 
 static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
-                                                 int pool_index, int dci_index)
+                                                 int pool_index, int dci_index,
+                                                 uint8_t lag_port)
 {
     uct_ib_iface_t *ib_iface           = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr         = {};
@@ -281,7 +282,10 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp *qp;
 
+    ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
+
     dci->pool_index = pool_index;
+    dci->lag_port   = lag_port;
 
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
                                 iface->super.super.config.tx_qp_len,
@@ -384,7 +388,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super,
-                                                  dci->pool_index);
+                                                  dci->lag_port);
     }
 
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
@@ -778,33 +782,36 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
 
 ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
 {
+    uint8_t num_paths = iface->super.super.super.num_paths;
+    uct_dc_mlx5_dci_pool_t *dci_pool;
     int i, pool_index, dci_index;
     ucs_status_t status;
 
-    ucs_debug("creating %d dci(s)", iface->tx.ndci);
-    ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
+    dci_index = 0;
+    for (pool_index = 0; pool_index < iface->tx.num_dci_pools; pool_index++) {
+        dci_pool = &iface->tx.dci_pool[pool_index];
+        ucs_debug("creating dci pool %d with %d QPs", pool_index,
+                  iface->tx.ndci);
+        dci_pool->stack_top = 0;
+        ucs_arbiter_init(&dci_pool->arbiter);
 
-    for (pool_index = 0, dci_index = 0; pool_index < iface->tx.num_dci_pools;
-         pool_index++) {
-        iface->tx.dci_pool[pool_index].stack_top = 0;
-        for (i = 0; i < iface->tx.ndci; i++, dci_index++) {
-            status = uct_dc_mlx5_iface_create_dci(iface, pool_index, dci_index);
+        for (i = 0; i < iface->tx.ndci; ++i) {
+            status = uct_dc_mlx5_iface_create_dci(iface, pool_index, dci_index,
+                                                  pool_index % num_paths);
             if (status != UCS_OK) {
                 goto err;
             }
 
-            iface->tx.dci_pool[pool_index].stack[i] = dci_index;
+            dci_pool->stack[i] = dci_index;
+            ++dci_index;
         }
-
-        ucs_arbiter_init(&iface->tx.dci_pool[pool_index].arbiter);
     }
 
     iface->tx.bb_max = iface->tx.dcis[0].txwq.bb_max;
-
     return UCS_OK;
 
 err:
-    uct_dc_mlx5_iface_dcis_destroy(iface, i);
+    uct_dc_mlx5_iface_dcis_destroy(iface, dci_index);
     return status;
 }
 
@@ -1047,17 +1054,8 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0 */
         if (cur_wnd <= 0) {
-            pool_index = uct_dc_mlx5_ep_pool_index(ep);
-            if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-                waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
-                group = &ep->arb_group;
-            } else {
-                /* Need to schedule fake ep in TX arbiter, because it
-                 * might have been descheduled due to lack of FC window. */
-                waitq = uct_dc_mlx5_iface_tx_waitq(iface);
-                group = uct_dc_mlx5_ep_arb_group(iface, ep);
-            }
-
+            uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group,
+                                           &pool_index);
             ucs_arbiter_group_schedule(waitq, group);
             uct_dc_mlx5_iface_progress_pending(iface, pool_index);
         }
@@ -1236,7 +1234,6 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         self->tx.num_dci_pools = self->super.super.super.num_paths;
     }
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
-    ucs_assert(ucs_is_pow2(self->tx.num_dci_pools));
 
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self);
@@ -1380,7 +1377,7 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
     }
 
     dci_index = uct_dc_mlx5_iface_total_ndci(iface);
-    status    = uct_dc_mlx5_iface_create_dci(iface, 0, dci_index);
+    status    = uct_dc_mlx5_iface_create_dci(iface, 0, dci_index, 0);
     if (status != UCS_OK) {
         return status;
     }

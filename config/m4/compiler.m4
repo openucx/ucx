@@ -314,7 +314,7 @@ ADD_COMPILER_FLAG_IF_SUPPORTED([-diag-disable 269],
 # Set default datatype alignment to 16 bytes.
 # Some compilers (LLVM based, clang) expects allocation of datatypes by 32 bytes
 # to optimize operations memset/memcpy/etc using vectorized processor instructions
-# which requires aligment of memory buffer by 32 or higer bytes. Default malloc method
+# which requires alignment of memory buffer by 32 or higer bytes. Default malloc method
 # guarantee alignment for 16 bytes only. Force using compiler 16-bytes alignment
 # by default if option is supported.
 #
@@ -322,7 +322,7 @@ UCX_ALLOC_ALIGN=16
 ADD_COMPILER_FLAG_IF_SUPPORTED([-fmax-type-align=$UCX_ALLOC_ALIGN],
                                [-fmax-type-align=$UCX_ALLOC_ALIGN],
                                [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
-                               [AC_DEFINE_UNQUOTED([UCX_ALLOC_ALIGN], $UCX_ALLOC_ALIGN, [Set aligment assumption for compiler])],
+                               [AC_DEFINE_UNQUOTED([UCX_ALLOC_ALIGN], $UCX_ALLOC_ALIGN, [Set alignment assumption for compiler])],
                                [])
 
 
@@ -467,13 +467,23 @@ AC_LANG_POP
 #
 # PGI specific switches
 #
+# --diag_suppress 1    - Suppress last line ends without a newline
+# --diag_suppress 68   - Suppress integer conversion resulted in a change of sign
+# --diag_suppress 111  - Suppress statement is unreachable
+# --diag_suppress 167  - Suppress int* incompatible with unsigned int*
 # --diag_suppress 181  - Suppress incorrect printf format for PGI18 compiler. TODO: remove it after compiler fix
+# --diag_suppress 188  - Suppress enumerated type mixed with another type
 # --diag_suppress 381  - Suppress extra ";" ignored
 # --diag_suppress 1215 - Suppress deprecated API warning for PGI18 compiler
 # --diag_suppress 1901 - Use of a const variable in a constant expression is nonstandard in C
 # --diag_suppress 1902 - Use of a const variable in a constant expression is nonstandard in C (same as 1901)
 ADD_COMPILER_FLAGS_IF_SUPPORTED([[--display_error_number],
+                                 [--diag_suppress 1],
+                                 [--diag_suppress 68],
+                                 [--diag_suppress 111],
+                                 [--diag_suppress 167],
                                  [--diag_suppress 181],
+                                 [--diag_suppress 188],
                                  [--diag_suppress 381],
                                  [--diag_suppress 1215],
                                  [--diag_suppress 1901],

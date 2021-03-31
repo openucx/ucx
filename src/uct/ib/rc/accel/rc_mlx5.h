@@ -164,6 +164,6 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
 
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
-void uct_rc_mlx5_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx);
+unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 
 #endif

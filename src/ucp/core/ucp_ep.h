@@ -36,6 +36,23 @@ typedef uint32_t                   ucp_ep_flags_t;
 typedef uint16_t                   ucp_ep_flags_t;
 #endif
 
+#if UCS_ENABLE_ASSERT
+#define UCP_EP_ASSERT_COUNTER_INC(_counter) \
+    do { \
+        ucs_assert(*(_counter) < UINT_MAX); \
+        ++(*(_counter)); \
+    } while (0)
+
+#define UCP_EP_ASSERT_COUNTER_DEC(_counter) \
+    do { \
+        ucs_assert(*(_counter) > 0); \
+        --(*(_counter)); \
+    } while (0)
+#else
+#define UCP_EP_ASSERT_COUNTER_INC(_counter)
+#define UCP_EP_ASSERT_COUNTER_DEC(_counter)
+#endif
+
 
 /**
  * Endpoint flags
@@ -354,7 +371,7 @@ struct ucp_ep_config {
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
 
-    uint8_t                       ref_cnt;       /* Reference counter: 0 - it is
+    uint8_t                       refcount;      /* Reference counter: 0 - it is
                                                     allowed to destroy EP */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
@@ -365,7 +382,16 @@ typedef struct ucp_ep {
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
 
 #if ENABLE_DEBUG_DATA
-    char                          peer_name[UCP_WORKER_NAME_MAX];
+    char                          peer_name[UCP_WORKER_ADDRESS_NAME_MAX];
+#endif
+
+#if UCS_ENABLE_ASSERT
+    /* How many Worker flush operations are in-progress where the EP is the next
+     * EP for flushing */
+    unsigned                      flush_iter_refcount;
+    /* How many UCT EP discarding operations are in-progress scheduled for the
+     * EP */
+    unsigned                      discard_refcount;
 #endif
 
     UCS_STATS_NODE_DECLARE(stats)
@@ -377,10 +403,10 @@ typedef struct ucp_ep {
  * Status of protocol-level remote completions
  */
 typedef struct {
-    ucs_queue_head_t              reqs;         /* Queue of flush requests which
-                                                   are waiting for remote completion */
-    uint32_t                      send_sn;      /* Sequence number of sent operations */
-    uint32_t                      cmpl_sn;      /* Sequence number of completions */
+    ucs_hlist_head_t reqs; /* Queue of flush requests which
+                              are waiting for remote completion */
+    uint32_t         send_sn; /* Sequence number of sent operations */
+    uint32_t         cmpl_sn; /* Sequence number of completions */
 } ucp_ep_flush_state_t;
 
 
@@ -420,6 +446,8 @@ typedef struct {
         ucp_ep_flush_state_t      flush_state;   /* Remote completion status */
     };
     ucp_ep_ext_control_t          *control_ext;  /* Control data path extension */
+    /* List of requests which are waiting for remote completion */
+    ucs_hlist_head_t              proto_reqs;
 } ucp_ep_ext_gen_t;
 
 
@@ -487,19 +515,21 @@ void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
                                     const ucp_ep_config_key_t *key,
                                     ucp_lane_index_t lane,
                                     ucp_rsc_index_t cm_index,
-                                    char *buf, size_t max);
+                                    ucs_string_buffer_t *buf);
 
 void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  const ucp_ep_config_key_t *key,
                                  const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
-                                 char *buf, size_t max);
+                                 ucs_string_buffer_t *buf);
 
 ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
                                 const char *message, ucp_ep_h *ep_p);
 
-void ucp_ep_destroy_base(ucp_ep_h ep);
+void ucp_ep_add_ref(ucp_ep_h ep);
+
+int ucp_ep_remove_ref(ucp_ep_h ep);
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,
@@ -536,6 +566,8 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
 void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg);
+
+void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg);
 
 void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
@@ -596,6 +628,10 @@ void ucp_ep_flush_completion(uct_completion_t *self);
 
 void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 
+void
+ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
+                   void *purge_arg);
+
 void ucp_ep_discard_lanes(ucp_ep_h ucp_ep, ucs_status_t status);
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req);
@@ -607,7 +643,7 @@ ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
  *
  * @param [in] ucp_ep  UCP Endpoint object to operate keepalive.
  * @param [in] uct_ep  UCT Endpoint object to do keepalive on.
- * @param [in] rsc_idx Resource index to check. 
+ * @param [in] rsc_idx Resource index to check.
  * @param [in] flags   Flags for keepalive operation.
  * @param [in] comp    Pointer to keepalive completion object.
  *
@@ -627,5 +663,14 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
  *                          has no resources.
  */
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);
+
+/**
+ * @brief Purge flush and protocol requests scheduled on a given UCP endpoint.
+ *
+ * @param [in]     ucp_ep           Endpoint object on which requests should be
+ *                                  purged.
+ * @param [in]     status           Completion status.
+ */
+void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
 #endif

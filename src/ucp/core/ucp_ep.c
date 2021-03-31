@@ -28,6 +28,7 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
 #include <string.h>
@@ -152,12 +153,16 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ep->ref_cnt                          = 1;
+    ep->refcount                         = 1;
     ep->cfg_index                        = UCP_WORKER_CFG_INDEX_NULL;
     ep->worker                           = worker;
     ep->am_lane                          = UCP_NULL_LANE;
     ep->flags                            = 0;
     ep->conn_sn                          = UCP_EP_MATCH_CONN_SN_MAX;
+#if UCS_ENABLE_ASSERT
+    ep->flush_iter_refcount              = 0;
+    ep->discard_refcount                 = 0;
+#endif
     ucp_ep_ext_gen(ep)->user_data        = NULL;
     ucp_ep_ext_control(ep)->cm_idx       = UCP_NULL_RESOURCE;
     ucp_ep_ext_control(ep)->err_cb       = NULL;
@@ -169,6 +174,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     memset(&ucp_ep_ext_gen(ep)->ep_match, 0,
            sizeof(ucp_ep_ext_gen(ep)->ep_match));
 
+    ucs_hlist_head_init(&ucp_ep_ext_gen(ep)->proto_reqs);
     ucp_stream_ep_init(ep);
     ucp_am_ep_init(ep);
 
@@ -177,7 +183,8 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     }
 
 #if ENABLE_DEBUG_DATA
-    ucs_snprintf_zero(ep->peer_name, UCP_WORKER_NAME_MAX, "%s", peer_name);
+    ucs_snprintf_zero(ep->peer_name, UCP_WORKER_ADDRESS_NAME_MAX, "%s",
+                      peer_name);
 #endif
 
     /* Create statistics */
@@ -232,7 +239,7 @@ static UCS_F_NOINLINE void ucp_ep_remove_progress_callbacks(ucp_ep_h ep)
     /* Remove pending slow-path functions after all UCT EP lanes are destroyed,
      * because cleanup lanes purges all outstanding operation and purged
      * operations could add callbacks on the progress */
-    ucs_assert(ep->ref_cnt == 0);
+    ucs_assert(ep->refcount == 0);
 
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
                             ucp_wireup_msg_ack_cb_pred, ep);
@@ -247,16 +254,34 @@ static UCS_F_NOINLINE void ucp_ep_remove_progress_callbacks(ucp_ep_h ep)
                             ucp_ep_local_disconnect_progress_remove_filter, ep);
 }
 
-void ucp_ep_destroy_base(ucp_ep_h ep)
+static void ucp_ep_destroy_base(ucp_ep_h ep)
 {
-    if (--ep->ref_cnt != 0) {
-        return;
-    }
+    ucs_assert(ep->refcount == 0);
+    ucs_assert(ep->flush_iter_refcount == 0);
+    ucs_assert(ep->discard_refcount == 0);
 
     ucp_ep_remove_progress_callbacks(ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ucp_ep_ext_control(ep));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
+}
+
+void ucp_ep_add_ref(ucp_ep_h ep)
+{
+    ucs_assert(ep->refcount < UINT8_MAX);
+    ++ep->refcount;
+}
+
+/* Return 1 if the endpoint was destroyed, 0 if not */
+int ucp_ep_remove_ref(ucp_ep_h ep)
+{
+    ucs_assert(ep->refcount > 0);
+    if (--ep->refcount == 0) {
+        ucp_ep_destroy_base(ep);
+        return 1;
+    }
+
+    return 0;
 }
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
@@ -297,7 +322,7 @@ out:
     return UCS_OK;
 
 err_destroy_ep_base:
-    ucp_ep_destroy_base(ep);
+    ucp_ep_remove_ref(ep);
 err:
     return status;
 }
@@ -316,7 +341,7 @@ static void ucp_ep_delete(ucp_ep_h ep)
         ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
     }
 
-    ucp_ep_destroy_base(ep);
+    ucp_ep_remove_ref(ep);
 }
 
 void ucp_ep_release_id(ucp_ep_h ep)
@@ -375,7 +400,7 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
-    char ep_name[UCP_WORKER_NAME_MAX];
+    char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     ucs_memory_type_for_each(mem_type) {
         if (UCP_MEM_IS_HOST(mem_type) ||
@@ -399,8 +424,8 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
             goto err_free_address_buffer;
         }
 
-        ucs_snprintf_zero(ep_name, UCP_WORKER_NAME_MAX, "mem_type_ep:%s",
-                          ucs_memory_type_names[mem_type]);
+        ucs_snprintf_zero(ep_name, UCP_WORKER_ADDRESS_NAME_MAX,
+                          "mem_type_ep:%s", ucs_memory_type_names[mem_type]);
 
         /* create memtype UCP EPs after blocking async context, because they set
          * INTERNAL flag (setting EP flags is expected to be guarded) */
@@ -582,6 +607,8 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
+
+    ucp_ep_flush_state_reset(ep);
 
     *ep_p = ep;
     return UCS_OK;
@@ -822,9 +849,28 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucp_request_send_state_ff(req, status);
 }
 
-static void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
+void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
 {
-    ucs_bug("pending request %p on ep %p should have been flushed", self, arg);
+    ucs_bug("pending request %p (%s) on ep %p should have been flushed",
+            self, ucs_debug_get_symbol_name(self->func), arg);
+}
+
+void
+ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
+                   void *purge_arg)
+{
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = ep->uct_eps[lane];
+        if ((lane == ucp_ep_get_cm_lane(ep)) || (uct_ep == NULL)) {
+            continue;
+        }
+
+        ucs_debug("ep %p: purge uct_ep[%d]=%p", ep, lane, uct_ep);
+        uct_ep_pending_purge(uct_ep, purge_cb, purge_arg);
+    }
 }
 
 void ucp_ep_destroy_internal(ucp_ep_h ep)
@@ -834,10 +880,40 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
     ucp_ep_delete(ep);
 }
 
+static void ucp_ep_check_lanes(ucp_ep_h ep)
+{
+#if UCS_ENABLE_ASSERT
+    uint8_t num_inprog       = ep->discard_refcount + ep->flush_iter_refcount;
+    uint8_t num_failed_tl_ep = 0;
+    ucp_lane_index_t lane;
+
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        num_failed_tl_ep += ucp_is_uct_ep_failed(ep->uct_eps[lane]);
+    }
+
+    ucs_assert((num_failed_tl_ep == 0) ||
+               (ucp_ep_num_lanes(ep) == num_failed_tl_ep));
+
+    if (num_failed_tl_ep != 0) {
+        /* EP reference count is the number of outstanding flush operations and
+         * discards, plus 1 if not destroyed yet */
+        ucs_assert((ep->refcount == num_inprog) ||
+                   (ep->refcount == (num_inprog + 1)));
+    } else {
+        /* EP is used, so reference count is the number of outstanding flush
+         * operations and discards plus 1 */
+        ucs_assert(ep->refcount == (num_inprog + 1));
+    }
+#endif
+}
+
 static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
 {
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
+
+    ucp_ep_check_lanes(ep);
 
     if (!(ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_INTERNAL))) {
         ucp_ep_release_id(ep);
@@ -849,20 +925,7 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
         uct_ep        = ep->uct_eps[lane];
         uct_eps[lane] = uct_ep;
 
-        /* an attempt to destroy UCT lanes can be done several times inside
-         * ucp_ep_cleanup_lanes()/ucp_ep_discard_lanes(), i.e. discarding lanes
-         * and then cleanup lanes during UCP EP close - so, if it happens, UCT
-         * lane has to be already set to '&ucp_failed_tl_ep' and UCP EP's
-         * 'ref_cnt' can be >= 1, when UCP EP is going to be destroyed.
-         * Otherwise - UCT lane is set to a real UCT EP and it means that
-         * discarding of UCT lanes was not started yet,  i.e. called from UCP EP
-         * destroy function and UCP EP's ref_cnt has to be '1'.
-         * If UCT lane is destroyed, but some operations are still in-progress,
-         * acompletions can be received for his UCT EP - this will lead to
-         * undefined behavior, because a real UCT EP was already destroyed */
-        ucs_assert(ucp_is_uct_ep_failed(uct_ep) || (ep->ref_cnt == 1));
-
-        /* set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
+        /* Set UCT EP to failed UCT EP to make sure if UCP EP won't be destroyed
          * due to some UCT EP discarding procedures are in-progress and UCP EP
          * may get some operation completions which could try to dereference its
          * lanes */
@@ -886,7 +949,7 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
             continue;
         }
 
-        ucs_debug("ep %p: purge & destroy uct_ep[%d]=%p", ep, lane, uct_ep);
+        ucs_debug("ep %p: pending & destroy uct_ep[%d]=%p", ep, lane, uct_ep);
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
         /* coverity wrongly resolves ucp_failed_tl_ep's no-op EP destroy
          * function to 'ucp_proxy_ep_destroy' */
@@ -905,6 +968,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_stream_ep_cleanup(ep);
     ucp_am_ep_cleanup(ep);
+    ucp_ep_reqs_purge(ep, UCS_ERR_CANCELED);
 
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_USED);
 
@@ -955,18 +1019,17 @@ static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep                = req->send.ep;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
     /* If a flush is completed from a pending/completion callback, we need to
      * schedule slow-path callback to release the endpoint later, since a UCT
      * endpoint cannot be released from pending/completion callback context.
      */
     ucs_trace("adding slow-path callback to destroy ep %p", ep);
-    req->send.disconnect.prog_id = UCS_CALLBACKQ_ID_NULL;
     uct_worker_progress_register_safe(ep->worker->uct,
                                       ucp_ep_local_disconnect_progress, req,
-                                      UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &req->send.disconnect.prog_id);
+                                      UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
 }
 
 static void ucp_ep_close_flushed_callback(ucp_request_t *req)
@@ -1035,16 +1098,9 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
         ucp_worker_discard_uct_ep(ep, uct_ep, UCT_FLUSH_FLAG_CANCEL,
                                   ucp_ep_err_pending_purge,
-                                  UCS_STATUS_PTR(status));
-        /* UCT CM lane mustn't be scheduled on worker progress when discarding,
-         * since UCP EP will be destroyed due to peer failure and
-         * ucp_cm_disconnect_cb() could be invoked on async thread after UCP EP
-         * is destroyed and before UCT CM EP is destroyed from discarding
-         * functionality. So, UCP EP will passed as a corrupted argument to
-         * ucp_cm_disconnect_cb() */
-        if (lane == ucp_ep_get_cm_lane(ep)) {
-            ucs_assert(!ucp_worker_is_uct_ep_discarding(ep->worker, uct_ep));
-        }
+                                  UCS_STATUS_PTR(status),
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
     }
 }
 
@@ -2213,12 +2269,12 @@ void ucp_ep_config_cm_lane_info_str(ucp_worker_h worker,
                                     const ucp_ep_config_key_t *key,
                                     ucp_lane_index_t lane,
                                     ucp_rsc_index_t cm_index,
-                                    char *buf, size_t max)
+                                    ucs_string_buffer_t *strbuf)
 {
-    ucs_snprintf_zero(buf, max, "lane[%d]: cm %s", lane,
-                      (cm_index != UCP_NULL_RESOURCE) ?
-                      ucp_context_cm_name(worker->context, cm_index) :
-                      "<unknown>");
+    ucs_string_buffer_appendf(strbuf, "lane[%d]: cm %s", lane,
+                              (cm_index != UCP_NULL_RESOURCE) ?
+                              ucp_context_cm_name(worker->context, cm_index) :
+                              "<unknown>");
 }
 
 void ucp_ep_config_lane_info_str(ucp_worker_h worker,
@@ -2226,7 +2282,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  const unsigned *addr_indices,
                                  ucp_lane_index_t lane,
                                  ucp_rsc_index_t aux_rsc_index,
-                                 char *buf, size_t max)
+                                 ucs_string_buffer_t *strbuf)
 {
     ucp_context_h context = worker->context;
     uct_tl_resource_desc_t *rsc;
@@ -2234,77 +2290,64 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
     ucp_md_index_t dst_md_index;
     ucp_rsc_index_t cmpt_index;
     unsigned path_index;
-    char *p, *endp;
     int prio;
 
-    p          = buf;
-    endp       = buf + max;
     rsc_index  = key->lanes[lane].rsc_index;
     rsc        = &context->tl_rscs[rsc_index].tl_rsc;
 
     path_index = key->lanes[lane].path_index;
-    snprintf(p, endp - p, "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
-             lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
-             context->tl_rscs[rsc_index].md_index,
-             20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)),
-             ' ');
-    p += strlen(p);
+    ucs_string_buffer_appendf(strbuf,
+            "lane[%d]: %2d:" UCT_TL_RESOURCE_DESC_FMT ".%u md[%d] %-*c-> ",
+            lane, rsc_index, UCT_TL_RESOURCE_DESC_ARG(rsc), path_index,
+            context->tl_rscs[rsc_index].md_index,
+            20 - (int)(strlen(rsc->dev_name) + strlen(rsc->tl_name)),
+            ' ');
 
     if (addr_indices != NULL) {
-        snprintf(p, endp - p, "addr[%d].", addr_indices[lane]);
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, "addr[%d].", addr_indices[lane]);
     }
 
     dst_md_index = key->lanes[lane].dst_md_index;
     cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
-    snprintf(p, endp - p, "md[%d]/%-8s", dst_md_index,
+    ucs_string_buffer_appendf(strbuf, "md[%d]/%-8s", dst_md_index,
              context->tl_cmpts[cmpt_index].attr.name);
-    p += strlen(p);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " rma#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " rma#%d", prio);
     }
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " rma_bw#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " rma_bw#%d", prio);
     }
 
     prio = ucp_ep_config_get_multi_lane_prio(key->amo_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " amo#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " amo#%d", prio);
     }
 
     if (key->am_lane == lane) {
-        snprintf(p, endp - p, " am");
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " am");
     }
 
     if (key->rkey_ptr_lane == lane) {
-        snprintf(p, endp - p, " rkey_ptr");
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " rkey_ptr");
     }
 
     prio = ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane);
     if (prio != -1) {
-        snprintf(p, endp - p, " am_bw#%d", prio);
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " am_bw#%d", prio);
     }
 
     if (lane == key->tag_lane) {
-        snprintf(p, endp - p, " tag_offload");
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " tag_offload");
     }
 
     if (key->wireup_msg_lane == lane) {
-        snprintf(p, endp - p, " wireup");
-        p += strlen(p);
+        ucs_string_buffer_appendf(strbuf, " wireup");
         if (aux_rsc_index != UCP_NULL_RESOURCE) {
-            snprintf(p, endp - p, "{" UCT_TL_RESOURCE_DESC_FMT "}",
+            ucs_string_buffer_appendf(strbuf, "{" UCT_TL_RESOURCE_DESC_FMT "}",
                      UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[aux_rsc_index].tl_rsc));
         }
     }
@@ -2315,23 +2358,22 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                 ucp_rsc_index_t aux_rsc_index)
 {
     ucp_context_h context   = worker->context;
-    char lane_info[128]     = {0};
     ucp_ep_config_t *config = ucp_ep_config(ep);
     ucp_md_index_t md_index;
     ucp_lane_index_t lane;
     ucp_rsc_index_t cm_idx;
 
     for (lane = 0; lane < config->key.num_lanes; ++lane) {
+        UCS_STRING_BUFFER_ONSTACK(strb, 128);
         if (lane == config->key.cm_lane) {
             cm_idx = ucp_ep_ext_control(ep)->cm_idx;
             ucp_ep_config_cm_lane_info_str(worker, &config->key, lane, cm_idx,
-                                           lane_info, sizeof(lane_info));
+                                           &strb);
         } else {
             ucp_ep_config_lane_info_str(worker, &config->key, addr_indices,
-                                        lane, aux_rsc_index, lane_info,
-                                        sizeof(lane_info));
+                                        lane, aux_rsc_index, &strb);
         }
-        fprintf(stream, "#                 %s\n", lane_info);
+        fprintf(stream, "#                 %s\n", ucs_string_buffer_cstr(&strb));
     }
     fprintf(stream, "#\n");
 
@@ -2487,7 +2529,8 @@ uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep)
 
 int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
 {
-    return ucp_ep_has_cm_lane(ep) && (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+    return (ucp_ep_get_cm_uct_ep(ep) != NULL) &&
+           (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
 ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
@@ -2630,5 +2673,74 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
         }
 
         *lane_map &= ~UCS_BIT(lane);
+    }
+}
+
+static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
+                             ucs_status_t status, int recursive)
+{
+    ucp_trace_req(req, "purged with status %s (%d) on ep %p",
+                  ucs_status_string(status), status, ucp_ep);
+
+    if (req->id != UCP_REQUEST_ID_INVALID) {
+        ucp_request_id_release(req);
+    }
+
+    if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
+        ucs_assert(req->super_req == NULL);
+        ucs_assert(req->send.ep == ucp_ep);
+        ucp_request_complete_and_dereg_send(req, status);
+    } else if (req->flags & UCP_REQUEST_FLAG_RECV_AM) {
+        ucs_assert(req->super_req == NULL);
+        ucs_assert(recursive); /* Mustn't be directly contained in an EP list
+                                * of tracking requests */
+        ucp_request_complete_am_recv(req, status);
+    } else if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
+        ucs_assert(req->super_req == NULL);
+        ucs_assert(recursive); /* Mustn't be directly contained in an EP list
+                                * of tracking requests */
+        ucp_request_complete_tag_recv(req, status);
+    } else if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
+        ucs_assert(req->super_req != NULL);
+        ucs_assert(req->send.ep == ucp_ep);
+        ucs_assert(recursive); /* Mustn't be directly contained in an EP list
+                                * of tracking requests */
+
+        /* It means that purging started from a request responsible for sending
+         * RTR, so a request is responsible for copying data from staging buffer
+         * and it uses a receive part of a request */
+        req->super_req->recv.remaining -= req->recv.length;
+        if (req->super_req->recv.remaining == 0) {
+            ucp_ep_req_purge(ucp_ep, req->super_req, status, 1);
+        }
+
+        ucp_request_put(req);
+    } else {
+        ucs_assert(req->super_req != NULL);
+        ucs_assert(req->send.ep == ucp_ep);
+
+        ucp_ep_req_purge(ucp_ep, req->super_req, status, 1);
+        ucp_request_put(req);
+    }
+}
+
+void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
+{
+    ucs_hlist_head_t *proto_reqs = &ucp_ep_ext_gen(ucp_ep)->proto_reqs;
+    ucp_request_t *req;
+
+    while (!ucs_hlist_is_empty(proto_reqs)) {
+        req = ucs_hlist_head_elem(proto_reqs, ucp_request_t, send.list);
+        ucp_ep_req_purge(ucp_ep, req, status, 0);
+    }
+
+    if (/* Flush state is already valid (i.e. EP doesn't exist on matching
+         * context) and not invalidated yet, also remote EP ID is already set */
+        !(ucp_ep->flags &
+          (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID))) {
+        ucs_hlist_for_each_extract(req, &ucp_ep_flush_state(ucp_ep)->reqs,
+                                   send.list) {
+            ucp_ep_flush_request_ff(req, status);
+        }
     }
 }

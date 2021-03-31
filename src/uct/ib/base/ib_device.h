@@ -180,7 +180,7 @@ typedef struct uct_ib_async_event {
  * IB async event waiting context.
  */
 typedef struct uct_ib_async_event_wait {
-    void                (*cb)(struct uct_ib_async_event_wait*); /* Callback */
+    ucs_callback_t      cb;                     /* Callback */
     ucs_callbackq_t     *cbq;                   /* Async queue for callback */
     int                 cb_id;                  /* Scheduled callback ID */
 } uct_ib_async_event_wait_t;

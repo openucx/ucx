@@ -66,13 +66,14 @@ ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
 }
 
 ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
-                                  uint32_t pd_key, struct ibv_cq **cq_p)
+                                  struct ibv_cq **cq_p)
 {
     struct ibv_cq *cq;
     khiter_t iter;
     int ret;
 
-    iter = kh_put(uct_rdmacm_cm_cqs, &cm->cqs, pd_key, &ret);
+    iter = kh_put(uct_rdmacm_cm_cqs, &cm->cqs,
+                  ibv_get_device_guid(verbs->device), &ret);
     if (ret == -1) {
         ucs_error("cm %p: cannot allocate hash entry for CQ", cm);
         return UCS_ERR_NO_MEMORY;
@@ -148,40 +149,32 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
 
 static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *event)
 {
-    uct_rdmacm_cm_ep_t     *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
-    uct_cm_remote_data_t   remote_data;
-    ucs_status_t           status;
-    struct rdma_conn_param conn_param;
-    char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_rdmacm_cm_ep_t *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
+    uint8_t pack_priv_data[UCT_RDMACM_TCP_PRIV_DATA_LEN];
+    size_t pack_priv_data_length;
+    ucs_status_t status;
 
     ucs_assert(event->id == cep->id);
 
-    memset(&conn_param, 0, sizeof(conn_param));
-    conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
-                                         sizeof(uct_rdmacm_priv_data_hdr_t));
+    if (cep->super.resolve_cb != NULL) {
+        status = uct_rdmacm_cm_ep_resolve_cb(cep);
+        goto out;
+    }
 
-    status = uct_rdmacm_cm_ep_pack_cb(cep, &conn_param);
+    ucs_assert(cep->super.priv_pack_cb != NULL);
+    status = uct_rdmacm_cm_ep_pack_cb(cep, pack_priv_data,
+                                      &pack_priv_data_length);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = uct_rdmacm_cm_ep_send_priv_data(cep, pack_priv_data,
+                                             pack_priv_data_length);
+
+out:
     if (status != UCS_OK) {
         cep->status = status;
         cep->flags |= UCT_RDMACM_CM_EP_FAILED;
-        return;
-    }
-
-    status = uct_rdamcm_cm_ep_set_qp_num(&conn_param, cep);
-    if (status != UCS_OK) {
-        remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
-        return;
-    }
-
-    ucs_trace("%s rdma_connect, cm_id %p",
-              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN), cep->id);
-
-    if (rdma_connect(cep->id, &conn_param)) {
-        ucs_error("%s rdma_connect failed: %m",
-                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN));
-        remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -400,15 +393,28 @@ static void uct_rdmacm_cm_handle_event_established(struct rdma_cm_event *event)
     uct_rdmacm_cm_ep_server_conn_notify_cb(cep, UCS_OK);
 }
 
+static const char*
+uct_rdmacm_cm_event_status_str(const struct rdma_cm_event *event)
+{
+    if (event->event == RDMA_CM_EVENT_REJECTED) {
+        /* If it is REJECTED event, the status is some transport-specific reject
+         * reason */
+        return strerror(ECONNREFUSED);
+    }
+
+    /* RDMACM returns a negative errno as an event status */
+    return strerror(-event->status);
+}
+
 static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
 {
     uct_rdmacm_cm_ep_t   *cep = event->id->context;
     char                 ep_str[UCT_RDMACM_EP_STRING_LEN];
     uct_cm_remote_data_t remote_data;
 
-    ucs_debug("%s got disconnect event, status %d",
+    ucs_debug("%s got disconnect event, status %s (%d)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-              event->status);
+              uct_rdmacm_cm_event_status_str(event), event->status);
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
     /* calling error_cb instead of disconnect CB directly handles out-of-order
@@ -462,9 +468,10 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
         log_level = UCS_LOG_LEVEL_ERROR;
     }
 
-    ucs_log(log_level, "%s got error event %s, event status %d ",
+    ucs_log(log_level, "%s got error event %s, event status %s (%d)",
             uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-            rdma_event_str(event->event), event->status);
+            rdma_event_str(event->event), uct_rdmacm_cm_event_status_str(event),
+            event->status);
 
     if (uct_rdmacm_ep_is_connected(cep) &&
         !(cep->flags & UCT_RDMACM_CM_EP_FAILED)) {
@@ -485,10 +492,13 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
     uint8_t         ack_event                 = 1;
     char            ip_port_str[UCS_SOCKADDR_STRING_LEN];
 
-    ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p status %s): %s. Peer: %s.",
-              cm->ev_ch->fd, event->id, cm, cm->ev_ch, strerror(event->status),
+    ucs_trace("rdmacm event (fd=%d cm_id %p cm %p event_channel %p status %s"
+              " (%d)): %s. Peer: %s.",
+              cm->ev_ch->fd, event->id, cm, cm->ev_ch,
+              uct_rdmacm_cm_event_status_str(event), event->status,
               rdma_event_str(event->event),
-              ucs_sockaddr_str(remote_addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
+              ucs_sockaddr_str(remote_addr, ip_port_str,
+                               UCS_SOCKADDR_STRING_LEN));
 
     /* The following applies for rdma_cm_id of type RDMA_PS_TCP only */
     ucs_assert(event->id->ps == RDMA_PS_TCP);
@@ -589,6 +599,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
 
 static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
+    .ep_connect               = uct_rdmacm_cm_ep_connect,
     .ep_disconnect            = uct_rdmacm_cm_ep_disconnect,
     .cm_ep_conn_notify        = uct_rdmacm_cm_ep_conn_notify,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_cm_ep_t),

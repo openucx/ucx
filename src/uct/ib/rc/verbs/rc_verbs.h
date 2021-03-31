@@ -165,6 +165,6 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_ep_addr_t *ep_addr);
 
-void uct_rc_verbs_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx);
+unsigned uct_rc_verbs_ep_cleanup_qp(void *arg);
 
 #endif

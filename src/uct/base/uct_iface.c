@@ -18,7 +18,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 
 
 #ifdef ENABLE_STATS
@@ -491,6 +491,11 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
     return UCS_ERR_INVALID_PARAM;
 }
 
+ucs_status_t uct_ep_connect(uct_ep_h ep, const uct_ep_connect_params_t *params)
+{
+    return ep->iface->ops.ep_connect(ep, params);
+}
+
 ucs_status_t uct_ep_disconnect(uct_ep_h ep, unsigned flags)
 {
     return ep->iface->ops.ep_disconnect(ep, flags);
@@ -663,7 +668,7 @@ uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
                                    &create_time);
     if (ucs_unlikely((status != UCS_OK) || (ka->start_time != create_time))) {
         return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
-                                       UCS_ERR_ENDPOINT_TIMEOUT);;
+                                       UCS_ERR_ENDPOINT_TIMEOUT);
     }
 
     return UCS_OK;

@@ -1,6 +1,6 @@
 jobs:
   - job: distro_release
-    condition: or(eq(variables['Build.Reason'], 'ResourceTrigger'), and(eq(stageDependencies.Check_Commit.Check.outputs['Commit.Title'], 'Yes'), eq(variables['Build.Reason'], 'PullRequest')))
+    condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
     displayName: distro
     variables:
       ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:

@@ -227,6 +227,22 @@ UCS_TEST_F(test_socket, str_sockaddr_str) {
             EXPECT_EQ(NULL, str);
         }
     }
+
+    /* Check NULL sockaddr */
+    {
+        /* with big enough string */
+        {
+            str = (char*)ucs_sockaddr_str(NULL, test_str, 1024);
+            EXPECT_EQ(test_str, str);
+            EXPECT_EQ(0, strcmp(str, "<null>"));
+        }
+
+        /* without string */
+        {
+            str = (char*)ucs_sockaddr_str(NULL, NULL, 0);
+            EXPECT_EQ(NULL, str);
+        }
+    }
 }
 
 UCS_TEST_F(test_socket, socket_setopt) {

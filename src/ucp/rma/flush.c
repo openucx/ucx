@@ -162,9 +162,10 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
                 ucs_trace_req("flush request %p remote completions done", req);
             } else {
                 req->send.flush.cmpl_sn = flush_state->send_sn;
-                ucs_queue_push(&flush_state->reqs, &req->send.flush.queue);
-                ucs_trace_req("added flush request %p to ep remote completion queue"
-                              " with sn %d", req, req->send.flush.cmpl_sn);
+                ucs_hlist_add_tail(&flush_state->reqs, &req->send.list);
+                ucs_trace_req("added flush request %p to ep remote completion"
+                              " queue with sn %d",
+                              req, req->send.flush.cmpl_sn);
             }
         }
         req->send.flush.sw_started = 1;
@@ -187,7 +188,7 @@ static int ucp_flush_check_completion(ucp_request_t *req)
 
     ucs_trace_req("flush req %p completed", req);
     ucp_ep_flush_slow_path_remove(req);
-    req->send.flush.flushed_cb(req);
+    req->send.flushed_cb(req);
     return 1;
 }
 
@@ -335,7 +336,7 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->status                     = UCS_OK;
     req->super_req                  = worker_req;
     req->send.ep                    = ep;
-    req->send.flush.flushed_cb      = flushed_cb;
+    req->send.flushed_cb            = flushed_cb;
     req->send.flush.prog_id         = UCS_CALLBACKQ_ID_NULL;
     req->send.flush.uct_flags       = UCT_FLUSH_FLAG_LOCAL;
     req->send.flush.sw_started      = 0;
@@ -423,6 +424,39 @@ static ucs_status_t ucp_worker_flush_check(ucp_worker_h worker)
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE ucp_ep_h
+ucp_worker_flush_req_set_next_ep(ucp_request_t *req, int is_current_ep_valid,
+                                 ucs_list_link_t *next_ep_iter)
+{
+    ucp_worker_h worker              = req->flush_worker.worker;
+    ucp_ep_ext_gen_t *next_ep_ext    = ucs_container_of(next_ep_iter,
+                                                        ucp_ep_ext_gen_t,
+                                                        ep_list);
+    ucp_ep_h next_ep                 = ucp_ep_from_ext_gen(next_ep_ext);
+    ucp_ep_ext_gen_t *current_ep_ext = req->flush_worker.next_ep;
+    ucp_ep_h current_ep;
+
+    req->flush_worker.next_ep = next_ep_ext;
+
+    if (next_ep_iter != &worker->all_eps) {
+        /* Increment UCP EP reference counter to avoid destroying UCP EP while
+         * it is being scheduled to be flushed */
+        ucp_ep_add_ref(next_ep);
+        UCP_EP_ASSERT_COUNTER_INC(&next_ep->flush_iter_refcount);
+    }
+
+    if (!is_current_ep_valid) {
+        return NULL;
+    }
+
+    ucs_assert(&current_ep_ext->ep_list != &worker->all_eps);
+
+    current_ep = ucp_ep_from_ext_gen(current_ep_ext);
+    UCP_EP_ASSERT_COUNTER_DEC(&current_ep->flush_iter_refcount);
+
+    return ucp_ep_remove_ref(current_ep) ? NULL : current_ep;
+}
+
 static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t status,
                                           int force_progress_unreg)
 {
@@ -439,6 +473,12 @@ static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t statu
 
     if (complete) {
         ucs_assert(status != UCS_INPROGRESS);
+
+        if (&req->flush_worker.next_ep->ep_list != &worker->all_eps) {
+            /* Cleanup EP iterator */
+            ucp_worker_flush_req_set_next_ep(req, 1, &worker->all_eps);
+        }
+
         ucp_request_complete(req, flush_worker.cb, status, req->user_data);
     }
 }
@@ -476,14 +516,14 @@ static unsigned ucp_worker_flush_progress(void *arg)
         }
     }
 
-    if ((worker->context->config.ext.flush_worker_eps) &&
+    if (worker->context->config.ext.flush_worker_eps &&
         (&next_ep->ep_list != &worker->all_eps)) {
-        /* Some endpoints are not flushed yet. Take next endpoint from the list
-         * and start flush operation on it.
-         */
-        ep                        = ucp_ep_from_ext_gen(next_ep);
-        req->flush_worker.next_ep = ucs_list_next(&next_ep->ep_list,
-                                                  ucp_ep_ext_gen_t, ep_list);
+        /* Some endpoints are not flushed yet. Take the endpoint from the list
+         * and start flush operation on it. */
+        ep = ucp_worker_flush_req_set_next_ep(req, 1, next_ep->ep_list.next);
+        if (ep == NULL) {
+            goto out;
+        }
 
         ep_flush_request = ucp_ep_flush_internal(ep, UCP_REQUEST_FLAG_RELEASED,
                                                  &ucp_request_null_param, req,
@@ -528,9 +568,8 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
     req->flush_worker.comp_count = 1; /* counting starts from 1, and decremented
                                          when finished going over all endpoints */
     req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
-    req->flush_worker.next_ep    = ucs_list_head(&worker->all_eps,
-                                                 ucp_ep_ext_gen_t, ep_list);
 
+    ucp_worker_flush_req_set_next_ep(req, 0, worker->all_eps.next);
     ucp_request_set_send_callback_param(param, req, flush_worker);
     uct_worker_progress_register_safe(worker->uct, ucp_worker_flush_progress,
                                       req, 0, &req->flush_worker.prog_id);

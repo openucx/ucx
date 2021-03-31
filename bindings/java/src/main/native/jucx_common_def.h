@@ -42,7 +42,12 @@ typedef uintptr_t native_ptr;
 } while(0)
 
 #define JNU_ThrowExceptionByStatus(_env, _status) do { \
-    JNU_ThrowException(_env, ucs_status_string(_status)); \
+    jclass _cls = _env->FindClass("org/openucx/jucx/UcxException"); \
+    jmethodID _constr = _env->GetMethodID(_cls, "<init>", "(Ljava/lang/String;I)V"); \
+    jstring _error_msg = _env->NewStringUTF(ucs_status_string(_status)); \
+    jthrowable _ex = \
+    static_cast<jthrowable>(_env->NewObject(_cls, _constr, _error_msg, _status)); \
+    _env->Throw(_ex); \
 } while(0)
 
 /**

@@ -146,10 +146,19 @@ AC_ARG_ENABLE([logging],
 	               [Enable debug logging, default: YES])
 	)
 
-AS_IF([test "x$enable_logging" != xno],
-        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE_POLL], [Highest log level])],
-        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_INFO], [Highest log level])]
-    )
+AS_CASE([$enable_logging],
+        [no],          [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_INFO], [Highest log level])],
+        [warn],        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_WARN], [Highest log level])],
+        [diag],        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_DIAG], [Highest log level])],
+        [info],        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_INFO], [Highest log level])],
+        [debug],       [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_DEBUG], [Highest log level])],
+        [trace],       [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE], [Highest log level])],
+        [trace_req],   [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE_REQ], [Highest log level])],
+        [trace_data],  [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE_DATA], [Highest log level])],
+        [trace_async], [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE_ASYNC], [Highest log level])],
+        [trace_func],  [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE_FUNC], [Highest log level])],
+        [trace_poll],  [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE_POLL], [Highest log level])],
+                       [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_TRACE_POLL], [Highest log level])])
 
 #
 # Disable assertions

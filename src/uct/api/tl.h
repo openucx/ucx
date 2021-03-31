@@ -219,6 +219,9 @@ typedef ucs_status_t (*uct_ep_check_func_t)(uct_ep_h ep,
 typedef ucs_status_t (*uct_ep_create_func_t)(const uct_ep_params_t *params,
                                              uct_ep_h *ep_p);
 
+typedef ucs_status_t (*uct_ep_connect_func_t)(
+        uct_ep_h ep, const uct_ep_connect_params_t *params);
+
 typedef ucs_status_t (*uct_ep_disconnect_func_t)(uct_ep_h ep, unsigned flags);
 
 typedef ucs_status_t (*uct_cm_ep_conn_notify_func_t)(uct_ep_h ep);
@@ -338,6 +341,7 @@ typedef struct uct_iface_ops {
 
     /* endpoint - connection establishment */
     uct_ep_create_func_t                ep_create;
+    uct_ep_connect_func_t               ep_connect;
     uct_ep_disconnect_func_t            ep_disconnect;
     uct_cm_ep_conn_notify_func_t        cm_ep_conn_notify;
     uct_ep_destroy_func_t               ep_destroy;

@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <ucp/core/ucp_worker.h>
+#include <ucp/core/ucp_worker.inl>
 #include <ucp/core/ucp_request.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
@@ -67,6 +68,16 @@ protected:
         }
     }
 
+    static void
+    discarded_cb(void *request, ucs_status_t status, void *user_data)
+    {
+        /* Make Coverity happy */
+        ucs_assert(user_data != NULL);
+
+        unsigned *discarded_count_p = static_cast<unsigned*>(user_data);
+        (*discarded_count_p)++;
+    }
+
     void test_worker_discard(void *ep_flush_func,
                              void *ep_pending_add_func,
                              void *ep_pending_purge_func,
@@ -75,9 +86,10 @@ protected:
                              unsigned wireup_ep_count = 0,
                              unsigned wireup_aux_ep_count = 0) {
         uct_iface_ops_t ops                  = {0};
-        ucp_ep_t ucp_ep                      = {0};
         unsigned created_wireup_aux_ep_count = 0;
         unsigned total_ep_count              = ep_count + wireup_aux_ep_count;
+        unsigned discarded_count             = 0;
+        ucp_ep_h ucp_ep;
         uct_iface_t iface;
         std::vector<uct_ep_t> eps(total_ep_count);
         std::vector<uct_ep_h> wireup_eps(wireup_ep_count);
@@ -86,8 +98,8 @@ protected:
         ASSERT_LE(wireup_ep_count, ep_count);
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 
-        ucp_ep.worker  = sender().worker();
-        ucp_ep.ref_cnt = 1u;
+        status = ucp_ep_create_base(sender().worker(), "peer", "", &ucp_ep);
+        ASSERT_UCS_OK(status);
 
         ops.ep_flush         = (uct_ep_flush_func_t)ep_flush_func;
         ops.ep_pending_add   = (uct_ep_pending_add_func_t)ep_pending_add_func;
@@ -95,6 +107,9 @@ protected:
         ops.ep_destroy       = ep_destroy_func;
         iface.ops            = ops;
 
+        ucp_rsc_index_t rsc_index  = UCS_BITMAP_FFS(sender().ucph()->tl_bitmap);
+        ucp_worker_iface_t *wiface = ucp_worker_iface(sender().worker(),
+                                                      rsc_index);
         std::vector<uct_ep_h> eps_to_discard;
 
         for (unsigned i = 0; i < ep_count; i++) {
@@ -106,7 +121,7 @@ protected:
             std::vector<ucp_request_t*> pending_reqs;
 
             if (i < wireup_ep_count) {
-                status = ucp_wireup_ep_create(&ucp_ep, &discard_ep);
+                status = ucp_wireup_ep_create(ucp_ep, &discard_ep);
                 ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);
@@ -117,9 +132,12 @@ protected:
                 if (i < wireup_aux_ep_count) {
                     eps[ep_count + created_wireup_aux_ep_count].iface = &iface;
 
+                    ucp_worker_iface_progress_ep(wiface);
+
                     /* coverity[escape] */
-                    wireup_ep->aux_ep = &eps[ep_count +
-                                             created_wireup_aux_ep_count];
+                    wireup_ep->aux_ep        =
+                            &eps[ep_count + created_wireup_aux_ep_count];
+                    wireup_ep->aux_rsc_index = rsc_index;
 
                     created_wireup_aux_ep_count++;
                     m_created_ep_count++;
@@ -157,9 +175,11 @@ protected:
             unsigned purged_reqs_count = 0;
 
             UCS_ASYNC_BLOCK(&sender().worker()->async);
-            ucp_worker_discard_uct_ep(&ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
+            ucp_worker_iface_progress_ep(wiface);
+            ucp_worker_discard_uct_ep(ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
-                                      &purged_reqs_count);
+                                      &purged_reqs_count, discarded_cb,
+                                      static_cast<void*>(&discarded_count));
             UCS_ASYNC_UNBLOCK(&sender().worker()->async);
 
             if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
@@ -170,6 +190,7 @@ protected:
         }
 
         if (!wait_for_comp) {
+            ucp_ep_remove_ref(ucp_ep);
             /* destroy sender's entity here to have an access to the valid
              * pointers */
             sender().cleanup();
@@ -178,40 +199,39 @@ protected:
 
         void *flush_req = sender().flush_worker_nb(0);
 
-        if (ep_flush_func != (void*)ucs_empty_function_return_success) {
-            /* If uct_ep_flush() returns UCS_OK from the first call, the request
-             * is not scheduled on a worker progress (it completes in-place) */
-            ASSERT_FALSE(flush_req == NULL);
-            ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
+        ASSERT_FALSE(flush_req == NULL);
+        ASSERT_TRUE(UCS_PTR_IS_PTR(flush_req));
 
-            do {
-                progress();
+        do {
+            progress();
 
-                if (!m_flush_comps.empty()) {
-                    uct_completion_t *comp = m_flush_comps.back();
+            if (!m_flush_comps.empty()) {
+                uct_completion_t *comp = m_flush_comps.back();
 
-                    m_flush_comps.pop_back();
-                    uct_invoke_completion(comp, UCS_OK);
+                m_flush_comps.pop_back();
+                uct_invoke_completion(comp, UCS_OK);
+            }
+
+            if (!m_pending_reqs.empty()) {
+                uct_pending_req_t *req = m_pending_reqs.back();
+
+                status = req->func(req);
+                if (status == UCS_OK) {
+                    m_pending_reqs.pop_back();
+                } else {
+                    EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
                 }
+            }
+        } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);
 
-                if (!m_pending_reqs.empty()) {
-                    uct_pending_req_t *req = m_pending_reqs.back();
-
-                    status = req->func(req);
-                    if (status == UCS_OK) {
-                        m_pending_reqs.pop_back();
-                    } else {
-                        EXPECT_EQ(UCS_ERR_NO_RESOURCE, status);
-                    }
-                }
-            } while (ucp_request_check_status(flush_req) == UCS_INPROGRESS);
-
-            EXPECT_UCS_OK(ucp_request_check_status(flush_req));
-            ucp_request_release(flush_req);
-        }
+        EXPECT_UCS_OK(ucp_request_check_status(flush_req));
+        ucp_request_release(flush_req);
 
         EXPECT_EQ(m_created_ep_count, m_destroyed_ep_count);
         EXPECT_EQ(m_created_ep_count, total_ep_count);
+        /* discarded_cb is called only for UCT EPs passed to
+         * ucp_worker_discard_uct_ep() */
+        EXPECT_EQ(ep_count, discarded_count);
 
         for (unsigned i = 0; i < m_created_ep_count; i++) {
             ep_test_info_t &test_info = ep_test_info_get(&eps[i]);
@@ -239,7 +259,9 @@ protected:
             EXPECT_EQ(NULL, eps[i].iface);
         }
 
-        EXPECT_EQ(1u, ucp_ep.ref_cnt);
+        EXPECT_EQ(1u, ucp_ep->refcount);
+
+        ucp_ep_remove_ref(ucp_ep);
     }
 
     static void ep_destroy_func(uct_ep_h ep) {
@@ -549,3 +571,44 @@ UCS_TEST_P(test_ucp_worker_request_leak, tag_send_recv)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_request_leak, all, "all")
+
+class test_ucp_worker_thread_mode : public ucp_test {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               UCS_THREAD_MODE_SINGLE, "single");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               UCS_THREAD_MODE_SERIALIZED, "serialized");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, UCS_THREAD_MODE_MULTI,
+                               "multi");
+    }
+
+    /// @override
+    virtual ucp_worker_params_t get_worker_params()
+    {
+        ucp_worker_params_t params = ucp_test::get_worker_params();
+
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+        params.thread_mode = thread_mode();
+        return params;
+    }
+
+protected:
+    ucs_thread_mode_t thread_mode() const
+    {
+        return static_cast<ucs_thread_mode_t>(get_variant_value(0));
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_thread_mode, query)
+{
+    ucp_worker_attr_t worker_attr = {};
+
+    worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_THREAD_MODE;
+    ucs_status_t status    = ucp_worker_query(sender().worker(), &worker_attr);
+    ASSERT_EQ(UCS_OK, status);
+    EXPECT_EQ(thread_mode(), worker_attr.thread_mode);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_thread_mode, all, "all")

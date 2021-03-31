@@ -495,10 +495,13 @@ public:
                                    "rndv_" + rndv_schemes[rndv_scheme]);
         }
 
-        // Generate a variant with auto scheme and new protocols
+        // Generate variants with and new protocols
         add_variant_with_value(variants, get_ctx_params(),
                                RNDV_SCHEME_AUTO | ENABLE_PROTO,
                                "rndv_auto,proto");
+        add_variant_with_value(variants, get_ctx_params(),
+                               RNDV_SCHEME_GET_ZCOPY | ENABLE_PROTO,
+                               "rndv_get_zcopy,proto");
     }
 
 protected:
@@ -673,12 +676,6 @@ UCS_TEST_P(test_ucp_tag_match_rndv, post_larger_recv, "RNDV_THRESH=0") {
         std::vector<char> sendbuf(send_size, 0);
         std::vector<char> recvbuf(recv_size, 0);
 
-        if (use_proto() && (recv_size <= 64)) {
-            UCS_TEST_MESSAGE
-                    << "FIXME: small recv is not supported by new protocols";
-            continue;
-        }
-
         ucs::fill_random(sendbuf);
         ucs::fill_random(recvbuf);
 
@@ -786,12 +783,6 @@ UCS_TEST_P(test_ucp_tag_match_rndv, bidir_multi_exp_post, "RNDV_THRESH=0") {
         std::vector<request*> rreqs;
         std::vector<std::vector<char> > sbufs;
         std::vector<std::vector<char> > rbufs;
-
-        if (use_proto() && (size <= 64)) {
-            UCS_TEST_MESSAGE
-                    << "FIXME: small recv is not supported by new protocols";
-            continue;
-        }
 
         sbufs.resize(count * 2);
         rbufs.resize(count * 2);
