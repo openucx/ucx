@@ -24,4 +24,7 @@ typedef enum {
 } ucs_thread_mode_t;
 
 
+extern const char *ucs_thread_mode_names[];
+
+
 #endif

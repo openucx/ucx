@@ -27,6 +27,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
@@ -1970,6 +1971,39 @@ static void ucp_worker_destroy_configs(ucp_worker_h worker)
     worker->rkey_config_count = 0;
 }
 
+static void ucp_worker_vfs_show_address_name(void *obj,
+                                             ucs_string_buffer_t *strb)
+{
+    ucp_worker_h worker = obj;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_string_buffer_appendf(strb, "%s\n",
+                              ucp_worker_get_address_name(worker));
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+ucs_thread_mode_t ucp_worker_get_thread_mode(uint64_t worker_flags)
+{
+    if (worker_flags & UCP_WORKER_FLAG_THREAD_MULTI) {
+        return UCS_THREAD_MODE_MULTI;
+    } else if (worker_flags & UCP_WORKER_FLAG_THREAD_SERIALIZED) {
+        return UCS_THREAD_MODE_SERIALIZED;
+    }
+    return UCS_THREAD_MODE_SINGLE;
+}
+
+static void ucp_worker_vfs_show_thread_mode(void *obj,
+                                            ucs_string_buffer_t *strb)
+{
+    ucp_worker_h worker = obj;
+    ucs_thread_mode_t thread_mode;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    thread_mode = ucp_worker_get_thread_mode(worker->flags);
+    ucs_string_buffer_appendf(strb, "%s\n", ucs_thread_mode_names[thread_mode]);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -2149,6 +2183,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
      * so warn about unused environment variables.
      */
     ucs_config_parser_warn_unused_env_vars_once(context->config.env_prefix);
+
+    ucs_vfs_obj_add_dir(context, worker, "worker/%p", worker);
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_address_name,
+                            "address_name");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_thread_mode,
+                            "thread_mode");
 
     *worker_p = worker;
     return UCS_OK;
@@ -2367,6 +2407,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
 
+    ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_destroy_mpools(worker);
     ucp_worker_destroy_mem_type_endpoints(worker);
@@ -2396,13 +2437,7 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     ucp_rsc_index_t tl_id;
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
-        if (worker->flags & UCP_WORKER_FLAG_THREAD_MULTI) {
-            attr->thread_mode = UCS_THREAD_MODE_MULTI;
-        } else if (worker->flags & UCP_WORKER_FLAG_THREAD_SERIALIZED) {
-            attr->thread_mode = UCS_THREAD_MODE_SERIALIZED;
-        } else {
-            attr->thread_mode = UCS_THREAD_MODE_SINGLE;
-        }
+        attr->thread_mode = ucp_worker_get_thread_mode(worker->flags);
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
