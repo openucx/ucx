@@ -165,7 +165,7 @@
 #define UCP_REQUEST_CHECK_PARAM(_param) \
     if (((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) && \
         ((_param)->memory_type > UCS_MEMORY_TYPE_LAST)) { \
-        ucs_error("invalid memory type paramter: %d", (_param)->memory_type); \
+        ucs_error("invalid memory type parameter: %d", (_param)->memory_type); \
         return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM); \
     }
 
@@ -242,7 +242,8 @@ ucp_request_can_complete_stream_recv(ucp_request_t *req)
         return 0;
     }
 
-    /* 0-length stream recv is meaningless if this was not requested explicitely */
+    /* 0-length stream recv is meaningless if this was not requested
+     * explicitly */
     if (req->recv.stream.offset == 0) {
         return 0;
     }
