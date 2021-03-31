@@ -30,7 +30,8 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC |
+                                    UCT_MD_FLAG_NEED_RKEY;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
