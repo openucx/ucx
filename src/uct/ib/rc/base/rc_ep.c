@@ -366,15 +366,15 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    
     /* No any other pending operations (except no-op, flush(CANEL), and others
-     * which don't consume TX resources) operations are allowed to be still
-     * scheduled on an arbiter group for which flush(CANCEL) was done */
+     * which don't consume TX resources) allowed to be still scheduled on an
+     * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL));
 
     /* No ep resources */
     ucs_assertv(!uct_rc_ep_has_tx_resources(ep),
-                "pending callback returned error but send resources are available");
+                "pending callback returned error, but send resources are"
+                " available");
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
