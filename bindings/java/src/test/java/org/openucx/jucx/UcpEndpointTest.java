@@ -641,8 +641,9 @@ public class UcpEndpointTest extends UcxTest {
         sendData.setData(dataString);
 
         MemoryBlock recvData = allocateMemory(context1, worker1, memType, dataSize);
+        MemoryBlock recvEagerData = allocateMemory(context1, worker1, memType, dataSize);
         ByteBuffer recvHeader = ByteBuffer.allocateDirect((int) headerSize);
-        UcpRequest[] requests = new UcpRequest[5];
+        UcpRequest[] requests = new UcpRequest[6];
 
         UcpEndpoint ep = worker2.newEndpoint(
             new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
@@ -689,6 +690,8 @@ public class UcpEndpointTest extends UcxTest {
                 cachedEp.add(replyEp);
             }
 
+            requests[5] = amData.receive(recvEagerData.getMemory().getAddress(), null);
+
             return UcsConstants.STATUS.UCS_OK;
         });
 
@@ -717,6 +720,9 @@ public class UcpEndpointTest extends UcxTest {
         assertEquals(dataString,
             recvData.getData().asCharBuffer().toString().trim());
 
+        assertEquals(dataString,
+            recvEagerData.getData().asCharBuffer().toString().trim());
+
         assertEquals(headerString,
             recvHeader.asCharBuffer().toString().trim());
 
@@ -725,7 +731,7 @@ public class UcpEndpointTest extends UcxTest {
         worker1.removeAmRecvHandler(1);
 
         Collections.addAll(resources, context1, context2, worker1, worker2, ep,
-            cachedEp.iterator().next(), sendData, recvData);
+            cachedEp.iterator().next(), sendData, recvData, recvEagerData);
         closeResources();
         cachedEp.clear();
     }
