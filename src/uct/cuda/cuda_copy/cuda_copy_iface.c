@@ -270,14 +270,14 @@ static void uct_cuda_copy_completion_desc_init(ucs_mpool_t *mp, void *obj, void 
     status = UCT_CUDA_FUNC_LOG_ERR(cudaEventCreateWithFlags(&base->event,
                                                             cudaEventDisableTiming));
     if (UCS_OK != status) {
-        ucs_error("cudaEventCreateWithFlags Failed");
+        ucs_fatal("cudaEventCreateWithFlags failed");
     }
 
     status =
         UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&base->stream,
                                                         cudaStreamNonBlocking));
     if (UCS_OK != status) {
-        ucs_error("cudaEventCreateWithFlags Failed");
+        ucs_fatal("cudaStreamCreateWithFlags failed");
     }
 }
 
