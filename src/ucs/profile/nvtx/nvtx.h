@@ -18,3 +18,13 @@
     va_start(_args, _format); \
     vsprintf(_str, _format, _args); \
     va_end(_args);
+
+uint64_t ucs_nvtx_profile_range_start(const char *format, ...);
+
+void ucs_nvtx_profile_range_stop(uint64_t id);
+
+void ucs_nvtx_profile_range_add_marker(const char *format, ...);
+
+void ucs_nvtx_profile_range_push(const char *format, ...);
+
+void ucs_nvtx_profile_range_pop();

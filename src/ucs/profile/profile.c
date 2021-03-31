@@ -18,6 +18,11 @@
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <pthread.h>
+#include <stdarg.h>
+
+#ifdef HAVE_NVTX
+#include <ucs/profile/nvtx/nvtx.h>
+#endif
 
 
 typedef struct ucs_profile_global_location {
@@ -62,7 +67,6 @@ typedef struct ucs_profile_thread_context {
         ucs_time_t                    stack[UCS_PROFILE_STACK_MAX]; /**< Timestamps for each nested scope */
     } accum;
 } ucs_profile_thread_context_t;
-
 
 #define ucs_profile_for_each_location(_var) \
     for ((_var) = ucs_profile_global_ctx.locations; \
@@ -613,25 +617,71 @@ void ucs_profile_global_cleanup()
     pthread_key_delete(ucs_profile_global_ctx.tls_key);
 }
 
-#ifndef HAVE_NVTX
-uint64_t ucs_profile_range_start(const char *format, ...)
+uint64_t ucs_base_profile_range_start(const char *format, ...)
 {
     return 0;
 }
 
+void ucs_base_profile_range_stop(uint64_t id)
+{
+}
+
+void ucs_base_profile_range_add_marker(const char *format, ...)
+{
+}
+
+void ucs_base_profile_range_push(const char *format, ...)
+{
+}
+
+void ucs_base_profile_range_pop()
+{
+}
+
+ucs_profile_range_ops_t ucs_profile_range_fxns = {
+    .start      = ucs_base_profile_range_start,
+    .stop       = ucs_base_profile_range_stop,
+    .push       = ucs_base_profile_range_push,
+    .pop        = ucs_base_profile_range_pop,
+    .add_marker = ucs_base_profile_range_add_marker,
+};
+
+uint64_t ucs_profile_range_start(const char *format, ...)
+{
+    uint64_t rval;
+    va_list args;
+
+    va_start(args, format);
+    rval = ucs_profile_range_fxns.start(format, args);
+    va_end(args);
+
+    return rval;
+}
+
 void ucs_profile_range_stop(uint64_t id)
 {
+    ucs_profile_range_fxns.stop(id);
 }
 
 void ucs_profile_range_add_marker(const char *format, ...)
 {
+    va_list args;
+
+    va_start(args, format);
+    ucs_profile_range_fxns.add_marker(format, args);
+    va_end(args);
 }
 
 void ucs_profile_range_push(const char *format, ...)
 {
+    va_list args;
+
+    va_start(args, format);
+    ucs_profile_range_fxns.push(format, args);
+    va_end(args);
 }
 
 void ucs_profile_range_pop()
 {
+    ucs_profile_range_fxns.pop();
 }
-#endif

@@ -121,6 +121,29 @@ typedef struct ucs_profile_record {
 extern const char *ucs_profile_mode_names[];
 
 
+typedef uint64_t (*ucs_profile_range_start_t)(const char *format, ...);
+
+typedef void (*ucs_profile_range_stop_t)(uint64_t id);
+
+typedef void (*ucs_profile_range_push_t)(const char *format, ...);
+
+typedef void (*ucs_profile_range_pop_t)();
+
+typedef void (*ucs_profile_range_add_marker_t)(const char *format, ...);
+
+/**
+ * Profile range operations
+ */
+typedef struct ucs_profile_range_ops {
+    ucs_profile_range_start_t      start;
+    ucs_profile_range_stop_t       stop;
+    ucs_profile_range_push_t       push;
+    ucs_profile_range_pop_t        pop;
+    ucs_profile_range_add_marker_t add_marker;
+} ucs_profile_range_ops_t;
+
+extern ucs_profile_range_ops_t ucs_profile_range_fxns;
+
 /**
  * Initialize profiling system.
  */
