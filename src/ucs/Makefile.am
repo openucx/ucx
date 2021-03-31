@@ -171,6 +171,7 @@ libucs_la_SOURCES = \
 	type/class.c \
 	type/status.c \
 	type/spinlock.c \
+	type/thread_mode.c \
 	vfs/base/vfs_obj.c
 
 if HAVE_AARCH64_THUNDERX2
