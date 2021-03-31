@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+BEGIN_C_DECLS
 
 /**
  * ucs_sys_event_set_t structure used in ucs_event_set_XXX functions.
@@ -144,5 +145,7 @@ void ucs_event_set_cleanup(ucs_sys_event_set_t *event_set);
  */
 ucs_status_t ucs_event_set_fd_get(ucs_sys_event_set_t *event_set,
                                   int *event_fd_p);
+
+END_C_DECLS
 
 #endif

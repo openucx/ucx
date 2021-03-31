@@ -149,40 +149,32 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
 
 static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *event)
 {
-    uct_rdmacm_cm_ep_t     *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
-    uct_cm_remote_data_t   remote_data;
-    ucs_status_t           status;
-    struct rdma_conn_param conn_param;
-    char                   ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_rdmacm_cm_ep_t *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
+    uint8_t pack_priv_data[UCT_RDMACM_TCP_PRIV_DATA_LEN];
+    size_t pack_priv_data_length;
+    ucs_status_t status;
 
     ucs_assert(event->id == cep->id);
 
-    memset(&conn_param, 0, sizeof(conn_param));
-    conn_param.private_data = ucs_alloca(uct_rdmacm_cm_get_max_conn_priv() +
-                                         sizeof(uct_rdmacm_priv_data_hdr_t));
+    if (cep->super.resolve_cb != NULL) {
+        status = uct_rdmacm_cm_ep_resolve_cb(cep);
+        goto out;
+    }
 
-    status = uct_rdmacm_cm_ep_pack_cb(cep, &conn_param);
+    ucs_assert(cep->super.priv_pack_cb != NULL);
+    status = uct_rdmacm_cm_ep_pack_cb(cep, pack_priv_data,
+                                      &pack_priv_data_length);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    status = uct_rdmacm_cm_ep_send_priv_data(cep, pack_priv_data,
+                                             pack_priv_data_length);
+
+out:
     if (status != UCS_OK) {
         cep->status = status;
         cep->flags |= UCT_RDMACM_CM_EP_FAILED;
-        return;
-    }
-
-    status = uct_rdamcm_cm_ep_set_qp_num(&conn_param, cep);
-    if (status != UCS_OK) {
-        remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
-        return;
-    }
-
-    ucs_trace("%s rdma_connect, cm_id %p",
-              uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN), cep->id);
-
-    if (rdma_connect(cep->id, &conn_param)) {
-        ucs_error("%s rdma_connect failed: %m",
-                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN));
-        remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_IO_ERROR);
     }
 }
 
@@ -607,6 +599,7 @@ static uct_cm_ops_t uct_rdmacm_cm_ops = {
 
 static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .ep_pending_purge         = ucs_empty_function,
+    .ep_connect               = uct_rdmacm_cm_ep_connect,
     .ep_disconnect            = uct_rdmacm_cm_ep_disconnect,
     .cm_ep_conn_notify        = uct_rdmacm_cm_ep_conn_notify,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rdmacm_cm_ep_t),

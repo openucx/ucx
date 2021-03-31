@@ -95,6 +95,9 @@ typedef struct uct_cm_base_ep {
     /* Callback to fill the user's private data */
     uct_cm_ep_priv_data_pack_callback_t priv_pack_cb;
 
+    /* Callback to notify bound device */
+    uct_cm_ep_resolve_callback_t        resolve_cb;
+
     union {
         struct {
             /* On the client side - callback to process an incoming
@@ -131,6 +134,9 @@ ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
                                void *priv_data, size_t priv_data_max,
                                size_t *priv_data_ret);
 
+ucs_status_t uct_cm_ep_resolve_cb(uct_cm_base_ep_t *cep,
+                                  const uct_cm_ep_resolve_args_t *args);
+
 void uct_cm_ep_disconnect_cb(uct_cm_base_ep_t *cep);
 
 void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
@@ -138,5 +144,9 @@ void uct_cm_ep_client_connect_cb(uct_cm_base_ep_t *cep,
                                  ucs_status_t status);
 
 void uct_cm_ep_server_conn_notify_cb(uct_cm_base_ep_t *cep, ucs_status_t status);
+
+void uct_ep_connect_params_get(const uct_ep_connect_params_t *params,
+                               const void **priv_data_p,
+                               size_t *priv_data_length_p);
 
 #endif /* UCT_CM_H_ */

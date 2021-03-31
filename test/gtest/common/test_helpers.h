@@ -12,6 +12,7 @@
 
 #include <common/mem_buffer.h>
 
+#include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
@@ -859,6 +860,18 @@ private:
 };
 
 } // detail
+
+
+class scoped_async_lock {
+public:
+    scoped_async_lock(ucs_async_context_t &async);
+
+    ~scoped_async_lock();
+
+private:
+    ucs_async_context_t &m_async;
+};
+
 
 /**
  * N-ary Cartesian product over the N vectors provided in the input vector
