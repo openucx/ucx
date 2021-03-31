@@ -8,8 +8,8 @@ AC_DEFUN([UCX_CHECK_NVTX],[
 AS_IF([test "x$nvtx_checked" != "xyes"],
    [
     AC_ARG_WITH([nvtx],
-                [AS_HELP_STRING([--with-nvtx=(DIR)], [Enable the use of NVTX (default is guess).])],
-                [], [with_nvtx=guess])
+                [AS_HELP_STRING([--with-nvtx=(DIR)], [Enable the use of NVTX (default is no).])],
+                [], [with_nvtx=no])
 
     AS_IF([test "x$with_nvtx" = "xno"],
         [
