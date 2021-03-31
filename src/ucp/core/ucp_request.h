@@ -135,9 +135,11 @@ struct ucp_request {
                 void                   *buffer; /* Send buffer */
                 ucp_request_callback_t flushed_cb; /* Called when flushed */
             };
-            ucp_datatype_t          datatype;   /* Send type */
-            size_t                  length;     /* Total length, in bytes */
-            ucp_send_nbx_callback_t cb;         /* Completion callback */
+            ucp_datatype_t          datatype; /* Send type */
+            size_t                  length; /* Total length, in bytes */
+            ucp_send_nbx_callback_t cb; /* Completion callback */
+            ucs_hlist_link_t        list; /* Element in the per-EP list of UCP
+                                             flush/proto requests */
 
             const ucp_proto_config_t *proto_config; /* Selected protocol for the request */
 
@@ -240,16 +242,14 @@ struct ucp_request {
                 } rndv_rtr;
 
                 struct {
-                    ucs_hlist_link_t       list_elem; /* Element in the per-EP list of UCP
-                                                         flush requests */
-                    unsigned               uct_flags; /* Flags to pass to @ref uct_ep_flush */
-                    uct_worker_cb_id_t     prog_id;   /* Progress callback ID */
-                    uint32_t               cmpl_sn;   /* Sequence number of the remote completion
-                                                         this request is waiting for */
-                    uint8_t                sw_started;
-                    uint8_t                sw_done;
-                    uint8_t                num_lanes; /* How many lanes are being flushed */
-                    ucp_lane_map_t         started_lanes;/* Which lanes need were flushed */
+                    unsigned           uct_flags; /* Flags to pass to @ref uct_ep_flush */
+                    uct_worker_cb_id_t prog_id; /* Progress callback ID */
+                    uint32_t           cmpl_sn; /* Sequence number of the remote completion
+                                                   this request is waiting for */
+                    uint8_t            sw_started;
+                    uint8_t            sw_done;
+                    uint8_t            num_lanes; /* How many lanes are being flushed */
+                    ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
                 } flush;
 
                 struct {

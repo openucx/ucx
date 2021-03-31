@@ -389,6 +389,7 @@ static ssize_t ucp_cm_client_priv_pack_cb(void *arg,
     ucp_ep_ext_control(cm_wireup_ep->tmp_ep)->local_ep_id =
             ucp_ep_ext_control(ep)->local_ep_id;
 
+    ucp_ep_flush_state_reset(cm_wireup_ep->tmp_ep);
     ucp_ep_update_flags(cm_wireup_ep->tmp_ep, UCP_EP_FLAG_INTERNAL, 0);
     ucs_debug("ep %p: created tmp_ep %p", ep, cm_wireup_ep->tmp_ep);
 
@@ -910,8 +911,6 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
     if (status != UCS_OK) {
         return status;
     }
-
-    ucp_ep_flush_state_reset(ucp_ep);
 
     return UCS_OK;
 }

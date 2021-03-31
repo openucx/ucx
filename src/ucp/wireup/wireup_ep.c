@@ -138,7 +138,7 @@ ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self)
     status = req->func(req);
     if (status == UCS_OK) {
         ucs_atomic_sub32(&wireup_ep->pending_count, 1);
-        ucs_free(proxy_req);
+        ucp_request_mem_free(proxy_req);
     }
     return status;
 }
@@ -156,8 +156,8 @@ ucp_wireup_ep_pending_req_release(uct_pending_req_t *self, void *arg)
     if (proxy_req->send.proxy.req->func == ucp_wireup_msg_progress) {
         req = ucs_container_of(proxy_req->send.proxy.req, ucp_request_t,
                                send.uct);
-        ucs_free((void*)req->send.buffer);
-        ucs_free(req);
+        ucs_free(req->send.buffer);
+        ucp_request_mem_free(req);
     }
 
     ucs_free(proxy_req);
@@ -176,7 +176,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
 
     UCS_ASYNC_BLOCK(&worker->async);
     if (req->func == ucp_wireup_msg_progress) {
-        proxy_req = ucs_malloc(sizeof(*proxy_req), "ucp_wireup_proxy_req");
+        proxy_req = ucp_request_mem_alloc("ucp_wireup_proxy_req");
         if (proxy_req == NULL) {
             status = UCS_ERR_NO_MEMORY;
             goto out;
@@ -194,7 +194,7 @@ static ucs_status_t ucp_wireup_ep_pending_add(uct_ep_h uct_ep,
         if (status == UCS_OK) {
             ucs_atomic_add32(&wireup_ep->pending_count, +1);
         } else {
-            ucs_free(proxy_req);
+            ucp_request_mem_free(proxy_req);
         }
     } else {
         ucs_queue_push(&wireup_ep->pending_q, ucp_wireup_ep_req_priv(req));

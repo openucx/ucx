@@ -266,14 +266,6 @@ ucp_rndv_adjust_zcopy_length(size_t min_zcopy, size_t max_zcopy, size_t align,
     return result_length;
 }
 
-static void ucp_rndv_complete_send(ucp_request_t *sreq, ucs_status_t status)
-{
-    ucs_assert(!sreq->send.ep->worker->context->config.ext.proto_enable);
-    ucp_request_send_generic_dt_finish(sreq);
-    ucp_request_send_buffer_dereg(sreq);
-    ucp_request_complete_send(sreq, status);
-}
-
 void ucp_rndv_req_send_ack(ucp_request_t *ack_req, ucp_request_t *req,
                            ucs_ptr_map_key_t remote_req_id, ucs_status_t status,
                            ucp_am_id_t am_id, const char *ack_str)
@@ -1478,7 +1470,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     if (sreq->flags & UCP_REQUEST_FLAG_OFFLOADED) {
         ucp_tag_offload_cancel_rndv(sreq);
     }
-    ucp_rndv_complete_send(sreq, rep_hdr->status);
+
+    ucp_request_complete_and_dereg_send(sreq, rep_hdr->status);
     return UCS_OK;
 }
 
@@ -1495,7 +1488,7 @@ ucs_status_t ucp_rndv_rts_handle_status_from_pending(ucp_request_t *sreq,
         }
 
         ucp_request_id_release(sreq);
-        ucp_rndv_complete_send(sreq, status);
+        ucp_request_complete_and_dereg_send(sreq, status);
     }
 
     return UCS_OK;
@@ -1549,7 +1542,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
         return UCS_ERR_NO_RESOURCE;
     }
 
-    ucp_rndv_complete_send(sreq, status);
+    ucp_request_complete_and_dereg_send(sreq, status);
 
     return UCS_OK;
 }

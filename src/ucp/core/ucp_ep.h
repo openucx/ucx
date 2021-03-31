@@ -446,6 +446,8 @@ typedef struct {
         ucp_ep_flush_state_t      flush_state;   /* Remote completion status */
     };
     ucp_ep_ext_control_t          *control_ext;  /* Control data path extension */
+    /* List of requests which are waiting for remote completion */
+    ucs_hlist_head_t              proto_reqs;
 } ucp_ep_ext_gen_t;
 
 
@@ -661,5 +663,14 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
  *                          has no resources.
  */
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);
+
+/**
+ * @brief Purge flush and protocol requests scheduled on a given UCP endpoint.
+ *
+ * @param [in]     ucp_ep           Endpoint object on which requests should be
+ *                                  purged.
+ * @param [in]     status           Completion status.
+ */
+void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
 #endif
