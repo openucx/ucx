@@ -269,7 +269,7 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_dc_mlx5_iface_t)(uct_iface_t*);
 
 static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
                                                  int pool_index, int dci_index,
-                                                 uint8_t lag_port)
+                                                 uint8_t path_index)
 {
     uct_ib_iface_t *ib_iface           = &iface->super.super.super;
     uct_ib_mlx5_qp_attr_t attr         = {};
@@ -285,7 +285,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
 
     dci->pool_index = pool_index;
-    dci->lag_port   = lag_port;
+    dci->path_index = path_index;
 
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
                                 iface->super.super.config.tx_qp_len,
@@ -388,7 +388,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super,
-                                                  dci->lag_port);
+                                                  dci->path_index);
     }
 
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);

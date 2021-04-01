@@ -150,7 +150,7 @@ typedef struct uct_dc_dci {
                                                 groups scheduled than ep num. */
     };
     uint8_t                       pool_index; /* DCI pool index. */
-    uint8_t                       lag_port; /* LAG port index */
+    uint8_t                       path_index; /* Path index */
 #if UCS_ENABLE_ASSERT
     uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
 #endif
@@ -289,7 +289,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
 
 ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
                                                 uct_ib_mlx5_qp_t *qp,
-                                                uint8_t pool_index);
+                                                uint8_t path_index);
 
 #else
 
@@ -305,9 +305,8 @@ uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface)
     return UCS_ERR_UNSUPPORTED;
 }
 
-static UCS_F_MAYBE_UNUSED ucs_status_t
-uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
-                                   uct_ib_mlx5_qp_t *qp)
+static UCS_F_MAYBE_UNUSED ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(
+        uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *qp, uint8_t path_index)
 {
     return UCS_ERR_UNSUPPORTED;
 }
