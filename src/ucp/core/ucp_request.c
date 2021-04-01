@@ -447,3 +447,10 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
 
     return UCS_ERR_MESSAGE_TRUNCATED;
 }
+
+void ucp_proto_comp_cb(uct_completion_t *comp)
+{
+    ucp_request_t *req = ucs_container_of(comp, ucp_request_t,
+                                          send.state.uct_comp);
+    req->send.proto.comp_cb(req);
+}
