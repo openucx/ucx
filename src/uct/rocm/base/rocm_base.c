@@ -220,7 +220,7 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
-        mem_attr_p->base_address = addr;
+        mem_attr_p->base_address = (void*) addr;
     }
 
     if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
