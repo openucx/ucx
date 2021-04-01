@@ -259,6 +259,7 @@ static void ucp_ep_destroy_base(ucp_ep_h ep)
     ucs_assert(ep->refcount == 0);
     ucs_assert(ep->flush_iter_refcount == 0);
     ucs_assert(ep->discard_refcount == 0);
+    ucs_assert(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
 
     ucp_ep_remove_progress_callbacks(ep);
     UCS_STATS_NODE_FREE(ep->stats);
