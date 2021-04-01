@@ -107,10 +107,9 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
             req->recv.tag.info.length =
             req->recv.remaining       = eagerf_hdr->total_len;
 
-            status = ucp_tag_request_process_recv_data(req,
-                                                       UCS_PTR_BYTE_OFFSET(data, hdr_len),
-                                                       recv_len, 0, 0, flags);
-            ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS));
+            ucp_tag_request_process_recv_data(req, UCS_PTR_BYTE_OFFSET(data,
+                                                                       hdr_len),
+                                              recv_len, 0, 0, flags);
 
             ucp_tag_frag_list_process_queue(&worker->tm, req, eagerf_hdr->msg_id
                                             UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP));
