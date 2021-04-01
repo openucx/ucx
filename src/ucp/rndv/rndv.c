@@ -819,7 +819,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
                                                send.state.uct_comp);
     /* if the super request is a receive request, it means that's used RNDV
      * scheme is PUT pipeline protocol, otherwise - GET pipeline protocol (where
-     * the super request is an intermidate RNDV request) */
+     * the super request is an intermediate RNDV request) */
     int is_put_proto        = freq->super_req->flags &
                               (UCP_REQUEST_FLAG_RECV_TAG |
                                UCP_REQUEST_FLAG_RECV_AM);
