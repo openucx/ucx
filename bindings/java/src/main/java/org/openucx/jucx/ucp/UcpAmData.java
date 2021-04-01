@@ -63,9 +63,6 @@ public class UcpAmData implements Closeable {
      * Get UCX data handle descriptor to pass to {@link UcpWorker#recvAmDataNonBlocking}
      */
     public long getDataHandle() {
-        if (isDataValid()) {
-            throw new UcxException("Handle is invalid, since data is received.");
-        }
         return address;
     }
 
