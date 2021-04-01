@@ -42,7 +42,7 @@
         _call;                                                                \
         ucm_trace("after %s: got 0x%x/0x%x", UCS_PP_MAKE_STRING(_call),       \
                   (_data)->fired_events, exp_events);                         \
-        /* in case if any event is missed - set correcponding bit to 0     */ \
+        /* in case if any event is missed - set corresponding bit to 0     */ \
         /* same as equation:                                               */ \
         /* (_data)->out_events &= ~(exp_events ^                           */ \
         /*                          ((_data)->fired_events & exp_events)); */ \
