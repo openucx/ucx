@@ -221,6 +221,12 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
 
     ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        ucs_debug("ep %p: not sending WIREUP message (%u), because ep failed",
+                  ep, type);
+        return UCS_ERR_CONNECTION_RESET;
+    }
+
     /* We cannot allocate from memory pool because it's not thread safe
      * and this function may be called from any thread
      */

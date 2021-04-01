@@ -258,6 +258,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
 
     ucs_queue_for_each_safe(sreq, iter, queue, send.tag_offload.queue) {
         if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
+            !(sreq->send.ep->flags & UCP_EP_FLAG_FAILED) &&
             (ucp_ep_local_id(sreq->send.ep) == rep_hdr->ep_id)) {
             ucp_request_id_release(sreq);
             ucp_tag_eager_sync_completion(sreq,
