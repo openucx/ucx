@@ -49,21 +49,10 @@ stages:
             clean: true
 
           - bash: |
-              set -eEx
-              echo "Get commit message target $(system.pullRequest.sourceCommitId)"
-              title=`git log -1 --format="%s" $(system.pullRequest.sourceCommitId)`
-              run_by_title=No
-              if [[ "$title" == "AZP/RELEASE: "* ]]
-              then
-                  run_by_title=Yes
-              fi
-
-              if [[ ( "$(Build.Reason)" == "IndividualCI" ) || ( "${run_by_title}" == "Yes" && "$(Build.Reason)" == "PullRequest" ) ]]
-              then
-                  echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
-              else
-                  echo "##vso[task.setvariable variable=Launch;isOutput=true]No"
-              fi
+              set -eE
+              source ./buildlib/az-helpers.sh
+              set -x
+              check_commit_message $(system.pullRequest.sourceCommitId) "AZP/RELEASE: " $(Build.Reason)
             name: Commit
   # Create an empty draft to avoid race condition in distro releases
   - stage: GitHubDraft
