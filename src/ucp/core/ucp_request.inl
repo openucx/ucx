@@ -596,7 +596,8 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     ucp_dt_generic_t *dt_gen;
     ucs_status_t status;
 
-    ucs_assert(req->status == UCS_OK);
+    ucs_assertv(req->status == UCS_OK, "status: %s",
+                ucs_status_string(req->status));
 
     ucp_trace_req(req, "unpack recv_data req_len %zu data_len %zu offset %zu last: %s",
                   req->recv.length, length, offset, last ? "yes" : "no");
