@@ -1076,6 +1076,53 @@ static void uct_ib_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
     (void)uct_ib_memh_dereg(md, &region->memh);
 }
 
+static ucs_status_t
+uct_ib_rcache_mem_reg_ext_validate_cb(void *context, ucs_rcache_t *rcache,
+                                      void *arg, ucs_rcache_region_t *rregion,
+                                      uint16_t rcache_mem_reg_flags)
+{
+    ucs_status_t status;
+    uct_ib_rcache_region_t *region;
+
+    status = uct_ib_rcache_mem_reg_cb(context, rcache, arg, rregion,
+                                      rcache_mem_reg_flags);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
+    return uct_mem_attr_query((void*)region->super.super.start,
+                              region->super.super.end - region->super.super.start,
+                              &region->mem_attr);
+}
+
+static void
+uct_ib_rcache_mem_dereg_ext_validate_cb(void *context, ucs_rcache_t *rcache,
+                                        ucs_rcache_region_t *rregion)
+{
+    uct_ib_rcache_region_t *region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
+    uct_mem_attr_destroy(region->mem_attr);
+    uct_ib_rcache_mem_dereg_cb(context, rcache, rregion);
+}
+
+static int uct_ib_rcache_mem_ext_validate_cb(void *context, ucs_rcache_t *rcache,
+                                             ucs_rcache_region_t *rregion)
+{
+    int ret;
+    ucs_status_t status;
+    uct_mem_attr_h mem_attr;
+    uct_ib_rcache_region_t *region;
+
+    region = ucs_derived_of(rregion, uct_ib_rcache_region_t);
+    status = uct_mem_attr_query((void*)region->super.super.start,
+                                region->super.super.end - region->super.super.start,
+                                &mem_attr);
+
+    ret = status != UCS_OK ? 0 : !uct_mem_attr_cmp(mem_attr, region->mem_attr);
+    uct_mem_attr_destroy(mem_attr);
+    return ret;
+}
+
 static void uct_ib_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,
                                          ucs_rcache_region_t *rregion, char *buf,
                                          size_t max)
@@ -1091,9 +1138,12 @@ static void uct_ib_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,
 }
 
 static ucs_rcache_ops_t uct_ib_rcache_ops = {
-    .mem_reg     = uct_ib_rcache_mem_reg_cb,
-    .mem_dereg   = uct_ib_rcache_mem_dereg_cb,
-    .dump_region = uct_ib_rcache_dump_region_cb
+    .mem_reg                = uct_ib_rcache_mem_reg_cb,
+    .mem_dereg              = uct_ib_rcache_mem_dereg_cb,
+    .mem_reg_ext_validate   = uct_ib_rcache_mem_reg_ext_validate_cb,
+    .mem_dereg_ext_validate = uct_ib_rcache_mem_dereg_ext_validate_cb,
+    .mem_ext_validate       = uct_ib_rcache_mem_ext_validate_cb,
+    .dump_region            = uct_ib_rcache_dump_region_cb
 };
 
 static ucs_status_t uct_ib_md_odp_query(uct_md_h uct_md, uct_md_attr_t *md_attr)

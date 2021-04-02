@@ -348,9 +348,16 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
     if (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) {
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_DEREGS, 1);
         {
-            UCS_PROFILE_CODE("mem_dereg") {
-                rcache->params.ops->mem_dereg(rcache->params.context, rcache,
-                region);
+            if (ucs_unlikely(rcache->ext_validate)) {
+                UCS_PROFILE_CODE("mem_dereg_ext_validate") {
+                    rcache->params.ops->mem_dereg_ext_validate(rcache->params.context,
+                                                               rcache, region);
+                }
+            } else {
+                UCS_PROFILE_CODE("mem_dereg") {
+                    rcache->params.ops->mem_dereg(rcache->params.context,
+                                                  rcache, region);
+                }
             }
         }
     }
@@ -631,6 +638,25 @@ static inline int ucs_rcache_region_test(ucs_rcache_region_t *region, int prot)
            ucs_test_all_flags(region->prot, prot);
 }
 
+static int ucs_rcache_region_ext_validate(ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *region)
+{
+    int ret = 1;
+
+    if (ucs_unlikely(rcache->ext_validate)) {
+        ret = rcache->params.ops->mem_ext_validate(rcache->params.context,
+                                                   rcache, region);
+        if (!ret) {
+            ucs_rcache_region_trace(rcache, region,
+                                    "invalid region found. Will invalidate");
+            ucs_rcache_region_invalidate(rcache, region,
+                                         UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+        }
+    }
+
+    return ret;
+}
+
 /* Lock must be held */
 static ucs_status_t
 ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
@@ -652,6 +678,14 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
     /* TODO check if any of the regions is locked */
 
     ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
+        if (!ucs_rcache_region_ext_validate(rcache, region)) {
+            ucs_rcache_region_trace(rcache, region,
+                                    "do not merge VA range 0x%lx..0x%lx "
+                                    "with invalid overlapping region",
+                                    *start, *end);
+            continue;
+        }
+
         if ((*start >= region->super.start) && (*end <= region->super.end) &&
             ucs_rcache_region_test(region, *prot))
         {
@@ -830,10 +864,19 @@ retry:
     ++rcache->num_regions;
     rcache->total_size += region->super.end - region->super.start;
 
-    region->status = status =
-        UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
-                               rcache->params.context, rcache, arg, region,
-                               merged ? UCS_RCACHE_MEM_REG_HIDE_ERRORS : 0);
+    if (ucs_unlikely(rcache->ext_validate)) {
+        region->status = status =
+            UCS_PROFILE_NAMED_CALL("mem_reg_ext_validate",
+                                   rcache->params.ops->mem_reg_ext_validate,
+                                   rcache->params.context, rcache, arg, region,
+                                   merged ? UCS_RCACHE_MEM_REG_HIDE_ERRORS : 0);
+    } else {
+        region->status = status =
+            UCS_PROFILE_NAMED_CALL("mem_reg", rcache->params.ops->mem_reg,
+                                   rcache->params.context, rcache, arg, region,
+                                   merged ? UCS_RCACHE_MEM_REG_HIDE_ERRORS : 0);
+    }
+
     if (status != UCS_OK) {
         if (merged) {
             /* failure may be due to merge, because memory of the merged
@@ -904,7 +947,8 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
         if (ucs_likely(pgt_region != NULL)) {
             region = ucs_derived_of(pgt_region, ucs_rcache_region_t);
             if (((start + length) <= region->super.end) &&
-                ucs_rcache_region_test(region, prot))
+                ucs_rcache_region_test(region, prot)    &&
+                ucs_rcache_region_ext_validate(rcache, region))
             {
                 ucs_rcache_region_hold(rcache, region);
                 ucs_rcache_region_validate_pfn(rcache, region);
@@ -1070,10 +1114,31 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_list_head_init(&self->lru.list);
     ucs_spinlock_init(&self->lru.lock, 0);
 
+    if (ucs_global_opts.rcache_ext_validate == UCS_CONFIG_ON) {
+        self->ext_validate = 1;
+    } else {
+        /* auto might set this back to 1 based on memory hooks */
+        self->ext_validate = 0;
+    }
+
     status = ucm_set_event_handler(params->ucm_events, params->ucm_event_priority,
                                    ucs_rcache_unmapped_callback, self);
     if (status != UCS_OK) {
-        goto err_destroy_mp;
+        /* try again without MEM_TYPE events */
+        int sub_events = params->ucm_events &
+                         ~(UCM_EVENT_MEM_TYPE_ALLOC | UCM_EVENT_MEM_TYPE_FREE);
+        status = ucm_set_event_handler(sub_events, params->ucm_event_priority,
+                                       ucs_rcache_unmapped_callback, self);
+        if (status != UCS_OK) {
+            goto err_destroy_mp;
+        }
+        if (ucs_global_opts.rcache_ext_validate == UCS_CONFIG_OFF) {
+            ucs_error("failed to initialize rcache. Use a different "
+                      "memory hook mode, or set UCX_RCACHE_EXT_VALIDATE=auto");
+            status = UCS_ERR_UNSUPPORTED;
+            goto err_destroy_mp;
+        }
+        self->ext_validate = 1;
     }
 
     status = ucs_rcache_global_list_add(self);

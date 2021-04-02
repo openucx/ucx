@@ -66,6 +66,7 @@ typedef struct uct_gdr_copy_key {
 typedef struct uct_gdr_copy_rcache_region {
     ucs_rcache_region_t  super;
     uct_gdr_copy_mem_t   memh;      /**<  mr exposed to the user as the memh */
+    uct_mem_attr_h       mem_attr;
 } uct_gdr_copy_rcache_region_t;
 
 #endif

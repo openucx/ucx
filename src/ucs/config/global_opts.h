@@ -121,6 +121,9 @@ typedef struct {
     /* registration cache checks if physical pages are not moved */
     unsigned                   rcache_check_pfn;
 
+    /* registration cache uses external validation of its entries */
+    ucs_on_off_auto_value_t    rcache_ext_validate;
+
     /* directory for loadable modules */
     char                       *module_dir;
 

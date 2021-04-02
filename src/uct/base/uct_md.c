@@ -52,6 +52,8 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
     {NULL}
 };
 
+uct_mem_query_func_t mqf[UCS_MEMORY_TYPE_LAST];
+
 
 ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
                          const uct_md_config_t *config, uct_md_h *md_p)
@@ -493,4 +495,55 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
     rcache_params->ucm_event_priority = rcache_config->event_prio;
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
+}
+
+static int uct_mem_attr_cmp_host(uct_mem_attr_h mem_attr1,
+                                 uct_mem_attr_h mem_attr2)
+{
+    /* host memory attributes always compare equal */
+    return 0;
+}
+
+static void uct_mem_attr_destroy_host(uct_mem_attr_h mem_attr)
+{
+    /* Nothing to be done for host memory attributes */
+}
+
+/* all host memory will have the same attributes.
+ * so, they will all point to this static struct */
+static uct_mem_attr_t mem_attr_host = {
+    .mem_type = UCS_MEMORY_TYPE_HOST,
+    .cmp      = uct_mem_attr_cmp_host,
+    .destroy  = uct_mem_attr_destroy_host
+};
+
+ucs_status_t uct_mem_attr_query(const void *address, size_t length,
+                                uct_mem_attr_h *mem_attr_p)
+{
+    ucs_status_t status;
+    ucs_memory_type_t mt;
+    for (mt = UCS_MEMORY_TYPE_HOST + 1; mt < UCS_MEMORY_TYPE_LAST; mt++) {
+        if (mqf[mt] != NULL) {
+            status = mqf[mt](address, length, mem_attr_p);
+            if (status == UCS_OK) {
+                return UCS_OK;
+            }
+        }
+    }
+
+    /* none of the MDs recognized the address. So, it must be HOST */
+    *mem_attr_p = &mem_attr_host;
+    return UCS_OK;
+}
+
+ucs_status_t uct_mem_attr_query_type(const void *address, size_t length,
+                                     ucs_memory_type_t *mem_type)
+{
+    ucs_status_t status;
+    uct_mem_attr_h mem_attr;
+    status = uct_mem_attr_query(address, length, &mem_attr);
+    if (status != UCS_OK) return UCS_ERR_NO_RESOURCE;
+    *mem_type = mem_attr->mem_type;
+    uct_mem_attr_destroy(mem_attr);
+    return UCS_OK;
 }
