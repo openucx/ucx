@@ -536,7 +536,7 @@ ucs_bitmap_ffs(const ucs_bitmap_word_t *bitmap_words, size_t num_words,
             return _UCS_BITMAP_BIT_INDEX(first_bit_in_word, word_index);
         }
 
-        mask = UINT64_MAX;
+        mask = ((uint64_t) -1);
         word_index++;
     }
 
