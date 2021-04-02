@@ -2357,10 +2357,20 @@ static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
     return 1;
 }
 
+static int ucp_worker_discard_remove_filter(const ucs_callbackq_elem_t *elem,
+                                            void *arg)
+{
+    return (elem->cb == ucp_worker_discard_uct_ep_destroy_progress) ||
+           (elem->cb == ucp_worker_discard_uct_ep_progress);
+}
+
 static void ucp_worker_discarded_uct_eps_cleanup(ucp_worker_h worker)
 {
     ucp_request_t *req;
     uct_ep_h uct_ep;
+
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_worker_discard_remove_filter, NULL);
 
     kh_foreach(&worker->discard_uct_ep_hash, uct_ep, req, {
         ucs_assert(req->send.discard_uct_ep.uct_ep == uct_ep);
