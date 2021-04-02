@@ -506,8 +506,7 @@ public:
                     /* Wait until getting ACK from responder */
                     sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
                     ucs_assertv(UCS_CIRCULAR_COMPARE8(send_sn - 1, >=, sn),
-                                "recv_sn=%d iters=%" PRIu64, sn,
-                                m_perf.current.iters);
+                                "recv_sn=%d iters=%lu", sn, m_perf.current.iters);
 
                     while (UCS_CIRCULAR_COMPARE8(send_sn, >, sn + fc_window)) {
                         progress_responder();
