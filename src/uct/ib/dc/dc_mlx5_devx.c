@@ -72,12 +72,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     return UCS_OK;
 }
 
-ucs_status_t
-uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
-                                   uct_ib_mlx5_qp_t *qp,
-                                   uint8_t lag_port)
+ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
+                                                uct_ib_mlx5_qp_t *qp,
+                                                uint8_t path_index)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
@@ -116,12 +114,8 @@ uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     if (uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
                           iface->super.super.super.config.sl);
-
-        if (md->flags & UCT_IB_MLX5_MD_FLAG_LAG) {
-            opt_param_mask |= UCT_IB_MLX5_QP_OPTPAR_LAG_TX_AFF;
-            UCT_IB_MLX5DV_SET(qpc, qpc, lag_tx_port_affinity,
-                              dev->first_port + lag_port);
-        }
+        uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
+                                               &opt_param_mask);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
                           iface->super.super.super.config.sl);

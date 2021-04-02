@@ -378,11 +378,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                               iface->super.super.config.traffic_class >> 2);
         }
 
-        if (md->flags & UCT_IB_MLX5_MD_FLAG_LAG) {
-            opt_param_mask |= UCT_IB_MLX5_QP_OPTPAR_LAG_TX_AFF;
-            UCT_IB_MLX5DV_SET(qpc, qpc, lag_tx_port_affinity,
-                              dev->first_port + path_index);
-        }
+        uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
+                                               &opt_param_mask);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);

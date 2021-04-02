@@ -598,6 +598,10 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
 
+void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
+                                            uint8_t path_index, void *qpc,
+                                            uint32_t *opt_param_mask);
+
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,

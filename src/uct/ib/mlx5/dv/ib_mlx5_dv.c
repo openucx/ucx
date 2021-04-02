@@ -310,6 +310,24 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
 
     return UCS_OK;
 }
+
+void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
+                                            uint8_t path_index, void *qpc,
+                                            uint32_t *opt_param_mask)
+{
+    uct_ib_device_t *dev = &md->super.dev;
+    uint8_t tx_port      = dev->first_port;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_LAG)) {
+        return;
+    }
+
+    *opt_param_mask |= UCT_IB_MLX5_QP_OPTPAR_LAG_TX_AFF;
+    if (dev->lag_level > 0) {
+        tx_port += path_index % dev->lag_level;
+    }
+    UCT_IB_MLX5DV_SET(qpc, qpc, lag_tx_port_affinity, tx_port);
+}
 #endif
 
 ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)
