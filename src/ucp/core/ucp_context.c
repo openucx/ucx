@@ -1343,10 +1343,10 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     }
 
     if ((params->field_mask & UCP_PARAM_FIELD_NAME) && (params->name != NULL)) {
-        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%s",
+        ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "%s",
                           params->name);
     } else {
-        ucs_snprintf_zero(context->name, UCP_CONTEXT_NAME_MAX, "%p", context);
+        ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "%p", context);
     }
 }
 
@@ -1651,7 +1651,7 @@ ucs_status_t ucp_context_query(ucp_context_h context, ucp_context_attr_t *attr)
     }
 
     if (attr->field_mask & UCP_ATTR_FIELD_NAME) {
-        ucs_strncpy_safe(attr->name, context->name, UCP_CONTEXT_NAME_MAX);
+        ucs_strncpy_safe(attr->name, context->name, UCP_ENTITY_NAME_MAX);
     }
 
     return UCS_OK;

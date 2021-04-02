@@ -257,10 +257,10 @@ typedef struct ucp_context {
         char                      *selection_cmp;
     } config;
 
-    /* All configurations about multithreading support */
+    /* Configuration of multi-threadiing support */
     ucp_mt_lock_t                 mt_lock;
 
-    char                          name[UCP_CONTEXT_NAME_MAX];
+    char                          name[UCP_ENTITY_NAME_MAX];
 
 } ucp_context_t;
 
