@@ -10,6 +10,8 @@
 
 #include "rdmacm_cm_ep.h"
 #include <uct/ib/base/ib_iface.h>
+#include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
+#include <uct/ib/mlx5/ib_mlx5.h>
 #include <ucs/async/async.h>
 
 #include <poll.h>
@@ -65,52 +67,233 @@ ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id)
     return UCS_OK;
 }
 
-ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
-                                  struct ibv_cq **cq_p)
+static ucs_status_t
+uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
+                                  uct_rdmacm_cm_t *cm,
+                                  struct ibv_context *verbs)
 {
-    struct ibv_cq *cq;
+    const char *dev_name = ibv_get_device_name(verbs->device);
+
+#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
+    uint64_t general_obj_types_caps;
+    void *cap;
+    int ret;
+
+    if (cm->config.reserved_qpn == UCS_NO) {
+        goto dummy_qp_ctx_init;
+    }
+
+    if (!mlx5dv_is_supported(verbs->device)) {
+        ucs_debug("%s: mlx5dv is not supported", dev_name);
+        goto dummy_qp_ctx_init;
+    }
+
+    cap = UCT_IB_MLX5DV_ADDR_OF(query_hca_cap_out, out, capability);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, opcode,
+                      UCT_IB_MLX5_CMD_OP_QUERY_HCA_CAP);
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod,
+                      (UCT_IB_MLX5_CAP_GENERAL << 1) |
+                      UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR);
+    ret = mlx5dv_devx_general_cmd(verbs, in, sizeof(in),
+                                  out, sizeof(out));
+    if (ret != 0) {
+        ucs_debug("mlx5dv_devx_general_cmd(%s, QUERY_HCA_CAP) failed: %m",
+                  dev_name);
+        goto dummy_qp_ctx_init;
+    }
+
+    general_obj_types_caps =
+            UCT_IB_MLX5DV_GET64(cmd_hca_cap, cap, general_obj_types);
+    if (!(general_obj_types_caps & UCS_BIT(UCT_IB_MLX5_OBJ_TYPE_RESERVED_QPN))) {
+        ucs_debug("%s general_obj_types_caps: reserved qpn is not support", dev_name);
+        goto dummy_qp_ctx_init;
+    }
+    
+    UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod,
+                      (UCT_IB_MLX5_CAP_2_GENERAL << 1) |
+                      UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR);
+    ret = mlx5dv_devx_general_cmd(verbs, in, sizeof(in),
+                                  out, sizeof(out));
+    if (ret != 0) {
+        ucs_debug("mlx5dv_devx_general_cmd(%s, QUERY_HCA_CAP_2) failed: %m", dev_name);
+        goto dummy_qp_ctx_init;
+    }
+
+    ctx->log_reserved_qpn_granularity =
+            UCT_IB_MLX5DV_GET(cmd_hca_cap_2, cap, log_reserved_qpn_granularity);
+    ucs_debug("%s reserved qpn cap: log_reserved_qpn_granularity is 0x%x",
+              dev_name, ctx->log_reserved_qpn_granularity);
+
+    ctx->use_reserved_qpn = 1;
+
+    ucs_spinlock_init(&ctx->lock, 0);
+    ucs_list_head_init(&ctx->blk_list);
+    return UCS_OK;
+
+dummy_qp_ctx_init:
+#endif
+
+    if (cm->config.reserved_qpn == UCS_YES) {
+        ucs_error("%s: reserved qpn is not supported, failed to use it", dev_name);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    ctx->use_reserved_qpn = 0;
+    /* Create a dummy completion queue */
+    ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
+    if (ctx->cq == NULL) {
+        ucs_error("ibv_create_cq(%s) failed: %m", dev_name);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+static void
+uct_rdmacm_cm_device_context_cleanup(uct_rdmacm_cm_device_context_t *ctx)
+{
+    uct_rdmacm_cm_reserved_qpn_blk_t *blk, *tmp;
+    int ret;
+
+    if (ctx->use_reserved_qpn) {
+        /* There can be some blks are not fully used, then they won't be 
+           destroyed in RDMACM CM EP, so need to be destroyed here. */
+        ucs_list_for_each_safe(blk, tmp, &ctx->blk_list, entry) {
+            uct_rdmacm_cm_reserved_qpn_blk_destroy(blk);
+        }
+
+        ucs_spinlock_destroy(&ctx->lock);
+    } else {
+        ret = ibv_destroy_cq(ctx->cq);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+        }
+    }
+}
+
+static void uct_rdmacm_cm_cleanup_devices(uct_rdmacm_cm_t *cm)
+{
+    uct_rdmacm_cm_device_context_t *ctx;
+
+    kh_foreach_value(&cm->ctxs, ctx, {
+        uct_rdmacm_cm_device_context_cleanup(ctx);
+        ucs_free(ctx);
+    });
+
+    kh_destroy_inplace(uct_rdmacm_cm_device_contexts, &cm->ctxs);
+}
+
+ucs_status_t uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_t *cm,
+                                              struct ibv_context *verbs,
+                                              uct_rdmacm_cm_device_context_t **ctx_p)
+{
+    uct_rdmacm_cm_device_context_t *ctx;
+    ucs_status_t status;
     khiter_t iter;
     int ret;
 
-    iter = kh_put(uct_rdmacm_cm_cqs, &cm->cqs,
+    iter = kh_put(uct_rdmacm_cm_device_contexts, &cm->ctxs,
                   ibv_get_device_guid(verbs->device), &ret);
     if (ret == -1) {
-        ucs_error("cm %p: cannot allocate hash entry for CQ", cm);
-        return UCS_ERR_NO_MEMORY;
+        ucs_error("cm %p: cannot allocate hash entry for device context", cm);
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
     }
 
     if (ret == 0) {
         /* already exists so use it */
-        cq = kh_value(&cm->cqs, iter);
+        ctx = kh_value(&cm->ctxs, iter);
     } else {
-        /* Create a dummy completion queue */
-        cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
-        if (cq == NULL) {
-            kh_del(uct_rdmacm_cm_cqs, &cm->cqs, iter);
-            ucs_error("ibv_create_cq() failed: %m");
-            return UCS_ERR_IO_ERROR;
+        /* Create a qp context */
+        ctx = ucs_malloc(sizeof(*ctx), "rdmacm_device_context");
+        if (ctx == NULL) {
+            ucs_error("cm %p: failed to allocate device context", cm);
+            status = UCS_ERR_NO_MEMORY;
+            goto err_kh_del;
         }
 
-        kh_value(&cm->cqs, iter) = cq;
+        status = uct_rdmacm_cm_device_context_init(ctx, cm, verbs);
+        if (status != UCS_OK) {
+            goto err_free_ctx;
+        }
+
+        kh_value(&cm->ctxs, iter) = ctx;
     }
 
-    *cq_p = cq;
+    *ctx_p = ctx;
     return UCS_OK;
+
+err_free_ctx:
+    ucs_free(ctx);
+err_kh_del:
+    kh_del(uct_rdmacm_cm_device_contexts, &cm->ctxs, iter);
+out:
+    return status;
 }
 
-void uct_rdmacm_cm_cqs_cleanup(uct_rdmacm_cm_t *cm)
+ucs_status_t
+uct_rdmacm_cm_reserved_qpn_blk_add(uct_rdmacm_cm_device_context_t *ctx,
+                                   struct ibv_context *verbs,
+                                   uct_rdmacm_cm_reserved_qpn_blk_t **blk_p)
 {
-    struct ibv_cq *cq;
-    int ret;
+    ucs_status_t status = UCS_ERR_UNSUPPORTED;
 
-    kh_foreach_value(&cm->cqs, cq, {
-        ret = ibv_destroy_cq(cq);
-        if (ret != 0) {
-            ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
-        }
-    });
+#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_reserved_qpn_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(general_obj_out_cmd_hdr)] = {};
+    uct_rdmacm_cm_reserved_qpn_blk_t *blk;
+    void *attr;
 
-    kh_destroy_inplace(uct_rdmacm_cm_cqs, &cm->cqs);
+    blk = ucs_calloc(1, sizeof(*blk), "reserved_qpn_blk");
+    if (blk == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    attr = UCT_IB_MLX5DV_ADDR_OF(create_reserved_qpn_in, in, hdr);
+    UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr,
+         attr, opcode, UCT_IB_MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+    UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr,
+         attr, obj_type, UCT_IB_MLX5_OBJ_TYPE_RESERVED_QPN);
+    UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr,
+         attr, log_obj_range, ctx->log_reserved_qpn_granularity);
+
+    blk->obj = mlx5dv_devx_obj_create(verbs, in, sizeof(in),
+                                      out, sizeof(out));
+    if (blk->obj == NULL) {
+        ucs_error("mlx5dv_devx_obj_create(CREATE_GENERAL_OBJECT, type=RESERVED_QPN) failed, syndrome %x: %m",
+                  UCT_IB_MLX5DV_GET(create_mkey_out, out, syndrome));
+        status = UCS_ERR_IO_ERROR;
+        goto err_free_blk;
+    }
+
+    blk->first_qpn = UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, obj_id);
+    blk->next_avail_qpn_offset = 0;
+    blk->refcount              = 0;
+
+    *blk_p = blk;
+    return UCS_OK;
+
+err_free_blk:
+    ucs_free(blk);
+#endif
+
+    return status;
+}
+
+void uct_rdmacm_cm_reserved_qpn_blk_destroy(uct_rdmacm_cm_reserved_qpn_blk_t *blk)
+{
+#if HAVE_DECL_MLX5DV_IS_SUPPORTED
+    ucs_assert(blk->refcount == 0);
+
+    if (mlx5dv_devx_obj_destroy(blk->obj)) {
+        ucs_error("mlx5dv_devx_obj_destroy(DESTROY_GENERAL_OBJECT, type=RESERVED_QPN) failed: %m");
+    }
+
+    ucs_list_del(&blk->entry);
+    ucs_free(blk);
+#endif
 }
 
 size_t uct_rdmacm_cm_get_max_conn_priv()
@@ -682,7 +865,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
                               &uct_rdmacm_cm_iface_ops, worker, component,
                               config);
 
-    kh_init_inplace(uct_rdmacm_cm_cqs, &self->cqs);
+    kh_init_inplace(uct_rdmacm_cm_device_contexts, &self->ctxs);
 
     self->ev_ch = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
@@ -725,7 +908,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
         goto ucs_async_remove_handler;
     }
 
-    self->config.timeout = rdmacm_config->timeout;
+    self->config.timeout      = rdmacm_config->timeout;
+    self->config.reserved_qpn = rdmacm_config->reserved_qpn;
 
     ucs_debug("created rdmacm_cm %p with event_channel %p (fd=%d)",
               self, self->ev_ch, self->ev_ch->fd);
@@ -754,7 +938,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_t)
 
     ucs_trace("destroying event_channel %p on cm %p", self->ev_ch, self);
     rdma_destroy_event_channel(self->ev_ch);
-    uct_rdmacm_cm_cqs_cleanup(self);
+    uct_rdmacm_cm_cleanup_devices(self);
 }
 
 UCS_CLASS_DEFINE(uct_rdmacm_cm_t, uct_cm_t);

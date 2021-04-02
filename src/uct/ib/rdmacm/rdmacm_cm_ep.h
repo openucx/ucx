@@ -13,11 +13,13 @@
  * RDMACM endpoint that is opened on a connection manager
  */
 typedef struct uct_rdmacm_cm_ep {
-    uct_cm_base_ep_t  super;
-    struct rdma_cm_id *id;  /* The rdmacm id that is created per this ep */
-    struct ibv_qp     *qp;  /* Dummy qp used for generating a unique qp_num */
-    uint8_t           flags;
-    ucs_status_t      status;
+    uct_cm_base_ep_t                 super;
+    struct rdma_cm_id                *id;  /* The rdmacm id that is created per this ep */
+    struct ibv_qp                    *qp;  /* Dummy qp used for generating a unique qp_num */
+    uint32_t                         qpn;  /* Reserved qp number */
+    uct_rdmacm_cm_reserved_qpn_blk_t *blk; /* The pointer of used qpn blk */
+    uint8_t                          flags;
+    ucs_status_t                     status;
 } uct_rdmacm_cm_ep_t;
 
 enum {
@@ -30,9 +32,10 @@ enum {
     UCT_RDMACM_CM_EP_GOT_DISCONNECT           = UCS_BIT(4), /* Got disconnect event. */
     UCT_RDMACM_CM_EP_DISCONNECTING            = UCS_BIT(5), /* @ref uct_ep_disconnect was
                                                                called on the ep. */
-    UCT_RDMACM_CM_EP_FAILED                   = UCS_BIT(6)  /* The EP is in error state,
+    UCT_RDMACM_CM_EP_FAILED                   = UCS_BIT(6), /* The EP is in error state,
                                                                see @ref
                                                                uct_rdmacm_cm_ep_t::status.*/
+    UCT_RDMACM_CM_EP_QPN_CREATED              = UCS_BIT(7)  /* QPN was created. */
 };
 
 

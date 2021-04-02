@@ -149,15 +149,94 @@ ep_failed:
     return cep->status;
 }
 
+/**
+ * Allocate a reserved QPN either from the last FW object allocated,
+ * or by allocating a new one. When find a free QPN in an object, it
+ * always starts from last allocation position, to make sure the QPN
+ * always move forward to prevent stale QPN.
+ */
+static ucs_status_t
+uct_rdamcm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
+                                     uct_rdmacm_cm_device_context_t *ctx)
+{
+    uint32_t qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
+    uct_rdmacm_cm_reserved_qpn_blk_t *blk;
+    ucs_status_t status;
+
+    ucs_spin_lock(&ctx->lock);
+
+    blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t, entry);
+    if (ucs_list_is_empty(&ctx->blk_list) ||
+        (blk->next_avail_qpn_offset >= qpns_per_obj)) {
+        status = uct_rdmacm_cm_reserved_qpn_blk_add(ctx, cep->id->verbs, &blk);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        ucs_list_add_tail(&ctx->blk_list, &blk->entry);
+    }
+
+    cep->qpn = blk->first_qpn + blk->next_avail_qpn_offset;
+    ucs_debug("created reserved qpn 0x%x on rdmacm_id %p",
+              cep->qpn, cep->id);
+    cep->blk = blk;
+    blk->refcount++;
+    blk->next_avail_qpn_offset++;
+    status = UCS_OK;
+
+out:
+    ucs_spin_unlock(&ctx->lock);
+    return status;
+}
+
+/**
+ * Deallocate a reserved QPN. The FW object is destroyed only when all QPNs
+ * in this object were used and freed.
+ */
+static void
+uct_rdamcm_cm_ep_destroy_reserved_qpn(uct_rdmacm_cm_device_context_t *ctx,
+                                      uct_rdmacm_cm_ep_t *cep)
+{
+    uint32_t qpns_per_obj;
+
+    /* Reserved QP number is created on-demand when we send the private data */
+    if (!(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED)) {
+        return;
+    }
+
+    ucs_debug("cm ep destroy reserved qpn 0x%x on rdmacm_id %p",
+              cep->qpn, cep->id);
+
+    qpns_per_obj = UCS_BIT(ctx->log_reserved_qpn_granularity);
+
+    ucs_spin_lock(&ctx->lock);
+
+    --cep->blk->refcount;
+    if ((cep->blk->next_avail_qpn_offset >= qpns_per_obj) &&
+        (cep->blk->refcount == 0)) {
+        uct_rdmacm_cm_reserved_qpn_blk_destroy(cep->blk);
+    }
+
+    ucs_spin_unlock(&ctx->lock);
+    return;
+}
+
 static void uct_rdmacm_cm_ep_destroy_dummy_qp(uct_rdmacm_cm_ep_t *cep)
 {
     int ret;
 
-    if (cep->qp != NULL) {
-        ret = ibv_destroy_qp(cep->qp);
-        if (ret != 0) {
-            ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
-        }
+    if (!(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED)) {
+        return;
+    }
+
+    ucs_assert_always(cep->qp != NULL);
+
+    ucs_debug("cm ep destroy dummy qp_num 0x%x on rdmacm_id %p",
+              cep->qp->qp_num, cep->id);
+
+    ret = ibv_destroy_qp(cep->qp);
+    if (ret != 0) {
+        ucs_warn("ibv_destroy_qp() returned %d: %m", ret);
     }
 
     cep->qp = NULL;
@@ -193,25 +272,75 @@ static ucs_status_t uct_rdmacm_cm_create_dummy_qp(struct rdma_cm_id *id,
 }
 
 static ucs_status_t
+uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
+                            uct_rdmacm_cm_ep_t *cep, uint32_t *qpn_p)
+{
+    ucs_status_t status;
+
+    if (ctx->use_reserved_qpn) {
+        status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);      
+    } else {
+        /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
+        status = uct_rdmacm_cm_create_dummy_qp(cep->id, ctx->cq, &cep->qp);
+    }
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    cep->flags |= UCT_RDMACM_CM_EP_QPN_CREATED;
+
+    if (ctx->use_reserved_qpn) {
+        *qpn_p = cep->qpn;
+    } else {
+        *qpn_p = cep->qp->qp_num;
+    }
+
+    return UCS_OK;
+}
+
+static void uct_rdamcm_cm_ep_destroy_qpn(uct_rdmacm_cm_ep_t *cep)
+{
+    uct_rdmacm_cm_device_context_t *ctx;
+    ucs_status_t status;
+
+    if (!(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED)) {
+        return;
+    }
+
+    status = uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_ep_get_cm(cep),
+                                              cep->id->verbs, &ctx);
+    if (status != UCS_OK) {
+        return;
+    };
+
+    if (ctx->use_reserved_qpn) {
+        uct_rdamcm_cm_ep_destroy_reserved_qpn(ctx, cep);
+    } else {
+        uct_rdmacm_cm_ep_destroy_dummy_qp(cep);
+    }
+
+    cep->flags &= ~UCT_RDMACM_CM_EP_QPN_CREATED;
+}
+
+static ucs_status_t
 uct_rdamcm_cm_ep_set_qp_num(struct rdma_conn_param *conn_param,
                             uct_rdmacm_cm_ep_t *cep)
 {
-    struct ibv_cq *cq;
+    uct_rdmacm_cm_device_context_t *ctx;
     ucs_status_t status;
 
-    status = uct_rdmacm_cm_get_cq(uct_rdmacm_cm_ep_get_cm(cep), cep->id->verbs,
-                                  &cq);
+    status = uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_ep_get_cm(cep),
+                                              cep->id->verbs, &ctx);
     if (status != UCS_OK) {
         return status;
     }
 
-    /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
-    status = uct_rdmacm_cm_create_dummy_qp(cep->id, cq, &cep->qp);
+    status = uct_rdamcm_cm_ep_create_qpn(ctx, cep, &conn_param->qp_num);
     if (status != UCS_OK) {
         return status;
     }
 
-    conn_param->qp_num = cep->qp->qp_num;
+    ucs_assert(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED);
     return UCS_OK;
 }
 
@@ -430,7 +559,7 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
     return UCS_OK;
 
 err:
-    uct_rdmacm_cm_ep_destroy_dummy_qp(cep);
+    uct_rdamcm_cm_ep_destroy_qpn(cep);
     remote_data.field_mask = 0;
     uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
     return status;
@@ -528,6 +657,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_base_ep_t, params);
 
     self->qp     = NULL;
+    self->qpn    = 0;
+    self->blk    = NULL;
     self->flags  = 0;
     self->status = UCS_OK;
     self->id     = NULL;
@@ -564,7 +695,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_cm_ep_t)
 
     UCS_ASYNC_BLOCK(worker_priv->async);
 
-    uct_rdmacm_cm_ep_destroy_dummy_qp(self);
+    uct_rdamcm_cm_ep_destroy_qpn(self);
 
     /* rdma_destroy_id() cleans all events not yet reported on progress thread,
      * so no events would be reported to the user after destroying the id */
