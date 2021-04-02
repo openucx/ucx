@@ -61,6 +61,9 @@ ucs_config_field_t uct_mm_iface_config_table[] = {
      "Maximal number of receive completions to pick during RX poll",
      ucs_offsetof(uct_mm_iface_config_t, fifo_max_poll), UCS_CONFIG_TYPE_ULUNITS},
 
+    {"ERROR_HANDLING", "n", "Expose error handling support capability",
+     ucs_offsetof(uct_mm_iface_config_t, error_handling), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -163,7 +166,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_AM_BCOPY            |
                                           UCT_IFACE_FLAG_PENDING             |
                                           UCT_IFACE_FLAG_CB_SYNC             |
-                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+                                          UCT_IFACE_FLAG_CONNECT_TO_IFACE    |
+                                          iface->config.extra_cap_flags;
 
     status = uct_mm_md_mapper_ops(md)->query(&attach_shm_file);
     ucs_assert_always(status == UCS_OK);
@@ -648,6 +652,10 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
                                       UCT_MM_IFACE_FIFO_MAX_POLL :
                                       /* trim by the maximum unsigned integer value */
                                       ucs_min(mm_config->fifo_max_poll, UINT_MAX));
+
+    self->config.extra_cap_flags   = (mm_config->error_handling == UCS_YES) ?
+                                     UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE :
+                                     0ul;
     self->fifo_prev_wnd_cons       = 0;
     self->fifo_poll_count          = self->config.fifo_max_poll;
     /* cppcheck-suppress internalAstError */

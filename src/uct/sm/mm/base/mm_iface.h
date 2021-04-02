@@ -101,6 +101,7 @@ typedef struct uct_mm_iface_config {
     ucs_ternary_auto_value_t hugetlb_mode;        /* Enable using huge pages for
                                                    * shared memory buffers */
     unsigned                 fifo_elem_size;      /* Size of the FIFO element size */
+    int                      error_handling; /* Exposing of error handling cap */
     uct_iface_mpool_config_t mp;
 } uct_mm_iface_config_t;
 
@@ -221,6 +222,7 @@ typedef struct uct_mm_iface {
         unsigned            fifo_elem_size;
         unsigned            seg_size;         /* size of the receive descriptor (for payload)*/
         unsigned            fifo_max_poll;
+        uint64_t            extra_cap_flags;
     } config;
 } uct_mm_iface_t;
 
