@@ -8,11 +8,12 @@ if HAVE_ROCM
 SUBDIRS = . gdr
 
 module_LTLIBRARIES      = libuct_rocm.la
-libuct_rocm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ROCM_CPPFLAGS)
+libuct_rocm_la_CPPFLAGS = $(BASE_CPPFLAGS) $(ROCM_CPPFLAGS) $(HIP_CPPFLAGS)
 libuct_rocm_la_CFLAGS   = $(BASE_CFLAGS)
 libuct_rocm_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                           $(top_builddir)/src/uct/libuct.la
 libuct_rocm_la_LDFLAGS  = $(ROCM_LDFLAGS) $(ROCM_LIBS) -version-info $(SOVERSION) \
+						  $(HIP_LDFLAGS)  $(HIP_LIBS)  -version-info $(SOVERSION) \
                           $(patsubst %, -Xlinker %, -L$(ROCM_ROOT)/lib -rpath $(ROCM_ROOT)/hip/lib -rpath $(ROCM_ROOT)/lib) \
                           $(patsubst %, -Xlinker %, --enable-new-dtags) \
                           $(patsubst %, -Xlinker %, -rpath $(ROCM_ROOT)/lib64)
