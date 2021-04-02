@@ -29,6 +29,9 @@ resources:
     - container: rhel74
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel72
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: rhel82
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
@@ -175,12 +178,19 @@ stages:
             - ucx_docker -equals yes
         strategy:
           matrix:
+            rhel72:
+              CONTAINER: rhel72
+            rhel74:
+              CONTAINER: rhel74
             rhel76:
               CONTAINER: rhel76
+              long_test: yes
             rhel76_mofed47:
               CONTAINER: rhel76_mofed47
+              long_test: yes
             ubuntu2004:
               CONTAINER: ubuntu2004
+              long_test: yes
             ubuntu1804:
               CONTAINER: ubuntu1804
             sles15sp2:
@@ -189,6 +199,7 @@ stages:
               CONTAINER: rhel82
             fedora34:
               CONTAINER: fedora34
+              long_test: yes
         container: $[ variables['CONTAINER'] ]
         timeoutInMinutes: 240
 
@@ -202,6 +213,7 @@ stages:
             displayName: Build
             env:
               BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+              long_test: $(long_test)
 
   - stage: Distro
     dependsOn: [Static_check]
