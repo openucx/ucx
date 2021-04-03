@@ -648,7 +648,13 @@ enum uct_iface_params_field {
     UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB     = UCS_BIT(14),
 
     /** Enables @ref uct_iface_params_t::keepalive_interval */
-    UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL = UCS_BIT(15)
+    UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL = UCS_BIT(15),
+
+    /** Enables @ref uct_iface_params_t::am_alignment */
+    UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT       = UCS_BIT(16),
+
+    /** Enables @ref uct_iface_params_t::am_align_offset */
+    UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17)
 };
 
 /**
@@ -1088,6 +1094,33 @@ struct uct_iface_params {
 
     /* Time period between keepalive rounds */
     ucs_time_t                                   keepalive_interval;
+
+    /**
+     * Desired alignment for Active Messages on the receiver. Note that only
+     * data received in the UCT descriptor can be aligned (i.e.
+     * @a UCT_CB_PARAM_FLAG_DESC flag is provided in the Active Message
+     * handler callback). The provided value must be power of 2. The default
+     * value is 1.
+     */
+    size_t                                       am_alignment;
+
+    /**
+     * Offset in the Active Message receive buffer, which should be aligned to
+     * the @a am_alignment boundary. Note this parameter has no effect without
+     * setting @a am_alignment parameter. The provided value must be less than
+     * the given @a am_alignment value. The default value is 0.
+     *
+     * +-+ pointer to @a data in @ref uct_am_callback_t
+     * |
+     * |        + alignment boundary
+     * |        |
+     * v        v
+     * +-------------------+
+     * | align  |          |
+     * | offset |          |
+     * +-------------------+
+     */
+    size_t                                       am_align_offset;
 };
 
 

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -595,7 +595,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     }
 
     /* Create RX buffers mempool */
-    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
+    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "rc_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
         goto err_destroy_eps_lock;

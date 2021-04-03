@@ -62,6 +62,7 @@ protected:
     uct_ep_h sender_ep();
     entity& receiver();
     uct_completion_t *comp();
+    void disable_comp();
 
 private:
     template <typename O>

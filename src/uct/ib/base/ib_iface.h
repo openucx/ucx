@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -338,6 +338,7 @@ extern const char *uct_ib_mtu_values[];
  */
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
+                                          const uct_iface_params_t *params,
                                           const char *name, ucs_mpool_t *mp);
 
 void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc);

@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -516,7 +516,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     ucs_ptr_array_init(&self->eps, "ud_eps");
 
-    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
+    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "ud_recv_skb", &self->rx.mp);
     if (status != UCS_OK) {
         goto err_qp;
