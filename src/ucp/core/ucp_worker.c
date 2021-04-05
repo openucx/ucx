@@ -2087,6 +2087,14 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->user_data = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
                                         NULL);
 
+    if ((params->field_mask & UCP_WORKER_PARAM_FIELD_NAME) &&
+        (params->name != NULL)) {
+        ucs_snprintf_zero(worker->name, UCP_ENTITY_NAME_MAX, "%s",
+                          params->name);
+    } else {
+        ucs_snprintf_zero(worker->name, UCP_ENTITY_NAME_MAX, "%p", worker);
+    }
+
     name_length = ucs_min(UCP_WORKER_ADDRESS_NAME_MAX,
                           context->config.ext.max_worker_address_name + 1);
     ucs_snprintf_zero(worker->address_name, name_length, "%s:%d",
@@ -2465,6 +2473,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER) {
         attr->max_am_header = ucp_am_max_header_size(worker);
+    }
+
+    if (attr->field_mask & UCP_WORKER_ATTR_FIELD_NAME) {
+        ucs_strncpy_safe(attr->name, worker->name, UCP_ENTITY_NAME_MAX);
     }
 
     return status;

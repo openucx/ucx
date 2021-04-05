@@ -749,10 +749,10 @@ typedef struct ucp_ep_params {
 
 /**
  * @ingroup UCP_CONTEXT
- * @brief Maximum size of the context name in @ref ucp_context_attr_t provided
- * by @ref ucp_context_query.
+ * @brief Maximum size of the UCP entity name in structure of entity attributes
+ * provided by a query method.
  */
-#define UCP_CONTEXT_NAME_MAX 32
+#define UCP_ENTITY_NAME_MAX 32
 
 
 #endif

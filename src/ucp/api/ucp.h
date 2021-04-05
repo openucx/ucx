@@ -168,7 +168,8 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_USER_DATA    = UCS_BIT(3), /**< User data */
     UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4), /**< External event file
                                                            descriptor */
-    UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5) /**< Worker flags */
+    UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5), /**< Worker flags */
+    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6) /**< Worker name */
 };
 
 
@@ -405,8 +406,9 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_THREAD_MODE   = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_ATTR_FIELD_ADDRESS       = UCS_BIT(1), /**< UCP address */
     UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS = UCS_BIT(2), /**< UCP address flags */
-    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER = UCS_BIT(3)  /**< Maximal header size
+    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER = UCS_BIT(3), /**< Maximal header size
                                                            used by UCP AM API */
+    UCP_WORKER_ATTR_FIELD_NAME          = UCS_BIT(4) /**< UCP worker name */
 };
 
 
@@ -1016,13 +1018,12 @@ typedef struct ucp_params {
     size_t                             estimated_num_ppn;
 
     /**
-     * The name is intended for identification of context during tracing and
-     * analysis of UCX-based applications (e.g. FUSE-based run time monitoring).
-     * The actual name of the context can be obtained by @ref ucp_context_query
-     * function, because the actual name may differ from the name specified in
-     * the parameters. The name can be truncated if it is too long, or can be
-     * modified if it is already used for another existing context. If the name
-     * is not set via parameters, the context will have a default name.
+     * Tracing and analysis tools can identify the context using this name.
+     * To retrieve the context's name, use @ref ucp_context_query, as the name
+     * you supply may be changed by UCX under some circumstances, e.g. a name
+     * conflict. This field is only assigned if you set
+     * @ref UCP_PARAM_FIELD_NAME in the field mask. If not, then a default
+     * unique name will be created for you.
      */
     const char                         *name;
 } ucp_params_t;
@@ -1090,10 +1091,9 @@ typedef struct ucp_context_attr {
     uint64_t              memory_types;
 
     /**
-     * The name is intended for identification of context during tracing and
-     * analysis of UCX-based applications.
+     * Tracing and analysis tools can use name to identify this UCX context.
      */
-    char                  name[UCP_CONTEXT_NAME_MAX];
+    char                  name[UCP_ENTITY_NAME_MAX];
 } ucp_context_attr_t;
 
 
@@ -1144,6 +1144,11 @@ typedef struct ucp_worker_attr {
      * Maximal allowed header size for @ref ucp_am_send_nbx routine
      */
     size_t                max_am_header;
+
+    /**
+     * Tracing and analysis tools can identify the worker using this name.
+     */
+    char                  name[UCP_ENTITY_NAME_MAX];
 } ucp_worker_attr_t;
 
 
@@ -1226,6 +1231,16 @@ typedef struct ucp_worker_params {
      * value of this field will default to 0.
      */
     uint64_t                flags;
+
+    /**
+     * Tracing and analysis tools can identify the worker using this name. To
+     * retrieve the worker's name, use @ref ucp_worker_query, as the name you
+     * supply may be changed by UCX under some circumstances, e.g. a name
+     * conflict. This field is only assigned if you set
+     * @ref UCP_WORKER_PARAM_FIELD_NAME in the field mask. If not, then a
+     * default unique name will be created for you.
+     */
+    const char              *name;
 
 } ucp_worker_params_t;
 
