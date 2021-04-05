@@ -515,19 +515,20 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
             /* return in_progress status in case if not all chunks are transmitted */
             ucp_rndv_zcopy_next_lane(req);
             return UCS_INPROGRESS;
-        } else {
-            if (status == UCS_ERR_NO_RESOURCE) {
-                if (lane != req->send.pending_lane) {
-                    /* switch to new pending lane */
-                    pending_add_res = ucp_request_pending_add(req, 0);
-                    if (!pending_add_res) {
-                        /* failed to switch req to pending queue, try again */
-                        continue;
-                    }
-                    return UCS_OK;
+        } else if (status == UCS_ERR_NO_RESOURCE) {
+            if (lane != req->send.pending_lane) {
+                /* switch to new pending lane */
+                pending_add_res = ucp_request_pending_add(req, 0);
+                if (!pending_add_res) {
+                    /* failed to switch req to pending queue, try again */
+                    continue;
                 }
+                return UCS_OK;
             }
-            return status;
+            return UCS_ERR_NO_RESOURCE;
+        } else {
+            ucp_request_send_state_ff(req, status);
+            return UCS_OK;
         }
     }
 }

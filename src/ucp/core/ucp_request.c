@@ -411,18 +411,24 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
-    /*
-     * FIXME should not fast-forward requests owned by UCT
-     */
-    ucp_trace_req(req, "fast-forward with status %s", ucs_status_string(status));
+    ucp_trace_req(req, "fast-forward with status %s",
+                  ucs_status_string(status));
 
     if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
-    } else if (req->send.state.uct_comp.func) {
-        req->send.state.dt.offset      = req->send.length;
-        req->send.state.uct_comp.count = 0;
+    } else if (req->send.state.uct_comp.func != NULL) {
+        /* Fast-forward the sending state to complete the operation when last
+         * network completion callback is called
+         */
+        req->send.state.dt.offset = req->send.length;
         uct_completion_update_status(&req->send.state.uct_comp, status);
-        req->send.state.uct_comp.func(&req->send.state.uct_comp);
+
+        if (req->send.state.uct_comp.count == 0) {
+            /* If nothing is in-flight, call completion callback to ensure
+             * cleanup of zero-copy resources
+             */
+            req->send.state.uct_comp.func(&req->send.state.uct_comp);
+        }
     } else {
         if (req->id != UCP_REQUEST_ID_INVALID) {
             ucp_request_id_release(req);
