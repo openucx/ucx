@@ -11,7 +11,8 @@ AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
-libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\"
+libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\" \
+                     -DUCX_CONF_DIR=\"$(ucx_conf_dir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
@@ -26,6 +27,7 @@ nobase_dist_libucs_la_HEADERS = \
 	algorithm/qsort_r.h \
 	async/async_fwd.h \
 	config/global_opts.h \
+	config/ini.h \
 	config/parser.h \
 	config/types.h \
 	datastruct/array.h \
@@ -132,6 +134,7 @@ libucs_la_SOURCES = \
 	async/thread.c \
 	config/global_opts.c \
 	config/ucm_opts.c \
+	config/ini.c \
 	config/parser.c \
 	datastruct/arbiter.c \
 	datastruct/array.c \

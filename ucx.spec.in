@@ -145,7 +145,12 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 %{_libdir}/pkgconfig/ucx.pc
 %{_datadir}/ucx/examples
 
-%post -p /sbin/ldconfig
+%post
+/sbin/ldconfig
+rm -f %{_sysconfdir}/ucx/ucx.conf
+mkdir -p %{_sysconfdir}/ucx
+ucx_info -fC > %{_sysconfdir}/ucx/ucx.conf
+
 %postun -p /sbin/ldconfig
 
 %if %{with cma}

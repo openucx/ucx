@@ -103,10 +103,16 @@ prefix `UCX_`.
 may lead to undefined behavior. The environment variables are mostly indented for
  dvanced users, or for specific tunings or workarounds recommended by UCX community.
 
-#### 2. Where can I see all UCX environment variables?
+#### Where can I see all UCX environment variables?
 
 * Running `ucx_info -c` prints all environment variables and their default values.
 * Running `ucx_info -cf` prints the documentation for all environment variables.
+
+#### UCX configuration file
+
+Upon installing the UCX package (RPM/DEB), a `/etc/ucx/ucx.conf` file is created.
+It allows customization of the various parameters. An environment variable
+has precedence over the value defined in `ucx.conf`.
 
 
 <br/>

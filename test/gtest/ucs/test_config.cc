@@ -12,6 +12,7 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 
+#define TEST_CONFIG_FILE TOP_SRCDIR "/test/gtest/ucs/ucx.conf"
 
 typedef enum {
     COLOR_RED,
@@ -326,11 +327,14 @@ protected:
         static car_opts_t parse(const char *env_prefix,
                                 const char *table_prefix) {
             car_opts_t tmp;
-            ucs_status_t status = ucs_config_parser_fill_opts(&tmp,
-                                                              car_opts_table,
-                                                              env_prefix,
-                                                              table_prefix,
-                                                              0);
+            ucs_status_t status = ucs_config_parse_config_file(TEST_CONFIG_FILE, 1);
+            ASSERT_UCS_OK(status);
+
+            status = ucs_config_parser_fill_opts(&tmp,
+                                                 car_opts_table,
+                                                 env_prefix,
+                                                 table_prefix,
+                                                 0);
             ASSERT_UCS_OK(status);
             return tmp;
         }
@@ -666,4 +670,17 @@ UCS_TEST_F(test_config, test_allow_list_negative)
 
     EXPECT_EQ(ucs_config_sscanf_allow_list("all,all", &field,
                                            &ucs_config_array_string), 0);
+}
+
+UCS_TEST_F(test_config, test_config_file) {
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv env1("UCX_BRAND", "Ford");
+
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+    /* Option parsing from INI file */
+    EXPECT_EQ(100, opts->price);
+
+    /* Overriding INI file by env vars */
+    EXPECT_EQ(std::string("Ford"), std::string(opts->brand));
 }

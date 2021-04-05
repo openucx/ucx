@@ -18,6 +18,7 @@
 
 #define UCS_DEFAULT_ENV_PREFIX "UCX_"
 #define UCS_CONFIG_ARRAY_MAX   128
+#define UCX_CONF_FILE          UCX_CONF_DIR "/ucx.conf"
 
 BEGIN_C_DECLS
 
@@ -371,6 +372,15 @@ UCS_CONFIG_DECLARE_ARRAY(string)
  */
 ucs_status_t
 ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
+
+
+/**
+ * Parse INI configuration file with UCX options.
+ * 
+ * @param path     Path file at this path.
+ * @param override Whether to override, if another file was previously parsed
+ */
+ucs_status_t ucs_config_parse_config_file(const char *path, int override);
 
 
 /**

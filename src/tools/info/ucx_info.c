@@ -28,6 +28,7 @@ static void usage() {
     printf("  -y              Show type and structures information\n");
     printf("  -s              Show system information\n");
     printf("  -c              Show UCX configuration\n");
+    printf("  -C              Comment-out default configuration values\n");
     printf("  -a              Show also hidden configuration\n");
     printf("  -f              Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
@@ -83,7 +84,7 @@ int main(int argc, char **argv)
     dev_type_bitmap          = UINT_MAX;
     ucp_ep_params.field_mask = 0;
 
-    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:N:A:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:m:N:A:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -93,6 +94,9 @@ int main(int argc, char **argv)
             break;
         case 'c':
             print_flags |= UCS_CONFIG_PRINT_CONFIG;
+            break;
+        case 'C':
+            print_flags |= UCS_CONFIG_PRINT_COMMENT_DEFAULT;
             break;
         case 'v':
             print_opts |= PRINT_VERSION;
