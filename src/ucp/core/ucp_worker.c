@@ -3020,3 +3020,17 @@ void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags, discarded_cb,
                                  discarded_cb_arg);
 }
+
+void ucp_worker_vfs_refresh(void *obj)
+{
+    ucp_worker_h worker = obj;
+    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_h ep;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
+        ep = ucp_ep_from_ext_gen(ep_ext);
+        ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%p", ep);
+    }
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}

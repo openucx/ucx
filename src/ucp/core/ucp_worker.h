@@ -385,4 +385,6 @@ ucp_worker_flush_ops_count_dec(ucp_worker_h worker)
     --worker->flush_ops_count;
 }
 
+void ucp_worker_vfs_refresh(void *obj);
+
 #endif

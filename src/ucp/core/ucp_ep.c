@@ -31,6 +31,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
 
@@ -194,6 +195,9 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep_control_ext;
     }
 
+    /* Create endpoint VFS node on demand to avoid memory bloat */
+    ucs_vfs_obj_set_dirty(worker, ucp_worker_vfs_refresh);
+
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
     return UCS_OK;
@@ -260,6 +264,7 @@ static void ucp_ep_destroy_base(ucp_ep_h ep)
     ucs_assert(ep->flush_iter_refcount == 0);
     ucs_assert(ep->discard_refcount == 0);
 
+    ucs_vfs_obj_remove(ep);
     ucp_ep_remove_progress_callbacks(ep);
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ucp_ep_ext_control(ep));
