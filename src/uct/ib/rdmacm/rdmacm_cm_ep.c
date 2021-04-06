@@ -236,7 +236,7 @@ ucs_status_t uct_rdmacm_cm_ep_resolve_cb(uct_rdmacm_cm_ep_t *cep)
 
     args.field_mask = UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME;
     uct_rdmacm_cm_id_to_dev_name(cep->id, args.dev_name);
-    return uct_cm_ep_resolve_cb(cep->super.user_data, &args);
+    return uct_cm_ep_resolve_cb(&cep->super, &args);
 }
 
 static ucs_status_t uct_rdamcm_cm_ep_client_init(uct_rdmacm_cm_ep_t *cep,

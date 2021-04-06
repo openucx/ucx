@@ -146,10 +146,9 @@ protected:
 
     void listen_and_connect() {
         start_listen(test_uct_sockaddr::conn_request_cb);
-        m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+        m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                       client_connect_cb, client_disconnect_cb,
                                       this);
-
         wait_for_bits(&m_state, TEST_STATE_CONNECT_REQUESTED);
         EXPECT_TRUE(m_state & TEST_STATE_CONNECT_REQUESTED);
     }
@@ -166,41 +165,52 @@ protected:
         }
     }
 
-    ssize_t common_priv_data_cb(void *arg, size_t pack_limit, void *priv_data) {
-        test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr *>(arg);
-        size_t priv_data_len;
+    ssize_t common_priv_data_cb(size_t pack_limit, void *priv_data) {
+        size_t priv_data_len = priv_data_do_pack(pack_limit, priv_data);
 
-        priv_data_len = self->priv_data_do_pack(pack_limit, priv_data);
         EXPECT_LE(priv_data_len, pack_limit);
         return priv_data_len;
     }
 
-    static ssize_t client_priv_data_cb(void *arg,
-                                       const uct_cm_ep_priv_data_pack_args_t
-                                       *pack_args, void *priv_data)
+    static ucs_status_t
+    client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
     {
-        test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr *>(arg);
-        return self->common_priv_data_cb(arg, self->m_client->max_conn_priv, priv_data);
+        entity::sockaddr_user_data *sa_user_data =
+                reinterpret_cast<entity::sockaddr_user_data*>(user_data);
+        test_uct_sockaddr *self =
+                static_cast<test_uct_sockaddr*>(sa_user_data->get_test());
+
+        std::vector<char> priv_data_buf(self->m_client->max_conn_priv);
+        ssize_t packed = self->common_priv_data_cb(priv_data_buf.size(),
+                                                   priv_data_buf.data());
+        if (packed < 0) {
+            return ucs_status_t(packed);
+        }
+
+        uct_ep_connect_params_t params;
+        params.field_mask          = UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA |
+                                     UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH;
+        params.private_data        = priv_data_buf.data();
+        params.private_data_length = packed;
+        return uct_ep_connect(sa_user_data->get_ep(), &params);
     }
 
-    static ssize_t server_priv_data_cb(void *arg,
-                                       const uct_cm_ep_priv_data_pack_args_t
-                                       *pack_args, void *priv_data)
+    virtual void accept(uct_cm_h cm, uct_conn_request_h conn_request,
+                        uct_cm_ep_server_conn_notify_callback_t notify_cb,
+                        uct_ep_disconnect_cb_t disconnect_cb,
+                        void *user_data)
     {
-        test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr *>(arg);
-        return self->common_priv_data_cb(arg, self->m_server->max_conn_priv, priv_data);
-    }
-
-    void accept(uct_cm_h cm, uct_conn_request_h conn_request,
-                uct_cm_ep_server_conn_notify_callback_t notify_cb,
-                uct_ep_disconnect_cb_t disconnect_cb,
-                void *user_data)
-    {
+        std::vector<char> priv_data_buf(m_server->max_conn_priv);
         uct_ep_params_t ep_params;
         ucs_status_t status;
         uct_ep_h ep;
 
         ASSERT_TRUE(m_server->listener());
+
+        ssize_t packed = common_priv_data_cb(priv_data_buf.size(),
+                                             priv_data_buf.data());
+        ASSERT_GT(packed, 0);
+
         m_server->reserve_ep(m_server->num_eps());
 
         ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                        |
@@ -209,15 +219,17 @@ protected:
                                UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER |
                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB    |
                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS         |
-                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+                               UCT_EP_PARAM_FIELD_PRIV_DATA                 |
+                               UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH;
 
-        ep_params.cm                 = cm;
-        ep_params.conn_request       = conn_request;
-        ep_params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
-        ep_params.sockaddr_pack_cb   = server_priv_data_cb;
-        ep_params.sockaddr_cb_server = notify_cb;
-        ep_params.disconnect_cb      = disconnect_cb;
-        ep_params.user_data          = user_data;
+        ep_params.cm                  = cm;
+        ep_params.conn_request        = conn_request;
+        ep_params.sockaddr_cb_flags   = UCT_CB_FLAG_ASYNC;
+        ep_params.sockaddr_cb_server  = notify_cb;
+        ep_params.disconnect_cb       = disconnect_cb;
+        ep_params.user_data           = user_data;
+        ep_params.private_data        = priv_data_buf.data();
+        ep_params.private_data_length = packed;
 
         status = uct_ep_create(&ep_params, &ep);
         ASSERT_UCS_OK(status);
@@ -231,7 +243,8 @@ protected:
     {
         ucs::scoped_async_lock listen_lock(m_server->async());
         ucs::scoped_async_lock accept_lock(server->async());
-        accept(server->cm(), conn_request, notify_cb, disconnect_cb, user_data);
+        accept(server->cm(), conn_request, notify_cb, disconnect_cb,
+               user_data);
     }
 
     void verify_remote_data(const void *remote_data, size_t remote_length)
@@ -334,7 +347,11 @@ protected:
     static void
     client_connect_cb(uct_ep_h ep, void *arg,
                       const uct_cm_ep_client_connect_args_t *connect_args) {
-        test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr *>(arg);
+        entity::sockaddr_user_data *sa_user_data =
+                reinterpret_cast<entity::sockaddr_user_data*>(arg);
+        test_uct_sockaddr *self =
+                static_cast<test_uct_sockaddr*>(sa_user_data->get_test());
+
         const uct_cm_remote_data_t *remote_data;
         ucs_status_t status;
 
@@ -359,11 +376,16 @@ protected:
             self->verify_remote_data(remote_data->conn_priv_data,
                                      remote_data->conn_priv_data_length);
 
+            ASSERT_EQ(sa_user_data->get_ep(), ep);
             status = uct_cm_client_ep_conn_notify(ep);
             ASSERT_UCS_OK(status);
 
             self->m_state |= TEST_STATE_CLIENT_CONNECTED;
             self->m_client_connect_cb_cnt++;
+        }
+
+        if (status != UCS_OK) {
+            delete sa_user_data;
         }
     }
 
@@ -380,7 +402,10 @@ protected:
     }
 
     static void client_disconnect_cb(uct_ep_h ep, void *arg) {
-        test_uct_sockaddr *self = reinterpret_cast<test_uct_sockaddr *>(arg);
+        entity::sockaddr_user_data *sa_user_data =
+                reinterpret_cast<entity::sockaddr_user_data*>(arg);
+        test_uct_sockaddr *self =
+                static_cast<test_uct_sockaddr*>(sa_user_data->get_test());
 
         if (self->m_server_start_disconnect) {
             /* if the server was the one who initiated the disconnect flow,
@@ -391,6 +416,7 @@ protected:
 
         self->m_state |= TEST_STATE_CLIENT_DISCONNECTED;
         self->m_client_disconnect_cnt++;
+        delete sa_user_data;
     }
 
     void cm_disconnect(entity *ent) {
@@ -662,7 +688,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
     /* Connect */
     /* multiple clients, on the same cm, connecting to the same server */
     for (int i = 0; i < num_conns_on_client; ++i) {
-        m_client->connect_to_sockaddr(i, m_connect_addr, client_priv_data_cb,
+        m_client->connect_to_sockaddr(i, m_connect_addr, client_resolve_cb,
                                       client_connect_cb, client_disconnect_cb,
                                       this);
     }
@@ -693,7 +719,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 UCS_TEST_P(test_uct_sockaddr, err_handle)
 {
     /* client - try to connect to a server that isn't listening */
-    m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+    m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                   client_connect_cb, client_disconnect_cb,
                                   this);
 
@@ -720,7 +746,7 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server_port)
     scoped_log_handler slh(detect_reject_error_logger);
 
     /* client - try to connect to a non-existing port on the server side. */
-    m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+    m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                   client_connect_cb, client_disconnect_cb,
                                   this);
 
@@ -846,7 +872,7 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
     {
         scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
-        m_client->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+        m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                       client_connect_cb, client_disconnect_cb,
                                       this);
 
@@ -928,11 +954,15 @@ public:
     }
 
     static void client_disconnect_cb(uct_ep_h ep, void *arg) {
+        entity::sockaddr_user_data *sa_user_data =
+                reinterpret_cast<entity::sockaddr_user_data*>(arg);
         test_uct_sockaddr_stress *self =
-                        reinterpret_cast<test_uct_sockaddr_stress *>(arg);
+                static_cast<test_uct_sockaddr_stress*>(sa_user_data->get_test());
 
+        EXPECT_EQ(sa_user_data->get_ep(), ep);
         self->common_test_disconnect(ep);
         self->disconnect_cnt_increment(&self->m_client_disconnect_cnt);
+        delete sa_user_data;
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
@@ -987,7 +1017,7 @@ UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
         m_entities.push_back(client_test);
 
         client_test->max_conn_priv = client_test->cm_attr().max_conn_priv;
-        client_test->connect_to_sockaddr(0, m_connect_addr, client_priv_data_cb,
+        client_test->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                          client_connect_cb,
                                          client_disconnect_cb, this);
     }
@@ -1149,3 +1179,113 @@ UCS_TEST_P(test_uct_sockaddr_multiple_cms, server_switch_cm)
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr_multiple_cms)
+
+/**
+ * This class tests "legacy" API @ref uct_ep_params::sockaddr_pack_cb which can
+ * be replaced with more flexible API:
+ *  - @ref uct_ep_params::cm_resolve_cb + @ref uct_ep_connect on client side
+ *  - @ref uct_ep_params::private_data + @ref uct_ep_params::private_data_length
+ *    on server side
+ * how this is implemented in @ref test_uct_sockaddr.
+ */
+class test_uct_sockaddr_legacy : public test_uct_sockaddr
+{
+public:
+    static ssize_t client_priv_data_cb(void *arg,
+                                       const uct_cm_ep_priv_data_pack_args_t
+                                       *pack_args, void *priv_data)
+    {
+        entity::sockaddr_user_data *sa_user_data =
+                reinterpret_cast<entity::sockaddr_user_data*>(arg);
+        test_uct_sockaddr_legacy *self =
+                static_cast<test_uct_sockaddr_legacy*>(sa_user_data->get_test());
+
+        return self->common_priv_data_cb(self->m_client->max_conn_priv,
+                                         priv_data);
+    }
+
+    static ssize_t server_priv_data_cb(void *arg,
+                                       const uct_cm_ep_priv_data_pack_args_t
+                                       *pack_args, void *priv_data)
+    {
+        test_uct_sockaddr_legacy *self =
+                reinterpret_cast<test_uct_sockaddr_legacy*>(arg);
+
+        return self->common_priv_data_cb(self->m_server->max_conn_priv,
+                                         priv_data);
+    }
+
+    virtual void accept(uct_cm_h cm, uct_conn_request_h conn_request,
+                        uct_cm_ep_server_conn_notify_callback_t notify_cb,
+                        uct_ep_disconnect_cb_t disconnect_cb,
+                        void *user_data)
+    {
+        uct_ep_params_t ep_params;
+        ucs_status_t status;
+        uct_ep_h ep;
+
+        ASSERT_TRUE(m_server->listener());
+        m_server->reserve_ep(m_server->num_eps());
+
+        ep_params.field_mask = UCT_EP_PARAM_FIELD_CM                        |
+                               UCT_EP_PARAM_FIELD_CONN_REQUEST              |
+                               UCT_EP_PARAM_FIELD_USER_DATA                 |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB    |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS         |
+                               UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+
+        ep_params.cm                 = cm;
+        ep_params.conn_request       = conn_request;
+        ep_params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
+        ep_params.sockaddr_pack_cb   = server_priv_data_cb;
+        ep_params.sockaddr_cb_server = notify_cb;
+        ep_params.disconnect_cb      = disconnect_cb;
+        ep_params.user_data          = user_data;
+
+        status = uct_ep_create(&ep_params, &ep);
+        ASSERT_UCS_OK(status);
+        m_server->eps().back().reset(ep, uct_ep_destroy);
+    }
+};
+
+UCS_TEST_P(test_uct_sockaddr_legacy, cm_open_listen_close)
+{
+    start_listen(conn_request_cb);
+
+    ucs_sock_addr_t ucs_remote_addr = m_connect_addr.to_ucs_sock_addr();
+
+    m_client->reserve_ep(0);
+    ASSERT_EQ(NULL, m_client->ep(0));
+
+    /* Connect to the server */
+    uct_ep_h ep;
+    uct_ep_params_t params;
+    params.field_mask         = UCT_EP_PARAM_FIELD_CM                         |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB     |
+                                UCT_EP_PARAM_FIELD_USER_DATA                  |
+                                UCT_EP_PARAM_FIELD_SOCKADDR                   |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_CB_FLAGS          |
+                                UCT_EP_PARAM_FIELD_SOCKADDR_PACK_CB;
+    params.cm                 = m_client->cm();
+    params.sockaddr_cb_client = client_connect_cb;
+    params.disconnect_cb      = client_disconnect_cb;
+    params.user_data          = new entity::sockaddr_user_data(this, m_client,
+                                                               0);
+    params.sockaddr           = &ucs_remote_addr;
+    params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
+    params.sockaddr_pack_cb   = client_priv_data_cb;
+
+    ucs_status_t status       = uct_ep_create(&params, &ep);
+    ASSERT_UCS_OK(status);
+
+    m_client->eps().at(0).reset(ep, uct_ep_destroy);
+    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
+                            TEST_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
+                                             TEST_STATE_CLIENT_CONNECTED)));
+    cm_disconnect(m_client);
+}
+
+UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr_legacy)
