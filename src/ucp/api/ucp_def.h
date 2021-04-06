@@ -744,6 +744,15 @@ typedef struct ucp_ep_params {
      */
     ucp_conn_request_h      conn_request;
 
+    /**
+     * Endpoint name. Tracing and analysis tools can identify the endpoint using
+     * this name. To retrieve the endpoint's name, use @ref ucp_ep_query, as the
+     * name you supply may be changed by UCX under some circumstances, e.g. a
+     * name conflict. This field is only assigned if you set
+     * @ref UCP_EP_PARAM_FIELD_NAME in the field mask. If not, then a default
+     * unique name will be created for you.
+     */
+    const char              *name;
 } ucp_ep_params_t;
 
 
