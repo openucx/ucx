@@ -14,6 +14,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/debug/assert.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/sys/math.h>
 
 BEGIN_C_DECLS
 
@@ -529,6 +530,7 @@ ucs_bitmap_ffs(const ucs_bitmap_word_t *bitmap_words, size_t num_words,
     size_t word_index = start_index / UCS_BITMAP_BITS_IN_WORD;
     size_t mask       = ~UCS_MASK(start_index % UCS_BITMAP_BITS_IN_WORD);
     size_t first_bit_in_word;
+    size_t bits;
 
     while (word_index < num_words) {
         if (bitmap_words[word_index] & mask) {
@@ -536,7 +538,8 @@ ucs_bitmap_ffs(const ucs_bitmap_word_t *bitmap_words, size_t num_words,
             return _UCS_BITMAP_BIT_INDEX(first_bit_in_word, word_index);
         }
 
-        mask = ((uint64_t) -1);
+        bits = UCS_BITMAP_BITS_IN_WORD;
+        mask = UCS_MASK_SAFE(bits);
         word_index++;
     }
 
