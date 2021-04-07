@@ -71,8 +71,7 @@ enum {
     UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
     UCP_REQUEST_SEND_PROTO_RNDV_GET,
     UCP_REQUEST_SEND_PROTO_RNDV_PUT,
-    UCP_REQUEST_SEND_PROTO_RMA,
-    UCP_REQUEST_SEND_PROTO_RNDV_ACK
+    UCP_REQUEST_SEND_PROTO_RMA
 };
 
 
@@ -449,7 +448,5 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
-
-void ucp_proto_comp_cb(uct_completion_t *comp);
 
 #endif

@@ -416,7 +416,9 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
      */
     ucp_trace_req(req, "fast-forward with status %s", ucs_status_string(status));
 
-    if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
+    if (req->send.uct.func == ucp_proto_progress_am_single) {
+        req->send.proto.comp_cb(req);
+    } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
     } else if (req->send.state.uct_comp.func) {
         req->send.state.dt.offset      = req->send.length;
@@ -446,11 +448,4 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
     }
 
     return UCS_ERR_MESSAGE_TRUNCATED;
-}
-
-void ucp_proto_comp_cb(uct_completion_t *comp)
-{
-    ucp_request_t *req = ucs_container_of(comp, ucp_request_t,
-                                          send.state.uct_comp);
-    req->send.proto.comp_cb(req);
 }

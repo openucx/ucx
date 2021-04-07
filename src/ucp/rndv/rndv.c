@@ -285,9 +285,8 @@ void ucp_rndv_req_send_ack(ucp_request_t *ack_req, ucp_request_t *req,
     ack_req->send.proto.status        = status;
     ack_req->send.proto.remote_req_id = remote_req_id;
     ack_req->send.proto.comp_cb       = ucp_request_put;
-    /* ack_req->send.state.uct_comp is used when ack operation is failed */
-    ucp_request_send_state_reset(ack_req, ucp_proto_comp_cb,
-                                 UCP_REQUEST_SEND_PROTO_RNDV_ACK);
+    ucp_request_send_state_reset(ack_req, NULL,
+                                 UCP_REQUEST_SEND_PROTO_BCOPY_AM);
 
     ucp_request_send(ack_req, 0);
 }
