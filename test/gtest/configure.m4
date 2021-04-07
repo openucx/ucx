@@ -11,6 +11,12 @@ CHECK_COMPILER_FLAG([-fno-tree-vectorize], [-fno-tree-vectorize],
                     [GTEST_CXXFLAGS="$GTEST_CXXFLAGS -fno-tree-vectorize"],
                     [])
 
+# error #186: pointless comparison of unsigned integer with zero
+CHECK_COMPILER_FLAG([--diag_suppress 186], [--diag_suppress 186],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                    [GTEST_CXXFLAGS="$GTEST_CXXFLAGS --diag_suppress 186"],
+                    [])
+                    
 # error #236: controlling expression is constant
 CHECK_COMPILER_FLAG([--diag_suppress 236], [--diag_suppress 236],
                     [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
