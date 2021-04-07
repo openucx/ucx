@@ -42,6 +42,15 @@ typedef void (*ucs_vfs_file_show_cb_t)(void *obj, ucs_string_buffer_t *strb);
 
 
 /**
+ * Callback function to show memory address of object.
+ *
+ * @param [in]    obj  Pointer to the object.
+ * @param [inout] strb String buffer to be filled by memory address of @a obj.
+ */
+void ucs_vfs_memory_address_show_cb(void *obj, ucs_string_buffer_t *strb);
+
+
+/**
  * Function to update representation of object in VFS.
  * 
  * @param [in] obj Pointer to the object to be updated.
