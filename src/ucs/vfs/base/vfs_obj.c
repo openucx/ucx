@@ -80,6 +80,11 @@ struct {
     }
 
 
+void ucs_vfs_memory_address_show_cb(void *obj, ucs_string_buffer_t *strb)
+{
+    ucs_string_buffer_appendf(strb, "%p\n", obj);
+}
+
 /* must be called with lock held */
 static ucs_vfs_node_t *ucs_vfs_node_find_by_path(const char *path)
 {
