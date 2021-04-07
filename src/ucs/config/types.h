@@ -77,6 +77,7 @@ typedef enum {
     UCS_HANDLE_ERROR_BACKTRACE, /* Print backtrace */
     UCS_HANDLE_ERROR_FREEZE,    /* Freeze and wait for a debugger */
     UCS_HANDLE_ERROR_DEBUG,     /* Attach debugger */
+    UCS_HANDLE_ERROR_NONE,      /* Do not take any action */
     UCS_HANDLE_ERROR_LAST
 } ucs_handle_error_t;
 

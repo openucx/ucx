@@ -57,6 +57,7 @@ static const char *ucs_handle_error_modes[] = {
     [UCS_HANDLE_ERROR_BACKTRACE] = "bt",
     [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
     [UCS_HANDLE_ERROR_DEBUG]     = "debug",
+    [UCS_HANDLE_ERROR_NONE]      = "none",
     [UCS_HANDLE_ERROR_LAST]      = NULL
 };
 
@@ -116,8 +117,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #else
   "bt",
 #endif
-  "Error handling mode. A combination of: 'bt' (print backtrace),\n"
-  "'freeze' (freeze and wait for a debugger), 'debug' (attach debugger)",
+  "Error signal handling mode. Either 'none' to disable signal interception,\n"
+  "or a combination of:\n"
+  " - 'bt'     : Print backtrace\n"
+  " - 'freeze' : Freeze and wait for a debugger\n"
+  " - 'debug'  : Attach a debugger",
   ucs_offsetof(ucs_global_opts_t, handle_errors),
   UCS_CONFIG_TYPE_BITMAP(ucs_handle_error_modes)},
 
