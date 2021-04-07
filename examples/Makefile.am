@@ -37,7 +37,7 @@ installcheck-local:
 
 if HAVE_EXAMPLES
 
-bin_PROGRAMS = \
+noinst_PROGRAMS = \
 	ucp_hello_world \
 	uct_hello_world \
 	ucp_client_server
@@ -59,9 +59,11 @@ uct_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(EXAMPLE_CUDA_LIBS)
 
 ucp_client_server_SOURCES  = ucp_client_server.c
-ucp_client_server_CFLAGS   = $(BASE_CFLAGS) $(CFLAGS_PEDANTIC)
-ucp_client_server_CPPFLAGS = $(BASE_CPPFLAGS)
+ucp_client_server_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)
+ucp_client_server_CPPFLAGS = $(BASE_CPPFLAGS) $(EXAMPLE_CUDA_CPPFLAGS)
+ucp_client_server_LDFLAGS  = $(EXAMPLE_CUDA_LD_FLAGS)
 ucp_client_server_LDADD    = $(top_builddir)/src/ucs/libucs.la \
-                             $(top_builddir)/src/ucp/libucp.la
+                             $(top_builddir)/src/ucp/libucp.la \
+                             $(EXAMPLE_CUDA_LIBS)
 
 endif
