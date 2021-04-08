@@ -3,6 +3,7 @@
 realdir=$(realpath $(dirname $0))
 source ${realdir}/common.sh
 source ${realdir}/../az-helpers.sh
+long_test=${long_test:-no}
 
 #
 # Build documentation
@@ -31,9 +32,7 @@ build_docs() {
 	then
 		echo " ==== Build docs only ===="
 		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-docs-only
-		make_clean
-		$MAKE  docs
-		make_clean # FIXME distclean does not work with docs-only
+		$MAKE docs
 	fi
 }
 
@@ -43,9 +42,7 @@ build_docs() {
 build_no_verbs() {
 	echo "==== Build without IB verbs ===="
 	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --without-verbs
-	make_clean
 	$MAKEP
-	make_clean distclean
 }
 
 #
@@ -54,9 +51,7 @@ build_no_verbs() {
 build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
 	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --disable-numa
-	make_clean
 	$MAKEP
-	make_clean distclean
 }
 
 #
@@ -65,12 +60,7 @@ build_disable_numa() {
 build_release_pkg() {
 	echo "==== Build release ===="
 	${WORKSPACE}/contrib/configure-release
-	make_clean
-	$MAKEP
 	$MAKEP distcheck
-
-	# Show UCX info
-	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M
 
 	if [ -f /etc/redhat-release -o -f /etc/fedora-release ]; then
 		rpm_based=yes
@@ -106,8 +96,6 @@ build_release_pkg() {
 		exit 1
 	fi
 	cd -
-
-	make_clean distclean
 }
 
 #
@@ -118,12 +106,11 @@ build_icc() {
 	then
 		echo "==== Build with Intel compiler ===="
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
-		make_clean
 		$MAKEP
 		make_clean distclean
+
 		echo "==== Build with Intel compiler (clang) ===="
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		make_clean
 		$MAKEP
 		make_clean distclean
 	else
@@ -147,9 +134,7 @@ build_pgi() {
 		#       in next versions.
 		#       Switch to default CC compiler after pgcc18 is default for pgi module
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
-		make_clean
 		$MAKEP
-		make_clean distclean
 	else
 		azure_log_warning "Not building with PGI compiler"
 	fi
@@ -164,9 +149,10 @@ build_pgi() {
 build_debug() {
 	echo "==== Build with --enable-debug option ===="
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
-	make_clean
 	$MAKEP
-	make_clean distclean
+
+	# Show UCX info
+	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M
 }
 
 #
@@ -175,9 +161,7 @@ build_debug() {
 build_prof() {
 	echo "==== Build configure-prof ===="
 	${WORKSPACE}/contrib/configure-prof --prefix=$ucx_inst
-	make_clean
 	$MAKEP
-	make_clean distclean
 }
 
 #
@@ -193,14 +177,12 @@ build_ugni() {
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-ugni \
 		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/${WORKSPACE}/contrib/cray-ugni-mock \
 		PKG_CONFIG_TOP_BUILD_DIR=${WORKSPACE}
-	make_clean
 	$MAKEP
 
 	# make sure UGNI transport is enabled
 	grep '#define HAVE_TL_UGNI 1' config.h
 
-	$MAKE  distcheck
-	make_clean distclean
+	$MAKEP distcheck
 }
 
 #
@@ -213,12 +195,10 @@ build_cuda() {
 		then
 			echo "==== Build with enable cuda, gdr_copy ===="
 			${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			make_clean
 			$MAKEP
 			make_clean distclean
 
 			${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			make_clean
 			$MAKEP
 			make_clean distclean
 			az_module_unload $GDRCOPY_MODULE
@@ -226,15 +206,12 @@ build_cuda() {
 
 		echo "==== Build with enable cuda, w/o gdr_copy ===="
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
-		make_clean
 		$MAKEP
 
 		az_module_unload $CUDA_MODULE
 
 		echo "==== Running test_link_map with cuda build but no cuda module ===="
 		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
-
-		make_clean distclean
 	else
 		echo "==== Not building with cuda flags ===="
 	fi
@@ -248,15 +225,12 @@ build_clang() {
 	then
 		echo "==== Build with clang compiler ===="
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		make_clean
 		$MAKEP
 		$MAKEP install
-		make_clean distclean
 	else
 		echo "==== Not building with clang compiler ===="
 	fi
 }
-
 
 #
 # Build with gcc-latest module
@@ -279,10 +253,8 @@ build_gcc() {
 		then
 			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
 			${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
-			make_clean
 			$MAKEP
 			$MAKEP install
-			make_clean distclean
 			az_module_unload $GCC_MODULE
 		fi
 	else
@@ -307,10 +279,8 @@ build_armclang() {
 	then
 		echo "==== Build with armclang compiler ===="
 		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
-		make_clean
 		$MAKEP
 		$MAKEP install
-		make_clean distclean
 	fi
 
 	rm -rf ${armclang_test_file} ${armclang_test_file}.out
@@ -321,10 +291,8 @@ check_inst_headers() {
 	echo "==== Testing installed headers ===="
 
 	${WORKSPACE}/contrib/configure-release --prefix=${ucx_inst}
-	make_clean
 	$MAKEP install
 	${WORKSPACE}/contrib/check_inst_headers.sh ${ucx_inst}/include
-	make_clean distclean
 }
 
 check_config_h() {
@@ -345,29 +313,42 @@ check_config_h() {
 }
 
 #
-# Do a given task only if the current worker is supposed to do it.
+# Do a given task and update progress indicator
 #
 do_task() {
+	amount=$1
+	shift
+	# cleanup build dir before the task
+	[ -n "${ucx_build_dir}" ] && rm -rf "${ucx_build_dir}/*"
+
 	$@
+
 	echo "##vso[task.setprogress value=$PROGRESS;]Progress Indicator"
-	PROGRESS=$((PROGRESS+5))
+	PROGRESS=$((PROGRESS+amount))
 }
 
 
 az_init_modules
 prepare_build
-do_task build_docs
-do_task build_disable_numa
-do_task build_no_verbs
-do_task build_release_pkg
-do_task check_inst_headers
-do_task check_config_h
-do_task build_icc
-do_task build_pgi
-do_task build_debug
-do_task build_prof
-do_task build_ugni
-do_task build_clang
-do_task build_armclang
-do_task build_gcc
-do_task build_cuda
+
+[ "${long_test}" = "yes" ] && prog=5 || prog=12
+
+do_task "${prog}" build_docs
+do_task "${prog}" build_debug
+do_task "${prog}" build_prof
+do_task "${prog}" build_ugni
+do_task "${prog}" build_disable_numa
+do_task "${prog}" build_cuda
+do_task "${prog}" build_no_verbs
+do_task "${prog}" build_release_pkg
+
+if [ "${long_test}" = "yes" ]
+then
+	do_task 5 check_config_h
+	do_task 5 check_inst_headers
+	do_task 10 build_icc
+	do_task 10 build_pgi
+	do_task 10 build_gcc
+	do_task 10 build_clang
+	do_task 10 build_armclang
+fi

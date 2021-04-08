@@ -28,6 +28,13 @@ typedef uint64_t ucs_bitmap_word_t;
     (sizeof(ucs_bitmap_word_t) * 8)
 
 
+/*
+ * Fully-set bitmap word
+ */
+#define UCS_BITMAP_WORD_MASK \
+    (~((ucs_bitmap_word_t)0))
+
+
 /**
  * Get the number of words in a given bitmap
  *
@@ -379,7 +386,8 @@ _ucs_bitmap_word_index(size_t bitmap_words, size_t bit_index)
  */
 #define _UCS_BITMAP_MASK_WORD(_bitmap, _word_index, _mask_index) \
     ((_mask_index) > (_word_index) * UCS_BITMAP_BITS_IN_WORD) ? \
-        ((((_mask_index) >= ((_word_index) + 1) * UCS_BITMAP_BITS_IN_WORD) ? UINT64_MAX : \
+        ((((_mask_index) >= ((_word_index) + 1) * UCS_BITMAP_BITS_IN_WORD) ? \
+              UCS_BITMAP_WORD_MASK : \
               UCS_MASK((_mask_index) % UCS_BITMAP_BITS_IN_WORD))) : 0; \
 
 
@@ -412,7 +420,7 @@ _ucs_bitmap_word_index(size_t bitmap_words, size_t bit_index)
     { \
         size_t _word_index = 0; \
         _UCS_BITMAP_FOR_EACH_WORD(_bitmap, _word_index) { \
-            _UCS_BITMAP_WORD(_bitmap, _word_index) = UINT64_MAX; \
+            _UCS_BITMAP_WORD(_bitmap, _word_index) = UCS_BITMAP_WORD_MASK; \
         } \
     }
 
@@ -536,7 +544,7 @@ ucs_bitmap_ffs(const ucs_bitmap_word_t *bitmap_words, size_t num_words,
             return _UCS_BITMAP_BIT_INDEX(first_bit_in_word, word_index);
         }
 
-        mask = UINT64_MAX;
+        mask = UCS_BITMAP_WORD_MASK;
         word_index++;
     }
 

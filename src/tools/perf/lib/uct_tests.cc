@@ -11,6 +11,8 @@
 #  include "config.h"
 #endif
 
+#define __STDC_FORMAT_MACROS /* For PRIu64 */
+
 #include "libperf_int.h"
 
 #include <limits>
