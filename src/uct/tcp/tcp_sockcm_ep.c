@@ -247,10 +247,10 @@ void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
         /* if the resolve or pack callback failed, then the upper layer already
          * knows about it since it failed in it. in this case, no need to invoke
          * another upper layer callback. */
-        if ((ep->state & (UCT_TCP_SOCKCM_EP_RESOLVE_CB_FAILED |
-                          UCT_TCP_SOCKCM_EP_PACK_CB_FAILED |
-                          UCT_TCP_SOCKCM_EP_SERVER_CREATED)) ==
-            UCT_TCP_SOCKCM_EP_SERVER_CREATED) {
+        if (!(ep->state & (UCT_TCP_SOCKCM_EP_RESOLVE_CB_FAILED |
+                           UCT_TCP_SOCKCM_EP_PACK_CB_FAILED)) &&
+            (ep->state & (UCT_TCP_SOCKCM_EP_SERVER_CREATED |
+                          UCT_TCP_SOCKCM_EP_ON_CLIENT))) {
             uct_tcp_sockcm_ep_invoke_error_cb(ep, status);
         }
 
