@@ -85,6 +85,29 @@ public:
     }
 
     static ucs_log_func_rc_t
+    detect_warn_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_WARN) {
+            static std::vector<std::string> stop_list;
+            if (stop_list.empty()) {
+                stop_list.push_back("failed to connect CM lane on device");
+            }
+
+            std::string err_str = format_message(message, ap);
+            for (size_t i = 0; i < stop_list.size(); ++i) {
+                if (err_str.find(stop_list[i]) != std::string::npos) {
+                    UCS_TEST_MESSAGE << err_str;
+                    return UCS_LOG_FUNC_RC_STOP;
+                }
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
     detect_error_logger(const char *file, unsigned line, const char *function,
                         ucs_log_level_t level,
                         const ucs_log_component_config_t *comp_conf,
@@ -491,19 +514,21 @@ public:
         wait_for_reject(sender(),   wakeup);
     }
 
-    void listen_and_communicate(bool wakeup, uint64_t flags)
+    void listen(ucp_test_base::entity::listen_cb_type_t cb_type)
     {
         UCS_TEST_MESSAGE << "Testing " << m_test_addr.to_str();
+        start_listener(cb_type);
+    }
 
-        start_listener(cb_type());
+    void listen_and_communicate(bool wakeup, uint64_t flags)
+    {
+        listen(cb_type());
         connect_and_send_recv(wakeup, flags);
     }
 
     void listen_and_reject(bool wakeup)
     {
-        UCS_TEST_MESSAGE << "Testing " << m_test_addr.to_str();
-
-        start_listener(ucp_test_base::entity::LISTEN_CB_REJECT);
+        listen(ucp_test_base::entity::LISTEN_CB_REJECT);
         connect_and_reject(wakeup);
     }
 
@@ -1162,6 +1187,37 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
     scoped_log_handler slh(wrap_errors_logger);
     one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
     one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
+{
+    ucp_test_base::entity::listen_cb_type_t listen_cb_type = cb_type();
+
+    listen(listen_cb_type);
+    for (unsigned i = 0; i < 1; ++i) {
+        {
+            scoped_log_handler warn_slh(detect_warn_logger);
+            scoped_log_handler error_slh(detect_error_logger);
+            client_ep_connect();
+
+            if (listen_cb_type == ucp_test_base::entity::LISTEN_CB_CONN) {
+                while ((m_err_count == 0) &&
+                       receiver().is_conn_reqs_queue_empty()) {
+                    progress();
+                }
+            } else {
+                ASSERT_EQ(ucp_test_base::entity::LISTEN_CB_EP, listen_cb_type);
+                wait_for_server_ep(false);
+            }
+
+            one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FORCE);
+            while ((m_err_count == 0) && (receiver().get_err_num() == 0)) {
+                progress();
+            }
+        }
+
+        one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
+    }
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)

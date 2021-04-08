@@ -641,8 +641,11 @@ ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
         UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                         "feature or no supported transport to send partial "
                         "worker address)");
+    } else if (status != UCS_OK) {
+        add_err(status);
+        ep = NULL;
     }
-    ASSERT_UCS_OK(status);
+
     return ep;
 }
 
@@ -877,7 +880,9 @@ unsigned ucp_test_base::entity::progress(int worker_index)
         ucp_conn_request_h conn_req = m_conn_reqs.back();
         m_conn_reqs.pop();
         ucp_ep_h ep = accept(ucp_worker, conn_req);
-        set_ep(ep, worker_index, std::numeric_limits<int>::max());
+        if (ep != NULL) {
+            set_ep(ep, worker_index, std::numeric_limits<int>::max());
+        }
         ++progress_count;
     }
 
@@ -986,6 +991,11 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
     }
 
     return false;
+}
+
+bool ucp_test_base::entity::is_conn_reqs_queue_empty() const
+{
+    return m_conn_reqs.empty();
 }
 
 bool ucp_test_base::is_request_completed(void *request) {

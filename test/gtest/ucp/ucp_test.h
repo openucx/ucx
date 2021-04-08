@@ -151,6 +151,8 @@ public:
 
         bool has_lane_with_caps(uint64_t caps) const;
 
+        bool is_conn_reqs_queue_empty() const;
+
     protected:
         ucs::handle<ucp_context_h>      m_ucph;
         worker_vec_t                    m_workers;
