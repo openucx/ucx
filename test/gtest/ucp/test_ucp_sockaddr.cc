@@ -91,17 +91,11 @@ public:
                        const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_WARN) {
-            static std::vector<std::string> stop_list;
-            if (stop_list.empty()) {
-                stop_list.push_back("failed to connect CM lane on device");
-            }
-
             std::string err_str = format_message(message, ap);
-            for (size_t i = 0; i < stop_list.size(); ++i) {
-                if (err_str.find(stop_list[i]) != std::string::npos) {
-                    UCS_TEST_MESSAGE << err_str;
-                    return UCS_LOG_FUNC_RC_STOP;
-                }
+            if (err_str.find("failed to connect CM lane on device") !=
+                std::string::npos) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
             }
         }
         return UCS_LOG_FUNC_RC_CONTINUE;
