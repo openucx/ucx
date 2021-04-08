@@ -47,8 +47,8 @@ static int uct_gdr_copy_iface_is_reachable(const uct_iface_h tl_iface,
     return (addr != NULL) && (iface->id == *addr);
 }
 
-static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h tl_iface,
-                                             uct_iface_attr_t *iface_attr)
+static ucs_status_t
+uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
 {
     uct_gdr_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_gdr_copy_iface_t);
 
@@ -88,9 +88,39 @@ static ucs_status_t uct_gdr_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = ucs_linear_func_make(1e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = 6911.0 * UCS_MBYTE;
-    iface_attr->overhead                = 0;
+    iface_attr->bandwidth.shared        = UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
+    iface_attr->overhead                = UCT_GDR_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth.dedicated = 0;
+        if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION) {
+            switch (perf_attr->operation) {
+            case UCT_OP_GET_SHORT:
+            case UCT_OP_GET_ZCOPY:
+                perf_attr->bandwidth.shared = 440.0 * UCS_MBYTE;
+                break;
+            case UCT_OP_PUT_SHORT:
+                perf_attr->bandwidth.shared = 10200.0 * UCS_MBYTE;
+                break;
+            default:
+                perf_attr->bandwidth.shared =
+                        UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
+            }
+        } else {
+            perf_attr->bandwidth.shared = UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
+        }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = UCT_GDR_COPY_IFACE_OVERHEAD;
+    }
 
     return UCS_OK;
 }
@@ -116,12 +146,18 @@ static uct_iface_ops_t uct_gdr_copy_iface_ops = {
     .iface_is_reachable       = uct_gdr_copy_iface_is_reachable,
 };
 
+static uct_iface_internal_ops_t uct_gdr_copy_iface_internal_ops = {
+    .iface_estimate_perf = uct_gdr_copy_estimate_perf
+};
+
 static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_gdr_copy_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_gdr_copy_iface_ops,
+                              &uct_gdr_copy_iface_internal_ops, md, worker,
+                              params,
+                              tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG("gdr_copy"));
 
     if (strncmp(params->mode.device.dev_name,

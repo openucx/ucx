@@ -107,8 +107,8 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = ucs_linear_func_make(8e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = 10000.0 * UCS_MBYTE;
-    iface_attr->overhead                = 0;
+    iface_attr->bandwidth.shared        = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+    iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
     return UCS_OK;
@@ -285,11 +285,51 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     }
 }
 
+static ucs_status_t
+uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth.dedicated = 0;
+        if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
+            perf_attr->bandwidth.shared = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+        } else {
+            switch (perf_attr->operation) {
+            case UCT_OP_GET_SHORT:
+                perf_attr->bandwidth.shared = 9320.0 * UCS_MBYTE;
+                break;
+            case UCT_OP_GET_ZCOPY:
+                perf_attr->bandwidth.shared = 11660.0 * UCS_MBYTE;
+                break;
+            case UCT_OP_PUT_SHORT:
+                perf_attr->bandwidth.shared = 8110.0 * UCS_MBYTE;
+                break;
+            case UCT_OP_PUT_ZCOPY:
+                perf_attr->bandwidth.shared = 9980.0 * UCS_MBYTE;
+                break;
+            default:
+                perf_attr->bandwidth.shared =
+                        UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+                break;
+            }
+        }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = UCT_CUDA_COPY_IFACE_OVERHEAD;
+    }
+
+    return UCS_OK;
+}
+
 static ucs_mpool_ops_t uct_cuda_copy_event_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_cuda_copy_event_desc_init,
     .obj_cleanup   = uct_cuda_copy_event_desc_cleanup,
+};
+
+static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {
+    .iface_estimate_perf = uct_cuda_copy_estimate_perf
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h worker,
@@ -301,8 +341,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     int i;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_copy_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_copy_iface_ops,
+                              &uct_cuda_copy_iface_internal_ops, md, worker,
+                              params,
+                              tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG("cuda_copy"));
 
     if (strncmp(params->mode.device.dev_name,

@@ -180,26 +180,12 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     return iface->ops.iface_query(iface, iface_attr);
 }
 
-ucs_status_t uct_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+ucs_status_t
+uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_iface_attr_t iface_attr;
-    ucs_status_t status;
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
-    status = uct_iface_query(iface, &iface_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* By default, the performance is assumed to be the same for all operations */
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        perf_attr->bandwidth = iface_attr.bandwidth;
-    }
-
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
-        perf_attr->overhead = iface_attr.overhead;
-    }
-
-    return UCS_OK;
+    return iface->internal_ops->iface_estimate_perf(tl_iface, perf_attr);
 }
 
 ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr)
@@ -408,6 +394,33 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    ucs_status_t status;
+    uct_iface_attr_t iface_attr;
+
+    status = uct_iface_query(iface, &iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* By default, the performance is assumed to be the same for all operations */
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = iface_attr.overhead;
+    }
+
+    return UCS_OK;
+}
+
+uct_iface_internal_ops_t uct_base_iface_internal_ops = {
+    .iface_estimate_perf = uct_base_iface_estimate_perf
+};
+
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
     ucs_assert_always(ops->ep_flush                 != NULL);
@@ -434,7 +447,8 @@ UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
+UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
+                    uct_iface_internal_ops_t *internal_ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent)
@@ -452,6 +466,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
                        params->err_handler_flags : 0);
 
     self->md                = md;
+    self->internal_ops      = internal_ops;
     self->worker            = ucs_derived_of(worker, uct_priv_worker_t);
     self->am_tracer         = NULL;
     self->am_tracer_arg     = NULL;

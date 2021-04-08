@@ -11,6 +11,12 @@
 #include <pthread.h>
 
 
+#define UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH (10000.0 * UCS_MBYTE)
+
+
+#define UCT_CUDA_COPY_IFACE_OVERHEAD          (0)
+
+
 typedef uint64_t uct_cuda_copy_iface_addr_t;
 
 

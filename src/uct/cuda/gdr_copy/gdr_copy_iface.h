@@ -9,6 +9,12 @@
 #include <uct/base/uct_iface.h>
 
 
+#define UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH (6911.0 * UCS_MBYTE)
+
+
+#define UCT_GDR_COPY_IFACE_OVERHEAD (0)
+
+
 typedef uint64_t uct_gdr_copy_iface_addr_t;
 
 

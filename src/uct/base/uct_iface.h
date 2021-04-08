@@ -21,6 +21,7 @@
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/class.h>
+#include <uct/api/v2/uct_v2.h>
 
 #include <ucs/datastruct/mpool.inl>
 
@@ -212,37 +213,50 @@ typedef struct uct_am_handler {
 } uct_am_handler_t;
 
 
+/* Performance estimation operation */
+typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
+        uct_iface_h iface, uct_perf_attr_t *perf_attr);
+
+
+/* Internal operations, not exposed by the external API */
+typedef struct uct_iface_internal_ops {
+    uct_iface_estimate_perf_func_t iface_estimate_perf;
+} uct_iface_internal_ops_t;
+
+
 /**
  * Base structure of all interfaces.
  * Includes the AM table which we don't want to expose.
  */
 typedef struct uct_base_iface {
-    uct_iface_t             super;
-    uct_md_h                md;               /* MD this interface is using */
-    uct_priv_worker_t       *worker;          /* Worker this interface is on */
-    uct_am_handler_t        am[UCT_AM_ID_MAX];/* Active message table */
-    uct_am_tracer_t         am_tracer;        /* Active message tracer */
-    void                    *am_tracer_arg;   /* Tracer argument */
-    uct_error_handler_t     err_handler;      /* Error handler */
-    void                    *err_handler_arg; /* Error handler argument */
-    uint32_t                err_handler_flags; /* Error handler callback flags */
-    uct_worker_progress_t   prog;             /* Will be removed once all transports
-                                                 support progress control */
-    unsigned                progress_flags;   /* Which progress is currently enabled */
+    uct_iface_t              super;
+    uct_iface_internal_ops_t *internal_ops;    /* Internal operations */
+    uct_md_h                 md;               /* MD this interface is using */
+    uct_priv_worker_t        *worker;          /* Worker this interface is on */
+    uct_am_handler_t         am[UCT_AM_ID_MAX];/* Active message table */
+    uct_am_tracer_t          am_tracer;        /* Active message tracer */
+    void                     *am_tracer_arg;   /* Tracer argument */
+    uct_error_handler_t      err_handler;      /* Error handler */
+    void                     *err_handler_arg; /* Error handler argument */
+    uint32_t                 err_handler_flags; /* Error handler callback flags */
+    uct_worker_progress_t    prog;             /* Will be removed once all transports
+                                                  support progress control */
+    unsigned                 progress_flags;   /* Which progress is currently enabled */
 
     struct {
-        unsigned            num_alloc_methods;
-        uct_alloc_method_t  alloc_methods[UCT_ALLOC_METHOD_LAST];
-        ucs_log_level_t     failure_level;
-        size_t              max_num_eps;
+        unsigned             num_alloc_methods;
+        uct_alloc_method_t   alloc_methods[UCT_ALLOC_METHOD_LAST];
+        ucs_log_level_t      failure_level;
+        size_t               max_num_eps;
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
 
-UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*,  uct_md_h, uct_worker_h,
-                  const uct_iface_params_t*, const uct_iface_config_t*
-                  UCS_STATS_ARG(ucs_stats_node_t*) UCS_STATS_ARG(const char*));
+UCS_CLASS_DECLARE(uct_base_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*,
+                  uct_md_h, uct_worker_h, const uct_iface_params_t*,
+                  const uct_iface_config_t *UCS_STATS_ARG(ucs_stats_node_t*)
+                  UCS_STATS_ARG(const char*));
 
 
 /**
@@ -593,6 +607,9 @@ typedef struct {
 
 
 extern ucs_config_field_t uct_iface_config_table[];
+
+
+extern uct_iface_internal_ops_t uct_base_iface_internal_ops;
 
 
 /**

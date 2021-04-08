@@ -752,7 +752,24 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
 
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     {
-    {
+            .super            = {},
+            .create_cq        = uct_ib_mlx5_create_cq,
+            .arm_cq           = uct_ud_mlx5_iface_arm_cq,
+            .event_cq         = uct_ud_mlx5_iface_event_cq,
+            .handle_failure   = uct_ud_mlx5_iface_handle_failure,
+    },
+    .async_progress           = uct_ud_mlx5_iface_async_progress,
+    .send_ctl                 = uct_ud_mlx5_ep_send_ctl,
+    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
+    .create_qp                = uct_ud_mlx5_iface_create_qp,
+    .destroy_qp               = uct_ud_mlx5_iface_destroy_qp,
+    .unpack_peer_address      = uct_ud_mlx5_iface_unpack_peer_address,
+    .ep_get_peer_address      = uct_ud_mlx5_ep_get_peer_address,
+    .get_peer_address_length  = uct_ud_mlx5_get_peer_address_length,
+    .peer_address_str         = uct_ud_mlx5_iface_peer_address_str
+};
+
+static uct_iface_ops_t uct_ud_mlx5_iface_tl_ops = {
     .ep_put_short             = uct_ud_mlx5_ep_put_short,
     .ep_am_short              = uct_ud_mlx5_ep_am_short,
     .ep_am_short_iov          = uct_ud_mlx5_ep_am_short_iov,
@@ -780,21 +797,6 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_get_address        = uct_ud_iface_get_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable
-    },
-    .create_cq                = uct_ib_mlx5_create_cq,
-    .arm_cq                   = uct_ud_mlx5_iface_arm_cq,
-    .event_cq                 = uct_ud_mlx5_iface_event_cq,
-    .handle_failure           = uct_ud_mlx5_iface_handle_failure,
-    },
-    .async_progress           = uct_ud_mlx5_iface_async_progress,
-    .send_ctl                 = uct_ud_mlx5_ep_send_ctl,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
-    .create_qp                = uct_ud_mlx5_iface_create_qp,
-    .destroy_qp               = uct_ud_mlx5_iface_destroy_qp,
-    .unpack_peer_address      = uct_ud_mlx5_iface_unpack_peer_address,
-    .ep_get_peer_address      = uct_ud_mlx5_ep_get_peer_address,
-    .get_peer_address_length  = uct_ud_mlx5_get_peer_address_length,
-    .peer_address_str         = uct_ud_mlx5_iface_peer_address_str
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
@@ -818,7 +820,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
-                              md, worker, params, &config->super, &init_attr);
+                              &uct_ud_mlx5_iface_tl_ops, md, worker, params,
+                              &config->super, &init_attr);
 
     self->super.config.max_inline = uct_ud_mlx5_max_inline();
 

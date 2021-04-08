@@ -137,8 +137,9 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h work
     uct_rocm_copy_iface_config_t *config = ucs_derived_of(tl_config,
                                                           uct_rocm_copy_iface_config_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_copy_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_copy_iface_ops, NULL,
+                              md, worker, params,
+                              tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_COPY_TL_NAME));
 
     self->id                    = ucs_generate_uuid((uintptr_t)self);
