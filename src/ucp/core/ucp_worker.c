@@ -584,21 +584,28 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_worker_h worker = ucp_ep->worker;
     ucp_wireup_ep_t *wireup_ep;
 
-    /* If the failure happened on AUX EP of CM lane on a server EP,
-     * it means that client closed its CM_WIREUP_EP/AUX_EP and it
-     * was detected before receiving WIREUP_MSG/ACK from a client or
-     * marking a server's EP as REMOTE_CONNECTED was scheduled on a
-     * progress, but not completed yet (CM_WIREUP_EP/AUX_EP is
-     * closed when moving an EP to REMOTE_CONNECTED state) */
+    /* No need to invoke the error handling flow for CM_WIREUP_EP/AUX_EP
+     * because the reason for this failure can be CM_WIREUP_EP/AUX_EP destroy on
+     * the remote side. In case of transport-level failure, we will detect it on
+     * transport lanes.
+     * If UCP EP isn't failed and the failure happened on AUX EP of CM lane:
+     * - on a server EP:
+     *   it means that client closed its CM_WIREUP_EP/AUX_EP and it was detected
+     *   before receiving WIREUP_MSG/ACK from a client or marking a server's EP
+     *   as REMOTE_CONNECTED was scheduled on a progress, but not completed yet
+     *   (CM_WIREUP_EP/AUX_EP is closed when moving an EP to REMOTE_CONNECTED
+     *   state)
+     * - on a client EP:
+     *   it means that server closed its CM_WIREUP_EP/AUX_EP and it was detected
+     *   when marking a client's EP as REMOTE_CONNECTED was scheduled on a
+     *   progress, but not completed yet (CM_WIREUP_EP/AUX_EP is closed when
+     *   moving an EP to REMOTE_CONNECTED state). */
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
-    if ((lane == ucp_ep_get_cm_lane(ucp_ep))         &&
+    if (!(ucp_ep->flags & UCP_EP_FLAG_FAILED) &&
+        (lane == ucp_ep_get_cm_lane(ucp_ep)) &&
         (lane == ucp_ep_get_wireup_msg_lane(ucp_ep)) &&
-        (wireup_ep != NULL)                          &&
+        (wireup_ep != NULL) &&
         ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep)) {
-        ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED);
-
-        /* No need to invoke the error handling flow, just flush and
-         * destroy CM_WIREUP/AUX_EP */
         ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                      ucp_destroyed_ep_pending_purge, NULL);
 
