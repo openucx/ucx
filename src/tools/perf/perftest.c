@@ -40,7 +40,7 @@
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUm:"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:"
 #define TEST_ID_UNDEFINED       -1
 
 enum {
@@ -490,6 +490,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        recv       : Use ucp_stream_recv_nb\n");
     printf("                        recv_data  : Use ucp_stream_recv_data_nb\n");
     printf("     -I             create context with wakeup feature enabled\n");
+    printf("     -e             create endpoints with error handling support\n");
     printf("     -E <mode>      wait mode for tests\n");
     printf("                        poll       : repeatedly call worker_progress\n");
     printf("                        sleep      : go to sleep after posting requests\n");
@@ -745,6 +746,9 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         return UCS_OK;
     case 'I':
         params->super.flags |= UCX_PERF_TEST_FLAG_WAKEUP;
+        return UCS_OK;
+    case 'e':
+        params->super.flags |= UCX_PERF_TEST_FLAG_ERR_HANDLING;
         return UCS_OK;
     case 'M':
         if (!strcmp(opt_arg, "single")) {

@@ -41,7 +41,8 @@ protected:
         if (level == UCS_LOG_LEVEL_ERROR) {
             std::string err_str = format_message(message, ap);
             if (strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNREACHABLE)) ||
-                strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNSUPPORTED))) {
+                strstr(err_str.c_str(), ucs_status_string(UCS_ERR_UNSUPPORTED)) ||
+                strstr(err_str.c_str(), "no peer failure handler")) {
                 UCS_TEST_MESSAGE << err_str;
                 return UCS_LOG_FUNC_RC_STOP;
             }
@@ -68,6 +69,13 @@ const test_perf::test_spec test_ucp_perf::tests[] =
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
+
+  { "tag latency errh", "usec",
+    UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
+    UCX_PERF_WAIT_MODE_POLL,
+    UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
+    ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
+    UCX_PERF_TEST_FLAG_ERR_HANDLING },
 
   { "blocking tag latency", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
