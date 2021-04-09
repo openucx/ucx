@@ -139,6 +139,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
     req->flags         = 0;
     req->send.ep       = ep;
     req->send.uct.func = ucp_progress_rma_cmpl;
+    ucp_request_send_state_clear(req, NULL);
     ucp_request_send(req, 0);
 }
 
