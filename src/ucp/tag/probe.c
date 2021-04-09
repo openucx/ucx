@@ -43,7 +43,7 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
             info->length = ((ucp_eager_first_hdr_t*)(rdesc + 1))->total_len;
         } else {
             ucs_assert(flags & UCP_RECV_DESC_FLAG_RNDV);
-            info->length = ucp_tag_rndv_rts_from_rdesc(rdesc)->super.size;
+            info->length = ucp_tag_rndv_rts_from_rdesc(rdesc)->size;
         }
     }
 

@@ -13,6 +13,13 @@
 #include <ucp/rndv/rndv.h>
 
 
+#define ucp_am_hdr_from_rts(_rts) \
+    ({ \
+        UCS_STATIC_ASSERT(sizeof((_rts)->hdr) == sizeof(ucp_am_hdr_t)); \
+        ((ucp_am_hdr_t*)&(_rts)->hdr); \
+    })
+
+
 enum {
     UCP_AM_CB_PRIV_FIRST_FLAG = UCS_BIT(15),
 
@@ -71,16 +78,6 @@ typedef struct {
     ucs_list_link_t          list;        /* entry into list of unfinished AM's */
     size_t                   remaining;   /* how many bytes left to receive */
 } ucp_am_first_desc_t;
-
-
-typedef struct {
-    ucp_rndv_rts_hdr_t       super;
-    ucp_am_hdr_t             am;
-    /*
-     * 1. packed rkeys follow
-     * 2. user header follows, if am->header_length is not 0
-     */
-} UCS_S_PACKED ucp_am_rndv_rts_hdr_t;
 
 
 ucs_status_t ucp_am_init(ucp_worker_h worker);

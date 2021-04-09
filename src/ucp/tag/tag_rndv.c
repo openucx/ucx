@@ -16,35 +16,32 @@
 
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
-                          const ucp_tag_rndv_rts_hdr_t *rts_hdr)
+                          const ucp_rndv_rts_hdr_t *rts_hdr)
 {
-    ucs_assert(rts_hdr->super.flags & UCP_RNDV_RTS_FLAG_TAG);
+    ucs_assert(ucp_rndv_rts_is_tag(rts_hdr));
 
     /* rreq is the receive request on the receiver's side */
-    rreq->recv.tag.info.sender_tag = rts_hdr->tag.tag;
-    rreq->recv.tag.info.length     = rts_hdr->super.size;
+    rreq->recv.tag.info.sender_tag = ucp_tag_hdr_from_rts(rts_hdr)->tag;
+    rreq->recv.tag.info.length     = rts_hdr->size;
 
     if (worker->context->config.ext.proto_enable) {
-        ucp_proto_rndv_receive(worker, rreq, &rts_hdr->super, sizeof(*rts_hdr));
+        ucp_proto_rndv_receive(worker, rreq, rts_hdr, sizeof(*rts_hdr));
     } else {
-        ucp_rndv_receive(worker, rreq, &rts_hdr->super, rts_hdr + 1);
+        ucp_rndv_receive(worker, rreq, rts_hdr, rts_hdr + 1);
     }
 }
 
 ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
-                                      ucp_rndv_rts_hdr_t *common_rts_hdr,
+                                      ucp_rndv_rts_hdr_t *rts_hdr,
                                       size_t length, unsigned tl_flags)
 {
-    ucp_tag_rndv_rts_hdr_t *rts_hdr = ucs_derived_of(common_rts_hdr,
-                                                     ucp_tag_rndv_rts_hdr_t);
     ucp_recv_desc_t *rdesc;
-    ucp_tag_t *rdesc_hdr;
     ucp_request_t *rreq;
     ucs_status_t status;
 
-    ucs_assert(rts_hdr->super.flags & UCP_RNDV_RTS_FLAG_TAG);
+    ucs_assert(ucp_rndv_rts_is_tag(rts_hdr));
 
-    rreq = ucp_tag_exp_search(&worker->tm, rts_hdr->tag.tag);
+    rreq = ucp_tag_exp_search(&worker->tm, ucp_tag_hdr_from_rts(rts_hdr)->tag);
     if (rreq != NULL) {
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
@@ -57,17 +54,14 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
 
     ucs_assert(length >= sizeof(*rts_hdr));
 
-    /* Include tag before the header as well, to keep ucp_rdesc_get_tag() fast
-     * (and therefore keep fast search by ucp_tag_unexp_search())
-     */
-    status = ucp_recv_desc_init(worker, rts_hdr, length, sizeof(*rdesc_hdr),
-                                tl_flags, sizeof(*rts_hdr) + sizeof(*rdesc_hdr),
-                                UCP_RECV_DESC_FLAG_RNDV,
-                                sizeof(*rdesc_hdr), &rdesc);
+    status = ucp_recv_desc_init(worker, rts_hdr, length, 0, tl_flags,
+                                sizeof(*rts_hdr), UCP_RECV_DESC_FLAG_RNDV, 0,
+                                &rdesc);
     if (!UCS_STATUS_IS_ERR(status)) {
-        rdesc_hdr  = (ucp_tag_t*)(rdesc + 1);
-        *rdesc_hdr = rts_hdr->tag.tag;
-        ucp_tag_unexp_recv(&worker->tm, rdesc, rts_hdr->tag.tag);
+        ucs_assert(ucp_rdesc_get_tag(rdesc) ==
+                   ucp_tag_hdr_from_rts(rts_hdr)->tag);
+        ucp_tag_unexp_recv(&worker->tm, rdesc,
+                           ucp_tag_hdr_from_rts(rts_hdr)->tag);
     }
 
     return status;
@@ -75,13 +69,12 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
 {
-    ucp_request_t *sreq                 = arg;
-    ucp_tag_rndv_rts_hdr_t *tag_rts_hdr = dest;
+    ucp_request_t *sreq         = arg;
+    ucp_rndv_rts_hdr_t *rts_hdr = dest;
 
-    tag_rts_hdr->tag.tag = sreq->send.msg_proto.tag;
+    ucp_tag_hdr_from_rts(rts_hdr)->tag = sreq->send.msg_proto.tag;
 
-    return ucp_rndv_rts_pack(sreq, &tag_rts_hdr->super, sizeof(*tag_rts_hdr),
-                             UCP_RNDV_RTS_FLAG_TAG);
+    return ucp_rndv_rts_pack(sreq, rts_hdr, UCP_RNDV_RTS_TAG_OK);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
@@ -90,7 +83,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
 
     return ucp_rndv_send_rts(sreq, ucp_tag_rndv_rts_pack,
-                             sizeof(ucp_tag_rndv_rts_hdr_t));
+                             sizeof(ucp_rndv_rts_hdr_t));
 }
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
@@ -123,13 +116,13 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
 
 static size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg)
 {
-    ucp_tag_rndv_rts_hdr_t *tag_rts = dest;
-    ucp_request_t *req              = arg;
+    ucp_rndv_rts_hdr_t *tag_rts = dest;
+    ucp_request_t *req          = arg;
 
-    tag_rts->super.flags = UCP_RNDV_RTS_FLAG_TAG;
-    tag_rts->tag.tag     = req->send.msg_proto.tag;
+    tag_rts->opcode                    = UCP_RNDV_RTS_TAG_OK;
+    ucp_tag_hdr_from_rts(tag_rts)->tag = req->send.msg_proto.tag;
 
-    return ucp_proto_rndv_rts_pack(req, &tag_rts->super, sizeof(*tag_rts));
+    return ucp_proto_rndv_rts_pack(req, tag_rts, sizeof(*tag_rts));
 }
 
 static ucs_status_t ucp_tag_rndv_rts_progress(uct_pending_req_t *self)
@@ -140,7 +133,7 @@ static ucs_status_t ucp_tag_rndv_rts_progress(uct_pending_req_t *self)
     ucs_status_t status;
 
     rpriv        = req->send.proto_config->priv;
-    max_rts_size = sizeof(ucp_tag_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
+    max_rts_size = sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
     status = ucp_proto_rndv_rts_request_init(req);
     if (status != UCS_OK) {

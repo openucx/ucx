@@ -95,7 +95,7 @@ static int ucp_rndv_is_put_pipeline_needed(uintptr_t remote_address,
 }
 
 size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
-                         size_t rndv_rts_hdr_size, uint16_t flags)
+                         ucp_rndv_rts_opcode_t opcode)
 {
     ucp_worker_h worker = sreq->send.ep->worker;
     ssize_t packed_rkey_size;
@@ -104,7 +104,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
     rndv_rts_hdr->sreq.ep_id  = ucp_send_request_get_ep_remote_id(sreq);
     rndv_rts_hdr->sreq.req_id = ucp_request_get_id(sreq);
     rndv_rts_hdr->size        = sreq->send.length;
-    rndv_rts_hdr->flags       = flags;
+    rndv_rts_hdr->opcode      = opcode;
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
@@ -112,7 +112,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         /* pack rkey, ask target to do get_zcopy */
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
-                                                    rndv_rts_hdr_size);
+                                                    sizeof(*rndv_rts_hdr));
         packed_rkey_size = ucp_rkey_pack_uct(worker->context,
                                              sreq->send.state.dt.dt.contig.md_map,
                                              sreq->send.state.dt.dt.contig.memh,
@@ -129,7 +129,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         packed_rkey_size      = 0;
     }
 
-    return rndv_rts_hdr_size + packed_rkey_size;
+    return sizeof(*rndv_rts_hdr) + packed_rkey_size;
 }
 
 static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
@@ -1459,11 +1459,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rts_handler,
     ucp_worker_h worker         = arg;
     ucp_rndv_rts_hdr_t *rts_hdr = data;
 
-    if (rts_hdr->flags & UCP_RNDV_RTS_FLAG_TAG) {
-        return ucp_tag_rndv_process_rts(worker, rts_hdr, length, tl_flags);
-    } else {
-        ucs_assert(rts_hdr->flags & UCP_RNDV_RTS_FLAG_AM);
+    if (ucp_rndv_rts_is_am(rts_hdr)) {
         return ucp_am_rndv_process_rts(arg, data, length, tl_flags);
+    } else {
+        ucs_assert(ucp_rndv_rts_is_tag(rts_hdr));
+        return ucp_tag_rndv_process_rts(worker, rts_hdr, length, tl_flags);
     }
 }
 
@@ -2021,28 +2021,22 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     const ucp_rndv_data_hdr_t *rndv_data   = data;
     const ucp_reply_hdr_t *rep_hdr         = data;
     UCS_STRING_BUFFER_ONSTACK(rts_info, 64);
-    ucp_tag_rndv_rts_hdr_t *tag_rts;
-    ucp_am_rndv_rts_hdr_t *am_rts;
-    void *rkey_buf;
+    const void *rkey_buf;
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
         ucs_assert(rndv_rts_hdr->sreq.ep_id != UCP_EP_ID_INVALID);
 
-        if (rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_AM) {
-            am_rts   = ucs_derived_of(rndv_rts_hdr, ucp_am_rndv_rts_hdr_t);
-            rkey_buf = am_rts + 1;
+        if (ucp_rndv_rts_is_am(rndv_rts_hdr)) {
             ucs_string_buffer_appendf(&rts_info, "AM am_id %u",
-                                      am_rts->am.am_id);
+                                      ucp_am_hdr_from_rts(rndv_rts_hdr)->am_id);
         } else {
-            ucs_assert(rndv_rts_hdr->flags & UCP_RNDV_RTS_FLAG_TAG);
-
-            tag_rts  = ucs_derived_of(rndv_rts_hdr, ucp_tag_rndv_rts_hdr_t);
-            rkey_buf = tag_rts + 1;
-
-            ucs_string_buffer_appendf(&rts_info, "TAG tag %"PRIx64"",
-                                      tag_rts->tag.tag);
+            ucs_assert(ucp_rndv_rts_is_tag(rndv_rts_hdr));
+            ucs_string_buffer_appendf(&rts_info, "TAG tag %" PRIx64,
+                                      ucp_tag_hdr_from_rts(rndv_rts_hdr)->tag);
         }
+
+        rkey_buf = rndv_rts_hdr + 1;
 
         snprintf(buffer, max, "RNDV_RTS %s ep_id 0x%"PRIx64" sreq_id"
                  " 0x%"PRIx64" address 0x%"PRIx64" size %zu",
