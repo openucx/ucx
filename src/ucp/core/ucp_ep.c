@@ -2693,21 +2693,21 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
     }
 
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
-        ucs_assert(req->super_req == NULL);
+        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(req->send.ep == ucp_ep);
         ucp_request_complete_and_dereg_send(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RECV_AM) {
-        ucs_assert(req->super_req == NULL);
+        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
         ucp_request_complete_am_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
-        ucs_assert(req->super_req == NULL);
+        ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
         ucp_request_complete_tag_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
-        ucs_assert(req->super_req != NULL);
+        ucs_assert(req->flags & UCP_REQUEST_FLAG_SUPER_VALID);
         ucs_assert(req->send.ep == ucp_ep);
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
@@ -2717,15 +2717,14 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
          * and it uses a receive part of a request */
         req->super_req->recv.remaining -= req->recv.length;
         if (req->super_req->recv.remaining == 0) {
-            ucp_ep_req_purge(ucp_ep, req->super_req, status, 1);
+            ucp_ep_req_purge(ucp_ep, ucp_request_get_super(req), status, 1);
         }
 
         ucp_request_put(req);
     } else {
-        ucs_assert(req->super_req != NULL);
         ucs_assert(req->send.ep == ucp_ep);
 
-        ucp_ep_req_purge(ucp_ep, req->super_req, status, 1);
+        ucp_ep_req_purge(ucp_ep, ucp_request_get_super(req), status, 1);
         ucp_request_put(req);
     }
 }

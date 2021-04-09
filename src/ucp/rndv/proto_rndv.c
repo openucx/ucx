@@ -414,7 +414,7 @@ ucp_request_get_super_req(void *request, void *user_data)
     ucp_request_t UCS_V_UNUSED *req = (ucp_request_t*)request - 1;
     ucp_request_t *super_req        = user_data;
 
-    ucs_assert(req->super_req == super_req);
+    ucs_assert(ucp_request_get_super(req) == super_req);
     return super_req;
 }
 
@@ -455,10 +455,12 @@ void ucp_proto_rndv_receive(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.rndv.remote_req_id  = rts->sreq.req_id;
 
     if (ucs_likely(rts->size <= recv_req->recv.length)) {
-        req->super_req = recv_req;
-        req->flags     = UCP_REQUEST_FLAG_CALLBACK | UCP_REQUEST_FLAG_RELEASED;
-        req->send.cb   = ucp_proto_rndv_recv_completion;
-        length         = rts->size;
+        req->flags   = UCP_REQUEST_FLAG_CALLBACK | UCP_REQUEST_FLAG_RELEASED;
+        req->send.cb = ucp_proto_rndv_recv_completion;
+        length       = rts->size;
+
+        ucp_request_set_super(req, recv_req);
+
         if (ucs_unlikely(rts->address == 0)) {
             rkey_buffer = NULL;
         } else {
@@ -572,7 +574,7 @@ ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
     }
 
     req      = ucs_container_of(uct_comp, ucp_request_t, send.state.uct_comp);
-    recv_req = req->super_req;
+    recv_req = ucp_request_get_super(req);
     UCS_PROFILE_REQUEST_EVENT(recv_req, "rndv_data_recv", recv_len);
 
     ucs_assertv(recv_req->recv.remaining >= recv_len,
