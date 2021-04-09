@@ -59,8 +59,9 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    dev->mr_access_flags = uct_ib_efadv_access_flags(&md->efadv);
-    md->super.ops        = &uct_ib_efa_md_ops;
+    dev->mr_access_flags   = uct_ib_efadv_access_flags(&md->efadv);
+    dev->has_inorder_scomp = 0;
+    md->super.ops          = &uct_ib_efa_md_ops;
 
     *p_md = &md->super;
     return UCS_OK;

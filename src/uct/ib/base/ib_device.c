@@ -698,6 +698,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
                    uct_ib_device_name(dev));
     }
 
+    dev->has_inorder_scomp = 1;
+
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
     kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
