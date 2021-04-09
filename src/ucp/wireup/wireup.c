@@ -739,7 +739,7 @@ void ucp_wireup_process_ack(ucp_worker_h worker, ucp_ep_h ep,
     ucs_assert(ep->flags & UCP_EP_FLAG_CONNECT_REP_SENT);
 
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
-        /* drop the procesing of ACK since close protocol or error
+        /* drop the processing of ACK since close protocol or error
          * handling is started */
         ucs_assert(ucp_ep_has_cm_lane(ep) &&
                    (ep->flags & UCP_EP_FLAG_DISCONNECTED_CM_LANE));
@@ -1181,7 +1181,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
             }
 
             /* save destination resource index in the CM wireup EP for doing
-             * futher intersections, if needed */
+             * further intersections, if needed */
             cm_wireup_ep->dst_rsc_indices[lane] = dst_rsc_index;
             new_dst_rsc_indices[lane]           = dst_rsc_index;
         }
@@ -1228,7 +1228,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
     }
 
     /* Need to discard only old lanes that won't be used anymore in the new
-     * configuraton. Also, UCT EPs with the lane index >= old_key->num_lanes
+     * configuration. Also, UCT EPs with the lane index >= old_key->num_lanes
      * could be set in case of CM, we have to not reset them */
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         reuse_lane = reuse_lane_map[lane];
