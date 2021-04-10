@@ -319,12 +319,14 @@ ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
 static UCS_F_ALWAYS_INLINE void
 ucp_request_send(ucp_request_t *req, unsigned pending_flags)
 {
+#ifndef NVALGRIND
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.func,
                                   sizeof(req->send.state.uct_comp.func));
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.count,
                                   sizeof(req->send.state.uct_comp.count));
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.status,
                                   sizeof(req->send.state.uct_comp.status));
+#endif /* NVALGRIND */
     while (!ucp_request_try_send(req, pending_flags));
 }
 
