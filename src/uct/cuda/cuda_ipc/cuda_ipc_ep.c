@@ -91,9 +91,13 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
-    offset          = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
-    mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
-    ucs_assert(offset <= key->b_len);
+    if (mapped_addr == (void*)0xdeadbeef) {
+        mapped_rem_addr = (void*)remote_addr;
+    } else {
+        offset          = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
+        mapped_rem_addr = (void*)((uintptr_t) mapped_addr + offset);
+        ucs_assert(offset <= key->b_len);
+    }
 
     if (!iface->streams_initialized) {
         status = uct_cuda_ipc_iface_init_streams(iface);

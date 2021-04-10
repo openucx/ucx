@@ -193,6 +193,10 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
 
+    if (mapped_addr == (void*)0xdeadbeef) {
+        return UCS_OK;
+    }
+
     status = uct_cuda_ipc_get_remote_cache(pid, &cache);
     if (status != UCS_OK) {
         return status;
@@ -226,6 +230,73 @@ ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
     return status;
 }
 
+static ucs_status_t
+uct_cuda_ipc_locally_accessible(const uct_cuda_ipc_key_t *key, void **mapped_addr,
+                                int *locally_accessible)
+{
+    static pid_t own_pid = -1;
+    ucs_status_t status  = UCS_OK;
+    CUdevice own_device;
+    int can_access_peer;
+
+    ucs_recursive_spin_lock(&uct_cuda_ipc_remote_cache.lock);
+
+    if (-1 == own_pid) {
+        own_pid = getpid();
+    }
+
+    *locally_accessible = (key->pid == own_pid) ? 1 : 0;
+
+    if (*locally_accessible) {
+
+        UCT_CUDA_IPC_GET_DEVICE(own_device);
+
+        if ((key->dev_num == own_device) ||
+            ((CUDA_SUCCESS == cuDeviceCanAccessPeer(&can_access_peer,
+                                                    own_device,
+                                                    (CUdevice)key->dev_num)) &&
+             (can_access_peer == 1))) {
+
+
+#if 0
+    CUresult cu_err;
+            if ((key->dev_num != own_device)) {
+                cu_err = cuCtxEnablePeerAccess(key->ctx, 0);
+                if ((CUDA_SUCCESS == cu_err) ||
+                    (CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED == cu_err)) {
+
+                    ucs_error("enabled peer access local peer device %d from %d : %s",
+                            (int)key->dev_num, (int)own_device, err_str);
+                } else {
+
+                    const char *err_str;
+                    cuGetErrorString(cu_err, &err_str);
+
+                    ucs_error("unable to access local peer device %d from %d : %s",
+                            (int)key->dev_num, (int)own_device, err_str);
+                    status = UCS_ERR_INVALID_PARAM;
+                    goto out;
+                }
+            }
+#endif
+
+            *mapped_addr = (void*)0xdeadbeef;
+            ucs_trace("able to access local peer device %d from %d",
+                       (int)key->dev_num, (int)own_device);
+            status = UCS_OK;
+            goto out;
+        }
+
+        ucs_trace("unable to access local peer device %d from %d",
+                  (int)key->dev_num, (int)own_device);
+        status = UCS_ERR_INVALID_PARAM;
+    }
+
+out:
+    ucs_recursive_spin_unlock(&uct_cuda_ipc_remote_cache.lock);
+    return status;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
                  const uct_cuda_ipc_key_t *key, void **mapped_addr)
 {
@@ -234,6 +305,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_map_memhandle, (key, mapped_addr),
     ucs_pgt_region_t *pgt_region;
     uct_cuda_ipc_cache_region_t *region;
     int ret;
+    int locally_accessible;
+
+    status = uct_cuda_ipc_locally_accessible(key, mapped_addr,
+                                             &locally_accessible);
+    if (locally_accessible) {
+        return status;
+    }
 
     status = uct_cuda_ipc_get_remote_cache(key->pid, &cache);
     if (status != UCS_OK) {

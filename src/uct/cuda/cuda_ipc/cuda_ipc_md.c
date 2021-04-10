@@ -133,10 +133,14 @@ static ucs_status_t uct_cuda_ipc_is_peer_accessible(uct_cuda_ipc_component_t *md
     ucs_ternary_auto_value_t *accessible;
     void *d_mapped;
 
+    pthread_rwlock_wrlock(&(mdc->md->lock));
+
     status = uct_cuda_ipc_get_unique_index_for_uuid(&peer_idx, mdc->md, rkey);
     if (ucs_unlikely(status != UCS_OK)) {
         goto err;
     }
+
+    pthread_rwlock_unlock(&(mdc->md->lock));
 
     /* overwrite dev_num with a unique ID; this means that relative remote
      * device number of multiple peers do not map on the same stream and reduces
@@ -236,6 +240,11 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
         return status;
     }
 
+    status = UCT_CUDADRV_FUNC(cuCtxGetCurrent(&key->ctx), log_level);
+    if (UCS_OK != status) {
+        return status;
+    }
+
     UCT_CUDA_IPC_GET_DEVICE(cu_device);
 
     UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
@@ -284,6 +293,7 @@ static void uct_cuda_ipc_md_close(uct_md_h uct_md)
 
     ucs_free(md->uuid_map);
     ucs_free(md->peer_accessible_cache);
+    pthread_rwlock_destroy(&(md->lock));
     ucs_free(md);
 }
 
@@ -302,6 +312,7 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     };
 
     int num_devices;
+    int ret;
     uct_cuda_ipc_md_t* md;
     uct_cuda_ipc_component_t* com;
 
@@ -320,6 +331,12 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->uuid_map_capacity     = 0;
     md->uuid_map              = NULL;
     md->peer_accessible_cache = NULL;
+
+    ret = pthread_rwlock_init(&(md->lock), NULL);
+    if (ret) {
+        ucs_error("pthread_rwlock_init() failed: %m");
+        return UCS_ERR_INVALID_PARAM;
+    }
 
     com     = ucs_derived_of(md->super.component, uct_cuda_ipc_component_t);
     com->md = md;

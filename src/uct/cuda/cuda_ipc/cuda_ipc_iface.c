@@ -77,9 +77,9 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
                                            const uct_iface_addr_t *iface_addr)
 {
     uct_cuda_ipc_iface_t  *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uint64_t node_guid = uct_cuda_ipc_iface_node_guid(&iface->super);
 
-    return ((uct_cuda_ipc_iface_node_guid(&iface->super) ==
-             *((const uint64_t *)dev_addr)) && ((getpid() != *(pid_t *)iface_addr)));
+    return ((node_guid == *((const uint64_t *)dev_addr)));
 }
 
 static double uct_cuda_ipc_iface_get_bw()
