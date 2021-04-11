@@ -555,9 +555,14 @@ ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)
     return ep->iface->ops.cm_ep_conn_notify(ep);
 }
 
+void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
+{
+    ep->iface = iface;
+}
+
 UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
 {
-    self->iface = iface;
+    uct_ep_set_iface(self, iface);
     return UCS_OK;
 }
 
@@ -611,6 +616,25 @@ ucs_config_field_t uct_iface_config_table[] = {
 
   {NULL}
 };
+
+ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
+{
+    ucs_status_t status;
+
+    UCS_STATS_NODE_FREE(ep->stats);
+
+    status = UCS_STATS_NODE_ALLOC(&ep->stats, &uct_ep_stats_class, iface->stats,
+                                  "-%p", ep);
+#ifdef ENABLE_STATS
+    if (status != UCS_OK) {
+        /* set the stats to NULL so that the UCS_STATS_NODE_FREE call on the
+         * base_ep's cleanup flow won't fail */
+        ep->stats = NULL;
+    }
+#endif
+
+    return status;
+}
 
 ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,
                                       size_t iovcnt)

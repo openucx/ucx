@@ -152,8 +152,8 @@ static ucs_status_t uct_cm_check_ep_params(const uct_ep_params_t *params)
     return UCS_OK;
 }
 
-ucs_status_t uct_cm_set_common_data(uct_cm_base_ep_t *ep,
-                                    const uct_ep_params_t *params)
+ucs_status_t uct_cm_ep_set_common_data(uct_cm_base_ep_t *ep,
+                                       const uct_ep_params_t *params)
 {
     ucs_status_t status;
 
@@ -195,7 +195,7 @@ UCS_CLASS_INIT_FUNC(uct_cm_base_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &params->cm->iface);
 
-    status = uct_cm_set_common_data(self, params);
+    status = uct_cm_ep_set_common_data(self, params);
     if (status != UCS_OK) {
         return status;
     }
