@@ -153,6 +153,9 @@ KHASH_IMPL(uct_ud_iface_gid, union ibv_gid, char, 0,
            uct_ud_iface_kh_gid_hash_func, uct_ud_iface_kh_gid_hash_equal)
 
 
+KHASH_MAP_INIT_INT64(uct_ud_iface_octl_hash, uct_ud_ctl_desc_t*);
+
+
 struct uct_ud_iface {
     uct_ib_iface_t           super;
     struct ibv_qp           *qp;
@@ -168,16 +171,19 @@ struct uct_ud_iface {
         uct_ud_send_skb_t     *skb; /* ready to use skb */
         ucs_mpool_t            mp;
         /* got async events but pending queue was not dispatched */
-        uint8_t                async_before_pending;
-        int16_t                available;
-        unsigned               unsignaled;
-        ucs_queue_head_t       outstanding_q;
-        ucs_arbiter_t          pending_q;
-        ucs_queue_head_t       async_comp_q;
-        ucs_twheel_t           timer;
-        ucs_time_t             tick;
-        double                 timer_backoff;
-        unsigned               timer_sweep_count;
+        uint8_t                             async_before_pending;
+        int16_t                             available;
+        unsigned                            unsignaled;
+        union {
+            ucs_queue_head_t                outstanding_q;
+            khash_t(uct_ud_iface_octl_hash) outstanding_map;
+        };
+        ucs_arbiter_t                       pending_q;
+        ucs_queue_head_t                    async_comp_q;
+        ucs_twheel_t                        timer;
+        ucs_time_t                          tick;
+        double                              timer_backoff;
+        unsigned                            timer_sweep_count;
     } tx;
     struct {
         ucs_time_t           peer_timeout;
@@ -546,7 +552,22 @@ uct_ud_iface_send_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep, uct_ud_send_skb_t 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
 {
-    ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super);
+    khiter_t it;
+    int ret;
+
+    if (dev->has_inorder_scomp) {
+        ucs_queue_push(&iface->tx.outstanding_q, &cdesc->queue);
+    } else {
+        it = kh_put(uct_ud_iface_octl_hash, &iface->tx.outstanding_map,
+                    cdesc->sn, &ret);
+        if (ret != UCS_KH_PUT_FAILED) {
+            ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
+            kh_value(&iface->tx.outstanding_map, it) = cdesc;
+        } else {
+            ucs_fatal("failed to put ctl desc in iface outstanding map");
+        }
+    }
 }
 
 
