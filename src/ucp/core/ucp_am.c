@@ -1000,7 +1000,7 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id, const void *payload,
         .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
                         UCP_OP_ATTR_FIELD_CALLBACK |
                         UCP_OP_ATTR_FIELD_FLAGS,
-        .flags        = flags,
+        .flags        = flags | UCP_AM_SEND_FLAG_EAGER,
         .cb.send      = (ucp_send_nbx_callback_t)cb,
         .datatype     = datatype
     };
@@ -1486,11 +1486,19 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     ucp_worker_h worker        = arg;
     uint16_t am_id             = rts->am.am_id;
     ucp_recv_desc_t *desc      = NULL;
+    ucp_am_entry_t *am_cb      = &ucs_array_elem(&worker->am, am_id);
     ucp_ep_h ep;
-    ucp_am_entry_t *am_cb;
     ucp_am_recv_param_t param;
     ucs_status_t status, desc_status;
     void *hdr;
+
+    if (ENABLE_PARAMS_CHECK && !(am_cb->flags & UCP_AM_CB_PRIV_FLAG_NBX)) {
+        ucs_error("active message callback registered with "
+                  "ucp_worker_set_am_handler() API does not support rendezvous "
+                  "protocol, the sender side should use ucp_am_send_nbx() API");
+        status = UCS_ERR_INVALID_PARAM;
+        goto out_send_ats;
+    }
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->super.sreq.ep_id,
                                   { status = UCS_ERR_CANCELED;
@@ -1520,7 +1528,6 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
         goto out_send_ats;
     }
 
-    am_cb           = &ucs_array_elem(&worker->am, am_id);
     param.recv_attr = UCP_AM_RECV_ATTR_FLAG_RNDV |
                       ucp_am_hdr_reply_ep(worker, rts->am.flags, ep,
                                           &param.reply_ep);
