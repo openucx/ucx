@@ -6,7 +6,8 @@ parameters:
 jobs:
   - job: jucx_release
     condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
-    container: ubuntu20_cuda11_2
+    # we need to use lowest version for compatible
+    container: centos7_cuda10_1
     pool:
       name: MLNX
       demands:
