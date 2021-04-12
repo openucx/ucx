@@ -406,7 +406,7 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_THREAD_MODE   = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_ATTR_FIELD_ADDRESS       = UCS_BIT(1), /**< UCP address */
     UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS = UCS_BIT(2), /**< UCP address flags */
-    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER = UCS_BIT(3), /**< Maximal header size
+    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER = UCS_BIT(3), /**< Maximum header size
                                                            used by UCP AM API */
     UCP_WORKER_ATTR_FIELD_NAME          = UCS_BIT(4) /**< UCP worker name */
 };
@@ -869,7 +869,7 @@ typedef struct ucp_generic_dt_ops {
      *                             "start_pack()" routine.
      * @param [in]  offset         Virtual offset in the output stream.
      * @param [in]  dest           Destination buffer to pack the data.
-     * @param [in]  max_length     Maximal length to pack.
+     * @param [in]  max_length     Maximum length to pack.
      *
      * @return The size of the data that was written to the destination buffer.
      *         Must be less than or equal to @e max_length.
@@ -1141,7 +1141,7 @@ typedef struct ucp_worker_attr {
     size_t                address_length;
 
     /**
-     * Maximal allowed header size for @ref ucp_am_send_nbx routine
+     * Maximum allowed header size for @ref ucp_am_send_nbx routine.
      */
     size_t                max_am_header;
 
@@ -2036,7 +2036,7 @@ unsigned ucp_worker_progress(ucp_worker_h worker);
  * @param [in]   worker    Worker to poll.
  * @param [out]  poll_eps  Pointer to array of endpoints, should be
  *                         allocated by user.
- * @param [in]   max_eps   Maximal number of endpoints which should be filled
+ * @param [in]   max_eps   Maximum number of endpoints that should be filled
  *                         in @a poll_eps.
  * @param [in]   flags     Reserved for future use.
  *

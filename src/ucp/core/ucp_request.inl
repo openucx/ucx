@@ -389,7 +389,6 @@ ucp_request_send_state_reset(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-    case UCP_REQUEST_SEND_PROTO_RNDV_ACK:
         req->send.state.uct_comp.func   = comp_cb;
         req->send.state.uct_comp.count  = 0;
         req->send.state.uct_comp.status = UCS_OK;

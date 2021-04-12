@@ -126,8 +126,8 @@ UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
 ucs_status_t uct_listener_backlog_adjust(const uct_listener_params_t *params,
                                          int max_value, int *backlog);
 
-ucs_status_t uct_cm_set_common_data(uct_cm_base_ep_t *ep,
-                                    const uct_ep_params_t *params);
+ucs_status_t uct_cm_ep_set_common_data(uct_cm_base_ep_t *ep,
+                                       const uct_ep_params_t *params);
 
 ucs_status_t uct_cm_ep_pack_cb(uct_cm_base_ep_t *cep, void *arg,
                                const uct_cm_ep_priv_data_pack_args_t *pack_args,

@@ -60,8 +60,7 @@ enum {
                                             ~UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX,
 
     UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT     = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                                            UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
-                                            UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX,
+                                            UCP_ADDRESS_PACK_FLAG_EP_ADDR,
 
     UCP_ADDRESS_PACK_FLAG_NO_TRACE        = UCS_BIT(16) /* Suppress debug tracing */
 };

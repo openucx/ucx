@@ -68,7 +68,7 @@ typedef struct {
                                       * 2 hsb :
                                       *        - amo32
                                       *        - amo64 */
-} ucp_address_packed_iface_attr_t;
+} UCS_S_PACKED ucp_address_packed_iface_attr_t;
 
 
 /* In unified mode we pack resource index instead of iface attrs to the address,
@@ -86,7 +86,7 @@ typedef struct {
 typedef struct {
     ucp_rsc_index_t  rsc_index;
     float            lat_ovh;
-} ucp_address_unified_iface_attr_t;
+} UCS_S_PACKED ucp_address_unified_iface_attr_t;
 
 
 #define UCP_ADDRESS_FLAG_ATOMIC32     UCS_BIT(30) /* 32bit atomic operations */

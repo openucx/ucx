@@ -2005,6 +2005,17 @@ static void ucp_worker_vfs_show_thread_mode(void *obj,
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
+void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
+{
+    ucs_vfs_obj_add_dir(context, worker, "worker/%s", worker->name);
+    ucs_vfs_obj_add_ro_file(worker, ucs_vfs_memory_address_show_cb,
+                            "memory_address");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_address_name,
+                            "address_name");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_thread_mode,
+                            "thread_mode");
+}
+
 ucs_status_t ucp_worker_create(ucp_context_h context,
                                const ucp_worker_params_t *params,
                                ucp_worker_h *worker_p)
@@ -2193,11 +2204,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
      */
     ucs_config_parser_warn_unused_env_vars_once(context->config.env_prefix);
 
-    ucs_vfs_obj_add_dir(context, worker, "worker/%p", worker);
-    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_address_name,
-                            "address_name");
-    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_thread_mode,
-                            "thread_mode");
+    ucp_worker_create_vfs(context, worker);
 
     *worker_p = worker;
     return UCS_OK;

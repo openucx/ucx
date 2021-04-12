@@ -930,19 +930,14 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         goto err_unblock;
     }
 
-    UCS_CLASS_CLEANUP(uct_cm_base_ep_t, &tcp_ep->super);
-
-    /* set the server's ep to use the cm from params and its iface
+    /* set the server's ep to use the cm from params.
      * (it could be the previous one it had - the one used by the listener or
      * a new one set by the user) */
-    status = UCS_CLASS_INIT(uct_cm_base_ep_t, &tcp_ep->super, params);
+    status = uct_cm_ep_set_common_data(&tcp_ep->super, params);
     if (status != UCS_OK) {
-        ucs_error("failed to initialize a uct_cm_base_ep_t endpoint");
+        ucs_error("failed to set common data for a uct_cm_base_ep_t endpoint");
         goto err_unblock;
     }
-
-    params_tcp_sockcm = ucs_derived_of(params->cm, uct_tcp_sockcm_t);
-    ucs_assert(uct_tcp_sockcm_ep_get_cm(tcp_ep) == params_tcp_sockcm);
 
     status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
                            tcp_ep->super.server.notify_cb, params->sockaddr_cb_server,
@@ -953,8 +948,9 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
     }
 
     /* the server's endpoint was already created by the listener, return it */
-    *ep_p          = &tcp_ep->super.super.super;
-    tcp_ep->state |= UCT_TCP_SOCKCM_EP_SERVER_CREATED;
+    *ep_p             = &tcp_ep->super.super.super;
+    tcp_ep->state    |= UCT_TCP_SOCKCM_EP_SERVER_CREATED;
+    params_tcp_sockcm = ucs_derived_of(params->cm, uct_tcp_sockcm_t);
 
     if (&tcp_sockcm->super != params->cm) {
         new_async_ctx = params_tcp_sockcm->super.iface.worker->async;
@@ -969,10 +965,21 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
             goto err_unblock;
         }
 
+        /* set the server's ep to use the iface from the cm in params */
+        uct_ep_set_iface(&tcp_ep->super.super.super, &params->cm->iface.super);
+
+        status = uct_base_ep_stats_reset(&tcp_ep->super.super, &params->cm->iface);
+        if (status != UCS_OK) {
+            ucs_error("failed to reset the stats on ep %p: %s",
+                      tcp_ep, ucs_status_string(status));
+            goto err_unblock;
+        }
+
         ucs_trace("moved tcp_sockcm ep %p from cm %p to cm %p", tcp_ep,
                   tcp_sockcm, params_tcp_sockcm);
     }
 
+    ucs_assert(uct_tcp_sockcm_ep_get_cm(tcp_ep) == params_tcp_sockcm);
     ucs_trace("server completed endpoint creation (fd=%d cm=%p state=%d)",
               tcp_ep->fd, params_tcp_sockcm, tcp_ep->state);
 

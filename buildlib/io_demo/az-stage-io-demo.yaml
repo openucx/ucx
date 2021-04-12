@@ -5,6 +5,8 @@ parameters:
   default: ''
 - name: iodemo_tls
   default: 'rc_x'
+- name: duration
+  default: 60
 
 steps:
 - bash: |
@@ -38,7 +40,7 @@ steps:
     $(workspace)/test/apps/iodemo/run_io_demo.sh \
         -H $(agent_hosts) \
         --tasks-per-node 1 \
-        --duration 480 \
+        --duration ${{ parameters.duration }} \
         -v \
         --num-clients 1 \
         --num-servers 1 \
@@ -57,7 +59,7 @@ steps:
   timeoutInMinutes: 10
 
 - bash: |
-    python $(workspace)/buildlib/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }}
+    python $(workspace)/buildlib/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }}
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 1
 

@@ -1504,6 +1504,13 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.selection_cmp);
 }
 
+static void ucp_context_create_vfs(ucp_context_h context)
+{
+    ucs_vfs_obj_add_dir(NULL, context, "ucp/context/%s", context->name);
+    ucs_vfs_obj_add_ro_file(context, ucs_vfs_memory_address_show_cb,
+                            "memory_address");
+}
+
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
@@ -1555,8 +1562,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         ucp_config_release(dfl_config);
     }
 
-    ucs_vfs_obj_add_dir(NULL, context, "ucp/context/%s-%p", context->name,
-                        context);
+    ucp_context_create_vfs(context);
 
     ucs_debug("created ucp context %s %p [%d mds %d tls] features 0x%" PRIx64
               " tl bitmap " UCT_TL_BITMAP_FMT,
