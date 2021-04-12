@@ -253,10 +253,13 @@ struct ucp_request {
                 } flush;
 
                 struct {
-                    uct_ep_h              uct_ep;         /* UCT EP that should be flushed and
-                                                             destroyed */
-                    unsigned              ep_flush_flags; /* Flags that should be passed into
-                                                             @ref uct_ep_flush */
+                    /* UCT EP that should be flushed and destroyed */
+                    uct_ep_h           uct_ep;
+                    /* Flags that should be passed into @ref uct_ep_flush */
+                    unsigned           ep_flush_flags;
+                    /* Progress ID, if it's UCS_CALLBACKQ_ID_NULL, no operations
+                     * are in-progress */
+                    uct_worker_cb_id_t cb_id;
                 } discard_uct_ep;
 
                 struct {
