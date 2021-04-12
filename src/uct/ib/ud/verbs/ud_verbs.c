@@ -71,18 +71,24 @@ uct_ud_verbs_post_send(uct_ud_verbs_iface_t *iface, uct_ud_verbs_ep_t *ep,
 {
     struct ibv_send_wr *bad_wr;
     int UCS_V_UNUSED ret;
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
 
-    if ((send_flags & IBV_SEND_SIGNALED) ||
-        (iface->super.tx.unsignaled >= (UCT_UD_TX_MODERATION - 1))) {
-        wr->send_flags             = send_flags | IBV_SEND_SIGNALED;
-        wr->wr_id                  = iface->super.tx.unsignaled;
-        iface->super.tx.unsignaled = 0;
-    } else {
-        wr->send_flags             = send_flags;
+    if (dev->has_inorder_scomp) {
+        if ((send_flags & IBV_SEND_SIGNALED) ||
+            (iface->super.tx.unsignaled >= (UCT_UD_TX_MODERATION - 1))) {
+            wr->send_flags             = send_flags | IBV_SEND_SIGNALED;
+            wr->wr_id                  = iface->super.tx.unsignaled;
+            iface->super.tx.unsignaled = 0;
+        } else {
+            wr->send_flags             = send_flags;
 #if UCS_ENABLE_ASSERT
-        wr->wr_id                  = UINT64_MAX;
+            wr->wr_id                  = UINT64_MAX;
 #endif
-        ++iface->super.tx.unsignaled;
+            ++iface->super.tx.unsignaled;
+        }
+    } else {
+        wr->send_flags = send_flags | IBV_SEND_SIGNALED;
+        wr->wr_id      = iface->tx.send_sn;
     }
 
     wr->wr.ud.remote_qpn = ep->peer_address.dest_qpn;
@@ -358,6 +364,7 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
     unsigned num_completed;
     struct ibv_wc wc;
     int ret;
+    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super);
 
     ret = ibv_poll_cq(iface->super.super.cq[UCT_IB_DIR_TX], 1, &wc);
     if (ucs_unlikely(ret < 0)) {
@@ -375,14 +382,19 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
         return 0;
     }
 
-    num_completed = wc.wr_id + 1;
-    ucs_assertv(num_completed <= UCT_UD_TX_MODERATION, "num_compeleted=%u",
-                num_completed);
+    if (dev->has_inorder_scomp) {
+        num_completed = wc.wr_id + 1;
+        ucs_assertv(num_completed <= UCT_UD_TX_MODERATION, "num_compeleted=%u",
+                    num_completed);
 
-    iface->super.tx.available += num_completed;
-    iface->tx.comp_sn         += num_completed;
+        iface->super.tx.available += num_completed;
+        iface->tx.comp_sn         += num_completed;
 
-    uct_ud_iface_send_completion(&iface->super, iface->tx.comp_sn, is_async);
+        uct_ud_iface_send_completion(&iface->super, iface->tx.comp_sn, is_async);
+    } else {
+        ++iface->super.tx.available;
+        uct_ud_iface_send_completion(&iface->super, wc.wr_id, is_async);
+    }
     return 1;
 }
 
