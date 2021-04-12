@@ -593,7 +593,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
     if (status == UCS_OK) {
         VALGRIND_MAKE_MEM_UNDEFINED(rndv_req, sizeof(rndv_req));
         /* rndv_req->send.ep is not updated - leave it as defined */
-        VALGRIND_MAKE_MEM_DEFINED(&rndv_req->send.ep, sizeof(rndv_req->send.ep));
+        VALGRIND_MAKE_MEM_DEFINED(&rndv_req->send.ep,
+                                  sizeof(rndv_req->send.ep));
         ucp_rndv_req_send_ack(rndv_req, rreq, rndv_req->send.rndv.remote_req_id,
                               UCS_OK, UCP_AM_ID_RNDV_ATS, "send_ats");
     } else {

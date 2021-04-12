@@ -268,6 +268,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         req->send.rma.rkey        = rkey;
         req->send.rma.remote_addr = remote_addr;
 
+        ucp_request_send_state_clear(req, NULL);
         ret = ucp_proto_request_send_op(ep,
                                         &ucp_rkey_config(worker, rkey)->proto_select,
                                         rkey->cfg_index, req, UCP_OP_ID_PUT,
@@ -368,6 +369,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         req->send.rma.rkey        = rkey;
         req->send.rma.remote_addr = remote_addr;
 
+        ucp_request_send_state_clear(req, NULL);
         ret = ucp_proto_request_send_op(ep,
                                         &ucp_rkey_config(worker, rkey)->proto_select,
                                         rkey->cfg_index, req, UCP_OP_ID_GET,

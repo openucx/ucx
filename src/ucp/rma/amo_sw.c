@@ -261,6 +261,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
         req->send.atomic_reply.remote_req_id = atomicreqh->req.req_id;
         req->send.length                     = atomicreqh->length;
         req->send.uct.func                   = ucp_progress_atomic_reply;
+        ucp_request_send_state_clear(req, NULL);
         ucp_request_send(req, 0);
     }
 

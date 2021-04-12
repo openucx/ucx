@@ -103,7 +103,6 @@
             __req = ((ucp_request_t*)(_param)->request) - 1; \
             ucp_request_id_reset(__req); \
         } \
-        ucp_request_send_state_clear(__req, NULL); \
         __req; \
     })
 
@@ -320,12 +319,16 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_send(ucp_request_t *req, unsigned pending_flags)
 {
 #ifndef NVALGRIND
+    /* test all values used in ucp_request_send_state_ff */
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.func,
                                   sizeof(req->send.state.uct_comp.func));
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.count,
                                   sizeof(req->send.state.uct_comp.count));
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.status,
                                   sizeof(req->send.state.uct_comp.status));
+    VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.uct.func,
+                                  sizeof(&req->send.uct.func));
+    VALGRIND_CHECK_MEM_IS_DEFINED(&req->id, sizeof(&req->id));
 #endif /* NVALGRIND */
     while (!ucp_request_try_send(req, pending_flags));
 }

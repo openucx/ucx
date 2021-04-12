@@ -569,6 +569,7 @@ ucp_worker_flush_nbx_internal(ucp_worker_h worker,
                                          when finished going over all endpoints */
     req->flush_worker.prog_id    = UCS_CALLBACKQ_ID_NULL;
 
+    ucp_request_send_state_clear(req, NULL);
     ucp_worker_flush_req_set_next_ep(req, 0, worker->all_eps.next);
     ucp_request_set_send_callback_param(param, req, flush_worker);
     uct_worker_progress_register_safe(worker->uct, ucp_worker_flush_progress,
