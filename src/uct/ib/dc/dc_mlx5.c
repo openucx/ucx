@@ -1394,7 +1394,10 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     uct_ib_mlx5_txwq_t *txwq = &iface->tx.dcis[dci_index].txwq;
     ucs_status_t status;
 
-    ucs_debug("iface %p reset dci[%d]", iface, dci_index);
+    ucs_debug("iface %p reset dci[%d] qpn 0x%x", iface, dci_index,
+              txwq->super.qp_num);
+
+    ucs_assert(!uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index));
 
     /* Synchronize CQ index with the driver, since it would remove pending
      * completions for this QP (both send and receive) during ibv_destroy_qp().
