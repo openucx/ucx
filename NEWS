@@ -11,6 +11,7 @@
 ### Bugfixes:
 * Fix Infiniband port speed detection for HDR100
 * Fix build issues in gtest-all.cc and sock.c with GCC11
+* Fix performance degradation with cuda memory on self endpoint
 
 ## 1.10.0 (March 9, 2021)
 ### Features:

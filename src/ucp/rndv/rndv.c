@@ -107,9 +107,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq, worker->context) &&
-        (UCP_MEM_IS_HOST(sreq->send.mem_type) ||
-         (sreq->send.state.dt.dt.contig.md_map != 0))) {
+        ucp_rndv_is_get_zcopy(sreq, worker->context)) {
         /* pack rkey, ask target to do get_zcopy */
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
@@ -1228,6 +1226,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     ucp_ep_config_t *ep_config;
     ucs_status_t status;
     int is_get_zcopy_failed;
+    ucs_memory_type_t src_mem_type;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -1254,6 +1253,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     rndv_req->send.mdesc        = NULL;
     rndv_req->send.pending_lane = UCP_NULL_LANE;
     is_get_zcopy_failed         = 0;
+    src_mem_type                = UCS_MEMORY_TYPE_HOST;
 
     ucp_trace_req(rreq,
                   "rndv matched remote {address 0x%"PRIx64" size %zu sreq_id "
@@ -1296,6 +1296,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             /* fallback to non get zcopy protocol */
             ucp_rkey_destroy(rndv_req->send.rndv_get.rkey);
             is_get_zcopy_failed = 1;
+            src_mem_type        = ucp_rkey_packed_mem_type(rkey_buf);
         }
 
         if (rndv_mode == UCP_RNDV_MODE_AUTO) {
@@ -1324,8 +1325,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             }
         }
 
-        if (!is_get_zcopy_failed) {
-            /* put protocol is allowed - register receive buffer memory for rma */
+        if (!is_get_zcopy_failed || !UCP_MEM_IS_HOST(src_mem_type)) {
+            /* register receive buffer for
+             * put protocol (or) pipeline rndv for non-host memory type
+             */
             ucs_assert(rndv_rts_hdr->size <= rreq->recv.length);
             ucp_request_recv_buffer_reg(rreq, ep_config->key.rma_bw_md_map,
                                         rndv_rts_hdr->size);
