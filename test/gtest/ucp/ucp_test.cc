@@ -500,7 +500,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params,
                               const ucp_test_base *test_owner)
-    : m_err_cntr(0), m_rejected_cntr(0)
+    : m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0)
 {
     const int thread_type                   = test_param.variant.thread_type;
     ucp_params_t local_ctx_params           = test_param.variant.ctx_params;
@@ -616,9 +616,10 @@ bool ucp_test_base::entity::verify_client_address(struct sockaddr_storage
     return false;
 }
 
-ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
-                                       ucp_conn_request_h conn_request)
+void ucp_test_base::entity::accept(int worker_index,
+                                   ucp_conn_request_h conn_request)
 {
+    ucp_worker_h ucp_worker   = worker(worker_index);
     ucp_ep_params_t ep_params = *m_server_ep_params;
     ucp_conn_request_attr_t attr;
     ucs_status_t status;
@@ -636,17 +637,17 @@ ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
     ep_params.user_data    = reinterpret_cast<void*>(this);
     ep_params.conn_request = conn_request;
 
-    status = ucp_ep_create(worker, &ep_params, &ep);
+    status = ucp_ep_create(ucp_worker, &ep_params, &ep);
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                         "feature or no supported transport to send partial "
                         "worker address)");
     } else if (status != UCS_OK) {
-        add_err(status);
-        ep = NULL;
+        ++m_accept_err_cntr;
+        return;
     }
 
-    return ep;
+    set_ep(ep, worker_index, std::numeric_limits<int>::max());
 }
 
 
@@ -879,10 +880,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     if (!m_conn_reqs.empty()) {
         ucp_conn_request_h conn_req = m_conn_reqs.back();
         m_conn_reqs.pop();
-        ucp_ep_h ep = accept(ucp_worker, conn_req);
-        if (ep != NULL) {
-            set_ep(ep, worker_index, std::numeric_limits<int>::max());
-        }
+        accept(worker_index, conn_req);
         ++progress_count;
     }
 
@@ -915,6 +913,10 @@ const size_t &ucp_test_base::entity::get_err_num_rejected() const {
 
 const size_t &ucp_test_base::entity::get_err_num() const {
     return m_err_cntr;
+}
+
+const size_t &ucp_test_base::entity::get_accept_err_num() const {
+    return m_accept_err_cntr;
 }
 
 void ucp_test_base::entity::warn_existing_eps() const {

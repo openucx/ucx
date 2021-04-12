@@ -93,7 +93,7 @@ public:
 
         bool verify_client_address(struct sockaddr_storage *client_address);
 
-        ucp_ep_h accept(ucp_worker_h worker, ucp_conn_request_h conn_request);
+        void accept(int worker_index, ucp_conn_request_h conn_request);
 
         void* modify_ep(const ucp_ep_params_t& ep_params, int worker_idx = 0,
                        int ep_idx = 0);
@@ -141,6 +141,8 @@ public:
 
         const size_t &get_err_num() const;
 
+        const size_t &get_accept_err_num() const;
+
         void warn_existing_eps() const;
 
         double set_ib_ud_timeout(double timeout_sec);
@@ -161,6 +163,7 @@ public:
         close_ep_reqs_t                 m_close_ep_reqs;
         size_t                          m_err_cntr;
         size_t                          m_rejected_cntr;
+        size_t                          m_accept_err_cntr;
         ucs::handle<ucp_ep_params_t*>   m_server_ep_params;
 
     private:
