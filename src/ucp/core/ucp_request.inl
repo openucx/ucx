@@ -327,8 +327,8 @@ ucp_request_send(ucp_request_t *req, unsigned pending_flags)
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.status,
                                   sizeof(req->send.state.uct_comp.status));
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.uct.func,
-                                  sizeof(&req->send.uct.func));
-    VALGRIND_CHECK_MEM_IS_DEFINED(&req->id, sizeof(&req->id));
+                                  sizeof(req->send.uct.func));
+    VALGRIND_CHECK_MEM_IS_DEFINED(&req->id, sizeof(req->id));
 #endif /* NVALGRIND */
     while (!ucp_request_try_send(req, pending_flags));
 }
