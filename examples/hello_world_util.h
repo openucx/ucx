@@ -43,6 +43,11 @@
         } \
     } while (0)
 
+typedef enum rma_op {
+    TEST_RMA_PUT,
+    TEST_RMA_GET,
+    TEST_RMA_LAST
+} rma_op_t;
 
 static ucs_memory_type_t test_mem_type = UCS_MEMORY_TYPE_HOST;
 
@@ -162,6 +167,19 @@ int check_mem_type_support(ucs_memory_type_t mem_type)
     return 0;
 }
 
+rma_op_t parse_rma_type(const char *opt_arg)
+{
+    if (!strcmp(opt_arg, "put")) {
+        return TEST_RMA_PUT;
+    } else if (!strcmp(opt_arg, "get")) {
+        return TEST_RMA_GET;
+    } else {
+        fprintf(stderr, "Unsupported RMA type: \"%s\".\n", opt_arg);
+    }
+
+    return TEST_RMA_LAST;
+}
+
 ucs_memory_type_t parse_mem_type(const char *opt_arg)
 {
     if (!strcmp(opt_arg, "host")) {
@@ -194,6 +212,9 @@ void print_common_help()
     if (check_mem_type_support(UCS_MEMORY_TYPE_CUDA_MANAGED)) {
         fprintf(stderr, "                 cuda-managed - NVIDIA GPU managed/unified memory\n");
     }
+    fprintf(stderr, "  -o <rma type>  use rma operations\n");
+    fprintf(stderr, "                 put - use ucp_put_nbx\n");
+    fprintf(stderr, "                 get - use ucp_get_nbx\n");
 }
 
 int server_connect(uint16_t server_port)
