@@ -412,6 +412,15 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
             uct_cm_ep_peer_error(&cep->super,
                                  "rdma_connect(on id=%p) failed: %m", cep->id);
             status = UCS_ERR_IO_ERROR;
+
+            /* If priv_pack_cb was specified, it means that error was detected
+             * while sending CM prviate data during handling "route resolved"
+             * RDMACM event, otherwise - error was detected when creating UCT EP
+             * and error should be returned to a user from uct_ep_create()
+             * status */
+            if (cep->super.priv_pack_cb != NULL) {
+                uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+            }
             goto err;
         }
     } else {
@@ -432,7 +441,6 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
 err:
     uct_rdmacm_cm_ep_destroy_dummy_qp(cep);
     remote_data.field_mask = 0;
-    uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
     return status;
 }
 
