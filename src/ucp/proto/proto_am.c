@@ -101,17 +101,10 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self)
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
                                            send.state.uct_comp);
 
-    if (req->send.state.dt.offset == req->send.length) {
-        ucp_proto_am_zcopy_req_complete(req, self->status);
-    } else if (self->status != UCS_OK) {
-        ucs_assert(req->send.state.uct_comp.count == 0);
-        ucs_assert(self->status != UCS_INPROGRESS);
-
-        /* NOTE: the request is in pending queue if data was not completely sent,
-         *       just dereg the buffer here and complete request on purge
-         *       pending later.
-         */
-        ucp_request_send_buffer_dereg(req);
-        req->send.state.uct_comp.func = NULL;
+    if (req->send.state.dt.offset != req->send.length) {
+        /* Cannot complete since not all fragments were posted yet */
+        return;
     }
+
+    ucp_proto_am_zcopy_req_complete(req, self->status);
 }
