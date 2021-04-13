@@ -1,20 +1,38 @@
 # See https://aka.ms/yaml
 # This pipeline to be run on direct pushes and merges
 
-pr: none
 trigger:
   - master
   - v*.*.x
 
 resources:
   containers:
-    - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:1
-      endpoint: ucfconsort_registry
+    - container: ubuntu20_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.2:2
 
 stages:
+  - stage: Check_Commit
+    jobs:
+      - job: Check
+        steps:
+          - checkout: self
+            clean: true
+
+          - bash: |
+              set -eE
+              source ./buildlib/az-helpers.sh
+              set -x
+              check_commit_message $(system.pullRequest.sourceCommitId) "AZP/SNAPSHOT: " $(Build.Reason)
+            name: Commit
   - stage: Build
+    dependsOn: Check_Commit
+    variables:
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+        TARGET: publish-snapshot
+      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+        TARGET: package
     jobs:
       - template: jucx/jucx-publish.yml
         parameters:
-          target: publish-snapshot
+          target: $(TARGET)
+

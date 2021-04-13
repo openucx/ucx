@@ -71,8 +71,7 @@ enum {
     UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
     UCP_REQUEST_SEND_PROTO_RNDV_GET,
     UCP_REQUEST_SEND_PROTO_RNDV_PUT,
-    UCP_REQUEST_SEND_PROTO_RMA,
-    UCP_REQUEST_SEND_PROTO_RNDV_ACK
+    UCP_REQUEST_SEND_PROTO_RMA
 };
 
 
@@ -254,10 +253,13 @@ struct ucp_request {
                 } flush;
 
                 struct {
-                    uct_ep_h              uct_ep;         /* UCT EP that should be flushed and
-                                                             destroyed */
-                    unsigned              ep_flush_flags; /* Flags that should be passed into
-                                                             @ref uct_ep_flush */
+                    /* UCT EP that should be flushed and destroyed */
+                    uct_ep_h           uct_ep;
+                    /* Flags that should be passed into @ref uct_ep_flush */
+                    unsigned           ep_flush_flags;
+                    /* Progress ID, if it's UCS_CALLBACKQ_ID_NULL, no operations
+                     * are in-progress */
+                    uct_worker_cb_id_t cb_id;
                 } discard_uct_ep;
 
                 struct {
@@ -449,7 +451,5 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
-
-void ucp_proto_comp_cb(uct_completion_t *comp);
 
 #endif

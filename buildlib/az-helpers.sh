@@ -130,3 +130,19 @@ try_load_cuda_env() {
 		num_gpus=$(nvidia-smi -L | wc -l)
 	fi
 }
+
+
+check_commit_message() {
+    git_id=$1
+    title_mask=$2
+    build_reason=$3
+    echo "Get commit message target $git_id"
+    title=`git log -1 --format="%s" $git_id`
+
+    if [[ ( "$build_reason" == "IndividualCI" ) || ( "$title" == "$title_mask"* && "$build_reason" == "PullRequest" ) ]]
+    then
+        echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
+    else
+        echo "##vso[task.setvariable variable=Launch;isOutput=true]No"
+    fi
+}

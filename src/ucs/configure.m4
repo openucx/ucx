@@ -146,7 +146,7 @@ AC_ARG_ENABLE([logging],
 	)
 
 AS_CASE([$enable_logging],
-        [no],          [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_INFO], [Highest log level])],
+        [no],          [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_DEBUG], [Highest log level])],
         [warn],        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_WARN], [Highest log level])],
         [diag],        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_DIAG], [Highest log level])],
         [info],        [AC_DEFINE([UCS_MAX_LOG_LEVEL], [UCS_LOG_LEVEL_INFO], [Highest log level])],

@@ -764,4 +764,8 @@ ucs_status_t
 uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
                        uct_completion_t *comp);
 
+void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
+
+ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
+
 #endif

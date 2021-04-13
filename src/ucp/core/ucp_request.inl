@@ -410,7 +410,6 @@ ucp_request_send_state_reset(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-    case UCP_REQUEST_SEND_PROTO_RNDV_ACK:
         ucp_request_send_state_clear(req, comp_cb);
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
