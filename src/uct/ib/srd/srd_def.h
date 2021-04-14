@@ -10,13 +10,16 @@
 #include <uct/ib/base/ib_iface.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/datastruct/frag_list.h>
 #include <ucs/sys/math.h>
 
 
+#define UCT_SRD_INITIAL_PSN      1
 #define UCT_SRD_RX_BATCH_MIN     8
 #define UCT_SRD_SKB_ALIGN        UCS_SYS_CACHE_LINE_SIZE
 
 
+typedef ucs_frag_list_sn_t        uct_srd_psn_t;
 typedef struct uct_srd_iface      uct_srd_iface_t;
 typedef struct uct_srd_ep         uct_srd_ep_t;
 typedef struct uct_srd_ctl_hdr    uct_srd_ctl_hdr_t;
@@ -55,6 +58,8 @@ Active message packet header
 +---------------------------------------------------------------+
 | am_id   |rsv|1|            dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
+|       psn (16 bit)        |
++----------------------------
 
 Control packet header
 
@@ -63,6 +68,8 @@ Control packet header
 +---------------------------------------------------------------+
 |rsv|C|0|                    dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
+|       psn (16 bit)        |
++----------------------------
 
     // neth layout in human readable form
     uint32_t           dest_ep_id:24;
@@ -70,7 +77,7 @@ Control packet header
     union {
         struct { // am false
             uint8_t ctl:1;
-            uint8_t reserved:2;
+            uint8_t reserved:6;
         } ctl;
         struct { // am true
             uint8_t reserved:2;
@@ -80,7 +87,8 @@ Control packet header
 */
 
 typedef struct uct_srd_neth {
-    uint32_t            packet_type;
+    uint32_t             packet_type;
+    uct_srd_psn_t        psn;
 } UCS_S_PACKED uct_srd_neth_t;
 
 
@@ -109,10 +117,7 @@ typedef struct uct_srd_send_skb {
     uint32_t                lkey;
     uint16_t                len;        /* data size */
     uint16_t                flags;
-    struct {
-        uct_srd_ep_t        *ep;        /* ep that sends skb */
-        uint16_t            sn;         /* ep sequence number */
-    } ep;
+    uct_srd_ep_t            *ep;        /* ep that sends skb */
     uct_srd_neth_t          neth[0];
 } UCS_S_PACKED UCS_V_ALIGNED(UCT_SRD_SKB_ALIGN) uct_srd_send_skb_t;
 
@@ -146,7 +151,9 @@ typedef struct uct_srd_zcopy_desc {
 typedef struct uct_srd_recv_skb {
     uct_ib_iface_recv_desc_t super;
     struct {
-        ucs_queue_elem_t         queue;
+        ucs_frag_list_elem_t     elem;
+    } ooo;
+    struct {
         uint32_t                 len;
     } am;
 } uct_srd_recv_skb_t;

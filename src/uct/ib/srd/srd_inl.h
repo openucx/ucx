@@ -67,8 +67,9 @@ static UCS_F_ALWAYS_INLINE uct_srd_send_skb_t *
 uct_srd_ep_get_tx_skb(uct_srd_iface_t *iface, uct_srd_ep_t *ep)
 {
     if (ucs_unlikely(!uct_srd_ep_is_connected_and_no_pending(ep))) {
-        ucs_trace_poll("iface=%p ep=%p (%d->%d) no ep resources",
-                       iface, ep, ep->ep_id, ep->dest_ep_id);
+        ucs_trace_poll("iface=%p ep=%p (%d->%d) no ep resources (psn=%u)",
+                       iface, ep, ep->ep_id, ep->dest_ep_id,
+                       (unsigned)ep->tx.psn);
         UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
         return NULL;
     }
@@ -172,6 +173,7 @@ uct_srd_ep_tx_inlv(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
     iface->tx.sge[1].length  = length;
     iface->tx.wr_inl.num_sge = 2;
     iface->tx.wr_inl.wr_id   = (uintptr_t)skb;
+    skb->neth->psn           = ep->tx.psn;
     uct_srd_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE, 2);
 }
 
@@ -184,6 +186,7 @@ uct_srd_ep_tx_skb(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
     iface->tx.sge[0].length = skb->len;
     iface->tx.sge[0].addr   = (uintptr_t)skb->neth;
     iface->tx.wr_skb.wr_id  = (uintptr_t)skb;
+    skb->neth->psn          = ep->tx.psn;
     uct_srd_post_send(iface, ep, &iface->tx.wr_skb, send_flags, max_log_sge);
 }
 
@@ -193,9 +196,9 @@ uct_srd_iface_complete_tx(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
 {
     iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     iface->tx.available--;
-    skb->ep.ep = ep;
-    skb->ep.sn = ep->tx.send_sn++;
-    skb->sn    = iface->tx.send_sn++;
+    ep->tx.psn++;
+    skb->ep = ep;
+    skb->sn = iface->tx.send_sn++;
     ucs_queue_push(&ep->tx.outstanding_q, &skb->out_queue);
 }
 
@@ -223,6 +226,7 @@ uct_srd_am_skb_common(uct_srd_iface_t *iface, uct_srd_ep_t *ep, uint8_t id,
                 &ep->tx.pending.elem);
 
     neth = skb->neth;
+    uct_srd_neth_init_data(ep, neth);
     uct_srd_neth_set_type_am(ep, neth, id);
 
     *skb_p = skb;
