@@ -45,10 +45,12 @@ static void uct_srd_peer_copy(uct_srd_peer_name_t *dst,
 
 static void uct_srd_ep_reset(uct_srd_ep_t *ep)
 {
-    ep->tx.send_sn         = 0;
+    ep->tx.psn             = UCT_SRD_INITIAL_PSN;
     ep->tx.pending.ops     = UCT_SRD_EP_OP_NONE;
     ep->rx_creq_count      = 0;
     ucs_queue_head_init(&ep->tx.outstanding_q);
+    ucs_frag_list_init(ep->tx.psn - 1, &ep->rx.ooo_pkts, -1
+                       UCS_STATS_ARG(ep->super.stats));
 }
 
 static void uct_srd_ep_purge(uct_srd_ep_t *ep, ucs_status_t status)
@@ -121,6 +123,7 @@ static ucs_status_t uct_srd_ep_connect_to_iface(uct_srd_ep_t *ep,
     uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(&iface->super);
     char buf[128];
 
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_srd_ep_reset(ep);
 
     ucs_debug(UCT_IB_IFACE_FMT" lid %d qpn 0x%x epid %u ep %p connected to "
@@ -137,6 +140,7 @@ static ucs_status_t uct_srd_ep_disconnect_from_iface(uct_ep_h tl_ep)
 {
     uct_srd_ep_t *ep = ucs_derived_of(tl_ep, uct_srd_ep_t);
 
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_srd_ep_reset(ep);
 
     ep->dest_ep_id = UCT_SRD_EP_NULL_ID;
@@ -248,6 +252,7 @@ ucs_status_t uct_srd_ep_connect_to_ep(uct_ep_h tl_ep,
 
     uct_srd_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ep_addr->ep_id));
 
+    ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_srd_ep_reset(ep);
 
     ucs_debug(UCT_IB_IFACE_FMT" slid %d qpn 0x%x epid %u connected to %s "
@@ -307,14 +312,17 @@ static void uct_srd_ep_rx_creq(uct_srd_iface_t *iface, uct_srd_neth_t *neth)
     if (ep == NULL) {
         ep = uct_srd_ep_create_passive(iface, ctl);
         ucs_assert_always(ep != NULL);
+        ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_srd_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
     } else if (ep->dest_ep_id == UCT_SRD_EP_NULL_ID) {
         /* simultaneuous CREQ */
         uct_srd_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
+        ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_srd_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         ucs_debug("simultaneuous CREQ ep=%p"
-                  "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d)",
-                  ep, iface, ep->conn_sn, ep->ep_id, ep->dest_ep_id);
+                  "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
+                  ep, iface, ep->conn_sn, ep->ep_id,
+                  ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
     }
     uct_srd_ep_ctl_op_add(iface, ep, UCT_SRD_EP_OP_CREP);
 
@@ -333,6 +341,14 @@ static void uct_srd_ep_rx_creq(uct_srd_iface_t *iface, uct_srd_neth_t *neth)
                        "creq->ep_addr.ep_id=%d ep->dest_ep_id=%d",
                        uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id),
                        ep->dest_ep_id);
+
+    /* creq must always have same psn */
+    ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
+                       "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
+                       "neth_psn=%u ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
+                       iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
+                       ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags,
+                       ep->tx.pending.ops, ep->rx_creq_count);
 
     /* schedule connection reply op */
     if (uct_srd_ep_ctl_op_check(ep, UCT_SRD_EP_OP_CREQ)) {
@@ -358,6 +374,7 @@ static void uct_srd_ep_rx_crep(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
                            uct_srd_neth_get_dest_id(neth), ctl->conn_rep.src_ep_id);
     }
 
+    ep->rx.ooo_pkts.head_sn = neth->psn;
     uct_srd_ep_set_dest_ep_id(ep, ctl->conn_rep.src_ep_id);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     uct_srd_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
@@ -379,10 +396,10 @@ uct_srd_send_skb_t *uct_srd_ep_prepare_creq(uct_srd_ep_t *ep)
      * (or sent already) */
     ucs_assertv_always(!uct_srd_ep_ctl_op_check(ep, UCT_SRD_EP_OP_CREP) &&
                        !(ep->flags & UCT_SRD_EP_FLAG_CREP_SENT),
-                       "iface=%p ep=%p conn_sn=%d ep_flags=0x%x "
+                       "iface=%p ep=%p conn_sn=%d rx_psn=%u ep_flags=0x%x "
                        "ctl_ops=0x%x rx_creq_count=%d",
-                       iface, ep, ep->conn_sn, ep->flags,
-                       ep->tx.pending.ops, ep->rx_creq_count);
+                       iface, ep, ep->conn_sn, ep->rx.ooo_pkts.head_sn,
+                       ep->flags, ep->tx.pending.ops, ep->rx_creq_count);
 
     skb = uct_srd_iface_get_tx_skb(iface, ep);
     if (!skb) {
@@ -390,6 +407,8 @@ uct_srd_send_skb_t *uct_srd_ep_prepare_creq(uct_srd_ep_t *ep)
     }
 
     neth = skb->neth;
+    uct_srd_neth_init_data(ep, neth);
+
     neth->packet_type  = UCT_SRD_EP_NULL_ID;
     neth->packet_type |= UCT_SRD_PACKET_FLAG_CTLX;
 
@@ -421,11 +440,14 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
                            unsigned byte_len, uct_srd_recv_skb_t *skb)
 {
     uint32_t dest_id;
-    uint32_t is_am, am_id;
+    uint32_t is_am;
     uct_srd_ep_t *ep = 0;
+    ucs_frag_list_elem_t *elem;
+    ucs_frag_list_ooo_type_t ooo_type;
+
+    ucs_trace_func("");
 
     dest_id = uct_srd_neth_get_dest_id(neth);
-    am_id   = uct_srd_neth_get_am_id(neth);
     is_am   = neth->packet_type & UCT_SRD_PACKET_FLAG_AM;
 
     if (ucs_unlikely(dest_id == UCT_SRD_EP_NULL_ID)) {
@@ -435,7 +457,7 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
     }
 
     if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
-                            (ep->ep_id != dest_id)))
+                     (ep->ep_id != dest_id)))
     {
         /* Drop the packet because it is
          * allowed to do disconnect without flush/barrier. So it
@@ -459,8 +481,37 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
         }
     }
 
-    uct_ib_iface_invoke_am_desc(&iface->super, am_id, neth + 1,
-                                byte_len - sizeof(*neth), &skb->super);
+    ucs_assert(is_am);
+
+    skb->am.len = byte_len - sizeof(*neth);
+    ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->ooo.elem, neth->psn);
+    ucs_assert(ooo_type != UCS_FRAG_LIST_INSERT_DUP);
+
+    if (ucs_unlikely(ooo_type == UCS_FRAG_LIST_INSERT_FAIL)) {
+        ucs_fatal("failed to insert SRD packet (psn %u) into rx frag list %p",
+                  neth->psn, &ep->rx.ooo_pkts);
+        goto out;
+    }
+
+    if (ooo_type == UCS_FRAG_LIST_INSERT_FAST ||
+        ooo_type == UCS_FRAG_LIST_INSERT_FIRST) {
+        /* skb has not been inserted into the frag list */
+        uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
+                                    neth + 1, skb->am.len, &skb->super);
+    }
+
+    if (ooo_type == UCS_FRAG_LIST_INSERT_FIRST ||
+        ooo_type == UCS_FRAG_LIST_INSERT_READY) {
+        /* it is now possible to pull (in order) some old elements */
+        while ((elem = ucs_frag_list_pull(&ep->rx.ooo_pkts))) {
+            skb  = ucs_container_of(elem, typeof(*skb), ooo.elem);
+            neth = (typeof(neth))uct_ib_iface_recv_desc_hdr(&iface->super,
+                                                            (uct_ib_iface_recv_desc_t*)skb);
+            uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
+                                        neth + 1, skb->am.len, &skb->super);
+        }
+    }
+
     return;
 
 out:
@@ -512,14 +563,14 @@ ucs_status_t uct_srd_ep_flush_nolock(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
                                       UCT_SRD_SEND_SKB_FLAG_FLUSH;
         skb->len                    = sizeof(skb->neth[0]);
         skb->neth->packet_type      = 0;
-        skb->ep.sn                  = ep->tx.send_sn - 1;
+        skb->neth->psn              = ep->tx.psn - 1;
         uct_srd_neth_set_dest_id(skb->neth, UCT_SRD_EP_NULL_ID);
         uct_srd_comp_desc(skb)->comp = comp;
 
         ucs_queue_push(&ep->tx.outstanding_q, &skb->out_queue);
 
-        ucs_trace_data("added dummy flush skb %p sn %d user_comp %p",
-                       skb, skb->sn, comp);
+        ucs_trace_data("added dummy flush skb %p psn %d user_comp %p",
+                       skb, skb->neth->psn, comp);
     }
 
     return UCS_INPROGRESS;
@@ -579,9 +630,10 @@ static uct_srd_send_skb_t *uct_srd_ep_prepare_crep(uct_srd_ep_t *ep)
     /* Check that CREQ is not sheduled */
     ucs_assertv_always(!uct_srd_ep_ctl_op_check(ep, UCT_SRD_EP_OP_CREQ),
                        "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d "
-                       "ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
+                       "rx_psn=%u ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
                        iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
-                       ep->flags, ep->tx.pending.ops, ep->rx_creq_count);
+                       ep->rx.ooo_pkts.head_sn, ep->flags, ep->tx.pending.ops,
+                       ep->rx_creq_count);
 
     skb = uct_srd_iface_get_tx_skb(iface, ep);
     if (!skb) {
@@ -589,6 +641,8 @@ static uct_srd_send_skb_t *uct_srd_ep_prepare_crep(uct_srd_ep_t *ep)
     }
 
     neth = skb->neth;
+    uct_srd_neth_init_data(ep, neth);
+
     neth->packet_type  = ep->dest_ep_id;
     neth->packet_type |= UCT_SRD_PACKET_FLAG_CTLX;
 
@@ -784,7 +838,8 @@ ucs_status_t uct_srd_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
     uct_srd_ep_set_has_pending_flag(ep);
     uct_pending_req_arb_group_push(&ep->tx.pending.group, req);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
-    ucs_trace_data("srd ep %p: added pending req %p", ep, req);
+    ucs_trace_data("srd ep %p: added pending req %p tx_psn %d",
+                   ep, req, ep->tx.psn);
     UCT_TL_EP_STAT_PEND(&ep->super);
 
     uct_srd_leave(iface);
@@ -910,6 +965,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
 
     uct_srd_iface_remove_ep(iface, self);
     uct_srd_iface_cep_remove_ep(iface, self);
+    ucs_frag_list_cleanup(&self->rx.ooo_pkts);
 
     ucs_arbiter_group_purge(&iface->tx.pending_q, &self->tx.pending.group,
                             uct_srd_ep_pending_cancel_cb, 0);

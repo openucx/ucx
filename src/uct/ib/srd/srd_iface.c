@@ -106,6 +106,7 @@ static ucs_status_t uct_srd_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
     iface->tx.wr_inl.num_sge =
         uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1, iov, iovcnt) + 1;
 
+    skb->neth->psn = ep->tx.psn++;
     uct_srd_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE,
                       iface->tx.wr_inl.num_sge);
 
@@ -190,7 +191,6 @@ uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
 
 static void uct_srd_ep_send_completion(uct_srd_send_skb_t *skb)
 {
-    uct_srd_ep_t *ep = skb->ep.ep;
     uct_srd_send_skb_t *q_skb;
     ucs_queue_iter_t iter;
 
@@ -199,18 +199,18 @@ static void uct_srd_ep_send_completion(uct_srd_send_skb_t *skb)
     /* If the completed skb is still in ep outstanding queue
      * remove it from the queue and call the user callback.
      * ep purge might have already removed the completed skb */
-    ucs_queue_for_each_safe(q_skb, iter, &ep->tx.outstanding_q, out_queue) {
+    ucs_queue_for_each_safe(q_skb, iter, &skb->ep->tx.outstanding_q, out_queue) {
         if (q_skb == skb) {
             if (ucs_unlikely((skb->flags & UCT_SRD_SEND_SKB_FLAG_COMP))) {
                 uct_invoke_completion(uct_srd_comp_desc(skb)->comp, UCS_OK);
             }
-            ucs_queue_del_iter(&ep->tx.outstanding_q, iter);
+            ucs_queue_del_iter(&skb->ep->tx.outstanding_q, iter);
             break;
         }
     }
 
     /* while queue head is flush skb, remove it and call user callback */
-    ucs_queue_for_each_extract(q_skb, &ep->tx.outstanding_q, out_queue,
+    ucs_queue_for_each_extract(q_skb, &skb->ep->tx.outstanding_q, out_queue,
                                q_skb->flags & UCT_SRD_SEND_SKB_FLAG_FLUSH) {
         /* outstanding flush must have completion callback. */
         ucs_assert(!(q_skb->flags & UCT_SRD_SEND_SKB_FLAG_COMP));

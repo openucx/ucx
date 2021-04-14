@@ -10,6 +10,7 @@
 #include "srd_def.h"
 
 #include <uct/api/uct.h>
+#include <ucs/datastruct/frag_list.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/datastruct/sglib.h>
@@ -86,12 +87,14 @@ struct uct_srd_ep {
     uint32_t                          ep_id;
     uint32_t                          dest_ep_id;
     struct {
-        uint16_t                      send_sn;
+        uct_srd_psn_t                 psn;     /* Next PSN to send */
         uct_srd_ep_pending_op_t       pending; /* pending ops */
         ucs_queue_head_t              outstanding_q; /* queue of dummy flush skbs */
         UCS_STATS_NODE_DECLARE(stats)
     } tx;
     struct {
+        ucs_frag_list_t               ooo_pkts; /* Out of order packets that
+                                                   can not be processed yet */
         UCS_STATS_NODE_DECLARE(stats)
     } rx;
     ucs_conn_match_elem_t             conn_match;
@@ -176,6 +179,12 @@ uct_srd_neth_set_type_am(uct_srd_ep_t *ep, uct_srd_neth_t *neth, uint8_t id)
     neth->packet_type = (id << UCT_SRD_PACKET_AM_ID_SHIFT) |
                         ep->dest_ep_id |
                         UCT_SRD_PACKET_FLAG_AM;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_srd_neth_init_data(uct_srd_ep_t *ep, uct_srd_neth_t *neth)
+{
+    neth->psn = ep->tx.psn;
 }
 
 void uct_srd_ep_process_rx(uct_srd_iface_t *iface,
