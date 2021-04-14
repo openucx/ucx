@@ -163,7 +163,8 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
                                     ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker        = ucp_ep->worker;
-    uint64_t addr_pack_flags   = UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
+    unsigned addr_pack_flags   = ucp_worker_common_address_pack_flags(worker) |
+                                 UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
                                  UCP_ADDRESS_PACK_FLAG_IFACE_ADDR;
     ucp_wireup_ep_t *wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucp_tl_bitmap_t tl_bitmap  = ucp_context_dev_tl_bitmap(worker->context,
@@ -330,6 +331,12 @@ out:
     return status;
 }
 
+static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
+{
+    return ucp_worker_common_address_pack_flags(worker) |
+           UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
+}
+
 static ucs_status_t
 ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
 {
@@ -415,7 +422,7 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
      * delivered by uct_cm_listener_conn_request_callback_t in
      * uct_cm_remote_data_t */
     status = ucp_address_pack(worker, cm_wireup_ep->tmp_ep, &tl_bitmap,
-                              UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT, NULL,
+                              ucp_cm_address_pack_flags(worker), NULL,
                               &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out_check_err;
@@ -542,7 +549,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
 
     status = ucp_address_unpack(worker, progress_arg->sa_data + 1,
-                                UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT, &addr);
+                                ucp_cm_address_pack_flags(worker), &addr);
     if (status != UCS_OK) {
         goto out;
     }
@@ -1208,7 +1215,7 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
             UCP_MAX_RESOURCES));
 
     status = ucp_address_pack(worker, ep, &tl_bitmap,
-                              UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT, NULL,
+                              ucp_cm_address_pack_flags(worker), NULL,
                               &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;

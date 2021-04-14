@@ -112,8 +112,10 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->num_lanes        = 0;
     for (i = 0; i < UCP_MAX_LANES; ++i) {
         key->lanes[i].rsc_index    = UCP_NULL_RESOURCE;
-        key->lanes[i].lane_types   = 0;
         key->lanes[i].dst_md_index = UCP_NULL_RESOURCE;
+        key->lanes[i].dst_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
+        key->lanes[i].path_index   = 0;
+        key->lanes[i].lane_types   = 0;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_msg_lane  = UCP_NULL_LANE;
@@ -401,6 +403,7 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
+    unsigned pack_flags   = ucp_worker_default_address_pack_flags(worker);
     ucp_unpacked_address_t local_address;
     ucs_memory_type_t mem_type;
     ucs_status_t status;
@@ -417,14 +420,13 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 
         status = ucp_address_pack(worker, NULL,
                                   &context->mem_type_access_tls[mem_type],
-                                  UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT, NULL,
-                                  &address_length, &address_buffer);
+                                  pack_flags, NULL, &address_length,
+                                  &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
 
-        status = ucp_address_unpack(worker, address_buffer,
-                                    UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT,
+        status = ucp_address_unpack(worker, address_buffer, pack_flags,
                                     &local_address);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
@@ -650,7 +652,8 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                   sa_data->addr_mode);
     }
 
-    addr_flags = UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
+    addr_flags = ucp_worker_common_address_pack_flags(worker) |
+                 UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 
     /* coverity[overrun-local] */
     status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
@@ -713,7 +716,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
     status = ucp_address_unpack(worker, params->address,
-                                UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT,
+                                ucp_worker_default_address_pack_flags(worker),
                                 &remote_address);
     if (status != UCS_OK) {
         goto out;
@@ -1286,6 +1289,7 @@ static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
     return (config_lane1->rsc_index == config_lane2->rsc_index) &&
            (config_lane1->path_index == config_lane2->path_index) &&
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
+           (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
            (config_lane1->lane_types == config_lane2->lane_types);
 }
 
@@ -2315,13 +2319,9 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
 
     dst_md_index = key->lanes[lane].dst_md_index;
     cmpt_index   = ucp_ep_config_get_dst_md_cmpt(key, dst_md_index);
-    ucs_string_buffer_appendf(strbuf, "md[%d]/%-8s", dst_md_index,
-             context->tl_cmpts[cmpt_index].attr.name);
-
-    prio = ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane);
-    if (prio != -1) {
-        ucs_string_buffer_appendf(strbuf, " rma#%d", prio);
-    }
+    ucs_string_buffer_appendf(strbuf, "md[%d]/%s/sysdev[%d]", dst_md_index,
+                              context->tl_cmpts[cmpt_index].attr.name,
+                              key->lanes[lane].dst_sys_dev);
 
     prio = ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane);
     if (prio != -1) {

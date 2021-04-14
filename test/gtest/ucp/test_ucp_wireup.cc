@@ -410,6 +410,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     size_t size;
     void *buffer;
     std::set<uint8_t> packed_dev_priorities, unpacked_dev_priorities;
+    std::set<ucs_sys_device_t> packed_sys_devices, unpacked_sys_devices;
     ucp_rsc_index_t tl;
 
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
@@ -421,10 +422,14 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
 
     UCS_BITMAP_FOR_EACH_BIT(sender().worker()->context->tl_bitmap, tl) {
-        if (sender().worker()->context->tl_rscs[tl].flags & UCP_TL_RSC_FLAG_SOCKADDR) {
+        const ucp_tl_resource_desc_t &rsc =
+                sender().worker()->context->tl_rscs[tl];
+        if (rsc.flags & UCP_TL_RSC_FLAG_SOCKADDR) {
             continue;
         }
-        packed_dev_priorities.insert(ucp_worker_iface_get_attr(sender().worker(), tl)->priority);
+        packed_dev_priorities.insert(
+                ucp_worker_iface_get_attr(sender().worker(), tl)->priority);
+        packed_sys_devices.insert(rsc.tl_rsc.sys_device);
     }
 
     ucp_unpacked_address unpacked_address;
@@ -444,6 +449,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     const ucp_address_entry_t *ae;
     ucp_unpacked_address_for_each(ae, &unpacked_address) {
         unpacked_dev_priorities.insert(ae->iface_attr.priority);
+        unpacked_sys_devices.insert(ae->sys_dev);
     }
 
     /* TODO test addresses */
@@ -453,6 +459,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     /* Make sure that the packed device priorities are equal to the unpacked
      * device priorities */
     ASSERT_TRUE(packed_dev_priorities == unpacked_dev_priorities);
+    ASSERT_TRUE(packed_sys_devices == unpacked_sys_devices);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
