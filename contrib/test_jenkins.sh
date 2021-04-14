@@ -474,7 +474,7 @@ run_hello() {
 		error_emulation=0
 	fi
 
-	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 ${error_emulation}
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
@@ -555,11 +555,16 @@ run_uct_hello() {
 run_client_server() {
 	test_name=ucp_client_server
 
+	mem_types_list="host"
+
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		mem_types_list+=" cuda cuda-managed "
+	fi
+
 	if [ ! -x ${test_name} ]
 	then
-		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-			-lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-			-Wl,-rpath=${ucx_inst}/lib
+		$MAKEP -C examples ${test_name}
 	fi
 
 	server_ip=$1
@@ -568,7 +573,11 @@ run_client_server() {
 		return
 	fi
 
-	run_client_server_app "./${test_name}" "" "-a ${server_ip}" 1 0
+	for mem_type in ${mem_types_list}
+	do
+		echo "==== Running UCP client-server with \"${mem_type}\" memory type ===="
+		run_client_server_app "./examples/${test_name}" "-m ${mem_type}" "-a ${server_ip}" 1 0
+	done
 }
 
 run_ucp_client_server() {
@@ -576,8 +585,6 @@ run_ucp_client_server() {
 	run_client_server $(get_rdma_device_ip_addr)
 	run_client_server $(get_non_rdma_ip_addr)
 	run_client_server "127.0.0.1"
-
-	rm -f ./ucp_client_server
 }
 
 run_io_demo() {
