@@ -36,6 +36,7 @@ typedef struct {
     uct_ud_iface_t                      super;
     struct {
         uct_ib_mlx5_txwq_t              wq;
+        uct_ib_mlx5_mmio_mode_t         mmio_mode;
     } tx;
     struct {
         uct_ib_mlx5_rxwq_t              wq;

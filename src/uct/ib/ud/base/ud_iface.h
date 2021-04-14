@@ -108,6 +108,7 @@ typedef struct uct_ud_iface_ops {
     void                      (*ep_free)(uct_ep_h ep);
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);
+    void                      (*destroy_qp)(uct_ud_iface_t *ud_iface);
     ucs_status_t              (*unpack_peer_address)(uct_ud_iface_t *iface,
                                                      const uct_ib_address_t *ib_addr,
                                                      const uct_ud_iface_addr_t *if_addr,

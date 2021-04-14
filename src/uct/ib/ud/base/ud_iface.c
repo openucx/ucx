@@ -147,6 +147,14 @@ static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
     skb->flags = UCT_UD_SEND_SKB_FLAG_INVALID;
 }
 
+static void uct_ud_iface_destroy_qp(uct_ud_iface_t *ud_iface)
+{
+    uct_ud_iface_ops_t *ops = ucs_derived_of(ud_iface->super.ops,
+                                             uct_ud_iface_ops_t);
+
+    ops->destroy_qp(ud_iface);
+}
+
 static ucs_status_t
 uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config)
 {
@@ -202,8 +210,9 @@ uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config
     }
 
     return UCS_OK;
+
 err_destroy_qp:
-    uct_ib_destroy_qp(self->qp);
+    uct_ud_iface_destroy_qp(self);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -509,12 +518,12 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
 
     UCT_UD_IFACE_HOOK_INIT(self);
 
+    ucs_ptr_array_init(&self->eps, "ud_eps");
+
     status = uct_ud_iface_create_qp(self, config);
     if (status != UCS_OK) {
-        return UCS_ERR_INVALID_PARAM;
+        goto err_eps_array;
     }
-
-    ucs_ptr_array_init(&self->eps, "ud_eps");
 
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "ud_recv_skb", &self->rx.mp);
@@ -571,7 +580,8 @@ err_tx_mpool:
 err_rx_mpool:
     ucs_mpool_cleanup(&self->rx.mp, 1);
 err_qp:
-    uct_ib_destroy_qp(self->qp);
+    uct_ud_iface_destroy_qp(self);
+err_eps_array:
     ucs_ptr_array_cleanup(&self->eps);
     return status;
 }
@@ -592,6 +602,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
 {
     ucs_trace_func("");
 
+    uct_ud_iface_remove_async_handlers(self);
+
     /* TODO: proper flush and connection termination */
     uct_ud_enter(self);
     ucs_conn_match_cleanup(&self->conn_match_ctx);
@@ -603,7 +615,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
     ucs_mpool_cleanup(&self->rx.mp, 0);
-    uct_ib_destroy_qp(self->qp);
+    uct_ud_iface_destroy_qp(self);
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps);
     ucs_arbiter_cleanup(&self->tx.pending_q);
