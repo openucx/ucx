@@ -41,11 +41,6 @@ BEGIN_C_DECLS
  * @param _scope       Scope for array's functions (e.g 'static inline')
  */
 #define UCS_ARRAY_DECLARE_FUNCS(_name, _index_type, _value_type, _scope) \
-    _scope void \
-    UCS_ARRAY_IDENTIFIER(_name, _init_dynamic)(ucs_array_t(_name) *array); \
-    \
-    _scope void \
-    UCS_ARRAY_IDENTIFIER(_name, _cleanup_dynamic)(ucs_array_t(_name) *array); \
     \
     _scope ucs_status_t \
     UCS_ARRAY_IDENTIFIER(_name, _reserve)(ucs_array_t(_name) *array, \
@@ -54,6 +49,14 @@ BEGIN_C_DECLS
     _scope ucs_status_t \
     UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array, \
                                          _index_type *index_p)
+
+
+/**
+ * Dynamic array initializer. The array storage should be released explicitly by
+ * calling @ref ucs_array_cleanup_dynamic()
+ */
+#define UCS_ARRAY_DYNAMIC_INITIALIZER \
+    { NULL, 0, 0 }
 
 
 /**
@@ -73,8 +76,7 @@ BEGIN_C_DECLS
  * @endcode
  */
 #define UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
-    { (_buffer), 0, \
-      ((_capacity) & UCS_ARRAY_CAP_MASK) | UCS_ARRAY_CAP_FLAG_FIXED }
+    { (_buffer), 0, ucs_array_init_fixed_capacity(_capacity) }
 
 
 /**
@@ -134,24 +136,52 @@ BEGIN_C_DECLS
 
 
 /**
+ * Helper function to initialize capacity field of a fixed-size array
+ */
+#define ucs_array_init_fixed_capacity(_capacity) \
+    (((_capacity) & UCS_ARRAY_CAP_MASK) | UCS_ARRAY_CAP_FLAG_FIXED)
+
+
+
+/**
  * Initialize a dynamic array. Such array can grow automatically to accommodate
  * for more elements.
  *
- * @param _name    Array name
  * @param _array   Pointer to the array to initialize
  */
-#define ucs_array_init_dynamic(_name, _array) \
-    UCS_ARRAY_IDENTIFIER(_name, _init_dynamic)(_array)
+#define ucs_array_init_dynamic(_array) \
+    { \
+        (_array)->buffer   = NULL; \
+        (_array)->length   = 0; \
+        (_array)->capacity = 0; \
+    }
+
+
+/**
+ * Initialize a fixed-size array with existing buffer as backing storage.
+ *
+ * @param _array     Pointer to the array to initialize
+ * @param _buffer    Buffer to use as backing store
+ * @param _capacity  Buffer capacity
+ */
+#define ucs_array_init_fixed(_array, _buffer, _capacity) \
+    { \
+        (_array)->buffer   = (_buffer); \
+        (_array)->length   = 0; \
+        (_array)->capacity = ucs_array_init_fixed_capacity(_capacity); \
+    }
 
 
 /*
  * Cleanup a dynamic array.
  *
- * @param _name    Array name
  * @param _array   Array to cleanup
  */
-#define ucs_array_cleanup_dynamic(_name, _array) \
-    UCS_ARRAY_IDENTIFIER(_name, _cleanup_dynamic)(_array)
+#define ucs_array_cleanup_dynamic(_array) \
+    { \
+        ucs_assert(!ucs_array_is_fixed(_array)); \
+        ucs_free((_array)->buffer); \
+    }
 
 
 /*

@@ -14,7 +14,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/async/async.h>
 #include <ucs/debug/assert.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/sys/sys.h>
 
 #include "callbackq.h"
@@ -363,18 +363,20 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
 {
     ucs_callbackq_t      *cbq  = arg;
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
+    unsigned num_slow_elems    = priv->num_slow_elems;
+    unsigned count             = 0;
     ucs_callbackq_elem_t *elem;
     unsigned UCS_V_UNUSED removed_idx;
     unsigned slow_idx, fast_idx;
     ucs_callbackq_elem_t tmp_elem;
-    unsigned count = 0;
 
     ucs_trace_poll("cbq=%p", cbq);
 
     ucs_callbackq_enter(cbq);
 
-    /* Execute and update slow-path callbacks */
-    for (slow_idx = 0; slow_idx < priv->num_slow_elems; ++slow_idx) {
+    /* Execute and update slow-path callbacks by num_slow_elems copy to avoid
+     * infinite loop if callback adds another one */
+    for (slow_idx = 0; slow_idx < num_slow_elems; ++slow_idx) {
         elem = &priv->slow_elems[slow_idx];
         if (elem->id == UCS_CALLBACKQ_ID_NULL) {
             continue;

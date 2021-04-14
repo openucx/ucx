@@ -69,6 +69,9 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
                                    ucs_status_t status);
 
+void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
+                                      const ucp_reply_hdr_t *rep_hdr);
+
 void ucp_tag_eager_zcopy_completion(uct_completion_t *self);
 
 void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
@@ -76,5 +79,14 @@ void ucp_tag_eager_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 void ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status);
 
 void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self);
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_eager_check_op_id(const ucp_proto_init_params_t *init_params,
+                            int offload_enabled)
+{
+    return (init_params->select_param->op_id == UCP_OP_ID_TAG_SEND) &&
+           (offload_enabled ==
+            ucp_ep_config_key_has_tag_lane(init_params->ep_config_key));
+}
 
 #endif

@@ -33,10 +33,10 @@ ucp_stream_send_am_short(ucp_ep_t *ep, const void *buffer, size_t length)
                            ucp_ep_remote_id(ep), buffer, length);
 }
 
-static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
-                                     const void* buffer, uintptr_t datatype,
-                                     ucs_memory_type_t memory_type, size_t count,
-                                     uint32_t flags)
+static void ucp_stream_send_req_init(ucp_request_t *req, ucp_ep_h ep,
+                                     const void *buffer, uintptr_t datatype,
+                                     size_t count, uint32_t flags,
+                                     const ucp_request_param_t *param)
 {
     req->flags             = flags;
     req->send.ep           = ep;
@@ -47,8 +47,9 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
-    req->send.mem_type     = ucp_get_memory_type(ep->worker->context, (void*)buffer,
-                                                 req->send.length, memory_type);
+    req->send.mem_type     = ucp_request_get_memory_type(ep->worker->context,
+                                                         (void*)buffer,
+                                                         req->send.length, param);
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.msg_proto.tag,
                                 sizeof(req->send.msg_proto.tag));
 }
@@ -119,17 +120,18 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  const ucp_request_param_t *param)
 {
-    ucp_datatype_t   datatype;
-    ucp_request_t    *req;
-    size_t           length;
-    ucs_status_t     status;
+    ucp_datatype_t datatype;
+    ucp_request_t *req;
+    size_t length;
+    ucs_status_t status;
     ucs_status_ptr_t ret;
-    uint32_t         attr_mask;
-    uint32_t         flags;
-    ucs_memory_type_t memory_type;
+    uint32_t attr_mask;
+    uint32_t flags;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_STREAM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_REQUEST_CHECK_PARAM(param);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     flags = ucp_request_param_flags(param);
@@ -176,15 +178,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
         goto out;
     }
 
-    memory_type = ucp_request_param_mem_type(param);
-
     req = ucp_request_get_param(ep->worker, param,
                                 {
                                     ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                     goto out;
                                 });
 
-    ucp_stream_send_req_init(req, ep, buffer, datatype, memory_type, count, flags);
+    ucp_stream_send_req_init(req, ep, buffer, datatype, count, flags, param);
 
     ret = ucp_stream_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->stream.proto);
@@ -200,10 +200,7 @@ static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)
     ucs_status_t   status = ucp_stream_send_am_short(req->send.ep,
                                                      req->send.buffer,
                                                      req->send.length);
-    if (ucs_likely(status == UCS_OK)) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-    return status;
+    return ucp_am_short_handle_status_from_pending(req, status);
 }
 
 static size_t ucp_stream_pack_am_single_dt(void *dest, void *arg)

@@ -11,7 +11,6 @@
 
 #include <ucs/sys/module.h>
 
-#include <hsa_ext_amd.h>
 #include <pthread.h>
 
 
@@ -110,7 +109,8 @@ ucs_status_t uct_rocm_base_query_devices(uct_md_h md,
                                          unsigned *num_tl_devices_p)
 {
     return uct_single_device_resource(md, md->component->name,
-                                      UCT_DEVICE_TYPE_ACC, tl_devices_p,
+                                      UCT_DEVICE_TYPE_ACC,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, tl_devices_p,
                                       num_tl_devices_p);
 }
 
@@ -177,8 +177,8 @@ ucs_status_t uct_rocm_base_detect_memory_type(uct_md_h md, const void *addr,
     hsa_status_t status;
     hsa_amd_pointer_info_t info;
 
+    *mem_type_p = UCS_MEMORY_TYPE_HOST;
     if (addr == NULL) {
-        *mem_type_p = UCS_MEMORY_TYPE_HOST;
         return UCS_OK;
     }
 
@@ -219,6 +219,70 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         mem_attr_p->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+        mem_attr_p->base_address = (void*) addr;
+    }
+
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+        mem_attr_p->alloc_length = length;
+    }
+
+    return UCS_OK;
+}
+
+static hsa_status_t uct_rocm_hsa_pool_callback(hsa_amd_memory_pool_t pool, void* data)
+{
+    int allowed;
+    uint32_t flags;
+    hsa_amd_segment_t segment;
+
+    hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_RUNTIME_ALLOC_ALLOWED, &allowed);
+    if (allowed) {
+        hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_SEGMENT, &segment);
+        if (HSA_AMD_SEGMENT_GLOBAL != segment) {
+            return HSA_STATUS_SUCCESS;
+        }
+
+        hsa_amd_memory_pool_get_info(pool, HSA_AMD_MEMORY_POOL_INFO_GLOBAL_FLAGS, &flags);
+        if (flags & HSA_AMD_MEMORY_POOL_GLOBAL_FLAG_COARSE_GRAINED) {
+            *((hsa_amd_memory_pool_t*)data) = pool;
+            return HSA_STATUS_INFO_BREAK;
+        }
+    }
+    return HSA_STATUS_SUCCESS;
+}
+
+ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *link_type)
+{
+    hsa_amd_memory_pool_link_info_t link_info;
+    hsa_agent_t agent1, agent2;
+    hsa_amd_memory_pool_t pool;
+    hsa_status_t status;
+
+    *link_type = HSA_AMD_LINK_INFO_TYPE_PCIE;
+
+    if (uct_rocm_base_agents.num_gpu < 2) {
+        return UCS_OK;
+    }
+
+    agent1 = uct_rocm_base_agents.gpu_agents[0];
+    agent2 = uct_rocm_base_agents.gpu_agents[1];
+
+    status = hsa_amd_agent_iterate_memory_pools(agent2,
+                            uct_rocm_hsa_pool_callback, (void*)&pool);
+    if ((status != HSA_STATUS_SUCCESS) && (status != HSA_STATUS_INFO_BREAK)) {
+        ucs_debug("Could not iterate HSA memory pools: 0x%x", status);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    status = hsa_amd_agent_memory_pool_get_info(agent1, pool,
+                        HSA_AMD_AGENT_MEMORY_POOL_INFO_LINK_INFO, &link_info);
+    if (status != HSA_STATUS_SUCCESS) {
+        ucs_debug("Could not get HSA memory pool info: 0x%x", status);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *link_type = link_info.link_type;
     return UCS_OK;
 }
 

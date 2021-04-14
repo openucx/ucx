@@ -264,10 +264,29 @@ ucs_status_t uct_rc_verbs_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
-    UCT_RC_CHECK_AM_SHORT(id, length, iface->config.max_inline);
+    UCT_RC_CHECK_AM_SHORT(id, length, uct_rc_am_short_hdr_t, iface->config.max_inline);
     UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
     uct_rc_verbs_iface_fill_inl_am_sge(iface, id, hdr, buffer, length);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
+    uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr,
+                              IBV_SEND_INLINE | IBV_SEND_SOLICITED, INT_MAX);
+    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_rc_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                          const uct_iov_t *iov, size_t iovcnt)
+{
+    uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+
+    UCT_RC_CHECK_AM_SHORT(id, uct_iov_total_length(iov, iovcnt), uct_rc_hdr_t,
+                          iface->config.max_inline);
+    UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
+    UCT_CHECK_IOV_SIZE(iovcnt, UCT_IB_MAX_IOV - 1, "uct_rc_verbs_ep_am_short_iov");
+    uct_rc_verbs_iface_fill_inl_am_sge_iov(iface, id, iov, iovcnt);
+    UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, uct_iov_total_length(iov, iovcnt));
     uct_rc_verbs_ep_post_send(iface, ep, &iface->inl_am_wr,
                               IBV_SEND_INLINE | IBV_SEND_SOLICITED, INT_MAX);
     UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
@@ -391,21 +410,27 @@ static void uct_rc_verbs_ep_post_flush(uct_rc_verbs_ep_t *ep, int send_flags)
     struct ibv_sge sge;
     int inl_flag;
 
-    /*
-     * Send small RDMA_WRITE as a flush operation
-     * (some adapters do not support 0-size RDMA_WRITE or inline sends)
-     */
-    sge.addr               = (uintptr_t)iface->flush_mem;
-    sge.length             = 1;
-    sge.lkey               = iface->flush_mr->lkey;
-    wr.next                = NULL;
-    wr.sg_list             = &sge;
-    wr.num_sge             = 1;
-    wr.opcode              = IBV_WR_RDMA_WRITE;
-    wr.wr.rdma.remote_addr = ep->flush.remote_addr;
-    wr.wr.rdma.rkey        = ep->flush.rkey;
-    inl_flag               = (iface->config.max_inline >= sge.length) ?
-                             IBV_SEND_INLINE : 0;
+    if (iface->config.flush_by_fc || (iface->config.max_inline == 0)) {
+        /* Flush by flow control pure grant, in case the device does not
+         * support 0-size RDMA_WRITE or does not support inline.
+         */
+        sge.addr   = (uintptr_t)(iface->fc_desc + 1);
+        sge.length = sizeof(uct_rc_hdr_t);
+        sge.lkey   = iface->fc_desc->lkey;
+        wr.sg_list = &sge;
+        wr.num_sge = 1;
+        wr.opcode  = IBV_WR_SEND;
+        inl_flag   = 0;
+    } else {
+        /* Flush by empty RDMA_WRITE */
+        wr.sg_list             = NULL;
+        wr.num_sge             = 0;
+        wr.opcode              = IBV_WR_RDMA_WRITE;
+        wr.wr.rdma.remote_addr = 0;
+        wr.wr.rdma.rkey        = 0;
+        inl_flag               = IBV_SEND_INLINE;
+    }
+    wr.next = NULL;
 
     uct_rc_verbs_ep_post_send(iface, ep, &wr, inl_flag | send_flags, 1);
 }
@@ -414,14 +439,9 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                    uct_completion_t *comp)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    uct_rc_verbs_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
+    int already_canceled        = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
-
-    if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        uct_ep_pending_purge(&ep->super.super.super, NULL, 0);
-        uct_rc_verbs_ep_handle_failure(ep, UCS_ERR_CANCELED);
-        return UCS_OK;
-    }
 
     status = uct_rc_ep_flush(&ep->super, iface->config.tx_max_wr, flags);
     if (status != UCS_INPROGRESS) {
@@ -431,6 +451,13 @@ ucs_status_t uct_rc_verbs_ep_flush(uct_ep_h tl_ep, unsigned flags,
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
         UCT_RC_CHECK_RES(&iface->super, &ep->super);
         uct_rc_verbs_ep_post_flush(ep, IBV_SEND_SIGNALED);
+    }
+
+    if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL) && !already_canceled)) {
+        status = uct_ib_modify_qp(ep->qp, IBV_QPS_ERR);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
@@ -494,21 +521,6 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_handle_failure(uct_rc_verbs_ep_t *ep,
-                                            ucs_status_t status)
-{
-    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.super.iface,
-                                           uct_rc_iface_t);
-
-    iface->tx.cq_available += ep->txcnt.pi - ep->txcnt.ci;
-    /* Reset CI to prevent cq_available overrun on ep_destroy */
-    ep->txcnt.ci = ep->txcnt.pi;
-    uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, status, ep->txcnt.pi, 0);
-
-    return iface->super.ops->set_ep_failed(&iface->super, &ep->super.super.super,
-                                           status);
-}
-
 ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_rc_verbs_iface_t *iface        = ucs_derived_of(tl_ep->iface,
@@ -516,17 +528,9 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
     uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_ib_md_t *md                    = uct_ib_iface_md(&iface->super.super);
     uct_rc_verbs_ep_address_t *rc_addr = (uct_rc_verbs_ep_address_t*)addr;
-    ucs_status_t status;
     uint8_t mr_id;
 
-    status = uct_rc_verbs_iface_flush_mem_create(iface);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     rc_addr->flags      = 0;
-    rc_addr->flush_addr = (uintptr_t)iface->flush_mem;
-    rc_addr->flush_rkey = iface->flush_mr->rkey;
     uct_ib_pack_uint24(rc_addr->qp_num, ep->qp->qp_num);
 
     if (md->ops->get_atomic_mr_id(md, &mr_id) == UCS_OK) {
@@ -562,9 +566,6 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     if (status != UCS_OK) {
         return status;
     }
-
-    ep->flush.remote_addr = rc_addr->flush_addr;
-    ep->flush.rkey        = rc_addr->flush_rkey;
 
     if (rc_addr->flags & UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR) {
         ep->super.atomic_mr_offset = uct_ib_md_atomic_offset(*(uint8_t*)(rc_addr + 1));
@@ -622,14 +623,14 @@ typedef struct {
     struct ibv_qp              *qp;
 } uct_rc_verbs_ep_cleanup_ctx_t;
 
-void uct_rc_verbs_ep_cleanup_qp(uct_ib_async_event_wait_t *wait_ctx)
+unsigned uct_rc_verbs_ep_cleanup_qp(void *arg)
 {
-    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx
-                    = ucs_derived_of(wait_ctx, uct_rc_verbs_ep_cleanup_ctx_t);
+    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx = arg;
     uint32_t qp_num = ep_cleanup_ctx->qp->qp_num;
 
     uct_ib_destroy_qp(ep_cleanup_ctx->qp);
     uct_rc_ep_cleanup_qp_done(&ep_cleanup_ctx->super, qp_num);
+    return 1;
 }
 
 UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
@@ -642,7 +643,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
     ucs_assert_always(ep_cleanup_ctx != NULL);
     ep_cleanup_ctx->qp = self->qp;
 
-    /* TODO should be removed by flush */
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
                                   UCS_ERR_CANCELED, self->txcnt.pi, 1);
     /* NOTE: usually, ci == pi here, but if user calls

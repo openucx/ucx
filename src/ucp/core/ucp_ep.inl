@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -42,14 +42,15 @@ static inline ucp_lane_index_t ucp_ep_get_tag_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.tag_lane;
 }
 
-static inline int ucp_ep_is_tag_offload_enabled(ucp_ep_config_t *config)
+static inline int ucp_ep_config_key_has_tag_lane(const ucp_ep_config_key_t *key)
 {
-    ucp_lane_index_t lane = config->key.tag_lane;
+    ucp_lane_index_t lane = key->tag_lane;
 
     if (lane != UCP_NULL_LANE) {
-        ucs_assert(config->key.lanes[lane].rsc_index != UCP_NULL_RESOURCE);
+        ucs_assert(key->lanes[lane].rsc_index != UCP_NULL_RESOURCE);
         return 1;
     }
+
     return 0;
 }
 
@@ -145,7 +146,6 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_LISTENER));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
@@ -154,6 +154,18 @@ static UCS_F_ALWAYS_INLINE ucp_ep_ext_control_t* ucp_ep_ext_control(ucp_ep_h ep)
 {
     ucs_assert(ucp_ep_ext_gen(ep)->control_ext != NULL);
     return ucp_ep_ext_gen(ep)->control_ext;
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_ep_update_flags(
+        ucp_ep_h ep, uint32_t flags_add, uint32_t flags_remove)
+{
+    ucp_ep_flags_t ep_flags_add    = (ucp_ep_flags_t)flags_add;
+    ucp_ep_flags_t ep_flags_remove = (ucp_ep_flags_t)flags_remove;
+
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
+    ucs_assert((ep_flags_add & ep_flags_remove) == 0);
+
+    ep->flags = (ep->flags | ep_flags_add) & ~ep_flags_remove;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
@@ -198,7 +210,7 @@ static inline void ucp_ep_update_remote_id(ucp_ep_h ep,
 
     ucs_assert(remote_id != UCP_EP_ID_INVALID);
     ucs_trace("ep %p: set remote_id to 0x%" PRIxPTR, ep, remote_id);
-    ep->flags                           |= UCP_EP_FLAG_REMOTE_ID;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_ID, 0);
     ucp_ep_ext_control(ep)->remote_ep_id = remote_id;
 }
 
@@ -215,23 +227,22 @@ static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
 {
     ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
 
-    ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                              UCP_EP_FLAG_LISTENER)));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
     ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
                ((flush_state->send_sn == 0) &&
                 (flush_state->cmpl_sn == 0) &&
-                ucs_queue_is_empty(&flush_state->reqs)));
+                ucs_hlist_is_empty(&flush_state->reqs)));
 
     flush_state->send_sn = 0;
     flush_state->cmpl_sn = 0;
-    ucs_queue_head_init(&flush_state->reqs);
-    ep->flags |= UCP_EP_FLAG_FLUSH_STATE_VALID;
+    ucs_hlist_head_init(&flush_state->reqs);
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
 }
 
 static inline void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
 {
-    ucs_assert(ucs_queue_is_empty(&ucp_ep_flush_state(ep)->reqs));
-    ep->flags &= ~UCP_EP_FLAG_FLUSH_STATE_VALID;
+    ucs_assert(ucs_hlist_is_empty(&ucp_ep_flush_state(ep)->reqs));
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
 }
 
 /* get index of the local component which can reach a remote memory domain */
@@ -278,4 +289,5 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
     UCS_STATIC_ASSERT(sizeof(ep->flags) <= sizeof(int));
     return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
 }
+
 #endif

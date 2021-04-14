@@ -20,21 +20,6 @@
  */
 #define UCS_ARRAY_IMPL(_name, _index_type, _value_type, _scope) \
     \
-    _scope UCS_F_MAYBE_UNUSED void \
-    UCS_ARRAY_IDENTIFIER(_name, _init_dynamic)(ucs_array_t(_name) *array) \
-    { \
-        array->buffer   = NULL; \
-        array->length   = 0; \
-        array->capacity = 0; \
-    } \
-    \
-    _scope UCS_F_MAYBE_UNUSED void \
-    UCS_ARRAY_IDENTIFIER(_name, _cleanup_dynamic)(ucs_array_t(_name) *array) \
-    { \
-        ucs_assert(!ucs_array_is_fixed(array)); \
-        ucs_free(array->buffer); \
-    } \
-    \
     _scope UCS_F_MAYBE_UNUSED ucs_status_t \
     UCS_ARRAY_IDENTIFIER(_name, _grow)(ucs_array_t(_name) *array, \
                                        _index_type min_capacity) \

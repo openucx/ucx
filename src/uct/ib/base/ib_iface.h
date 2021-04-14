@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -26,8 +26,7 @@
 #define UCT_IB_ADDRESS_INVALID_PATH_MTU    ((enum ibv_mtu)0)
 #define UCT_IB_ADDRESS_INVALID_PKEY        0
 #define UCT_IB_ADDRESS_DEFAULT_PKEY        0xffff
-#define UCT_IB_SL_MAX                      15
-#define UCT_IB_SL_INVALID                  (UCT_IB_SL_MAX + 1)
+#define UCT_IB_SL_NUM                      16
 
 /* Forward declarations */
 typedef struct uct_ib_iface_config   uct_ib_iface_config_t;
@@ -63,6 +62,8 @@ enum {
     UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
 #elif HAVE_DC_DV
     UCT_IB_QPT_DCI = IBV_QPT_DRIVER,
+#else
+    UCT_IB_QPT_DCI = UCT_IB_QPT_UNKNOWN,
 #endif
 };
 
@@ -230,7 +231,6 @@ struct uct_ib_iface_ops {
     uct_ib_iface_arm_cq_func_t         arm_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
     uct_ib_iface_handle_failure_func_t handle_failure;
-    uct_ib_iface_set_ep_failed_func_t  set_ep_failed;
 };
 
 
@@ -338,6 +338,7 @@ extern const char *uct_ib_mtu_values[];
  */
 ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
                                           const uct_ib_iface_config_t *config,
+                                          const uct_iface_params_t *params,
                                           const char *name, ucs_mpool_t *mp);
 
 void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc);
@@ -581,7 +582,7 @@ size_t uct_ib_verbs_sge_fill_iov(struct ibv_sge *sge, const uct_iov_t *iov,
             continue; /* to avoid zero length elements in sge */
         }
 
-        if (iov[sge_it].memh == UCT_MEM_HANDLE_NULL) {
+        if (iov[iov_it].memh == UCT_MEM_HANDLE_NULL) {
             sge[sge_it].lkey = 0;
         } else {
             sge[sge_it].lkey = uct_ib_memh_get_lkey(iov[iov_it].memh);

@@ -201,6 +201,10 @@ public:
         UCS_ASYNC_UNBLOCK(&m_async);
     }
 
+    bool is_blocked() const {
+        return ucs_async_is_blocked(&m_async);
+    }
+
     void check_miss() {
         ucs_async_check_miss(&m_async);
     }
@@ -293,6 +297,12 @@ protected:
                                          << " retries";
     }
 
+    void check_is_blocked(const local *le, bool expected)
+    {
+#if UCS_ENABLE_ASSERT
+        EXPECT_EQ(expected, le->is_blocked());
+#endif
+    }
 };
 
 template<typename LOCAL>
@@ -313,11 +323,14 @@ protected:
     int thread_run(unsigned index) {
         LOCAL* le;
         m_ev[index] = le = new LOCAL(GetParam());
+  
+        check_is_blocked(le, false);
 
         barrier();
 
         while (!m_stop[index]) {
             le->block();
+            check_is_blocked(le, true);
             unsigned before = le->count();
             suspend_and_poll(le, 1.0);
             unsigned after  = le->count();
@@ -327,6 +340,8 @@ protected:
             le->check_miss();
             suspend_and_poll(le, 1.0);
         }
+
+        check_is_blocked(le, false);
 
         int result = le->count();
         delete le;
@@ -357,6 +372,26 @@ protected:
 
     int thread_count(unsigned thread) {
         return m_thread_counts[thread];
+    }
+
+    void is_blocked_test()
+    {
+        spawn();
+        suspend();
+
+        for (unsigned i = 0; i < NUM_THREADS; ++i) {
+            LOCAL *le = m_ev[i];
+
+            EXPECT_FALSE(le->is_blocked());
+            le->block();
+            {
+                EXPECT_TRUE(le->is_blocked());
+            }
+            le->unblock();
+            EXPECT_FALSE(le->is_blocked());
+        }
+
+        stop();
     }
 
 private:
@@ -603,6 +638,32 @@ UCS_TEST_P(test_async, warn_block) {
     }
 }
 
+UCS_TEST_P(test_async, check_blocks) {
+    local_event le(GetParam());
+
+    check_is_blocked(&le, false);
+
+    le.block();
+    {
+        check_is_blocked(&le, true);
+        le.block();
+        {
+            check_is_blocked(&le, true);
+            le.block();
+            {
+                check_is_blocked(&le, true);
+            }
+            le.unblock();
+            check_is_blocked(&le, true);
+        }
+        le.unblock();
+        check_is_blocked(&le, true);
+    }
+    le.unblock();
+
+    check_is_blocked(&le, false);
+}
+
 class local_timer_long_handler : public local_timer {
 public:
     local_timer_long_handler(ucs_async_mode_t mode, int sleep_usec) :
@@ -784,6 +845,15 @@ UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread,
         UCS_TEST_MESSAGE << "retry " << (retry + 1);
     }
     EXPECT_GE(min_count, exp_min_count);
+}
+
+UCS_TEST_SKIP_COND_P(test_async_event_mt, check_blocks_multithread,
+                     // This test blocks async in two threads simultaneously -
+                     // poll_block and signal don't allow it
+                     (GetParam() == UCS_ASYNC_MODE_POLL) ||
+                     (GetParam() == UCS_ASYNC_MODE_SIGNAL))
+{
+    is_blocked_test();
 }
 
 UCS_TEST_P(test_async_timer_mt, multithread) {

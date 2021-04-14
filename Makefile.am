@@ -13,7 +13,12 @@
 EXTRA_DIST =
 ACLOCAL_AMFLAGS = -I config/m4
 
-noinst_HEADERS = src/uct/api/uct.h src/uct/api/uct_def.h src/uct/api/tl.h
+noinst_HEADERS = \
+	src/uct/api/uct.h \
+	src/uct/api/v2/uct_v2.h \
+	src/uct/api/uct_def.h \
+	src/uct/api/tl.h
+
 doxygen_doc_files = $(noinst_HEADERS)
 
 doc_dir = $(pkgdatadir)/doc
@@ -37,6 +42,7 @@ SUBDIRS += $(UCG_SUBDIR)
 endif
 
 SUBDIRS += \
+	src/tools/vfs \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \

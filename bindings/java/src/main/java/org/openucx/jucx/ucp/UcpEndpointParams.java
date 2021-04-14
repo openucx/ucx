@@ -30,7 +30,8 @@ public class UcpEndpointParams extends UcxParams {
         }
 
         if (connectionRequest != 0) {
-            result += "connectionRequest,";
+            result += "connectionRequest" +
+                ((clientAddress != null) ? clientAddress.toString() : "");
         }
         return result;
     }
@@ -43,6 +44,7 @@ public class UcpEndpointParams extends UcxParams {
         flags = 0;
         socketAddress = null;
         connectionRequest = 0;
+        clientAddress = null;
         errorHandler = null;
         return this;
     }
@@ -54,6 +56,8 @@ public class UcpEndpointParams extends UcxParams {
     private long flags;
 
     private InetSocketAddress socketAddress;
+
+    private InetSocketAddress clientAddress;
 
     private long connectionRequest;
 
@@ -107,6 +111,9 @@ public class UcpEndpointParams extends UcxParams {
     public UcpEndpointParams setConnectionRequest(UcpConnectionRequest connectionRequest) {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_CONN_REQUEST;
         this.connectionRequest = connectionRequest.getNativeId();
+        if (connectionRequest.getClientAddress() != null) {
+            this.clientAddress = connectionRequest.getClientAddress();
+        }
         return this;
     }
 

@@ -1,6 +1,9 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+* Copyright (C) 2021 Broadcom. ALL RIGHTS RESERVED. The term “Broadcom”
+* refers to Broadcom Inc. and/or its subsidiaries.
+*
 * See file LICENSE for terms.
 */
 
@@ -234,7 +237,7 @@ static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq) { return 0; }
 #else
 static inline int ibv_exp_cq_ignore_overrun(struct ibv_cq *cq)
 {
-    errno = ENOSYS;
+    errno = EOPNOTSUPP;
     return -1;
 }
 #endif /* HAVE_IBV_EXP_CQ_IGNORE_OVERRUN */
@@ -322,9 +325,5 @@ static inline ucs_status_t uct_ib_qp_max_send_sge(struct ibv_qp *qp,
 
     return UCS_OK;
 }
-
-typedef struct uct_ib_qpnum {
-    uct_ib_uint24_t qp_num;
-} uct_ib_qpnum_t;
 
 #endif /* UCT_IB_VERBS_H */

@@ -105,6 +105,8 @@ static void *ucs_async_thread_func(void *arg)
     cb_arg.thread    = thread;
     cb_arg.is_missed = &is_missed;
 
+    ucs_log_set_thread_name("async");
+
     while (!thread->stop) {
         num_events = ucs_min(UCS_ASYNC_EPOLL_MAX_EVENTS,
                              ucs_sys_event_set_max_wait_events);
@@ -278,11 +280,16 @@ static void ucs_async_thread_spinlock_unblock(ucs_async_context_t *async)
 static ucs_status_t ucs_async_thread_mutex_init(ucs_async_context_t *async)
 {
     pthread_mutexattr_t attr;
-    int                 ret;
+    int ret;
+
+#if UCS_ENABLE_ASSERT
+    async->thread.mutex.owner = UCS_ASYNC_PTHREAD_ID_NULL;
+    async->thread.mutex.count = 0;
+#endif
 
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    ret = pthread_mutex_init(&async->thread.mutex, &attr);
+    ret = pthread_mutex_init(&async->thread.mutex.lock, &attr);
     if (ret == 0) {
         return UCS_OK;
     }
@@ -293,7 +300,7 @@ static ucs_status_t ucs_async_thread_mutex_init(ucs_async_context_t *async)
 
 static void ucs_async_thread_mutex_cleanup(ucs_async_context_t *async)
 {
-    int ret = pthread_mutex_destroy(&async->thread.mutex);
+    int ret = pthread_mutex_destroy(&async->thread.mutex.lock);
 
     if (ret != 0) {
         ucs_warn("failed to destroy async lock: %s", strerror(ret));
@@ -355,12 +362,24 @@ ucs_async_thread_modify_event_fd(ucs_async_context_t *async, int event_fd,
 
 static int ucs_async_thread_mutex_try_block(ucs_async_context_t *async)
 {
-    return !pthread_mutex_trylock(&async->thread.mutex);
+    if (pthread_mutex_trylock(&async->thread.mutex.lock)) {
+        /* not locked */
+        return 0;
+    }
+
+#if UCS_ENABLE_ASSERT
+    /* locked */
+    if (async->thread.mutex.count++ == 0) {
+        async->thread.mutex.owner = pthread_self();
+    }
+#endif
+
+    return 1;
 }
 
 static void ucs_async_thread_mutex_unblock(ucs_async_context_t *async)
 {
-    (void)pthread_mutex_unlock(&async->thread.mutex);
+    ucs_recursive_mutex_unblock(&async->thread.mutex);
 }
 
 static ucs_status_t ucs_async_thread_add_timer(ucs_async_context_t *async,

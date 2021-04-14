@@ -177,6 +177,17 @@ void ucp_test::flush_worker(const entity &e, int worker_index)
     request_wait(request, worker_index);
 }
 
+void ucp_test::flush_workers()
+{
+    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
+         iter != entities().end(); ++iter) {
+        const entity &e = **iter;
+        for (int i = 0; i < e.get_num_workers(); i++) {
+            flush_worker(e, i);
+        }
+    }
+}
+
 void ucp_test::disconnect(entity& e) {
     bool has_failed_entity = false;
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
@@ -240,6 +251,22 @@ ucs_status_t ucp_test::request_wait(void *req, int worker_index)
     return request_process(req, worker_index, true);
 }
 
+ucs_status_t ucp_test::requests_wait(const std::vector<void*> &reqs,
+                                     int worker_index)
+{
+    ucs_status_t ret_status = UCS_OK;
+
+    for (std::vector<void*>::const_iterator it = reqs.begin(); it != reqs.end();
+         ++it) {
+        ucs_status_t status = request_process(*it, worker_index, true);
+        if (status != UCS_OK) {
+            ret_status = status;
+        }
+    }
+
+    return ret_status;
+}
+
 void ucp_test::request_release(void *req)
 {
     request_process(req, 0, false);
@@ -251,6 +278,14 @@ int ucp_test::max_connections() {
     } else {
         return std::numeric_limits<int>::max();
     }
+}
+
+void ucp_test::set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env)
+{
+    /* Set small TL timeouts to reduce testing time */
+    env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
+    env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
+    env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
 }
 
 void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
@@ -465,28 +500,31 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params,
                               const ucp_test_base *test_owner)
-    : m_err_cntr(0), m_rejected_cntr(0)
+    : m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0)
 {
-    ucp_test_variant entity_param           = test_param.variant;
+    const int thread_type                   = test_param.variant.thread_type;
+    ucp_params_t local_ctx_params           = test_param.variant.ctx_params;
     ucp_worker_params_t local_worker_params = worker_params;
     int num_workers;
 
-    if (entity_param.thread_type == MULTI_THREAD_CONTEXT) {
-        num_workers = MT_TEST_NUM_THREADS;
-        entity_param.ctx_params.mt_workers_shared = 1;
-        local_worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
-    } else if (entity_param.thread_type == MULTI_THREAD_WORKER) {
-        num_workers = 1;
-        entity_param.ctx_params.mt_workers_shared = 0;
-        local_worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+    if (thread_type == MULTI_THREAD_CONTEXT) {
+        /* Test multi-threading on context level, so create multiple workers
+           which share the context */
+        num_workers                        = MT_TEST_NUM_THREADS;
+        local_ctx_params.field_mask       |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+        local_ctx_params.mt_workers_shared = 1;
     } else {
+        /* Test multi-threading on worker level, so create a single worker */
         num_workers = 1;
-        entity_param.ctx_params.mt_workers_shared = 0;
-        local_worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
     }
 
-    entity_param.ctx_params.field_mask |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
-    local_worker_params.field_mask     |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    /* Set thread mode according to variant.thread_type, unless it's already set
+       in worker_params */
+    if (!(worker_params.field_mask & UCP_WORKER_PARAM_FIELD_THREAD_MODE) &&
+        (thread_type == MULTI_THREAD_WORKER)) {
+        local_worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
+        local_worker_params.field_mask |= UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+    }
 
     /* Set transports configuration */
     std::stringstream ss;
@@ -496,7 +534,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     {
         scoped_log_handler slh(hide_errors_logger);
         UCS_TEST_CREATE_HANDLE_IF_SUPPORTED(ucp_context_h, m_ucph, ucp_cleanup,
-                                            ucp_init, &entity_param.ctx_params,
+                                            ucp_init, &local_ctx_params,
                                             ucp_config);
     }
 
@@ -578,9 +616,10 @@ bool ucp_test_base::entity::verify_client_address(struct sockaddr_storage
     return false;
 }
 
-ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
-                                       ucp_conn_request_h conn_request)
+void ucp_test_base::entity::accept(int worker_index,
+                                   ucp_conn_request_h conn_request)
 {
+    ucp_worker_h ucp_worker   = worker(worker_index);
     ucp_ep_params_t ep_params = *m_server_ep_params;
     ucp_conn_request_attr_t attr;
     ucs_status_t status;
@@ -598,14 +637,17 @@ ucp_ep_h ucp_test_base::entity::accept(ucp_worker_h worker,
     ep_params.user_data    = reinterpret_cast<void*>(this);
     ep_params.conn_request = conn_request;
 
-    status = ucp_ep_create(worker, &ep_params, &ep);
+    status = ucp_ep_create(ucp_worker, &ep_params, &ep);
     if (status == UCS_ERR_UNREACHABLE) {
         UCS_TEST_SKIP_R("Skipping due an unreachable destination (unsupported "
                         "feature or no supported transport to send partial "
                         "worker address)");
+    } else if (status != UCS_OK) {
+        ++m_accept_err_cntr;
+        return;
     }
-    ASSERT_UCS_OK(status);
-    return ep;
+
+    set_ep(ep, worker_index, std::numeric_limits<int>::max());
 }
 
 
@@ -686,7 +728,7 @@ void *ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
         return req;
     }
 
-    ASSERT_UCS_OK(UCS_PTR_STATUS(req));
+    /* close request can be completed with any status depends on peer state */
     return NULL;
 }
 
@@ -697,7 +739,8 @@ void ucp_test_base::entity::close_ep_req_free(void *close_req) {
 
     ucs_status_t status = UCS_PTR_IS_ERR(close_req) ? UCS_PTR_STATUS(close_req) :
                           ucp_request_check_status(close_req);
-    ASSERT_NE(UCS_INPROGRESS, status) << "free not completed EP close request";
+    ASSERT_NE(UCS_INPROGRESS, status) << "free not completed EP close request: "
+                                      << close_req;
     if (status != UCS_OK) {
         UCS_TEST_MESSAGE << "ucp_ep_close_nb completed with status "
                          << ucs_status_string(status);
@@ -837,8 +880,7 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     if (!m_conn_reqs.empty()) {
         ucp_conn_request_h conn_req = m_conn_reqs.back();
         m_conn_reqs.pop();
-        ucp_ep_h ep = accept(ucp_worker, conn_req);
-        set_ep(ep, worker_index, std::numeric_limits<int>::max());
+        accept(worker_index, conn_req);
         ++progress_count;
     }
 
@@ -871,6 +913,10 @@ const size_t &ucp_test_base::entity::get_err_num_rejected() const {
 
 const size_t &ucp_test_base::entity::get_err_num() const {
     return m_err_cntr;
+}
+
+const size_t &ucp_test_base::entity::get_accept_err_num() const {
+    return m_accept_err_cntr;
 }
 
 void ucp_test_base::entity::warn_existing_eps() const {
@@ -949,6 +995,11 @@ bool ucp_test_base::entity::has_lane_with_caps(uint64_t caps) const
     return false;
 }
 
+bool ucp_test_base::entity::is_conn_reqs_queue_empty() const
+{
+    return m_conn_reqs.empty();
+}
+
 bool ucp_test_base::is_request_completed(void *request) {
     return (request == NULL) ||
            (ucp_request_check_status(request) != UCS_INPROGRESS);
@@ -1001,4 +1052,9 @@ ucs::handle<ucp_rkey_h> ucp_test::mapped_buffer::rkey(const entity& entity) cons
 ucp_mem_h ucp_test::mapped_buffer::memh() const
 {
     return m_memh;
+}
+
+void test_ucp_context::get_test_variants(std::vector<ucp_test_variant> &variants)
+{
+    add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
 }

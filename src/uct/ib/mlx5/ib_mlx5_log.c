@@ -71,11 +71,6 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         wqe_index %= UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) / MLX5_SEND_WQE_BB;
     }
 
-    if (ecqe->syndrome == MLX5_CQE_SYNDROME_WR_FLUSH_ERR) {
-        ucs_trace("QP 0x%x wqe[%d] is flushed", qp_num, wqe_index);
-        return status;
-    }
-
     switch (ecqe->syndrome) {
     case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
         snprintf(err_info, sizeof(err_info), "Local length");
@@ -87,7 +82,10 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         snprintf(err_info, sizeof(err_info), "Local protection");
         break;
     case MLX5_CQE_SYNDROME_WR_FLUSH_ERR:
-        snprintf(err_info, sizeof(err_info), "WR flushed because QP in error state");
+        snprintf(err_info, sizeof(err_info),
+                 "WR flushed because QP in error state");
+        log_level = UCS_LOG_LEVEL_TRACE;
+        status    = UCS_ERR_CANCELED;
         break;
     case MLX5_CQE_SYNDROME_MW_BIND_ERR:
         snprintf(err_info, sizeof(err_info), "Memory window bind");
@@ -106,7 +104,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
-        snprintf(err_info, sizeof(err_info), "Remote QP");
+        snprintf(err_info, sizeof(err_info), "Remote OP");
         status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
@@ -126,6 +124,10 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         break;
     }
 
+    if (!ucs_log_is_enabled(log_level)) {
+        goto out;
+    }
+
     if ((txwq != NULL) && ((ecqe->op_own >> 4) == MLX5_CQE_REQ_ERR)) {
         wqe = UCS_PTR_BYTE_OFFSET(txwq->qstart, MLX5_SEND_WQE_BB * wqe_index);
         uct_ib_mlx5_wqe_dump(iface, wqe, txwq->qstart, txwq->qend, INT_MAX, 0,
@@ -143,6 +145,8 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
             ecqe->syndrome, ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4,
             ecqe->hw_err_synd, uct_ib_qp_type_str(iface->config.qp_type),
             qp_num, wqe_index, wqe_info);
+
+out:
     return status;
 }
 
@@ -384,15 +388,15 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
             if (is_inline) {
                 inline_bitmap |= UCS_BIT(i-1);
             }
-            s += strlen(s);
         }
+        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, sg_list, i,
+                                inline_bitmap, packet_dump_cb, max_sge, s,
+                                ends - s);
+    } else {
+        uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND, log_sge->sg_list,
+                                log_sge->num_sge, log_sge->inline_bitmap,
+                                packet_dump_cb, log_sge->num_sge, s, ends - s);
     }
-
-    uct_ib_log_dump_sg_list(iface, UCT_AM_TRACE_TYPE_SEND,
-                            log_sge ? log_sge->sg_list : sg_list,
-                            log_sge ? log_sge->num_sge : ucs_min(i, max_sge),
-                            log_sge ? log_sge->inline_bitmap : inline_bitmap,
-                            packet_dump_cb, s, ends - s);
 }
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,

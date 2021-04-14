@@ -5,11 +5,14 @@
 # See file LICENSE for terms.
 #
 
+SUBDIRS = vfs/sock . vfs/fuse
+
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
-libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\"
+libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\" \
+                     -DUCX_CONF_DIR=\"$(ucx_conf_dir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
@@ -24,6 +27,7 @@ nobase_dist_libucs_la_HEADERS = \
 	algorithm/qsort_r.h \
 	async/async_fwd.h \
 	config/global_opts.h \
+	config/ini.h \
 	config/parser.h \
 	config/types.h \
 	datastruct/array.h \
@@ -40,6 +44,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/string_buffer.h \
 	datastruct/string_set.h \
 	debug/log_def.h \
+	debug/debug.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -63,6 +68,7 @@ nobase_dist_libucs_la_HEADERS = \
 	type/status.h \
 	type/thread_mode.h \
 	type/cpu_set.h \
+	vfs/base/vfs_obj.h \
 	arch/atomic.h \
 	arch/x86_64/global_opts.h \
 	arch/x86_64/atomic.h \
@@ -78,6 +84,7 @@ noinst_HEADERS = \
 	arch/x86_64/cpu.h \
 	arch/cpu.h \
 	datastruct/arbiter.h \
+	datastruct/bitmap.h \
 	datastruct/frag_list.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \
@@ -89,7 +96,7 @@ noinst_HEADERS = \
 	datastruct/ptr_map.h \
 	datastruct/ptr_map.inl \
 	debug/assert.h \
-	debug/debug.h \
+	debug/debug_int.h \
 	debug/log.h \
 	debug/memtrack.h \
 	memory/numa.h \
@@ -127,6 +134,7 @@ libucs_la_SOURCES = \
 	async/thread.c \
 	config/global_opts.c \
 	config/ucm_opts.c \
+	config/ini.c \
 	config/parser.c \
 	datastruct/arbiter.c \
 	datastruct/array.c \
@@ -165,8 +173,9 @@ libucs_la_SOURCES = \
 	time/timerq.c \
 	type/class.c \
 	type/status.c \
-	type/init_once.c \
-	type/spinlock.c
+	type/spinlock.c \
+	type/thread_mode.c \
+	vfs/base/vfs_obj.c
 
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \

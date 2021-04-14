@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -89,6 +89,11 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
   {"TX_NUM_GET_BYTES", "inf",
    "Maximal number of bytes simultaneously transferred by get/RDMA_READ operations.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.max_get_bytes), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TX_POLL_ALWAYS", "n",
+   "When enabled, TX completions are polled every time the progress function is invoked.\n"
+   "Otherwise poll TX completions only if no RX completions found.",
+   ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always), UCS_CONFIG_TYPE_BOOL},
 
   {NULL}
 };
@@ -245,6 +250,7 @@ void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
 {
     uct_rc_ep_t ***ptr, **memb;
 
+    ucs_spin_lock(&iface->eps_lock);
     ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
     if (*ptr == NULL) {
         *ptr = ucs_calloc(UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER), sizeof(**ptr),
@@ -254,16 +260,19 @@ void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
     memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
+    ucs_spin_unlock(&iface->eps_lock);
 }
 
 void uct_rc_iface_remove_qp(uct_rc_iface_t *iface, unsigned qp_num)
 {
     uct_rc_ep_t **memb;
 
+    ucs_spin_lock(&iface->eps_lock);
     memb = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
                       [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb != NULL);
     *memb = NULL;
+    ucs_spin_unlock(&iface->eps_lock);
 }
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
@@ -284,14 +293,17 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     }
 
     count = 0;
+    ucs_spin_lock(&iface->eps_lock);
     ucs_list_for_each(ep, &iface->ep_list, list) {
         status = uct_ep_flush(&ep->super.super, 0, NULL);
         if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
             ++count;
         } else if (status != UCS_OK) {
+            ucs_spin_unlock(&iface->eps_lock);
             return status;
         }
     }
+    ucs_spin_unlock(&iface->eps_lock);
 
     if (count != 0) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
@@ -343,8 +355,8 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
     ucs_assert(iface->config.fc_enabled);
 
-    if (ep == NULL) {
-        /* We get fc for ep which is being removed so should ignore it */
+    if ((ep == NULL) || (ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
+        /* We get fc for ep which is being removed or canceled so should ignore it */
         goto out;
     }
 
@@ -398,8 +410,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         if (status == UCS_ERR_NO_RESOURCE){
             /* force add request to group & schedule group to eliminate
              * FC deadlock */
-            uct_pending_req_arb_group_push_head(&iface->tx.arbiter,
-                                                &ep->arb_group, &fc_req->super);
+            uct_pending_req_arb_group_push_head(&ep->arb_group, &fc_req->super);
             ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
         } else {
             ucs_assertv_always(status == UCS_OK, "Failed to send FC grant msg: %s",
@@ -517,30 +528,31 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
                               &config->super, init_attr);
 
-    self->tx.cq_available           = init_attr->cq_len[UCT_IB_DIR_TX] - 1;
-    self->rx.srq.available          = 0;
-    self->rx.srq.quota              = 0;
-    self->config.tx_qp_len          = config->super.tx.queue_len;
-    self->config.tx_min_sge         = config->super.tx.min_sge;
-    self->config.tx_min_inline      = config->super.tx.min_inline;
-    self->config.tx_ops_count       = init_attr->cq_len[UCT_IB_DIR_TX];
-    self->config.min_rnr_timer      = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
-    self->config.timeout            = uct_ib_to_qp_fabric_time(config->tx.timeout);
-    self->config.rnr_retry          = uct_rc_iface_config_limit_value(
-                                                  "RNR_RETRY_COUNT",
-                                                  config->tx.rnr_retry_count,
-                                                  UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.retry_cnt          = uct_rc_iface_config_limit_value(
-                                                  "RETRY_COUNT",
-                                                  config->tx.retry_count,
-                                                  UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.max_rd_atomic      = config->max_rd_atomic;
-    self->config.ooo_rw             = config->ooo_rw;
+    self->tx.cq_available       = init_attr->cq_len[UCT_IB_DIR_TX] - 1;
+    self->rx.srq.available      = 0;
+    self->rx.srq.quota          = 0;
+    self->config.tx_qp_len      = config->super.tx.queue_len;
+    self->config.tx_min_sge     = config->super.tx.min_sge;
+    self->config.tx_min_inline  = config->super.tx.min_inline;
+    self->config.tx_poll_always = config->tx.poll_always;
+    self->config.tx_ops_count   = init_attr->cq_len[UCT_IB_DIR_TX];
+    self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
+    self->config.timeout        = uct_ib_to_qp_fabric_time(config->tx.timeout);
+    self->config.rnr_retry      = uct_rc_iface_config_limit_value(
+                                                     "RNR_RETRY_COUNT",
+                                                     config->tx.rnr_retry_count,
+                                                     UCT_RC_QP_MAX_RETRY_COUNT);
+    self->config.retry_cnt      = uct_rc_iface_config_limit_value(
+                                                     "RETRY_COUNT",
+                                                     config->tx.retry_count,
+                                                     UCT_RC_QP_MAX_RETRY_COUNT);
+    self->config.max_rd_atomic  = config->max_rd_atomic;
+    self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
-    self->config.tx_cq_len          = init_attr->cq_len[UCT_IB_DIR_TX];
-    self->tx.in_pending             = 0;
+    self->config.tx_cq_len      = init_attr->cq_len[UCT_IB_DIR_TX];
+    self->tx.in_pending         = 0;
 #endif
-    max_ib_msg_size                 = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
+    max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
 
     if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
         self->config.max_get_zcopy = max_ib_msg_size;
@@ -563,6 +575,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     self->tx.reads_completed = 0;
 
     uct_ib_fence_info_init(&self->tx.fi);
+
+    status = ucs_spinlock_init(&self->eps_lock, 0);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
@@ -577,10 +595,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     }
 
     /* Create RX buffers mempool */
-    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super,
+    status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "rc_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
-        goto err;
+        goto err_destroy_eps_lock;
     }
 
     /* Create TX buffers mempool */
@@ -641,13 +659,13 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
          * Then FC window size is the same for all endpoints as well.
          * TODO: Make wnd size to be a property of the particular interface.
          * We could distribute it via rc address then.*/
-        self->config.fc_wnd_size     = ucs_min(config->fc.wnd_size,
-                                               config->super.rx.queue_len);
-        self->config.fc_hard_thresh  = ucs_max((int)(self->config.fc_wnd_size *
-                                               config->fc.hard_thresh), 1);
+        self->config.fc_wnd_size    = ucs_min(config->fc.wnd_size,
+                                              config->super.rx.queue_len);
+        self->config.fc_hard_thresh = ucs_max((int)(self->config.fc_wnd_size *
+                                              config->fc.hard_thresh), 1);
     } else {
-        self->config.fc_wnd_size     = INT16_MAX;
-        self->config.fc_hard_thresh  = 0;
+        self->config.fc_wnd_size    = INT16_MAX;
+        self->config.fc_hard_thresh = 0;
     }
 
     return UCS_OK;
@@ -662,6 +680,8 @@ err_destroy_tx_mp:
     ucs_mpool_cleanup(&self->tx.mp, 1);
 err_destroy_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
+err_destroy_eps_lock:
+    ucs_spinlock_destroy(&self->eps_lock);
 err:
     return status;
 }
@@ -696,6 +716,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
     UCS_STATS_NODE_FREE(self->stats);
 
+    ucs_spinlock_destroy(&self->eps_lock);
     ops->cleanup_rx(self);
     uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);

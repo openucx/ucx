@@ -60,6 +60,17 @@ void ucs_fill_filename_template(const char *tmpl, char *buf, size_t max);
 
 
 /**
+ * Strip specified number of last components from file/dir path
+ *
+ * @param path          The pointer of file path to be stripped
+ * @param num_layers    The number of components to be stripped
+ *
+ * @return Pointer of the stripped dir path.
+ */
+char *ucs_dirname(char *path, int num_layers);
+
+
+/**
  * Format a string to a buffer of given size, and fill the rest of the buffer
  * with '\0'. Also, guarantee that the last char in the buffer is '\0'.
  *
@@ -218,14 +229,38 @@ const char* ucs_flags_str(char *str, size_t max,
 
 
 /**
- * Get estimated number of segments different in the two paths. Segments are
- * separated by `/`.
+ * Find the number of occurences of a char in the given string.
+ *
+ * @param  str String buffer to search.
+ * @param  c   Character to search in the string.
+ *
+ * @return a value between 0 and strlen(str).
+ */
+size_t ucs_string_count_char(const char *str, char c);
+
+
+/**
+ * Length of the common string from the start of two given strings.
+ *
+ * @param  str1 First string buffer.
+ * @param  str2 Second string buffer.
+ *
+ * @return a value between 0 and min(strlen(str1), strlen(str2)).
+ */
+size_t ucs_string_common_prefix_len(const char *str1, const char *str2);
+
+
+/**
+ * Get number of segments that are disimilar in the two paths. Segments
+ * are separated by `/`. When the number of segments are unequal for the given
+ * paths, the number of segments different in the larger of the paths is
+ * returned. E.g. for /a/b/c/d and /a/x/y 3 is returned; for /a/b/c/d and
+ * /a/b/c/e 1 is returned; for /a/b/c and /a/b/c 0 is returned
  *
  * @param  path1  String pointing to first path
  * @param  path2  String pointing to second path
  *
- * @return if either of the paths are invalid, UINT_MAX; if paths are the same 0
- *         is returned; otherwise in between
+ * @return if either of the paths are invalid UINT_MAX is returned.
  */
 ssize_t ucs_path_calc_distance(const char *path1, const char *path2);
 

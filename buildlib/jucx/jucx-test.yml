@@ -1,0 +1,91 @@
+parameters:
+  name: java test
+  demands: []
+
+jobs:
+  - job: ${{ parameters.name }}
+
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    strategy:
+      matrix:
+        java8:
+          JAVA_VERSION: 1.8
+        java11:
+          JAVA_VERSION: 1.11
+
+    steps:
+      - checkout: self
+        fetchDepth: 100
+        clean: true
+        displayName: Checkout
+      - bash: |
+          set -x
+          source buildlib/az-helpers.sh
+          az_init_modules
+          res=0
+          az_module_load dev/mvn
+          res=$(($res+$?))
+          az_module_load dev/jdk-${JAVA_VERSION}
+          res=$(($res+$?))
+          if [ $res -ne 0 ]; then
+            exit 0;
+          fi
+          try_load_cuda_env
+          set -eE
+          ./autogen.sh
+          ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
+            --with-java --enable-gtest=no --with-cuda=$have_cuda
+          make -j`nproc`
+          make install
+        displayName: Build UCX
+      - bash: |
+          set -x
+          source buildlib/az-helpers.sh
+          az_init_modules
+          try_load_cuda_env
+          res=0
+          az_module_load dev/mvn
+          res=$(($res+$?))
+          az_module_load dev/jdk-${JAVA_VERSION}
+          res=$(($res+$?))
+          if [ $res -ne 0 ]; then
+            exit 0;
+          fi
+          set -eE
+          ifaces=`get_rdma_interfaces`
+          if [ -z "$ifaces" ]; then
+              azure_log_warning "No active RDMA interfaces on machine"
+              exit 0;
+          fi
+          jucx_port=$((20000 + $RANDOM % 10000))
+          export JUCX_TEST_PORT=$jucx_port
+          make -C bindings/java/src/main/native test
+          make -C bindings/java/src/main/native package
+          ipv4_found=0
+          for iface in $ifaces
+          do
+              server_ip=$(get_ip ${iface})
+              if [ -z "$server_ip" ]; then
+                  continue
+              fi
+              echo "Running standalone benchamrk on $iface:$jucx_port"
+              java_cmd='java -XX:ErrorFile=$(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log  \
+                  -XX:OnError="cat $(Build.ArtifactStagingDirectory)/hs_err_$(Build.BuildId)_%p.log" \
+                  -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
+                  org.openucx.jucx.examples.$bench_class s=$server_ip p=$jucx_port t=1000000'
+              bench_class=UcxReadBWBenchmarkReceiver
+              eval "$java_cmd &"
+              java_pid=$!
+              sleep 10
+              bench_class=UcxReadBWBenchmarkSender
+              eval "$java_cmd"
+              wait $java_pid
+              ipv4_found=1
+          done
+          if [[ $ipv4_found -eq 0 ]]; then
+              azure_log_warning "No IPv4 address on any of $ifaces"
+          fi
+        displayName: Run jucx tests

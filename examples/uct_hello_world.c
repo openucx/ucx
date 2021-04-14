@@ -10,7 +10,8 @@
 #include <uct/api/uct.h>
 
 #include <assert.h>
-#include <ctype.h>
+#include <inttypes.h>
+
 
 typedef enum {
     FUNC_AM_SHORT,
@@ -206,7 +207,8 @@ static void print_strings(const char *label, const char *local_str,
                           const char *remote_str, size_t length)
 {
     fprintf(stdout, "\n\n----- UCT TEST SUCCESS ----\n\n");
-    fprintf(stdout, "[%s] %s sent %s", label, local_str, remote_str);
+    fprintf(stdout, "[%s] %s sent %s (%" PRIu64 " bytes)", label, local_str,
+            (length != 0) ? remote_str : "<none>", length);
     fprintf(stdout, "\n\n---------------------------\n");
     fflush(stdout);
 }
@@ -424,8 +426,11 @@ int print_err_usage()
     fprintf(stderr, func_template, 'i', func_am_t_str(FUNC_AM_SHORT), " (default)");
     fprintf(stderr, func_template, 'b', func_am_t_str(FUNC_AM_BCOPY), "");
     fprintf(stderr, func_template, 'z', func_am_t_str(FUNC_AM_ZCOPY), "");
-    fprintf(stderr, "  -d      Select device name\n");
-    fprintf(stderr, "  -t      Select transport layer\n");
+    fprintf(stderr, "  -d        Select device name\n");
+    fprintf(stderr, "  -t        Select transport layer\n");
+    fprintf(stderr, "  -n <name> Set node name or IP address "
+            "of the server (required for client and should be ignored "
+            "for server)\n");
     print_common_help();
     fprintf(stderr, "\nExample:\n");
     fprintf(stderr, "  Server: uct_hello_world -d eth0 -t tcp\n");
@@ -446,7 +451,6 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
     args->func_am_type  = FUNC_AM_SHORT;
     args->test_strlen   = 16;
 
-    opterr = 0;
     while ((c = getopt(argc, argv, "ibzd:t:n:p:s:m:h")) != -1) {
         switch (c) {
         case 'i':
@@ -477,7 +481,7 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
             break;
         case 's':
             args->test_strlen = atol(optarg);
-            if (args->test_strlen <= 0) {
+            if (args->test_strlen < 0) {
                 fprintf(stderr, "Wrong string size %ld\n", args->test_strlen);
                 return UCS_ERR_UNSUPPORTED;
             }
@@ -488,14 +492,6 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
                 return UCS_ERR_UNSUPPORTED;
             }
             break;
-        case '?':
-            if (optopt == 's') {
-                fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-            } else if (isprint (optopt)) {
-                fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-            } else {
-                fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
-            }
         case 'h':
         default:
             return print_err_usage();

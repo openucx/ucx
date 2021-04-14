@@ -1,23 +1,28 @@
 # See https://aka.ms/yaml
 # This pipeline to be run on tags creation
 
-pr: none
 trigger:
   tags:
     include:
       - v*
+pr:
+  - master
+  - v*.*.x
 
 resources:
   containers:
-    - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:2
-      endpoint: ucfconsort_registry
     - container: centos7_cuda10_1
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
     - container: centos7_cuda10_2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.2:1
     - container: centos7_cuda11_0
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.0:1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.0:2
+    - container: centos7_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.2:2
+    - container: centos8_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5.0-cuda11.0:2
+    - container: centos8_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5.1-cuda11.2:2
     - container: ubuntu16_cuda10_1
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.1:1
     - container: ubuntu16_cuda10_2
@@ -26,18 +31,44 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.1:1
     - container: ubuntu18_cuda10_2
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.2:1
-    - container: ubuntu18_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.0:1
+    - container: ubuntu18_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.0:2
+    - container: ubuntu18_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.2:2
+    - container: ubuntu20_cuda11_0
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.0:2
+    - container: ubuntu20_cuda11_2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.2:2
 
 stages:
+  - stage: Check_Commit
+    jobs:
+      - job: Check
+        steps:
+          - checkout: self
+            clean: true
+
+          - bash: |
+              set -eE
+              source ./buildlib/az-helpers.sh
+              set -x
+              check_commit_message $(system.pullRequest.sourceCommitId) "AZP/RELEASE: " $(Build.Reason)
+            name: Commit
   # Create an empty draft to avoid race condition in distro releases
   - stage: GitHubDraft
+    dependsOn: Check_Commit
     jobs:
       - job: DraftRelease
-        container: centos7
+        condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
+        container: centos7_cuda11_2
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         steps:
         - checkout: self
           clean: true
+          fetchDepth: 100
           path: "we/need/to/go/deeper"
 
         - bash: ./autogen.sh
@@ -46,11 +77,12 @@ stages:
         - bash: |
             set -eE
             gcc --version
-            ./contrib/configure-release
+            ./contrib/configure-release --with-java=no
             ./contrib/buildrpm.sh -s -t -b
           displayName: Build tarball
 
         - task: GithubRelease@0
+          condition: eq(variables['Build.Reason'], 'IndividualCI')
           displayName: Create/edit GitHub Draft Release
           inputs:
             githubConnection: release
@@ -67,8 +99,14 @@ stages:
               ./rpm-dist/ucx-*.src.rpm
 
   - stage: Release
+    dependsOn: Check_Commit
+    variables:
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+        TARGET: publish-release
+      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+        TARGET: package
     jobs:
       - template: az-distro-release.yml
-      - template: jucx-publish.yml
+      - template: jucx/jucx-publish.yml
         parameters:
-          target: publish-release
+          target: $(TARGET)

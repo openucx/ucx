@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "debug.h"
+#include "debug_int.h"
 #include "log.h"
 
 #include <ucs/datastruct/khash.h>
@@ -521,7 +521,7 @@ static void ucs_debug_print_source_file(const char *file, unsigned line,
         return;
     }
 
-    n = 0;
+    n = 1;
     fprintf(stream, "\n");
     fprintf(stream, "%s: [ %s() ]\n", file, function);
     if (line > context) {
@@ -1260,6 +1260,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            !strcmp(symbol, "ucs_debug_handle_error_signal") ||
            !strcmp(symbol, "ucs_debug_backtrace_create") ||
            !strcmp(symbol, "ucs_debug_show_innermost_source_file") ||
+           !strcmp(symbol, "ucs_debug_print_backtrace") ||
            !strcmp(symbol, "ucs_log_default_handler") ||
            !strcmp(symbol, "__ucs_abort") ||
            !strcmp(symbol, "ucs_log_dispatch") ||

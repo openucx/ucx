@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -63,6 +63,12 @@ public:
 
     /* return the string name of a memory type */
     static std::string mem_type_name(ucs_memory_type_t mem_type);
+
+    /* returns whether any other type of memory besides the CPU is supported */
+    static bool is_gpu_supported();
+
+    /* set device context if compiled with GPU support */
+    static void set_device_context();
 
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     virtual ~mem_buffer();

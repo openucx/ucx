@@ -1,17 +1,186 @@
 #
-## Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
+## Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 ## Copyright (C) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
-## Copyright (C) ARM Ltd. 2017-2020.  ALL RIGHTS RESERVED.
+## Copyright (C) ARM Ltd. 2017-2021.  ALL RIGHTS RESERVED.
 ##
 ## See file LICENSE for terms.
 ##
 #
 
 ## Current
-### Features: TBD
-#### UCX Core TBD
-#### UCX Java (API Preview) TBD
-### Bugfixes: TBD
+### Features:
+#### UCP
+* Added API for querying UCP library attributes
+### Bugfixes:
+
+## 1.10.0 (March 9, 2021)
+### Features:
+#### Core
+* Added support for Nvidia HPC SDK
+* Added support for latest PGI and Clang
+* Added support for ROCM-3.7+ (warning generated if older version detected)
+* Added support for GCC11
+#### Architecture
+* Added Arm SVE memcpy()
+* Redesigned Arm WFE support
+* Improved clear_cache performance for Arm
+* Added architecture detection for Zhaoxin CPU
+#### CI
+* Added release builds on CUDA 11
+* Enabled performance validation in gtest
+* Added new OS for release CI
+#### UCP
+* Added locality awareness to the transport selection logic for GPU devices
+* Added put/offload/short and put/offload/zcopy protocols
+* Added receive message nbx routine
+* Reworked AM implementation and API, which adds support for RNDV semantics
+* Added support for multi-lane connection manager over TCP
+* Added support for printing AM tls with info log level
+* Implement flush and destroy for UCT EPs on UCP worker
+* Reduced UCP request size
+* Added support for keepalive protocol
+* Added support for multi-fragment protocol
+* Added implementation for protocol progress for eager, bcopy, and multicopy
+* Improved selection logic for protocol selection
+* Added new protocols for UCP get operation
+* Added bcopy protocols with support for GPU memory
+* Added RNDV protocol implementation for GPU devices (CUDA, ROCm)
+* Set SOCKADDR_CM_ENABLE=y by default
+* Added support for fast-path short with new tag protocols
+* Added a new parameter to control the CM listener's backlog
+* Added support sending AM RTS over short message protocol
+* Added support for shared memory multi-lane when CM is used
+* Added missing async locks
+#### UCT
+* Added API for keepalive_timeout value
+* Added add uct_completion.status
+* Allowed transports to access multiple mem_types
+* Removed status arg from uct_completion_callback_t
+* Restructured  uct_mem_alloc/uct_md_mem_alloc to use mem_type
+* Updated documentation for uct_listener_params
+* Lowered the log level for certain network errors
+* Added cuda_copy wakeup feature
+* Added wakeup support for shared memory
+#### UCS
+* Added "inf" and "auto" values to time units
+* Added on-stack constructors for array and string buffer
+* Added ucs_ptr_map_t data structure
+* Added bool CSWAP
+* Improved logging
+* Added optimization for namespace processing
+* Fixes for connection matching functionality
+#### CUDA
+* Added support for global IPC cache
+#### RDMA CORE (IB, ROCE, etc.)
+* Added support for auto detection of adapative routing settings
+* Added an option to poll TX CQ every progress iteration
+* Added local and remote addresses to the reject error message
+* Added support for UAR allocation with non-cacheable memory type
+* Added support for multiple flush cancel without completion
+* Added async events callback support
+* Added detection for  ConnectX-6, ConnectX-7 and BlueField-1/2 devices
+* Added support for connection matching for UD
+* Added a check for AM ordering
+* Added better support for non-4K MTU values
+#### Java (preview)
+* Added support for a different javadoc executable path for different java versions
+* Added UCS memory type constants
+* Added support build on Java10+
+* Added support for io-vector datatype.
+* Removed libjucx from packages.
+#### Tests
+* Added CI for CUDA 11
+* Added test_ucp_sockaddr_protocols.stream_short
+* Reimplemented tests using NBX API
+* Added flush(cancel) test
+* Added memory_wait mode to perftest
+* Added support for clang 10
+* Refactored RMA and atomic tests, add memtype support
+* Added test for uct_md_mem_query()
+* Added request interrupt support
+* Added support for connection manager fallbacks
+* Added new ucp request test checking for leaks from the ptr_map
+#### Documentation
+* Added glossaries
+
+### Bugfixes:
+#### Portability
+* Fixes in print functions to use format string like PRIx64, etc.
+* Fixes for Arm v8 cross compilation support
+#### Continues Integration:
+* Fixes in Github release flow
+* Fixes in docker image
+#### Packaging
+* Removed deb package dependencies
+* Fixes in SPEC to make the RPM relocatable
+#### Documentation
+* Fixes in documentation for ucp_am_recv_data_nbx
+* Fixes in quick start example
+* Fixes in installation instruction
+* Fixes in updates in author list
+#### Tests
+* Fixes for failures under valgrind runtime
+* Fixes in mmap tests for 0-length RMA
+* Fixes in definition of LAST_WQE wait timeout
+* Fixes in ROCm for mem_buffer test
+* Fixes in test name printing format
+* Fixes in tcp_sockcm test
+#### UCP
+* Fixes in worker cleanup flow
+* Fixes in RNDV RTS flow
+* Fix in length check condition for RMA PUT short
+* Fixes in handling failures from AM Bcopy
+* Fix in a release flow of deferred data
+* Fixes for invalid ID and handling of status in RNDV
+* Fixes in short active message reply protocol
+#### CUDA
+* Fixes in managed memory support
+* Fixes in topology detection
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixes in assert definitions
+* Fixes in printing an error about invalid AM Bcopy length for UD
+* Fixes for thread safety support
+* Fixes to get ROCE device name according to GID
+* Fixes for SL selection
+* Fixes in create STRICT_ORDER key
+* Fixes addressing performance degradation in UD transport due to excess async events
+* Fixes in QP destroy
+* Fixes for CQ creation failure using old Verbs API
+#### UGNI
+* Fixing disable logic in config
+* Fixing clang 11 warnings
+#### Java
+* Fixes in build dependencies
+* Fixes in constructing UcpRequest object on error
+* Fixes in exception handling on endpoint closure request
+* Fixes for segfault in UcpErrorHandler
+#### UCP
+* Fixes in datatype support for get_zcopy RNDV
+* Fixes in connection manager disconnect
+* Fixes in assert definitions
+* Fixes in completion flow for failed EP
+* Fixes in flush error handling flow
+* Fixes in latency calculations for wireup protocol
+* Fixes in offload completion with inlined data
+* Fixes in unpacking flow
+* Fixes in error handling for various protocols
+#### UCT
+* Fixes in flush TX
+* Fixes in checks for enabling GPU Direct RDMA
+#### UCS
+* Fixes for crashes on incorrect value set in config
+* Fixes in ptr_array
+* Fixes in maximal size for ucs_snprintf_safe()
+* Fixes in compilation warning
+* Fixes in ucs_aarch64_dsb(_op) definition
+#### TCP
+* Fixes in default route interface confirmation flow
+* Fixes in PUT protocol
+* Fixes in max connection limit and improved error reporting
+#### UCM
+* Fixing crash on prevent unload
+* Fixes in libucm_rocm
+* Fixes for few racing conditions
 
 ## 1.9.0 (September 19, 2020)
 ### Features:

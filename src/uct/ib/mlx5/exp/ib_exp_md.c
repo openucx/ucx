@@ -171,7 +171,8 @@ static ucs_status_t uct_ib_mlx5_exp_md_umr_qp_create(uct_ib_mlx5_md_t *md)
     qp_attr.ah_attr.dlid             = port_attr->lid;
     qp_attr.ah_attr.is_global        = 1;
     if (uct_ib_device_query_gid(ibdev, port_num, UCT_IB_MD_DEFAULT_GID_INDEX,
-                                &qp_attr.ah_attr.grh.dgid) != UCS_OK) {
+                                &qp_attr.ah_attr.grh.dgid,
+                                UCS_LOG_LEVEL_ERROR) != UCS_OK) {
         goto err_destroy_qp;
     }
 
@@ -489,9 +490,16 @@ static ucs_status_t uct_ib_mlx5_exp_dereg_atomic_key(uct_ib_md_t *ibmd,
 {
 #ifdef HAVE_EXP_UMR
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
+    struct ibv_mr *atomic_mr;
     int ret;
 
-    ret = UCS_PROFILE_CALL(ibv_dereg_mr, memh->atomic_mr);
+    if (memh->super.flags & UCT_IB_MEM_MULTITHREADED) {
+        atomic_mr = memh->ksm_data->atomic_mr;
+    } else {
+        atomic_mr = memh->atomic_mr;
+    }
+
+    ret = UCS_PROFILE_CALL(ibv_dereg_mr, atomic_mr);
     if (ret != 0) {
         ucs_error("ibv_dereg_mr() failed: %m");
         return UCS_ERR_IO_ERROR;
@@ -576,13 +584,6 @@ static ucs_status_t uct_ib_mlx5_exp_dereg_multithreaded(uct_ib_md_t *ibmd,
     size_t chunk = ibmd->config.mt_reg_chunk;
     ucs_status_t s, status = UCS_OK;
 
-    if (memh->super.flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
-        s = uct_ib_dereg_mr(memh->ksm_data->atomic_mr);
-        if (s != UCS_OK) {
-            status = s;
-        }
-    }
-
     s = uct_ib_md_handle_mr_list_multithreaded(ibmd, memh->mr->addr,
                                                memh->mr->length,
                                                UCT_IB_MEM_DEREG, chunk,
@@ -622,7 +623,8 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
 
     ctx = ibv_open_device(ibv_device);
     if (ctx == NULL) {
-        ucs_debug("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
+        ucs_diag("ibv_open_device(%s) failed: %m",
+                 ibv_get_device_name(ibv_device));
         status = UCS_ERR_UNSUPPORTED;
         goto err;
     }

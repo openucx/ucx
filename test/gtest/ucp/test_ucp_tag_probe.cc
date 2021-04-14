@@ -166,9 +166,14 @@ UCS_TEST_P(test_ucp_tag_probe, send_rndv_msg_probe, "RNDV_THRESH=1048576") {
     EXPECT_EQ((ucp_tag_t)0x111337, info.sender_tag);
 
     /* receiver - process the rts and schedule a get operation */
-    my_recv_req = (request*)ucp_tag_msg_recv_nb(receiver().worker(), &recvbuf[0],
-                                                recvbuf.size(), DATATYPE, message,
-                                                recv_callback);
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_DATATYPE |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.recv      = recv_callback;
+    param.datatype     = DATATYPE;
+
+    my_recv_req = (request*)ucp_tag_msg_recv_nbx(receiver().worker(), &recvbuf[0],
+                                                 recvbuf.size(), message, &param);
     ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
 
     /* receiver - perform rndv get and send the ATS */

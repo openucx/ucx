@@ -9,6 +9,7 @@
 #endif
 
 #include "cuda_md.h"
+#include "cuda_iface.h"
 
 #include <ucs/sys/module.h>
 #include <ucs/profile/profile.h>
@@ -17,8 +18,8 @@
 #include <cuda.h>
 
 
-static ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
-                                              ucs_sys_device_t *sys_dev_p)
+ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
+                                       ucs_sys_device_t *sys_dev_p)
 {
     ucs_sys_bus_id_t bus_id;
     CUresult cu_err;
@@ -56,15 +57,16 @@ static ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
 
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
-                 (md, addr, length, mem_type_p),
-                 uct_md_h md, const void *addr, size_t length,
+                 (md, address, length, mem_type_p),
+                 uct_md_h md, const void *address, size_t length,
                  ucs_memory_type_t *mem_type_p)
 {
     uct_md_mem_attr_t mem_attr;
     ucs_status_t status;
 
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE;
-    status              = uct_cuda_base_mem_query(md, addr, length, &mem_attr);
+    status              = uct_cuda_base_mem_query(md, address, length,
+                                                  &mem_attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -83,6 +85,9 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
     uint32_t is_managed        = 0;
     unsigned value             = 1;
     CUdevice cuda_device       = -1;
+    void *base_address         = (void*)address;
+    size_t alloc_length        = length;
+    ucs_sys_device_t sys_dev   =  UCS_SYS_DEVICE_ID_UNKNOWN;
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     ucs_memory_type_t mem_type;
@@ -90,16 +95,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
     ucs_status_t status;
     CUresult cu_err;
 
-    if (!(mem_attr->field_mask & (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                                  UCT_MD_MEM_ATTR_FIELD_SYS_DEV))) {
+    if (!(mem_attr->field_mask & (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     |
+                                  UCT_MD_MEM_ATTR_FIELD_SYS_DEV      |
+                                  UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                                  UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH))) {
         return UCS_OK;
     }
 
     if (address == NULL) {
         mem_type              = UCS_MEMORY_TYPE_HOST;
-        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
-            mem_attr->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        }
     } else {
         attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
         attr_data[0] = &cuda_mem_mype;
@@ -133,15 +137,39 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
         }
 
         if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
-            status = uct_cuda_base_get_sys_dev(cuda_device, &mem_attr->sys_dev);
+            status = uct_cuda_base_get_sys_dev(cuda_device, &sys_dev);
             if (status != UCS_OK) {
                 return status;
+            }
+        }
+
+        if (mem_attr->field_mask & (UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
+                                    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS)) {
+            cu_err = cuMemGetAddressRange((CUdeviceptr*)&base_address,
+                                          &alloc_length, (CUdeviceptr)address);
+            if (cu_err != CUDA_SUCCESS) {
+                cuGetErrorString(cu_err, &cu_err_str);
+                ucs_error("ccuMemGetAddressRange(%p) error: %s", address,
+                          cu_err_str);
+                return UCS_ERR_INVALID_ADDR;
             }
         }
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
         mem_attr->mem_type = mem_type;
+    }
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
+        mem_attr->sys_dev = sys_dev;
+    }
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
+        mem_attr->base_address = base_address;
+    }
+
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
+        mem_attr->alloc_length = alloc_length;
     }
 
     return UCS_OK;

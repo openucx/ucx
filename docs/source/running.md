@@ -75,7 +75,7 @@ improvements.
   ```
   $ mkdir build-ucx
   $ cd build-ucx
-  $ ../configure --prefix=<ucx-install-path> --with-ucx=<ompi-install-path>
+  $ ../configure --prefix=<ompi-install-path> --with-ucx=<ucx-install-path>
   ```
 > **NOTE**: With OpenMPI 4.0 and above, there could be compilation errors from "btl_uct" component.
 > This component is not critical for using UCX; so it could be disabled this way:

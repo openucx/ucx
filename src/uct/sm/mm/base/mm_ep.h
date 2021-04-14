@@ -18,41 +18,37 @@ KHASH_INIT(uct_mm_remote_seg, uintptr_t, uct_mm_remote_seg_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal)
 
 
-/* owner of segment process information. we have to cache this value
- * because some transports terminate segment when process gone (xpmem) */
-typedef struct uct_mm_keepalive_info {
-    ucs_time_t starttime; /* Process starttime */
-    char       proc[];    /* Process owner proc dir */
-} uct_mm_keepalive_info_t;
-
 /**
  * MM transport endpoint
  */
 typedef struct uct_mm_ep {
     uct_base_ep_t              super;
 
-    /* Remote peer */
-    uct_mm_fifo_ctl_t          *fifo_ctl;   /* pointer to the destination's ctl struct in the receive fifo */
-    void                       *fifo_elems; /* fifo elements (destination's receive fifo) */
+    /* pointer to the destination's ctl struct in the receive fifo */
+    uct_mm_fifo_ctl_t          *fifo_ctl;
 
-    uint64_t                   cached_tail; /* the sender's own copy of the remote FIFO's tail.
-                                               it is not always updated with the actual remote tail value */
+    /* fifo elements (destination's receive fifo) */
+    void                       *fifo_elems;
+
+    /* the sender's own copy of the remote FIFO's tail.
+       it is not always updated with the actual remote tail value */
+    uint64_t                   cached_tail;
 
     /* mapped remote memory chunks to which remote descriptors belong to.
      * (after attaching to them) */
     khash_t(uct_mm_remote_seg) remote_segs;
 
-    void                       *remote_iface_addr; /* remote md-specific address, can be NULL */
+    /* remote md-specific address, can be NULL */
+    void                       *remote_iface_addr;
 
-    ucs_arbiter_group_t        arb_group;   /* the group that holds this ep's pending operations */
+    /* group that holds this ep's pending operations */
+    ucs_arbiter_group_t        arb_group;
 
-    /* Used for signaling remote side wakeup */
-    struct {
-        struct sockaddr_un     sockaddr;  /* address of signaling socket */
-        socklen_t              addrlen;   /* address length of signaling socket */
-    } signal;
+    /* placeholder arbiter element to make sure that we would not be able to arm
+       the interface as long as one of the endpoints is unable to send */
+    ucs_arbiter_elem_t         arb_elem;
 
-    uct_mm_keepalive_info_t    *keepalive; /* keepalive info */
+    uct_keepalive_info_t       *keepalive; /* keepalive info */
 } uct_mm_ep_t;
 
 
@@ -61,6 +57,10 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_mm_ep_t, uct_ep_t);
 
 ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                 const void *payload, unsigned length);
+
+ucs_status_t uct_mm_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                    const uct_iov_t *iov, size_t iovcnt);
+
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
                            void *arg, unsigned flags);
 

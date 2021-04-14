@@ -11,12 +11,14 @@
 
 #include "uct_iface.h"
 #include "uct_cm.h"
+#include "uct_iov.inl"
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 
 
 #ifdef ENABLE_STATS
@@ -177,6 +179,28 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     return iface->ops.iface_query(iface, iface_attr);
 }
 
+ucs_status_t uct_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    uct_iface_attr_t iface_attr;
+    ucs_status_t status;
+
+    status = uct_iface_query(iface, &iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* By default, the performance is assumed to be the same for all operations */
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = iface_attr.overhead;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr)
 {
     return iface->ops.iface_get_device_address(iface, addr);
@@ -304,106 +328,17 @@ ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags)
     return UCS_OK;
 }
 
-static void uct_ep_failed_purge_cb(uct_pending_req_t *self, void *arg)
+ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
+                                     ucs_status_t status)
 {
-    uct_pending_req_queue_push((ucs_queue_head_t*)arg, self);
-}
+    uct_base_iface_t *base_iface = ucs_derived_of(iface, uct_base_iface_t);
 
-static void uct_ep_failed_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
-                                void *arg)
-{
-    uct_failed_iface_t *iface = ucs_derived_of(tl_ep->iface,
-                                               uct_failed_iface_t);
-    uct_pending_req_t *req;
-
-    ucs_queue_for_each_extract(req, &iface->pend_q, priv, 1) {
-        if (cb != NULL) {
-            cb(req, arg);
-        } else {
-            ucs_warn("ep=%p cancelling user pending request %p", tl_ep, req);
-        }
-    }
-}
-
-static void uct_ep_failed_destroy(uct_ep_h tl_ep)
-{
-    /* Warn user if some pending reqs left*/
-    uct_ep_failed_purge (tl_ep, NULL, NULL);
-
-    ucs_free(tl_ep->iface);
-    ucs_free(tl_ep);
-}
-
-ucs_status_t uct_set_ep_failed(ucs_class_t *cls, uct_ep_h tl_ep,
-                               uct_iface_h tl_iface, ucs_status_t status)
-{
-    uct_failed_iface_t *f_iface;
-    uct_iface_ops_t    *ops;
-    uct_base_iface_t   *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-
-    ucs_debug("set ep %p to failed state", tl_ep);
-
-    /* TBD: consider allocating one instance per interface
-     * rather than for each endpoint */
-    f_iface = ucs_malloc(sizeof(*f_iface), "failed iface");
-    if (f_iface == NULL) {
-        ucs_error("Could not create failed iface (nomem)");
-        return status;
+    if (base_iface->err_handler) {
+        return base_iface->err_handler(base_iface->err_handler_arg, ep, status);
     }
 
-    ucs_queue_head_init(&f_iface->pend_q);
-    ops = &f_iface->super.ops;
-
-    /* Move all pending requests to the queue.
-     * Failed ep will use that queue for purge. */
-    uct_ep_pending_purge(tl_ep, uct_ep_failed_purge_cb, &f_iface->pend_q);
-
-    ops->ep_put_short        = (uct_ep_put_short_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_put_bcopy        = (uct_ep_put_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout;
-    ops->ep_put_zcopy        = (uct_ep_put_zcopy_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_get_short        = (uct_ep_get_short_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_get_bcopy        = (uct_ep_get_bcopy_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_get_zcopy        = (uct_ep_get_zcopy_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_am_short         = (uct_ep_am_short_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_am_bcopy         = (uct_ep_am_bcopy_func_t)ucs_empty_function_return_bc_ep_timeout;
-    ops->ep_am_zcopy         = (uct_ep_am_zcopy_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_cswap64   = (uct_ep_atomic_cswap64_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic64_post    = (uct_ep_atomic64_post_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic32_post    = (uct_ep_atomic32_post_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic64_fetch   = (uct_ep_atomic64_fetch_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_eager_short  = (uct_ep_tag_eager_short_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_eager_bcopy  = (uct_ep_tag_eager_bcopy_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_eager_zcopy  = (uct_ep_tag_eager_zcopy_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_rndv_zcopy   = (uct_ep_tag_rndv_zcopy_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_rndv_cancel  = (uct_ep_tag_rndv_cancel_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_tag_rndv_request = (uct_ep_tag_rndv_request_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_pending_add      = (uct_ep_pending_add_func_t)ucs_empty_function_return_busy;
-    ops->ep_pending_purge    = uct_ep_failed_purge;
-    ops->ep_flush            = (uct_ep_flush_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_fence            = (uct_ep_fence_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_check            = (uct_ep_check_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_connect_to_ep    = (uct_ep_connect_to_ep_func_t)ucs_empty_function_return_ep_timeout;
-    ops->ep_destroy          = uct_ep_failed_destroy;
-    ops->ep_get_address      = (uct_ep_get_address_func_t)ucs_empty_function_return_ep_timeout;
-
-    ucs_class_call_cleanup_chain(cls, tl_ep, -1);
-
-    tl_ep->iface = &f_iface->super;
-
-    if (iface->err_handler) {
-        return iface->err_handler(iface->err_handler_arg, tl_ep, status);
-    } else if (status == UCS_ERR_CANCELED) {
-        ucs_debug("error %s was suppressed for ep %p",
-                  ucs_status_string(UCS_ERR_CANCELED), tl_ep);
-        /* Suppress this since the cancellation is initiated by user. */
-        status = UCS_OK;
-    } else {
-        ucs_debug("error %s was not handled for ep %p",
-                  ucs_status_string(status), tl_ep);
-    }
-
+    ucs_assert(status != UCS_ERR_CANCELED);
+    ucs_debug("error %s was not handled for ep %p", ucs_status_string(status), ep);
     return status;
 }
 
@@ -415,8 +350,42 @@ void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr)
     iface_attr->dev_num_paths = 1;
 }
 
+ucs_status_t
+uct_iface_param_am_alignment(const uct_iface_params_t *params, size_t elem_size,
+                             size_t base_offset, size_t payload_offset,
+                             size_t *align, size_t *align_offset)
+{
+    if (!(params->field_mask & UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT)) {
+        if (params->field_mask & UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET) {
+            ucs_error("alignment offset has no effect without alignment");
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        *align        = UCS_SYS_CACHE_LINE_SIZE;
+        *align_offset = base_offset;
+
+        return UCS_OK;
+    }
+
+    *align        = params->am_alignment;
+    *align_offset = UCT_IFACE_PARAM_VALUE(params, am_align_offset,
+                                          AM_ALIGN_OFFSET, 0ul);
+
+    if (*align_offset >= elem_size) {
+        ucs_diag("invalid AM alignment offset %zu, must be less than %zu",
+                 *align_offset, elem_size);
+
+        *align_offset = 0ul;
+    }
+
+    *align_offset += payload_offset;
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
                                         uct_device_type_t dev_type,
+                                        ucs_sys_device_t sys_device,
                                         uct_tl_device_resource_t **tl_devices_p,
                                         unsigned *num_tl_devices_p)
 {
@@ -430,7 +399,7 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 
     ucs_snprintf_zero(device->name, sizeof(device->name), "%s", dev_name);
     device->type       = dev_type;
-    device->sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
+    device->sys_device = sys_device;
 
     *num_tl_devices_p = 1;
     *tl_devices_p     = device;
@@ -555,6 +524,11 @@ ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
     return UCS_ERR_INVALID_PARAM;
 }
 
+ucs_status_t uct_ep_connect(uct_ep_h ep, const uct_ep_connect_params_t *params)
+{
+    return ep->iface->ops.ep_connect(ep, params);
+}
+
 ucs_status_t uct_ep_disconnect(uct_ep_h ep, unsigned flags)
 {
     return ep->iface->ops.ep_disconnect(ep, flags);
@@ -581,9 +555,14 @@ ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)
     return ep->iface->ops.cm_ep_conn_notify(ep);
 }
 
+void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
+{
+    ep->iface = iface;
+}
+
 UCS_CLASS_INIT_FUNC(uct_ep_t, uct_iface_t *iface)
 {
-    self->iface = iface;
+    uct_ep_set_iface(self, iface);
     return UCS_OK;
 }
 
@@ -637,3 +616,117 @@ ucs_config_field_t uct_iface_config_table[] = {
 
   {NULL}
 };
+
+ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
+{
+    ucs_status_t status;
+
+    UCS_STATS_NODE_FREE(ep->stats);
+
+    status = UCS_STATS_NODE_ALLOC(&ep->stats, &uct_ep_stats_class, iface->stats,
+                                  "-%p", ep);
+#ifdef ENABLE_STATS
+    if (status != UCS_OK) {
+        /* set the stats to NULL so that the UCS_STATS_NODE_FREE call on the
+         * base_ep's cleanup flow won't fail */
+        ep->stats = NULL;
+    }
+#endif
+
+    return status;
+}
+
+ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,
+                                      size_t iovcnt)
+{
+    uint64_t header = 0;
+    size_t length;
+    void *buffer;
+    ucs_iov_iter_t iov_iter;
+    ucs_status_t status;
+
+    length = uct_iov_total_length(iov, iovcnt);
+
+    /* Copy first sizeof(header) bytes of iov to header. If the total length of
+     * iov is less than sizeof(header), the remainder of the header is filled
+     * with zeros. */
+    ucs_iov_iter_init(&iov_iter);
+    uct_iov_to_buffer(iov, iovcnt, &iov_iter, &header, sizeof(header));
+
+    /* If the total size of iov is greater than sizeof(header), then allocate
+       buffer and copy the remainder of iov to the buffer. */
+    if (length > sizeof(header)) {
+        length -= sizeof(header);
+
+        if (length > UCS_ALLOCA_MAX_SIZE) {
+            buffer = ucs_malloc(length, "uct_base_ep_am_short_iov buffer");
+        } else {
+            buffer = ucs_alloca(length);
+        }
+
+        uct_iov_to_buffer(iov, iovcnt, &iov_iter, buffer, SIZE_MAX);
+    } else {
+        buffer = NULL;
+        length = 0;
+    }
+
+    status = uct_ep_am_short(ep, id, header, buffer, length);
+
+    if (length > UCS_ALLOCA_MAX_SIZE) {
+        ucs_free(buffer);
+    }
+
+    return status;
+}
+
+int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
+{
+    ucs_assert((buffer != NULL) || (max_len == 0));
+    /* cppcheck-suppress nullPointer */
+    /* cppcheck-suppress ctunullpointer */
+    return snprintf(buffer, max_len, "/proc/%d", (int)pid);
+}
+
+uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time)
+{
+    uct_keepalive_info_t *ka;
+    int proc_len;
+
+    proc_len = uct_ep_get_process_proc_dir(NULL, 0, pid);
+    if (proc_len <= 0) {
+        ucs_error("failed to get length to hold path to a process directory");
+        return NULL;
+    }
+
+    ka = ucs_malloc(sizeof(*ka) + proc_len + 1, "keepalive");
+    if (ka == NULL) {
+        ucs_error("failed to allocate keepalive info");
+        return NULL;
+    }
+
+    ka->start_time = start_time;
+    uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
+
+    return ka;
+}
+
+ucs_status_t
+uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
+                       uct_completion_t *comp)
+{
+    ucs_status_t status;
+    ucs_time_t create_time;
+
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+
+    ucs_assert(ka != NULL);
+
+    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
+                                   &create_time);
+    if (ucs_unlikely((status != UCS_OK) || (ka->start_time != create_time))) {
+        return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
+                                       UCS_ERR_ENDPOINT_TIMEOUT);
+    }
+
+    return UCS_OK;
+}

@@ -22,7 +22,8 @@ static size_t ucp_proto_put_am_bcopy_pack(void *dest, void *arg)
     ucp_request_t                   *req = pack_ctx->req;
     ucp_put_hdr_t                  *puth = dest;
 
-    puth->address  = req->send.rma.remote_addr + req->send.dt_iter.offset;
+    puth->address  = req->send.rma.remote_addr +
+                     req->send.state.dt_iter.offset;
     puth->ep_id    = ucp_send_request_get_ep_remote_id(req);
     puth->mem_type = req->send.rma.rkey->mem_type;
 
@@ -63,8 +64,9 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_multi_progress(req, ucp_proto_put_am_bcopy_send_func,
-                                    ucp_proto_request_bcopy_complete,
+    return ucp_proto_multi_progress(req, mpriv,
+                                    ucp_proto_put_am_bcopy_send_func,
+                                    ucp_proto_request_bcopy_complete_success,
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
 }
 

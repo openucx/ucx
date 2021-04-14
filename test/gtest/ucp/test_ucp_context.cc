@@ -9,13 +9,22 @@ extern "C" {
 #include <ucs/sys/sys.h>
 }
 
-
-class test_ucp_context : public ucp_test {
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
-    }
+class test_ucp_lib_query : public ucs::test {
 };
+
+UCS_TEST_F(test_ucp_lib_query, test_max_thread_support) {
+    ucs_status_t status;
+    ucp_lib_attr_t params;
+    memset(&params, 0, sizeof(ucp_lib_attr_t));
+    params.field_mask = UCP_LIB_ATTR_FIELD_MAX_THREAD_LEVEL;
+    status            = ucp_lib_query(&params);
+    ASSERT_EQ(UCS_OK, status);
+#if ENABLE_MT
+    EXPECT_EQ(UCS_THREAD_MODE_MULTI, params.max_thread_level);
+#else
+    EXPECT_EQ(UCS_THREAD_MODE_SERIALIZED, params.max_thread_level);
+#endif
+}
 
 UCS_TEST_P(test_ucp_context, minimal_field_mask) {
     ucs::handle<ucp_config_t*> config;

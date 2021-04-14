@@ -72,6 +72,15 @@
 #define UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG UCS_BIT(30) /* MP last packet indication */
 #define UCT_IB_MLX5_MP_RQ_FILLER_FLAG   UCS_BIT(31) /* Filler CQE indicator */
 
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_BF
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC MLX5DV_UAR_ALLOC_TYPE_BF
+#else
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC 0
+#endif
+
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC MLX5DV_UAR_ALLOC_TYPE_NC
+#endif
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
     ((8) | ((_log_arg_size) - 2))
@@ -163,13 +172,18 @@ enum {
     UCT_IB_MLX5_MD_FLAG_RMP              = UCS_BIT(5),
     /* Device supports querying bitmask of OOO (AR) states per SL */
     UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK      = UCS_BIT(6),
+    /* Device has LAG */
+    UCT_IB_MLX5_MD_FLAG_LAG              = UCS_BIT(7),
+    /* Device supports CQE V1 */
+    UCT_IB_MLX5_MD_FLAG_CQE_V1           = UCS_BIT(8),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 7,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 9,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
     UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCSRQ),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DCI         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCI),
 };
 
 
@@ -227,7 +241,7 @@ typedef struct uct_ib_mlx5_iface_config {
     } dm;
 #endif
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
-    ucs_ternary_value_t      ar_enable;
+    ucs_ternary_auto_value_t ar_enable;
 } uct_ib_mlx5_iface_config_t;
 
 
@@ -259,7 +273,6 @@ typedef struct uct_ib_mlx5_srq {
     uint16_t                           ready_idx;  /* what is ready to be posted to hw */
     uint16_t                           sw_pi;      /* what is posted to hw */
     uint16_t                           mask;
-    uint16_t                           tail;       /* tail in the driver */
     uint16_t                           stride;
     union {
         struct {
@@ -324,6 +337,7 @@ typedef struct uct_ib_mlx5_res_domain {
 typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    uint32_t                    uidx;
 } uct_ib_mlx5_qp_attr_t;
 
 
@@ -584,6 +598,10 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
                                                 uint8_t port_num,
                                                 uint16_t *ooo_sl_mask_p);
 
+void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
+                                            uint8_t path_index, void *qpc,
+                                            uint32_t *opt_param_mask);
+
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
@@ -679,7 +697,7 @@ static inline void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5
 
 ucs_status_t
 uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
-                      ucs_ternary_value_t ar_enable,
+                      ucs_ternary_auto_value_t ar_enable,
                       uint16_t hw_sl_mask, int have_sl_mask_cap,
                       const char *dev_name, uint8_t port_num,
                       uint8_t *sl_p);

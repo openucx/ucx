@@ -40,7 +40,7 @@ typedef uint16_t                 uct_ud_psn_t;
 typedef struct uct_ud_iface      uct_ud_iface_t;
 typedef struct uct_ud_ep         uct_ud_ep_t;
 typedef struct uct_ud_ctl_hdr    uct_ud_ctl_hdr_t;
-typedef uct_ib_qpnum_t           uct_ud_iface_addr_t;
+typedef struct uct_ud_iface_addr uct_ud_iface_addr_t;
 typedef struct uct_ud_ep_addr    uct_ud_ep_addr_t;
 typedef struct uct_ud_iface_peer uct_ud_iface_peer_t;
 
@@ -162,8 +162,8 @@ typedef struct uct_ud_send_skb {
  * Call user completion handler
  */
 typedef struct uct_ud_comp_desc {
-    uct_completion_t        *comp;
-    ucs_status_t            status;     /* used in case of failure */
+    uct_completion_t *comp;
+    uct_ud_ep_t      *ep;
 } uct_ud_comp_desc_t;
 
 

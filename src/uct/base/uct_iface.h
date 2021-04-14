@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -16,6 +16,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
@@ -189,6 +190,11 @@ enum {
     UCT_CHECK_PARAM((_flags) == 0, "Unsupported flags: %x", (_flags));
 
 
+#define UCT_IFACE_PARAM_VALUE(_params, _name, _flag, _default) \
+    (((_params)->field_mask & (UCT_IFACE_PARAM_FIELD_##_flag)) ? \
+     (_params)->_name : (_default))
+
+
 /**
  * Declare classes for structures defined in api/tl.h
  */
@@ -249,6 +255,15 @@ typedef struct uct_failed_iface {
 
 
 /**
+ * Keepalive info used by EP
+ */
+typedef struct uct_keepalive_info {
+    ucs_time_t start_time; /* Process start time */
+    char       proc[]; /* Process owner proc dir */
+} uct_keepalive_info_t;
+
+
+/**
  * Base structure of all endpoints.
  */
 typedef struct uct_base_ep {
@@ -298,6 +313,9 @@ typedef struct uct_tl {
  * @param _name           Name of the transport (should be a token, not a string)
  * @param _query_devices  Function to query the list of available devices
  * @param _iface_class    Struct type defining the uct_iface class
+ * @param _cfg_prefix     Prefix for configuration variables
+ * @param _cfg_table      Transport configuration table
+ * @param _cfg_struct     Struct type defining transport configuration
  */
 #define UCT_TL_DEFINE(_component, _name, _query_devices, _iface_class, \
                       _cfg_prefix, _cfg_table, _cfg_struct) \
@@ -439,7 +457,7 @@ uct_pending_req_priv_arb_elem(uct_pending_req_t *req)
 /**
  * Add a pending request to the head of group in arbiter.
  */
-#define uct_pending_req_arb_group_push_head(_arbiter, _arbiter_group, _req) \
+#define uct_pending_req_arb_group_push_head(_arbiter_group, _req) \
     do { \
         ucs_arbiter_elem_init(uct_pending_req_priv_arb_elem(_req)); \
         ucs_arbiter_group_push_head_elem_always(_arbiter_group, \
@@ -609,13 +627,37 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg);
 
-ucs_status_t uct_set_ep_failed(ucs_class_t* cls, uct_ep_h tl_ep, uct_iface_h
-                               tl_iface, ucs_status_t status);
+ucs_status_t uct_iface_handle_ep_err(uct_iface_h iface, uct_ep_h ep,
+                                      ucs_status_t status);
+
+/**
+ * Initialize AM data alignment and its offset based on the user configuration
+ * provided in interface parameters.
+ *
+ * @param [in]  params         User defined interface parameters.
+ * @param [in]  elem_size      Transport receive buffer size.
+ * @param [in]  base_offset    Default offset in the transport receive buffer,
+ *                             which should be aligned to the certain boundary.
+ * @param [in]  payload_offset Offset to the payload in the transport receive
+ *                             buffer.
+ * @param [out] align          Alignment of the Active Message data on the
+ *                             receiver.
+ * @param [out] align_offset   Offset in the incoming Active Message which
+ *                             should be aligned to the @a align boundary.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM if user specified invalid
+ *         combination of @a am_alignment and @a am_align_offset in @a params.
+ */
+ucs_status_t
+uct_iface_param_am_alignment(const uct_iface_params_t *params, size_t elem_size,
+                             size_t base_offset, size_t payload_offset,
+                             size_t *align, size_t *align_offset);
 
 void uct_base_iface_query(uct_base_iface_t *iface, uct_iface_attr_t *iface_attr);
 
 ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
                                         uct_device_type_t dev_type,
+                                        ucs_sys_device_t sys_device,
                                         uct_tl_device_resource_t **tl_devices_p,
                                         unsigned *num_tl_devices_p);
 
@@ -675,8 +717,12 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
 static UCS_F_ALWAYS_INLINE
 void uct_invoke_completion(uct_completion_t *comp, ucs_status_t status)
 {
-    ucs_trace_func("comp=%p, count=%d, status=%d", comp, comp->count, status);
-    ucs_assertv(comp->count > 0, "comp=%p count=%d", comp, comp->count);
+    ucs_trace_func("comp=%p (%s) count=%d status=%d", comp,
+                   ucs_debug_get_symbol_name((void*)comp->func), comp->count,
+                   status);
+    ucs_assertv(comp->count > 0, "comp=%p (%s) count=%d status=%d", comp,
+                ucs_debug_get_symbol_name((void*)comp->func), comp->count,
+                status);
 
     uct_completion_update_status(comp, status);
     if (--comp->count == 0) {
@@ -706,5 +752,20 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
     /* cppcheck-suppress ctunullpointer */
     memcpy(packet->payload, payload, length);
 }
+
+ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,
+                                      size_t iovcnt);
+
+int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid);
+
+uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time);
+
+ucs_status_t
+uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
+                       uct_completion_t *comp);
+
+void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
+
+ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
 
 #endif

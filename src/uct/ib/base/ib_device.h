@@ -23,6 +23,7 @@
 
 
 #define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */
+#define UCT_IB_UIDX_SHIFT                 8   /* BE uidx shift */
 #define UCT_IB_LRH_LEN                    8   /* IB Local routing header */
 #define UCT_IB_GRH_LEN                    40  /* IB GLobal routing header */
 #define UCT_IB_BTH_LEN                    12  /* IB base transport header */
@@ -50,6 +51,9 @@
 #define UCT_IB_SITE_LOCAL_MASK            be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP        106  /* Default DSCP for RoCE v2 */
 #define UCT_IB_ROCE_UDP_SRC_PORT_BASE     0xC000
+#define UCT_IB_CQE_SL_PKTYPE_MASK         0x7 /* SL for IB or packet type
+                                                 (GRH/IPv4/IPv6) for RoCE in the
+                                                 CQE */
 #define UCT_IB_DEVICE_SYSFS_PFX           "/sys/class/infiniband/%s"
 #define UCT_IB_DEVICE_SYSFS_FMT           UCT_IB_DEVICE_SYSFS_PFX "/device/%s"
 #define UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX  UCT_IB_DEVICE_SYSFS_PFX "/ports/%d/gid_attrs"
@@ -176,7 +180,7 @@ typedef struct uct_ib_async_event {
  * IB async event waiting context.
  */
 typedef struct uct_ib_async_event_wait {
-    void                (*cb)(struct uct_ib_async_event_wait*); /* Callback */
+    ucs_callback_t      cb;                     /* Callback */
     ucs_callbackq_t     *cbq;                   /* Async queue for callback */
     int                 cb_id;                  /* Scheduled callback ID */
 } uct_ib_async_event_wait_t;
@@ -217,6 +221,7 @@ typedef struct uct_ib_device {
     uint8_t                     pci_fadd_arg_sizes;
     uint8_t                     pci_cswap_arg_sizes;
     uint8_t                     atomic_align;
+    uint8_t                     lag_level;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
@@ -367,7 +372,8 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
 
 unsigned uct_ib_device_get_roce_lag_level(uct_ib_device_t *dev,
-                                          uint8_t port_num);
+                                          uint8_t port_num,
+                                          uint8_t gid_index);
 
 
 static inline struct ibv_port_attr*
@@ -387,7 +393,8 @@ const char *uct_ib_roce_version_str(uct_ib_roce_version_t roce_ver);
 const char *uct_ib_gid_str(const union ibv_gid *gid, char *str, size_t max_size);
 
 ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
-                                     unsigned gid_index, union ibv_gid *gid);
+                                     unsigned gid_index, union ibv_gid *gid,
+                                     ucs_log_level_t error_level);
 
 ucs_status_t uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
                                           uint8_t port_num, unsigned gid_index,

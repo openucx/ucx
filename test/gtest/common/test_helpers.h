@@ -12,6 +12,7 @@
 
 #include <common/mem_buffer.h>
 
+#include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
@@ -266,7 +267,7 @@ ucs_time_t get_deadline(double timeout_in_sec = test_timeout_in_sec);
  */
 int max_tcp_connections();
 
- 
+
 /**
  * Signal-safe sleep.
  */
@@ -346,6 +347,8 @@ public:
     std::string to_str() const;
 
     const struct sockaddr* get_sock_addr_ptr() const;
+
+    const void* get_sock_addr_in_buf() const;
 
 private:
     struct sockaddr_storage m_storage;
@@ -799,6 +802,17 @@ static void deleter(T *ptr) {
     delete ptr;
 }
 
+
+class scoped_log_level {
+public:
+    scoped_log_level(ucs_log_level_t level);
+    ~scoped_log_level();
+
+private:
+    const ucs_log_level_t m_prev_level;
+};
+
+
 extern int    perf_retry_count;
 extern double perf_retry_interval;
 
@@ -846,6 +860,18 @@ private:
 };
 
 } // detail
+
+
+class scoped_async_lock {
+public:
+    scoped_async_lock(ucs_async_context_t &async);
+
+    ~scoped_async_lock();
+
+private:
+    ucs_async_context_t &m_async;
+};
+
 
 /**
  * N-ary Cartesian product over the N vectors provided in the input vector

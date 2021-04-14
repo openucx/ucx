@@ -26,8 +26,8 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda11.0"
-GDRCOPY_MODULE="dev/gdrcopy2.0_cuda11.0"
+CUDA_MODULE="dev/cuda11.1.1"
+GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -91,6 +91,18 @@ then
 	nworkers=1
 fi
 echo "==== Running on $(hostname), worker $worker / $nworkers ===="
+
+# Report an warning message to Azure pipeline
+log_warning() {
+	msg=$1
+	test "x$RUNNING_IN_AZURE" = "xyes" && { azure_log_warning "${msg}" ; set -x; } || echo "${msg}"
+}
+
+# Report an error message to Azure pipeline
+log_error() {
+	msg=$1
+	test "x$RUNNING_IN_AZURE" = "xyes" && { azure_log_error "${msg}" ; set -x; } || echo "${msg}"
+}
 
 #
 # cleanup ucx
@@ -204,15 +216,41 @@ get_my_tasks() {
 }
 
 #
-# Get list of active IB devices
+# Get list IB devices
 #
-get_active_ib_devices() {
-	device_list=$(ibv_devinfo -l | tail -n +2 | sed -e 's/^[ \t]*//' | head -n -1)
+get_ib_devices() {
+	state=$1
+	device_list=$(ibv_devinfo -l | tail -n +2)
 	for ibdev in $device_list
 	do
-		port=1
-		(ibv_devinfo -d $ibdev -i $port | grep -q PORT_ACTIVE) && echo "$ibdev:$port" || true
+		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
+		for port in $(seq 1 $num_ports)
+		do
+			if ibv_devinfo -d $ibdev -i $port | grep -q $state
+			then
+				echo "$ibdev:$port"
+			fi
+		done
 	done
+}
+
+#
+# Get IB devices on state Active
+#
+get_active_ib_devices() {
+	get_ib_devices PORT_ACTIVE
+}
+
+#
+# Check IB devices on state INIT
+#
+check_machine() {
+	init_dev=$(get_ib_devices PORT_INIT)
+	if [ -n "${init_dev}" ]
+	then
+		echo "${init_dev} have state PORT_INIT"
+		exit 1
+	fi
 }
 
 #
@@ -268,6 +306,26 @@ get_rdma_device_ip_addr() {
 	echo $ipaddr
 }
 
+get_non_rdma_ip_addr() {
+	if ! which ibdev2netdev >&/dev/null
+	then
+		return
+	fi
+
+	# get the interface of the ip address that is the default gateway (pure Ethernet IPv4 address).
+	eth_iface=$(ip route show| sed -n 's/default via \(\S*\) dev \(\S*\).*/\2/p')
+
+	# the pure Ethernet interface should not appear in the ibdev2netdev output. it should not be an IPoIB or
+	# RoCE interface.
+	if ibdev2netdev|grep -qw "${eth_iface}"
+	then
+		echo "Failed to retrieve an IP of a non IPoIB/RoCE interface"
+		exit 1
+	fi
+
+	get_ifaddr ${eth_iface}
+}
+
 #
 # Prepare build environment
 #
@@ -285,387 +343,6 @@ prepare() {
 	cd build-test
 }
 
-#
-# Build documentation
-#
-build_docs() {
-	doxy_ready=0
-	doxy_target_version="1.8.11"
-	doxy_version="$(doxygen --version)" || true
-
-	# Try load newer doxygen if native is older than 1.8.11
-	if ! (echo $doxy_target_version; echo $doxy_version) | sort -CV
-	then
-		if module_load tools/doxygen-1.8.11
-		then
-			doxy_ready=1
-		else
-			echo " doxygen was not found"
-		fi
-	else
-		doxy_ready=1
-	fi
-
-	if [ $doxy_ready -eq 1 ]
-	then
-		echo " ==== Build docs only ===="
-		../configure --prefix=$ucx_inst --with-docs-only
-		make_clean
-		$MAKE  docs
-		make_clean # FIXME distclean does not work with docs-only
-	fi
-}
-
-#
-# Building java docs
-#
-build_java_docs() {
-	echo " ==== Building java docs ===="
-	if module_load dev/jdk && module_load dev/mvn
-	then
-		../configure --prefix=$ucx_inst --with-java
-		$MAKE -C ../build-test/bindings/java/src/main/native docs
-		module unload dev/jdk
-		module unload dev/mvn
-	else
-		echo "No jdk and mvn module, failed to build docs".
-	fi
-}
-
-#
-# Build without verbs
-#
-build_no_verbs() {
-	echo "==== Build without IB verbs ===="
-	../contrib/configure-release --prefix=$ucx_inst --without-verbs
-	make_clean
-	$MAKEP
-	make_clean distclean
-}
-
-#
-# Build without numa support check
-#
-build_disable_numa() {
-	echo "==== Check --disable-numa compilation option ===="
-	../contrib/configure-release --prefix=$ucx_inst --disable-numa
-	make_clean
-	$MAKEP
-	make_clean distclean
-}
-
-#
-# Build a package in release mode
-#
-build_release_pkg() {
-	echo "==== Build release ===="
-	../contrib/configure-release
-	make_clean
-	$MAKEP
-	$MAKEP distcheck
-
-	# Show UCX info
-	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M
-
-	if [ -f /etc/redhat-release -o -f /etc/fedora-release ]; then
-		rpm_based=yes
-	elif [ `cat /etc/os-release | grep -i "ubuntu\|mint"|wc -l` -gt 0 ]; then
-		rpm_based=no
-	else
-		# try rpm tool to detect distro
-		set +e
-		out=$(rpm -q rpm 2>/dev/null)
-		rc=$?
-		set -e
-		rpm_based=yes
-		if [[ $rc != 0 || "$out" == *"not installed"* ]]; then
-			rpm_based=no
-		fi
-	fi
-
-	if [[ "$rpm_based" == "no" && -x /usr/bin/dpkg-buildpackage ]]; then
-		echo "==== Build debian package ===="
-		dpkg-buildpackage -us -uc
-	else
-		echo "==== Build RPM ===="
-		../contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
-	fi
-
-	# check that UCX version is present in spec file
-	cd ${WORKSPACE}
-	# extract version from configure.ac and convert to MAJOR.MINOR.PATCH representation
-	version=$(grep -P "define\S+ucx_ver" configure.ac | awk '{print $2}' | sed 's,),,' | xargs echo | tr ' ' '.')
-	if ! grep -q "$version" ucx.spec.in; then
-		echo "Current UCX version ($version) is not present in ucx.spec.in changelog"
-		exit 1
-	fi
-	cd -
-
-	make_clean distclean
-}
-
-#
-# Build with Intel compiler
-#
-build_icc() {
-	echo 1..1 > build_icc.tap
-	if module_load intel/ics-19.1.1 && icc -v
-	then
-		echo "==== Build with Intel compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=icc CXX=icpc
-		make_clean
-		$MAKEP
-		make_clean distclean
-		echo "==== Build with Intel compiler (clang) ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		make_clean
-		$MAKEP
-		make_clean distclean
-		echo "ok 1 - build successful " >> build_icc.tap
-	else
-		echo "==== Not building with Intel compiler ===="
-		echo "ok 1 - # SKIP because Intel compiler not installed" >> build_icc.tap
-	fi
-	module_unload intel/ics-19.1.1
-}
-
-#
-# Build with PGI compiler
-#
-build_pgi() {
-	echo 1..1 > build_pgi.tap
-	pgi_test_file=$(mktemp ./XXXXXX).c
-	echo "int main() {return 0;}" > ${pgi_test_file}
-
-	if module_load pgi/latest && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
-	then
-		echo "==== Build with PGI compiler ===="
-		# PGI failed to build valgrind headers, disable it for now
-		# TODO: Using non-default PGI compiler - pgcc18 which is going to be default
-		#       in next versions.
-		#       Switch to default CC compiler after pgcc18 is default for pgi module
-		../contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
-		make_clean
-		$MAKEP
-		make_clean distclean
-		echo "ok 1 - build successful " >> build_pgi.tap
-	else
-		echo "==== Not building with PGI compiler ===="
-		echo "ok 1 - # SKIP because PGI compiler not installed" >> build_pgi.tap
-	fi
-
-	rm -rf ${pgi_test_file} ${pgi_test_file}.out
-	module_unload pgi/latest
-}
-
-#
-# Build debug version
-#
-build_debug() {
-	echo "==== Build with --enable-debug option ===="
-	../contrib/configure-devel --prefix=$ucx_inst --enable-debug --enable-examples
-	make_clean
-	$MAKEP
-	make_clean distclean
-}
-
-#
-# Build prof
-#
-build_prof() {
-	echo "==== Build configure-prof ===="
-	../contrib/configure-prof --prefix=$ucx_inst
-	make_clean
-	$MAKEP
-	make_clean distclean
-}
-
-#
-# Build UGNI
-#
-build_ugni() {
-	echo 1..1 > build_ugni.tap
-
-	echo "==== Build with cray-ugni ===="
-	#
-	# Point pkg-config to contrib/cray-ugni-mock, and replace
-	# PKG_CONFIG_TOP_BUILD_DIR with source dir, since the mock .pc files contain
-	# relative paths.
-	#
-	../contrib/configure-devel --prefix=$ucx_inst --with-ugni \
-		PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$PWD/../contrib/cray-ugni-mock \
-		PKG_CONFIG_TOP_BUILD_DIR=$PWD/..
-	make_clean
-	$MAKEP
-
-	# make sure UGNI transport is enabled
-	grep '#define HAVE_TL_UGNI 1' config.h
-
-	$MAKE  distcheck
-	make_clean distclean
-
-	module_unload dev/cray-ugni
-	echo "ok 1 - build successful " >> build_ugni.tap
-}
-
-#
-# Build CUDA
-#
-build_cuda() {
-	echo 1..1 > build_cuda.tap
-	if module_load $CUDA_MODULE
-	then
-		if module_load $GDRCOPY_MODULE
-		then
-			echo "==== Build with enable cuda, gdr_copy ===="
-			../contrib/configure-devel --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			make_clean
-			$MAKEP
-			make_clean distclean
-
-			../contrib/configure-release --prefix=$ucx_inst --with-cuda --with-gdrcopy
-			make_clean
-			$MAKEP
-			make_clean distclean
-			module unload $GDRCOPY_MODULE
-		fi
-
-		echo "==== Build with enable cuda, w/o gdr_copy ===="
-		../contrib/configure-devel --prefix=$ucx_inst --with-cuda --without-gdrcopy
-		make_clean
-		$MAKEP
-
-		module unload $CUDA_MODULE
-
-		echo "==== Running test_link_map with cuda build but no cuda module ===="
-		env UCX_HANDLE_ERRORS=bt ./test/apps/test_link_map
-
-		make_clean distclean
-		echo "ok 1 - build successful " >> build_cuda.tap
-	else
-		echo "==== Not building with cuda flags ===="
-		echo "ok 1 - # SKIP because cuda not installed" >> build_cuda.tap
-	fi
-	unload_cuda_env
-}
-
-#
-# Build with clang compiler
-#
-build_clang() {
-	echo 1..1 > build_clang.tap
-	if which clang > /dev/null 2>&1
-	then
-		echo "==== Build with clang compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=clang CXX=clang++
-		make_clean
-		$MAKEP
-		$MAKEP install
-		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-		make_clean distclean
-		echo "ok 1 - build successful " >> build_clang.tap
-	else
-		echo "==== Not building with clang compiler ===="
-		echo "ok 1 - # SKIP because clang not installed" >> build_clang.tap
-	fi
-}
-
-#
-# Build with gcc-latest module
-#
-build_gcc_latest() {
-	echo 1..1 > build_gcc_latest.tap
-	#If the glibc version on the host is older than 2.14, don't run
-	#check the glibc version with the ldd version since it comes with glibc
-	#see https://www.linuxquestions.org/questions/linux-software-2/how-to-check-glibc-version-263103/
-	#see https://benohead.com/linux-check-glibc-version/
-	#see https://stackoverflow.com/questions/9705660/check-glibc-version-for-a-particular-gcc-compiler
-	ldd_ver="$(ldd --version | awk '/ldd/{print $NF}')"
-	if (echo "2.14"; echo $ldd_ver) | sort -CV
-	then
-		if module_load dev/gcc-latest
-		then
-			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
-			../contrib/configure-devel --prefix=$ucx_inst
-			make_clean
-			$MAKEP
-			$MAKEP install
-			UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-			make_clean distclean
-			echo "ok 1 - build successful " >> build_gcc_latest.tap
-			module unload dev/gcc-latest
-		else
-			echo "==== Not building with latest gcc compiler ===="
-			echo "ok 1 - # SKIP because dev/gcc-latest module is not available" >> build_gcc_latest.tap
-		fi
-	else
-		echo "==== Not building with gcc compiler ===="
-		echo "Required glibc version is too old ($ldd_ver)"
-		echo "ok 1 - # SKIP because glibc version is older than 2.14" >> build_gcc_latest.tap
-	fi
-}
-
-#
-# Builds jucx
-#
-build_jucx() {
-	echo 1..1 > build_jucx.tap
-	if module_load dev/jdk && module_load dev/mvn
-	then
-		echo "==== Building JUCX bindings (java api for ucx) ===="
-		../contrib/configure-release --prefix=$ucx_inst --with-java
-		make_clean
-		$MAKEP
-		$MAKEP install
-		make_clean distclean
-		echo "ok 1 - build successful " >> build_jucx.tap
-		module unload dev/jdk
-		module unload dev/mvn
-	else
-		echo "==== No jdk and mvn modules ==== "
-		echo "ok 1 - # SKIP because dev/jdk and dev/mvn modules are not available" >> build_jucx.tap
-	fi
-}
-
-#
-# Build with armclang compiler
-#
-build_armclang() {
-	echo 1..1 > build_armclang.tap
-	armclang_test_file=$(mktemp ./XXXXXX).c
-	echo "int main() {return 0;}" > ${armclang_test_file}
-	if module_load arm-compiler/latest && armclang --version && armclang ${armclang_test_file} -o ${armclang_test_file}.out
-	then
-		echo "==== Build with armclang compiler ===="
-		../contrib/configure-devel --prefix=$ucx_inst CC=armclang CXX=armclang++
-		make_clean
-		$MAKEP
-		$MAKEP install
-		UCX_HANDLE_ERRORS=bt,freeze UCX_LOG_LEVEL_TRIGGER=ERROR $ucx_inst/bin/ucx_info -d
-		make_clean distclean
-		echo "ok 1 - build successful " >> build_armclang.tap
-	else
-		echo "==== Not building with armclang compiler ===="
-		echo "ok 1 - # SKIP because armclang not installed" >> build_armclang.tap
-	fi
-
-	rm -rf ${armclang_test_file} ${armclang_test_file}.out
-	module_unload arm-compiler/latest
-}
-
-check_inst_headers() {
-	echo 1..1 > inst_headers.tap
-	echo "==== Testing installed headers ===="
-
-	../contrib/configure-release --prefix=$PWD/install
-	make_clean
-	$MAKEP install
-	../contrib/check_inst_headers.sh $PWD/install/include
-	make_clean distclean
-
-	echo "ok 1 - build successful " >> inst_headers.tap
-}
-
 check_make_distcheck() {
 	echo 1..1 > make_distcheck.tap
 
@@ -679,26 +356,7 @@ check_make_distcheck() {
 		../contrib/configure-release --prefix=$PWD/install
 		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
 	else
-		echo "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
-	fi
-}
-
-check_config_h() {
-	echo 1..1 > check_config_h.tap
-
-	srcdir=$PWD/../src
-
-	# Check if all .c files include config.h
-	echo "==== Checking for config.h files in directory $srcdir ===="
-
-	missing=`find $srcdir \( -name "*.c" -o -name "*.cc" \) -type f -exec grep -LP '\#\s*include\s+"config.h"' {} \;`
-
-	if [ `echo $missing | wc -w` -eq 0 ]
-	then
-		echo "ok 1 - check successful " >> check_config_h.tap
-	else
-		echo "Error: missing include config.h in files: $missing"
-		exit 1
+		log_warning "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
 	fi
 }
 
@@ -751,7 +409,7 @@ rename_files() {
 }
 
 run_client_server_app() {
-	test_name=$1
+	test_exe=$1
 	test_args=$2
 	server_addr_arg=$3
 	kill_server=$4
@@ -763,7 +421,7 @@ run_client_server_app() {
 	affinity_server=$(slice_affinity 0)
 	affinity_client=$(slice_affinity 1)
 
-	taskset -c $affinity_server ${test_name} ${test_args} ${server_port_arg} &
+	taskset -c $affinity_server ${test_exe} ${test_args} ${server_port_arg} &
 	server_pid=$!
 
 	sleep 15
@@ -773,7 +431,7 @@ run_client_server_app() {
 		set +Ee
 	fi
 
-	taskset -c $affinity_client ${test_name} ${test_args} ${server_addr_arg} ${server_port_arg} &
+	taskset -c $affinity_client ${test_exe} ${test_args} ${server_addr_arg} ${server_port_arg} &
 	client_pid=$!
 
 	wait ${client_pid}
@@ -802,21 +460,21 @@ run_hello() {
 	fi
 
 	# set smaller timeouts so the test will complete faster
-	if [[ ${test_args} == *"-e"* ]]
+	if [[ ${test_args} =~ "-e" ]]
 	then
 		export UCX_UD_TIMEOUT=15s
 		export UCX_RC_TIMEOUT=1ms
 		export UCX_RC_RETRY_COUNT=4
 	fi
 
-	if [[ ${test_args} == *"-e"* ]]
+	if [[ ${test_args} =~ "-e" ]]
 	then
 		error_emulation=1
 	else
 		error_emulation=0
 	fi
 
-	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 $error_emulation
+	run_client_server_app "./examples/${test_name}" "${test_args}" "-n $(hostname)" 0 ${error_emulation}
 
 	if [[ ${test_args} == *"-e"* ]]
 	then
@@ -842,7 +500,10 @@ run_ucp_hello() {
 		mem_types_list+="cuda cuda-managed "
 	fi
 
-	for test_mode in -w -f -b -e
+	export UCX_KEEPALIVE_INTERVAL=1s
+	export UCX_KEEPALIVE_NUM_EPS=10
+
+	for test_mode in -w -f -b -erecv -esend -ekeepalive
 	do
 		for mem_type in $mem_types_list
 		do
@@ -851,6 +512,9 @@ run_ucp_hello() {
 		done
 	done
 	rm -f ./ucp_hello_world
+
+	unset UCX_KEEPALIVE_INTERVAL
+	unset UCX_KEEPALIVE_NUM_EPS
 }
 
 #
@@ -891,50 +555,76 @@ run_uct_hello() {
 run_client_server() {
 	test_name=ucp_client_server
 
-	if [ ! -x ${test_name} ]
+	mem_types_list="host"
+
+	if [ "X$have_cuda" == "Xyes" ]
 	then
-		gcc -o ${test_name} ${ucx_inst}/share/ucx/examples/${test_name}.c \
-			-lucp -lucs -I${ucx_inst}/include -L${ucx_inst}/lib \
-			-Wl,-rpath=${ucx_inst}/lib
+		mem_types_list+=" cuda cuda-managed "
 	fi
 
-	server_ip=$(get_rdma_device_ip_addr)
+	if [ ! -x ${test_name} ]
+	then
+		$MAKEP -C examples ${test_name}
+	fi
+
+	server_ip=$1
 	if [ "$server_ip" == "" ]
 	then
 		return
 	fi
 
-	run_client_server_app "./${test_name}" "" "-a ${server_ip}" 1 0
+	for mem_type in ${mem_types_list}
+	do
+		echo "==== Running UCP client-server with \"${mem_type}\" memory type ===="
+		run_client_server_app "./examples/${test_name}" "-m ${mem_type}" "-a ${server_ip}" 1 0
+	done
 }
 
 run_ucp_client_server() {
 	echo "==== Running UCP client-server  ===="
-	run_client_server
-
-	rm -f ./ucp_client_server
+	run_client_server $(get_rdma_device_ip_addr)
+	run_client_server $(get_non_rdma_ip_addr)
+	run_client_server "127.0.0.1"
 }
 
 run_io_demo() {
-	server_ip=$(get_rdma_device_ip_addr)
-	if [ "$server_ip" == "" ]
+	server_rdma_addr=$(get_rdma_device_ip_addr)
+	server_nonrdma_addr=$(get_non_rdma_ip_addr)
+	server_loopback_addr="127.0.0.1"
+	mem_types_list="host "
+
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		mem_types_list+="cuda cuda-managed "
+	fi
+
+	if [ -z "$server_rdma_addr" ] && [ -z "$server_nonrdma_addr" ]
 	then
 		return
 	fi
 
-	echo "==== Running UCP IO demo  ===="
+	for mem_type in $mem_types_list
+	do
+		echo "==== Running UCP IO demo with \"${mem_type}\" memory type ===="
 
-	test_args="$@ -o write,read -d 128:4194304 -i 10000 -w 10"
-	test_name=io_demo
+		test_args="$@ -o write,read -d 128:4194304 -P 2 -i 10000 -w 10 -m ${mem_type}"
+		test_name=io_demo
 
-	if [ ! -x ${test_name} ]
-	then
-		$MAKEP -C test/apps/iodemo ${test_name}
-	fi
+		if [ ! -x ${test_name} ]
+		then
+			$MAKEP -C test/apps/iodemo ${test_name}
+		fi
 
-	export UCX_SOCKADDR_CM_ENABLE=y
-	run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+		for server_ip in $server_rdma_addr $server_nonrdma_addr $server_loopback_addr
+		do
+			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+			for server_ip in $server_rdma_addr $server_nonrdma_addr
+			do
+				run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+			done
+		done
+	done
 
-	unset UCX_SOCKADDR_CM_ENABLE
 	make_clean
 }
 
@@ -1096,16 +786,21 @@ run_ucx_perftest() {
 # Test malloc hooks with mpi
 #
 test_malloc_hooks_mpi() {
-	for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
+	for mode in reloc bistro
 	do
-		echo "==== Running memory hook (${tname}) on MPI ===="
-		$MPIRUN -np 1 $AFFINITY ./test/mpi/test_memhooks -t $tname
-	done
+		for tname in malloc_hooks malloc_hooks_unmapped external_events flag_no_install
+		do
+			echo "==== Running memory hook (${tname} mode ${mode}) on MPI ===="
+			$MPIRUN -np 1 $AFFINITY \
+				./test/mpi/test_memhooks -t $tname -m ${mode}
+		done
 
-	echo "==== Running memory hook (malloc_hooks) on MPI with LD_PRELOAD ===="
-	ucm_lib=$PWD/src/ucm/.libs/libucm.so
-	ls -l $ucm_lib
-	$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY ./test/mpi/test_memhooks -t malloc_hooks
+		echo "==== Running memory hook (malloc_hooks mode ${mode}) on MPI with LD_PRELOAD ===="
+		ucm_lib=$PWD/src/ucm/.libs/libucm.so
+		ls -l $ucm_lib
+		$MPIRUN -np 1 -x LD_PRELOAD=$ucm_lib $AFFINITY \
+			./test/mpi/test_memhooks -t malloc_hooks -m ${mode}
+	done
 }
 
 #
@@ -1222,6 +917,15 @@ test_ucp_dlopen() {
 	fi
 }
 
+test_init_mt() {
+	echo "==== Running multi-thread init ===="
+	$MAKEP
+	for ((i=0;i<50;++i))
+	do
+		$AFFINITY timeout 1m ./test/apps/test_init_mt
+	done
+}
+
 test_memtrack() {
 	../contrib/configure-devel --prefix=$ucx_inst
 	make_clean
@@ -1234,7 +938,7 @@ test_memtrack() {
 test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
-	UCX_SOCKADDR_CM_ENABLE=y UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
+	UCX_IB_PORTS=mlx5_0:1 ./src/tools/info/ucx_info -epw -u t | grep "unused" | grep -q -E "UCX_IB_PORTS"
 }
 
 test_env_var_aliases() {
@@ -1280,113 +984,42 @@ test_malloc_hook() {
 	then
 		./test/apps/test_tcmalloc
 	fi
-}
 
-test_jucx() {
-	echo "==== Running jucx test ===="
-	echo "1..2" > jucx_tests.tap
-	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
-	if [ -z "$iface" ]
+	if [ "X$have_cuda" == "Xyes" ]
 	then
-		echo "Failed to find active ib devices." >> jucx_tests.tap
-		return
-	elif module_load dev/jdk && module_load dev/mvn
-	then
-		jucx_port=$((20000 + EXECUTOR_NUMBER))
-		export JUCX_TEST_PORT=$jucx_port
-		export UCX_MEM_EVENTS=no
-		$MAKE -C bindings/java/src/main/native test
-		ifaces=`ibdev2netdev | grep Up | awk '{print $5}'`
-		if [ -n "$ifaces" ]
-		then
-			$MAKE -C bindings/java/src/main/native package
-		fi
-		for iface in $ifaces
+		cuda_dynamic_exe=./test/apps/test_cuda_hook_dynamic
+		cuda_static_exe=./test/apps/test_cuda_hook_static
+
+		for mode in reloc bistro
 		do
-			if [ -n "$iface" ]
+			export UCX_MEM_CUDA_HOOK_MODE=${mode}
+
+			# Run cuda memory hooks with dynamic link
+			${cuda_dynamic_exe}
+
+			# Run cuda memory hooks with static link, if exists. If the static
+			# library 'libcudart_static.a' is not present, static test will not
+			# be built.
+			if [ -x ${cuda_static_exe} ]
 			then
-				server_ip=$(get_ifaddr ${iface})
+				${cuda_static_exe} && status="pass" || status="fail"
+				[ ${mode} == "bistro" ] && exp_status="pass" || exp_status="fail"
+				if [ ${status} == ${exp_status} ]
+				then
+					echo "Static link with cuda ${status}, as expected"
+				else
+					echo "Static link with cuda is expected to ${exp_status}, actual: ${status}"
+					exit 1
+				fi
 			fi
 
-			if [ -z "$server_ip" ]
-			then
-				echo "Interface $iface has no IPv4"
-				continue
-			fi
+			# Test that driver API hooks work in both reloc and bistro modes,
+			# since we call them directly from the test
+			${cuda_dynamic_exe} -d
+			[ -x ${cuda_static_exe} ] && ${cuda_static_exe} -d
 
-			echo "Running standalone benchamrk on $iface"
-
-			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log  \
-			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*" \
-			  org.openucx.jucx.examples.UcxReadBWBenchmarkReceiver \
-			     s=$server_ip p=$JUCX_TEST_PORT &
-			     java_pid=$!
-
-			sleep 10
-
-			java -XX:ErrorFile=$WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log \
-			     -XX:OnError="cat $WORKSPACE/hs_err_${BUILD_NUMBER}_%p.log" \
-			     -cp "bindings/java/resources/:bindings/java/src/main/native/build-java/*"  \
-			  org.openucx.jucx.examples.UcxReadBWBenchmarkSender \
-			     s=$server_ip p=$JUCX_TEST_PORT t=10000000
-			wait $java_pid
+			unset UCX_MEM_CUDA_HOOK_MODE
 		done
-
-		unset JUCX_TEST_PORT
-		unset UCX_MEM_EVENTS
-		module unload dev/jdk
-		module unload dev/mvn
-		echo "ok 1 - jucx test" >> jucx_tests.tap
-	else
-		echo "Failed to load dev/jdk and dev/mvn modules." >> jucx_tests.tap
-	fi
-}
-
-#
-# Run Coverity and report errors
-# The argument is a UCX build type: devel or release
-#
-run_coverity() {
-	echo 1..1 > coverity.tap
-	if module_load tools/cov
-	then
-		ucx_build_type=$1
-
-		echo "==== Running coverity ===="
-		../contrib/configure-$ucx_build_type --prefix=$ucx_inst
-		make_clean
-		cov_build_id="cov_build_${ucx_build_type}_${BUILD_NUMBER}"
-		cov_build="$WORKSPACE/$cov_build_id"
-		rm -rf $cov_build
-		cov-build --dir $cov_build $MAKEP all
-		cov-analyze --jobs $parallel_jobs $COV_OPT --security --concurrency --dir $cov_build
-		nerrors=$(cov-format-errors --dir $cov_build | awk '/Processing [0-9]+ errors?/ { print $2 }')
-		rc=$(($rc+$nerrors))
-
-		index_html=$(cd $cov_build && find . -name index.html | cut -c 3-)
-		if [ -z "$BUILD_URL" ]; then
-			cov_url="${WS_URL}/${cov_build_id}/${index_html}"
-		else
-			cov_url="${BUILD_URL}/artifact/${cov_build_id}/${index_html}"
-		fi
-		rm -f jenkins_sidelinks.txt
-		if [ $nerrors -gt 0 ]; then
-			cov-format-errors --dir $cov_build --emacs-style
-			echo "not ok 1 Coverity Detected $nerrors failures # $cov_url" >> coverity.tap
-		else
-			echo "ok 1 Coverity found no issues" >> coverity.tap
-			rm -rf $cov_build
-		fi
-
-		echo Coverity report: $cov_url
-		printf "%s\t%s\n" Coverity $cov_url >> jenkins_sidelinks.txt
-		module unload tools/cov
-
-		return $rc
-	else
-		echo "==== Not running Coverity ===="
-		echo "ok 1 - # SKIP because Coverity not installed" >> coverity.tap
 	fi
 }
 
@@ -1504,12 +1137,12 @@ run_gtest() {
 		# Load newer valgrind if naative is older than 3.10
 		if ! (echo "valgrind-3.10.0"; valgrind --version) | sort -CV
 		then
-			module load tools/valgrind-latest
+			module load tools/valgrind-3.12.0
 		fi
 
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
 		(cd test/gtest && rename_files .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
-		module unload tools/valgrind-latest
+		module unload tools/valgrind-3.12.0
 	else
 		echo "==== Not running valgrind tests with $compiler_name compiler ===="
 		echo "1..1"                                          > vg_skipped.tap
@@ -1586,7 +1219,14 @@ run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
 
+	# Test transport selection
 	../test/apps/test_ucx_tls.py -p $ucx_inst
+
+	# Test setting many lanes
+	UCX_IB_NUM_PATHS=8 \
+		UCX_MAX_EAGER_LANES=4 \
+		UCX_MAX_RNDV_LANES=4 \
+		./src/tools/info/ucx_info -u t -e
 
 	if [ $? -ne 0 ]; then
 		echo "not ok 1" >> ucx_tl_check.tap
@@ -1604,23 +1244,10 @@ run_tests() {
 	export UCX_ERROR_MAIL_TO=$ghprbActualCommitAuthorEmail
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
-	export UCX_TCP_CM_ALLOW_ADDR_INUSE=y
-
-	# test cuda build if cuda modules available
-	do_distributed_task 2 4 build_cuda
+	export UCX_TCP_CM_REUSEADDR=y
 
 	# load cuda env only if GPU available for remaining tests
 	try_load_cuda_env
-
-	do_distributed_task 0 4 build_icc
-	do_distributed_task 0 4 build_pgi
-	do_distributed_task 1 4 build_debug
-	do_distributed_task 1 4 build_prof
-	do_distributed_task 1 4 build_ugni
-	do_distributed_task 3 4 build_clang
-	do_distributed_task 0 4 build_armclang
-	do_distributed_task 1 4 build_gcc_latest
-	do_distributed_task 0 4 build_jucx
 
 	# all are running mpi tests
 	run_mpi_tests
@@ -1634,43 +1261,33 @@ run_tests() {
 	$MAKEP
 	$MAKEP install
 
-	run_ucx_tl_check
-
+	do_distributed_task 2 4 run_ucx_tl_check
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 2 4 run_ucx_perftest
 	do_distributed_task 1 4 run_io_demo
 	do_distributed_task 3 4 test_profiling
-	do_distributed_task 0 3 test_jucx
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 2 4 test_env_var_aliases
-	do_distributed_task 1 3 test_malloc_hook
+	do_distributed_task 1 4 test_malloc_hook
 	do_distributed_task 0 4 test_ucp_dlopen
+	do_distributed_task 1 4 test_init_mt
 
 	# all are running gtest
 	run_gtest_default
 	run_gtest_armclang
 
-	do_distributed_task 3 4 run_coverity release
-	do_distributed_task 0 4 run_coverity devel
 	do_distributed_task 1 4 run_gtest_release
 }
 
 prepare
 try_load_cuda_env
-do_distributed_task 0 4 build_docs
-do_distributed_task 0 4 build_java_docs
-do_distributed_task 0 4 build_disable_numa
-do_distributed_task 1 4 build_no_verbs
-do_distributed_task 2 4 build_release_pkg
-do_distributed_task 3 4 check_inst_headers
-do_distributed_task 1 4 check_make_distcheck
-do_distributed_task 2 4 check_config_h
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
 then
+	check_machine
 	run_tests
 fi

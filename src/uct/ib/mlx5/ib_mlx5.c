@@ -50,20 +50,20 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      ucs_offsetof(uct_ib_mlx5_iface_config_t, mmio_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_mmio_modes)},
 
-    {"AR_ENABLE", "try",
+    {"AR_ENABLE", "auto",
      "Enable Adaptive Routing (out of order) feature on SL that supports it.\n"
      "SLs are selected as follows:\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
-     "+                                         + UCX_IB_AR=yes         + UCX_IB_AR=no          + UCX_IB_AR=try         +\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
-     "+ UCX_IB_SL=auto + AR enabled on some SLs + Use 1st SL with AR    + Use 1st SL without AR + Use 1st SL with AR    +\n"
-     "+                + AR enabled on all SLs  + Use SL=0              + Failure               + Use SL=0              +\n"
-     "+                + AR disabled on all SLs + Failure               + Use SL=0              + Use SL=0              +\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
-     "+ UCX_IB_SL=<sl> + AR enabled on <sl>     + Use SL=<sl>           + Failure               + Use SL=<sl>           +\n"
-     "+                + AR disabled on <sl>    + Failure               + Use SL=<sl>           + Use SL=<sl>           +\n"
-     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
-     ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY},
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+                                         + UCX_IB_AR_ENABLE=yes  + UCX_IB_AR_ENABLE=no   + UCX_IB_AR_ENABLE=try  + UCX_IB_AR_ENABLE=auto +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+ UCX_IB_SL=auto + AR enabled on some SLs + Use 1st SL with AR    + Use 1st SL without AR + Use 1st SL with AR    + Use SL=0              +\n"
+     "+                + AR enabled on all SLs  + Use SL=0              + Failure               + Use SL=0              + Use SL=0              +\n"
+     "+                + AR disabled on all SLs + Failure               + Use SL=0              + Use SL=0              + Use SL=0              +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
+     "+ UCX_IB_SL=<sl> + AR enabled on <sl>     + Use SL=<sl>           + Failure               + Use SL=<sl>           + Use SL=<sl>           +\n"
+     "+                + AR disabled on <sl>    + Failure               + Use SL=<sl>           + Use SL=<sl>           + Use SL=<sl>           +\n"
+     "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY_AUTO},
 
     {NULL}
 };
@@ -400,15 +400,56 @@ int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
     return uar->ctx == md->super.dev.ibv_context;
 }
 
+#if HAVE_DEVX
+static ucs_status_t
+uct_ib_mlx5_devx_alloc_uar(uct_ib_mlx5_md_t *md, unsigned flags, int log_level,
+                           char *title, char *fallback,
+                           struct mlx5dv_devx_uar **uar_p)
+{
+    struct mlx5dv_devx_uar *uar;
+    char buf[512];
+
+    uar = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, flags);
+    if (uar == NULL) {
+        sprintf(buf, "mlx5dv_devx_alloc_uar(device=%s, flags=0x%x(%s)) "
+                "failed: %m", uct_ib_device_name(&md->super.dev), flags, title);
+        if (fallback == NULL) {
+            ucs_log(log_level, "%s", buf);
+        } else {
+            ucs_log(log_level, "%s, fallback to %s", buf, fallback);
+        }
+
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *uar_p = uar;
+    return UCS_OK;
+}
+#endif
+
 ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_md_t *md,
                                        uct_ib_mlx5_mmio_mode_t mmio_mode)
 {
 #if HAVE_DEVX
-    uar->uar            = mlx5dv_devx_alloc_uar(md->super.dev.ibv_context, 0);
-    if (uar->uar == NULL) {
-        ucs_error("mlx5dv_devx_alloc_uar() failed: %m");
-        return UCS_ERR_NO_MEMORY;
+    ucs_status_t status;
+
+#if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC
+    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
+                                        UCS_LOG_LEVEL_DEBUG, "WC", "NC",
+                                        &uar->uar);
+    if (status != UCS_OK) {
+        status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_NC,
+                                            UCS_LOG_LEVEL_ERROR, "NC", NULL,
+                                            &uar->uar);
+    }
+#else
+    status = uct_ib_mlx5_devx_alloc_uar(md, UCT_IB_MLX5_UAR_ALLOC_TYPE_WC,
+                                        UCS_LOG_LEVEL_ERROR, "WC", NULL,
+                                        &uar->uar);
+#endif
+    if (status != UCS_OK) {
+        return status;
     }
 
     uar->super.addr.ptr = uar->uar->reg_addr;
@@ -647,7 +688,6 @@ void uct_ib_mlx5_srq_buff_init(uct_ib_mlx5_srq_t *srq, uint32_t head,
     srq->ready_idx = UINT16_MAX;
     srq->sw_pi     = UINT16_MAX;
     srq->mask      = tail;
-    srq->tail      = tail;
     srq->stride    = uct_ib_mlx5_srq_stride(sge_num);
 
     for (i = head; i <= tail; ++i) {
@@ -719,7 +759,7 @@ void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)
 /* Keep the function as a separate to test SL selection */
 ucs_status_t
 uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
-                      ucs_ternary_value_t ar_enable,
+                      ucs_ternary_auto_value_t ar_enable,
                       uint16_t hw_sl_mask, int have_sl_mask_cap,
                       const char *dev_name, uint8_t port_num,
                       uint8_t *sl_p)
@@ -736,7 +776,7 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
 
     /* which SLs are allowed by user config */
     sl_allow_mask = (ib_config->sl == UCS_ULUNITS_AUTO) ?
-                    UCS_MASK(UCT_IB_SL_MAX) : UCS_BIT(ib_config->sl);
+                    UCS_MASK(UCT_IB_SL_NUM) : UCS_BIT(ib_config->sl);
 
     if (have_sl_mask_cap) {
         sls_with_ar    = sl_allow_mask & hw_sl_mask;
@@ -749,8 +789,16 @@ uct_ib_mlx5_select_sl(const uct_ib_iface_config_t *ib_config,
     ucs_string_buffer_init(&sls_with_ar_str);
     ucs_string_buffer_init(&sls_without_ar_str);
 
-    if (((ar_enable == UCS_YES) || (ar_enable == UCS_TRY)) &&
-        (sls_with_ar != 0)) {
+    if (ar_enable == UCS_AUTO) {
+        /* selects SL requested by a user */
+        sl                    = ucs_ffs64(sl_allow_mask);
+        if (have_sl_mask_cap) {
+            sl_ar_support_str = (sl & sls_with_ar) ? "yes" : "no";
+        } else {
+            sl_ar_support_str = "unknown";
+        }
+    } else if (((ar_enable == UCS_YES) || (ar_enable == UCS_TRY)) &&
+               (sls_with_ar != 0)) {
         /* have SLs with AR, and AR is YES/TRY */
         sl                = ucs_ffs64(sls_with_ar);
         sl_ar_support_str = "yes";
@@ -782,8 +830,8 @@ out_str_buf_clean:
 err:
     ucs_assert(ar_enable != UCS_TRY);
     ucs_config_sprintf_ulunits(sl_str, sizeof(sl_str), &ib_config->sl, NULL);
-    ucs_config_sprintf_ternary(ar_enable_str, sizeof(ar_enable_str), &ar_enable,
-                               NULL);
+    ucs_config_sprintf_ternary_auto(ar_enable_str, sizeof(ar_enable_str),
+                                    &ar_enable, NULL);
     ucs_error("AR=%s was requested for SL=%s, but %s %s AR on %s:%u,"
               " SLs with AR support = { %s }, SLs without AR support = { %s }",
               ar_enable_str, sl_str,
@@ -807,7 +855,16 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
     uint16_t ooo_sl_mask = 0;
     ucs_status_t status;
 
-    ucs_assert(iface->config.sl == UCT_IB_SL_INVALID);
+    ucs_assert(iface->config.sl == UCT_IB_SL_NUM);
+
+    if (uct_ib_device_is_port_roce(uct_ib_iface_device(iface),
+                                   iface->config.port_num)) {
+        /* Ethernet priority for RoCE devices can't be selected regardless
+         * AR support requested by user, pass empty ooo_sl_mask */
+        return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1,
+                                     UCT_IB_IFACE_ARG(iface),
+                                     &iface->config.sl);
+    }
 
 #if HAVE_DEVX
     status = uct_ib_mlx5_devx_query_ooo_sl_mask(md, iface->config.port_num,

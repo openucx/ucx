@@ -137,16 +137,10 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
      * TODO implement more accurate estimation, based on system type, PCIe
      * switch, etc.
      */
-    if (path_distance <= 2) {
-        distance->latency   = 0;
-        distance->bandwidth = DBL_MAX;
-    } else if (path_distance <= 4) {
-        distance->latency   = 300e-9;
-        distance->bandwidth = 2000 * UCS_MBYTE;
-    } else {
-        distance->latency   = 900e-9;
-        distance->bandwidth = 300 * UCS_MBYTE;
-    }
+    distance->latency   = 100e-9 * path_distance;
+    distance->bandwidth = (path_distance == 0) ?
+                                  DBL_MAX :
+                                  ((20000 / path_distance) * UCS_MBYTE);
 
     return UCS_OK;
 }
@@ -168,6 +162,30 @@ ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
     ucs_snprintf_safe(buffer, max, "%04x:%02x:%02x.%d", bus_id->domain,
                       bus_id->bus, bus_id->slot, bus_id->function);
     return buffer;
+}
+
+ucs_status_t
+ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev)
+{
+    ucs_sys_bus_id_t bus_id;
+    int num_fields;
+
+    /* Try to parse as "<domain>:<bus>:<device>.<function>" */
+    num_fields = sscanf(name, "%hx:%hhx:%hhx.%hhx", &bus_id.domain, &bus_id.bus,
+                        &bus_id.slot, &bus_id.function);
+    if (num_fields == 4) {
+        return ucs_topo_find_device_by_bus_id(&bus_id, sys_dev);
+    }
+
+    /* Try to parse as "<bus>:<device>.<function>", assume domain is 0 */
+    bus_id.domain = 0;
+    num_fields    = sscanf(name, "%hhx:%hhx.%hhx", &bus_id.bus, &bus_id.slot,
+                           &bus_id.function);
+    if (num_fields == 3) {
+        return ucs_topo_find_device_by_bus_id(&bus_id, sys_dev);
+    }
+
+    return UCS_ERR_INVALID_PARAM;
 }
 
 void ucs_topo_print_info(FILE *stream)

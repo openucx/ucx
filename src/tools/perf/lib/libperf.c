@@ -81,7 +81,9 @@ static const char *perf_iface_ops[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_SHORT)]  = "tag eager short",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_BCOPY)]  = "tag eager bcopy",
     [ucs_ilog2(UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)]  = "tag eager zcopy",
-    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy"
+    [ucs_ilog2(UCT_IFACE_FLAG_TAG_RNDV_ZCOPY)]   = "tag rndv zcopy",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_CHECK)]         = "ep check",
+    [ucs_ilog2(UCT_IFACE_FLAG_EP_KEEPALIVE)]     = "ep keepalive"
 };
 
 static const char *perf_atomic_op[] = {
@@ -167,7 +169,6 @@ uct_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
     status = uct_iface_mem_alloc(perf->uct.iface, length,
                                  flags, "perftest", alloc_mem);
     if (status != UCS_OK) {
-        ucs_free(alloc_mem);
         ucs_error("failed to allocate memory: %s", ucs_status_string(status));
         return status;
     }
@@ -324,7 +325,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     double factor;
 
     if ((perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) ||
-        (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG_WFE)) {
+        (perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM)) {
         factor = 2.0;
     } else {
         factor = 1.0;
@@ -480,7 +481,8 @@ void uct_perf_iface_flush_b(ucx_perf_context_t *perf)
 static inline uint64_t __get_flag(uct_perf_data_layout_t layout, uint64_t short_f,
                                   uint64_t bcopy_f, uint64_t zcopy_f)
 {
-    return (layout == UCT_PERF_DATA_LAYOUT_SHORT) ? short_f :
+    return ((layout == UCT_PERF_DATA_LAYOUT_SHORT) ||
+            (layout == UCT_PERF_DATA_LAYOUT_SHORT_IOV)) ? short_f :
            (layout == UCT_PERF_DATA_LAYOUT_BCOPY) ? bcopy_f :
            (layout == UCT_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_f :
            0;
@@ -502,7 +504,8 @@ static inline ucs_status_t __get_atomic_flag(size_t size, uint64_t *op32,
 static inline size_t __get_max_size(uct_perf_data_layout_t layout, size_t short_m,
                                     size_t bcopy_m, uint64_t zcopy_m)
 {
-    return (layout == UCT_PERF_DATA_LAYOUT_SHORT) ? short_m :
+    return ((layout == UCT_PERF_DATA_LAYOUT_SHORT) ||
+            (layout == UCT_PERF_DATA_LAYOUT_SHORT_IOV)) ? short_m :
            (layout == UCT_PERF_DATA_LAYOUT_BCOPY) ? bcopy_m :
            (layout == UCT_PERF_DATA_LAYOUT_ZCOPY) ? zcopy_m :
            0;
@@ -651,8 +654,7 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
 
     if (params->command == UCX_PERF_CMD_AM) {
         if ((params->uct.data_layout == UCT_PERF_DATA_LAYOUT_SHORT) &&
-            (params->am_hdr_size != sizeof(uint64_t)))
-        {
+            (params->uct.am_hdr_size != sizeof(uint64_t))) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                 ucs_error("Short AM header size must be 8 bytes");
             }
@@ -660,19 +662,20 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         }
 
         if ((params->uct.data_layout == UCT_PERF_DATA_LAYOUT_ZCOPY) &&
-            (params->am_hdr_size > attr.cap.am.max_hdr))
-        {
+            (params->uct.am_hdr_size > attr.cap.am.max_hdr)) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("AM header size (%zu) is larger than max supported (%zu)",
-                          params->am_hdr_size, attr.cap.am.max_hdr);
+                ucs_error("AM header size (%zu) is larger than max supported "
+                          "(%zu)",
+                          params->uct.am_hdr_size, attr.cap.am.max_hdr);
             }
             return UCS_ERR_UNSUPPORTED;
         }
 
-        if (params->am_hdr_size > message_size) {
+        if (params->uct.am_hdr_size > message_size) {
             if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("AM header size (%zu) is larger than message size (%zu)",
-                          params->am_hdr_size, message_size);
+                ucs_error("AM header size (%zu) is larger than message size "
+                          "(%zu)",
+                          params->uct.am_hdr_size, message_size);
             }
             return UCS_ERR_INVALID_PARAM;
         }
@@ -692,7 +695,8 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
         }
     }
 
-    if (UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) {
+    if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) ||
+        (UCT_PERF_DATA_LAYOUT_SHORT_IOV == params->uct.data_layout)) {
         if (params->msg_size_cnt > max_iov) {
             if ((params->flags & UCX_PERF_TEST_FLAG_VERBOSE) ||
                 !params->msg_size_cnt) {
@@ -703,11 +707,13 @@ static ucs_status_t uct_perf_test_check_capabilities(ucx_perf_params_t *params,
             return UCS_ERR_UNSUPPORTED;
         }
         /* if msg_size_cnt == 1 the message size checked above */
-        if ((UCX_PERF_CMD_AM == params->command) && (params->msg_size_cnt > 1)) {
-            if (params->am_hdr_size > params->msg_size_list[0]) {
+        if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) &&
+            (UCX_PERF_CMD_AM == params->command) && (params->msg_size_cnt > 1)) {
+            if (params->uct.am_hdr_size > params->msg_size_list[0]) {
                 if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
                     ucs_error("AM header size (%lu) larger than the first IOV "
-                              "message size (%lu)", params->am_hdr_size,
+                              "message size (%lu)",
+                              params->uct.am_hdr_size,
                               params->msg_size_list[0]);
                 }
                 return UCS_ERR_INVALID_PARAM;
@@ -973,6 +979,9 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     case UCX_PERF_CMD_STREAM:
         ucp_params->features |= UCP_FEATURE_STREAM;
         break;
+    case UCX_PERF_CMD_AM:
+        ucp_params->features |= UCP_FEATURE_AM;
+        break;
     default:
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Invalid test command");
@@ -980,7 +989,8 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (params->flags & UCX_PERF_TEST_FLAG_WAKEUP) {
+    if ((params->flags & UCX_PERF_TEST_FLAG_WAKEUP) ||
+        (params->wait_mode == UCX_PERF_WAIT_MODE_SLEEP)) {
         ucp_params->features |= UCP_FEATURE_WAKEUP;
     }
 
@@ -1087,6 +1097,16 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
         goto err_free_send_buffer;
     }
 
+    /* Allocate AM header */
+    if (params->ucp.am_hdr_size != 0) {
+        perf->ucp.am_hdr = malloc(params->ucp.am_hdr_size);
+        if (perf->ucp.am_hdr == NULL) {
+            goto err_free_buffers;
+        }
+    } else {
+        perf->ucp.am_hdr = NULL;
+    }
+
     /* Allocate IOV datatype memory */
     perf->ucp.send_iov = NULL;
     status = ucp_perf_test_alloc_iov_mem(params->ucp.send_datatype,
@@ -1094,7 +1114,7 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
                                          params->thread_count,
                                          &perf->ucp.send_iov);
     if (UCS_OK != status) {
-        goto err_free_buffers;
+        goto err_free_am_hdr;
     }
 
     perf->ucp.recv_iov = NULL;
@@ -1110,6 +1130,8 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
 
 err_free_send_iov_buffers:
     free(perf->ucp.send_iov);
+err_free_am_hdr:
+    free(perf->ucp.am_hdr);
 err_free_buffers:
     perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
 err_free_send_buffer:
@@ -1122,6 +1144,7 @@ static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
 {
     free(perf->ucp.recv_iov);
     free(perf->ucp.send_iov);
+    free(perf->ucp.am_hdr);
     perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
     perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
 }
@@ -1397,7 +1420,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     for (i = 0; i < perf->params.thread_count; i++) {
         status = ucp_worker_flush(perf->ucp.tctx[i].perf.ucp.worker);
         if (status != UCS_OK) {
-            ucs_warn("ucp_worker_flush() failed on theread %d: %s",
+            ucs_warn("ucp_worker_flush() failed on thread %d: %s",
                      i, ucs_status_string(status));
         }
     }
@@ -1600,7 +1623,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
     }
 
     /* Enable progress before `uct_iface_flush` and `uct_worker_progress` called
-     * to give a chance to finish connection for some tranports (ib/ud, tcp).
+     * to give a chance to finish connection for some transports (ib/ud, tcp).
      * They may return UCS_INPROGRESS from `uct_iface_flush` when connections are
      * in progress */
     uct_iface_progress_enable(perf->uct.iface,
@@ -1649,6 +1672,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
 {
     ucp_params_t ucp_params;
     ucp_worker_params_t worker_params;
+    ucp_worker_attr_t worker_attr;
     ucp_config_t *config;
     ucs_status_t status;
     unsigned i, thread_count;
@@ -1714,6 +1738,23 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
         status = ucp_worker_create(perf->ucp.context, &worker_params,
                                    &perf->ucp.tctx[i].perf.ucp.worker);
         if (status != UCS_OK) {
+            goto err_free_tctx_destroy_workers;
+        }
+    }
+
+    if (perf->params.command == UCX_PERF_CMD_AM) {
+        /* Check that requested AM header size is not larger than max supported. */
+        worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER;
+        status = ucp_worker_query(perf->ucp.tctx[0].perf.ucp.worker,
+                                  &worker_attr);
+        if (status != UCS_OK) {
+            goto err_free_tctx_destroy_workers;
+        }
+
+        if (worker_attr.max_am_header < perf->params.ucp.am_hdr_size) {
+            ucs_error("AM header size (%zu) is larger than max supported (%zu)",
+                      perf->params.ucp.am_hdr_size, worker_attr.max_am_header);
+            status = UCS_ERR_INVALID_PARAM;
             goto err_free_tctx_destroy_workers;
         }
     }
@@ -1865,6 +1906,12 @@ static ucs_status_t ucx_perf_thread_run_test(void* arg)
     ucx_perf_context_t* perf        = &tctx->perf;
     ucx_perf_params_t* params       = &perf->params;
     ucs_status_t status;
+
+    /* new threads need explicit device association */
+    status = perf->allocator->init(perf);
+    if (status != UCS_OK) {
+        goto out;
+    }
 
     if (params->warmup_iter > 0) {
         ucx_perf_set_warmup(perf, params);

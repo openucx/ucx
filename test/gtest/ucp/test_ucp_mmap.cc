@@ -52,7 +52,8 @@ public:
 protected:
     bool resolve_rma(entity *e, ucp_rkey_h rkey);
     bool resolve_amo(entity *e, ucp_rkey_h rkey);
-    bool resolve_rma_bw(entity *e, ucp_rkey_h rkey);
+    bool resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey);
+    bool resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey);
     void test_length0(unsigned flags);
     void test_rkey_management(entity *e, ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
@@ -98,14 +99,30 @@ bool test_ucp_mmap::resolve_amo(entity *e, ucp_rkey_h rkey)
     }
 }
 
-bool test_ucp_mmap::resolve_rma_bw(entity *e, ucp_rkey_h rkey)
+bool test_ucp_mmap::resolve_rma_bw_get_zcopy(entity *e, ucp_rkey_h rkey)
 {
     ucp_ep_config_t *ep_config = ucp_ep_config(e->ep());
     ucp_lane_index_t lane;
     uct_rkey_t uct_rkey;
 
     lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
-                                  ep_config->rndv.get_zcopy_lanes, rkey, 0,
+                                  ep_config->rndv.get_zcopy.lanes, rkey, 0,
+                                  &uct_rkey);
+    if (lane != UCP_NULL_LANE) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool test_ucp_mmap::resolve_rma_bw_put_zcopy(entity *e, ucp_rkey_h rkey)
+{
+    ucp_ep_config_t *ep_config = ucp_ep_config(e->ep());
+    ucp_lane_index_t lane;
+    uct_rkey_t uct_rkey;
+
+    lane = ucp_rkey_find_rma_lane(e->ucph(), ep_config, UCS_MEMORY_TYPE_HOST,
+                                  ep_config->rndv.put_zcopy.lanes, rkey, 0,
                                   &uct_rkey);
     if (lane != UCP_NULL_LANE) {
         return true;
@@ -125,7 +142,7 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
      * can be inaccessible remotely. But it should always be possible
      * to pack/unpack a key, even if empty. */
     status = ucp_rkey_pack(e->ucph(), memh, &rkey_buffer, &rkey_size);
-    if (status == UCS_ERR_UNSUPPORTED && !is_dummy) {
+    if ((status == UCS_ERR_UNSUPPORTED) && !is_dummy) {
         return;
     }
     ASSERT_UCS_OK(status);
@@ -135,7 +152,7 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
     /* Unpack remote key buffer */
     ucp_rkey_h rkey;
     status = ucp_ep_rkey_unpack(e->ep(), rkey_buffer, &rkey);
-    if (status == UCS_ERR_UNREACHABLE && !is_dummy) {
+    if ((status == UCS_ERR_UNREACHABLE) && !is_dummy) {
         ucp_rkey_buffer_release(rkey_buffer);
         return;
     }
@@ -144,13 +161,14 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
     /* Test ucp_rkey_packed_md_map() */
     EXPECT_EQ(rkey->md_map, ucp_rkey_packed_md_map(rkey_buffer));
 
-    bool have_rma    = resolve_rma(e, rkey);
-    bool have_amo    = resolve_amo(e, rkey);
-    bool have_rma_bw = resolve_rma_bw(e, rkey);
+    bool have_rma              = resolve_rma(e, rkey);
+    bool have_amo              = resolve_amo(e, rkey);
+    bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(e, rkey);
+    bool have_rma_bw_put_zcopy = resolve_rma_bw_put_zcopy(e, rkey);
 
     /* Test that lane resolution on the remote key returns consistent results */
     for (int i = 0; i < 10; ++i) {
-        switch (ucs::rand() % 3) {
+        switch (ucs::rand() % 4) {
         case 0:
             EXPECT_EQ(have_rma, resolve_rma(e, rkey));
             break;
@@ -158,13 +176,20 @@ void test_ucp_mmap::test_rkey_management(entity *e, ucp_mem_h memh,
             EXPECT_EQ(have_amo, resolve_amo(e, rkey));
             break;
         case 2:
-            EXPECT_EQ(have_rma_bw, resolve_rma_bw(e, rkey));
+            EXPECT_EQ(have_rma_bw_get_zcopy, resolve_rma_bw_get_zcopy(e, rkey));
+            break;
+        case 3:
+            EXPECT_EQ(have_rma_bw_put_zcopy, resolve_rma_bw_put_zcopy(e, rkey));
             break;
         }
     }
 
-    if (expect_rma_offload && is_dummy) {
-        EXPECT_NE(&ucp_rma_sw_proto, rkey->cache.rma_proto);
+    if (expect_rma_offload) {
+        if (is_dummy) {
+            EXPECT_EQ(&ucp_rma_sw_proto, rkey->cache.rma_proto);
+        } else {
+            EXPECT_EQ(&ucp_rma_basic_proto, rkey->cache.rma_proto);
+        }
     }
 
     /* Test obtaining direct-access pointer */
@@ -279,7 +304,10 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
         ASSERT_UCS_OK(status);
 
         is_dummy = (size == 0);
-        test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());
+        test_rkey_management(&sender(), memh, is_dummy,
+                             is_tl_rdma() &&
+                             !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
+                             !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type));
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -314,8 +342,12 @@ void test_ucp_mmap::test_length0(unsigned flags)
     status = ucp_mem_map(sender().ucph(), &params, &memh[1]);
     ASSERT_UCS_OK(status);
 
+    bool expect_rma_offload = is_tl_rdma() ||
+                              ((flags & UCP_MEM_MAP_ALLOCATE) &&
+                               is_tl_shm());
+
     for (i = 0; i < buf_num; i++) {
-        test_rkey_management(&sender(), memh[i], true, false);
+        test_rkey_management(&sender(), memh[i], true, expect_rma_offload);
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
     }
@@ -352,9 +384,11 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     status = ucp_mem_map(sender().ucph(), &params, &memh);
     ASSERT_UCS_OK(status);
 
-    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH;
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH |
+                      UCP_MEM_ATTR_FIELD_MEM_TYPE;
     status = ucp_mem_query(memh, &attr);
     ASSERT_UCS_OK(status);
+    EXPECT_EQ(attr.mem_type, UCS_MEMORY_TYPE_HOST);
     EXPECT_GE(attr.length, size);
 
     advise_params.field_mask = UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS |
@@ -410,7 +444,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     advise_params.address    = mem_attr.address;
     advise_params.length     = size;
     advise_params.advice     = UCP_MADV_WILLNEED;
-    status = ucp_mem_advise(sender().ucph(), memh, &advise_params); 
+    status = ucp_mem_advise(sender().ucph(), memh, &advise_params);
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
     test_rkey_management(&sender(), memh, is_dummy, is_tl_rdma());

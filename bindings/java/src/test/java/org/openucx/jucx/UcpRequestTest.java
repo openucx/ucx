@@ -6,13 +6,14 @@ package org.openucx.jucx;
 
 import org.junit.Test;
 import org.openucx.jucx.ucp.*;
+import org.openucx.jucx.ucs.UcsConstants;
 
 import java.nio.ByteBuffer;
 import static org.junit.Assert.*;
 
 public class UcpRequestTest {
     @Test
-    public void testCancelRequest() {
+    public void testCancelRequest() throws Exception {
         UcpContext context = new UcpContext(new UcpParams().requestTagFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         UcpRequest recv = worker.recvTaggedNonBlocking(ByteBuffer.allocateDirect(100), null);
@@ -22,6 +23,7 @@ public class UcpRequestTest {
             worker.progress();
         }
 
+        assertEquals(UcsConstants.STATUS.UCS_ERR_CANCELED, recv.getStatus());
         assertTrue(recv.isCompleted());
         assertNull(recv.getNativeId());
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -29,7 +29,7 @@ ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_IOV:
         if ((count > max_iov) &&
-            ucp_ep_is_tag_offload_enabled(ucp_ep_config(req->send.ep))) {
+            ucp_ep_config_key_has_tag_lane(&ucp_ep_config(req->send.ep)->key)) {
             /* Make sure SW RNDV will be used, because tag offload does
              * not support multi-packet eager protocols. */
             return 1;
@@ -68,7 +68,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                                              rndv_rma_thresh, rndv_am_thresh);
 
     if (!(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
-        ucs_unlikely(!UCP_MEM_IS_ACCESSIBLE_FROM_CPU(req->send.mem_type))) {
+        ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
         zcopy_thresh = ucp_proto_get_zcopy_threshold(req, msg_config, dt_count,
                                                      rndv_thresh);
     } else {
@@ -76,34 +76,35 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     }
 
     ucs_trace_req("select tag request(%p) progress algorithm datatype=0x%"PRIx64
-                  " buffer=%p length=%zu max_short=%zd rndv_thresh=%zu "
+                  " buffer=%p length=%zu mem_type:%s max_short=%zd rndv_thresh=%zu "
                   "zcopy_thresh=%zu zcopy_enabled=%d",
                   req, req->send.datatype, req->send.buffer, req->send.length,
+                  ucs_memory_type_names[req->send.mem_type],
                   max_short, rndv_thresh, zcopy_thresh,
                   !(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL));
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     dt_count, 0, req->send.length, msg_config,
                                     proto);
-    if (ucs_unlikely(status != UCS_OK)) {
-        if (status == UCS_ERR_NO_PROGRESS) {
-            /* RMA/AM rendezvous */
-            ucs_assert(req->send.length >= rndv_thresh);
-            status = ucp_tag_send_start_rndv(req);
-            if (status != UCS_OK) {
-                return UCS_STATUS_PTR(status);
-            }
-
-            UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
+    if (ucs_likely(status == UCS_OK)) {
+        /* Eager send initialized successfuly */
+        if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+            ucp_request_id_alloc(req);
+            UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
         } else {
+            UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
+        }
+    } else if (status == UCS_ERR_NO_PROGRESS) {
+        /* RMA/AM rendezvous */
+        ucs_assert(req->send.length >= rndv_thresh);
+        status = ucp_tag_send_start_rndv(req);
+        if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }
-    }
 
-    if (req->flags & UCP_REQUEST_FLAG_SYNC) {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
+        UCP_EP_STAT_TAG_OP(req->send.ep, RNDV);
     } else {
-        UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
+        return UCS_STATUS_PTR(status);
     }
 
     /*
@@ -123,32 +124,24 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
-                      uintptr_t datatype, ucs_memory_type_t memory_type,
-                      size_t count, ucp_tag_t tag, uint32_t flags)
+ucp_tag_send_req_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
+                      uintptr_t datatype, size_t count, ucp_tag_t tag,
+                      uint32_t flags, const ucp_request_param_t *param)
 {
-    req->flags                  = flags | UCP_REQUEST_FLAG_SEND_TAG;
-    req->send.ep                = ep;
-    req->send.buffer            = (void*)buffer;
-    req->send.datatype          = datatype;
-    req->send.msg_proto.tag.tag = tag;
+    req->flags              = flags | UCP_REQUEST_FLAG_SEND_TAG;
+    req->send.ep            = ep;
+    req->send.buffer        = (void*)buffer;
+    req->send.datatype      = datatype;
+    req->send.msg_proto.tag = tag;
     ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);
-    req->send.mem_type     = ucp_get_memory_type(ep->worker->context, (void*)buffer,
-                                                 req->send.length, memory_type);
+    req->send.mem_type     = ucp_request_get_memory_type(ep->worker->context,
+                                                         (void*)buffer,
+                                                         req->send.length, param);
     req->send.lane         = ucp_ep_config(ep)->tag.lane;
     req->send.pending_lane = UCP_NULL_LANE;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_tag_eager_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
-                        ssize_t length)
-{
-    return (ucs_likely(length <= max_eager_short->memtype_off) ||
-            (length <= max_eager_short->memtype_on &&
-             ucp_memory_type_cache_is_empty(ep->worker->context)));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -156,14 +149,14 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length, ucp_tag_t ta
 {
     ucs_status_t status;
 
-    if (ucp_tag_eager_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short,
-                                length)) {
+    if (ucp_proto_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short, length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
         status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
                                  tag, buffer, length);
-    } else if (ucp_tag_eager_is_inline(ep, &ucp_ep_config(ep)->tag.offload.max_eager_short,
-                                       length)) {
+    } else if (ucp_proto_is_inline(ep,
+                                   &ucp_ep_config(ep)->tag.offload.max_eager_short,
+                                   length)) {
         UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uct_tag_t));
         status = uct_ep_tag_eager_short(ucp_ep_get_tag_uct_ep(ep), tag, buffer,
                                         length);
@@ -240,12 +233,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     uintptr_t datatype;
-    ucs_memory_type_t memory_type;
     uint32_t attr_mask;
     ucp_worker_h worker;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_REQUEST_CHECK_PARAM(param);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
     ucs_trace_req("send_nbx buffer %p count %zu tag %"PRIx64" to %s",
@@ -276,22 +270,21 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         goto out;
     }
 
-    worker      = ep->worker;
-    memory_type = ucp_request_param_mem_type(param);
-    req         = ucp_request_get_param(worker, param,
-                                        {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-                                        goto out;});
+    worker = ep->worker;
+    req    = ucp_request_get_param(worker, param, {
+        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+        goto out;
+    });
 
     if (worker->context->config.ext.proto_enable) {
-        req->send.msg_proto.tag.tag = tag;
+        req->send.msg_proto.tag = tag;
 
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_TAG_SEND, buffer, count,
                                         datatype, contig_length, param);
     } else {
-        ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count,
-                              tag, 0);
+        ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag, 0, param);
         ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
                                param, ucp_ep_config(ep)->tag.proto);
     }
@@ -305,22 +298,23 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
+    ucp_worker_h worker = ep->worker;
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
     uintptr_t datatype;
-    ucs_memory_type_t memory_type;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
-                                    return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
+                                    return UCS_STATUS_PTR(
+                                            UCS_ERR_INVALID_PARAM));
+    UCP_REQUEST_CHECK_PARAM(param);
+
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_trace_req("send_sync_nbx buffer %p count %zu tag %"PRIx64" to %s",
                   buffer, count, tag, ucp_ep_peer_name(ep));
 
-    datatype    = ucp_request_param_datatype(param);
-    memory_type = ucp_request_param_mem_type(param);
-
+    datatype = ucp_request_param_datatype(param);
     if (!ucp_ep_config_test_rndv_support(ucp_ep_config(ep))) {
         ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
         goto out;
@@ -332,15 +326,26 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
         goto out;
     }
 
-    req = ucp_request_get_param(ep->worker, param,
+    req = ucp_request_get_param(worker, param,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                  goto out;});
 
-    ucp_tag_send_req_init(req, ep, buffer, datatype, memory_type, count, tag,
-                          UCP_REQUEST_FLAG_SYNC);
-    ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
-                           param, ucp_ep_config(ep)->tag.sync_proto);
+    if (worker->context->config.ext.proto_enable) {
+        req->send.msg_proto.tag = tag;
+        ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
+                                        UCP_WORKER_CFG_INDEX_NULL, req,
+                                        UCP_OP_ID_TAG_SEND_SYNC, buffer, count,
+                                        datatype,
+                                        ucp_contig_dt_length(datatype, count),
+                                        param);
+    } else {
+        ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
+                              UCP_REQUEST_FLAG_SYNC, param);
+        ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager, param,
+                               ucp_ep_config(ep)->tag.sync_proto);
+    }
+
 out:
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }

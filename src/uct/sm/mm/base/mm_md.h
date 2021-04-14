@@ -44,8 +44,8 @@ typedef struct uct_mm_remote_seg {
  * MM memory domain configuration
  */
 typedef struct uct_mm_md_config {
-    uct_md_config_t       super;
-    ucs_ternary_value_t   hugetlb_mode;     /* Enable using huge pages */
+    uct_md_config_t          super;
+    ucs_ternary_auto_value_t hugetlb_mode;     /* Enable using huge pages */
 } uct_mm_md_config_t;
 
 
@@ -60,8 +60,16 @@ typedef struct uct_mm_md {
 } uct_mm_md_t;
 
 
-/* Check if available on current machine */
-typedef ucs_status_t (*uct_mm_mapper_query_func_t)();
+/* Check if available on current machine.
+ *
+ * @param [in/out] attach_shm_file_p     Flag which shows whether MM transport
+ *                                       attaches to a SHM file or to a process
+ *                                       region.
+ *
+ * @return UCS_OK - if MM transport is available on the machine, otherwise -
+ *         error code.
+ */
+typedef ucs_status_t (*uct_mm_mapper_query_func_t)(int *attach_shm_file_p);
 
 
 /* Return the size of memory-domain specific iface address (e.g mmap path) */
@@ -107,13 +115,13 @@ typedef void
  * Memory mapper operations - used to implement MD and TL functionality
  */
 typedef struct uct_mm_mapper_ops {
-    uct_md_ops_t                             super;
-    uct_mm_mapper_query_func_t               query;
-    uct_mm_mapper_iface_addr_length_func_t   iface_addr_length;
-    uct_mm_mapper_iface_addr_pack_func_t     iface_addr_pack;
-    uct_mm_mapper_mem_attach_func_t          mem_attach;
-    uct_mm_mapper_mem_detach_func_t          mem_detach;
-    uct_mm_mapper_is_reachable_func_t        is_reachable;
+    uct_md_ops_t                           super;
+    uct_mm_mapper_query_func_t             query;
+    uct_mm_mapper_iface_addr_length_func_t iface_addr_length;
+    uct_mm_mapper_iface_addr_pack_func_t   iface_addr_pack;
+    uct_mm_mapper_mem_attach_func_t        mem_attach;
+    uct_mm_mapper_mem_detach_func_t        mem_detach;
+    uct_mm_mapper_is_reachable_func_t      is_reachable;
 } uct_mm_md_mapper_ops_t;
 
 
@@ -147,6 +155,8 @@ typedef struct uct_mm_component {
  * @param _var          Variable for MM component.
  * @param _name         String which is the component name.
  * @param _md_ops       Mapper operations, of type uct_mm_mapper_ops_t.
+ * @param _rkey_unpack  Remote key unpack function.
+ * @param _rkey_release Remote key release function.
  * @param _cfg_prefix   Prefix for configuration environment vars.
  */
 #define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _rkey_unpack, \

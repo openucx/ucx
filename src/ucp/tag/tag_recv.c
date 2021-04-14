@@ -39,8 +39,6 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     ucp_trace_req(req, "%s buffer %p dt 0x%lx count %zu tag %"PRIx64"/%"PRIx64,
                   debug_name, buffer, datatype, count, tag, tag_mask);
 
-    memory_type = ucp_request_param_mem_type(param);
-
     /* First, check the fast path case - single fragment
      * in this case avoid initializing most of request fields
      * */
@@ -59,12 +57,13 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         recv_len                      = rdesc->length - hdr_len;
         req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
         req->recv.tag.info.length     = recv_len;
-        memory_type                   = ucp_get_memory_type(worker->context, buffer,
-                                                            recv_len, memory_type);
 
-        status = ucp_dt_unpack_only(worker, buffer, count, datatype, memory_type,
-                                    UCS_PTR_BYTE_OFFSET(rdesc + 1, hdr_len),
-                                    recv_len, 1);
+        memory_type = ucp_request_get_memory_type(worker->context, buffer,
+                                                  recv_len, param);
+        status      = ucp_dt_unpack_only(worker, buffer, count, datatype,
+                                         memory_type,
+                                         UCS_PTR_BYTE_OFFSET(rdesc + 1, hdr_len),
+                                         recv_len, 1);
         ucp_recv_desc_release(rdesc);
 
         req->status = status;
@@ -95,13 +94,19 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->flags              = common_flags | req_flags;
     req->recv.length        = ucp_dt_length(datatype, count, buffer,
                                             &req->recv.state);
-    req->recv.mem_type      = ucp_get_memory_type(worker->context, buffer,
-                                                  req->recv.length, memory_type);
+    req->recv.mem_type      = ucp_request_get_memory_type(worker->context, buffer,
+                                                         req->recv.length, param);
+
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
         req->recv.tag.cb    = param->cb.recv;
-        req->user_data      = param->user_data;
+
+        if (param->op_attr_mask & UCP_OP_ATTR_FIELD_USER_DATA) {
+            req->user_data = param->user_data;
+        } else {
+            req->user_data = NULL;
+        }
     }
 
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
@@ -205,6 +210,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_recv_nbx,
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_REQUEST_CHECK_PARAM(param);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     datatype = ucp_request_param_datatype(param);
@@ -221,34 +228,46 @@ out:
     return ret;
 }
 
-UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nb,
-                 (worker, buffer, count, datatype, message, cb),
-                 ucp_worker_h worker, void *buffer, size_t count,
-                 ucp_datatype_t datatype, ucp_tag_message_h message,
-                 ucp_tag_recv_callback_t cb)
+ucs_status_ptr_t ucp_tag_msg_recv_nb(ucp_worker_h worker, void *buffer, size_t count,
+                                     ucp_datatype_t datatype, ucp_tag_message_h message,
+                                     ucp_tag_recv_callback_t cb)
 {
     ucp_request_param_t param = {
         .op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                        UCP_OP_ATTR_FIELD_DATATYPE |
                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL,
+        .datatype     = datatype,
         .cb.recv      = (ucp_tag_recv_nbx_callback_t)cb
     };
+
+    return ucp_tag_msg_recv_nbx(worker, buffer, count, message, &param);
+}
+
+UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_msg_recv_nbx,
+                 (worker, buffer, count, message, param),
+                 ucp_worker_h worker, void *buffer, size_t count,
+                 ucp_tag_message_h message, const ucp_request_param_t *param)
+{
     ucp_recv_desc_t *rdesc = message;
     ucs_status_ptr_t ret;
     ucp_request_t *req;
+    ucp_datatype_t datatype;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
+    UCP_REQUEST_CHECK_PARAM(param);
+
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    req = ucp_request_get(worker);
-    if (ucs_likely(req != NULL)) {
-        ret = ucp_tag_recv_common(worker, buffer, count, datatype,
-                                  ucp_rdesc_get_tag(rdesc), UCP_TAG_MASK_FULL,
-                                  req, rdesc, &param, "msg_recv_nb");
-    } else {
-        ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
-    }
+    req      = ucp_request_get_param(worker, param,
+                                     {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
+                                     goto out;});
+    datatype = ucp_request_param_datatype(param);
+    ret      =  ucp_tag_recv_common(worker, buffer, count, datatype,
+                                    ucp_rdesc_get_tag(rdesc), UCP_TAG_MASK_FULL,
+                                    req, rdesc, param, "msg_recv_nbx");
 
+out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }

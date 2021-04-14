@@ -5,13 +5,12 @@
 
 package org.openucx.jucx.examples;
 
-import org.openucx.jucx.UcxCallback;
-import org.openucx.jucx.ucp.UcpRequest;
+import org.openucx.jucx.UcxException;
+import org.openucx.jucx.ucp.*;
 import org.openucx.jucx.UcxUtils;
-import org.openucx.jucx.ucp.UcpEndpoint;
-import org.openucx.jucx.ucp.UcpEndpointParams;
-import org.openucx.jucx.ucp.UcpMemory;
+import org.openucx.jucx.ucs.UcsConstants;
 
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 
@@ -28,12 +27,19 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
         String serverHost = argsMap.get("s");
         UcpEndpoint endpoint = worker.newEndpoint(new UcpEndpointParams()
             .setPeerErrorHandlingMode()
+            .setErrorHandler((ep, status, errorMsg) -> {
+                if (status == UcsConstants.STATUS.UCS_ERR_CONNECTION_RESET) {
+                    throw new ConnectException(errorMsg);
+                } else {
+                    throw new UcxException(errorMsg);
+                }
+            })
             .setSocketAddress(new InetSocketAddress(serverHost, serverPort)));
 
         UcpMemory memory = context.memoryMap(allocationParams);
         resources.push(memory);
         ByteBuffer data = UcxUtils.getByteBufferView(memory.getAddress(),
-            (int)Math.min(Integer.MAX_VALUE, totalSize));
+            Math.min(Integer.MAX_VALUE, totalSize));
 
         // Send worker and memory address and Rkey to receiver.
         ByteBuffer rkeyBuffer = memory.getRemoteKeyBuffer();
@@ -49,22 +55,23 @@ public class UcxReadBWBenchmarkSender extends UcxBenchmark {
 
         // Send memory metadata and wait until receiver will finish benchmark.
         endpoint.sendTaggedNonBlocking(sendData, null);
-        ByteBuffer recvBuffer = ByteBuffer.allocateDirect(4096);
-        UcpRequest recvRequest = worker.recvTaggedNonBlocking(recvBuffer,
-            new UcxCallback() {
-                @Override
-                public void onSuccess(UcpRequest request) {
-                    System.out.println("Received a message:");
-                    System.out.println(recvBuffer.asCharBuffer().toString().trim());
+
+        try {
+            while (true) {
+                if (worker.progress() == 0) {
+                    worker.waitForEvents();
                 }
-            });
+            }
+        } catch (ConnectException ignored) {
+        } catch (Exception ex) {
+            System.err.println(ex.getMessage());
+        }
 
-        worker.progressRequest(recvRequest);
-
-        UcpRequest closeRequest = endpoint.closeNonBlockingFlush();
-        worker.progressRequest(closeRequest);
-        resources.push(closeRequest);
-
-        closeResources();
+        try {
+            worker.progressRequest(endpoint.closeNonBlockingForce());
+        } catch (Exception ignored) {
+        } finally {
+            closeResources();
+        }
     }
 }

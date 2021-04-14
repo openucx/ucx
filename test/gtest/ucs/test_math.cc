@@ -300,3 +300,11 @@ UCS_TEST_F(test_math, linear_func) {
     double y_added_func = ucs_linear_func_apply(added_func, x);
     EXPECT_NEAR(y[0] + y[1], y_added_func, 1e-6);
 }
+
+UCS_TEST_F(test_math, double_to_sizet) {
+    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet(1e20, SIZE_MAX));
+    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet(1e30, SIZE_MAX));
+    EXPECT_EQ(SIZE_MAX, ucs_double_to_sizet((double)SIZE_MAX, SIZE_MAX));
+    EXPECT_EQ(10, ucs_double_to_sizet(10.0, SIZE_MAX));
+    EXPECT_EQ(UCS_MBYTE, ucs_double_to_sizet(UCS_MBYTE, SIZE_MAX));
+}

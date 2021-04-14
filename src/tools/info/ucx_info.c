@@ -28,6 +28,7 @@ static void usage() {
     printf("  -y              Show type and structures information\n");
     printf("  -s              Show system information\n");
     printf("  -c              Show UCX configuration\n");
+    printf("  -C              Comment-out default configuration values\n");
     printf("  -a              Show also hidden configuration\n");
     printf("  -f              Display fully decorated output\n");
     printf("\nUCP information (-u is required):\n");
@@ -39,6 +40,7 @@ static void usage() {
     printf("                    'a' : atomic operations\n");
     printf("                    'r' : remote memory access\n");
     printf("                    't' : tag matching \n");
+    printf("                    'm' : active messages \n");
     printf("                    'w' : wakeup\n");
     printf("                  Modifiers to use in combination with above features:\n");
     printf("                    'e' : error handling\n");
@@ -51,12 +53,16 @@ static void usage() {
     printf("                    'shm'  : shared memory devices only\n");
     printf("                    'net'  : network devices only\n");
     printf("                    'self' : self transport only\n");
+    /* TODO: add IPv6 support */
+    printf("  -A <ipv4>       Local IPv4 device address to use for creating\n"
+           "                  endpoint in client/server mode");
     printf("  -h              Show this help message\n");
     printf("\n");
 }
 
 int main(int argc, char **argv)
 {
+    char *ip_addr = NULL;
     ucs_config_print_flags_t print_flags;
     ucp_ep_params_t ucp_ep_params;
     unsigned dev_type_bitmap;
@@ -77,7 +83,8 @@ int main(int argc, char **argv)
     mem_size                 = NULL;
     dev_type_bitmap          = UINT_MAX;
     ucp_ep_params.field_mask = 0;
-    while ((c = getopt(argc, argv, "fahvcydbswpet:n:u:D:m:N:")) != -1) {
+
+    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:m:N:A:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -87,6 +94,9 @@ int main(int argc, char **argv)
             break;
         case 'c':
             print_flags |= UCS_CONFIG_PRINT_CONFIG;
+            break;
+        case 'C':
+            print_flags |= UCS_CONFIG_PRINT_COMMENT_DEFAULT;
             break;
         case 'v':
             print_opts |= PRINT_VERSION;
@@ -140,6 +150,9 @@ int main(int argc, char **argv)
                 case 'w':
                     ucp_features |= UCP_FEATURE_WAKEUP;
                     break;
+                case 'm':
+                    ucp_features |= UCP_FEATURE_AM;
+                    break;
                 case 'e':
                     ucp_ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
                     ucp_ep_params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
@@ -163,6 +176,9 @@ int main(int argc, char **argv)
                 usage();
                 return -1;
             }
+            break;
+        case 'A':
+            ip_addr = optarg;
             break;
         case 'h':
             usage();
@@ -208,12 +224,14 @@ int main(int argc, char **argv)
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {
         if (ucp_features == 0) {
-            printf("Please select UCP features using -u switch: a|r|t|w\n");
+            printf("Please select UCP features using -u switch: a|r|t|m|w\n");
             usage();
             return -1;
         }
-        print_ucp_info(print_opts, print_flags, ucp_features, &ucp_ep_params,
-                       ucp_num_eps, ucp_num_ppn, dev_type_bitmap, mem_size);
+
+        return print_ucp_info(print_opts, print_flags, ucp_features,
+                              &ucp_ep_params, ucp_num_eps, ucp_num_ppn,
+                              dev_type_bitmap, mem_size, ip_addr);
     }
 
     return 0;

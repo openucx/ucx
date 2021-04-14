@@ -6,9 +6,11 @@
 
 #include "test_helpers.h"
 
+#include <ucs/async/async.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
+#include <ucs/config/global_opts.h>
 #include <ucs/config/parser.h>
 
 #include <set>
@@ -685,6 +687,18 @@ const struct sockaddr* sock_addr_storage::get_sock_addr_ptr() const {
     return m_is_valid ? (struct sockaddr *)(&m_storage) : NULL;
 }
 
+const void* sock_addr_storage::get_sock_addr_in_buf() const {
+    const struct sockaddr* saddr = get_sock_addr_ptr();
+
+    ucs_assert_always(saddr != NULL);
+    ucs_assert_always((saddr->sa_family == AF_INET) ||
+                      (saddr->sa_family == AF_INET6));
+
+    return (saddr->sa_family == AF_INET) ?
+           (const void*)&((struct sockaddr_in*)saddr)->sin_addr :
+           (const void*)&((struct sockaddr_in6*)saddr)->sin6_addr;
+}
+
 std::ostream& operator<<(std::ostream& os, const sock_addr_storage& sa_storage)
 {
     return os << ucs::sockaddr_to_str(sa_storage.get_sock_addr_ptr());
@@ -705,6 +719,17 @@ void* auto_buffer::operator*() const {
     return m_ptr;
 };
 
+scoped_log_level::scoped_log_level(ucs_log_level_t level)
+    : m_prev_level(ucs_global_opts.log_component.log_level)
+{
+    ucs_global_opts.log_component.log_level = level;
+}
+
+scoped_log_level::~scoped_log_level()
+{
+    ucs_global_opts.log_component.log_level = m_prev_level;
+}
+
 namespace detail {
 
 message_stream::message_stream(const std::string& title) {
@@ -722,6 +747,17 @@ message_stream::~message_stream() {
 }
 
 } // detail
+
+scoped_async_lock::scoped_async_lock(ucs_async_context_t &async) :
+    m_async(async)
+{
+    UCS_ASYNC_BLOCK(&m_async);
+}
+
+scoped_async_lock::~scoped_async_lock()
+{
+    UCS_ASYNC_UNBLOCK(&m_async);
+}
 
 std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
     static std::vector<std::vector<ucs_memory_type_t> > result;

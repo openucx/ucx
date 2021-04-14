@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) Los Alamos National Security, LLC. 2019. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
@@ -57,6 +57,8 @@ noinst_HEADERS = \
 	proto/proto.h \
 	rma/rma.h \
 	rma/rma.inl \
+	rndv/proto_rndv.h \
+	rndv/proto_rndv.inl \
 	rndv/rndv.h \
 	tag/eager.h \
 	tag/tag_rndv.h \
@@ -103,6 +105,7 @@ libucp_la_SOURCES = \
 	proto/lane_type.c \
 	proto/proto_am.c \
 	proto/proto_common.c \
+	proto/proto_reconfig.c \
 	proto/proto_multi.c \
 	proto/proto_select.c \
 	proto/proto_single.c \
@@ -118,6 +121,10 @@ libucp_la_SOURCES = \
 	rma/rma_send.c \
 	rma/rma_sw.c \
 	rma/flush.c \
+	rndv/proto_rndv.c \
+	rndv/rndv_am.c \
+	rndv/rndv_get.c \
+	rndv/rndv_rtr.c \
 	rndv/rndv.c \
 	tag/eager_multi.c \
 	tag/eager_rcv.c \
@@ -129,6 +136,7 @@ libucp_la_SOURCES = \
 	tag/tag_recv.c \
 	tag/tag_send.c \
 	tag/offload.c \
+	tag/offload/eager.c \
 	wireup/address.c \
 	wireup/ep_match.c \
 	wireup/select.c \

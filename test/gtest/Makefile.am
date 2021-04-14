@@ -46,6 +46,7 @@ noinst_PROGRAMS = gtest
 gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
+	$(top_builddir)/src/ucs/vfs/sock/libucs_vfs_sock.la \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
@@ -56,6 +57,7 @@ gtest_LDADD = \
 
 gtest_CPPFLAGS = \
 	$(BASE_CPPFLAGS) \
+	-DTOP_SRCDIR=\"$(top_srcdir)\" \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/test \
 	-I$(top_builddir)/src \
@@ -104,6 +106,7 @@ gtest_SOURCES = \
 	uct/test_progress.cc \
 	uct/test_uct_ep.cc \
 	uct/test_uct_perf.cc \
+	uct/v2/test_uct_query.cc \
 	uct/test_zcopy_comp.cc \
 	uct/uct_p2p_test.cc \
 	uct/uct_test.cc \
@@ -119,11 +122,11 @@ gtest_SOURCES = \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_atomic.cc \
 	ucp/test_ucp_dt.cc \
+	ucp/test_ucp_tls.cc \
 	ucp/test_ucp_memheap.cc \
 	ucp/test_ucp_mmap.cc \
 	ucp/test_ucp_mem_type.cc \
 	ucp/test_ucp_perf.cc \
-	ucp/test_ucp_wfe.cc \
 	ucp/test_ucp_proto.cc \
 	ucp/test_ucp_rma.cc \
 	ucp/test_ucp_rma_mt.cc \
@@ -148,6 +151,7 @@ gtest_SOURCES = \
 	ucs/test_algorithm.cc \
 	ucs/test_arbiter.cc \
 	ucs/test_async.cc \
+	ucs/test_bitmap.cc \
 	ucs/test_callbackq.cc \
 	ucs/test_class.cc \
 	ucs/test_config.cc \
@@ -174,6 +178,7 @@ gtest_SOURCES = \
 	ucs/test_type.cc \
 	ucs/test_log.cc \
 	ucs/test_iov.cc \
+	ucs/test_vfs.cc \
 	ucs/arch/test_x86_64.cc
 
 if HAVE_IB
@@ -204,7 +209,7 @@ endif
 if HAVE_TL_RC
 gtest_SOURCES += \
 	uct/ib/test_rc.cc
-endif	
+endif
 if HAVE_TL_DC
 gtest_SOURCES += \
 	uct/ib/test_dc.cc
@@ -220,8 +225,10 @@ gtest_SOURCES += \
 	ucm/cuda_hooks.cc
 gtest_CPPFLAGS += \
 	$(CUDA_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(CUDA_LDFLAGS)
 gtest_LDADD += \
-	$(CUDA_LDFLAGS) \
+	$(CUDA_LIBS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
 endif
 

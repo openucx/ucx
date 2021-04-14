@@ -76,13 +76,17 @@ ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
 ucs_status_t ucp_proto_progress_am_single(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_status_t status = ucp_do_am_single(self, req->send.proto.am_id,
-                                           ucp_proto_pack,
-                                           ucp_proto_max_packed_size());
-    if (status == UCS_OK) {
-        req->send.proto.comp_cb(req);
+    ucs_status_t status;
+
+    status = ucp_do_am_single(self, req->send.proto.am_id, ucp_proto_pack,
+                              ucp_proto_max_packed_size());
+    if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        return UCS_ERR_NO_RESOURCE;
     }
-    return status;
+
+    /* TODO: handle failure */
+    req->send.proto.comp_cb(req);
+    return UCS_OK;
 }
 
 void ucp_proto_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)

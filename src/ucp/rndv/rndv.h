@@ -52,6 +52,13 @@ typedef struct {
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 
+ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,
+                               size_t rts_body_size);
+
+void ucp_rndv_req_send_ack(ucp_request_t *ack_req, ucp_request_t *req,
+                           ucs_ptr_map_key_t remote_req_id, ucs_status_t status,
+                           ucp_am_id_t am_id, const char *ack_str);
+
 ucs_status_t ucp_rndv_progress_rma_get_zcopy(uct_pending_req_t *self);
 
 ucs_status_t ucp_rndv_progress_rma_put_zcopy(uct_pending_req_t *self);
@@ -65,7 +72,7 @@ void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                       const void *rkey_buf);
 
-void ucp_rndv_req_send_ats(ucp_request_t *rndv_req, ucp_request_t *rreq,
-                           ucs_ptr_map_key_t remote_req_id, ucs_status_t status);
+ucs_status_t ucp_rndv_rts_handle_status_from_pending(ucp_request_t *sreq,
+                                                     ucs_status_t status);
 
 #endif

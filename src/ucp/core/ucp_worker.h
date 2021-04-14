@@ -30,28 +30,40 @@
 #define UCP_WORKER_MPOOL_DEFAULT_DEVICE_ID UINT_MAX
 
 
+#define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker) \
+    ucs_assert(ucs_async_is_blocked(&(_worker)->async))
+
+
 #if ENABLE_MT
 
-#define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)                 \
-    do {                                                                \
-        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
-            UCS_ASYNC_BLOCK(&(_worker)->async);                         \
-        }                                                               \
+#define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker) \
+    do { \
+        if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
+            UCS_ASYNC_BLOCK(&(_worker)->async); \
+        } \
     } while (0)
 
 
-#define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)                  \
-    do {                                                                \
-        if ((_worker)->flags & UCP_WORKER_FLAG_MT) {                    \
-            UCS_ASYNC_UNBLOCK(&(_worker)->async);                       \
-        }                                                               \
+#define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker) \
+    do { \
+        if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
+            UCS_ASYNC_UNBLOCK(&(_worker)->async); \
+        } \
     } while (0)
 
+
+#define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(_worker) \
+    do { \
+        if ((_worker)->flags & UCP_WORKER_FLAG_THREAD_MULTI) { \
+            UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker); \
+        } \
+    } while (0)
 
 #else
 
 #define UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(_worker)
 #define UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(_worker)
+#define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(_worker)
 
 #endif
 
@@ -60,9 +72,28 @@
  * UCP worker flags
  */
 enum {
-    UCP_WORKER_FLAG_EXTERNAL_EVENT_FD = UCS_BIT(0), /**< worker event fd is external */
-    UCP_WORKER_FLAG_EDGE_TRIGGERED    = UCS_BIT(1), /**< events are edge-triggered */
-    UCP_WORKER_FLAG_MT                = UCS_BIT(2)  /**< MT locking is required */
+    /** Internal worker flags start from this bit index, to co-exist with user
+     * flags specified when worker is created */
+    UCP_WORKER_INTERNAL_FLAGS_SHIFT = 32,
+
+    /** The worker can be accessed from multiple threads at the same time, so
+        locking is required */
+    UCP_WORKER_FLAG_THREAD_MULTI =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 0),
+
+    /** The worker can be accessed from multiple threads, but only by one thread
+        at a time, so locking is not required, but IO flush may be required.
+        This flag is mutually exclusive with UCP_WORKER_FLAG_THREAD_MULTI. */
+    UCP_WORKER_FLAG_THREAD_SERIALIZED =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 1),
+
+    /** Events are edge-triggered */
+    UCP_WORKER_FLAG_EDGE_TRIGGERED =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 2),
+
+    /** Worker event fd is external */
+    UCP_WORKER_FLAG_EXTERNAL_EVENT_FD =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 3)
 };
 
 
@@ -215,17 +246,20 @@ struct ucp_worker_cm {
  * UCP worker (thread context).
  */
 typedef struct ucp_worker {
-    unsigned                         flags;               /* Worker flags */
+    uint64_t                         flags;               /* Worker flags */
     ucs_async_context_t              async;               /* Async context for this worker */
     ucp_context_h                    context;             /* Back-reference to UCP context */
     uint64_t                         uuid;                /* Unique ID for wireup */
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
-    uint64_t                         atomic_tls;          /* Which resources can be used for atomics */
+    ucp_tl_bitmap_t                  atomic_tls;          /* Which resources can be used for atomics */
 
     int                              inprogress;
-    char                             name[UCP_WORKER_NAME_MAX]; /* Worker name */
+    /* Worker name for tracing and analysis */
+    char                             name[UCP_ENTITY_NAME_MAX];
+    /* Worker address name composed of host name and process id */
+    char                             address_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     unsigned                         flush_ops_count;     /* Number of pending operations */
 
@@ -244,7 +278,7 @@ typedef struct ucp_worker {
                                                              one for each resource */
     unsigned                         num_ifaces;          /* Number of elements in ifaces array  */
     unsigned                         num_active_ifaces;   /* Number of activated ifaces  */
-    uint64_t                         scalable_tl_bitmap;  /* Map of scalable tl resources */
+    ucp_tl_bitmap_t                  scalable_tl_bitmap;  /* Map of scalable tl resources */
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
     ucs_mpool_t                      am_mp;               /* Memory pool for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
@@ -278,7 +312,9 @@ typedef struct ucp_worker {
         ucs_time_t                   last_round;          /* Last round timespamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
         ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
-        unsigned                     ep_count;            /* Number if EPs processed in current time slot */
+        unsigned                     ep_count;            /* Number of EPs processed in current time slot */
+        unsigned                     iter_count;          /* Number of progress iterations to skip,
+                                                           * used to minimize call of ucs_get_time */
     } keepalive;
 } ucp_worker_t;
 
@@ -333,15 +369,22 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
 /* must be called with async lock held */
-void ucp_worker_discard_uct_ep(ucp_worker_h worker, uct_ep_h uct_ep,
+void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                unsigned ep_flush_flags,
                                uct_pending_purge_callback_t purge_cb,
-                               void *purge_arg);
+                               void *purge_arg,
+                               ucp_send_nbx_callback_t discarded_cb,
+                               void *discarded_cb_arg);
 
-/* must be called with async lock held */
+char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
+                                ucp_context_h context,
+                                ucp_worker_cfg_index_t config_idx, char *info,
+                                size_t max);
+
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
 {
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
     ucs_assert(worker->flush_ops_count < UINT_MAX);
     ++worker->flush_ops_count;
 }
@@ -350,8 +393,11 @@ ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_dec(ucp_worker_h worker)
 {
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED_CONDITIONAL(worker);
     ucs_assert(worker->flush_ops_count > 0);
     --worker->flush_ops_count;
 }
+
+void ucp_worker_vfs_refresh(void *obj);
 
 #endif

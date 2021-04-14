@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
 #
@@ -289,20 +289,12 @@ build_server_args_list() {
 	do
 		key="$1"
 		case $key in
-		-d)
+		-d|-P|-k|-r|-b)
 			value="$2"
 			iodemo_server_args+=" $key $value"
 			shift
 			;;
-		-P)
-			value="$2"
-			iodemo_server_args+=" $key $value"
-			shift
-			;;
-		-q)
-			iodemo_server_args+=" $key"
-			;;
-		-a)
+		-q|-A|-v|-H)
 			iodemo_server_args+=" $key"
 			;;
 		*)
@@ -350,17 +342,17 @@ create_mapping_bynode()
 	# which means no node will have one process less.
 	# The expression "(x + N - 1) % N" yields a number in the range 0..N-1 and
 	# then adding 1 yields the equivalent of "x % N" in the range 1..N.
-	# 
+	#
 	remainder_client_index=$(((num_clients + num_hosts - 1) % num_hosts + 1))
 	remainder_server_index=$(((num_servers + num_hosts - 1) % num_hosts + 1))
 	show_var remainder_client_index
 	show_var remainder_client_index
-	
+
 	host_index=0
 	for host in $(split_list ${host_list})
 	do
 		# Add same amount of clients/servers on each host, except few last hosts
-		# which may have less (if mapping is not balanced) 
+		# which may have less (if mapping is not balanced)
 		num_clients_per_host[${host}]=$((max_clients_per_node - \
 		                                 (host_index >= remainder_client_index)))
 		num_servers_per_host[${host}]=$((max_servers_per_node - \
@@ -381,7 +373,7 @@ create_mapping_byslot()
 		                       ${remaining_clients})
 		num_servers_per_host[${host}]=${node_num_servers}
 		num_clients_per_host[${host}]=${node_num_clients}
-		
+
 		remaining_clients=$((remaining_clients - node_num_clients))
 		remaining_servers=$((remaining_servers - node_num_servers))
 	done
@@ -474,7 +466,7 @@ make_scripts()
 
 		# Add file header and startup
 		cat >${command_file} <<-EOF
-			#!/bin/sh
+			#!/bin/bash
 			#
 			# Launch script for io_demo on ${host} with ${num_servers_per_host[${host}]} servers and ${num_clients_per_host[${host}]} clients
 			#

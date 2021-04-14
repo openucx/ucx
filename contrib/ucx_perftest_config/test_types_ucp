@@ -1,36 +1,48 @@
-# UCP
-ucp_iov_contig_tag_lat      -t tag_lat -D iov,contig
-ucp_iov_iov_tag_lat         -t tag_lat -D iov,iov
-ucp_contig_contig_tag_lat   -t tag_lat -D contig,contig
+#
+# UCP basic
+#
+ucp_iov_contig_tag_lat               -t tag_lat -D iov,contig
+ucp_iov_iov_tag_lat                  -t tag_lat -D iov,iov
+ucp_contig_tag_lat                   -t tag_lat -D contig,contig
 #IOV with RNDV is not yet supported
-#ucp_contig_iov_tag_lat      -t tag_lat -D contig,iov
-ucp_iov_contig_tag_bw       -t tag_bw  -D iov,contig
-ucp_iov_iov_tag_bw          -t tag_bw  -D iov,iov
-ucp_contig_contig_tag_bw    -t tag_bw  -D contig,contig
+#ucp_contig_iov_tag_lat              -t tag_lat -D contig,iov
+ucp_iov_contig_tag_bw                -t tag_bw  -D iov,contig
+ucp_iov_iov_tag_bw                   -t tag_bw  -D iov,iov
+ucp_contig_tag_bw                    -t tag_bw  -D contig,contig
 #IOV with RNDV is not yet supported
-#ucp_contig_iov_tag_bw       -t tag_bw  -D contig,iov
-ucp_sync_tag_lat            -t tag_sync_lat
-ucp_unexp_tag_lat           -t tag_lat -U
-ucp_wild_tag_lat            -t tag_lat -C
-ucp_contig_stream_bw        -t stream_bw  -r recv_data
-ucp_contig_stream_lat       -t stream_lat -r recv_data
-ucp_contig_stream_bw        -t stream_bw  -r recv
-ucp_contig_stream_lat       -t stream_lat -r recv
-#CUDA
-ucp_contig_contig_cuda_tag_lat   -t tag_lat -D contig,contig -m cuda,cuda
-ucp_contig_contig_cuda_tag_lat   -t tag_lat -D contig,contig -m cuda,host
-ucp_contig_contig_cuda_tag_lat   -t tag_lat -D contig,contig -m host,cuda
-ucp_contig_contig_cuda_tag_bw    -t tag_bw  -D contig,contig -m cuda,cuda
-ucp_contig_contig_cuda_tag_bw    -t tag_bw  -D contig,contig -m cuda,host
-ucp_contig_contig_cuda_tag_bw    -t tag_bw  -D contig,contig -m host,cuda
-ucp_contig_cuda_stream_bw        -t stream_bw  -r recv_data -m cuda
-ucp_contig_cuda_stream_lat       -t stream_lat -r recv_data -m cuda
-ucp_contig_cuda_stream_bw        -t stream_bw  -r recv -m cuda
-ucp_contig_cuda_stream_lat       -t stream_lat -r recv -m cuda
-ucp_contig_contig_cuda_mng_tag_lat   -t tag_lat -D contig,contig -m cuda-managed
-ucp_contig_contig_cuda_mng_tag_bw    -t tag_bw  -D contig,contig -m cuda-managed
-ucp_contig_cuda_mng_stream_bw        -t stream_bw  -r recv_data -m cuda-managed
-ucp_contig_cuda_mng_stream_lat       -t stream_lat -r recv_data -m cuda-managed
+#ucp_contig_iov_tag_bw               -t tag_bw  -D contig,iov
+ucp_sync_tag_lat                     -t tag_sync_lat
+ucp_unexp_tag_lat                    -t tag_lat -U
+ucp_wild_tag_lat                     -t tag_lat -C
+ucp_contig_stream_data_bw            -t stream_bw  -r recv_data
+ucp_contig_stream_data_lat           -t stream_lat -r recv_data
+ucp_contig_stream_bw                 -t stream_bw  -r recv
+ucp_contig_stream_lat                -t stream_lat -r recv
+#
+# CUDA
+#
+ucp_contig_cuda_tag_lat              -t tag_lat -D contig,contig -m cuda,cuda
+ucp_contig_cuda_host_tag_lat         -t tag_lat -D contig,contig -m cuda,host
+ucp_contig_host_cuda_tag_lat         -t tag_lat -D contig,contig -m host,cuda
+ucp_contig_cuda_tag_bw               -t tag_bw  -D contig,contig -m cuda,cuda
+ucp_contig_cuda_host_tag_bw          -t tag_bw  -D contig,contig -m cuda,host
+ucp_contig_host_cuda_tag_bw          -t tag_bw  -D contig,contig -m host,cuda
+ucp_contig_cuda_stream_bw            -t stream_bw  -r recv -m cuda
+ucp_contig_cuda_stream_lat           -t stream_lat -r recv -m cuda
+ucp_contig_cuda_stream_data_bw       -t stream_bw  -r recv_data -m cuda
+ucp_contig_cuda_stream_data_lat      -t stream_lat -r recv_data -m cuda
+ucp_contig_cuda_mng_tag_lat          -t tag_lat -D contig,contig -m cuda-managed
+ucp_contig_cuda_mng_tag_bw           -t tag_bw  -D contig,contig -m cuda-managed
+ucp_contig_cuda_mng_stream_data_bw   -t stream_bw  -r recv_data -m cuda-managed
+ucp_contig_cuda_mng_stream_data_lat  -t stream_lat -r recv_data -m cuda-managed
 ucp_contig_cuda_mng_stream_bw        -t stream_bw  -r recv -m cuda-managed
 ucp_contig_cuda_mng_stream_lat       -t stream_lat -r recv -m cuda-managed
-
+#
+# CUDA wakeup mode
+#
+ucp_contig_cuda_tag_lat_sleep        -I -E sleep  -t tag_lat -D contig,contig -m cuda,cuda
+ucp_contig_cuda_host_tag_lat_sleep   -I -E sleep  -t tag_lat -D contig,contig -m cuda,host
+ucp_contig_host_cuda_tag_lat_sleep   -I -E sleep  -t tag_lat -D contig,contig -m host,cuda
+ucp_contig_cuda_tag_bw_sleep         -I -E sleep  -t tag_bw  -D contig,contig -m cuda,cuda
+ucp_contig_cuda_host_tag_bw_sleep    -I -E sleep  -t tag_bw  -D contig,contig -m cuda,host
+ucp_contig_host_cuda_tag_bw_sleep    -I -E sleep  -t tag_bw  -D contig,contig -m host,cuda

@@ -39,7 +39,8 @@ ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->rkey_packed_size     = sizeof(uct_knem_key_t);
     md_attr->cap.flags            = UCT_MD_FLAG_REG |
                                     UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.reg_mem_types    = UCS_MEMORY_TYPES_CPU_ACCESSIBLE;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
@@ -275,12 +276,13 @@ static ucs_status_t uct_knem_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
 }
 
 static uct_md_ops_t uct_knem_md_rcache_ops = {
-    .close              = uct_knem_md_close,
-    .query              = uct_knem_md_query,
-    .mkey_pack          = uct_knem_rkey_pack,
-    .mem_reg            = uct_knem_mem_rcache_reg,
-    .mem_dereg          = uct_knem_mem_rcache_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .close                  = uct_knem_md_close,
+    .query                  = uct_knem_md_query,
+    .mkey_pack              = uct_knem_rkey_pack,
+    .mem_reg                = uct_knem_mem_rcache_reg,
+    .mem_dereg              = uct_knem_mem_rcache_dereg,
+    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .detect_memory_type     = ucs_empty_function_return_unsupported,
 };
 
 
@@ -352,11 +354,10 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
     }
 
     if (md_config->rcache_enable != UCS_NO) {
+        uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_knem_rcache_region_t);
-        rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.max_alignment      = ucs_get_page_size();
         rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
-        rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = knem_md;
         rcache_params.ops                = &uct_knem_rcache_ops;
         rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;

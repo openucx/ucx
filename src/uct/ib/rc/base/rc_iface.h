@@ -23,9 +23,9 @@
 #define UCT_RC_QP_TABLE_MEMB_ORDER  (UCT_IB_QPN_ORDER - UCT_RC_QP_TABLE_ORDER)
 #define UCT_RC_QP_MAX_RETRY_COUNT   7
 
-#define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _max_inline) \
+#define UCT_RC_CHECK_AM_SHORT(_am_id, _length, _header_t, _max_inline) \
      UCT_CHECK_AM_ID(_am_id); \
-     UCT_CHECK_LENGTH(sizeof(uct_rc_am_short_hdr_t) + _length, 0, _max_inline, "am_short");
+     UCT_CHECK_LENGTH(sizeof(_header_t) + _length, 0, _max_inline, "am_short");
 
 #define UCT_RC_CHECK_ZCOPY_DATA(_header_length, _length, _seg_size) \
     UCT_CHECK_LENGTH(_header_length + _length, 0, _seg_size, "am_zcopy payload"); \
@@ -157,6 +157,7 @@ typedef struct uct_rc_iface_common_config {
         unsigned             rnr_retry_count;
         size_t               max_get_zcopy;
         size_t               max_get_bytes;
+        int                  poll_always;
     } tx;
 
     struct {
@@ -188,7 +189,7 @@ typedef struct uct_rc_iface_ops {
                                        uct_rc_hdr_t *hdr, unsigned length,
                                        uint32_t imm_data, uint16_t lid,
                                        unsigned flags);
-    void                 (*cleanup_qp)(uct_ib_async_event_wait_t *cleanup_ctx);
+    unsigned             (*cleanup_qp)(void *arg);
     void                 (*ep_post_check)(uct_ep_h tl_ep);
 } uct_rc_iface_ops_t;
 
@@ -235,6 +236,7 @@ struct uct_rc_iface {
         unsigned             tx_min_inline;
         unsigned             tx_ops_count;
         uint16_t             tx_moderation;
+        uint8_t              tx_poll_always;
 
         /* Threshold to send "soft" FC credit request. The peer will try to
          * piggy-back credits grant to the counter AM, if any. */
@@ -269,6 +271,7 @@ struct uct_rc_iface {
 
     UCS_STATS_NODE_DECLARE(stats)
 
+    ucs_spinlock_t           eps_lock; /* common lock for eps and ep_list */
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
     ucs_list_link_t          ep_gc_list;
@@ -529,6 +532,12 @@ uct_rc_iface_invoke_pending_cb(uct_rc_iface_t *iface, uct_pending_req_t *req)
                    ucs_status_string(status));
 
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_rc_iface_poll_tx(uct_rc_iface_t *iface, unsigned count)
+{
+    return (count == 0) || iface->config.tx_poll_always;
 }
 
 #endif

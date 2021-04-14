@@ -1,5 +1,5 @@
 #
-# Copyright (C) Mellanox Technologies Ltd. 2001-2011.  ALL RIGHTS RESERVED.
+# Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 # Copyright (C) The University of Tennessee and The University
 #               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
@@ -9,7 +9,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)
-define([ucx_ver_minor], 10)
+define([ucx_ver_minor], 11)
 define([ucx_ver_patch], 0)
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 
@@ -109,6 +109,10 @@ AS_IF([${LN_S} --relative symlinktest 2>/dev/null],
 #
 AC_DEFINE_UNQUOTED([UCX_CONFIGURE_FLAGS], ["$config_flags"], [UCX configure flags])
 
+#
+# Define path of ucx.conf configuration file
+#
+AC_SUBST([ucx_conf_dir], [${sysconfdir}/ucx])
 
 #
 # Provide the functionality of AS_VAR_APPEND if Autoconf does not have it.
@@ -185,6 +189,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_TL_CM], [false])
      AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
      AM_CONDITIONAL([HAVE_CUDA], [false])
+     AM_CONDITIONAL([HAVE_CUDA_STATIC], [false])
      AM_CONDITIONAL([HAVE_GDR_COPY], [false])
      AM_CONDITIONAL([HAVE_ROCM], [false])
      AM_CONDITIONAL([HAVE_HIP], [false])
@@ -192,7 +197,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_CMA], [false])
      AM_CONDITIONAL([HAVE_KNEM], [false])
      AM_CONDITIONAL([HAVE_RDMACM], [false])
-     AM_CONDITIONAL([HAVE_RDMACM_QP_LESS], [false])
      AM_CONDITIONAL([HAVE_MPI], [false])
      AM_CONDITIONAL([HAVE_MPIRUN], [false])
      AM_CONDITIONAL([HAVE_MPICC], [false])
@@ -209,20 +213,22 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
+     AM_CONDITIONAL([HAVE_FUSE3], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
      m4_include([config/m4/compiler.m4])
      m4_include([config/m4/sysdep.m4])
-     m4_include([config/m4/ucs.m4])
      m4_include([config/m4/ucm.m4])
      m4_include([config/m4/mpi.m4])
      m4_include([config/m4/rte.m4])
+     m4_include([config/m4/fuse3.m4])
      m4_include([config/m4/java.m4])
      m4_include([config/m4/cuda.m4])
      m4_include([config/m4/rocm.m4])
      m4_include([config/m4/gdrcopy.m4])
      m4_include([src/ucm/configure.m4])
+     m4_include([src/ucs/configure.m4])
      m4_include([src/uct/configure.m4])
      m4_include([src/tools/perf/configure.m4])
      m4_include([test/gtest/configure.m4])
@@ -328,6 +334,7 @@ AS_IF([test "x$with_docs_only" = xyes],
 # Print which transports are built
 #
 build_modules="${uct_modules}"
+build_modules="${build_modules}${ucs_modules}"
 build_modules="${build_modules}${uct_ib_modules}"
 build_modules="${build_modules}${uct_cuda_modules}"
 build_modules="${build_modules}${ucm_modules}"
@@ -357,10 +364,10 @@ AC_CONFIG_FILES([
                  debian/rules
                  debian/control
                  debian/changelog
-                 src/ucs/Makefile
                  src/ucp/Makefile
                  src/ucp/api/ucp_version.h
                  src/ucp/core/ucp_version.c
+                 src/tools/vfs/Makefile
                  src/tools/info/Makefile
                  src/tools/profile/Makefile
                  test/apps/Makefile
@@ -392,13 +399,16 @@ AC_MSG_NOTICE([Building documents only])
 [
 AC_MSG_NOTICE([UCX build configuration:])
 AC_MSG_NOTICE([      Build prefix:   ${prefix}])
+AC_MSG_NOTICE([ Configuration dir:   ${ucx_conf_dir}])
 AC_MSG_NOTICE([Preprocessor flags:   ${BASE_CPPFLAGS}])
 AC_MSG_NOTICE([        C compiler:   ${CC} ${BASE_CFLAGS}])
 AC_MSG_NOTICE([      C++ compiler:   ${CXX} ${BASE_CXXFLAGS}])
 AC_MSG_NOTICE([      Multi-thread:   ${mt_enable}])
 AC_MSG_NOTICE([         MPI tests:   ${mpi_enable}])
+AC_MSG_NOTICE([       VFS support:   ${vfs_enable}])
 AC_MSG_NOTICE([     Devel headers:   ${enable_devel_headers}])
 AC_MSG_NOTICE([          Bindings:   <$(echo ${build_bindings}|tr ':' ' ') >])
+AC_MSG_NOTICE([       UCS modules:   <$(echo ${ucs_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([       UCT modules:   <$(echo ${uct_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([      CUDA modules:   <$(echo ${uct_cuda_modules}|tr ':' ' ') >])
 AC_MSG_NOTICE([      ROCM modules:   <$(echo ${uct_rocm_modules}|tr ':' ' ') >])

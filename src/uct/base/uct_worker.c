@@ -15,16 +15,20 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/type/class.h>
 #include <ucs/async/async.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 static UCS_CLASS_INIT_FUNC(uct_worker_t)
 {
     ucs_callbackq_init(&self->progress_q);
+    ucs_vfs_obj_add_dir(NULL, self, "uct/worker/%p", self);
+
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_worker_t)
 {
+    ucs_vfs_obj_remove(self);
     ucs_callbackq_cleanup(&self->progress_q);
 }
 

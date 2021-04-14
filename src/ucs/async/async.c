@@ -11,7 +11,7 @@
 #include "async_int.h"
 
 #include <ucs/arch/atomic.h>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/stubs.h>
 
@@ -22,8 +22,6 @@
 #define UCS_ASYNC_HANDLER_FMT           "%p [id=%d ref %d] %s()"
 #define UCS_ASYNC_HANDLER_ARG(_h)       (_h), (_h)->id, (_h)->refcount, \
                                         ucs_debug_get_symbol_name((_h)->cb)
-
-#define UCS_ASYNC_HANDLER_CALLER_NULL   ((pthread_t)-1)
 
 #define UCS_ASYNC_MISSED_QUEUE_SHIFT    32
 #define UCS_ASYNC_MISSED_QUEUE_MASK     UCS_MASK(UCS_ASYNC_MISSED_QUEUE_SHIFT)
@@ -246,10 +244,10 @@ static void ucs_async_handler_invoke(ucs_async_handler_t *handler,
      * the handler must always be called with async context blocked, so no need
      * for atomic operations here.
      */
-    ucs_assert(handler->caller == UCS_ASYNC_HANDLER_CALLER_NULL);
+    ucs_assert(handler->caller == UCS_ASYNC_PTHREAD_ID_NULL);
     handler->caller = pthread_self();
     handler->cb(handler->id, events, handler->arg);
-    handler->caller = UCS_ASYNC_HANDLER_CALLER_NULL;
+    handler->caller = UCS_ASYNC_PTHREAD_ID_NULL;
 }
 
 static ucs_status_t ucs_async_handler_dispatch(ucs_async_handler_t *handler,
@@ -447,7 +445,7 @@ ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
 
     handler->mode     = mode;
     handler->events   = events;
-    handler->caller   = UCS_ASYNC_HANDLER_CALLER_NULL;
+    handler->caller   = UCS_ASYNC_PTHREAD_ID_NULL;
     handler->cb       = cb;
     handler->arg      = arg;
     handler->async    = async;

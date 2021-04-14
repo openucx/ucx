@@ -26,8 +26,10 @@ typedef enum uct_tcp_sockcm_ep_state {
                                                                     (debug flag) */
     UCT_TCP_SOCKCM_EP_PACK_CB_FAILED              = UCS_BIT(15), /* the upper layer's priv_pack_cb failed */
     UCT_TCP_SOCKCM_EP_SERVER_REJECT_CALLED        = UCS_BIT(16), /* ep on the server called reject API call */
-    UCT_TCP_SOCKCM_EP_SERVER_REJECT_SENT          = UCS_BIT(17)  /* ep on the server sent the reject message to the client */
-
+    UCT_TCP_SOCKCM_EP_SERVER_REJECT_SENT          = UCS_BIT(17), /* ep on the server sent the reject message to the client */
+    UCT_TCP_SOCKCM_EP_RESOLVE_CB_FAILED           = UCS_BIT(18), /* the upper layer's resolve_cb failed */
+    UCT_TCP_SOCKCM_EP_RESOLVE_CB_INVOKED          = UCS_BIT(19), /* resolve_cb invoked */
+    UCT_TCP_SOCKCM_EP_SERVER_CONN_REQ_CB_INVOKED  = UCS_BIT(20)  /* server ep was passed to a user via conn_req_cb */
 } uct_tcp_sockcm_ep_state_t;
 
 
@@ -62,6 +64,9 @@ uct_tcp_sockcm_t *uct_tcp_sockcm_ep_get_cm(uct_tcp_sockcm_ep_t *cep)
 void uct_tcp_sockcm_ep_close_fd(int *fd);
 
 ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h* ep_p);
+
+ucs_status_t uct_tcp_sockcm_ep_connect(uct_ep_h ep,
+                                       const uct_ep_connect_params_t *params);
 
 ucs_status_t uct_tcp_sockcm_ep_disconnect(uct_ep_h ep, unsigned flags);
 

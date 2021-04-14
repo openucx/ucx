@@ -9,12 +9,14 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/algorithm/crc.h>
+#include <ucs/sys/sock.h>
 #include <deque>
 #include <exception>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <string>
+#include <vector>
 #include <ucs/datastruct/list.h>
 
 #define MAX_LOG_PREFIX_SIZE   64
@@ -57,15 +59,15 @@ public:
     ~UcxLog();
 
     template<typename T>
-    const UcxLog& operator<<(const T &t) const {
-        if (_enable) {
-            std::cout << t;
+    UcxLog& operator<<(const T &t) {
+        if (_ss != NULL) {
+            (*_ss) << t;
         }
         return *this;
     }
 
 private:
-    const bool               _enable;
+    std::stringstream        *_ss;
 };
 
 
@@ -73,6 +75,17 @@ private:
  * Holds UCX global context and worker
  */
 class UcxContext {
+    class UcxAcceptCallback : public UcxCallback {
+    public:
+        UcxAcceptCallback(UcxContext &context, UcxConnection &connection);
+
+        virtual void operator()(ucs_status_t status);
+
+    private:
+        UcxContext    &_context;
+        UcxConnection &_connection;
+    };
+
 public:
     UcxContext(size_t iomsg_size, double connect_timeout, bool use_am);
 
@@ -82,9 +95,14 @@ public:
 
     bool listen(const struct sockaddr* saddr, size_t addrlen);
 
-    UcxConnection* connect(const struct sockaddr* saddr, size_t addrlen);
-
     void progress();
+
+    static const std::string sockaddr_str(const struct sockaddr* saddr,
+                                          size_t addrlen);
+
+    void destroy_connections();
+
+    static double get_time();
 
 protected:
 
@@ -111,6 +129,11 @@ private:
         WAIT_STATUS_TIMED_OUT
     } wait_status_t;
 
+    typedef struct {
+        ucp_conn_request_h conn_request;
+        struct timeval     arrival_time;
+    } conn_req_t;
+
     friend class UcxConnection;
 
     static const ucp_tag_t IOMSG_TAG = 1ull << 63;
@@ -133,13 +156,13 @@ private:
                                          void *data, size_t length,
                                          const ucp_am_recv_param_t *param);
 
-
-    static const std::string sockaddr_str(const struct sockaddr* saddr,
-                                          size_t addrlen);
-
     ucp_worker_h worker() const;
 
     double connect_timeout() const;
+
+    int is_timeout_elapsed(struct timeval const *tv_prior, double timeout);
+
+    void progress_timed_out_conns();
 
     void progress_conn_requests();
 
@@ -156,9 +179,9 @@ private:
 
     void remove_connection(UcxConnection *conn);
 
-    void handle_connection_error(UcxConnection *conn);
+    void remove_connection_inprogress(UcxConnection *conn);
 
-    void destroy_connections();
+    void handle_connection_error(UcxConnection *conn);
 
     void destroy_listener();
 
@@ -166,31 +189,33 @@ private:
 
     void set_am_handler(ucp_am_recv_callback_t cb, void *arg);
 
-    typedef std::map<uint64_t, UcxConnection*> conn_map_t;
+    typedef std::map<uint64_t, UcxConnection*>              conn_map_t;
+    typedef std::vector<std::pair<double, UcxConnection*> > timeout_conn_t;
 
-    ucp_context_h                  _context;
-    ucp_worker_h                   _worker;
-    ucp_listener_h                 _listener;
-    conn_map_t                     _conns;
-    std::deque<ucp_conn_request_h> _conn_requests;
-    std::deque<UcxConnection *>    _failed_conns;
-    ucx_request*                   _iomsg_recv_request;
-    std::string                    _iomsg_buffer;
-    double                         _connect_timeout;
-    bool                           _use_am;
+    ucp_context_h               _context;
+    ucp_worker_h                _worker;
+    ucp_listener_h              _listener;
+    conn_map_t                  _conns;
+    std::deque<conn_req_t>      _conn_requests;
+    timeout_conn_t              _conns_in_progress; // ordered in time
+    std::deque<UcxConnection *> _failed_conns;
+    ucx_request                 *_iomsg_recv_request;
+    std::string                 _iomsg_buffer;
+    double                      _connect_timeout;
+    bool                        _use_am;
 };
 
 
 class UcxConnection {
 public:
-    public:
-    UcxConnection(UcxContext& context, uint32_t conn_id, bool use_am);
+    UcxConnection(UcxContext &context, bool use_am);
 
     ~UcxConnection();
 
-    bool connect(const struct sockaddr* saddr, socklen_t addrlen);
+    void connect(const struct sockaddr *saddr, socklen_t addrlen,
+                 UcxCallback *callback);
 
-    bool accept(ucp_conn_request_h conn_req);
+    void accept(ucp_conn_request_h conn_req, UcxCallback *callback);
 
     bool send_io_message(const void *buffer, size_t length,
                          UcxCallback* callback = EmptyCallback::get());
@@ -218,6 +243,12 @@ public:
         return _ucx_status;
     }
 
+    bool is_established() const {
+        return _establish_cb == NULL;
+    }
+
+    void handle_connection_error(ucs_status_t status);
+
 private:
     static ucp_tag_t make_data_tag(uint32_t conn_id, uint32_t sn);
 
@@ -243,7 +274,13 @@ private:
 
     void set_log_prefix(const struct sockaddr* saddr, socklen_t addrlen);
 
-    bool connect_common(ucp_ep_params_t& ep_params);
+    void connect_common(ucp_ep_params_t &ep_params, UcxCallback *callback);
+
+    void connect_tag(UcxCallback *callback);
+
+    void connect_am(UcxCallback *callback);
+
+    void established(ucs_status_t status);
 
     bool send_common(const void *buffer, size_t length, ucp_tag_t tag,
                      UcxCallback* callback);
@@ -252,27 +289,23 @@ private:
 
     void request_completed(ucx_request *r);
 
-    void handle_connection_error(ucs_status_t status);
-
-    void disconnect(enum ucp_ep_close_mode mode);
-
     void ep_close(enum ucp_ep_close_mode mode);
 
     bool process_request(const char *what, ucs_status_ptr_t ptr_status,
                          UcxCallback* callback);
 
-    static unsigned    _num_instances;
+    static unsigned _num_instances;
 
-    UcxContext&        _context;
-    uint64_t           _conn_id;
-    uint64_t           _remote_conn_id;
-    char               _log_prefix[MAX_LOG_PREFIX_SIZE];
-    ucp_ep_h           _ep;
-    void*              _close_request;
-    ucs_list_link_t    _all_requests;
-    ucs_status_t       _ucx_status;
-    bool               _use_am;
-    bool               _connected;
+    UcxContext      &_context;
+    UcxCallback     *_establish_cb;
+    uint64_t        _conn_id;
+    uint64_t        _remote_conn_id;
+    char            _log_prefix[MAX_LOG_PREFIX_SIZE];
+    ucp_ep_h        _ep;
+    void            *_close_request;
+    ucs_list_link_t _all_requests;
+    ucs_status_t    _ucx_status;
+    bool            _use_am;
 };
 
 #endif

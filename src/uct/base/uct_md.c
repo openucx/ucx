@@ -16,6 +16,7 @@
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack.h>
+#include <ucs/memory/rcache.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
@@ -36,8 +37,17 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
 
     {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
      "Registration cache address alignment, must be power of 2\n"
-     "between "UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN)"and system page size",
+     "between " UCS_PP_MAKE_STRING(UCS_PGT_ADDR_ALIGN) "and system page size",
      ucs_offsetof(uct_md_rcache_config_t, alignment), UCS_CONFIG_TYPE_UINT},
+
+    {"RCACHE_MAX_REGIONS", "inf",
+     "Maximal number of regions in the registration cache",
+     ucs_offsetof(uct_md_rcache_config_t, max_regions),
+     UCS_CONFIG_TYPE_ULUNITS},
+
+    {"RCACHE_MAX_SIZE", "inf",
+     "Maximal total size of registration cache regions",
+     ucs_offsetof(uct_md_rcache_config_t, max_size), UCS_CONFIG_TYPE_MEMUNITS},
 
     {NULL}
 };
@@ -373,7 +383,6 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
                                         unsigned num_methods,
                                         const uct_mem_alloc_params_t *params)
 {
-    const uct_alloc_method_t *method;
     ucs_status_t status;
 
     if (params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_FLAGS) {
@@ -402,19 +411,6 @@ ucs_status_t uct_mem_alloc_check_params(size_t length,
         ucs_debug("the length value for allocating memory is set to zero: %s",
                   ucs_status_string(UCS_ERR_INVALID_PARAM));
         return UCS_ERR_INVALID_PARAM;
-    }
-
-    for (method = methods;
-         method < methods + num_methods; ++method) {
-        if (*method == UCT_ALLOC_METHOD_MD) {
-            if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MDS) ||
-                (params->mds.count < 1)) {
-                ucs_debug("methods include UCT_ALLOC_METHOD but params->mds"
-                          " not populated correctly: %s",
-                          ucs_status_string(UCS_ERR_INVALID_PARAM));
-                return UCS_ERR_INVALID_PARAM;
-            }
-        }
     }
 
     return UCS_OK;
@@ -450,11 +446,17 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
     ucs_status_t status;
 
     if ((length == 0) || (address == NULL)) {
+        uct_md_log_mem_reg_error(flags,
+                                 "uct_md_mem_reg(address=%p length=%zu): "
+                                 "invalid parameters", address, length);
         return UCS_ERR_INVALID_PARAM;
     }
 
     status = uct_mem_check_flags(flags);
     if (status != UCS_OK) {
+        uct_md_log_mem_reg_error(flags,
+                                 "uct_md_mem_reg(flags=0x%x): invalid flags",
+                                 flags);
         return status;
     }
 
@@ -466,10 +468,10 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
     return md->ops->mem_dereg(md, memh);
 }
 
-ucs_status_t uct_md_mem_query(uct_md_h md, const void *addr, const size_t length,
-                              uct_md_mem_attr_t *mem_attr_p)
+ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
+                              uct_md_mem_attr_t *mem_attr)
 {
-    return md->ops->mem_query(md, addr, length, mem_attr_p);
+    return md->ops->mem_query(md, address, length, mem_attr);
 }
 
 int uct_md_is_sockaddr_accessible(uct_md_h md, const ucs_sock_addr_t *sockaddr,
@@ -482,4 +484,13 @@ ucs_status_t uct_md_detect_memory_type(uct_md_h md, const void *addr, size_t len
                                        ucs_memory_type_t *mem_type_p)
 {
     return md->ops->detect_memory_type(md, addr, length, mem_type_p);
+}
+
+void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
+                              const uct_md_rcache_config_t *rcache_config)
+{
+    rcache_params->alignment          = rcache_config->alignment;
+    rcache_params->ucm_event_priority = rcache_config->event_prio;
+    rcache_params->max_regions        = rcache_config->max_regions;
+    rcache_params->max_size           = rcache_config->max_size;
 }

@@ -9,13 +9,51 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
-#include <stddef.h>
 #include <ucs/datastruct/array.h>
+#include <stddef.h>
+#include <stdio.h>
 
 
 BEGIN_C_DECLS
 
 UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
+
+
+/**
+ * Dynamic string buffer initializer. The backing storage should be released
+ * explicitly by calling @ref ucs_string_buffer_cleanup()
+ */
+#define UCS_STRING_BUFFER_INITIALIZER \
+    { \
+        UCS_ARRAY_DYNAMIC_INITIALIZER \
+    }
+
+
+/**
+ * Declare a string buffer which is using an existing string as backing store.
+ * Such string buffer does not allocate additional memory and does not have to
+ * be cleaned-up, and it can also be used to build a string onto existing
+ * C-string buffer passed as a function argument.
+ *
+ * @param _var       String buffer variable name
+ * @param _buffer    Buffer to use as backing store.
+ * @param _capacity  Buffer capacity.
+ *
+ * Example:
+ *
+ * @code{.c}
+ * char * build_my_string(char *buffer, size_t max_length)
+ * {
+ *    UCS_STRING_BUFFER_FIXED(strb, buffer, max_legth);
+ *    ucs_string_buffer_appendf(&strb, "%x%x", 57005, 48879);
+ *    return buffer;
+ * }
+ * @endcode
+ */
+#define UCS_STRING_BUFFER_FIXED(_var, _buffer, _capacity) \
+    ucs_string_buffer_t _var = { \
+        UCS_ARRAY_FIXED_INITIALIZER(_buffer, _capacity) \
+    }
 
 
 /**
@@ -35,10 +73,13 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
  * ucs_string_buffer_appendf(&strb, "%x%x", 57005, 48879);
  * @endcode
  */
-#define UCS_STRING_BUFFER_FIXED(_var, _buffer) \
-    ucs_string_buffer_t _var = { \
-        UCS_ARRAY_FIXED_INITIALIZER((_buffer), ucs_static_array_size(_buffer)) \
-    }
+#define UCS_STRING_BUFFER_STATIC(_var, _buffer) \
+    UCS_STRING_BUFFER_FIXED(_var, _buffer, ucs_static_array_size(_buffer))
+
+
+#define UCS_STRING_BUFFER_ONSTACK(_var, _capacity) \
+    UCS_STRING_BUFFER_FIXED(_var, UCS_ARRAY_ALLOC_ONSTACK(string_buffer, _capacity), \
+                            _capacity) \
 
 
 /**
@@ -56,6 +97,17 @@ typedef struct ucs_string_buffer {
  * @param [out] strb   String buffer to initialize.
  */
 void ucs_string_buffer_init(ucs_string_buffer_t *strb);
+
+
+/**
+ * Initialize a string buffer with fixed-size buffer as backing storage.
+ *
+ * @param [out] strb      String buffer to initialize.
+ * @param [in]  buffer    Buffer to use as backing storage.
+ * @param [in]  capacity  Buffer size.
+ */
+void ucs_string_buffer_init_fixed(ucs_string_buffer_t *strb, char *buffer,
+                                  size_t capacity);
 
 
 /**
@@ -90,6 +142,21 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
 
 
 /**
+ * Append a hex dump to the string buffer.
+ *
+ * @param [inout] strb       String buffer to append to.
+ * @param [in]    data       Raw data to hex-dump.
+ * @param [in]    size       Raw data size.
+ * @param [in]    per_line   Add a newline character after this number of bytes.
+ *
+ * @note If the string cannot grow to the required length, only some of the
+ *       characters would be appended.
+ */
+void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
+                                  size_t size, size_t per_line);
+
+
+/**
  * Remove specific characters from the end of the string.
  *
  * @param [inout] strb     String buffer remote characters from.
@@ -108,12 +175,35 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset);
  * buffer. The returned string is valid only as long as no other operation is
  * done on the string buffer (including append).
  *
- * @param [in]   strb   String buffer to convert to a C-style string
+ * @param [in]   strb   String buffer to convert to a C-style string.
  *
  * @return C-style string representing the data in the buffer.
  */
 const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb);
 
+
+/**
+ * Print the string buffer to a stream as multi-line text.
+ *
+ * @param [in]  strb          String buffer to print.
+ * @param [in]  line_prefix   Prefix to prepend to each output line.
+ * @param [in]  stream        Stream to print to.
+ */
+void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
+                            const char *line_prefix, FILE *stream);
+
+
+/**
+ * Return a pointer to a C-style string which represents the string buffer. The
+ * returned pointer should be freed with method which deallocates memory, e.g.
+ * ucs_free. There is no need to call ucs_string_buffer_cleanup in case of
+ * extracting memory using this method.
+ *
+ * @param [inout] strb String buffer to convert to a C-style string.
+ *
+ * @return C-style string representing the data in the buffer.
+ */
+char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb);
 
 END_C_DECLS
 

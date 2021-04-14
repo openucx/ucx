@@ -160,5 +160,4 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
     }
 }
 
-
 #endif

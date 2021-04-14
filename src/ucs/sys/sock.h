@@ -215,7 +215,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
  *                                for the listen() call.
  * @param [in]  silent_bind       Whether or not to print error message on bind
  *                                failure with EADDRINUSE.
- * @param [in]  allow_addr_inuse  Whether or not to allow the socket to use an
+ * @param [in]  reuse_addr        Whether or not to allow the socket to use an
  *                                address that is already in use and was not
  *                                released by another socket yet.
  * @param [out] listen_fd         The fd that belongs to the server.
@@ -223,7 +223,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
  * @return UCS_OK on success or an error code on failure.
  */
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
-                                    int backlog, int silent_bind, int allow_addr_inuse,
+                                    int backlog, int silent_bind, int reuse_addr,
                                     int *listen_fd);
 
 
@@ -370,11 +370,25 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr);
  * @param [out]  str         A string filled with the IP address.
  * @param [in]   max_size    Size of a string (considering '\0'-terminated symbol)
  *
- * @return ip_str if the sock_addr has a valid IP address or 'Invalid address'
- *         otherwise.
+ * @return '<null>' if NULL is specified or @a str if the sock_addr has a valid
+ *         IP address or 'Invalid address' otherwise.
  */
 const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
                              char *str, size_t max_size);
+
+
+/**
+ * Extract the IP address from a given string and return it as a sockaddr storage.
+ *
+ * @param [in]  ip_str       A string to take IP address from.
+ * @param [out] sa_storage   sockaddr storage filled with the IP address and
+ *                           address family.
+ *
+ * @return UCS_OK if @a ip_str has a valid IP address or UCS_ERR_INVALID_ADDR
+ *         otherwise.
+ */
+ucs_status_t ucs_sock_ipstr_to_sockaddr(const char *ip_str,
+                                        struct sockaddr_storage *sa_storage);
 
 
 /**

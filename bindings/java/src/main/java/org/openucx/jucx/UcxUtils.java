@@ -5,38 +5,27 @@
 
 package org.openucx.jucx;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 
 public class UcxUtils {
 
-    private static final Constructor<?> directBufferConstructor;
-
-    static {
-        try {
-            Class<?> classDirectByteBuffer = Class.forName("java.nio.DirectByteBuffer");
-            directBufferConstructor = classDirectByteBuffer.getDeclaredConstructor(long.class,
-                int.class);
-            directBufferConstructor.setAccessible(true);
-        } catch (Exception e) {
-            throw new UcxException(e.getMessage());
-        }
-    }
+    private UcxUtils() { }
 
     /**
      * Returns view of underlying memory region as a ByteBuffer.
      * @param address - address of start of memory region
      */
-    public static ByteBuffer getByteBufferView(long address, int length)
-        throws IllegalAccessException, InvocationTargetException, InstantiationException {
-        return (ByteBuffer)directBufferConstructor.newInstance(address, length);
+    public static ByteBuffer getByteBufferView(long address, long length) {
+        return getByteBufferViewNative(address, length);
     }
 
     /**
      * Returns native address of the current position of a direct byte buffer.
      */
     public static long getAddress(ByteBuffer buffer) {
-        return ((sun.nio.ch.DirectBuffer) buffer).address() + buffer.position();
+        return getAddressNative(buffer) + buffer.position();
     }
+
+    private static native long getAddressNative(ByteBuffer buffer);
+    private static native ByteBuffer getByteBufferViewNative(long address, long length);
 }

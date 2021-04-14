@@ -11,6 +11,9 @@
 #include "tag_rndv.h"
 #include "tag_match.inl"
 
+#include <ucp/proto/proto_single.inl>
+#include <ucp/rndv/proto_rndv.inl>
+
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
                           const ucp_tag_rndv_rts_hdr_t *rts_hdr)
@@ -21,7 +24,11 @@ void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
     rreq->recv.tag.info.sender_tag = rts_hdr->tag.tag;
     rreq->recv.tag.info.length     = rts_hdr->super.size;
 
-    ucp_rndv_receive(worker, rreq, &rts_hdr->super, rts_hdr + 1);
+    if (worker->context->config.ext.proto_enable) {
+        ucp_proto_rndv_receive(worker, rreq, &rts_hdr->super, sizeof(*rts_hdr));
+    } else {
+        ucp_rndv_receive(worker, rreq, &rts_hdr->super, rts_hdr + 1);
+    }
 }
 
 ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
@@ -39,11 +46,10 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
 
     rreq = ucp_tag_exp_search(&worker->tm, rts_hdr->tag.tag);
     if (rreq != NULL) {
-        ucp_tag_rndv_matched(worker, rreq, rts_hdr);
-
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
         ucp_tag_offload_try_cancel(worker, rreq, UCP_TAG_OFFLOAD_CANCEL_FORCE);
+        ucp_tag_rndv_matched(worker, rreq, rts_hdr);
 
         UCP_WORKER_STAT_RNDV(worker, EXP, 1);
         return UCS_OK;
@@ -72,7 +78,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     ucp_request_t *sreq                 = arg;
     ucp_tag_rndv_rts_hdr_t *tag_rts_hdr = dest;
 
-    tag_rts_hdr->tag.tag = sreq->send.msg_proto.tag.tag;
+    tag_rts_hdr->tag.tag = sreq->send.msg_proto.tag;
 
     return ucp_rndv_rts_pack(sreq, &tag_rts_hdr->super, sizeof(*tag_rts_hdr),
                              UCP_RNDV_RTS_FLAG_TAG);
@@ -82,12 +88,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
-    size_t packed_rkey_size;
 
-    /* send the RTS. the pack_cb will pack all the necessary fields in the RTS */
-    packed_rkey_size = ucp_ep_config(sreq->send.ep)->rndv.rkey_size;
-    return ucp_do_am_single(self, UCP_AM_ID_RNDV_RTS, ucp_tag_rndv_rts_pack,
-                            sizeof(ucp_tag_rndv_rts_hdr_t) + packed_rkey_size);
+    return ucp_rndv_send_rts(sreq, ucp_tag_rndv_rts_pack,
+                             sizeof(ucp_tag_rndv_rts_hdr_t));
 }
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
@@ -95,9 +98,9 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     ucp_ep_h ep = sreq->send.ep;
     ucs_status_t status;
 
-    ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu",
+    ucp_trace_req(sreq, "start_rndv to %s buffer %p length %zu mem_type:%s",
                   ucp_ep_peer_name(ep), sreq->send.buffer,
-                  sreq->send.length);
+                  sreq->send.length, ucs_memory_type_names[sreq->send.mem_type]);
     UCS_PROFILE_REQUEST_EVENT(sreq, "start_rndv", sreq->send.length);
 
     status = ucp_ep_resolve_remote_id(ep, sreq->send.lane);
@@ -105,7 +108,9 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
         return status;
     }
 
-    if (ucp_ep_is_tag_offload_enabled(ucp_ep_config(ep))) {
+    ucp_request_id_alloc(sreq);
+
+    if (ucp_ep_config_key_has_tag_lane(&ucp_ep_config(ep)->key)) {
         status = ucp_tag_offload_start_rndv(sreq);
     } else {
         ucs_assert(sreq->send.lane == ucp_ep_get_am_lane(ep));
@@ -116,3 +121,44 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
     return status;
 }
 
+static size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg)
+{
+    ucp_tag_rndv_rts_hdr_t *tag_rts = dest;
+    ucp_request_t *req              = arg;
+
+    tag_rts->super.flags = UCP_RNDV_RTS_FLAG_TAG;
+    tag_rts->tag.tag     = req->send.msg_proto.tag;
+
+    return ucp_proto_rndv_rts_pack(req, &tag_rts->super, sizeof(*tag_rts));
+}
+
+static ucs_status_t ucp_tag_rndv_rts_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_rndv_ctrl_priv_t *rpriv;
+    size_t max_rts_size;
+    ucs_status_t status;
+
+    rpriv        = req->send.proto_config->priv;
+    max_rts_size = sizeof(ucp_tag_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
+
+    status = ucp_proto_rndv_rts_request_init(req);
+    if (status != UCS_OK) {
+        ucp_proto_request_abort(req, status);
+        return UCS_OK;
+    }
+
+    return ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTS,
+                                              rpriv->lane,
+                                              ucp_tag_rndv_proto_rts_pack, req,
+                                              max_rts_size, NULL);
+}
+
+static ucp_proto_t ucp_tag_rndv_proto = {
+    .name       = "tag/rndv",
+    .flags      = 0,
+    .init       = ucp_proto_rndv_rts_init,
+    .config_str = ucp_proto_rndv_ctrl_config_str,
+    .progress   = ucp_tag_rndv_rts_progress
+};
+UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 #
 # Copyright (C) Mellanox Technologies Ltd. 2017-.  ALL RIGHTS RESERVED.
 #
@@ -10,6 +10,8 @@ import subprocess
 import os
 import re
 import commands
+import itertools
+import contextlib
 from distutils.version import LooseVersion
 from optparse import OptionParser
 
@@ -80,6 +82,37 @@ am_tls =  {
     "mlx5_override"   : mlx5_am_override
 }
 
+tl_aliases = {
+    "mm":   ["posix", "sysv", "xpmem", ],
+    "sm":   ["posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", ],
+    "shm":  ["posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", ],
+    "ib":   ["rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", ],
+    "ud_v": ["ud_verbs", "rdmacm", ],
+    "ud_x": ["ud_mlx5", "rdmacm", ],
+    "ud":   ["ud_mlx5", "ud_verbs", "rdmacm", ],
+    "rc_v": ["rc_verbs", "ud_verbs:aux", "rdmacm", ],
+    "rc_x": ["rc_mlx5", "ud_mlx5:aux", "rdmacm", ],
+    "rc":   ["rc_mlx5", "ud_mlx5:aux", "rc_verbs", "ud_verbs:aux", "rdmacm", ],
+    "dc":   ["dc_mlx5", "rdmacm", ],
+    "dc_x": ["dc_mlx5", "rdmacm", ],
+    "ugni": ["ugni_smsg", "ugni_udt:aux", "ugni_rdma", ],
+    "cuda": ["cuda_copy", "cuda_ipc", "gdr_copy", ],
+    "rocm": ["rocm_copy", "rocm_ipc", "rocm_gdr", ],
+}
+
+@contextlib.contextmanager
+def _override_env(var_name, value):
+    if value is None:
+        yield
+        return
+
+    prev_value = os.getenv(var_name)
+    os.putenv(var_name, value)
+    try:
+        yield
+    finally:
+        os.putenv(var_name, prev_value) if prev_value else os.unsetenv(var_name)
+
 def exec_cmd(cmd):
     if options.verbose:
         print cmd
@@ -91,18 +124,14 @@ def exec_cmd(cmd):
 
     return status, output
 
-def find_am_transport(dev, neps, override = 0) :
-
-    os.putenv("UCX_TLS", "ib")
-    os.putenv("UCX_NET_DEVICES", dev)
-
+def find_am_transport(dev, neps=1, override=0, tls="ib"):
     if (override):
         os.putenv("UCX_NUM_EPS", "2")
+    
+    with _override_env("UCX_TLS", tls), \
+         _override_env("UCX_NET_DEVICES", dev):
 
-    status, output = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep am")
-
-    os.unsetenv("UCX_TLS")
-    os.unsetenv("UCX_NET_DEVICES")
+        status, output = exec_cmd(ucx_info + ucx_info_args + str(neps) + " | grep am")
 
     match = re.search(r'\d+:(\S+)/\S+', output)
     if match:
@@ -112,7 +141,7 @@ def find_am_transport(dev, neps, override = 0) :
 
         return am_tls
     else:
-        return "no am tls"
+        return None
 
 def test_fallback_from_rc(dev, neps) :
 
@@ -139,6 +168,61 @@ def test_fallback_from_rc(dev, neps) :
         sys.exit(1)
 
     os.unsetenv("UCX_TLS")
+
+def test_ucx_tls_positive(tls):
+    # Use TLS list in "allow" mode and verify that the found tl is in the list
+    found_tl = find_am_transport(None, tls=tls)
+    print "Using UCX_TLS=" + tls + ", found TL: " + str(found_tl)
+    if tls == 'all':
+        return
+    tls = tls.split(',')
+    if found_tl in tls or "\\" + found_tl in tls:
+        return
+    for tl in tls:
+        if tl in tl_aliases and found_tl in tl_aliases[tl]:
+            return
+    print "Found TL doesn't belong to the allowed UCX_TLS"
+    sys.exit(1)
+
+def test_ucx_tls_negative(tls):
+    # Use TLS list in "negate" mode and verify that the found tl is not in the list
+    found_tl = find_am_transport(None, tls="^"+tls)
+    print "Using UCX_TLS=^" + tls + ", found TL: " + str(found_tl)
+    tls = tls.split(',')
+    if not found_tl or found_tl in tls:
+        print "No available TL found"
+        sys.exit(1)
+    for tl in tls:
+        if tl in tl_aliases and found_tl in tl_aliases[tl]:
+            print "Found TL belongs to the forbidden UCX_TLS"
+            sys.exit(1)
+
+def _powerset(iterable, with_empty_set=True):
+    iterable_list = list(iterable)
+    return itertools.chain.from_iterable(
+        itertools.combinations(iterable_list, r) for r in \
+            range(0 if with_empty_set else 1, len(iterable_list) + 1))
+
+def test_tls_allow_list(ucx_info):
+    status, output = exec_cmd(ucx_info + " -d | grep Transport | awk '{print $3}'")
+    available_tls = set(output.splitlines())
+
+    # Add some basic variants (those that are available on this platform)
+    tls_variants = [tls_variant for tls_variant in ["tcp", "posix", "xpmem"] if \
+                    tls_variant in available_tls]
+
+    # Add some IB variant (both strict and alias), if available
+    for tls_variant in available_tls:
+        if tls_variant.startswith("rc_") or tls_variant.startswith("dc_") or \
+           tls_variant.startswith("ud_"):
+            tls_variants += ["ib", "\\" + tls_variant]
+            break
+
+    tls_variants = _powerset(tls_variants, with_empty_set=False)
+    test_funcs = [test_ucx_tls_positive, test_ucx_tls_negative]
+    for (tls_variant, test_func) in \
+        itertools.product(tls_variants, test_funcs):
+        test_func(",".join(tls_variant))
 
 parser = OptionParser()
 parser.add_option("-p", "--prefix", metavar="PATH", help = "root UCX directory")
@@ -196,7 +280,7 @@ for dev in sorted(dev_list):
     for n_eps in sorted(dev_tl_map):
         tl = find_am_transport(dev + ':' + port, n_eps)
         print dev+':' + port + "               eps: ", n_eps, " expected am tl: " + \
-              dev_tl_map[n_eps] + " selected: " + tl
+              dev_tl_map[n_eps] + " selected: " + str(tl)
 
         if dev_tl_map[n_eps] != tl:
             sys.exit(1)
@@ -204,13 +288,16 @@ for dev in sorted(dev_list):
         if override:
             tl = find_am_transport(dev + ':' + port, n_eps, 1)
             print dev+':' + port + " UCX_NUM_EPS=2 eps: ", n_eps, " expected am tl: " + \
-                  dev_tl_override_map[n_eps] + " selected: " + tl
+                  dev_tl_override_map[n_eps] + " selected: " + str(tl)
 
             if dev_tl_override_map[n_eps] != tl:
                 sys.exit(1)
 
         if n_eps >= (rc_max_num_eps * 2):
             test_fallback_from_rc(dev + ':' + port, n_eps)
+
+# Test UCX_TLS configuration (TL choice according to "allow" and "negate" lists)
+test_tls_allow_list(ucx_info)
 
 sys.exit(0)
 

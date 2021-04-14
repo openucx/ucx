@@ -21,8 +21,8 @@ public:
         std::string  shm_dir;
 
         mm_resource(const resource& res, const std::string& shm_dir = "") :
-            resource(res.component, res.md_name, res.local_cpus, res.tl_name,
-                     res.dev_name, res.dev_type),
+            resource(res.component, res.component_name, res.md_name,
+                     res.local_cpus, res.tl_name, res.dev_name, res.dev_type),
             shm_dir(shm_dir)
         {
         }
@@ -56,7 +56,8 @@ public:
             }
         }
 
-        return filter_resources(all_resources, tl_name);
+        return filter_resources(all_resources, resource::is_equal_tl_name,
+                                tl_name);
     }
 
     test_uct_mm() : m_e1(NULL), m_e2(NULL) {

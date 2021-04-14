@@ -56,13 +56,17 @@ typedef struct {
 
 
 typedef struct {
-    ucp_lane_map_t          lane_map;      /* Which lanes are used for sending
-                                              data in the protocol */
-    ucp_md_map_t            reg_md_map;    /* Which memory domains are used for
-                                              registration */
-    ucp_lane_index_t        lane0;         /* The lane which is used to send the
-                                              first fragment, to detect fragment
-                                              size and performance ranges */
+    /* Which lanes are used for sending data in the protocol */
+    ucp_lane_map_t lane_map;
+
+    /* Which memory domains are used for registration */
+    ucp_md_map_t   reg_md_map;
+
+    /* Fragment size for performance estimation  */
+    size_t         frag_size;
+
+    /* Total transport bandwidth on all lanes */
+    double         bandwidth;
 } ucp_proto_common_perf_params_t;
 
 
@@ -74,8 +78,24 @@ typedef struct {
 } ucp_proto_common_lane_priv_t;
 
 
+/**
+ * Called the first time the protocol starts sending a request, and only once
+ * per request.
+ *
+ * @param [in] req   Request which started to send.
+ */
 typedef void (*ucp_proto_init_cb_t)(ucp_request_t *req);
-typedef void (*ucp_proto_complete_cb_t)(ucp_request_t *req, ucs_status_t status);
+
+
+/**
+ * Called when a protocol finishes sending (or queueing to the transport) all
+ * its data successfully.
+ *
+ * @param [in] req   Request which is finished sending.
+ *
+ * @return Status code to be returned from the progress function.
+ */
+typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 
 
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
@@ -97,8 +117,14 @@ ucp_proto_common_get_iface_attr(const ucp_proto_init_params_t *params,
                                 ucp_lane_index_t lane);
 
 
-size_t ucp_proto_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
-                                      ptrdiff_t field_offset, size_t dfl_value);
+size_t
+ucp_proto_common_get_max_frag(const ucp_proto_common_init_params_t *params,
+                              const uct_iface_attr_t *iface_attr);
+
+
+size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
+                                             ptrdiff_t field_offset,
+                                             size_t dfl_value);
 
 
 double
@@ -110,8 +136,18 @@ ucp_proto_common_iface_bandwidth(const ucp_proto_common_init_params_t *params,
 ucp_lane_index_t
 ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
                             ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
-                            ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
-                            ucp_lane_index_t *lanes, ucp_md_map_t *reg_md_map_p);
+                            ucp_lane_index_t max_lanes,
+                            ucp_lane_map_t exclude_map,
+                            ucp_lane_index_t *lanes);
+
+
+ucp_md_map_t
+ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
+                            ucp_lane_map_t lane_map);
+
+
+ucp_lane_index_t
+ucp_proto_common_find_am_bcopy_lane(const ucp_proto_init_params_t *params);
 
 
 void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
@@ -126,5 +162,7 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     ucp_worker_cfg_index_t rkey_cfg_index,
                                     const ucp_proto_select_param_t *sel_param,
                                     size_t msg_length);
+
+void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
 #endif

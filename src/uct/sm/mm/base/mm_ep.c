@@ -12,6 +12,7 @@
 #include "mm_ep.h"
 #include "uct/sm/base/sm_ep.h"
 
+#include <uct/base/uct_iov.inl>
 #include <ucs/arch/atomic.h>
 
 
@@ -19,6 +20,7 @@
 typedef enum {
     UCT_MM_SEND_AM_BCOPY,
     UCT_MM_SEND_AM_SHORT,
+    UCT_MM_SEND_AM_SHORT_IOV
 } uct_mm_send_op_t;
 
 
@@ -84,7 +86,6 @@ uct_mm_ep_get_remote_seg(uct_mm_ep_t *ep, uct_mm_seg_id_t seg_id, size_t length,
     return uct_mm_ep_attach_remote_seg(ep, seg_id, length, address_p);
 }
 
-
 /* send a signal to remote interface using Unix-domain socket */
 static void uct_mm_ep_signal_remote(uct_mm_ep_t *ep)
 {
@@ -92,15 +93,18 @@ static void uct_mm_ep_signal_remote(uct_mm_ep_t *ep)
     char dummy = 0;
     int ret;
 
+    ucs_trace("ep %p: signal remote", ep);
+
     for (;;) {
         ret = sendto(iface->signal_fd, &dummy, sizeof(dummy), 0,
-                     (const struct sockaddr*)&ep->signal.sockaddr,
-                     ep->signal.addrlen);
+                     (const struct sockaddr*)&ep->fifo_ctl->signal_sockaddr,
+                     ep->fifo_ctl->signal_addrlen);
         if (ucs_unlikely(ret < 0)) {
             if (errno == EINTR) {
                 /* Interrupted system call - retry */
                 continue;
-            } if ((errno == EAGAIN) || (errno == ECONNREFUSED)) {
+            }
+            if ((errno == EAGAIN) || (errno == ECONNREFUSED)) {
                 /* If we failed to signal because buffer is full - ignore the error
                  * since it means the remote side would get a signal anyway.
                  * If the remote side is not there - ignore the error as well.
@@ -113,8 +117,8 @@ static void uct_mm_ep_signal_remote(uct_mm_ep_t *ep)
             }
         } else {
             ucs_assert(ret == sizeof(dummy));
-            ucs_trace("sent wakeup from socket %d to %p", iface->signal_fd,
-                      (const struct sockaddr*)&ep->signal.sockaddr);
+            ucs_trace("sent wakeup from socket %d to %s", iface->signal_fd,
+                      ep->fifo_ctl->signal_sockaddr.sun_path);
             return;
         }
     }
@@ -158,10 +162,9 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
 
     /* Initialize remote FIFO control structure */
     uct_mm_iface_set_fifo_ptrs(fifo_ptr, &self->fifo_ctl, &self->fifo_elems);
-    self->cached_tail     = self->fifo_ctl->tail;
-    self->signal.addrlen  = self->fifo_ctl->signal_addrlen;
-    self->signal.sockaddr = self->fifo_ctl->signal_sockaddr;
-    self->keepalive       = NULL;
+    self->cached_tail = self->fifo_ctl->tail;
+    self->keepalive   = NULL;
+    ucs_arbiter_elem_init(&self->arb_elem);
 
     ucs_debug("created mm ep %p, connected to remote FIFO id 0x%"PRIx64,
               self, addr->fifo_seg_id);
@@ -225,20 +228,20 @@ static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)
 
 /* A common mm active message sending function.
  * The first parameter indicates the origin of the call.
- * is_short = 1 - perform AM short sending
- * is_short = 0 - perform AM bcopy sending
  */
-static UCS_F_ALWAYS_INLINE ssize_t
-uct_mm_ep_am_common_send(uct_mm_send_op_t send_op, uct_mm_ep_t *ep,
-                         uct_mm_iface_t *iface, uint8_t am_id, size_t length,
-                         uint64_t header, const void *payload,
-                         uct_pack_callback_t pack_cb, void *arg)
+static UCS_F_ALWAYS_INLINE ssize_t uct_mm_ep_am_common_send(
+        uct_mm_send_op_t send_op, uct_mm_ep_t *ep, uct_mm_iface_t *iface,
+        uint8_t am_id, size_t length, uint64_t header, const void *payload,
+        uct_pack_callback_t pack_cb, void *arg, const uct_iov_t *iov,
+        size_t iovcnt)
 {
     uct_mm_fifo_element_t *elem;
     ucs_status_t status;
     void *base_address;
     uint8_t elem_flags;
     uint64_t head;
+    ucs_iov_iter_t iov_iter;
+    void *desc_data;
 
     UCT_CHECK_AM_ID(am_id);
 
@@ -255,7 +258,12 @@ retry:
             /* update the local copy of the tail to its actual value on the remote peer */
             uct_mm_ep_update_cached_tail(ep);
             if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
-                UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
+                ucs_arbiter_group_push_head_elem_always(&ep->arb_group,
+                                                        &ep->arb_elem);
+                ucs_arbiter_group_schedule_nonempty(&iface->arbiter,
+                                                    &ep->arb_group);
+                UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES,
+                                         1);
                 return UCS_ERR_NO_RESOURCE;
             }
         }
@@ -276,8 +284,9 @@ retry:
         elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
         elem->length = length + sizeof(header);
 
-        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                           elem + 1, length + sizeof(header), "TX: AM_SHORT");
+        uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_SEND, elem_flags, am_id,
+                              elem + 1, elem->length,
+                              head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
         UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(header) + length);
         break;
     case UCT_MM_SEND_AM_BCOPY:
@@ -289,16 +298,26 @@ retry:
             return status;
         }
 
-        length       = pack_cb(UCS_PTR_BYTE_OFFSET(base_address,
-                                                   elem->desc.offset),
-                               arg);
+        desc_data    = UCS_PTR_BYTE_OFFSET(base_address, elem->desc.offset);
+        length       = pack_cb(desc_data, arg);
         elem_flags   = 0;
         elem->length = length;
 
-        uct_iface_trace_am(&iface->super.super, UCT_AM_TRACE_TYPE_SEND, am_id,
-                           UCS_PTR_BYTE_OFFSET(base_address, elem->desc.offset),
-                           length, "TX: AM_BCOPY");
+        uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_SEND, elem_flags, am_id,
+                              desc_data, elem->length,
+                              head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
         UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
+        break;
+    case UCT_MM_SEND_AM_SHORT_IOV:
+        elem_flags   = UCT_MM_FIFO_ELEM_FLAG_INLINE;
+        ucs_iov_iter_init(&iov_iter);
+        elem->length = uct_iov_to_buffer(iov, iovcnt, &iov_iter, elem + 1,
+                                         SIZE_MAX);
+
+        uct_mm_iface_trace_am(iface, UCT_AM_TRACE_TYPE_SEND, elem_flags, am_id,
+                              elem + 1, elem->length,
+                              head & ~UCT_MM_IFACE_FIFO_HEAD_EVENT_ARMED);
+        UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, elem->length);
         break;
     }
 
@@ -321,6 +340,7 @@ retry:
 
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
+    case UCT_MM_SEND_AM_SHORT_IOV:
         return UCS_OK;
     case UCT_MM_SEND_AM_BCOPY:
         return length;
@@ -341,7 +361,23 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT, ep,
                                                   iface, id, length, header,
-                                                  payload, NULL, NULL);
+                                                  payload, NULL, NULL, NULL, 0);
+}
+
+ucs_status_t uct_mm_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                    const uct_iov_t *iov, size_t iovcnt)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_mm_iface_t);
+    uct_mm_ep_t *ep       = ucs_derived_of(tl_ep, uct_mm_ep_t);
+
+    UCT_CHECK_LENGTH(uct_iov_total_length(iov, iovcnt), 0,
+                     iface->config.fifo_elem_size -
+                             sizeof(uct_mm_fifo_element_t),
+                     "am_short_iov");
+
+    return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT_IOV, ep,
+                                                  iface, id, 0, 0, NULL, NULL,
+                                                  NULL, iov, iovcnt);
 }
 
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
@@ -351,7 +387,7 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     return uct_mm_ep_am_common_send(UCT_MM_SEND_AM_BCOPY, ep, iface, id, 0, 0,
-                                    NULL, pack_cb, arg);
+                                    NULL, pack_cb, arg, NULL, 0);
 }
 
 static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)
@@ -388,9 +424,9 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
                                                   ucs_arbiter_elem_t *elem,
                                                   void *arg)
 {
-    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
     uct_mm_ep_t *ep        = ucs_container_of(group, uct_mm_ep_t, arb_group);
     unsigned *count        = (unsigned*)arg;
+    uct_pending_req_t *req;
     ucs_status_t status;
 
     /* update the local tail with its actual value from the remote peer
@@ -400,6 +436,12 @@ ucs_arbiter_cb_result_t uct_mm_ep_process_pending(ucs_arbiter_t *arbiter,
     if (!uct_mm_ep_has_tx_resources(ep)) {
         return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
     }
+
+    if (elem == &ep->arb_elem) {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    req = ucs_container_of(elem, uct_pending_req_t, priv);
 
     ucs_trace_data("progressing pending request %p", req);
     status = req->func(req);
@@ -428,16 +470,21 @@ static ucs_arbiter_cb_result_t uct_mm_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter
 {
     uct_mm_ep_t *ep                 = ucs_container_of(group, uct_mm_ep_t,
                                                        arb_group);
-    uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t,
-                                                       priv);
     uct_purge_cb_args_t *cb_args    = arg;
     uct_pending_purge_callback_t cb = cb_args->cb;
+    uct_pending_req_t *req;
 
+    if (elem == &ep->arb_elem) {
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    req = ucs_container_of(elem, uct_pending_req_t, priv);
     if (cb != NULL) {
         cb(req, cb_args->arg);
     } else {
         ucs_warn("ep=%p canceling user pending request %p", ep, req);
     }
+
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
 }
 
@@ -476,38 +523,16 @@ ucs_status_t uct_mm_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t
 uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
-    uct_mm_ep_t *ep    = ucs_derived_of(tl_ep, uct_mm_ep_t);
-    uct_iface_h  iface = ep->super.super.iface;
-    ucs_status_t status;
-    int proc_len;
+    uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    if (ep->keepalive == NULL) {
-        proc_len = uct_sm_ep_get_process_proc_dir(NULL, 0,
-                                                  ep->fifo_ctl->owner.pid);
-        if (proc_len <= 0) {
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        ep->keepalive = ucs_malloc(sizeof(*ep->keepalive) + proc_len + 1,
-                                   "mm_ep->keepalive");
+    if (ucs_unlikely(ep->keepalive == NULL)) {
+        ep->keepalive = uct_ep_keepalive_create(ep->fifo_ctl->owner.pid,
+                                                ep->fifo_ctl->owner.start_time);
         if (ep->keepalive == NULL) {
-            status = UCS_ERR_NO_MEMORY;
-            goto err_set_ep_failed;
+            return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
+                                           UCS_ERR_NO_MEMORY);
         }
-
-        ep->keepalive->starttime = ep->fifo_ctl->owner.starttime;
-        uct_sm_ep_get_process_proc_dir(ep->keepalive->proc, proc_len + 1,
-                                       ep->fifo_ctl->owner.pid);
     }
 
-    status = uct_sm_ep_check(ep->keepalive->proc, ep->keepalive->starttime,
-                             flags, comp);
-    if (status != UCS_OK) {
-        goto err_set_ep_failed;
-    }
-    return UCS_OK;
-
-err_set_ep_failed:
-    return uct_set_ep_failed(&UCS_CLASS_NAME(uct_mm_ep_t), &ep->super.super,
-                             iface, status);
+    return uct_ep_keepalive_check(tl_ep, ep->keepalive, flags, comp);
 }

@@ -22,6 +22,14 @@ static ucs_config_field_t uct_rocm_copy_iface_config_table[] = {
      ucs_offsetof(uct_rocm_copy_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
+    {"D2H_THRESH", "16k",
+     "Threshold for switching to hsa memcpy for device-to-host copies",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, d2h_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"H2D_THRESH", "1m",
+     "Threshold for switching to hsa memcpy for host-to-device copies",
+     ucs_offsetof(uct_rocm_copy_iface_config_t, h2d_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -126,18 +134,24 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h work
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    uct_rocm_copy_iface_config_t *config = ucs_derived_of(tl_config,
+                                                          uct_rocm_copy_iface_config_t);
+
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_copy_iface_ops, md, worker,
                               params, tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_COPY_TL_NAME));
 
-    self->id = ucs_generate_uuid((uintptr_t)self);
+    self->id                    = ucs_generate_uuid((uintptr_t)self);
+    self->config.d2h_thresh     = config->d2h_thresh;
+    self->config.h2d_thresh     = config->h2d_thresh;
+    hsa_signal_create(1, 0, NULL, &self->hsa_signal);
 
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rocm_copy_iface_t)
 {
-
+    hsa_signal_destroy(self->hsa_signal);
 }
 
 UCS_CLASS_DEFINE(uct_rocm_copy_iface_t, uct_base_iface_t);

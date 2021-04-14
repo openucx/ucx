@@ -8,6 +8,7 @@
 #endif
 
 #include "tcp.h"
+#include "tcp/tcp.h"
 
 #include <ucs/async/async.h>
 
@@ -58,6 +59,7 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
         }
         break;
     case UCT_TCP_EP_CONN_STATE_CLOSED:
+        ucs_assert(ep->events == 0);
         if (old_conn_state == UCT_TCP_EP_CONN_STATE_CLOSED) {
             return;
         }
@@ -182,7 +184,7 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
     pkt_buf         = ucs_alloca(pkt_length);
     pkt_hdr         = (uct_tcp_am_hdr_t*)(UCS_PTR_BYTE_OFFSET(pkt_buf,
                                                               magic_number_length));
-    pkt_hdr->am_id  = UCT_AM_ID_MAX;
+    pkt_hdr->am_id  = UCT_TCP_EP_CM_AM_ID;
     pkt_hdr->length = cm_pkt_length;
 
     if (event == UCT_TCP_CM_CONN_REQ) {
@@ -421,7 +423,7 @@ uct_tcp_cm_simult_conn_accept_remote_conn(uct_tcp_ep_t *accept_ep,
     ucs_assertv(connect_ep->events == 0,
                 "Requested epoll events must be 0-ed for ep=%p", connect_ep);
 
-    close(connect_ep->fd);
+    ucs_close_fd(&connect_ep->fd);
     connect_ep->fd = accept_ep->fd;
 
     /* 2. Migrate RX from the EP allocated during accepting connection to

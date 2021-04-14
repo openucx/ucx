@@ -75,11 +75,10 @@ void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
                !(ep->flags & UCP_EP_FLAG_REMOTE_ID));
     /* NOTE: protect union */
     ucs_assert(!(ep->flags & (UCP_EP_FLAG_ON_MATCH_CTX |
-                              UCP_EP_FLAG_FLUSH_STATE_VALID |
-                              UCP_EP_FLAG_LISTENER)));
+                              UCP_EP_FLAG_FLUSH_STATE_VALID)));
     /* EP matching is not used in CM flow */
     ucs_assert(!ucp_ep_has_cm_lane(ep));
-    ep->flags                             |= UCP_EP_FLAG_ON_MATCH_CTX;
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_ON_MATCH_CTX, 0);
     ucp_ep_ext_gen(ep)->ep_match.dest_uuid = dest_uuid;
 
     ucs_conn_match_insert(&worker->conn_match_ctx, &dest_uuid,
@@ -115,7 +114,8 @@ ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
     ucs_assertv(ucs_test_all_flags(ep->flags, exp_ep_flags),
                 "ep=%p flags=0x%x exp_flags=0x%x", ep, ep->flags,
                 exp_ep_flags);
-    ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_ON_MATCH_CTX);
+
     return ep;
 }
 
@@ -131,5 +131,5 @@ void ucp_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
                                UCS_CONN_MATCH_QUEUE_UNEXP :
                                UCS_CONN_MATCH_QUEUE_EXP);
 
-    ep->flags &= ~UCP_EP_FLAG_ON_MATCH_CTX;
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_ON_MATCH_CTX);
 }

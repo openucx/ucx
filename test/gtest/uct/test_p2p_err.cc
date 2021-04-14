@@ -16,6 +16,7 @@ public:
         OP_PUT_BCOPY,
         OP_PUT_ZCOPY,
         OP_AM_SHORT,
+        OP_AM_SHORT_IOV,
         OP_AM_BCOPY,
         OP_AM_ZCOPY
     };
@@ -71,6 +72,11 @@ public:
             case OP_AM_SHORT:
                 status = uct_ep_am_short(sender_ep(), am_id, 0, buffer, length);
                 break;
+            case OP_AM_SHORT_IOV: {
+                UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, buffer, length, memh, 1);
+                status = uct_ep_am_short_iov(sender_ep(), am_id, iov, iovcnt);
+                break;
+            }
             case OP_AM_BCOPY:
                 arg.buffer = buffer;
                 arg.length = length;
@@ -231,6 +237,23 @@ UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_am_short_length,
     recvbuf.pattern_check(2);
 }
 
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_am_short_iov_length,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    size_t max_short = sender().iface_attr().cap.am.max_short;
+    if (max_short > (2 * UCS_MBYTE)) {
+        UCS_TEST_SKIP_R("max_short too large");
+    }
+
+    mapped_buffer sendbuf(max_short + 1, 1, sender());
+    mapped_buffer recvbuf(max_short + 1, 2, receiver());
+
+    test_error_run(OP_AM_SHORT_IOV, 0, sendbuf.ptr(), sendbuf.length(),
+                   UCT_MEM_HANDLE_NULL, recvbuf.addr(), recvbuf.rkey(), "length");
+
+    recvbuf.pattern_check(2);
+}
+
 UCS_TEST_SKIP_COND_P(uct_p2p_err_test, invalid_am_bcopy_length,
                      !check_caps(UCT_IFACE_FLAG_AM_BCOPY |
                                  UCT_IFACE_FLAG_ERRHANDLE_BCOPY_LEN)) {
@@ -277,6 +300,15 @@ UCS_TEST_SKIP_COND_P(uct_p2p_err_test, short_invalid_am_id,
     test_error_run(OP_AM_SHORT, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
                    UCT_MEM_HANDLE_NULL, 0, UCT_INVALID_RKEY,
                    "active message id");
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_err_test, short_iov_invalid_am_id,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    mapped_buffer sendbuf(4, 2, sender());
+
+    test_error_run(OP_AM_SHORT_IOV, UCT_AM_ID_MAX, sendbuf.ptr(), sendbuf.length(),
+                   UCT_MEM_HANDLE_NULL, 0, UCT_INVALID_RKEY, "active message id");
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_err_test, bcopy_invalid_am_id,

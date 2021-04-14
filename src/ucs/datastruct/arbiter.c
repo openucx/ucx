@@ -77,6 +77,7 @@ void ucs_arbiter_group_push_head_elem_always(ucs_arbiter_group_t *group,
     ucs_arbiter_elem_t *head;
 
     UCS_ARBITER_GROUP_GUARD_CHECK(group);
+    ucs_assert(!ucs_arbiter_elem_is_scheduled(elem));
 
     ucs_arbiter_group_head_reset(elem);
     ucs_arbiter_elem_set_scheduled(elem, group);
@@ -216,7 +217,7 @@ void ucs_arbiter_group_schedule_nonempty(ucs_arbiter_t *arbiter,
     ucs_arbiter_elem_t *tail = group->tail;
     ucs_arbiter_elem_t *head;
 
-    ucs_assert(tail != NULL);
+    ucs_assert(!ucs_arbiter_group_is_empty(group));
     head = tail->next;
 
     ucs_assert(head != NULL);

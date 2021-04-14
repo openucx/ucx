@@ -58,20 +58,23 @@
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
-#define UCT_CUDADRV_CTX_ACTIVE(_state)                                       \
-    {                                                                        \
-        CUcontext cur_ctx;                                                   \
-        CUdevice dev;                                                        \
-        unsigned flags;                                                      \
-                                                                             \
-        _state = 0;                                                          \
-        /* avoid active state check if no cuda activity */                   \
-        if ((CUDA_SUCCESS == cuCtxGetCurrent(&cur_ctx)) &&                   \
-            (NULL != cur_ctx)) {                                             \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuCtxGetDevice(&dev));                  \
-            UCT_CUDADRV_FUNC_LOG_ERR(cuDevicePrimaryCtxGetState(dev, &flags, \
-                                                                &_state));   \
-        }                                                                    \
+#define UCT_CUDADRV_CTX_ACTIVE(_state) \
+    { \
+        CUdevice _dev; \
+        CUcontext _ctx; \
+        int _flags; \
+        if (CUDA_SUCCESS == cuCtxGetDevice(&_dev)) { \
+            cuDevicePrimaryCtxGetState(_dev, &_flags, &_state); \
+            if (_state == 0) { \
+                /* need to retain for malloc purposes */ \
+                if (CUDA_SUCCESS != cuDevicePrimaryCtxRetain(&_ctx, _dev)) { \
+                    ucs_fatal("unable to retain ctx after detecting device"); \
+                } \
+            } \
+            _state = 1; \
+        } else { \
+            _state = 0; \
+        } \
     }
 
 
@@ -83,7 +86,16 @@ typedef enum uct_cuda_base_gen {
 
 
 ucs_status_t
-uct_cuda_base_query_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
-                           unsigned *num_tl_devices_p);
+uct_cuda_base_query_devices_common(
+        uct_md_h md, uct_device_type_t dev_type,
+        uct_tl_device_resource_t **tl_devices_p, unsigned *num_tl_devices_p);
+
+ucs_status_t
+uct_cuda_base_query_devices(
+        uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+        unsigned *num_tl_devices_p);
+
+ucs_status_t
+uct_cuda_base_get_sys_dev(CUdevice cuda_device, ucs_sys_device_t *sys_dev_p);
 
 #endif

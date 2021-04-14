@@ -48,6 +48,7 @@ static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.flags            = UCT_MD_FLAG_REG |
                                     UCT_MD_FLAG_NEED_RKEY;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cap.detect_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
@@ -259,12 +260,13 @@ static void uct_gdr_copy_md_close(uct_md_h uct_md)
 }
 
 static uct_md_ops_t md_ops = {
-    .close               = uct_gdr_copy_md_close,
-    .query               = uct_gdr_copy_md_query,
-    .mkey_pack           = uct_gdr_copy_mkey_pack,
-    .mem_reg             = uct_gdr_copy_mem_reg,
-    .mem_dereg           = uct_gdr_copy_mem_dereg,
-    .detect_memory_type  = ucs_empty_function_return_unsupported,
+    .close                  = uct_gdr_copy_md_close,
+    .query                  = uct_gdr_copy_md_query,
+    .mkey_pack              = uct_gdr_copy_mkey_pack,
+    .mem_reg                = uct_gdr_copy_mem_reg,
+    .mem_dereg              = uct_gdr_copy_mem_dereg,
+    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .detect_memory_type     = ucs_empty_function_return_unsupported
 };
 
 static inline uct_gdr_copy_rcache_region_t*
@@ -384,11 +386,10 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
     }
 
     if (md_config->enable_rcache != UCS_NO) {
+        uct_md_set_rcache_params(&rcache_params, &md_config->rcache);
         rcache_params.region_struct_size = sizeof(uct_gdr_copy_rcache_region_t);
-        rcache_params.alignment          = md_config->rcache.alignment;
         rcache_params.max_alignment      = UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN;
         rcache_params.ucm_events         = UCM_EVENT_MEM_TYPE_FREE;
-        rcache_params.ucm_event_priority = md_config->rcache.event_prio;
         rcache_params.context            = md;
         rcache_params.ops                = &uct_gdr_copy_rcache_ops;
         rcache_params.flags              = 0;

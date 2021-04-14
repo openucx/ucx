@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (C) Advanced Micro Devices, Inc. 2019.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
@@ -11,6 +11,7 @@
 
 #include "mem_buffer.h"
 
+#include <sys/types.h>
 #include <ucp/core/ucp_mm.h>
 #include <ucs/debug/assert.h>
 #include <common/test_helpers.h>
@@ -23,7 +24,7 @@
     do { \
         cudaError_t cerr = _code; \
         if (cerr != cudaSuccess) { \
-            UCS_TEST_ABORT(# _code << " failed" << _details); \
+            UCS_TEST_ABORT(#_code << " failed with code " << cerr << _details); \
         } \
     } while (0)
 
@@ -65,6 +66,11 @@ bool mem_buffer::is_rocm_supported()
 #endif
 }
 
+bool mem_buffer::is_gpu_supported()
+{
+    return is_cuda_supported() || is_rocm_supported();
+}
+
 const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
 {
     static std::vector<ucs_memory_type_t> vec;
@@ -82,6 +88,29 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
     }
 
     return vec;
+}
+
+void mem_buffer::set_device_context()
+{
+    static __thread bool device_set = false;
+
+    if (device_set) {
+        return;
+    }
+
+#if HAVE_CUDA
+    if (is_cuda_supported()) {
+        cudaSetDevice(0);
+    }
+#endif
+
+#if HAVE_ROCM
+    if (is_rocm_supported()) {
+        hipSetDevice(0);
+    }
+#endif
+
+    device_set = true;
 }
 
 void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
@@ -198,7 +227,7 @@ void mem_buffer::pattern_check(const void *buffer, size_t length)
 void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed,
                               ucs_memory_type_t mem_type)
 {
-    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
+    if (UCP_MEM_IS_HOST(mem_type)) {
         pattern_fill(buffer, length, seed);
     } else {
         ucs::auto_buffer temp(length);
@@ -210,7 +239,7 @@ void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed,
 void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed,
                                ucs_memory_type_t mem_type)
 {
-    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
+    if (UCP_MEM_IS_HOST(mem_type)) {
         pattern_check(buffer, length, seed);
     } else {
         ucs::auto_buffer temp(length);
@@ -224,12 +253,12 @@ void mem_buffer::copy_to(void *dst, const void *src, size_t length,
 {
     switch (dst_mem_type) {
     case UCS_MEMORY_TYPE_HOST:
-    case UCS_MEMORY_TYPE_CUDA_MANAGED:
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
         memcpy(dst, src, length);
         break;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyHostToDevice),
                   ": dst=" << dst << " src=" << src << "length=" << length);
         CUDA_CALL(cudaDeviceSynchronize(), "");
@@ -251,12 +280,12 @@ void mem_buffer::copy_from(void *dst, const void *src, size_t length,
 {
     switch (src_mem_type) {
     case UCS_MEMORY_TYPE_HOST:
-    case UCS_MEMORY_TYPE_CUDA_MANAGED:
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
         memcpy(dst, src, length);
         break;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDeviceToHost),
                   ": dst=" << dst << " src=" << src << "length=" << length);
         CUDA_CALL(cudaDeviceSynchronize(), "");
@@ -276,7 +305,11 @@ void mem_buffer::copy_from(void *dst, const void *src, size_t length,
 bool mem_buffer::compare(const void *expected, const void *buffer,
                          size_t length, ucs_memory_type_t mem_type)
 {
-    if (UCP_MEM_IS_ACCESSIBLE_FROM_CPU(mem_type)) {
+    /* don't access managed memory from CPU to avoid moving the pages
+     * from GPU to CPU during the test
+     */
+    if ((mem_type == UCS_MEMORY_TYPE_HOST) ||
+        (mem_type == UCS_MEMORY_TYPE_ROCM_MANAGED)) {
         return memcmp(expected, buffer, length) == 0;
     } else {
         ucs::auto_buffer temp(length);

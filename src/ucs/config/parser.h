@@ -18,6 +18,7 @@
 
 #define UCS_DEFAULT_ENV_PREFIX "UCX_"
 #define UCS_CONFIG_ARRAY_MAX   128
+#define UCX_CONF_FILE          UCX_CONF_DIR "/ucx.conf"
 
 BEGIN_C_DECLS
 
@@ -151,7 +152,8 @@ int ucs_config_sscanf_bool(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_bool(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_ternary(const char *buf, void *dest, const void *arg);
-int ucs_config_sprintf_ternary(char *buf, size_t max, const void *src, const void *arg);
+int ucs_config_sscanf_ternary_auto(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_ternary_auto(char *buf, size_t max, const void *src, const void *arg);
 
 int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg);
 
@@ -201,6 +203,13 @@ int ucs_config_sprintf_array(char *buf, size_t max, const void *src, const void 
 ucs_status_t ucs_config_clone_array(const void *src, void *dest, const void *arg);
 void ucs_config_release_array(void *ptr, const void *arg);
 void ucs_config_help_array(char *buf, size_t max, const void *arg);
+
+int ucs_config_sscanf_allow_list(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
+                                  const void *arg);
+ucs_status_t ucs_config_clone_allow_list(const void *src, void *dest, const void *arg);
+void ucs_config_release_allow_list(void *ptr, const void *arg);
+void ucs_config_help_allow_list(char *buf, size_t max, const void *arg);
 
 int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg);
 ucs_status_t ucs_config_clone_table(const void *src, void *dest, const void *arg);
@@ -256,9 +265,13 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     ucs_config_clone_int,        ucs_config_release_nop, \
                                     ucs_config_help_generic,     "<y|n>"}
 
-#define UCS_CONFIG_TYPE_TERNARY    {ucs_config_sscanf_ternary,   ucs_config_sprintf_ternary, \
-                                    ucs_config_clone_int,        ucs_config_release_nop, \
-                                    ucs_config_help_generic,     "<yes|no|try>"}
+#define UCS_CONFIG_TYPE_TERNARY    {ucs_config_sscanf_ternary, ucs_config_sprintf_ternary_auto, \
+                                    ucs_config_clone_int,      ucs_config_release_nop, \
+                                    ucs_config_help_generic,   "<yes|no|try>"}
+
+#define UCS_CONFIG_TYPE_TERNARY_AUTO {ucs_config_sscanf_ternary_auto, ucs_config_sprintf_ternary_auto, \
+                                      ucs_config_clone_int,           ucs_config_release_nop, \
+                                      ucs_config_help_generic,        "<yes|no|try|auto>"}
 
 #define UCS_CONFIG_TYPE_ON_OFF     {ucs_config_sscanf_on_off,    ucs_config_sprintf_on_off_auto, \
                                     ucs_config_clone_int,        ucs_config_release_nop, \
@@ -286,7 +299,8 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 
 #define UCS_CONFIG_TYPE_TIME_UNITS {ucs_config_sscanf_time_units, ucs_config_sprintf_time_units, \
                                     ucs_config_clone_ulong,       ucs_config_release_nop, \
-                                    ucs_config_help_generic,      "time value: <number>[s|us|ms|ns]"}
+                                    ucs_config_help_generic, \
+                                    "time value: <number>[s|us|ms|ns], \"inf\", or \"auto\""}
 
 #define UCS_CONFIG_TYPE_BW         {ucs_config_sscanf_bw,        ucs_config_sprintf_bw, \
                                     ucs_config_clone_double,     ucs_config_release_nop, \
@@ -314,6 +328,10 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
 #define UCS_CONFIG_TYPE_ARRAY(a)   {ucs_config_sscanf_array,     ucs_config_sprintf_array, \
                                     ucs_config_clone_array,      ucs_config_release_array, \
                                     ucs_config_help_array,       &ucs_config_array_##a}
+
+#define UCS_CONFIG_TYPE_ALLOW_LIST {ucs_config_sscanf_allow_list,     ucs_config_sprintf_allow_list, \
+                                    ucs_config_clone_allow_list,      ucs_config_release_allow_list, \
+                                    ucs_config_help_allow_list,       &ucs_config_array_string}
 
 #define UCS_CONFIG_TYPE_TABLE(t)   {ucs_config_sscanf_table,     NULL, \
                                     ucs_config_clone_table,      ucs_config_release_table, \
@@ -354,6 +372,15 @@ UCS_CONFIG_DECLARE_ARRAY(string)
  */
 ucs_status_t
 ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
+
+
+/**
+ * Parse INI configuration file with UCX options.
+ * 
+ * @param path     Path file at this path.
+ * @param override Whether to override, if another file was previously parsed
+ */
+ucs_status_t ucs_config_parse_config_file(const char *path, int override);
 
 
 /**

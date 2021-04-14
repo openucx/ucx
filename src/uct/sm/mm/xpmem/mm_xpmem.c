@@ -70,6 +70,12 @@ static ucs_config_field_t uct_xpmem_md_config_table[] = {
   {NULL}
 };
 
+static ucs_config_field_t uct_xpmem_iface_config_table[] = {
+  {"MM_", "", NULL, 0, UCS_CONFIG_TYPE_TABLE(uct_mm_iface_config_table)},
+
+  {NULL}
+};
+
 UCS_STATIC_INIT {
     ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
     kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
@@ -88,7 +94,7 @@ UCS_STATIC_CLEANUP {
     ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
 }
 
-static ucs_status_t uct_xpmem_query()
+static ucs_status_t uct_xpmem_query(int *attach_shm_file_p)
 {
     int version;
 
@@ -100,6 +106,9 @@ static ucs_status_t uct_xpmem_query()
     }
 
     ucs_debug("xpmem version: %d", version);
+
+    *attach_shm_file_p = 0;
+
     return UCS_OK;
 }
 
@@ -110,7 +119,7 @@ static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.flags        |= UCT_MD_FLAG_REG;
     md_attr->reg_cost          = ucs_linear_func_make(60.0e-9, 0);
     md_attr->cap.max_reg       = ULONG_MAX;
-    md_attr->cap.reg_mem_types = UCS_MEMORY_TYPES_CPU_ACCESSIBLE;
+    md_attr->cap.reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->rkey_packed_size  = sizeof(uct_xpmem_packed_rkey_t);
 
     return UCS_OK;
@@ -262,6 +271,8 @@ uct_xpmem_rmem_add(xpmem_segid_t xsegid, uct_xpmem_remote_mem_t **rmem_p)
     rcache_params.ops                = &uct_xpmem_rcache_ops;
     rcache_params.context            = rmem;
     rcache_params.flags              = UCS_RCACHE_FLAG_NO_PFN_CHECK;
+    rcache_params.max_regions        = ULONG_MAX;
+    rcache_params.max_size           = SIZE_MAX;
 
     status = ucs_rcache_create(&rcache_params, "xpmem_remote_mem",
                                ucs_stats_get_root(), &rmem->rcache);
@@ -538,13 +549,13 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported
     },
-   .query                       = uct_xpmem_query,
-   .iface_addr_length           = uct_xpmem_iface_addr_length,
-   .iface_addr_pack             = uct_xpmem_iface_addr_pack,
-   .mem_attach                  = uct_xpmem_mem_attach,
-   .mem_detach                  = uct_xpmem_mem_detach,
-   .is_reachable                = ucs_empty_function_return_one_int
+    .query             = uct_xpmem_query,
+    .iface_addr_length = uct_xpmem_iface_addr_length,
+    .iface_addr_pack   = uct_xpmem_iface_addr_pack,
+    .mem_attach        = uct_xpmem_mem_attach,
+    .mem_detach        = uct_xpmem_mem_detach,
+    .is_reachable      = ucs_empty_function_return_one_int
 };
 
 UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
-                 uct_xpmem_rkey_release, "XPMEM_")
+                 uct_xpmem_rkey_release, "XPMEM_", uct_xpmem_iface_config_table)

@@ -516,7 +516,7 @@ void test_ucp_tag_xfer::test_xfer_len_offset()
     const size_t buf_size    = max_length + max_offset + 2;
     ucp_datatype_t type      = ucp_dt_make_contig(1);
     void *send_buf           = 0;
-    void *recv_buf           = 0;;
+    void *recv_buf           = 0;
     size_t offset;
     size_t length;
     ucs::detail::message_stream *ms;

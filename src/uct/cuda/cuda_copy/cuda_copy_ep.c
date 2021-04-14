@@ -37,9 +37,9 @@ UCS_CLASS_DEFINE(uct_cuda_copy_ep_t, uct_base_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_copy_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
 
-#define uct_cuda_copy_trace_data(_remote_addr, _rkey, _fmt, ...) \
-     ucs_trace_data(_fmt " to %"PRIx64"(%+ld)", ## __VA_ARGS__, (_remote_addr), \
-                    (_rkey))
+#define uct_cuda_copy_trace_data(_name, _remote_addr, _iov, _iovcnt) \
+    ucs_trace_data("%s [ptr %p len %zu] to 0x%" PRIx64, _name, (_iov)->buffer, \
+                   (_iov)->length, (_remote_addr))
 
 #define UCT_CUDA_COPY_CHECK_AND_CREATE_STREAM(_iface, _id) \
     if ((_iface)->stream[_id] == 0) { \
@@ -87,8 +87,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src, size_t 
     ucs_queue_push(&iface->outstanding_event_q[id], &cuda_event->queue);
     cuda_event->comp = comp;
 
-    ucs_trace("cuda async issued :%p dst:%p, src:%p  len:%ld",
-             cuda_event, dst, src, length);
+    ucs_trace_data("cuda async issued :%p dst:%p, src:%p len:%ld", cuda_event,
+                   dst, src, length);
     return UCS_INPROGRESS;
 }
 
@@ -110,8 +110,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_zcopy,
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), GET, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
-    uct_cuda_copy_trace_data(remote_addr, rkey, "GET_ZCOPY [length %zu]",
-                             uct_iov_total_length(iov, iovcnt));
+    uct_cuda_copy_trace_data("GET_ZCOPY", remote_addr, iov, iovcnt);
     return status;
 }
 
@@ -130,8 +129,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_zcopy,
 
     UCT_TL_EP_STAT_OP(ucs_derived_of(tl_ep, uct_base_ep_t), PUT, ZCOPY,
                       uct_iov_total_length(iov, iovcnt));
-    uct_cuda_copy_trace_data(remote_addr, rkey, "PUT_ZCOPY [length %zu]",
-                             uct_iov_total_length(iov, iovcnt));
+    uct_cuda_copy_trace_data("PUT_ZCOPY", remote_addr, iov, iovcnt);
     return status;
 
 }

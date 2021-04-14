@@ -60,8 +60,7 @@ enum {
                                             ~UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX,
 
     UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT     = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                                            UCP_ADDRESS_PACK_FLAG_EP_ADDR    |
-                                            UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX,
+                                            UCP_ADDRESS_PACK_FLAG_EP_ADDR,
 
     UCP_ADDRESS_PACK_FLAG_NO_TRACE        = UCS_BIT(16) /* Suppress debug tracing */
 };
@@ -107,10 +106,11 @@ struct ucp_address_entry {
  * Unpacked remote address
  */
 struct ucp_unpacked_address {
-    uint64_t                   uuid;            /* Remote worker UUID */
-    char                       name[UCP_WORKER_NAME_MAX]; /* Remote worker name */
-    unsigned                   address_count;   /* Length of address list */
-    ucp_address_entry_t        *address_list;   /* Pointer to address list */
+    uint64_t                    uuid;           /* Remote worker UUID */
+    /* Remote worker address name */
+    char                        name[UCP_WORKER_ADDRESS_NAME_MAX];
+    unsigned                    address_count;  /* Length of address list */
+    ucp_address_entry_t         *address_list;  /* Pointer to address list */
 };
 
 
@@ -149,7 +149,8 @@ struct ucp_unpacked_address {
  *                            released by ucs_free().
  */
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
-                              uint64_t tl_bitmap, unsigned pack_flags,
+                              const ucp_tl_bitmap_t *tl_bitmap,
+                              unsigned pack_flags,
                               const ucp_lane_index_t *lanes2remote,
                               size_t *size_p, void **buffer_p);
 

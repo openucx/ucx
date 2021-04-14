@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -61,6 +62,10 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
         .max = UCS_MEMUNITS_INF
     },
     [UCS_CPU_VENDOR_FUJITSU_ARM] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
+    },
+    [UCS_CPU_VENDOR_ZHAOXIN] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
     }

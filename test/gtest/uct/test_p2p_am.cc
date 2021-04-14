@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -182,6 +182,16 @@ public:
                                sendbuf.length() - sizeof(hdr));
     }
 
+    ucs_status_t am_short_iov(uct_ep_h ep, const mapped_buffer &sendbuf,
+                              const mapped_buffer &recvbuf)
+    {
+        UCS_TEST_GET_BUFFER_IOV(
+            iov, iovcnt, (char*)sendbuf.ptr(), sendbuf.length(), sendbuf.memh(),
+            ucs_min(sendbuf.length(), sender().iface_attr().cap.am.max_iov));
+
+        return uct_ep_am_short_iov(ep, AM_ID, iov, iovcnt);
+    }
+
     ucs_status_t am_bcopy(uct_ep_h ep, const mapped_buffer& sendbuf,
                           const mapped_buffer& recvbuf)
     {
@@ -337,6 +347,11 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_sync,
         blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                       sender_ep(), sendbuf_short, recvbuf, false);
         am_sync_finish(am_count);
+
+        am_count = m_am_count;
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov),
+                      sender_ep(), sendbuf_short, recvbuf, false);
+        am_sync_finish(am_count);
     }
 
     if (receiver().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
@@ -378,6 +393,11 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_async,
                                     SEED1, sender());
         am_count = m_am_count;
         blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
+                      sender_ep(), sendbuf_short, recvbuf, false);
+        am_async_finish(am_count);
+
+        am_count = m_am_count;
+        blocking_send(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov),
                       sender_ep(), sendbuf_short, recvbuf, false);
         am_async_finish(am_count);
     }
@@ -511,6 +531,42 @@ public:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
+    void am_max_multi(send_func_t send)
+    {
+        ucs_status_t status;
+
+        mapped_buffer small_sendbuf(sizeof(SEED1), SEED1, sender());
+        mapped_buffer sendbuf(ucs_min(sender().iface_attr().cap.am.max_short, 8192ul),
+                              SEED1, sender());
+        mapped_buffer recvbuf(0, 0, sender()); /* dummy */
+
+        m_am_count = 0;
+        set_keep_data(false);
+
+        status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
+                                          this, UCT_CB_FLAG_ASYNC);
+        ASSERT_UCS_OK(status);
+
+        /* exhaust all resources or time out 1sec */
+        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
+        do {
+            status = (this->*send)(sender_ep(), sendbuf, recvbuf);
+        } while ((ucs_get_time() < loop_end_limit) && (status == UCS_OK));
+        if (status != UCS_ERR_NO_RESOURCE) {
+            ASSERT_UCS_OK(status);
+        }
+
+        /* should be able to send again after a while */
+        ucs_time_t deadline = ucs_get_time() +
+                              (ucs::test_time_multiplier() *
+                               ucs_time_from_sec(DEFAULT_TIMEOUT_SEC));
+        do {
+            progress();
+            status = (this->*send)(sender_ep(), small_sendbuf, recvbuf);
+        } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
+        EXPECT_EQ(UCS_OK, status);
+    }
+
     bool m_rx_buf_limit_failed;
 };
 
@@ -530,6 +586,15 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_keep_data,
     test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short),
                     sizeof(uint64_t),
                     sender().iface_attr().cap.am.max_short,
+                    TEST_UCT_FLAG_DIR_SEND_TO_RECV);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_test, am_short_iov_keep_data,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT, UCT_IFACE_FLAG_AM_DUP))
+{
+    set_keep_data(true);
+    test_xfer_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov),
+                    sizeof(uint64_t), sender().iface_attr().cap.am.max_short,
                     TEST_UCT_FLAG_DIR_SEND_TO_RECV);
 }
 
@@ -600,41 +665,15 @@ UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, no_rx_buffs,
 }
 
 UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_multi,
-                     !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    ucs_status_t status;
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    am_max_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short));
+}
 
-    m_am_count = 0;
-    set_keep_data(false);
-
-    status = uct_iface_set_am_handler(receiver().iface(), AM_ID, am_handler,
-                                      this, UCT_CB_FLAG_ASYNC);
-    ASSERT_UCS_OK(status);
-
-    size_t size = ucs_min(sender().iface_attr().cap.am.max_short, 8192ul);
-    std::string sendbuf(size, 0);
-    mem_buffer::pattern_fill(&sendbuf[0], sendbuf.size(), SEED1);
-    ucs_assert(SEED1 == *(uint64_t*)&sendbuf[0]);
-
-    /* exhaust all resources or time out 1sec */
-    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
-    do {
-        status = uct_ep_am_short(sender_ep(), AM_ID, SEED1,
-                                 ((uint64_t*)&sendbuf[0]) + 1,
-                                 sendbuf.size() - sizeof(uint64_t));
-    } while ((ucs_get_time() < loop_end_limit) && (status == UCS_OK));
-    if (status != UCS_ERR_NO_RESOURCE) {
-        ASSERT_UCS_OK(status);
-    }
-
-    /* should be able to send again after a while */
-    ucs_time_t deadline = ucs_get_time() +
-                    (ucs::test_time_multiplier() *
-                     ucs_time_from_sec(DEFAULT_TIMEOUT_SEC));
-    do {
-        progress();
-        status = uct_ep_am_short(sender_ep(), AM_ID, SEED1, NULL, 0);
-    } while ((status == UCS_ERR_NO_RESOURCE) && (ucs_get_time() < deadline));
-    EXPECT_EQ(UCS_OK, status);
+UCS_TEST_SKIP_COND_P(uct_p2p_am_misc, am_max_short_iov_multi,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    am_max_multi(static_cast<send_func_t>(&uct_p2p_am_test::am_short_iov));
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_misc)
@@ -707,3 +746,181 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
 }
 
 UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_tx_bufs)
+
+class uct_p2p_am_alignment : public uct_p2p_am_test {
+public:
+    uct_p2p_am_alignment()
+        : m_am_received(false), m_alignment(1), m_align_offset(0)
+    {
+    }
+
+    void init()
+    {
+        if (has_ugni() || has_gpu() || has_transport("tcp") ||
+            has_transport("cma") || has_transport("knem") ||
+            has_transport("xpmem")) {
+            UCS_TEST_SKIP_R(GetParam()->tl_name +
+                            " does not support AM alignment");
+        }
+        // Do not call init method of uct_p2p_am_test and others to avoid
+        // creating UCT instances with basic iface params
+        uct_test::init();
+    }
+
+    void test_align(send_func_t send_f, bool set_offset)
+    {
+        size_t data_length = SIZE_MAX;
+
+        m_alignment = pow(2, ucs::rand() % 13);
+
+        if (set_offset) {
+            // Offset has to be:
+            // 1. Smaller than alignment.
+            // 2. Smaller than UCT iface element size. For now assume element
+            //    size is always bigger than 128. TODO: Fix this when new
+            //    interface for querying maximal alignment offset is defined.
+            m_align_offset = ucs_min(128, ucs::rand() % m_alignment);
+        } else {
+            m_align_offset = 0;
+        }
+
+        UCS_TEST_MESSAGE << "alignment: " << m_alignment << ", offset: "
+                     << (set_offset ? ucs::to_string(m_align_offset) : "none");
+
+        create_connected_entities(0ul, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                                  m_alignment, m_align_offset);
+        check_skip_test();
+
+        if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+            data_length = sender().iface_attr().cap.am.max_short;
+        }
+
+        if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+            data_length = ucs_min(data_length,
+                                  sender().iface_attr().cap.am.max_bcopy);
+        }
+
+        if (sender().iface_attr().cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+            data_length = ucs_min(data_length,
+                                  sender().iface_attr().cap.am.max_zcopy);
+        }
+
+        m_am_received  = false;
+        disable_comp();
+
+        ASSERT_UCS_OK(uct_iface_set_am_handler(receiver().iface(), AM_ID,
+                                               am_handler, this, 0));
+
+        mapped_buffer sendbuf(data_length, 0, sender());
+        ucs_status_t status = (this->*send_f)(sender_ep(), sendbuf, sendbuf);
+        ASSERT_UCS_OK_OR_INPROGRESS(status);
+        wait_for_flag(&m_am_received);
+    }
+
+    void test_invalid_alignment(size_t alignment, size_t align_offset,
+                                uint64_t field_mask)
+    {
+        entity *dummy = uct_test::create_entity(0);
+        m_entities.push_back(dummy);
+        uct_iface_params_t params = dummy->iface_params();
+
+        check_skip_test();
+
+        if (field_mask & UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT) {
+            params.am_alignment = alignment;
+        }
+
+        if (field_mask & UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET) {
+            params.am_align_offset = align_offset;
+        }
+
+        params.field_mask |= field_mask;
+
+        scoped_log_handler wrap_err(wrap_errors_logger);
+        uct_iface_h iface;
+        ucs_status_t status = uct_iface_open(dummy->md(), dummy->worker(),
+                                             &params, m_iface_config, &iface);
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status) << "alignment " << alignment;
+    }
+
+    static ucs_status_t
+    am_handler(void *arg, void *data, size_t length, unsigned flags)
+    {
+        uct_p2p_am_alignment *self = reinterpret_cast<uct_p2p_am_alignment*>(
+                arg);
+        EXPECT_FALSE(self->m_am_received);
+
+        if (flags & UCT_CB_PARAM_FLAG_DESC) {
+            void *aligned_data = UCS_PTR_BYTE_OFFSET(data,
+                                                     self->m_align_offset);
+            EXPECT_EQ(0u, ((uintptr_t)aligned_data) % self->m_alignment)
+                      << "aligned data ptr " << aligned_data;
+        } else {
+            UCS_TEST_MESSAGE << "Alignment is not supported for inlined data";
+        }
+
+        self->m_am_received = true;
+
+        return UCS_OK;
+    }
+
+private:
+    bool m_am_received;
+    size_t m_alignment;
+    size_t m_align_offset;
+};
+
+
+UCS_TEST_P(uct_p2p_am_alignment, invalid_align)
+{
+    test_invalid_alignment(0, 0, UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT);
+    test_invalid_alignment(3, 1, UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT);
+}
+
+UCS_TEST_P(uct_p2p_am_alignment, invalid_offset)
+{
+    // Align ofsset has no meaning if alignment is not requested
+    test_invalid_alignment(0, 11, UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET);
+
+    // Align offset must be less than alignment itself
+    test_invalid_alignment(8, 8, UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET);
+    test_invalid_alignment(8, 11, UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, align_short,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_align(static_cast<send_func_t>(&uct_p2p_am_test::am_short), false);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, align_short_with_offset,
+                     !check_caps(UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_align(static_cast<send_func_t>(&uct_p2p_am_test::am_short), true);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, align_bcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    test_align(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy), false);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, align_bcopy_with_offset,
+                     !check_caps(UCT_IFACE_FLAG_AM_BCOPY))
+{
+    test_align(static_cast<send_func_t>(&uct_p2p_am_test::am_bcopy), true);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, align_zcopy,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    test_align(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy), false);
+}
+
+UCS_TEST_SKIP_COND_P(uct_p2p_am_alignment, align_zcopy_with_offset,
+                     !check_caps(UCT_IFACE_FLAG_AM_ZCOPY))
+{
+    test_align(static_cast<send_func_t>(&uct_p2p_am_test::am_zcopy), true);
+}
+
+UCT_INSTANTIATE_TEST_CASE(uct_p2p_am_alignment)

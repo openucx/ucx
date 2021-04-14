@@ -88,3 +88,8 @@ GTAGS
 *.swp
 compile_commands.json
 .idea/
+.externalToolBuilders
+.classpath
+.vscode
+src/tools/vfs/ucx_vfs
+test/apps/test_init_mt

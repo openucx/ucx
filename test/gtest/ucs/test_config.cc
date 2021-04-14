@@ -12,6 +12,7 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 
+#define TEST_CONFIG_FILE TOP_SRCDIR "/test/gtest/ucs/ucx.conf"
 
 typedef enum {
     COLOR_RED,
@@ -87,6 +88,11 @@ typedef struct {
     int             air_conditioning;
     int             abs;
     int             transmission;
+
+    ucs_time_t      time_value;
+    ucs_time_t      time_auto;
+    ucs_time_t      time_inf;
+    ucs_config_allow_list_t allow_list;
 } car_opts_t;
 
 
@@ -205,13 +211,32 @@ ucs_config_field_t car_opts_table[] = {
   {"TRANSMISSION", "auto", "Transmission mode",
    ucs_offsetof(car_opts_t, transmission), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
+  {"TIME_VAL", "1s", "Time value 1 sec",
+   ucs_offsetof(car_opts_t, time_value), UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"TIME_AUTO", "auto", "Time value \"auto\"",
+   ucs_offsetof(car_opts_t, time_auto), UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"TIME_INF", "inf", "Time value \"inf\"",
+   ucs_offsetof(car_opts_t, time_inf), UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"ALLOW_LIST", "all", "Allow-list: \"all\" OR \"val1,val2\" OR \"^val1,val2\"",
+   ucs_offsetof(car_opts_t, allow_list), UCS_CONFIG_TYPE_ALLOW_LIST},
+
   {NULL}
 };
 
 static std::vector<std::string> config_err_exp_str;
 
 class test_config : public ucs::test {
+public:
+    test_config() {
+        m_num_errors = 0;
+    }
+
 protected:
+    static int m_num_errors;
+
     static ucs_log_func_rc_t
     config_error_handler(const char *file, unsigned line, const char *function,
                          ucs_log_level_t level,
@@ -228,6 +253,22 @@ protected:
                     return UCS_LOG_FUNC_RC_STOP;
                 }
             }
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
+    config_error_suppress(const char *file, unsigned line, const char *function,
+                          ucs_log_level_t level,
+                          const ucs_log_component_config_t *comp_conf,
+                          const char *message, va_list ap)
+    {
+        // Ignore errors that invalid input parameters as it is expected
+        if (level == UCS_LOG_LEVEL_ERROR) {
+            m_num_errors++;
+            return wrap_errors_logger(file, line, function, level, comp_conf,
+                                      message, ap);
         }
 
         return UCS_LOG_FUNC_RC_CONTINUE;
@@ -286,11 +327,14 @@ protected:
         static car_opts_t parse(const char *env_prefix,
                                 const char *table_prefix) {
             car_opts_t tmp;
-            ucs_status_t status = ucs_config_parser_fill_opts(&tmp,
-                                                              car_opts_table,
-                                                              env_prefix,
-                                                              table_prefix,
-                                                              0);
+            ucs_status_t status = ucs_config_parse_config_file(TEST_CONFIG_FILE, 1);
+            ASSERT_UCS_OK(status);
+
+            status = ucs_config_parser_fill_opts(&tmp,
+                                                 car_opts_table,
+                                                 env_prefix,
+                                                 table_prefix,
+                                                 0);
             ASSERT_UCS_OK(status);
             return tmp;
         }
@@ -364,6 +408,8 @@ protected:
     }
 };
 
+int test_config::m_num_errors;
+
 UCS_TEST_F(test_config, parse_default) {
     car_opts opts(UCS_DEFAULT_ENV_PREFIX, "TEST");
 
@@ -397,6 +443,12 @@ UCS_TEST_F(test_config, parse_default) {
     EXPECT_EQ(UCS_CONFIG_ON, opts->air_conditioning);
     EXPECT_EQ(UCS_CONFIG_OFF, opts->abs);
     EXPECT_EQ(UCS_CONFIG_AUTO, opts->transmission);
+
+    EXPECT_EQ(ucs_time_from_sec(1.0), opts->time_value);
+    EXPECT_EQ(UCS_TIME_AUTO, opts->time_auto);
+    EXPECT_EQ(UCS_TIME_INFINITY, opts->time_inf);
+    EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW_ALL, opts->allow_list.mode);
+    EXPECT_EQ(0, opts->allow_list.array.count);
 }
 
 UCS_TEST_F(test_config, clone) {
@@ -419,6 +471,7 @@ UCS_TEST_F(test_config, clone) {
     }
 
     EXPECT_EQ(COLOR_WHITE, (*opts_clone_ptr)->color);
+    EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW_ALL, (*opts_clone_ptr)->allow_list.mode);
     delete opts_clone_ptr;
 }
 
@@ -440,6 +493,17 @@ UCS_TEST_F(test_config, set_get) {
 
     opts.set("VIN", "123456");
     EXPECT_EQ(123456UL, opts->vin);
+
+    /* try to set incorrect value - color should not be updated */
+    {
+        scoped_log_handler log_handler_vars(config_error_suppress);
+        opts.set("COLOR", "magenta");
+    }
+
+    EXPECT_EQ(COLOR_WHITE, opts->color);
+    EXPECT_EQ(std::string(color_names[COLOR_WHITE]),
+            std::string(opts.get("COLOR")));
+    EXPECT_EQ(1, m_num_errors);
 }
 
 UCS_TEST_F(test_config, set_get_with_table_prefix) {
@@ -523,27 +587,23 @@ UCS_TEST_F(test_config, unused) {
 
 UCS_TEST_F(test_config, dump) {
     /* aliases must not be counted here */
-    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 28u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG, 32u);
 }
 
 UCS_TEST_F(test_config, dump_hidden) {
     /* aliases must be counted here */
-    test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
-                            UCS_CONFIG_PRINT_HIDDEN),
-                           35u);
+    test_config_print_opts(UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN, 39u);
 }
 
 UCS_TEST_F(test_config, dump_hidden_check_alias_name) {
     /* aliases must be counted here */
-    test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
-                            UCS_CONFIG_PRINT_HIDDEN |
-                            UCS_CONFIG_PRINT_DOC),
-                           35u);
+    test_config_print_opts(
+        UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN | UCS_CONFIG_PRINT_DOC,
+        39u);
 
-    test_config_print_opts((UCS_CONFIG_PRINT_CONFIG |
-                            UCS_CONFIG_PRINT_HIDDEN |
-                            UCS_CONFIG_PRINT_DOC),
-                           35u, "TEST_");
+    test_config_print_opts(
+        UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HIDDEN | UCS_CONFIG_PRINT_DOC,
+        39u, "TEST_");
 }
 
 UCS_TEST_F(test_config, deprecated) {
@@ -576,4 +636,51 @@ UCS_TEST_F(test_config, deprecated) {
 
     /* reset to not warn about unused env vars */
     ucs_global_opts.warn_unused_env_vars = 0;
+}
+
+UCS_TEST_F(test_config, test_allow_list) {
+    const std::string allow_list = "UCX_ALLOW_LIST";
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(allow_list.c_str(), "first,second");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_ALLOW, opts->allow_list.mode);
+        EXPECT_EQ(2, opts->allow_list.array.count);
+        EXPECT_EQ(std::string("first"), opts->allow_list.array.names[0]);
+        EXPECT_EQ(std::string("second"), opts->allow_list.array.names[1]);
+    }
+
+    {
+        /* coverity[tainted_string_argument] */
+        ucs::scoped_setenv env(allow_list.c_str(), "^first,second");
+
+        car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+        EXPECT_EQ(UCS_CONFIG_ALLOW_LIST_NEGATE, opts->allow_list.mode);
+        EXPECT_EQ(2, opts->allow_list.array.count);
+        EXPECT_EQ(std::string("first"), opts->allow_list.array.names[0]);
+        EXPECT_EQ(std::string("second"), opts->allow_list.array.names[1]);
+    }
+}
+
+UCS_TEST_F(test_config, test_allow_list_negative)
+{
+    ucs_config_allow_list_t field;
+
+    EXPECT_EQ(ucs_config_sscanf_allow_list("all,all", &field,
+                                           &ucs_config_array_string), 0);
+}
+
+UCS_TEST_F(test_config, test_config_file) {
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv env1("UCX_BRAND", "Ford");
+
+    car_opts opts(UCS_DEFAULT_ENV_PREFIX, NULL);
+
+    /* Option parsing from INI file */
+    EXPECT_EQ(100, opts->price);
+
+    /* Overriding INI file by env vars */
+    EXPECT_EQ(std::string("Ford"), std::string(opts->brand));
 }

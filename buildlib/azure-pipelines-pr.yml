@@ -9,11 +9,44 @@ pr:
 resources:
   containers:
     - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:1
-      endpoint: ucfconsort_registry
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: fedora
-      image: ucfconsort.azurecr.io/ucx/fedora:3
-      endpoint: ucfconsort_registry
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      options: --privileged
+    - container: fedora34
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
+      options: --privileged -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: coverity_rh7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76_mofed47
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel74
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel72
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel82
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu2004
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu1804
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles15sp2
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles12sp5
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
 
 stages:
   - stage: Codestyle
@@ -24,10 +57,12 @@ stages:
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
 
           - bash: |
               set -eE
-              range="remotes/origin/$(System.PullRequest.TargetBranch)..$(Build.SourceVersion)"
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
               ok=1
               for sha1 in `git log $range --format="%h"`
               do
@@ -48,40 +83,71 @@ stages:
               fi
             condition: eq(variables['Build.Reason'], 'PullRequest')
 
-  - stage: Build
-    jobs:
-      - job: static_checks
-        displayName: Static checks
+      # Check that the code is formatted according to the code style guidelines
+      - job: format
+        displayName: format code
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         container: fedora
         steps:
           - checkout: self
             clean: true
+            fetchDepth: 100
+
+          - bash: |
+              source ./buildlib/az-helpers.sh
+              set -x
+              git log -1 HEAD
+              git log -1 HEAD^
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
+              git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
+              echo "Generated patch file:"
+              cat format.patch
+              if [ "`cat format.patch`" = "no modified files to format" ]; then
+                  exit
+              fi
+              git apply format.patch
+              if ! git diff --quiet --exit-code
+              then
+                  url="https://github.com/openucx/ucx/wiki/Code-style-checking"
+                  azure_complete_with_issues "Code is not formatted according to the code style, see $url for more info."
+              fi
+            condition: eq(variables['Build.Reason'], 'PullRequest')
+
+  - stage: Static_check
+    dependsOn: [Codestyle]
+    jobs:
+      - job: static_checks
+        displayName: Static checks
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker_fast -equals yes
+        container: fedora
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
 
           - bash: ./autogen.sh
             displayName: Setup autotools
 
           - bash: |
               set -eE
-              mkdir build && cd build
+              . buildlib/tools/common.sh
+              prepare_build
               clang --version
               gcc --version
               cppcheck --version
-              ../contrib/configure-release
-            displayName: Configure
-
-          - bash: |
-              set -eE
-
-              cd build
+              ${WORKSPACE}/contrib/configure-release
 
               export PATH="`csclng --print-path-to-wrap`:`cscppc --print-path-to-wrap`:`cswrap --print-path-to-wrap`:$PATH"
+              set -o pipefail
               make -j`nproc` 2>&1 | tee compile.log
-            displayName: Build
-
-          - bash: |
-              set -eE
-
-              cd build
+              set +o pipefail
 
               cs_errors="cs.err"
               cslinker --quiet compile.log \
@@ -99,10 +165,66 @@ stages:
                 echo "No errors reported by static checkers"
               fi
             displayName: cstools reports
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
 
-      # Perform test builds on relevant distributions.
+  - stage: Build
+    dependsOn: [Static_check]
+    jobs:
+      - job: build_source
+        pool:
+          name: MLNX
+          demands:
+            - ucx_docker -equals yes
+        strategy:
+          matrix:
+            rhel72:
+              CONTAINER: rhel72
+            rhel74:
+              CONTAINER: rhel74
+            rhel76:
+              CONTAINER: rhel76
+              long_test: yes
+            rhel76_mofed47:
+              CONTAINER: rhel76_mofed47
+              long_test: yes
+            ubuntu2004:
+              CONTAINER: ubuntu2004
+              long_test: yes
+            ubuntu1804:
+              CONTAINER: ubuntu1804
+            sles15sp2:
+              CONTAINER: sles15sp2
+            rhel82:
+              CONTAINER: rhel82
+            fedora34:
+              CONTAINER: fedora34
+              long_test: yes
+        container: $[ variables['CONTAINER'] ]
+        timeoutInMinutes: 240
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+              long_test: $(long_test)
+
+  - stage: Distro
+    dependsOn: [Static_check]
+    jobs:
+       # Perform test builds on relevant distributions.
       - job: Distros
         displayName: Build for
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         strategy:
           matrix:
             centos7:
@@ -112,50 +234,36 @@ stages:
         steps:
           - checkout: self
             clean: true
-
-          - bash: ./autogen.sh
-            displayName: Setup autotools
+            fetchDepth: 100
 
           - bash: |
               set -eE
-              mkdir build && cd build
-              ../configure $(CONFIGURE_OPTS)
-            displayName: Configure
-
-          - bash: |
-              set -eE
-              cd build
+              . buildlib/tools/common.sh
+              prepare_build
+              ${WORKSPACE}/configure $(CONFIGURE_OPTS)
               gcc -v
               make -s -j `nproc`
-            displayName: Build for $(CONTAINER)
-
-      # Test RPM build
-      - job: build_rpm
-        displayName: Build tarball and source rpm
-        container: fedora
-        steps:
-          - checkout: self
-            clean: true
-
-          - bash: ./autogen.sh
-            displayName: Setup autotools
-
-          - bash: |
-              set -eE
-              gcc --version
-              ./contrib/configure-release
-              stdbuf -e0 -o0 ./contrib/buildrpm.sh -s -t -b |& tee rpmbuild.log
-              pattern='^warning: '
-              if grep -q "$pattern" rpmbuild.log; then
-                echo "rpm build generated warnings:"
-                grep "$pattern" rpmbuild.log
-                echo "##vso[task.logissue type=error]rpm build generated warnings"
-                echo "##vso[task.complete result=Failed;]"
+              set +eE
+              set -x
+              ./src/tools/info/ucx_info -e -u t 2>&1 | tee info.txt
+              grep -i error info.txt
+              retVal=$?
+              if [ $retVal -eq 0 ]; then
+                  exit 1;
               fi
-            displayName: Configure source and build RPM
+              exit 0;
+            displayName: Test ucx_info
+
+  - stage: Coverity
+    dependsOn: [Static_check]
+    jobs:
+      - template: coverity.yml
+        parameters:
+          demands: ucx_docker -equals yes
+          container: coverity_rh7
 
   - stage: Tests
-    dependsOn: [Codestyle]
+    dependsOn: [Static_check]
     jobs:
     - template: tests.yml
       parameters:
@@ -177,4 +285,25 @@ stages:
         name: hwi
         demands: ucx_hwi -equals yes
         test_perf: 0
-    - template: io-demo.yml
+    - template: tests.yml
+      parameters:
+        name: sputnik
+        demands: ucx_sputnik -equals yes
+        test_perf: 0
+
+  - stage: io_demo
+    dependsOn: [Static_check]
+    jobs:
+    - template: io_demo/io-demo.yml
+
+  - stage: jucx
+    dependsOn: [Static_check]
+    jobs:
+      - template: jucx/jucx-test.yml
+        parameters:
+          name: new
+          demands: ucx_new -equals yes
+      - template: jucx/jucx-test.yml
+        parameters:
+          name: gpu
+          demands: ucx_gpu -equals yes

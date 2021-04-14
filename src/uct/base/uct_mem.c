@@ -102,11 +102,19 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                    params->mem_type : UCS_MEMORY_TYPE_HOST;
     alloc_length = length;
 
+    ucs_trace("allocating %s: %s memory length %zu flags 0x%x", alloc_name,
+              ucs_memory_type_names[mem_type], alloc_length, flags);
+    ucs_log_indent(1);
+
     for (method = methods; method < methods + num_methods; ++method) {
         ucs_trace("trying allocation method %s", uct_alloc_method_names[*method]);
 
         switch (*method) {
         case UCT_ALLOC_METHOD_MD:
+            if (!(params->field_mask & UCT_MEM_ALLOC_PARAM_FIELD_MDS)) {
+                break;
+            }
+
             /* Allocate with one of the specified memory domains */
             for (md_index = 0; md_index < params->mds.count; ++md_index) {
                 alloc_length = length;
@@ -115,7 +123,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 status = uct_md_query(md, &md_attr);
                 if (status != UCS_OK) {
                     ucs_error("Failed to query MD");
-                    return status;
+                    goto out;
                 }
 
                 /* Check if MD supports allocation */
@@ -147,7 +155,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                     ucs_error("failed to allocate %zu bytes using md %s for %s: %s",
                               alloc_length, md->component->name,
                               alloc_name, ucs_status_string(status));
-                    return status;
+                    goto out;
                 }
 
                 ucs_assert(memh != UCT_MEM_HANDLE_NULL);
@@ -163,7 +171,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                  * memory
                  */
                 ucs_error("unable to allocated requested memory type");
-                return UCS_ERR_UNSUPPORTED;
+                status = UCS_ERR_UNSUPPORTED;
+                goto out;
             }
 
             break;
@@ -277,12 +286,14 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
 
         default:
             ucs_error("Invalid allocation method %d", *method);
-            return UCS_ERR_INVALID_PARAM;
+            status = UCS_ERR_INVALID_PARAM;
+            goto out;
         }
     }
 
-    ucs_debug("Could not allocate memory with any of the provided methods");
-    return UCS_ERR_NO_MEMORY;
+    ucs_debug("could not allocate memory with any of the provided methods");
+    status = UCS_ERR_NO_MEMORY;
+    goto out;
 
 allocated_without_md:
     mem->md       = NULL;
@@ -295,7 +306,10 @@ allocated:
     mem->address = address;
     mem->length  = alloc_length;
     mem->method  = *method;
-    return UCS_OK;
+    status       = UCS_OK;
+out:
+    ucs_log_indent(-1);
+    return status;
 }
 
 ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)

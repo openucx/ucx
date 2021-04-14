@@ -66,7 +66,7 @@ void ucs_close_fd(int *fd_p)
 
 int ucs_netif_flags_is_active(unsigned int flags)
 {
-    return (flags & IFF_UP) && (flags & IFF_RUNNING) && !(flags & IFF_LOOPBACK);
+    return (flags & IFF_UP) && (flags & IFF_RUNNING);
 }
 
 ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
@@ -365,7 +365,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 
 ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t socklen,
                                     int backlog, int silent_err_in_use,
-                                    int allow_addr_inuse, int *listen_fd)
+                                    int reuse_addr, int *listen_fd)
 {
     int so_reuse_optval = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
@@ -374,6 +374,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
     int ret, fd;
 
     /* Create the server socket for accepting incoming connections */
+    fd     = -1; /* Suppress compiler warning */
     status = ucs_socket_create(saddr->sa_family, SOCK_STREAM, &fd);
     if (status != UCS_OK) {
         goto err;
@@ -385,7 +386,7 @@ ucs_status_t ucs_socket_server_init(const struct sockaddr *saddr, socklen_t sock
         goto err_close_socket;
     }
 
-    if (allow_addr_inuse) {
+    if (reuse_addr) {
         status = ucs_socket_setopt(fd, SOL_SOCKET, SO_REUSEADDR,
                                    &so_reuse_optval, sizeof(so_reuse_optval));
         if (status != UCS_OK) {
@@ -649,6 +650,11 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     uint16_t port;
     size_t str_len;
 
+    if (sock_addr == NULL) {
+        ucs_strncpy_zero(str, "<null>", max_size);
+        return str;
+    }
+
     if (!ucs_sockaddr_is_known_af(sock_addr)) {
         ucs_strncpy_zero(str, "<invalid address family>", max_size);
         return str;
@@ -670,6 +676,33 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
     ucs_snprintf_zero(str + str_len, max_size - str_len, ":%d", port);
 
     return str;
+}
+
+ucs_status_t ucs_sock_ipstr_to_sockaddr(const char *ip_str,
+                                        struct sockaddr_storage *sa_storage)
+{
+    struct sockaddr_in* sa_in;
+    struct sockaddr_in6* sa_in6;
+    int ret;
+
+    /* try IPv4 */
+    sa_in             = (struct sockaddr_in*)sa_storage;
+    sa_in->sin_family = AF_INET;
+    ret = inet_pton(AF_INET, ip_str, &sa_in->sin_addr);
+    if (ret == 1) {
+        return UCS_OK;
+    }
+
+    /* try IPv6 */
+    sa_in6              = (struct sockaddr_in6*)sa_storage;
+    sa_in6->sin6_family = AF_INET6;
+    ret = inet_pton(AF_INET6, ip_str, &sa_in6->sin6_addr);
+    if (ret == 1) {
+        return UCS_OK;
+    }
+
+    ucs_error("invalid address %s", ip_str);
+    return UCS_ERR_INVALID_ADDR;
 }
 
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,

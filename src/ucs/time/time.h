@@ -9,7 +9,6 @@
 
 #include <ucs/arch/cpu.h>
 #include <ucs/time/time_def.h>
-#include <ucs/sys/math.h>
 #include <sys/time.h>
 #include <limits.h>
 
@@ -30,6 +29,7 @@ typedef uint32_t             ucs_short_time_t;
 
 
 #define UCS_TIME_INFINITY  ULLONG_MAX
+#define UCS_TIME_AUTO      (UCS_TIME_INFINITY - 1)
 
 #define UCS_MSEC_PER_SEC   1000ull       /* Milli */
 #define UCS_USEC_PER_SEC   1000000ul     /* Micro */

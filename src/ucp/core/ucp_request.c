@@ -15,7 +15,7 @@
 #include <ucp/proto/proto_am.h>
 
 #include <ucs/datastruct/mpool.inl>
-#include <ucs/debug/debug.h>
+#include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
 
 
@@ -133,11 +133,14 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
     }
 }
 
-static void ucp_worker_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chunk)
+static void
+ucp_worker_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chunk)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, req_mp);
+    ucp_worker_h worker   = ucs_container_of(mp, ucp_worker_t, req_mp);
     ucp_context_h context = worker->context;
-    ucp_request_t *req = obj;
+    ucp_request_t *req    = obj;
+
+    ucp_request_id_reset(req);
 
     if (context->config.request.init != NULL) {
         context->config.request.init(req + 1);
@@ -146,9 +149,11 @@ static void ucp_worker_request_init_proxy(ucs_mpool_t *mp, void *obj, void *chun
 
 static void ucp_worker_request_fini_proxy(ucs_mpool_t *mp, void *obj)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, req_mp);
+    ucp_worker_h worker   = ucs_container_of(mp, ucp_worker_t, req_mp);
     ucp_context_h context = worker->context;
-    ucp_request_t *req = obj;
+    ucp_request_t *req    = obj;
+
+    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
 
     if (context->config.request.cleanup != NULL) {
         context->config.request.cleanup(req + 1);
@@ -366,6 +371,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             ucp_request_init_multi_proto(req, proto->bcopy_multi,
                                          "start_bcopy_multi");
         }
+
         return UCS_OK;
     } else if (length < zcopy_max) {
         /* zcopy */
@@ -396,6 +402,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
             req->send.uct.func = proto->zcopy_single;
             UCS_PROFILE_REQUEST_EVENT(req, "start_zcopy_single", req->send.length);
         }
+
         return UCS_OK;
     }
 
@@ -404,19 +411,30 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
 
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 {
-    /*
-     * FIXME should not fast-forward requests owned by UCT
-     */
-    ucp_trace_req(req, "fast-forward with status %s", ucs_status_string(status));
+    ucp_trace_req(req, "fast-forward with status %s",
+                  ucs_status_string(status));
 
-    if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
+    if (req->send.uct.func == ucp_proto_progress_am_single) {
+        req->send.proto.comp_cb(req);
+    } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
-    } else if (req->send.state.uct_comp.func) {
-        req->send.state.dt.offset      = req->send.length;
-        req->send.state.uct_comp.count = 0;
+    } else if (req->send.state.uct_comp.func != NULL) {
+        /* Fast-forward the sending state to complete the operation when last
+         * network completion callback is called
+         */
+        req->send.state.dt.offset = req->send.length;
         uct_completion_update_status(&req->send.state.uct_comp, status);
-        req->send.state.uct_comp.func(&req->send.state.uct_comp);
+
+        if (req->send.state.uct_comp.count == 0) {
+            /* If nothing is in-flight, call completion callback to ensure
+             * cleanup of zero-copy resources
+             */
+            req->send.state.uct_comp.func(&req->send.state.uct_comp);
+        }
     } else {
+        if (req->id != UCP_REQUEST_ID_INVALID) {
+            ucp_request_id_release(req);
+        }
         ucp_request_complete_send(req, status);
     }
 }

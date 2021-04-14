@@ -22,6 +22,7 @@
                   ## __VA_ARGS__); \
     }
 
+
 #define ucm_fatal(_message, ...) ucm_log(UCS_LOG_LEVEL_FATAL, _message, ## __VA_ARGS__)
 #define ucm_error(_message, ...) ucm_log(UCS_LOG_LEVEL_ERROR, _message, ## __VA_ARGS__)
 #define ucm_warn(_message, ...)  ucm_log(UCS_LOG_LEVEL_WARN,  _message, ## __VA_ARGS__)
@@ -30,7 +31,24 @@
 #define ucm_debug(_message, ...) ucm_log(UCS_LOG_LEVEL_DEBUG, _message, ## __VA_ARGS__)
 #define ucm_trace(_message, ...) ucm_log(UCS_LOG_LEVEL_TRACE, _message, ## __VA_ARGS__)
 
+
+#define ucm_assert_always(_expression) \
+    do { \
+        if (!(_expression)) { \
+            ucm_fatal("Assertion `%s' failed", #_expression); \
+        } \
+    } while (0)
+
+
+#if ENABLE_ASSERT
+#  define ucm_assert(...)    ucm_assert_always(__VA_ARGS__)
+#else
+#  define ucm_assert(...)    {}
+#endif
+
+
 extern const char *ucm_log_level_names[];
+
 
 void __ucm_log(const char *file, unsigned line, const char *function,
                ucs_log_level_t level, const char *message, ...)

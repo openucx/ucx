@@ -23,8 +23,6 @@ public:
     };
 
     test_ucp_tag_match() {
-        // TODO: test offload and offload MP as different variants
-        enable_tag_mp_offload();
         if (RUNNING_ON_VALGRIND) {
             m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE", "8k"));
             m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
@@ -34,9 +32,15 @@ public:
     virtual void init()
     {
         modify_config("TM_THRESH", "1");
-        if (get_variant_value() & ENABLE_PROTO) {
+        if (use_proto()) {
             modify_config("PROTO_ENABLE", "y");
             modify_config("MAX_EAGER_LANES", "2");
+        } else {
+            // TODO:
+            // 1. test offload and offload MP as different variants
+            // 2. Enable offload for new protocols as well when it is fully
+            //    supported.
+            enable_tag_mp_offload();
         }
         test_ucp_tag::init();
     }
@@ -64,6 +68,11 @@ protected:
     {
         ucp_request_free(request);
         m_req_status = status;
+    }
+
+    bool use_proto() const
+    {
+        return get_variant_value() & ENABLE_PROTO;
     }
 
     static ucs_status_t m_req_status;
@@ -475,9 +484,8 @@ public:
     static const std::string rndv_schemes[];
 
     void init() {
-        ASSERT_LE(get_variant_value(), (int)RNDV_SCHEME_GET_ZCOPY);
-        modify_config("RNDV_SCHEME", rndv_schemes[get_variant_value()]);
-
+        ASSERT_LE(rndv_scheme(), (int)RNDV_SCHEME_GET_ZCOPY);
+        modify_config("RNDV_SCHEME", rndv_schemes[rndv_scheme()]);
         test_ucp_tag_match::init();
     }
 
@@ -486,12 +494,40 @@ public:
             add_variant_with_value(variants, get_ctx_params(), rndv_scheme,
                                    "rndv_" + rndv_schemes[rndv_scheme]);
         }
+
+        // Generate variants with and new protocols
+        add_variant_with_value(variants, get_ctx_params(),
+                               RNDV_SCHEME_AUTO | ENABLE_PROTO,
+                               "rndv_auto,proto");
+        add_variant_with_value(variants, get_ctx_params(),
+                               RNDV_SCHEME_GET_ZCOPY | ENABLE_PROTO,
+                               "rndv_get_zcopy,proto");
+    }
+
+protected:
+    int rndv_scheme() const
+    {
+        int mask = ucs_roundup_pow2(static_cast<int>(RNDV_SCHEME_LAST) + 1) - 1;
+        ucs_assert(!(mask & ENABLE_PROTO));
+        return get_variant_value() & mask;
     }
 };
 
 const std::string test_ucp_tag_match_rndv::rndv_schemes[] = { "auto",
                                                               "put_zcopy",
                                                               "get_zcopy" };
+
+UCS_TEST_P(test_ucp_tag_match_rndv, length0, "RNDV_THRESH=0")
+{
+    request *my_send_req = send_nb((void*)0xdeadbeef, 0, DATATYPE, 1);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_send_req));
+
+    ucp_tag_recv_info_t info;
+    ucs_status_t status = recv_b((void*)0xbadc0fee, 0, DATATYPE, 1, 0, &info);
+    EXPECT_EQ(UCS_OK, status);
+
+    wait_and_validate(my_send_req);
+}
 
 UCS_TEST_P(test_ucp_tag_match_rndv, sync_send_unexp, "RNDV_THRESH=1048576") {
     static const size_t size = 1148576;
@@ -795,3 +831,4 @@ UCS_TEST_P(test_ucp_tag_match_rndv, bidir_multi_exp_post, "RNDV_THRESH=0") {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_match_rndv)
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_match_rndv, mm_tcp, "posix,sysv,tcp")

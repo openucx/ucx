@@ -32,8 +32,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer, size_t length,
                               ucp_datatype_t datatype, ucp_datatype_iter_t *dt_iter)
 {
-    dt_iter->mem_type               = ucp_memory_type_detect(context, buffer,
-                                                             length);
+    ucp_memory_detect(context, buffer, length, &dt_iter->mem_info);
     dt_iter->length                 = length;
     dt_iter->type.contig.buffer     = buffer;
     dt_iter->type.contig.reg.md_map = 0;
@@ -53,11 +52,10 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
 
     if (ucs_likely(count > 0)) {
         *sg_count         = ucs_min(count, (size_t)UINT8_MAX);
-        dt_iter->mem_type = ucp_memory_type_detect(context, iov->buffer,
-                                                   iov->length);
+        ucp_memory_detect(context, iov->buffer, iov->length, &dt_iter->mem_info);
     } else {
-        *sg_count         = 1;
-        dt_iter->mem_type = UCS_MEMORY_TYPE_HOST;
+        *sg_count = 1;
+        ucp_memory_info_set_host(&dt_iter->mem_info);
     }
 }
 
@@ -70,10 +68,10 @@ ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer, size_t count
 
     state                        = dt_gen->ops.start_pack(dt_gen->context,
                                                           buffer, count);
-    dt_iter->mem_type            = UCS_MEMORY_TYPE_LAST;
     dt_iter->length              = dt_gen->ops.packed_size(state);
     dt_iter->type.generic.dt_gen = dt_gen;
     dt_iter->type.generic.state  = state;
+    ucp_memory_info_set_host(&dt_iter->mem_info);
 }
 
 /*
@@ -128,11 +126,12 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
 
     switch (dt_iter->dt_class) {
     case UCP_DATATYPE_CONTIG:
-        ucs_assert(dt_iter->mem_type < UCS_MEMORY_TYPE_LAST);
+        ucs_assert(dt_iter->mem_info.type < UCS_MEMORY_TYPE_LAST);
         length = ucs_min(dt_iter->length - dt_iter->offset, max_length);
         src    = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer,
                                      dt_iter->offset);
-        ucp_dt_contig_pack(worker, dest, src, length, dt_iter->mem_type);
+        ucp_dt_contig_pack(worker, dest, src, length,
+                           (ucs_memory_type_t)dt_iter->mem_info.type);
         break;
     case UCP_DATATYPE_IOV:
         length = ucs_min(dt_iter->length - dt_iter->offset, max_length);
@@ -178,9 +177,10 @@ ucp_datatype_iter_next_unpack(const ucp_datatype_iter_t *dt_iter,
 
     switch (dt_iter->dt_class) {
     case UCP_DATATYPE_CONTIG:
-        ucs_assert(dt_iter->mem_type < UCS_MEMORY_TYPE_LAST);
+        ucs_assert(dt_iter->mem_info.type < UCS_MEMORY_TYPE_LAST);
         dest = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, dt_iter->offset);
-        ucp_dt_contig_unpack(worker, dest, src, length, dt_iter->mem_type);
+        ucp_dt_contig_unpack(worker, dest, src, length,
+                             (ucs_memory_type_t)dt_iter->mem_info.type);
         status = UCS_OK;
         break;
     case UCP_DATATYPE_IOV:
@@ -290,13 +290,14 @@ ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
-                          ucp_md_map_t md_map)
+                          ucp_md_map_t md_map, unsigned uct_flags)
 {
     /* TODO support IOV datatype */
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
+
     return ucp_mem_rereg_mds(context, md_map, dt_iter->type.contig.buffer,
-                             dt_iter->length, UCT_MD_MEM_ACCESS_RMA, NULL,
-                             dt_iter->mem_type, NULL,
+                             dt_iter->length, uct_flags, NULL,
+                             (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
                              dt_iter->type.contig.reg.memh,
                              &dt_iter->type.contig.reg.md_map);
 }
@@ -307,7 +308,8 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter)
 {
-    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, dt_iter->mem_type, NULL,
+    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL,
+                      (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
                       dt_iter->type.contig.reg.memh,
                       &dt_iter->type.contig.reg.md_map);
 }

@@ -53,6 +53,7 @@ typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
     double                        peer_timeout;
+    double                        min_poke_time;
     double                        timer_tick;
     double                        timer_backoff;
     double                        event_timer_tick;
@@ -179,6 +180,7 @@ struct uct_ud_iface {
     } tx;
     struct {
         ucs_time_t           peer_timeout;
+        ucs_time_t           min_poke_time;
         unsigned             tx_qp_len;
         unsigned             max_inline;
         int                  check_grh_dgid;
@@ -332,7 +334,7 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
 
 void uct_ud_iface_cep_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
-ucs_status_t uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
+unsigned uct_ud_iface_dispatch_pending_rx_do(uct_ud_iface_t *iface);
 
 ucs_status_t uct_ud_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 
@@ -346,7 +348,8 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                   int is_async);
 
-void uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface);
+unsigned
+uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 
 static UCS_F_ALWAYS_INLINE int uct_ud_iface_can_tx(uct_ud_iface_t *iface)
@@ -380,18 +383,9 @@ static UCS_F_ALWAYS_INLINE void uct_ud_leave(uct_ud_iface_t *iface)
 }
 
 
-static UCS_F_ALWAYS_INLINE unsigned
-uct_ud_grh_get_dgid_len(struct ibv_grh *grh)
-{
-    static const uint8_t ipmask = 0xf0;
-    uint8_t ipver               = ((*(uint8_t*)grh) & ipmask);
-
-    return (ipver == (6 << 4)) ? UCS_IPV6_ADDR_LEN : UCS_IPV4_ADDR_LEN;
-}
-
-
 static UCS_F_ALWAYS_INLINE int
-uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present)
+uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present,
+                       uint8_t roce_pkt_type)
 {
     struct ibv_grh *grh = (struct ibv_grh *)packet;
     size_t gid_len;
@@ -408,7 +402,25 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present)
         return 1;
     }
 
-    gid_len = uct_ud_grh_get_dgid_len(grh);
+    /*
+     * Take the packet type from CQE, because:
+     * 1. According to Annex17_RoCEv2 (A17.4.5.1):
+     * For UD, the Completion Queue Entry (CQE) includes remote address
+     * information (InfiniBand Specification Vol. 1 Rev 1.2.1 Section 11.4.2.1).
+     * For RoCEv2, the remote address information comprises the source L2
+     * Address and a flag that indicates if the received frame is an IPv4,
+     * IPv6 or RoCE packet.
+     * 2. According to PRM, for responder UD/DC over RoCE sl represents RoCE
+     * packet type as:
+     * bit 3    : when set R-RoCE frame contains an UDP header otherwise not
+     * Bits[2:0]: L3_Header_Type, as defined below
+     *     - 0x0 : GRH - (RoCE v1.0)
+     *     - 0x1 : IPv6 - (RoCE v1.5/v2.0)
+     *     - 0x2 : IPv4 - (RoCE v1.5/v2.0)
+     */
+    gid_len = ((roce_pkt_type & UCT_IB_CQE_SL_PKTYPE_MASK) == 0x2) ?
+              UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN;
+
     if (ucs_likely((gid_len == iface->gid_table.last_len) &&
                     uct_ud_gid_equal(&grh->dgid, &iface->gid_table.last,
                                      gid_len))) {
@@ -537,23 +549,25 @@ uct_ud_iface_add_ctl_desc(uct_ud_iface_t *iface, uct_ud_ctl_desc_t *cdesc)
 }
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE unsigned
 uct_ud_iface_dispatch_pending_rx(uct_ud_iface_t *iface)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->rx.pending_q))) {
-        return UCS_OK;
+        return 0;
     }
+
     return uct_ud_iface_dispatch_pending_rx_do(iface);
 }
 
 
-static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface)
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     if (ucs_likely(ucs_queue_is_empty(&iface->tx.async_comp_q))) {
-        return;
+        return 0;
     }
-    uct_ud_iface_dispatch_async_comps_do(iface);
+
+    return uct_ud_iface_dispatch_async_comps_do(iface, ep);
 }
 
 #if ENABLE_PARAMS_CHECK

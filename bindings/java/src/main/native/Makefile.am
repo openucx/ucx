@@ -22,11 +22,11 @@ JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
                          org_openucx_jucx_ucp_UcpEndpoint.h              \
                          org_openucx_jucx_ucp_UcpListener.h              \
                          org_openucx_jucx_ucp_UcpMemory.h                \
-                         org_openucx_jucx_ucp_UcpRequest.h               \
                          org_openucx_jucx_ucp_UcpRemoteKey.h             \
                          org_openucx_jucx_ucp_UcpWorker.h                \
                          org_openucx_jucx_ucs_UcsConstants_ThreadMode.h  \
-                         org_openucx_jucx_ucs_UcsConstants.h
+                         org_openucx_jucx_ucs_UcsConstants.h             \
+                         org_openucx_jucx_UcxUtils.h
 
 BUILT_SOURCES = $(JUCX_GENERATED_H_FILES)
 
@@ -40,7 +40,8 @@ MOSTLYCLEANFILES = $(JUCX_GENERATED_H_FILES) $(STAMP_FILE)
 #
 $(STAMP_FILE): \
 		$(javadir)/src/main/java/org/openucx/jucx/ucs/*.java \
-		$(javadir)/src/main/java/org/openucx/jucx/ucp/*.java
+		$(javadir)/src/main/java/org/openucx/jucx/ucp/*.java \
+		$(javadir)/src/main/java/org/openucx/jucx/examples/*.java
 	$(MVNCMD) compile
 	touch $(STAMP_FILE)
 
@@ -58,12 +59,11 @@ libjucx_la_SOURCES = context.cc \
                      jucx_common_def.cc \
                      listener.cc \
                      memory.cc \
-                     request.cc \
                      ucp_constants.cc \
                      ucs_constants.cc \
                      worker.cc
 
-libjucx_la_CXXFLAGS = -fPIC -DPIC -Werror -std=gnu++98
+libjucx_la_CXXFLAGS = $(BASE_CXXFLAGS) -std=gnu++98
 
 libjucx_la_LIBADD = $(topdir)/src/ucs/libucs.la \
                     $(topdir)/src/uct/libuct.la \
@@ -73,7 +73,7 @@ libjucx_la_LIBADD = $(topdir)/src/ucs/libucs.la \
 libjucx_la_DEPENDENCIES = Makefile.am Makefile.in Makefile
 
 # Compile Java source code and pack to jar
-$(jarfile):
+$(jarfile): libjucx.la
 	$(MVNCMD) package -DskipTests
 
 package : $(jarfile)

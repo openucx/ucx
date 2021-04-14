@@ -45,6 +45,14 @@ public class UcpContext extends UcxNativeStruct implements Closeable {
     }
 
     /**
+     * @return - mask which memory types are supported, for supported memory types
+     * please see {@link org.openucx.jucx.ucs.UcsConstants.MEMORY_TYPE#isMemTypeSupported}
+     */
+    public long getMemoryTypesMask() {
+        return queryMemTypesNative(getNativeId());
+    }
+
+    /**
      * Creates new UcpWorker on current context.
      */
     public UcpWorker newWorker(UcpWorkerParams params) {
@@ -82,6 +90,8 @@ public class UcpContext extends UcxNativeStruct implements Closeable {
     }
 
     private static native long createContextNative(UcpParams params);
+
+    private static native long queryMemTypesNative(long contextId);
 
     private static native void cleanupContextNative(long contextId);
 

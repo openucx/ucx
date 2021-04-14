@@ -19,20 +19,25 @@ typedef struct ucp_cm_client_connect_progress_arg {
 } ucp_cm_client_connect_progress_arg_t;
 
 
-unsigned ucp_cm_ep_init_flags(const ucp_worker_h worker,
-                              const ucp_ep_params_t *params);
+unsigned ucp_cm_ep_init_flags(const ucp_ep_params_t *params);
 
 int ucp_ep_init_flags_has_cm(unsigned ep_init_flags);
+
+void ucp_cm_client_restore_ep(ucp_wireup_ep_t *wireup_cm_ep, ucp_ep_h ucp_ep);
 
 ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            uct_listener_h uct_listener,
                                            uct_conn_request_h uct_conn_req,
-                                           ucp_rsc_index_t cm_idx);
+                                           ucp_rsc_index_t cm_idx,
+                                           const char *dev_name);
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
                                             const ucp_ep_params_t *params);
 
 ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep);
+
+int ucp_cm_server_conn_request_progress_cb_pred(const ucs_callbackq_elem_t *elem,
+                                                void *arg);
 
 void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                    const uct_cm_listener_conn_request_args_t
@@ -46,7 +51,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
 
 void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep);
 
-ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep);
+ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep,
+                                           const ucp_request_param_t *param);
 
 void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep);
 

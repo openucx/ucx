@@ -117,7 +117,15 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     UCT_IB_MLX5DV_SET(create_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_CREATE_QP);
     qpc = UCT_IB_MLX5DV_ADDR_OF(create_qp_in, in, qpc);
-    UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
+    if (attr->super.qp_type == UCT_IB_QPT_DCI) {
+        UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_DCI);
+    } else if (attr->super.qp_type == IBV_QPT_RC) {
+        UCT_IB_MLX5DV_SET(qpc, qpc, st, UCT_IB_MLX5_QPC_ST_RC);
+    } else {
+        ucs_error("create qp failed: unknown type %d", attr->super.qp_type);
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_free_db;
+    }
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, dvpd.pdn);
     UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
@@ -135,6 +143,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
             uct_ib_mlx5_qpc_cs_res(attr->super.max_inl_cqe[UCT_IB_DIR_RX], 0));
     UCT_IB_MLX5DV_SET64(qpc, qpc, dbr_addr, qp->devx.dbrec->offset);
     UCT_IB_MLX5DV_SET(qpc, qpc, dbr_umem_id, qp->devx.dbrec->mem_id);
+    UCT_IB_MLX5DV_SET(qpc, qpc, user_index, attr->uidx);
 
     if (qp->devx.wq_buf == NULL) {
         UCT_IB_MLX5DV_SET(qpc, qpc, no_sq, true);
@@ -155,20 +164,22 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     qp->qp_num = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
 
-    qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
-    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode, UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
-    UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, attr->super.port);
-    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
+    if (attr->super.qp_type == IBV_QPT_RC) {
+        qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
+        UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, opcode, UCT_IB_MLX5_CMD_OP_RST2INIT_QP);
+        UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
+        UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, attr->super.port);
+        UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
-    ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2init, sizeof(in_2init),
-                                 out_2init, sizeof(out_2init));
-    if (ret) {
-        ucs_error("mlx5dv_devx_obj_modify(2INIT_QP) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(rst2init_qp_out, out_2init, syndrome));
-        status = UCS_ERR_IO_ERROR;
-        goto err_free;
+        ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2init, sizeof(in_2init),
+                out_2init, sizeof(out_2init));
+        if (ret) {
+            ucs_error("mlx5dv_devx_obj_modify(2INIT_QP) failed, syndrome %x: %m",
+                    UCT_IB_MLX5DV_GET(rst2init_qp_out, out_2init, syndrome));
+            status = UCS_ERR_IO_ERROR;
+            goto err_free;
+        }
     }
 
     qp->type = UCT_IB_MLX5_OBJ_TYPE_DEVX;
@@ -298,6 +309,24 @@ ucs_status_t uct_ib_mlx5_devx_query_ooo_sl_mask(uct_ib_mlx5_md_t *md,
     *ooo_sl_mask_p = UCT_IB_MLX5DV_GET(hca_vport_context, ctx, ooo_sl_mask);
 
     return UCS_OK;
+}
+
+void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
+                                            uint8_t path_index, void *qpc,
+                                            uint32_t *opt_param_mask)
+{
+    uct_ib_device_t *dev = &md->super.dev;
+    uint8_t tx_port      = dev->first_port;
+
+    if (!(md->flags & UCT_IB_MLX5_MD_FLAG_LAG)) {
+        return;
+    }
+
+    *opt_param_mask |= UCT_IB_MLX5_QP_OPTPAR_LAG_TX_AFF;
+    if (dev->lag_level > 0) {
+        tx_port += path_index % dev->lag_level;
+    }
+    UCT_IB_MLX5DV_SET(qpc, qpc, lag_tx_port_affinity, tx_port);
 }
 #endif
 

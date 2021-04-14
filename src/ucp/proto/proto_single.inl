@@ -1,5 +1,5 @@
 /**
- * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ * Copyright (C) Mellanox Technologies Ltd. 2020-2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -45,79 +45,72 @@ ucp_proto_am_bcopy_single_send(ucp_request_t *req, ucp_am_id_t am_id,
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_am_bcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
-                                   ucp_lane_index_t lane,
-                                   uct_pack_callback_t pack_func, void *pack_arg,
-                                   size_t max_packed_size,
-                                   ucp_proto_complete_cb_t complete_func,
-                                   ucp_proto_complete_cb_t error_func)
+ucp_proto_single_status_handle(ucp_request_t *req,
+                               ucp_proto_complete_cb_t complete_func,
+                               ucp_lane_index_t lane, ucs_status_t status)
 {
-    ucs_status_t status;
-
-    ucs_assert(error_func != NULL);
-
-    status = ucp_proto_am_bcopy_single_send(req, am_id, lane, pack_func,
-                                            pack_arg, max_packed_size);
     if (ucs_likely(status == UCS_OK)) {
         if (complete_func != NULL) {
-            complete_func(req, status);
+            complete_func(req);
         }
     } else if (status == UCS_ERR_NO_RESOURCE) {
+        /* keep on pending queue */
         req->send.lane = lane;
         return UCS_ERR_NO_RESOURCE;
-    } else {
-        ucs_assert(status != UCS_INPROGRESS);
-        error_func(req, status);
+    } else if (status != UCS_INPROGRESS) {
+        ucp_proto_request_abort(req, status);
     }
-
     return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_am_zcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
-                                   const void *hdr, size_t hdr_size)
+ucp_proto_am_bcopy_single_progress(ucp_request_t *req, ucp_am_id_t am_id,
+                                   ucp_lane_index_t lane,
+                                   uct_pack_callback_t pack_func, void *pack_arg,
+                                   size_t max_packed_size,
+                                   ucp_proto_complete_cb_t complete_func)
 {
-    ucp_ep_t *ep                         = req->send.ep;
+    ucs_status_t status;
+
+    status = ucp_proto_am_bcopy_single_send(req, am_id, lane, pack_func,
+                                            pack_arg, max_packed_size);
+    return ucp_proto_single_status_handle(req, complete_func, lane, status);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
+                                ucp_proto_send_single_cb_t send_func,
+                                const char *name)
+{
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucp_datatype_iter_t next_iter;
     ucs_status_t status;
     ucp_md_map_t md_map;
     uct_iov_t iov;
 
-    ucs_assert(req->send.dt_iter.offset == 0);
+    ucs_assert(req->send.state.dt_iter.offset == 0);
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         md_map = (spriv->reg_md == UCP_NULL_RESOURCE) ? 0 : UCS_BIT(spriv->reg_md);
         status = ucp_proto_request_zcopy_init(req, md_map,
-                                              ucp_proto_request_zcopy_completion);
+                                              ucp_proto_request_zcopy_completion,
+                                              uct_mem_flags);
         if (status != UCS_OK) {
-            ucp_proto_request_zcopy_complete(req, status);
+            ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */
         }
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    ucp_datatype_iter_next_iov(&req->send.dt_iter, spriv->super.memh_index,
+    ucp_datatype_iter_next_iov(&req->send.state.dt_iter, spriv->super.memh_index,
                                SIZE_MAX, &next_iter, &iov);
-    status = uct_ep_am_zcopy(ep->uct_eps[spriv->super.lane], am_id, hdr,
-                             hdr_size, &iov, 1, 0, &req->send.state.uct_comp);
-    UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, "am_zcopy_only", iov.length,
-                                           status);
-    if (ucs_likely(status == UCS_OK)) {
-        /* fastpath is UCS_OK */
-    } else if (status == UCS_INPROGRESS) {
-        /* completion callback will be called */
-        return UCS_OK;
-    } else if (status == UCS_ERR_NO_RESOURCE) {
-        /* keep on pending queue */
-        req->send.lane = spriv->super.lane;
-        return UCS_ERR_NO_RESOURCE;
-    }
+    status = send_func(req, spriv, &iov);
+    UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, name, iov.length, status);
 
-    /* complete the request with OK or error */
-    ucp_proto_request_zcopy_complete(req, status);
-    return UCS_OK;
+    return ucp_proto_single_status_handle(
+            req, ucp_proto_request_zcopy_complete_success, spriv->super.lane,
+            status);
 }
 
 #endif

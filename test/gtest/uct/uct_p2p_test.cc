@@ -43,7 +43,8 @@ std::vector<const resource*> uct_p2p_test::enum_resources(const std::string& tl_
         }
     }
 
-    return filter_resources(all_resources, tl_name);
+    return filter_resources<p2p_resource>(all_resources,
+                                          resource::is_equal_tl_name, tl_name);
 }
 
 uct_p2p_test::uct_p2p_test(size_t rx_headroom,
@@ -147,8 +148,8 @@ void uct_p2p_test::test_xfer_print(O& os, send_func_t send, size_t length,
 void uct_p2p_test::test_xfer_multi(send_func_t send, size_t min_length,
                                    size_t max_length, unsigned flags)
 {
-
-    for (int mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; mem_type++) {
+    for (size_t i = 0; i < mem_buffer::supported_mem_types().size(); ++i) {
+        ucs_memory_type_t mem_type = mem_buffer::supported_mem_types()[i];
         /* test mem type if md supports mem type
          * (or) if HOST MD can register mem type
          */
@@ -319,6 +320,11 @@ uct_completion_t *uct_p2p_test::comp() {
     } else {
         return &m_completion.uct;
     }
+}
+
+void uct_p2p_test::disable_comp()
+{
+    m_null_completion = true;
 }
 
 void uct_p2p_test::completion_cb(uct_completion_t *self) {

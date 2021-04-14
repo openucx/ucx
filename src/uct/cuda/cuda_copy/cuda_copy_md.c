@@ -30,12 +30,17 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags            = UCT_MD_FLAG_REG;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->cap.alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->cap.detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
-    md_attr->cap.max_alloc        = 0;
+    md_attr->cap.max_alloc        = SIZE_MAX;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = 0;
     md_attr->reg_cost             = ucs_linear_func_make(0, 0);
@@ -82,9 +87,13 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 
     result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
                                    (CUdeviceptr)(address));
-    if ((result == CUDA_SUCCESS) && (memType == CU_MEMORYTYPE_HOST)) {
-        /* memory is allocated with cudaMallocHost which is already registered */
-        *memh_p = NULL;
+    if ((result == CUDA_SUCCESS) && ((memType == CU_MEMORYTYPE_HOST)    ||
+                                     (memType == CU_MEMORYTYPE_UNIFIED) ||
+                                     (memType == CU_MEMORYTYPE_DEVICE))) {
+        /* only host memory not allocated by cuda needs to be registered */
+        /* using deadbeef as VA to avoid gtest error */
+        UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
+        *memh_p = (void *)0xdeadbeef;
         return UCS_OK;
     }
 
@@ -107,7 +116,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     void *address = (void *)memh;
     ucs_status_t status;
 
-    if (address == NULL) {
+    if (address == (void*)0xdeadbeef) {
         return UCS_OK;
     }
 
@@ -119,6 +128,50 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
     return UCS_OK;
 }
 
+static ucs_status_t uct_cuda_copy_mem_alloc(uct_md_h md, size_t *length_p,
+                                            void **address_p,
+                                            ucs_memory_type_t mem_type,
+                                            unsigned flags,
+                                            const char *alloc_name,
+                                            uct_mem_h *memh_p)
+{
+    ucs_status_t status;
+    int active;
+
+    if ((mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
+        (mem_type != UCS_MEMORY_TYPE_CUDA)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    UCT_CUDADRV_CTX_ACTIVE(active);
+    if (!active) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    if (mem_type == UCS_MEMORY_TYPE_CUDA) {
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc((CUdeviceptr*)address_p,
+                                                     *length_p));
+    } else {
+        status = 
+            UCT_CUDADRV_FUNC_LOG_ERR(cuMemAllocManaged((CUdeviceptr*)address_p,
+                                                       *length_p,
+                                                       CU_MEM_ATTACH_GLOBAL));
+    }
+
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *memh_p = *address_p;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_cuda_copy_mem_free(uct_md_h md, uct_mem_h memh)
+{
+    return UCT_CUDADRV_FUNC_LOG_ERR(cuMemFree((CUdeviceptr)memh));
+}
+
+
 static void uct_cuda_copy_md_close(uct_md_h uct_md) {
     uct_cuda_copy_md_t *md = ucs_derived_of(uct_md, uct_cuda_copy_md_t);
 
@@ -126,13 +179,16 @@ static void uct_cuda_copy_md_close(uct_md_h uct_md) {
 }
 
 static uct_md_ops_t md_ops = {
-    .close               = uct_cuda_copy_md_close,
-    .query               = uct_cuda_copy_md_query,
-    .mkey_pack           = uct_cuda_copy_mkey_pack,
-    .mem_reg             = uct_cuda_copy_mem_reg,
-    .mem_dereg           = uct_cuda_copy_mem_dereg,
-    .mem_query           = uct_cuda_base_mem_query,
-    .detect_memory_type  = uct_cuda_base_detect_memory_type,
+    .close                  = uct_cuda_copy_md_close,
+    .query                  = uct_cuda_copy_md_query,
+    .mem_alloc              = uct_cuda_copy_mem_alloc,
+    .mem_free               = uct_cuda_copy_mem_free,
+    .mkey_pack              = uct_cuda_copy_mkey_pack,
+    .mem_reg                = uct_cuda_copy_mem_reg,
+    .mem_dereg              = uct_cuda_copy_mem_dereg,
+    .mem_query              = uct_cuda_base_mem_query,
+    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
+    .detect_memory_type     = uct_cuda_base_detect_memory_type
 };
 
 static ucs_status_t

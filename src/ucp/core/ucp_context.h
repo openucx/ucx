@@ -18,6 +18,7 @@
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
+#include <ucs/datastruct/bitmap.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
@@ -78,8 +79,8 @@ typedef struct ucp_context_config {
     int                                    tm_sw_rndv;
     /** Pack debug information in worker address */
     int                                    address_debug_info;
-    /** Maximal size of worker name for debugging */
-    unsigned                               max_worker_name;
+    /** Maximal size of worker address name for debugging */
+    unsigned                               max_worker_address_name;
     /** Atomic mode */
     ucp_atomic_mode_t                      atomic_mode;
     /** If use mutex for MT support or not */
@@ -100,8 +101,6 @@ typedef struct ucp_context_config {
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
     int                                    unified_mode;
-    /** Enable cm wireup-and-close protocol for client-server connections */
-    ucs_ternary_value_t                    sockaddr_cm_enable;
     /** Enable cm wireup message exchange to select the best transports
      *  for all lanes after cm phase is done */
     int                                    cm_use_all_devices;
@@ -110,7 +109,7 @@ typedef struct ucp_context_config {
     /** Enable new protocol selection logic */
     int                                    proto_enable;
     /** Time period between keepalive rounds (0 - disabled) */
-    ucs_time_t                             keepalive_timeout;
+    double                                 keepalive_interval;
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
@@ -125,7 +124,7 @@ struct ucp_config {
      *  and acceleration devices */
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
-    ucs_config_names_array_t               tls;
+    ucs_config_allow_list_t                tls;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
@@ -136,6 +135,8 @@ struct ucp_config {
     int                                    warn_invalid_config;
     /** This config environment prefix */
     char                                   *env_prefix;
+    /** MD to compare for transport selection scores */
+    char                                   *selection_cmp;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
 };
@@ -201,13 +202,13 @@ typedef struct ucp_context {
     ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
-    uint64_t                      tl_bitmap;  /* Cached map of tl resources used by workers.
+    ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
                                                * Not all resources may be used if unified
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
 
     /* Mask of memory type communication resources */
-    uint64_t                      mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
+    ucp_tl_bitmap_t               mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
 
     struct {
 
@@ -238,15 +239,8 @@ typedef struct ucp_context {
         unsigned                  num_alloc_methods;
 
         /* Cached map of components which support CM capability */
-        uint64_t                  cm_cmpts_bitmap;
+        ucp_tl_bitmap_t           cm_cmpts_bitmap;
 
-        /* Bitmap of sockaddr auxiliary transports to pack for client/server flow */
-        uint64_t                  sockaddr_aux_rscs_bitmap;
-
-        /* Array of sockaddr transports indexes.
-         * The indexes appear in the configured priority order */
-        ucp_rsc_index_t           sockaddr_tl_ids[UCP_MAX_RESOURCES];
-        ucp_rsc_index_t           num_sockaddr_tls;
         /* Array of CMs indexes. The indexes appear in the configured priority
          * order. */
         ucp_rsc_index_t           cm_cmpt_idxs[UCP_MAX_RESOURCES];
@@ -254,14 +248,21 @@ typedef struct ucp_context {
 
         /* Configuration supplied by the user */
         ucp_context_config_t      ext;
-        
+
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
 
+        /* Time period between keepalive rounds */
+        ucs_time_t                keepalive_interval;
+
+        /* MD to compare for transport selection scores */
+        char                      *selection_cmp;
     } config;
 
-    /* All configurations about multithreading support */
+    /* Configuration of multi-threadiing support */
     ucp_mt_lock_t                 mt_lock;
+
+    char                          name[UCP_ENTITY_NAME_MAX];
 
 } ucp_context_t;
 
@@ -376,14 +377,15 @@ void ucp_context_uct_atomic_iface_flags(ucp_context_h context,
 
 const char * ucp_find_tl_name_by_csum(ucp_context_t *context, uint16_t tl_name_csum);
 
-const char* ucp_tl_bitmap_str(ucp_context_h context, uint64_t tl_bitmap,
-                              char *str, size_t max_str_len);
+const char *ucp_tl_bitmap_str(ucp_context_h context,
+                              const ucp_tl_bitmap_t *tl_bitmap, char *str,
+                              size_t max_str_len);
 
 const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
                                   size_t max_str_len);
 
-ucs_memory_type_t
-ucp_memory_type_detect_mds(ucp_context_h context, const void *address, size_t length);
+void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
+                                size_t length, ucs_memory_info_t *mem_info);
 
 /**
  * Calculate a small value to overcome float imprecision
@@ -445,51 +447,62 @@ static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h cont
             !context->memtype_cache->pgtable.num_regions);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_memory_type_detect(ucp_context_h context, const void *address, size_t length)
+static UCS_F_ALWAYS_INLINE void
+ucp_memory_info_set_host(ucs_memory_info_t *mem_info)
 {
-    ucs_memory_type_t mem_type;
+    mem_info->type    = UCS_MEMORY_TYPE_HOST;
+    mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
+                  ucs_memory_info_t *mem_info)
+{
     ucs_status_t status;
 
     if (ucs_likely(context->num_mem_type_detect_mds == 0)) {
-        return UCS_MEMORY_TYPE_HOST;
+        goto out_host_mem;
     }
 
     if (ucs_likely(context->memtype_cache != NULL)) {
         if (!context->memtype_cache->pgtable.num_regions) {
-            return UCS_MEMORY_TYPE_HOST;
+            goto out_host_mem;
         }
 
         status = ucs_memtype_cache_lookup(context->memtype_cache, address,
-                                          length, &mem_type);
-        if (status != UCS_OK) {
+                                          length, mem_info);
+        if (ucs_likely(status != UCS_OK)) {
             ucs_assert(status == UCS_ERR_NO_ELEM);
-            return UCS_MEMORY_TYPE_HOST;
+            goto out_host_mem;
         }
 
-        if (mem_type != UCS_MEMORY_TYPE_LAST) {
-            return mem_type;
+        if ((mem_info->type != UCS_MEMORY_TYPE_UNKNOWN) &&
+            ((mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN))) {
+            return;
         }
 
-        /* mem_type is UCS_MEMORY_TYPE_LAST: fall thru to memory detection by
-         * UCT memory domains */
+        /* Fall thru to slow-path memory type and system device detection by UCT
+         * memory domains. In any case, the memory type cache is not expected to
+         * return HOST memory type.
+         */
+        ucs_assert(mem_info->type != UCS_MEMORY_TYPE_HOST);
     }
 
-    return ucp_memory_type_detect_mds(context, address, length);
+    ucp_memory_detect_slowpath(context, address, length, mem_info);
+    return;
+
+out_host_mem:
+    ucp_memory_info_set_host(mem_info);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_memory_type_t
-ucp_get_memory_type(ucp_context_h context, const void *address,
-                    size_t length, ucs_memory_type_t memory_type)
-{
-    return (memory_type == UCS_MEMORY_TYPE_UNKNOWN) ?
-           ucp_memory_type_detect(context, address, length) : memory_type;
-}
 
-uint64_t ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
+ucp_tl_bitmap_t
+ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name);
 
-uint64_t ucp_context_dev_idx_tl_bitmap(ucp_context_h context,
-                                       ucp_rsc_index_t dev_idx);
+
+ucp_tl_bitmap_t
+ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx);
+
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
 

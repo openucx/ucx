@@ -1,5 +1,5 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
 *
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017.  ALL RIGHTS RESERVED
@@ -46,6 +46,7 @@ struct resource {
     virtual ~resource() {};
     virtual std::string name() const;
     uct_component_h         component;
+    std::string             component_name;
     std::string             md_name;
     ucs_cpu_set_t           local_cpus;
     std::string             tl_name;
@@ -54,23 +55,31 @@ struct resource {
     uct_device_type_t       dev_type;
     ucs::sock_addr_storage  listen_sock_addr;     /* sockaddr to listen on */
     ucs::sock_addr_storage  connect_sock_addr;    /* sockaddr to connect to */
+    ucs::sock_addr_storage  source_sock_addr;     /* sockaddr to connect from */
     int                     variant;
 
     resource();
-    resource(uct_component_h component, const std::string& md_name,
-             const ucs_cpu_set_t& local_cpus, const std::string& tl_name,
-             const std::string& dev_name, uct_device_type_t dev_type);
-    resource(uct_component_h component, const uct_md_attr_t& md_attr,
+    resource(uct_component_h component, const std::string& component_name,
+             const std::string& md_name, const ucs_cpu_set_t& local_cpus,
+             const std::string& tl_name, const std::string& dev_name,
+             uct_device_type_t dev_type);
+    resource(uct_component_h component, const uct_component_attr& cmpnt_attr,
+             const uct_md_attr_t& md_attr,
              const uct_md_resource_desc_t& md_resource,
              const uct_tl_resource_desc_t& tl_resource);
+    static bool is_equal_tl_name(const resource &rsc, const std::string &name);
+    static bool
+    is_equal_component_name(const resource &rsc, const std::string &name);
 };
 
 struct resource_speed : public resource {
     double bw;
 
     resource_speed() : resource(), bw(0) { }
-    resource_speed(uct_component_h component, const uct_worker_h& worker,
-                   const uct_md_h& md, const uct_md_attr_t& md_attr,
+    resource_speed(uct_component_h component,
+                   const uct_component_attr& cmpnt_attr,
+                   const uct_worker_h& worker, const uct_md_h& md,
+                   const uct_md_attr_t& md_attr,
                    const uct_md_resource_desc_t& md_resource,
                    const uct_tl_resource_desc_t& tl_resource);
 };
@@ -104,12 +113,6 @@ public:
      */
     static std::vector<const resource*> enum_resources(const std::string& tl_name);
 
-    /* By default generate test variant for all tls. If variant is specific to
-     * the particular transport tl_name need to be specified accordingly */
-    static void generate_test_variant(int variant,
-                                      const std::string &variant_name,
-                                      std::vector<resource>& test_res,
-                                      const std::string &tl_name="");
     uct_test();
     virtual ~uct_test();
 
@@ -182,37 +185,25 @@ protected:
         void revoke_ep(unsigned index);
         void destroy_eps();
         void connect(unsigned index, entity& other, unsigned other_index);
-        void connect(unsigned index, entity& other, unsigned other_index,
-                     const ucs::sock_addr_storage &remote_addr,
-                     uct_cm_ep_priv_data_pack_callback_t pack_cb,
-                     uct_cm_ep_client_connect_callback_t connect_cb,
-                     uct_ep_disconnect_cb_t disconnect_cb,
-                     void *user_data);
         void connect_to_iface(unsigned index, entity& other);
         void connect_to_ep(unsigned index, entity& other,
                            unsigned other_index);
-        void connect_to_sockaddr(unsigned index, entity& other,
+        void connect_to_sockaddr(unsigned index,
                                  const ucs::sock_addr_storage &remote_addr,
                                  uct_cm_ep_priv_data_pack_callback_t pack_cb,
                                  uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
                                  void *user_sata);
 
-        void listen(const ucs::sock_addr_storage &listen_addr,
-                    const uct_listener_params_t &params);
+        ucs_status_t listen(const ucs::sock_addr_storage &listen_addr,
+                            const uct_listener_params_t &params);
         void disconnect(uct_ep_h ep);
 
         void flush() const;
 
-        size_t                   max_conn_priv;
+        ucs_async_context_t &async() const;
 
-        class scoped_async_lock {
-        public:
-            scoped_async_lock(entity &e);
-            ~scoped_async_lock();
-        private:
-            entity &m_entity;
-        };
+        size_t                   max_conn_priv;
 
     private:
         class async_wrapper {
@@ -224,8 +215,6 @@ protected:
         private:
             async_wrapper(const async_wrapper &);
         };
-
-        entity(const entity&);
 
 
         void connect_p2p_ep(uct_ep_h from, uct_ep_h to);
@@ -303,16 +292,16 @@ protected:
         bool             aux_pipe_init;
     };
 
-    template <typename T>
-    static std::vector<const resource*> filter_resources(const std::vector<T>& resources,
-                                                         const std::string& tl_name)
+    template<typename T>
+    static std::vector<const resource*>
+    filter_resources(const std::vector<T> &resources,
+                     bool is_equal(const resource&, const std::string&),
+                     const std::string &filter)
     {
         std::vector<const resource*> result;
-        for (typename std::vector<T>::const_iterator iter = resources.begin();
-                        iter != resources.end(); ++iter)
-        {
-            if (tl_name.empty() || (iter->tl_name == tl_name)) {
-                result.push_back(&*iter);
+        for (size_t i = 0; i < resources.size(); ++i) {
+            if (filter.empty() || is_equal(resources[i], filter)) {
+                result.push_back(&resources[i]);
             }
         }
         return result;
@@ -369,7 +358,10 @@ protected:
     virtual bool has_rc_or_dc() const;
     virtual bool has_ib() const;
     virtual bool has_mm() const;
+    virtual bool has_cuda_ipc() const;
     virtual bool has_cma() const;
+    virtual bool has_ugni() const;
+    virtual bool has_gpu() const;
 
     bool is_caps_supported(uint64_t required_flags);
     bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
@@ -389,19 +381,31 @@ protected:
     static void set_cm_sockaddr_resources(uct_component_h cmpt, const char *cmpt_name,
                                           ucs_cpu_set_t local_cpus,
                                           std::vector<resource>& all_resources);
-    static void set_interface_rscs(uct_component_h comt, const char * name,
-                                   ucs_cpu_set_t local_cpus, struct ifaddrs *ifa,
+    static void set_interface_rscs(uct_component_h cmpt, const char *cmpt_name,
+                                   const char *md_name, ucs_cpu_set_t local_cpus,
+                                   struct ifaddrs *ifa,
                                    std::vector<resource>& all_resources);
     static void init_sockaddr_rsc(resource *rsc, struct sockaddr *listen_addr,
-                                  struct sockaddr *connect_addr, size_t size);
-    uct_test::entity* create_entity(size_t rx_headroom,
-                                    uct_error_handler_t err_handler = NULL,
-                                    uct_tag_unexp_eager_cb_t eager_cb = NULL,
-                                    uct_tag_unexp_rndv_cb_t rndv_cb = NULL,
-                                    void *eager_arg = NULL,
-                                    void *rndv_arg = NULL,
-                                    uct_async_event_cb_t async_event_cb = NULL,
-                                    void *async_event_arg = NULL);
+                                  struct sockaddr *connect_addr, size_t size,
+                                  bool init_src);
+    uct_test::entity *
+    create_entity(size_t rx_headroom, uct_error_handler_t err_handler = NULL,
+                  uct_tag_unexp_eager_cb_t eager_cb = NULL,
+                  uct_tag_unexp_rndv_cb_t rndv_cb = NULL,
+                  void *eager_arg = NULL, void *rndv_arg = NULL,
+                  uct_async_event_cb_t async_event_cb = NULL,
+                  void *async_event_arg = NULL, size_t am_alignment = 0ul,
+                  size_t am_align_offset = 0ul);
+    void
+    create_connected_entities(size_t rx_headroom,
+                              uct_error_handler_t err_handler = NULL,
+                              uct_tag_unexp_eager_cb_t eager_cb = NULL,
+                              uct_tag_unexp_rndv_cb_t rndv_cb = NULL,
+                              void *eager_arg = NULL, void *rndv_arg = NULL,
+                              uct_async_event_cb_t async_event_cb = NULL,
+                              void *async_event_arg = NULL,
+                              size_t am_alignment = 0ul,
+                              size_t am_align_offset = 0ul);
     uct_test::entity* create_entity(uct_iface_params_t &params);
     uct_test::entity* create_entity();
     int max_connections();
@@ -441,8 +445,9 @@ protected:
     ud_mlx5,            \
     cm
 
-#define UCT_TEST_SOCKADDR_TLS \
-    sockaddr
+
+#define UCT_TEST_CMS rdmacm, tcp
+
 
 #define UCT_TEST_NO_SELF_TLS \
     UCT_TEST_IB_TLS,         \
@@ -497,8 +502,21 @@ protected:
 #define UCT_INSTANTIATE_NO_SELF_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_SELF_TLS)
 
+
+/**
+ * Instantiate the parametrized test case for all sockaddr CMs.
+ *
+ * @param _test_case  Test case class, derived from @ref test_uct_sockaddr.
+ */
 #define UCT_INSTANTIATE_SOCKADDR_TEST_CASE(_test_case) \
-    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_SOCKADDR_TLS)
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_CM_TEST_CASE, _test_case, UCT_TEST_CMS)
+
+
+#define _UCT_INSTANTIATE_CM_TEST_CASE(_test_case, _cm_name) \
+    INSTANTIATE_TEST_CASE_P(_cm_name, _test_case, \
+                            testing::ValuesIn(_test_case::enum_cm_resources( \
+                                    UCS_PP_QUOTE(_cm_name))));
+
 
 /**
  * Instantiate the parametrized test case for the RC/DC transports.

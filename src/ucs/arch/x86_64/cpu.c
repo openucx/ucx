@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -19,6 +20,8 @@
 
 #define X86_CPUID_GENUINEINTEL    "GenuntelineI" /* GenuineIntel in magic notation */
 #define X86_CPUID_AUTHENTICAMD    "AuthcAMDenti" /* AuthenticAMD in magic notation */
+#define X86_CPUID_CENTAURHAULS    "CentaulsaurH" /* CentaurHauls in magic notation */
+#define X86_CPUID_SHANGHAI        "  Shai  angh" /* Shanghai in magic notation */
 #define X86_CPUID_GET_MODEL       0x00000001u
 #define X86_CPUID_GET_BASE_VALUE  0x00000000u
 #define X86_CPUID_GET_EXTD_VALUE  0x00000007u
@@ -103,7 +106,7 @@ typedef struct ucs_x86_cpu_cache_size_codes {
 } ucs_x86_cpu_cache_size_codes_t;
 
 
-ucs_ternary_value_t ucs_arch_x86_enable_rdtsc = UCS_TRY;
+ucs_ternary_auto_value_t ucs_arch_x86_enable_rdtsc = UCS_TRY;
 
 static const ucs_x86_cpu_cache_info_t x86_cpu_cache[] = {
     [UCS_CPU_CACHE_L1d] = {.level = 1, .type = X86_CPU_CACHE_TYPE_DATA},
@@ -320,7 +323,7 @@ double ucs_arch_get_clocks_per_sec()
 
 ucs_cpu_model_t ucs_arch_get_cpu_model()
 {
-    ucs_x86_cpu_version_t version;
+    ucs_x86_cpu_version_t version = {}; /* Silence static checker */
     uint32_t _ebx, _ecx, _edx;
     uint32_t model, family;
 
@@ -334,53 +337,72 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
     if (family == 0xf) {
         family += version.ext_family;
     }
-    if ((family == 0x6) || (family == 0xf) || (family == 0x17)) {
+    if ((family == 0x6) || (family == 0x7) || (family == 0xf) || (family == 0x17)) {
         model = (version.ext_model << 4) | model;
     }
 
-    /* Check known CPUs */
-    if (family == 0x06) {
-       switch (model) {
-       case 0x3a:
-       case 0x3e:
-           return UCS_CPU_MODEL_INTEL_IVYBRIDGE;
-       case 0x2a:
-       case 0x2d:
-           return UCS_CPU_MODEL_INTEL_SANDYBRIDGE;
-       case 0x1a:
-       case 0x1e:
-       case 0x1f:
-       case 0x2e:
-           return UCS_CPU_MODEL_INTEL_NEHALEM;
-       case 0x25:
-       case 0x2c:
-       case 0x2f:
-           return UCS_CPU_MODEL_INTEL_WESTMERE;
-       case 0x3c:
-       case 0x3f:
-       case 0x45:
-       case 0x46:
-           return UCS_CPU_MODEL_INTEL_HASWELL;
-       case 0x3d:
-       case 0x47:
-       case 0x4f:
-       case 0x56:
-           return UCS_CPU_MODEL_INTEL_BROADWELL;
-       case 0x5e:
-       case 0x4e:
-       case 0x55:
-           return UCS_CPU_MODEL_INTEL_SKYLAKE;
-       }
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_ZHAOXIN) {
+        if (family == 0x06) {
+            switch (model) {
+            case 0x0f:
+                return UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG;
+            }
+        }
+
+        if (family == 0x07) {
+            switch (model) {
+            case 0x1b:
+                return UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU;
+            case 0x3b:
+                return UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI;
+            }
+        }
+    } else {
+        /* Check known CPUs */
+        if (family == 0x06) {
+            switch (model) {
+            case 0x3a:
+            case 0x3e:
+                return UCS_CPU_MODEL_INTEL_IVYBRIDGE;
+            case 0x2a:
+            case 0x2d:
+                return UCS_CPU_MODEL_INTEL_SANDYBRIDGE;
+            case 0x1a:
+            case 0x1e:
+            case 0x1f:
+            case 0x2e:
+                return UCS_CPU_MODEL_INTEL_NEHALEM;
+            case 0x25:
+            case 0x2c:
+            case 0x2f:
+                return UCS_CPU_MODEL_INTEL_WESTMERE;
+            case 0x3c:
+            case 0x3f:
+            case 0x45:
+            case 0x46:
+                return UCS_CPU_MODEL_INTEL_HASWELL;
+            case 0x3d:
+            case 0x47:
+            case 0x4f:
+            case 0x56:
+                return UCS_CPU_MODEL_INTEL_BROADWELL;
+            case 0x5e:
+            case 0x4e:
+            case 0x55:
+                return UCS_CPU_MODEL_INTEL_SKYLAKE;
+            }
+        }
+
+        if (family == 0x17) {
+            switch (model) {
+            case 0x29:
+                return UCS_CPU_MODEL_AMD_NAPLES;
+            case 0x31:
+                return UCS_CPU_MODEL_AMD_ROME;
+            }
+        }
     }
 
-    if (family == 0x17) {
-        switch (model) {
-        case 0x29:
-            return UCS_CPU_MODEL_AMD_NAPLES;
-        case 0x31:
-            return UCS_CPU_MODEL_AMD_ROME;
-        }
-    } 
     return UCS_CPU_MODEL_UNKNOWN;
 }
 
@@ -447,7 +469,7 @@ int ucs_arch_get_cpu_flag()
 
 ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
 {
-    ucs_x86_cpu_registers reg;
+    ucs_x86_cpu_registers reg = {}; /* Silence static checker */
 
     ucs_x86_cpuid(X86_CPUID_GET_BASE_VALUE,
                   ucs_unaligned_ptr(&reg.eax), ucs_unaligned_ptr(&reg.ebx),
@@ -456,6 +478,9 @@ ucs_cpu_vendor_t ucs_arch_get_cpu_vendor()
         return UCS_CPU_VENDOR_INTEL;
     } else if (!memcmp(reg.id, X86_CPUID_AUTHENTICAMD, sizeof(X86_CPUID_AUTHENTICAMD) - 1)) {
         return UCS_CPU_VENDOR_AMD;
+    } else if (!memcmp(reg.id, X86_CPUID_CENTAURHAULS, sizeof(X86_CPUID_CENTAURHAULS) - 1) ||
+               !memcmp(reg.id, X86_CPUID_SHANGHAI, sizeof(X86_CPUID_SHANGHAI) - 1)) {
+        return UCS_CPU_VENDOR_ZHAOXIN;
     }
 
     return UCS_CPU_VENDOR_UNKNOWN;
@@ -470,7 +495,8 @@ static size_t ucs_cpu_memcpy_thresh(size_t user_val, size_t auto_val)
 
     if (((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_INTEL) &&
          (ucs_arch_get_cpu_model() >= UCS_CPU_MODEL_INTEL_HASWELL)) ||
-        (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD)) {
+        (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_AMD) ||
+        (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_ZHAOXIN)) {
         return auto_val;
     } else {
         return UCS_MEMUNITS_INF;
@@ -492,9 +518,9 @@ void ucs_cpu_init()
 
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 {
+    ucs_x86_cpu_registers reg = {}; /* Silence static checker */
     ucs_x86_cache_line_reg_info_t cache_info;
     ucs_x86_cache_line_reg_info_t line_info;
-    ucs_x86_cpu_registers reg;
     uint32_t sets;
     uint32_t i, t, r, l4;
     uint32_t max_iter;

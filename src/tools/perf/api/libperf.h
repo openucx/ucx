@@ -1,7 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) The University of Tennessee and The University 
+* Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -16,12 +16,8 @@ BEGIN_C_DECLS
 
 /** @file libperf.h */
 
-#include <sys/uio.h>
 #include <uct/api/uct.h>
 #include <ucp/api/ucp.h>
-#include <ucs/sys/math.h>
-#include <ucs/sys/stubs.h>
-#include <ucs/type/status.h>
 
 
 typedef enum {
@@ -48,7 +44,8 @@ typedef enum {
 
 typedef enum {
     UCX_PERF_TEST_TYPE_PINGPONG,         /* Ping-pong mode */
-    UCX_PERF_TEST_TYPE_PINGPONG_WFE,     /* Ping-pong mode with wait for event */
+    UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM,/* Ping-pong mode with
+                                            ucp_worker_wait_mem() */
     UCX_PERF_TEST_TYPE_STREAM_UNI,       /* Unidirectional stream */
     UCX_PERF_TEST_TYPE_STREAM_BI,        /* Bidirectional stream */
     UCX_PERF_TEST_TYPE_LAST
@@ -63,6 +60,7 @@ typedef enum {
 
 typedef enum {
     UCT_PERF_DATA_LAYOUT_SHORT,
+    UCT_PERF_DATA_LAYOUT_SHORT_IOV,
     UCT_PERF_DATA_LAYOUT_BCOPY,
     UCT_PERF_DATA_LAYOUT_ZCOPY,
     UCT_PERF_DATA_LAYOUT_LAST
@@ -70,7 +68,7 @@ typedef enum {
 
 
 typedef enum {
-    UCX_PERF_WAIT_MODE_PROGRESS,     /* Repeatedly call progress */
+    UCX_PERF_WAIT_MODE_POLL,         /* Repeatedly call progress */
     UCX_PERF_WAIT_MODE_SLEEP,        /* Go to sleep */
     UCX_PERF_WAIT_MODE_SPIN,         /* Spin without calling progress */
     UCX_PERF_WAIT_MODE_LAST
@@ -190,7 +188,6 @@ typedef struct ucx_perf_params {
     size_t                 iov_stride;      /* Distance between starting address
                                                of consecutive IOV entries. It is
                                                similar to UCT uct_iov_t type stride */
-    size_t                 am_hdr_size;     /* Active message header size (included in message size) */
     size_t                 alignment;       /* Message buffer alignment */
     unsigned               max_outstanding; /* Maximal number of outstanding sends */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
@@ -208,12 +205,16 @@ typedef struct ucx_perf_params {
         char                   md_name[UCT_MD_NAME_MAX];      /* Memory domain name to use */
         uct_perf_data_layout_t data_layout; /* Data layout to use */
         unsigned               fc_window;   /* Window size for flow control <= UCX_PERF_TEST_MAX_FC_WINDOW */
+        size_t                 am_hdr_size; /* UCT Active Message header size
+                                               (included in message size) */
     } uct;
 
     struct {
         unsigned               nonblocking_mode; /* TBD */
         ucp_perf_datatype_t    send_datatype;
         ucp_perf_datatype_t    recv_datatype;
+        size_t                 am_hdr_size; /* UCP Active Message header size
+                                               (not included in message size) */
     } ucp;
 
 } ucx_perf_params_t;

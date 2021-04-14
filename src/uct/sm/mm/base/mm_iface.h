@@ -22,8 +22,12 @@
 
 
 enum {
-    UCT_MM_FIFO_ELEM_FLAG_OWNER  = UCS_BIT(0), /* new/old info */
-    UCT_MM_FIFO_ELEM_FLAG_INLINE = UCS_BIT(1), /* if inline or not */
+    /* FIFO element polarity, changes every cycle to indicate the element is
+       written by the sender */
+    UCT_MM_FIFO_ELEM_FLAG_OWNER  = UCS_BIT(0),
+
+    /* Whether the element data is inline or in receive descriptor */
+    UCT_MM_FIFO_ELEM_FLAG_INLINE = UCS_BIT(1),
 };
 
 
@@ -47,6 +51,19 @@ enum {
         uct_mm_md_t *md = ucs_derived_of((_iface)->super.super.md, uct_mm_md_t); \
         uct_mm_md_mapper_call(md, _func, ## __VA_ARGS__); \
     })
+
+
+#define uct_mm_iface_trace_am(_iface, _type, _flags, _am_id, _data, _length, \
+                              _elem_sn) \
+    uct_iface_trace_am(&(_iface)->super.super, _type, _am_id, _data, _length, \
+                       "%cX [%lu] %c%c", \
+                       ((_type) == UCT_AM_TRACE_TYPE_RECV) ? 'R' : \
+                       ((_type) == UCT_AM_TRACE_TYPE_SEND) ? 'T' : \
+                                                             '?', \
+                       (_elem_sn), \
+                       ((_flags) & UCT_MM_FIFO_ELEM_FLAG_OWNER) ? 'o' : '-', \
+                       ((_flags) & UCT_MM_FIFO_ELEM_FLAG_INLINE) ? 'i' : '-')
+
 
 /* AIMD (additive increase/multiplicative decrease) algorithm adopted for FIFO
  * polling mechanism to adjust FIFO polling window.
@@ -81,9 +98,10 @@ typedef struct uct_mm_iface_config {
     size_t                   fifo_max_poll;       /* Maximal RX completions to pick
                                                    * during RX poll */
     double                   release_fifo_factor; /* Tail index update frequency */
-    ucs_ternary_value_t      hugetlb_mode;        /* Enable using huge pages for
+    ucs_ternary_auto_value_t hugetlb_mode;        /* Enable using huge pages for
                                                    * shared memory buffers */
     unsigned                 fifo_elem_size;      /* Size of the FIFO element size */
+    int                      error_handling; /* Exposing of error handling cap */
     uct_iface_mpool_config_t mp;
 } uct_mm_iface_config_t;
 
@@ -113,7 +131,7 @@ typedef struct uct_mm_fifo_ctl {
     volatile uint64_t         tail;           /* How much was consumed */
     struct {
         pid_t                 pid;            /* Process owner pid */
-        ucs_time_t            starttime;      /* Process starttime */
+        ucs_time_t            start_time;     /* Process starttime */
     } owner;
 } UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_mm_fifo_ctl_t;
 
@@ -204,6 +222,7 @@ typedef struct uct_mm_iface {
         unsigned            fifo_elem_size;
         unsigned            seg_size;         /* size of the receive descriptor (for payload)*/
         unsigned            fifo_max_poll;
+        uint64_t            extra_cap_flags;
     } config;
 } uct_mm_iface_t;
 
@@ -212,13 +231,14 @@ typedef struct uct_mm_iface {
  * Define a memory-mapper transport for MM.
  *
  * @param _name         Component name token
- * @param _md_ops       Memory domain operations, of type uct_mm_md_ops_t.
+ * @param _md_ops       Memory domain operations, of type uct_mm_md_ops_t
  * @param _rkey_unpack  Remote key unpack function
  * @param _rkey_release Remote key release function
- * @param _cfg_prefix   Prefix for configuration variables.
+ * @param _cfg_prefix   Prefix for configuration variables
+ * @param _cfg_table    Configuration table
  */
 #define UCT_MM_TL_DEFINE(_name, _md_ops, _rkey_unpack, _rkey_release, \
-                         _cfg_prefix) \
+                         _cfg_prefix, _cfg_table) \
     \
     UCT_MM_COMPONENT_DEFINE(uct_##_name##_component, _name, _md_ops, \
                             _rkey_unpack, _rkey_release, _cfg_prefix) \
@@ -227,8 +247,8 @@ typedef struct uct_mm_iface {
                   _name, \
                   uct_sm_base_query_tl_devices, \
                   uct_mm_iface_t, \
-                  "MM_", \
-                  uct_mm_iface_config_table, \
+                  _cfg_prefix, \
+                  _cfg_table, \
                   uct_mm_iface_config_t);
 
 

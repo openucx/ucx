@@ -54,6 +54,19 @@ static inline void ucs_ptr_map_destroy(ucs_ptr_map_t *map)
 }
 
 /**
+ * Returns whether the key is indirect or not.
+ *
+ * @param [in]  key     Key to object pointer.
+ *
+ * @return 0 - direct, otherside - indirect.
+ */
+static UCS_F_ALWAYS_INLINE int
+ucs_ptr_map_key_indirect(ucs_ptr_map_key_t key)
+{
+    return key & UCS_PTR_MAP_KEY_INDIRECT_FLAG;
+}
+
+/**
  * Put a pointer into the map.
  *
  * @param [in]  map       Container.
@@ -79,6 +92,7 @@ ucs_ptr_map_put(ucs_ptr_map_t *map, void *ptr, int indirect,
     if (ucs_likely(!indirect)) {
         *key = (uintptr_t)ptr;
         ucs_assert(!(*key & UCS_PTR_MAP_KEY_MIN_ALIGN));
+        ucs_assert(*key != 0);
         return UCS_OK;
     }
 
@@ -101,47 +115,32 @@ ucs_ptr_map_put(ucs_ptr_map_t *map, void *ptr, int indirect,
  *
  * @param [in]  map     Container to get the pointer value from.
  * @param [in]  key     Key to look up in the container.
- * @return object pointer on success, otherwise NULL.
- */
-static UCS_F_ALWAYS_INLINE void*
-ucs_ptr_map_get(const ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
-{
-    khiter_t iter;
-
-    if (ucs_likely(!(key & UCS_PTR_MAP_KEY_INDIRECT_FLAG))) {
-        return (void*)key;
-    }
-
-    iter = kh_get(ucs_ptr_map_impl, &map->hash, key);
-    return ucs_unlikely(iter == kh_end(&map->hash)) ? NULL :
-           kh_value(&map->hash, iter);
-}
-
-/**
- * Extract a pointer value from the map by its key.
+ * @param [in]  extract Whether to remove the key from the map.
+ * @param [out] ptr_p   If successful, set to the pointer found in the map.
  *
- * @param [in]  map     Container to get the pointer value from.
- * @param [in]  key     Key to look up in the container.
- * @return object pointer on success, otherwise NULL.
+ * @return UCS_OK if found, UCS_ERR_NO_ELEM if not found.
  */
-static UCS_F_ALWAYS_INLINE void*
-ucs_ptr_map_extract(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucs_ptr_map_get(ucs_ptr_map_t *map, ucs_ptr_map_key_t key, int extract,
+                void **ptr_p)
 {
     khiter_t iter;
-    void *value;
 
-    if (ucs_likely(!(key & UCS_PTR_MAP_KEY_INDIRECT_FLAG))) {
-        return (void*)key;
+    if (ucs_likely(!ucs_ptr_map_key_indirect(key))) {
+        *ptr_p = (void*)key;
+        return UCS_OK;
     }
 
     iter = kh_get(ucs_ptr_map_impl, &map->hash, key);
     if (ucs_unlikely(iter == kh_end(&map->hash))) {
-        return NULL;
+        return UCS_ERR_NO_ELEM;
     }
 
-    value = kh_value(&map->hash, iter);
-    kh_del(ucs_ptr_map_impl, &map->hash, iter);
-    return value;
+    *ptr_p = kh_value(&map->hash, iter);
+    if (extract) {
+        kh_del(ucs_ptr_map_impl, &map->hash, iter);
+    }
+    return UCS_OK;
 }
 
 /**
@@ -149,6 +148,7 @@ ucs_ptr_map_extract(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
  *
  * @param [in]  map     Container.
  * @param [in]  key     Key to object pointer.
+ *
  * @return       - UCS_OK on success
  *               - UCS_ERR_NO_ELEM if the key is not found in the internal hash
  *                 table.
@@ -156,8 +156,8 @@ ucs_ptr_map_extract(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucs_ptr_map_del(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)
 {
-    return ucs_likely(ucs_ptr_map_extract(map, key) != NULL) ?
-           UCS_OK : UCS_ERR_NO_ELEM;
+    void UCS_V_UNUSED *dummy;
+    return ucs_ptr_map_get(map, key, 1, &dummy);
 }
 
 END_C_DECLS

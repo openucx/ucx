@@ -15,8 +15,10 @@ BEGIN_C_DECLS
 
 /** @file libperf_int.h */
 
-#include <ucs/time/time.h>
 #include <ucs/async/async.h>
+#include <ucs/time/time.h>
+#include <ucs/sys/math.h>
+
 
 #if _OPENMP
 #include <omp.h>
@@ -102,6 +104,7 @@ struct ucx_perf_context {
             ucp_mem_h                  recv_memh;
             ucp_dt_iov_t               *send_iov;
             ucp_dt_iov_t               *recv_iov;
+            void                       *am_hdr;
         } ucp;
     };
 };

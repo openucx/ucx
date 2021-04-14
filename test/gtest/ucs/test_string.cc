@@ -6,6 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
+#include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/sys/string.h>
@@ -22,6 +23,39 @@ protected:
         ucs_string_buffer_cleanup(&mask_str);
     }
 };
+
+UCS_TEST_F(test_string, count_char) {
+    static const char *str1 = "/foo";
+    static const char *str2 = "/foo/bar";
+    size_t count;
+
+    count = ucs_string_count_char(str1, '/');
+    EXPECT_EQ(1, count);
+
+    count = ucs_string_count_char((const char*)UCS_PTR_BYTE_OFFSET(str1, 1),
+                                  '/');
+    EXPECT_EQ(0, count);
+
+    count = ucs_string_count_char(str2, '/');
+    EXPECT_EQ(2, count);
+
+    count = ucs_string_count_char((const char*)UCS_PTR_BYTE_OFFSET(str2, 1),
+                                  '/');
+    EXPECT_EQ(1, count);
+}
+
+UCS_TEST_F(test_string, common_prefix_len) {
+    static const char *str1 = "/foo";
+    static const char *str2 = "/foobar";
+    static const char *str3 = "foo/bar";
+    size_t common_length;
+
+    common_length = ucs_string_common_prefix_len(str1, str2);
+    EXPECT_EQ(4, common_length);
+
+    common_length = ucs_string_common_prefix_len(str1, str3);
+    EXPECT_EQ(0, common_length);
+}
 
 UCS_TEST_F(test_string, trim) {
     char str1[] = " foo ";
@@ -63,7 +97,18 @@ UCS_TEST_F(test_string, mask_str) {
     }
 }
 
+UCS_TEST_F(test_string, range_str) {
+    char buf[64];
+    EXPECT_EQ(std::string("1..10"),
+              ucs_memunits_range_str(1, 10, buf, sizeof(buf)));
+    EXPECT_EQ(std::string("10"),
+              ucs_memunits_range_str(10, 10, buf, sizeof(buf)));
+}
+
 class test_string_buffer : public ucs::test {
+protected:
+    void test_fixed(ucs_string_buffer_t *strb, size_t capacity);
+    void check_extract_mem(ucs_string_buffer_t *strb);
 };
 
 
@@ -117,16 +162,71 @@ UCS_TEST_F(test_string_buffer, rtrim) {
     ucs_string_buffer_cleanup(&strb);
 }
 
-UCS_TEST_F(test_string_buffer, fixed) {
+void test_string_buffer::test_fixed(ucs_string_buffer_t *strb, size_t capacity)
+{
+    ucs_string_buffer_appendf(strb, "%s", "im");
+    ucs_string_buffer_appendf(strb, "%s", "mrmeeseeks");
+    ucs_string_buffer_appendf(strb, "%s", "lookatme");
+
+    EXPECT_LE(ucs_string_buffer_length(strb), capacity - 1);
+    EXPECT_EQ(std::string("immrmeeseeksloo"), ucs_string_buffer_cstr(strb));
+}
+
+UCS_TEST_F(test_string_buffer, fixed_static) {
     char buf[17];
-    UCS_STRING_BUFFER_FIXED(strb, buf);
+    UCS_STRING_BUFFER_STATIC(strb, buf);
+    test_fixed(&strb, sizeof(buf));
+}
 
-    ucs_string_buffer_appendf(&strb, "%s", "im");
-    ucs_string_buffer_appendf(&strb, "%s", "mrmeeseeks");
-    ucs_string_buffer_appendf(&strb, "%s", "lookatme");
+UCS_TEST_F(test_string_buffer, fixed_init) {
+    ucs_string_buffer_t strb;
+    char buf[17];
 
-    EXPECT_LE(ucs_string_buffer_length(&strb), sizeof(buf) - 1);
-    EXPECT_EQ(std::string("immrmeeseeksloo"), ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_init_fixed(&strb, buf, sizeof(buf));
+    test_fixed(&strb, sizeof(buf));
+}
+
+UCS_TEST_F(test_string_buffer, fixed_onstack) {
+    const size_t num_elems = 17;
+    UCS_STRING_BUFFER_ONSTACK(strb, num_elems);
+    test_fixed(&strb, num_elems);
+}
+
+UCS_TEST_F(test_string_buffer, append_hex) {
+    static const uint8_t hexbytes[] = {0xde, 0xad, 0xbe, 0xef,
+                                       0xba, 0xdc, 0xf,  0xee};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_append_hex(&strb, hexbytes,
+                                 ucs_static_array_size(hexbytes), SIZE_MAX);
+    EXPECT_EQ(std::string("deadbeef:badc0fee"), ucs_string_buffer_cstr(&strb));
+}
+
+UCS_TEST_F(test_string_buffer, dump) {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_appendf(&strb, "hungry\n");
+    ucs_string_buffer_appendf(&strb, "for\n");
+    ucs_string_buffer_appendf(&strb, "apples\n");
+    ucs_string_buffer_dump(&strb, "[ TEST     ] ", stdout);
+}
+
+void test_string_buffer::check_extract_mem(ucs_string_buffer_t *strb)
+{
+    char test_str[] = "test";
+    ucs_string_buffer_appendf(strb, "%s", test_str);
+    char *c_str = ucs_string_buffer_extract_mem(strb);
+    EXPECT_STREQ(test_str, c_str);
+    ucs_free(c_str);
+}
+
+UCS_TEST_F(test_string_buffer, extract_mem) {
+    ucs_string_buffer_t strb;
+    char buf[8];
+
+    ucs_string_buffer_init_fixed(&strb, buf, sizeof(buf));
+    check_extract_mem(&strb);
+
+    ucs_string_buffer_init(&strb);
+    check_extract_mem(&strb);
 }
 
 class test_string_set : public ucs::test {

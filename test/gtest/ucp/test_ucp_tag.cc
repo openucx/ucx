@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucs/arch/atomic.h>
 }
 
 #include <sys/mman.h>
@@ -56,7 +57,7 @@ void test_ucp_tag::enable_tag_mp_offload()
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_SRQ_ENABLE", "try"));
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_MP_NUM_STRIDES", "8"));
     m_env.push_back(new ucs::scoped_setenv("UCX_IB_MLX5_DEVX_OBJECTS",
-                                           "dct,dcsrq,rcsrq,rcqp"));
+                                           "dct,dcsrq,rcsrq,rcqp,dci"));
 }
 
 void test_ucp_tag::request_init(void *request)
@@ -175,7 +176,8 @@ void test_ucp_tag::wait_for_unexpected_msg(ucp_worker_h worker, double sec)
 
 void test_ucp_tag::check_offload_support(bool offload_required)
 {
-    bool offload_supported = ucp_ep_is_tag_offload_enabled(ucp_ep_config(sender().ep()));
+    bool offload_supported = ucp_ep_config_key_has_tag_lane(
+                               &ucp_ep_config(sender().ep())->key);
     if (offload_supported != offload_required) {
         cleanup();
         std::string reason = offload_supported ? "tag offload" : "no tag offload";
@@ -443,9 +445,9 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_rndv_thresh_zero, "RNDV_THRESH=0
         size_t min_rndv = ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config(sender().ep()));
 
         EXPECT_GT(min_rndv, 0ul); // min_rndv should be RTS size at least
-        EXPECT_GE(min_rndv,
+        EXPECT_LE(min_rndv,
                   ucp_ep_config(sender().ep())->tag.rndv.am_thresh.local);
-        EXPECT_GE(min_rndv,
+        EXPECT_LE(min_rndv,
                   ucp_ep_config(sender().ep())->tag.rndv.rma_thresh.local);
     }
 }
@@ -462,28 +464,39 @@ UCS_TEST_P(test_ucp_tag_limits, check_max_short_zcopy_thresh_zero, "ZCOPY_THRESH
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_limits)
 
 
-class test_ucp_tag_fallback : public ucp_test {
+class test_ucp_tag_nbx : public test_ucp_tag {
 public:
     void init() {
         /* forbid zcopy access because it will always fail due to read-only
          * memory pages (will fail to register memory) */
         modify_config("ZCOPY_THRESH", "inf");
-        ucp_test::init();
-        sender().connect(&receiver(), get_ep_params());
-        receiver().connect(&sender(), get_ep_params());
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
+        test_ucp_tag::init();
+        m_completed = 0;
     }
 
 protected:
     static const size_t MSG_SIZE;
+    uint32_t m_completed;
+
+    static void send_callback(void *req, ucs_status_t status,
+                              void *user_data)
+    {
+        request_free((request*)req);
+        ucs_atomic_add32((volatile uint32_t*)user_data, 1);
+    }
+
+    static void recv_callback(void *req, ucs_status_t status,
+                              const ucp_tag_recv_info_t *info,
+                              void *user_data)
+    {
+        request_free((request*)req);
+        ucs_atomic_add32((volatile uint32_t*)user_data, 1);
+    }
 };
 
-const size_t test_ucp_tag_fallback::MSG_SIZE  = 4 * 1024 * ucs_get_page_size();
+const size_t test_ucp_tag_nbx::MSG_SIZE  = 4 * UCS_KBYTE * ucs_get_page_size();
 
-UCS_TEST_P(test_ucp_tag_fallback, fallback)
+UCS_TEST_P(test_ucp_tag_nbx, fallback)
 {
     ucp_request_param_t param = {0};
 
@@ -509,4 +522,36 @@ UCS_TEST_P(test_ucp_tag_fallback, fallback)
     munmap(send_buffer, MSG_SIZE);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_fallback)
+UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
+{
+    ucp_request_param_t send_param;
+    ucp_request_param_t recv_param;
+
+    send_param.op_attr_mask = recv_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                                                        UCP_OP_ATTR_FIELD_REQUEST  |
+                                                        UCP_OP_ATTR_FLAG_NO_IMM_CMPL |
+                                                        UCP_OP_ATTR_FIELD_USER_DATA;
+    send_param.user_data   = recv_param.user_data     = &m_completed;
+    send_param.request     = request_alloc();
+    recv_param.request     = request_alloc();
+    send_param.cb.send     = (ucp_send_nbx_callback_t)send_callback;
+    recv_param.cb.recv     = (ucp_tag_recv_nbx_callback_t)recv_callback;
+    send_param.user_data   = &m_completed;
+    recv_param.user_data   = &m_completed;
+
+    std::vector<char> send_buffer(MSG_SIZE);
+    std::vector<char> recv_buffer(MSG_SIZE);
+
+    ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
+                                                 &recv_buffer[0], MSG_SIZE,
+                                                 0, 0, &recv_param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(recv_req));
+
+    ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), &send_buffer[0],
+                                                 MSG_SIZE, 0, &send_param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(send_req));
+
+    wait_for_value(&m_completed, 2u);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_nbx)

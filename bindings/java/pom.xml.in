@@ -58,7 +58,7 @@
         <activation>
           <jdk>1.8</jdk>
         </activation>
-	<properties>
+        <properties>
           <javadocExecutable>${java.home}/../bin/javadoc</javadocExecutable>
         </properties>
         <build>
@@ -78,7 +78,7 @@
         <activation>
           <jdk>1.9</jdk>
         </activation>
-	<properties>
+        <properties>
           <javadocExecutable>${java.home}/../bin/javadoc</javadocExecutable>
         </properties>
         <build>
@@ -105,12 +105,11 @@
             <plugin>
               <artifactId>maven-compiler-plugin</artifactId>
               <configuration>
-		<source>1.9</source>
-                <target>1.9</target>
+                <source>1.8</source>
+                <target>1.8</target>
                 <compilerArgs>
                   <arg>-h</arg>
                   <arg>${native.dir}</arg>
-                  <arg>--add-exports</arg><arg>java.base/sun.nio.ch=ALL-UNNAMED</arg>
                 </compilerArgs>
               </configuration>
             </plugin>
@@ -395,6 +394,7 @@
         <artifactId>maven-javadoc-plugin</artifactId>
         <version>3.2.0</version>
         <configuration>
+          <source>8</source>
           <quiet>true</quiet>
           <doclint>all,-missing</doclint>
         </configuration>

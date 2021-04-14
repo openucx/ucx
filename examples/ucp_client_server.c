@@ -27,6 +27,8 @@
  *      13337.
  */
 
+#include "hello_world_util.h"
+
 #include <ucp/api/ucp.h>
 
 #include <string.h>    /* memset */
@@ -34,7 +36,6 @@
 #include <unistd.h>    /* getopt */
 #include <stdlib.h>    /* atoi */
 
-#define TEST_STRING_LEN        sizeof(test_message)
 #define DEFAULT_PORT           13337
 #define IP_STRING_LEN          50
 #define PORT_STRING_LEN        8
@@ -44,9 +45,10 @@
 #define DEFAULT_NUM_ITERATIONS 1
 #define TEST_AM_ID             0
 
-const  char test_message[]           = "UCX Client-Server Hello World";
-static uint16_t server_port          = DEFAULT_PORT;
-static int num_iterations            = DEFAULT_NUM_ITERATIONS;
+
+static long test_string_length = 16;
+static uint16_t server_port    = DEFAULT_PORT;
+static int num_iterations      = DEFAULT_NUM_ITERATIONS;
 
 
 typedef enum {
@@ -219,19 +221,20 @@ static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
  * Print the received message on the server side or the sent data on the client
  * side.
  */
-static void print_result(int is_server, char *recv_message, int current_iter)
+static void print_result(int is_server, char *msg_str, int current_iter)
 {
     if (is_server) {
         printf("Server: iteration #%d\n", (current_iter + 1));
         printf("UCX data message was received\n");
         printf("\n\n----- UCP TEST SUCCESS -------\n\n");
-        printf("%s", recv_message);
+        printf("%s", msg_str);
         printf("\n\n------------------------------\n\n");
     } else {
         printf("Client: iteration #%d\n", (current_iter + 1));
         printf("\n\n-----------------------------------------\n\n");
         printf("Client sent message: \n%s.\nlength: %ld\n",
-               test_message, TEST_STRING_LEN);
+               (test_string_length != 0) ? msg_str : "<none>",
+               test_string_length);
         printf("\n-----------------------------------------\n\n");
     }
 }
@@ -264,11 +267,11 @@ static ucs_status_t request_wait(ucp_worker_h ucp_worker, void *request,
 }
 
 static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
-                            test_req_t *ctx, int is_server,
-                            char *recv_message, int current_iter)
+                            test_req_t *ctx, int is_server, void *msg,
+                            int current_iter)
 {
     ucs_status_t status;
-    int ret = 0;
+    char *msg_str;
 
     status = request_wait(ucp_worker, request, ctx);
     if (status != UCS_OK) {
@@ -280,10 +283,18 @@ static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
     /* Print the output of the first, last and every PRINT_INTERVAL iteration */
     if ((current_iter == 0) || (current_iter == (num_iterations - 1)) ||
         !((current_iter + 1) % (PRINT_INTERVAL))) {
-        print_result(is_server, recv_message, current_iter);
+        msg_str = calloc(1, test_string_length + 1);
+        if (msg_str == NULL) {
+            fprintf(stderr, "memory allocation failed\n");
+            return -1;
+        }
+
+        mem_type_memcpy(msg_str, msg, test_string_length);
+        print_result(is_server, msg_str, current_iter);
+        free(msg_str);
     }
 
-    return ret;
+    return 0;
 }
 
 /**
@@ -294,33 +305,41 @@ static int request_finalize(ucp_worker_h ucp_worker, test_req_t *request,
 static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                             int current_iter)
 {
-    char recv_message[TEST_STRING_LEN]= "";
     ucp_request_param_t param;
     test_req_t *request;
-    size_t length;
+    size_t msg_length;
+    void *msg;
     test_req_t ctx;
+    int ret;
 
-    ctx.complete = 0;
+    msg_length = test_string_length;
+    msg        = mem_type_malloc(msg_length);
+    CHKERR_ACTION(msg == NULL, "allocate memory\n", return -1;);
+    mem_type_memset(msg, 0, msg_length);
+
+    ctx.complete       = 0;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                          UCP_OP_ATTR_FIELD_USER_DATA;
     param.user_data    = &ctx;
+
     if (!is_server) {
+        ret = generate_test_string(msg, msg_length);
+        CHKERR_ACTION(ret < 0, "generate test string", return -1;);
+
         /* Client sends a message to the server using the stream API */
         param.cb.send = send_cb;
-        request       = ucp_stream_send_nbx(ep, test_message, TEST_STRING_LEN,
-                                            &param);
+        request       = ucp_stream_send_nbx(ep, msg, msg_length, &param);
     } else {
         /* Server receives a message from the client using the stream API */
         param.op_attr_mask  |= UCP_OP_ATTR_FIELD_FLAGS;
         param.flags          = UCP_STREAM_RECV_FLAG_WAITALL;
         param.cb.recv_stream = stream_recv_cb;
-        request              = ucp_stream_recv_nbx(ep, &recv_message,
-                                                   TEST_STRING_LEN,
-                                                   &length, &param);
+        request              = ucp_stream_recv_nbx(ep, msg, msg_length,
+                                                   &msg_length, &param);
     }
 
-    return request_finalize(ucp_worker, request, &ctx, is_server,
-                            recv_message, current_iter);
+    return request_finalize(ucp_worker, request, &ctx, is_server, msg,
+                            current_iter);
 }
 
 /**
@@ -331,28 +350,37 @@ static int send_recv_stream(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
 static int send_recv_tag(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                          int current_iter)
 {
-    char recv_message[TEST_STRING_LEN]= "";
     ucp_request_param_t param;
     void *request;
+    size_t msg_length;
+    void *msg;
     test_req_t ctx;
+    int ret;
 
-    ctx.complete = 0;
+    msg_length = test_string_length;
+    msg        = mem_type_malloc(msg_length);
+    CHKERR_ACTION(msg == NULL, "allocate memory\n", return -1;);
+    mem_type_memset(msg, 0, msg_length);
+
+    ctx.complete       = 0;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                          UCP_OP_ATTR_FIELD_USER_DATA;
     param.user_data    = &ctx;
     if (!is_server) {
+        ret = generate_test_string(msg, msg_length);
+        CHKERR_ACTION(ret < 0, "generate test string", return -1;);
+
         /* Client sends a message to the server using the Tag-Matching API */
         param.cb.send = send_cb;
-        request       = ucp_tag_send_nbx(ep, test_message, TEST_STRING_LEN,
-                                         TAG, &param);
+        request       = ucp_tag_send_nbx(ep, msg, msg_length, TAG, &param);
     } else {
         /* Server receives a message from the client using the Tag-Matching API */
         param.cb.recv = tag_recv_cb;
-        request       = ucp_tag_recv_nbx(ucp_worker, &recv_message,
-                                         TEST_STRING_LEN, TAG, 0, &param);
+        request       = ucp_tag_recv_nbx(ucp_worker, msg, msg_length, TAG, 0,
+                                         &param);
     }
 
-    return request_finalize(ucp_worker, request, &ctx, is_server, recv_message,
+    return request_finalize(ucp_worker, request, &ctx, is_server, msg,
                             current_iter);
 }
 
@@ -360,9 +388,9 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
                             void *data, size_t length,
                             const ucp_am_recv_param_t *param)
 {
-    if (length != TEST_STRING_LEN) {
+    if (length != test_string_length) {
         fprintf(stderr, "received wrong data length %ld (expected %ld)",
-                length, TEST_STRING_LEN);
+                length, test_string_length);
         goto out;
     }
 
@@ -384,7 +412,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
      * immediately
      */
     am_data_desc.is_rndv = 0;
-    memcpy(am_data_desc.recv_buf, data, length);
+    mem_type_memcpy(am_data_desc.recv_buf, data, length);
 
 out:
     am_data_desc.complete = 1;
@@ -400,21 +428,30 @@ out:
 static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
                         int current_iter)
 {
-    char recv_message[TEST_STRING_LEN] = "";
     test_req_t *request;
     ucp_request_param_t params;
+    size_t msg_length;
+    void *msg;
     test_req_t ctx;
+    int ret;
 
-    am_data_desc.recv_buf = recv_message;
-    ctx.complete          = 0;
-    params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK |
-                            UCP_OP_ATTR_FIELD_USER_DATA;
-    params.user_data      = &ctx;
+    msg_length = test_string_length;
+    msg        = mem_type_malloc(msg_length);
+    CHKERR_ACTION(msg == NULL, "allocate memory\n", return -1;);
+    mem_type_memset(msg, 0, msg_length);
+
+    ctx.complete        = 0;
+    params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                          UCP_OP_ATTR_FIELD_USER_DATA;
+    params.user_data    = &ctx;
 
     if (is_server) {
+        am_data_desc.recv_buf = msg;
+
         while (!am_data_desc.complete) {
             ucp_worker_progress(ucp_worker);
         }
+
         am_data_desc.complete = 0;
 
         if (am_data_desc.is_rndv) {
@@ -425,8 +462,7 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
             params.cb.recv_am    = am_recv_cb,
             request              = ucp_am_recv_data_nbx(ucp_worker,
                                                         am_data_desc.desc,
-                                                        &recv_message,
-                                                        TEST_STRING_LEN,
+                                                        msg, msg_length,
                                                         &params);
         } else {
             /* Data has arrived eagerly and is ready for use, no need to
@@ -434,14 +470,16 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
             request = NULL;
         }
     } else {
+        ret = generate_test_string(msg, msg_length);
+        CHKERR_ACTION(ret < 0, "generate test string", return -1;);
+
         /* Client sends a message to the server using the AM API */
         params.cb.send = (ucp_send_nbx_callback_t)send_cb,
-        request        = ucp_am_send_nbx(ep, TEST_AM_ID, NULL, 0ul,
-                                         test_message, TEST_STRING_LEN,
-                                         &params);
+        request        = ucp_am_send_nbx(ep, TEST_AM_ID, NULL, 0ul, msg,
+                                         msg_length, &params);
     }
 
-    return request_finalize(ucp_worker, request, &ctx, is_server, recv_message,
+    return request_finalize(ucp_worker, request, &ctx, is_server, msg,
                             current_iter);
 }
 
@@ -480,24 +518,25 @@ static void usage()
     fprintf(stderr, "Usage: ucp_client_server [parameters]\n");
     fprintf(stderr, "UCP client-server example utility\n");
     fprintf(stderr, "\nParameters are:\n");
-    fprintf(stderr, " -a Set IP address of the server "
+    fprintf(stderr, "  -a Set IP address of the server "
                     "(required for client and should not be specified "
                     "for the server)\n");
-    fprintf(stderr, " -l Set IP address where server listens "
+    fprintf(stderr, "  -l Set IP address where server listens "
                     "(If not specified, server uses INADDR_ANY; "
                     "Irrelevant at client)\n");
-    fprintf(stderr, " -p Port number to listen/connect to (default = %d). "
+    fprintf(stderr, "  -p Port number to listen/connect to (default = %d). "
                     "0 on the server side means select a random port and print it\n",
                     DEFAULT_PORT);
-    fprintf(stderr, " -c Communication type for the client and server. "
-                    " Valid values are:\n"
-                    "     'stream' : Stream API\n"
-                    "     'tag'    : Tag API\n"
-                    "     'am'     : AM API\n"
-                    "    If not specified, %s API will be used.\n", COMM_TYPE_DEFAULT);
-    fprintf(stderr, " -i Number of iterations to run. Client and server must "
+    fprintf(stderr, "  -c Communication type for the client and server. "
+                    "  Valid values are:\n"
+                    "      'stream' : Stream API\n"
+                    "      'tag'    : Tag API\n"
+                    "      'am'     : AM API\n"
+                    "     If not specified, %s API will be used.\n", COMM_TYPE_DEFAULT);
+    fprintf(stderr, "  -i Number of iterations to run. Client and server must "
                     "have the same value. (default = %d).\n",
                     num_iterations);
+    print_common_help();
     fprintf(stderr, "\n");
 }
 
@@ -510,9 +549,7 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
     int c = 0;
     int port;
 
-    opterr = 0;
-
-    while ((c = getopt(argc, argv, "a:l:p:c:i:")) != -1) {
+    while ((c = getopt(argc, argv, "a:l:p:c:i:s:m:h")) != -1) {
         switch (c) {
         case 'a':
             *server_addr = optarg;
@@ -523,10 +560,7 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
             } else if (!strcasecmp(optarg, "tag")) {
                 *send_recv_type = CLIENT_SERVER_SEND_RECV_TAG;
             } else if (!strcasecmp(optarg, "am")) {
-                /* TODO: uncomment below when AM API is fully supported.
-                 * *send_recv_type = CLIENT_SERVER_SEND_RECV_AM; */
-                fprintf(stderr, "AM API is not fully supported yet\n");
-                return -1;
+                *send_recv_type = CLIENT_SERVER_SEND_RECV_AM;
             } else {
                 fprintf(stderr, "Wrong communication type %s. "
                         "Using %s as default\n", optarg, COMM_TYPE_DEFAULT);
@@ -547,6 +581,20 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
         case 'i':
             num_iterations = atoi(optarg);
             break;
+        case 's':
+            test_string_length = atol(optarg);
+            if (test_string_length < 0) {
+                fprintf(stderr, "Wrong string size %ld\n", test_string_length);
+                return UCS_ERR_UNSUPPORTED;
+            }	
+            break;
+        case 'm':
+            test_mem_type = parse_mem_type(optarg);
+            if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
+                return UCS_ERR_UNSUPPORTED;
+            }
+            break;
+        case 'h':
         default:
             usage();
             return -1;

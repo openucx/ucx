@@ -10,7 +10,7 @@ jobs:
       name: MLNX
       demands: ${{ parameters.demands }}
     displayName: ${{ parameters.name }} on worker
-    timeoutInMinutes: 360
+    timeoutInMinutes: 300
     strategy:
       matrix:
         ${{ each wid in parameters.worker_ids }}:
@@ -22,8 +22,10 @@ jobs:
 
       - checkout: self
         clean: true
+        fetchDepth: 100
 
       - bash: |
+          source ./buildlib/az-helpers.sh
           ./contrib/test_jenkins.sh
         displayName: Run ./contrib/test_jenkins.sh
         env:
@@ -37,4 +39,5 @@ jobs:
           EXECUTOR_NUMBER: $(AZP_AGENT_ID)
           RUN_TESTS: yes
           JENKINS_TEST_PERF: ${{ parameters.test_perf }}
-
+          JENKINS_NO_VALGRIND: ${{ parameters.valgrind_disable }}
+          RUNNING_IN_AZURE: yes

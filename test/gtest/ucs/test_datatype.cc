@@ -934,14 +934,21 @@ static std::ostream& operator<<(std::ostream& os, const test_value_type_t &v) {
     return os << "<" << v.num1 << "," << v.num2 << ">";
 }
 
-UCS_ARRAY_DEFINE_INLINE(test_2num, unsigned, test_value_type_t);
 
-UCS_TEST_F(test_datatype, dynamic_array_2int_grow) {
+UCS_ARRAY_DEFINE_INLINE(test_2num, unsigned, test_value_type_t);
+UCS_ARRAY_DEFINE_INLINE(test_1int, size_t, int);
+
+class test_array : public test_datatype {
+protected:
+    void test_fixed(ucs_array_t(test_1int) *array, size_t capacity);
+};
+
+UCS_TEST_F(test_array, dynamic_array_2int_grow) {
     ucs_array_t(test_2num) test_array;
     test_value_type_t value;
     ucs_status_t status;
 
-    ucs_array_init_dynamic(test_2num, &test_array);
+    ucs_array_init_dynamic(&test_array);
     EXPECT_FALSE(ucs_array_is_fixed(&test_array));
 
     /* grow the array enough to contain 'value_index' */
@@ -966,19 +973,17 @@ UCS_TEST_F(test_datatype, dynamic_array_2int_grow) {
     ASSERT_UCS_OK(status);
     EXPECT_EQ(value, ucs_array_elem(&test_array, value_index));
 
-    ucs_array_cleanup_dynamic(test_2num, &test_array);
+    ucs_array_cleanup_dynamic(&test_array);
 }
 
-UCS_ARRAY_DEFINE_INLINE(test_1int, size_t, int);
-
-UCS_TEST_F(test_datatype, dynamic_array_int_append) {
+UCS_TEST_F(test_array, dynamic_array_int_append) {
     static const size_t NUM_ELEMS = 1000;
 
     ucs_array_t(test_1int) test_array;
     std::vector<int> vec;
     ucs_status_t status;
 
-    ucs_array_init_dynamic(test_1int, &test_array);
+    ucs_array_init_dynamic(&test_array);
     EXPECT_FALSE(ucs_array_is_fixed(&test_array));
 
     /* push same elements to the array and the std::vector */
@@ -1021,31 +1026,53 @@ UCS_TEST_F(test_datatype, dynamic_array_int_append) {
     ucs_array_set_length(&test_array, new_length);
     EXPECT_EQ(new_length, ucs_array_length(&test_array));
 
-    ucs_array_cleanup_dynamic(test_1int, &test_array);
+    ucs_array_cleanup_dynamic(&test_array);
 }
 
-UCS_TEST_F(test_datatype, fixed_array) {
-    const size_t num_elems = 100;
-    UCS_ARRAY_DEFINE_ONSTACK(test_array, test_1int, num_elems);
+void test_array::test_fixed(ucs_array_t(test_1int) *array, size_t capacity)
+{
     ucs_status_t status;
 
     /* check initial capacity */
-    size_t initial_capacity = ucs_array_capacity(&test_array);
-    EXPECT_LE(initial_capacity, num_elems);
-    EXPECT_GE(initial_capacity, num_elems - 1);
+    size_t initial_capacity = ucs_array_capacity(array);
+    EXPECT_LE(initial_capacity, capacity);
+    EXPECT_GE(initial_capacity, capacity - 1);
 
     /* append one element */
-    status = ucs_array_append(test_1int, &test_array);
+    status = ucs_array_append(test_1int, array);
     ASSERT_UCS_OK(status);
 
-    size_t idx = ucs_array_length(&test_array) - 1;
-    ucs_array_elem(&test_array, idx) = 17;
+    size_t idx = ucs_array_length(array) - 1;
+    ucs_array_elem(array, idx) = 17;
     EXPECT_EQ(0u, idx);
-    EXPECT_EQ(1u, ucs_array_length(&test_array));
+    EXPECT_EQ(1u, ucs_array_length(array));
 
     /* check end capacity */
-    EXPECT_EQ(initial_capacity - 1, ucs_array_available_length(&test_array));
-    EXPECT_EQ(&ucs_array_elem(&test_array, 1), ucs_array_end(&test_array));
+    EXPECT_EQ(initial_capacity - 1, ucs_array_available_length(array));
+    EXPECT_EQ(&ucs_array_elem(array, 1), ucs_array_end(array));
+}
+
+UCS_TEST_F(test_array, fixed_static) {
+    const size_t num_elems = 100;
+    int buffer[num_elems];
+    ucs_array_t(test_1int) test_array =
+             UCS_ARRAY_FIXED_INITIALIZER(buffer, num_elems);
+    test_fixed(&test_array, num_elems);
+}
+
+UCS_TEST_F(test_array, fixed_init) {
+    const size_t num_elems = 100;
+    int buffer[num_elems];
+    ucs_array_t(test_1int) test_array;
+
+    ucs_array_init_fixed(&test_array, buffer, num_elems);
+    test_fixed(&test_array, num_elems);
+}
+
+UCS_TEST_F(test_array, fixed_onstack) {
+    const size_t num_elems = 100;
+    UCS_ARRAY_DEFINE_ONSTACK(test_array, test_1int, num_elems);
+    test_fixed(&test_array, num_elems);
 }
 
 UCS_TEST_F(test_datatype, ptr_map) {
@@ -1068,9 +1095,15 @@ UCS_TEST_F(test_datatype, ptr_map) {
     }
 
     for (std_map_t::iterator i = std_map.begin(); i != std_map.end(); ++i) {
-        ASSERT_EQ(i->second, ucs_ptr_map_get(&ptr_map, i->first));
-        status = ucs_ptr_map_del(&ptr_map, i->first);
+        bool extract = ucs::rand() % 2;
+        void *value;
+        status = ucs_ptr_map_get(&ptr_map, i->first, extract, &value);
         ASSERT_EQ(UCS_OK, status);
+        ASSERT_EQ(i->second, value);
+        if (!extract) {
+            status = ucs_ptr_map_del(&ptr_map, i->first);
+            ASSERT_EQ(UCS_OK, status);
+        }
         delete i->second;
     }
 
