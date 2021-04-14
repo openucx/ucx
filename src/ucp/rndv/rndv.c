@@ -1163,6 +1163,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         frndv_req->flags             = 0;
         frndv_req->send.ep           = rndv_req->send.ep;
         frndv_req->send.pending_lane = UCP_NULL_LANE;
+        ucp_request_send_state_clear(frndv_req, NULL);
 
         ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.req_id,
                               freq->recv.length, offset);
