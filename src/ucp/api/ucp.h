@@ -2164,13 +2164,13 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * @code {.c}
  * void application_initialization() {
  * // should be called once in application init flow and before
- * // process_comminucation() is used
+ * // process_communication() is used
  *     ...
  *     status = ucp_worker_get_efd(worker, &fd);
  *     ...
  * }
  *
- * void process_comminucation() {
+ * void process_communication() {
  * // should be called every time need to wait for some condition such as
  * // ucp request completion in sleep mode.
  *
@@ -2735,7 +2735,7 @@ ucs_status_t ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
  *
  * @note
  * @li RKEYs for InfiniBand and Cray Aries networks typically includes
- * InifiniBand and Aries key.
+ * InfiniBand and Aries key.
  * @li In order to enable remote direct memory access to the memory associated
  * with the memory handle the application is responsible for sharing the RKEY with
  * the peers that will initiate the access.
@@ -2959,9 +2959,9 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  * @param [in]  param         Operation parameters, see @ref ucp_request_param_t.
  *
  * @note Sending only header without actual data is allowed and is recommended
- *       for transfering latency-critical amount of data.
+ *       for transferring a latency-critical amount of data.
  * @note The maximum allowed header size can be obtained by querying worker
- *       attributes by @ref ucp_worker_query routine.
+ *       attributes by the @ref ucp_worker_query routine.
  *
  *
  * @return NULL                 - Active Message was sent immediately.

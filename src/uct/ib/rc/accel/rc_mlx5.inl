@@ -351,7 +351,7 @@ uct_rc_mlx5_iface_tm_common_data(uct_rc_mlx5_iface_common_t *iface,
         *context_p = uct_rc_mlx5_iface_rx_mp_context_from_hash(iface, cqe, flags);
     } else {
         /* Non-tagged messages (AM, RNDV Fin) should always arrive in
-         * a single frgament */
+         * a single fragment */
         *context_p = uct_rc_mlx5_iface_single_frag_context(iface, flags);
     }
 
