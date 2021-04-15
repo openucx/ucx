@@ -334,7 +334,6 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
      */
     req->flags                      = req_flags;
     req->status                     = UCS_OK;
-    req->super_req                  = worker_req;
     req->send.ep                    = ep;
     req->send.flushed_cb            = flushed_cb;
     req->send.flush.prog_id         = UCS_CALLBACKQ_ID_NULL;
@@ -343,13 +342,13 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
     req->send.flush.sw_done         = 0;
     req->send.flush.num_lanes       = ucp_ep_num_lanes(ep);
     req->send.flush.started_lanes   = 0;
-
     req->send.lane                  = UCP_NULL_LANE;
     req->send.uct.func              = ucp_ep_flush_progress_pending;
     req->send.state.uct_comp.func   = ucp_ep_flush_completion;
     req->send.state.uct_comp.count  = ucp_ep_num_lanes(ep);
     req->send.state.uct_comp.status = UCS_OK;
 
+    ucp_request_set_super(req, worker_req);
     ucp_request_set_send_callback_param(param, req, send);
     ucp_ep_flush_progress(req);
 
@@ -485,7 +484,7 @@ static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t statu
 
 static void ucp_worker_flush_ep_flushed_cb(ucp_request_t *req)
 {
-    ucp_worker_flush_complete_one(req->super_req, UCS_OK, 0);
+    ucp_worker_flush_complete_one(ucp_request_get_super(req), UCS_OK, 0);
     ucp_request_put(req);
 }
 

@@ -136,7 +136,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
 {
     ucp_request_t *rndv_req          = arg;
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = dest;
-    ucp_request_t *rreq              = rndv_req->super_req;
+    ucp_request_t *rreq              = ucp_request_get_super(rndv_req);
     ucp_ep_h ep                      = rndv_req->send.ep;
     ssize_t packed_rkey_size;
 
@@ -371,12 +371,20 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_trace_req(rndv_req, "send rtr remote sreq_id 0x%"PRIxPTR" rreq %p",
                   sender_req_id, rreq);
 
+    /* Reset super request and send state, since it may be set by the previous
+     * protocol (e.g. RNDV GET Zcopy) */
+    ucp_request_reset_super(rndv_req);
+    ucp_request_send_state_reset(rndv_req, NULL,
+                                 UCP_REQUEST_SEND_PROTO_BCOPY_AM);
+    UCP_WORKER_STAT_RNDV(rndv_req->send.ep->worker, SEND_RTR, +1);
+
     rreq->recv.remote_req_id       = sender_req_id;
-    rndv_req->super_req            = rreq;
     rndv_req->send.lane            = ucp_ep_get_am_lane(rndv_req->send.ep);
     rndv_req->send.uct.func        = ucp_proto_progress_rndv_rtr;
     rndv_req->send.rndv_rtr.length = recv_length;
     rndv_req->send.rndv_rtr.offset = offset;
+
+    ucp_request_set_super(rndv_req, rreq);
     ucp_request_id_alloc(rndv_req);
 
     ucp_request_send(rndv_req, 0);
@@ -550,11 +558,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_rma_get_zcopy, (self),
      * NOTE: we do not register memory and do not send our keys. */
     ucp_trace_req(rndv_req, "remote memory unreachable, switch to rtr");
     ucp_rkey_destroy(rndv_req->send.rndv.rkey);
-    ucp_rndv_recv_data_init(rndv_req->super_req, rndv_req->send.length);
-    /* Update statistics counters from get_zcopy to rtr */
+    ucp_rndv_recv_data_init(ucp_request_get_super(rndv_req),
+                            rndv_req->send.length);
+    /* Remove statistics related to get_zcopy */
     UCP_WORKER_STAT_RNDV(rndv_req->send.ep->worker, GET_ZCOPY, -1);
-    UCP_WORKER_STAT_RNDV(rndv_req->send.ep->worker, SEND_RTR, +1);
-    ucp_rndv_req_send_rtr(rndv_req, rndv_req->super_req,
+    ucp_rndv_req_send_rtr(rndv_req, ucp_request_get_super(rndv_req),
                           rndv_req->send.rndv.remote_req_id,
                           rndv_req->send.length, 0ul);
     return UCS_OK;
@@ -572,7 +580,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
         return;
     }
 
-    rreq   = rndv_req->super_req;
+    rreq   = ucp_request_get_super(rndv_req);
     status = rndv_req->send.state.uct_comp.status;
     ep     = rndv_req->send.ep;
 
@@ -714,11 +722,11 @@ static void ucp_rndv_req_init(ucp_request_t *req, ucp_request_t *super_req,
 {
     ucp_lane_index_t i;
 
-    req->super_req                = super_req;
     req->send.rndv.rkey           = rkey;
     req->send.rndv.remote_address = remote_address;
     req->send.pending_lane        = UCP_NULL_LANE;
 
+    ucp_request_set_super(req, super_req);
     ucp_rndv_req_init_lanes(req, lanes_map, lanes_count);
 
     if (rkey_index != NULL) {
@@ -777,7 +785,6 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
 
     ucp_trace_req(rndv_req, "start rma_get rreq %p", rreq);
 
-    rndv_req->super_req                = rreq;
     rndv_req->send.uct.func            = ucp_rndv_progress_rma_get_zcopy;
     rndv_req->send.buffer              = rreq->recv.buffer;
     rndv_req->send.mem_type            = rreq->recv.mem_type;
@@ -786,6 +793,8 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     rndv_req->send.rndv.remote_req_id  = rndv_rts_hdr->sreq.req_id;
     rndv_req->send.rndv.remote_address = rndv_rts_hdr->address;
     rndv_req->send.pending_lane        = UCP_NULL_LANE;
+
+    ucp_request_set_super(rndv_req, rreq);
 
     status = ucp_ep_rkey_unpack(ep, rkey_buf, &rndv_req->send.rndv.rkey);
     if (status != UCS_OK) {
@@ -821,22 +830,22 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
     /* if the super request is a receive request, it means that's used RNDV
      * scheme is PUT pipeline protocol, otherwise - GET pipeline protocol (where
      * the super request is an intermediate RNDV request) */
-    int is_put_proto        = freq->super_req->flags &
+    int is_put_proto        = ucp_request_get_super(freq)->flags &
                               (UCP_REQUEST_FLAG_RECV_TAG |
                                UCP_REQUEST_FLAG_RECV_AM);
-    ucp_request_t *rreq     = NULL;
-    ucp_request_t *rndv_req = NULL;
+    ucp_request_t *rreq;
+    ucp_request_t *rndv_req;
 
     /* release memory descriptor */
     ucs_mpool_put_inline((void*)freq->send.mdesc);
 
     /* rndv_req is NULL in case of put protocol */
     if (!is_put_proto) {
+        rndv_req = ucp_request_get_super(freq);
+        rreq     = ucp_request_get_super(rndv_req);
+
         ucs_trace_req("freq:%p: recv_frag_put done, nrdv_req:%p rreq:%p ", freq,
                       rndv_req, rreq);
-
-        rndv_req = freq->super_req;
-        rreq     = rndv_req->super_req;
 
         /* pipeline recv get protocol */
         rndv_req->send.state.dt.offset += freq->send.length;
@@ -849,8 +858,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
                                   UCS_OK, UCP_AM_ID_RNDV_ATS, "send_ats");
         }
     } else {
+        rreq = ucp_request_get_super(freq);
         ucs_trace_req("freq:%p: recv_frag_put done, rreq:%p ", freq, rreq);
-        rreq = freq->super_req;
     }
 
     ucs_assertv(rreq->recv.remaining >= freq->send.length,
@@ -917,8 +926,9 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
                                     rreq->recv.mem_type, length,
                                     ucp_rndv_progress_rma_put_zcopy);
 
-    freq->send.rndv.rkey           = NULL;
-    freq->send.rndv.remote_address = (uintptr_t)rreq->recv.buffer + offset;
+    ucp_rndv_req_init(freq, rreq, 0, 0, NULL,
+                      (uintptr_t)UCS_PTR_BYTE_OFFSET(rreq->recv.buffer, offset),
+                      NULL);
 
     ucp_rndv_req_init_zcopy_lane_map(freq, freq->send.mem_type,
                                      UCP_REQUEST_SEND_PROTO_RNDV_PUT);
@@ -1015,8 +1025,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),
         return;
     }
 
-    rndv_req = freq->super_req;
-    rreq     = rndv_req->super_req;
+    rndv_req = ucp_request_get_super(freq);
+    rreq     = ucp_request_get_super(rndv_req);
     offset   = freq->send.rndv.remote_address -
                rndv_req->send.rndv.remote_address;
 
@@ -1050,13 +1060,14 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
     max_zcopy                          = config->rndv.get_zcopy.max;
     max_frag_size                      = ucs_min(context->config.ext.rndv_frag_size,
                                                  max_zcopy);
-    rndv_req->super_req                = rreq;
     rndv_req->send.rndv.remote_req_id  = remote_req_id;
     rndv_req->send.rndv.remote_address = remote_address - base_offset;
     rndv_req->send.length              = size;
     rndv_req->send.state.dt.offset     = 0;
     rndv_req->send.mem_type            = rreq->recv.mem_type;
     rndv_req->send.pending_lane        = UCP_NULL_LANE;
+
+    ucp_request_set_super(rndv_req, rreq);
 
     /* Protocol:
      * Step 1: GET remote fragment into HOST fragment buffer
@@ -1141,8 +1152,9 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         freq->recv.length                 = frag_size;
         freq->recv.state.dt.contig.md_map = 0;
         freq->recv.frag.offset            = offset;
-        freq->super_req                   = rreq;
         freq->flags                       = UCP_REQUEST_FLAG_RNDV_FRAG;
+
+        ucp_request_set_super(freq, rreq);
 
         memh_index = 0;
         ucs_for_each_bit(md_index,
@@ -1190,7 +1202,7 @@ static unsigned ucp_rndv_progress_rkey_ptr(void *arg)
     ucp_request_t *rndv_req = ucs_queue_head_elem_non_empty(&worker->rkey_ptr_reqs,
                                                             ucp_request_t,
                                                             send.rkey_ptr.queue_elem);
-    ucp_request_t *rreq     = rndv_req->super_req;
+    ucp_request_t *rreq     = ucp_request_get_super(rndv_req);
     size_t seg_size         = ucs_min(worker->context->config.ext.rkey_ptr_seg_size,
                                       rndv_req->send.length - rreq->recv.state.offset);
     ucs_status_t status;
@@ -1278,12 +1290,12 @@ static void ucp_rndv_do_rkey_ptr(ucp_request_t *rndv_req, ucp_request_t *rreq,
 
     ucp_trace_req(rndv_req, "obtained a local pointer to remote buffer: %p",
                   local_ptr);
-    rndv_req->super_req                   = rreq;
     rndv_req->send.buffer                 = local_ptr;
     rndv_req->send.length                 = rndv_rts_hdr->size;
     rndv_req->send.rkey_ptr.rkey          = rkey;
     rndv_req->send.rkey_ptr.remote_req_id = rndv_rts_hdr->sreq.req_id;
 
+    ucp_request_set_super(rndv_req, rreq);
     UCP_WORKER_STAT_RNDV(ep->worker, RKEY_PTR, 1);
 
     ucs_queue_push(&worker->rkey_ptr_reqs, &rndv_req->send.rkey_ptr.queue_elem);
@@ -1428,7 +1440,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
      * configured to PUT, or GET rndv mode is unsupported - send an RTR and
      * the sender will send the data with active message or put_zcopy. */
     ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
-    UCP_WORKER_STAT_RNDV(ep->worker, SEND_RTR, 1);
     ucp_rndv_req_send_rtr(rndv_req, rreq, rndv_rts_hdr->sreq.req_id,
                           rndv_rts_hdr->size, 0ul);
 
@@ -1638,8 +1649,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self),
         ucs_mpool_put_inline((void*)freq->send.mdesc);
     }
 
-    fsreq                        = freq->super_req;
-    sreq                         = fsreq->super_req;
+    fsreq                        = ucp_request_get_super(freq);
+    sreq                         = ucp_request_get_super(fsreq);
     fsreq->send.state.dt.offset += freq->send.length;
     ucs_assert(fsreq->send.state.dt.offset <= fsreq->send.length);
 
@@ -1668,7 +1679,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_put_pipeline_frag_get_completion, (self),
 {
     ucp_request_t *freq  = ucs_container_of(self, ucp_request_t,
                                             send.state.uct_comp);
-    ucp_request_t *fsreq = freq->super_req;
+    ucp_request_t *fsreq = ucp_request_get_super(freq);
 
     /* get rkey can be NULL if memtype ep doesn't need RKEY */
     if (freq->send.rndv.rkey != NULL) {
@@ -1812,15 +1823,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     UCP_REQUEST_GET_BY_ID(&rtr_sreq, worker, rep_hdr->req_id, 1, return UCS_OK,
                           "RNDV ATP %p", rep_hdr);
 
-    req = rtr_sreq->super_req;
+    req = ucp_request_get_super(rtr_sreq);
     ucs_assert(req != NULL);
     ucp_request_put(rtr_sreq);
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
-        ucs_assert(req->super_req != NULL);
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_frag_atp_recv", 0);
-        ucp_rndv_recv_frag_put_mem_type(req->super_req, req,
+        ucp_rndv_recv_frag_put_mem_type(ucp_request_get_super(req), req,
                                         (ucp_mem_desc_t*)req->recv.buffer - 1,
                                         req->recv.length,
                                         req->recv.frag.offset);
@@ -1972,7 +1982,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     UCP_REQUEST_GET_BY_ID(&rndv_req, worker, rndv_data_hdr->rreq_id, 0,
                           return UCS_OK, "RNDV data %p", rndv_data_hdr);
 
-    rreq = rndv_req->super_req;
+    rreq = ucp_request_get_super(rndv_req);
     ucs_assert(rreq != NULL);
     ucs_assert(!(rreq->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
     ucs_assert(rreq->flags &

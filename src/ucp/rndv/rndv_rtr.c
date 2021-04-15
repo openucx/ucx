@@ -38,7 +38,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rtr_common_request_init(ucp_request_t *req)
 {
-    ucp_request_t *recv_req = req->super_req;
+    ucp_request_t *recv_req = ucp_request_get_super(req);
 
     recv_req->status         = UCS_OK;
     recv_req->recv.remaining = req->send.state.dt_iter.length;

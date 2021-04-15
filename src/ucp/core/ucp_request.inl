@@ -54,11 +54,8 @@
     ({ \
         ucp_request_t *_req = ucs_mpool_get_inline(&(_worker)->req_mp); \
         if (_req != NULL) { \
-            VALGRIND_MAKE_MEM_DEFINED(&(_req)->id, sizeof((_req)->id)); \
-            ucp_request_id_check(_req, ==, UCP_REQUEST_ID_INVALID); \
-            VALGRIND_MAKE_MEM_DEFINED(_req + 1, \
-                                      (_worker)->context->config.request.size); \
             ucs_trace_req("allocated request %p", _req); \
+            ucp_request_reset_internal(_req, _worker); \
             UCS_PROFILE_REQUEST_NEW(_req, "ucp_request", 0); \
         } \
         _req; \
@@ -173,6 +170,14 @@
 static UCS_F_ALWAYS_INLINE void ucp_request_id_reset(ucp_request_t *req)
 {
     req->id = UCP_REQUEST_ID_INVALID;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_reset_internal(ucp_request_t *req, ucp_worker_h worker)
+{
+    VALGRIND_MAKE_MEM_DEFINED(&req->id, sizeof(req->id));
+    VALGRIND_MAKE_MEM_DEFINED(req + 1, worker->context->config.request.size);
+    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -909,6 +914,28 @@ ucp_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
     }
 
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_request_set_super(ucp_request_t *req,
+                                                      ucp_request_t *super_req)
+{
+    ucs_assertv(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID),
+                "req=%p req->super_req=%p", req, req->super_req);
+    req->super_req = super_req;
+    req->flags    |= UCP_REQUEST_FLAG_SUPER_VALID;
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_request_reset_super(ucp_request_t *req)
+{
+    req->flags &= ~UCP_REQUEST_FLAG_SUPER_VALID;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_request_t*
+ucp_request_get_super(ucp_request_t *req)
+{
+    ucs_assertv(req->flags & UCP_REQUEST_FLAG_SUPER_VALID,
+                "req=%p req->super_req=%p", req, req->super_req);
+    return req->super_req;
 }
 
 static UCS_F_ALWAYS_INLINE void
