@@ -1378,24 +1378,34 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     ucs_arbiter_group_t *group;
     uint8_t pool_index;
 
+    ucs_debug("handle failure iface: %p, dci[%d] qpn 0x%x, status: %s", iface,
+              dci_index, txwq->super.qp_num, ucs_status_string(ep_status));
+
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+    /* Try to return DCI into iface stack */
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
     uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
 
-    /* Do not invoke pending requests on a failed endpoint */
+    /* Do not invoke pending requests on a failed endpoint. This call should be
+     * done after uct_dc_mlx5_iface_dci_put because uct_dc_mlx5_iface_dci_put
+     * may schedule group to arbiter */
     ucs_arbiter_group_desched(waitq, group);
-    uct_dc_mlx5_iface_progress_pending(iface, pool_index);
-
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        /* No more operations scheduled on DCI, reset it.
+         * This operation should be done prior to
+         * uct_dc_mlx5_iface_progress_pending call to avoid reset of working
+         * DCI */
         uct_dc_mlx5_iface_reset_dci(iface, dci_index);
     }
+
+    uct_dc_mlx5_iface_progress_pending(iface, pool_index);
 }
 
 static void
