@@ -925,7 +925,7 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
         ucp_ep_release_id(ep);
     }
 
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, 0);
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         uct_ep        = ep->uct_eps[lane];
