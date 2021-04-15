@@ -94,9 +94,9 @@ void uct_tcp_sa_data_handler(int fd, ucs_event_set_types_t events, void *arg)
 
     ucs_assertv(ep->fd == fd, "ep->fd %d fd %d, ep_state %d", ep->fd, fd, ep->state);
 
-    ucs_trace("ep %p on %s received event (state = %d)", ep,
+    ucs_trace("ep %p on %s received event 0x%x (state = %d)", ep,
               (ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client",
-              ep->state);
+              events, ep->state);
 
     if (events & UCS_EVENT_SET_EVERR) {
         status = uct_tcp_sockcm_event_err_to_ucs_err_log(fd, &log_level);
