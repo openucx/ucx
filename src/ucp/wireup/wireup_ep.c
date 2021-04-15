@@ -471,6 +471,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->flags            = 0;
     self->progress_id      = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->pending_q);
+    UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
 
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         self->dst_rsc_indices[lane] = UCP_NULL_RESOURCE;
