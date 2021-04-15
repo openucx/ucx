@@ -175,11 +175,11 @@ UCS_CLASS_INIT_FUNC(uct_tcp_sockcm_t, uct_component_h component,
                               &uct_tcp_sockcm_iface_ops, worker, component,
                               config);
 
-    self->priv_data_len    = cm_config->priv_data_len -
-                             sizeof(uct_tcp_sockcm_priv_data_hdr_t);
-    self->sockopt_sndbuf   = cm_config->sockopt.sndbuf;
-    self->sockopt_rcvbuf   = cm_config->sockopt.rcvbuf;
-    self->syn_cnt          = cm_config->syn_cnt;
+    self->priv_data_len  = cm_config->priv_data_len +
+                                   sizeof(uct_tcp_sockcm_priv_data_hdr_t);
+    self->sockopt_sndbuf = cm_config->sockopt.sndbuf;
+    self->sockopt_rcvbuf = cm_config->sockopt.rcvbuf;
+    self->syn_cnt        = cm_config->syn_cnt;
 
     ucs_list_head_init(&self->ep_list);
 

@@ -326,11 +326,13 @@ std::string sockaddr_to_str(const S *saddr) {
  */
 class sock_addr_storage {
 public:
-    sock_addr_storage();
+    sock_addr_storage(bool is_rdmacm_netdev = false);
 
-    sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr);
+    sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr,
+                      bool is_rdmacm_netdev = false);
 
-    void set_sock_addr(const struct sockaddr &addr, const size_t size);
+    void set_sock_addr(const struct sockaddr &addr, const size_t size,
+                       bool is_rdmacm_netdev = false);
 
     void reset_to_any();
 
@@ -339,6 +341,8 @@ public:
     void set_port(uint16_t port);
 
     uint16_t get_port() const;
+
+    bool is_rdmacm_netdev() const;
 
     size_t get_addr_size() const;
 
@@ -354,6 +358,7 @@ private:
     struct sockaddr_storage m_storage;
     size_t                  m_size;
     bool                    m_is_valid;
+    bool                    m_is_rdmacm_netdev;
 };
 
 

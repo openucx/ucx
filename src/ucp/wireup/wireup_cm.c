@@ -98,19 +98,34 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
     return 1;
 }
 
+static int ucp_cm_client_get_next_cm_idx(ucp_ep_h ep)
+{
+    ucp_worker_h worker          = ep->worker;
+    ucp_rsc_index_t next_cm_idx  = ucp_ep_ext_control(ep)->cm_idx + 1;
+    ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
+
+    for (; next_cm_idx < num_cm_cmpts; ++next_cm_idx) {
+        if (worker->cms[next_cm_idx].cm != NULL) {
+            return next_cm_idx;
+        }
+    }
+
+    return UCP_NULL_RESOURCE;
+}
+
 static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
 {
     ucp_worker_h worker          = ep->worker;
-    ucp_rsc_index_t cm_idx       = ucp_ep_ext_control(ep)->cm_idx;
-    ucp_rsc_index_t next_cm_idx  = cm_idx + 1;
     uct_worker_cb_id_t prog_id   = UCS_CALLBACKQ_ID_NULL;
     ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
     UCS_STRING_BUFFER_ONSTACK(cms_strb, 64);
     char addr_str[UCS_SOCKADDR_STRING_LEN];
     ucp_wireup_ep_t *cm_wireup_ep;
+    ucp_rsc_index_t next_cm_idx;
     int i;
 
-    if ((next_cm_idx >= num_cm_cmpts) || (worker->cms[next_cm_idx].cm == NULL)) {
+    next_cm_idx = ucp_cm_client_get_next_cm_idx(ep);
+    if (next_cm_idx == UCP_NULL_RESOURCE) {
         for (i = 0; i < num_cm_cmpts; ++i) {
             ucs_string_buffer_appendf(&cms_strb, "%s,",
                                       ucp_context_cm_name(worker->context, i));
@@ -320,15 +335,17 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_worker_h worker           = ep->worker;
     ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucp_rsc_index_t dev_index     = UCP_NULL_RESOURCE;
+    void *ucp_addr                = NULL; /* Set to NULL to call ucs_free
+                                             safely */
     ucp_tl_bitmap_t tl_bitmap;
     uct_ep_connect_params_t params;
     ucp_wireup_sockaddr_data_t *sa_data;
     ucp_ep_config_key_t key;
-    void* ucp_addr;
     size_t ucp_addr_size;
     ucp_rsc_index_t cm_idx;
     ucs_queue_head_t tmp_pending_queue;
     ucs_status_t status;
+    ucs_log_level_t log_level;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -376,21 +393,32 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     cm_idx = ucp_ep_ext_control(ep)->cm_idx;
     if (worker->cms[cm_idx].attr.max_conn_priv <
         ucp_cm_priv_data_length(ucp_addr_size)) {
-        ucs_error("CM private data buffer is too small to pack UCP endpoint"
-                  " info, ep %p service data %lu, address length %lu, cm %p"
-                  " max_conn_priv %lu",
-                  ep, sizeof(ucp_wireup_sockaddr_data_t), ucp_addr_size,
-                  worker->cms[cm_idx].cm,
-                  worker->cms[cm_idx].attr.max_conn_priv);
-        status = UCS_ERR_BUFFER_TOO_SMALL;
-        goto free_addr;
+        status    = UCS_ERR_BUFFER_TOO_SMALL;
+        log_level = (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE) ?
+                            UCS_LOG_LEVEL_DEBUG :
+                            UCS_LOG_LEVEL_ERROR;
+
+        ucs_log(log_level,
+                "CM private data buffer is too small to pack UCP endpoint"
+                " info, ep %p service data %lu, address length %lu, cm %p"
+                " max_conn_priv %lu",
+                ep, sizeof(ucp_wireup_sockaddr_data_t), ucp_addr_size,
+                worker->cms[cm_idx].cm, worker->cms[cm_idx].attr.max_conn_priv);
+
+        if (ucp_cm_client_try_fallback_cms(ep)) {
+            /* Can fallback to the next CM to retry getting CM initial config to
+             * fit to CM private data */
+            goto out;
+        }
+
+        goto out_check_err;
     }
 
     sa_data = ucs_malloc(ucp_cm_priv_data_length(ucp_addr_size),
                          "client_priv_data");
     if (sa_data == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto free_addr;
+        goto out_check_err;
     }
 
     ucp_cm_priv_data_pack(sa_data, ep, dev_index, ucp_addr, ucp_addr_size);
@@ -403,8 +431,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
                                                 &params);
     ucs_free(sa_data);
 
-free_addr:
-    ucs_free(ucp_addr);
 out_check_err:
     if (status == UCS_OK) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
@@ -414,6 +440,7 @@ out_check_err:
                                  ucp_ep_get_cm_lane(ep), status);
     }
 out:
+    ucs_free(ucp_addr);
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
 }
