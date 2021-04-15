@@ -181,6 +181,7 @@ out:
 
 void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
 {
+    ucs_assert(!(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CONN_REQ_CB_INVOKED));
     ucs_list_del(&ep->list);
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
@@ -224,10 +225,13 @@ void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
               ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) ? "server" : "client"),
               ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
 
-    /* if the ep is on the server side but uct_ep_create wasn't called yet,
-     * destroy the ep here since uct_ep_destroy won't be called either */
-    if ((ep->state & UCT_TCP_SOCKCM_EP_ON_SERVER) &&
-        !(ep->state & UCT_TCP_SOCKCM_EP_SERVER_CREATED)) {
+    /* if the ep is on the server side but uct_ep_create wasn't called yet and
+     * connection request wasn't prvodied to a user, destroy the ep here since
+     * uct_ep_destroy won't be called either */
+    if ((ep->state & (UCT_TCP_SOCKCM_EP_ON_SERVER |
+                      UCT_TCP_SOCKCM_EP_SERVER_CREATED |
+                      UCT_TCP_SOCKCM_EP_SERVER_CONN_REQ_CB_INVOKED)) ==
+        UCT_TCP_SOCKCM_EP_ON_SERVER) {
         ucs_trace("closing server's internal ep %p (state=%d)", ep, ep->state);
         uct_tcp_sockcm_close_ep(ep);
     } else {
@@ -245,7 +249,9 @@ void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
          * knows about it since it failed in it. in this case, no need to invoke
          * another upper layer callback. */
         if (!(ep->state & (UCT_TCP_SOCKCM_EP_RESOLVE_CB_FAILED |
-                           UCT_TCP_SOCKCM_EP_PACK_CB_FAILED))) {
+                           UCT_TCP_SOCKCM_EP_PACK_CB_FAILED)) &&
+            (ep->state & (UCT_TCP_SOCKCM_EP_SERVER_CREATED |
+                          UCT_TCP_SOCKCM_EP_ON_CLIENT))) {
             uct_tcp_sockcm_ep_invoke_error_cb(ep, status);
         }
 
@@ -596,6 +602,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
      * to uct_ep_create() which will be invoked by the user and therefore moving
      * over to its responsibility. */
     ucs_list_del(&cep->list);
+    cep->state |= UCT_TCP_SOCKCM_EP_SERVER_CONN_REQ_CB_INVOKED;
     cep->listener->conn_request_cb(&cep->listener->super, cep->listener->user_data,
                                    &conn_req_args);
 
@@ -905,6 +912,13 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         goto err;
     }
 
+    UCS_ASYNC_BLOCK(async);
+
+    if (tcp_ep->state & UCT_TCP_SOCKCM_EP_FAILED) {
+        status = UCS_ERR_CONNECTION_RESET;
+        goto err_unblock;
+    }
+
     /* check if the server opened this ep, to the client, on a CM that is
      * different from the one it created its internal ep on earlier, when it
      * received the connection request from the client (the cm used by its listener) */
@@ -913,11 +927,9 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         if (status != UCS_OK) {
             ucs_error("failed to remove fd %d from the async handlers: %s",
                       tcp_ep->fd, ucs_status_string(status));
-            goto err;
+            goto err_unblock;
         }
     }
-
-    UCS_ASYNC_BLOCK(async);
 
     /* set the server's ep to use the cm from params.
      * (it could be the previous one it had - the one used by the listener or

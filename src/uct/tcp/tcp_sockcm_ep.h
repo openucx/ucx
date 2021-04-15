@@ -28,7 +28,8 @@ typedef enum uct_tcp_sockcm_ep_state {
     UCT_TCP_SOCKCM_EP_SERVER_REJECT_CALLED        = UCS_BIT(16), /* ep on the server called reject API call */
     UCT_TCP_SOCKCM_EP_SERVER_REJECT_SENT          = UCS_BIT(17), /* ep on the server sent the reject message to the client */
     UCT_TCP_SOCKCM_EP_RESOLVE_CB_FAILED           = UCS_BIT(18), /* the upper layer's resolve_cb failed */
-    UCT_TCP_SOCKCM_EP_RESOLVE_CB_INVOKED          = UCS_BIT(19)  /* resolve_cb invoked */
+    UCT_TCP_SOCKCM_EP_RESOLVE_CB_INVOKED          = UCS_BIT(19), /* resolve_cb invoked */
+    UCT_TCP_SOCKCM_EP_SERVER_CONN_REQ_CB_INVOKED  = UCS_BIT(20)  /* server ep was passed to a user via conn_req_cb */
 } uct_tcp_sockcm_ep_state_t;
 
 

@@ -47,7 +47,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>  /* getopt */
-#include <ctype.h>   /* isprint */
 #include <pthread.h> /* pthread_self */
 #include <errno.h>   /* errno */
 #include <time.h>
@@ -314,25 +313,23 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     }
 
     str = calloc(1, test_string_length);
-    if (str != NULL) {
-        mem_type_memcpy(str, msg + 1, test_string_length);
-        printf("\n\n----- UCP TEST SUCCESS ----\n\n");
-        printf("%s", str);
-        printf("\n\n---------------------------\n\n");
-        free(str);
-    } else {
+    if (str == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
-        mem_type_free(msg);
-        goto err_ep;
+        ret = -1;
+        goto err_msg;
     }
 
-    mem_type_free(msg);
-
+    mem_type_memcpy(str, msg + 1, test_string_length);
+    printf("\n\n----- UCP TEST SUCCESS ----\n\n");
+    printf("%s", str);
+    printf("\n\n---------------------------\n\n");
+    free(str);
     ret = 0;
 
+err_msg:
+    mem_type_free(msg);
 err_ep:
     ucp_ep_destroy(server_ep);
-
 err:
     return ret;
 }
@@ -633,6 +630,9 @@ static void print_usage()
             "ucp_worker_get_efd function with later poll\n");
     fprintf(stderr, "  -b      Select test mode \"busy polling\" to test "
             "ucp_tag_probe_nb and ucp_worker_progress (default)\n");
+    fprintf(stderr, "  -n <name> Set node name or IP address "
+            "of the server (required for client and should be ignored "
+            "for server)\n");
     fprintf(stderr, "  -e <type> Emulate unexpected failure and handle an "
                                 "error with enabled UCP_ERR_HANDLING_MODE_PEER\n");
     fprintf(stderr, "            send      - send failure on server side "
@@ -648,7 +648,6 @@ static void print_usage()
 ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
 {
     int c = 0, idx = 0;
-    opterr = 0;
 
     err_handling_opt.ucp_err_mode = UCP_ERR_HANDLING_MODE_NONE;
     err_handling_opt.failure_mode = FAILURE_MODE_NONE;
@@ -689,7 +688,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
             break;
         case 's':
             test_string_length = atol(optarg);
-            if (test_string_length <= 0) {
+            if (test_string_length < 0) {
                 fprintf(stderr, "Wrong string size %ld\n", test_string_length);
                 return UCS_ERR_UNSUPPORTED;
             }	
@@ -700,15 +699,6 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
                 return UCS_ERR_UNSUPPORTED;
             }
             break;
-        case '?':
-            if (optopt == 's') {
-                fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-            } else if (isprint (optopt)) {
-                fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-            } else {
-                fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
-            }
-            /* Fall through */
         case 'h':
         default:
             print_usage();

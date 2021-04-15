@@ -41,7 +41,17 @@ shared memory mechanisms for efficient intra-node communication.
 * UCX version 1.8.0 has a bug that may cause data corruption when TCP transport
   is used in conjunction with shared memory transport. It is advised to upgrade
   to UCX version 1.9.0 and above. UCX versions released before 1.8.0 don't have
-  this bug.   
+  this bug.
+
+* UCX may hang with glibc versions 2.25-2.29 due to known bugs in the
+  pthread_rwlock functions. When such hangs occur, one of the UCX threads gets
+  stuck in pthread_rwlock_rdlock (which is called by ucs_rcache_get), even
+  though no other thread holds the lock. A related issue is reported in
+  [glibc Bug 23844](https://sourceware.org/bugzilla/show_bug.cgi?id=23844).
+  If this issue occurs, it is advised to use glibc version provided with your
+  OS distribution or build glibc from source using versions less than 2.25 or
+  greater than 2.29.
+
 ### Release Builds
 
 Building UCX is typically a combination of running "configure" and "make".

@@ -85,6 +85,23 @@ public:
     }
 
     static ucs_log_func_rc_t
+    detect_warn_logger(const char *file, unsigned line, const char *function,
+                       ucs_log_level_t level,
+                       const ucs_log_component_config_t *comp_conf,
+                       const char *message, va_list ap)
+    {
+        if (level == UCS_LOG_LEVEL_WARN) {
+            std::string err_str = format_message(message, ap);
+            if (err_str.find("failed to connect CM lane on device") !=
+                std::string::npos) {
+                UCS_TEST_MESSAGE << err_str;
+                return UCS_LOG_FUNC_RC_STOP;
+            }
+        }
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static ucs_log_func_rc_t
     detect_error_logger(const char *file, unsigned line, const char *function,
                         ucs_log_level_t level,
                         const ucs_log_component_config_t *comp_conf,
@@ -491,19 +508,21 @@ public:
         wait_for_reject(sender(),   wakeup);
     }
 
-    void listen_and_communicate(bool wakeup, uint64_t flags)
+    void listen(ucp_test_base::entity::listen_cb_type_t cb_type)
     {
         UCS_TEST_MESSAGE << "Testing " << m_test_addr.to_str();
+        start_listener(cb_type);
+    }
 
-        start_listener(cb_type());
+    void listen_and_communicate(bool wakeup, uint64_t flags)
+    {
+        listen(cb_type());
         connect_and_send_recv(wakeup, flags);
     }
 
     void listen_and_reject(bool wakeup)
     {
-        UCS_TEST_MESSAGE << "Testing " << m_test_addr.to_str();
-
-        start_listener(ucp_test_base::entity::LISTEN_CB_REJECT);
+        listen(ucp_test_base::entity::LISTEN_CB_REJECT);
         connect_and_reject(wakeup);
     }
 
@@ -1162,6 +1181,56 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
     scoped_log_handler slh(wrap_errors_logger);
     one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
     one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+/* The test check that a client disconenction works fine when a server received
+ * a conenction request, but a conenction wasn't fully established */
+UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
+{
+    ucp_test_base::entity::listen_cb_type_t listen_cb_type = cb_type();
+
+    listen(listen_cb_type);
+
+    {
+        scoped_log_handler warn_slh(detect_warn_logger);
+        scoped_log_handler error_slh(detect_error_logger);
+        client_ep_connect();
+
+        if (listen_cb_type == ucp_test_base::entity::LISTEN_CB_CONN) {
+            /* Wait for either connection to a peer failed (e.g. no TL to create
+             * after CM created a connection) or connection request is provided
+             * by UCP */
+            while ((m_err_count == 0) &&
+                   receiver().is_conn_reqs_queue_empty()) {
+                progress();
+            }
+        } else {
+            /* Wait for EP being created on a server side */
+            ASSERT_EQ(ucp_test_base::entity::LISTEN_CB_EP, listen_cb_type);
+            if (!wait_for_server_ep(false)) {
+                UCS_TEST_SKIP_R("cannot connect to server");
+            }
+        }
+
+        /* Disconnect from a peer while conenction is not fully established with
+         * a peer */
+        one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FORCE);
+
+        /* Wait until either accepting a connection fails on a server side or
+         * disconnection is detected by a server in case of a connection was
+         * established successfully */
+        ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(10.0);
+        while ((ucs_get_time() < loop_end_limit) &&
+               (m_err_count == 0) && (receiver().get_accept_err_num() == 0)) {
+            progress();
+        }
+
+        EXPECT_TRUE((m_err_count != 0) ||
+                    (receiver().get_accept_err_num() != 0));
+    }
+
+    /* Disconnect from a client if a connection was established */
+    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
 }
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_destroy_ep_on_err)
