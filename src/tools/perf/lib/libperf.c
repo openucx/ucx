@@ -1203,6 +1203,13 @@ static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
     return collective_status;
 }
 
+static void ucp_perf_test_err_handler(void *arg, ucp_ep_h ep,
+                                      ucs_status_t status)
+{
+    ucs_error("error handler called with status %d (%s)\n", status,
+              ucs_status_string(status));
+}
+
 static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
 {
     unsigned thread_count = perf->params.thread_count;
@@ -1253,6 +1260,14 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
 
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address    = address;
+
+        if (perf->params.flags & UCX_PERF_TEST_FLAG_ERR_HANDLING) {
+            ep_params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLER |
+                                        UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
+            ep_params.err_handler.cb  = ucp_perf_test_err_handler;
+            ep_params.err_handler.arg = NULL;
+            ep_params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
+        }
 
         status = ucp_ep_create(perf->ucp.tctx[i].perf.ucp.worker, &ep_params,
                                &perf->ucp.tctx[i].perf.ucp.ep);
