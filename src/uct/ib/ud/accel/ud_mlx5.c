@@ -697,7 +697,9 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
                                                 struct ibv_qp **qp_p)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
-    uct_ib_mlx5_qp_t *qp = &iface->tx.wq.super;
+    uct_ib_mlx5_md_t *ib_md    = ucs_derived_of(ib_iface->super.md,
+                                                uct_ib_mlx5_md_t);
+    uct_ib_mlx5_qp_t *qp       = &iface->tx.wq.super;
     uct_ib_mlx5_qp_attr_t attr = {};
     ucs_status_t status;
 
@@ -706,11 +708,33 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
+        goto err_destroy_qp;
+    }
+
+    status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
+                                   iface->tx.mmio_mode, &iface->tx.wq,
+                                   qp->verbs.qp);
+    if (status != UCS_OK) {
         return status;
     }
 
     *qp_p = qp->verbs.qp;
     return status;
+
+err_destroy_qp:
+    uct_ib_mlx5_destroy_qp(ib_md, qp);
+    return status;
+}
+
+static void uct_ud_mlx5_iface_destroy_qp(uct_ud_iface_t *ud_iface)
+{
+    uct_ud_mlx5_iface_t *iface = ucs_derived_of(ud_iface, uct_ud_mlx5_iface_t);
+    uct_ib_mlx5_md_t *ib_md    = ucs_derived_of(ud_iface->super.super.md,
+                                                uct_ib_mlx5_md_t);
+    uct_ib_mlx5_qp_t *qp       = &iface->tx.wq.super;
+
+    uct_ib_mlx5_qp_mmio_cleanup(qp, iface->tx.wq.reg);
+    uct_ib_mlx5_destroy_qp(ib_md, qp);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);
@@ -766,6 +790,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .send_ctl                 = uct_ud_mlx5_ep_send_ctl,
     .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
     .create_qp                = uct_ud_mlx5_iface_create_qp,
+    .destroy_qp               = uct_ud_mlx5_iface_destroy_qp,
     .unpack_peer_address      = uct_ud_mlx5_iface_unpack_peer_address,
     .ep_get_peer_address      = uct_ud_mlx5_ep_get_peer_address,
     .get_peer_address_length  = uct_ud_mlx5_get_peer_address_length,
@@ -789,6 +814,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
     init_attr.cq_len[UCT_IB_DIR_RX] = config->super.super.rx.queue_len;
 
+    self->tx.mmio_mode     = config->mlx5_common.mmio_mode;
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
@@ -809,13 +835,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     }
 
     status = uct_ib_mlx5_get_cq(self->super.super.cq[UCT_IB_DIR_RX], &self->cq[UCT_IB_DIR_RX]);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    status = uct_ib_mlx5_txwq_init(self->super.super.super.worker,
-                                   config->mlx5_common.mmio_mode, &self->tx.wq,
-                                   self->super.qp);
     if (status != UCS_OK) {
         return status;
     }
@@ -854,10 +873,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 static UCS_CLASS_CLEANUP_FUNC(uct_ud_mlx5_iface_t)
 {
     ucs_trace_func("");
-    uct_ud_iface_remove_async_handlers(&self->super);
-    uct_ud_enter(&self->super);
-    uct_ib_mlx5_qp_mmio_cleanup(&self->tx.wq.super, self->tx.wq.reg);
-    uct_ud_leave(&self->super);
 }
 
 UCS_CLASS_DEFINE(uct_ud_mlx5_iface_t, uct_ud_iface_t);
