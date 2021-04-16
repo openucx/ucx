@@ -1400,7 +1400,7 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep, const ucp_request_param_
     request->flags   = 0;
     request->send.ep = ep;
     request->send.flush.uct_flags = UCT_FLUSH_FLAG_LOCAL;
-    ucp_request_send_state_clear(request, NULL);
+    ucp_request_send_state_comp_reset(request, NULL);
 
     ucp_request_set_send_callback_param(param, request, send);
 

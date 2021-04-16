@@ -453,7 +453,7 @@ void ucp_proto_rndv_receive(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.ep                  = ep;
     req->send.rndv.remote_address = rts->address;
     req->send.rndv.remote_req_id  = rts->sreq.req_id;
-    ucp_request_send_state_clear(req, NULL);
+    ucp_request_send_state_comp_reset(req, NULL);
 
     if (ucs_likely(rts->size <= recv_req->recv.length)) {
         req->super_req = recv_req;

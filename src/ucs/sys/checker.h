@@ -32,11 +32,16 @@
 #  define VALGRIND_MEMPOOL_FREE(n,p)
 #  define VALGRIND_MALLOCLIKE_BLOCK(p,s,r,z)
 #  define VALGRIND_FREELIKE_BLOCK(p,r)
-#  define VALGRIND_CHECK_MEM_IS_DEFINED(p, n) ({(uintptr_t)0;})
+#  define VALGRIND_CHECK_MEM_IS_DEFINED(p, n) ucs_mem_check_stub()
 #  define VALGRIND_COUNT_ERRORS              0
 #  define VALGRIND_COUNT_LEAKS(a,b,c,d)      { a = b = c = d = 0; }
 #  define RUNNING_ON_VALGRIND                0
 #  define VALGRIND_PRINTF(...)
+
+static UCS_F_ALWAYS_INLINE uintptr_t ucs_mem_check_stub()
+{
+    return 0;
+}
 #endif
 
 

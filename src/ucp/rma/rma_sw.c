@@ -139,7 +139,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
     req->flags         = 0;
     req->send.ep       = ep;
     req->send.uct.func = ucp_progress_rma_cmpl;
-    ucp_request_send_state_clear(req, NULL);
+    ucp_request_send_state_comp_reset(req, NULL);
     ucp_request_send(req, 0);
 }
 
@@ -245,7 +245,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     req->send.length                  = getreqh->length;
     req->send.get_reply.remote_req_id = getreqh->req.req_id;
     req->send.uct.func                = ucp_progress_get_reply;
-    ucp_request_send_state_clear(req, NULL);
+    ucp_request_send_state_comp_reset(req, NULL);
     if (ep->worker->context->config.ext.proto_enable) {
         req->send.mem_type = getreqh->mem_type;
     } else {

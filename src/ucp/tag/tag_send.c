@@ -276,7 +276,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         goto out;
     });
 
-    ucp_request_send_state_clear(req, NULL);
+    ucp_request_send_state_comp_reset(req, NULL);
     if (worker->context->config.ext.proto_enable) {
         req->send.msg_proto.tag = tag;
 
@@ -332,7 +332,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                                  goto out;});
 
     if (worker->context->config.ext.proto_enable) {
-        ucp_request_send_state_clear(req, NULL);
+        ucp_request_send_state_comp_reset(req, NULL);
         req->send.msg_proto.tag = tag;
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,

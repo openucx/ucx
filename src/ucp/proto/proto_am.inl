@@ -553,7 +553,7 @@ ucp_proto_ssend_ack_request_alloc(ucp_worker_h worker, ucp_ep_h ep)
     req->send.uct.func      = ucp_proto_progress_am_single;
     req->send.proto.comp_cb = ucp_request_put;
     req->send.proto.status  = UCS_OK;
-    ucp_request_send_state_clear(req, NULL);
+    ucp_request_send_state_comp_reset(req, NULL);
 
     return req;
 }
