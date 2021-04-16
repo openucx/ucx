@@ -298,7 +298,8 @@ static uct_srd_ep_t *uct_srd_ep_create_passive(uct_srd_iface_t *iface, uct_srd_c
     return ep;
 }
 
-static void uct_srd_ep_rx_creq(uct_srd_iface_t *iface, uct_srd_neth_t *neth)
+static uct_srd_ep_t *uct_srd_ep_rx_creq(uct_srd_iface_t *iface,
+                                        uct_srd_neth_t *neth)
 {
     uct_srd_ctl_hdr_t *ctl = (uct_srd_ctl_hdr_t *)(neth + 1);
     uct_srd_ep_t *ep;
@@ -317,6 +318,14 @@ static void uct_srd_ep_rx_creq(uct_srd_iface_t *iface, uct_srd_neth_t *neth)
     } else if (ep->dest_ep_id == UCT_SRD_EP_NULL_ID) {
         /* simultaneuous CREQ */
         uct_srd_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
+        /* creq must always be the next in-order packet, i.e.,
+         * there can't be any packets or holes before it. */
+        ucs_assertv_always(ep->rx.ooo_pkts.head_sn + 1 == neth->psn,
+                           "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
+                           "neth_psn=%u ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
+                           iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
+                           ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags,
+                           ep->tx.pending.ops, ep->rx_creq_count);
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_srd_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         ucs_debug("simultaneuous CREQ ep=%p"
@@ -342,7 +351,6 @@ static void uct_srd_ep_rx_creq(uct_srd_iface_t *iface, uct_srd_neth_t *neth)
                        uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id),
                        ep->dest_ep_id);
 
-    /* creq must always have same psn */
     ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
                        "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
                        "neth_psn=%u ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
@@ -356,6 +364,7 @@ static void uct_srd_ep_rx_creq(uct_srd_iface_t *iface, uct_srd_neth_t *neth)
     }
     uct_srd_ep_ctl_op_del(ep, UCT_SRD_EP_OP_CREQ);
     uct_srd_ep_set_state(ep, UCT_SRD_EP_FLAG_CREQ_RCVD);
+    return ep;
 }
 
 static void uct_srd_ep_rx_crep(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
@@ -374,7 +383,6 @@ static void uct_srd_ep_rx_crep(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
                            uct_srd_neth_get_dest_id(neth), ctl->conn_rep.src_ep_id);
     }
 
-    ep->rx.ooo_pkts.head_sn = neth->psn;
     uct_srd_ep_set_dest_ep_id(ep, ctl->conn_rep.src_ep_id);
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
     uct_srd_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
@@ -436,6 +444,20 @@ uct_srd_send_skb_t *uct_srd_ep_prepare_creq(uct_srd_ep_t *ep)
     return skb;
 }
 
+static void inline
+uct_srd_ep_process_rx_skb(uct_srd_iface_t *iface, uct_srd_ep_t *ep, int is_am,
+                          uct_srd_neth_t *neth, uct_srd_recv_skb_t *skb)
+{
+    if (ucs_likely(is_am)) {
+        uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
+                                    neth + 1, skb->am.len, &skb->super);
+    } else {
+        /* must be connection reply packet */
+        uct_srd_ep_rx_crep(iface, ep, neth, skb);
+        ucs_mpool_put(skb);
+    }
+}
+
 void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
                            unsigned byte_len, uct_srd_recv_skb_t *skb)
 {
@@ -452,8 +474,11 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
 
     if (ucs_unlikely(dest_id == UCT_SRD_EP_NULL_ID)) {
         /* must be connection request packet */
-        uct_srd_ep_rx_creq(iface, neth);
-        goto out;
+        ep = uct_srd_ep_rx_creq(iface, neth);
+        ucs_mpool_put(skb);
+        /* In case of simultaneous CREQ, other packets
+         * might have been received before CREQ. */
+        goto pull_ooo_pkts;
     }
 
     if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
@@ -470,23 +495,12 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
 
     ucs_assert(ep->ep_id != UCT_SRD_EP_NULL_ID);
 
-    if (ucs_unlikely(!is_am)) {
-        if ((size_t)byte_len == sizeof(*neth)) {
-            goto out;
-        }
-        if (neth->packet_type & UCT_SRD_PACKET_FLAG_CTLX) {
-            /* must be connection reply packet */
-            uct_srd_ep_rx_crep(iface, ep, neth, skb);
-            goto out;
-        }
+    if (ucs_likely(is_am)) {
+        skb->am.len = byte_len - sizeof(*neth);
     }
 
-    ucs_assert(is_am);
-
-    skb->am.len = byte_len - sizeof(*neth);
     ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &skb->ooo.elem, neth->psn);
     ucs_assert(ooo_type != UCS_FRAG_LIST_INSERT_DUP);
-
     if (ucs_unlikely(ooo_type == UCS_FRAG_LIST_INSERT_FAIL)) {
         ucs_fatal("failed to insert SRD packet (psn %u) into rx frag list %p",
                   neth->psn, &ep->rx.ooo_pkts);
@@ -496,20 +510,17 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
     if (ooo_type == UCS_FRAG_LIST_INSERT_FAST ||
         ooo_type == UCS_FRAG_LIST_INSERT_FIRST) {
         /* skb has not been inserted into the frag list */
-        uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
-                                    neth + 1, skb->am.len, &skb->super);
+        uct_srd_ep_process_rx_skb(iface, ep, is_am, neth, skb);
     }
 
-    if (ooo_type == UCS_FRAG_LIST_INSERT_FIRST ||
-        ooo_type == UCS_FRAG_LIST_INSERT_READY) {
-        /* it is now possible to pull (in order) some old elements */
-        while ((elem = ucs_frag_list_pull(&ep->rx.ooo_pkts))) {
-            skb  = ucs_container_of(elem, typeof(*skb), ooo.elem);
-            neth = (typeof(neth))uct_ib_iface_recv_desc_hdr(&iface->super,
-                                                            (uct_ib_iface_recv_desc_t*)skb);
-            uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
-                                        neth + 1, skb->am.len, &skb->super);
-        }
+pull_ooo_pkts:
+    /* it might now be possible to pull (in order) some old elements */
+    while ((elem = ucs_frag_list_pull(&ep->rx.ooo_pkts))) {
+        skb   = ucs_container_of(elem, typeof(*skb), ooo.elem);
+        neth  = (typeof(neth))uct_ib_iface_recv_desc_hdr(&iface->super,
+                                                        (uct_ib_iface_recv_desc_t*)skb);
+        is_am = neth->packet_type & UCT_SRD_PACKET_FLAG_AM;
+        uct_srd_ep_process_rx_skb(iface, ep, is_am, neth, skb);
     }
 
     return;
