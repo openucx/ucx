@@ -1528,14 +1528,14 @@ public:
     void connect_succeed(size_t server_index)
     {
         server_info_t &server_info = _server_info[server_index];
-        long retries               = server_info.retry_count + 1;
+        long attempts              = server_info.retry_count + 1;
 
         server_info.retry_count                = 0;
         server_info.prev_connect_time          = 0.;
         _server_index_lookup[server_info.conn] = server_index;
         active_servers_add(server_index);
         LOG << "Connected to " << server_name(server_index) << " after "
-            << retries << " retries";
+            << attempts << " attempts";
     }
 
     void connect_failed(size_t server_index) {
