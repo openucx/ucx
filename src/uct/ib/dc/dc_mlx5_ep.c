@@ -1215,8 +1215,8 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    /* No any other pending operations (except no-op, flush(CANEL), and others
-     * which don't consume TX resources) allowed to be still scheduled on an
+    /* No pending operations (except no-op, flush(CANCEL), and others
+     * that don't consume TX resources) allowed to be still scheduled on an
      * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL));
 
