@@ -7,8 +7,6 @@
 #ifndef UCP_ADDRESS_H_
 #define UCP_ADDRESS_H_
 
-#include "wireup.h"
-
 #include <uct/api/uct.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_worker.h>
@@ -41,12 +39,26 @@ enum {
 
 
 enum {
-    UCP_ADDRESS_PACK_FLAG_WORKER_UUID     = UCS_BIT(0), /* Add worker UUID */
-    UCP_ADDRESS_PACK_FLAG_WORKER_NAME     = UCS_BIT(1), /* Pack worker name */
-    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR     = UCS_BIT(2), /* Pack device addresses */
-    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR      = UCS_BIT(3), /* Pack interface addresses */
-    UCP_ADDRESS_PACK_FLAG_EP_ADDR         = UCS_BIT(4), /* Pack endpoint addresses */
-    UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX      = UCS_BIT(5), /* Pack TL resource index */
+    /* Add worker UUID */
+    UCP_ADDRESS_PACK_FLAG_WORKER_UUID = UCS_BIT(0),
+
+    /* Pack worker name */
+    UCP_ADDRESS_PACK_FLAG_WORKER_NAME = UCS_BIT(1),
+
+    /* Pack device addresses */
+    UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR = UCS_BIT(2),
+
+    /* Pack interface addresses */
+    UCP_ADDRESS_PACK_FLAG_IFACE_ADDR  = UCS_BIT(3),
+
+    /* Pack endpoint addresses */
+    UCP_ADDRESS_PACK_FLAG_EP_ADDR     = UCS_BIT(4),
+
+    /* Pack TL resource index */
+    UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX  = UCS_BIT(5),
+
+    /* Pack system device id */
+    UCP_ADDRESS_PACK_FLAG_SYS_DEVICE  = UCS_BIT(6),
 
     UCP_ADDRESS_PACK_FLAG_LAST,
 
@@ -54,15 +66,14 @@ enum {
      * so UCP_ADDRESS_PACK_FLAG_LAST<<1 is the next bit plus 2. If we subtract 3
      * we get the next bit minus 1.
      */
-    UCP_ADDRESS_PACK_FLAGS_ALL            = (UCP_ADDRESS_PACK_FLAG_LAST << 1) - 3,
+    UCP_ADDRESS_PACK_FLAGS_ALL        = (UCP_ADDRESS_PACK_FLAG_LAST << 1) - 3,
 
-    UCP_ADDRESS_PACK_FLAGS_WORKER_DEFAULT = UCP_ADDRESS_PACK_FLAGS_ALL &
-                                            ~UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX,
+    /* Default packing flags for client-server protocol */
+    UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
+                                        UCP_ADDRESS_PACK_FLAG_EP_ADDR,
 
-    UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT     = UCP_ADDRESS_PACK_FLAG_IFACE_ADDR |
-                                            UCP_ADDRESS_PACK_FLAG_EP_ADDR,
-
-    UCP_ADDRESS_PACK_FLAG_NO_TRACE        = UCS_BIT(16) /* Suppress debug tracing */
+    /* Suppress debug tracing */
+    UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16)
 };
 
 
@@ -98,6 +109,7 @@ struct ucp_address_entry {
     unsigned                    dev_num_paths;  /* Number of paths on the device */
     uint16_t                    tl_name_csum;   /* Checksum of transport name */
     ucp_md_index_t              md_index;       /* Memory domain index */
+    ucs_sys_device_t            sys_dev;        /* System device id */
     ucp_rsc_index_t             dev_index;      /* Device index */
 };
 

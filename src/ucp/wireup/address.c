@@ -53,6 +53,7 @@ typedef struct {
     ucp_rsc_index_t  rsc_index;
     ucp_rsc_index_t  tl_count;
     unsigned         num_paths;
+    ucs_sys_device_t sys_dev;
     size_t           tl_addrs_size;
 } ucp_address_packed_device_t;
 
@@ -96,15 +97,26 @@ typedef struct {
 #define UCP_ADDRESS_FLAG_HAS_EP_ADDR  0x40u  /* For iface address:
                                                 Indicates that ep addr is packed
                                                 right after iface addr */
-#define UCP_ADDRESS_FLAG_HAVE_PATHS   0x40u  /* For device address:
+#define UCP_ADDRESS_FLAG_NUM_PATHS    0x40u  /* For device address:
                                                 Indicates that number of paths on the
                                                 device is packed right after device
                                                 address, otherwise number of paths
                                                 defaults to 1. */
-#define UCP_ADDRESS_FLAG_LEN_MASK     (UCS_MASK(8) ^ \
-                                        (UCP_ADDRESS_FLAG_HAS_EP_ADDR | \
-                                         UCP_ADDRESS_FLAG_HAVE_PATHS  | \
-                                         UCP_ADDRESS_FLAG_LAST))
+#define UCP_ADDRESS_FLAG_SYS_DEVICE   0x20u  /* For device address:
+                                                Indicates that system device is
+                                                packed after device address or
+                                                number of paths (if present) */
+
+/* Mask for iface and endpoint address length */
+#define UCP_ADDRESS_IFACE_LEN_MASK   (UCS_MASK(8) ^ \
+                                      (UCP_ADDRESS_FLAG_HAS_EP_ADDR | \
+                                       UCP_ADDRESS_FLAG_LAST))
+
+/* Mask for device address length */
+#define UCP_ADDRESS_DEVICE_LEN_MASK  (UCS_MASK(8) ^ \
+                                      (UCP_ADDRESS_FLAG_SYS_DEVICE | \
+                                       UCP_ADDRESS_FLAG_NUM_PATHS | \
+                                       UCP_ADDRESS_FLAG_LAST))
 
 #define UCP_ADDRESS_FLAG_MD_EMPTY_DEV 0x80u  /* Device without TL addresses */
 #define UCP_ADDRESS_FLAG_MD_ALLOC     0x40u  /* MD can register  */
@@ -181,8 +193,7 @@ ucp_address_get_device(ucp_context_h context, ucp_rsc_index_t rsc_index,
 
     for (dev = devices; dev < devices + *num_devices_p; ++dev) {
         if ((tl_rsc[rsc_index].md_index == tl_rsc[dev->rsc_index].md_index) &&
-            !strcmp(tl_rsc[rsc_index].tl_rsc.dev_name,
-                    tl_rsc[dev->rsc_index].tl_rsc.dev_name)) {
+            (tl_rsc[rsc_index].dev_index == tl_rsc[dev->rsc_index].dev_index)) {
             goto out;
         }
     }
@@ -253,6 +264,12 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
             dev->dev_addr_len = 0;
         }
 
+        if (flags & UCP_ADDRESS_PACK_FLAG_SYS_DEVICE) {
+            dev->sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
+        } else {
+            dev->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
+
         if (iface_attr->dev_num_paths > UINT8_MAX) {
             ucs_error("only up to %d paths are supported by address pack (got: %u)",
                       UINT8_MAX, iface_attr->dev_num_paths);
@@ -300,7 +317,10 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
                 size += dev->dev_addr_len;  /* device address */
             }
             if (dev->num_paths > 1) {
-                size += 1;                  /* number of paths */
+                size += 1; /* number of paths */
+            }
+            if (dev->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+                size += 1; /* system device */
             }
             size += dev->tl_addrs_size; /* transport addresses */
         }
@@ -455,9 +475,9 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     if (ucp_worker_is_unified_mode(worker)) {
         /* Address contains resources index and iface latency overhead
          * (not all iface attrs). */
-        unified               = ptr;
-        rsc_idx               = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
-        iface_attr->lat_ovh   = fabs(unified->lat_ovh);
+        unified             = ptr;
+        rsc_idx             = unified->rsc_index & UCP_ADDRESS_IFACE_LEN_MASK;
+        iface_attr->lat_ovh = fabs(unified->lat_ovh);
         if (!UCS_BITMAP_GET(worker->context->tl_bitmap, rsc_idx)) {
             if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                 ucs_error("failed to unpack address, resource[%d] is not valid",
@@ -508,7 +528,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->atomic.atomic32.op_flags  |= UCP_ATOMIC_OP_MASK;
         iface_attr->atomic.atomic32.fop_flags |= UCP_ATOMIC_FOP_MASK;
     }
-    
+
     /* Unpack iface 64-bit atomic operations */
     if (packed->prio_cap_flags & UCP_ADDRESS_FLAG_ATOMIC64) {
         iface_attr->atomic.atomic64.op_flags  |= UCP_ATOMIC_OP_MASK;
@@ -544,23 +564,24 @@ ucp_address_iface_flags_ptr(ucp_worker_h worker, void *attr_ptr, int attr_len)
     return UCS_PTR_BYTE_OFFSET(attr_ptr, attr_len);
 }
 
-static void*
-ucp_address_pack_length(ucp_worker_h worker, void *ptr, size_t addr_length)
+static void *ucp_address_pack_iface_length(ucp_worker_h worker, void *ptr,
+                                           size_t addr_length)
 {
     if (ucp_worker_is_unified_mode(worker)) {
         return ptr;
     }
 
-    ucs_assertv(addr_length <= UCP_ADDRESS_FLAG_LEN_MASK, "addr_length=%zu",
+    ucs_assertv(addr_length <= UCP_ADDRESS_IFACE_LEN_MASK, "addr_length=%zu",
                 addr_length);
     *(uint8_t*)ptr = addr_length;
 
     return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 }
 
-static const void*
-ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void *ptr,
-                          size_t *addr_length, int is_ep_addr, int *is_last_iface)
+static const void *
+ucp_address_unpack_iface_length(ucp_worker_h worker, const void *flags_ptr,
+                                const void *ptr, size_t *addr_length,
+                                int is_ep_addr, int *is_last_iface)
 {
     ucp_rsc_index_t rsc_index;
     uct_iface_attr_t *attr;
@@ -576,7 +597,7 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
          * - iface and ep addr lengths are not packed, need to take them from
          *   local iface attrs */
         unified   = flags_ptr;
-        rsc_index = unified->rsc_index & UCP_ADDRESS_FLAG_LEN_MASK;
+        rsc_index = unified->rsc_index & UCP_ADDRESS_IFACE_LEN_MASK;
         attr      = ucp_worker_iface_get_attr(worker, rsc_index);
 
         ucs_assert(&unified->rsc_index == flags_ptr);
@@ -594,7 +615,7 @@ ucp_address_unpack_length(ucp_worker_h worker, const void* flags_ptr, const void
         *is_last_iface = *(uint8_t*)ptr & UCP_ADDRESS_FLAG_LAST;
     }
 
-    *addr_length = *(uint8_t*)ptr & UCP_ADDRESS_FLAG_LEN_MASK;
+    *addr_length = *(uint8_t*)ptr & UCP_ADDRESS_IFACE_LEN_MASK;
 
     return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 }
@@ -685,20 +706,27 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         *(uint8_t*)ptr = (dev == (devices + num_devices - 1)) ?
                          UCP_ADDRESS_FLAG_LAST : 0;
         if (pack_flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) {
-            ucs_assert(dev->dev_addr_len <= UCP_ADDRESS_FLAG_LEN_MASK);
+            ucs_assert(dev->dev_addr_len <= UCP_ADDRESS_DEVICE_LEN_MASK);
             *(uint8_t*)ptr |= dev->dev_addr_len;
         }
+        flags_ptr = ptr;
+        ptr       = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
         /* Device number of paths flag and value */
         ucs_assert(dev->num_paths >= 1);
-        ucs_assert(dev->num_paths <= UINT8_MAX);
-
         if (dev->num_paths > 1) {
-            *(uint8_t*)ptr |= UCP_ADDRESS_FLAG_HAVE_PATHS;
-            ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
-            *(uint8_t*)ptr = dev->num_paths;
+            ucs_assert(dev->num_paths <= UINT8_MAX);
+            *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_NUM_PATHS;
+            *(uint8_t*)ptr        = dev->num_paths;
+            ptr                   = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
         }
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+
+        /* System device */
+        if (dev->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+            *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_SYS_DEVICE;
+            *(uint8_t*)ptr        = dev->sys_dev;
+            ptr                   = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        }
 
         /* Device address */
         if (pack_flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) {
@@ -748,7 +776,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
 
             /* Pack iface address */
-            ptr = ucp_address_pack_length(worker, ptr, iface_addr_len);
+            ptr = ucp_address_pack_iface_length(worker, ptr, iface_addr_len);
             if (pack_flags & UCP_ADDRESS_PACK_FLAG_IFACE_ADDR) {
                 status = uct_iface_get_address(wiface->iface,
                                                (uct_iface_addr_t*)ptr);
@@ -777,7 +805,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     }
 
                     /* pack ep address length and save pointer to flags */
-                    ptr = ucp_address_pack_length(worker, ptr, ep_addr_len);
+                    ptr = ucp_address_pack_iface_length(worker, ptr,
+                                                        ep_addr_len);
 
                     /* pack ep address */
                     status = uct_ep_get_address(ep->uct_eps[lane], ptr);
@@ -793,7 +822,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                      */
                     remote_lane  = (lanes2remote == NULL) ? lane :
                                    lanes2remote[lane];
-                    ucs_assertv(remote_lane <= UCP_ADDRESS_FLAG_LEN_MASK,
+                    ucs_assertv(remote_lane <= UCP_ADDRESS_IFACE_LEN_MASK,
                                 "remote_lane=%d", remote_lane);
                     ep_lane_ptr  = ptr;
                     *ep_lane_ptr = remote_lane;
@@ -821,18 +850,21 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                        !(*(uint8_t*)flags_ptr & UCP_ADDRESS_FLAG_HAS_EP_ADDR));
 
             if (!(pack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-               ucs_trace("pack addr[%d] : "UCT_TL_RESOURCE_DESC_FMT" "
-                          "eps %u md_flags 0x%"PRIx64" tl_flags 0x%"PRIx64
-                          " bw %e + %e/n ovh %e lat_ovh %e dev_priority %d a32 "
-                          "0x%"PRIx64"/0x%"PRIx64" a64 0x%"PRIx64"/0x%"PRIx64,
+                ucs_trace("pack addr[%d] : " UCT_TL_RESOURCE_DESC_FMT
+                          " sysdev %d paths %d eps %u md_flags 0x%" PRIx64
+                          " tl_flags 0x%" PRIx64 " bw %.2f+%.2f/nMBs"
+                          " ovh %.0fns lat_ovh %.0fns dev_priority %d"
+                          " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
+                          "/0x%" PRIx64,
                           addr_index,
-                          UCT_TL_RESOURCE_DESC_ARG(&context->tl_rscs[rsc_index].tl_rsc),
-                          num_ep_addrs, md_flags, iface_attr->cap.flags,
-                          iface_attr->bandwidth.dedicated,
-                          iface_attr->bandwidth.shared,
-                          iface_attr->overhead,
-                          iface_attr->latency.c,
-                          iface_attr->priority,
+                          UCT_TL_RESOURCE_DESC_ARG(
+                                  &context->tl_rscs[rsc_index].tl_rsc),
+                          dev->sys_dev, dev->num_paths, num_ep_addrs, md_flags,
+                          iface_attr->cap.flags,
+                          iface_attr->bandwidth.dedicated / UCS_MBYTE,
+                          iface_attr->bandwidth.shared / UCS_MBYTE,
+                          iface_attr->overhead * 1e9,
+                          iface_attr->latency.c * 1e9, iface_attr->priority,
                           iface_attr->cap.atomic32.op_flags,
                           iface_attr->cap.atomic32.fop_flags,
                           iface_attr->cap.atomic64.op_flags,
@@ -927,6 +959,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     int last_dev, last_tl, last_ep_addr;
     const uct_device_addr_t *dev_addr;
     ucp_rsc_index_t dev_index;
+    ucs_sys_device_t sys_dev;
     ucp_md_index_t md_index;
     unsigned dev_num_paths;
     ucs_status_t status;
@@ -999,15 +1032,22 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         ptr          = UCS_PTR_TYPE_OFFSET(ptr, md_byte);
 
         /* device address length */
-        dev_addr_len = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LEN_MASK;
-        last_dev     = (*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_LAST;
-        if ((*(uint8_t*)ptr) & UCP_ADDRESS_FLAG_HAVE_PATHS) {
-            ptr           = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        flags_ptr    = ptr;
+        ptr          = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        dev_addr_len = (*(uint8_t*)flags_ptr) & UCP_ADDRESS_DEVICE_LEN_MASK;
+        last_dev     = (*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_LAST;
+        if ((*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_NUM_PATHS) {
             dev_num_paths = *(uint8_t*)ptr;
+            ptr           = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
         } else {
             dev_num_paths = 1;
         }
-        ptr      = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        if ((*(uint8_t*)flags_ptr) & UCP_ADDRESS_FLAG_SYS_DEVICE) {
+            sys_dev = *(uint8_t*)ptr;
+            ptr     = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
+        } else {
+            sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+        }
 
         dev_addr = ptr;
         ptr      = UCS_PTR_BYTE_OFFSET(ptr, dev_addr_len);
@@ -1028,6 +1068,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
             address->dev_addr      = (dev_addr_len > 0) ? dev_addr : NULL;
             address->md_index      = md_index;
+            address->sys_dev       = sys_dev;
             address->dev_index     = dev_index;
             address->md_flags      = md_flags;
             address->dev_num_paths = dev_num_paths;
@@ -1040,8 +1081,8 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
             flags_ptr = ucp_address_iface_flags_ptr(worker, (void*)ptr, attr_len);
             ptr       = UCS_PTR_BYTE_OFFSET(ptr, attr_len);
-            ptr       = ucp_address_unpack_length(worker, flags_ptr, ptr,
-                                                  &iface_addr_len, 0, &last_tl);
+            ptr       = ucp_address_unpack_iface_length(worker, flags_ptr, ptr,
+                                                        &iface_addr_len, 0, &last_tl);
             address->iface_addr   = (iface_addr_len > 0) ? ptr : NULL;
             address->num_ep_addrs = 0;
             ptr                   = UCS_PTR_BYTE_OFFSET(ptr, iface_addr_len);
@@ -1056,13 +1097,14 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                     goto err_free;
                 }
 
+                ptr = ucp_address_unpack_iface_length(worker, flags_ptr, ptr,
+                                                      &ep_addr_len, 1, NULL);
+
                 ep_addr       = &address->ep_addrs[address->num_ep_addrs++];
-                ptr           = ucp_address_unpack_length(worker, flags_ptr, ptr,
-                                                          &ep_addr_len, 1, NULL);
                 ep_addr->addr = ptr;
                 ptr           = UCS_PTR_BYTE_OFFSET(ptr, ep_addr_len);
 
-                ep_addr->lane = *(uint8_t*)ptr & UCP_ADDRESS_FLAG_LEN_MASK;
+                ep_addr->lane = *(uint8_t*)ptr & UCP_ADDRESS_IFACE_LEN_MASK;
                 last_ep_addr  = *(uint8_t*)ptr & UCP_ADDRESS_FLAG_LAST;
 
                 if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
@@ -1076,17 +1118,20 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             }
 
             if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
-                ucs_trace("unpack addr[%d] : eps %u md_flags 0x%"PRIx64
-                          " tl_iface_flags 0x%"PRIx64" tl_event_flags 0x%"PRIx64
-                          " bw %e + %e/n ovh %e lat_ovh %e dev_priority %d a32 "
-                          "0x%"PRIx64"/0x%"PRIx64" a64 0x%"PRIx64"/0x%"PRIx64,
-                          (int)(address - address_list), address->num_ep_addrs,
+                ucs_trace("unpack addr[%d] : sysdev %d paths %d eps %u"
+                          " md_flags 0x%" PRIx64 " tl_iface_flags 0x%" PRIx64
+                          " tl_event_flags 0x%" PRIx64 " bw %.2f+%.2f/nMBs"
+                          " ovh %.0fns lat_ovh %.0fns dev_priority %d"
+                          " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
+                          "/0x%" PRIx64,
+                          (int)(address - address_list), address->sys_dev,
+                          address->dev_num_paths, address->num_ep_addrs,
                           address->md_flags, address->iface_attr.cap_flags,
                           address->iface_attr.event_flags,
-                          address->iface_attr.bandwidth.dedicated,
-                          address->iface_attr.bandwidth.shared,
-                          address->iface_attr.overhead,
-                          address->iface_attr.lat_ovh,
+                          address->iface_attr.bandwidth.dedicated / UCS_MBYTE,
+                          address->iface_attr.bandwidth.shared / UCS_MBYTE,
+                          address->iface_attr.overhead * 1e9,
+                          address->iface_attr.lat_ovh * 1e9,
                           address->iface_attr.priority,
                           address->iface_attr.atomic.atomic32.op_flags,
                           address->iface_attr.atomic.atomic32.fop_flags,

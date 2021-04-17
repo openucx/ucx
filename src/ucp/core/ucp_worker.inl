@@ -10,6 +10,7 @@
 #include "ucp_worker.h"
 
 #include <ucp/core/ucp_request.h>
+#include <ucp/wireup/address.h>
 #include <ucs/datastruct/ptr_map.inl>
 
 
@@ -201,6 +202,28 @@ ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
     }
 
     return ucp_worker_add_rkey_config(worker, key, cfg_index_p);
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_worker_common_address_pack_flags(ucp_worker_h worker)
+{
+    unsigned pack_flags = 0;
+
+    if (worker->context->num_mem_type_detect_mds > 0) {
+        pack_flags |= UCP_ADDRESS_PACK_FLAG_SYS_DEVICE;
+    }
+
+    return pack_flags;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+ucp_worker_default_address_pack_flags(ucp_worker_h worker)
+{
+    return ucp_worker_common_address_pack_flags(worker) |
+           UCP_ADDRESS_PACK_FLAG_WORKER_UUID |
+           UCP_ADDRESS_PACK_FLAG_WORKER_NAME |
+           UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
+           UCP_ADDRESS_PACK_FLAG_IFACE_ADDR | UCP_ADDRESS_PACK_FLAG_EP_ADDR;
 }
 
 #define UCP_WORKER_GET_EP_BY_ID(_ep_p, _worker, _ep_id, _action, _fmt_str, ...) \

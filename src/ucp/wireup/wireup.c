@@ -185,6 +185,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
                        ucp_wireup_msg_t *msg_hdr, void **address_p,
                        size_t *address_length_p)
 {
+    unsigned pack_flags = ucp_worker_default_address_pack_flags(ep->worker) |
+                          UCP_ADDRESS_PACK_FLAG_TL_RSC_IDX;
     ucs_status_t status;
 
     msg_hdr->type      = type;
@@ -198,9 +200,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     }
 
     /* pack all addresses */
-    status = ucp_address_pack(ep->worker, ep, tl_bitmap,
-                              UCP_ADDRESS_PACK_FLAGS_ALL, lanes2remote,
-                              address_length_p, address_p);
+    status = ucp_address_pack(ep->worker, ep, tl_bitmap, pack_flags,
+                              lanes2remote, address_length_p, address_p);
     if (status != UCS_OK) {
         ucs_error("failed to pack address: %s", ucs_status_string(status));
     }

@@ -48,6 +48,7 @@ typedef struct {
     unsigned             addr_index;
     unsigned             path_index;
     ucp_md_index_t       dst_md_index;
+    ucs_sys_device_t     dst_sys_dev;
     ucp_lane_type_mask_t lane_types;
     double               score[UCP_LANE_TYPE_LAST];
 } ucp_wireup_lane_desc_t;
@@ -532,10 +533,10 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
            (iface_attr->latency.m * context->config.est_num_eps);
 }
 
-static UCS_F_NOINLINE ucs_status_t
-ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
-                         ucp_md_index_t dst_md_index, ucp_lane_type_t lane_type,
-                         ucp_wireup_select_context_t *select_ctx)
+static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
+        const ucp_wireup_select_info_t *select_info,
+        ucp_md_index_t dst_md_index, ucs_sys_device_t dst_sys_dev,
+        ucp_lane_type_t lane_type, ucp_wireup_select_context_t *select_ctx)
 {
     ucp_wireup_lane_desc_t *lane_desc;
     ucp_lane_type_t lane_type_iter;
@@ -578,6 +579,7 @@ ucp_wireup_add_lane_desc(const ucp_wireup_select_info_t *select_info,
     lane_desc->addr_index   = select_info->addr_index;
     lane_desc->path_index   = select_info->path_index;
     lane_desc->dst_md_index = dst_md_index;
+    lane_desc->dst_sys_dev  = dst_sys_dev;
     lane_desc->lane_types   = UCS_BIT(lane_type);
     for (lane_type_iter = UCP_LANE_TYPE_FIRST;
          lane_type_iter < UCP_LANE_TYPE_LAST;
@@ -599,9 +601,9 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
 {
     ucp_address_entry_t *addr_list = select_params->address->address_list;
     unsigned addr_index            = select_info->addr_index;
-    ucp_md_index_t dst_md_index    = addr_list[addr_index].md_index;
 
-    return ucp_wireup_add_lane_desc(select_info, dst_md_index, lane_type,
+    return ucp_wireup_add_lane_desc(select_info, addr_list[addr_index].md_index,
+                                    addr_list[addr_index].sys_dev, lane_type,
                                     select_ctx);
 }
 
@@ -848,7 +850,8 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
 
     /* server is not a proxy because it can create all lanes connected */
     return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
-                                    UCP_LANE_TYPE_CM, select_ctx);
+                                    UCS_SYS_DEVICE_ID_UNKNOWN, UCP_LANE_TYPE_CM,
+                                    select_ctx);
 }
 
 static ucs_status_t
@@ -1176,11 +1179,11 @@ static ucs_status_t
 ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
                            ucp_wireup_select_context_t *select_ctx)
 {
-    ucp_ep_h ep            = select_params->ep; 
+    ucp_ep_h ep            = select_params->ep;
     ucp_context_h context  = ep->worker->context;
     unsigned ep_init_flags = ucp_wireup_ep_init_flags(select_params,
                                                       select_ctx);
-            
+
     ucp_lane_index_t lane_desc_idx, am_lane;
     ucp_wireup_select_bw_info_t bw_info;
     unsigned num_am_bw_lanes;
@@ -1653,6 +1656,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         ucs_assert(select_ctx->lane_descs[lane].lane_types != 0);
         key->lanes[lane].rsc_index    = select_ctx->lane_descs[lane].rsc_index;
         key->lanes[lane].dst_md_index = select_ctx->lane_descs[lane].dst_md_index;
+        key->lanes[lane].dst_sys_dev  = select_ctx->lane_descs[lane].dst_sys_dev;
         key->lanes[lane].path_index   = select_ctx->lane_descs[lane].path_index;
         key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;
         addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
