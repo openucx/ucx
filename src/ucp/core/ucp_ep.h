@@ -674,4 +674,12 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);
  */
 void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
+
+/**
+ * @brief Create objects in VFS to represent endpoint and its features.
+ *
+ * @param [in] ep Endpoint object to be described.
+ */
+void ucp_ep_vfs_init(ucp_ep_h ep);
+
 #endif

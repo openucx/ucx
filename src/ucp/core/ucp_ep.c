@@ -98,6 +98,11 @@ static uct_ep_t ucp_failed_tl_ep = {
     .iface = &ucp_failed_tl_iface
 };
 
+static const char *ucp_err_handling_mode_names[] = {
+    [UCP_ERR_HANDLING_MODE_NONE] = "none",
+    [UCP_ERR_HANDLING_MODE_PEER] = "peer"
+};
+
 
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep)
 {
@@ -2749,4 +2754,28 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
             ucp_ep_flush_request_ff(req, status);
         }
     }
+}
+
+static void ucp_ep_vfs_show_peer_name(void *obj, ucs_string_buffer_t *strb)
+{
+    ucp_ep_h ep = obj;
+
+    ucs_string_buffer_appendf(strb, "%s\n", ucp_ep_peer_name(ep));
+}
+
+static void ucp_ep_vfs_show_error_mode(void *obj, ucs_string_buffer_t *strb)
+{
+    ucp_ep_h ep = obj;
+    ucp_err_handling_mode_t err_mode;
+
+    err_mode = ucp_ep_config(ep)->key.err_mode;
+    ucs_string_buffer_appendf(strb, "%s\n",
+                              ucp_err_handling_mode_names[err_mode]);
+}
+
+void ucp_ep_vfs_init(ucp_ep_h ep)
+{
+    ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%p", ep);
+    ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_peer_name, "peer_name");
+    ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_error_mode, "error_mode");
 }
