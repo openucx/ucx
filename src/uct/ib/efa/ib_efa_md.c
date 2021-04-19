@@ -23,11 +23,13 @@ static uint64_t
 uct_ib_efadv_access_flags(const uct_ib_efadv_t *efadv)
 {
     uint64_t access_flags = IBV_ACCESS_LOCAL_WRITE;
+
 #ifdef HAVE_DECL_EFA_DV_RDMA_READ
     if (efadv->efadv_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
         access_flags |= IBV_ACCESS_REMOTE_READ;
     }
 #endif
+
     return access_flags;
 }
 
@@ -119,7 +121,7 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    dev->access_flags = uct_ib_efadv_access_flags(&md->efadv);
+    dev->mr_access_flags = uct_ib_efadv_access_flags(&md->efadv);
 
     *p_md = &md->super;
     return UCS_OK;

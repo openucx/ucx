@@ -224,7 +224,7 @@ typedef struct uct_ib_device {
     uint8_t                     pci_cswap_arg_sizes;
     uint8_t                     atomic_align;
     uint8_t                     lag_level;
-    uint64_t                    access_flags;
+    uint64_t                    mr_access_flags;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
