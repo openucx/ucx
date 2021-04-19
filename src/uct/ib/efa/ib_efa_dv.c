@@ -17,5 +17,6 @@ ucs_status_t uct_ib_efadv_query(struct ibv_context *ctx,
     if (efadv_query_device(ctx, efadv_attr, sizeof(*efadv_attr))) {
         return UCS_ERR_IO_ERROR;
     }
+
     return UCS_OK;
 }
