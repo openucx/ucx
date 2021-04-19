@@ -444,3 +444,45 @@ UCS_TEST_F(test_socket, sockaddr_cmp_err) {
     sockaddr_cmp_err_test((const struct sockaddr*)&sa_un,
                           (const struct sockaddr*)&sa_in);
 }
+
+static void sockaddr_get_ipstr_check(const struct sockaddr *sockaddr,
+                                     ucs_status_t expected_ret,
+                                     const char *expected_str = NULL)
+{
+    const size_t max_size = 1024;
+    char str[max_size];
+
+    EXPECT_EQ(expected_ret, ucs_sockaddr_get_ipstr(sockaddr, str, max_size));
+    if (expected_str != NULL) {
+        EXPECT_STREQ(expected_str, str);
+    }
+}
+
+static void sockaddr_get_ipstr_check_ip(void *sockaddr, const char *ip_str)
+{
+    EXPECT_UCS_OK(
+            ucs_sock_ipstr_to_sockaddr(ip_str,
+                                       (struct sockaddr_storage*)sockaddr));
+    sockaddr_get_ipstr_check((const struct sockaddr*)sockaddr, UCS_OK, ip_str);
+}
+
+UCS_TEST_F(test_socket, sockaddr_get_ipstr) {
+    /* Check ipv4 */
+    struct sockaddr_in sa_in;
+    sa_in.sin_family = AF_INET;
+    sockaddr_get_ipstr_check_ip(&sa_in, "192.168.122.157");
+
+    /* Check ipv6 */
+    struct sockaddr_in6 sa_in6;
+    sa_in6.sin6_family = AF_INET6;
+    sockaddr_get_ipstr_check_ip(&sa_in6, "fe80::218:e7ff:fe16:fb97");
+
+    /* Check invalid sa_family */
+    socket_err_exp_str = "unknown address family:";
+    scoped_log_handler log_handler(socket_error_handler);
+
+    struct sockaddr_un sa_un;
+    sa_un.sun_family = AF_UNIX;
+    sockaddr_get_ipstr_check((const struct sockaddr*)&sa_un,
+                             UCS_ERR_INVALID_PARAM);
+}
