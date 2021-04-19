@@ -359,7 +359,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_send_state_comp_reset(ucp_request_t *req,
                                   uct_completion_callback_t comp_cb)
 {
-    req->send.state.uct_comp.func   = comp_cb;
+    req->send.state.uct_comp.func = comp_cb;
     if (comp_cb != NULL) {
         req->send.state.uct_comp.count  = 0;
         req->send.state.uct_comp.status = UCS_OK;
