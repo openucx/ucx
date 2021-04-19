@@ -19,6 +19,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/time/time.h>
 #include <ucs/debug/debug_int.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 #ifdef ENABLE_STATS
@@ -235,6 +236,7 @@ ucs_status_t uct_iface_event_arm(uct_iface_h iface, unsigned events)
 
 void uct_iface_close(uct_iface_h iface)
 {
+    ucs_vfs_obj_remove(iface);
     iface->ops.iface_close(iface);
 }
 

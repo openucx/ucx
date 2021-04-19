@@ -21,6 +21,7 @@
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 ucs_config_field_t uct_md_config_table[] = {
@@ -263,7 +264,14 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_DEVICE;
     }
 
-    return tl->iface_open(md, worker, params, config, iface_p);
+    status = tl->iface_open(md, worker, params, config, iface_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_vfs_obj_add_dir(worker, *iface_p, "iface/%p", *iface_p);
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_md_config_read(uct_component_h component,
