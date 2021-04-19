@@ -659,7 +659,7 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
         }
     }
 
-    dev->access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+    dev->mr_access_flags = UCT_IB_MEM_ACCESS_FLAGS;
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
     ucs_recursive_spinlock_init(&dev->ah_lock, 0);
