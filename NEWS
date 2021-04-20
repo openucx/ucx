@@ -133,6 +133,7 @@
 * Fix in a release flow of deferred data
 * Fixes for invalid ID and handling of status in RNDV
 * Fixes in short active message reply protocol
+* Fix backward compatibility of Active Message API semantics
 #### CUDA
 * Fixes in managed memory support
 * Fixes in topology detection

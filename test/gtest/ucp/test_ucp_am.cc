@@ -254,7 +254,7 @@ void test_ucp_am::do_set_am_handler_realloc_test()
     do_send_process_data_test(0, UCP_SEND_ID + 1, 0);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_am, "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am, send_process_am)
 {
     set_handlers(UCP_SEND_ID);
     do_send_process_data_test(0, UCP_SEND_ID, 0);
@@ -263,13 +263,22 @@ UCS_TEST_P(test_ucp_am, send_process_am, "RNDV_THRESH=-1")
     do_send_process_data_test(0, UCP_SEND_ID, UCP_AM_SEND_REPLY);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_am_release, "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am, send_process_am_rndv, "RNDV_THRESH=1")
+{
+    set_handlers(UCP_SEND_ID);
+    do_send_process_data_test(0, UCP_SEND_ID, 0);
+
+    set_reply_handlers();
+    do_send_process_data_test(0, UCP_SEND_ID, UCP_AM_SEND_REPLY);
+}
+
+UCS_TEST_P(test_ucp_am, send_process_am_release)
 {
     set_handlers(UCP_SEND_ID);
     do_send_process_data_test(UCP_RELEASE, 0, 0);
 }
 
-UCS_TEST_P(test_ucp_am, send_process_iov_am, "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am, send_process_iov_am)
 {
     ucs::detail::message_stream ms("INFO");
 
@@ -285,7 +294,7 @@ UCS_TEST_P(test_ucp_am, send_process_iov_am, "RNDV_THRESH=-1")
     }
 }
 
-UCS_TEST_P(test_ucp_am, set_am_handler_realloc, "RNDV_THRESH=-1")
+UCS_TEST_P(test_ucp_am, set_am_handler_realloc)
 {
     do_set_am_handler_realloc_test();
 }
