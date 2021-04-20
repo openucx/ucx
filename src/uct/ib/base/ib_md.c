@@ -271,11 +271,6 @@ static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
 
 UCS_LIST_HEAD(uct_ib_md_ops_list);
 
-typedef struct uct_ib_verbs_mem {
-    uct_ib_mem_t        super;
-    uct_ib_mr_t         mrs[];
-} uct_ib_verbs_mem_t;
-
 typedef struct {
     pthread_t     thread;
     void          *addr;
@@ -844,10 +839,10 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
     return status;
 }
 
-static ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
-                                         size_t length, uint64_t access_flags,
-                                         uct_ib_mem_t *ib_memh,
-                                         uct_ib_mr_type_t mr_type, int silent)
+ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
+                                  size_t length, uint64_t access_flags,
+                                  uct_ib_mem_t *ib_memh,
+                                  uct_ib_mr_type_t mr_type, int silent)
 {
     uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
 
@@ -875,9 +870,9 @@ ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_verbs_dereg_key(uct_ib_md_t *md,
-                                           uct_ib_mem_t *ib_memh,
-                                           uct_ib_mr_type_t mr_type)
+ucs_status_t uct_ib_verbs_dereg_key(uct_ib_md_t *md,
+                                    uct_ib_mem_t *ib_memh,
+                                    uct_ib_mr_type_t mr_type)
 {
     uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
 
