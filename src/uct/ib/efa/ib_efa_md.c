@@ -14,11 +14,6 @@
 #include <ucs/debug/log.h>
 
 
-typedef struct uct_ib_efa_mem {
-    uct_ib_mem_t        super;
-    uct_ib_mr_t         mrs[];
-} uct_ib_efa_mem_t;
-
 static uint64_t
 uct_ib_efadv_access_flags(const uct_ib_efadv_t *efadv)
 {
@@ -31,26 +26,6 @@ uct_ib_efadv_access_flags(const uct_ib_efadv_t *efadv)
 #endif
 
     return access_flags;
-}
-
-static ucs_status_t uct_ib_efa_reg_key(uct_ib_md_t *md, void *address,
-                                       size_t length, uint64_t access_flags,
-                                       uct_ib_mem_t *ib_memh,
-                                       uct_ib_mr_type_t mr_type, int silent)
-{
-    uct_ib_efa_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_efa_mem_t);
-
-    return uct_ib_reg_key_impl(md, address, length, access_flags,
-                               ib_memh, &memh->mrs[mr_type], mr_type, silent);
-}
-
-static ucs_status_t uct_ib_efa_dereg_key(uct_ib_md_t *md,
-                                         uct_ib_mem_t *ib_memh,
-                                         uct_ib_mr_type_t mr_type)
-{
-    uct_ib_efa_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_efa_mem_t);
-
-    return uct_ib_dereg_mr(memh->mrs[mr_type].ib);
 }
 
 static uct_ib_md_ops_t uct_ib_efa_md_ops;
@@ -103,8 +78,8 @@ err:
 static uct_ib_md_ops_t uct_ib_efa_md_ops = {
     .open                = uct_ib_efa_md_open,
     .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
-    .reg_key             = uct_ib_efa_reg_key,
-    .dereg_key           = uct_ib_efa_dereg_key,
+    .reg_key             = uct_ib_verbs_reg_key,
+    .dereg_key           = uct_ib_verbs_dereg_key,
     .reg_atomic_key      = (uct_ib_md_reg_atomic_key_func_t)ucs_empty_function_return_unsupported,
     .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_success,
     .reg_multithreaded   = (uct_ib_md_reg_multithreaded_func_t)ucs_empty_function_return_unsupported,
