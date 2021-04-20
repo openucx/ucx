@@ -454,6 +454,10 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
                                    const uct_ib_md_config_t *md_config);
 
+ucs_status_t uct_ib_verbs_md_open_common(struct ibv_device *ibv_device,
+                                         const uct_ib_md_config_t *md_config,
+                                         uct_ib_md_t *md);
+
 void uct_ib_md_close(uct_md_h uct_md);
 
 ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
