@@ -44,8 +44,9 @@ public:
     };
 
     enum {
-        TEST_MODIFIER_MASK      = UCS_MASK(16),
-        TEST_MODIFIER_MT        = UCS_BIT(16)
+        TEST_MODIFIER_MASK               = UCS_MASK(16),
+        TEST_MODIFIER_MT                 = UCS_BIT(16),
+        TEST_MODIFIER_CM_USE_ALL_DEVICES = UCS_BIT(17)
     };
 
     enum {
@@ -64,6 +65,7 @@ public:
     void init() {
         m_err_count = 0;
         modify_config("KEEPALIVE_INTERVAL", "10s");
+        modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
         get_sockaddr();
         ucp_test::init();
         skip_loopback();
@@ -78,10 +80,19 @@ public:
     }
 
     static void
+    get_test_variants_cm_mode(std::vector<ucp_test_variant>& variants, uint64_t features,
+                              int modifier, const std::string& name)
+    {
+        get_test_variants_mt(variants, features,
+                             modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES, name);
+        get_test_variants_mt(variants, features, modifier, name + ",not_all_devs");
+    }
+
+    static void
     get_test_variants(std::vector<ucp_test_variant>& variants,
                       uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM) {
-        get_test_variants_mt(variants, features, CONN_REQ_TAG, "tag");
-        get_test_variants_mt(variants, features, CONN_REQ_STREAM, "stream");
+        get_test_variants_cm_mode(variants, features, CONN_REQ_TAG, "tag");
+        get_test_variants_cm_mode(variants, features, CONN_REQ_STREAM, "stream");
     }
 
     static ucs_log_func_rc_t
@@ -652,6 +663,10 @@ protected:
                (get_variant_value() != CONN_REQ_TAG);
     }
 
+    bool cm_use_all_devices() const {
+        return get_variant_value() & TEST_MODIFIER_CM_USE_ALL_DEVICES;
+    }
+
     static void cmp_cfg_lanes(ucp_ep_config_key_t *key1, ucp_lane_index_t lane1,
                               ucp_ep_config_key_t *key2, ucp_lane_index_t lane2) {
         EXPECT_TRUE(((lane1 == UCP_NULL_LANE) && (lane2 == UCP_NULL_LANE)) ||
@@ -912,7 +927,8 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listener_invalid_params,
     ucp_listener_destroy(listener);
 }
 
-UCS_TEST_P(test_ucp_sockaddr, compare_cm_and_wireup_configs) {
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
+                     !cm_use_all_devices()) {
     ucp_worker_cfg_index_t cm_ep_cfg_index, wireup_ep_cfg_index;
     ucp_ep_config_key_t *cm_ep_cfg_key, *wireup_ep_cfg_key;
 
@@ -985,7 +1001,8 @@ UCS_TEST_P(test_ucp_sockaddr, compare_cm_and_wireup_configs) {
     }
 }
 
-UCS_TEST_P(test_ucp_sockaddr, connect_and_fail_wireup)
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, connect_and_fail_wireup,
+                     !cm_use_all_devices())
 {
     start_listener(cb_type());
 
@@ -1018,16 +1035,16 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants)
     {
         uint64_t features = UCP_FEATURE_STREAM | UCP_FEATURE_TAG;
-        test_ucp_sockaddr::get_test_variants_mt(variants, features,
-                                                UNSET_SELF_DEVICES,
-                                                "unset_self_devices");
-        test_ucp_sockaddr::get_test_variants_mt(variants, features,
-                                                UNSET_SHM_DEVICES,
-                                                "unset_shm_devices");
-        test_ucp_sockaddr::get_test_variants_mt(variants, features,
-                                                UNSET_SELF_DEVICES |
-                                                UNSET_SHM_DEVICES,
-                                                "unset_self_shm_devices");
+        test_ucp_sockaddr::get_test_variants_cm_mode(variants, features,
+                                                     UNSET_SELF_DEVICES,
+                                                     "unset_self_devices");
+        test_ucp_sockaddr::get_test_variants_cm_mode(variants, features,
+                                                     UNSET_SHM_DEVICES,
+                                                     "unset_shm_devices");
+        test_ucp_sockaddr::get_test_variants_cm_mode(variants, features,
+                                                     UNSET_SELF_DEVICES |
+                                                     UNSET_SHM_DEVICES,
+                                                     "unset_self_shm_devices");
     }
 
 protected:
@@ -1926,12 +1943,13 @@ class test_ucp_sockaddr_protocols_err : public test_ucp_sockaddr_protocols {
 public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         uint64_t features = UCP_FEATURE_TAG;
-        test_ucp_sockaddr::get_test_variants_mt(variants, features, SEND_STOP,
-                                                "send_stop");
-        test_ucp_sockaddr::get_test_variants_mt(variants, features, RECV_STOP,
-                                                "recv_stop");
-        test_ucp_sockaddr::get_test_variants_mt(variants, features,
-                                                SEND_STOP | RECV_STOP, "bidi_stop");
+        test_ucp_sockaddr::get_test_variants_cm_mode(variants, features,
+                                                     SEND_STOP, "send_stop");
+        test_ucp_sockaddr::get_test_variants_cm_mode(variants, features,
+                                                     RECV_STOP, "recv_stop");
+        test_ucp_sockaddr::get_test_variants_cm_mode(variants, features,
+                                                     SEND_STOP | RECV_STOP,
+                                                     "bidi_stop");
     }
 
 protected:
