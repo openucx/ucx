@@ -1746,24 +1746,14 @@ ucs_status_t uct_ib_verbs_md_open_common(struct ibv_device *ibv_device,
                                          const uct_ib_md_config_t *md_config,
                                          uct_ib_md_t *md)
 {
-    uct_ib_device_t *dev;
     ucs_status_t status;
     int num_mrs;
 
-    /* Open verbs context */
-    dev              = &md->dev;
-    dev->ibv_context = ibv_open_device(ibv_device);
-    if (dev->ibv_context == NULL) {
-        ucs_diag("ibv_open_device(%s) failed: %m",
-                 ibv_get_device_name(ibv_device));
-        return UCS_ERR_IO_ERROR;
-    }
-
     md->config = md_config->ext;
 
-    status = uct_ib_device_query(dev, ibv_device);
+    status = uct_ib_device_query(&md->dev, ibv_device);
     if (status != UCS_OK) {
-        goto err_free_context;
+        return status;
     }
 
     uct_ib_md_parse_relaxed_order(md, md_config);
@@ -1776,16 +1766,7 @@ ucs_status_t uct_ib_verbs_md_open_common(struct ibv_device *ibv_device,
     md->memh_struct_size = sizeof(uct_ib_verbs_mem_t) +
                            (sizeof(uct_ib_mr_t) * num_mrs);
 
-    status = uct_ib_md_open_common(md, ibv_device, md_config);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
-
-    return UCS_OK;
-
-err_free_context:
-    ibv_close_device(dev->ibv_context);
-    return status;
+    return uct_ib_md_open_common(md, ibv_device, md_config);
 }
 
 static uct_ib_md_ops_t uct_ib_verbs_md_ops;
@@ -1803,10 +1784,19 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         return UCS_ERR_NO_MEMORY;
     }
 
-    dev    = &md->dev;
+    /* Open verbs context */
+    dev              = &md->dev;
+    dev->ibv_context = ibv_open_device(ibv_device);
+    if (dev->ibv_context == NULL) {
+        ucs_diag("ibv_open_device(%s) failed: %m",
+                 ibv_get_device_name(ibv_device));
+        status = UCS_ERR_IO_ERROR;
+        goto err;
+    }
+
     status = uct_ib_md_parse_device_config(md, md_config);
     if (status != UCS_OK) {
-        goto err;
+        goto err_free_context;
     }
 
     status = uct_ib_verbs_md_open_common(ibv_device, md_config, md);
@@ -1830,6 +1820,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
 err_dev_cfg:
     uct_ib_md_release_device_config(md);
+err_free_context:
+    ibv_close_device(dev->ibv_context);
 err:
     ucs_free(md);
     return status;
