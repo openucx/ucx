@@ -103,6 +103,12 @@ typedef union uct_ib_mr {
 } uct_ib_mr_t;
 
 
+typedef struct uct_ib_verbs_mem {
+    uct_ib_mem_t        super;
+    uct_ib_mr_t         mrs[];
+} uct_ib_verbs_mem_t;
+
+
 typedef enum {
     /* Default memory region with either strict or relaxed order */
     UCT_IB_MR_DEFAULT,
@@ -461,6 +467,14 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access, struct ibv_mr **mr_p, int silent);
 ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr);
 ucs_status_t uct_ib_dereg_mrs(struct ibv_mr **mrs, size_t mr_num);
+
+ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
+                                  size_t length, uint64_t access_flags,
+                                  uct_ib_mem_t *ib_memh,
+                                  uct_ib_mr_type_t mr_type, int silent);
+ucs_status_t uct_ib_verbs_dereg_key(uct_ib_md_t *md,
+                                    uct_ib_mem_t *ib_memh,
+                                    uct_ib_mr_type_t mr_type);
 
 ucs_status_t
 uct_ib_md_handle_mr_list_multithreaded(uct_ib_md_t *md, void *address,
