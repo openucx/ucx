@@ -503,6 +503,20 @@ const char *ucs_sockaddr_address_family_str(sa_family_t af);
  */
 ucs_status_t ucs_sockaddr_get_ip_local_port_range(ucs_range_spec_t *port_range);
 
+
+/**
+ * Get IP address of a given sockaddr structure.
+ * 
+ * @param [in]  addr     Pointer to the sockaddr structure.
+ * @param [out] str      A string filled with the IP address.
+ * @param [in]  max_size Size of the string including terminating
+ *                       null-character.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t
+ucs_sockaddr_get_ipstr(const struct sockaddr *addr, char *str, size_t max_size);
+
 END_C_DECLS
 
 #endif

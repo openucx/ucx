@@ -660,9 +660,9 @@ const char* ucs_sockaddr_str(const struct sockaddr *sock_addr,
         return str;
     }
 
-    if (!inet_ntop(sock_addr->sa_family, ucs_sockaddr_get_inet_addr(sock_addr),
-                   str, max_size)) {
-        ucs_strncpy_zero(str, "<failed to convert sockaddr to string>", max_size);
+    if (ucs_sockaddr_get_ipstr(sock_addr, str, max_size) != UCS_OK) {
+        ucs_strncpy_zero(str, "<failed to convert sockaddr to string>",
+                         max_size);
         return str;
     }
 
@@ -886,6 +886,17 @@ ucs_status_t ucs_sockaddr_get_ip_local_port_range(ucs_range_spec_t *port_range)
     port_range->last = strtol(endptr, &endptr, 10);
     if (port_range->last <= 0) {
         return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t
+ucs_sockaddr_get_ipstr(const struct sockaddr *addr, char *str, size_t max_size)
+{
+    if (inet_ntop(addr->sa_family, ucs_sockaddr_get_inet_addr(addr), str,
+                  max_size) == NULL) {
+        return UCS_ERR_INVALID_PARAM;
     }
 
     return UCS_OK;
