@@ -62,28 +62,18 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
     ucs_status_t status;
     uct_ib_device_t *dev;
     uct_ib_efadv_md_t *md;
-    int num_mrs;
 
     md = ucs_calloc(1, sizeof(*md), "ib_efa_md");
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    dev = &md->super.dev;
-    dev->ibv_context = ibv_open_device(ibv_device);
-    if (dev->ibv_context == NULL) {
-        ucs_warn("ibv_open_device(%s) failed: %m", ibv_get_device_name(ibv_device));
-        status = UCS_ERR_IO_ERROR;
+    status = uct_ib_verbs_md_open_common(ibv_device, md_config, &md->super);
+    if (status != UCS_OK) {
         goto err;
     }
 
-    md->super.config = md_config->ext;
-
-    status = uct_ib_device_query(dev, ibv_device);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
-
+    dev        = &md->super.dev;
     dev->flags = uct_ib_device_spec(dev)->flags;
 
     if (!(dev->flags & UCT_IB_DEVICE_FLAG_EFA)) {
@@ -91,30 +81,7 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
-    }
-
-    if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
-        dev->atomic_arg_sizes = sizeof(uint64_t);
-    }
-
     md->super.ops = &uct_ib_efa_md_ops;
-
-    uct_ib_md_parse_relaxed_order(&md->super, md_config);
-    num_mrs = 1;      /* UCT_IB_MR_DEFAULT */
-
-    if (md->super.relaxed_order) {
-        ++num_mrs;    /* UCT_IB_MR_STRICT_ORDER */
-    }
-
-    md->super.memh_struct_size = sizeof(uct_ib_efa_mem_t) +
-                                 (sizeof(uct_ib_mr_t) * num_mrs);
-
-    status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
 
     status = uct_ib_efadv_query(dev->ibv_context, &md->efadv.efadv_attr);
     if (status != UCS_OK) {
