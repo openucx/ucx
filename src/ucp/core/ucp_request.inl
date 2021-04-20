@@ -319,11 +319,11 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_send(ucp_request_t *req, unsigned pending_flags)
 {
     /* test all values used in ucp_request_send_state_ff */
+    VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.status,
+                                  sizeof(req->send.state.uct_comp.status));
     if (req->send.state.uct_comp.func != NULL) {
         VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.count,
                                       sizeof(req->send.state.uct_comp.count));
-        VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.status,
-                                      sizeof(req->send.state.uct_comp.status));
     }
 
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.uct.func,
@@ -359,10 +359,10 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_send_state_comp_reset(ucp_request_t *req,
                                   uct_completion_callback_t comp_cb)
 {
-    req->send.state.uct_comp.func = comp_cb;
+    req->send.state.uct_comp.func   = comp_cb;
+    req->send.state.uct_comp.status = UCS_OK;
     if (comp_cb != NULL) {
         req->send.state.uct_comp.count  = 0;
-        req->send.state.uct_comp.status = UCS_OK;
     }
 }
 
