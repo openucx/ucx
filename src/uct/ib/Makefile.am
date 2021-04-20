@@ -150,8 +150,7 @@ if HAVE_EFA_DV
 libuct_ib_la_LDFLAGS +=  $(LIB_EFA)
 
 noinst_HEADERS += \
-	efa/ib_efa.h \
-	efa/ib_efa_dv.h
+	efa/ib_efa.h
 
 libuct_ib_la_SOURCES += \
 	efa/ib_efa_dv.c \

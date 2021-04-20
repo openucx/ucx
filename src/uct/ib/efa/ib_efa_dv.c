@@ -12,7 +12,7 @@
 
 
 ucs_status_t uct_ib_efadv_query(struct ibv_context *ctx,
-                                uct_ib_efadv_attr_t *efadv_attr)
+                                struct efadv_device_attr *efadv_attr)
 {
     if (efadv_query_device(ctx, efadv_attr, sizeof(*efadv_attr))) {
         return UCS_ERR_IO_ERROR;
