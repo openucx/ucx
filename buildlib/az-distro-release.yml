@@ -78,7 +78,7 @@ jobs:
       - bash: |
           set -eE
           cd pkg-build
-          ../contrib/buildrpm.sh -s -t -b --strict-ibverbs-dep
+          ../contrib/buildrpm.sh -s -t -b
           cd rpm-dist/`uname -m`
           tar -cjf "../../../${AZ_ARTIFACT_NAME}" *.rpm
           cd ../../..

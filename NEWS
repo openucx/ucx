@@ -29,6 +29,7 @@
 * Added release builds on CUDA 11
 * Enabled performance validation in gtest
 * Added new OS for release CI
+* Build RPM package without strict libibverbs dependency
 #### UCP
 * Added locality awareness to the transport selection logic for GPU devices
 * Added put/offload/short and put/offload/zcopy protocols
