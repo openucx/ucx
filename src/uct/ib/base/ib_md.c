@@ -1747,21 +1747,13 @@ void uct_ib_md_close(uct_md_h uct_md)
     ucs_free(md);
 }
 
-static uct_ib_md_ops_t uct_ib_verbs_md_ops;
-
-static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
+ucs_status_t uct_ib_verbs_md_open_common(struct ibv_device *ibv_device,
                                          const uct_ib_md_config_t *md_config,
-                                         uct_ib_md_t **p_md)
+                                         uct_ib_md_t *md)
 {
     uct_ib_device_t *dev;
     ucs_status_t status;
-    uct_ib_md_t *md;
     int num_mrs;
-
-    md = ucs_calloc(1, sizeof(*md), "ib_md");
-    if (md == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
 
     /* Open verbs context */
     dev              = &md->dev;
@@ -1769,8 +1761,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     if (dev->ibv_context == NULL) {
         ucs_diag("ibv_open_device(%s) failed: %m",
                  ibv_get_device_name(ibv_device));
-        status = UCS_ERR_IO_ERROR;
-        goto err;
+        return UCS_ERR_IO_ERROR;
     }
 
     md->config = md_config->ext;
@@ -1780,43 +1771,70 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
+    uct_ib_md_parse_relaxed_order(md, md_config);
+    num_mrs = 1;    /* UCT_IB_MR_DEFAULT */
+
+    if (md->relaxed_order) {
+        ++num_mrs;  /* UCT_IB_MR_STRICT_ORDER */
+    }
+
+    md->memh_struct_size = sizeof(uct_ib_verbs_mem_t) +
+                           (sizeof(uct_ib_mr_t) * num_mrs);
+
+    status = uct_ib_md_open_common(md, ibv_device, md_config);
+    if (status != UCS_OK) {
+        goto err_free_context;
+    }
+
+    return UCS_OK;
+
+err_free_context:
+    ibv_close_device(dev->ibv_context);
+    return status;
+}
+
+static uct_ib_md_ops_t uct_ib_verbs_md_ops;
+
+static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
+                                         const uct_ib_md_config_t *md_config,
+                                         uct_ib_md_t **p_md)
+{
+    uct_ib_device_t *dev;
+    ucs_status_t status;
+    uct_ib_md_t *md;
+
+    md = ucs_calloc(1, sizeof(*md), "ib_md");
+    if (md == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    dev    = &md->dev;
+    status = uct_ib_md_parse_device_config(md, md_config);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    status = uct_ib_verbs_md_open_common(ibv_device, md_config, md);
+    if (status != UCS_OK) {
+        goto err_dev_cfg;
+    }
+
     if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
-        md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
+        dev->flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
     }
 
-    md->ops = &uct_ib_verbs_md_ops;
-    status = uct_ib_md_parse_device_config(md, md_config);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
+    md->ops    = &uct_ib_verbs_md_ops;
+    dev->flags = uct_ib_device_spec(dev)->flags;
 
-    uct_ib_md_parse_relaxed_order(md, md_config);
-    num_mrs = 1;      /* UCT_IB_MR_DEFAULT */
-
-    if (md->relaxed_order) {
-        ++num_mrs;    /* UCT_IB_MR_STRICT_ORDER */
-    }
-
-    md->memh_struct_size = sizeof(uct_ib_verbs_mem_t) +
-                          (sizeof(uct_ib_mr_t) * num_mrs);
-
-    status = uct_ib_md_open_common(md, ibv_device, md_config);
-    if (status != UCS_OK) {
-        goto err_dev_cfg;
-    }
-
-    md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
     *p_md = md;
     return UCS_OK;
 
 err_dev_cfg:
     uct_ib_md_release_device_config(md);
-err_free_context:
-    ibv_close_device(dev->ibv_context);
 err:
     ucs_free(md);
     return status;
