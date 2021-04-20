@@ -321,9 +321,9 @@ ucp_request_send(ucp_request_t *req, unsigned pending_flags)
     /* test all values used in ucp_request_send_state_ff */
     if (req->send.state.uct_comp.func != NULL) {
         VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.count,
-                                    sizeof(req->send.state.uct_comp.count));
+                                      sizeof(req->send.state.uct_comp.count));
         VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.status,
-                                    sizeof(req->send.state.uct_comp.status));
+                                      sizeof(req->send.state.uct_comp.status));
     }
 
     VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.uct.func,
