@@ -382,15 +382,8 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     /* Check that TX polling is working well */
     while (sender().progress());
 
-    /* Destroy rkeys before destroying the worker (which also destroys the
-     * endpoints) */
+    /* Destroy rkey for failing pair */
     m_failing_rkey.reset();
-    m_stable_rkey.reset();
-
-    /* When all requests on sender are done we need to prevent LOCAL_FLUSH
-     * in test teardown. Receiver is killed and doesn't respond on FC requests
-     */
-    sender().destroy_worker();
 }
 
 UCS_TEST_P(test_ucp_peer_failure, basic) {

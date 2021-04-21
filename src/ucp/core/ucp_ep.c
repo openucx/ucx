@@ -25,6 +25,9 @@
 #include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
+#include <ucp/rma/rma.inl>
+#include <ucp/rma/rma.h>
+
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
@@ -340,7 +343,7 @@ err:
     return status;
 }
 
-static void ucp_ep_delete(ucp_ep_h ep)
+void ucp_ep_delete(ucp_ep_h ep)
 {
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucp_worker_keepalive_remove_ep(ep);
@@ -2727,7 +2730,22 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         }
 
         ucp_request_put(req);
+    } else if ((req->send.uct.func == ucp_rma_sw_proto.progress_get) ||
+               (req->send.uct.func == ucp_amo_sw_proto.progress_fetch)) {
+        /* Currently we don't support UCP EP request purging for proto mode */
+        ucs_assert(!ucp_ep->worker->context->config.ext.proto_enable);
+        ucs_assert(req->send.ep == ucp_ep);
+
+        ucp_request_send_buffer_dereg(req);
+        ucp_request_complete_send(req, status);
+        ucp_ep_rma_remote_request_completed(ucp_ep);
     } else {
+        /* SW RMA/PUT and AMO/Post operations don't allcoate local request ID
+         * and don't need to be tracked, since they complete UCP request upon
+         * sending all data to a peer. Receiving RMA/CMPL and AMO/REP packets
+         * complete flush requests */
+        ucs_assert((req->send.uct.func != ucp_rma_sw_proto.progress_put) &&
+                   (req->send.uct.func != ucp_amo_sw_proto.progress_post));
         ucs_assert(req->send.ep == ucp_ep);
 
         ucp_ep_req_purge(ucp_ep, ucp_request_get_super(req), status, 1);
@@ -2738,6 +2756,7 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
 void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
 {
     ucs_hlist_head_t *proto_reqs = &ucp_ep_ext_gen(ucp_ep)->proto_reqs;
+    ucp_ep_flush_state_t *flush_state;
     ucp_request_t *req;
 
     while (!ucs_hlist_is_empty(proto_reqs)) {
@@ -2749,9 +2768,17 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
          * context) and not invalidated yet, also remote EP ID is already set */
         !(ucp_ep->flags &
           (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID))) {
-        ucs_hlist_for_each_extract(req, &ucp_ep_flush_state(ucp_ep)->reqs,
-                                   send.list) {
-            ucp_ep_flush_request_ff(req, status);
+        flush_state = ucp_ep_flush_state(ucp_ep);
+
+        /* Adjust 'comp_sn' value to a value stored in 'send_sn' by emulating
+         * remote completion of RMA operations because those uncompleted
+         * uncompleted operations won't be completed anymore. This could be only
+         * SW RMA/PUT or AMO/Post operations, because SW RMA/GET or AMO/Fetch
+         * operations should already complete flush operations which are waiting
+         * for completion packets */
+        while (UCS_CIRCULAR_COMPARE32(flush_state->cmpl_sn, <,
+                                      flush_state->send_sn)) {
+            ucp_ep_rma_remote_request_completed(ucp_ep);
         }
     }
 }
