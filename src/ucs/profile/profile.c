@@ -611,3 +611,25 @@ void ucs_profile_global_cleanup()
     ucs_profile_check_active_threads();
     pthread_key_delete(ucs_profile_global_ctx.tls_key);
 }
+
+#ifndef HAVE_CUDA
+void ucs_profile_range_start(const char *name, uint64_t *id)
+{
+}
+
+void ucs_profile_range_stop(uint64_t id)
+{
+}
+
+void ucs_profile_range_add_marker(const char *name)
+{
+}
+
+void ucs_profile_range_push(const char *name)
+{
+}
+
+void ucs_profile_range_pop()
+{
+}
+#endif

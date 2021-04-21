@@ -258,6 +258,26 @@ BEGIN_C_DECLS
     UCS_PROFILE(UCS_PROFILE_TYPE_REQUEST_FREE, "", 0, (uintptr_t)(_req));
 
 
+#define UCS_PROFILE_RANGE_START(_name, _id) \
+    ucs_profile_range_start(_name, &_id);
+
+
+#define UCS_PROFILE_RANGE_STOP(_id) \
+    ucs_profile_range_stop(_id);
+
+
+#define UCS_PROFILE_RANGE_PUSH(_name) \
+    ucs_profile_range_push(_name);
+
+
+#define UCS_PROFILE_RANGE_POP() \
+    ucs_profile_range_pop();
+
+
+#define UCS_PROFILE_RANGE_ADD_MARKER(_name) \
+    ucs_profile_range_add_marker(_name);
+
+
 /*
  * Store a new record with the given data.
  * SHOULD NOT be used directly - use UCS_PROFILE macros instead.

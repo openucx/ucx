@@ -177,6 +177,10 @@ libucs_la_SOURCES = \
 	type/thread_mode.c \
 	vfs/base/vfs_obj.c
 
+if HAVE_CUDA
+libucs_la_SOURCES += \
+        profile/nvtx/nvtx.c
+endif
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \
         arch/aarch64/memcpy_thunderx2.S

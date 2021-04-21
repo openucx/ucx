@@ -361,6 +361,19 @@ UCS_TEST_P(test_profile, log_accum) {
             "log,accum");
 }
 
+UCS_TEST_P(test_profile, test_range) {
+    uint64_t id;
+    UCS_PROFILE_RANGE_START("sum_start_stop", id);
+    sum(1, 2);
+    UCS_PROFILE_RANGE_STOP(id);
+
+    UCS_PROFILE_RANGE_ADD_MARKER("sum_marker");
+
+    UCS_PROFILE_RANGE_PUSH("sum_push_pop");
+    sum(1, 2);
+    UCS_PROFILE_RANGE_POP();
+}
+
 INSTANTIATE_TEST_CASE_P(st, test_profile, ::testing::Values(1));
 INSTANTIATE_TEST_CASE_P(mt, test_profile, ::testing::Values(2, 4, 8));
 
