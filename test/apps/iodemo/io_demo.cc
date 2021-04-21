@@ -728,7 +728,7 @@ protected:
 
     static void validate(const iomsg_t *msg, uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            LOG << "ERROR: io msg sn missmatch " << sn << " != " << msg->sn;
+            LOG << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
             abort();
         }
 
