@@ -233,6 +233,7 @@ void UcxContext::request_reset(ucx_request *r)
     r->completed   = false;
     r->callback    = NULL;
     r->conn        = NULL;
+    r->status      = UCS_OK;
     r->recv_length = 0;
     r->pos.next    = NULL;
     r->pos.prev    = NULL;
@@ -788,11 +789,10 @@ void UcxConnection::cancel_all()
     ucx_request *request, *tmp;
     unsigned     count = 0;
     ucs_list_for_each_safe(request, tmp, &_all_requests, pos) {
-        ucp_request_cancel(_context.worker(), request);
         ++count;
+        UCX_CONN_LOG << "canceling " << request << " request #" << count;
+        ucp_request_cancel(_context.worker(), request);
     }
-
-    UCX_CONN_LOG << "canceling " << count << " requests ";
 }
 
 ucp_tag_t UcxConnection::make_data_tag(uint32_t conn_id, uint32_t sn)
@@ -831,6 +831,8 @@ void UcxConnection::common_request_callback(void *request, ucs_status_t status)
     ucx_request *r = reinterpret_cast<ucx_request*>(request);
 
     assert(!r->completed);
+    r->status = status;
+
     if (r->callback) {
         // already processed by send/recv function
         (*r->callback)(status);
@@ -839,7 +841,6 @@ void UcxConnection::common_request_callback(void *request, ucs_status_t status)
     } else {
         // not yet processed by "process_request"
         r->completed = true;
-        r->status    = status;
     }
 }
 
@@ -989,8 +990,15 @@ void UcxConnection::request_completed(ucx_request *r)
 {
     assert(r->conn == this);
     ucs_list_del(&r->pos);
-    if (ucs_list_is_empty(&_all_requests) && (_disconnect_cb != NULL)) {
-        _context.move_connection_to_disconnecting(this);
+
+    if (_disconnect_cb != NULL) {
+        UCX_CONN_LOG << "completing request " << r << " with status \""
+                     << ucs_status_string(r->status) << "\" (" << r->status
+                     << ")" << " during disconnect";
+
+        if (ucs_list_is_empty(&_all_requests)) {
+            _context.move_connection_to_disconnecting(this);
+        }
     }
 }
 
