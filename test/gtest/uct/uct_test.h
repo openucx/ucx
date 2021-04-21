@@ -130,23 +130,6 @@ protected:
         typedef uct_test::atomic_mode atomic_mode;
         typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
-        class sockaddr_user_data {
-        public:
-            sockaddr_user_data(uct_test *test, entity *entity,
-                               unsigned ep_index);
-
-            uct_test* get_test() const;
-
-            entity* get_entity() const;
-
-            uct_ep_h get_ep() const;
-
-        private:
-            uct_test *m_test;
-            entity   *m_entity;
-            unsigned m_ep_index;
-        };
-
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
@@ -210,7 +193,7 @@ protected:
                                  uct_cm_ep_resolve_callback_t resolve_cb,
                                  uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
-                                 uct_test *test);
+                                 void *user_data);
 
         ucs_status_t listen(const ucs::sock_addr_storage &listen_addr,
                             const uct_listener_params_t &params);

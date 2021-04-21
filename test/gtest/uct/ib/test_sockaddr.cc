@@ -20,6 +20,10 @@ extern "C" {
 class test_uct_sockaddr : public uct_test {
     friend class uct_test::entity;
 protected:
+
+    class client_user_data;
+    typedef std::map<uct_ep_h, client_user_data*> ep_client_data_map_t;
+
     enum {
         TEST_STATE_CONNECT_REQUESTED             = UCS_BIT(0),
         TEST_STATE_CLIENT_CONNECTED              = UCS_BIT(1),
@@ -37,6 +41,40 @@ protected:
         TEST_EP_FLAG_DISCONNECT_CB_INVOKED = UCS_BIT(1)
     };
 
+    class client_user_data {
+    public:
+        client_user_data(test_uct_sockaddr &test, entity &entity,
+                         unsigned ep_index) :
+            m_test(test), m_entity(entity), m_ep_index(ep_index)
+        {
+        }
+
+        test_uct_sockaddr* get_test() const
+        {
+            return &m_test;
+        }
+
+        entity* get_entity() const
+        {
+            return &m_entity;
+        }
+
+        unsigned get_ep_index() const
+        {
+            return m_ep_index;
+        }
+
+        uct_ep_h get_ep() const
+        {
+            return get_entity()->ep(get_ep_index());
+        }
+
+    private:
+        test_uct_sockaddr &m_test;
+        entity            &m_entity;
+        unsigned          m_ep_index;
+    };
+
 public:
     test_uct_sockaddr() : m_state(0), m_server(NULL), m_client(NULL),
                           m_server_recv_req_cnt(0), m_client_connect_cb_cnt(0),
@@ -46,6 +84,11 @@ public:
                           m_server_start_disconnect(false),
                           m_delay_conn_reply(false), m_short_priv_data_len(0),
                           m_long_priv_data_len(0) {
+        pthread_mutex_init(&m_ep_client_data_lock, NULL);
+    }
+
+    ~test_uct_sockaddr() {
+        pthread_mutex_destroy(&m_ep_client_data_lock);
     }
 
     static std::vector<const resource*>
@@ -119,6 +162,15 @@ public:
                               src_addr.cstr) : "");
     }
 
+    void cleanup() {
+        {
+            ucs::scoped_mutex_lock lock(m_ep_client_data_lock);
+            ASSERT_TRUE(m_ep_client_data.empty());
+        }
+
+        uct_test::cleanup();
+    }
+
 protected:
 
     void start_listen(uct_cm_listener_conn_request_callback_t server_conn_req_cb) {
@@ -146,9 +198,13 @@ protected:
 
     void listen_and_connect() {
         start_listen(test_uct_sockaddr::conn_request_cb);
+
+        client_user_data *user_data = new client_user_data(*this, *m_client, 0);
         m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                       client_connect_cb, client_disconnect_cb,
-                                      this);
+                                      user_data);
+        add_user_data(user_data);
+
         wait_for_bits(&m_state, TEST_STATE_CONNECT_REQUESTED);
         EXPECT_TRUE(m_state & TEST_STATE_CONNECT_REQUESTED);
     }
@@ -175,15 +231,15 @@ protected:
     static ucs_status_t
     client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
     {
-        entity::sockaddr_user_data *sa_user_data =
-                reinterpret_cast<entity::sockaddr_user_data*>(user_data);
-        test_uct_sockaddr *self =
-                static_cast<test_uct_sockaddr*>(sa_user_data->get_test());
+        client_user_data *sa_user_data =
+                reinterpret_cast<client_user_data*>(user_data);
+        test_uct_sockaddr *self = sa_user_data->get_test();
 
         std::vector<char> priv_data_buf(self->m_client->max_conn_priv);
         ssize_t packed = self->common_priv_data_cb(priv_data_buf.size(),
                                                    priv_data_buf.data());
         if (packed < 0) {
+            self->del_user_data(sa_user_data);
             return ucs_status_t(packed);
         }
 
@@ -347,10 +403,9 @@ protected:
     static void
     client_connect_cb(uct_ep_h ep, void *arg,
                       const uct_cm_ep_client_connect_args_t *connect_args) {
-        entity::sockaddr_user_data *sa_user_data =
-                reinterpret_cast<entity::sockaddr_user_data*>(arg);
-        test_uct_sockaddr *self =
-                static_cast<test_uct_sockaddr*>(sa_user_data->get_test());
+        client_user_data *sa_user_data =
+                reinterpret_cast<client_user_data*>(arg);
+        test_uct_sockaddr *self = sa_user_data->get_test();
 
         const uct_cm_remote_data_t *remote_data;
         ucs_status_t status;
@@ -385,7 +440,7 @@ protected:
         }
 
         if (status != UCS_OK) {
-            delete sa_user_data;
+            self->del_user_data(sa_user_data);
         }
     }
 
@@ -402,10 +457,9 @@ protected:
     }
 
     static void client_disconnect_cb(uct_ep_h ep, void *arg) {
-        entity::sockaddr_user_data *sa_user_data =
-                reinterpret_cast<entity::sockaddr_user_data*>(arg);
-        test_uct_sockaddr *self =
-                static_cast<test_uct_sockaddr*>(sa_user_data->get_test());
+        client_user_data *sa_user_data =
+                reinterpret_cast<client_user_data*>(arg);
+        test_uct_sockaddr *self = sa_user_data->get_test();
 
         if (self->m_server_start_disconnect) {
             /* if the server was the one who initiated the disconnect flow,
@@ -416,7 +470,7 @@ protected:
 
         self->m_state |= TEST_STATE_CLIENT_DISCONNECTED;
         self->m_client_disconnect_cnt++;
-        delete sa_user_data;
+        self->del_user_data(sa_user_data);
     }
 
     void cm_disconnect(entity *ent) {
@@ -556,6 +610,35 @@ protected:
         cm_disconnect(m_client);
     }
 
+    void add_user_data(client_user_data *user_data) {
+        ucs::scoped_mutex_lock lock(m_ep_client_data_lock);
+
+        EXPECT_NE(uct_ep_h(NULL), user_data->get_ep());
+        EXPECT_TRUE(m_ep_client_data.insert(std::make_pair(user_data->get_ep(),
+                                                           user_data)).second);
+    }
+
+    void del_user_data(client_user_data *user_data) {
+        ucs::scoped_mutex_lock lock(m_ep_client_data_lock);
+        del_user_data_no_lock(user_data->get_ep());
+    }
+
+    void release_user_data() {
+        ucs::scoped_mutex_lock lock(m_ep_client_data_lock);
+        while (!m_ep_client_data.empty()) {
+            del_user_data_no_lock(m_ep_client_data.begin()->first);
+        }
+    }
+
+private:
+    void del_user_data_no_lock(uct_ep_h ep) {
+        ep_client_data_map_t::iterator it = m_ep_client_data.find(ep);
+
+        EXPECT_NE(m_ep_client_data.end(), it) << "ep: " << ep;
+        delete it->second;
+        m_ep_client_data.erase(it);
+    }
+
 protected:
     ucs::sock_addr_storage m_listen_addr, m_connect_addr;
     uint64_t               m_state;
@@ -571,6 +654,8 @@ protected:
     size_t                 m_short_priv_data_len, m_long_priv_data_len;
     std::vector<char>      m_short_priv_data;
     std::vector<char>      m_long_priv_data;
+    pthread_mutex_t        m_ep_client_data_lock;
+    ep_client_data_map_t   m_ep_client_data;
 };
 
 
@@ -688,9 +773,11 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
     /* Connect */
     /* multiple clients, on the same cm, connecting to the same server */
     for (int i = 0; i < num_conns_on_client; ++i) {
+        client_user_data *user_data = new client_user_data(*this, *m_client, i);
         m_client->connect_to_sockaddr(i, m_connect_addr, client_resolve_cb,
                                       client_connect_cb, client_disconnect_cb,
-                                      this);
+                                      user_data);
+        add_user_data(user_data);
     }
 
     /* wait for the server to connect to all the endpoints on the cm */
@@ -719,9 +806,11 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 UCS_TEST_P(test_uct_sockaddr, err_handle)
 {
     /* client - try to connect to a server that isn't listening */
+    client_user_data *user_data = new client_user_data(*this, *m_client, 0);
     m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                   client_connect_cb, client_disconnect_cb,
-                                  this);
+                                  user_data);
+    add_user_data(user_data);
 
     EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
 
@@ -746,9 +835,11 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server_port)
     scoped_log_handler slh(detect_reject_error_logger);
 
     /* client - try to connect to a non-existing port on the server side. */
+    client_user_data *user_data = new client_user_data(*this, *m_client, 0);
     m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                   client_connect_cb, client_disconnect_cb,
-                                  this);
+                                  user_data);
+    add_user_data(user_data);
 
     /* with the TCP port space (which is currently tested with rdmacm),
      * a REJECT event will be generated on the client side and since it's a
@@ -872,9 +963,11 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
     {
         scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
+        client_user_data *user_data = new client_user_data(*this, *m_client, 0);
         m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                       client_connect_cb, client_disconnect_cb,
-                                      this);
+                                      user_data);
+        add_user_data(user_data);
 
         wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE, 300);
         EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
@@ -940,9 +1033,8 @@ public:
     }
 
     void disconnect_cnt_increment(volatile int *cnt) {
-        pthread_mutex_lock(&m_lock);
+        ucs::scoped_mutex_lock lock(m_lock);
         (*cnt)++;
-        pthread_mutex_unlock(&m_lock);
     }
 
     static void server_disconnect_cb(uct_ep_h ep, void *arg) {
@@ -954,15 +1046,15 @@ public:
     }
 
     static void client_disconnect_cb(uct_ep_h ep, void *arg) {
-        entity::sockaddr_user_data *sa_user_data =
-                reinterpret_cast<entity::sockaddr_user_data*>(arg);
+        client_user_data *sa_user_data =
+                reinterpret_cast<client_user_data*>(arg);
         test_uct_sockaddr_stress *self =
                 static_cast<test_uct_sockaddr_stress*>(sa_user_data->get_test());
 
         EXPECT_EQ(sa_user_data->get_ep(), ep);
         self->common_test_disconnect(ep);
         self->disconnect_cnt_increment(&self->m_client_disconnect_cnt);
-        delete sa_user_data;
+        self->del_user_data(sa_user_data);
     }
 
     void server_accept(entity *server, uct_conn_request_h conn_request,
@@ -1016,10 +1108,13 @@ UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
         client_test = uct_test::create_entity();
         m_entities.push_back(client_test);
 
-        client_test->max_conn_priv = client_test->cm_attr().max_conn_priv;
+        client_test->max_conn_priv  = client_test->cm_attr().max_conn_priv;
+        client_user_data *user_data = new client_user_data(*this, *client_test,
+                                                           0);
         client_test->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
                                          client_connect_cb,
-                                         client_disconnect_cb, this);
+                                         client_disconnect_cb, user_data);
+        add_user_data(user_data);
     }
 
     /* wait for the server to connect to all the clients */
@@ -1109,6 +1204,9 @@ UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
     /* destroy all the eps here (and not in the test's destruction flow) so that
      * no disconnect callbacks are invoked after the test ends */
     m_entities.clear();
+
+    /* destroyed EPs don't invoke CBs, need to clean up user data manually */
+    release_user_data();
 }
 
 UCT_INSTANTIATE_SOCKADDR_TEST_CASE(test_uct_sockaddr_stress)
@@ -1195,8 +1293,8 @@ public:
                                        const uct_cm_ep_priv_data_pack_args_t
                                        *pack_args, void *priv_data)
     {
-        entity::sockaddr_user_data *sa_user_data =
-                reinterpret_cast<entity::sockaddr_user_data*>(arg);
+        client_user_data *sa_user_data =
+                reinterpret_cast<client_user_data*>(arg);
         test_uct_sockaddr_legacy *self =
                 static_cast<test_uct_sockaddr_legacy*>(sa_user_data->get_test());
 
@@ -1258,6 +1356,8 @@ UCS_TEST_P(test_uct_sockaddr_legacy, cm_open_listen_close)
     m_client->reserve_ep(0);
     ASSERT_EQ(NULL, m_client->ep(0));
 
+    client_user_data *user_data = new client_user_data(*this, *m_client, 0);
+
     /* Connect to the server */
     uct_ep_h ep;
     uct_ep_params_t params;
@@ -1271,16 +1371,15 @@ UCS_TEST_P(test_uct_sockaddr_legacy, cm_open_listen_close)
     params.cm                 = m_client->cm();
     params.sockaddr_cb_client = client_connect_cb;
     params.disconnect_cb      = client_disconnect_cb;
-    params.user_data          = new entity::sockaddr_user_data(this, m_client,
-                                                               0);
+    params.user_data          = user_data;
     params.sockaddr           = &ucs_remote_addr;
     params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
     params.sockaddr_pack_cb   = client_priv_data_cb;
 
     ucs_status_t status       = uct_ep_create(&params, &ep);
     ASSERT_UCS_OK(status);
-
     m_client->eps().at(0).reset(ep, uct_ep_destroy);
+    add_user_data(user_data);
     wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
                             TEST_STATE_CLIENT_CONNECTED);
     EXPECT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
