@@ -18,6 +18,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sock.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 static unsigned ucp_listener_accept_cb_progress(void *arg)
@@ -246,6 +247,40 @@ err_free_listeners:
     return status;
 }
 
+static void ucp_listener_vfs_show_ip(void *obj, ucs_string_buffer_t *strb)
+{
+    ucp_listener_h listener   = obj;
+    struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
+    char ip_str[UCS_SOCKADDR_STRING_LEN];
+
+    if (ucs_sockaddr_get_ipstr(sockaddr, ip_str, UCS_SOCKADDR_STRING_LEN) ==
+        UCS_OK) {
+        ucs_string_buffer_appendf(strb, "%s\n", ip_str);
+    } else {
+        ucs_string_buffer_appendf(strb, "<unable to get ip>\n");
+    }
+}
+
+static void ucp_listener_vfs_show_port(void *obj, ucs_string_buffer_t *strb)
+{
+    ucp_listener_h listener   = obj;
+    struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
+    uint16_t port;
+
+    if (ucs_sockaddr_get_port(sockaddr, &port) == UCS_OK) {
+        ucs_string_buffer_appendf(strb, "%u\n", port);
+    } else {
+        ucs_string_buffer_appendf(strb, "<unable to get port>\n");
+    }
+}
+
+void ucp_listener_vfs_init(ucp_listener_h listener)
+{
+    ucs_vfs_obj_add_dir(listener->worker, listener, "listener/%p", listener);
+    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_ip, "ip");
+    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_port, "port");
+}
+
 ucs_status_t ucp_listener_create(ucp_worker_h worker,
                                  const ucp_listener_params_t *params,
                                  ucp_listener_h *listener_p)
@@ -297,6 +332,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 
     status = ucp_listen(listener, params);
     if (status == UCS_OK) {
+        ucp_listener_vfs_init(listener);
         *listener_p = listener;
         goto out;
     }
@@ -313,6 +349,7 @@ void ucp_listener_destroy(ucp_listener_h listener)
     ucs_trace("listener %p: destroying", listener);
 
     UCS_ASYNC_BLOCK(&listener->worker->async);
+    ucs_vfs_obj_remove(listener);
     ucs_callbackq_remove_if(&listener->worker->uct->progress_q,
                             ucp_cm_server_conn_request_progress_cb_pred,
                             listener);
