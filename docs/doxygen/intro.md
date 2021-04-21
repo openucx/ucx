@@ -42,8 +42,8 @@ communications (one-sided and two-sided), collective communication,
 and remote atomic operations required for popular parallel programming models.
 Also, the initial UCX reference implementation
 is targeted to support current network technologies such as:
-+ Open Fabrics - InfiniBand (Mellanox, Qlogic, IBM), libfabrics, iWARP, RoCE
-+ Cray GEMINI \& ARIES
++ Open Fabrics - InfiniBand (Mellanox, Qlogic, IBM), iWARP, RoCE
++ Cray uGNI - GEMINI and ARIES interconnects
 + Shared memory (MMAP, Posix, CMA, KNEM, XPMEM, etc.)
 + Ethernet (TCP/UDP)
 
