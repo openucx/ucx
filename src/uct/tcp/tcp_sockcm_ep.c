@@ -891,7 +891,6 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
                                                     uct_ep_h *ep_p)
 {
     uct_tcp_sockcm_t *tcp_sockcm = uct_tcp_sockcm_ep_get_cm(tcp_ep);
-    ucs_async_context_t *async   = tcp_sockcm->super.iface.worker->async;
     void *data_buf               = NULL;
     uct_tcp_sockcm_t *params_tcp_sockcm;
     const void *priv_data;
@@ -912,11 +911,9 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         goto err;
     }
 
-    UCS_ASYNC_BLOCK(async);
-
     if (tcp_ep->state & UCT_TCP_SOCKCM_EP_FAILED) {
         status = UCS_ERR_CONNECTION_RESET;
-        goto err_unblock;
+        goto err;
     }
 
     /* check if the server opened this ep, to the client, on a CM that is
@@ -927,7 +924,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         if (status != UCS_OK) {
             ucs_error("failed to remove fd %d from the async handlers: %s",
                       tcp_ep->fd, ucs_status_string(status));
-            goto err_unblock;
+            goto err;
         }
     }
 
@@ -937,7 +934,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
     status = uct_cm_ep_set_common_data(&tcp_ep->super, params);
     if (status != UCS_OK) {
         ucs_error("failed to set common data for a uct_cm_base_ep_t endpoint");
-        goto err_unblock;
+        goto err;
     }
 
     status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
@@ -945,12 +942,11 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
                            uct_cm_ep_server_conn_notify_callback_t,
                            ucs_empty_function);
     if (status != UCS_OK) {
-        goto err_unblock;
+        goto err;
     }
 
     /* the server's endpoint was already created by the listener, return it */
     *ep_p             = &tcp_ep->super.super.super;
-    tcp_ep->state    |= UCT_TCP_SOCKCM_EP_SERVER_CREATED;
     params_tcp_sockcm = ucs_derived_of(params->cm, uct_tcp_sockcm_t);
 
     if (&tcp_sockcm->super != params->cm) {
@@ -963,7 +959,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         if (status != UCS_OK) {
             ucs_error("failed to set event handler (fd %d): %s",
                       tcp_ep->fd, ucs_status_string(status));
-            goto err_unblock;
+            goto err;
         }
 
         /* set the server's ep to use the iface from the cm in params */
@@ -973,7 +969,7 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         if (status != UCS_OK) {
             ucs_error("failed to reset the stats on ep %p: %s",
                       tcp_ep, ucs_status_string(status));
-            goto err_unblock;
+            goto err;
         }
 
         ucs_trace("moved tcp_sockcm ep %p from cm %p to cm %p", tcp_ep,
@@ -997,14 +993,14 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
         data_buf = ucs_malloc(tcp_sockcm->priv_data_len, "tcp_priv_data");
         if (data_buf == NULL) {
             status = UCS_ERR_NO_MEMORY;
-            goto err_unblock;
+            goto err;
         }
 
         priv_data        = data_buf;
         priv_data_length = uct_tcp_sockcm_ep_pack_cb(tcp_ep, data_buf);
         if (priv_data_length < 0) {
             status = (ucs_status_t)priv_data_length;
-            goto err_unblock;
+            goto err;
         }
     } else {
         priv_data        = NULL;
@@ -1013,9 +1009,10 @@ static ucs_status_t uct_tcp_sockcm_ep_server_create(uct_tcp_sockcm_ep_t *tcp_ep,
 
     status = uct_tcp_sockcm_ep_pack_priv_data(tcp_ep, priv_data,
                                               priv_data_length);
+    if (status == UCS_OK) {
+        tcp_ep->state |= UCT_TCP_SOCKCM_EP_SERVER_CREATED;
+    }
 
-err_unblock:
-    UCS_ASYNC_UNBLOCK(async);
 err:
     ucs_free(data_buf);
     return status;
@@ -1060,6 +1057,7 @@ out:
 ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
     uct_tcp_sockcm_ep_t *tcp_ep;
+    ucs_async_context_t *async;
     ucs_status_t status;
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
@@ -1067,12 +1065,15 @@ ucs_status_t uct_tcp_sockcm_ep_create(const uct_ep_params_t *params, uct_ep_h *e
         return UCS_CLASS_NEW(uct_tcp_sockcm_ep_t, ep_p, params);
     } else if (params->field_mask & UCT_EP_PARAM_FIELD_CONN_REQUEST) {
         tcp_ep = (uct_tcp_sockcm_ep_t*)params->conn_request;
+        async  = uct_tcp_sockcm_ep_get_cm(tcp_ep)->super.iface.worker->async;
 
+        UCS_ASYNC_BLOCK(async);
         status = uct_tcp_sockcm_ep_server_create(tcp_ep, params, ep_p);
         if (status != UCS_OK) {
             UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, tcp_ep);
         }
 
+        UCS_ASYNC_UNBLOCK(async);
         return status;
     } else {
         ucs_error("either UCT_EP_PARAM_FIELD_SOCKADDR or UCT_EP_PARAM_FIELD_CONN_REQUEST "
