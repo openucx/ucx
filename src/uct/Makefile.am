@@ -50,6 +50,7 @@ libuct_la_SOURCES = \
 	base/uct_mem.c \
 	base/uct_component.c \
 	base/uct_iface.c \
+	base/uct_iface_vfs.c \
 	base/uct_worker.c \
 	base/uct_cm.c \
 	sm/base/sm_ep.c \
