@@ -417,9 +417,6 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
     }
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_ep_is_lane_p2p(ep, lane)) {
-            ucs_assert(ucp_wireup_ep_test(ep->uct_eps[lane]));
-        }
         if (ucp_wireup_ep_test(ep->uct_eps[lane])) {
             ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
         }

@@ -585,35 +585,35 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_worker_h worker = ucp_ep->worker;
     ucp_wireup_ep_t *wireup_ep;
 
-    /* No need to invoke the error handling flow for CM_WIREUP_EP/AUX_EP
-     * because the reason for this failure can be CM_WIREUP_EP/AUX_EP destroy on
-     * the remote side. In case of transport-level failure, we will detect it on
-     * transport lanes.
-     * If UCP EP isn't failed and the failure happened on AUX EP of CM lane:
-     * - on a server EP:
-     *   it means that client closed its CM_WIREUP_EP/AUX_EP and it was detected
-     *   before receiving WIREUP_MSG/ACK from a client or marking a server's EP
-     *   as REMOTE_CONNECTED was scheduled on a progress, but not completed yet
-     *   (CM_WIREUP_EP/AUX_EP is closed when moving an EP to REMOTE_CONNECTED
-     *   state)
-     * - on a client EP:
-     *   it means that server closed its CM_WIREUP_EP/AUX_EP and it was detected
-     *   when marking a client's EP as REMOTE_CONNECTED was scheduled on a
-     *   progress, but not completed yet (CM_WIREUP_EP/AUX_EP is closed when
-     *   moving an EP to REMOTE_CONNECTED state). */
-    wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
-    if (!(ucp_ep->flags & UCP_EP_FLAG_FAILED) &&
-        (lane == ucp_ep_get_cm_lane(ucp_ep)) &&
-        (lane == ucp_ep_get_wireup_msg_lane(ucp_ep)) &&
-        (wireup_ep != NULL) &&
-        ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep)) {
-        ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
-                                     ucp_destroyed_ep_pending_purge, NULL);
-
+    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
         return UCS_OK;
     }
 
-    return ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep, lane, status);
+    wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
+    if ((wireup_ep == NULL) ||
+        !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
+        !(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
+         * means failure on the UCP EP */
+        return ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep, lane, status);
+    }
+
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
+        /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
+         * pending requests have to be handled there */
+        return UCS_OK;
+    }
+
+    /**
+     * Failure on AUX EP after recv remote address but before recv ACK
+     * assumes that remote EP is already connected and destroyed its
+     * wireup/AUX EP. If remote EP is dead, it will be detected by send
+     * operations or KA.
+     */
+    ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
+                                 ucp_destroyed_ep_pending_purge, ucp_ep);
+    ucp_wireup_remote_connected(ucp_ep);
+    return UCS_OK;
 }
 
 static ucs_status_t
