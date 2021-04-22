@@ -23,6 +23,12 @@ ucx_perftest_LDADD    = \
 	$(abs_top_builddir)/src/ucs/libucs.la \
 	lib/libucxperf.la
 
+if HAVE_NVTX
+ucx_perftest_LDADD   += \
+    $(NVTX_LIBS) \
+    $(abs_top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 perftestdir = $(pkgdatadir)/perftest
 dist_perftest_DATA = \
 	$(top_srcdir)/contrib/ucx_perftest_config/msg_pow2 \

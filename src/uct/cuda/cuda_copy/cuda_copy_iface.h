@@ -47,6 +47,7 @@ typedef struct uct_cuda_copy_iface_config {
 
 typedef struct uct_cuda_copy_event_desc {
     cudaEvent_t event;
+    uint64_t id;
     uct_completion_t *comp;
     ucs_queue_elem_t  queue;
 } uct_cuda_copy_event_desc_t;

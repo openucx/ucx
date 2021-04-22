@@ -10,10 +10,13 @@
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
 #include <ucs/type/class.h>
+#include <ucs/profile/profile.h>
 
 
 #define UCT_RC_VERBS_IFACE_FOREACH_TXWQE(_iface, _i, _wc, _num_wcs) \
+      ucs_profile_range_push("poll_tx"); \
       status = uct_ib_poll_cq((_iface)->super.cq[UCT_IB_DIR_TX], &_num_wcs, _wc); \
+      ucs_profile_range_pop(); \
       if (status != UCS_OK) { \
           return 0; \
       } \

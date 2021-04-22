@@ -8,6 +8,7 @@
 #define UCT_RC_VERBS_IMPL_H
 
 #include <ucs/arch/bitops.h>
+#include <ucs/profile/profile.h>
 
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/rc/base/rc_ep.h>
@@ -84,7 +85,9 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
     unsigned num_wcs = iface->super.super.config.rx_max_poll;
     struct ibv_wc wc[num_wcs];
 
+    ucs_profile_range_push("poll_rx");
     status = uct_ib_poll_cq(iface->super.super.cq[UCT_IB_DIR_RX], &num_wcs, wc);
+    ucs_profile_range_pop();
     if (status != UCS_OK) {
         num_wcs = 0;
         goto out;

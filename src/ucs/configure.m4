@@ -8,6 +8,7 @@
 ucs_modules=""
 m4_include([src/ucs/vfs/sock/configure.m4])
 m4_include([src/ucs/vfs/fuse/configure.m4])
+m4_include([src/ucs/profile/nvtx/configure.m4])
 AC_DEFINE_UNQUOTED([ucs_MODULES], ["${ucs_modules}"], [UCS loadable modules])
 
 #

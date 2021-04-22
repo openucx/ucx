@@ -1358,6 +1358,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     self->addr_size  = uct_ib_iface_address_size(self);
 
+    kh_init_inplace(uct_ib_wr_hash, &self->wr_hash);
+
     ucs_debug("created uct_ib_iface_t headroom_ofs %d payload_ofs %d hdr_ofs %d data_sz %d",
               self->config.rx_headroom_offset, self->config.rx_payload_offset,
               self->config.rx_hdr_offset, self->config.seg_size);
@@ -1379,6 +1381,8 @@ err:
 static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
 {
     int ret;
+
+    kh_destroy_inplace(uct_ib_wr_hash, &self->wr_hash);
 
     ret = ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
     if (ret != 0) {

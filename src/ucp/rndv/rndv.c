@@ -19,6 +19,7 @@
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucs/datastruct/queue.h>
+#include <ucs/profile/profile.h>
 
 
 static UCS_F_ALWAYS_INLINE int
@@ -337,8 +338,10 @@ static void ucp_rndv_complete_rma_put_zcopy(ucp_request_t *sreq, int is_frag_put
 
         atp_req->send.ep = sreq->send.ep;
         atp_req->flags   = 0;
+        ucs_profile_range_push("send_atp");
         ucp_rndv_req_send_ack(atp_req, sreq, sreq->send.rndv.remote_req_id,
                               status, UCP_AM_ID_RNDV_ATP, "send_atp");
+        ucs_profile_range_pop();
     }
 
     ucp_request_send_buffer_dereg(sreq);
@@ -853,9 +856,11 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
         /* send ATS for fragment get rndv completion */
         if (rndv_req->send.length == rndv_req->send.state.dt.offset) {
             ucp_rkey_destroy(rndv_req->send.rndv.rkey);
+            ucs_profile_range_push("send_ats");
             ucp_rndv_req_send_ack(rndv_req, rreq,
                                   rndv_req->send.rndv.remote_req_id,
                                   UCS_OK, UCP_AM_ID_RNDV_ATS, "send_ats");
+            ucs_profile_range_pop();
         }
     } else {
         rreq = ucp_request_get_super(freq);
@@ -1333,6 +1338,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
 
     UCS_ASYNC_BLOCK(&worker->async);
 
+    ucs_profile_range_push("rndv recv");
     UCS_PROFILE_REQUEST_EVENT(rreq, "rndv_receive", 0);
 
     /* if receiving a message on an already closed endpoint, stop processing */
@@ -1445,6 +1451,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
+    ucs_profile_range_pop();
     return;
 
 err:
@@ -1475,6 +1482,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *sreq;
 
+    ucs_profile_range_push("ats_handler");
     if (worker->context->config.ext.proto_enable) {
         return ucp_proto_rndv_ats_handler(arg, data, length, flags);
     }
@@ -1489,6 +1497,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     }
 
     ucp_request_complete_and_dereg_send(sreq, rep_hdr->status);
+    ucs_profile_range_pop();
+
     return UCS_OK;
 }
 
@@ -1665,8 +1675,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self),
         uct_completion_update_status(&sreq->send.state.uct_comp, self->status);
         ucp_rndv_complete_rma_put_zcopy(sreq, 1);
 
+        ucs_profile_range_push("send_frag_atp");
         ucp_rndv_req_send_ack(fsreq, fsreq, fsreq->send.rndv.remote_req_id,
                               self->status, UCP_AM_ID_RNDV_ATP, "send_frag_atp");
+        ucs_profile_range_pop();
     }
 
     /* release registered memory during doing PUT operation for a given fragment */
@@ -1697,7 +1709,9 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_put_pipeline_frag_get_completion, (self),
     freq->send.lane                      = fsreq->send.lane;
     freq->send.state.dt.dt.contig.md_map = 0;
 
+    ucs_profile_range_push("send frag");
     ucp_request_send(freq, 0);
+    ucs_profile_range_pop();
 }
 
 static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
@@ -1715,6 +1729,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
     size_t min_zcopy, max_zcopy;
     uct_rkey_t uct_rkey;
 
+    ucs_profile_range_push("put_pipeline");
     ucp_trace_req(sreq, "using put rndv pipeline protocol");
 
     /* Protocol:
@@ -1773,6 +1788,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
 
     offset = 0;
     while (offset != rndv_size) {
+        ucs_profile_range_push("put pipeline frag");
         length = ucp_rndv_adjust_zcopy_length(min_zcopy, max_frag_size, 0,
                                               rndv_size, offset,
                                               rndv_size - offset);
@@ -1807,8 +1823,10 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         }
 
         offset += length;
+        ucs_profile_range_pop();
     }
 
+    ucs_profile_range_pop();
     return UCS_OK;
 }
 
@@ -1827,6 +1845,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucs_assert(req != NULL);
     ucp_request_put(rtr_sreq);
 
+    ucs_profile_range_push("atp_handler");
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_frag_atp_recv", 0);
@@ -1838,6 +1857,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_atp_recv", 0);
         ucp_rndv_zcopy_recv_req_complete(req, UCS_OK);
     }
+    ucs_profile_range_pop();
 
     return UCS_OK;
 }
@@ -2000,6 +2020,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
         ucp_request_put(rndv_req);
     }
 
+    ucs_profile_range_pop();
     return UCS_OK;
 }
 

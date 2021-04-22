@@ -50,6 +50,12 @@ ucp_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/ucp/libucp.la \
                            $(EXAMPLE_CUDA_LIBS)
 
+if HAVE_NVTX
+ucp_hello_world_LDADD   += \
+    $(NVTX_LIBS) \
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 uct_hello_world_SOURCES  = uct_hello_world.c
 uct_hello_world_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)
 uct_hello_world_CPPFLAGS = $(BASE_CPPFLAGS) $(EXAMPLE_CUDA_CPPFLAGS)
@@ -58,6 +64,12 @@ uct_hello_world_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                            $(top_builddir)/src/uct/libuct.la \
                            $(EXAMPLE_CUDA_LIBS)
 
+if HAVE_NVTX
+uct_hello_world_LDADD   += \
+    $(NVTX_LIBS) \
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
+
 ucp_client_server_SOURCES  = ucp_client_server.c
 ucp_client_server_CFLAGS   = $(BASE_CFLAGS) $(EXAMPLE_CUDA_CFLAGS)
 ucp_client_server_CPPFLAGS = $(BASE_CPPFLAGS) $(EXAMPLE_CUDA_CPPFLAGS)
@@ -65,5 +77,11 @@ ucp_client_server_LDFLAGS  = $(EXAMPLE_CUDA_LD_FLAGS)
 ucp_client_server_LDADD    = $(top_builddir)/src/ucs/libucs.la \
                              $(top_builddir)/src/ucp/libucp.la \
                              $(EXAMPLE_CUDA_LIBS)
+
+if HAVE_NVTX
+ucp_client_server_LDADD   += \
+    $(NVTX_LIBS) \
+    $(top_builddir)/src/ucs/profile/nvtx/libucs_nvtx.la
+endif
 
 endif

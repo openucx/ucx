@@ -17,6 +17,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/string_buffer.h>
+#include <ucs/datastruct/khash.h>
 
 
 #define UCT_IB_MAX_IOV                     8UL
@@ -80,6 +81,7 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
 };
 
+KHASH_MAP_INIT_INT64(uct_ib_wr_hash, uint64_t);
 
 typedef struct uct_ib_address_pack_params {
     /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
@@ -270,6 +272,7 @@ struct uct_ib_iface {
     } config;
 
     uct_ib_iface_ops_t        *ops;
+    khash_t(uct_ib_wr_hash)   wr_hash;
 };
 
 

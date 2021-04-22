@@ -11,6 +11,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/time/time_def.h>
 #include <limits.h>
+#include <stdint.h>
 
 BEGIN_C_DECLS
 
@@ -120,6 +121,29 @@ typedef struct ucs_profile_record {
 extern const char *ucs_profile_mode_names[];
 
 
+typedef uint64_t (*ucs_profile_range_start_t)(const char *format, ...);
+
+typedef void (*ucs_profile_range_stop_t)(uint64_t id);
+
+typedef void (*ucs_profile_range_push_t)(const char *format, ...);
+
+typedef void (*ucs_profile_range_pop_t)();
+
+typedef void (*ucs_profile_range_add_marker_t)(const char *format, ...);
+
+/**
+ * Profile range operations
+ */
+typedef struct ucs_profile_range_ops {
+    ucs_profile_range_start_t      start;
+    ucs_profile_range_stop_t       stop;
+    ucs_profile_range_push_t       push;
+    ucs_profile_range_pop_t        pop;
+    ucs_profile_range_add_marker_t add_marker;
+} ucs_profile_range_ops_t;
+
+extern ucs_profile_range_ops_t ucs_profile_range_fxns;
+
 /**
  * Initialize profiling system.
  */
@@ -136,6 +160,54 @@ void ucs_profile_global_cleanup();
  * Save and reset profiling.
  */
 void ucs_profile_dump();
+
+
+/*
+ * Start a range trace on an arbitrary event in a potentially nested fashion.
+ * A range tracing can be started in a function and potentially end in an
+ * another function or a recursive invocation of the same function.
+ * A unique ID is returned to stop tracing the event.
+ *
+ * @param [in]     format      String name for the range.
+ *
+ * @return ID to be used to stop tracing a range
+ */
+uint64_t ucs_profile_range_start(const char *format, ...);
+
+
+/*
+ * Stop range trace.
+ *
+ * @param [in]     id          id that was returned from range start.
+ *
+ */
+void ucs_profile_range_stop(uint64_t id);
+
+
+/*
+ * Add a marker on trace profiles.
+ *
+ * @param [in]     format      String name for the marker.
+ *
+ */
+void ucs_profile_range_add_marker(const char *format, ...);
+
+
+/*
+ * Start a range trace in a non-nested fashion. Range tracing must start and end
+ * in the same function.
+ *
+ * @param [in]     format      String name for the marker.
+ *
+ */
+void ucs_profile_range_push(const char *format, ...);
+
+
+/*
+ * Stop a range trace in a non-nested fashion.
+ *
+ */
+void ucs_profile_range_pop();
 
 END_C_DECLS
 

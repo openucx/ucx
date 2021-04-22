@@ -16,6 +16,7 @@
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
+#include <ucs/profile/profile.h>
 
 #include "rc_mlx5.inl"
 
@@ -137,7 +138,9 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     unsigned qp_num;
     uint16_t hw_ci;
 
+    ucs_profile_range_push("poll_mlx_tx");
     cqe = uct_ib_mlx5_poll_cq(&iface->super.super, &iface->cq[UCT_IB_DIR_TX]);
+    ucs_profile_range_pop();
     if (cqe == NULL) {
         return 0;
     }
