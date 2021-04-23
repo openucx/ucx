@@ -364,7 +364,9 @@ protected:
 
         if (status == UCS_ERR_REJECTED) {
             self->m_state |= TEST_STATE_CLIENT_GOT_REJECT;
-        } else if ((status == UCS_ERR_UNREACHABLE) || (status == UCS_ERR_NOT_CONNECTED)) {
+        } else if ((status == UCS_ERR_UNREACHABLE) ||
+                   (status == UCS_ERR_NOT_CONNECTED) ||
+                   (status == UCS_ERR_CONNECTION_RESET)) {
             self->m_state |= TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE;
         } else if (status != UCS_OK) {
             self->m_state |= TEST_STATE_CLIENT_GOT_ERROR;
