@@ -362,14 +362,16 @@ UCS_TEST_P(test_profile, log_accum) {
 }
 
 UCS_TEST_P(test_profile, test_range) {
+    ucs_profile_color_t color = UCS_PROFILE_COLOR_RED;
     uint64_t id;
-    UCS_PROFILE_RANGE_START("sum_start_stop", id);
+
+    UCS_PROFILE_RANGE_START("sum_start_stop", color, id);
     sum(1, 2);
     UCS_PROFILE_RANGE_STOP(id);
 
     UCS_PROFILE_RANGE_ADD_MARKER("sum_marker");
 
-    UCS_PROFILE_RANGE_PUSH("sum_push_pop");
+    UCS_PROFILE_RANGE_PUSH("sum_push_pop", color);
     sum(1, 2);
     UCS_PROFILE_RANGE_POP();
 }

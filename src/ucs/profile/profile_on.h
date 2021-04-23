@@ -258,16 +258,16 @@ BEGIN_C_DECLS
     UCS_PROFILE(UCS_PROFILE_TYPE_REQUEST_FREE, "", 0, (uintptr_t)(_req));
 
 
-#define UCS_PROFILE_RANGE_START(_name, _id) \
-    ucs_profile_range_start(_name, &_id);
+#define UCS_PROFILE_RANGE_START(_name, _color, _id) \
+    ucs_profile_range_start(_name, _color, &_id);
 
 
 #define UCS_PROFILE_RANGE_STOP(_id) \
     ucs_profile_range_stop(_id);
 
 
-#define UCS_PROFILE_RANGE_PUSH(_name) \
-    ucs_profile_range_push(_name);
+#define UCS_PROFILE_RANGE_PUSH(_name, _color) \
+    ucs_profile_range_push(_name, _color);
 
 
 #define UCS_PROFILE_RANGE_POP() \

@@ -32,6 +32,22 @@ enum {
 
 
 /**
+ * Profile range colors
+ */
+typedef enum {
+    UCS_PROFILE_COLOR_GREEN      = 0xff00ff00,
+    UCS_PROFILE_COLOR_BLUE       = 0xff0000ff,
+    UCS_PROFILE_COLOR_YELLOW     = 0xffffff00,
+    UCS_PROFILE_COLOR_PURPLE     = 0xffff00ff,
+    UCS_PROFILE_COLOR_CYAN       = 0xff00ffff,
+    UCS_PROFILE_COLOR_RED        = 0xffff0000,
+    UCS_PROFILE_COLOR_WHITE      = 0xffffffff,
+    UCS_PROFILE_COLOR_DARK_GREEN = 0xff006600,
+    UCS_PROFILE_COLOR_ORANGE     = 0xffffa500
+} ucs_profile_color_t;
+
+
+/**
  * Profiling location type
  */
 typedef enum {
@@ -145,11 +161,13 @@ void ucs_profile_dump();
  * another function or a recursive invocation of the same function.
  *
  * @param [in]     name        String name for the range.
+ * @param [in]     color       Color for the range.
  * @param [inout]  id          Unique ID returned to stop tracing the event
  *
  * @return ID to be used to stop tracing a range
  */
-void ucs_profile_range_start(const char *name, uint64_t *id);
+void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
+                             uint64_t *id);
 
 
 /*
@@ -175,9 +193,10 @@ void ucs_profile_range_add_marker(const char *name);
  * in the same function.
  *
  * @param [in]     name        String name for the marker.
+ * @param [in]     color       Color for the range.
  *
  */
-void ucs_profile_range_push(const char *name);
+void ucs_profile_range_push(const char *name, ucs_profile_color_t color);
 
 
 /*
