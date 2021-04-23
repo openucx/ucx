@@ -276,11 +276,17 @@ static void ucs_vfs_refresh_dir(ucs_vfs_node_t *node)
 static void
 ucs_vfs_read_ro_file(ucs_vfs_node_t *node, ucs_string_buffer_t *strb)
 {
+    ucs_vfs_node_t *parent_node = node->parent;
+
     ucs_assert(ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_RO_FILE) == 1);
+
+    while (ucs_vfs_check_node(parent_node, UCS_VFS_NODE_TYPE_SUBDIR)) {
+        parent_node = parent_node->parent;
+    }
 
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
 
-    node->text_cb(node->parent->obj, strb);
+    node->text_cb(parent_node->obj, strb);
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 }
