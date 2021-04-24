@@ -123,23 +123,23 @@ build_icc() {
 # Build with PGI compiler
 #
 build_pgi() {
-	pgi_test_file=$(mktemp ./XXXXXX).c
-	echo "int main() {return 0;}" > ${pgi_test_file}
-
-	if az_module_load $PGI_MODULE && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
+	if az_module_load $PGI_MODULE
 	then
+		# add_network_host utility from $PGI_MODULE it create config file for machine
+		# Doc: https://docs.nvidia.com/hpc-sdk/hpc-sdk-install-guide/index.html
+		add_network_host
 		echo "==== Build with PGI compiler ===="
 		# PGI failed to build valgrind headers, disable it for now
 		# TODO: Using non-default PGI compiler - pgcc18 which is going to be default
 		#       in next versions.
 		#       Switch to default CC compiler after pgcc18 is default for pgi module
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --without-valgrind
 		$MAKEP
+		# TODO: Check why "make distclean" is needed to cleanup after PGI compiler
+		make_clean distclean
 	else
 		azure_log_warning "Not building with PGI compiler"
 	fi
-
-	rm -rf ${pgi_test_file} ${pgi_test_file}.out
 	az_module_unload $PGI_MODULE
 }
 

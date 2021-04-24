@@ -9,7 +9,7 @@ GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
 JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"
-PGI_MODULE="pgi/19.7"
+PGI_MODULE="hpc-sdk/nvhpc/21.2"
 GCC_MODULE="dev/gcc-10.1.0"
 ARM_MODULE="arm-compiler/armcc-19.0"
 INTEL_MODULE="intel/ics-19.1.1"
@@ -25,8 +25,8 @@ parallel_jobs=4
 num_pinned_threads=$(nproc)
 [ $parallel_jobs -gt $num_pinned_threads ] && parallel_jobs=$num_pinned_threads
 
-MAKE="make"
-MAKEP="make -j${parallel_jobs}"
+MAKE="make V=1"
+MAKEP="make V=1 -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
 #
