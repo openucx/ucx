@@ -1433,11 +1433,16 @@ public:
         server_info_t& server_info = _server_info[server_index];
 
         if (server_info.conn->is_disconnecting()) {
+            LOG << "not disconnecting " << server_info.conn << " with "
+                << get_num_uncompleted(server_info) << " uncompleted oeprations"
+                " due to \"" << reason << "\" because disconnection is already"
+                " in progress";
             return;
         }
 
-        LOG << "disconnecting connection " << server_info.conn << " due to "
-            << reason;
+        LOG << "disconnecting connection " << server_info.conn << " with "
+            << get_num_uncompleted(server_info) << " uncompleted oeprations due"
+            "to \"" << reason << "\"";
 
         // Destroying the connection will complete its outstanding operations
         server_info.conn->disconnect(new DisconnectCallback(*this,
