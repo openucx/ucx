@@ -12,20 +12,17 @@
 #include <ucp/core/ucp_request.h>
 
 
-/*
- * TAG API Rendezvous RTS header
- */
-typedef struct {
-    ucp_rndv_rts_hdr_t        super;
-    ucp_tag_hdr_t             tag;
-    /* packed rkeys follows */
-} UCS_S_PACKED ucp_tag_rndv_rts_hdr_t;
+#define ucp_tag_hdr_from_rts(_rts) \
+    ({ \
+        UCS_STATIC_ASSERT(sizeof((_rts)->hdr) == sizeof(ucp_tag_hdr_t)); \
+        ((ucp_tag_hdr_t*)&(_rts)->hdr); \
+    })
 
 
 ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
-                          const ucp_tag_rndv_rts_hdr_t *rndv_rts_hdr);
+                          const ucp_rndv_rts_hdr_t *rndv_rts_hdr);
 
 ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
                                       ucp_rndv_rts_hdr_t *rts_hdr,
@@ -33,17 +30,13 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
 
 size_t ucp_tag_rndv_rts_pack(void *dest, void *arg);
 
-/* In case of RNDV, there is a tag(ucp_tag_t) right after rdesc and before
- * the TAG RTS header (ucp_tag_rndv_rts_hdr_t). It is needed to unify all
- * TAG API protocol headers and make search in unexpected queue fast.
- */
-static UCS_F_ALWAYS_INLINE ucp_tag_rndv_rts_hdr_t*
+
+static UCS_F_ALWAYS_INLINE ucp_rndv_rts_hdr_t *
 ucp_tag_rndv_rts_from_rdesc(ucp_recv_desc_t *rdesc)
 {
-    ucs_assert(rdesc->payload_offset ==
-               (sizeof(ucp_tag_rndv_rts_hdr_t) + sizeof(ucp_tag_t)));
+    ucs_assert(rdesc->payload_offset == sizeof(ucp_rndv_rts_hdr_t));
 
-    return UCS_PTR_BYTE_OFFSET(rdesc + 1, sizeof(ucp_tag_t));
+    return (ucp_rndv_rts_hdr_t*)(rdesc + 1);
 }
 
 #endif

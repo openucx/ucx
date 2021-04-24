@@ -99,7 +99,7 @@ size_t ucp_am_max_header_size(ucp_worker_h worker)
     }
 
     max_am_header  = SIZE_MAX;
-    max_rts_size   = sizeof(ucp_am_rndv_rts_hdr_t) +
+    max_rts_size   = sizeof(ucp_rndv_rts_hdr_t) +
                      ucp_rkey_packed_size(context, UCS_MASK(context->num_mds));
     max_ucp_header = ucs_max(max_rts_size, sizeof(ucp_am_first_hdr_t));
 
@@ -130,14 +130,13 @@ size_t ucp_am_max_header_size(ucp_worker_h worker)
     return ucs_min(max_am_header, UINT32_MAX);
 }
 
-static void ucp_am_rndv_send_ats(ucp_worker_h worker,
-                                 ucp_am_rndv_rts_hdr_t *rts,
+static void ucp_am_rndv_send_ats(ucp_worker_h worker, ucp_rndv_rts_hdr_t *rts,
                                  ucs_status_t status)
 {
     ucp_request_t *req;
     ucp_ep_h ep;
 
-    UCP_WORKER_GET_EP_BY_ID(&ep, worker, rts->super.sreq.ep_id, return,
+    UCP_WORKER_GET_EP_BY_ID(&ep, worker, rts->sreq.ep_id, return,
                             "AM RNDV ATS");
     req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
@@ -148,7 +147,7 @@ static void ucp_am_rndv_send_ats(ucp_worker_h worker,
     req->send.ep = ep;
     req->flags   = 0;
 
-    ucp_rndv_req_send_ack(req, NULL, rts->super.sreq.req_id, status,
+    ucp_rndv_req_send_ack(req, NULL, rts->sreq.req_id, status,
                           UCP_AM_ID_RNDV_ATS, "send_ats");
 }
 
@@ -705,15 +704,14 @@ static ucs_status_t ucp_am_zcopy_multi(uct_pending_req_t *self)
 
 size_t ucp_am_rndv_rts_pack(void *dest, void *arg)
 {
-    ucp_request_t *sreq               = arg;
-    ucp_am_rndv_rts_hdr_t *am_rts_hdr = dest;
-    size_t max_bcopy                  = ucp_ep_get_max_bcopy(sreq->send.ep,
-                                                             sreq->send.lane);
+    ucp_request_t *sreq         = arg;
+    ucp_rndv_rts_hdr_t *rts_hdr = dest;
+    size_t max_bcopy            = ucp_ep_get_max_bcopy(sreq->send.ep,
+                                                       sreq->send.lane);
     size_t rts_size, total_size;
 
-    ucp_am_fill_header(&am_rts_hdr->am, sreq);
-    rts_size = ucp_rndv_rts_pack(sreq, &am_rts_hdr->super,
-                                 sizeof(*am_rts_hdr), UCP_RNDV_RTS_FLAG_AM);
+    ucp_am_fill_header(ucp_am_hdr_from_rts(rts_hdr), sreq);
+    rts_size = ucp_rndv_rts_pack(sreq, rts_hdr, UCP_RNDV_RTS_AM);
 
     if (sreq->send.msg_proto.am.header_length == 0) {
         return rts_size;
@@ -725,7 +723,7 @@ size_t ucp_am_rndv_rts_pack(void *dest, void *arg)
         ucs_fatal("RTS is too big %lu, max %lu", total_size, max_bcopy);
     }
 
-    ucp_am_pack_user_header(UCS_PTR_BYTE_OFFSET(am_rts_hdr, rts_size), sreq);
+    ucp_am_pack_user_header(UCS_PTR_BYTE_OFFSET(rts_hdr, rts_size), sreq);
 
     return total_size;
 }
@@ -737,7 +735,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_am_rndv_rts, (self),
 
     /* RTS consists of: AM RTS header, packed rkeys and user header */
     return ucp_rndv_send_rts(sreq, ucp_am_rndv_rts_pack,
-                             sizeof(ucp_am_rndv_rts_hdr_t) +
+                             sizeof(ucp_rndv_rts_hdr_t) +
                                      sreq->send.msg_proto.am.header_length);
 }
 
@@ -1019,7 +1017,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     ucp_request_t *req;
     ucp_datatype_t datatype;
     ucs_memory_type_t mem_type;
-    ucp_am_rndv_rts_hdr_t *rts;
+    ucp_rndv_rts_hdr_t *rts;
     ucs_status_t status;
     size_t recv_length;
 
@@ -1066,12 +1064,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 
         ucp_request_set_callback_param(param, recv_am, req, recv.am);
 
-        ucs_assert(rts->super.flags & UCP_RNDV_RTS_FLAG_AM);
-        ucs_assertv(req->recv.length >= rts->super.size,
+        ucs_assert(rts->opcode == UCP_RNDV_RTS_AM);
+        ucs_assertv(req->recv.length >= rts->size,
                     "rx buffer too small %zu, need %zu", req->recv.length,
-                    rts->super.size);
+                    rts->size);
 
-        ucp_rndv_receive(worker, req, &rts->super, rts + 1);
+        ucp_rndv_receive(worker, req, rts, rts + 1);
         ret = req + 1;
         goto out;
     }
@@ -1482,11 +1480,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
 ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                      unsigned tl_flags)
 {
-    ucp_am_rndv_rts_hdr_t *rts = data;
-    ucp_worker_h worker        = arg;
-    uint16_t am_id             = rts->am.am_id;
-    ucp_recv_desc_t *desc      = NULL;
-    ucp_am_entry_t *am_cb      = &ucs_array_elem(&worker->am, am_id);
+    ucp_rndv_rts_hdr_t *rts = data;
+    ucp_worker_h worker     = arg;
+    ucp_am_hdr_t *am        = ucp_am_hdr_from_rts(rts);
+    uint16_t am_id          = am->am_id;
+    ucp_recv_desc_t *desc   = NULL;
+    ucp_am_entry_t *am_cb   = &ucs_array_elem(&worker->am, am_id);
     ucp_ep_h ep;
     ucp_am_recv_param_t param;
     ucs_status_t status, desc_status;
@@ -1500,7 +1499,7 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
         goto out_send_ats;
     }
 
-    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->super.sreq.ep_id,
+    UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id,
                                   { status = UCS_ERR_CANCELED;
                                      goto out_send_ats; },
                                   "AM RTS");
@@ -1510,9 +1509,9 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
         goto out_send_ats;
     }
 
-    if (rts->am.header_length != 0) {
-        ucs_assert(length >= rts->am.header_length + sizeof(*rts));
-        hdr = UCS_PTR_BYTE_OFFSET(rts, length - rts->am.header_length);
+    if (am->header_length != 0) {
+        ucs_assert(length >= am->header_length + sizeof(*rts));
+        hdr = UCS_PTR_BYTE_OFFSET(rts, length - am->header_length);
     } else {
         hdr = NULL;
     }
@@ -1529,10 +1528,10 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     }
 
     param.recv_attr = UCP_AM_RECV_ATTR_FLAG_RNDV |
-                      ucp_am_hdr_reply_ep(worker, rts->am.flags, ep,
+                      ucp_am_hdr_reply_ep(worker, am->flags, ep,
                                           &param.reply_ep);
-    status          = am_cb->cb(am_cb->context, hdr, rts->am.header_length,
-                                desc + 1, rts->super.size, &param);
+    status          = am_cb->cb(am_cb->context, hdr, am->header_length,
+                                desc + 1, rts->size, &param);
     if (ucp_am_rdesc_in_progress(desc, status)) {
         /* User either wants to save descriptor for later use or initiated
          * rendezvous receive (by ucp_am_recv_data_nbx) in the callback. */

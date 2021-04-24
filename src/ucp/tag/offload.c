@@ -182,7 +182,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     ucp_worker_t *worker      = iface->worker;
     const void *uct_rkeys[]   = { rkey_buf };
     const ucp_tag_offload_unexp_rndv_hdr_t *rndv_hdr;
-    ucp_tag_rndv_rts_hdr_t *dummy_rts;
+    ucp_rndv_rts_hdr_t *dummy_rts;
+    ucp_tag_hdr_t *tag;
     ucp_md_index_t md_index;
     size_t dummy_rts_size;
     size_t rkey_size;
@@ -200,19 +201,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         /* Build the dummy RTS packet, copy meta-data from unexpected rndv header
          * and remote key from rkey_buf.
          */
-        dummy_rts                    = ucs_alloca(dummy_rts_size);
-        dummy_rts->tag.tag           = stag;
-        dummy_rts->super.sreq.ep_id  = rndv_hdr->ep_id;
-        dummy_rts->super.sreq.req_id = rndv_hdr->req_id;
-        dummy_rts->super.address     = remote_addr;
-        dummy_rts->super.size        = length;
-        dummy_rts->super.flags       = UCP_RNDV_RTS_FLAG_TAG;
+        dummy_rts              = ucs_alloca(dummy_rts_size);
+        dummy_rts->sreq.ep_id  = rndv_hdr->ep_id;
+        dummy_rts->sreq.req_id = rndv_hdr->req_id;
+        dummy_rts->address     = remote_addr;
+        dummy_rts->size        = length;
+        dummy_rts->opcode      = UCP_RNDV_RTS_TAG_OK;
+        tag                    = ucp_tag_hdr_from_rts(dummy_rts);
+        tag->tag               = stag;
 
         ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
                              UCS_MEMORY_TYPE_HOST, dummy_rts + 1, uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
-        ucp_tag_rndv_process_rts(worker, &dummy_rts->super, dummy_rts_size, 0);
+        ucp_tag_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);
     } else {
         /* Unexpected tag offload rndv request. Sender buffer is either
            non-contig or it's length > rndv.max_zcopy capability of tag lane.
