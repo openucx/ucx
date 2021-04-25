@@ -707,7 +707,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     status = ucp_wireup_init_lanes(reply_ep, ep_init_flags, &ucp_tl_bitmap_max,
                                    remote_address, addr_indices);
     if (status != UCS_OK) {
-        goto destroy_ep;
+        goto out_delete_ep;
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
@@ -715,7 +715,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED,
                                  &ucp_tl_bitmap_min, NULL);
     if (status != UCS_OK) {
-        goto destroy_ep;
+        goto out_cleanup_lanes;
     }
 
     req = ucp_ep_flush_internal(reply_ep, UCP_REQUEST_FLAG_RELEASED,
@@ -725,8 +725,10 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
         return;
     }
 
-destroy_ep:
-    ucp_ep_disconnected(reply_ep, 0);
+out_cleanup_lanes:
+    ucp_ep_cleanup_lanes(reply_ep);
+out_delete_ep:
+    ucp_ep_delete(reply_ep);
 }
 
 static UCS_F_NOINLINE

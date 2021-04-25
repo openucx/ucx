@@ -76,12 +76,12 @@ static inline ucs_status_t ucp_rma_wait(ucp_worker_h worker, void *user_req,
     }
 }
 
-static inline void ucp_ep_rma_remote_request_sent(ucp_ep_t *ep)
+static inline void ucp_ep_rma_remote_request_sent(ucp_ep_h ep)
 {
     ++ucp_ep_flush_state(ep)->send_sn;
 }
 
-static inline void ucp_ep_rma_remote_request_completed(ucp_ep_t *ep)
+static inline void ucp_ep_rma_remote_request_completed(ucp_ep_h ep)
 {
     ucp_ep_flush_state_t *flush_state = ucp_ep_flush_state(ep);
     ucp_request_t *req;

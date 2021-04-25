@@ -813,19 +813,7 @@ static void ucp_wireup_clean_amo_criteria(ucp_wireup_criteria_t *criteria)
  */
 static int ucp_wireup_allow_am_emulation_layer(unsigned ep_init_flags)
 {
-    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
-        return 0;
-    }
-
-    /* disable emulation layer if err handling is required due to lack of
-     * keep alive protocol, unless we have CM which handles disconnect
-     */
-    if ((ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
-        !ucp_ep_init_flags_has_cm(ep_init_flags)) {
-        return 0;
-    }
-
-    return 1;
+    return !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE);
 }
 
 static unsigned
