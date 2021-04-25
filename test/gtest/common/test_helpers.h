@@ -873,6 +873,17 @@ private:
 };
 
 
+class scoped_mutex_lock {
+public:
+    scoped_mutex_lock(pthread_mutex_t &mutex);
+
+    ~scoped_mutex_lock();
+
+private:
+    pthread_mutex_t &m_mutex;
+};
+
+
 /**
  * N-ary Cartesian product over the N vectors provided in the input vector
  * The cardinality of the result vector:

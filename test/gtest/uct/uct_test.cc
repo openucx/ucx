@@ -824,28 +824,6 @@ void uct_test::reduce_tl_send_queues()
     set_config("RCVBUF?=128");
 }
 
-uct_test::entity::sockaddr_user_data::sockaddr_user_data(uct_test *test,
-                                                         entity *entity,
-                                                         unsigned ep_index) :
-    m_test(test), m_entity(entity), m_ep_index(ep_index)
-{
-}
-
-uct_test* uct_test::entity::sockaddr_user_data::get_test() const
-{
-    return m_test;
-}
-
-uct_test::entity* uct_test::entity::sockaddr_user_data::get_entity() const
-{
-    return m_entity;
-}
-
-uct_ep_h uct_test::entity::sockaddr_user_data::get_ep() const
-{
-    return get_entity()->ep(m_ep_index);
-}
-
 uct_test::entity::entity(const resource& resource, uct_iface_config_t *iface_config,
                          uct_iface_params_t *params, uct_md_config_t *md_config) :
     m_resource(resource)
@@ -1227,7 +1205,7 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
                                       uct_cm_ep_resolve_callback_t resolve_cb,
                                       uct_cm_ep_client_connect_callback_t connect_cb,
                                       uct_ep_disconnect_cb_t disconnect_cb,
-                                      uct_test *test)
+                                      void *user_data)
 {
     ucs_sock_addr_t ucs_remote_addr = remote_addr.to_ucs_sock_addr();
     uct_ep_params_t params;
@@ -1237,9 +1215,7 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
     ucs::scoped_async_lock lock(async());
 
     reserve_ep(index);
-    if (m_eps[index]) {
-        return; /* Already connected */
-    }
+    ASSERT_FALSE(m_eps[index]) << "Already connected";
 
     /* Connect to the server */
     params.field_mask = UCT_EP_PARAM_FIELD_USER_DATA                  |
@@ -1250,14 +1226,14 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
                         UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
                         UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
 
-    params.user_data          = new sockaddr_user_data(test, this, index);
-    params.cm                 = m_cm;
-    params.sockaddr           = &ucs_remote_addr;
-    params.sockaddr_cb_flags  = UCT_CB_FLAG_ASYNC;
-    params.cm_resolve_cb      = resolve_cb;
-    params.sockaddr_cb_client = connect_cb;
-    params.disconnect_cb      = disconnect_cb;
-    status                    = uct_ep_create(&params, &ep);
+    params.user_data            = user_data;
+    params.cm                   = m_cm;
+    params.sockaddr             = &ucs_remote_addr;
+    params.sockaddr_cb_flags    = UCT_CB_FLAG_ASYNC;
+    params.cm_resolve_cb        = resolve_cb;
+    params.sockaddr_cb_client   = connect_cb;
+    params.disconnect_cb        = disconnect_cb;
+    status                      = uct_ep_create(&params, &ep);
     ASSERT_UCS_OK(status);
 
     m_eps[index].reset(ep, uct_ep_destroy);

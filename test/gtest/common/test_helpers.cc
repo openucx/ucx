@@ -759,6 +759,16 @@ scoped_async_lock::~scoped_async_lock()
     UCS_ASYNC_UNBLOCK(&m_async);
 }
 
+scoped_mutex_lock::scoped_mutex_lock(pthread_mutex_t &mutex) : m_mutex(mutex)
+{
+    pthread_mutex_lock(&m_mutex);
+}
+
+scoped_mutex_lock::~scoped_mutex_lock()
+{
+    pthread_mutex_unlock(&m_mutex);
+}
+
 std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
     static std::vector<std::vector<ucs_memory_type_t> > result;
 
