@@ -9,10 +9,15 @@
 #endif
 
 #include "tcp_sockcm_ep.h"
+#include "tcp.h"
 #include <ucs/sys/sock.h>
 #include <ucs/async/async.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/string.h>
+
+
+#define UCT_TCP_SOCKCM_EP_MAX_DEVICE_ADDR_LEN (sizeof(uct_tcp_device_addr_t) + \
+                                               sizeof(struct in6_addr))
 
 
 const char *uct_tcp_sockcm_cm_ep_peer_addr_str(uct_tcp_sockcm_ep_t *cep,
@@ -545,42 +550,85 @@ ucs_status_t uct_tcp_sockcm_ep_send(uct_tcp_sockcm_ep_t *cep)
     return uct_tcp_sockcm_ep_progress_send(cep);
 }
 
-static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
+static ssize_t
+uct_tcp_sockcm_ep_get_remote_device_addr(const uct_tcp_sockcm_ep_t *cep,
+                                         struct sockaddr_storage *saddr,
+                                         socklen_t *saddr_len_p,
+                                         uct_tcp_device_addr_t *remote_dev_addr,
+                                         size_t max_remote_dev_addr_len)
 {
-    uct_tcp_sockcm_priv_data_hdr_t *hdr     = (uct_tcp_sockcm_priv_data_hdr_t *)
-                                              cep->comm_ctx.buf;
-    struct sockaddr_storage remote_dev_addr = {0}; /* Suppress Clang false-positive */
+    ucs_status_t status;
+    size_t in_addr_len;
+    size_t remote_dev_addr_len;
+
+    /* Get the device address of the remote peer associated with the connected
+     * fd */
+    status = ucs_socket_getpeername(cep->fd, saddr, saddr_len_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_sockaddr_inet_addr_sizeof((struct sockaddr*)saddr,
+                                           &in_addr_len);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    remote_dev_addr_len = sizeof(*remote_dev_addr) + in_addr_len;
+    if (remote_dev_addr_len > max_remote_dev_addr_len) {
+        return UCS_ERR_BUFFER_TOO_SMALL;
+    }
+
+    remote_dev_addr->flags     = 0u;
+    remote_dev_addr->sa_family = saddr->ss_family;
+
+    memcpy(remote_dev_addr + 1,
+           ucs_sockaddr_get_inet_addr((struct sockaddr*)saddr), in_addr_len);
+
+    return remote_dev_addr_len;
+}
+
+static ucs_status_t
+uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_ep_t *cep)
+{
+    uct_tcp_sockcm_priv_data_hdr_t *hdr    = (uct_tcp_sockcm_priv_data_hdr_t*)
+                                                     cep->comm_ctx.buf;
+    struct sockaddr_storage saddr          = {0};
+    uct_tcp_device_addr_t *remote_dev_addr =
+            ucs_alloca(UCT_TCP_SOCKCM_EP_MAX_DEVICE_ADDR_LEN);
+    ssize_t remote_dev_addr_len;
     uct_cm_listener_conn_request_args_t conn_req_args;
     char peer_str[UCS_SOCKADDR_STRING_LEN];
     char ifname_str[UCT_DEVICE_NAME_MAX];
     uct_cm_remote_data_t remote_data;
-    socklen_t remote_dev_addr_len;
+    socklen_t saddr_len;
     ucs_sock_addr_t client_saddr;
     ucs_status_t status;
 
-    /* get the local interface name associated with the connected fd */
+    /* Get the local interface name associated with the connected fd */
     status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, UCT_DEVICE_NAME_MAX);
     if (UCS_OK != status) {
         return status;
     }
 
-    /* get the device address of the remote peer associated with the connected fd */
-    status = ucs_socket_getpeername(cep->fd, &remote_dev_addr, &remote_dev_addr_len);
-    if (status != UCS_OK) {
-        return status;
+    remote_dev_addr_len = uct_tcp_sockcm_ep_get_remote_device_addr(
+            cep, &saddr, &saddr_len, remote_dev_addr,
+            UCT_TCP_SOCKCM_EP_MAX_DEVICE_ADDR_LEN);
+    if (remote_dev_addr_len < 0) {
+        return (ucs_status_t)remote_dev_addr_len;
     }
 
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
                                         UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
-    remote_data.dev_addr              = (uct_device_addr_t *)&remote_dev_addr;
+    remote_data.dev_addr              = (uct_device_addr_t*)remote_dev_addr;
     remote_data.dev_addr_length       = remote_dev_addr_len;
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
-    client_saddr.addr    = (struct sockaddr*)&remote_dev_addr;
-    client_saddr.addrlen = remote_dev_addr_len;
+    client_saddr.addr    = (struct sockaddr*)&saddr;
+    client_saddr.addrlen = saddr_len;
 
     conn_req_args.field_mask     = UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
                                    UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
@@ -609,33 +657,37 @@ static ucs_status_t uct_tcp_sockcm_ep_server_invoke_conn_req_cb(uct_tcp_sockcm_e
     return UCS_OK;
 }
 
-static ucs_status_t uct_tcp_sockcm_ep_client_invoke_connect_cb(uct_tcp_sockcm_ep_t *cep)
+static ucs_status_t
+uct_tcp_sockcm_ep_client_invoke_connect_cb(uct_tcp_sockcm_ep_t *cep)
 {
-    uct_tcp_sockcm_priv_data_hdr_t *hdr     = (uct_tcp_sockcm_priv_data_hdr_t *)
-                                              cep->comm_ctx.buf;
-    struct sockaddr_storage remote_dev_addr = {0}; /* Suppress Clang false-positive */
-    socklen_t remote_dev_addr_len;
+    uct_tcp_sockcm_priv_data_hdr_t *hdr    = (uct_tcp_sockcm_priv_data_hdr_t*)
+                                                     cep->comm_ctx.buf;
+    struct sockaddr_storage saddr          = {0};
+    uct_tcp_device_addr_t *remote_dev_addr =
+            ucs_alloca(UCT_TCP_SOCKCM_EP_MAX_DEVICE_ADDR_LEN);
+    ssize_t remote_dev_addr_len;
     uct_cm_remote_data_t remote_data;
-    ucs_status_t status;
+    socklen_t saddr_len;
 
-    /* get the device address of the remote peer associated with the connected fd */
-    status = ucs_socket_getpeername(cep->fd, &remote_dev_addr, &remote_dev_addr_len);
-    if (status != UCS_OK) {
-        return status;
+    remote_dev_addr_len = uct_tcp_sockcm_ep_get_remote_device_addr(
+            cep, &saddr, &saddr_len, remote_dev_addr,
+            UCT_TCP_SOCKCM_EP_MAX_DEVICE_ADDR_LEN);
+    if (remote_dev_addr_len < 0) {
+        return (ucs_status_t)remote_dev_addr_len;
     }
 
     remote_data.field_mask            = UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR        |
                                         UCT_CM_REMOTE_DATA_FIELD_DEV_ADDR_LENGTH |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA  |
                                         UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH;
-    remote_data.dev_addr              = (uct_device_addr_t *)&remote_dev_addr;
+    remote_data.dev_addr              = (uct_device_addr_t*)remote_dev_addr;
     remote_data.dev_addr_length       = remote_dev_addr_len;
     remote_data.conn_priv_data        = hdr + 1;
     remote_data.conn_priv_data_length = hdr->length;
 
     uct_tcp_sockcm_ep_client_connect_cb(cep, &remote_data, (ucs_status_t)hdr->status);
 
-    return status;
+    return UCS_OK;
 }
 
 static ucs_status_t uct_tcp_sockcm_ep_server_handle_data_received(uct_tcp_sockcm_ep_t *cep)

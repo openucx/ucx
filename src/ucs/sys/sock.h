@@ -322,7 +322,7 @@ ucs_status_t ucs_socket_recv(int fd, void *data, size_t length);
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  size_p     Pointer to variable where size of
- *                          sockaddr_in/sockaddr_in6 structure will be written
+ *                          sockaddr_in/sockaddr_in6 structure will be written.
  *
  * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
  */
@@ -334,7 +334,8 @@ ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p);
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  port_p     Pointer to variable where port (host notation)
- *                          of sockaddr_in/sockaddr_in6 structure will be written
+ *                          of sockaddr_in/sockaddr_in6 structure will be
+ *                          written.
  *
  * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
  */
@@ -345,7 +346,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, uint16_t *port_p
  * Set port to a given sockaddr structure.
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
- * @param [in]   port       Port (host notation) that will be written
+ * @param [in]   port       Port (host notation) that will be written.
  *
  * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
  */
@@ -361,6 +362,31 @@ ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port);
  *         on success or NULL on failure.
  */
 const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr);
+
+
+/**
+ * Set IP addr to a given sockaddr structure.
+ * 
+ * @param [in]   addr        Pointer to sockaddr structure.
+ * @param [in]   in_addr     IP address that will be written.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_set_inet_addr(struct sockaddr *addr,
+                                        const void *in_addr);
+
+
+/**
+ * Return size of IP address of a given sockaddr structure.
+ * 
+ * @param [in]   addr       Pointer to sockaddr structure.
+ * @param [out]  size_p     Pointer to variable where size of IP address
+ *                          structure will be written.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_inet_addr_sizeof(const struct sockaddr *addr,
+                                           size_t *size_p);
 
 
 /**
@@ -450,14 +476,26 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
 
 
 /**
- * Indicate if given IP addr is INADDR_ANY (IPV4) or in6addr_any (IPV6)
+ * Indicate if given IP address is INADDR_ANY (IPV4) or in6addr_any (IPV6)
  * 
  * @param [in]   addr       Pointer to sockaddr structure.
  *
  * @return 1 if input is INADDR_ANY or in6addr_any
  *         0 if not
  */
-int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr);
+int ucs_sockaddr_is_inaddr_any(const struct sockaddr *addr);
+
+
+/**
+ * Indicate if given IP address is INADDR_LOOPBACK (IPV4) or in6addr_loopback
+ * (IPV6)
+ * 
+ * @param [in]   addr       Pointer to sockaddr structure.
+ *
+ * @return 1 if input is INADDR_LOOPBACK or in6addr_loopback
+ *         0 if not
+ */
+int ucs_sockaddr_is_inaddr_loopback(const struct sockaddr *addr);
 
 
 /**

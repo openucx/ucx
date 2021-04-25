@@ -25,6 +25,11 @@
 #include <ucs/datastruct/mpool.inl>
 
 
+/* UCT IFACE local address flag which packed to ID and indicates if an address
+ * is extended by a system namespace information */
+#define UCT_IFACE_LOCAL_ADDR_FLAG_NS UCS_BIT(63)
+
+
 enum {
     UCT_EP_STAT_AM,
     UCT_EP_STAT_PUT,
@@ -304,6 +309,24 @@ typedef struct uct_tl {
     ucs_config_global_list_entry_t config; /**< Transport configuration entry */
     ucs_list_link_t                list;   /**< Entry in component's transports list */
 } uct_tl_t;
+
+
+/**
+ * Base UCT IFACE local address
+ */
+typedef struct uct_iface_local_addr_base {
+    uint64_t id; /* System ID + @ref UCT_IFACE_LOCAL_ADDR_FLAG_NS if a local
+                    address is extended by a system namespace information */
+} UCS_S_PACKED uct_iface_local_addr_base_t;
+
+
+/**
+ * Extended UCT IFACE local address
+ */
+typedef struct uct_iface_local_addr_ns {
+    uct_iface_local_addr_base_t super; /* Base UCT IFACE local address */
+    ucs_sys_ns_t                sys_ns; /* System namespace (IPC or network) */
+} UCS_S_PACKED uct_iface_local_addr_ns_t;
 
 
 /**
@@ -677,6 +700,12 @@ ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                uct_completion_t *comp);
 
 ucs_status_t uct_base_ep_fence(uct_ep_h tl_ep, unsigned flags);
+
+void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
+                                 ucs_sys_namespace_type_t sys_ns_type);
+
+int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
+                                 ucs_sys_namespace_type_t sys_ns_type);
 
 /*
  * Invoke active message handler.

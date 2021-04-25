@@ -1412,6 +1412,20 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low)
     return status;
 }
 
+uint64_t ucs_iface_get_system_id()
+{
+    uint64_t high;
+    uint64_t low;
+    ucs_status_t status;
+
+    status = ucs_sys_get_boot_id(&high, &low);
+    if (status == UCS_OK) {
+        return high ^ low;
+    }
+
+    return ucs_machine_guid();
+}
+
 ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ctx)
 {
     ucs_status_t res = UCS_OK;
