@@ -1,6 +1,7 @@
 # See https://aka.ms/yaml
 # This pipeline to be run on direct pushes and merges
 
+pr: none
 trigger:
   - master
   - v*.*.x
