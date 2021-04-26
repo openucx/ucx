@@ -1194,6 +1194,12 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
     return (count == 0) ? UCS_ERR_NO_ELEM : UCS_OK;
 }
 
+static int ucs_config_parser_env_vars_track()
+{
+    return ucs_global_opts.warn_unused_env_vars ||
+           ucs_log_is_enabled(UCS_LOG_LEVEL_INFO);
+}
+
 static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
 {
     khiter_t iter;
@@ -1202,7 +1208,7 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
 
     *added = 0;
 
-    if (!ucs_global_opts.warn_unused_env_vars) {
+    if (!ucs_config_parser_env_vars_track()) {
         return;
     }
 
@@ -1822,33 +1828,31 @@ void ucs_config_parser_print_all_opts(FILE *stream, const char *prefix,
     }
 }
 
-static void ucs_config_parser_warn_unused_env_vars(const char *prefix)
+static void ucs_config_parser_print_env_vars(const char *prefix)
 {
-    char unused_env_vars_names[40];
-    int num_unused_vars;
+    int num_unused_vars, num_used_vars;
     char **envp, *envstr;
     size_t prefix_len;
     char *var_name;
-    char *p, *endp;
     khiter_t iter;
     char *saveptr;
-    int truncated;
-    int ret;
+    ucs_string_buffer_t used_vars_strb;
+    ucs_string_buffer_t unused_vars_strb;
 
-    if (!ucs_global_opts.warn_unused_env_vars) {
+    if (!ucs_config_parser_env_vars_track()) {
         return;
     }
 
+    prefix_len      = strlen(prefix);
+    num_unused_vars = 0;
+    num_used_vars   = 0;
+
+    ucs_string_buffer_init(&unused_vars_strb);
+    ucs_string_buffer_init(&used_vars_strb);
+
     pthread_mutex_lock(&ucs_config_parser_env_vars_hash_lock);
 
-    prefix_len      = strlen(prefix);
-    p               = unused_env_vars_names;
-    endp            = p + sizeof(unused_env_vars_names) - 1;
-    *endp           = '\0';
-    truncated       = 0;
-    num_unused_vars = 0;
-
-    for (envp = environ; !truncated && (*envp != NULL); ++envp) {
+    for (envp = environ; *envp != NULL; ++envp) {
         envstr = ucs_strdup(*envp, "env_str");
         if (envstr == NULL) {
             continue;
@@ -1862,33 +1866,40 @@ static void ucs_config_parser_warn_unused_env_vars(const char *prefix)
 
         iter = kh_get(ucs_config_env_vars, &ucs_config_parser_env_vars, var_name);
         if (iter == kh_end(&ucs_config_parser_env_vars)) {
-            ret = snprintf(p, endp - p, " %s,", var_name);
-            if (ret > endp - p) {
-                truncated = 1;
-                *p = '\0';
-            } else {
-                p += strlen(p);
+            if (ucs_global_opts.warn_unused_env_vars) {
+                ucs_string_buffer_appendf(&unused_vars_strb, "%s,", var_name);
                 ++num_unused_vars;
             }
+        } else {
+            ucs_string_buffer_appendf(&used_vars_strb, "%s ", *envp);
+            ++num_used_vars;
         }
 
         ucs_free(envstr);
     }
 
+    pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
+
     if (num_unused_vars > 0) {
-        if (!truncated) {
-            p[-1] = '\0'; /* remove trailing comma */
-        }
-        ucs_warn("unused env variable%s:%s%s (set %s%s=n to suppress this warning)",
-                 (num_unused_vars > 1) ? "s" : "", unused_env_vars_names,
-                 truncated ? "..." : "", UCS_DEFAULT_ENV_PREFIX,
-                 UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
+        ucs_string_buffer_rtrim(&unused_vars_strb, ",");
+        ucs_warn("unused env variable%s: %s (set %s%s=n to suppress this warning)",
+                 (num_unused_vars > 1) ? "s" : "",
+                 ucs_string_buffer_cstr(&unused_vars_strb),
+                 UCS_DEFAULT_ENV_PREFIX, UCS_GLOBAL_OPTS_WARN_UNUSED_CONFIG);
     }
 
-    pthread_mutex_unlock(&ucs_config_parser_env_vars_hash_lock);
+    if (num_used_vars > 0) {
+        ucs_string_buffer_rtrim(&used_vars_strb, " ");
+        ucs_info("%s* env variable%s: %s", prefix,
+                 (num_used_vars > 1) ? "s" : "",
+                 ucs_string_buffer_cstr(&used_vars_strb));
+    }
+
+    ucs_string_buffer_cleanup(&unused_vars_strb);
+    ucs_string_buffer_cleanup(&used_vars_strb);
 }
 
-void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix)
+void ucs_config_parser_print_env_vars_once(const char *env_prefix)
 {
     const char   *sub_prefix = NULL;
     int          added;
@@ -1902,8 +1913,8 @@ void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix)
         return;
     }
 
-    ucs_config_parser_warn_unused_env_vars(env_prefix);
- 
+    ucs_config_parser_print_env_vars(env_prefix);
+
     status = ucs_config_parser_get_sub_prefix(env_prefix, &sub_prefix);
     if (status != UCS_OK) {
         return;
@@ -1918,7 +1929,7 @@ void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix)
         return;
     }
 
-    ucs_config_parser_warn_unused_env_vars(sub_prefix);
+    ucs_config_parser_print_env_vars(sub_prefix);
 }
 
 size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,

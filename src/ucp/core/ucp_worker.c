@@ -2208,9 +2208,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucp_worker_init_atomic_tls(worker);
 
     /* At this point all UCT memory domains and interfaces are already created
-     * so warn about unused environment variables.
+     * so print used environment variables and warn about unused ones.
      */
-    ucs_config_parser_warn_unused_env_vars_once(context->config.env_prefix);
+    ucs_config_parser_print_env_vars_once(context->config.env_prefix);
 
     ucp_worker_create_vfs(context, worker);
 

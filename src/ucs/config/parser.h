@@ -468,14 +468,14 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
- * Wrapper for `ucs_config_parser_warn_unused_env_vars`
+ * Wrapper for `ucs_config_parser_print_env_vars`
  * that ensures that this is called once
  *
  * @param env_prefix     Environment variable prefix.
  *                       env_prefix may consist of multiple sub prefixex
  */
 
-void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix);
+void ucs_config_parser_print_env_vars_once(const char *env_prefix);
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.
