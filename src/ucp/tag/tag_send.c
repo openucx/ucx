@@ -87,7 +87,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                                     dt_count, 0, req->send.length, msg_config,
                                     proto);
     if (ucs_likely(status == UCS_OK)) {
-        /* Eager send initialized successfuly */
+        /* Eager send initialized successfully */
         if (req->flags & UCP_REQUEST_FLAG_SYNC) {
             ucp_request_id_alloc(req);
             UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);

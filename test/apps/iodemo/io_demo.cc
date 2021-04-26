@@ -728,7 +728,7 @@ protected:
 
     static void validate(const iomsg_t *msg, uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            LOG << "ERROR: io msg sn missmatch " << sn << " != " << msg->sn;
+            LOG << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
             abort();
         }
 
@@ -1434,14 +1434,14 @@ public:
 
         if (server_info.conn->is_disconnecting()) {
             LOG << "not disconnecting " << server_info.conn << " with "
-                << get_num_uncompleted(server_info) << " uncompleted oeprations"
+                << get_num_uncompleted(server_info) << " uncompleted operations"
                 " due to \"" << reason << "\" because disconnection is already"
                 " in progress";
             return;
         }
 
         LOG << "disconnecting connection " << server_info.conn << " with "
-            << get_num_uncompleted(server_info) << " uncompleted oeprations due"
+            << get_num_uncompleted(server_info) << " uncompleted operations due"
             "to \"" << reason << "\"";
 
         // Destroying the connection will complete its outstanding operations
