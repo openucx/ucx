@@ -66,6 +66,28 @@ void ucs_vfs_show_string(void *obj, void *arg, ucs_string_buffer_t *strb);
 
 
 /**
+ * Callback function to fill a value of an unsigned long type to the string
+ * buffer. The function handles 'auto' and 'infinty' values.
+ *
+ * @param [in]    obj  Pointer to the object is not used.
+ * @param [in]    arg  Pointer to the value of an unsigned long type.
+ * @param [inout] strb String buffer filled with the value.
+ */
+void ucs_vfs_show_ulunits(void *obj, void *arg, ucs_string_buffer_t *strb);
+
+
+/**
+ * Callback function to fill memory units to the string buffer. The function
+ * handles 'auto' and 'infinty' values.
+ *
+ * @param [in]    obj  Pointer to the object is not used.
+ * @param [in]    arg  Pointer to the memory unit value.
+ * @param [inout] strb String buffer filled with the memory unit value.
+ */
+void ucs_vfs_show_memunits(void *obj, void *arg, ucs_string_buffer_t *strb);
+
+
+/**
  * Function to update representation of object in VFS.
  * 
  * @param [in] obj Pointer to the object to be updated.

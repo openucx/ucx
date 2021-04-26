@@ -18,6 +18,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucm/api/ucm.h>
 
 #include "rcache.h"
@@ -999,6 +1000,49 @@ static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache) {
     pthread_mutex_unlock(&ucs_rcache_global_list_lock);
 }
 
+static void ucs_rcache_vfs_show_inv_q_length(void *obj, void *arg,
+                                             ucs_string_buffer_t *strb)
+{
+    ucs_rcache_t *rcache = obj;
+    size_t rcache_inv_q_length;
+
+    ucs_spin_lock(&rcache->lock);
+    rcache_inv_q_length = ucs_queue_length(&rcache->inv_q);
+    ucs_spin_unlock(&rcache->lock);
+
+    ucs_string_buffer_appendf(strb, "%zu\n", rcache_inv_q_length);
+}
+
+static void ucs_rcache_vfs_show_gc_list_length(void *obj, void *arg,
+                                               ucs_string_buffer_t *strb)
+{
+    ucs_rcache_t *rcache = obj;
+    unsigned long rcache_gc_list_length;
+
+    ucs_spin_lock(&rcache->lock);
+    rcache_gc_list_length = ucs_list_length(&rcache->gc_list);
+    ucs_spin_unlock(&rcache->lock);
+
+    ucs_string_buffer_appendf(strb, "%lu\n", rcache_gc_list_length);
+}
+
+static void ucs_rcache_vfs_init(ucs_rcache_t *rcache)
+{
+    ucs_vfs_obj_add_dir(NULL, rcache, "ucs/rcache/%s", rcache->name);
+    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_ulunits, &rcache->num_regions,
+                            "num_regions");
+    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_memunits, &rcache->total_size,
+                            "total_size");
+    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_ulunits,
+                            &rcache->params.max_regions, "max_regions");
+    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_memunits,
+                            &rcache->params.max_size, "max_size");
+    ucs_vfs_obj_add_ro_file(rcache, ucs_rcache_vfs_show_inv_q_length, NULL,
+                            "inv_q/length");
+    ucs_vfs_obj_add_ro_file(rcache, ucs_rcache_vfs_show_gc_list_length, NULL,
+                            "gc_list/length");
+}
+
 static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
                            const char *name, ucs_stats_node_t *stats_parent)
 {
@@ -1081,6 +1125,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_unset_event;
     }
 
+    ucs_rcache_vfs_init(self);
+
     return UCS_OK;
 
 err_unset_event:
@@ -1104,6 +1150,7 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
+    ucs_vfs_obj_remove(self);
     ucs_rcache_global_list_remove(self);
     ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
