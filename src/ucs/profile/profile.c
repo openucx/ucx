@@ -17,7 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <pthread.h>
-#ifdef HAVE_CUDA
+#ifdef HAVE_NVTX
 #include <nvtx3/nvToolsExt.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/profile/profile.h>
@@ -617,7 +617,7 @@ void ucs_profile_global_cleanup()
     pthread_key_delete(ucs_profile_global_ctx.tls_key);
 }
 
-#ifdef HAVE_CUDA
+#ifdef HAVE_NVTX
 void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
 		             uint64_t *id)
 {
