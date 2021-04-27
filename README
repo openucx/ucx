@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="http://www.openucx.org/"><img src="./docs/doxygen/UCX_Logo_930x933.png" width="200"></a>
+  <a href="https://openucx.github.io/ucx/"><img src="./docs/doxygen/UCX_Logo_930x933.png" width="200"></a>
   <br>
   <a href="https://twitter.com/intent/follow?screen_name=openucx"> <img src="https://img.shields.io/twitter/follow/openucx?style=social&logo=twitter" alt="follow on Twitter"></a>
   <a href="https://openucx.github.io/ucx/api/latest/html/"><img src="docs/doxygen/api.svg"></a>
@@ -122,7 +122,7 @@ Note: the `-c` flag sets CPU affinity. If running both commands on same host, ma
 
 ## Our Community
 
-* [Project Website](http://www.openucx.org/)
+* [Project Website](https://openucx.github.io/ucx/)
 * [ReadTheDocs](https://openucx.readthedocs.io/en/master/)
 * [Github](http://www.github.com/openucx/ucx/)
 * [Software Releases](http://www.github.com/openucx/ucx/releases)
