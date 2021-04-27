@@ -101,9 +101,13 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    reserved_at_90[0xb];
     uint8_t    log_max_qp[0x5];
 
-    uint8_t    reserved_at_a0[0xb];
+    uint8_t    reserved_at_a0[0x3];
+    uint8_t    ece[0x1];
+    uint8_t    reserved_at_a4[0x7];
     uint8_t    log_max_srq[0x5];
-    uint8_t    reserved_at_b0[0x10];
+    uint8_t    reserved_at_b0[0x8];
+    uint8_t    selective_repeat[0x1];
+    uint8_t    reserved_at_b9[0x7];
 
     uint8_t    reserved_at_c0[0x8];
     uint8_t    log_max_cq_sz[0x8];
@@ -775,7 +779,8 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         state[0x4];
     uint8_t         reserved_at_8[0x10];
     uint8_t         offload_type[0x4];
-    uint8_t         reserved_at_1c[0x4];
+    uint8_t         reserved_at_1c[0x2];
+    uint8_t         retry_mode[0x2];
 
     uint8_t         reserved_at_20[0x8];
     uint8_t         user_index[0x18];
@@ -831,6 +836,10 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         dscp[0x6];
 
     uint8_t         reserved_at_1c0[0x40];
+
+    uint8_t         ece[0x20];
+
+    uint8_t         reserved_at_220[0x160];
 };
 
 struct uct_ib_mlx5_create_dct_out_bits {
@@ -842,7 +851,7 @@ struct uct_ib_mlx5_create_dct_out_bits {
     uint8_t         reserved_at_40[0x8];
     uint8_t         dctn[0x18];
 
-    uint8_t         reserved_at_60[0x20];
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_create_dct_in_bits {
@@ -855,8 +864,6 @@ struct uct_ib_mlx5_create_dct_in_bits {
     uint8_t         reserved_at_40[0x40];
 
     struct uct_ib_mlx5_dctc_bits dct_context_entry;
-
-    uint8_t         reserved_at_280[0x180];
 };
 
 struct uct_ib_mlx5_drain_dct_out_bits {
@@ -1215,6 +1222,12 @@ static inline unsigned uct_ib_mlx5_qpc_cs_res(unsigned size, int dc)
                          UCT_IB_MLX5_QPC_CS_RES_DISABLE;
 }
 
+enum {
+    UCT_IB_MLX5_RETRY_MODE_DEFAULT          = 0x0,
+    UCT_IB_MLX5_RETRY_MODE_GO_BACK_N        = 0x1,
+    UCT_IB_MLX5_RETRY_MODE_SELECTIVE_REPEAT = 0x2,
+};
+
 struct uct_ib_mlx5_qpc_bits {
     uint8_t         state[0x4];
     uint8_t         lag_tx_port_affinity[0x4];
@@ -1243,7 +1256,9 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         log_rq_stride[0x3];
     uint8_t         no_sq[0x1];
     uint8_t         log_sq_size[0x4];
-    uint8_t         reserved_at_55[0x6];
+    uint8_t         reserved_at_55[0x1];
+    uint8_t         retry_mode[0x2];
+    uint8_t         reserved_at_58[0x3];
     uint8_t         rlky[0x1];
     uint8_t         ulp_stateless_offload_mode[0x4];
 
@@ -1361,7 +1376,7 @@ struct uct_ib_mlx5_create_qp_out_bits {
     uint8_t         reserved_at_40[0x8];
     uint8_t         qpn[0x18];
 
-    uint8_t         reserved_at_60[0x20];
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_create_qp_in_bits {
@@ -1375,7 +1390,7 @@ struct uct_ib_mlx5_create_qp_in_bits {
 
     uint8_t         opt_param_mask[0x20];
 
-    uint8_t         reserved_at_a0[0x20];
+    uint8_t         ece[0x20];
 
     struct uct_ib_mlx5_qpc_bits qpc;
 
@@ -1395,7 +1410,9 @@ struct uct_ib_mlx5_init2rtr_qp_out_bits {
 
     uint8_t         syndrome[0x20];
 
-    uint8_t         reserved_at_40[0x40];
+    uint8_t         reserved_at_40[0x20];
+
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_init2rtr_qp_in_bits {
@@ -1412,7 +1429,7 @@ struct uct_ib_mlx5_init2rtr_qp_in_bits {
 
     uint8_t         opt_param_mask[0x20];
 
-    uint8_t         reserved_at_a0[0x20];
+    uint8_t         ece[0x20];
 
     struct uct_ib_mlx5_qpc_bits qpc;
 
@@ -1425,7 +1442,9 @@ struct uct_ib_mlx5_rtr2rts_qp_out_bits {
 
     uint8_t         syndrome[0x20];
 
-    uint8_t         reserved_at_40[0x40];
+    uint8_t         reserved_at_40[0x20];
+
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_rtr2rts_qp_in_bits {
@@ -1442,7 +1461,7 @@ struct uct_ib_mlx5_rtr2rts_qp_in_bits {
 
     uint8_t         opt_param_mask[0x20];
 
-    uint8_t         reserved_at_a0[0x20];
+    uint8_t         ece[0x20];
 
     struct uct_ib_mlx5_qpc_bits qpc;
 
@@ -1455,7 +1474,9 @@ struct uct_ib_mlx5_rst2init_qp_out_bits {
 
     uint8_t         syndrome[0x20];
 
-    uint8_t         reserved_at_40[0x40];
+    uint8_t         reserved_at_40[0x20];
+
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_rst2init_qp_in_bits {
@@ -1472,7 +1493,7 @@ struct uct_ib_mlx5_rst2init_qp_in_bits {
 
     uint8_t         opt_param_mask[0x20];
 
-    uint8_t         reserved_at_a0[0x20];
+    uint8_t         ece[0x20];
 
     struct uct_ib_mlx5_qpc_bits qpc;
 

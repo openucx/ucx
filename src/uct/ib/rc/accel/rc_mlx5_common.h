@@ -359,12 +359,18 @@ typedef union uct_rc_mlx5_dm_copy_data {
 KHASH_INIT(uct_rc_mlx5_tag_addrs, void*, char, 0, uct_rc_mlx5_tag_addr_hash,
            kh_int64_hash_equal)
 
+typedef enum {
+    UCT_RC_MLX5_IFACE_FORCE_ECE = UCS_BIT(0),
+} uct_rc_mlx5_iface_common_flags_t;
+
 typedef struct uct_rc_mlx5_iface_common {
     uct_rc_iface_t                     super;
     struct {
         ucs_mpool_t                    atomic_desc_mp;
         uct_ib_mlx5_mmio_mode_t        mmio_mode;
         uint16_t                       bb_max;     /* limit number of outstanding WQE BBs */
+        uint32_t                       ece;
+        uint32_t                       tm_ece;
     } tx;
     struct {
         uct_ib_mlx5_srq_t              srq;
@@ -423,6 +429,7 @@ typedef struct uct_rc_mlx5_iface_common {
     struct mlx5dv_devx_event_channel   *event_channel;
 #endif
     struct {
+        uint8_t                        flags; /* uct_rc_mlx5_iface_common_flags_t */
         uint8_t                        atomic_fence_flag;
         uct_rc_mlx5_srq_topo_t         srq_topo;
     } config;
@@ -726,7 +733,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uint32_t dest_qp_num,
                                          struct ibv_ah_attr *ah_attr,
                                          enum ibv_mtu path_mtu,
-                                         uint8_t path_index);
+                                         uint8_t path_index, uint32_t ece);
 
 #else
 static UCS_F_MAYBE_UNUSED ucs_status_t
@@ -735,7 +742,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uint32_t dest_qp_num,
                                          struct ibv_ah_attr *ah_attr,
                                          enum ibv_mtu path_mtu,
-                                         uint8_t path_index)
+                                         uint8_t path_index, uint32_t ece)
 {
     return UCS_ERR_UNSUPPORTED;
 }

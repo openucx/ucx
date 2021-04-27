@@ -153,6 +153,11 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem.mem->umem_id);
     }
 
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_ECE) {
+        /* Create QP should start from ECE version 1 as a trigger */
+        UCT_IB_MLX5DV_SET(create_qp_in, in, ece, 0x10000000);
+    }
+
     qp->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                           out, sizeof(out));
     if (!qp->devx.obj) {
@@ -162,7 +167,8 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err_free_db;
     }
 
-    qp->qp_num = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
+    qp->devx.ece = UCT_IB_MLX5DV_GET(create_qp_out, out, ece);
+    qp->qp_num   = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
 
     if (attr->super.qp_type == IBV_QPT_RC) {
         qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);

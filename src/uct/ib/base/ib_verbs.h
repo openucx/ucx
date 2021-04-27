@@ -326,4 +326,47 @@ static inline ucs_status_t uct_ib_qp_max_send_sge(struct ibv_qp *qp,
     return UCS_OK;
 }
 
+#if HAVE_DECL_IBV_QUERY_ECE
+
+typedef struct ibv_ece uct_ib_ece;
+
+static inline void uct_ib_query_ece(struct ibv_qp *qp, uct_ib_ece *ece)
+{
+    int ret;
+
+    ret = ibv_query_ece(qp, ece);
+    if (ret && (ret != EOPNOTSUPP)) {
+        ucs_warn("ibv_query_ece() failed: %d", ret);
+    }
+}
+
+static inline void uct_ib_set_ece(struct ibv_qp *qp, uct_ib_ece *ece)
+{
+    int ret;
+
+    ret = ibv_set_ece(qp, ece);
+    if (ret && (ret != EOPNOTSUPP)) {
+        ucs_warn("ibv_set_ece() failed: %d", ret);
+    }
+}
+
+#else
+
+typedef struct {
+    uint32_t vendor_id;
+    uint32_t options;
+} uct_ib_ece;
+
+static inline void uct_ib_query_ece(struct ibv_qp *qp, uct_ib_ece *ece) {
+    memset(ece, 0, sizeof(*ece));
+}
+
+static inline void uct_ib_set_ece(struct ibv_qp *qp, uct_ib_ece *ece) { }
+
+#endif
+
+static inline int uct_ib_ece_is_set(uct_ib_ece *ece) {
+    return !!ece->options;
+}
+
 #endif /* UCT_IB_VERBS_H */

@@ -37,13 +37,28 @@ typedef struct uct_rc_mlx5_ep {
     uct_rc_mlx5_mp_context_t mp;
 } uct_rc_mlx5_ep_t;
 
+
+typedef enum {
+    UCT_RC_MLX5_EP_ADDR_TM_QP_NUM = UCS_BIT(0),
+    UCT_RC_MLX5_EP_ADDR_ECE       = UCS_BIT(1),
+    UCT_RC_MLX5_EP_ADDR_SR        = UCS_BIT(2),
+    UCT_RC_MLX5_EP_ADDR_TM_ECE    = UCS_BIT(3),
+    UCT_RC_MLX5_EP_ADDR_TM_SR     = UCS_BIT(4),
+} uct_rc_mlx5_ep_addr_flag_t;
+
+
 typedef struct uct_rc_mlx5_ep_address {
     uct_ib_uint24_t  qp_num;
-    /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
-     * another one for HW (device will use it for RDMA reads and sending RNDV
-     * Complete messages). */
-    uct_ib_uint24_t  tm_qp_num;
     uint8_t          atomic_mr_id;
+    uint8_t          flags;    /* uct_rc_mlx5_ep_addr_flag_t */
+    /* Optional fields.
+     * For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
+     * another one for HW (device will use it for RDMA reads and sending RNDV
+     * Complete messages).
+     * - uct_ib_uint24_t  tm_qp_num
+     * - uint32_t         tm_ece
+     * - uint32_t         ece
+     */
 } UCS_S_PACKED uct_rc_mlx5_ep_address_t;
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
@@ -125,13 +140,13 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_txwq_t *txwq,
-                                         uct_ib_mlx5_qp_attr_t *attr);
+                                         unsigned tx_qp_len);
 
 ucs_status_t
 uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                           uct_ib_mlx5_qp_t *qp, uint32_t qp_num,
                           struct ibv_ah_attr *ah_attr, enum ibv_mtu path_mtu,
-                          uint8_t path_index);
+                          uint8_t path_index, uint32_t ece);
 
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                                           const uct_device_addr_t *dev_addr,

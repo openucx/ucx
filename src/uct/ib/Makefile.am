@@ -38,7 +38,8 @@ noinst_HEADERS += \
 	mlx5/ib_mlx5.inl \
 	mlx5/dv/ib_mlx5_dv.h \
 	mlx5/dv/ib_mlx5_ifc.h \
-	mlx5/exp/ib_mlx5_hw.h
+	mlx5/exp/ib_mlx5_hw.h \
+	mlx5/ece.h
 
 libuct_ib_la_SOURCES += \
 	mlx5/ib_mlx5_log.c \
