@@ -960,7 +960,7 @@ run_ucp_client_server() {
 
 run_io_demo() {
 	server_rdma_addr=$(get_rdma_device_ip_addr)
-	server_loopback_addr="127.0.0.1"
+	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 
 	if [ "$server_rdma_addr" == "" ]
 	then
@@ -979,7 +979,8 @@ run_io_demo() {
 
 	export UCX_SOCKADDR_CM_ENABLE=y
 
-	for server_ip in $server_rdma_addr $server_loopback_addr
+
+	for server_ip in $server_rdma_addr $server_nonrdma_addr
 	do
 		run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 	done
