@@ -1655,6 +1655,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
 	export UCX_TCP_CM_ALLOW_ADDR_INUSE=y
+	export UCX_TCP_LOOPBACK_ENABLE=y
 
 	# test cuda build if cuda modules available
 	do_distributed_task 2 4 build_cuda
