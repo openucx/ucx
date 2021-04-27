@@ -208,6 +208,7 @@ err_free_mem:
     return status;
 }
 
+#if IBV_HW_TM
 ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
@@ -267,6 +268,7 @@ err_cleanup_srq:
     uct_rc_mlx5_devx_cleanup_srq(md, &iface->rx.srq);
     return status;
 }
+#endif
 
 ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                       const uct_rc_iface_common_config_t *config)
