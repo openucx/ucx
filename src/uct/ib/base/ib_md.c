@@ -537,7 +537,7 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
             }
 
             return status;
-        } /* if unsuported - fallback to regular registration */
+        } /* if unsupported - fallback to regular registration */
     }
 
     return md->ops->reg_key(md, address, length, access_flags, memh, mr_type,
@@ -569,7 +569,7 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
 
     *mr_p = mr;
 
-    /* to prvent clang dead code */
+    /* to prevent clang dead code */
     (void)start_time;
     ucs_trace("ibv_reg_mr(%p, %p, %zu) took %.3f msec", pd, addr, length,
               ucs_time_to_msec(ucs_get_time() - start_time));
