@@ -1802,7 +1802,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
             ucp_rndv_send_frag_get_mem_type(
                     fsreq, length,
                     (uint64_t)UCS_PTR_BYTE_OFFSET(fsreq->send.buffer, offset),
-                    fsreq->send.mem_type, NULL, NULL, UCS_BIT(0), 0,
+                    fsreq->send.mem_type, NULL, NULL, UCS_BIT(0), 1,
                     ucp_rndv_put_pipeline_frag_get_completion);
         }
 
