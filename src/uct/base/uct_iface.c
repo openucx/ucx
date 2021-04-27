@@ -161,17 +161,10 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg)
 {
-    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
-        *event_cb = params->async_event_cb;
-    } else {
-        *event_cb = NULL;
-    }
-
-    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG) {
-        *event_arg = params->async_event_arg;
-    } else {
-        *event_arg = NULL;
-    }
+    *event_cb  = UCT_IFACE_PARAM_VALUE(params, async_event_cb, ASYNC_EVENT_CB,
+                                       NULL);                                       
+    *event_arg = UCT_IFACE_PARAM_VALUE(params, async_event_arg, ASYNC_EVENT_ARG,
+                                       NULL);
 }
 
 
@@ -470,15 +463,12 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     self->worker            = ucs_derived_of(worker, uct_priv_worker_t);
     self->am_tracer         = NULL;
     self->am_tracer_arg     = NULL;
-    self->err_handler       = (params->field_mask &
-                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER) ?
-                              params->err_handler : NULL;
-    self->err_handler_flags = (params->field_mask &
-                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
-                              params->err_handler_flags : 0;
-    self->err_handler_arg   = (params->field_mask &
-                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG) ?
-                              params->err_handler_arg : NULL;
+    self->err_handler       = UCT_IFACE_PARAM_VALUE(params, err_handler, ERR_HANDLER,
+                                                    NULL);
+    self->err_handler_flags = UCT_IFACE_PARAM_VALUE(params, err_handler_flags,
+                                                    ERR_HANDLER_FLAGS, 0);
+    self->err_handler_arg   = UCT_IFACE_PARAM_VALUE(params, err_handler_arg,
+                                                    ERR_HANDLER_ARG, NULL);
     self->progress_flags    = 0;
     uct_worker_progress_init(&self->prog);
 

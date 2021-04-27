@@ -1218,9 +1218,8 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops,
 {
     uct_ib_md_t *ib_md   = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
-    size_t rx_headroom   = (params->field_mask &
-                            UCT_IFACE_PARAM_FIELD_RX_HEADROOM) ?
-                           params->rx_headroom : 0;
+    size_t rx_headroom   = UCT_IFACE_PARAM_VALUE(params, rx_headroom,
+                                                 RX_HEADROOM, 0);
     ucs_cpu_set_t cpu_mask;
     int preferred_cpu;
     ucs_status_t status;

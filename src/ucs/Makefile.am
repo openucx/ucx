@@ -63,6 +63,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/stubs.h \
 	time/time_def.h \
 	type/class.h \
+	type/param.h \
 	type/init_once.h \
 	type/spinlock.h \
 	type/status.h \
