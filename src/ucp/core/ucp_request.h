@@ -94,10 +94,12 @@ enum {
     UCP_RECV_DESC_FLAG_MALLOC           = UCS_BIT(8), /* Descriptor was allocated with malloc
                                                          and must be freed, not returned to the
                                                          memory pool or UCT */
-    UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS = UCS_BIT(9)  /* Descriptor should not be released,
+    UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS = UCS_BIT(9), /* Descriptor should not be released,
                                                          because UCT AM callback is still in
                                                          the call stack and descriptor is not
                                                          initialized yet. */
+    UCP_RECV_DESC_FLAG_RELEASED         = UCS_BIT(10) /* Indicates that the descriptor was
+                                                         released and cannot be used. */
 };
 
 

@@ -1006,6 +1006,11 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_dts)
 
 class test_ucp_am_nbx_rndv : public test_ucp_am_nbx {
 public:
+    struct am_cb_args {
+        test_ucp_am_nbx_rndv *self;
+        void                 **desc;
+    };
+
     test_ucp_am_nbx_rndv()
     {
         m_status = UCS_OK;
@@ -1055,6 +1060,24 @@ public:
         return UCS_INPROGRESS;
     }
 
+    static ucs_status_t am_data_drop_rndv_cb(void *arg,
+                                             const void *header,
+                                             size_t header_length,
+                                             void *data, size_t length,
+                                             const ucp_am_recv_param_t *param)
+    {
+        struct am_cb_args *args    = reinterpret_cast<am_cb_args*>(arg);
+        test_ucp_am_nbx_rndv *self = args->self;
+        void **data_desc_p         = args->desc;
+
+        *data_desc_p = data;
+        self->m_am_received = true;
+
+        /* return UCS_OK without calling ucp_am_recv_data_nbx()
+         * to drop the message */
+        return UCS_OK;
+    }
+
     ucs_status_t m_status;
 };
 
@@ -1096,6 +1119,37 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, just_header_rndv, "RNDV_THRESH=1")
 UCS_TEST_P(test_ucp_am_nbx_rndv, header_and_data_rndv, "RNDV_THRESH=128")
 {
     test_am_send_recv(127, 1);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_rndv, invalid_recv_desc,
+                     RUNNING_ON_VALGRIND, "RNDV_THRESH=1")
+{
+    void *data_desc = NULL;
+    void *rx_data   = NULL;
+    char data       = 'd';
+    ucp_request_param_t param;
+
+    struct am_cb_args args = { this,  &data_desc };
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_drop_rndv_cb, &args);
+
+    param.op_attr_mask = 0ul;
+
+    ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
+                                            0ul, &data, sizeof(data), &param);
+
+    wait_for_flag(&m_am_received);
+
+    scoped_log_handler wrap_err(wrap_errors_logger);
+    /* attempt to recv data with invalid 'data_desc' since it was reliased
+     * due to am_data_drop_rndv_cb() returned UCS_OK */
+    ucs_status_ptr_t rptr = ucp_am_recv_data_nbx(receiver().worker(),
+                                                 data_desc,
+                                                 rx_data, sizeof(data),
+                                                 &param);
+
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, UCS_PTR_STATUS(rptr));
+
+    request_wait(sptr);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, reject_rndv)

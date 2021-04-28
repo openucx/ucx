@@ -1021,6 +1021,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     ucs_status_t status;
     size_t recv_length;
 
+    /* Sanity check if the descriptor has been released */
+    if (ENABLE_PARAMS_CHECK &&
+        ucs_unlikely(desc->flags & UCP_RECV_DESC_FLAG_RELEASED)) {
+        ucs_error("attempt to receive AM data with invalid descriptor");
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
+
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
@@ -1558,10 +1565,19 @@ out_send_ats:
     ucp_am_rndv_send_ats(worker, rts, status);
 
 out:
-    if ((desc != NULL) && !(desc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
-        /* Release descriptor if it was allocated on UCP mpool, otherwise it
-         * will be freed by UCT, when UCS_OK is returned from this func. */
-        ucp_recv_desc_release(desc);
+    if (desc != NULL) {
+        if (ENABLE_PARAMS_CHECK) {
+            /* Specifying the descriptor as released. This can detect the use of
+             * the invalid descriptor in the case when the user returns UCS_OK
+             * from the AM callback and then wrongly tries to receive data with
+             * ucp_am_recv_data_nbx(). */
+            desc->flags |= UCP_RECV_DESC_FLAG_RELEASED;
+        }
+        if (!(desc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
+            /* Release descriptor if it was allocated on UCP mpool, otherwise it
+             * will be freed by UCT, when UCS_OK is returned from this func. */
+            ucp_recv_desc_release(desc);
+        }
     }
 
     return UCS_OK;
