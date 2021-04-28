@@ -111,7 +111,7 @@ UCS_TEST_F(test_vfs_sock, send_recv_nop) {
 
 class test_vfs_obj : public ucs::test {
 public:
-    static void file_show_cb(void *obj, ucs_string_buffer_t *strb)
+    static void file_show_cb(void *obj, void *arg, ucs_string_buffer_t *strb)
     {
         ucs_string_buffer_appendf(strb, "%s", file_content().c_str());
     }
@@ -130,14 +130,14 @@ public:
 
     static void refresh_cb(void *obj)
     {
-        ucs_vfs_obj_add_ro_file(obj, test_vfs_obj::file_show_cb, "info");
+        ucs_vfs_obj_add_ro_file(obj, test_vfs_obj::file_show_cb, NULL, "info");
     }
 
     static void *create_simple_tree()
     {
         static char obj;
         ucs_vfs_obj_add_dir(NULL, &obj, "obj");
-        ucs_vfs_obj_add_ro_file(&obj, test_vfs_obj::file_show_cb, "info");
+        ucs_vfs_obj_add_ro_file(&obj, test_vfs_obj::file_show_cb, NULL, "info");
         return &obj;
     }
 };

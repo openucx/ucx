@@ -1980,7 +1980,7 @@ static void ucp_worker_destroy_configs(ucp_worker_h worker)
     worker->rkey_config_count = 0;
 }
 
-static void ucp_worker_vfs_show_address_name(void *obj,
+static void ucp_worker_vfs_show_address_name(void *obj, void *arg,
                                              ucs_string_buffer_t *strb)
 {
     ucp_worker_h worker = obj;
@@ -2001,26 +2001,19 @@ ucs_thread_mode_t ucp_worker_get_thread_mode(uint64_t worker_flags)
     return UCS_THREAD_MODE_SINGLE;
 }
 
-static void ucp_worker_vfs_show_thread_mode(void *obj,
-                                            ucs_string_buffer_t *strb)
-{
-    ucp_worker_h worker = obj;
-    ucs_thread_mode_t thread_mode;
-
-    UCS_ASYNC_BLOCK(&worker->async);
-    thread_mode = ucp_worker_get_thread_mode(worker->flags);
-    ucs_string_buffer_appendf(strb, "%s\n", ucs_thread_mode_names[thread_mode]);
-    UCS_ASYNC_UNBLOCK(&worker->async);
-}
-
 void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
 {
+    ucs_thread_mode_t thread_mode;
+
     ucs_vfs_obj_add_dir(context, worker, "worker/%s", worker->name);
-    ucs_vfs_obj_add_ro_file(worker, ucs_vfs_memory_address_show_cb,
+    ucs_vfs_obj_add_ro_file(worker, ucs_vfs_show_memory_address, NULL,
                             "memory_address");
-    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_address_name,
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_address_name, NULL,
                             "address_name");
-    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_thread_mode,
+
+    thread_mode = ucp_worker_get_thread_mode(worker->flags);
+    ucs_vfs_obj_add_ro_file(worker, ucs_vfs_show_string,
+                            (void*)ucs_thread_mode_names[thread_mode],
                             "thread_mode");
 }
 
