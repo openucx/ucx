@@ -70,7 +70,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             ucs_trace("de-registering memh[%d]=%p from md[%d]", memh_index,
                       uct_memh[memh_index], md_index);
             status = uct_md_mem_dereg(context->tl_mds[md_index].md,
-                                      uct_memh[memh_index]);
+                                      uct_memh[memh_index], 0);
             if (status != UCS_OK) {
                 ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
                          context->tl_mds[md_index].rsc.md_name,

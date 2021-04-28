@@ -130,7 +130,7 @@ static void uct_perf_cuda_free(const ucx_perf_context_t *perf,
 
     ucs_assert(alloc_mem->md == perf->uct.md);
 
-    status = uct_md_mem_dereg(perf->uct.md, alloc_mem->memh);
+    status = uct_md_mem_dereg(perf->uct.md, alloc_mem->memh, 0);
     if (status != UCS_OK) {
         ucs_error("failed to deregister memory");
     }

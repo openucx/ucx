@@ -927,7 +927,8 @@ ucs_status_t ucs_rcache_get(ucs_rcache_t *rcache, void *address, size_t length,
                             prot, arg, region_p);
 }
 
-void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
+void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region,
+                           unsigned flags)
 {
     ucs_rcache_region_lru_put(rcache, region);
     ucs_rcache_region_put_internal(rcache, region,

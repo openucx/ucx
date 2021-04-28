@@ -222,6 +222,15 @@ typedef struct uct_md_resource_desc {
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Memory domain flags used for de-registration of memory region.
+ */
+typedef enum {
+    UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0) /**< Force invalidate region */
+} uct_md_mem_dereg_flags_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief UCT component attributes field mask
  *
  * The enumeration allows specifying which fields in @ref uct_component_attr_t
@@ -2388,8 +2397,10 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
  *
  * @param [in]  md          Memory domain which was used to register the memory.
  * @param [in]  memh        Local access key to memory region.
+ * @param [in]  flags       De-registration flags. see @ref
+ *                          uct_md_mem_dereg_flags_t
  */
-ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
+ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh, unsigned flags);
 
 
 /**

@@ -47,6 +47,13 @@ enum {
 };
 
 /*
+ * Memory region put flags.
+ */
+enum {
+    UCS_RCACHE_MEM_REGION_PUT_INVALIDATE = UCS_BIT(0) /**< Force invalidate region */
+};
+
+/*
  * Rcache flags.
  */
 enum {
@@ -212,8 +219,10 @@ void ucs_rcache_region_hold(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
  *
  * @param [in]  rcache      Memory registration cache.
  * @param [in]  region      Memory region to release.
- */
-void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
+ * @param [in]  flags       Memory region put flags.
+*/
+void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region,
+                           unsigned flags);
 
 
 #endif

@@ -448,7 +448,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg,
             ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
             check_memory(address, &fill_buffer[0], size, mem_type);
 
-            status = uct_md_mem_dereg(md(), memh);
+            status = uct_md_mem_dereg(md(), memh, 0);
             ASSERT_UCS_OK(status);
             check_memory(address, &fill_buffer[0], size, mem_type);
 
@@ -487,7 +487,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg_perf,
                 ASSERT_UCS_OK(status);
                 ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-                status = uct_md_mem_dereg(md(), memh);
+                status = uct_md_mem_dereg(md(), memh, 0);
                 ASSERT_UCS_OK(status);
 
                 ++n;
@@ -529,7 +529,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg_advise,
                                32 * UCS_KBYTE, UCT_MADV_WILLNEED);
     EXPECT_UCS_OK(status);
 
-    status = uct_md_mem_dereg(md(), memh);
+    status = uct_md_mem_dereg(md(), memh, 0);
     EXPECT_UCS_OK(status);
     free(address);
 }
@@ -604,7 +604,7 @@ UCS_TEST_SKIP_COND_P(test_md, reg_multi_thread,
 
         sched_yield();
 
-        status = uct_md_mem_dereg(md(), memh);
+        status = uct_md_mem_dereg(md(), memh, 0);
         EXPECT_UCS_OK(status);
         free(buffer);
     }
@@ -662,7 +662,7 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
     /* dereg can keep the region pinned in the registration cache */
-    status = uct_md_mem_dereg(md(), memh);
+    status = uct_md_mem_dereg(md(), memh, 0);
     EXPECT_UCS_OK(status);
 
     pid = fork();
@@ -683,7 +683,7 @@ UCS_TEST_SKIP_COND_P(test_md_fork, fork,
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(memh != UCT_MEM_HANDLE_NULL);
 
-    status = uct_md_mem_dereg(md(), memh);
+    status = uct_md_mem_dereg(md(), memh, 0);
     EXPECT_UCS_OK(status);
 
     ASSERT_EQ(pid, waitpid(pid, &child_status, 0));

@@ -471,9 +471,9 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
     return md->ops->mem_reg(md, address, length, flags, memh_p);
 }
 
-ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
+ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh, unsigned flags)
 {
-    return md->ops->mem_dereg(md, memh);
+    return md->ops->mem_dereg(md, memh, flags);
 }
 
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,

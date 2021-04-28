@@ -265,7 +265,7 @@ UCS_TEST_SKIP_COND_P(test_uct_mm, reg,
 
     test_memh(&buffer[0], memh, size);
 
-    status = uct_md_mem_dereg(m_e1->md(), memh);
+    status = uct_md_mem_dereg(m_e1->md(), memh, 0);
     ASSERT_UCS_OK(status);
 }
 

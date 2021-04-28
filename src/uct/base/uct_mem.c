@@ -400,7 +400,7 @@ void uct_iface_mem_free(const uct_allocated_memory_t *mem)
     if ((mem->method != UCT_ALLOC_METHOD_MD) &&
         (mem->memh != UCT_MEM_HANDLE_NULL))
     {
-        (void)uct_md_mem_dereg(mem->md, mem->memh);
+        (void)uct_md_mem_dereg(mem->md, mem->memh, 0);
     }
     uct_mem_free(mem);
 }

@@ -101,7 +101,7 @@ protected:
     }
 
     void put(region *r) {
-        ucs_rcache_region_put(m_rcache, &r->super);
+        ucs_rcache_region_put(m_rcache, &r->super, 0);
     }
 
     virtual ucs_status_t mem_reg(region *region)

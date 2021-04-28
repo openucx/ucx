@@ -210,7 +210,8 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh,
+                                           unsigned flags)
 {
     uct_gdr_copy_mem_t *mem_hndl = memh;
     ucs_status_t status;
@@ -296,12 +297,14 @@ uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md,
+                                                  uct_mem_h memh,
+                                                  unsigned flags)
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     uct_gdr_copy_rcache_region_t *region = uct_gdr_copy_rache_region_from_memh(memh);
 
-    ucs_rcache_region_put(md->rcache, &region->super);
+    ucs_rcache_region_put(md->rcache, &region->super, flags);
     return UCS_OK;
 }
 

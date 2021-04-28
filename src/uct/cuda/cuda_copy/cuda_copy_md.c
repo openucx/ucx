@@ -111,7 +111,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
-                 (md, memh), uct_md_h md, uct_mem_h memh)
+                 (md, memh, flags), uct_md_h md, uct_mem_h memh, unsigned flags)
 {
     void *address = (void *)memh;
     ucs_status_t status;

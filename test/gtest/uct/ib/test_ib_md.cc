@@ -90,7 +90,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     }
 #endif
 
-    status = uct_md_mem_dereg(md(), memh);
+    status = uct_md_mem_dereg(md(), memh, 0);
     EXPECT_UCS_OK(status);
 
     ucs_mmap_free(buffer, alloc_size);

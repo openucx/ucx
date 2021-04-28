@@ -852,7 +852,8 @@ static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh,
+                                     unsigned flags)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_mem_t *ib_memh = memh;
@@ -1026,12 +1027,16 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh,
+                                            unsigned flags)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_rcache_region_t *region = uct_ib_rcache_region_from_memh(memh);
 
-    ucs_rcache_region_put(md->rcache, &region->super);
+    UCS_STATIC_ASSERT((unsigned)UCT_MD_MEM_DEREG_FLAG_INVALIDATE ==
+                      (unsigned)UCS_RCACHE_MEM_REGION_PUT_INVALIDATE);
+
+    ucs_rcache_region_put(md->rcache, &region->super, flags);
     return UCS_OK;
 }
 
@@ -1131,7 +1136,8 @@ static ucs_status_t uct_ib_mem_global_odp_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_global_odp_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_global_odp_dereg(uct_md_h uct_md, uct_mem_h memh,
+                                                unsigned flags)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
@@ -1139,7 +1145,7 @@ static ucs_status_t uct_ib_mem_global_odp_dereg(uct_md_h uct_md, uct_mem_h memh)
         return UCS_OK;
     }
 
-    return uct_ib_mem_dereg(uct_md, memh);
+    return uct_ib_mem_dereg(uct_md, memh, flags);
 }
 
 static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
@@ -1401,7 +1407,7 @@ static void uct_ib_md_release_reg_method(uct_ib_md_t *md)
         ucs_rcache_destroy(md->rcache);
     }
     if (md->global_odp != NULL) {
-        uct_ib_mem_dereg(&md->super, md->global_odp);
+        uct_ib_mem_dereg(&md->super, md->global_odp, 0);
     }
 }
 

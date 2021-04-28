@@ -93,7 +93,8 @@ mem_err:
     return status;
 }
 
-static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh,
+                                       unsigned flags)
 {
     uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
     gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;

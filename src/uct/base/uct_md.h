@@ -70,7 +70,8 @@ typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
                                               unsigned flags,
                                               uct_mem_h *memh_p);
 
-typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh);
+typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh,
+                                                unsigned flags);
 
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,

@@ -981,7 +981,7 @@ void uct_test::entity::mem_type_reg(uct_allocated_memory_t *mem) const {
 void uct_test::entity::mem_type_dereg(uct_allocated_memory_t *mem) const {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
         (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
-        ucs_status_t status = uct_md_mem_dereg(m_md, mem->memh);
+        ucs_status_t status = uct_md_mem_dereg(m_md, mem->memh, 0);
         ASSERT_UCS_OK(status);
         mem->memh = UCT_MEM_HANDLE_NULL;
         mem->md   = NULL;

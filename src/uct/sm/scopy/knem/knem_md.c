@@ -179,7 +179,8 @@ static ucs_status_t uct_knem_mem_dereg_internal(uct_md_h md, uct_knem_key_t *key
     return UCS_OK;
 }
 
-static ucs_status_t uct_knem_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t uct_knem_mem_dereg(uct_md_h md, uct_mem_h memh,
+                                       unsigned flags)
 {
     uct_knem_key_t *key = (uct_knem_key_t *)memh;
     ucs_status_t status;
@@ -266,12 +267,16 @@ static ucs_status_t uct_knem_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_knem_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_knem_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh,
+                                              unsigned flags)
 {
     uct_knem_md_t *md                = ucs_derived_of(uct_md, uct_knem_md_t);
     uct_knem_rcache_region_t *region = uct_knem_rcache_region_from_memh(memh);
 
-    ucs_rcache_region_put(md->rcache, &region->super);
+    UCS_STATIC_ASSERT((unsigned)UCT_MD_MEM_DEREG_FLAG_INVALIDATE ==
+                      (unsigned)UCS_RCACHE_MEM_REGION_PUT_INVALIDATE);
+
+    ucs_rcache_region_put(md->rcache, &region->super, flags);
     return UCS_OK;
 }
 

@@ -147,7 +147,8 @@ static ucs_status_t uct_rocm_copy_mem_reg(uct_md_h md, void *address, size_t len
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t uct_rocm_copy_mem_dereg(uct_md_h md, uct_mem_h memh,
+                                            unsigned flags)
 {
     uct_rocm_copy_mem_t *mem_hndl = (uct_rocm_copy_mem_t *)memh;
     void *address = mem_hndl->vaddr;
@@ -214,12 +215,14 @@ uct_rocm_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_rocm_copy_mem_rcache_dereg(uct_md_h uct_md,
+                                                   uct_mem_h memh,
+                                                   unsigned flags)
 {
     uct_rocm_copy_md_t *md = ucs_derived_of(uct_md, uct_rocm_copy_md_t);
     uct_rocm_copy_rcache_region_t *region = uct_rocm_copy_rache_region_from_memh(memh);
 
-    ucs_rcache_region_put(md->rcache, &region->super);
+    ucs_rcache_region_put(md->rcache, &region->super, flags);
     return UCS_OK;
 }
 
@@ -257,7 +260,7 @@ static void uct_rocm_copy_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcach
     uct_rocm_copy_rcache_region_t *region;
 
     region = ucs_derived_of(rregion, uct_rocm_copy_rcache_region_t);
-    (void)uct_rocm_copy_mem_dereg(&md->super, &region->memh);
+    (void)uct_rocm_copy_mem_dereg(&md->super, &region->memh, 0);
 }
 
 static void uct_rocm_copy_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,

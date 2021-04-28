@@ -154,7 +154,7 @@ void zcopy_completion_cb(uct_completion_t *self)
     zcopy_comp_t *comp = (zcopy_comp_t *)self;
     assert((comp->uct_comp.count == 0) && (self->status == UCS_OK));
     if (comp->memh != UCT_MEM_HANDLE_NULL) {
-        uct_md_mem_dereg(comp->md, comp->memh);
+        uct_md_mem_dereg(comp->md, comp->memh, 0);
     }
     desc_holder = (void *)0xDEADBEEF;
 }
