@@ -8,12 +8,21 @@ trigger:
 
 resources:
   containers:
-    - container: centos7
-      image: ucfconsort.azurecr.io/ucx/centos7:1
-      endpoint: ucfconsort_registry
+    - container: centos7_cuda10_1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
 
 stages:
+  - stage: Check_Commit
+    jobs:
+      - job: Check
+        steps:
+          - checkout: self
+            clean: true
+          - bash: |
+              echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
+            name: Commit
   - stage: Build
+    dependsOn: Check_Commit
     jobs:
       - template: jucx-publish.yml
         parameters:
