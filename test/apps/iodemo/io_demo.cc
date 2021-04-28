@@ -2222,7 +2222,6 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -H                          Use human-readable timestamps" << std::endl;
             std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
             std::cout << "" << std::endl;
-            std::cout << "  -q                          Validate data in buffers" << std::endl;
             std::cout << "  -m <memory_type>            Memory type to use. Possible values: host"
 #ifdef HAVE_CUDA
                       << ", cuda, cuda-managed"
