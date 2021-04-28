@@ -391,12 +391,14 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
     if (length != test_string_length) {
         fprintf(stderr, "received wrong data length %ld (expected %ld)",
                 length, test_string_length);
-        goto out;
+        return UCS_OK;
     }
 
     if ((header != NULL) || (header_length != 0)) {
         fprintf(stderr, "received unexpected header, length %ld", header_length);
     }
+
+    am_data_desc.complete = 1;
 
     if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
         /* Rendezvous request arrived, data contains an internal UCX descriptor,
@@ -414,8 +416,6 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
     am_data_desc.is_rndv = 0;
     mem_type_memcpy(am_data_desc.recv_buf, data, length);
 
-out:
-    am_data_desc.complete = 1;
     return UCS_OK;
 }
 
@@ -448,6 +448,7 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
     if (is_server) {
         am_data_desc.recv_buf = msg;
 
+        /* waiting for AM callback has called */
         while (!am_data_desc.complete) {
             ucp_worker_progress(ucp_worker);
         }
