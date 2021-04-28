@@ -448,7 +448,6 @@ AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
 
 uct_ib_modules=""
-m4_include([src/uct/ib/cm/configure.m4])
 m4_include([src/uct/ib/rdmacm/configure.m4])
 AC_DEFINE_UNQUOTED([uct_ib_MODULES], ["${uct_ib_modules}"], [IB loadable modules])
 AC_CONFIG_FILES([src/uct/ib/Makefile])
