@@ -155,7 +155,7 @@ public:
             skip = 1;
         } else if ((has_transport("tcp") || has_transport("all")) &&
                    (ifa->ifa_addr->sa_family == AF_INET6)) {
-            /* the tcp transport (and 'all' which may fallback to tcp_sockcmm)
+            /* the tcp transport (and 'all' which may fallback to tcp_sockcm)
              * can run either on an rdma-enabled interface (IPoIB/RoCE)
              * or any interface with IPv4 address because IPv6 isn't supported
              * by the tcp transport yet */
@@ -1200,7 +1200,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
     one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
 }
 
-/* The test check that a client disconenction works fine when a server received
+/* The test check that a client disconnection works fine when a server received
  * a conenction request, but a conenction wasn't fully established */
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
 {
@@ -2028,3 +2028,97 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_put_scheme,
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err)
+
+class test_ucp_sockaddr_protocols_err_sender
+      : public test_ucp_sockaddr_protocols {
+public:
+protected:
+    test_ucp_sockaddr_protocols_err_sender() {
+        set_tl_timeouts(m_env);
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
+                                               "rcache,odp,direct"));
+    }
+
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
+};
+
+/* This test is quite tricky: is checks for incorrect behavior on RNDV send
+ * on DC transport: in case if sender EP was killed right after sent RTS
+ * then receiver may get incorrect/corrupted data */
+UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender, tag_rndv_killed_sender,
+           "RNDV_THRESH=10k", "RNDV_SCHEME=get_zcopy", "KEEPALIVE_INTERVAL=0",
+           "KEEPALIVE_NUM_EPS=inf")
+{
+    static size_t size = 64 * UCS_KBYTE;
+
+    /* Warmup */
+    test_tag_send_recv(size, true, false, false, false);
+
+    if (m_err_count > 0) {
+        UCS_TEST_SKIP_R("Failed to connect");
+    }
+
+    std::string send_buf(size, 'x');
+    std::string recv_buf(size, 'y');
+    std::string recv_copy(size, 'y');
+    std::string str_z(size, 'z');
+
+    void *rreq = NULL, *sreq = NULL;
+    int i;
+
+    rreq = ucp_tag_recv_nbx(receiver().worker(), &recv_buf[0], size, 0, 0,
+                            &ucp_request_null_param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(rreq));
+
+    sreq = ucp_tag_send_nbx(sender().ep(), &send_buf[0], size, 0,
+                            &ucp_request_null_param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sreq));
+
+    for(i = 0; i < 1000; i++) {
+        /* allow sender to send RTS */
+        ucp_worker_progress(sender().worker());
+    }
+
+    /* requests still should be in PROGRESS state */
+    ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
+    ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
+
+    ucp_worker_h sender_worker = sender().worker();
+
+    /* Close sender EP to force send operation to complete with CANCEL status */
+    void *close_req = sender().disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+    if (UCS_PTR_IS_PTR(close_req)) {
+        while (ucp_request_check_status(close_req) == UCS_INPROGRESS) {
+            ucp_worker_progress(sender_worker);
+        }
+    }
+
+    ucs_status_t status = UCS_OK;
+
+    /* Allow sender request to be canceled */
+    while ((status = ucp_request_check_status(sreq)) == UCS_INPROGRESS) {
+        ucp_worker_progress(sender_worker);
+    }
+
+    ASSERT_EQ(UCS_ERR_CANCELED, status);
+    /* Receive request should be in INPROGRESS state */
+    ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(rreq));
+    /* Receive buffer should not be updated */
+    ASSERT_EQ(recv_buf, recv_copy);
+    /* Update send buffer by new data - emulation of free(buffer) */
+    memset(&send_buf[0], 'z', size);
+
+    /* Allow receiver to complete RNDV GET operation */
+    while ((status = ucp_request_check_status(rreq)) == UCS_INPROGRESS) {
+        ucp_worker_progress(receiver().worker());
+    }
+
+    ASSERT_EQ(UCS_OK, status);
+    ASSERT_EQ(recv_buf, str_z); /* received updated/corrupted data */
+
+    ucp_request_free(sreq);
+    ucp_request_free(rreq);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_protocols_err_sender, dc_x,
+                              "dc_x")

@@ -2740,7 +2740,7 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucp_request_complete_send(req, status);
         ucp_ep_rma_remote_request_completed(ucp_ep);
     } else {
-        /* SW RMA/PUT and AMO/Post operations don't allcoate local request ID
+        /* SW RMA/PUT and AMO/Post operations don't allocate local request ID
          * and don't need to be tracked, since they complete UCP request upon
          * sending all data to a peer. Receiving RMA/CMPL and AMO/REP packets
          * complete flush requests */
