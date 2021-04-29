@@ -2783,26 +2783,23 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     }
 }
 
-static void ucp_ep_vfs_show_peer_name(void *obj, ucs_string_buffer_t *strb)
+static void
+ucp_ep_vfs_show_peer_name(void *obj, void *arg, ucs_string_buffer_t *strb)
 {
     ucp_ep_h ep = obj;
 
     ucs_string_buffer_appendf(strb, "%s\n", ucp_ep_peer_name(ep));
 }
 
-static void ucp_ep_vfs_show_error_mode(void *obj, ucs_string_buffer_t *strb)
-{
-    ucp_ep_h ep = obj;
-    ucp_err_handling_mode_t err_mode;
-
-    err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucs_string_buffer_appendf(strb, "%s\n",
-                              ucp_err_handling_mode_names[err_mode]);
-}
-
 void ucp_ep_vfs_init(ucp_ep_h ep)
 {
+    ucp_err_handling_mode_t err_mode;
+
     ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%p", ep);
-    ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_peer_name, "peer_name");
-    ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_error_mode, "error_mode");
+    ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_peer_name, NULL, "peer_name");
+
+    err_mode = ucp_ep_config(ep)->key.err_mode;
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_string,
+                            (void*)ucp_err_handling_mode_names[err_mode],
+                            "error_mode");
 }

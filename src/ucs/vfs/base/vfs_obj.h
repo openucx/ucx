@@ -32,22 +32,37 @@ typedef struct {
 
 
 /**
- * Function to fill buffer @a strb with the information about @a obj.
- * 
- * @param [in]    obj  Pointer to the object to be described.
- * @param [inout] strb String buffer to be filled by the description of the
- *                     object @a obj.
+ * Function to fill information about an object to the string buffer.
+ *
+ * @param [in]    obj  Pointer to the object.
+ * @param [in]    arg  Pointer to the optional argument.
+ * @param [inout] strb String buffer filled with the object's information.
  */
-typedef void (*ucs_vfs_file_show_cb_t)(void *obj, ucs_string_buffer_t *strb);
+typedef void (*ucs_vfs_file_show_cb_t)(void *obj, void *arg,
+                                       ucs_string_buffer_t *strb);
 
 
 /**
- * Callback function to show memory address of object.
+ * Callback function to fill the memory address of an object to the string
+ * buffer.
  *
  * @param [in]    obj  Pointer to the object.
- * @param [inout] strb String buffer to be filled by memory address of @a obj.
+ * @param [in]    arg  Pointer to the optional argument is not used.
+ * @param [inout] strb String buffer filled with the memory address of the
+ *                     object.
  */
-void ucs_vfs_memory_address_show_cb(void *obj, ucs_string_buffer_t *strb);
+void ucs_vfs_show_memory_address(void *obj, void *arg,
+                                 ucs_string_buffer_t *strb);
+
+
+/**
+ * Callback function to fill a C-style string to the string buffer.
+ *
+ * @param [in]    obj  Pointer to the object is not used.
+ * @param [in]    arg  Pointer to the beginning of the C-style string.
+ * @param [inout] strb String buffer filled with the C-style string.
+ */
+void ucs_vfs_show_string(void *obj, void *arg, ucs_string_buffer_t *strb);
 
 
 /**
@@ -88,10 +103,13 @@ void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
  * @param [in] obj      Pointer to the object. @a rel_path is relative to @a obj
  *                      directory.
  * @param [in] text_cb  Callback method that generates the content of the file.
+ * @param [in] arg      Pointer to the optional argument that is passed to the
+ *                      callback method.
  * @param [in] rel_path Format string which specifies relative path to the file.
  */
 void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
-                             const char *rel_path, ...) UCS_F_PRINTF(3, 4);
+                             void *arg, const char *rel_path, ...)
+        UCS_F_PRINTF(4, 5);
 
 
 /**

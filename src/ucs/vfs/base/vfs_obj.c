@@ -44,6 +44,7 @@ struct ucs_vfs_node {
     ucs_vfs_file_show_cb_t text_cb;
     ucs_vfs_refresh_cb_t   refresh_cb;
     ucs_list_link_t        list;
+    void                   *arg;
     char                   path[0];
 };
 
@@ -80,9 +81,15 @@ struct {
     }
 
 
-void ucs_vfs_memory_address_show_cb(void *obj, ucs_string_buffer_t *strb)
+void ucs_vfs_show_memory_address(void *obj, void *arg,
+                                 ucs_string_buffer_t *strb)
 {
     ucs_string_buffer_appendf(strb, "%p\n", obj);
+}
+
+void ucs_vfs_show_string(void *obj, void *arg, ucs_string_buffer_t *strb)
+{
+    ucs_string_buffer_appendf(strb, "%s\n", (char*)arg);
 }
 
 /* must be called with lock held */
@@ -119,6 +126,7 @@ static void ucs_vfs_node_init(ucs_vfs_node_t *node, ucs_vfs_node_type_t type,
     node->parent     = parent_node;
     node->text_cb    = NULL;
     node->refresh_cb = NULL;
+    node->arg        = NULL;
     ucs_list_head_init(&node->children);
 }
 
@@ -286,7 +294,7 @@ ucs_vfs_read_ro_file(ucs_vfs_node_t *node, ucs_string_buffer_t *strb)
 
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
 
-    node->text_cb(parent_node->obj, strb);
+    node->text_cb(parent_node->obj, node->arg, strb);
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 }
@@ -316,7 +324,7 @@ void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
 }
 
 void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
-                             const char *rel_path, ...)
+                             void *arg, const char *rel_path, ...)
 {
     ucs_vfs_node_t *node;
     va_list ap;
@@ -329,6 +337,7 @@ void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
 
     if (node != NULL) {
         node->text_cb = text_cb;
+        node->arg     = arg;
     }
 
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
