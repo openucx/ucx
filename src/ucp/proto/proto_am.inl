@@ -561,6 +561,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_short_handle_status_from_pending(ucp_request_t *req, ucs_status_t status)
 {
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
+        req->send.lane = ucp_ep_get_am_lane(req->send.ep);
         return UCS_ERR_NO_RESOURCE;
     }
 
