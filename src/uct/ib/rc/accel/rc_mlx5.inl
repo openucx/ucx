@@ -218,11 +218,23 @@ uct_rc_mlx5_iface_rx_mp_context_from_hash(uct_rc_mlx5_iface_common_t *iface,
                                           struct mlx5_cqe64 *cqe,
                                           unsigned *flags)
 {
+#if UCS_ENABLE_ASSERT
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
+                                          uct_ib_mlx5_md_t);
+#endif
     uct_rc_mlx5_mp_context_t *mp_ctx;
     uct_rc_mlx5_mp_hash_key_t key_gid;
     uint64_t key_lid;
     void *gid;
     int last;
+
+    if (ucs_likely(ucs_test_all_flags(cqe->byte_cnt,
+                                      htonl(UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG |
+                                            UCT_IB_MLX5_MP_RQ_FIRST_MSG_FLAG)))) {
+        ucs_assert(md->flags & UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG);
+        *flags |= UCT_CB_PARAM_FLAG_FIRST;
+        return &iface->tm.mp.last_frag_ctx;
+    }
 
     last = cqe->byte_cnt & htonl(UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG);
 

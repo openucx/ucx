@@ -242,7 +242,8 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    cq_oi[0x1];
     uint8_t    cq_resize[0x1];
     uint8_t    cq_moderation[0x1];
-    uint8_t    reserved_at_223[0x3];
+    uint8_t    reserved_at_223[0x2];
+    uint8_t    ib_striding_wq_cq_first_indication[0x1];
     uint8_t    cq_eq_remap[0x1];
     uint8_t    pg[0x1];
     uint8_t    block_lb_mc[0x1];

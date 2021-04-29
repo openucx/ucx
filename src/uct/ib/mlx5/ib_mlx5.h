@@ -45,32 +45,33 @@
 #include <string.h>
 
 
-#define UCT_IB_MLX5_WQE_SEG_SIZE        16 /* Size of a segment in a WQE */
-#define UCT_IB_MLX5_CQE64_MAX_INL       32 /* Inline scatter size in 64-byte CQE */
-#define UCT_IB_MLX5_CQE128_MAX_INL      64 /* Inline scatter size in 128-byte CQE */
-#define UCT_IB_MLX5_CQE64_SIZE_LOG      6
-#define UCT_IB_MLX5_CQE128_SIZE_LOG     7
-#define UCT_IB_MLX5_MAX_BB              4
-#define UCT_IB_MLX5_WORKER_BF_KEY       0x00c1b7e8u
-#define UCT_IB_MLX5_DEVX_UAR_KEY        0xdea1ab1eU
-#define UCT_IB_MLX5_RES_DOMAIN_KEY      0x1b1bda7aU
-#define UCT_IB_MLX5_WORKER_DM_KEY       0xacdf1245u
-#define UCT_IB_MLX5_EXTENDED_UD_AV      0x80 /* htonl(0x80000000) */
-#define UCT_IB_MLX5_AV_GRH_PRESENT      0x40 /* htonl(UCS_BIT(30)) */
-#define UCT_IB_MLX5_BF_REG_SIZE         256
-#define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP 0x93
-#define UCT_IB_MLX5_CQE_VENDOR_SYND_PSN 0x99
-#define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK 0x80
-#define UCT_IB_MLX5_MAX_SEND_WQE_SIZE   (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB)
-#define UCT_IB_MLX5_CQ_SET_CI           0
-#define UCT_IB_MLX5_CQ_ARM_DB           1
-#define UCT_IB_MLX5_LOG_MAX_MSG_SIZE    30
-#define UCT_IB_MLX5_ATOMIC_MODE         3
-#define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA UCS_BIT(28) /* GRH/IP in the receive buffer */
-#define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE  UCS_BIT(29) /* GRH/IP in the CQE */
-#define UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK 0x0000FFFF  /* Byte count mask for multi-packet RQs */
-#define UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG UCS_BIT(30) /* MP last packet indication */
-#define UCT_IB_MLX5_MP_RQ_FILLER_FLAG   UCS_BIT(31) /* Filler CQE indicator */
+#define UCT_IB_MLX5_WQE_SEG_SIZE         16 /* Size of a segment in a WQE */
+#define UCT_IB_MLX5_CQE64_MAX_INL        32 /* Inline scatter size in 64-byte CQE */
+#define UCT_IB_MLX5_CQE128_MAX_INL       64 /* Inline scatter size in 128-byte CQE */
+#define UCT_IB_MLX5_CQE64_SIZE_LOG       6
+#define UCT_IB_MLX5_CQE128_SIZE_LOG      7
+#define UCT_IB_MLX5_MAX_BB               4
+#define UCT_IB_MLX5_WORKER_BF_KEY        0x00c1b7e8u
+#define UCT_IB_MLX5_DEVX_UAR_KEY         0xdea1ab1eU
+#define UCT_IB_MLX5_RES_DOMAIN_KEY       0x1b1bda7aU
+#define UCT_IB_MLX5_WORKER_DM_KEY        0xacdf1245u
+#define UCT_IB_MLX5_EXTENDED_UD_AV       0x80 /* htonl(0x80000000) */
+#define UCT_IB_MLX5_AV_GRH_PRESENT       0x40 /* htonl(UCS_BIT(30)) */
+#define UCT_IB_MLX5_BF_REG_SIZE          256
+#define UCT_IB_MLX5_CQE_VENDOR_SYND_ODP  0x93
+#define UCT_IB_MLX5_CQE_VENDOR_SYND_PSN  0x99
+#define UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK  0x80
+#define UCT_IB_MLX5_MAX_SEND_WQE_SIZE    (UCT_IB_MLX5_MAX_BB * MLX5_SEND_WQE_BB)
+#define UCT_IB_MLX5_CQ_SET_CI            0
+#define UCT_IB_MLX5_CQ_ARM_DB            1
+#define UCT_IB_MLX5_LOG_MAX_MSG_SIZE     30
+#define UCT_IB_MLX5_ATOMIC_MODE          3
+#define UCT_IB_MLX5_CQE_FLAG_L3_IN_DATA  UCS_BIT(28) /* GRH/IP in the receive buffer */
+#define UCT_IB_MLX5_CQE_FLAG_L3_IN_CQE   UCS_BIT(29) /* GRH/IP in the CQE */
+#define UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK  0x0000FFFF  /* Byte count mask for multi-packet RQs */
+#define UCT_IB_MLX5_MP_RQ_FIRST_MSG_FLAG UCS_BIT(29) /* MP first packet indication */
+#define UCT_IB_MLX5_MP_RQ_LAST_MSG_FLAG  UCS_BIT(30) /* MP last packet indication */
+#define UCT_IB_MLX5_MP_RQ_FILLER_FLAG    UCS_BIT(31) /* Filler CQE indicator */
 
 #if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_BF
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC MLX5DV_UAR_ALLOC_TYPE_BF
@@ -176,9 +177,11 @@ enum {
     UCT_IB_MLX5_MD_FLAG_LAG              = UCS_BIT(7),
     /* Device supports CQE V1 */
     UCT_IB_MLX5_MD_FLAG_CQE_V1           = UCS_BIT(8),
+    /* Device supports first fragment indication for MP XRQ */
+    UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG = UCS_BIT(9),
 
     /* Object to be created by DevX */
-    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 9,
+    UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 10,
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP       = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCQP),
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
