@@ -1,8 +1,1 @@
-title: UCX
-description: Unified Communication X
-google_analytics: UA-60366922-1
-show_downloads: false
 theme: jekyll-theme-leap-day
-
-gems:
-  - jekyll-mentions
