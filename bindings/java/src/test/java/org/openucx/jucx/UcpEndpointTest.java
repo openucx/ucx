@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.*;
 
@@ -643,7 +644,7 @@ public class UcpEndpointTest extends UcxTest {
         MemoryBlock recvData = allocateMemory(context1, worker1, memType, dataSize);
         MemoryBlock recvEagerData = allocateMemory(context1, worker1, memType, dataSize);
         ByteBuffer recvHeader = ByteBuffer.allocateDirect((int) headerSize);
-        UcpRequest[] requests = new UcpRequest[6];
+        UcpRequest[] requests = new UcpRequest[7];
 
         UcpEndpoint ep = worker2.newEndpoint(
             new UcpEndpointParams().setUcpAddress(worker1.getAddress()));
@@ -671,7 +672,7 @@ public class UcpEndpointTest extends UcxTest {
             }
 
             return UcsConstants.STATUS.UCS_OK;
-        });
+        }, UcpConstants.UCP_AM_FLAG_WHOLE_MSG);
 
         // Test eager flow
         worker1.setAmRecvHandler(1, (headerAddress, headerSize1, amData, replyEp) -> {
@@ -690,10 +691,19 @@ public class UcpEndpointTest extends UcxTest {
                 cachedEp.add(replyEp);
             }
 
-            requests[5] = amData.receive(recvEagerData.getMemory().getAddress(), null);
+            requests[6] = amData.receive(recvEagerData.getMemory().getAddress(), null);
 
             return UcsConstants.STATUS.UCS_OK;
-        });
+        }, UcpConstants.UCP_AM_FLAG_WHOLE_MSG);
+
+        AtomicReference<UcpAmData> persistantAmData = new AtomicReference<>(null);
+        // Test amData persistence flow
+        worker1.setAmRecvHandler(2, (headerAddress, headerSize1, amData, replyEp) -> {
+            assertTrue(amData.isDataValid());
+            assertTrue(amData.canPersist());
+            persistantAmData.set(amData);
+            return UcsConstants.STATUS.UCS_INPROGRESS;
+        }, UcpConstants.UCP_AM_FLAG_WHOLE_MSG | UcpConstants.UCP_AM_FLAG_PERSISTENT_DATA);
 
         requests[0] = ep.sendAmNonBlocking(0,
             UcxUtils.getAddress(header), headerSize,
@@ -711,6 +721,9 @@ public class UcpEndpointTest extends UcxTest {
             sendData.getMemory().getAddress(), dataSize,
             UcpConstants.UCP_AM_SEND_FLAG_REPLY | UcpConstants.UCP_AM_SEND_FLAG_EAGER, null);
 
+        // Persistence data flow
+        requests[5] = ep.sendAmNonBlocking(2, 0L, 0L,
+            sendData.getMemory().getAddress(), 2L, UcpConstants.UCP_AM_FLAG_PERSISTENT_DATA, null);
 
         while (!Arrays.stream(requests).allMatch(r -> (r != null) && r.isCompleted())) {
             worker1.progress();
@@ -726,9 +739,16 @@ public class UcpEndpointTest extends UcxTest {
         assertEquals(headerString,
             recvHeader.asCharBuffer().toString().trim());
 
+        assertEquals(dataString.charAt(0),
+            UcxUtils.getByteBufferView(persistantAmData.get().getDataAddress(),
+                persistantAmData.get().getLength()).getChar(0));
+        persistantAmData.get().close();
+        persistantAmData.set(null);
+
         // Reset AM callback
         worker1.removeAmRecvHandler(0);
         worker1.removeAmRecvHandler(1);
+        worker1.removeAmRecvHandler(2);
 
         Collections.addAll(resources, context1, context2, worker1, worker2, ep,
             cachedEp.iterator().next(), sendData, recvData, recvEagerData);
