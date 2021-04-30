@@ -73,9 +73,11 @@ AS_IF([test "x$with_efa_dv" != xno],
        CFLAGS="$EFA_CFLAGS $CFLAGS"
        CPPFLAGS="$EFA_CPPFLAGS $CPPFLAGS"
 
-       AC_CHECK_DECLS([EFADV_DEVICE_ATTR_CAPS_RDMA_READ],
-                      [AC_DEFINE([HAVE_DECL_EFA_DV_RDMA_READ],
-                                 [1], [HAVE EFA device with RDMA READ support])],
+       AC_CHECK_DECLS([EFADV_DEVICE_ATTR_CAPS_RDMA_READ,
+                       IBV_QP_INIT_ATTR_SEND_OPS_FLAGS,
+                       efadv_create_qp_ex],
+                      [AC_DEFINE([HAVE_DECL_EFA_DV_RDMA_READ], [1],
+                                 [HAVE EFA device with RDMA READ support])],
                       [], [[#include <infiniband/efadv.h>]])
 
        CFLAGS="$save_CFLAGS"
