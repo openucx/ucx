@@ -297,7 +297,8 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
             frag_list_add_tail(h, elem);
             nexth = ucs_container_of(h->list.next, ucs_frag_list_elem_t, list);
 
-            if (nexth != NULL && nexth->head.first_sn == sn + 1) {
+            if ((head->list.ptail != &h->list.next) &&
+                nexth != NULL && nexth->head.first_sn == sn + 1) {
                 frag_list_merge_heads(head, h, nexth);
                 head->list_count--;
             }
