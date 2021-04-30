@@ -3,8 +3,19 @@
 
 trigger: none
 pr:
-  - master
-  - v*.*.x
+  branches:
+    include:
+    - master
+    - v*.*.x
+  paths:
+    exclude:
+    - .gitignore
+    - docs/source
+    - docs/CodeStyle.md
+    - docs/LoggingStyle.md
+    - docs/OptimizationStyle.md
+    - README.md
+    - NEWS
 
 resources:
   containers:
