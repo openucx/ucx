@@ -335,11 +335,13 @@ void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
                 break;
             };
 
-            test_nesting(loc, nesting, "profile_test_func1", 0);
-            test_nesting(loc, nesting, "code", 1);
+            /* Test nesting expects SCOPE_BEGIN to have name association
+             * unlike previously where SCOPE_END had the name association */
+            test_nesting(loc, nesting, "profile_test_func1", 1);
+            test_nesting(loc, nesting, "code", 2);
             test_nesting(loc, nesting, "sample", 2);
-            test_nesting(loc, nesting, "profile_test_func2", 0);
-            test_nesting(loc, nesting, "sum", 1);
+            test_nesting(loc, nesting, "profile_test_func2", 1);
+            test_nesting(loc, nesting, "sum", 2);
         }
 
         ptr = records + thread_hdr->num_records;

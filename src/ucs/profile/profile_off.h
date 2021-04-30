@@ -14,8 +14,8 @@
 
 #define UCS_PROFILE(...)                                    UCS_EMPTY_STATEMENT
 #define UCS_PROFILE_SAMPLE(_name)                           UCS_EMPTY_STATEMENT
-#define UCS_PROFILE_SCOPE_BEGIN()                           UCS_EMPTY_STATEMENT
-#define UCS_PROFILE_SCOPE_END(_name)                        UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_SCOPE_BEGIN(_name)                      UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_SCOPE_END()                             UCS_EMPTY_STATEMENT
 #define UCS_PROFILE_CODE(_name)
 #define UCS_PROFILE_FUNC(_ret_type, _name, _arglist, ...)   _ret_type _name(__VA_ARGS__)
 #define UCS_PROFILE_FUNC_VOID(_name, _arglist, ...)         void _name(__VA_ARGS__)

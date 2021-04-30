@@ -31,9 +31,9 @@ BEGIN_C_DECLS
 /* Helper macro */
 #define __UCS_PROFILE_CODE(_name, _loop_var) \
     int _loop_var ; \
-    for (({ UCS_PROFILE_SCOPE_BEGIN(); _loop_var = 1;}); \
+    for (({ UCS_PROFILE_SCOPE_BEGIN(_name); _loop_var = 1;}); \
          _loop_var; \
-         ({ UCS_PROFILE_SCOPE_END(_name); _loop_var = 0;}))
+         ({ UCS_PROFILE_SCOPE_END(); _loop_var = 0;}))
 
 
 /* Helper macro */
@@ -67,23 +67,23 @@ BEGIN_C_DECLS
 
 /**
  * Record a scope-begin profiling event.
+ *
+ * @param _name   Scope name.
  */
-#define UCS_PROFILE_SCOPE_BEGIN() \
+#define UCS_PROFILE_SCOPE_BEGIN(_name) \
     { \
-        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_BEGIN, "", 0, 0); \
+        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_BEGIN, _name, 0, 0); \
         ucs_compiler_fence(); \
     }
 
 
 /**
  * Record a scope-end profiling event.
- *
- * @param _name   Scope name.
  */
-#define UCS_PROFILE_SCOPE_END(_name) \
+#define UCS_PROFILE_SCOPE_END() \
     { \
         ucs_compiler_fence(); \
-        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_END, _name, 0, 0); \
+        UCS_PROFILE(UCS_PROFILE_TYPE_SCOPE_END, "", 0, 0); \
     }
 
 
@@ -118,9 +118,9 @@ BEGIN_C_DECLS
     _ret_type _name(__VA_ARGS__) \
     { \
         _ret_type _ret; \
-        UCS_PROFILE_SCOPE_BEGIN(); \
+        UCS_PROFILE_SCOPE_BEGIN(#_name); \
         _ret = _name##_inner _arglist; \
-        UCS_PROFILE_SCOPE_END(#_name); \
+        UCS_PROFILE_SCOPE_END(); \
         return _ret; \
     } \
     static UCS_F_ALWAYS_INLINE _ret_type _name##_inner(__VA_ARGS__)
@@ -140,9 +140,9 @@ BEGIN_C_DECLS
     static UCS_F_ALWAYS_INLINE void _name##_inner(__VA_ARGS__); \
     \
     void _name(__VA_ARGS__) { \
-        UCS_PROFILE_SCOPE_BEGIN(); \
+        UCS_PROFILE_SCOPE_BEGIN(#_name); \
         _name##_inner _arglist; \
-        UCS_PROFILE_SCOPE_END(#_name); \
+        UCS_PROFILE_SCOPE_END(); \
     } \
     static UCS_F_ALWAYS_INLINE void _name##_inner(__VA_ARGS__)
 
@@ -161,9 +161,9 @@ BEGIN_C_DECLS
 #define UCS_PROFILE_NAMED_CALL(_name, _func, ...) \
     ({ \
         typeof(_func(__VA_ARGS__)) retval; \
-        UCS_PROFILE_SCOPE_BEGIN(); \
+        UCS_PROFILE_SCOPE_BEGIN(_name); \
         retval = _func(__VA_ARGS__); \
-        UCS_PROFILE_SCOPE_END(_name); \
+        UCS_PROFILE_SCOPE_END(); \
         retval; \
     })
 
@@ -194,9 +194,9 @@ BEGIN_C_DECLS
  */
 #define UCS_PROFILE_NAMED_CALL_VOID(_name, _func, ...) \
     { \
-        UCS_PROFILE_SCOPE_BEGIN(); \
+        UCS_PROFILE_SCOPE_BEGIN(_name); \
         _func(__VA_ARGS__); \
-        UCS_PROFILE_SCOPE_END(_name); \
+        UCS_PROFILE_SCOPE_END(); \
     }
 
 
