@@ -92,6 +92,22 @@ void ucs_vfs_show_string(void *obj, void *arg, ucs_string_buffer_t *strb)
     ucs_string_buffer_appendf(strb, "%s\n", (char*)arg);
 }
 
+void ucs_vfs_show_ulunits(void *obj, void *arg, ucs_string_buffer_t *strb)
+{
+    char buf[64];
+
+    ucs_config_sprintf_ulunits(buf, sizeof(buf), arg, NULL);
+    ucs_string_buffer_appendf(strb, "%s\n", buf);
+}
+
+void ucs_vfs_show_memunits(void *obj, void *arg, ucs_string_buffer_t *strb)
+{
+    char buf[64];
+
+    ucs_memunits_to_str(*(size_t*)arg, buf, sizeof(buf));
+    ucs_string_buffer_appendf(strb, "%s\n", buf);
+}
+
 /* must be called with lock held */
 static ucs_vfs_node_t *ucs_vfs_node_find_by_path(const char *path)
 {
