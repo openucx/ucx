@@ -72,6 +72,16 @@ enum {
 #endif
 };
 
+
+#define UCT_SRD_EP_ASSERT_PENDING(_ep) \
+    ucs_assertv((_ep->flags & UCT_SRD_EP_FLAG_IN_PENDING) ||    \
+                !uct_srd_ep_has_pending(_ep),                   \
+                "out-of-order send detected for"                \
+                " ep %p ep_pending %d arbelem %p",              \
+                _ep, (_ep->flags & UCT_SRD_EP_FLAG_IN_PENDING), \
+                &_ep->tx.pending.elem);
+
+
 typedef struct uct_srd_peer_name {
     char name[16];
     int  pid;
@@ -88,8 +98,8 @@ struct uct_srd_ep {
     uint32_t                          dest_ep_id;
     struct {
         uct_srd_psn_t                 psn;     /* Next PSN to send */
-        uct_srd_ep_pending_op_t       pending; /* pending ops */
-        ucs_queue_head_t              outstanding_q; /* queue of dummy flush skbs */
+        uct_srd_ep_pending_op_t       pending; /* pending */
+        ucs_queue_head_t              outstanding_q; /* queue of outstanding send ops*/
         UCS_STATS_NODE_DECLARE(stats)
     } tx;
     struct {
@@ -163,8 +173,6 @@ void uct_srd_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
 
 void uct_srd_ep_disconnect(uct_ep_h ep);
 
-uct_srd_send_skb_t *uct_srd_ep_prepare_creq(uct_srd_ep_t *ep);
-
 ucs_arbiter_cb_result_t
 uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                       ucs_arbiter_elem_t *elem, void *arg);
@@ -173,24 +181,38 @@ void uct_srd_ep_clone(uct_srd_ep_t *old_ep, uct_srd_ep_t *new_ep);
 
 void *uct_srd_ep_get_peer_address(uct_srd_ep_t *srd_ep);
 
-static UCS_F_ALWAYS_INLINE void
-uct_srd_neth_set_type_am(uct_srd_ep_t *ep, uct_srd_neth_t *neth, uint8_t id)
-{
-    neth->packet_type = (id << UCT_SRD_PACKET_AM_ID_SHIFT) |
-                        ep->dest_ep_id |
-                        UCT_SRD_PACKET_FLAG_AM;
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_srd_neth_init_data(uct_srd_ep_t *ep, uct_srd_neth_t *neth)
-{
-    neth->psn = ep->tx.psn;
-}
-
 void uct_srd_ep_process_rx(uct_srd_iface_t *iface,
                            uct_srd_neth_t *neth, unsigned byte_len,
-                           uct_srd_recv_skb_t *skb);
+                           uct_srd_recv_desc_t *desc);
 
+void uct_srd_ep_send_completion(uct_srd_send_op_t *send_op);
+
+ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
+                                 const void *buffer, unsigned length);
+
+ucs_status_t uct_srd_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                     const uct_iov_t *iov, size_t iovcnt);
+
+ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                            uct_pack_callback_t pack_cb, void *arg,
+                            unsigned flags);
+
+ucs_status_t
+uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
+                    unsigned header_length, const uct_iov_t *iov,
+                    size_t iovcnt, unsigned flags, uct_completion_t *comp);
+
+#ifdef HAVE_DECL_EFA_DV_RDMA_READ
+ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
+                                  size_t iovcnt, uint64_t remote_addr,
+                                  uct_rkey_t rkey, uct_completion_t *comp);
+
+ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
+                                  uct_unpack_callback_t unpack_cb,
+                                  void *arg, size_t length,
+                                  uint64_t remote_addr, uct_rkey_t rkey,
+                                  uct_completion_t *comp);
+#endif
 
 static UCS_F_ALWAYS_INLINE void
 uct_srd_ep_ctl_op_del(uct_srd_ep_t *ep, uint32_t ops)
