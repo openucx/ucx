@@ -393,8 +393,6 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
     ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
-    ucp_ep_h tmp_ep            = wireup_ep->tmp_ep;
-    ucp_lane_index_t lane;
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         return uct_ep_check(wireup_ep->super.uct_ep, flags, comp);
@@ -403,24 +401,6 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
     if (wireup_ep->aux_ep != NULL) {
         return ucp_wireup_ep_do_check(ucp_ep, wireup_ep->aux_ep,
                                       wireup_ep->aux_rsc_index,
-                                      flags, comp);
-    }
-
-    if ((tmp_ep != NULL) && (ucp_ep_config(tmp_ep)->key.ep_check_map != 0)) {
-        lane = ucs_ffs64_safe(wireup_ep->tmp_ep_check_map);
-        if (lane == 64) {
-            /* re-arm TMP EP check map */
-            wireup_ep->tmp_ep_check_map =
-                    ucp_ep_config(tmp_ep)->key.ep_check_map;
-
-            lane = ucs_ffs64_safe(wireup_ep->tmp_ep_check_map);
-            ucs_assert(lane != 64);
-        }
-
-        wireup_ep->tmp_ep_check_map &= ~UCS_BIT(lane);
-        ucs_assert(ucp_ep_remote_id(tmp_ep) == ucp_ep_remote_id(ucp_ep));
-        return ucp_wireup_ep_do_check(tmp_ep, tmp_ep->uct_eps[lane],
-                                      ucp_ep_get_rsc_index(tmp_ep, lane),
                                       flags, comp);
     }
 
@@ -463,13 +443,11 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
 
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
-    self->aux_ep           = NULL;
-    self->tmp_ep           = NULL;
-    self->tmp_ep_check_map = 0;
-    self->aux_rsc_index    = UCP_NULL_RESOURCE;
-    self->pending_count    = 0;
-    self->flags            = 0;
-    self->progress_id      = UCS_CALLBACKQ_ID_NULL;
+    self->aux_ep        = NULL;
+    self->aux_rsc_index = UCP_NULL_RESOURCE;
+    self->pending_count = 0;
+    self->flags         = 0;
+    self->progress_id   = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->pending_q);
     UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
 
@@ -510,17 +488,6 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
                                      &tmp_pending_queue);
         self->aux_ep = NULL;
         ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
-    }
-
-    if (self->tmp_ep != NULL) {
-        ucs_assert(!(self->tmp_ep->flags & UCP_EP_FLAG_USED));
-        /* discard all TMP EP lanes before destroying TMP EP to make sure that
-         * all lanes are destroyed gracefully (i.e. purged and flushed prior) -
-         * it is required to prevent possible events after a lane was destroyed
-         * (e.g. errors due to broken link to a peer detected by KEEPALIVE) */
-        ucp_ep_discard_lanes(self->tmp_ep, UCS_ERR_CANCELED);
-        ucp_ep_disconnected(self->tmp_ep, 1);
-        self->tmp_ep = NULL;
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -697,11 +664,6 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep)
     if ((ucp_wireup_aux_ep_is_owner(wireup_ep, owned_ep)) ||
         (wireup_ep->super.uct_ep == owned_ep)) {
         return 1;
-    }
-
-    /* Check if owned_ep belongs to tmp_ep */
-    if (wireup_ep->tmp_ep != NULL) {
-        return ucp_ep_lookup_lane(wireup_ep->tmp_ep, owned_ep) != UCP_NULL_LANE;
     }
 
     return 0;

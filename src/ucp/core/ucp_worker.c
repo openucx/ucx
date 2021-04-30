@@ -2391,9 +2391,9 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
     uct_ep_h uct_ep;
 
     /* Destroying UCP EP in ucp_ep_disconnected() could start UCT EP discarding
-     * operations (e.g. for TMP EP in CM lane). Do cleanup of discarding
-     * functionality after trying to destroy UCP EPs in order to destroy all
-     * remaining UCP EPs here */
+     * operations. Do cleanup of discarding functionality after trying to
+     * destroy UCP EPs in order to destroy all remaining UCP EPs here (they are
+     * destroyed during discarding operation completion for all UCT EPs) */
 
     kh_foreach(&worker->discard_uct_ep_hash, uct_ep, req, {
         ucs_assert(uct_ep == req->send.discard_uct_ep.uct_ep);

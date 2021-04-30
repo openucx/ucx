@@ -33,10 +33,6 @@ struct ucp_wireup_ep {
     ucp_proxy_ep_t            super;         /**< Derive from ucp_proxy_ep_t */
     ucs_queue_head_t          pending_q;     /**< Queue of pending operations */
     uct_ep_h                  aux_ep;        /**< Used to wireup the "real" endpoint */
-    ucp_ep_h                  tmp_ep;        /**< Used by the client for local tls setup */
-    ucp_lane_index_t          tmp_ep_check_map; /**< Bitmap of lanes to do
-                                                     ep_check keepalive
-                                                     operations */
     struct sockaddr_storage   cm_remote_sockaddr;  /**< sockaddr of the remote peer -
                                                         used only on the client side
                                                         in a client-server flow */

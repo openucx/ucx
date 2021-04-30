@@ -514,7 +514,7 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     key.am_lane             = 0;
     if (ucp_ep_init_flags_has_cm(ep_init_flags)) {
         key.cm_lane         = 0;
-        /* Send keepalive on wireup_ep (which will send on aux_ep/tmp_ep) */
+        /* Send keepalive on wireup_ep (which will send on aux_ep) */
         if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
             key.ep_check_map |= UCS_BIT(key.cm_lane);
         }
@@ -2681,7 +2681,7 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
         if (status == UCS_ERR_NO_RESOURCE) {
             continue;
         } else if (status != UCS_OK) {
-            ucs_warn("unexpected return status from doing keepalive(ep=%p, "
+            ucs_diag("unexpected return status from doing keepalive(ep=%p, "
                      "lane[%d]=%p): %s",
                      ep, lane, ep->uct_eps[lane],
                      ucs_status_string(status));
