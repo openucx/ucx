@@ -198,7 +198,7 @@ ucs_fp8_unpack(ucs_fp8_t value, uint64_t min, uint64_t max)
             double value) \
     { \
         /* 2 is subtracted because of special values for 0 and NaN */ \
-        ucs_assert(ucs_ilog2(_max / _min) < \
+        ucs_assert(ucs_ilog2((_max) / (_min)) < \
                    UCS_BIT(_UCS_FP8_EXPONENT_BITS) - 2); \
         return ucs_fp8_pack(value, _min, _max); \
     } \
