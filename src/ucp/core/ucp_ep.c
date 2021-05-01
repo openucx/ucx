@@ -1904,7 +1904,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->rndv.put_zcopy.min          = 1;
     config->rndv.put_zcopy.max          = SIZE_MAX;
     config->rndv.rkey_size              = ucp_rkey_packed_size(context,
-                                                               config->key.rma_bw_md_map);
+                                                               config->key.rma_bw_md_map,
+                                                               UCS_SYS_DEVICE_ID_UNKNOWN, 0);
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {
         config->rndv.get_zcopy.lanes[lane] =
                 config->rndv.put_zcopy.lanes[lane] = UCP_NULL_LANE;

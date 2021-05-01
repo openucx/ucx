@@ -17,16 +17,27 @@ extern "C" {
 
 class test_ucp_mmap : public ucp_test {
 public:
+    enum {
+        VARIANT_DEFAULT,
+        VARIANT_MAP_NONBLOCK,
+        VARIANT_PROTO_ENABLE
+    };
+
     static void
     get_test_variants(std::vector<ucp_test_variant>& variants)
     {
-        add_variant_with_value(variants, UCP_FEATURE_RMA, 0, "");
-        add_variant_with_value(variants, UCP_FEATURE_RMA, UCP_MEM_MAP_NONBLOCK,
+        add_variant_with_value(variants, UCP_FEATURE_RMA, VARIANT_DEFAULT, "");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, VARIANT_MAP_NONBLOCK,
                                "map_nb");
+        add_variant_with_value(variants, UCP_FEATURE_RMA, VARIANT_PROTO_ENABLE,
+                               "proto");
     }
 
     virtual void init() {
         ucs::skip_on_address_sanitizer();
+        if (get_variant_value() == VARIANT_PROTO_ENABLE) {
+            modify_config("PROTO_ENABLE", "y");
+        }
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
         if (!is_loopback()) {
@@ -35,7 +46,9 @@ public:
     }
 
     unsigned mem_map_flags() const {
-        return get_variant_value();
+        return (get_variant_value() == VARIANT_MAP_NONBLOCK) ?
+                       UCP_MEM_MAP_NONBLOCK :
+                       0;
     }
 
     bool is_tl_rdma() {
@@ -61,6 +74,11 @@ protected:
     void test_length0(unsigned flags);
     void test_rkey_management(ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
+    void test_rkey_proto(ucp_mem_h memh);
+
+private:
+    void compare_distance(const ucs_sys_dev_distance_t &dist1,
+                          const ucs_sys_dev_distance_t &dist2);
 };
 
 bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
@@ -151,7 +169,9 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     }
     ASSERT_UCS_OK(status);
 
-    EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map), rkey_size);
+    EXPECT_EQ(ucp_rkey_packed_size(sender().ucph(), memh->md_map,
+                                   UCS_SYS_DEVICE_ID_UNKNOWN, 0),
+              rkey_size);
 
     /* Unpack remote key buffer */
     ucp_rkey_h rkey;
@@ -214,6 +234,70 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     ucp_rkey_buffer_release(rkey_buffer);
 }
 
+void test_ucp_mmap::compare_distance(const ucs_sys_dev_distance_t &dist1,
+                                     const ucs_sys_dev_distance_t &dist2)
+{
+    EXPECT_NEAR(dist1.bandwidth, dist2.bandwidth, 600e6); /* 600 MBs accuracy */
+    EXPECT_NEAR(dist1.latency, dist2.latency, 20e-9); /* 20 nsec accuracy */
+}
+
+void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
+{
+    ucs_status_t status;
+
+    /* Detect system device of the allocated memory */
+    ucs_memory_info_t mem_info;
+    ucp_memory_detect(sender().ucph(), memh->address, memh->length, &mem_info);
+    EXPECT_EQ(memh->mem_type, mem_info.type);
+
+    /* Collect distances from all devices in the system */
+    uint64_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
+    std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
+    for (unsigned i = 0; i < sys_distance.size(); ++i) {
+        status = ucs_topo_get_distance(mem_info.sys_dev, i, &sys_distance[i]);
+        ASSERT_UCS_OK(status);
+    }
+
+    /* Allocate buffer for packed rkey */
+    size_t rkey_size = ucp_rkey_packed_size(sender().ucph(), memh->md_map,
+                                            mem_info.sys_dev, sys_dev_map);
+    std::string rkey_buffer(rkey_size, '0');
+
+    /* Pack the rkey and validate packed size */
+    ssize_t packed_size = ucp_rkey_pack_uct(sender().ucph(), memh->md_map,
+                                            memh->uct, &mem_info, sys_dev_map,
+                                            &sys_distance[0], &rkey_buffer[0]);
+    ASSERT_EQ((ssize_t)rkey_size, packed_size);
+
+    /* Unpack remote key buffer */
+    ucp_rkey_h rkey;
+    status = ucp_ep_rkey_unpack_internal(receiver().ep(), &rkey_buffer[0],
+                                         rkey_size, &rkey);
+    ASSERT_UCS_OK(status);
+
+    /* Check rkey configuration */
+    if (receiver().ucph()->config.ext.proto_enable) {
+        ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
+                                                         rkey);
+        ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());
+
+        EXPECT_EQ(receiver().ep()->cfg_index, rkey_config->key.ep_cfg_index);
+        EXPECT_EQ(mem_info.sys_dev, rkey_config->key.sys_dev);
+        EXPECT_EQ(mem_info.type, rkey_config->key.mem_type);
+
+        /* Compare original system distance and unpacked rkey system distance */
+        for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes;
+             ++lane) {
+            ucs_sys_device_t sys_dev = ep_config->key.lanes[lane].dst_sys_dev;
+            compare_distance(rkey_config->lanes_distance[lane],
+                             (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                                     ucs_topo_default_distance :
+                                     sys_distance[sys_dev]);
+        }
+    }
+
+    ucp_rkey_destroy(rkey);
+}
 
 UCS_TEST_P(test_ucp_mmap, alloc) {
     ucs_status_t status;
@@ -237,6 +321,7 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
 
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
+        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -268,6 +353,7 @@ UCS_TEST_P(test_ucp_mmap, reg) {
 
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma());
+        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -312,6 +398,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
                              is_tl_rdma() &&
                                      !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
                                      !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type));
+        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -350,6 +437,7 @@ void test_ucp_mmap::test_length0(unsigned flags)
 
     for (i = 0; i < buf_num; i++) {
         test_rkey_management(memh[i], true, expect_rma_offload);
+        test_rkey_proto(memh[i]);
         status = ucp_mem_unmap(sender().ucph(), memh[i]);
         ASSERT_UCS_OK(status);
     }
@@ -402,6 +490,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
 
     is_dummy = (size == 0);
     test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
+    test_rkey_proto(memh);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -445,6 +534,7 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
     test_rkey_management(memh, is_dummy, is_tl_rdma());
+    test_rkey_proto(memh);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -477,6 +567,7 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma());
+        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);

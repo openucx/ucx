@@ -16,16 +16,16 @@
 
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
-                          const ucp_rndv_rts_hdr_t *rts_hdr)
+                          const ucp_rndv_rts_hdr_t *rts_hdr, size_t hdr_length)
 {
-    ucs_assert(ucp_rndv_rts_is_tag(rts_hdr));
-
     /* rreq is the receive request on the receiver's side */
+    ucs_assert(ucp_rndv_rts_is_tag(rts_hdr));
     rreq->recv.tag.info.sender_tag = ucp_tag_hdr_from_rts(rts_hdr)->tag;
     rreq->recv.tag.info.length     = rts_hdr->size;
 
     if (worker->context->config.ext.proto_enable) {
-        ucp_proto_rndv_receive(worker, rreq, rts_hdr, sizeof(*rts_hdr));
+        ucp_proto_rndv_receive(worker, rreq, rts_hdr, rts_hdr + 1,
+                               hdr_length - sizeof(*rts_hdr));
     } else {
         ucp_rndv_receive(worker, rreq, rts_hdr, rts_hdr + 1);
     }
@@ -46,7 +46,7 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
         /* Cancel req in transport if it was offloaded, because it arrived
            as unexpected */
         ucp_tag_offload_try_cancel(worker, rreq, UCP_TAG_OFFLOAD_CANCEL_FORCE);
-        ucp_tag_rndv_matched(worker, rreq, rts_hdr);
+        ucp_tag_rndv_matched(worker, rreq, rts_hdr, length);
 
         UCP_WORKER_STAT_RNDV(worker, EXP, 1);
         return UCS_OK;
@@ -125,7 +125,8 @@ static size_t ucp_tag_rndv_proto_rts_pack(void *dest, void *arg)
     return ucp_proto_rndv_rts_pack(req, tag_rts, sizeof(*tag_rts));
 }
 
-static ucs_status_t ucp_tag_rndv_rts_progress(uct_pending_req_t *self)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
+                 uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_rndv_ctrl_priv_t *rpriv;
@@ -135,16 +136,16 @@ static ucs_status_t ucp_tag_rndv_rts_progress(uct_pending_req_t *self)
     rpriv        = req->send.proto_config->priv;
     max_rts_size = sizeof(ucp_rndv_rts_hdr_t) + rpriv->packed_rkey_size;
 
-    status = ucp_proto_rndv_rts_request_init(req);
+    status = UCS_PROFILE_CALL(ucp_proto_rndv_rts_request_init, req);
     if (status != UCS_OK) {
         ucp_proto_request_abort(req, status);
         return UCS_OK;
     }
 
-    return ucp_proto_am_bcopy_single_progress(req, UCP_AM_ID_RNDV_RTS,
-                                              rpriv->lane,
-                                              ucp_tag_rndv_proto_rts_pack, req,
-                                              max_rts_size, NULL);
+    return UCS_PROFILE_CALL(ucp_proto_am_bcopy_single_progress, req,
+                            UCP_AM_ID_RNDV_RTS, rpriv->lane,
+                            ucp_tag_rndv_proto_rts_pack, req, max_rts_size,
+                            NULL);
 }
 
 static ucp_proto_t ucp_tag_rndv_proto = {

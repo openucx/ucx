@@ -16,9 +16,17 @@
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
 #include <ucs/type/serialize.h>
+#include <ucs/type/float8.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo.h>
 #include <inttypes.h>
 
+
+typedef struct {
+    uint8_t   sys_dev;
+    ucs_fp8_t latency;
+    ucs_fp8_t bandwidth;
+} UCS_S_PACKED ucp_rkey_packed_distance_t;
 
 static struct {
     ucp_md_map_t md_map;
@@ -26,7 +34,8 @@ static struct {
 } UCS_S_PACKED ucp_mem_dummy_buffer = {0, UCS_MEMORY_TYPE_HOST};
 
 
-size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
+size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
+                            ucs_sys_device_t sys_dev, uint64_t sys_dev_map)
 {
     size_t size, tl_rkey_size;
     unsigned md_index;
@@ -38,6 +47,14 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map)
         tl_rkey_size = context->tl_mds[md_index].attr.rkey_packed_size;
         ucs_assert_always(tl_rkey_size <= UINT8_MAX);
         size += sizeof(uint8_t) + tl_rkey_size;
+    }
+
+    if (sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        /* System device id */
+        size += sizeof(uint8_t);
+
+        /* Distance of each device */
+        size += ucs_popcount(sys_dev_map) * sizeof(ucp_rkey_packed_distance_t);
     }
 
     return size;
@@ -63,15 +80,48 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
     }
 }
 
+/* Pack bandwidth as bytes/second, range: 512 MB/s to 4 TB/s */
+UCS_FP8_DECLARE_TYPE(RKEY_BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+
+/* Pack latency as nanoseconds, range: 16 nsec to 131 usec */
+UCS_FP8_DECLARE_TYPE(RKEY_LATENCY, UCS_BIT(4), UCS_BIT(17))
+
+static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
+                                   const ucs_sys_dev_distance_t *distance,
+                                   ucp_rkey_packed_distance_t *packed_distance)
+{
+    packed_distance->sys_dev   = sys_dev;
+    packed_distance->bandwidth = UCS_FP8_PACK(RKEY_BANDWIDTH,
+                                              distance->bandwidth);
+    packed_distance->latency   = UCS_FP8_PACK(RKEY_LATENCY,
+                                              distance->latency *
+                                                      UCS_NSEC_PER_SEC);
+}
+
+static void
+ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
+                         ucs_sys_device_t *sys_dev_p,
+                         ucs_sys_dev_distance_t *distance)
+{
+    *sys_dev_p          = packed_distance->sys_dev;
+    distance->bandwidth = UCS_FP8_UNPACK(RKEY_BANDWIDTH,
+                                         packed_distance->bandwidth);
+    distance->latency = UCS_FP8_UNPACK(RKEY_LATENCY, packed_distance->latency) /
+                        UCS_NSEC_PER_SEC;
+}
+
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
-                 (context, md_map, memh, mem_info, buffer),
+                 (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
+                  buffer),
                  ucp_context_h context, ucp_md_map_t md_map,
                  const uct_mem_h *memh, const ucs_memory_info_t *mem_info,
-                 void *buffer)
+                 uint64_t sys_dev_map,
+                 const ucs_sys_dev_distance_t *sys_distance, void *buffer)
 {
     void *p = buffer;
     unsigned md_index, uct_memh_index;
     char UCS_V_UNUSED buf[128];
+    ucs_sys_device_t sys_dev;
     size_t tl_rkey_size;
     ucs_status_t status;
     void *tl_rkey_buf;
@@ -80,8 +130,8 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
     /* Check that md_map is valid */
     ucs_assert(ucs_test_all_flags(UCS_MASK(context->num_mds), md_map));
 
-    ucs_trace("packing rkey type %s md_map 0x%" PRIx64,
-              ucs_memory_type_names[mem_info->type], md_map);
+    ucs_trace("packing rkey type %s md_map 0x%" PRIx64 "dev_map 0x%" PRIx64,
+              ucs_memory_type_names[mem_info->type], md_map, sys_dev_map);
     ucs_log_indent(1);
 
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_LAST <= 255);
@@ -108,6 +158,21 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
         ++uct_memh_index;
     }
 
+    if (ucs_likely(mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+        goto out_packed_size;
+    }
+
+    /* Pack system device id */
+    *ucs_serialize_next(&p, uint8_t) = mem_info->sys_dev;
+
+    /* Pack distance from sys_dev to each device in distance_dev_map */
+    ucs_for_each_bit(sys_dev, sys_dev_map) {
+        ucp_rkey_pack_distance(sys_dev, sys_distance++,
+                               ucs_serialize_next(&p,
+                                                  ucp_rkey_packed_distance_t));
+    }
+
+out_packed_size:
     result = UCS_PTR_BYTE_DIFF(buffer, p);
 out:
     ucs_log_indent(-1);
@@ -137,7 +202,8 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
         goto out;
     }
 
-    size        = ucp_rkey_packed_size(context, memh->md_map);
+    size        = ucp_rkey_packed_size(context, memh->md_map,
+                                       UCS_SYS_DEVICE_ID_UNKNOWN, 0);
     rkey_buffer = ucs_malloc(size, "ucp_rkey_buffer");
     if (rkey_buffer == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -148,7 +214,7 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 
     packed_size = ucp_rkey_pack_uct(context, memh->md_map, memh->uct, &mem_info,
-                                    rkey_buffer);
+                                    0, NULL, rkey_buffer);
     if (packed_size < 0) {
         status = (ucs_status_t)packed_size;
         goto err_destroy;
@@ -177,11 +243,49 @@ void ucp_rkey_buffer_release(void *rkey_buffer)
     ucs_free(rkey_buffer);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve, (rkey, ep),
-                 ucp_rkey_h rkey, ucp_ep_h ep)
+static void UCS_F_NOINLINE
+ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
+                               ucs_sys_dev_distance_t *lanes_distance,
+                               const void *buffer, const void *buffer_end)
+{
+    const void *p = buffer;
+    ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_MAX];
+    ucs_sys_device_t sys_dev;
+    ucp_lane_index_t lane;
+    uint64_t sys_dev_map;
+    char buf[128];
+
+    /* Unpack lane distances and update distance_by_dev lookup */
+    sys_dev_map = 0;
+    while (p < buffer_end) {
+        ucp_rkey_unpack_distance(
+                ucs_serialize_next(&p, const ucp_rkey_packed_distance_t),
+                &sys_dev, &distance);
+        distance_by_dev[sys_dev] = distance;
+        sys_dev_map             |= UCS_BIT(sys_dev);
+    }
+
+    /* Initialize lane distances according to distance_by_dev */
+    for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
+        sys_dev              = ep_config_key->lanes[lane].dst_sys_dev;
+        lanes_distance[lane] = (sys_dev_map & UCS_BIT(sys_dev)) ?
+                                       distance_by_dev[sys_dev] :
+                                       ucs_topo_default_distance;
+        ucs_trace("lane[%d] dev %d distance %s", lane, sys_dev,
+                  ucs_topo_distance_str(&lanes_distance[lane], buf,
+                                        sizeof(buf)));
+    }
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
+                 (rkey, ep, buffer, buffer_end), ucp_rkey_h rkey, ucp_ep_h ep,
+                 const void *buffer, const void *buffer_end)
 {
     ucp_worker_h worker = ep->worker;
+    const void *p       = buffer;
+    ucs_sys_dev_distance_t *lanes_distance;
     ucp_rkey_config_key_t rkey_config_key;
+    khiter_t khiter;
 
     /* Avoid calling ucp_ep_resolve_remote_id() from rkey_unpack, and let
      * the APIs which are not yet using new protocols resolve the remote key
@@ -194,13 +298,30 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve, (rkey, ep),
     rkey_config_key.md_map       = rkey->md_map;
     rkey_config_key.mem_type     = rkey->mem_type;
 
-    return ucp_worker_rkey_config_get(worker, &rkey_config_key,
+    if (buffer < buffer_end) {
+        rkey_config_key.sys_dev = *ucs_serialize_next(&p, const uint8_t);
+    } else {
+        rkey_config_key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    }
+
+    khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
+                    rkey_config_key);
+    if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
+        /* Found existing configuration in hash */
+        rkey->cfg_index = kh_val(&worker->rkey_config_hash, khiter);
+        return UCS_OK;
+    }
+
+    lanes_distance = ucs_alloca(sizeof(*lanes_distance) * UCP_MAX_LANES);
+    ucp_rkey_unpack_lanes_distance(&ucp_ep_config(ep)->key, lanes_distance, p,
+                                   buffer_end);
+    return ucp_worker_add_rkey_config(worker, &rkey_config_key, lanes_distance,
                                       &rkey->cfg_index);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
-                 (ep, buffer, rkey_p), ucp_ep_h ep, const void *buffer,
-                 ucp_rkey_h *rkey_p)
+                 (ep, buffer, length, rkey_p), ucp_ep_h ep, const void *buffer,
+                 size_t length, ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -216,7 +337,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     ucp_rkey_h rkey;
     uint8_t flags;
 
-    ucs_trace("ep %p: unpacking rkey buffer %p", ep, buffer);
+    ucs_trace("ep %p: unpacking rkey buffer %p length %zu", ep, buffer, length);
     ucs_log_indent(1);
 
     /* MD map for the unpacked rkey */
@@ -291,7 +412,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     }
 
     if (worker->context->config.ext.proto_enable) {
-        status = ucp_rkey_proto_resolve(rkey, ep);
+        status = ucp_rkey_proto_resolve(rkey, ep, p,
+                                        UCS_PTR_BYTE_OFFSET(buffer, length));
         if (status != UCS_OK) {
             goto err_destroy;
         }
@@ -318,20 +440,26 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
     ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-    status = ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_p);
+    status = ucp_ep_rkey_unpack_internal(ep, rkey_buffer, 0, rkey_p);
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 
     return status;
 }
 
-void ucp_rkey_dump_packed(const void *buffer, ucs_string_buffer_t *strb)
+void ucp_rkey_dump_packed(const void *buffer, size_t length,
+                          ucs_string_buffer_t *strb)
 {
-    const void *p = buffer;
+    const void *p          = buffer;
+    const void *buffer_end = UCS_PTR_BYTE_OFFSET(buffer, length);
+    const ucp_rkey_packed_distance_t *packed_distance;
+    ucs_sys_dev_distance_t distance;
     ucs_memory_type_t mem_type;
+    ucs_sys_device_t sys_dev;
     const void *tl_tkey;
     ucp_md_map_t md_map;
     unsigned md_index;
     uint8_t tl_rkey_size;
+    char buf[128];
 
     md_map   = *ucs_serialize_next(&p, const ucp_md_map_t);
     mem_type = *ucs_serialize_next(&p, const uint8_t);
@@ -343,6 +471,21 @@ void ucp_rkey_dump_packed(const void *buffer, ucs_string_buffer_t *strb)
         tl_tkey      = ucs_serialize_next_raw(&p, const void, tl_rkey_size);
         ucs_string_buffer_appendf(strb, ",%u:", md_index);
         ucs_string_buffer_append_hex(strb, tl_tkey, tl_rkey_size, SIZE_MAX);
+    }
+
+    if (p < buffer_end) {
+        sys_dev = *ucs_serialize_next(&p, const uint8_t);
+        ucs_string_buffer_appendf(strb, ",sys:%u", sys_dev);
+    }
+
+    while (p < buffer_end) {
+        packed_distance    = ucs_serialize_next(&p,
+                                                const ucp_rkey_packed_distance_t);
+        distance.bandwidth = packed_distance->bandwidth;
+        distance.latency   = packed_distance->latency;
+        ucs_string_buffer_appendf(strb, ",dev:%u:%s", packed_distance->sys_dev,
+                                  ucs_topo_distance_str(&distance, buf,
+                                                        sizeof(buf)));
     }
 
     ucs_string_buffer_appendf(strb, "}");

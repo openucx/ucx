@@ -118,7 +118,8 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
         packed_rkey_size      = ucp_rkey_pack_uct(
                 worker->context, sreq->send.state.dt.dt.contig.md_map,
-                sreq->send.state.dt.dt.contig.memh, &mem_info, rkey_buf);
+                sreq->send.state.dt.dt.contig.memh, &mem_info, 0, NULL,
+                rkey_buf);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -159,7 +160,8 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         packed_rkey_size = ucp_rkey_pack_uct(ep->worker->context,
                                              rreq->recv.state.dt.contig.md_map,
                                              rreq->recv.state.dt.contig.memh,
-                                             &mem_info, rndv_rtr_hdr + 1);
+                                             &mem_info, 0, NULL,
+                                             rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }
@@ -2007,12 +2009,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
     return UCS_OK;
 }
 
-static void ucp_rndv_dump_rkey(const void *packed_rkey, char *buffer, size_t max)
+static void ucp_rndv_dump_rkey(const void *packed_rkey, size_t rkey_size,
+                               char *buffer, size_t max)
 {
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
 
     ucs_string_buffer_appendf(&strb, " rkey ");
-    ucp_rkey_dump_packed(packed_rkey, &strb);
+    ucp_rkey_dump_packed(packed_rkey, rkey_size, &strb);
 }
 
 static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
@@ -2024,13 +2027,11 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
     const ucp_rndv_data_hdr_t *rndv_data   = data;
     const ucp_reply_hdr_t *rep_hdr         = data;
-    UCS_STRING_BUFFER_ONSTACK(rts_info, 64);
+    UCS_STRING_BUFFER_ONSTACK(rts_info, 128);
     const void *rkey_buf;
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
-        ucs_assert(rndv_rts_hdr->sreq.ep_id != UCS_PTR_MAP_KEY_INVALID);
-
         if (ucp_rndv_rts_is_am(rndv_rts_hdr)) {
             ucs_string_buffer_appendf(&rts_info, "AM am_id %u",
                                       ucp_am_hdr_from_rts(rndv_rts_hdr)->am_id);
@@ -2041,7 +2042,6 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         }
 
         rkey_buf = rndv_rts_hdr + 1;
-
         snprintf(buffer, max, "RNDV_RTS %s ep_id 0x%"PRIx64" sreq_id"
                  " 0x%"PRIx64" address 0x%"PRIx64" size %zu",
                  ucs_string_buffer_cstr(&rts_info), rndv_rts_hdr->sreq.ep_id,
@@ -2049,8 +2049,9 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                  rndv_rts_hdr->size);
 
         if (rndv_rts_hdr->address != 0) {
-            ucp_rndv_dump_rkey(rkey_buf, buffer + strlen(buffer),
-                               max - strlen(buffer));
+            ucp_rndv_dump_rkey(rkey_buf,
+                               length - UCS_PTR_BYTE_DIFF(data, rkey_buf),
+                               buffer + strlen(buffer), max - strlen(buffer));
         }
         break;
     case UCP_AM_ID_RNDV_ATS:
@@ -2065,8 +2066,8 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                  rndv_rtr_hdr->address, rndv_rtr_hdr->size,
                  rndv_rtr_hdr->offset);
         if (rndv_rtr_hdr->address != 0) {
-            ucp_rndv_dump_rkey(rndv_rtr_hdr + 1, buffer + strlen(buffer),
-                               max - strlen(buffer));
+            ucp_rndv_dump_rkey(rndv_rtr_hdr + 1, length - sizeof(*rndv_rtr_hdr),
+                               buffer + strlen(buffer), max - strlen(buffer));
         }
         break;
     case UCP_AM_ID_RNDV_DATA:

@@ -157,7 +157,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
 
     if (UCP_MEM_IS_HOST(req->recv.mem_type) ||
         (flags & UCT_TAG_RECV_CB_INLINE_DATA)) {
-        ucp_tag_rndv_matched(req->recv.worker, req, header);
+        ucp_tag_rndv_matched(req->recv.worker, req, header, header_length);
     } else {
         /* SW rendezvous request is stored in the user buffer (temporarily)
            when matched. If user buffer allocated on GPU memory, need to "pack"
@@ -165,7 +165,8 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_rndv_cb,
         header_host_copy = ucs_alloca(header_length);
         ucp_mem_type_pack(req->recv.worker, header_host_copy, header,
                           header_length, req->recv.mem_type);
-        ucp_tag_rndv_matched(req->recv.worker, req, header_host_copy);
+        ucp_tag_rndv_matched(req->recv.worker, req, header_host_copy,
+                             header_length);
     }
 
 out:
@@ -184,7 +185,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
     const ucp_tag_offload_unexp_rndv_hdr_t *rndv_hdr;
     ucp_rndv_rts_hdr_t *dummy_rts;
     ucp_tag_hdr_t *tag;
-    ucp_md_index_t md_index;
+    ucp_md_map_t md_map;
     size_t dummy_rts_size;
     size_t rkey_size;
 
@@ -194,8 +195,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         rndv_hdr = hdr;
 
         /* Calculate size for dummy (on-stack) RTS packet */
-        md_index       = rndv_hdr->md_index;
-        rkey_size      = ucp_rkey_packed_size(worker->context, UCS_BIT(md_index));
+        md_map         = UCS_BIT(rndv_hdr->md_index);
+        rkey_size      = ucp_rkey_packed_size(worker->context, md_map,
+                                              UCS_SYS_DEVICE_ID_UNKNOWN, 0);
         dummy_rts_size = sizeof(*dummy_rts) + rkey_size;
 
         /* Build the dummy RTS packet, copy meta-data from unexpected rndv header
@@ -210,8 +212,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_rndv,
         tag                    = ucp_tag_hdr_from_rts(dummy_rts);
         tag->tag               = stag;
 
-        ucp_rkey_packed_copy(worker->context, UCS_BIT(md_index),
-                             UCS_MEMORY_TYPE_HOST, dummy_rts + 1, uct_rkeys);
+        ucp_rkey_packed_copy(worker->context, md_map, UCS_MEMORY_TYPE_HOST,
+                             dummy_rts + 1, uct_rkeys);
 
         UCP_WORKER_STAT_TAG_OFFLOAD(worker, RX_UNEXP_RNDV);
         ucp_tag_rndv_process_rts(worker, dummy_rts, dummy_rts_size, 0);

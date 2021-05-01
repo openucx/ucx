@@ -131,7 +131,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     /* Check rendezvous case */
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV)) {
-        ucp_tag_rndv_matched(worker, req, ucp_tag_rndv_rts_from_rdesc(rdesc));
+        ucp_tag_rndv_matched(worker, req, ucp_tag_rndv_rts_from_rdesc(rdesc),
+                             rdesc->length);
         UCP_WORKER_STAT_RNDV(worker, UNEXP, 1);
         ucp_recv_desc_release(rdesc);
         return req + 1;

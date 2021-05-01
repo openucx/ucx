@@ -28,6 +28,7 @@ KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
         ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+        const ucs_sys_dev_distance_t *lanes_distance,
         ucp_worker_cfg_index_t *cfg_index_p)
 {
     khiter_t khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
@@ -37,7 +38,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
         return UCS_OK;
     }
 
-    return ucp_worker_add_rkey_config(worker, key, cfg_index_p);
+    return ucp_worker_add_rkey_config(worker, key, lanes_distance, cfg_index_p);
 }
 
 /**

@@ -1925,13 +1925,18 @@ out:
 }
 
 ucs_status_t
-ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+ucp_worker_add_rkey_config(ucp_worker_h worker,
+                           const ucp_rkey_config_key_t *key,
+                           const ucs_sys_dev_distance_t *lanes_distance,
                            ucp_worker_cfg_index_t *cfg_index_p)
 {
+    const ucp_ep_config_t *ep_config = &worker->ep_config[key->ep_cfg_index];
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_rkey_config_t *rkey_config;
+    ucp_lane_index_t lane;
     ucs_status_t status;
     khiter_t khiter;
+    char buf[128];
     int khret;
 
     ucs_assert(worker->context->config.ext.proto_enable);
@@ -1943,17 +1948,34 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
         goto err;
     }
 
-    /* initialize rkey configuration */
+    ucs_assert((key->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+               (lanes_distance != NULL));
+
+    /* Initialize rkey configuration */
     rkey_cfg_index   = worker->rkey_config_count;
     rkey_config      = &worker->rkey_config[rkey_cfg_index];
     rkey_config->key = *key;
-    status           = ucp_proto_select_init(&rkey_config->proto_select);
+
+    /* Copy remote-memory distance of each lane to rkey config */
+    for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        if (key->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            rkey_config->lanes_distance[lane] = ucs_topo_default_distance;
+        } else {
+            rkey_config->lanes_distance[lane] = lanes_distance[lane];
+        }
+        ucs_trace("rkey_config[%d] lane [%d] distance %s", rkey_cfg_index, lane,
+                  ucs_topo_distance_str(&rkey_config->lanes_distance[lane], buf,
+                                        sizeof(buf)));
+    }
+
+    /* Initialize protocol selection */
+    status = ucp_proto_select_init(&rkey_config->proto_select);
     if (status != UCS_OK) {
         goto err;
     }
 
+    /* Set threshold for short put */
     if (worker->context->config.features & UCP_FEATURE_RMA) {
-       /* Set threshold for short put */
         ucp_proto_select_short_init(worker, &rkey_config->proto_select,
                                     key->ep_cfg_index, rkey_cfg_index,
                                     UCP_OP_ID_PUT, UCP_OP_ATTR_FLAG_FAST_CMPL,
@@ -1963,6 +1985,7 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
         ucp_proto_select_short_disable(&rkey_config->put_short);
     }
 
+    /* Save key-to-index lookup */
     khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
                     &khret);
     if (khret == UCS_KH_PUT_FAILED) {
@@ -1970,9 +1993,8 @@ ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key
         goto err_proto_cleanup;
     }
 
-    /* we should not get into this function if key already exists */
+    /* We should not get into this function if key already exists */
     ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
-
     kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
 
     ++worker->rkey_config_count;

@@ -29,7 +29,8 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .remote_op_id       = UCP_OP_ID_RNDV_SEND,
         .perf_bias          = 0.0,
         .mem_info.type      = mem_type,
-        .mem_info.sys_dev   = sys_dev
+        .mem_info.sys_dev   = sys_dev,
+        .min_length         = 1
     };
 
     return ucp_proto_rndv_ctrl_init(&params);
@@ -86,6 +87,7 @@ static size_t ucp_proto_rndv_rtr_pack(void *dest, void *arg)
     rtr->address = (uintptr_t)req->send.state.dt_iter.type.contig.buffer;
 
     rpriv = req->send.proto_config->priv;
+    ucs_assert(rtr->size > 0);
     ucs_assert(rpriv->md_map == req->send.state.dt_iter.type.contig.reg.md_map);
     return sizeof(*rtr) + ucp_proto_request_pack_rkey(req, rtr + 1);
 }
