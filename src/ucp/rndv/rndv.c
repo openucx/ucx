@@ -98,6 +98,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                          ucp_rndv_rts_opcode_t opcode)
 {
     ucp_worker_h worker = sreq->send.ep->worker;
+    ucs_memory_info_t mem_info;
     ssize_t packed_rkey_size;
     void *rkey_buf;
 
@@ -110,13 +111,14 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
         ucp_rndv_is_get_zcopy(sreq, worker->context)) {
         /* pack rkey, ask target to do get_zcopy */
+        mem_info.type         = sreq->send.mem_type;
+        mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
         rndv_rts_hdr->address = (uintptr_t)sreq->send.buffer;
         rkey_buf              = UCS_PTR_BYTE_OFFSET(rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
-        packed_rkey_size = ucp_rkey_pack_uct(worker->context,
-                                             sreq->send.state.dt.dt.contig.md_map,
-                                             sreq->send.state.dt.dt.contig.memh,
-                                             sreq->send.mem_type, rkey_buf);
+        packed_rkey_size      = ucp_rkey_pack_uct(
+                worker->context, sreq->send.state.dt.dt.contig.md_map,
+                sreq->send.state.dt.dt.contig.memh, &mem_info, rkey_buf);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -138,6 +140,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = dest;
     ucp_request_t *rreq              = ucp_request_get_super(rndv_req);
     ucp_ep_h ep                      = rndv_req->send.ep;
+    ucs_memory_info_t mem_info;
     ssize_t packed_rkey_size;
 
     /* Request ID of sender side (remote) */
@@ -150,12 +153,13 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         rndv_rtr_hdr->address = (uintptr_t)rreq->recv.buffer;
         rndv_rtr_hdr->size    = rndv_req->send.rndv_rtr.length;
         rndv_rtr_hdr->offset  = rndv_req->send.rndv_rtr.offset;
+        mem_info.type         = rreq->recv.mem_type;
+        mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
         packed_rkey_size = ucp_rkey_pack_uct(ep->worker->context,
                                              rreq->recv.state.dt.contig.md_map,
                                              rreq->recv.state.dt.contig.memh,
-                                             rreq->recv.mem_type,
-                                             rndv_rtr_hdr + 1);
+                                             &mem_info, rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }
@@ -2044,7 +2048,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                  rndv_rts_hdr->sreq.req_id, rndv_rts_hdr->address,
                  rndv_rts_hdr->size);
 
-        if (rndv_rts_hdr->address) {
+        if (rndv_rts_hdr->address != 0) {
             ucp_rndv_dump_rkey(rkey_buf, buffer + strlen(buffer),
                                max - strlen(buffer));
         }

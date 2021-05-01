@@ -10,6 +10,8 @@
 
 #include "proto_common.inl"
 
+#include <ucp/core/ucp_worker.inl>
+
 
 /* Select a new protocol and start progressing it */
 static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
@@ -35,7 +37,7 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
         rkey_config_key = worker->rkey_config[prev_rkey_cfg_index].key;
         rkey_config_key.ep_cfg_index = ep->cfg_index;
 
-        status = ucp_worker_get_rkey_config(worker, &rkey_config_key,
+        status = ucp_worker_rkey_config_get(worker, &rkey_config_key,
                                             &rkey_cfg_index);
         if (status != UCS_OK) {
             ucs_error("failed to switch to new rkey");

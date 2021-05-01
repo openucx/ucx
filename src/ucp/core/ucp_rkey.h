@@ -136,13 +136,17 @@ size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
 
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
-                          ucs_memory_type_t mem_type, void *rkey_buffer,
-                          const void* uct_rkeys[]);
+                          ucs_memory_type_t mem_type, void *buffer,
+                          const void *uct_rkeys[]);
 
 
 ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
-                          const uct_mem_h *memh, ucs_memory_type_t mem_type,
-                          void *rkey_buffer);
+                          const uct_mem_h *memh,
+                          const ucs_memory_info_t *mem_info, void *buffer);
+
+
+ucs_status_t ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer,
+                                         ucp_rkey_h *rkey_p);
 
 
 void ucp_rkey_dump_packed(const void *rkey_buffer, ucs_string_buffer_t *strb);

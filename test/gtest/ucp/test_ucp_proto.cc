@@ -72,11 +72,13 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
 
     /* similar configurations should return same index */
     ucp_worker_cfg_index_t cfg_index1;
-    status = ucp_worker_get_rkey_config(worker(), &rkey_config_key, &cfg_index1);
+    status = ucp_worker_rkey_config_get(worker(), &rkey_config_key,
+                                        &cfg_index1);
     ASSERT_UCS_OK(status);
 
     ucp_worker_cfg_index_t cfg_index2;
-    status = ucp_worker_get_rkey_config(worker(), &rkey_config_key, &cfg_index2);
+    status = ucp_worker_rkey_config_get(worker(), &rkey_config_key,
+                                        &cfg_index2);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(static_cast<int>(cfg_index1), static_cast<int>(cfg_index2));
@@ -87,12 +89,12 @@ UCS_TEST_P(test_ucp_proto, rkey_config) {
 
     /* different configuration should return different index */
     ucp_worker_cfg_index_t cfg_index3;
-    status = ucp_worker_get_rkey_config(worker(), &rkey_config_key, &cfg_index3);
+    status = ucp_worker_rkey_config_get(worker(), &rkey_config_key,
+                                        &cfg_index3);
     ASSERT_UCS_OK(status);
 
     EXPECT_NE(static_cast<int>(cfg_index1), static_cast<int>(cfg_index3));
 }
-
 
 UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
 {
@@ -104,7 +106,7 @@ UCS_TEST_P(test_ucp_proto, worker_print_info_rkey)
 
     /* similar configurations should return same index */
     ucp_worker_cfg_index_t cfg_index;
-    ucs_status_t status = ucp_worker_get_rkey_config(worker(), &rkey_config_key,
+    ucs_status_t status = ucp_worker_rkey_config_get(worker(), &rkey_config_key,
                                                      &cfg_index);
     ASSERT_UCS_OK(status);
 
