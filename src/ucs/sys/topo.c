@@ -65,6 +65,11 @@ void ucs_topo_cleanup()
     ucs_spinlock_destroy(&ucs_topo_ctx.lock);
 }
 
+unsigned ucs_topo_num_devices()
+{
+    return ucs_topo_ctx.sys_dev_to_bus_lookup.count;
+}
+
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
@@ -121,8 +126,8 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
         goto default_distance;
     }
 
-    if ((device1 >= ucs_topo_ctx.sys_dev_to_bus_lookup.count) ||
-        (device2 >= ucs_topo_ctx.sys_dev_to_bus_lookup.count)) {
+    if ((device1 >= ucs_topo_num_devices()) ||
+        (device2 >= ucs_topo_num_devices())) {
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -176,8 +181,8 @@ ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
         return "<unknown>";
     }
 
-    if (sys_dev >= ucs_topo_ctx.sys_dev_to_bus_lookup.count) {
-        return NULL;
+    if (sys_dev >= ucs_topo_num_devices()) {
+        return "<invalid>";
     }
 
     bus_id = &ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[sys_dev];

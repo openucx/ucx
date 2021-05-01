@@ -119,6 +119,14 @@ ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev);
 
 
 /**
+ * Get the number of registered system devices.
+ *
+ * @return Number of system devices.
+ */
+unsigned ucs_topo_num_devices();
+
+
+/**
  * Print a map indicating the topology information between system
  * devices discovered
  */

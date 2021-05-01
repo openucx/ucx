@@ -25,12 +25,16 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
 
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev1);
     ASSERT_UCS_OK(status);
+    EXPECT_LT(dev1, UCS_SYS_DEVICE_ID_MAX);
 
     dummy_bus_id.function = 2;
 
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev2);
     ASSERT_UCS_OK(status);
-    ASSERT_EQ(dev2, ((unsigned)dev1 + 1));
+    EXPECT_EQ((unsigned)dev1 + 1, dev2);
+    EXPECT_LT(dev2, UCS_SYS_DEVICE_ID_MAX);
+
+    EXPECT_GE(ucs_topo_num_devices(), 2);
 }
 
 UCS_TEST_F(test_topo, get_distance) {
