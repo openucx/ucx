@@ -518,28 +518,24 @@ static int uct_tcp_sockcm_ep_send_skip_event(uct_tcp_sockcm_ep_t *cep)
         return cep->state & UCT_TCP_SOCKCM_EP_DATA_SENT;
     } else {
         ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
-        return (cep->state & UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT) ||
-               ((cep->state & UCT_TCP_SOCKCM_EP_DATA_SENT) &&
-                !(cep->state & UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED));
+        /* if data already sent or not packed yet, then skip event */
+        return (cep->state & (UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_SENT |
+                              UCT_TCP_SOCKCM_EP_DATA_SENT)) ||
+               !(cep->state & UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED);
     }
 }
 
 ucs_status_t uct_tcp_sockcm_ep_send(uct_tcp_sockcm_ep_t *cep)
 {
-    ucs_status_t status;
-
-    if (uct_tcp_sockcm_ep_send_skip_event(cep)) {
-        return UCS_OK;
-    }
-
     if (!(cep->state & (UCT_TCP_SOCKCM_EP_RESOLVE_CB_INVOKED |
                         UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED   |
                         UCT_TCP_SOCKCM_EP_ON_SERVER))) {
         ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
-        status = uct_tcp_sockcm_ep_resolve(cep);
-        if (status != UCS_OK) {
-            return status;
-        }
+        return uct_tcp_sockcm_ep_resolve(cep);
+    }
+
+    if (uct_tcp_sockcm_ep_send_skip_event(cep)) {
+        return UCS_OK;
     }
 
     return uct_tcp_sockcm_ep_progress_send(cep);

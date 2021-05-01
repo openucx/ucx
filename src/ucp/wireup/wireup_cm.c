@@ -159,7 +159,8 @@ ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context, ucp_tl_bitmap_t tl_bitmap)
 }
 
 static ucs_status_t
-ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
+ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep,
+                                    const ucp_tl_bitmap_t *tl_bitmap,
                                     ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker        = ucp_ep->worker;
@@ -167,33 +168,19 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
                                  UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
                                  UCP_ADDRESS_PACK_FLAG_IFACE_ADDR;
     ucp_wireup_ep_t *wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
-    ucp_tl_bitmap_t tl_bitmap  = ucp_context_dev_tl_bitmap(worker->context,
-                                                           dev_name);
     void *ucp_addr;
     size_t ucp_addr_size;
     ucp_unpacked_address_t unpacked_addr;
     ucp_address_entry_t *ae;
     unsigned addr_indices[UCP_MAX_RESOURCES];
-    char addr_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
     ucs_assert_always(wireup_ep != NULL);
 
-    if (UCS_BITMAP_IS_ZERO_INPLACE(&tl_bitmap)) {
-        ucs_diag("client ep %p connect to %s failed: device %s is not enabled, "
-                 "enable it in UCX_NET_DEVICES or use corresponding ip address",
-                 ucp_ep,
-                 ucs_sockaddr_str(
-                         (struct sockaddr*)&wireup_ep->cm_remote_sockaddr,
-                         addr_str, sizeof(addr_str)),
-                 dev_name);
-        return UCS_ERR_UNREACHABLE;
-    }
-
     /* Construct local dummy address for lanes selection taking an assumption
      * that server has the transports which are the best from client's
      * perspective. */
-    status = ucp_address_pack(worker, NULL, &tl_bitmap, addr_pack_flags, NULL,
+    status = ucp_address_pack(worker, NULL, tl_bitmap, addr_pack_flags, NULL,
                               &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;
@@ -215,7 +202,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, const char *dev_name,
     ucp_ep_config_key_reset(key);
     ucp_ep_config_key_set_err_mode(key, wireup_ep->ep_init_flags);
     status = ucp_wireup_select_lanes(ucp_ep, wireup_ep->ep_init_flags,
-                                     tl_bitmap, &unpacked_addr, addr_indices,
+                                     *tl_bitmap, &unpacked_addr, addr_indices,
                                      key);
 
     ucs_free(unpacked_addr.address_list);
@@ -337,44 +324,26 @@ static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
            UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 }
 
-static ucs_status_t
-ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
+static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 {
-    ucp_ep_h ep               = user_data;
-    ucp_worker_h worker       = ep->worker;
-    ucp_rsc_index_t dev_index = UCP_NULL_RESOURCE;
+    ucp_ep_h ep                   = arg;
+    ucp_worker_h worker           = ep->worker;
+    ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    ucp_rsc_index_t dev_index     = UCP_NULL_RESOURCE;
+    ucp_tl_bitmap_t tl_bitmap;
     uct_ep_connect_params_t params;
     ucp_wireup_sockaddr_data_t *sa_data;
     ucp_ep_config_key_t key;
-    ucp_tl_bitmap_t tl_bitmap;
-    ucp_wireup_ep_t *cm_wireup_ep;
     void* ucp_addr;
     size_t ucp_addr_size;
-    ucs_status_t status;
-    const char *dev_name;
     ucs_queue_head_t tmp_pending_queue;
     ucp_rsc_index_t cm_idx;
+    ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    ucs_assert_always(args->field_mask & UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME);
-
-    dev_name = args->dev_name;
-
-    /* At this point the ep has only CM lane */
-    ucs_assert((ucp_ep_num_lanes(ep) == 1) && ucp_ep_has_cm_lane(ep));
-
-    UCP_EP_CM_CALLBACK_ENTER(ep, ucp_ep_get_cm_uct_ep(ep),
-                             {
-                                 ucs_assert(ep->flags & UCP_EP_FLAG_CLOSED);
-                                 status = UCS_ERR_CANCELED;
-                                 goto out;
-                             });
-
-    cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    ucs_assert(cm_wireup_ep != NULL);
-
-    status = ucp_cm_ep_client_initial_config_get(ep, dev_name, &key);
+    status = ucp_cm_ep_client_initial_config_get(ep,
+                                    &cm_wireup_ep->cm_resolve_tl_bitmap, &key);
     if (status != UCS_OK) {
         if (ucp_cm_client_try_fallback_cms(ep)) {
             goto out;
@@ -441,11 +410,6 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
         goto free_addr;
     }
 
-    ucs_debug("client ep %p created on device %s idx %d, "
-              "tl_bitmap " UCT_TL_BITMAP_FMT " on cm %s",
-              ep, dev_name, dev_index, UCT_TL_BITMAP_ARG(&tl_bitmap),
-              ucp_context_cm_name(worker->context, cm_idx));
-
     sa_data = ucs_malloc(ucp_cm_priv_data_length(ucp_addr_size),
                          "client_priv_data");
     if (sa_data == NULL) {
@@ -475,6 +439,69 @@ out_check_err:
                                  &ucp_ep_get_cm_wireup_ep(ep)->super.super,
                                  ucp_ep_get_cm_lane(ep), status);
     }
+out:
+    UCS_ASYNC_UNBLOCK(&worker->async);
+    return 1;
+}
+
+static ucs_status_t
+ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
+{
+    ucp_ep_h ep                = user_data;
+    ucp_worker_h worker        = ep->worker;
+    ucs_status_t status        = UCS_OK;
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+    ucp_wireup_ep_t *cm_wireup_ep;
+    char addr_str[UCS_SOCKADDR_STRING_LEN];
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_assert_always(args->field_mask & UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME);
+
+    /* At this point the ep has only CM lane */
+    ucs_assert((ucp_ep_num_lanes(ep) == 1) && ucp_ep_has_cm_lane(ep));
+
+    UCP_EP_CM_CALLBACK_ENTER(ep, ucp_ep_get_cm_uct_ep(ep),
+                             {
+                                 ucs_assert(ep->flags & UCP_EP_FLAG_CLOSED);
+                                 status = UCS_ERR_CANCELED;
+                                 goto out;
+                             });
+
+    cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    ucs_assert(cm_wireup_ep != NULL);
+    cm_wireup_ep->cm_resolve_tl_bitmap =
+            ucp_context_dev_tl_bitmap(worker->context, args->dev_name);
+
+    if (UCS_BITMAP_IS_ZERO_INPLACE(&cm_wireup_ep->cm_resolve_tl_bitmap)) {
+        ucs_diag("client ep %p connect to %s failed: device %s is not enabled, "
+                 "enable it in UCX_NET_DEVICES or use corresponding ip address",
+                 ep,
+                 ucs_sockaddr_str(
+                        (struct sockaddr*)&cm_wireup_ep->cm_remote_sockaddr,
+                         addr_str, sizeof(addr_str)),
+                 args->dev_name);
+        status = UCS_ERR_UNREACHABLE;
+        if (!ucp_cm_client_try_fallback_cms(ep)) {
+            ucp_worker_set_ep_failed(worker, ep,
+                                     &cm_wireup_ep->super.super,
+                                     ucp_ep_get_cm_lane(ep), status);
+
+        }
+        goto out;
+    }
+
+    ucs_debug("client created ep %p on device %s, "
+              "tl_bitmap " UCT_TL_BITMAP_FMT " on cm %s",
+              ep, args->dev_name,
+              UCT_TL_BITMAP_ARG(&cm_wireup_ep->cm_resolve_tl_bitmap),
+              ucp_context_cm_name(worker->context,
+                                  ucp_ep_ext_control(ep)->cm_idx));
+
+    uct_worker_progress_register_safe(worker->uct,
+                                      ucp_cm_client_uct_connect_progress,
+                                      ep, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+    ucp_worker_signal_internal(worker);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1426,8 +1453,9 @@ static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
         } else {
             return 0;
         }
-    } else if ((elem->cb == ucp_ep_cm_disconnect_progress) ||
-               (elem->cb == ucp_cm_server_conn_notify_progress)) {
+    } else if ((elem->cb == ucp_ep_cm_disconnect_progress)      ||
+               (elem->cb == ucp_cm_server_conn_notify_progress) ||
+               (elem->cb == ucp_cm_client_uct_connect_progress)) {
         return arg == elem->arg;
     } else {
         return 0;
