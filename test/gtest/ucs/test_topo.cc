@@ -41,6 +41,10 @@ UCS_TEST_F(test_topo, get_distance) {
                                    UCS_SYS_DEVICE_ID_UNKNOWN, &distance);
     ASSERT_EQ(UCS_OK, status);
     EXPECT_NEAR(distance.latency, 0.0, 1e-9);
+
+    char buf[128];
+    UCS_TEST_MESSAGE << "distance: "
+                     << ucs_topo_distance_str(&distance, buf, sizeof(buf));
 }
 
 UCS_TEST_F(test_topo, print_info) {

@@ -14,10 +14,13 @@
 
 BEGIN_C_DECLS
 
-#define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX /* Indicate that the ucs_sys_device_t
-                                             * for the device has no real bus_id
-                                             * e.g. virtual devices like CMA/knem
-                                             */
+
+/* Upper limit on system device id */
+#define UCS_SYS_DEVICE_ID_MAX UINT8_MAX
+
+/* Indicate that the ucs_sys_device_t for the device has no real bus_id
+ * e.g. virtual devices like CMA/knem */
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
 
 typedef struct ucs_sys_bus_id {
@@ -47,6 +50,9 @@ typedef struct ucs_sys_dev_distance {
 } ucs_sys_dev_distance_t;
 
 
+extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
+
+
 /**
  * Find system device by pci bus id
  *
@@ -73,6 +79,19 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
                                    ucs_sys_device_t device2,
                                    ucs_sys_dev_distance_t *distance);
+
+
+/**
+ * Convert the distance to a human-readable string.
+ *
+ * @param [in]  distance   Distance between two devices.
+ * @param [out] buffer     String buffer to fill with distance string.
+ * @param [in]  max        Maximal size of the string buffer.
+ *
+ * @return Pointer to the distance string.
+ */
+const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
+                                  char *buffer, size_t max);
 
 
 /**
