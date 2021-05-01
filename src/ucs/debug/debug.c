@@ -1080,12 +1080,20 @@ void ucs_handle_error(const char *message)
     }
 }
 
+int ucs_debug_is_handle_errors()
+{
+    static const unsigned mask = UCS_BIT(UCS_HANDLE_ERROR_BACKTRACE) |
+                                 UCS_BIT(UCS_HANDLE_ERROR_FREEZE) |
+                                 UCS_BIT(UCS_HANDLE_ERROR_DEBUG);
+    return ucs_global_opts.handle_errors & mask;
+}
+
 static int ucs_debug_is_error_signal(int signum)
 {
     khiter_t hash_it;
     int result;
 
-    if (!ucs_global_opts.handle_errors) {
+    if (!ucs_debug_is_handle_errors()) {
         return 0;
     }
 
@@ -1315,7 +1323,7 @@ void ucs_debug_init()
     kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);
 
-    if (ucs_global_opts.handle_errors) {
+    if (ucs_debug_is_handle_errors()) {
         ucs_debug_set_signal_alt_stack();
         ucs_set_signal_handler(ucs_error_signal_handler);
     }
