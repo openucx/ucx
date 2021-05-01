@@ -13,6 +13,7 @@
 * Fix build issues in gtest-all.cc and sock.c with GCC11
 * Fix performance degradation with cuda memory on self endpoint
 * Fix bug in JUCX listener connection handler.
+* Configurable loopback interface for TCP transport (disable by default).
 
 ## 1.10.0 (March 9, 2021)
 ### Features:

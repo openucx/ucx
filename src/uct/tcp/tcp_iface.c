@@ -29,7 +29,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"TX_SEG_SIZE", "8kb",
    "Size of send copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
-  
+
   {"RX_SEG_SIZE", "64kb",
    "Size of receive copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
@@ -727,6 +727,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
 {
+    uct_tcp_md_t *tcp_md = ucs_derived_of(md, uct_tcp_md_t);
     uct_tl_device_resource_t *devices, *tmp;
     static const char *netdev_dir = "/sys/class/net";
     struct dirent *entry;
@@ -767,6 +768,10 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         }
 
         if (!ucs_netif_is_active(entry->d_name)) {
+            continue;
+        }
+
+        if (!tcp_md->loopback_enable && ucs_netif_is_loopback(entry->d_name)) {
             continue;
         }
 

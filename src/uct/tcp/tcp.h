@@ -413,6 +413,24 @@ typedef struct uct_tcp_iface_config {
 } uct_tcp_iface_config_t;
 
 
+/**
+ * TCP md configuration
+ */
+typedef struct uct_tcp_md_config {
+    uct_md_config_t     super;
+    int                 loopback_enable;
+} uct_tcp_md_config_t;
+
+
+/**
+ * TCP MD descriptor
+ */
+typedef struct uct_tcp_md {
+    uct_md_t            super;
+    uint8_t             loopback_enable;
+} uct_tcp_md_t;
+
+
 extern uct_component_t uct_tcp_component;
 extern const char *uct_tcp_address_type_names[];
 extern const uct_tcp_cm_state_t uct_tcp_ep_cm_state[];

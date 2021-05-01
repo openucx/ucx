@@ -12,6 +12,17 @@
 #include <uct/base/uct_md.h>
 
 
+static ucs_config_field_t uct_tcp_md_config_table[] = {
+    {"", "", NULL,
+     ucs_offsetof(uct_tcp_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+    {"LOOPBACK_ENABLE", "n",
+     "Enable loopback interface for TCP device selection.",
+     ucs_offsetof(uct_tcp_md_config_t, loopback_enable), UCS_CONFIG_TYPE_BOOL},
+
+    {NULL}
+};
+
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
@@ -37,24 +48,40 @@ static ucs_status_t uct_tcp_md_mem_reg(uct_md_h md, void *address, size_t length
     return UCS_OK;
 }
 
+static void uct_tcp_md_close(uct_md_h uct_md)
+{
+    uct_tcp_md_t *md = ucs_derived_of(uct_md, uct_tcp_md_t);
+    ucs_free(md);
+}
+
 static ucs_status_t
 uct_tcp_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
 {
+    uct_tcp_md_config_t *tcp_md_config =
+            ucs_derived_of(md_config, uct_tcp_md_config_t);
+    uct_tcp_md_t *md;
+
     static uct_md_ops_t md_ops = {
-        .close              = ucs_empty_function,
+        .close              = uct_tcp_md_close,
         .query              = uct_tcp_md_query,
         .mkey_pack          = ucs_empty_function_return_success,
         .mem_reg            = uct_tcp_md_mem_reg,
         .mem_dereg          = ucs_empty_function_return_success,
         .detect_memory_type = ucs_empty_function_return_unsupported
     };
-    static uct_md_t md = {
-        .ops          = &md_ops,
-        .component    = &uct_tcp_component
-    };
 
-    *md_p = &md;
+    md = ucs_malloc(sizeof(uct_tcp_md_t), "uct_tcp_md_t");
+    if (NULL == md) {
+        ucs_error("failed to allocate memory for uct_tcp_md_t");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    md->super.ops          = &md_ops;
+    md->super.component    = &uct_tcp_component;
+    md->loopback_enable    = tcp_md_config->loopback_enable;
+
+    *md_p = (uct_md_h) md;
     return UCS_OK;
 }
 
@@ -79,7 +106,12 @@ uct_component_t uct_tcp_component = {
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_TCP_NAME,
-    .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .md_config          = {
+        .name           = "TCP memory domain",
+        .prefix         = "TCP_",
+        .table          = uct_tcp_md_config_table,
+        .size           = sizeof(uct_tcp_md_config_t),
+    },
     .cm_config          = {
         .name           = "TCP-SOCKCM connection manager",
         .prefix         = "TCP_CM_",

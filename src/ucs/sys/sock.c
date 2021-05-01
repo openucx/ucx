@@ -115,6 +115,19 @@ int ucs_netif_is_active(const char *if_name)
     return ucs_netif_flags_is_active(ifr.ifr_flags);
 }
 
+int ucs_netif_is_loopback(const char *if_name)
+{
+    ucs_status_t status;
+    struct ifreq ifr;
+
+    status = ucs_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return ifr.ifr_flags & IFF_LOOPBACK;
+}
+
 unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
 {
     ucs_status_t status;
@@ -791,7 +804,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_debug("check ifname for socket on %s", 
+    ucs_debug("check ifname for socket on %s",
               ucs_sockaddr_str(my_addr, str_local_addr, UCS_SOCKADDR_STRING_LEN));
 
     if (getifaddrs(&ifaddrs)) {
@@ -807,7 +820,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
             continue;
         }
 
-        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) && 
+        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) &&
             (!ucs_sockaddr_cmp(sa, my_addr, NULL))) {
             ucs_debug("matching ip found iface on %s", ifa->ifa_name);
             ucs_strncpy_safe(ifname_str, ifa->ifa_name, max_strlen);
