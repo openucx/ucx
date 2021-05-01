@@ -8,6 +8,7 @@
 extern "C" {
 #include <ucs/type/cpu_set.h>
 #include <ucs/type/init_once.h>
+#include <ucs/type/serialize.h>
 #include <ucs/type/status.h>
 #include <ucs/type/float8.h>
 }
@@ -47,6 +48,42 @@ UCS_TEST_F(test_type, status) {
     EXPECT_TRUE(UCS_PTR_IS_PTR(ptr));
     EXPECT_FALSE(UCS_PTR_IS_PTR(NULL));
     EXPECT_NE(UCS_OK, UCS_PTR_STATUS(ptr));
+}
+
+UCS_TEST_F(test_type, serialize) {
+    std::vector<uint8_t> data(100);
+
+    std::vector<uint64_t> values;
+    values.push_back(ucs::rand() % UINT8_MAX);
+    values.push_back(ucs::rand() % UINT32_MAX);
+    for (unsigned i = 0; i < 3; ++i) {
+        values.push_back(ucs::rand() * ucs::rand());
+    }
+
+    /* Pack */
+    uint64_t *p64;
+    void *pack_ptr = &data[0];
+
+    *ucs_serialize_next(&pack_ptr, uint8_t)  = values[0];
+    *ucs_serialize_next(&pack_ptr, uint32_t) = values[1];
+    *ucs_serialize_next(&pack_ptr, uint64_t) = values[2];
+    p64  = ucs_serialize_next(&pack_ptr, uint64_t);
+    *p64 = values[3];
+    *ucs_serialize_next(&pack_ptr, uint64_t) = values[4];
+    EXPECT_EQ(1 + 4 + (3 * 8), UCS_PTR_BYTE_DIFF(&data[0], pack_ptr));
+
+    /* Unpack */
+    const void *unpack_ptr = &data[0];
+    uint64_t value;
+    value = *ucs_serialize_next(&unpack_ptr, const uint8_t);
+    EXPECT_EQ(values[0], value);
+    value = *ucs_serialize_next(&unpack_ptr, const uint32_t);
+    EXPECT_EQ(values[1], value);
+    for (unsigned i = 0; i < 3; ++i) {
+        value = *ucs_serialize_next(&unpack_ptr, const uint64_t);
+        EXPECT_EQ(values[2 + i], value);
+    }
+    EXPECT_EQ(pack_ptr, unpack_ptr);
 }
 
 /* Represents latency (in ns) */
