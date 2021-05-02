@@ -341,6 +341,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
     uint32_t                    uidx;
+    int                         full_handshake;
 } uct_ib_mlx5_qp_attr_t;
 
 
