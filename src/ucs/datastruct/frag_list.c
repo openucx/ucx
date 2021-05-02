@@ -292,12 +292,15 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
         }
 
         /* todo: mark as likely */
-        if (UCS_FRAG_LIST_SN_CMP(h->head.last_sn+1, ==, sn)) {
+        if (UCS_FRAG_LIST_SN_CMP(h->head.last_sn + 1, ==, sn)) {
+            ucs_assertv(h->head.first_sn <= h->head.last_sn,
+                        "h=%p first_sn=%u last_sn=%u", h, h->head.first_sn,
+                        h->head.last_sn);
             /* add tail, check merge with next list */
             frag_list_add_tail(h, elem);
             nexth = ucs_container_of(h->list.next, ucs_frag_list_elem_t, list);
-
-            if (nexth != NULL && nexth->head.first_sn == sn + 1) {
+            if (!ucs_queue_is_tail(&head->list, &h->list) &&
+                (nexth->head.first_sn == (sn + 1))) {
                 frag_list_merge_heads(head, h, nexth);
                 head->list_count--;
             }
