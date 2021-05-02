@@ -38,6 +38,10 @@ typedef struct ucs_topo_global_ctx {
 } ucs_topo_global_ctx_t;
 
 
+const ucs_sys_dev_distance_t ucs_topo_default_distance = {
+    .latency   = 0,
+    .bandwidth = DBL_MAX
+};
 static ucs_topo_global_ctx_t ucs_topo_ctx;
 
 static ucs_bus_id_bit_rep_t ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
@@ -59,6 +63,11 @@ void ucs_topo_cleanup()
 {
     kh_destroy_inplace(bus_to_sys_dev, &ucs_topo_ctx.bus_to_sys_dev_hash);
     ucs_spinlock_destroy(&ucs_topo_ctx.lock);
+}
+
+unsigned ucs_topo_num_devices()
+{
+    return ucs_topo_ctx.sys_dev_to_bus_lookup.count;
 }
 
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
@@ -114,22 +123,24 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
     /* If one of the devices is unknown, we assume near topology */
     if ((device1 == UCS_SYS_DEVICE_ID_UNKNOWN) ||
         (device2 == UCS_SYS_DEVICE_ID_UNKNOWN) || (device1 == device2)) {
-        path_distance = 0;
-    } else {
-        if ((device1 >= ucs_topo_ctx.sys_dev_to_bus_lookup.count) ||
-            (device2 >= ucs_topo_ctx.sys_dev_to_bus_lookup.count)) {
-            return UCS_ERR_INVALID_PARAM;
-        }
+        goto default_distance;
+    }
 
-        ucs_topo_get_bus_path(&ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device1],
-                              path1, sizeof(path1));
-        ucs_topo_get_bus_path(&ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device2],
-                              path2, sizeof(path2));
+    if ((device1 >= ucs_topo_num_devices()) ||
+        (device2 >= ucs_topo_num_devices())) {
+        return UCS_ERR_INVALID_PARAM;
+    }
 
-        path_distance = ucs_path_calc_distance(path1, path2);
-        if (path_distance < 0) {
-            return (ucs_status_t)path_distance;
-        }
+    ucs_topo_get_bus_path(&ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device1],
+                          path1, sizeof(path1));
+    ucs_topo_get_bus_path(&ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[device2],
+                          path2, sizeof(path2));
+
+    path_distance = ucs_path_calc_distance(path1, path2);
+    if (path_distance < 0) {
+        return (ucs_status_t)path_distance;
+    } else if (path_distance == 0) {
+        goto default_distance;
     }
 
     /* Rough approximation of bandwidth/latency as function of PCI distance in
@@ -138,11 +149,27 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
      * switch, etc.
      */
     distance->latency   = 100e-9 * path_distance;
-    distance->bandwidth = (path_distance == 0) ?
-                                  DBL_MAX :
-                                  ((20000 / path_distance) * UCS_MBYTE);
-
+    distance->bandwidth = (20000 / path_distance) * UCS_MBYTE;
     return UCS_OK;
+
+default_distance:
+    *distance = ucs_topo_default_distance;
+    return UCS_OK;
+}
+
+const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
+                                  char *buffer, size_t max)
+{
+    UCS_STRING_BUFFER_FIXED(strb, buffer, max);
+
+    if (distance->bandwidth < 1e20) {
+        /* Print bandwidth only if limited */
+        ucs_string_buffer_appendf(&strb, "%.2fMBs/",
+                                  distance->bandwidth / UCS_MBYTE);
+    }
+
+    ucs_string_buffer_appendf(&strb, "%.0fns", distance->latency * 1e9);
+    return ucs_string_buffer_cstr(&strb);
 }
 
 const char *
@@ -154,8 +181,8 @@ ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
         return "<unknown>";
     }
 
-    if (sys_dev >= ucs_topo_ctx.sys_dev_to_bus_lookup.count) {
-        return NULL;
+    if (sys_dev >= ucs_topo_num_devices()) {
+        return "<invalid>";
     }
 
     bus_id = &ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[sys_dev];
