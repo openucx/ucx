@@ -93,11 +93,11 @@ typedef uint8_t ucs_fp8_t;
  * pack a double-precision floating-point number in a given range to a single byte.
  * The packing is lossy and the unpacked number is assumed to be
  * non-negative.
- * 
+ *
  * @param value Pack this number
  * @param min   Min supported value (assumed to be a power of 2)
  * @param max   Max supported value (assumed to be a power of 2)
- * 
+ *
  * @return A single byte which represents the given number
  */
 static UCS_F_ALWAYS_INLINE ucs_fp8_t ucs_fp8_pack(double value, uint64_t min,
@@ -143,11 +143,11 @@ static UCS_F_ALWAYS_INLINE ucs_fp8_t ucs_fp8_pack(double value, uint64_t min,
 
 /**
  * Unpack a byte to a double-precision floating-point number in a given range.
- * 
+ *
  * @param value Unpack this number
  * @param min   Min supported value (assumed to be a power of 2)
  * @param max   Max supported value (assumed to be a power of 2)
- * 
+ *
  * @return A double-precision floating-point number which approximates the
  *         original unpacked value
  */
@@ -176,18 +176,18 @@ ucs_fp8_unpack(ucs_fp8_t value, uint64_t min, uint64_t max)
 
 /**
  * Declare a packed floating-point type.
- * 
+ *
  * The packed type uses a portable and platform-independent underlying
  * representation (an 8-bit char), able to perform a (lossy) packing and
  * unpacking from a double (8-byte) type.
- * 
+ *
  * The packed type is defined by the required min and max values -
  * the exponent is scaled accordingly, to accommodate the needed range.
- * 
+ *
  * Special values (0 and NaN) are packed and unpacked in a loseless way.
- * 
+ *
  * max/min <= 2^14 must hold, as only 4 bits are used for exponent representation.
- * 
+ *
  * @param _name Packed type name
  * @param _min  Min supported number (assumed to be a power of 2)
  * @param _max  Max supported number (assumed to be a power of 2)
@@ -198,7 +198,7 @@ ucs_fp8_unpack(ucs_fp8_t value, uint64_t min, uint64_t max)
             double value) \
     { \
         /* 2 is subtracted because of special values for 0 and NaN */ \
-        ucs_assert(ucs_ilog2(_max / _min) < \
+        ucs_assert(ucs_ilog2((_max) / (_min)) < \
                    UCS_BIT(_UCS_FP8_EXPONENT_BITS) - 2); \
         return ucs_fp8_pack(value, _min, _max); \
     } \
@@ -214,10 +214,10 @@ ucs_fp8_unpack(ucs_fp8_t value, uint64_t min, uint64_t max)
  * Pack a double-precision floating-point number of a given type to a single byte.
  * The packing is lossy and the unpacked number is assumed to be
  * non-negative.
- * 
+ *
  * @param _name  Packed type name
  * @param _value Pack this number
- * 
+ *
  * @return A single byte which represents the given number
  */
 #define UCS_FP8_PACK(_name, _value) _UCS_FP8_IDENTIFIER(_name, _pack)(_value)
@@ -225,10 +225,10 @@ ucs_fp8_unpack(ucs_fp8_t value, uint64_t min, uint64_t max)
 
 /**
  * Unpack a byte to a double-precision floating-point number of a given type.
- * 
+ *
  * @param _name  Packed type name
  * @param _value Unpack this number
- * 
+ *
  * @return A double-precision floating-point number which approximates the
  *         original unpacked value
  */
