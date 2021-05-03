@@ -60,7 +60,8 @@ enum {
     UCT_IB_DEVX_OBJ_RCQP,
     UCT_IB_DEVX_OBJ_RCSRQ,
     UCT_IB_DEVX_OBJ_DCT,
-    UCT_IB_DEVX_OBJ_DCSRQ
+    UCT_IB_DEVX_OBJ_DCSRQ,
+    UCT_IB_DEVX_OBJ_DCI
 };
 
 typedef struct uct_ib_md_ext_config {
