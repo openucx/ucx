@@ -1015,7 +1015,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, connect_and_fail_wireup,
     ucp_lane_index_t am_lane = ucp_ep_get_wireup_msg_lane(sender().ep());
     uct_ep_h uct_ep          = sender().ep()->uct_eps[am_lane];
 
-    /* emulate failure of WIREUP MSG sending */
+    /* Emulate failure of WIREUP MSG sending */
     uct_ep->iface->ops.ep_am_bcopy = reinterpret_cast<uct_ep_am_bcopy_func_t>(
             ucs_empty_function_return_bc_ep_timeout);
 
