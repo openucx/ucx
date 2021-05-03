@@ -7,13 +7,15 @@
 ##
 #
 
-## 1.10.1 (TBD)
+## 1.10.1 RC2 (TBD)
 ### Bugfixes:
-* Fix Infiniband port speed detection for HDR100
-* Fix build issues in gtest-all.cc and sock.c with GCC11
-* Fix performance degradation with cuda memory on self endpoint
-* Fix bug in JUCX listener connection handler.
-* Configurable loopback interface for TCP transport (disable by default).
+* Fixes in Infiniband port speed detection for HDR100
+* Fixes in building gtest-all.cc and sock.c with GCC11
+* Fixes addressing performance degradation with cuda memory on a self endpoint
+* Fixes in JUCX listener connection handler
+* Fixed in configuration of loopback TCP transport (disable by default)
+* Fixes in RPM dependency on libibverbs
+* Fixes in ABI backward compatibility for active message protocol
 
 ## 1.10.0 (March 9, 2021)
 ### Features:
