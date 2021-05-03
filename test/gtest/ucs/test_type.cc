@@ -52,6 +52,7 @@ UCS_TEST_F(test_type, status) {
 
 UCS_TEST_F(test_type, serialize) {
     std::vector<uint8_t> data(100);
+    const size_t raw_field_size = 3;
 
     std::vector<uint64_t> values;
     values.push_back(ucs::rand() % UINT8_MAX);
@@ -59,6 +60,7 @@ UCS_TEST_F(test_type, serialize) {
     for (unsigned i = 0; i < 3; ++i) {
         values.push_back(ucs::rand() * ucs::rand());
     }
+    values.push_back(ucs::rand() % UCS_BIT(raw_field_size * 8));
 
     /* Pack */
     uint64_t *p64;
@@ -70,7 +72,11 @@ UCS_TEST_F(test_type, serialize) {
     p64  = ucs_serialize_next(&pack_ptr, uint64_t);
     *p64 = values[3];
     *ucs_serialize_next(&pack_ptr, uint64_t) = values[4];
-    EXPECT_EQ(1 + 4 + (3 * 8), UCS_PTR_BYTE_DIFF(&data[0], pack_ptr));
+    /* Pack raw 3-byte value */
+    memcpy(ucs_serialize_next_raw(&pack_ptr, void, raw_field_size), &values[5],
+           raw_field_size);
+    EXPECT_EQ(1 + 4 + (3 * 8) + raw_field_size,
+              UCS_PTR_BYTE_DIFF(&data[0], pack_ptr));
 
     /* Unpack */
     const void *unpack_ptr = &data[0];
@@ -83,6 +89,12 @@ UCS_TEST_F(test_type, serialize) {
         value = *ucs_serialize_next(&unpack_ptr, const uint64_t);
         EXPECT_EQ(values[2 + i], value);
     }
+    /* Unpack raw 3-byte value */
+    value = 0;
+    memcpy(&value, ucs_serialize_next_raw(&unpack_ptr, void, raw_field_size),
+           raw_field_size);
+    EXPECT_EQ(values[5], value);
+
     EXPECT_EQ(pack_ptr, unpack_ptr);
 }
 

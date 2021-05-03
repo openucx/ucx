@@ -82,7 +82,7 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
     rkey_config_key.ep_cfg_index = ep_cfg_index;
     rkey_config_key.mem_type     = params->mem_info.type;
 
-    status = ucp_worker_get_rkey_config(worker, &rkey_config_key,
+    status = ucp_worker_rkey_config_get(worker, &rkey_config_key,
                                         &rkey_cfg_index);
     if (status != UCS_OK) {
         return status;
