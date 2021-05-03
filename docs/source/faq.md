@@ -10,7 +10,7 @@ and relatively easy way to construct widely used HPC protocols: MPI tag matching
 RMA operations, rendezvous protocols, stream, fragmentation, remote atomic operations, etc.
 
 #### What is UCP, UCT, UCS?
-* **UCT** is a transport layer that abstracts the differences across various hardware architectures and provides a low-level API that enables the implementation of communication protocols. The primary goal of the layer is to provide direct and efficient access to hardware network resources with minimal software overhead. For this purpose UCT relies on low-level drivers provided by vendors such as InfiniBand Verbs, Cray's uGNI, libfabrics, etc. In addition, the layer provides constructs for communication context management (thread-based and ap- plication level), and allocation and management of device- specific memories including those found in accelerators. In terms of communication APIs, UCT defines interfaces for immediate (short), buffered copy-and-send (bcopy), and zero- copy (zcopy) communication operations. The short operations are optimized for small messages that can be posted and completed in place. The bcopy operations are optimized for medium size messages that are typically sent through a so- called bouncing-buffer. Finally, the zcopy operations expose zero-copy memory-to-memory communication semantics.
+* **UCT** is a transport layer that abstracts the differences across various hardware architectures and provides a low-level API that enables the implementation of communication protocols. The primary goal of the layer is to provide direct and efficient access to hardware network resources with minimal software overhead. For this purpose UCT relies on low-level drivers provided by vendors such as InfiniBand Verbs, Cray's uGNI, etc. In addition, the layer provides constructs for communication context management (thread-based and application level), and allocation and management of device-specific memories including those found in accelerators. In terms of communication APIs, UCT defines interfaces for immediate (short), buffered copy-and-send (bcopy), and zero-copy (zcopy) communication operations. The short operations are optimized for small messages that can be posted and completed in place. The bcopy operations are optimized for medium size messages that are typically sent through a so-called bouncing-buffer. Finally, the zcopy operations expose zero-copy memory-to-memory communication semantics.
 
 * **UCP** implements higher-level protocols that are typically used by message passing (MPI) and PGAS programming models by using lower-level capabilities exposed through the UCT layer.
 UCP is responsible for the following functionality: initialization of the library, selection of transports for communication, message fragmentation, and multi-rail communication. Currently, the API has the following classes of interfaces: Initialization, Remote Memory Access (RMA) communication, Atomic Memory Operations (AMO), Active Message, Tag-Matching, and Collectives. 
@@ -35,13 +35,13 @@ submit issues on github: https://github.com/openucx/ucx/issues
 The UCX framework is maintained and supported by hardware vendors in addition to the open source community. Every pull-request is tested and multiple hardware platforms supported by vendors community.
 
 * **Performance, performance, performance!** 
-The framework design, data structures, and components are design to provide highly optimized access to the network hardware. 
+The framework architecture, data structures, and components are designed to provide optimized access to the network hardware.
 
 * **High level API for a broad range HPC programming models.**  
-UCX provides a high level API implemented in software 'UCP' to fill in the gaps across interconnects. This allows to use a single set of APIs in a library  to implement multiple interconnects. This reduces the level of complexities when implementing libraries such as Open MPI or OpenSHMEM.  Because of this, UCX performance portable  because a single implementation (in Open MPI or OpenSHMEM) will work efficiently on multiple interconnects. (e.g. uGNI, Verbs, libfabrics, etc). 
+UCX provides a high level API implemented in software (UCP) to fill in the gaps across interconnects. This allows the use of a single set of APIs in a library to implement multiple interconnects, and reduces the level of complexity when implementing libraries such as Open MPI or OpenSHMEM. UCX is therefore performance portable because a single implementation (in Open MPI or OpenSHMEM) will work efficiently on multiple interconnects. (e.g. uGNI, Verbs, shared memory).
 
 * **Support for interaction between multiple transports (or providers) to deliver messages.**  
-For example, UCX has the logic (in UCP) to make 'GPUDirect', IB' and share memory work together efficiently to deliver the data where is needed without the user dealing with this. 
+For example, UCX has the logic (in UCP) to make 'GPUDirect', IB' and share memory work together efficiently to deliver the data where it is needed without the user dealing with this.
 
 * **Cross-transport multi-rail capabilities.** UCX protocol layer can utilize multiple transports,
  event on different types of hardware, to deliver messages faster, without the need for
@@ -61,10 +61,10 @@ Instead, GASNET can leverage UCX framework for fast end efficient implementation
 UCX framework does not provide drivers, instead it relies on the drivers provided by vendors. Currently we use: OFA VERBs, Cray's UGNI, NVIDIA CUDA.
 
 #### What is the relation between UCX and OFA Verbs or Libfabrics?
-UCX, is a middleware communication layer that relies on vendors provided user level drivers including OFA Verbs or libfabrics (or any other drivers provided by another communities or vendors) to implement high-level protocols which can be used to close functionality gaps between various vendors drivers including various libfabrics providers: coordination across various drivers, multi-rail capabilities, software based RMA, AMOs, tag-matching for transports and drivers that do not support such capabilities natively.
+UCX is a middleware communication framework that relies on device drivers, e.g. RDMA, CUDA, ROCM. RDMA and OS-bypass network devices typically implement device drivers using the RDMA-core Linux subsystem that is supported by UCX. Support for other network abstractions can be added based on requests and contributions from the community.
 
-#### Is UCX a user level driver?
-No. Typically,  Drivers  aim to expose fine-grain access to the network architecture specific features.
+#### Is UCX a user-level driver?
+UCX is not a user-level driver. Typically, drivers aim to expose fine-grained access to the network architecture-specific features.
 UCX abstracts the differences across various drivers and fill-in the gaps using software protocols for some of the architectures that don't provide hardware level support for all the operations.
 
 <br/>
