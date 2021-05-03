@@ -107,6 +107,8 @@ typedef struct uct_dc_mlx5_iface_config {
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
+    int                                 dci_full_handshake;
+    int                                 dct_full_handshake;
     unsigned                            quota;
     unsigned                            rand_seed;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
@@ -195,7 +197,9 @@ struct uct_dc_mlx5_iface {
 
 extern ucs_config_field_t uct_dc_mlx5_iface_config_table[];
 
-ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface);
+ucs_status_t
+uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
+                             const uct_dc_mlx5_iface_config_t *config);
 
 int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
@@ -231,7 +235,8 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
 
 #if HAVE_DEVX
 
-ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface);
+ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
+                                               int full_handshake);
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface);
 

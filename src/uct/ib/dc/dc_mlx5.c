@@ -69,6 +69,16 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
+    {"DCI_FULL_HANDSHAKE", "n",
+     "Force full-handshake protocol for DC initiator. Enabling this mode\n"
+     "increases network latency, but is more resilient to packet drops.",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, dci_full_handshake),
+     UCS_CONFIG_TYPE_BOOL},
+
+    {"DCT_FULL_HANDSHAKE", "n", "Force full-handshake protocol for DC target.",
+     ucs_offsetof(uct_dc_mlx5_iface_config_t, dct_full_handshake),
+     UCS_CONFIG_TYPE_BOOL},
+
     {"RAND_DCI_SEED", "0",
      "Seed for DCI allocation when \"rand\" dci policy is used (0 - use default).",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, rand_seed), UCS_CONFIG_TYPE_UINT},
@@ -300,6 +310,7 @@ static void uct_dc_mlx5_iface_event_cq(uct_ib_iface_t *ib_iface,
 
 static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
                                                 struct ibv_qp_cap *cap,
+                                                int full_handshake,
                                                 uct_dc_dci_t *dci)
 {
     uct_ib_iface_t *ib_iface           = &iface->super.super.super;
@@ -318,6 +329,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_qp(uct_dc_mlx5_iface_t *iface,
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) {
         attr.super.max_inl_cqe[UCT_IB_DIR_RX] = 0;
+        attr.full_handshake                   = full_handshake;
         status = uct_ib_mlx5_devx_create_qp(ib_iface, &dci->txwq.super,
                                             &dci->txwq, &attr);
         if (status != UCS_OK) {
@@ -465,7 +477,9 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     return UCS_OK;
 }
 
-ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
+ucs_status_t
+uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
+                             const uct_dc_mlx5_iface_config_t *config)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
                                           uct_ib_mlx5_md_t);
@@ -476,7 +490,8 @@ ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
     int ret;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCT) {
-        return uct_dc_mlx5_iface_devx_create_dct(iface);
+        return uct_dc_mlx5_iface_devx_create_dct(iface,
+                                                 config->dct_full_handshake);
     }
 
     init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
@@ -676,7 +691,9 @@ void uct_dc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
 }
 
 #ifdef HAVE_DC_EXP
-ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface)
+ucs_status_t
+uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
+                             const uct_dc_mlx5_iface_config_t *config)
 {
     struct ibv_exp_dct_init_attr init_attr;
 
@@ -792,7 +809,9 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
     }
 }
 
-static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
+static ucs_status_t
+uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
+                              const uct_dc_mlx5_iface_config_t *config)
 {
     struct ibv_qp_cap cap = {};
     ucs_status_t status;
@@ -804,7 +823,9 @@ static ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface)
     for (i = 0; i < iface->tx.ndci; i++) {
         ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
 
-        status = uct_dc_mlx5_iface_create_qp(iface, &cap, &iface->tx.dcis[i]);
+        status = uct_dc_mlx5_iface_create_qp(iface, &cap,
+                                             config->dci_full_handshake,
+                                             &iface->tx.dcis[i]);
         if (status != UCS_OK) {
             goto err;
         }
@@ -1215,13 +1236,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                          uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
     /* create DC target */
-    status = uct_dc_mlx5_iface_create_dct(self);
+    status = uct_dc_mlx5_iface_create_dct(self, config);
     if (status != UCS_OK) {
         goto err;
     }
 
     /* create DC initiators */
-    status = uct_dc_mlx5_iface_create_dcis(self);
+    status = uct_dc_mlx5_iface_create_dcis(self, config);
     if (status != UCS_OK) {
         goto err_destroy_dct;
     }

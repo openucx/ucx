@@ -15,7 +15,8 @@
 #include <ucs/arch/bitops.h>
 
 
-ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
+ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
+                                               int full_handshake)
 {
     uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super.super.super);
     struct mlx5dv_pd dvpd = {};
@@ -47,6 +48,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, rre, true);
     UCT_IB_MLX5DV_SET(dctc, dctc, rwe, true);
     UCT_IB_MLX5DV_SET(dctc, dctc, rae, true);
+    UCT_IB_MLX5DV_SET(dctc, dctc, force_full_handshake, !!full_handshake);
     UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, uct_ib_mlx5_qpc_cs_res(
                       iface->super.super.super.config.max_inl_cqe[UCT_IB_DIR_RX], 1));
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
