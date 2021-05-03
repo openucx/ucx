@@ -761,7 +761,7 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         rlky[0x1];
     uint8_t         force_full_handshake[0x1];
     uint8_t         multi_path[0x1];
-    uint8_t         reserved_at_73[0xc];
+    uint8_t         reserved_at_74[0xc];
 
     uint8_t         reserved_at_80[0x8];
     uint8_t         cs_res[0x8];

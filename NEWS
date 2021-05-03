@@ -14,6 +14,7 @@
 * Fix performance degradation with cuda memory on self endpoint
 * Fix bug in JUCX listener connection handler.
 * Configurable loopback interface for TCP transport (disable by default).
+* Add support for DC full-handshake mode (off by default).
 
 ## 1.10.0 (March 9, 2021)
 ### Features:
