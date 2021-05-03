@@ -579,7 +579,7 @@ ucp_is_resource_in_transports_list(const char *tl_name,
          * enable/disable the transport (according to the list mode)
          */
         alias_arr_count = ucp_tl_alias_count(alias);
-        snprintf(info, sizeof(info), "for alias '%s'", alias->alias);
+        snprintf(info, sizeof(info), " for alias '%s'", alias->alias);
         dummy_mask      = 0;
         tmp_rsc_flags   = 0;
         tmp_tl_cfg_mask = 0;
