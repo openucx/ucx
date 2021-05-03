@@ -202,6 +202,7 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
 
     ucs_assert(iface->tm.cmd_wq.super.super.type == UCT_IB_MLX5_OBJ_TYPE_LAST);
 
+    attr.super.qp_type          = IBV_QPT_RC;
     attr.super.cap.max_send_wr  = iface->tm.cmd_qp_len;
     attr.super.cap.max_send_sge = 1;
     attr.super.ibv.pd           = md->super.pd;
@@ -458,6 +459,7 @@ void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
         break;
     case UCT_IB_MLX5_OBJ_TYPE_DEVX:
         uct_rc_iface_fill_attr(&iface->super, &qp_attr->super, max_send_wr, NULL);
+        qp_attr->mmio_mode = iface->tx.mmio_mode;
         break;
     case UCT_IB_MLX5_OBJ_TYPE_LAST:
         break;
