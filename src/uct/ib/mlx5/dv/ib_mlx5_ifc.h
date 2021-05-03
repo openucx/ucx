@@ -759,8 +759,9 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         atomic_like_write_en[0x1];
     uint8_t         latency_sensitive[0x1];
     uint8_t         rlky[0x1];
-    uint8_t         free_ar[0x1];
-    uint8_t         reserved_at_73[0xd];
+    uint8_t         force_full_handshake[0x1];
+    uint8_t         multi_path[0x1];
+    uint8_t         reserved_at_73[0xc];
 
     uint8_t         reserved_at_80[0x8];
     uint8_t         cs_res[0x8];
@@ -1211,7 +1212,9 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         counter_set_id[0x8];
     uint8_t         uar_page[0x18];
 
-    uint8_t         reserved_at_80[0x8];
+    uint8_t         reserved_at_80[0x3];
+    uint8_t         full_handshake[0x1];
+    uint8_t         cnak_reverse_sl[0x4];
     uint8_t         user_index[0x18];
 
     uint8_t         reserved_at_a0[0x3];
