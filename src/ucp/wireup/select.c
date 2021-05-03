@@ -291,6 +291,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_context_h context                 = worker->context;
     ucp_wireup_select_info_t sinfo        = {0};
     int found                             = 0;
+    uint64_t local_iface_flags            = criteria->local_iface_flags;
     uint64_t addr_index_map, rsc_addr_index_map;
     const ucp_wireup_lane_desc_t *lane_desc;
     unsigned addr_index;
@@ -389,12 +390,16 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             continue;
         }
 
+        if (select_params->ep_init_flags & UCP_EP_INIT_CONNECT_TO_IFACE_ONLY) {
+            local_iface_flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
+        }
+
         /* Check that local md and interface satisfy the criteria */
         if (!ucp_wireup_check_flags(resource, md_attr->cap.flags,
                                     criteria->local_md_flags, criteria->title,
                                     ucp_wireup_md_flags, p, endp - p) ||
             !ucp_wireup_check_flags(resource, iface_attr->cap.flags,
-                                    criteria->local_iface_flags, criteria->title,
+                                    local_iface_flags, criteria->title,
                                     ucp_wireup_iface_flags, p, endp - p) ||
             !ucp_wireup_check_keepalive(select_params, resource,
                                         iface_attr->cap.flags,

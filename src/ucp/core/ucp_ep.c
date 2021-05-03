@@ -313,14 +313,10 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err;
     }
 
-    if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
-        ucp_ep_update_flags(ep, UCP_EP_FLAG_INTERNAL, 0);
-        goto out;
-    }
-
-    if ((context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
-        ((context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
-         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE))) {
+    if (!(ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) &&
+        ((context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
+         ((context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
+          (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE)))) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_INDIRECT_ID, 0);
     }
 
@@ -331,9 +327,13 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep_base;
     }
 
-    ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    if (ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) {
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_INTERNAL, 0);
+        ucs_list_add_tail(&worker->internal_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    } else {
+        ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+    }
 
-out:
     *ep_p = ep;
     return UCS_OK;
 
@@ -347,16 +347,10 @@ void ucp_ep_delete(ucp_ep_h ep)
 {
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucp_worker_keepalive_remove_ep(ep);
-        ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-
-        /* If FAILED flag set, EP ID must be already released */
-        if (!(ep->flags & UCP_EP_FLAG_FAILED)) {
-            ucp_ep_release_id(ep);
-        }
-
-        ucs_assert(ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID);
     }
 
+    ucp_ep_release_id(ep);
+    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucp_ep_remove_ref(ep);
 }
 
@@ -364,7 +358,9 @@ void ucp_ep_release_id(ucp_ep_h ep)
 {
     ucs_status_t status;
 
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
+    if (ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID) {
+        return;
+    }
 
     status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
     if (status != UCS_OK) {
@@ -448,13 +444,17 @@ ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
         UCS_ASYNC_BLOCK(&worker->async);
         status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
                                               &local_address,
-                                              UCP_EP_INIT_FLAG_MEM_TYPE,
+                                              UCP_EP_INIT_FLAG_MEM_TYPE |
+                                              UCP_EP_INIT_FLAG_INTERNAL,
                                               ep_name,
                                               &worker->mem_type_ep[mem_type]);
-        UCS_ASYNC_UNBLOCK(&worker->async);
         if (status != UCS_OK) {
+            UCS_ASYNC_UNBLOCK(&worker->async);
             goto err_free_address_list;
         }
+
+        ucp_ep_flush_state_reset(worker->mem_type_ep[mem_type]);
+        UCS_ASYNC_UNBLOCK(&worker->async);
 
         ucs_free(local_address.address_list);
         ucs_free(address_buffer);
@@ -931,11 +931,7 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
     uct_ep_h uct_ep;
 
     ucp_ep_check_lanes(ep);
-
-    if (!(ep->flags & (UCP_EP_FLAG_FAILED | UCP_EP_FLAG_INTERNAL))) {
-        ucp_ep_release_id(ep);
-    }
-
+    ucp_ep_release_id(ep);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
