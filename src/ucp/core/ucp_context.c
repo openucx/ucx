@@ -1490,7 +1490,7 @@ static void ucp_free_config(ucp_context_h context)
 static void ucp_context_create_vfs(ucp_context_h context)
 {
     ucs_vfs_obj_add_dir(NULL, context, "ucp/context/%s", context->name);
-    ucs_vfs_obj_add_ro_file(context, ucs_vfs_show_memory_address, NULL,
+    ucs_vfs_obj_add_ro_file(context, ucs_vfs_show_memory_address, NULL, 0,
                             "memory_address");
 }
 

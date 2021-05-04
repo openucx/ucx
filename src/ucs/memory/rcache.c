@@ -866,7 +866,7 @@ retry:
             ucs_free(region);
             goto out_unlock;
         }
-        
+
         ucs_rcache_lru_evict(rcache);
     }
 
@@ -1000,8 +1000,9 @@ static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache) {
     pthread_mutex_unlock(&ucs_rcache_global_list_lock);
 }
 
-static void ucs_rcache_vfs_show_inv_q_length(void *obj, void *arg,
-                                             ucs_string_buffer_t *strb)
+static void ucs_rcache_vfs_show_inv_q_length(void *obj,
+                                             ucs_string_buffer_t *strb,
+                                             void *arg_ptr, uint64_t arg_u64)
 {
     ucs_rcache_t *rcache = obj;
     size_t rcache_inv_q_length;
@@ -1013,8 +1014,9 @@ static void ucs_rcache_vfs_show_inv_q_length(void *obj, void *arg,
     ucs_string_buffer_appendf(strb, "%zu\n", rcache_inv_q_length);
 }
 
-static void ucs_rcache_vfs_show_gc_list_length(void *obj, void *arg,
-                                               ucs_string_buffer_t *strb)
+static void ucs_rcache_vfs_show_gc_list_length(void *obj,
+                                               ucs_string_buffer_t *strb,
+                                               void *arg_ptr, uint64_t arg_u64)
 {
     ucs_rcache_t *rcache = obj;
     unsigned long rcache_gc_list_length;
@@ -1029,17 +1031,18 @@ static void ucs_rcache_vfs_show_gc_list_length(void *obj, void *arg,
 static void ucs_rcache_vfs_init(ucs_rcache_t *rcache)
 {
     ucs_vfs_obj_add_dir(NULL, rcache, "ucs/rcache/%s", rcache->name);
-    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_ulunits, &rcache->num_regions,
+    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_primitive,
+                            &rcache->num_regions, UCS_VFS_TYPE_ULONG,
                             "num_regions");
-    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_memunits, &rcache->total_size,
-                            "total_size");
+    ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_primitive, &rcache->total_size,
+                            UCS_VFS_TYPE_SIZET, "total_size");
     ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_ulunits,
-                            &rcache->params.max_regions, "max_regions");
+                            &rcache->params.max_regions, 0, "max_regions");
     ucs_vfs_obj_add_ro_file(rcache, ucs_vfs_show_memunits,
-                            &rcache->params.max_size, "max_size");
-    ucs_vfs_obj_add_ro_file(rcache, ucs_rcache_vfs_show_inv_q_length, NULL,
+                            &rcache->params.max_size, 0, "max_size");
+    ucs_vfs_obj_add_ro_file(rcache, ucs_rcache_vfs_show_inv_q_length, NULL, 0,
                             "inv_q/length");
-    ucs_vfs_obj_add_ro_file(rcache, ucs_rcache_vfs_show_gc_list_length, NULL,
+    ucs_vfs_obj_add_ro_file(rcache, ucs_rcache_vfs_show_gc_list_length, NULL, 0,
                             "gc_list/length");
 }
 

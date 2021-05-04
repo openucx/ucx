@@ -105,14 +105,14 @@ static const uct_iface_vfs_cap_limit_info_t uct_iface_vfs_cap_limit_infos[] = {
 };
 
 
-static void
-uct_iface_vfs_show_cap(void *obj, void *arg, ucs_string_buffer_t *strb)
+static void uct_iface_vfs_show_cap(void *obj, ucs_string_buffer_t *strb,
+                                   void *arg_ptr, uint64_t arg_u64)
 {
     ucs_string_buffer_appendf(strb, "1\n");
 }
 
-static void
-uct_iface_vfs_show_cap_limit(void *obj, void *arg, ucs_string_buffer_t *strb)
+static void uct_iface_vfs_show_cap_limit(void *obj, ucs_string_buffer_t *strb,
+                                         void *arg_ptr, uint64_t arg_u64)
 {
     uct_iface_h iface = obj;
     uct_iface_attr_t iface_attr;
@@ -124,7 +124,7 @@ uct_iface_vfs_show_cap_limit(void *obj, void *arg, ucs_string_buffer_t *strb)
         return;
     }
 
-    attr = *(size_t*)UCS_PTR_BYTE_OFFSET(&iface_attr, *(size_t*)arg);
+    attr = *(size_t*)UCS_PTR_BYTE_OFFSET(&iface_attr, arg_u64);
     ucs_string_buffer_appendf(strb, "%s\n",
                               ucs_memunits_to_str(attr, buf, sizeof(buf)));
 }
@@ -135,7 +135,7 @@ static void uct_iface_vfs_init_caps(uct_iface_h iface, uint64_t iface_cap_flags)
 
     for (i = 0; i < ucs_static_array_size(uct_iface_vfs_cap_infos); ++i) {
         if (iface_cap_flags & uct_iface_vfs_cap_infos[i].flag) {
-            ucs_vfs_obj_add_ro_file(iface, uct_iface_vfs_show_cap, NULL,
+            ucs_vfs_obj_add_ro_file(iface, uct_iface_vfs_show_cap, NULL, 0,
                                     "attribute/capability/%s",
                                     uct_iface_vfs_cap_infos[i].name);
         }
@@ -149,11 +149,11 @@ uct_iface_vfs_init_cap_limits(uct_iface_h iface, uint64_t iface_cap_flags)
 
     for (i = 0; i < ucs_static_array_size(uct_iface_vfs_cap_limit_infos); ++i) {
         if (iface_cap_flags & uct_iface_vfs_cap_limit_infos[i].flag) {
-            ucs_vfs_obj_add_ro_file(
-                    iface, uct_iface_vfs_show_cap_limit,
-                    (void*)&uct_iface_vfs_cap_limit_infos[i].offset,
-                    "attribute/%s/%s", uct_iface_vfs_cap_limit_infos[i].op_name,
-                    uct_iface_vfs_cap_limit_infos[i].limit_name);
+            ucs_vfs_obj_add_ro_file(iface, uct_iface_vfs_show_cap_limit, NULL,
+                                    uct_iface_vfs_cap_limit_infos[i].offset,
+                                    "attribute/%s/%s",
+                                    uct_iface_vfs_cap_limit_infos[i].op_name,
+                                    uct_iface_vfs_cap_limit_infos[i].limit_name);
         }
     }
 }

@@ -251,8 +251,8 @@ err_free_listeners:
     return status;
 }
 
-static void
-ucp_listener_vfs_show_ip(void *obj, void *arg, ucs_string_buffer_t *strb)
+static void ucp_listener_vfs_show_ip(void *obj, ucs_string_buffer_t *strb,
+                                     void *arg_ptr, uint64_t arg_u64)
 {
     ucp_listener_h listener   = obj;
     struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
@@ -266,8 +266,8 @@ ucp_listener_vfs_show_ip(void *obj, void *arg, ucs_string_buffer_t *strb)
     }
 }
 
-static void
-ucp_listener_vfs_show_port(void *obj, void *arg, ucs_string_buffer_t *strb)
+static void ucp_listener_vfs_show_port(void *obj, ucs_string_buffer_t *strb,
+                                       void *arg_ptr, uint64_t arg_u64)
 {
     ucp_listener_h listener   = obj;
     struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
@@ -283,8 +283,9 @@ ucp_listener_vfs_show_port(void *obj, void *arg, ucs_string_buffer_t *strb)
 void ucp_listener_vfs_init(ucp_listener_h listener)
 {
     ucs_vfs_obj_add_dir(listener->worker, listener, "listener/%p", listener);
-    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_ip, NULL, "ip");
-    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_port, NULL, "port");
+    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_ip, NULL, 0, "ip");
+    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_port, NULL, 0,
+                            "port");
 }
 
 ucs_status_t ucp_listener_create(ucp_worker_h worker,

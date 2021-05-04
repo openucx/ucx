@@ -44,7 +44,8 @@ struct ucs_vfs_node {
     ucs_vfs_file_show_cb_t text_cb;
     ucs_vfs_refresh_cb_t   refresh_cb;
     ucs_list_link_t        list;
-    void                   *arg;
+    void                   *arg_ptr;
+    uint64_t               arg_u64;
     char                   path[0];
 };
 
@@ -81,30 +82,73 @@ struct {
     }
 
 
-void ucs_vfs_show_memory_address(void *obj, void *arg,
-                                 ucs_string_buffer_t *strb)
+void ucs_vfs_show_memory_address(void *obj, ucs_string_buffer_t *strb,
+                                 void *arg_ptr, uint64_t arg_u64)
 {
     ucs_string_buffer_appendf(strb, "%p\n", obj);
 }
 
-void ucs_vfs_show_string(void *obj, void *arg, ucs_string_buffer_t *strb)
+void ucs_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
+                            uint64_t arg_u64)
 {
-    ucs_string_buffer_appendf(strb, "%s\n", (char*)arg);
+    ucs_vfs_primitive_type_t type = arg_u64;
+    unsigned long ulvalue;
+    long lvalue;
+
+    UCS_STATIC_ASSERT(UCS_VFS_TYPE_UNSIGNED >= UCS_VFS_TYPE_LAST);
+    UCS_STATIC_ASSERT(UCS_VFS_TYPE_HEX >= UCS_VFS_TYPE_LAST);
+
+    if (type == UCS_VFS_TYPE_POINTER) {
+        ucs_string_buffer_appendf(strb, "%p\n", *(void**)arg_ptr);
+    } else if (type == UCS_VFS_TYPE_STRING) {
+        ucs_string_buffer_appendf(strb, "%s\n", (char*)arg_ptr);
+    } else {
+        switch (type & ~(UCS_VFS_TYPE_UNSIGNED | UCS_VFS_TYPE_HEX)) {
+        case UCS_VFS_TYPE_CHAR:
+            lvalue  = *(char*)arg_ptr;
+            ulvalue = *(unsigned char*)arg_ptr;
+            break;
+        case UCS_VFS_TYPE_SHORT:
+            lvalue  = *(short*)arg_ptr;
+            ulvalue = *(unsigned short*)arg_ptr;
+            break;
+        case UCS_VFS_TYPE_INT:
+            lvalue  = *(int*)arg_ptr;
+            ulvalue = *(unsigned int*)arg_ptr;
+            break;
+        case UCS_VFS_TYPE_LONG:
+            lvalue  = *(long*)arg_ptr;
+            ulvalue = *(unsigned long*)arg_ptr;
+            break;
+        default:
+            return;
+        }
+
+        if (type & UCS_VFS_TYPE_HEX) {
+            ucs_string_buffer_appendf(strb, "%lx\n", ulvalue);
+        } else if (type & UCS_VFS_TYPE_UNSIGNED) {
+            ucs_string_buffer_appendf(strb, "%lu\n", ulvalue);
+        } else {
+            ucs_string_buffer_appendf(strb, "%ld\n", lvalue);
+        }
+    }
 }
 
-void ucs_vfs_show_ulunits(void *obj, void *arg, ucs_string_buffer_t *strb)
+void ucs_vfs_show_ulunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
+                          uint64_t arg_u64)
 {
     char buf[64];
 
-    ucs_config_sprintf_ulunits(buf, sizeof(buf), arg, NULL);
+    ucs_config_sprintf_ulunits(buf, sizeof(buf), arg_ptr, NULL);
     ucs_string_buffer_appendf(strb, "%s\n", buf);
 }
 
-void ucs_vfs_show_memunits(void *obj, void *arg, ucs_string_buffer_t *strb)
+void ucs_vfs_show_memunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
+                           uint64_t arg_u64)
 {
     char buf[64];
 
-    ucs_memunits_to_str(*(size_t*)arg, buf, sizeof(buf));
+    ucs_memunits_to_str(*(size_t*)arg_ptr, buf, sizeof(buf));
     ucs_string_buffer_appendf(strb, "%s\n", buf);
 }
 
@@ -142,7 +186,8 @@ static void ucs_vfs_node_init(ucs_vfs_node_t *node, ucs_vfs_node_type_t type,
     node->parent     = parent_node;
     node->text_cb    = NULL;
     node->refresh_cb = NULL;
-    node->arg        = NULL;
+    node->arg_ptr    = NULL;
+    node->arg_u64    = 0;
     ucs_list_head_init(&node->children);
 }
 
@@ -310,7 +355,7 @@ ucs_vfs_read_ro_file(ucs_vfs_node_t *node, ucs_string_buffer_t *strb)
 
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
 
-    node->text_cb(parent_node->obj, node->arg, strb);
+    node->text_cb(parent_node->obj, strb, node->arg_ptr, node->arg_u64);
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 }
@@ -340,7 +385,8 @@ void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
 }
 
 void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
-                             void *arg, const char *rel_path, ...)
+                             void *arg_ptr, uint64_t arg_u64,
+                             const char *rel_path, ...)
 {
     ucs_vfs_node_t *node;
     va_list ap;
@@ -353,7 +399,8 @@ void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
 
     if (node != NULL) {
         node->text_cb = text_cb;
-        node->arg     = arg;
+        node->arg_ptr = arg_ptr;
+        node->arg_u64 = arg_u64;
     }
 
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
