@@ -275,9 +275,11 @@ UCS_TEST_F(test_datatype, queue) {
         ucs_queue_push(&head, &elem0.queue);
         EXPECT_FALSE(ucs_queue_is_empty(&head));
         EXPECT_EQ((unsigned long)1, ucs_queue_length(&head));
+        EXPECT_TRUE(ucs_queue_is_tail(&head, &elem0.queue));
 
         ucs_queue_push(&head, &elem1.queue);
         EXPECT_EQ((unsigned long)2, ucs_queue_length(&head));
+        EXPECT_TRUE(ucs_queue_is_tail(&head, &elem1.queue));
 
         EXPECT_EQ(&elem1, ucs_queue_tail_elem_non_empty(&head, elem_t, queue));
 

@@ -42,6 +42,15 @@ static inline size_t ucs_queue_length(ucs_queue_head_t *queue)
 }
 
 /**
+ * @return Whether the given element is the tail element in the queue.
+ */
+static inline int
+ucs_queue_is_tail(ucs_queue_head_t *queue, ucs_queue_elem_t *elem)
+{
+    return queue->ptail == &elem->next;
+}
+
+/**
  * @return Whether the queue is empty.
  */
 static inline int ucs_queue_is_empty(ucs_queue_head_t *queue)
@@ -75,7 +84,7 @@ static inline void ucs_queue_push_head(ucs_queue_head_t *queue,
 {
     elem->next = queue->head;
     queue->head = elem;
-    if (queue->ptail == &queue->head) {
+    if (ucs_queue_is_empty(queue)) {
         queue->ptail = &elem->next;
     }
 }
@@ -92,7 +101,7 @@ static inline ucs_queue_elem_t *ucs_queue_pull_non_empty(ucs_queue_head_t *queue
 
     elem = queue->head;
     queue->head = elem->next;
-    if (queue->ptail == &elem->next) {
+    if (ucs_queue_is_tail(queue, elem)) {
         queue->ptail = &queue->head;
     }
     return elem;
@@ -107,7 +116,7 @@ static inline void ucs_queue_del_iter(ucs_queue_head_t *queue, ucs_queue_iter_t 
 {
     ucs_assert((iter != NULL) && (*iter != NULL));
 
-    if (queue->ptail == &(*iter)->next) {
+    if (ucs_queue_is_tail(queue, *iter)) {
         queue->ptail = iter; /* deleting the last element */
         *iter = NULL;        /* make *ptail point to NULL */
     } else {
@@ -115,14 +124,14 @@ static inline void ucs_queue_del_iter(ucs_queue_head_t *queue, ucs_queue_iter_t 
     }
 
     /* Sanity check */
-    ucs_assertv((queue->head != NULL) || (queue->ptail == &queue->head),
-               "head=%p ptail=%p &head=%p iter=%p", queue->head, queue->ptail,
-               &queue->head, iter);
+    ucs_assertv((queue->head != NULL) || ucs_queue_is_empty(queue),
+                "head=%p ptail=%p &head=%p iter=%p", queue->head, queue->ptail,
+                &queue->head, iter);
 
     /* If the queue is empty, head must point to null */
-    ucs_assertv((queue->ptail != &queue->head) || (queue->head == NULL),
-               "head=%p ptail=%p &head=%p iter=%p", queue->head, queue->ptail,
-               &queue->head, iter);
+    ucs_assertv(!ucs_queue_is_empty(queue) || (queue->head == NULL),
+                "head=%p ptail=%p &head=%p iter=%p", queue->head, queue->ptail,
+                &queue->head, iter);
 }
 
 /**
