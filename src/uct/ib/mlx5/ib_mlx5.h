@@ -179,6 +179,7 @@ enum {
     UCT_IB_MLX5_MD_FLAG_DEVX_RC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(RCSRQ),
     UCT_IB_MLX5_MD_FLAG_DEVX_DCT         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCT),
     UCT_IB_MLX5_MD_FLAG_DEVX_DC_SRQ      = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCSRQ),
+    UCT_IB_MLX5_MD_FLAG_DEVX_DCI         = UCT_IB_MLX5_MD_FLAG_DEVX_OBJS(DCI),
 };
 
 
@@ -333,6 +334,7 @@ typedef struct uct_ib_mlx5_res_domain {
 typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_qp_attr_t            super;
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
+    int                         full_handshake;
 } uct_ib_mlx5_qp_attr_t;
 
 
