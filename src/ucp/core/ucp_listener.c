@@ -169,6 +169,10 @@ ucp_listen(ucp_listener_h listener, const ucp_listener_params_t *params)
     cm_index = 0;
     while (cm_index < num_cms) {
         ucp_cm = &worker->cms[cm_index++];
+        if (ucp_cm->cm == NULL) {
+            continue;
+        }
+
         status = uct_listener_create(ucp_cm->cm, addr,
                                      params->sockaddr.addrlen, &uct_params,
                                      &uct_listeners[listener->num_rscs]);
