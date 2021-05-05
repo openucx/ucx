@@ -1210,8 +1210,9 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config)
     return (uint8_t)ib_config->sl;
 }
 
-UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const uct_iface_params_t *params,
+UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops,
+                    uct_iface_ops_t *tl_ops, uct_md_h md, uct_worker_h worker,
+                    const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
                     const uct_ib_iface_init_attr_t *init_attr)
 {
@@ -1237,14 +1238,14 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_ib_iface_ops_t *ops, uct_md_h md,
 
     preferred_cpu = ucs_cpu_set_find_lcs(&cpu_mask);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &ops->super, md, worker,
-                              params, &config->super
-                              UCS_STATS_ARG(((params->field_mask &
-                                              UCT_IFACE_PARAM_FIELD_STATS_ROOT) &&
-                                             (params->stats_root != NULL)) ?
-                                            params->stats_root :
-                                            dev->stats)
-                              UCS_STATS_ARG(params->mode.device.dev_name));
+    UCS_CLASS_CALL_SUPER_INIT(
+            uct_base_iface_t, tl_ops, &uct_base_iface_internal_ops, md, worker, params,
+            &config->super UCS_STATS_ARG(
+                    ((params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) &&
+                     (params->stats_root != NULL)) ?
+                            params->stats_root :
+                            dev->stats)
+                     UCS_STATS_ARG(params->mode.device.dev_name));
 
     status = uct_ib_device_find_port(dev, params->mode.device.dev_name,
                                      &port_num);

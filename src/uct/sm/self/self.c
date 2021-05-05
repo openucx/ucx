@@ -191,12 +191,13 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_self_iface_ops, md, worker,
-                              params, tl_config
-                              UCS_STATS_ARG((params->field_mask & 
-                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
-                                            params->stats_root : NULL)
-                              UCS_STATS_ARG(UCT_SELF_NAME));
+    UCS_CLASS_CALL_SUPER_INIT(
+            uct_base_iface_t, &uct_self_iface_ops,
+            &uct_base_iface_internal_ops, md, worker, params,
+            tl_config UCS_STATS_ARG(
+                    (params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                            params->stats_root :
+                            NULL) UCS_STATS_ARG(UCT_SELF_NAME));
 
     self->id          = ucs_generate_uuid((uintptr_t)self);
     self->send_size   = config->seg_size;

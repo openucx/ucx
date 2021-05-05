@@ -516,8 +516,9 @@ static int uct_rc_iface_config_limit_value(const char *name,
      }
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const uct_iface_params_t *params,
+UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops,
+                    uct_iface_ops_t *tl_ops, uct_md_h md, uct_worker_h worker,
+                    const uct_iface_params_t *params,
                     const uct_rc_iface_common_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
@@ -525,8 +526,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops, uct_md_h md,
     uint32_t max_ib_msg_size;
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker, params,
-                              &config->super, init_attr);
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, tl_ops, md, worker,
+                              params, &config->super, init_attr);
 
     self->tx.cq_available       = init_attr->cq_len[UCT_IB_DIR_TX] - 1;
     self->rx.srq.available      = 0;

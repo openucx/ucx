@@ -447,11 +447,9 @@ typedef struct uct_rc_mlx5_iface_common_config {
 } uct_rc_mlx5_iface_common_config_t;
 
 
-UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t,
-                  uct_rc_iface_ops_t*,
-                  uct_md_h, uct_worker_h,
-                  const uct_iface_params_t*,
-                  uct_rc_iface_common_config_t*,
+UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
+                  uct_iface_ops_t*, uct_md_h, uct_worker_h,
+                  const uct_iface_params_t*, uct_rc_iface_common_config_t*,
                   uct_rc_mlx5_iface_common_config_t*,
                   uct_ib_iface_init_attr_t*);
 

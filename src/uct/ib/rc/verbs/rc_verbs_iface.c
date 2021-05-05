@@ -23,6 +23,7 @@
 #include <string.h>
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops;
+static uct_iface_ops_t uct_rc_verbs_iface_tl_ops;
 
 static const char *uct_rc_verbs_flush_mode_names[] = {
     [UCT_RC_VERBS_FLUSH_MODE_RDMA_WRITE_0] = "write0",
@@ -259,8 +260,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.cq_len[UCT_IB_DIR_TX]  = config->super.tx_cq_len;
     init_attr.seg_size               = ib_config->seg_size;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops, tl_md,
-                              worker, params, &config->super.super, &init_attr);
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_ops,
+                              &uct_rc_verbs_iface_tl_ops, tl_md, worker, params,
+                              &config->super.super, &init_attr);
 
     self->config.tx_max_wr           = ucs_min(config->tx_max_wr,
                                                self->super.config.tx_qp_len);
@@ -433,9 +435,7 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rc_verbs_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_verbs_iface_t, uct_iface_t);
 
-static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
-    {
-    {
+static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
     .ep_am_short              = uct_rc_verbs_ep_am_short,
     .ep_am_short_iov          = uct_rc_verbs_ep_am_short_iov,
     .ep_am_bcopy              = uct_rc_verbs_ep_am_bcopy,
@@ -472,11 +472,15 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .iface_get_address        = ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable,
-    },
-    .create_cq                = uct_ib_verbs_create_cq,
-    .arm_cq                   = uct_ib_iface_arm_cq,
-    .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
-    .handle_failure           = uct_rc_verbs_handle_failure,
+    };
+
+static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
+    {
+        .super            = {},
+        .create_cq        = uct_ib_verbs_create_cq,
+        .arm_cq           = uct_ib_iface_arm_cq,
+        .event_cq         = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
+        .handle_failure   = uct_rc_verbs_handle_failure,
     },
     .init_rx                  = uct_rc_iface_verbs_init_rx,
     .cleanup_rx               = uct_rc_iface_verbs_cleanup_rx,

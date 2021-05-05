@@ -53,6 +53,7 @@ ucs_config_field_t uct_rc_mlx5_iface_config_table[] = {
 
 
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops;
+static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops;
 
 #ifdef ENABLE_STATS
 ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
@@ -620,10 +621,9 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
     return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
-                    uct_rc_iface_ops_t *ops,
-                    uct_md_h tl_md, uct_worker_h worker,
-                    const uct_iface_params_t *params,
+UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t *ops,
+                    uct_iface_ops_t *tl_ops, uct_md_h tl_md,
+                    uct_worker_h worker, const uct_iface_params_t *params,
                     uct_rc_iface_common_config_t *rc_config,
                     uct_rc_mlx5_iface_common_config_t *mlx5_config,
                     uct_ib_iface_init_attr_t *init_attr)
@@ -643,8 +643,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t,
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, tl_md, worker, params,
-                              rc_config, init_attr);
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, tl_ops, tl_md, worker,
+                              params, rc_config, init_attr);
 
     dev                       = uct_ib_iface_device(&self->super.super);
     self->tx.mmio_mode        = mlx5_config->super.mmio_mode;
@@ -800,7 +800,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t, &uct_rc_mlx5_iface_ops,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_rc_mlx5_iface_ops, &uct_rc_mlx5_iface_tl_ops,
                               tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
 
@@ -831,7 +832,21 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rc_mlx5_iface_t, uct_iface_t);
 
 static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     {
-    {
+        .super            = {},
+        .create_cq        = uct_ib_mlx5_create_cq,
+        .arm_cq           = uct_rc_mlx5_iface_common_arm_cq,
+        .event_cq         = uct_rc_mlx5_iface_common_event_cq,
+        .handle_failure   = uct_rc_mlx5_iface_handle_failure,
+    },
+    .init_rx                  = uct_rc_mlx5_iface_init_rx,
+    .cleanup_rx               = uct_rc_mlx5_iface_cleanup_rx,
+    .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
+    .fc_handler               = uct_rc_iface_fc_handler,
+    .cleanup_qp               = uct_rc_mlx5_ep_cleanup_qp,
+    .ep_post_check            = uct_rc_mlx5_ep_post_check
+};
+
+static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {
     .ep_put_short             = uct_rc_mlx5_ep_put_short,
     .ep_put_bcopy             = uct_rc_mlx5_ep_put_bcopy,
     .ep_put_zcopy             = uct_rc_mlx5_ep_put_zcopy,
@@ -878,19 +893,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .iface_get_address        = uct_rc_mlx5_iface_get_address,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_rc_mlx5_iface_is_reachable
-    },
-    .create_cq                = uct_ib_mlx5_create_cq,
-    .arm_cq                   = uct_rc_mlx5_iface_common_arm_cq,
-    .event_cq                 = uct_rc_mlx5_iface_common_event_cq,
-    .handle_failure           = uct_rc_mlx5_iface_handle_failure,
-    },
-    .init_rx                  = uct_rc_mlx5_iface_init_rx,
-    .cleanup_rx               = uct_rc_mlx5_iface_cleanup_rx,
-    .fc_ctrl                  = uct_rc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_rc_iface_fc_handler,
-    .cleanup_qp               = uct_rc_mlx5_ep_cleanup_qp,
-    .ep_post_check            = uct_rc_mlx5_ep_post_check
-};
+    };
 
 static ucs_status_t
 uct_rc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,

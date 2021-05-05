@@ -226,7 +226,7 @@ typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface,
 
 
 struct uct_ib_iface_ops {
-    uct_iface_ops_t                    super;
+    uct_iface_internal_ops_t           super;
     uct_ib_iface_create_cq_func_t      create_cq;
     uct_ib_iface_arm_cq_func_t         arm_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
@@ -280,8 +280,9 @@ typedef struct uct_ib_fence_info {
 } uct_ib_fence_info_t;
 
 
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
-                  const uct_iface_params_t*, const uct_ib_iface_config_t*,
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_iface_ops_t*,
+                  uct_md_h, uct_worker_h, const uct_iface_params_t*,
+                  const uct_ib_iface_config_t*,
                   const uct_ib_iface_init_attr_t*);
 
 /*

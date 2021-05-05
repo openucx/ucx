@@ -1132,7 +1132,19 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     {
-    {
+        .super            = {},
+        .create_cq        = uct_ib_mlx5_create_cq,
+        .arm_cq           = uct_rc_mlx5_iface_common_arm_cq,
+        .event_cq         = uct_rc_mlx5_iface_common_event_cq,
+        .handle_failure   = uct_dc_mlx5_iface_handle_failure,
+    },
+    .init_rx                  = uct_dc_mlx5_init_rx,
+    .cleanup_rx               = uct_dc_mlx5_cleanup_rx,
+    .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
+    .fc_handler               = uct_dc_mlx5_iface_fc_handler,
+};
+
+static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {
     .ep_put_short             = uct_dc_mlx5_ep_put_short,
     .ep_put_bcopy             = uct_dc_mlx5_ep_put_bcopy,
     .ep_put_zcopy             = uct_dc_mlx5_ep_put_zcopy,
@@ -1177,16 +1189,6 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_dc_mlx5_iface_is_reachable,
     .iface_get_address        = uct_dc_mlx5_iface_get_address,
-    },
-    .create_cq                = uct_ib_mlx5_create_cq,
-    .arm_cq                   = uct_rc_mlx5_iface_common_arm_cq,
-    .event_cq                 = uct_rc_mlx5_iface_common_event_cq,
-    .handle_failure           = uct_dc_mlx5_iface_handle_failure,
-    },
-    .init_rx                  = uct_dc_mlx5_init_rx,
-    .cleanup_rx               = uct_dc_mlx5_cleanup_rx,
-    .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_dc_mlx5_iface_fc_handler,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h worker,
@@ -1233,7 +1235,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_dc_mlx5_iface_ops,
+                              &uct_dc_mlx5_iface_ops, &uct_dc_mlx5_iface_tl_ops,
                               tl_md, worker, params, &config->super,
                               &config->rc_mlx5_common, &init_attr);
 

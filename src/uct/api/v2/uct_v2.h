@@ -128,11 +128,11 @@ typedef struct {
  *        types and operation members initialized. Overhead and bandwidth
  *        for the opration on the given memory types will be reported.
  *
- * @param [in]    iface     Interface to query.
+ * @param [in]    tl_iface  Interface to query.
  * @param [inout] perf_attr Filled with performance attributes.
  */
 ucs_status_t
-uct_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
+uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
 END_C_DECLS
 
