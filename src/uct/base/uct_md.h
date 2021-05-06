@@ -72,6 +72,10 @@ typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
 
 typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh);
 
+typedef ucs_status_t (*uct_md_mem_dereg_and_invalidate_func_t)(uct_md_h md,
+                                                               uct_mem_h memh,
+                                                               uct_completion_t *comp);
+
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,
                                                 size_t length,
@@ -94,17 +98,18 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
  * Memory domain operations
  */
 struct uct_md_ops {
-    uct_md_close_func_t                  close;
-    uct_md_query_func_t                  query;
-    uct_md_mem_alloc_func_t              mem_alloc;
-    uct_md_mem_free_func_t               mem_free;
-    uct_md_mem_advise_func_t             mem_advise;
-    uct_md_mem_reg_func_t                mem_reg;
-    uct_md_mem_dereg_func_t              mem_dereg;
-    uct_md_mem_query_func_t              mem_query;
-    uct_md_mkey_pack_func_t              mkey_pack;
-    uct_md_is_sockaddr_accessible_func_t is_sockaddr_accessible;
-    uct_md_detect_memory_type_func_t     detect_memory_type;
+    uct_md_close_func_t                    close;
+    uct_md_query_func_t                    query;
+    uct_md_mem_alloc_func_t                mem_alloc;
+    uct_md_mem_free_func_t                 mem_free;
+    uct_md_mem_advise_func_t               mem_advise;
+    uct_md_mem_reg_func_t                  mem_reg;
+    uct_md_mem_dereg_func_t                mem_dereg;
+    uct_md_mem_query_func_t                mem_query;
+    uct_md_mkey_pack_func_t                mkey_pack;
+    uct_md_is_sockaddr_accessible_func_t   is_sockaddr_accessible;
+    uct_md_detect_memory_type_func_t       detect_memory_type;
+    uct_md_mem_dereg_and_invalidate_func_t mem_dereg_and_invalidate;
 };
 
 

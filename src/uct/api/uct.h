@@ -2394,6 +2394,25 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
 
 /**
  * @ingroup UCT_MD
+ * @brief Undo the operation of @ref uct_md_mem_reg() and invalidate region.
+ *
+ * @param [in]    md        Memory domain which was used to register the memory.
+ * @param [in]    memh      Local access key to memory region.
+ * @param [inout] comp      Completion handle as defined by @ref
+ *                          uct_completion_t. Can be NULL, which means that the
+ *                          call will return the current state of the interface
+ *                          and no completion will be generated in case of
+ *                          outstanding communications. If it is not NULL
+ *                          completion counter is decremented by 1 when the
+ *                          call completes. Completion callback is called when
+ *                          the counter reaches 0.
+ */
+ucs_status_t uct_md_mem_dereg_and_invalidate(uct_md_h md, uct_mem_h memh,
+                                             uct_completion_t *comp);
+
+
+/**
+ * @ingroup UCT_MD
  * @brief Detect memory type
  *
  *
