@@ -50,6 +50,12 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
      "Maximal total size of registration cache regions",
      ucs_offsetof(uct_md_rcache_config_t, max_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+    {"RCACHE_MAX_UNRELEASED", "512M",
+     "Maximal size of total memory regions in invalidate queue and garbage,\n"
+     "after which a cleanup is triggered.",
+     ucs_offsetof(uct_md_rcache_config_t, max_unreleased),
+     UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -502,4 +508,5 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
     rcache_params->ucm_event_priority = rcache_config->event_prio;
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
+    rcache_params->max_unreleased     = rcache_config->max_unreleased;
 }

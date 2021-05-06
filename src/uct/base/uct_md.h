@@ -24,11 +24,12 @@
 
 
 typedef struct uct_md_rcache_config {
-    size_t               alignment;    /**< Force address alignment */
-    unsigned             event_prio;   /**< Memory events priority */
-    double               overhead;     /**< Lookup overhead estimation */
-    unsigned long        max_regions;  /**< Maximal number of rcache regions */
-    size_t               max_size;     /**< Maximal size of mapped memory */
+    size_t        alignment;      /**< Force address alignment */
+    unsigned      event_prio;     /**< Memory events priority */
+    double        overhead;       /**< Lookup overhead estimation */
+    unsigned long max_regions;    /**< Maximal number of rcache regions */
+    size_t        max_size;       /**< Maximal size of mapped memory */
+    size_t        max_unreleased; /**< Threshold for triggering a cleanup */
 } uct_md_rcache_config_t;
 
 
