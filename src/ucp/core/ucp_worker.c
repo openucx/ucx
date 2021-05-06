@@ -455,9 +455,16 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);
         }
-    } else {
-        ucs_debug("ep %p: destroy internal endpoint due to peer failure", ucp_ep);
+    } else if (!(ucp_ep->flags & UCP_EP_FLAG_INTERNAL)) {
+        ucs_debug("ep %p: destroy endpoint which is not exposed to a user due"
+                  " to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
+    } else {
+        /* No additional actions are required, this is an internal EP created
+         * for sending WIREUP/EP_REMOVED messsage to a peer. So, close operation
+         * was already scheduled, this EP will be deleted after all lanes will
+         * be discarded successfully */
+        ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);
     }
 
     ucs_free(err_handle_arg);
@@ -616,13 +623,32 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     return UCS_OK;
 }
 
+static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
+                                     ucp_lane_index_t *lane_p)
+{
+    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_h ucp_ep;
+    ucp_lane_index_t lane;
+
+    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
+    ucs_list_for_each(ep_ext, ep_list, ep_list) {
+        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
+        lane   = ucp_ep_lookup_lane(ucp_ep, uct_ep);
+        if (lane != UCP_NULL_LANE) {
+            *lane_p = lane;
+            return ucp_ep;
+        }
+    }
+
+    return NULL;
+}
+
 static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
     ucp_lane_index_t lane;
     ucs_status_t ret_status;
-    ucp_ep_ext_gen_t *ep_ext;
     ucp_ep_h ucp_ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -637,21 +663,20 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         goto out;
     }
 
-    /* TODO: need to optimize uct_ep -> ucp_ep lookup */
-    ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
-        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
-        lane = ucp_ep_lookup_lane(ucp_ep, uct_ep);
-        if (lane != UCP_NULL_LANE) {
-            ret_status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane,
-                                                                uct_ep, status);
-            goto out;
-        }
+    ucp_ep = ucp_worker_find_lane(&worker->all_eps, uct_ep, &lane);
+    if (ucp_ep == NULL) {
+        ucp_ep = ucp_worker_find_lane(&worker->internal_eps, uct_ep, &lane);
     }
 
-    ucs_error("worker %p: uct_ep %p isn't associated with any ucp endpoint and "
-              "was not scheduled to be discarded",
-              worker, uct_ep);
-    ret_status = UCS_ERR_NO_ELEM;
+    if (ucp_ep != NULL) {
+        ret_status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane,
+                                                            uct_ep, status);
+    } else {
+        ucs_error("worker %p: uct_ep %p isn't associated with any ucp endpoint"
+                  " and was not scheduled to be discarded",
+                  worker, uct_ep);
+        ret_status = UCS_ERR_NO_ELEM;
+    }
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -2051,6 +2076,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->arm_ifaces);
     ucs_list_head_init(&worker->stream_ready_eps);
     ucs_list_head_init(&worker->all_eps);
+    ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
 
@@ -2408,13 +2434,15 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
     })
 }
 
-static void ucp_worker_destroy_eps(ucp_worker_h worker)
+static void ucp_worker_destroy_eps(ucp_worker_h worker,
+                                   ucs_list_link_t *ep_list,
+                                   const char *ep_type_name)
 {
     ucp_ep_ext_gen_t *ep_ext, *tmp;
     ucp_ep_h ep;
 
-    ucs_debug("worker %p: destroy all endpoints", worker);
-    ucs_list_for_each_safe(ep_ext, tmp, &worker->all_eps, ep_list) {
+    ucs_debug("worker %p: destroy %s endpoints", worker, ep_type_name);
+    ucs_list_for_each_safe(ep_ext, tmp, ep_list, ep_list) {
         ep = ucp_ep_from_ext_gen(ep_ext);
         /* Cleanup pending operations on the UCP EP before destroying it, since
          * ucp_ep_destroy_internal() expects the pending queues of the UCT EPs
@@ -2431,7 +2459,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
-    ucp_worker_destroy_eps(worker);
+    ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
+    ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
     ucp_worker_remove_am_handlers(worker);
     ucp_am_cleanup(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
@@ -2446,7 +2475,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_destroy_mpools(worker);
-    ucp_worker_destroy_mem_type_endpoints(worker);
     ucp_worker_close_cms(worker);
     ucp_worker_close_ifaces(worker);
     ucs_conn_match_cleanup(&worker->conn_match_ctx);

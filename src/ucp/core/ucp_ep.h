@@ -120,8 +120,13 @@ enum {
                                                            server side */
     UCP_EP_INIT_ERR_MODE_PEER_FAILURE  = UCS_BIT(4),  /**< Endpoint requires an
                                                            @ref UCP_ERR_HANDLING_MODE_PEER */
-    UCP_EP_INIT_CM_PHASE               = UCS_BIT(5)   /**< Endpoint connection to a peer is on
+    UCP_EP_INIT_CM_PHASE               = UCS_BIT(5),  /**< Endpoint connection to a peer is on
                                                            CM phase */
+    UCP_EP_INIT_FLAG_INTERNAL          = UCS_BIT(6),  /**< Endpoint for internal usage
+                                                           (e.g. memtype, reply on keepalive) */
+    UCP_EP_INIT_CONNECT_TO_IFACE_ONLY  = UCS_BIT(7)   /**< Select transports which
+                                                           support CONNECT_TO_IFACE
+                                                           mode only */
 };
 
 
