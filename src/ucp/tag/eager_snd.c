@@ -194,8 +194,9 @@ const ucp_request_send_proto_t ucp_tag_eager_proto = {
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
                                    ucs_status_t status)
 {
-    static const uint16_t all_completed = UCP_REQUEST_FLAG_LOCAL_COMPLETED |
-                                          UCP_REQUEST_FLAG_REMOTE_COMPLETED;
+    static const uint16_t all_completed =
+            UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED |
+            UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
 
     ucs_assertv(!(req->flags & flag), "req->flags=%d flag=%d", req->flags, flag);
     req->flags |= flag;
@@ -229,7 +230,7 @@ ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
     ucs_assert(req->send.state.uct_comp.count == 0);
 
     ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
-    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED,
                                   status);
 }
 
@@ -319,7 +320,7 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
         return;
     }
 
-    ucs_assert(reqhdr->req_id != UCP_REQUEST_ID_INVALID);
+    ucs_assert(reqhdr->req_id != UCS_PTR_MAP_KEY_INVALID);
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, reqhdr->ep_id, return,
                                   "ACK for sync-send");
 

@@ -28,7 +28,7 @@ static size_t ucp_rma_sw_put_pack_cb(void *dest, void *arg)
     puth->ep_id    = ucp_ep_remote_id(ep);
     puth->mem_type = UCS_MEMORY_TYPE_HOST;
 
-    ucs_assert(puth->ep_id != UCP_EP_ID_INVALID);
+    ucs_assert(puth->ep_id != UCS_PTR_MAP_KEY_INVALID);
 
     length = ucs_min(req->send.length,
                      ucp_ep_config(ep)->am.max_bcopy - sizeof(*puth));
@@ -48,7 +48,7 @@ static ucs_status_t ucp_rma_sw_progress_put(uct_pending_req_t *self)
                                             ucp_rma_sw_put_pack_cb, req,
                                             &packed_len);
     return ucp_rma_request_advance(req, packed_len - sizeof(ucp_put_hdr_t),
-                                   status, UCP_REQUEST_ID_INVALID);
+                                   status, UCS_PTR_MAP_KEY_INVALID);
 }
 
 static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
@@ -61,7 +61,7 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
     getreqh->mem_type   = req->send.rma.rkey->mem_type;
     getreqh->req.req_id = ucp_request_get_id(req);
-    ucs_assert(getreqh->req.ep_id != UCP_EP_ID_INVALID);
+    ucs_assert(getreqh->req.ep_id != UCS_PTR_MAP_KEY_INVALID);
 
     return sizeof(*getreqh);
 }

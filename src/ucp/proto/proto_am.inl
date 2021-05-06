@@ -591,7 +591,8 @@ ucp_am_bcopy_handle_status_from_pending(uct_pending_req_t *self, int multi,
 
     ucp_request_send_generic_dt_finish(req);
     if (tag_sync) {
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+        ucp_tag_eager_sync_completion(req,
+                                      UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED,
                                       status);
     } else {
         ucp_request_complete_send(req, status);

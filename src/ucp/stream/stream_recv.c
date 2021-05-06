@@ -572,7 +572,7 @@ static void ucp_stream_am_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     snprintf(buffer, max, "STREAM ep_id 0x%"PRIx64, hdr->ep_id);
     p = buffer + strlen(buffer);
 
-    ucs_assert(hdr->ep_id != UCP_EP_ID_INVALID);
+    ucs_assert(hdr->ep_id != UCS_PTR_MAP_KEY_INVALID);
     ucp_dump_payload(worker->context, p, buffer + max - p,
                      UCS_PTR_BYTE_OFFSET(data, hdr_len), length - hdr_len);
 }

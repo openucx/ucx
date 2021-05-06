@@ -177,8 +177,8 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ucp_ep_ext_gen(ep)->user_data        = NULL;
     ucp_ep_ext_control(ep)->cm_idx       = UCP_NULL_RESOURCE;
     ucp_ep_ext_control(ep)->err_cb       = NULL;
-    ucp_ep_ext_control(ep)->local_ep_id  =
-    ucp_ep_ext_control(ep)->remote_ep_id = UCP_EP_ID_INVALID;
+    ucp_ep_ext_control(ep)->local_ep_id  = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->remote_ep_id = UCS_PTR_MAP_KEY_INVALID;
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->flush_state));
@@ -323,7 +323,9 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
     status = ucs_ptr_map_put(&worker->ptr_map, ep,
                              !!(ep->flags & UCP_EP_FLAG_INDIRECT_ID),
                              &ucp_ep_ext_control(ep)->local_ep_id);
-    if (status != UCS_OK) {
+    if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
+        ucs_error("ep %p: failed to allocate ID: %s", ep,
+                  ucs_status_string(status));
         goto err_destroy_ep_base;
     }
 
@@ -354,21 +356,23 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucp_ep_remove_ref(ep);
 }
 
+/* Since release functuion resets EP ID to @ref UCS_PTR_MAP_KEY_INVALID and PTR
+ * MAP considers @ref UCS_PTR_MAP_KEY_INVALID as direct key, release EP ID is
+ * re-entrant function */
 void ucp_ep_release_id(ucp_ep_h ep)
 {
     ucs_status_t status;
 
-    if (ucp_ep_ext_control(ep)->local_ep_id == UCP_EP_ID_INVALID) {
-        return;
-    }
-
-    status = ucs_ptr_map_del(&ep->worker->ptr_map, ucp_ep_local_id(ep));
-    if (status != UCS_OK) {
+    /* Don't use ucp_ep_local_id() function here to avoid assertion failure,
+     * because local_ep_id can be set to @ref UCS_PTR_MAP_KEY_INVALID */
+    status = ucs_ptr_map_del(&ep->worker->ptr_map,
+                             ucp_ep_ext_control(ep)->local_ep_id);
+    if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         ucs_warn("ep %p local id 0x%" PRIxPTR ": ucs_ptr_map_del failed: %s",
                  ep, ucp_ep_local_id(ep), ucs_status_string(status));
     }
 
-    ucp_ep_ext_control(ep)->local_ep_id = UCP_EP_ID_INVALID;
+    ucp_ep_ext_control(ep)->local_ep_id = UCS_PTR_MAP_KEY_INVALID;
 }
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
@@ -2693,9 +2697,7 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
     ucp_trace_req(req, "purged with status %s (%d) on ep %p",
                   ucs_status_string(status), status, ucp_ep);
 
-    if (req->id != UCP_REQUEST_ID_INVALID) {
-        ucp_request_id_release(req);
-    }
+    ucp_request_id_release(req);
 
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));

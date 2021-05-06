@@ -546,7 +546,7 @@ ucp_proto_rndv_rtr_uct_comp_from_id(ucp_worker_h worker, uint64_t id,
     void *ptr;
 
     status = ucs_ptr_map_get(&worker->ptr_map, id, extract, &ptr);
-    if (ucs_unlikely(status != UCS_OK)) {
+    if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }
 

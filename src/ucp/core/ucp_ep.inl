@@ -173,7 +173,7 @@ static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
 #if UCS_ENABLE_ASSERT
     if (!(ep->flags & UCP_EP_FLAG_REMOTE_ID)) {
         /* Let remote side assert if it gets invalid key */
-        return UCP_EP_ID_INVALID;
+        return UCS_PTR_MAP_KEY_INVALID;
     }
 #endif
     return ucp_ep_ext_control(ep)->remote_ep_id;
@@ -181,7 +181,7 @@ static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_remote_id(ucp_ep_h ep)
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t ucp_ep_local_id(ucp_ep_h ep)
 {
-    ucs_assert(ucp_ep_ext_control(ep)->local_ep_id != UCP_EP_ID_INVALID);
+    ucs_assert(ucp_ep_ext_control(ep)->local_ep_id != UCS_PTR_MAP_KEY_INVALID);
     return ucp_ep_ext_control(ep)->local_ep_id;
 }
 
@@ -208,7 +208,7 @@ static inline void ucp_ep_update_remote_id(ucp_ep_h ep,
                     ep, remote_id, ucp_ep_ext_control(ep)->remote_ep_id);
     }
 
-    ucs_assert(remote_id != UCP_EP_ID_INVALID);
+    ucs_assert(remote_id != UCS_PTR_MAP_KEY_INVALID);
     ucs_trace("ep %p: set remote_id to 0x%" PRIxPTR, ep, remote_id);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_ID, 0);
     ucp_ep_ext_control(ep)->remote_ep_id = remote_id;

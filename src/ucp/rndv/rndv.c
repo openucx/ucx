@@ -1794,7 +1794,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
                                          UCP_REQUEST_SEND_PROTO_RNDV_PUT);
 
             ucp_rndv_req_init_from_super_req(freq, fsreq, length, offset,
-                                             offset, UCP_REQUEST_ID_INVALID);
+                                             offset, UCS_PTR_MAP_KEY_INVALID);
             freq->send.datatype     = ucp_dt_make_contig(1);
             freq->send.mem_type     = UCS_MEMORY_TYPE_HOST;
             freq->send.uct.func     = ucp_rndv_progress_rma_put_zcopy;
@@ -2029,7 +2029,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
 
     switch (id) {
     case UCP_AM_ID_RNDV_RTS:
-        ucs_assert(rndv_rts_hdr->sreq.ep_id != UCP_EP_ID_INVALID);
+        ucs_assert(rndv_rts_hdr->sreq.ep_id != UCS_PTR_MAP_KEY_INVALID);
 
         if (ucp_rndv_rts_is_am(rndv_rts_hdr)) {
             ucs_string_buffer_appendf(&rts_info, "AM am_id %u",

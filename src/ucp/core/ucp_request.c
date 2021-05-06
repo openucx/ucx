@@ -153,7 +153,7 @@ static void ucp_worker_request_fini_proxy(ucs_mpool_t *mp, void *obj)
     ucp_context_h context = worker->context;
     ucp_request_t *req    = obj;
 
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
 
     if (context->config.request.cleanup != NULL) {
         context->config.request.cleanup(req + 1);
@@ -414,7 +414,13 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     ucp_trace_req(req, "fast-forward with status %s",
                   ucs_status_string(status));
 
+    /* Set REMOTE_COMPLETED flag to make sure that TAG/Sync operations will be
+     * fully completed here */
+    req->flags |= UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
+    ucp_request_id_release(req);
+
     if (req->send.uct.func == ucp_proto_progress_am_single) {
+        ucs_assert(req->send.state.uct_comp.count == 0);
         req->send.proto.comp_cb(req);
     } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
@@ -432,9 +438,6 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
             req->send.state.uct_comp.func(&req->send.state.uct_comp);
         }
     } else {
-        if (req->id != UCP_REQUEST_ID_INVALID) {
-            ucp_request_id_release(req);
-        }
         ucp_request_complete_send(req, status);
     }
 }

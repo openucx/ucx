@@ -261,9 +261,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
             !(sreq->send.ep->flags & UCP_EP_FLAG_FAILED) &&
             (ucp_ep_local_id(sreq->send.ep) == rep_hdr->ep_id)) {
             ucp_request_id_release(sreq);
-            ucp_tag_eager_sync_completion(sreq,
-                                          UCP_REQUEST_FLAG_REMOTE_COMPLETED,
-                                          UCS_OK);
+            ucp_tag_eager_sync_completion(
+                    sreq, UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED, UCS_OK);
             ucs_queue_del_iter(queue, iter);
             return UCS_OK;
         }
@@ -287,7 +286,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
     } else {
         UCP_REQUEST_GET_BY_ID(&req, worker, rep_hdr->req_id, 1, return UCS_OK,
                               "EAGER_S ACK %p", rep_hdr);
-        ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_REMOTE_COMPLETED,
+        ucp_tag_eager_sync_completion(req,
+                                      UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED,
                                       UCS_OK);
     }
 
@@ -429,7 +429,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     priv_len              = sizeof(*priv);
     priv                  = ucp_tag_eager_offload_priv(tl_flags, data, length,
                                                        ucp_eager_sync_hdr_t);
-    priv->req.req_id      = UCP_REQUEST_ID_INVALID;
+    priv->req.req_id      = UCS_PTR_MAP_KEY_INVALID;
     priv->req.ep_id       = imm;
     priv->super.super.tag = stag;
     return ucp_eager_tagged_handler(worker, priv, length + priv_len,
@@ -467,7 +467,7 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
         header_len = sizeof(*eager_mid_hdr);
         break;
     case UCP_AM_ID_EAGER_SYNC_ONLY:
-        ucs_assert(eagers_hdr->req.ep_id != UCP_EP_ID_INVALID);
+        ucs_assert(eagers_hdr->req.ep_id != UCS_PTR_MAP_KEY_INVALID);
         snprintf(buffer, max,
                  "EGRS tag %" PRIx64 " ep_id 0x%" PRIx64 " req_id 0x%" PRIx64
                  " len %zu",

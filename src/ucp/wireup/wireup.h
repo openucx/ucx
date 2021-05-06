@@ -70,13 +70,13 @@ typedef struct {
  * Packet structure for wireup requests.
  */
 typedef struct ucp_wireup_msg {
-    uint8_t                 type;         /* Message type */
-    uint8_t                 err_mode;     /* Peer error handling mode defined in
-                                             @ucp_err_handling_mode_t */
-    ucp_ep_match_conn_sn_t  conn_sn;      /* Connection sequence number */
-    uint64_t                src_ep_id;    /* Endpoint ID of source */
-    uint64_t                dst_ep_id;    /* Endpoint ID of destination, can be
-                                             UCP_EP_ID_INVALID */
+    uint8_t                type; /* Message type */
+    uint8_t                err_mode; /* Peer error handling mode defined in
+                                        @ucp_err_handling_mode_t */
+    ucp_ep_match_conn_sn_t conn_sn; /* Connection sequence number */
+    uint64_t               src_ep_id; /* Endpoint ID of source */
+    uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
+                                         UCS_PTR_MAP_KEY_INVALID */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
