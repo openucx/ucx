@@ -57,8 +57,6 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
         goto err_free_context;
     }
 
-    dev->flags = UCT_IB_DEVICE_FLAG_EFA;
-
     status = uct_ib_verbs_md_open_common(ibv_device, md_config, &md->super);
     if (status != UCS_OK) {
         ucs_error("uct_ib_verbs_md_open_common() failed for EFA device %s",
