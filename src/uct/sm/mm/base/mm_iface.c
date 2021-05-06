@@ -613,7 +613,6 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     size_t alignment, align_offset;
     ucs_status_t status;
     unsigned i;
-    char proc[32];
 
     UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_mm_iface_ops, md,
                               worker, params, tl_config);
@@ -682,21 +681,13 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     uct_mm_iface_set_fifo_ptrs(self->recv_fifo_mem.address,
                                &self->recv_fifo_ctl, &self->recv_fifo_elems);
-    self->recv_fifo_ctl->head      = 0;
-    self->recv_fifo_ctl->tail      = 0;
-    self->recv_fifo_ctl->owner.pid = getpid();
-    self->read_index               = 0;
-    self->read_index_elem          = UCT_MM_IFACE_GET_FIFO_ELEM(self,
-                                                                self->recv_fifo_elems,
-                                                                self->read_index);
-    uct_ep_get_process_proc_dir(proc, sizeof(proc),
-                                self->recv_fifo_ctl->owner.pid);
-    status = ucs_sys_get_file_time(proc, UCS_SYS_FILE_TIME_CTIME,
-                                   &self->recv_fifo_ctl->owner.start_time);
-    if (status != UCS_OK) {
-        ucs_error("mm_iface failed to get process start time");
-        return status;
-    }
+    self->recv_fifo_ctl->head = 0;
+    self->recv_fifo_ctl->tail = 0;
+    self->recv_fifo_ctl->pid  = getpid();
+    self->read_index          = 0;
+    self->read_index_elem     = UCT_MM_IFACE_GET_FIFO_ELEM(self,
+                                                           self->recv_fifo_elems,
+                                                           self->read_index);
 
     /* create a unix file descriptor to receive event notifications */
     status = uct_mm_iface_create_signal_fd(self);

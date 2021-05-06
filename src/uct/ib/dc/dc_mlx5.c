@@ -1488,7 +1488,8 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
 
     status  = uct_iface_handle_ep_err(&ib_iface->super.super,
                                       &ep->super.super, ep_status);
-    log_lvl = uct_ib_iface_failure_log_level(ib_iface, status, ep_status);
+    log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
+                                               ep_status);
     uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
                                     txwq, log_lvl);
 

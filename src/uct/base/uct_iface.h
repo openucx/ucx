@@ -799,16 +799,33 @@ void uct_am_short_fill_data(void *buffer, uint64_t header, const void *payload,
     memcpy(packet->payload, payload, length);
 }
 
+
+static UCS_F_ALWAYS_INLINE
+ucs_log_level_t uct_base_iface_failure_log_level(uct_base_iface_t *iface,
+                                                 ucs_status_t err_handler_status,
+                                                 ucs_status_t status)
+{
+    if (err_handler_status != UCS_OK) {
+        return UCS_LOG_LEVEL_FATAL;
+    } else if ((status == UCS_ERR_ENDPOINT_TIMEOUT) ||
+               (status == UCS_ERR_CONNECTION_RESET)) {
+        return iface->config.failure_level;
+    } else {
+        return UCS_LOG_LEVEL_ERROR;
+    }
+}
+
+
 ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *iov,
                                       size_t iovcnt);
 
 int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid);
 
-uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time);
+ucs_status_t uct_ep_keepalive_create(pid_t pid, uct_keepalive_info_t **ka_p);
 
 ucs_status_t
-uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
-                       uct_completion_t *comp);
+uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t **ka, pid_t pid,
+                       unsigned flags, uct_completion_t *comp);
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 

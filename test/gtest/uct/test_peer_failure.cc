@@ -96,6 +96,7 @@ ucs_status_t test_uct_peer_failure::err_cb(void *arg, uct_ep_h ep,
 
     switch (status) {
     case UCS_ERR_ENDPOINT_TIMEOUT:
+    case UCS_ERR_CONNECTION_RESET:
     case UCS_ERR_CANCELED: /* goes from ib flushed QP */
         return UCS_OK;
     default:
@@ -476,20 +477,15 @@ class test_uct_keepalive : public ucs::test {
 public:
     test_uct_keepalive()
     {
-        m_ka        = NULL;
-        m_pid       = getpid();
-        m_starttime = 0;
-
-        uct_ep_get_process_proc_dir(m_proc, sizeof(m_proc), m_pid);
-        ucs_sys_get_file_time(m_proc, UCS_SYS_FILE_TIME_CTIME, &m_starttime);
+        m_ka  = NULL;
+        m_pid = getpid();
     }
 
     void init()
     {
         m_err_handler_count = 0;
 
-        m_ka = uct_ep_keepalive_create(m_pid, m_starttime);
-        ASSERT_TRUE(m_ka != NULL);
+        ASSERT_UCS_OK(uct_ep_keepalive_create(m_pid, &m_ka));
     }
 
     void cleanup()
@@ -507,8 +503,6 @@ public:
 protected:
     uct_keepalive_info_t *m_ka;
     pid_t                m_pid;
-    char                 m_proc[32];
-    ucs_time_t           m_starttime;
     static unsigned      m_err_handler_count;
 };
 
@@ -526,14 +520,15 @@ UCS_TEST_F(test_uct_keepalive, ep_check)
     ep.iface              = &iface.super;
 
     for (unsigned i = 0; i < 10; ++i) {
-        ucs_status_t status = uct_ep_keepalive_check(&ep, m_ka, 0, NULL);
+        ucs_status_t status = uct_ep_keepalive_check(&ep, &m_ka, m_pid, 0,
+                                                     NULL);
         EXPECT_UCS_OK(status);
     }
 
     /* change start time saved in KA to force an error from EP check */
     m_ka->start_time--;
 
-    ucs_status_t status = uct_ep_keepalive_check(&ep, m_ka, 0, NULL);
+    ucs_status_t status = uct_ep_keepalive_check(&ep, &m_ka, m_pid, 0, NULL);
     EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
     EXPECT_EQ(1u, m_err_handler_count);
 }
@@ -558,16 +553,18 @@ public:
 
         if (has_mm()) {
             uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
-
-            ka_info = ep->keepalive;
+            ka_info         = ep->keepalive;
             ASSERT_TRUE(ka_info != NULL);
         } else if (has_cuda_ipc()) {
 #if HAVE_CUDA
             uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
-
-            ka_info = ep->keepalive;
+            ka_info               = ep->keepalive;
             ASSERT_TRUE(ka_info != NULL);
 #endif
+        } else if (has_cma()) {
+            uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
+            ka_info          = ep->keepalive;
+            ASSERT_TRUE(ka_info != NULL);
         }
 
         if (ka_info != NULL) {
@@ -612,3 +609,63 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)
 _UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_keepalive, cuda_ipc);
+
+
+class test_ucp_peer_failure_rma_zcopy : public test_uct_peer_failure
+{
+public:
+    test_ucp_peer_failure_rma_zcopy()
+    {
+        m_dummy_comp.func   = NULL;
+        m_dummy_comp.count  = INT_MAX;
+        m_dummy_comp.status = UCS_OK;
+    }
+
+    void test_rma_zcopy_peer_failure(bool is_put_op)
+    {
+        {
+            scoped_log_handler slh(wrap_errors_logger);
+            const size_t size = 128;
+            mapped_buffer sendbuf(size, 0, *m_sender);
+            mapped_buffer recvbuf(size, 0, *m_receivers.front());
+            ucs_status_t status;
+
+            // Pretend peer failure by using invalid address
+            if (is_put_op) {
+                status = uct_ep_put_zcopy(m_sender->ep(0),
+                                          sendbuf.iov(), 1,
+                                          0xDEADBEAF, 0ul,
+                                          &m_dummy_comp);
+            } else {
+                status = uct_ep_get_zcopy(m_sender->ep(0),
+                                          sendbuf.iov(), 1,
+                                          0xDEADBEAF, 0ul,
+                                          &m_dummy_comp);
+            }
+            EXPECT_FALSE(UCS_STATUS_IS_ERR(status)) << ucs_status_string(status) ;
+
+            flush();
+        }
+
+        EXPECT_GT(m_err_count, 0ul);
+    }
+
+    uct_completion_t m_dummy_comp;
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rma_zcopy, put,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                 UCT_IFACE_FLAG_PUT_ZCOPY))
+{
+    test_rma_zcopy_peer_failure(true);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rma_zcopy, get,
+                     !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                 UCT_IFACE_FLAG_GET_ZCOPY))
+{
+    test_rma_zcopy_peer_failure(false);
+}
+
+_UCT_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rma_zcopy, cma)
+

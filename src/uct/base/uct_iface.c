@@ -704,45 +704,69 @@ int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
     return snprintf(buffer, max_len, "/proc/%d", (int)pid);
 }
 
-uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time)
+ucs_status_t uct_ep_keepalive_create(pid_t pid, uct_keepalive_info_t **ka_p)
 {
     uct_keepalive_info_t *ka;
+    ucs_time_t start_time;
+    ucs_status_t status;
     int proc_len;
 
     proc_len = uct_ep_get_process_proc_dir(NULL, 0, pid);
     if (proc_len <= 0) {
         ucs_error("failed to get length to hold path to a process directory");
-        return NULL;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     ka = ucs_malloc(sizeof(*ka) + proc_len + 1, "keepalive");
     if (ka == NULL) {
         ucs_error("failed to allocate keepalive info");
-        return NULL;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
+
+    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
+                                   &start_time);
+    if (status != UCS_OK) {
+        ucs_error("failed to get process start time");
+        goto err_free_ka;
     }
 
     ka->start_time = start_time;
-    uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
+    *ka_p          = ka;
 
-    return ka;
+    return UCS_OK;
+
+err_free_ka:
+    ucs_free(ka);
+err:
+    return status;
 }
 
 ucs_status_t
-uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
-                       uct_completion_t *comp)
+uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t **ka, pid_t pid,
+                       unsigned flags, uct_completion_t *comp)
 {
     ucs_status_t status;
     ucs_time_t create_time;
 
     UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
-    ucs_assert(ka != NULL);
-
-    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
-                                   &create_time);
-    if (ucs_unlikely((status != UCS_OK) || (ka->start_time != create_time))) {
-        return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
-                                       UCS_ERR_ENDPOINT_TIMEOUT);
+    if (ucs_unlikely(*ka == NULL)) {
+        status = uct_ep_keepalive_create(pid, ka);
+        if (status != UCS_OK) {
+            return uct_iface_handle_ep_err(tl_ep->iface, tl_ep, status);
+        }
+    } else {
+        status = ucs_sys_get_file_time((*ka)->proc, UCS_SYS_FILE_TIME_CTIME,
+                                       &create_time);
+        if (ucs_unlikely((status != UCS_OK) ||
+                         ((*ka)->start_time != create_time))) {
+            return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
+                                           UCS_ERR_ENDPOINT_TIMEOUT);
+        }
     }
 
     return UCS_OK;

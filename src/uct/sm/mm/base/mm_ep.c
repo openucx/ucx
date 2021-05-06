@@ -525,14 +525,6 @@ uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    if (ucs_unlikely(ep->keepalive == NULL)) {
-        ep->keepalive = uct_ep_keepalive_create(ep->fifo_ctl->owner.pid,
-                                                ep->fifo_ctl->owner.start_time);
-        if (ep->keepalive == NULL) {
-            return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
-                                           UCS_ERR_NO_MEMORY);
-        }
-    }
-
-    return uct_ep_keepalive_check(tl_ep, ep->keepalive, flags, comp);
+    return uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->fifo_ctl->pid,
+                                  flags, comp);
 }

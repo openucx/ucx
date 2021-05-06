@@ -62,6 +62,8 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
     iface_attr->bandwidth.dedicated = iface->super.super.config.bandwidth;
     iface_attr->bandwidth.shared    = 0;
     iface_attr->overhead            = 0.4e-6; /* 0.4 us */
+    iface_attr->cap.flags          |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
+                                      UCT_IFACE_FLAG_EP_CHECK;
 
     return UCS_OK;
 }
@@ -94,6 +96,7 @@ static uct_scopy_iface_ops_t uct_cma_iface_ops = {
         .ep_pending_purge         = ucs_empty_function,
         .ep_flush                 = uct_scopy_ep_flush,
         .ep_fence                 = uct_sm_ep_fence,
+        .ep_check                 = uct_cma_ep_check,
         .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_cma_ep_t),
         .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_cma_ep_t),
         .iface_flush              = uct_scopy_iface_flush,
