@@ -19,11 +19,9 @@ uct_ib_efadv_access_flags(const uct_ib_efadv_t *efadv)
 {
     uint64_t access_flags = IBV_ACCESS_LOCAL_WRITE;
 
-#ifdef HAVE_DECL_EFA_DV_RDMA_READ
-    if (efadv->efadv_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
+    if (uct_ib_efadv_has_rdma_read(efadv)) {
         access_flags |= IBV_ACCESS_REMOTE_READ;
     }
-#endif
 
     return access_flags;
 }
