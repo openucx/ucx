@@ -83,7 +83,8 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
     ucp_rsc_index_t next_cm_idx   = cm_wireup_ep->cm_idx + 1;
     uct_worker_cb_id_t prog_id    = UCS_CALLBACKQ_ID_NULL;
 
-    if (next_cm_idx >= ucp_worker_num_cm_cmpts(worker)) {
+    if ((next_cm_idx >= ucp_worker_num_cm_cmpts(worker)) ||
+        (worker->cms[next_cm_idx].cm == NULL)) {
         ucs_debug("reached the end of the cms priority list, no cms left to"
                   " check (sockaddr_cm=%s, cm_idx=%d).",
                   ucp_context_cm_name(worker->context, cm_wireup_ep->cm_idx),

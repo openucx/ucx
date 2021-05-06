@@ -265,6 +265,10 @@ ucp_listen_on_cm(ucp_listener_h listener, const ucp_listener_params_t *params)
 
     for (i = 0; i < num_cms; ++i) {
         ucp_cm = &worker->cms[i];
+        if (ucp_cm->cm == NULL) {
+            continue;
+        }
+
         status = uct_listener_create(ucp_cm->cm, addr,
                                      params->sockaddr.addrlen, &uct_params,
                                      &uct_listeners[listener->num_rscs]);
