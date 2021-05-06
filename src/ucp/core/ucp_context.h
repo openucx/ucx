@@ -22,6 +22,7 @@
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
+#include <ucs/type/param.h>
 
 
 enum {
@@ -352,8 +353,12 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 
 #define UCP_PARAM_VALUE(_obj, _params, _name, _flag, _default) \
-    (((_params)->field_mask & (UCP_##_obj##_PARAM_FIELD_##_flag)) ? \
-                    (_params)->_name : (_default))
+    UCS_PARAM_VALUE(UCS_PP_TOKENPASTE3(UCP_, _obj, _PARAM_FIELD), _params, \
+                    _name, _flag, _default)
+
+
+#define UCP_PARAM_FIELD_VALUE(_params, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCP_PARAM_FIELD, _params, _name, _flag, _default)
 
 
 #define ucp_assert_memtype(_context, _buffer, _length, _mem_type) \

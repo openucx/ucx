@@ -1290,50 +1290,33 @@ out_cleanup_avail_devices:
 static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
                              ucp_mt_type_t mt_type)
 {
-    if (params->field_mask & UCP_PARAM_FIELD_FEATURES) {
-        context->config.features = params->features;
-    } else {
-        context->config.features = 0;
-    }
+    context->config.features = UCP_PARAM_FIELD_VALUE(params, features, FEATURES,
+                                                     0);
     if (!context->config.features) {
         ucs_warn("empty features set passed to ucp context create");
     }
 
-    if (params->field_mask & UCP_PARAM_FIELD_TAG_SENDER_MASK) {
-        context->config.tag_sender_mask = params->tag_sender_mask;
-    } else {
-        context->config.tag_sender_mask = 0;
-    }
+    context->config.tag_sender_mask = UCP_PARAM_FIELD_VALUE(params,
+                                                            tag_sender_mask,
+                                                            TAG_SENDER_MASK, 0);
 
-    if (params->field_mask & UCP_PARAM_FIELD_REQUEST_SIZE) {
-        context->config.request.size = params->request_size;
-    } else {
-        context->config.request.size = 0;
-    }
+    context->config.request.size = UCP_PARAM_FIELD_VALUE(params, request_size,
+                                                         REQUEST_SIZE, 0);
 
-    if (params->field_mask & UCP_PARAM_FIELD_REQUEST_INIT) {
-        context->config.request.init = params->request_init;
-    } else {
-        context->config.request.init = NULL;
-    }
+    context->config.request.init = UCP_PARAM_FIELD_VALUE(params, request_init,
+                                                         REQUEST_INIT, NULL);
 
-    if (params->field_mask & UCP_PARAM_FIELD_REQUEST_CLEANUP) {
-        context->config.request.cleanup = params->request_cleanup;
-    } else {
-        context->config.request.cleanup = NULL;
-    }
+    context->config.request.cleanup = UCP_PARAM_FIELD_VALUE(params,
+                                                            request_cleanup,
+                                                            REQUEST_CLEANUP, NULL);
 
-    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_EPS) {
-        context->config.est_num_eps = params->estimated_num_eps;
-    } else {
-        context->config.est_num_eps = 1;
-    }
+    context->config.est_num_eps = UCP_PARAM_FIELD_VALUE(params,
+                                                        estimated_num_eps,
+                                                        ESTIMATED_NUM_EPS, 1);
 
-    if (params->field_mask & UCP_PARAM_FIELD_ESTIMATED_NUM_PPN) {
-        context->config.est_num_ppn = params->estimated_num_ppn;
-    } else {
-        context->config.est_num_ppn = 1;
-    }
+    context->config.est_num_ppn = UCP_PARAM_FIELD_VALUE(params,
+                                                        estimated_num_ppn,
+                                                        ESTIMATED_NUM_PPN, 1);
 
     if ((params->field_mask & UCP_PARAM_FIELD_MT_WORKERS_SHARED) &&
         params->mt_workers_shared) {

@@ -22,6 +22,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
+#include <ucs/type/param.h>
 
 #include <ucs/datastruct/mpool.inl>
 
@@ -129,9 +130,17 @@ enum {
                     "UCT_EP_PARAM_FIELD_DEV_ADDR and UCT_EP_PARAM_FIELD_IFACE_ADDR are not defined")
 
 
+#define UCT_EP_PARAM_VALUE(_params, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCT_EP_PARAM_FIELD, _params, _name, _flag, _default)
+
+
+#define UCT_IFACE_PARAM_VALUE(_params, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCT_IFACE_PARAM_FIELD, _params, _name, _flag, _default)
+
+
 #define UCT_EP_PARAMS_GET_PATH_INDEX(_params) \
-    (((_params)->field_mask & UCT_EP_PARAM_FIELD_PATH_INDEX) ? \
-     (_params)->path_index : 0)
+    UCT_EP_PARAM_VALUE(_params, path_index, PATH_INDEX, 0)
+
 
 /**
  * Check the condition and return status as a pointer if not true.
@@ -197,8 +206,7 @@ enum {
 
 
 #define UCT_IFACE_PARAM_VALUE(_params, _name, _flag, _default) \
-    (((_params)->field_mask & (UCT_IFACE_PARAM_FIELD_##_flag)) ? \
-     (_params)->_name : (_default))
+    UCS_PARAM_VALUE(UCT_IFACE_PARAM_FIELD, _params, _name, _flag, _default)
 
 
 /**

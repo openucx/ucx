@@ -456,12 +456,10 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
 
     iface->tm.eager_unexp.cb  = params->eager_cb;
     iface->tm.rndv_unexp.cb   = params->rndv_cb;
-    iface->tm.eager_unexp.arg = (params->field_mask &
-                                 UCT_IFACE_PARAM_FIELD_HW_TM_EAGER_ARG) ?
-                                params->eager_arg : NULL;
-    iface->tm.rndv_unexp.arg  = (params->field_mask &
-                                 UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_ARG) ?
-                                params->rndv_arg : NULL;
+    iface->tm.eager_unexp.arg = UCT_IFACE_PARAM_VALUE(params, eager_arg,
+                                                      HW_TM_EAGER_ARG, NULL);
+    iface->tm.rndv_unexp.arg  = UCT_IFACE_PARAM_VALUE(params, eager_arg,
+                                                      HW_TM_RNDV_ARG, NULL);
     iface->tm.unexpected_cnt  = 0;
     iface->tm.num_outstanding = 0;
     iface->tm.num_tags        = ucs_min(IBV_DEVICE_TM_CAPS(dev, max_num_tags),
