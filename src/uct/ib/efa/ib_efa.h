@@ -70,4 +70,7 @@ static inline uint32_t uct_ib_efadv_max_rdma_size(const uct_ib_efadv_t *efadv)
 
 ucs_status_t uct_ib_efadv_query(struct ibv_context *ctx,
                                 struct efadv_device_attr *efadv_attr);
+
+int uct_ib_efadv_check(struct ibv_device *ibv_device);
+
 #endif
