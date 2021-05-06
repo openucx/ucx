@@ -33,34 +33,29 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
                                        uct_ib_md_t **p_md)
 {
     ucs_status_t status;
-    uct_ib_device_t *dev;
+    uct_ib_device_t   *dev;
     uct_ib_efadv_md_t *md;
+
+    if (!uct_ib_efadv_check(ibv_device)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     md = ucs_calloc(1, sizeof(*md), "ib_efa_md");
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    /* Open verbs context */
-    dev              = &md->super.dev;
-    dev->ibv_context = ibv_open_device(ibv_device);
-    if (dev->ibv_context == NULL) {
-        ucs_diag("ibv_open_device(%s) failed: %m",
-                 ibv_get_device_name(ibv_device));
-        status = UCS_ERR_IO_ERROR;
-        goto err;
-    }
-
-    status = uct_ib_efadv_query(dev->ibv_context, &md->efadv.efadv_attr);
-    if (status != UCS_OK) {
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_free_context;
-    }
+    dev = &md->super.dev;
 
     status = uct_ib_verbs_md_open_common(ibv_device, md_config, &md->super);
     if (status != UCS_OK) {
         ucs_error("uct_ib_verbs_md_open_common() failed for EFA device %s",
                   ibv_get_device_name(ibv_device));
+        goto err;
+    }
+
+    status = uct_ib_efadv_query(dev->ibv_context, &md->efadv.efadv_attr);
+    if (status != UCS_OK) {
         goto err_free_context;
     }
 
