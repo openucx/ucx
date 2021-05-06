@@ -423,11 +423,10 @@ static void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
                                    ucs_status_string(status));
         }
         region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
+        ucs_rcache_region_put_internal(rcache, region, flags);
     } else {
         ucs_assert(!(flags & UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE));
     }
-
-     ucs_rcache_region_put_internal(rcache, region, flags);
 }
 
 /* Lock must be held in write mode */
