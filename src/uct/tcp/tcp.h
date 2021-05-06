@@ -281,12 +281,45 @@ typedef struct uct_tcp_ep_zcopy_tx {
 
 
 /**
+ * TCP device address flags
+ */
+typedef enum uct_tcp_device_addr_flags {
+    /**
+     * Device address is extended by additional information:
+     * @ref uct_iface_local_addr_ns_t for loopback reachability
+     */
+    UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK = UCS_BIT(0)
+} uct_tcp_device_addr_flags_t;
+
+
+/**
+ * TCP device address
+ */
+typedef struct uct_tcp_device_addr {
+    uint8_t flags; /* Flags of type @ref uct_tcp_device_addr_flags_t */
+    uint8_t sa_family; /* Address family of packed address */
+    /* The following packed fields follow:
+     * 1. in_addr/in6_addr structure in case of non-loopback interface
+     * 2. @ref uct_iface_local_addr_ns_t in case of loopback interface
+     */
+} UCS_S_PACKED uct_tcp_device_addr_t;
+
+
+/**
+ * TCP iface address
+ */
+typedef struct uct_tcp_iface_addr {
+    uint16_t port; /* Listening port of iface */
+} UCS_S_PACKED uct_tcp_iface_addr_t;
+
+
+/**
  * TCP endpoint address
  */
 typedef struct uct_tcp_ep_addr {
-    in_port_t                     iface_addr;     /* Interface address */
-    ucs_ptr_map_key_t             ptr_map_key;    /* PTR map key, used by EPs created with
-                                                   * CONNECT_TO_EP method */
+    uct_tcp_iface_addr_t iface_addr; /* TCP iface address */
+    ucs_ptr_map_key_t    ptr_map_key; /* PTR map key, used by EPs created with
+                                       * CONNECT_TO_EP method */
 } UCS_S_PACKED uct_tcp_ep_addr_t;
 
 
@@ -452,6 +485,10 @@ ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
                              uct_tcp_ep_t **ep_p);
+
+ucs_status_t uct_tcp_ep_set_dest_addr(const uct_device_addr_t *dev_addr,
+                                      const uct_iface_addr_t *iface_addr,
+                                      struct sockaddr *dest_addr);
 
 uint64_t uct_tcp_ep_get_cm_id(const uct_tcp_ep_t *ep);
 

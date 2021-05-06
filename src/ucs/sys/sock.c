@@ -638,6 +638,38 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr)
     }
 }
 
+ucs_status_t ucs_sockaddr_set_inet_addr(struct sockaddr *addr,
+                                        const void *in_addr)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        memcpy(&UCS_SOCKET_INET_ADDR(addr), in_addr, UCS_IPV4_ADDR_LEN);
+        return UCS_OK;
+    case AF_INET6:
+        memcpy(&UCS_SOCKET_INET6_ADDR(addr), in_addr, UCS_IPV6_ADDR_LEN);
+        return UCS_OK;
+    default:
+        ucs_error("unknown address family: %d", addr->sa_family);
+        return UCS_ERR_INVALID_PARAM;
+    }
+}
+
+ucs_status_t ucs_sockaddr_inet_addr_sizeof(const struct sockaddr *addr,
+                                           size_t *size_p)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        *size_p = UCS_IPV4_ADDR_LEN;
+        return UCS_OK;
+    case AF_INET6:
+        *size_p = UCS_IPV6_ADDR_LEN;
+        return UCS_OK;
+    default:
+        ucs_error("unknown address family: %d", addr->sa_family);
+        return UCS_ERR_INVALID_PARAM;
+    }
+}
+
 int ucs_sockaddr_is_known_af(const struct sockaddr *sa)
 {
     return ((sa->sa_family == AF_INET) ||
@@ -769,13 +801,27 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
                   UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN);
 }
 
-int ucs_sockaddr_is_inaddr_any(struct sockaddr *addr)
+int ucs_sockaddr_is_inaddr_any(const struct sockaddr *addr)
 {
     switch (addr->sa_family) {
     case AF_INET:
-        return UCS_SOCKET_INET_ADDR(addr).s_addr == INADDR_ANY;
+        return UCS_SOCKET_INET_ADDR(addr).s_addr == htonl(INADDR_ANY);
     case AF_INET6:
         return !memcmp(&(UCS_SOCKET_INET6_ADDR(addr)), &in6addr_any,
+                       sizeof(UCS_SOCKET_INET6_ADDR(addr)));
+    default:
+        ucs_debug("invalid address family: %d", addr->sa_family);
+        return 0;
+    }
+}
+
+int ucs_sockaddr_is_inaddr_loopback(const struct sockaddr *addr)
+{
+    switch (addr->sa_family) {
+    case AF_INET:
+        return UCS_SOCKET_INET_ADDR(addr).s_addr == htonl(INADDR_LOOPBACK);
+    case AF_INET6:
+        return !memcmp(&(UCS_SOCKET_INET6_ADDR(addr)), &in6addr_loopback,
                        sizeof(UCS_SOCKET_INET6_ADDR(addr)));
     default:
         ucs_debug("invalid address family: %d", addr->sa_family);

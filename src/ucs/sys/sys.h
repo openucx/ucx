@@ -563,6 +563,14 @@ ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low);
 
 
 /**
+ * Read boot ID value or use machine_guid.
+ *
+ * @return 64-bit value representing system ID.
+ */
+uint64_t ucs_iface_get_system_id();
+
+
+/**
  * Read directory
  *
  * @param [in]  path       Path to directory to read

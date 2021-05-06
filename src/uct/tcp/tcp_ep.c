@@ -696,17 +696,36 @@ out:
     return UCS_OK;
 }
 
-void uct_tcp_ep_set_dest_addr(const uct_device_addr_t *dev_addr,
-                              const uct_iface_addr_t *iface_addr,
-                              struct sockaddr_in *dest_addr)
+ucs_status_t uct_tcp_ep_set_dest_addr(const uct_device_addr_t *dev_addr,
+                                      const uct_iface_addr_t *iface_addr,
+                                      struct sockaddr *dest_addr)
 {
+    uct_tcp_device_addr_t *tcp_dev_addr  = (uct_tcp_device_addr_t*)dev_addr;
+    uct_tcp_iface_addr_t *tcp_iface_addr = (uct_tcp_iface_addr_t*)iface_addr;
+    const struct in_addr loopback_addr   = {
+        .s_addr = htonl(INADDR_LOOPBACK)
+    };
+    const void *in_addr;
+    ucs_status_t status;
+
     memset(dest_addr, 0, sizeof(*dest_addr));
+
+    if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
+        in_addr = &loopback_addr;
+    } else {
+        in_addr = tcp_dev_addr + 1;
+    }
+
     /* TODO: handle AF_INET6 */
-    dest_addr->sin_family = AF_INET;
-    dest_addr->sin_port   = *(const in_port_t*)iface_addr;
-    dest_addr->sin_addr   = *(const struct in_addr*)
-                            ucs_sockaddr_get_inet_addr((const struct sockaddr*)
-                                                       dev_addr);
+    dest_addr->sa_family = tcp_dev_addr->sa_family;
+    ucs_assert(dest_addr->sa_family == AF_INET);
+
+    status = ucs_sockaddr_set_inet_addr(dest_addr, in_addr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return ucs_sockaddr_set_port(dest_addr, ntohs(tcp_iface_addr->port));
 }
 
 uint64_t uct_tcp_ep_get_cm_id(const uct_tcp_ep_t *ep)
@@ -727,8 +746,12 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
     if (ucs_test_all_flags(params->field_mask,
                            UCT_EP_PARAM_FIELD_DEV_ADDR |
                            UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
-        uct_tcp_ep_set_dest_addr(params->dev_addr, params->iface_addr,
-                                 &dest_addr);
+        status = uct_tcp_ep_set_dest_addr(params->dev_addr, params->iface_addr,
+                                          (struct sockaddr*)&dest_addr);
+        if (status != UCS_OK) {
+            return status;
+        }
+
         ep_dest_addr = &dest_addr;
     }
 
@@ -758,6 +781,7 @@ ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
 
     addr->ptr_map_key = ep->cm_id.ptr_map_key;
+
     return uct_iface_get_address(tl_ep->iface,
                                  (uct_iface_addr_t*)&addr->iface_addr);
 }
@@ -770,6 +794,7 @@ ucs_status_t uct_tcp_ep_connect_to_ep(uct_ep_h tl_ep,
     uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
                                                          uct_tcp_iface_t);
     uct_tcp_ep_addr_t *addr             = (uct_tcp_ep_addr_t*)ep_addr;
+    ucs_status_t status;
 
     ucs_assert(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP);
 
@@ -794,8 +819,12 @@ ucs_status_t uct_tcp_ep_connect_to_ep(uct_ep_h tl_ep,
         return UCS_ERR_CONNECTION_RESET;
     }
 
-    uct_tcp_ep_set_dest_addr(dev_addr, (uct_iface_addr_t*)&addr->iface_addr,
-                             &ep->peer_addr);
+    status = uct_tcp_ep_set_dest_addr(dev_addr,
+                                      (uct_iface_addr_t*)&addr->iface_addr,
+                                      (struct sockaddr*)&ep->peer_addr);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     if (!uct_tcp_cm_ep_accept_conn(ep)) {
         ucs_assert(ep->conn_state == UCT_TCP_EP_CONN_STATE_CLOSED);

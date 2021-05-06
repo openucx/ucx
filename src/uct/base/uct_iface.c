@@ -747,3 +747,39 @@ uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
 
     return UCS_OK;
 }
+
+void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
+                                 ucs_sys_namespace_type_t sys_ns_type)
+{
+    addr_ns->super.id = ucs_iface_get_system_id() &
+                        ~UCT_IFACE_LOCAL_ADDR_FLAG_NS;
+
+    if (!ucs_sys_ns_is_default(sys_ns_type)) {
+        addr_ns->super.id |= UCT_IFACE_LOCAL_ADDR_FLAG_NS;
+        addr_ns->sys_ns    = ucs_sys_get_ns(sys_ns_type);
+    }
+}
+
+int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
+                                 ucs_sys_namespace_type_t sys_ns_type)
+{
+    uct_iface_local_addr_ns_t my_addr = {};
+
+    uct_iface_get_local_address(&my_addr, sys_ns_type);
+
+    /* Do not merge these evaluations into single 'if' due to Clang compilation
+     * warning */
+    /* Check if both processes are on same host and both of them are in root (or
+     * non-root) pid namespace */
+    if (addr_ns->super.id != my_addr.super.id) {
+        return 0;
+    }
+
+    if (!(addr_ns->super.id & UCT_IFACE_LOCAL_ADDR_FLAG_NS)) {
+        return 1; /* Both processes are in root namespace */
+    }
+
+    /* We are in non-root PID namespace - return 1 if ID of namespaces are the
+     * same */
+    return addr_ns->sys_ns == my_addr.sys_ns;
+}
