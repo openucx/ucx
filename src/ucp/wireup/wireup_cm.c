@@ -110,7 +110,7 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
     ucp_wireup_ep_t *cm_wireup_ep;
     int i;
 
-    if (next_cm_idx >= num_cm_cmpts) {
+    if ((next_cm_idx >= num_cm_cmpts) || (worker->cms[next_cm_idx].cm == NULL)) {
         for (i = 0; i < num_cm_cmpts; ++i) {
             ucs_string_buffer_appendf(&cms_strb, "%s,",
                                       ucp_context_cm_name(worker->context, i));
