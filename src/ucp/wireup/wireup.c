@@ -116,7 +116,7 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
             ucs_trace("ep %p: not sending wireup message - remote already connected",
                       ep);
             status = UCS_OK;
-            goto out;
+            goto out_free_req;
         }
     } else if (req->send.wireup.type == UCP_WIREUP_MSG_PRE_REQUEST) {
         ucs_assert (!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED));
