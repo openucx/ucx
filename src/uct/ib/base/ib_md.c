@@ -298,6 +298,7 @@ static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_att
 static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    char gdr_file[PATH_MAX];
 
     md_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
     md_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
@@ -311,10 +312,12 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
 
+    ucs_snprintf_safe(gdr_file, PATH_MAX, UCT_IB_DEVICE_SYSFS_FMT,
+                      uct_ib_device_name(&md->dev), "gdr");
+
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
-        uct_ib_check_gpudirect_driver(md, md_attr,
-                                      "/sys/kernel/mm/memory_peers/nv_mem/version",
+        uct_ib_check_gpudirect_driver(md, md_attr, gdr_file,
                                       UCS_MEMORY_TYPE_CUDA);
 
         /* check if ROCM KFD driver is loaded */
