@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
 * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -22,9 +23,6 @@
 
 #include <ucs/datastruct/array.inl>
 
-
-#define UCP_AM_SHORT_REPLY_MAX_SIZE  (UCS_ALLOCA_MAX_SIZE - \
-                                      sizeof(ucs_ptr_map_key_t))
 
 UCS_ARRAY_IMPL(ucp_am_cbs, unsigned, ucp_am_entry_t, static)
 
@@ -899,6 +897,13 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
     return req + 1;
 }
 
+static UCS_F_ALWAYS_INLINE ssize_t
+ucp_am_get_short_max_reply(ucp_ep_h ep)
+{
+    return ucs_min(ucp_ep_config(ep)->am_u.max_eager_short,
+                   UCS_ALLOCA_MAX_SIZE) - sizeof(ucs_ptr_map_key_t);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
                       const void *header, size_t header_length,
@@ -914,7 +919,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
     if (!(flags & UCP_AM_SEND_REPLY)) {
         return ucp_am_send_short(ep, id, flags, header, header_length,
                                  buffer, length);
-    } else if ((length + header_length) < UCP_AM_SHORT_REPLY_MAX_SIZE) {
+    } else if ((length + header_length) < ucp_am_get_short_max_reply(ep)) {
         return ucp_am_send_short_reply(ep, id, flags, header, header_length,
                                        buffer, length);
     }
@@ -984,8 +989,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     if (flags & UCP_AM_SEND_REPLY) {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->am_u.reply_proto,
-                              ucs_min(ucp_ep_config(ep)->am_u.max_eager_short,
-                                      UCP_AM_SHORT_REPLY_MAX_SIZE), flags);
+                              ucp_am_get_short_max_reply(ep), flags);
     } else {
         ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param,
                               ucp_ep_config(ep)->am_u.proto,
