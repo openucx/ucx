@@ -54,6 +54,7 @@ extern const ucp_request_send_proto_t ucp_am_reply_proto;
 static ucs_stats_class_t ucp_ep_stats_class = {
     .name           = "ucp_ep",
     .num_counters   = UCP_EP_STAT_LAST,
+    .class_id       = UCS_STATS_CLASS_ID_INVALID,
     .counter_names  = {
         [UCP_EP_STAT_TAG_TX_EAGER]      = "tx_eager",
         [UCP_EP_STAT_TAG_TX_EAGER_SYNC] = "tx_eager_sync",

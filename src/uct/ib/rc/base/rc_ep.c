@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -20,8 +21,9 @@
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_fc_stats_class = {
-    .name = "rc_fc",
-    .num_counters = UCT_RC_FC_STAT_LAST,
+    .name          = "rc_fc",
+    .num_counters  = UCT_RC_FC_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_FC_STAT_NO_CRED]            = "no_cred",
         [UCT_RC_FC_STAT_TX_GRANT]           = "tx_grant",
@@ -37,8 +39,9 @@ static ucs_stats_class_t uct_rc_fc_stats_class = {
 };
 
 static ucs_stats_class_t uct_rc_txqp_stats_class = {
-    .name = "rc_txqp",
-    .num_counters = UCT_RC_TXQP_STAT_LAST,
+    .name          = "rc_txqp",
+    .num_counters  = UCT_RC_TXQP_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_TXQP_STAT_QP_FULL]          = "qp_full",
         [UCT_RC_TXQP_STAT_SIGNAL]           = "signal"

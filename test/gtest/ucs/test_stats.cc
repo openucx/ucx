@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -15,6 +16,9 @@ extern "C" {
 #ifdef ENABLE_STATS
 #define NUM_DATA_NODES 20
 
+/* The maximum number of UCX aggregate-sum counters */
+#define UCS_STATS_NUM_AGGREGATE_SUM_COUNTERS_MAX 128
+
 class stats_test : public ucs::test {
 public:
 
@@ -28,6 +32,7 @@ public:
         m_data_stats_class->counter_names[1] = "counter1";
         m_data_stats_class->counter_names[2] = "counter2";
         m_data_stats_class->counter_names[3] = "counter3";
+        m_data_stats_class->class_id         = UCS_STATS_CLASS_ID_INVALID;
     }
 
     ~stats_test() {
@@ -253,6 +258,37 @@ public:
     }
 };
 
+class stats_aggregate_sum_test : public stats_udp_test {
+public:
+    void
+    read_and_check_aggrgt_sum_stats(ucs_stats_node_t *data_nodes[NUM_DATA_NODES])
+    {
+        const ucs_stats_aggrgt_counter_name_t *aggregate_cnt_names_db = NULL;
+        ucs_stats_counter_t ucs_stats_aggregate_sum_counters
+                [UCS_STATS_NUM_AGGREGATE_SUM_COUNTERS_MAX];
+        size_t size;
+
+        /* Test */
+        size_t num_counters = ucs_stats_aggregate(ucs_stats_aggregate_sum_counters,
+                                                  UCS_STATS_NUM_AGGREGATE_SUM_COUNTERS_MAX);
+
+        ucs_stats_aggregate_get_counter_names(&aggregate_cnt_names_db, &size);
+
+        EXPECT_EQ(num_counters, size);
+        ASSERT_FALSE(aggregate_cnt_names_db == NULL);
+
+        /* Example for processing the statistics */
+        for (size_t i = 0; i < num_counters; i++) {
+             ucs_print("[%zu] pid=%d | CNT: cls_name=<%s> Name=%s, value=%lu\n",
+                       i,
+                       getpid(),
+                       aggregate_cnt_names_db[i].class_name,
+                       aggregate_cnt_names_db[i].counter_name,
+                       ucs_stats_aggregate_sum_counters[i]);
+       }
+    }
+};
+
 UCS_TEST_F(stats_on_demand_test, null_root) {
     ucs_stats_node_t       *cat_node;
 
@@ -333,6 +369,15 @@ UCS_MT_TEST_F(stats_file_test, mt_add_remove, 10) {
         prepare_nodes(&cat_node, data_nodes);
         free_nodes(cat_node, data_nodes);
     }
+}
+
+UCS_TEST_F(stats_aggregate_sum_test, report) {
+    ucs_stats_node_t *cat_node;
+    ucs_stats_node_t *data_nodes[NUM_DATA_NODES] = {NULL};
+
+    prepare_nodes(&cat_node, data_nodes);
+    read_and_check_aggrgt_sum_stats(data_nodes);
+    free_nodes(cat_node, data_nodes);
 }
 
 #endif

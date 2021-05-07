@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -81,8 +82,9 @@ typedef struct {
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_rcache_stats_class = {
-    .name = "rcache",
-    .num_counters = UCS_RCACHE_STAT_LAST,
+    .name          = "rcache",
+    .num_counters  = UCS_RCACHE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCS_RCACHE_GETS]               = "gets",
         [UCS_RCACHE_HITS_FAST]          = "hits_fast",

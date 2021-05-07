@@ -2,6 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2020. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -19,6 +20,8 @@
 #include <ucs/type/status.h>
 #include <ucs/sys/sys.h>
 #include <ucs/datastruct/khash.h>
+#include <ucs/sys/string.h>
+#include <ucs/datastruct/array.inl>
 
 #include <sys/ioctl.h>
 #ifdef HAVE_LINUX_FUTEX_H
@@ -52,6 +55,11 @@ enum {
 
 KHASH_MAP_INIT_STR(ucs_stats_cls, ucs_stats_class_t*)
 
+UCS_ARRAY_DEFINE_INLINE(aggrt_class_offsets, unsigned, size_t);
+
+UCS_ARRAY_DEFINE_INLINE(aggrgt_counter_names, unsigned,
+                        ucs_stats_aggrgt_counter_name_t);
+
 typedef struct {
     volatile unsigned    flags;
 
@@ -59,6 +67,12 @@ typedef struct {
     ucs_stats_filter_node_t  root_filter_node;
     ucs_stats_node_t     root_node;
     ucs_stats_counter_t  root_counters[UCS_ROOT_STATS_LAST];
+
+    /* Offset of each stats class in the aggregate counters array */
+    ucs_array_t(aggrt_class_offsets) aggrt_class_offsets;
+
+    /* Statistics counters names database */
+    ucs_array_t(aggrgt_counter_names) aggrgt_counter_names;
 
     union {
         FILE             *stream;         /* Output stream */
@@ -87,7 +101,7 @@ static ucs_stats_context_t ucs_stats_context = {
 #ifndef HAVE_LINUX_FUTEX_H
     .cv               = PTHREAD_COND_INITIALIZER,
 #endif
-    .thread           = (pthread_t)-1
+    .thread           = (pthread_t)-1,
 };
 
 static ucs_stats_class_t ucs_stats_root_node_class = {
@@ -97,7 +111,6 @@ static ucs_stats_class_t ucs_stats_root_node_class = {
         [UCS_ROOT_STATS_RUNTIME] = "runtime"
     }
 };
-
 
 #ifdef HAVE_LINUX_FUTEX_H
 static inline int
@@ -460,6 +473,141 @@ void ucs_stats_node_free(ucs_stats_node_t *node)
     }
 }
 
+static size_t ucs_stats_agrgt_sum_clsid_alloc(ucs_stats_node_t *node)
+{
+    ucs_stats_filter_node_t *filter_node = node->filter_node;
+    ucs_stats_node_t *temp_node;
+    uint32_t counter_index;
+    size_t *offset;
+    ucs_stats_aggrgt_counter_name_t *counter_name;
+    ucs_status_t status;
+
+    /* Get current array length and update it in the node structure */
+    node->cls->class_id = ucs_array_length(&ucs_stats_context.aggrt_class_offsets);
+
+    status = ucs_array_append(aggrt_class_offsets, &ucs_stats_context.aggrt_class_offsets);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    offset = ucs_array_last(&ucs_stats_context.aggrt_class_offsets);
+
+    /* Initialize entry */
+    *offset = ucs_array_length(&ucs_stats_context.aggrgt_counter_names);
+
+    ucs_for_each_bit(counter_index, filter_node->counters_bitmask) {
+        ucs_list_for_each(temp_node, &filter_node->type_list_head,
+                          type_list) {
+            status = ucs_array_append(aggrgt_counter_names,
+                                      &ucs_stats_context.aggrgt_counter_names);
+            if (status != UCS_OK) {
+                return status;
+            }
+
+            counter_name = ucs_array_last(&ucs_stats_context.aggrgt_counter_names);
+
+            counter_name->counter_name = node->cls->counter_names[counter_index];
+            counter_name->class_name   = node->cls->name;
+        }
+    }
+
+    return *offset;
+}
+
+static size_t ucs_stats_clsid_to_base_offset(ucs_stats_node_t *node)
+{
+    size_t offset;
+
+    pthread_mutex_lock(&ucs_stats_context.lock);
+
+    if (ucs_likely(node->cls->class_id != UCS_STATS_CLASS_ID_INVALID)) {
+        offset = ucs_array_elem(&ucs_stats_context.aggrt_class_offsets,
+                                node->cls->class_id);
+    } else {
+        offset = ucs_stats_agrgt_sum_clsid_alloc(node);
+    }
+
+    pthread_mutex_unlock(&ucs_stats_context.lock);
+
+    return offset;
+}
+
+
+/**
+ * Returns the aggregate_sum of all counters from all interfaces for a compact statistics trace.
+ * Used for Score-P UCX plugin to collect a compact trace of the counters.
+ *
+ * @param [in]  node                      Pointer to the statistics node.
+ * @param [in]  sel                       Whether or not to recursively iterate through the children.
+ * @param [out] ucs_stats_aggregate_sum   The aggregate-sum of all counters of each class/type.
+ * @param [in]  num_stats_counters_max The number of elements in ucs_stats_aggregate_sum.
+ *
+ * Complexity: O(n)
+ *
+ * Remarks: The function is recursive.
+ */
+static void ucs_stats_aggregate_sum_recurs(ucs_stats_node_t *node,
+                                           ucs_stats_children_sel_t sel,
+                                           ucs_stats_counter_t *aggregate_sum,
+                                           size_t num_stats_counters_max)
+{
+    ucs_stats_filter_node_t *filter_node = node->filter_node;
+    ucs_stats_node_t *temp_node;
+    ucs_stats_node_t *child;
+    uint32_t counter_index;
+    size_t cnt_agrgt_sum_index;
+    size_t counter_output_index;
+
+    /* Filter output */
+    counter_output_index  = 0;
+    cnt_agrgt_sum_index   = 0;
+    ucs_for_each_bit(counter_index, filter_node->counters_bitmask) {
+        ucs_list_for_each(temp_node, &filter_node->type_list_head, type_list) {
+            cnt_agrgt_sum_index = counter_output_index +
+                                      ucs_stats_clsid_to_base_offset(node);
+
+            if (ucs_unlikely(cnt_agrgt_sum_index >= num_stats_counters_max)) {
+                return;
+            }
+
+            aggregate_sum[cnt_agrgt_sum_index] +=
+                temp_node->counters[counter_index];
+        }
+        counter_output_index++;
+    }
+
+    /* Children */
+    ucs_list_for_each(child, &node->children[sel], list) {
+        ucs_stats_aggregate_sum_recurs(child, sel, aggregate_sum,
+                                       num_stats_counters_max);
+    }
+}
+
+size_t ucs_stats_aggregate(ucs_stats_counter_t *counters, size_t max_counters)
+{
+    size_t i;
+
+    /* Zero output counters */
+    for (i = 0; i < max_counters; i++) {
+        counters[i] = 0;
+    }
+
+    /* Aggregate-sum counters */
+    ucs_stats_aggregate_sum_recurs(&ucs_stats_context.root_node,
+                                   UCS_STATS_ACTIVE_CHILDREN,
+                                   counters, max_counters);
+
+    /* Return the number of aggregate-sum counters */
+    return ucs_array_length(&ucs_stats_context.aggrgt_counter_names);
+}
+
+void ucs_stats_aggregate_get_counter_names(
+        const ucs_stats_aggrgt_counter_name_t **names_p, size_t *size_p)
+{
+    *names_p = ucs_array_begin(&ucs_stats_context.aggrgt_counter_names);
+    *size_p  = ucs_array_length(&ucs_stats_context.aggrgt_counter_names);
+}
+
 static void __ucs_stats_dump(int inactive)
 {
     ucs_status_t status = UCS_OK;
@@ -718,6 +866,12 @@ void ucs_stats_init()
     ucs_stats_set_trigger();
     kh_init_inplace(ucs_stats_cls, &ucs_stats_context.cls);
 
+    /* Aggregate-sum initialize database */
+    ucs_array_init_dynamic(&ucs_stats_context.aggrt_class_offsets);
+
+    /* Aggregate-sum class id to name database initialize */
+    ucs_array_init_dynamic(&ucs_stats_context.aggrgt_counter_names);
+
     ucs_debug("statistics enabled, flags: %c%c%c%c%c%c%c",
               (ucs_stats_context.flags & UCS_STATS_FLAG_ON_TIMER)      ? 't' : '-',
               (ucs_stats_context.flags & UCS_STATS_FLAG_ON_EXIT)       ? 'e' : '-',
@@ -746,6 +900,12 @@ void ucs_stats_cleanup()
     });
 
     kh_destroy_inplace(ucs_stats_cls, &ucs_stats_context.cls);
+
+    /* Clean-up aggregate sum database */
+    ucs_array_cleanup_dynamic(&ucs_stats_context.aggrt_class_offsets);
+
+    /* Clean-up aggregate statistics */
+    ucs_array_cleanup_dynamic(&ucs_stats_context.aggrgt_counter_names);
 }
 
 void ucs_stats_dump()

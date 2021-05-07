@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -52,8 +53,9 @@ static ucs_memtrack_context_t ucs_memtrack_context = {
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_memtrack_stats_class = {
-    .name = "memtrack",
-    .num_counters = UCS_MEMTRACK_STAT_LAST,
+    .name          = "memtrack",
+    .num_counters  = UCS_MEMTRACK_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCS_MEMTRACK_STAT_ALLOCATION_COUNT] = "alloc_cnt",
         [UCS_MEMTRACK_STAT_ALLOCATION_SIZE]  = "alloc_size"
