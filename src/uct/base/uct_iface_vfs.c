@@ -160,14 +160,15 @@ uct_iface_vfs_init_cap_limits(uct_iface_h iface, uint64_t iface_cap_flags)
 
 void uct_iface_vfs_refresh(void *obj)
 {
-    uct_iface_h iface = obj;
+    uct_base_iface_t *iface = obj;
     uct_iface_attr_t iface_attr;
 
-    if (uct_iface_query(iface, &iface_attr) != UCS_OK) {
+    if (uct_iface_query(&iface->super, &iface_attr) == UCS_OK) {
+        uct_iface_vfs_init_caps(&iface->super, iface_attr.cap.flags);
+        uct_iface_vfs_init_cap_limits(&iface->super, iface_attr.cap.flags);
+    } else {
         ucs_debug("failed to query iface attributes");
-        return;
     }
 
-    uct_iface_vfs_init_caps(iface, iface_attr.cap.flags);
-    uct_iface_vfs_init_cap_limits(iface, iface_attr.cap.flags);
+    iface->internal_ops->iface_vfs_refresh(&iface->super);
 }

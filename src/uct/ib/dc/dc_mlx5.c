@@ -1131,17 +1131,20 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 }
 
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
-    {
-        .super            = {},
-        .create_cq        = uct_ib_mlx5_create_cq,
-        .arm_cq           = uct_rc_mlx5_iface_common_arm_cq,
-        .event_cq         = uct_rc_mlx5_iface_common_event_cq,
-        .handle_failure   = uct_dc_mlx5_iface_handle_failure,
+    .super = {
+        .super = {
+            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+        },
+        .create_cq      = uct_ib_mlx5_create_cq,
+        .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
+        .event_cq       = uct_rc_mlx5_iface_common_event_cq,
+        .handle_failure = uct_dc_mlx5_iface_handle_failure,
     },
-    .init_rx                  = uct_dc_mlx5_init_rx,
-    .cleanup_rx               = uct_dc_mlx5_cleanup_rx,
-    .fc_ctrl                  = uct_dc_mlx5_ep_fc_ctrl,
-    .fc_handler               = uct_dc_mlx5_iface_fc_handler,
+    .init_rx    = uct_dc_mlx5_init_rx,
+    .cleanup_rx = uct_dc_mlx5_cleanup_rx,
+    .fc_ctrl    = uct_dc_mlx5_ep_fc_ctrl,
+    .fc_handler = uct_dc_mlx5_iface_fc_handler,
 };
 
 static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {

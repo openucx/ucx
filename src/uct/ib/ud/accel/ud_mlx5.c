@@ -751,22 +751,25 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
 }
 
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
-    {
-            .super            = {},
-            .create_cq        = uct_ib_mlx5_create_cq,
-            .arm_cq           = uct_ud_mlx5_iface_arm_cq,
-            .event_cq         = uct_ud_mlx5_iface_event_cq,
-            .handle_failure   = uct_ud_mlx5_iface_handle_failure,
+    .super = {
+        .super = {
+            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+        },
+        .create_cq      = uct_ib_mlx5_create_cq,
+        .arm_cq         = uct_ud_mlx5_iface_arm_cq,
+        .event_cq       = uct_ud_mlx5_iface_event_cq,
+        .handle_failure = uct_ud_mlx5_iface_handle_failure,
     },
-    .async_progress           = uct_ud_mlx5_iface_async_progress,
-    .send_ctl                 = uct_ud_mlx5_ep_send_ctl,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
-    .create_qp                = uct_ud_mlx5_iface_create_qp,
-    .destroy_qp               = uct_ud_mlx5_iface_destroy_qp,
-    .unpack_peer_address      = uct_ud_mlx5_iface_unpack_peer_address,
-    .ep_get_peer_address      = uct_ud_mlx5_ep_get_peer_address,
-    .get_peer_address_length  = uct_ud_mlx5_get_peer_address_length,
-    .peer_address_str         = uct_ud_mlx5_iface_peer_address_str
+    .async_progress          = uct_ud_mlx5_iface_async_progress,
+    .send_ctl                = uct_ud_mlx5_ep_send_ctl,
+    .ep_free                 = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
+    .create_qp               = uct_ud_mlx5_iface_create_qp,
+    .destroy_qp              = uct_ud_mlx5_iface_destroy_qp,
+    .unpack_peer_address     = uct_ud_mlx5_iface_unpack_peer_address,
+    .ep_get_peer_address     = uct_ud_mlx5_ep_get_peer_address,
+    .get_peer_address_length = uct_ud_mlx5_get_peer_address_length,
+    .peer_address_str        = uct_ud_mlx5_iface_peer_address_str,
 };
 
 static uct_iface_ops_t uct_ud_mlx5_iface_tl_ops = {
