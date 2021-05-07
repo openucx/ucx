@@ -310,6 +310,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
 
+    ucs_snprintf_safe(md->gdr_file, PATH_MAX, UCT_IB_DEVICE_SYSFS_FMT,
+                      uct_ib_device_name(&md->dev), "gdr");
+
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
         uct_ib_check_gpudirect_driver(md, md_attr, md->gdr_file,
@@ -1697,9 +1700,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         status = UCS_ERR_NO_MEMORY;
         goto err_cleanup_device;
     }
-
-    ucs_snprintf_safe(md->gdr_file, PATH_MAX,
-                      "/sys/kernel/mm/memory_peers/nv_mem/version");
 
     status = uct_md_query(&md->super, &md_attr);
     if (status != UCS_OK) {

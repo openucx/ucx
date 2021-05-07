@@ -63,9 +63,6 @@ static ucs_status_t uct_ib_efa_md_open(struct ibv_device *ibv_device,
     dev->mr_access_flags = uct_ib_efadv_access_flags(&md->efadv);
     md->super.ops        = &uct_ib_efa_md_ops;
 
-    ucs_snprintf_safe(md->super.gdr_file, PATH_MAX, UCT_IB_DEVICE_SYSFS_FMT,
-                      uct_ib_device_name(&md->super.dev), "gdr");
-
     *p_md = &md->super;
     return UCS_OK;
 

@@ -664,7 +664,7 @@ uct_srd_ep_process_rx_desc(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
                           uct_srd_neth_t *neth, uct_srd_recv_desc_t *desc)
 {
     if (ucs_likely(uct_srd_neth_is_am(neth))) {
-        uct_srd_ep_am_fc_handler(iface, ep, neth);
+        uct_srd_ep_fc_handler(iface, ep, neth);
         uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
                                     neth + 1, desc->data_len, &desc->super);
     } else if (uct_srd_neth_is_put(neth)) {
@@ -1469,12 +1469,12 @@ ucs_status_t uct_srd_ep_put_short(uct_ep_h tl_ep,
 {
     uct_srd_ep_t *ep           = ucs_derived_of(tl_ep, uct_srd_ep_t);
     uct_srd_iface_t *iface     = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
-    uct_srd_put_hdr_t *put_hdr = &iface->tx.put_inl_hdr;
+    uct_srd_put_hdr_t *put_hdr = &iface->tx.put_hdr;
     uct_srd_neth_t *neth       = &put_hdr->neth;
     uct_srd_send_op_t *send_op;
 
     UCT_CHECK_LENGTH(sizeof(*put_hdr) + length,
-                     0, iface->super.config.max_inline, "put_short");
+                     0, iface->config.max_inline, "put_short");
 
     uct_srd_enter(iface);
 
