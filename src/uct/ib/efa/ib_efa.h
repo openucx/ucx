@@ -61,11 +61,11 @@ static inline uint16_t uct_ib_efadv_inline_buf_size(const uct_ib_efadv_t *efadv)
 
 static inline uint32_t uct_ib_efadv_max_rdma_size(const uct_ib_efadv_t *efadv)
 {
-#ifdef HAVE_DECL_EFA_DV_RDMA_READ
-    return efadv->efadv_attr.max_rdma_size;
-#else
+    if (uct_ib_efadv_has_rdma_read(efadv)) {
+        return efadv->efadv_attr.max_rdma_size;
+    }
+
     return 0;
-#endif
 }
 
 ucs_status_t uct_ib_efadv_query(struct ibv_context *ctx,
