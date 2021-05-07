@@ -26,6 +26,7 @@
     ((_prot) & PROT_WRITE) ? 'w' : '-'
 
 
+struct uct_completion;
 typedef struct ucs_rcache         ucs_rcache_t;
 typedef struct ucs_rcache_ops     ucs_rcache_ops_t;
 typedef struct ucs_rcache_params  ucs_rcache_params_t;
@@ -100,7 +101,7 @@ struct ucs_rcache_ops {
 
     /**
      * Dump memory region information to a string buffer.
-     * (Only the user-defined part of the memory regoin should be dumped)
+     * (Only the user-defined part of the memory region should be dumped)
      *
      * @param [in]  context    User context, as passed to @ref ucs_rcache_create
      * @param [in]  rcache     Pointer to the registration cache.
@@ -139,6 +140,7 @@ struct ucs_rcache_region {
     ucs_pgt_region_t       super;     /**< Base class - page table region */
     ucs_list_link_t        lru_list;  /**< LRU list element */
     ucs_list_link_t        tmp_list;  /**< Temp list element */
+    ucs_list_link_t        comp_list; /**< Completion list element */
     volatile uint32_t      refcount;  /**< Reference count, including +1 if it's
                                            in the page table */
     ucs_status_t           status;    /**< Current status code */
@@ -216,4 +218,21 @@ void ucs_rcache_region_hold(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
 
 
+/**
+ * Decrement memory region reference count, invalidate and possibly destroy it.
+ *
+ * @param [in]    rcache    Memory registration cache.
+ * @param [in]    region    Memory region to release.
+ * @param [inout] comp      Completion handle as defined by @ref
+ *                          uct_completion_t. Can be NULL, which means that the
+ *                          call will return the current state of the interface
+ *                          and no completion will be generated in case of
+ *                          outstanding communications. If it is not NULL
+ *                          completion counter is decremented by 1 when the
+ *                          call completes. Completion callback is called when
+ *                          the counter reaches 0.
+ */
+void ucs_rcache_region_put_and_invalidate(ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *region,
+                                          struct uct_completion *comp);
 #endif

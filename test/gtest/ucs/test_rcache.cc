@@ -13,6 +13,7 @@ extern "C" {
 #include <ucs/memory/rcache_int.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
+#include <uct/api/uct.h>
 }
 #include <set>
 
@@ -63,7 +64,16 @@ protected:
         uint32_t            id;
     };
 
+    typedef struct {
+        uct_completion_t super;
+        test_rcache     *self;
+    } test_rcache_completion_t;
+
     test_rcache() : m_reg_count(0), m_ptr(NULL) {
+        m_completion.self         = this;
+        m_completion.super.count  = 1;
+        m_completion.super.status = UCS_OK;
+        m_completion.super.func   = completion_cb;
     }
 
     virtual void init() {
@@ -167,6 +177,8 @@ protected:
     volatile uint32_t m_reg_count;
     ucs::handle<ucs_rcache_t*> m_rcache;
     void * volatile m_ptr;
+    size_t m_comp_count;
+    test_rcache_completion_t m_completion;
 
 private:
 
@@ -190,6 +202,12 @@ private:
     {
         reinterpret_cast<test_rcache*>(context)->dump_region(
                         ucs_derived_of(r, struct region), buf, max);
+    }
+
+    static void completion_cb(uct_completion_t *comp)
+    {
+        test_rcache_completion_t *completion = (test_rcache_completion_t*)comp;
+        completion->self->m_comp_count++;
     }
 };
 
@@ -284,6 +302,23 @@ UCS_MT_TEST_F(test_rcache, get_unmapped, 6) {
         ucs_debug("physical address not changed (0x%lx)", pa);
     }
     put(region);
+    free(ptr);
+}
+
+UCS_MT_TEST_F(test_rcache, put_and_invalidate, 1) {
+    static const size_t size = 1 * 1024 * 1024;
+    region *region;
+    void *ptr;
+
+    ptr = malloc(size);
+    region = get(ptr, size);
+
+    ASSERT_EQ(1, m_completion.super.count);
+    ASSERT_EQ(0, m_comp_count);
+    ucs_rcache_region_put_and_invalidate(m_rcache, &region->super,
+                                         &m_completion.super);
+    EXPECT_EQ(1, m_comp_count);
+
     free(ptr);
 }
 

@@ -24,6 +24,8 @@
 #include "rcache.h"
 #include "rcache_int.h"
 
+#include <uct/api/uct.h>
+
 #define ucs_rcache_region_log(_level, _message, ...) \
     do { \
         if (ucs_log_is_enabled(_level)) { \
@@ -71,6 +73,12 @@ typedef struct ucs_rcache_inv_entry {
     ucs_pgt_addr_t           start;
     ucs_pgt_addr_t           end;
 } ucs_rcache_inv_entry_t;
+
+
+typedef struct ucs_rcache_comp_entry {
+    ucs_list_link_t   list;
+    uct_completion_t *comp;
+} ucs_rcache_comp_entry_t;
 
 
 typedef struct {
@@ -165,7 +173,7 @@ static ucs_status_t ucs_rcache_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
     ptr = ucm_orig_mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS,
                         -1, 0);
     if (ptr == MAP_FAILED) {
-        ucs_error("mmmap(size=%zu) failed: %m", size);
+        ucs_error("mmap(size=%zu) failed: %m", size);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -340,6 +348,8 @@ ucs_rcache_region_lru_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
                                             ucs_rcache_region_t *region)
 {
+    ucs_rcache_comp_entry_t *comp;
+
     ucs_rcache_region_trace(rcache, region, "destroy");
 
     ucs_assertv(region->refcount == 0, "region 0x%lx..0x%lx of %s",
@@ -367,6 +377,14 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 
     --rcache->num_regions;
     rcache->total_size -= region->super.end - region->super.start;
+
+    while (!ucs_list_is_empty(&region->comp_list)) {
+        comp = ucs_list_extract_head(&region->comp_list, ucs_rcache_comp_entry_t, list);
+        if ((--comp->comp->count) == 0) {
+            comp->comp->func(comp->comp);
+            ucs_mpool_put(comp);
+        }
+    }
 
     ucs_free(region);
 }
@@ -870,6 +888,8 @@ retry:
         ucs_rcache_lru_evict(rcache);
     }
 
+    ucs_list_head_init(&region->comp_list);
+
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MISSES, 1);
 
     ucs_rcache_region_trace(rcache, region, "created");
@@ -933,6 +953,29 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
     ucs_rcache_region_lru_put(rcache, region);
     ucs_rcache_region_put_internal(rcache, region,
                                    UCS_RCACHE_REGION_PUT_FLAG_TAKE_PGLOCK);
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);
+}
+
+void ucs_rcache_region_put_and_invalidate(ucs_rcache_t *rcache,
+                                          ucs_rcache_region_t *region,
+                                          uct_completion_t *comp)
+{
+    ucs_rcache_comp_entry_t *rcache_comp;
+
+    if (comp != NULL) {
+        /* Add completion entry before any region action to allow completion
+         * shot if region is destroyed */
+        rcache_comp = (ucs_rcache_comp_entry_t*)ucs_mpool_get(&rcache->mp);
+        ucs_assert(rcache_comp != NULL);
+        rcache_comp->comp = comp;
+        ucs_list_add_tail(&region->comp_list, &rcache_comp->list);
+    }
+
+    pthread_rwlock_wrlock(&rcache->pgt_lock);
+    ucs_rcache_region_invalidate(rcache, region, 0);
+    ucs_rcache_region_lru_put(rcache, region);
+    ucs_rcache_region_put_internal(rcache, region, 0);
+    pthread_rwlock_unlock(&rcache->pgt_lock);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);
 }
 
@@ -1098,6 +1141,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_destroy_inv_q_lock;
     }
 
+    UCS_STATIC_ASSERT(sizeof(ucs_rcache_comp_entry_t) <=
+                      sizeof(ucs_rcache_inv_entry_t));
     mp_obj_size = ucs_max(sizeof(ucs_pgt_dir_t), sizeof(ucs_rcache_inv_entry_t));
     mp_align    = ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN);
     status      = ucs_mpool_init(&self->mp, 0, mp_obj_size, 0, mp_align, 1024,
