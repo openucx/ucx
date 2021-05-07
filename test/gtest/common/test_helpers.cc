@@ -26,7 +26,7 @@ typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
 const double test_timeout_in_sec = 60.;
 
-const double watchdog_timeout_default = 900.; // 15 minutes
+double watchdog_timeout = 900.; // 15 minutes
 
 static test_watchdog_t watchdog;
 
@@ -78,7 +78,7 @@ void *watchdog_func(void *arg)
             watchdog.state = WATCHDOG_DEFAULT_SET;
             break;
         case WATCHDOG_DEFAULT_SET:
-            watchdog.timeout     = watchdog_timeout_default;
+            watchdog.timeout     = watchdog_timeout;
             watchdog.state       = WATCHDOG_RUN;
             watchdog.kill_signal = SIGABRT;
             break;
@@ -116,7 +116,7 @@ void watchdog_set(test_watchdog_state_t new_state, double new_timeout)
 
 void watchdog_set(test_watchdog_state_t new_state)
 {
-    watchdog_set(new_state, watchdog_timeout_default);
+    watchdog_set(new_state, watchdog_timeout);
 }
 
 void watchdog_set(double new_timeout)
@@ -173,7 +173,7 @@ int watchdog_start()
 
     pthread_mutex_lock(&watchdog.mutex);
     watchdog.state          = WATCHDOG_RUN;
-    watchdog.timeout        = watchdog_timeout_default;
+    watchdog.timeout        = watchdog_timeout;
     watchdog.kill_signal    = SIGABRT;
     watchdog.watched_thread = pthread_self();
     pthread_mutex_unlock(&watchdog.mutex);
