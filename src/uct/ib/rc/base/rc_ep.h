@@ -305,6 +305,7 @@ ucs_status_t uct_rc_txqp_init(uct_rc_txqp_t *txqp, uct_rc_iface_t *iface,
                               uint32_t qp_num
                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_txqp_cleanup(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp);
+void uct_rc_txqp_vfs_populate(uct_rc_txqp_t *txqp, void *parent_obj);
 
 static inline int16_t uct_rc_txqp_available(uct_rc_txqp_t *txqp)
 {

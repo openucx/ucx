@@ -16,6 +16,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
@@ -846,6 +847,37 @@ void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_c
                                                            config->quota);
 }
 
+static void uct_dc_mlx5_iface_vfs_refresh(uct_iface_h tl_iface)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_dci_pool_t *dci_pool;
+    int i, pool_index, dci_index;
+    uct_dc_dci_t *dci;
+
+    /* Add iface resources */
+    uct_rc_iface_vfs_populate(&iface->super.super);
+
+    /* Add objects for DCIs */
+    dci_index = 0;
+    for (pool_index = 0; pool_index < iface->tx.num_dci_pools; pool_index++) {
+        dci_pool = &iface->tx.dci_pool[pool_index];
+        ucs_vfs_obj_add_dir(iface, dci_pool, "dci_pool/%d", pool_index);
+        for (i = 0; i < iface->tx.ndci; ++i) {
+            dci = &iface->tx.dcis[dci_index];
+            ucs_vfs_obj_add_dir(dci_pool, dci, "%d", dci_index);
+            uct_ib_mlx5_txwq_vfs_populate(&dci->txwq, dci);
+            uct_rc_txqp_vfs_populate(&dci->txqp, dci);
+            ++dci_index;
+        }
+    }
+
+    /* Add objects for DCT */
+    ucs_vfs_obj_add_dir(iface, &iface->rx.dct, "dct");
+    ucs_vfs_obj_add_ro_file(&iface->rx.dct, ucs_vfs_show_primitive,
+                            &iface->rx.dct.qp_num, UCS_VFS_TYPE_U32_HEX,
+                            "qp_num");
+}
+
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md)
 {
     uct_ib_device_t *dev;
@@ -1134,7 +1166,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .super = {
         .super = {
             .iface_estimate_perf = uct_base_iface_estimate_perf,
-            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .iface_vfs_refresh   = uct_dc_mlx5_iface_vfs_refresh,
         },
         .create_cq      = uct_ib_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,

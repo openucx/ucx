@@ -15,6 +15,7 @@
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/type/class.h>
 #include <endian.h>
 
@@ -64,6 +65,14 @@ void uct_rc_txqp_cleanup(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp)
 {
     ucs_assert(ucs_queue_is_empty(&txqp->outstanding));
     UCS_STATS_NODE_FREE(txqp->stats);
+}
+
+void uct_rc_txqp_vfs_populate(uct_rc_txqp_t *txqp, void *parent_obj)
+{
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txqp->unsignaled, UCS_VFS_TYPE_U16, "unsignaled");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txqp->available, UCS_VFS_TYPE_I16, "available");
 }
 
 ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize

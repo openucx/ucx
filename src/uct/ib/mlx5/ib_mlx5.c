@@ -18,6 +18,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
 
@@ -479,6 +480,29 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 #endif
     uct_ib_fence_info_init(&txwq->fi);
     memset(txwq->qstart, 0, UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
+}
+
+void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
+{
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txwq->super.qp_num, UCS_VFS_TYPE_U32_HEX,
+                            "qp_num");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->sw_pi,
+                            UCS_VFS_TYPE_U16, "sw_pi");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txwq->prev_sw_pi, UCS_VFS_TYPE_U16, "prev_sw_pi");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qstart,
+                            UCS_VFS_TYPE_POINTER, "qstart");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->qend,
+                            UCS_VFS_TYPE_POINTER, "qend");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->bb_max,
+                            UCS_VFS_TYPE_U16, "bb_max");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->sig_pi,
+                            UCS_VFS_TYPE_U16, "sig_pi");
+#if UCS_ENABLE_ASSERT
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive, &txwq->hw_ci,
+                            UCS_VFS_TYPE_U16, "hw_ci");
+#endif
 }
 
 ucs_status_t

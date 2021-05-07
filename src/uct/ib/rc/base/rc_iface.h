@@ -386,6 +386,8 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
 
 ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
+void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface);
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_pending_req_t *req)
 {
