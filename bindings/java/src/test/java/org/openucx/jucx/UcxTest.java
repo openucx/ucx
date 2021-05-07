@@ -19,7 +19,6 @@ abstract class UcxTest {
         private UcpEndpoint selfEp;
         private ByteBuffer buffer;
         private final UcpWorker worker;
-        private UcpRemoteKey rkey;
 
         protected MemoryBlock(UcpWorker worker, UcpMemory memory) {
             this.memory = memory;
@@ -27,7 +26,6 @@ abstract class UcxTest {
             if (memory.getMemType() == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
                 this.selfEp = worker.newEndpoint(
                     new UcpEndpointParams().setUcpAddress(worker.getAddress()));
-                rkey = selfEp.unpackRemoteKey(memory.getRemoteKeyBuffer());
             } else {
                 buffer = UcxUtils.getByteBufferView(memory.getAddress(), memory.getLength());
             }
@@ -39,10 +37,11 @@ abstract class UcxTest {
 
         public void setData(String data) throws Exception {
             if (memory.getMemType() == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
-                ByteBuffer srcBuffer = ByteBuffer.allocateDirect(data.length());
+                ByteBuffer srcBuffer = ByteBuffer.allocateDirect(data.length() * 2);
                 srcBuffer.asCharBuffer().put(data);
-                worker.progressRequest(selfEp.putNonBlocking(srcBuffer, memory.getAddress(), rkey,
-                    null));
+                selfEp.sendTaggedNonBlocking(srcBuffer, 0, null);
+                worker.progressRequest(worker.recvTaggedNonBlocking(memory.getAddress(),
+                    data.length() * 2L, 0, 0, null));
             } else {
                 buffer.asCharBuffer().put(data);
             }
@@ -51,8 +50,8 @@ abstract class UcxTest {
         public ByteBuffer getData() throws Exception {
             if (memory.getMemType() == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
                 ByteBuffer dstBuffer = ByteBuffer.allocateDirect((int)memory.getLength());
-                worker.progressRequest(selfEp.getNonBlocking(memory.getAddress(), rkey,
-                    dstBuffer, null));
+                selfEp.sendTaggedNonBlocking(memory.getAddress(), memory.getLength(), 0, null);
+                worker.progressRequest(worker.recvTaggedNonBlocking(dstBuffer, 0L, 0L, null));
                 return dstBuffer;
             } else {
                 return buffer;
@@ -61,9 +60,6 @@ abstract class UcxTest {
 
         @Override
         public void close() {
-            if (rkey != null) {
-                rkey.close();
-            }
             memory.close();
             if (selfEp != null) {
                 selfEp.close();

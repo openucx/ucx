@@ -170,7 +170,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 /* assumes that only MDs are capable of allocating non-host
                  * memory
                  */
-                ucs_error("unable to allocated requested memory type");
+                ucs_trace("unable to allocate requested memory type");
                 status = UCS_ERR_UNSUPPORTED;
                 goto out;
             }
