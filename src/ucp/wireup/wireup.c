@@ -1435,9 +1435,10 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
 
-    /* checking again, with lock held, if already connected or connection is
-     * in progress */
-    if ((ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
+    /* Checking again, with lock held, if already connected, connection is in
+     * progress, or the endpoint is in failed state.
+     */
+    if ((ep->flags & (UCP_EP_FLAG_REMOTE_ID | UCP_EP_FLAG_FAILED)) ||
         ucp_wireup_ep_test(ep->uct_eps[lane])) {
         status = UCS_OK;
         goto out_unlock;
