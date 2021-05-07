@@ -1442,7 +1442,7 @@ public:
 
         LOG << "disconnecting connection " << server_info.conn << " with "
             << get_num_uncompleted(server_info) << " uncompleted operations due"
-            "to \"" << reason << "\"";
+            " to \"" << reason << "\"";
 
         // Destroying the connection will complete its outstanding operations
         server_info.conn->disconnect(new DisconnectCallback(*this,
