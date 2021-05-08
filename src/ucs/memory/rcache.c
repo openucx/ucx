@@ -25,6 +25,7 @@
 #include "rcache_int.h"
 
 #include <uct/api/uct.h>
+#include <uct/base/uct_iface.h>
 
 #define ucs_rcache_region_log(_level, _message, ...) \
     do { \
@@ -380,10 +381,8 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 
     while (!ucs_list_is_empty(&region->comp_list)) {
         comp = ucs_list_extract_head(&region->comp_list, ucs_rcache_comp_entry_t, list);
-        if ((--comp->comp->count) == 0) {
-            comp->comp->func(comp->comp);
-            ucs_mpool_put(comp);
-        }
+        uct_invoke_completion(comp->comp, comp->comp->status);
+        ucs_mpool_put(comp);
     }
 
     ucs_free(region);
@@ -441,11 +440,10 @@ static void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
                                    ucs_status_string(status));
         }
         region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
+        ucs_rcache_region_put_internal(rcache, region, flags);
     } else {
         ucs_assert(!(flags & UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE));
     }
-
-     ucs_rcache_region_put_internal(rcache, region, flags);
 }
 
 /* Lock must be held in write mode */

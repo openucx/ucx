@@ -307,17 +307,38 @@ UCS_MT_TEST_F(test_rcache, get_unmapped, 6) {
 
 UCS_MT_TEST_F(test_rcache, put_and_invalidate, 1) {
     static const size_t size = 1 * 1024 * 1024;
-    region *region;
+    std::vector<region*> regions;
     void *ptr;
+    size_t i;
+    size_t j;
+    size_t comp_count;
 
     ptr = malloc(size);
-    region = get(ptr, size);
 
-    ASSERT_EQ(1, m_completion.super.count);
-    ASSERT_EQ(0, m_comp_count);
-    ucs_rcache_region_put_and_invalidate(m_rcache, &region->super,
-                                         &m_completion.super);
-    EXPECT_EQ(1, m_comp_count);
+    for (i = 1; i < 100; i++) {
+        comp_count = (i + 1) / 2;
+        m_completion.super.count = comp_count;
+        m_comp_count             = 0;
+        for (j = 0; j < i; j++) {
+            regions.push_back(get(ptr, size));
+        }
+
+        for (j = 0; j < i; j++) {
+            ASSERT_EQ(comp_count, m_completion.super.count);
+            ASSERT_EQ(0, m_comp_count);
+            region *region = regions.back();
+            if ((j & 1) == 0) { /* on even iteration invalidate region */
+                ucs_rcache_region_put_and_invalidate(m_rcache, &region->super,
+                                                     &m_completion.super);
+            } else {
+                put(region);
+            }
+            regions.pop_back();
+        }
+
+        ASSERT_TRUE(regions.empty());
+        EXPECT_EQ(1, m_comp_count);
+    }
 
     free(ptr);
 }
