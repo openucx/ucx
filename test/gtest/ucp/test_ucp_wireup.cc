@@ -56,8 +56,6 @@ protected:
     void send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker, ucp_ep_h recv_ep,
                    size_t vecsize, int repeat);
 
-    void waitall(std::vector<void*> reqs);
-
     void disconnect(ucp_ep_h ep);
 
     void disconnect(ucp_test::entity &e);
@@ -271,7 +269,7 @@ void test_ucp_wireup::send_b(ucp_ep_h ep, size_t length, int repeat,
 {
     std::vector<void*> reqs;
     send_nb(ep, length, repeat, reqs, send_data);
-    waitall(reqs);
+    requests_wait(reqs);
 }
 
 void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
@@ -345,7 +343,7 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
 
     send_nb(send_ep, length, repeat, send_reqs, send_data);
     recv_b (recv_worker, recv_ep, length, repeat, send_data);
-    waitall(send_reqs);
+    requests_wait(send_reqs);
     m_rkeys.clear();
 }
 
@@ -359,14 +357,6 @@ void test_ucp_wireup::disconnect(ucp_ep_h ep) {
 
 void test_ucp_wireup::disconnect(ucp_test::entity &e) {
     disconnect(e.revoke_ep());
-}
-
-void test_ucp_wireup::waitall(std::vector<void*> reqs)
-{
-    while (!reqs.empty()) {
-        request_wait(reqs.back());
-        reqs.pop_back();
-    }
 }
 
 bool test_ucp_wireup::ep_iface_has_caps(const entity& e, const std::string& tl,
@@ -692,7 +682,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
     sender().close_ep_req_free(req);
 
     recv_b(receiver().worker(), receiver().ep(), 1000, 1000);
-    waitall(sreqs);
+    requests_wait(sreqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
@@ -813,7 +803,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_2sided, async_connect,
     reqs.push_back(ucp_tag_recv_nb(receiver().worker(), NULL, 0, DT_U64, 1,
                                    (ucp_tag_t)-1, tag_recv_completion));
     EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
-    waitall(reqs);
+    requests_wait(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
@@ -850,7 +840,7 @@ UCS_TEST_P(test_ucp_wireup_2sided, close_nbx_callback) {
         EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
     }
 
-    waitall(reqs);
+    requests_wait(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {

@@ -235,7 +235,7 @@ protected:
     void flush_workers();
     void disconnect(entity& entity);
     ucs_status_t request_wait(void *req, int worker_index = 0);
-    ucs_status_t requests_wait(const std::vector<void*> &reqs, int worker_index = 0);
+    ucs_status_t requests_wait(std::vector<void*> &reqs, int worker_index = 0);
     void request_release(void *req);
     int max_connections();
     void set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env);

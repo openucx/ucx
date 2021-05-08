@@ -251,17 +251,18 @@ ucs_status_t ucp_test::request_wait(void *req, int worker_index)
     return request_process(req, worker_index, true);
 }
 
-ucs_status_t ucp_test::requests_wait(const std::vector<void*> &reqs,
+ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
                                      int worker_index)
 {
     ucs_status_t ret_status = UCS_OK;
 
-    for (std::vector<void*>::const_iterator it = reqs.begin(); it != reqs.end();
-         ++it) {
-        ucs_status_t status = request_process(*it, worker_index, true);
-        if (status != UCS_OK) {
+    while (!reqs.empty()) {
+        ucs_status_t status = request_wait(reqs.back(), worker_index);
+        if (ret_status == UCS_OK) {
+            // Save the first failure
             ret_status = status;
         }
+        reqs.pop_back();
     }
 
     return ret_status;
