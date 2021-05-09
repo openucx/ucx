@@ -42,12 +42,13 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close              = ucs_empty_function,
-        .query              = uct_tcp_md_query,
-        .mkey_pack          = ucs_empty_function_return_success,
-        .mem_reg            = uct_tcp_md_mem_reg,
-        .mem_dereg          = ucs_empty_function_return_success,
-        .detect_memory_type = ucs_empty_function_return_unsupported
+        .close                    = ucs_empty_function,
+        .query                    = uct_tcp_md_query,
+        .mkey_pack                = ucs_empty_function_return_success,
+        .mem_reg                  = uct_tcp_md_mem_reg,
+        .mem_dereg                = ucs_empty_function_return_success,
+        .detect_memory_type       = ucs_empty_function_return_unsupported,
+        .mem_dereg_and_invalidate = ucs_empty_function_return_success
     };
     static uct_md_t md = {
         .ops          = &md_ops,

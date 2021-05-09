@@ -292,13 +292,14 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                      const uct_md_config_t *config, uct_md_h *md_p)
 {
     static uct_md_ops_t md_ops = {
-        .close                  = uct_cuda_ipc_md_close,
-        .query                  = uct_cuda_ipc_md_query,
-        .mkey_pack              = uct_cuda_ipc_mkey_pack,
-        .mem_reg                = uct_cuda_ipc_mem_reg,
-        .mem_dereg              = uct_cuda_ipc_mem_dereg,
-        .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-        .detect_memory_type     = ucs_empty_function_return_unsupported
+        .close                    = uct_cuda_ipc_md_close,
+        .query                    = uct_cuda_ipc_md_query,
+        .mkey_pack                = uct_cuda_ipc_mkey_pack,
+        .mem_reg                  = uct_cuda_ipc_mem_reg,
+        .mem_dereg                = uct_cuda_ipc_mem_dereg,
+        .is_sockaddr_accessible   = ucs_empty_function_return_zero_int,
+        .detect_memory_type       = ucs_empty_function_return_unsupported,
+        .mem_dereg_and_invalidate = uct_md_mem_base_dereg_and_invalidate
     };
 
     int num_devices;

@@ -234,12 +234,13 @@ static ucs_status_t uct_knem_rkey_release(uct_component_t *component,
 }
 
 static uct_md_ops_t md_ops = {
-    .close              = uct_knem_md_close,
-    .query              = uct_knem_md_query,
-    .mkey_pack          = uct_knem_rkey_pack,
-    .mem_reg            = uct_knem_mem_reg,
-    .mem_dereg          = uct_knem_mem_dereg,
-    .detect_memory_type = ucs_empty_function_return_unsupported,
+    .close                    = uct_knem_md_close,
+    .query                    = uct_knem_md_query,
+    .mkey_pack                = uct_knem_rkey_pack,
+    .mem_reg                  = uct_knem_mem_reg,
+    .mem_dereg                = uct_knem_mem_dereg,
+    .detect_memory_type       = ucs_empty_function_return_unsupported,
+    .mem_dereg_and_invalidate = uct_md_mem_base_dereg_and_invalidate
 };
 
 static inline uct_knem_rcache_region_t* uct_knem_rcache_region_from_memh(uct_mem_h memh)
@@ -275,14 +276,26 @@ static ucs_status_t uct_knem_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_knem_mem_rcache_dereg_and_invalidate(uct_md_h uct_md, uct_mem_h memh,
+                                       uct_completion_t *comp)
+{
+    uct_knem_md_t *md                = ucs_derived_of(uct_md, uct_knem_md_t);
+    uct_knem_rcache_region_t *region = uct_knem_rcache_region_from_memh(memh);
+
+    ucs_rcache_region_put_and_invalidate(md->rcache, &region->super, comp);
+    return UCS_OK;
+}
+
 static uct_md_ops_t uct_knem_md_rcache_ops = {
-    .close                  = uct_knem_md_close,
-    .query                  = uct_knem_md_query,
-    .mkey_pack              = uct_knem_rkey_pack,
-    .mem_reg                = uct_knem_mem_rcache_reg,
-    .mem_dereg              = uct_knem_mem_rcache_dereg,
-    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-    .detect_memory_type     = ucs_empty_function_return_unsupported,
+    .close                    = uct_knem_md_close,
+    .query                    = uct_knem_md_query,
+    .mkey_pack                = uct_knem_rkey_pack,
+    .mem_reg                  = uct_knem_mem_rcache_reg,
+    .mem_dereg                = uct_knem_mem_rcache_dereg,
+    .is_sockaddr_accessible   = ucs_empty_function_return_zero_int,
+    .detect_memory_type       = ucs_empty_function_return_unsupported,
+    .mem_dereg_and_invalidate = uct_knem_mem_rcache_dereg_and_invalidate
 };
 
 

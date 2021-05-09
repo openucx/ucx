@@ -112,13 +112,14 @@ static void uct_rocm_gdr_md_close(uct_md_h uct_md) {
 }
 
 static uct_md_ops_t md_ops = {
-    .close               = uct_rocm_gdr_md_close,
-    .query               = uct_rocm_gdr_md_query,
-    .mkey_pack           = uct_rocm_gdr_mkey_pack,
-    .mem_reg             = uct_rocm_gdr_mem_reg,
-    .mem_dereg           = uct_rocm_gdr_mem_dereg,
-    .mem_query           = ucs_empty_function_return_unsupported,
-    .detect_memory_type  = ucs_empty_function_return_unsupported,
+    .close                    = uct_rocm_gdr_md_close,
+    .query                    = uct_rocm_gdr_md_query,
+    .mkey_pack                = uct_rocm_gdr_mkey_pack,
+    .mem_reg                  = uct_rocm_gdr_mem_reg,
+    .mem_dereg                = uct_rocm_gdr_mem_dereg,
+    .mem_query                = ucs_empty_function_return_unsupported,
+    .detect_memory_type       = ucs_empty_function_return_unsupported,
+    .mem_dereg_and_invalidate = uct_md_mem_base_dereg_and_invalidate
 };
 
 static ucs_status_t

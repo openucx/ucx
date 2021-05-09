@@ -822,6 +822,7 @@ retry:
     }
 
     memset(region, 0, rcache->params.region_struct_size);
+    ucs_list_head_init(&region->comp_list);
 
     region->super.start = start;
     region->super.end   = end;
@@ -885,8 +886,6 @@ retry:
         
         ucs_rcache_lru_evict(rcache);
     }
-
-    ucs_list_head_init(&region->comp_list);
 
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_MISSES, 1);
 

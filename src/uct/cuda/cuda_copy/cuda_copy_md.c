@@ -179,16 +179,17 @@ static void uct_cuda_copy_md_close(uct_md_h uct_md) {
 }
 
 static uct_md_ops_t md_ops = {
-    .close                  = uct_cuda_copy_md_close,
-    .query                  = uct_cuda_copy_md_query,
-    .mem_alloc              = uct_cuda_copy_mem_alloc,
-    .mem_free               = uct_cuda_copy_mem_free,
-    .mkey_pack              = uct_cuda_copy_mkey_pack,
-    .mem_reg                = uct_cuda_copy_mem_reg,
-    .mem_dereg              = uct_cuda_copy_mem_dereg,
-    .mem_query              = uct_cuda_base_mem_query,
-    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-    .detect_memory_type     = uct_cuda_base_detect_memory_type
+    .close                    = uct_cuda_copy_md_close,
+    .query                    = uct_cuda_copy_md_query,
+    .mem_alloc                = uct_cuda_copy_mem_alloc,
+    .mem_free                 = uct_cuda_copy_mem_free,
+    .mkey_pack                = uct_cuda_copy_mkey_pack,
+    .mem_reg                  = uct_cuda_copy_mem_reg,
+    .mem_dereg                = uct_cuda_copy_mem_dereg,
+    .mem_query                = uct_cuda_base_mem_query,
+    .is_sockaddr_accessible   = ucs_empty_function_return_zero_int,
+    .detect_memory_type       = uct_cuda_base_detect_memory_type,
+    .mem_dereg_and_invalidate = uct_md_mem_base_dereg_and_invalidate
 };
 
 static ucs_status_t

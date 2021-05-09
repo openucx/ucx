@@ -477,6 +477,12 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
     return md->ops->mem_dereg(md, memh);
 }
 
+ucs_status_t uct_md_mem_dereg_and_invalidate(uct_md_h md, uct_mem_h memh,
+                                             uct_completion_t *comp)
+{
+    return md->ops->mem_dereg_and_invalidate(md, memh, comp);
+}
+
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
                               uct_md_mem_attr_t *mem_attr)
 {
@@ -502,4 +508,14 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
     rcache_params->ucm_event_priority = rcache_config->event_prio;
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
+}
+
+ucs_status_t uct_md_mem_base_dereg_and_invalidate(uct_md_h md, uct_mem_h memh,
+                                                  uct_completion_t *comp)
+{
+    ucs_status_t status;
+
+    status = md->ops->mem_dereg(md, memh);
+    uct_invoke_completion(comp, status);
+    return status;
 }

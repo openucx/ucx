@@ -260,13 +260,14 @@ static void uct_gdr_copy_md_close(uct_md_h uct_md)
 }
 
 static uct_md_ops_t md_ops = {
-    .close                  = uct_gdr_copy_md_close,
-    .query                  = uct_gdr_copy_md_query,
-    .mkey_pack              = uct_gdr_copy_mkey_pack,
-    .mem_reg                = uct_gdr_copy_mem_reg,
-    .mem_dereg              = uct_gdr_copy_mem_dereg,
-    .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
-    .detect_memory_type     = ucs_empty_function_return_unsupported
+    .close                    = uct_gdr_copy_md_close,
+    .query                    = uct_gdr_copy_md_query,
+    .mkey_pack                = uct_gdr_copy_mkey_pack,
+    .mem_reg                  = uct_gdr_copy_mem_reg,
+    .mem_dereg                = uct_gdr_copy_mem_dereg,
+    .is_sockaddr_accessible   = ucs_empty_function_return_zero_int,
+    .detect_memory_type       = ucs_empty_function_return_unsupported,
+    .mem_dereg_and_invalidate = uct_md_mem_base_dereg_and_invalidate
 };
 
 static inline uct_gdr_copy_rcache_region_t*
@@ -305,13 +306,25 @@ static ucs_status_t uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h mem
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_gdr_copy_mem_rcache_dereg_and_invalidate(uct_md_h uct_md, uct_mem_h memh,
+                                       uct_completion_t *comp)
+{
+    uct_gdr_copy_md_t *md                = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
+    uct_gdr_copy_rcache_region_t *region = uct_ib_rcache_region_from_memh(memh);
+
+    ucs_rcache_region_put_and_invalidate(md->rcache, &region->super, comp);
+    return UCS_OK;
+}
+
 static uct_md_ops_t md_rcache_ops = {
-    .close               = uct_gdr_copy_md_close,
-    .query               = uct_gdr_copy_md_query,
-    .mkey_pack           = uct_gdr_copy_mkey_pack,
-    .mem_reg             = uct_gdr_copy_mem_rcache_reg,
-    .mem_dereg           = uct_gdr_copy_mem_rcache_dereg,
-    .detect_memory_type  = ucs_empty_function_return_unsupported,
+    .close                    = uct_gdr_copy_md_close,
+    .query                    = uct_gdr_copy_md_query,
+    .mkey_pack                = uct_gdr_copy_mkey_pack,
+    .mem_reg                  = uct_gdr_copy_mem_rcache_reg,
+    .mem_dereg                = uct_gdr_copy_mem_rcache_dereg,
+    .detect_memory_type       = ucs_empty_function_return_unsupported,
+    .mem_dereg_and_invalidate = uct_gdr_copy_mem_rcache_dereg_and_invalidate
 };
 
 static ucs_status_t

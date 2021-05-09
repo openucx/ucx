@@ -211,6 +211,9 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
                               const uct_md_rcache_config_t *rcache_config);
 
 
+ucs_status_t uct_md_mem_base_dereg_and_invalidate(uct_md_h md, uct_mem_h memh,
+                                                  uct_completion_t *comp);
+
 extern ucs_config_field_t uct_md_config_table[];
 
 static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
