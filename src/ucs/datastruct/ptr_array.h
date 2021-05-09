@@ -11,7 +11,6 @@
 #include <ucs/sys/math.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/spinlock.h>
-#include <ucs/debug/assert.h>
 
 /*
  * Array element layout:
@@ -98,10 +97,10 @@ void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, const char *name);
  * Cleanup the array.
  *
  * @param ptr_array  Pointer to a ptr array.
- *
- * @note All values should already be removed from it.
+ * @param leak_check Whether to check for leaks (elements which were not
+ *                   freed from this ptr array).
  */
-void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array);
+void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array, int leak_check);
 
 
 /**
@@ -117,6 +116,23 @@ void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array);
  * @note The array will grow if needed.
  */
 unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value);
+
+
+/**
+ * Allocate a number of contiguous array slots.
+ *
+ * @param [in] ptr_array      Pointer to a ptr array.
+ * @param [in] element_count  Number of slots to allocate
+ *
+ * @return The index of the requested amount of slots (initialized to zero).
+ *
+ * Complexity: O(n*n) - not recommended for data-path
+ *
+ * @note The array will grow if needed.
+ * @note Use @ref ucs_ptr_array_remove to "deallocate" the slots.
+ */
+unsigned
+ucs_ptr_array_alloc(ucs_ptr_array_t *ptr_array, unsigned element_count);
 
 
 /**
@@ -185,6 +201,44 @@ ucs_ptr_array_is_empty(ucs_ptr_array_t *ptr_array)
 
 
 /**
+ * Shift an input value so it will fit in a ptr array slot.
+ *
+ * @param [in] new_val        Value to be put into a slot (at some point).
+ *
+ * @return The same value, as it would be stored in the ptr array.
+ */
+static UCS_F_ALWAYS_INLINE uintptr_t ucs_ptr_array_shift(uintptr_t new_val)
+{
+    return new_val << UCS_PTR_ARRAY_NEXT_SHIFT;
+}
+
+
+/**
+ * Shift back the value retrieved from a ptr array (@ref ucs_ptr_array_shift).
+ *
+ * @param [in] old_val        Value which has been stored in the ptr array slot.
+ *
+ * @return The original value stored in the ptr array slot (before shifting).
+ */
+static UCS_F_ALWAYS_INLINE uintptr_t ucs_ptr_array_unshift(uintptr_t old_val)
+{
+    return old_val >> UCS_PTR_ARRAY_NEXT_SHIFT;
+}
+
+
+/**
+ * Access the element without checking for array bounds or initialization.
+ *
+ * @param [in]  _ptr_array  Pointer to a ptr array.
+ * @param [in]  _index      Index to retrieve the value from.
+ *
+ * @return The "raw" value at the given index, regardless of status.
+ */
+#define __ucs_ptr_array_lookup_no_check(_ptr_array, _index) \
+    ((_ptr_array)->start[_index])
+
+
+/**
  * Retrieve a value from the array.
  *
  * @param [in]  _ptr_array  Pointer to a ptr array.
@@ -196,9 +250,11 @@ ucs_ptr_array_is_empty(ucs_ptr_array_t *ptr_array)
  * Complexity: O(1)
  */
 #define ucs_ptr_array_lookup(_ptr_array, _index, _var) \
-    (((_index) >= (_ptr_array)->size) ? \
+    (ucs_unlikely((_index) >= (_ptr_array)->size) ? \
                     (UCS_V_INITIALIZED(_var), 0) : \
-                    !__ucs_ptr_array_is_free(_var = (void*)((_ptr_array)->start[_index])))
+                    !__ucs_ptr_array_is_free(_var = \
+                            (void*)(__ucs_ptr_array_lookup_no_check(_ptr_array, \
+                                                                    _index))))
 
 
 /**
@@ -224,7 +280,6 @@ __ucs_ptr_array_for_each_get_step_size(ucs_ptr_array_t *ptr_array,
 
     /* Prefetch the next item */
     ucs_prefetch(&ptr_array->start[element_index + size_elem]);
-    ucs_assert(size_elem > 0);
 
     return size_elem;
 }
@@ -283,10 +338,11 @@ ucs_ptr_array_locked_init(ucs_ptr_array_locked_t *locked_ptr_array,
  * Cleanup the locked array.
  *
  * @param [in] locked_ptr_array    Pointer to a locked ptr array.
- *
- * @note All values should already be removed from it.
+ * @param leak_check Whether to check for leaks (elements which were not
+ *                   freed from this ptr array).
  */
-void ucs_ptr_array_locked_cleanup(ucs_ptr_array_locked_t *locked_ptr_array);
+void ucs_ptr_array_locked_cleanup(ucs_ptr_array_locked_t *locked_ptr_array,
+                                  int leak_check);
 
 
 /**
@@ -303,6 +359,23 @@ void ucs_ptr_array_locked_cleanup(ucs_ptr_array_locked_t *locked_ptr_array);
  */
 unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,
                                      void *value);
+
+
+/**
+ * Allocate a number of contiguous slots in the locked array.
+ *
+ * @param [in] locked_ptr_array  Pointer to a locked ptr array.
+ * @param [in] element_count     Number of slots to allocate
+ *
+ * @return The index of the requested amount of slots (initialized to zero).
+ *
+ * Complexity: O(n*n) - not recommended for data-path
+ *
+ * @note The array will grow if needed.
+ * @note Use @ref ucs_ptr_array_locked_remove to "deallocate" the slots.
+ */
+unsigned ucs_ptr_array_locked_alloc(ucs_ptr_array_locked_t *locked_ptr_array,
+                                    unsigned element_count);
 
 
 /**
