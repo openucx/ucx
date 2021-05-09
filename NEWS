@@ -18,6 +18,7 @@
 * Fixes in ABI backward compatibility for active message protocol
 * Add support for DC full-handshake mode (off by default).
 * Fixes in Active Messages short reply protocol.
+* Fixes for segmentation fault while listening for connections.
 
 ## 1.10.0 (March 9, 2021)
 ### Features:
