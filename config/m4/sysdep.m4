@@ -134,21 +134,42 @@ AS_IF([test "x$with_valgrind" = xno],
 #
 AC_ARG_ENABLE([numa],
     AC_HELP_STRING([--disable-numa], [Disable NUMA support]),
+    [],
+    [enable_numa=guess])
+AS_IF([test "x$enable_numa" = xno],
     [
-        AC_MSG_NOTICE([NUMA support is disabled])
+     AC_MSG_NOTICE([NUMA support is explictly disabled])
+     numa_enable=disabled
     ],
     [
-        AC_DEFUN([NUMA_W1], [not found. Please reconfigure with --disable-numa. ])
-        AC_DEFUN([NUMA_W2], [Warning: this may have negative impact on library performance. It is better to install])
-        AC_CHECK_HEADERS([numa.h numaif.h], [],
-                         [AC_MSG_ERROR([NUMA headers NUMA_W1 NUMA_W2 libnuma-devel package])])
-        AC_CHECK_LIB(numa, mbind,
-                     [AC_SUBST(NUMA_LIBS, [-lnuma])],
-                     [AC_MSG_ERROR([NUMA library NUMA_W1 NUMA_W2 libnuma package])])
-        AC_DEFINE([HAVE_NUMA], 1, [Define to 1 to enable NUMA support])
-        AC_CHECK_TYPES([struct bitmask], [], [], [[#include <numa.h>]])
-    ]
-)
+     save_LDFLAGS="$LDFLAGS"
+
+     numa_happy=yes
+     AC_CHECK_HEADERS([numa.h numaif.h], [], [numa_happy=no])
+     AC_CHECK_LIB(numa, mbind,
+                  [AC_SUBST(NUMA_LIBS, [-lnuma])],
+                  [numa_happy=no])
+     AC_CHECK_TYPES([struct bitmask], [], [numa_happy=no], [[#include <numa.h>]])
+
+     LDFLAGS="$save_LDFLAGS"
+
+     AS_IF([test "x$numa_happy" = xyes],
+           [
+            AC_DEFINE([HAVE_NUMA], 1, [Define to 1 to enable NUMA support])
+            numa_enable=enabled
+           ],
+           [
+            AC_DEFUN([NUMA_W1], [NUMA support not found])
+            AC_DEFUN([NUMA_W2], [Please consider installing libnuma-devel package.])
+            AS_IF([test "x$enable_numa" = xyes],
+                  [AC_MSG_ERROR([NUMA_W1. NUMA_W2])],
+                  [
+                   AC_MSG_WARN([NUMA_W1, this many impact library performance.])
+                   AC_MSG_WARN([NUMA_W2])
+                  ])
+            numa_enable=disabled
+           ])
+    ])
 
 
 #

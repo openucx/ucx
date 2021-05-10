@@ -52,6 +52,8 @@ build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
 	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --disable-numa
 	$MAKEP
+	# Make sure config.h file undefines HAVE_NUMA proceprocessor macro
+	grep 'undef HAVE_NUMA' config.h || exit 1
 }
 
 #
