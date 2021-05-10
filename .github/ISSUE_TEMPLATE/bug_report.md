@@ -18,6 +18,7 @@ A clear and concise description of what the bug is.
 ### Setup and versions
 - OS version (e.g Linux distro) + CPU architecture (x86_64/aarch64/ppc64le/...)
    - `cat /etc/issue` or `cat /etc/redhat-release` + `uname -a`
+   - For Nvidia Bluefield SmartNIC include `cat /etc/mlnx-release` (the string identifies software and firmware setup)
 - For RDMA/IB/RoCE related issues:
     - Driver version:
         - `rpm -q rdma-core` or `rpm -q libibverbs`
