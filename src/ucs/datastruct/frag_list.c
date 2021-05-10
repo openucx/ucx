@@ -293,7 +293,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
 
         /* todo: mark as likely */
         if (UCS_FRAG_LIST_SN_CMP(h->head.last_sn + 1, ==, sn)) {
-            ucs_assertv(h->head.first_sn <= h->head.last_sn,
+            ucs_assertv(UCS_FRAG_LIST_SN_CMP(h->head.first_sn, <=, h->head.last_sn),
                         "h=%p first_sn=%u last_sn=%u", h, h->head.first_sn,
                         h->head.last_sn);
             /* add tail, check merge with next list */
