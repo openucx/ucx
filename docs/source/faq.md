@@ -10,12 +10,12 @@ and relatively easy way to construct widely used HPC protocols: MPI tag matching
 RMA operations, rendezvous protocols, stream, fragmentation, remote atomic operations, etc.
 
 #### What is UCP, UCT, UCS?
-* **UCT** is a transport layer that abstracts the differences across various hardware architectures and provides a low-level API that enables the implementation of communication protocols. The primary goal of the layer is to provide direct and efficient access to hardware network resources with minimal software overhead. For this purpose UCT relies on low-level drivers provided by vendors such as InfiniBand Verbs, Cray's uGNI, etc. In addition, the layer provides constructs for communication context management (thread-based and application level), and allocation and management of device-specific memories including those found in accelerators. In terms of communication APIs, UCT defines interfaces for immediate (short), buffered copy-and-send (bcopy), and zero-copy (zcopy) communication operations. The short operations are optimized for small messages that can be posted and completed in place. The bcopy operations are optimized for medium size messages that are typically sent through a so-called bouncing-buffer. Finally, the zcopy operations expose zero-copy memory-to-memory communication semantics.
+* **UCT** is a transport layer that abstracts the differences across various hardware architectures and provides a low-level API that enables the implementation of communication protocols. The primary goal of the layer is to provide direct and efficient access to hardware network resources with minimal software overhead. For this purpose, UCT relies on low-level drivers such as uGNI, Verbs, shared memory, ROCM, CUDA. In addition, the layer provides constructs for communication context management (thread-based and application level), and allocation and management of device-specific memories including those found in accelerators. In terms of communication APIs, UCT defines interfaces for immediate (short), buffered copy-and-send (bcopy), and zero-copy (zcopy) communication operations. The short operations are optimized for small messages that can be posted and completed in place. The bcopy operations are optimized for medium size messages that are typically sent through a so-called bouncing-buffer. Finally, the zcopy operations expose zero-copy memory-to-memory communication semantics.
 
 * **UCP** implements higher-level protocols that are typically used by message passing (MPI) and PGAS programming models by using lower-level capabilities exposed through the UCT layer.
 UCP is responsible for the following functionality: initialization of the library, selection of transports for communication, message fragmentation, and multi-rail communication. Currently, the API has the following classes of interfaces: Initialization, Remote Memory Access (RMA) communication, Atomic Memory Operations (AMO), Active Message, Tag-Matching, and Collectives. 
 
-* **UCS** is a service layer that provides the necessary func- tionality for implementing portable and efficient utilities. 
+* **UCS** is a service layer that provides the necessary functionality for implementing portable and efficient utilities.
 
 #### How can I contribute?
 1. Fork
@@ -38,7 +38,7 @@ The UCX framework is maintained and supported by hardware vendors in addition to
 The framework architecture, data structures, and components are designed to provide optimized access to the network hardware.
 
 * **High level API for a broad range HPC programming models.**  
-UCX provides a high level API implemented in software (UCP) to fill in the gaps across interconnects. This allows the use of a single set of APIs in a library to implement multiple interconnects, and reduces the level of complexity when implementing libraries such as Open MPI or OpenSHMEM. UCX is therefore performance portable because a single implementation (in Open MPI or OpenSHMEM) will work efficiently on multiple interconnects. (e.g. uGNI, Verbs, shared memory).
+UCX provides a high-level and performance-portable network API. The API targets a variety of programming models ranging from high-performance MPI implementation to Apache Spark. UCP API abstracts differences and fills in the gaps across interconnects implemented in the UCT layer. As a result, implementations of programming models and libraries (MPI, OpenSHMEM, Apache Spark, RAPIDS, etc.) is simplified while providing efficient support for multiple interconnects (uGNI, Verbs, TCP, shared memory, ROCM, CUDA, etc.).
 
 * **Support for interaction between multiple transports (or providers) to deliver messages.**  
 For example, UCX has the logic (in UCP) to make 'GPUDirect', IB' and share memory work together efficiently to deliver the data where it is needed without the user dealing with this.
@@ -48,7 +48,7 @@ For example, UCX has the logic (in UCP) to make 'GPUDirect', IB' and share memor
  any special tuning.
 
 * **Utilizing hardware offloads for optimized performance**, such as RDMA, Hardware tag-matching
-  hardware atomic operations, etc. 
+ hardware atomic operations, etc.
 
 #### What protocols are supported by UCX?
 UCP implements RMA put/get, send/receive with tag matching, Active messages, atomic operations. In near future we plan to add support for commonly used collective operations.
@@ -99,9 +99,9 @@ UCX does not depend on an external runtime environment.
 
 UCX takes parameters from specific **environment variables**, which start with the
 prefix `UCX_`.  
-> **IMPORTANT NOTE:** Changing the values of UCX environment variables to non-default
-may lead to undefined behavior. The environment variables are mostly indented for
- dvanced users, or for specific tunings or workarounds recommended by UCX community.
+> **IMPORTANT NOTE:** Setting UCX environment variables to non-default values
+may lead to undefined behavior. The environment variables are mostly intended for
+advanced users, or for specific tunings or workarounds recommended by the UCX community.
 
 #### Where can I see all UCX environment variables?
 

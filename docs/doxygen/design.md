@@ -22,8 +22,8 @@ the differences across various hardware architectures and provides a
 low-level API that enables the implementation of communication protocols.
 The primary goal of the layer is to provide direct and efficient access to
 hardware network functionality. For this purpose,
-UCT relies on vendor provided low-level drivers such as InfiniBand
-Verbs, Cray's uGNI, libfabrics, etc. In addition, the layer provides
+UCT relies on vendor provided low-level drivers such as uGNI, Verbs,
+shared memory, ROCM, CUDA. In addition, the layer provides
 constructs for communication context management (thread-based and application level), and
 allocation and management of device-specific memories including those found
 in accelerators. In terms of communication APIs, UCT defines interfaces for
