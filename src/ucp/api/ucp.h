@@ -2235,16 +2235,18 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker);
 
 /**
  * @ingroup UCP_WORKER
- * @brief Accept connections on a local address of the worker object.
+ * @brief Create a listener to accept connections on. Connection requests on
+ * the listener will arrive at a local address specified by the user.
  *
- * This routine binds the worker object to a @ref ucs_sock_addr_t sockaddr
- * which is set by the user.
- * The worker will listen to incoming connection requests and upon receiving such
- * a request from the remote peer, an endpoint to it will be created.
- * The user's call-back will be invoked once the endpoint is created.
+ * This routine creates a new listener object that is bound to a specific
+ * local address.
+ * The listener will listen to incoming connection requests.
+ * After receiving a request from the remote peer, an endpoint to this peer
+ * will be created - either right away or by calling @ref ucp_ep_create,
+ * as specified by the callback type in @ref ucp_listener_params_t.
+ * The user's callback will be invoked once the endpoint is created.
  *
- * @param [in]  worker           Worker object that is associated with the
- *                               params object.
+ * @param [in]  worker           Worker object to create the listener on.
  * @param [in]  params           User defined @ref ucp_listener_params_t
  *                               configurations for the @ref ucp_listener_h.
  * @param [out] listener_p       A handle to the created listener, can be released
