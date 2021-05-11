@@ -334,6 +334,34 @@ enum ucp_ep_close_mode {
 
 
 /**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP performance fields and flags
+ *
+ * The enumeration allows specifying which fields in @ref ucp_ep_evaluate_perf_param_t are
+ * present and operation flags are used. It is used to enable backward
+ * compatibility support.
+ */
+typedef enum ucp_ep_perf_param_field {
+    /** Enables @ref ucp_ep_evaluate_perf_param_t::message_size */
+    UCP_EP_PERF_PARAM_FIELD_MESSAGE_SIZE       = UCS_BIT(0)
+} ucp_ep_perf_param_field_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP performance fields and flags
+ *
+ * The enumeration allows specifying which fields in @ref ucp_ep_evaluate_perf_attr_t are
+ * present and operation flags are used. It is used to enable backward
+ * compatibility support.
+ */
+typedef enum ucp_ep_perf_attr_field {
+    /** Enables @ref ucp_ep_evaluate_perf_attr_t::estimated_time */
+    UCP_EP_PERF_ATTR_FIELD_ESTIMATED_TIME = UCS_BIT(0)
+} ucp_ep_perf_attr_field_t;
+
+
+/**
  * @ingroup UCP_MEM
  * @brief UCP memory mapping parameters field mask.
  *
@@ -1059,7 +1087,7 @@ typedef struct ucp_lib_attr {
  * @ingroup UCP_CONTEXT
  * @brief Context attributes.
  *
- * The structure defines the attributes which characterize
+ * The structure defines the attributes that characterize
  * the particular context.
  */
 typedef struct ucp_context_attr {
@@ -1244,6 +1272,54 @@ typedef struct ucp_worker_params {
 
 } ucp_worker_params_t;
 
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint performance evaluation request attributes.
+ *
+ * The structure defines the attributes which characterize
+ * the request for performance estimation of a particular endpoint.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_perf_param_field_t.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t          field_mask;
+
+    /**
+     * Message size to use for determining performance.
+     * This field must be initialized by the caller.
+     */
+    size_t            message_size;
+} ucp_ep_evaluate_perf_param_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint performance evaluation result attributes.
+ *
+ * The structure defines the attributes which characterize
+ * the result of performance estimation of a particular endpoint.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_perf_attr_field_t.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t          field_mask;
+
+    /**
+     * Estimated time (in seconds) required to send a message of a given size
+     * on this endpoint.
+     * This field is set by the @ref ucp_ep_evaluate_perf function.
+     */
+    double            estimated_time;
+} ucp_ep_evaluate_perf_attr_t;
 
 /**
  * @ingroup UCP_WORKER
@@ -2508,6 +2584,24 @@ ucs_status_ptr_t ucp_ep_flush_nb(ucp_ep_h ep, unsigned flags,
  *                                order to track progress.
  */
 ucs_status_ptr_t ucp_ep_flush_nbx(ucp_ep_h ep, const ucp_request_param_t *param);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Estimate performance characteristics of a specific endpoint.
+ *
+ * This routine fetches information about the endpoint.
+ * 
+ * @param [in]  ep    Endpoint to query.
+ * @param [in]  param Filled by the user with request params.
+ * @param [out] attr  Filled with performance estimation of the given operation
+ *                    on the endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
+                                  const ucp_ep_evaluate_perf_param_t *param,
+                                  ucp_ep_evaluate_perf_attr_t *attr);
 
 
 /**

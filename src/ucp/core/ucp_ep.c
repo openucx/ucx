@@ -404,6 +404,53 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
     return UCS_OK;
 }
 
+ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
+                                  const ucp_ep_evaluate_perf_param_t *param,
+                                  ucp_ep_evaluate_perf_attr_t *attr)
+{
+    const ucp_worker_h worker               = ep->worker;
+    const ucp_context_h context             = worker->context;
+    const ucp_ep_config_key_t *key          = &ucp_ep_config(ep)->key;
+    double max_bandwidth                    = 0;
+    ucp_rsc_index_t max_bandwidth_rsc_index = 0;
+    ucp_rsc_index_t rsc_index;
+    double bandwidth;
+    ucp_lane_index_t lane;
+    ucp_worker_iface_t *wiface;
+    uct_iface_attr_t *iface_attr;
+    ucs_linear_func_t estimated_time;
+
+    if (!ucs_test_all_flags(attr->field_mask,
+                            UCP_EP_PERF_ATTR_FIELD_ESTIMATED_TIME &
+                            UCP_EP_PERF_PARAM_FIELD_MESSAGE_SIZE)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (lane == key->cm_lane) {
+            /* Skip CM lanes for banwidth calculation */
+            continue;
+        }
+
+        rsc_index = key->lanes[lane].rsc_index;
+        wiface    = worker->ifaces[rsc_index];
+        bandwidth = ucp_tl_iface_bandwidth(context,
+                                            &wiface->attr.bandwidth);
+        if (bandwidth > max_bandwidth) {
+            max_bandwidth           = bandwidth;
+            max_bandwidth_rsc_index = rsc_index;
+        }
+    }
+
+    iface_attr           = ucp_worker_iface_get_attr(worker,
+                                                     max_bandwidth_rsc_index);
+    estimated_time.c     = ucp_tl_iface_latency(context, &iface_attr->latency);
+    estimated_time.m     = param->message_size / max_bandwidth;
+    attr->estimated_time = estimated_time.c + estimated_time.m;
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
