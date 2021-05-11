@@ -311,7 +311,7 @@ uct_gdr_copy_mem_rcache_dereg_and_invalidate(uct_md_h uct_md, uct_mem_h memh,
                                        uct_completion_t *comp)
 {
     uct_gdr_copy_md_t *md                = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    uct_gdr_copy_rcache_region_t *region = uct_ib_rcache_region_from_memh(memh);
+    uct_gdr_copy_rcache_region_t *region = uct_gdr_copy_rache_region_from_memh(memh);
 
     ucs_rcache_region_put_and_invalidate(md->rcache, &region->super, comp);
     return UCS_OK;
