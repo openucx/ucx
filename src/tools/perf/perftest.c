@@ -953,8 +953,8 @@ static ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized
                 return status;
             }
             break;
-        case 'P':
 #ifdef HAVE_MPI
+        case 'P':
             ctx->mpi = atoi(optarg) && mpi_initialized;
             break;
 #endif
