@@ -181,7 +181,8 @@ public:
                     continue;
                 }
 
-                saddrs.push_back(ucs::sock_addr_storage());
+                saddrs.push_back(ucs::sock_addr_storage(
+                        ucs::is_rdmacm_netdev(ifa->ifa_name)));
                 status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
                 ASSERT_UCS_OK(status);
                 saddrs.back().set_sock_addr(*ifa->ifa_addr, size);
@@ -1097,6 +1098,92 @@ UCS_TEST_P(test_ucp_sockaddr_different_tl_rsc, unset_devices_and_communicate)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_different_tl_rsc, all, "all")
+
+
+class test_ucp_sockaddr_cm_private_data : public test_ucp_sockaddr {
+protected:
+    ucp_rsc_index_t get_num_cms()
+    {
+        const ucp_worker_h worker    = sender().worker();
+        ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
+        ucp_rsc_index_t num_cms      = 0;
+
+        for (ucp_rsc_index_t cm_idx = 0; cm_idx < num_cm_cmpts; ++cm_idx) {
+            if (worker->cms[cm_idx].cm != NULL) {
+                num_cms++;
+            }
+        }
+
+        return num_cms;
+    }
+
+    void check_cm_fallback()
+    {
+        if (get_num_cms() < 2) {
+            UCS_TEST_SKIP_R("No CM for fallback to");
+        }
+
+        if (!m_test_addr.is_rdmacm_netdev()) {
+            UCS_TEST_SKIP_R("RDMACM isn't allowed to be used on " +
+                            m_test_addr.to_str());
+        }
+    }
+
+    void check_rdmacm()
+    {
+        ucp_rsc_index_t num_cm_cmpts = receiver().ucph()->config.num_cm_cmpts;
+        ucp_rsc_index_t cm_idx;
+
+        if (!m_test_addr.is_rdmacm_netdev()) {
+            UCS_TEST_SKIP_R("RDMACM isn't allowed to be used on " +
+                            m_test_addr.to_str());
+        }
+
+        for (cm_idx = 0; cm_idx < num_cm_cmpts; ++cm_idx) {
+            if (sender().worker()->cms[cm_idx].cm == NULL) {
+                continue;
+            }
+
+            std::string cm_name = ucp_context_cm_name(sender().ucph(), cm_idx);
+            if (cm_name.compare("rdmacm") == 0) {
+                break;
+            }
+        }
+
+        if (cm_idx == num_cm_cmpts) {
+            UCS_TEST_SKIP_R("No RDMACM to check address packing");
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
+           short_cm_private_data_fallback_to_next_cm,
+           "TCP_CM_PRIV_DATA_LEN?=16", "SOCKADDR_TLS_PRIORITY=tcp,rdmacm")
+{
+    check_cm_fallback();
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
+           create_multiple_lanes_no_fallback_to_next_cm, "TLS=ud,rc,sm",
+           "NUM_EPS=128", "SOCKADDR_TLS_PRIORITY=rdmacm")
+{
+    check_rdmacm();
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_cm_private_data,
+           create_multiple_lanes_have_fallback_to_next_cm, "TLS=ud,rc,sm,tcp",
+           "NUM_EPS=128", "SOCKADDR_TLS_PRIORITY=rdmacm,tcp")
+{
+    check_cm_fallback();
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+    concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_cm_private_data, all, "all")
 
 
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
