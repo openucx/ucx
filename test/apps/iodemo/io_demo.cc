@@ -957,6 +957,10 @@ public:
 
         assert(iov->size() == 1);
 
+        conn_stat_map_t::iterator it = _conn_stat_map.find(conn->id());
+        assert(it != _conn_stat_map.end());
+        it->second.read_started(msg->data_size);
+
         // Send IO_READ_COMP as AM header and first iov element as payload
         // (note that multi-iov send is not supported for IODEMO with AM yet)
         conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(),
@@ -992,6 +996,9 @@ public:
 
         assert(iov->size() == 1);
 
+        conn_stat_map_t::iterator it = _conn_stat_map.find(conn->id());
+        assert(it != _conn_stat_map.end());
+        it->second.write_started(msg->data_size);
         conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(), data_desc, w);
     }
 
@@ -1105,7 +1112,7 @@ private:
     }
 
 private:
-    typedef std::map<uint32_t, ConnectionState> conn_stat_map_t;
+    typedef std::map<uint64_t, ConnectionState> conn_stat_map_t;
 
     MemoryPool<IoWriteResponseCallback> _callback_pool;
     conn_stat_map_t                     _conn_stat_map;
