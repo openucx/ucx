@@ -55,7 +55,7 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
     ucs_assert(length >= sizeof(*rts_hdr));
 
     status = ucp_recv_desc_init(worker, rts_hdr, length, 0, tl_flags,
-                                sizeof(*rts_hdr), UCP_RECV_DESC_FLAG_RNDV, 0,
+                                sizeof(*rts_hdr), UCP_RECV_DESC_FLAG_RNDV, 0, 1,
                                 &rdesc);
     if (!UCS_STATUS_IS_ERR(status)) {
         ucs_assert(ucp_rdesc_get_tag(rdesc) ==

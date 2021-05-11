@@ -169,12 +169,11 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
     middle_hdr.msg_id         = req->send.msg_proto.message_id;
     middle_hdr.offset         = req->send.state.dt.offset;
 
-    return ucp_do_am_zcopy_multi(self,
-                                 UCP_AM_ID_EAGER_FIRST,
-                                 UCP_AM_ID_EAGER_MIDDLE,
-                                 &first_hdr, sizeof(first_hdr),
-                                 &middle_hdr, sizeof(middle_hdr),
-                                 NULL, 0ul, ucp_proto_am_zcopy_req_complete, 1);
+    return ucp_do_am_zcopy_multi(self, UCP_AM_ID_EAGER_FIRST,
+                                 UCP_AM_ID_EAGER_MIDDLE, &first_hdr,
+                                 sizeof(first_hdr), &middle_hdr,
+                                 sizeof(middle_hdr), NULL, 0ul, 0ul,
+                                 ucp_proto_am_zcopy_req_complete, 1);
 }
 
 ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
@@ -274,7 +273,8 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
         return ucp_do_am_zcopy_multi(self, UCP_AM_ID_LAST,
                                      UCP_AM_ID_EAGER_MIDDLE, NULL, 0,
                                      &middle_hdr, sizeof(middle_hdr), NULL, 0ul,
-                                     ucp_tag_eager_sync_zcopy_req_complete, 1);
+                                     0ul, ucp_tag_eager_sync_zcopy_req_complete,
+                                     1);
     }
     
     first_hdr.super.super.super.tag = req->send.msg_proto.tag;
@@ -285,7 +285,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
 
     return ucp_do_am_zcopy_multi(self, UCP_AM_ID_EAGER_SYNC_FIRST,
                                  UCP_AM_ID_LAST, &first_hdr, sizeof(first_hdr),
-                                 NULL, 0, NULL, 0ul,
+                                 NULL, 0, NULL, 0ul, 0ul,
                                  ucp_tag_eager_sync_zcopy_req_complete, 1);
 }
 

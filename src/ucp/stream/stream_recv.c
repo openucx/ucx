@@ -446,20 +446,21 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         ucs_assertv_always(rdesc != NULL,
                            "ucp recv descriptor is not allocated");
-        rdesc->length         = rdesc_tmp.length;
+        rdesc->length              = rdesc_tmp.length;
         /* reset offset to improve locality */
-        rdesc->payload_offset = sizeof(*rdesc) + sizeof(*am_data);
-        rdesc->flags          = 0;
+        rdesc->payload_offset      = sizeof(*rdesc) + sizeof(*am_data);
+        rdesc->flags               = 0;
+        rdesc->release_desc_offset = 0;
         memcpy(ucp_stream_rdesc_payload(rdesc),
                UCS_PTR_BYTE_OFFSET(am_data, rdesc_tmp.payload_offset),
                rdesc_tmp.length);
     } else {
         /* slowpath */
-        rdesc                  = (ucp_recv_desc_t *)am_data - 1;
-        rdesc->length          = rdesc_tmp.length;
-        rdesc->payload_offset  = rdesc_tmp.payload_offset + sizeof(*rdesc);
-        rdesc->uct_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE;
-        rdesc->flags           = UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc                      = (ucp_recv_desc_t *)am_data - 1;
+        rdesc->length              = rdesc_tmp.length;
+        rdesc->payload_offset      = rdesc_tmp.payload_offset + sizeof(*rdesc);
+        rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE;
+        rdesc->flags               = UCP_RECV_DESC_FLAG_UCT_DESC;
     }
 
     ucp_ep_from_ext_proto(ep_ext)->flags |= UCP_EP_FLAG_STREAM_HAS_DATA;

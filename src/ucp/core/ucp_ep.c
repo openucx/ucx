@@ -2273,7 +2273,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             /* Calculate max short threshold for UCP AM short reply protocol */
             am_max_eager_short = ucp_ep_config_max_short(
                     worker->context, iface_attr, UCT_IFACE_FLAG_AM_SHORT,
-                    iface_attr->cap.am.max_short, sizeof(ucp_am_reply_hdr_t),
+                    iface_attr->cap.am.max_short,
+                    sizeof(ucp_am_hdr_t) + sizeof(ucp_am_reply_ftr_t),
                     config->am.zcopy_thresh[0], &config->rndv.am_thresh);
 
             ucp_ep_config_set_memtype_thresh(&config->am_u.max_reply_eager_short,

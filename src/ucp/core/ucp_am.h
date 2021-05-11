@@ -42,6 +42,43 @@ typedef struct ucp_am_entry {
 } ucp_am_entry_t;
 
 
+UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
+
+
+typedef struct ucp_am_info {
+    size_t                   alignment;
+    ucs_array_t(ucp_am_cbs)  cbs;
+} ucp_am_info_t;
+
+
+/**
+ * All eager messages are sent with 8 byte basic header. If more meta data need
+ * to be sent, it is added as a footer in the end of message. This helps to
+ * guarantee proper alignment on the receiver. Below are the layouts of
+ * different eager messages:
+ *
+ * Single fragment message:
+ *  +------------------+---------+----------+
+ *  | ucp_am_hdr_t     | payload | user hdr |
+ *  +------------------+---------+----------+
+ *
+ * Single fragment message with reply protocol:
+ *  +------------------+---------+----------+--------------------+
+ *  | ucp_am_hdr_t     | payload | user hdr | ucp_am_reply_ftr_t |
+ *  +------------------+---------+----------+--------------------+
+ *
+ * First fragment of the multi-fragment message:
+ *  +------------------+---------+----------+--------------------+
+ *  | ucp_am_hdr_t     | payload | user hdr | ucp_am_first_ftr_t |
+ *  +------------------+---------+----------+--------------------+
+ *
+ * Middle/last fragment of the multi-fragment message:
+ *  +------------------+---------+------------------+
+ *  | ucp_am_mid_hdr_t | payload | ucp_am_mid_ftr_t |
+ *  +------------------+---------+------------------+
+ */
+
+
 typedef union {
     struct {
         uint16_t             am_id;         /* index into callback array */
@@ -55,23 +92,25 @@ typedef union {
 
 
 typedef struct {
-    ucp_am_hdr_t             super;
-    uint64_t                 ep_id; /* ep which can be used for reply */
-} UCS_S_PACKED ucp_am_reply_hdr_t;
-
-
-typedef struct {
-    ucp_am_reply_hdr_t       super;
-    uint64_t                 msg_id;     /* method to match parts of the same AM */
-    size_t                   total_size; /* length of buffer needed for all data */
-} UCS_S_PACKED ucp_am_first_hdr_t;
-
-
-typedef struct {
-    uint64_t                 msg_id;     /* method to match parts of the same AM */
-    size_t                   offset;     /* offset in the entire AM buffer */
-    uint64_t                 ep_id;      /* ep which can be used for reply */
+    size_t                   offset;
 } UCS_S_PACKED ucp_am_mid_hdr_t;
+
+
+typedef struct {
+    uint64_t                 ep_id; /* ep which can be used for reply */
+} UCS_S_PACKED ucp_am_reply_ftr_t;
+
+
+typedef struct {
+    uint64_t                 msg_id; /* method to match parts of the same AM */
+    uint64_t                 ep_id; /* ep which can be used for reply */
+} UCS_S_PACKED ucp_am_mid_ftr_t;
+
+
+typedef struct {
+    ucp_am_mid_ftr_t         super; /* base fragment header */
+    size_t                   total_size; /* length of buffer needed for all data */
+} UCS_S_PACKED ucp_am_first_ftr_t;
 
 
 typedef struct {
@@ -94,8 +133,5 @@ ucs_status_t ucp_proto_progress_am_rndv_rts(uct_pending_req_t *self);
 
 ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                      unsigned tl_flags);
-
-UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
-
 
 #endif

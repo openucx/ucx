@@ -326,6 +326,12 @@ protected:
         return attr.max_am_header;
     }
 
+    size_t fragment_size()
+    {
+        return ucp_ep_config(sender().ep())->am.max_bcopy -
+               sizeof(ucp_am_hdr_t);
+    }
+
     virtual unsigned get_send_flag()
     {
         return 0;
@@ -491,13 +497,12 @@ protected:
                                                    data, m_rx_dt_desc.buf(),
                                                    m_rx_dt_desc.count(),
                                                    &params);
-        //ucs_warn("imm_compl %d, sp %p, rx len %zu", imm_compl_flag, sp, rx_length);
         if (UCS_PTR_IS_PTR(sp)) {
             ucp_request_release(sp);
             status = UCS_INPROGRESS;
         } else {
             EXPECT_EQ(NULL, sp);
-            EXPECT_EQ(rx_length, length);
+            EXPECT_EQ(length, rx_length);
             am_recv_check_data(rx_length);
             status = UCS_OK;
         }
@@ -862,12 +867,6 @@ public:
         ucp_am_data_release(receiver().worker(), m_data_ptr);
     }
 
-    size_t fragment_size()
-    {
-        return ucp_ep_config(sender().ep())->am.max_bcopy -
-               sizeof(ucp_am_hdr_t);
-    }
-
 private:
     void *m_data_ptr;
 };
@@ -888,6 +887,66 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi)
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_eager_data_release)
+
+class test_ucp_am_nbx_align : public test_ucp_am_nbx {
+public:
+    test_ucp_am_nbx_align()
+    {
+        m_alignment = pow(2, ucs::rand() % 13);
+    }
+
+    virtual ucp_worker_params_t get_worker_params()
+    {
+        ucp_worker_params_t params = ucp_test::get_worker_params();
+        params.field_mask         |= UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT;
+        params.am_alignment        = m_alignment;
+        return params;
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_AM_SEND_REPLY, "reply");
+    }
+
+    virtual unsigned get_send_flag()
+    {
+        return get_variant_value(0);
+    }
+
+    virtual ucs_status_t
+    am_data_handler(const void *header, size_t header_length, void *data,
+                    size_t length, const ucp_am_recv_param_t *rx_param)
+    {
+        test_ucp_am_nbx::am_data_handler(header, header_length, data, length,
+                                         rx_param);
+
+        if (rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
+            EXPECT_EQ(0u, (uintptr_t)data % m_alignment)
+                      << " data ptr " << data;
+        }
+
+        return UCS_OK;
+    }
+
+private:
+    size_t m_alignment;
+};
+
+UCS_TEST_P(test_ucp_am_nbx_align, basic)
+{
+    test_am_send_recv(fragment_size() / 2, 0, 0, UCS_MEMORY_TYPE_HOST,
+                      UCP_AM_FLAG_PERSISTENT_DATA);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_align, multi)
+{
+    test_am_send_recv(fragment_size() * 5, 0, 0, UCS_MEMORY_TYPE_HOST,
+                      UCP_AM_FLAG_PERSISTENT_DATA);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_align)
 
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx {

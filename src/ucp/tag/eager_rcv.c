@@ -58,7 +58,7 @@ ucp_eager_offload_handler(void *arg, void *data, size_t length,
     } else {
         status = ucp_recv_desc_init(worker, data, length, sizeof(ucp_tag_t),
                                     tl_flags, sizeof(ucp_tag_t), flags,
-                                    sizeof(ucp_tag_t), &rdesc);
+                                    sizeof(ucp_tag_t), 1, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
             rdesc_hdr  = (ucp_tag_t*)(rdesc + 1);
             *rdesc_hdr = recv_tag;
@@ -119,7 +119,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
         status = UCS_OK;
     } else {
         status = ucp_recv_desc_init(worker, data, length, 0, am_flags, hdr_len,
-                                    flags, priv_length, &rdesc);
+                                    flags, priv_length, 1, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
             ucp_tag_unexp_recv(&worker->tm, rdesc, recv_tag);
         }
@@ -172,7 +172,7 @@ ucp_eager_common_middle_handler(ucp_worker_t *worker, void *data, size_t length,
     if (ucp_tag_frag_match_is_unexp(matchq)) {
         /* add new received descriptor to the queue */
         status = ucp_recv_desc_init(worker, data, length, 0, tl_flags,
-                                    hdr_len, flags, priv_length, &rdesc);
+                                    hdr_len, flags, priv_length, 1, &rdesc);
         if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
             ucp_tag_frag_match_add_unexp(matchq, rdesc, hdr->offset);
         } else if (ucs_queue_is_empty(&matchq->unexp_q)) {
