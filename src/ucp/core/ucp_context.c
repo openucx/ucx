@@ -1736,36 +1736,42 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     ucp_memory_info_set_host(mem_info);
 }
 
-ucp_tl_bitmap_t
-ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name)
+void
+ucp_context_dev_tl_bitmap(ucp_context_h context, const char *dev_name,
+                          ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_rsc_index_t tl_idx;
 
+    UCS_BITMAP_CLEAR(tl_bitmap);
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_idx) {
         if (strcmp(context->tl_rscs[tl_idx].tl_rsc.dev_name, dev_name)) {
             continue;
         }
 
-        UCS_BITMAP_SET(tl_bitmap, tl_idx);
+        UCS_BITMAP_SET(*tl_bitmap, tl_idx);
     }
-
-    return tl_bitmap;
 }
 
-ucp_tl_bitmap_t
-ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx)
+void
+ucp_context_dev_idx_tl_bitmap(ucp_context_h context, ucp_rsc_index_t dev_idx,
+                              ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_rsc_index_t tl_idx;
 
+    UCS_BITMAP_CLEAR(tl_bitmap);
     UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_idx) {
         if (context->tl_rscs[tl_idx].dev_index == dev_idx) {
-            UCS_BITMAP_SET(tl_bitmap, tl_idx);
+            UCS_BITMAP_SET(*tl_bitmap, tl_idx);
         }
     }
+}
 
-    return tl_bitmap;
+void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
+                            const ucp_tl_bitmap_t *tl_bitmap_super)
+{
+    ucs_assert_always(UCS_BITMAP_IS_ZERO(UCP_TL_BITMAP_AND_NOT(*tl_bitmap,
+                                                               *tl_bitmap_super),
+                                         UCP_MAX_RESOURCES));
 }
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)

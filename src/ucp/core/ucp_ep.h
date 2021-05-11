@@ -616,7 +616,7 @@ void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
-ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
+void ucp_ep_get_tl_bitmap(ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap);
 
 uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
 
