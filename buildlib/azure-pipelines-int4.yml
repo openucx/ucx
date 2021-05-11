@@ -1,0 +1,129 @@
+# See https://aka.ms/yaml
+# This pipeline to be run on PRs
+
+trigger: none
+pr:
+  branches:
+    include:
+    - integration4
+
+  paths:
+    exclude:
+    - .gitignore
+    - docs/source
+    - docs/CodeStyle.md
+    - docs/LoggingStyle.md
+    - docs/OptimizationStyle.md
+    - README.md
+    - NEWS
+
+resources:
+  containers:
+    - container: centos7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: fedora
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+      options: --privileged
+    - container: fedora34
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
+      options: --privileged -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: coverity_rh7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76_mofed47
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel74
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel72
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel82
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu2004
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu1804
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles15sp2
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles12sp5
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+
+stages:
+  - stage: Codestyle
+    jobs:
+      # Check that commit title matches code style guidelines
+      - job: commit_title
+        displayName: commit title
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              set -eE
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
+              ok=1
+              for sha1 in `git log $range --format="%h"`
+              do
+                  title=`git log -1 --format="%s" $sha1`
+                  if echo $title | grep -qP '^Merge |^[0-9A-Z/_\-]*: \w'
+                  then
+                      echo "Good commit title: '$title'"
+                  else
+                      echo "Bad commit title: '$title'"
+                      ok=0
+                  fi
+              done
+              if [ $ok -ne 1 ]
+              then
+                 url="https://github.com/openucx/ucx/wiki/Guidance-for-contributors#general-guidelines"
+                 echo "##vso[task.logissue type=error]Bad commit title(s), see $url for more info."
+                 echo "##vso[task.complete result=Failed;]"
+              fi
+            condition: eq(variables['Build.Reason'], 'PullRequest')
+
+      # Check that the code is formatted according to the code style guidelines
+      - job: format
+        displayName: format code
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
+        container: fedora
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              source ./buildlib/az-helpers.sh
+              set -x
+              git log -1 HEAD
+              git log -1 HEAD^
+              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+              echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
+              git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
+              echo "Generated patch file:"
+              cat format.patch
+              if [ "`cat format.patch`" = "no modified files to format" ]; then
+                  exit
+              fi
+              git apply format.patch
+              if ! git diff --quiet --exit-code
+              then
+                  url="https://github.com/openucx/ucx/wiki/Code-style-checking"
+                  azure_complete_with_issues "Code is not formatted according to the code style, see $url for more info."
+              fi
+            condition: eq(variables['Build.Reason'], 'PullRequest')
