@@ -136,6 +136,7 @@ std::vector<int> test_perf::get_affinity() {
     cpu_set_t affinity;
     int ret, nr_cpus;
 
+    CPU_ZERO(&affinity);
     ret = sched_getaffinity(getpid(), sizeof(affinity), &affinity);
     if (ret != 0) {
         ucs_error("Failed to get CPU affinity: %m");
