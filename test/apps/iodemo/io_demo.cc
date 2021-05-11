@@ -822,6 +822,44 @@ public:
         long    active_conns;
     } state_t;
 
+    class ConnectionState {
+    public:
+        ConnectionState() {
+            reset();
+        }
+
+        void reset() {
+            _read_req_bytes  = 0;
+            _read_req_count  = 0;
+            _write_req_bytes = 0;
+            _write_req_count = 0;
+        }
+
+        long get_total_count() const {
+            return _read_req_count + _write_req_count;
+        }
+
+        long get_total_bytes() const {
+            return _read_req_bytes + _write_req_bytes;
+        }
+
+        void read_started(size_t bytes) {
+            _read_req_bytes += bytes;
+            ++_read_req_count;
+        }
+
+        void write_started(size_t bytes) {
+            _write_req_bytes += bytes;
+            ++_write_req_count;
+        }
+
+    private:
+        long _read_req_bytes;
+        long _read_req_count;
+        long _write_req_bytes;
+        long _write_req_count;
+    };
+
     DemoServer(const options_t& test_opts) :
         P2pDemoCommon(test_opts), _callback_pool(0, "callbacks") {
         _curr_state.read_count   = 0;
@@ -893,6 +931,10 @@ public:
         iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
         cb->init(iov, &_curr_state.read_count);
 
+        conn_stat_map_t::iterator it = _conn_stat_map.find(conn->id());
+        assert(it != _conn_stat_map.end());
+        it->second.read_started(msg->data_size);
+
         send_data(conn, *iov, msg->sn, cb);
 
         // send response as data
@@ -931,6 +973,9 @@ public:
         iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
         w->init(this, conn, msg->sn, iov, &_curr_state.write_count);
 
+        conn_stat_map_t::iterator it = _conn_stat_map.find(conn->id());
+        assert(it != _conn_stat_map.end());
+        it->second.write_started(msg->data_size);
         recv_data(conn, *iov, msg->sn, w);
     }
 
@@ -951,12 +996,20 @@ public:
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
+        bool res = _conn_stat_map.insert(
+                std::make_pair(conn->id(), ConnectionState())).second;
+        assert(res);
         ++_curr_state.active_conns;
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
         LOG << "disconnecting connection with status "
             << ucs_status_string(conn->ucx_status());
+
+        conn_stat_map_t::iterator it = _conn_stat_map.find(conn->id());
+        assert(it != _conn_stat_map.end());
+        _conn_stat_map.erase(it);
+
         --_curr_state.active_conns;
         conn->disconnect(new UcxDisconnectCallback());
     }
@@ -1012,18 +1065,50 @@ private:
     }
 
     void report_state() {
-        LOG << "read:" << _curr_state.read_count -
-                          _prev_state.read_count << " ops, "
-            << "write:" << _curr_state.write_count -
-                           _prev_state.write_count << " ops, "
+        conn_stat_map_t::iterator it_min = _conn_stat_map.begin(),
+                                  it_max = _conn_stat_map.begin();
+        for (conn_stat_map_t::iterator it = _conn_stat_map.begin();
+             it != _conn_stat_map.end(); ++it) {
+            long i_val = it->second.get_total_count();
+            if (i_val <= it_min->second.get_total_count()) {
+                it_min = it;
+            } else if (i_val >= it_max->second.get_total_count()) {
+                it_max = it;
+            } else {
+                it->second.reset();
+            }
+        }
+
+        UcxLog log(LOG_PREFIX);
+        log << "read:" << _curr_state.read_count - _prev_state.read_count
+            << " ops, "
+            << "write:" << _curr_state.write_count - _prev_state.write_count
+            << " ops, "
             << "connections:" << _curr_state.active_conns << "/"
-            << UcxConnection::get_num_instances()
-            << ", buffers:" << _data_buffers_pool.allocated();
+           << UcxConnection::get_num_instances();
+
+        if (_curr_state.active_conns > 0) {
+            log << ", min:" << it_min->second.get_total_count() << "/"
+                << it_min->second.get_total_bytes() / double(UCS_MBYTE)
+                << "MB(" << get_connection(it_min->first).get_peer_name()
+                << ")"
+                << ", max:" << it_max->second.get_total_count() << "/"
+                << it_max->second.get_total_bytes() / double(UCS_MBYTE)
+                << "MB(" << get_connection(it_max->first).get_peer_name()
+                << ")";
+            it_min->second.reset();
+            it_max->second.reset();
+        }
+
+        log << ", buffers:" << _data_buffers_pool.allocated();
         save_prev_state();
     }
 
 private:
+    typedef std::map<uint32_t, ConnectionState> conn_stat_map_t;
+
     MemoryPool<IoWriteResponseCallback> _callback_pool;
+    conn_stat_map_t                     _conn_stat_map;
     state_t                             _prev_state;
     state_t                             _curr_state;
 };

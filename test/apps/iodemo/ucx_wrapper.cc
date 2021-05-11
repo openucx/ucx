@@ -532,6 +532,12 @@ double UcxContext::get_time() {
     return tv.tv_sec + (tv.tv_usec * 1e-6);
 }
 
+UcxConnection& UcxContext::get_connection(uint64_t id) const {
+    conn_map_t::const_iterator it = _conns.find(id);
+    assert(it != _conns.end());
+    return *it->second;
+}
+
 void UcxContext::destroy_listener()
 {
     if (_listener) {
@@ -870,8 +876,8 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
                                    socklen_t addrlen)
 {
     std::stringstream ss;
-    ss << "[UCX-connection #" << _conn_id << " " <<
-          UcxContext::sockaddr_str(saddr, addrlen) << "]";
+    _remote_address = UcxContext::sockaddr_str(saddr, addrlen);
+    ss << "[UCX-connection #" << _conn_id << " " << _remote_address << "]";
     memset(_log_prefix, 0, MAX_LOG_PREFIX_SIZE);
     int length = ss.str().length();
     if (length >= MAX_LOG_PREFIX_SIZE) {
