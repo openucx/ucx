@@ -25,10 +25,6 @@
 #define UCP_MAX_IOV                16UL
 
 
-/* Used as invalidated value */
-#define UCP_EP_ID_INVALID          UINTPTR_MAX
-
-
 /* Endpoint flags type */
 #if ENABLE_DEBUG_DATA || UCS_ENABLE_ASSERT
 typedef uint32_t                   ucp_ep_flags_t;

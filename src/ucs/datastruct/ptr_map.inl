@@ -20,6 +20,16 @@ BEGIN_C_DECLS
 #define UCS_PTR_MAP_KEY_INDIRECT_FLAG   UCS_BIT(0)
 
 
+/**
+ * Returns whether the key is indirect or not.
+ *
+ * @param [in]  key     Key to object pointer.
+ *
+ * @return 0 - direct, otherside - indirect.
+ */
+#define ucs_ptr_map_key_indirect(_key) ((_key) & UCS_PTR_MAP_KEY_INDIRECT_FLAG)
+
+
 KHASH_IMPL(ucs_ptr_map_impl, ucs_ptr_map_key_t, void*, 1,
            kh_int64_hash_func, kh_int64_hash_equal);
 
@@ -32,6 +42,7 @@ KHASH_IMPL(ucs_ptr_map_impl, ucs_ptr_map_key_t, void*, 1,
  */
 static inline ucs_status_t ucs_ptr_map_init(ucs_ptr_map_t *map)
 {
+    UCS_STATIC_ASSERT(!ucs_ptr_map_key_indirect(UCS_PTR_MAP_KEY_INVALID));
     map->next_id = 0;
     kh_init_inplace(ucs_ptr_map_impl, &map->hash);
     return UCS_OK;
@@ -54,19 +65,6 @@ static inline void ucs_ptr_map_destroy(ucs_ptr_map_t *map)
 }
 
 /**
- * Returns whether the key is indirect or not.
- *
- * @param [in]  key     Key to object pointer.
- *
- * @return 0 - direct, otherside - indirect.
- */
-static UCS_F_ALWAYS_INLINE int
-ucs_ptr_map_key_indirect(ucs_ptr_map_key_t key)
-{
-    return key & UCS_PTR_MAP_KEY_INDIRECT_FLAG;
-}
-
-/**
  * Put a pointer into the map.
  *
  * @param [in]  map       Container.
@@ -78,8 +76,9 @@ ucs_ptr_map_key_indirect(ucs_ptr_map_key_t key)
  *                        the pointer @ptr.
  * @param [out] key       Key to object pointer @ptr if operation completed
  *                        successfully otherwise value is undefined.
- * @return      UCS_OK on success otherwise error code as defined by
- *              @ref ucs_status_t.
+ * @return UCS_OK on success, UCS_ERR_NO_PROGRESS if this key is direct and
+ *         therefore no action was performed, otherwise error code as defined by
+ *         @ref ucs_status_t.
  * @note @ptr must be aligned on @ref UCS_PTR_MAP_KEY_MIN_ALIGN.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -93,7 +92,7 @@ ucs_ptr_map_put(ucs_ptr_map_t *map, void *ptr, int indirect,
         *key = (uintptr_t)ptr;
         ucs_assert(!(*key & UCS_PTR_MAP_KEY_MIN_ALIGN));
         ucs_assert(*key != 0);
-        return UCS_OK;
+        return UCS_ERR_NO_PROGRESS;
     }
 
     *key = (map->next_id += UCS_PTR_MAP_KEY_MIN_ALIGN) |
@@ -118,7 +117,8 @@ ucs_ptr_map_put(ucs_ptr_map_t *map, void *ptr, int indirect,
  * @param [in]  extract Whether to remove the key from the map.
  * @param [out] ptr_p   If successful, set to the pointer found in the map.
  *
- * @return UCS_OK if found, UCS_ERR_NO_ELEM if not found.
+ * @return UCS_OK if found, UCS_ERR_NO_PROGRESS if this key is direct and
+ *         therefore no action was performed, UCS_ERR_NO_ELEM if not found.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucs_ptr_map_get(ucs_ptr_map_t *map, ucs_ptr_map_key_t key, int extract,
@@ -128,7 +128,7 @@ ucs_ptr_map_get(ucs_ptr_map_t *map, ucs_ptr_map_key_t key, int extract,
 
     if (ucs_likely(!ucs_ptr_map_key_indirect(key))) {
         *ptr_p = (void*)key;
-        return UCS_OK;
+        return UCS_ERR_NO_PROGRESS;
     }
 
     iter = kh_get(ucs_ptr_map_impl, &map->hash, key);
@@ -149,9 +149,10 @@ ucs_ptr_map_get(ucs_ptr_map_t *map, ucs_ptr_map_key_t key, int extract,
  * @param [in]  map     Container.
  * @param [in]  key     Key to object pointer.
  *
- * @return       - UCS_OK on success
- *               - UCS_ERR_NO_ELEM if the key is not found in the internal hash
- *                 table.
+ * @return - UCS_OK on success
+ *         - UCS_ERR_NO_PROGRESS if this key is direct and therefore no action
+ *           was performed
+ *         - UCS_ERR_NO_ELEM if the key is not found in the internal hash table.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucs_ptr_map_del(ucs_ptr_map_t *map, ucs_ptr_map_key_t key)

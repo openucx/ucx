@@ -201,8 +201,8 @@ ucp_proto_eager_sync_bcopy_send_completed(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
 
-    req->flags |= UCP_REQUEST_FLAG_LOCAL_COMPLETED;
-    if (req->flags & UCP_REQUEST_FLAG_REMOTE_COMPLETED) {
+    req->flags |= UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED;
+    if (req->flags & UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED) {
         ucp_request_complete_send(req, UCS_OK);
     }
     return UCS_OK;
@@ -216,8 +216,8 @@ void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
     UCP_REQUEST_GET_BY_ID(&req, worker, rep_hdr->req_id, 1, return,
                           "EAGER_S ACK %p", rep_hdr);
 
-    req->flags |= UCP_REQUEST_FLAG_REMOTE_COMPLETED;
-    if (req->flags & UCP_REQUEST_FLAG_LOCAL_COMPLETED) {
+    req->flags |= UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
+    if (req->flags & UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED) {
         ucp_request_complete_send(req, rep_hdr->status);
     }
 }

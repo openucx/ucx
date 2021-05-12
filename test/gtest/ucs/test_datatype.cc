@@ -1090,21 +1090,39 @@ UCS_TEST_F(test_datatype, ptr_map) {
     ASSERT_EQ(UCS_OK, status);
 
     for (size_t i = 0; i < N; ++i) {
-        char *ptr = new char;
-        status = ucs_ptr_map_put(&ptr_map, ptr, ucs::rand() % 2, &ptr_key);
-        ASSERT_EQ(UCS_OK, status);
+        char *ptr     = new char;
+        bool indirect = ucs::rand() % 2;
+        status = ucs_ptr_map_put(&ptr_map, ptr, indirect, &ptr_key);
+        if (indirect) {
+            ASSERT_UCS_OK(status);
+            EXPECT_TRUE(ucs_ptr_map_key_indirect(ptr_key));
+        } else {
+            ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+            EXPECT_FALSE(ucs_ptr_map_key_indirect(ptr_key));
+        }
+
         std_map[ptr_key] = ptr;
     }
 
     for (std_map_t::iterator i = std_map.begin(); i != std_map.end(); ++i) {
-        bool extract = ucs::rand() % 2;
+        bool indirect = ucs_ptr_map_key_indirect(i->first);
+        bool extract  = ucs::rand() % 2;
         void *value;
         status = ucs_ptr_map_get(&ptr_map, i->first, extract, &value);
-        ASSERT_EQ(UCS_OK, status);
+        if (indirect) {
+            ASSERT_EQ(UCS_OK, status);
+        } else {
+            ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+        }
+
         ASSERT_EQ(i->second, value);
         if (!extract) {
             status = ucs_ptr_map_del(&ptr_map, i->first);
-            ASSERT_EQ(UCS_OK, status);
+            if (indirect) {
+                ASSERT_EQ(UCS_OK, status);
+            } else {
+                ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+            }
         }
         delete i->second;
     }

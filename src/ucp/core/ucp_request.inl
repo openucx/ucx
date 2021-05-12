@@ -28,7 +28,7 @@
     (((_flags) & UCP_REQUEST_FLAG_COMPLETED)       ? 'd' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_RELEASED)        ? 'f' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_EXPECTED)        ? 'e' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_LOCAL_COMPLETED) ? 'L' : '-'), \
+    (((_flags) & UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED) ? 'L' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
     (((_flags) & (UCP_REQUEST_FLAG_RECV_TAG | \
                   UCP_REQUEST_FLAG_RECV_AM))       ? 'r' : '-'), \
@@ -68,7 +68,7 @@
         uint32_t _flags = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
         (_req)->status = (_status); \
         \
-        ucp_request_id_check(_req, ==, UCP_REQUEST_ID_INVALID); \
+        ucp_request_id_check(_req, ==, UCS_PTR_MAP_KEY_INVALID); \
         \
         if (ucs_likely((_req)->flags & UCP_REQUEST_FLAG_CALLBACK)) { \
             (_req)->_cb((_req) + 1, (_status), ## __VA_ARGS__); \
@@ -114,7 +114,7 @@
     if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
         ucp_request_put(_req); \
     } else { \
-        ucp_request_id_check(_req, ==, UCP_REQUEST_ID_INVALID); \
+        ucp_request_id_check(_req, ==, UCS_PTR_MAP_KEY_INVALID); \
     }
 
 
@@ -169,7 +169,7 @@
 
 static UCS_F_ALWAYS_INLINE void ucp_request_id_reset(ucp_request_t *req)
 {
-    req->id = UCP_REQUEST_ID_INVALID;
+    req->id = UCS_PTR_MAP_KEY_INVALID;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -177,14 +177,14 @@ ucp_request_reset_internal(ucp_request_t *req, ucp_worker_h worker)
 {
     VALGRIND_MAKE_MEM_DEFINED(&req->id, sizeof(req->id));
     VALGRIND_MAKE_MEM_DEFINED(req + 1, worker->context->config.request.size);
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
     ucs_trace_req("put request %p", req);
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
     UCS_PROFILE_REQUEST_FREE(req);
     ucs_mpool_put_inline(req);
 }
@@ -282,7 +282,7 @@ ucp_request_mem_alloc(const char *name)
 static UCS_F_ALWAYS_INLINE void ucp_request_mem_free(ucp_request_t *req)
 {
     UCS_PROFILE_REQUEST_FREE(req);
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
     ucs_trace_req("freed request %p", req);
     ucs_free(req);
 }
@@ -795,10 +795,10 @@ ucp_send_request_next_am_bw_lane(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
 ucp_send_request_get_ep_remote_id(ucp_request_t *req)
 {
-    /* This function may return UCP_WORKER_PTR_KEY_INVALID, but in such cases
+    /* This function may return UCS_PTR_MAP_KEY_INVALID, but in such cases
      * the message should not be sent at all because the am_lane would point to
      * a wireup (proxy) endpoint. So only the receiver side has an assertion
-     * that remote_id != UCP_EP_ID_INVALID.
+     * that remote_id != UCS_PTR_MAP_KEY_INVALID.
      */
     return ucp_ep_remote_id(req->send.ep);
 }
@@ -835,24 +835,35 @@ ucp_request_get_memory_type(ucp_context_h context, const void *address,
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_ep_ptr_map_check_status(ucp_ep_h ep, void *ptr, const char *action_str,
+                            ucs_status_t status)
+{
+    ucs_assertv((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS),
+                "ep %p: failed to %s id for %p: %s", ep, action_str, ptr,
+                ucs_status_string(status));
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
 {
-    ucs_status_t UCS_V_UNUSED status;
+    ucs_status_t status;
 
     status = ucs_ptr_map_put(&ep->worker->ptr_map, ptr,
                              ucp_ep_use_indirect_id(ep), ptr_id_p);
-    ucs_assertv(status == UCS_OK, "ep %p: failed to get id for %p", ep, ptr);
+    ucp_ep_ptr_map_check_status(ep, ptr, "allocate", status);
+
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_request_id_alloc(ucp_request_t *req)
 {
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
-    ucp_ep_ptr_id_alloc(req->send.ep, req, &req->id);
+    ucp_ep_h ep = req->send.ep;
+    ucs_status_t status;
 
-    /* TODO: combine checks for err_mode and PTR MAP indirect flag */
-    if (ucs_unlikely(ucp_ep_config(req->send.ep)->key.err_mode ==
-                     UCP_ERR_HANDLING_MODE_PEER)) {
-        ucs_hlist_add_tail(&ucp_ep_ext_gen(req->send.ep)->proto_reqs,
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
+    status = ucp_ep_ptr_id_alloc(ep, req, &req->id);
+    if (status == UCS_OK) {
+        ucs_hlist_add_tail(&ucp_ep_ext_gen(ep)->proto_reqs,
                            &req->send.list);
     }
 }
@@ -860,33 +871,25 @@ static UCS_F_ALWAYS_INLINE void ucp_request_id_alloc(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
 ucp_request_get_id(const ucp_request_t *req)
 {
-    ucp_request_id_check(req, !=, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, !=, UCS_PTR_MAP_KEY_INVALID);
     return req->id;
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_request_ep_list_del(ucp_request_t *req)
+/* Since release functuion resets request ID to @ref UCS_PTR_MAP_KEY_INVALID and
+ * PTR MAP considers @ref UCS_PTR_MAP_KEY_INVALID as direct key, release request
+ * ID is re-entrant function */
+static UCS_F_ALWAYS_INLINE void ucp_request_id_release(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
-
-    ucs_assert(ep != NULL);
-    /* TODO: combine checks for err_mode and PTR MAP indirect flag */
-    if (ucs_unlikely(ucp_ep_config(ep)->key.err_mode ==
-                     UCP_ERR_HANDLING_MODE_PEER)) {
-        ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_id_release(ucp_request_t *req)
-{
-    ucp_worker_h worker = req->send.ep->worker;
     ucs_status_t UCS_V_UNUSED status;
 
-    ucp_request_id_check(req, !=, UCP_REQUEST_ID_INVALID);
-    status = ucs_ptr_map_del(&worker->ptr_map, req->id);
-    ucs_assertv(status == UCS_OK, "req %p: failed to release id", req);
+    status = ucs_ptr_map_del(&ep->worker->ptr_map, req->id);
+    if (status == UCS_OK) {
+        ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
+    }
+
+    ucp_ep_ptr_map_check_status(ep, req, "release", status);
     ucp_request_id_reset(req);
-    ucp_request_ep_list_del(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -896,24 +899,29 @@ ucp_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
     ucs_status_t status;
     void *ptr;
 
-    ucs_assert(id != UCP_REQUEST_ID_INVALID);
+    ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
 
     status = ucs_ptr_map_get(&worker->ptr_map, id, extract, &ptr);
-    if (ucs_unlikely(status != UCS_OK)) {
+    if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }
 
     *req_p = (ucp_request_t*)ptr;
     ucp_request_id_check(*req_p, ==, id);
+
     if (extract) {
         /* If request ID was released, then need to reset the request ID to use
          * the value for checking whether the request ID should be put to PTR
          * map or not in case of error handling */
         ucp_request_id_reset(*req_p);
-        ucp_request_ep_list_del(*req_p);
+
+        if (status == UCS_OK) {
+            ucs_hlist_del(&ucp_ep_ext_gen((*req_p)->send.ep)->proto_reqs,
+                                          &(*req_p)->send.list);
+        }
     }
 
-    return status;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_request_set_super(ucp_request_t *req,

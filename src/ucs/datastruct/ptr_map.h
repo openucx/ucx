@@ -24,6 +24,12 @@ BEGIN_C_DECLS
 
 
 /**
+ * Invalid key.
+ */
+#define UCS_PTR_MAP_KEY_INVALID ((ucs_ptr_map_key_t)0)
+
+
+/**
  * Key to find pointer in @ref ucs_ptr_map_t.
  */
 typedef uintptr_t ucs_ptr_map_key_t;

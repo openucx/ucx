@@ -36,10 +36,10 @@
     do { \
         ucs_assert((_msg)->type == (_msg_type)); \
         if ((_msg_type) == UCP_WIREUP_MSG_REQUEST) { \
-            ucs_assert(((_msg)->dst_ep_id == UCP_EP_ID_INVALID) != \
+            ucs_assert(((_msg)->dst_ep_id == UCS_PTR_MAP_KEY_INVALID) != \
                        ((_ep) != NULL)); \
         } else { \
-            ucs_assert((_msg)->dst_ep_id != UCP_EP_ID_INVALID); \
+            ucs_assert((_msg)->dst_ep_id != UCS_PTR_MAP_KEY_INVALID); \
             ucs_assert((_ep) != NULL); \
         } \
     } while (0)
@@ -196,7 +196,7 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
         msg_hdr->dst_ep_id = ucp_ep_remote_id(ep);
     } else {
-        msg_hdr->dst_ep_id = UCP_EP_ID_INVALID;
+        msg_hdr->dst_ep_id = UCS_PTR_MAP_KEY_INVALID;
     }
 
     /* pack all addresses */
@@ -502,12 +502,12 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
               msg->src_ep_id, msg->dst_ep_id, msg->conn_sn);
 
     if (ep != NULL) {
-        ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
+        ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
         ucp_ep_flush_state_reset(ep);
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
-        ucs_assert(msg->dst_ep_id == UCP_EP_ID_INVALID);
+        ucs_assert(msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID);
         ep = ucp_ep_match_retrieve(worker, remote_uuid,
                                    msg->conn_sn ^
                                    (remote_uuid == worker->uuid),
@@ -571,9 +571,8 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
      */
     send_reply = /* Always send the reply in case of CM, the client's EP has to
                   * be marked as REMOTE_CONNECTED */
-                 has_cm_lane                           ||
-                 (msg->dst_ep_id == UCP_EP_ID_INVALID) ||
-                 ucp_ep_config(ep)->p2p_lanes;
+        has_cm_lane || (msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID) ||
+        ucp_ep_config(ep)->p2p_lanes;
 
     /* Connect p2p addresses to remote endpoint, if at least one is true: */
     if (/* - EP has not been connected locally yet */
@@ -761,7 +760,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    if (msg->dst_ep_id != UCP_EP_ID_INVALID) {
+    if (msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID) {
         UCP_WORKER_GET_EP_BY_ID(
                 &ep, worker, msg->dst_ep_id,
                 if (msg->type != UCP_WIREUP_MSG_EP_CHECK) { goto out; },
@@ -793,10 +792,10 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
     } else if (msg->type == UCP_WIREUP_MSG_REPLY) {
         ucp_wireup_process_reply(worker, ep, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_CHECK) {
-        ucs_assert((msg->dst_ep_id != UCP_EP_ID_INVALID) && (ep == NULL));
+        ucs_assert((msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID) && (ep == NULL));
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
-        ucs_assert(msg->dst_ep_id != UCP_EP_ID_INVALID);
+        ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
         ucp_worker_set_ep_failed(worker, ep, NULL, UCP_NULL_LANE,
                                  UCS_ERR_CONNECTION_RESET);
     } else {

@@ -108,7 +108,7 @@ UCS_PROFILE_FUNC_VOID(ucp_tag_offload_completed,
 
     if (ucs_unlikely(imm)) {
         hdr.req.ep_id       = imm;
-        hdr.req.req_id      = UCP_REQUEST_ID_INVALID;  /* unused */
+        hdr.req.req_id      = UCS_PTR_MAP_KEY_INVALID; /* unused */
         hdr.super.super.tag = stag;
 
         /* Sync send - need to send a reply */

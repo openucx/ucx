@@ -26,7 +26,7 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
     atomich->address    = req->send.amo.remote_addr;
     atomich->req.ep_id  = ucp_ep_remote_id(ep);
     atomich->req.req_id = fetch ? ucp_request_get_id(req) :
-                                  UCP_REQUEST_ID_INVALID;
+                                  UCS_PTR_MAP_KEY_INVALID;
     atomich->length     = size;
     atomich->opcode     = req->send.amo.uct_op;
 
@@ -224,7 +224,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
          *       EP and continue SW AMO protocol */
     }
 
-    if (atomicreqh->req.req_id == UCP_REQUEST_ID_INVALID) {
+    if (atomicreqh->req.req_id == UCS_PTR_MAP_KEY_INVALID) {
         /* atomic operation without result */
         switch (atomicreqh->length) {
         case sizeof(uint32_t):

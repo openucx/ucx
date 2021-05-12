@@ -71,7 +71,7 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
     }
 
     return ucp_rma_request_advance(req, packed_len, status,
-                                   UCP_REQUEST_ID_INVALID);
+                                   UCS_PTR_MAP_KEY_INVALID);
 }
 
 static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
@@ -119,7 +119,7 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
     }
 
     return ucp_rma_request_advance(req, frag_length, status,
-                                   UCP_REQUEST_ID_INVALID);
+                                   UCS_PTR_MAP_KEY_INVALID);
 }
 
 ucp_rma_proto_t ucp_rma_basic_proto = {
