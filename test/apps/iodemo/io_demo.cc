@@ -1341,11 +1341,9 @@ public:
         server_info_t& server_info = _server_info[server_index];
         size_t data_size           = get_data_size();
         bool validate              = opts().validate;
-
-        if (!send_io_message(server_info.conn, IO_WRITE, sn, data_size,
-                             validate)) {
-            return 0;
-        }
+        ucp_datatype_t bufferiov_dt = ucp_dt_make_contig(1);
+        size_t *buffers_size_array = NULL;
+        uint8_t buffers_array_size = 0;
 
         commit_operation(server_index);
 
@@ -1355,9 +1353,29 @@ public:
         iov->init(data_size, _data_chunks_pool, sn, validate);
         cb->init(iov, NULL);
 
+        bufferiov_dt = iov->get_bufferiov_dt();
+        if (bufferiov_dt == ucp_dt_make_iov()) {
+            buffers_array_size = iov->get_dt_iov_size();
+            buffers_size_array = static_cast<size_t*>
+                                 (calloc(sizeof(buffers_size_array[0]),
+                                         buffers_array_size));
+            for(size_t idx = 0; idx < buffers_array_size; idx++) {
+                buffers_size_array[idx] = iov->get_dt_iov()[idx].length;
+            }
+        }
+        if (!send_io_message(server_info.conn, IO_WRITE, sn, data_size,
+                             validate, bufferiov_dt, buffers_array_size,
+                             buffers_size_array)) {
+            free(buffers_size_array);
+            buffers_size_array = NULL;
+            return 0;
+        }
+
         VERBOSE_LOG << "sending data " << iov << " size "
                     << data_size << " sn " << sn;
         send_data(server_info.conn, *iov, sn, cb);
+        free(buffers_size_array);
+        buffers_size_array = NULL;
 
         return data_size;
     }
