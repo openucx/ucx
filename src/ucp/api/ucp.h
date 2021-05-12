@@ -169,7 +169,7 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4), /**< External event file
                                                            descriptor */
     UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5), /**< Worker flags */
-    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6) /**< Worker name */
+    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6)  /**< Worker name */
 };
 
 
@@ -431,12 +431,14 @@ enum ucp_context_attr_field {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_attr_field {
-    UCP_WORKER_ATTR_FIELD_THREAD_MODE   = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_ATTR_FIELD_ADDRESS       = UCS_BIT(1), /**< UCP address */
-    UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS = UCS_BIT(2), /**< UCP address flags */
-    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER = UCS_BIT(3), /**< Maximum header size
-                                                           used by UCP AM API */
-    UCP_WORKER_ATTR_FIELD_NAME          = UCS_BIT(4) /**< UCP worker name */
+    UCP_WORKER_ATTR_FIELD_THREAD_MODE     = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_ATTR_FIELD_ADDRESS         = UCS_BIT(1), /**< UCP address */
+    UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS   = UCS_BIT(2), /**< UCP address flags */
+    UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER   = UCS_BIT(3), /**< Maximum header size
+                                                             used by UCP AM API */
+    UCP_WORKER_ATTR_FIELD_NAME            = UCS_BIT(4), /**< UCP worker name */
+    UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5)  /**< Maximum size of
+                                                             info string */
 };
 
 
@@ -693,6 +695,21 @@ typedef enum {
                                                         operation cannot be
                                                         completed immediately */
 } ucp_op_attr_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief UCP request query attributes
+ *
+ * The enumeration allows specifying which fields in @ref ucp_request_attr_t are
+ * present. It is used to enable backward compatibility support.
+ */
+typedef enum {
+    UCP_REQUEST_ATTR_FIELD_INFO_STRING      = UCS_BIT(0),
+    UCP_REQUEST_ATTR_FIELD_INFO_STRING_SIZE = UCS_BIT(1),
+    UCP_REQUEST_ATTR_FIELD_STATUS           = UCS_BIT(2),
+    UCP_REQUEST_ATTR_FIELD_MEM_TYPE         = UCS_BIT(3)
+} ucp_req_attr_field;
 
 
 /**
@@ -1177,6 +1194,11 @@ typedef struct ucp_worker_attr {
      * Tracing and analysis tools can identify the worker using this name.
      */
     char                  name[UCP_ENTITY_NAME_MAX];
+
+    /**
+     * Maximum debug string size that can be filled with @ref ucp_request_query.
+     */
+    size_t                max_debug_string;
 } ucp_worker_attr_t;
 
 
@@ -1651,6 +1673,44 @@ typedef struct {
                                           function. */
     } recv_info;
 } ucp_request_param_t;
+
+
+/**
+ * @ingroup UCP_COMM
+ * @brief Attributes of a particular request.
+ */
+typedef struct {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_req_attr_field. Fields not specified in this mask will
+     * be ignored. Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t          field_mask;
+
+    /**
+     * Pointer to allocated string of size @ref debug_string_size that will be filled
+     * with debug information about transports and protocols that were selected
+     * to complete the request.
+     */
+    char              *debug_string;
+
+    /**
+     * Size of the @ref debug_string. String will be filled up to this size.
+     * Maximum possible size debug string can be obtained by quering the worker via
+     * @ref ucp_worker_query.
+     */
+    size_t            debug_string_size;
+
+    /**
+     * Status of the request. The same as @ref ucp_request_check_status.
+     */
+    ucs_status_t      status;
+
+    /**
+     * Detected memory type of the buffer passed to the operation.
+     */
+    ucs_memory_type_t mem_type;
+} ucp_request_attr_t;
 
 
 /**
@@ -2382,6 +2442,18 @@ ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
 
 
 /**
+ * @ingroup UCP_COMM
+ * @brief Get information about ucp_request.
+ *
+ * @param [in]  request Non-blocking request to query.
+ * @param [out] attr    Filled with attributes of the request.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_request_query(void *request, ucp_request_attr_t *attr);
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief Create and connect an endpoint.
  *
@@ -2591,7 +2663,7 @@ ucs_status_ptr_t ucp_ep_flush_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
  * @brief Estimate performance characteristics of a specific endpoint.
  *
  * This routine fetches information about the endpoint.
- * 
+ *
  * @param [in]  ep    Endpoint to query.
  * @param [in]  param Filled by the user with request params.
  * @param [out] attr  Filled with performance estimation of the given operation

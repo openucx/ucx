@@ -21,6 +21,80 @@
 
 const ucp_request_param_t ucp_request_null_param = { .op_attr_mask = 0 };
 
+static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
+{
+    if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
+        if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+            return req->send.state.dt_iter.mem_info.type;
+        } else {
+            return req->send.mem_type;
+        }
+    } else if (req->flags &
+               (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)) {
+        return req->recv.mem_type;
+    } else {
+        return UCS_MEMORY_TYPE_UNKNOWN;
+    }
+}
+
+static void ucp_request_print(ucs_string_buffer_t *strb, ucp_request_t *req)
+{
+    ucp_ep_h ep;
+    ucp_ep_config_t *config;
+
+    if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
+        ucs_string_buffer_appendf(strb, "send length %zu ", req->send.length);
+
+        if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+            ucp_proto_select_param_str(&req->send.proto_config->select_param,
+                                       strb);
+        }
+
+        ep     = req->send.ep;
+        config = ucp_ep_config(ep);
+        ucp_ep_config_lane_info_str(ep->worker, &config->key, NULL,
+                                    req->send.lane, UCP_NULL_RESOURCE, strb);
+    } else if (req->flags &
+               (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)) {
+        ucs_string_buffer_appendf(strb, "recv length %zu ", req->recv.length);
+    } else {
+        ucs_string_buffer_appendf(strb, "no debug info ");
+    }
+
+    ucs_string_buffer_appendf(
+            strb, " %s memory",
+            ucs_memory_type_names[ucp_request_get_mem_type(req)]);
+}
+
+ucs_status_t ucp_request_query(void *request, ucp_request_attr_t *attr)
+{
+    ucp_request_t *req = (ucp_request_t*)request - 1;
+    ucs_string_buffer_t strb;
+
+    if (req->flags & UCP_REQUEST_FLAG_RELEASED) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (attr->field_mask & UCP_REQUEST_ATTR_FIELD_INFO_STRING) {
+        if (!(attr->field_mask & UCP_REQUEST_ATTR_FIELD_INFO_STRING_SIZE)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ucs_string_buffer_init_fixed(&strb, attr->debug_string,
+                                     attr->debug_string_size);
+        ucp_request_print(&strb, req);
+    }
+
+    if (attr->field_mask & UCP_REQUEST_ATTR_FIELD_STATUS) {
+        attr->status = ucp_request_check_status(request);
+    }
+
+    if (attr->field_mask & UCP_REQUEST_ATTR_FIELD_MEM_TYPE) {
+        attr->mem_type = ucp_request_get_mem_type(req);
+    }
+
+    return UCS_OK;
+}
 
 int ucp_request_is_completed(void *request)
 {
