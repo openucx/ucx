@@ -611,10 +611,12 @@ UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)
 _UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_keepalive, cuda_ipc);
 
 
-class test_ucp_peer_failure_rma_zcopy : public test_uct_peer_failure
+class test_uct_peer_failure_rma_zcopy : public test_uct_peer_failure
 {
 public:
-    test_ucp_peer_failure_rma_zcopy()
+    static const uint64_t INVALID_ADDRESS = UINT64_MAX;
+
+    test_uct_peer_failure_rma_zcopy()
     {
         m_dummy_comp.func   = NULL;
         m_dummy_comp.count  = INT_MAX;
@@ -627,22 +629,20 @@ public:
             scoped_log_handler slh(wrap_errors_logger);
             const size_t size = 128;
             mapped_buffer sendbuf(size, 0, *m_sender);
-            mapped_buffer recvbuf(size, 0, *m_receivers.front());
             ucs_status_t status;
 
             // Pretend peer failure by using invalid address
             if (is_put_op) {
                 status = uct_ep_put_zcopy(m_sender->ep(0),
                                           sendbuf.iov(), 1,
-                                          0xDEADBEAF, 0ul,
-                                          &m_dummy_comp);
+                                          INVALID_ADDRESS, 0ul, &m_dummy_comp);
             } else {
                 status = uct_ep_get_zcopy(m_sender->ep(0),
                                           sendbuf.iov(), 1,
-                                          0xDEADBEAF, 0ul,
-                                          &m_dummy_comp);
+                                          INVALID_ADDRESS, 0ul, &m_dummy_comp);
             }
-            EXPECT_FALSE(UCS_STATUS_IS_ERR(status)) << ucs_status_string(status) ;
+            EXPECT_FALSE(UCS_STATUS_IS_ERR(status))
+                << ucs_status_string(status);
 
             flush();
         }
@@ -653,19 +653,19 @@ public:
     uct_completion_t m_dummy_comp;
 };
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rma_zcopy, put,
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_rma_zcopy, put,
                      !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                  UCT_IFACE_FLAG_PUT_ZCOPY))
 {
     test_rma_zcopy_peer_failure(true);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_peer_failure_rma_zcopy, get,
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_rma_zcopy, get,
                      !check_caps(UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                  UCT_IFACE_FLAG_GET_ZCOPY))
 {
     test_rma_zcopy_peer_failure(false);
 }
 
-_UCT_INSTANTIATE_TEST_CASE(test_ucp_peer_failure_rma_zcopy, cma)
+_UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_rma_zcopy, cma)
 
