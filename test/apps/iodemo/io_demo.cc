@@ -480,9 +480,17 @@ protected:
     class BufferIov {
     public:
         BufferIov(size_t size, MemoryPool<BufferIov> &pool) :
-            _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool)
-        {
+            _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool),
+            _data_type(ucp_dt_make_contig(1)) {
             _iov.reserve(size);
+        }
+
+        ucp_datatype_t get_bufferiov_dt() const {
+            return _data_type;
+        }
+
+        void set_bufferiov_dt(ucp_datatype_t data_type) {
+            _data_type = data_type;
         }
 
         size_t size() const {
@@ -490,7 +498,8 @@ protected:
         }
 
         void init(size_t data_size, BufferMemoryPool<Buffer> &chunk_pool,
-                  uint32_t sn, bool validate)
+                  uint32_t sn, bool validate,
+                  ucp_datatype_t data_type = ucp_dt_make_contig(1))
         {
             assert(_iov.empty());
 
@@ -508,6 +517,7 @@ protected:
             if (validate) {
                 fill_data(sn, _memory_type);
             }
+            set_bufferiov_dt(data_type);
         }
 
         inline Buffer &operator[](size_t i) const
@@ -559,11 +569,11 @@ protected:
                                    memory_type);
             }
         }
-
         static const size_t    _npos = static_cast<size_t>(-1);
         ucs_memory_type_t _memory_type;
         std::vector<Buffer*>   _iov;
         MemoryPool<BufferIov>& _pool;
+        ucp_datatype_t _data_type;
     };
 
     /* Asynchronous IO message */
