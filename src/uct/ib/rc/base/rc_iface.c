@@ -250,7 +250,6 @@ void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
 {
     uct_rc_ep_t ***ptr, **memb;
 
-    ucs_spin_lock(&iface->eps_lock);
     ptr = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER];
     if (*ptr == NULL) {
         *ptr = ucs_calloc(UCS_BIT(UCT_RC_QP_TABLE_MEMB_ORDER), sizeof(**ptr),
@@ -260,19 +259,16 @@ void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
     memb = &(*ptr)[qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb == NULL);
     *memb = ep;
-    ucs_spin_unlock(&iface->eps_lock);
 }
 
 void uct_rc_iface_remove_qp(uct_rc_iface_t *iface, unsigned qp_num)
 {
     uct_rc_ep_t **memb;
 
-    ucs_spin_lock(&iface->eps_lock);
     memb = &iface->eps[qp_num >> UCT_RC_QP_TABLE_ORDER]
                       [qp_num &  UCS_MASK(UCT_RC_QP_TABLE_MEMB_ORDER)];
     ucs_assert(*memb != NULL);
     *memb = NULL;
-    ucs_spin_unlock(&iface->eps_lock);
 }
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
@@ -293,17 +289,14 @@ ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
     }
 
     count = 0;
-    ucs_spin_lock(&iface->eps_lock);
     ucs_list_for_each(ep, &iface->ep_list, list) {
         status = uct_ep_flush(&ep->super.super, 0, NULL);
         if ((status == UCS_ERR_NO_RESOURCE) || (status == UCS_INPROGRESS)) {
             ++count;
         } else if (status != UCS_OK) {
-            ucs_spin_unlock(&iface->eps_lock);
             return status;
         }
     }
-    ucs_spin_unlock(&iface->eps_lock);
 
     if (count != 0) {
         UCT_TL_IFACE_STAT_FLUSH_WAIT(&iface->super.super);
@@ -576,12 +569,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops,
     self->tx.reads_completed = 0;
 
     uct_ib_fence_info_init(&self->tx.fi);
-
-    status = ucs_spinlock_init(&self->eps_lock, 0);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
@@ -599,7 +586,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops,
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "rc_recv_desc", &self->rx.mp);
     if (status != UCS_OK) {
-        goto err_destroy_eps_lock;
+        goto err;
     }
 
     /* Create TX buffers mempool */
@@ -681,8 +668,6 @@ err_destroy_tx_mp:
     ucs_mpool_cleanup(&self->tx.mp, 1);
 err_destroy_rx_mp:
     ucs_mpool_cleanup(&self->rx.mp, 1);
-err_destroy_eps_lock:
-    ucs_spinlock_destroy(&self->eps_lock);
 err:
     return status;
 }
@@ -717,7 +702,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
 
     UCS_STATS_NODE_FREE(self->stats);
 
-    ucs_spinlock_destroy(&self->eps_lock);
     ops->cleanup_rx(self);
     uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);

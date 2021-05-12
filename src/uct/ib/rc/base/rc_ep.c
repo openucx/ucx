@@ -157,10 +157,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
     UCS_STATIC_ASSERT(UCT_RC_EP_FC_MASK < UINT8_MAX);
 
     ucs_arbiter_group_init(&self->arb_group);
-
-    ucs_spin_lock(&iface->eps_lock);
     ucs_list_add_head(&iface->ep_list, &self->list);
-    ucs_spin_unlock(&iface->eps_lock);
 
     ucs_debug("created rc ep %p", self);
     return UCS_OK;
