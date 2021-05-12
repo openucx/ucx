@@ -34,11 +34,19 @@ UCS_CLASS_DECLARE(uct_listener_t, uct_cm_h);
     })
 
 
+#define uct_cm_peer_error(_cm, _fmt, ...) \
+    { \
+        ucs_log((_cm)->config.failure_level, _fmt, ## __VA_ARGS__); \
+    }
+
+
 #define uct_cm_ep_peer_error(_cep, _fmt, ...) \
     { \
-        uct_cm_t *_cm_base = ucs_container_of((_cep)->super.super.iface, uct_cm_t, iface); \
-        ucs_log((_cm_base)->config.failure_level, _fmt, ## __VA_ARGS__); \
+        uct_cm_t *_cm_base = ucs_container_of((_cep)->super.super.iface, \
+                                              uct_cm_t, iface); \
+        uct_cm_peer_error(_cm_base, _fmt, ## __VA_ARGS__); \
     }
+
 
 /**
  * "Base" structure which defines CM configuration options.
