@@ -673,7 +673,11 @@ protected:
 
         void init(BufferIov* iov, long* op_counter, IoMessage *io_msg = NULL) {
             _op_counter = op_counter;
-            _counter    = iov->size();
+            if (iov->get_bufferiov_dt() == ucp_dt_make_iov()) {
+                _counter = 1;
+            } else {
+                _counter    = iov->size();
+            }
             _iov        = iov;
             _io_msg     = io_msg;
             assert(_counter > 0);
