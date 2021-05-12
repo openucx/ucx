@@ -712,14 +712,14 @@ bool UcxConnection::send_io_message(const void *buffer, size_t length,
                                     UcxCallback* callback)
 {
     ucp_tag_t tag = make_iomsg_tag(_remote_conn_id, 0);
-    return send_common(buffer, length, tag, callback);
+    return send_common(buffer, length, tag, ucp_dt_make_contig(1), callback);
 }
 
 bool UcxConnection::send_data(const void *buffer, size_t length, uint32_t sn,
-                              UcxCallback* callback)
+                              ucp_datatype_t data_type, UcxCallback* callback)
 {
     ucp_tag_t tag = make_data_tag(_remote_conn_id, sn);
-    return send_common(buffer, length, tag, callback);
+    return send_common(buffer, length, tag, data_type, callback);
 }
 
 bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
@@ -968,7 +968,8 @@ void UcxConnection::established(ucs_status_t status)
     _establish_cb = NULL;
 }
 
-bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag,
+bool UcxConnection::send_common(const void *buffer, size_t length,
+                                ucp_tag_t tag, ucp_datatype_t data_type,
                                 UcxCallback* callback)
 {
     if (_ep == NULL) {
@@ -976,7 +977,7 @@ bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag
     }
 
     ucs_status_ptr_t ptr_status = ucp_tag_send_nb(_ep, buffer, length,
-                                                  ucp_dt_make_contig(1), tag,
+                                                  data_type, tag,
                                                   common_request_callback);
     return process_request("ucp_tag_send_nb", ptr_status, callback);
 }

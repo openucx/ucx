@@ -744,9 +744,11 @@ protected:
     void send_recv_data(UcxConnection* conn, const BufferIov &iov, uint32_t sn,
                         xfer_type_t send_recv_data,
                         UcxCallback* callback = EmptyCallback::get()) {
+        const ucp_datatype_t data_type = iov.get_bufferiov_dt();
         for (size_t i = 0; i < iov.size(); ++i) {
             if (send_recv_data == XFER_TYPE_SEND) {
-                conn->send_data(iov[i].buffer(), iov[i].size(), sn, callback);
+                conn->send_data(iov[i].buffer(), iov[i].size(), sn, data_type,
+                                callback);
             } else {
                 conn->recv_data(iov[i].buffer(), iov[i].size(), sn, callback);
             }
@@ -810,7 +812,7 @@ private:
          * by sn on receiver side */
         if (msg->msg()->op == IO_READ_COMP) {
             return conn->send_data(msg->buffer(), opts().iomsg_size,
-                                   msg->msg()->sn, msg);
+                                   msg->msg()->sn, ucp_dt_make_contig(1), msg);
         } else {
             return conn->send_io_message(msg->buffer(), opts().iomsg_size, msg);
         }
