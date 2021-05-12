@@ -614,8 +614,9 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_status_t status;
     unsigned i;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_mm_iface_ops, md,
-                              worker, params, tl_config);
+    UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_mm_iface_ops,
+                              &uct_base_iface_internal_ops, md, worker, params,
+                              tl_config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
         ucs_error("Shared memory transport does not support multi-threaded worker");

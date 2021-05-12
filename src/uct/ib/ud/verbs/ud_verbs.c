@@ -554,22 +554,25 @@ static void uct_ud_verbs_iface_destroy_qp(uct_ud_iface_t *ud_iface)
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 
 static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
-    {
-        .super            = {},
-        .create_cq        = uct_ib_verbs_create_cq,
-        .arm_cq           = uct_ib_iface_arm_cq,
-        .event_cq         = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
-        .handle_failure   = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
+    .super = {
+        .super = {
+            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+        },
+        .create_cq      = uct_ib_verbs_create_cq,
+        .arm_cq         = uct_ib_iface_arm_cq,
+        .event_cq       = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
+        .handle_failure = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
     },
-    .async_progress           = uct_ud_verbs_iface_async_progress,
-    .send_ctl                 = uct_ud_verbs_ep_send_ctl,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
-    .create_qp                = uct_ib_iface_create_qp,
-    .destroy_qp               = uct_ud_verbs_iface_destroy_qp,
-    .unpack_peer_address      = uct_ud_verbs_iface_unpack_peer_address,
-    .ep_get_peer_address      = uct_ud_verbs_ep_get_peer_address,
-    .get_peer_address_length  = uct_ud_verbs_get_peer_address_length,
-    .peer_address_str         = uct_ud_verbs_iface_peer_address_str
+    .async_progress          = uct_ud_verbs_iface_async_progress,
+    .send_ctl                = uct_ud_verbs_ep_send_ctl,
+    .ep_free                 = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
+    .create_qp               = uct_ib_iface_create_qp,
+    .destroy_qp              = uct_ud_verbs_iface_destroy_qp,
+    .unpack_peer_address     = uct_ud_verbs_iface_unpack_peer_address,
+    .ep_get_peer_address     = uct_ud_verbs_ep_get_peer_address,
+    .get_peer_address_length = uct_ud_verbs_get_peer_address_length,
+    .peer_address_str        = uct_ud_verbs_iface_peer_address_str,
 };
 
 static uct_iface_ops_t uct_ud_verbs_iface_tl_ops = {

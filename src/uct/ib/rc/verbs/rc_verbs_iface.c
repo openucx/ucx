@@ -476,19 +476,22 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
     };
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
-    {
-        .super            = {},
-        .create_cq        = uct_ib_verbs_create_cq,
-        .arm_cq           = uct_ib_iface_arm_cq,
-        .event_cq         = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
-        .handle_failure   = uct_rc_verbs_handle_failure,
+    .super = {
+        .super = {
+            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+        },
+        .create_cq      = uct_ib_verbs_create_cq,
+        .arm_cq         = uct_ib_iface_arm_cq,
+        .event_cq       = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
+        .handle_failure = uct_rc_verbs_handle_failure,
     },
-    .init_rx                  = uct_rc_iface_verbs_init_rx,
-    .cleanup_rx               = uct_rc_iface_verbs_cleanup_rx,
-    .fc_ctrl                  = uct_rc_verbs_ep_fc_ctrl,
-    .fc_handler               = uct_rc_iface_fc_handler,
-    .cleanup_qp               = uct_rc_verbs_ep_cleanup_qp,
-    .ep_post_check            = uct_rc_verbs_ep_post_check
+    .init_rx       = uct_rc_iface_verbs_init_rx,
+    .cleanup_rx    = uct_rc_iface_verbs_cleanup_rx,
+    .fc_ctrl       = uct_rc_verbs_ep_fc_ctrl,
+    .fc_handler    = uct_rc_iface_fc_handler,
+    .cleanup_qp    = uct_rc_verbs_ep_cleanup_qp,
+    .ep_post_check = uct_rc_verbs_ep_post_check,
 };
 
 static ucs_status_t

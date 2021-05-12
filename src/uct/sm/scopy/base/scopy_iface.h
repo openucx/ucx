@@ -54,15 +54,16 @@ typedef struct uct_scopy_iface {
 
 
 typedef struct uct_scopy_iface_ops {
-    uct_iface_ops_t               super;
-    uct_scopy_ep_tx_func_t        ep_tx;
+    uct_iface_internal_ops_t super;
+    uct_scopy_ep_tx_func_t   ep_tx;
 } uct_scopy_iface_ops_t;
 
 
 void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_attr);
 
-UCS_CLASS_DECLARE(uct_scopy_iface_t, uct_scopy_iface_ops_t*, uct_md_h, uct_worker_h,
-                  const uct_iface_params_t*, const uct_iface_config_t*);
+UCS_CLASS_DECLARE(uct_scopy_iface_t, uct_iface_ops_t*, uct_scopy_iface_ops_t*,
+                  uct_md_h, uct_worker_h, const uct_iface_params_t*,
+                  const uct_iface_config_t*);
 
 unsigned uct_scopy_iface_progress(uct_iface_h tl_iface);
 
