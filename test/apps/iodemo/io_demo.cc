@@ -578,15 +578,25 @@ protected:
             }
         }
 
-        void init(io_op_t op, uint32_t sn, size_t data_size, bool validate) {
+        void init(io_op_t op, uint32_t sn, size_t data_size, bool validate,
+                  ucp_datatype_t data_type = ucp_dt_make_contig(1),
+                  uint8_t dt_iov_size = 0,
+                  size_t *dt_iov = NULL) {
             iomsg_t *m = reinterpret_cast<iomsg_t *>(_buffer);
 
             m->sn        = sn;
             m->op        = op;
             m->data_size = data_size;
+            m->data_type = data_type;
+            m->dt_iov_size = dt_iov_size;
+            if (dt_iov_size != 0 && dt_iov != NULL) {
+                memcpy(m->dt_iov, dt_iov,
+                       m->dt_iov_size * sizeof(m->dt_iov[0]));
+            }
             if (validate) {
-                void *tail       = reinterpret_cast<void*>(m + 1);
-                size_t tail_size = _io_msg_size - sizeof(*m);
+                void *tail = reinterpret_cast<void*>(m->dt_iov +
+                                                     m->dt_iov_size);
+                size_t tail_size = _io_msg_size - m->get_iomsg_size();
                 IoDemoRandom::fill(sn, tail, tail_size, UCS_MEMORY_TYPE_HOST);
             }
         }
@@ -678,9 +688,12 @@ protected:
     }
 
     bool send_io_message(UcxConnection *conn, io_op_t op, uint32_t sn,
-                         size_t data_size, bool validate) {
+                         size_t data_size, bool validate,
+                         ucp_datatype_t data_type = ucp_dt_make_contig(1),
+                         uint8_t dt_iov_size = 0,
+                         size_t *dt_iov = NULL) {
         IoMessage *m = _io_msg_pool.get();
-        m->init(op, sn, data_size, validate);
+        m->init(op, sn, data_size, validate, data_type, dt_iov_size, dt_iov);
         return send_io_message(conn, m);
     }
 
