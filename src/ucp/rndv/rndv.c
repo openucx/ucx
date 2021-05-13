@@ -1604,8 +1604,6 @@ static void ucp_rndv_am_zcopy_completion(uct_completion_t *self)
 
     if (sreq->send.state.dt.offset == sreq->send.length) {
         ucp_rndv_am_zcopy_send_req_complete(sreq, status);
-    } else if (status != UCS_OK) {
-        ucs_fatal("error handling is unsupported with rendezvous protocol");
     }
 }
 
