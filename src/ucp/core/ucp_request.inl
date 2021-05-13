@@ -855,7 +855,7 @@ ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_request_id_alloc(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
 {
     ucp_ep_h ep = req->send.ep;
     ucs_status_t status;
@@ -869,7 +869,7 @@ static UCS_F_ALWAYS_INLINE void ucp_request_id_alloc(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
-ucp_request_get_id(const ucp_request_t *req)
+ucp_send_request_get_id(const ucp_request_t *req)
 {
     ucp_request_id_check(req, !=, UCS_PTR_MAP_KEY_INVALID);
     return req->id;
@@ -878,10 +878,14 @@ ucp_request_get_id(const ucp_request_t *req)
 /* Since release functuion resets request ID to @ref UCS_PTR_MAP_KEY_INVALID and
  * PTR MAP considers @ref UCS_PTR_MAP_KEY_INVALID as direct key, release request
  * ID is re-entrant function */
-static UCS_F_ALWAYS_INLINE void ucp_request_id_release(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep;
     ucs_status_t UCS_V_UNUSED status;
+
+    ucs_assert(!(req->flags &
+                 (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));
+    ep = req->send.ep;
 
     status = ucs_ptr_map_del(&ep->worker->ptr_map, req->id);
     if (status == UCS_OK) {
@@ -893,8 +897,8 @@ static UCS_F_ALWAYS_INLINE void ucp_request_id_release(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
-                      ucp_request_t **req_p, int extract)
+ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
+                           ucp_request_t **req_p, int extract)
 {
     ucs_status_t status;
     void *ptr;
@@ -990,11 +994,11 @@ ucp_request_complete_and_dereg_send(ucp_request_t *sreq, ucs_status_t status)
 }
 
 
-#define UCP_REQUEST_GET_BY_ID(_req_p, _worker, _req_id, _extract, \
-                              _action, _fmt_str, ...) \
+#define UCP_SEND_REQUEST_GET_BY_ID(_req_p, _worker, _req_id, _extract, \
+                                   _action, _fmt_str, ...) \
     { \
-        ucs_status_t __status = ucp_request_get_by_id(_worker, _req_id, \
-                                                      _req_p, _extract); \
+        ucs_status_t __status = ucp_send_request_get_by_id(_worker, _req_id, \
+                                                           _req_p, _extract); \
         if (ucs_unlikely(__status != UCS_OK)) { \
             ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
                            " drop " _fmt_str, \

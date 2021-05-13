@@ -60,7 +60,7 @@ static size_t ucp_rma_sw_get_req_pack_cb(void *dest, void *arg)
     getreqh->length     = req->send.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
     getreqh->mem_type   = req->send.rma.rkey->mem_type;
-    getreqh->req.req_id = ucp_request_get_id(req);
+    getreqh->req.req_id = ucp_send_request_get_id(req);
     ucs_assert(getreqh->req.ep_id != UCS_PTR_MAP_KEY_INVALID);
 
     return sizeof(*getreqh);
@@ -73,13 +73,13 @@ static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(req->send.ep);
-    ucp_request_id_alloc(req);
+    ucp_send_request_id_alloc(req);
 
     status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_GET_REQ, req->send.lane,
                                     ucp_rma_sw_get_req_pack_cb, req,
                                     &packed_len);
     if (status != UCS_OK) {
-        ucp_request_id_release(req);
+        ucp_send_request_id_release(req);
         if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
             /* completed with error */
             ucp_request_complete_send(req, status);
@@ -264,8 +264,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
     ucp_ep_h ep;
     void *ptr;
 
-    UCP_REQUEST_GET_BY_ID(&req, worker, getreph->req_id, 0, return UCS_OK,
-                          "GET reply data %p", getreph);
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, getreph->req_id, 0, return UCS_OK,
+                               "GET reply data %p", getreph);
     ep = req->send.ep;
     if (ep->worker->context->config.ext.proto_enable) {
         // TODO use dt_iter.inl unpack
@@ -275,7 +275,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags
                              req->send.state.dt_iter.mem_info.type);
         req->send.state.dt_iter.offset += frag_length;
         if (req->send.state.dt_iter.offset == req->send.state.dt_iter.length) {
-            ucp_request_id_release(req);
+            ucp_send_request_id_release(req);
             ucp_proto_request_bcopy_complete_success(req);
             ucp_ep_rma_remote_request_completed(ep);
         }

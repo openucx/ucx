@@ -260,7 +260,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_offload_sync_ack_handler,
         if ((sreq->send.tag_offload.ssend_tag == rep_hdr->sender_tag) &&
             !(sreq->send.ep->flags & UCP_EP_FLAG_FAILED) &&
             (ucp_ep_local_id(sreq->send.ep) == rep_hdr->ep_id)) {
-            ucp_request_id_release(sreq);
+            ucp_send_request_id_release(sreq);
             ucp_tag_eager_sync_completion(
                     sreq, UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED, UCS_OK);
             ucs_queue_del_iter(queue, iter);
@@ -284,8 +284,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_sync_ack_handler,
     if (worker->context->config.ext.proto_enable) {
         ucp_proto_eager_sync_ack_handler(worker, rep_hdr);
     } else {
-        UCP_REQUEST_GET_BY_ID(&req, worker, rep_hdr->req_id, 1, return UCS_OK,
-                              "EAGER_S ACK %p", rep_hdr);
+        UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rep_hdr->req_id, 1,
+                                   return UCS_OK, "EAGER_S ACK %p", rep_hdr);
         ucp_tag_eager_sync_completion(req,
                                       UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED,
                                       UCS_OK);

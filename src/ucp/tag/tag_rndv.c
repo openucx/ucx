@@ -101,7 +101,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
         return status;
     }
 
-    ucp_request_id_alloc(sreq);
+    ucp_send_request_id_alloc(sreq);
 
     if (ucp_ep_config_key_has_tag_lane(&ucp_ep_config(ep)->key)) {
         status = ucp_tag_offload_start_rndv(sreq);
