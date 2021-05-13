@@ -15,6 +15,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 static const char *uct_rc_fence_mode_values[] = {
@@ -902,4 +903,17 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
 
     UCT_TL_IFACE_STAT_FENCE(&iface->super.super);
     return UCS_OK;
+}
+
+void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface)
+{
+    ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
+                            &iface->tx.cq_available, UCS_VFS_TYPE_INT,
+                            "cq_available");
+    ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
+                            &iface->tx.reads_available, UCS_VFS_TYPE_SSIZET,
+                            "reads_available");
+    ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,
+                            &iface->tx.reads_completed, UCS_VFS_TYPE_SSIZET,
+                            "reads_completed");
 }

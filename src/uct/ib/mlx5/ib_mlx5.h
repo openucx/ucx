@@ -549,6 +549,11 @@ void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
 void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq);
 
 /**
+ * Add txwq attributes to a VFS object
+ */
+void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj);
+
+/**
  * Initialize rxwq structure.
  */
 ucs_status_t uct_ib_mlx5_get_rxwq(struct ibv_qp *qp, uct_ib_mlx5_rxwq_t *wq);
