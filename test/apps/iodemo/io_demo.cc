@@ -1365,7 +1365,7 @@ public:
         server_info_t& server_info = _server_info[server_index];
         size_t data_size           = get_data_size();
         bool validate              = opts().validate;
-        ucp_datatype_t bufferiov_dt = ucp_dt_make_contig(1);
+        ucp_datatype_t bufferiov_dt = opts().bufferiov_dt;
         size_t *buffers_size_array = NULL;
         uint8_t buffers_array_size = 0;
 
@@ -1374,7 +1374,7 @@ public:
         BufferIov *iov           = _data_buffers_pool.get();
         SendCompleteCallback *cb = _send_callback_pool.get();
 
-        iov->init(data_size, _data_chunks_pool, sn, validate);
+        iov->init(data_size, _data_chunks_pool, sn, validate, bufferiov_dt);
         cb->init(iov, NULL);
 
         bufferiov_dt = iov->get_bufferiov_dt();
