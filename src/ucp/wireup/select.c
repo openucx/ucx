@@ -132,7 +132,7 @@ static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
      [UCT_ATOMIC_OP_OR]    = {.name = "or",    .fetch = "fetch-"},
      [UCT_ATOMIC_OP_XOR]   = {.name = "xor",   .fetch = "fetch-"},
      [UCT_ATOMIC_OP_SWAP]  = {.name = "swap",  .fetch = ""},
-     [UCT_ATOMIC_OP_CSWAP] = {.name = "cscap", .fetch = ""}
+     [UCT_ATOMIC_OP_CSWAP] = {.name = "cswap", .fetch = ""}
 };
 
 
@@ -1418,7 +1418,7 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
     }
 
     /* Do not add tag offload lane, if selected tag lane score is lower
-     * than AM score. In this case AM will be used for tag macthing. */
+     * than AM score. In this case AM will be used for tag matching. */
     status = ucp_wireup_select_transport(select_ctx, select_params, &criteria,
                                          ucp_tl_bitmap_max, UINT64_MAX,
                                          UINT64_MAX, UINT64_MAX, 0,

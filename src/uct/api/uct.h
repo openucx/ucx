@@ -1184,7 +1184,7 @@ struct uct_ep_params {
      * Callback that will be used for filling the user's private data to be
      * delivered to the remote peer by the callback on the server or client side.
      * This field is only valid if @ref uct_ep_params_t::sockaddr is set.
-     * @note It is never guaranteed that the callaback will be called. If, for
+     * @note It is never guaranteed that the callback will be called. If, for
      * example, the endpoint goes into error state before issuing the connection
      * request, the callback will not be invoked.
      * @note Can not be set together with @ref uct_ep_params_t::private_data or

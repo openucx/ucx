@@ -155,7 +155,7 @@ public:
             skip = 1;
         } else if ((has_transport("tcp") || has_transport("all")) &&
                    (ifa->ifa_addr->sa_family == AF_INET6)) {
-            /* the tcp transport (and 'all' which may fallback to tcp_sockcmm)
+            /* the tcp transport (and 'all' which may fallback to tcp_sockcm)
              * can run either on an rdma-enabled interface (IPoIB/RoCE)
              * or any interface with IPv4 address because IPv6 isn't supported
              * by the tcp transport yet */
@@ -1287,7 +1287,7 @@ UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, onesided_bidi_sforce) {
     one_sided_disconnect(sender(),   UCP_EP_CLOSE_MODE_FLUSH);
 }
 
-/* The test check that a client disconenction works fine when a server received
+/* The test check that a client disconnection works fine when a server received
  * a conenction request, but a conenction wasn't fully established */
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, create_and_destroy_immediately)
 {
