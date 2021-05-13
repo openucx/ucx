@@ -439,7 +439,8 @@ ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     ucp_request_t *req_dbg, unsigned uct_flags);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
-                              ucp_dt_state_t *state, ucp_request_t *req_dbg);
+                              ucp_dt_state_t *state, ucs_status_t status,
+                              ucp_request_t *req_dbg);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
@@ -453,5 +454,7 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
+
+void ucp_request_invalidate_comp(uct_completion_t *comp);
 
 #endif

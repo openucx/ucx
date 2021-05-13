@@ -78,11 +78,15 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
  * In case alloc_md != NULL, alloc_md_memh will hold the memory key obtained from
  * allocation. It will be put in the array of keys in the proper index.
  */
-ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
-                               void *address, size_t length, unsigned uct_flags,
+ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map, void *address, size_t length, unsigned uct_flags,
                                uct_md_h alloc_md, ucs_memory_type_t mem_type,
                                uct_mem_h *alloc_md_memh_p, uct_mem_h *uct_memh,
                                ucp_md_map_t *md_map_p);
+
+ucs_status_t
+ucp_mem_invalidate_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
+                       uct_mem_h *uct_memh, ucp_md_map_t *md_map_p,
+                       ucp_request_t *request);
 
 ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
                                       size_t length, ucs_memory_type_t mem_type,

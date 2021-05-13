@@ -131,6 +131,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->rkey_ptr_lane    = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
+    key->rma_inv_md_map   = 0;
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
     key->ep_check_map     = 0;
@@ -2736,7 +2737,7 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucs_assert(!ucp_ep->worker->context->config.ext.proto_enable);
         ucs_assert(req->send.ep == ucp_ep);
 
-        ucp_request_send_buffer_dereg(req);
+        ucp_request_send_buffer_dereg(req, status);
         ucp_request_complete_send(req, status);
         ucp_ep_rma_remote_request_completed(ucp_ep);
     } else {

@@ -551,16 +551,17 @@ ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
                                   UCT_MD_MEM_FLAG_HIDE_ERRORS);
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_request_send_buffer_dereg(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE void
+ucp_request_send_buffer_dereg(ucp_request_t *req, ucs_status_t status)
 {
     ucp_request_memory_dereg(req->send.ep->worker->context, req->send.datatype,
-                             &req->send.state.dt, req);
+                             &req->send.state.dt, status, req);
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_request_recv_buffer_dereg(ucp_request_t *req)
 {
     ucp_request_memory_dereg(req->recv.worker->context, req->recv.datatype,
-                             &req->recv.state, req);
+                             &req->recv.state, UCS_OK, req);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -977,8 +978,19 @@ ucp_request_complete_and_dereg_send(ucp_request_t *sreq, ucs_status_t status)
 {
     ucs_assert(!sreq->send.ep->worker->context->config.ext.proto_enable);
     ucp_request_send_generic_dt_finish(sreq);
-    ucp_request_send_buffer_dereg(sreq);
-    ucp_request_complete_send(sreq, status);
+    if ((status == UCS_OK) ||
+        (ucp_ep_config(sreq->send.ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+        !ucp_ep_config(sreq->send.ep)->key.rma_inv_md_map) {
+        ucp_request_send_buffer_dereg(sreq, UCS_OK);
+        ucp_request_complete_send(sreq, status);
+    } else {
+        ucs_assert(sreq->send.state.uct_comp.func == NULL);
+        sreq->send.state.uct_comp.count  = 1;
+        sreq->send.state.uct_comp.status = UCS_OK;
+        sreq->send.state.uct_comp.func   = ucp_request_invalidate_comp;
+        ucp_request_send_buffer_dereg(sreq, status);
+        ucp_invoke_uct_completion(&sreq->send.state.uct_comp, status);
+    }
 }
 
 

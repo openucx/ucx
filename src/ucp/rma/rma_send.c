@@ -86,7 +86,7 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
             return UCS_ERR_NO_RESOURCE;
         }
 
-        ucp_request_send_buffer_dereg(req);
+        ucp_request_send_buffer_dereg(req, UCS_OK);
         ucp_request_complete_send(req, status);
         return UCS_OK;
     }
@@ -100,7 +100,7 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
             if (req_id != UCP_REQUEST_ID_INVALID) {
                 ucp_request_id_release(req);
             }
-            ucp_request_send_buffer_dereg(req);
+            ucp_request_send_buffer_dereg(req, UCS_OK);
             ucp_request_complete_send(req, UCS_OK);
         }
         return UCS_OK;
@@ -126,7 +126,7 @@ static void ucp_rma_request_zcopy_completion(uct_completion_t *self)
                                           send.state.uct_comp);
 
     if (ucs_likely(req->send.length == req->send.state.dt.offset)) {
-        ucp_request_send_buffer_dereg(req);
+        ucp_request_send_buffer_dereg(req, UCS_OK);
         ucp_request_complete_send(req, self->status);
     }
 }

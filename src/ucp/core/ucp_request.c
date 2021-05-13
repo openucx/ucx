@@ -200,15 +200,24 @@ int ucp_request_pending_add(ucp_request_t *req, unsigned pending_flags)
 }
 
 static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
-                                 size_t count, ucp_request_t *req_dbg)
+                                 size_t count, ucs_status_t status,
+                                 ucp_request_t *req_dbg)
 {
+    ucp_ep_h ep = req_dbg->send.ep;
     size_t i;
+    ucp_md_map_t dereg_map;
 
     for (i = 0; i < count; ++i) {
+        if (status != UCS_OK) {
+            dereg_map = ucp_ep_config(ep)->key.rma_inv_md_map;
+        } else {
+            dereg_map = 0;
+        }
         ucp_trace_req(req_dbg, "mem dereg buffer %ld/%ld md_map 0x%"PRIx64,
                       i, count, dt_reg[i].md_map);
-        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL, UCS_MEMORY_TYPE_HOST, NULL,
+        ucp_mem_rereg_mds(context, dereg_map, NULL, 0, 0, NULL, UCS_MEMORY_TYPE_HOST, NULL,
                           dt_reg[i].memh, &dt_reg[i].md_map);
+        ucp_mem_invalidate_mds(context, 0, dt_reg[i].memh, &dt_reg[i].md_map, req_dbg);
         ucs_assert(dt_reg[i].md_map == 0);
     }
 }
@@ -259,7 +268,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
                                            &dt_reg[iov_it].md_map);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
-                    ucp_request_dt_dereg(context, dt_reg, iov_it, req_dbg);
+                    ucp_request_dt_dereg(context, dt_reg, iov_it, UCS_OK,
+                                         req_dbg);
                     ucs_free(dt_reg);
                     goto err;
                 }
@@ -287,21 +297,23 @@ err:
     return status;
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_dbg),
+UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state,
+                                                 status, req_dbg),
                       ucp_context_t *context, ucp_datatype_t datatype,
-                      ucp_dt_state_t *state, ucp_request_t *req_dbg)
+                      ucp_dt_state_t *state, ucs_status_t status,
+                      ucp_request_t *req_dbg)
 {
     ucs_trace_func("context=%p datatype=0x%"PRIx64" state=%p", context,
                    datatype, state);
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        ucp_request_dt_dereg(context, &state->dt.contig, 1, req_dbg);
+        ucp_request_dt_dereg(context, &state->dt.contig, 1, status, req_dbg);
         break;
     case UCP_DATATYPE_IOV:
         if (state->dt.iov.dt_reg != NULL) {
             ucp_request_dt_dereg(context, state->dt.iov.dt_reg,
-                                 state->dt.iov.iovcnt, req_dbg);
+                                 state->dt.iov.iovcnt, status, req_dbg);
             ucs_free(state->dt.iov.dt_reg);
             state->dt.iov.dt_reg = NULL;
         }
@@ -454,4 +466,11 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
     }
 
     return UCS_ERR_MESSAGE_TRUNCATED;
+}
+
+void ucp_request_invalidate_comp(uct_completion_t *comp)
+{
+    ucp_request_t *req = ucs_container_of(comp, ucp_request_t,  
+                                          send.state.uct_comp);
+    ucp_request_complete_send(req, comp->status);
 }

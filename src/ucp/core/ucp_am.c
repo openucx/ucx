@@ -617,7 +617,7 @@ static UCS_F_ALWAYS_INLINE void ucp_am_zcopy_complete_common(ucp_request_t *req)
         ucs_mpool_put_inline(req->send.msg_proto.am.reg_desc);
     }
 
-    ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
+    ucp_request_send_buffer_dereg(req, UCS_OK); /* TODO register+lane change */
 }
 
 static void ucp_am_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)

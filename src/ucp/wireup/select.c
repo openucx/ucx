@@ -1720,6 +1720,10 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
             !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
             key->rma_bw_md_map |= UCS_BIT(md_index);
+            if (ucs_test_all_flags(ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags,
+                                   UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_GET_ZCOPY)) {
+                key->rma_inv_md_map |= UCS_BIT(md_index);
+            }
         }
     }
 

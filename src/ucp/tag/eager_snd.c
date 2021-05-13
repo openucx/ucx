@@ -228,7 +228,7 @@ ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
 
-    ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
+    ucp_request_send_buffer_dereg(req, UCS_OK); /* TODO register+lane change */
     ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
                                   status);
 }

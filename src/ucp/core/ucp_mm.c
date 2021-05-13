@@ -17,6 +17,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucp/core/ucp_request.h>
 #include <string.h>
 #include <inttypes.h>
 
@@ -29,6 +30,56 @@ static ucp_mem_t ucp_mem_dummy_handle = {
     .md_map       = 0
 };
 
+
+ucs_status_t
+ucp_mem_invalidate_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
+                       uct_mem_h *uct_memh, ucp_md_map_t *md_map_p,
+                       ucp_request_t *request)
+{
+    unsigned memh_index, prev_memh_index;
+    ucp_md_map_t new_md_map = *md_map_p;
+    unsigned prev_num_memh;
+    unsigned md_index;
+    ucs_status_t status;
+
+    if (*md_map_p == 0) {
+        return UCS_OK; /* shortcut - no changes required */
+    }
+
+    prev_num_memh = ucs_popcount(*md_map_p & reg_md_map);
+
+    prev_memh_index = memh_index = 0;
+    ucs_for_each_bit(md_index, *md_map_p) {
+        if (reg_md_map & UCS_BIT(md_index)) {
+            /* memh still needed, save it */
+            ucs_assert(prev_memh_index < prev_num_memh);
+            uct_memh[prev_memh_index++] = uct_memh[memh_index];
+        } else {
+            /* memh not needed and registered, deregister it */
+            ucs_trace("invalidating memh[%d]=%p from md[%d]", memh_index,
+                      uct_memh[memh_index], md_index);
+            request->send.state.uct_comp.count++;
+            status = uct_md_mem_dereg_and_invalidate(context->tl_mds[md_index].md,
+                                                     uct_memh[memh_index],
+                                                     &request->send.state.uct_comp);
+            if (status != UCS_OK) {
+                ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
+                         context->tl_mds[md_index].rsc.md_name,
+                         ucs_status_string(status));
+            }
+            new_md_map &= ~UCS_BIT(md_index);
+        }
+
+        VALGRIND_MAKE_MEM_UNDEFINED(&uct_memh[memh_index],
+                                    sizeof(uct_memh[memh_index]));
+        ++memh_index;
+    }
+
+    /* Update md_map, note that MDs which did not support registration will be
+     * missing from the map.*/
+    *md_map_p = new_md_map;
+    return UCS_OK;
+}
 
 ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                                void *address, size_t length, unsigned uct_flags,

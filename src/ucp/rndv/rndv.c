@@ -345,7 +345,7 @@ static void ucp_rndv_complete_rma_put_zcopy(ucp_request_t *sreq, int is_frag_put
                               status, UCP_AM_ID_RNDV_ATP, "send_atp");
     }
 
-    ucp_request_send_buffer_dereg(sreq);
+    ucp_request_send_buffer_dereg(sreq, UCS_OK);
     ucs_assert(sreq->send.state.dt.dt.contig.md_map == 0);
     ucp_request_complete_send(sreq, status);
 }
@@ -597,7 +597,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
     UCS_PROFILE_REQUEST_EVENT(rreq, "complete_rndv_get", 0);
 
     ucp_rkey_destroy(rndv_req->send.rndv.rkey);
-    ucp_request_send_buffer_dereg(rndv_req);
+    ucp_request_send_buffer_dereg(rndv_req, UCS_OK);
 
     if (status == UCS_OK) {
         ucp_rndv_req_send_ack(rndv_req, rreq, rndv_req->send.rndv.remote_req_id,
@@ -1592,7 +1592,7 @@ static void ucp_rndv_am_zcopy_send_req_complete(ucp_request_t *req,
                                                 ucs_status_t status)
 {
     ucs_assert(req->send.state.uct_comp.count == 0);
-    ucp_request_send_buffer_dereg(req);
+    ucp_request_send_buffer_dereg(req, UCS_OK);
     ucp_request_complete_send(req, status);
 }
 
@@ -1674,7 +1674,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self),
     }
 
     /* release registered memory during doing PUT operation for a given fragment */
-    ucp_request_send_buffer_dereg(freq);
+    ucp_request_send_buffer_dereg(freq, UCS_OK);
     ucp_request_put(freq);
 }
 
