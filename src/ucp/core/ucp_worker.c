@@ -1987,7 +1987,12 @@ err:
 
 static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
 {
-    worker->keepalive.iter = &worker->all_eps;
+    worker->keepalive.cb_id      = UCS_CALLBACKQ_ID_NULL;
+    worker->keepalive.last_round = 0;
+    worker->keepalive.lane_map   = 0;
+    worker->keepalive.ep_count   = 0;
+    worker->keepalive.iter_count = 0;
+    worker->keepalive.iter       = &worker->all_eps;
 }
 
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
@@ -2017,6 +2022,28 @@ static void ucp_worker_vfs_show_address_name(void *obj,
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
+static void ucp_worker_vfs_show_num_all_eps(void *obj,
+                                            ucs_string_buffer_t *strb,
+                                            void *arg_ptr, uint64_t arg_u64)
+{
+    ucp_worker_h worker = obj;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_string_buffer_appendf(strb, "%u\n", worker->num_all_eps);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+static void
+ucp_worker_vfs_show_keepalive_ep_count(void *obj, ucs_string_buffer_t *strb,
+                                       void *arg_ptr, uint64_t arg_u64)
+{
+    ucp_worker_h worker = obj;
+
+    UCS_ASYNC_BLOCK(&worker->async);
+    ucs_string_buffer_appendf(strb, "%u\n", worker->keepalive.ep_count);
+    UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
 ucs_thread_mode_t ucp_worker_get_thread_mode(uint64_t worker_flags)
 {
     if (worker_flags & UCP_WORKER_FLAG_THREAD_MULTI) {
@@ -2041,6 +2068,11 @@ void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
     ucs_vfs_obj_add_ro_file(worker, ucs_vfs_show_primitive,
                             (void*)ucs_thread_mode_names[thread_mode],
                             UCS_VFS_TYPE_STRING, "thread_mode");
+
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_num_all_eps, NULL, 0,
+                            "num_all_eps");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_keepalive_ep_count,
+                            NULL, 0, "keepalive/ep_count");
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,
@@ -2067,11 +2099,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     worker->num_ifaces           = 0;
     worker->am_message_id        = ucs_generate_uuid(0);
     worker->rkey_ptr_cb_id       = UCS_CALLBACKQ_ID_NULL;
-    worker->keepalive.cb_id      = UCS_CALLBACKQ_ID_NULL;
-    worker->keepalive.last_round = 0;
-    worker->keepalive.lane_map   = 0;
-    worker->keepalive.ep_count   = 0;
-    worker->keepalive.iter_count = 0;
+    worker->num_all_eps          = 0;
     ucp_worker_keepalive_reset(worker);
     ucs_queue_head_init(&worker->rkey_ptr_reqs);
     ucs_list_head_init(&worker->arm_ifaces);
@@ -2467,10 +2495,15 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_discard_uct_ep_cleanup(worker);
 
     if (worker->flush_ops_count != 0) {
-        ucs_warn("not all pending operations (%u) were flushed on worker %p "
-                 "that is being destroyed",
-                 worker->flush_ops_count, worker);
+        ucs_warn("worker %p: %u pending operations were not flushed", worker,
+                 worker->flush_ops_count);
     }
+
+    if (worker->num_all_eps != 0) {
+        ucs_warn("worker %p: %u endpoints were not destroyed", worker,
+                 worker->num_all_eps);
+    }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_vfs_obj_remove(worker);
@@ -2825,8 +2858,11 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
 static UCS_F_ALWAYS_INLINE ucp_ep_h
 ucp_worker_keepalive_current_ep(ucp_worker_h worker)
 {
-    ucp_ep_ext_gen_t *ep_ext = ucs_container_of(worker->keepalive.iter,
-                                                ucp_ep_ext_gen_t, ep_list);
+    ucp_ep_ext_gen_t *ep_ext;
+
+    ucs_assert(worker->keepalive.iter != &worker->all_eps);
+    ep_ext = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_gen_t,
+                              ep_list);
     return ucp_ep_from_ext_gen(ep_ext);
 }
 
@@ -2851,8 +2887,9 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
 static UCS_F_NOINLINE unsigned
 ucp_worker_do_keepalive_progress(ucp_worker_h worker)
 {
+    unsigned ka_ep_count = 0;
+    unsigned max_ka_ep_count;
     ucs_time_t now;
-    ucs_list_link_t *iter_begin;
     ucp_ep_h ep;
 
     ucs_assert(worker->context->config.ext.keepalive_num_eps != 0);
@@ -2860,52 +2897,54 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
     now = ucs_get_time();
     if (ucs_likely((now - worker->keepalive.last_round) <
                    worker->context->config.keepalive_interval)) {
-        return 0;
+        goto out;
     }
 
     ucs_trace_func("worker %p: keepalive round", worker);
 
     if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
-        ucs_trace("worker %p: keepalive ep list is empty - disabling", worker);
+        ucs_trace("worker %p: keepalive ep list is empty - disabling",
+                  worker);
         uct_worker_progress_unregister_safe(worker->uct,
                                             &worker->keepalive.cb_id);
-        return 0;
+        goto out;
     }
 
     if (ucs_unlikely(worker->keepalive.iter == &worker->all_eps)) {
         ucp_worker_keepalive_next_ep(worker);
     }
 
-    iter_begin = worker->keepalive.iter;
-    /* use own loop for elements because standard for_each skips
+    max_ka_ep_count = ucs_min(worker->context->config.ext.keepalive_num_eps,
+                              worker->num_all_eps) - worker->keepalive.ep_count;
+
+    /* Use own loop for elements because standard for_each skips
      * head element */
     /* TODO: use more optimal algo to enumerate EPs to keepalive
      * (linked list) */
     do {
         ep = ucp_worker_keepalive_current_ep(worker);
-        ucs_trace_func("worker %p: do keepalive on ep %p lane_map 0x%x", worker, ep,
-                        worker->keepalive.lane_map);
+        ucs_trace_func("worker %p: do keepalive on ep %p lane_map 0x%x", worker,
+                       ep, worker->keepalive.lane_map);
         ucp_ep_do_keepalive(ep, &worker->keepalive.lane_map);
         if (worker->keepalive.lane_map != 0) {
-            /* in case if EP has no resources to send keepalive message
+            /* In case if EP has no resources to send keepalive message
              * then just return without update of last_round timestamp,
              * on next progress iteration we will continue from this point */
-            goto out_no_resources;
+            worker->keepalive.ep_count += ka_ep_count;
+            goto out;
         }
 
-        worker->keepalive.ep_count++;
+        ka_ep_count++;
         ucp_worker_keepalive_next_ep(worker);
-    } while ((iter_begin != worker->keepalive.iter) &&
-             (worker->keepalive.ep_count < worker->context->config.ext.keepalive_num_eps));
+    } while (ka_ep_count < max_ka_ep_count);
 
-    ucs_trace("worker %p: sent keepalive on %u endpoints", worker,
-              worker->keepalive.ep_count);
+    ucs_trace("worker %p: sent keepalive on %u endpoints", worker, ka_ep_count);
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
 
-out_no_resources:
-    return worker->keepalive.ep_count;
+out:
+    return ka_ep_count;
 }
 
 static unsigned ucp_worker_keepalive_progress(void *arg)
