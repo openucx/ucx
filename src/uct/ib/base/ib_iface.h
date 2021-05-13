@@ -172,7 +172,12 @@ struct uct_ib_iface_config {
 
 enum {
     UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
-    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
+    UCT_IB_TM_SUPPORTED              = UCS_BIT(1),
+
+    /* Indicates that TX cq len in uct_ib_iface_init_attr_t is specified per
+     * each IB path. Therefore IB interface constructor would need to multiply
+     * TX CQ len by the number of IB paths (when it is properly initialized). */
+    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2)
 };
 
 
@@ -604,6 +609,19 @@ static UCS_F_ALWAYS_INLINE void
 uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
 {
     fence->fence_beat = 0;
+}
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ib_cq_size(uct_ib_iface_t *iface, const uct_ib_iface_init_attr_t *init_attr,
+               uct_ib_dir_t dir)
+{
+    if (dir == UCT_IB_DIR_RX) {
+        return init_attr->cq_len[UCT_IB_DIR_RX];
+    } else if (init_attr->flags & UCT_IB_TX_OPS_PER_PATH) {
+        return init_attr->cq_len[UCT_IB_DIR_TX] * iface->num_paths;
+    } else {
+        return init_attr->cq_len[UCT_IB_DIR_TX];
+    }
 }
 
 #endif

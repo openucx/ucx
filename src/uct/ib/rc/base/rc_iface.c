@@ -520,23 +520,26 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops,
                     uct_iface_ops_t *tl_ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
                     const uct_rc_iface_common_config_t *config,
-                    uct_ib_iface_init_attr_t *init_attr)
+                    const uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_device_t *dev = &ucs_derived_of(md, uct_ib_md_t)->dev;
     uint32_t max_ib_msg_size;
     ucs_status_t status;
+    unsigned tx_cq_size;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, tl_ops, md, worker,
                               params, &config->super, init_attr);
 
-    self->tx.cq_available       = init_attr->cq_len[UCT_IB_DIR_TX] - 1;
+    tx_cq_size                  = uct_ib_cq_size(&self->super, init_attr,
+                                                 UCT_IB_DIR_TX);
+    self->tx.cq_available       = tx_cq_size - 1;
     self->rx.srq.available      = 0;
     self->rx.srq.quota          = 0;
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
     self->config.tx_poll_always = config->tx.poll_always;
-    self->config.tx_ops_count   = init_attr->cq_len[UCT_IB_DIR_TX];
+    self->config.tx_ops_count   = tx_cq_size;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
     self->config.timeout        = uct_ib_to_qp_fabric_time(config->tx.timeout);
     self->config.rnr_retry      = uct_rc_iface_config_limit_value(
@@ -550,7 +553,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops,
     self->config.max_rd_atomic  = config->max_rd_atomic;
     self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
-    self->config.tx_cq_len      = init_attr->cq_len[UCT_IB_DIR_TX];
+    self->config.tx_cq_len      = tx_cq_size;
     self->tx.in_pending         = 0;
 #endif
     max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;

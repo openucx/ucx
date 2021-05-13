@@ -1203,6 +1203,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
+    unsigned tx_cq_size;
+
     ucs_trace_func("");
 
     if (config->ndci < 1) {
@@ -1218,29 +1220,33 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     init_attr.qp_type     = UCT_IB_QPT_DCI;
-    init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN;
+    init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN |
+                            UCT_IB_TX_OPS_PER_PATH;
     init_attr.fc_req_size = sizeof(uct_dc_fc_request_t);
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    /* driver will round up to pow of 2 if needed */
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len *
                                       UCT_IB_MLX5_MAX_BB *
                                       (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
     /* TODO check caps instead */
-    if (ucs_roundup_pow2(init_attr.cq_len[UCT_IB_DIR_TX]) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
+                              &uct_dc_mlx5_iface_ops, &uct_dc_mlx5_iface_tl_ops,
+                              tl_md, worker, params, &config->super,
+                              &config->rc_mlx5_common, &init_attr);
+
+    tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr,
+                                UCT_IB_DIR_TX);
+
+    /* driver will round up num cqes to pow of 2 if needed */
+    if (ucs_roundup_pow2(tx_cq_size) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
         ucs_error("Can't allocate TX resources, try to decrease dcis number (%d)"
                   " or tx qp length (%d)",
                   config->ndci, config->super.super.tx.queue_len);
         return UCS_ERR_INVALID_PARAM;
     }
-
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_dc_mlx5_iface_ops, &uct_dc_mlx5_iface_tl_ops,
-                              tl_md, worker, params, &config->super,
-                              &config->rc_mlx5_common, &init_attr);
 
     uct_dc_mlx5_iface_init_version(self, tl_md);
 
@@ -1282,7 +1288,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
     ucs_debug("dc iface %p: using '%s' policy with %d dcis and %d cqes, dct 0x%x",
               self, uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
-              init_attr.cq_len[UCT_IB_DIR_TX], UCT_RC_MLX5_TM_ENABLED(&self->super) ?
+              tx_cq_size, UCT_RC_MLX5_TM_ENABLED(&self->super) ?
               0 : self->rx.dct.qp_num);
 
     /* Create fake endpoint which will be used for sending FC grants */
