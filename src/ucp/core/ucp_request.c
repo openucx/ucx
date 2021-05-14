@@ -417,7 +417,7 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     /* Set REMOTE_COMPLETED flag to make sure that TAG/Sync operations will be
      * fully completed here */
     req->flags |= UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
-    ucp_request_id_release(req);
+    ucp_send_request_id_release(req);
 
     if (req->send.uct.func == ucp_proto_progress_am_single) {
         ucs_assert(req->send.state.uct_comp.count == 0);

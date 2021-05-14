@@ -103,7 +103,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
     void *rkey_buf;
 
     rndv_rts_hdr->sreq.ep_id  = ucp_send_request_get_ep_remote_id(sreq);
-    rndv_rts_hdr->sreq.req_id = ucp_request_get_id(sreq);
+    rndv_rts_hdr->sreq.req_id = ucp_send_request_get_id(sreq);
     rndv_rts_hdr->size        = sreq->send.length;
     rndv_rts_hdr->opcode      = opcode;
 
@@ -146,7 +146,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
     /* Request ID of sender side (remote) */
     rndv_rtr_hdr->sreq_id = rreq->recv.remote_req_id;
     /* Request ID of receiver side (local) */
-    rndv_rtr_hdr->rreq_id = ucp_request_get_id(rndv_req);
+    rndv_rtr_hdr->rreq_id = ucp_send_request_get_id(rndv_req);
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(rreq->recv.datatype)) {
@@ -330,7 +330,7 @@ static void ucp_rndv_complete_rma_put_zcopy(ucp_request_t *sreq, int is_frag_put
     UCS_PROFILE_REQUEST_EVENT(sreq, "complete_rndv_put", 0);
 
     if (is_frag_put) {
-        ucp_request_id_release(sreq);
+        ucp_send_request_id_release(sreq);
     } else {
         ucp_rkey_destroy(sreq->send.rndv.rkey);
 
@@ -389,7 +389,7 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     rndv_req->send.rndv_rtr.offset = offset;
 
     ucp_request_set_super(rndv_req, rreq);
-    ucp_request_id_alloc(rndv_req);
+    ucp_send_request_id_alloc(rndv_req);
 
     ucp_request_send(rndv_req, 0);
 }
@@ -1483,8 +1483,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
         return ucp_proto_rndv_ats_handler(arg, data, length, flags);
     }
 
-    UCP_REQUEST_GET_BY_ID(&sreq, worker, rep_hdr->req_id, 1, return UCS_OK,
-                          "RNDV ATS %p", rep_hdr);
+    UCP_SEND_REQUEST_GET_BY_ID(&sreq, worker, rep_hdr->req_id, 1, return UCS_OK,
+                               "RNDV ATS %p", rep_hdr);
 
     /* dereg the original send request and set it to complete */
     UCS_PROFILE_REQUEST_EVENT(sreq, "rndv_ats_recv", 0);
@@ -1508,7 +1508,7 @@ ucs_status_t ucp_rndv_rts_handle_status_from_pending(ucp_request_t *sreq,
             return UCS_ERR_NO_RESOURCE;
         }
 
-        ucp_request_id_release(sreq);
+        ucp_send_request_id_release(sreq);
         ucp_request_complete_and_dereg_send(sreq, status);
     }
 
@@ -1824,8 +1824,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *rtr_sreq, *req;
 
-    UCP_REQUEST_GET_BY_ID(&rtr_sreq, worker, rep_hdr->req_id, 1, return UCS_OK,
-                          "RNDV ATP %p", rep_hdr);
+    UCP_SEND_REQUEST_GET_BY_ID(&rtr_sreq, worker, rep_hdr->req_id, 1,
+                               return UCS_OK, "RNDV ATP %p", rep_hdr);
 
     req = ucp_request_get_super(rtr_sreq);
     ucs_assert(req != NULL);
@@ -1865,8 +1865,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         return ucp_proto_rndv_handle_rtr(arg, data, length, flags);
     }
 
-    UCP_REQUEST_GET_BY_ID(&sreq, arg, rndv_rtr_hdr->sreq_id, 0, return UCS_OK,
-                          "RNDV RTR %p", rndv_rtr_hdr);
+    UCP_SEND_REQUEST_GET_BY_ID(&sreq, arg, rndv_rtr_hdr->sreq_id, 0,
+                               return UCS_OK, "RNDV RTR %p", rndv_rtr_hdr);
     ep        = sreq->send.ep;
     ep_config = ucp_ep_config(ep);
     put_zcopy = &ep_config->rndv.put_zcopy;
@@ -1964,7 +1964,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
 
 out_send:
     /* if it is not a PUT pipeline protocol, delete the send request ID */
-    ucp_request_id_release(sreq);
+    ucp_send_request_id_release(sreq);
     ucp_request_send(sreq, 0);
     return UCS_OK;
 }
@@ -1983,8 +1983,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
         return ucp_proto_rndv_handle_data(arg, data, length, flags);
     }
 
-    UCP_REQUEST_GET_BY_ID(&rndv_req, worker, rndv_data_hdr->rreq_id, 0,
-                          return UCS_OK, "RNDV data %p", rndv_data_hdr);
+    UCP_SEND_REQUEST_GET_BY_ID(&rndv_req, worker, rndv_data_hdr->rreq_id, 0,
+                               return UCS_OK, "RNDV data %p", rndv_data_hdr);
 
     rreq = ucp_request_get_super(rndv_req);
     ucs_assert(rreq != NULL);
@@ -2000,7 +2000,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
                                            rreq->flags &
                                                    UCP_REQUEST_FLAG_RECV_AM);
     if (status != UCS_INPROGRESS) {
-        ucp_request_id_release(rndv_req);
+        ucp_send_request_id_release(rndv_req);
         ucp_request_put(rndv_req);
     }
 

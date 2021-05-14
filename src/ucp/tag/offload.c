@@ -569,7 +569,7 @@ static void ucp_tag_offload_rndv_zcopy_completion(uct_completion_t *self)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_request_id_release(req);
+    ucp_send_request_id_release(req);
     ucp_proto_am_zcopy_req_complete(req, self->status);
 }
 
@@ -587,7 +587,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
 
     ucp_tag_offload_unexp_rndv_hdr_t rndv_hdr = {
         .ep_id    = ucp_send_request_get_ep_remote_id(req),
-        .req_id   = ucp_request_get_id(req),
+        .req_id   = ucp_send_request_get_id(req),
         .md_index = ucp_ep_md_index(ep, req->send.lane)
     };
 

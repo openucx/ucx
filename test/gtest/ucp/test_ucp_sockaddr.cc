@@ -1505,9 +1505,8 @@ protected:
             req->flags        |= UCP_REQUEST_FLAG_COMPLETED;
 
             ucp_request_t *req_from_id;
-            ucs_status_t status = ucp_request_get_by_id(sender().worker(),
-                                                        req->id,&req_from_id,
-                                                        1);
+            ucs_status_t status = ucp_send_request_get_by_id(
+                    sender().worker(), req->id,&req_from_id, 1);
             if (status == UCS_OK) {
                 EXPECT_EQ(req, req_from_id);
             }

@@ -2744,7 +2744,11 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
     ucp_trace_req(req, "purged with status %s (%d) on ep %p",
                   ucs_status_string(status), status, ucp_ep);
 
-    ucp_request_id_release(req);
+    /* Only send operations could have request ID allocated */
+    if (!(req->flags &
+          (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG))) {
+        ucp_send_request_id_release(req);
+    }
 
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));

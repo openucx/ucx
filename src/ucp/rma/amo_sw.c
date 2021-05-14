@@ -25,7 +25,7 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
 
     atomich->address    = req->send.amo.remote_addr;
     atomich->req.ep_id  = ucp_ep_remote_id(ep);
-    atomich->req.req_id = fetch ? ucp_request_get_id(req) :
+    atomich->req.req_id = fetch ? ucp_send_request_get_id(req) :
                                   UCS_PTR_MAP_KEY_INVALID;
     atomich->length     = size;
     atomich->opcode     = req->send.amo.uct_op;
@@ -61,14 +61,14 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
 
     req->send.lane = ucp_ep_get_am_lane(req->send.ep);
     if (fetch) {
-        ucp_request_id_alloc(req);
+        ucp_send_request_id_alloc(req);
     }
 
     status = ucp_rma_sw_do_am_bcopy(req, UCP_AM_ID_ATOMIC_REQ,
                                     req->send.lane, pack_cb, req, NULL);
     if ((status != UCS_OK) || ((status == UCS_OK) && !fetch)) {
         if (fetch) {
-            ucp_request_id_release(req);
+            ucp_send_request_id_release(req);
         }
 
         if (status != UCS_ERR_NO_RESOURCE) {
@@ -276,8 +276,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_rep_handler, (arg, data, length, am_fl
     ucp_request_t *req;
     ucp_ep_h ep;
 
-    UCP_REQUEST_GET_BY_ID(&req, worker, hdr->req_id, 1, return UCS_OK,
-                          "ATOMIC_REP %p", hdr);
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, hdr->req_id, 1, return UCS_OK,
+                               "ATOMIC_REP %p", hdr);
     ep = req->send.ep;
     memcpy(req->send.buffer, hdr + 1, frag_length);
     ucp_request_complete_send(req, UCS_OK);
