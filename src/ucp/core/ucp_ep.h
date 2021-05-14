@@ -663,7 +663,7 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
  * @param [in]     ep       Endpoint object to operate keepalive.
  * @param [in/out] lane_map Map of lanes to process. During processing bit
  *                          corresponding to processed lane is set to 0.
- *                          Used for procerssing situation when any UCT lane
+ *                          Used for processing situation when any UCT lane
  *                          has no resources.
  */
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);

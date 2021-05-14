@@ -356,7 +356,7 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucp_ep_remove_ref(ep);
 }
 
-/* Since release functuion resets EP ID to @ref UCS_PTR_MAP_KEY_INVALID and PTR
+/* Since release function resets EP ID to @ref UCS_PTR_MAP_KEY_INVALID and PTR
  * MAP considers @ref UCS_PTR_MAP_KEY_INVALID as direct key, release EP ID is
  * re-entrant function */
 void ucp_ep_release_id(ucp_ep_h ep)
@@ -432,7 +432,7 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (lane == key->cm_lane) {
-            /* Skip CM lanes for banwidth calculation */
+            /* Skip CM lanes for bandwidth calculation */
             continue;
         }
 
@@ -2789,7 +2789,7 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucp_request_complete_send(req, status);
         ucp_ep_rma_remote_request_completed(ucp_ep);
     } else {
-        /* SW RMA/PUT and AMO/Post operations don't allcoate local request ID
+        /* SW RMA/PUT and AMO/Post operations don't allocate local request ID
          * and don't need to be tracked, since they complete UCP request upon
          * sending all data to a peer. Receiving RMA/CMPL and AMO/REP packets
          * complete flush requests */
