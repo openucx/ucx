@@ -17,6 +17,7 @@
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/ptr_map.inl>
+#include <ucs/debug/debug_int.h>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
@@ -394,12 +395,21 @@ ucp_request_send_state_reset(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        req->send.state.uct_comp.func   = comp_cb;
         req->send.state.uct_comp.count  = 0;
         req->send.state.uct_comp.status = UCS_OK;
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
-        req->send.state.dt.offset       = 0;
+        /* Always set completion function to make sure this value is initialized
+         * when doing send fast-forwarding in ucp_request_send_state_ff() */
+        req->send.state.uct_comp.func = comp_cb;
+        req->send.state.dt.offset     = 0;
+
+        if (proto == UCP_REQUEST_SEND_PROTO_BCOPY_AM) {
+            ucs_assertv(comp_cb == NULL,
+                        "completion function for AM Bcopy protocol must be NULL"
+                        " instead of %s",
+                        ucs_debug_get_symbol_name((void*)comp_cb));
+        }
         break;
     default:
         ucs_fatal("unknown protocol");
