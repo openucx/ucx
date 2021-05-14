@@ -18,6 +18,13 @@ pr:
     - NEWS
 
 resources:
+  pipelines:
+  - pipeline: MellanoxUcxBase
+    source: Mellanox.ucx
+    project: ucx_int3
+    trigger:
+      stages:
+      - Static_check
   containers:
     - container: centos7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
