@@ -540,6 +540,7 @@ ucs_status_t uct_tcp_sockcm_ep_send(uct_tcp_sockcm_ep_t *cep)
     }
 
     if (uct_tcp_sockcm_ep_send_skip_event(cep)) {
+        ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_DISCONNECTING));
         return UCS_OK;
     }
 
