@@ -21,9 +21,6 @@ resources:
   pipelines:
   - pipeline: MellanoxUcxBase
     source: 'UCX INT3'
-    trigger:
-      stages:
-      - Static_check
   containers:
     - container: centos7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
