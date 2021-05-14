@@ -723,7 +723,7 @@ bool UcxConnection::send_data(const void *buffer, size_t length, uint32_t sn,
 }
 
 bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
-                              UcxCallback* callback)
+                              ucp_datatype_t data_type, UcxCallback* callback)
 {
     if (_ep == NULL) {
         return false;
@@ -732,7 +732,7 @@ bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
     ucp_tag_t tag      = make_data_tag(_conn_id, sn);
     ucp_tag_t tag_mask = std::numeric_limits<ucp_tag_t>::max();
     ucs_status_ptr_t ptr_status = ucp_tag_recv_nb(_context.worker(), buffer,
-                                                  length, ucp_dt_make_contig(1),
+                                                  length, data_type,
                                                   tag, tag_mask,
                                                   data_recv_callback);
     return process_request("ucp_tag_recv_nb", ptr_status, callback);
