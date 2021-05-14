@@ -289,6 +289,7 @@ void ucp_rndv_req_send_ack(ucp_request_t *ack_req, ucp_request_t *req,
     ack_req->send.proto.status        = status;
     ack_req->send.proto.remote_req_id = remote_req_id;
     ack_req->send.proto.comp_cb       = ucp_request_put;
+    ucp_request_send_state_comp_reset(ack_req, NULL);
     ucp_request_send_state_reset(ack_req, NULL,
                                  UCP_REQUEST_SEND_PROTO_BCOPY_AM);
 
@@ -602,6 +603,10 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
     ucp_request_send_buffer_dereg(rndv_req);
 
     if (status == UCS_OK) {
+        VALGRIND_MAKE_MEM_UNDEFINED(rndv_req, sizeof(rndv_req));
+        /* rndv_req->send.ep is not updated - leave it as defined */
+        VALGRIND_MAKE_MEM_DEFINED(&rndv_req->send.ep,
+                                  sizeof(rndv_req->send.ep));
         ucp_rndv_req_send_ack(rndv_req, rreq, rndv_req->send.rndv.remote_req_id,
                               UCS_OK, UCP_AM_ID_RNDV_ATS, "send_ats");
     } else {
@@ -1174,6 +1179,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         frndv_req->flags             = 0;
         frndv_req->send.ep           = rndv_req->send.ep;
         frndv_req->send.pending_lane = UCP_NULL_LANE;
+        ucp_request_send_state_comp_reset(frndv_req, NULL);
 
         ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.req_id,
                               freq->recv.length, offset);
@@ -1360,6 +1366,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
     rndv_req->send.mdesc = NULL;
     is_get_zcopy_failed  = 0;
     src_mem_type         = UCS_MEMORY_TYPE_HOST;
+    ucp_request_send_state_comp_reset(rndv_req, NULL);
 
     ucp_trace_req(rreq,
                   "rndv matched remote {address 0x%"PRIx64" size %zu sreq_id "

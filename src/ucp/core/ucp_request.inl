@@ -323,6 +323,18 @@ ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
 static UCS_F_ALWAYS_INLINE void
 ucp_request_send(ucp_request_t *req, unsigned pending_flags)
 {
+    /* test all values used in ucp_request_send_state_ff */
+    VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.status,
+                                  sizeof(req->send.state.uct_comp.status));
+    if (req->send.state.uct_comp.func != NULL) {
+        VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.state.uct_comp.count,
+                                      sizeof(req->send.state.uct_comp.count));
+    }
+
+    VALGRIND_CHECK_MEM_IS_DEFINED(&req->send.uct.func,
+                                  sizeof(req->send.uct.func));
+    VALGRIND_CHECK_MEM_IS_DEFINED(&req->id, sizeof(req->id));
+
     while (!ucp_request_try_send(req, pending_flags));
 }
 
@@ -349,6 +361,17 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_request_send_state_comp_reset(ucp_request_t *req,
+                                  uct_completion_callback_t comp_cb)
+{
+    req->send.state.uct_comp.func   = comp_cb;
+    req->send.state.uct_comp.status = UCS_OK;
+    if (comp_cb != NULL) {
+        req->send.state.uct_comp.count  = 0;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
                             size_t dt_count)
 {
@@ -360,7 +383,7 @@ ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.dt.offset,
                                 sizeof(req->send.state.dt.offset));
 
-    req->send.state.uct_comp.func = NULL;
+    ucp_request_send_state_comp_reset(req, NULL);
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
@@ -394,12 +417,10 @@ ucp_request_send_state_reset(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        req->send.state.uct_comp.func   = comp_cb;
-        req->send.state.uct_comp.count  = 0;
-        req->send.state.uct_comp.status = UCS_OK;
+        ucp_request_send_state_comp_reset(req, comp_cb);
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
-        req->send.state.dt.offset       = 0;
+        req->send.state.dt.offset = 0;
         break;
     default:
         ucs_fatal("unknown protocol");

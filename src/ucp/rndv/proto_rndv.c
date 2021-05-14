@@ -471,6 +471,7 @@ void ucp_proto_rndv_receive(ucp_worker_h worker, ucp_request_t *recv_req,
     req->send.ep                  = ep;
     req->send.rndv.remote_address = rts->address;
     req->send.rndv.remote_req_id  = rts->sreq.req_id;
+    ucp_request_send_state_comp_reset(req, NULL);
 
     if (ucs_likely(rts->size <= recv_req->recv.length)) {
         req->flags   = UCP_REQUEST_FLAG_CALLBACK | UCP_REQUEST_FLAG_RELEASED;
