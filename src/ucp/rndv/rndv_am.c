@@ -72,7 +72,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_am_request_init(ucp_request_t *req)
 {
-    ucp_rkey_destroy(req->send.rndv.rkey);
+    if (req->send.rndv.rkey != NULL) {
+        ucp_rkey_destroy(req->send.rndv.rkey);
+    }
     ucp_proto_msg_multi_request_init(req);
     /* Memory could be registered when we sent the RTS */
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,

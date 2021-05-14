@@ -42,9 +42,17 @@ enum {
  * Rkey configuration key
  */
 struct ucp_rkey_config_key {
-    ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
-    ucp_worker_cfg_index_t        ep_cfg_index; /* Endpoint configuration */
-    ucs_memory_type_t             mem_type;     /* Remote memory type */
+    /* Which *remote* MDs have valid memory handles */
+    ucp_md_map_t           md_map;
+
+    /* Endpoint configuration index */
+    ucp_worker_cfg_index_t ep_cfg_index;
+
+    /* Remove system device id */
+    ucs_sys_device_t       sys_dev;
+
+    /* Remote memory type */
+    ucs_memory_type_t      mem_type;
 };
 
 
@@ -52,9 +60,20 @@ struct ucp_rkey_config_key {
  * Rkey configuration
  */
 typedef struct {
-    ucp_rkey_config_key_t         key;          /* Configuration key */
-    ucp_proto_select_short_t      put_short;    /* Put-short thresholds */
-    ucp_proto_select_t            proto_select; /* Protocol selection data */
+    /* Configuration key */
+    ucp_rkey_config_key_t    key;
+
+    /* Put-short thresholds */
+    ucp_proto_select_short_t put_short;
+
+    /* Remote system topology distance of each lane from the remote memory
+     * buffer. The number of valid entries is according to the number of lanes
+     * defined by the configuration at index "key.ep_cfg_index".
+     */
+    ucs_sys_dev_distance_t   lanes_distance[UCP_MAX_LANES];
+
+    /* Protocol selection data */
+    ucp_proto_select_t       proto_select;
 } ucp_rkey_config_t;
 
 
@@ -132,7 +151,8 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
                                         uct_rkey_t *uct_rkey_p);
 
 
-size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map);
+size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
+                            ucs_sys_device_t sys_dev, uint64_t sys_dev_map);
 
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
@@ -140,16 +160,19 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
                           const void *uct_rkeys[]);
 
 
-ssize_t ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
-                          const uct_mem_h *memh,
-                          const ucs_memory_info_t *mem_info, void *buffer);
+ssize_t
+ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
+                  const uct_mem_h *memh, const ucs_memory_info_t *mem_info,
+                  uint64_t sys_dev_map,
+                  const ucs_sys_dev_distance_t *sys_distance, void *buffer);
 
 
 ucs_status_t ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer,
-                                         ucp_rkey_h *rkey_p);
+                                         size_t length, ucp_rkey_h *rkey_p);
 
 
-void ucp_rkey_dump_packed(const void *rkey_buffer, ucs_string_buffer_t *strb);
+void ucp_rkey_dump_packed(const void *buffer, size_t length,
+                          ucs_string_buffer_t *strb);
 
 
 void ucp_rkey_config_dump_brief(const ucp_rkey_config_key_t *rkey_config_key,

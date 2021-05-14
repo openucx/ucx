@@ -75,6 +75,9 @@ typedef struct {
 
     /* Memory type of the transfer */
     ucs_memory_info_t              mem_info;
+
+    /* Minimal data length */
+    size_t                         min_length;
 } ucp_proto_rndv_ctrl_init_params_t;
 
 
@@ -116,7 +119,8 @@ void ucp_proto_rndv_bulk_config_str(size_t min_length, size_t max_length,
 
 
 void ucp_proto_rndv_receive(ucp_worker_h worker, ucp_request_t *recv_req,
-                            const ucp_rndv_rts_hdr_t *rts, size_t hdr_len);
+                            const ucp_rndv_rts_hdr_t *rts,
+                            const void *rkey_buffer, size_t rkey_length);
 
 
 ucs_status_t

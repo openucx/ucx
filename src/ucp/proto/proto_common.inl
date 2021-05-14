@@ -199,11 +199,11 @@ ucp_proto_request_pack_rkey(ucp_request_t *req, void *rkey_buffer)
      */
     ucs_assert(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG);
 
-    packed_rkey_size =
-            ucp_rkey_pack_uct(req->send.ep->worker->context,
-                              req->send.state.dt_iter.type.contig.reg.md_map,
-                              req->send.state.dt_iter.type.contig.reg.memh,
-                              &req->send.state.dt_iter.mem_info, rkey_buffer);
+    packed_rkey_size = ucp_rkey_pack_uct(
+            req->send.ep->worker->context,
+            req->send.state.dt_iter.type.contig.reg.md_map,
+            req->send.state.dt_iter.type.contig.reg.memh,
+            &req->send.state.dt_iter.mem_info, 0, NULL, rkey_buffer);
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
                   ucs_status_string((ucs_status_t)packed_rkey_size));

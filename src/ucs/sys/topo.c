@@ -137,9 +137,8 @@ ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
                           path2, sizeof(path2));
 
     path_distance = ucs_path_calc_distance(path1, path2);
-    if (path_distance < 0) {
-        return (ucs_status_t)path_distance;
-    } else if (path_distance == 0) {
+    if (path_distance <= 0) {
+        /* Assume default distance for devices that cannot be found in sysfs */
         goto default_distance;
     }
 

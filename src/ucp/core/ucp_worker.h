@@ -321,7 +321,9 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                          int print_cfg, ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t
-ucp_worker_add_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+ucp_worker_add_rkey_config(ucp_worker_h worker,
+                           const ucp_rkey_config_key_t *key,
+                           const ucs_sys_dev_distance_t *lanes_distance,
                            ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
