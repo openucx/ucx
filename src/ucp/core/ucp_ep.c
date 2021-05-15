@@ -334,6 +334,8 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         ucs_list_add_tail(&worker->internal_eps, &ucp_ep_ext_gen(ep)->ep_list);
     } else {
         ucs_list_add_tail(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list);
+        ucs_assert(ep->worker->num_all_eps < UINT_MAX);
+        ++ep->worker->num_all_eps;
     }
 
     *ep_p = ep;
@@ -348,6 +350,8 @@ err:
 void ucp_ep_delete(ucp_ep_h ep)
 {
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
+        ucs_assert(ep->worker->num_all_eps > 0);
+        --ep->worker->num_all_eps;
         ucp_worker_keepalive_remove_ep(ep);
     }
 
@@ -2705,7 +2709,6 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
 {
-    ucp_lane_map_t check_lanes;
     ucp_lane_index_t lane;
     ucs_status_t status;
     ucp_rsc_index_t rsc_index;
@@ -2716,9 +2719,9 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
     }
 
     /* Take updated ep_check_map, in case ep configuration has changed */
-    check_lanes = *lane_map & ucp_ep_config(ep)->key.ep_check_map;
+    *lane_map &= ucp_ep_config(ep)->key.ep_check_map;
 
-    ucs_for_each_bit(lane, check_lanes) {
+    ucs_for_each_bit(lane, *lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
         rsc_index = ucp_ep_get_rsc_index(ep, lane);
         ucs_assert((rsc_index != UCP_NULL_RESOURCE) ||
