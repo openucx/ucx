@@ -74,12 +74,12 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                    int preferred_cpu, size_t inl)
 {
 #if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    struct ibv_cq *cq;
+    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
+    struct ibv_cq *cq;
 
-    cq_attr.cqe         = init_attr->cq_len[dir];
+    cq_attr.cqe         = uct_ib_cq_size(iface, init_attr, dir);
     cq_attr.channel     = iface->comp_channel;
     cq_attr.comp_vector = preferred_cpu;
     if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {

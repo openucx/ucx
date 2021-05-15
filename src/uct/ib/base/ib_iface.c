@@ -958,11 +958,12 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                     int preferred_cpu, size_t inl)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
+    unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
 #if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
     struct ibv_cq_init_attr_ex cq_attr = {};
 
-    cq_attr.cqe         = init_attr->cq_len[dir];
+    cq_attr.cqe         = cq_size;
     cq_attr.channel     = iface->comp_channel;
     cq_attr.comp_vector = preferred_cpu;
     if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {
@@ -975,12 +976,12 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 #endif
     {
         iface->config.max_inl_cqe[dir] = 0;
-        cq = ibv_create_cq(dev->ibv_context, init_attr->cq_len[dir], NULL,
-                           iface->comp_channel, preferred_cpu);
+        cq = ibv_create_cq(dev->ibv_context, cq_size, NULL, iface->comp_channel,
+                           preferred_cpu);
     }
 
     if (!cq) {
-        ucs_error("ibv_create_cq(cqe=%d) failed: %m", init_attr->cq_len[dir]);
+        ucs_error("ibv_create_cq(cqe=%d) failed: %m", cq_size);
         return UCS_ERR_IO_ERROR;
     }
 
