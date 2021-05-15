@@ -420,7 +420,6 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     ucp_send_request_id_release(req);
 
     if (req->send.uct.func == ucp_proto_progress_am_single) {
-        ucs_assert(req->send.state.uct_comp.count == 0);
         req->send.proto.comp_cb(req);
     } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
