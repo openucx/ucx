@@ -2251,7 +2251,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Create loopback endpoints to copy across memory types */
-    status = ucp_worker_create_mem_type_endpoints(worker);
+    status = ucp_worker_mem_type_eps_create(worker);
     if (status != UCS_OK) {
         goto err_close_cms;
     }
@@ -2292,7 +2292,7 @@ err_tag_match_cleanup:
 err_destroy_mpools:
     ucp_worker_destroy_mpools(worker);
 err_destroy_memtype_eps:
-    ucp_worker_destroy_mem_type_endpoints(worker);
+    ucp_worker_mem_type_eps_create(worker);
 err_close_cms:
     ucp_worker_close_cms(worker);
 err_close_ifaces:
@@ -2873,6 +2873,8 @@ void ucp_worker_print_info(ucp_worker_h worker, FILE *stream)
         ucs_string_buffer_dump(&strb, "# ", stream);
         ucs_string_buffer_cleanup(&strb);
     }
+
+    ucp_worker_mem_type_eps_print_info(worker, stream);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 }
