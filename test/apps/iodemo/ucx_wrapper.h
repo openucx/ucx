@@ -112,8 +112,6 @@ public:
 
     static double get_time();
 
-    UcxConnection &get_connection(uint64_t id) const;
-
 protected:
 
     // Called when new IO message is received

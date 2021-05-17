@@ -532,12 +532,6 @@ double UcxContext::get_time() {
     return tv.tv_sec + (tv.tv_usec * 1e-6);
 }
 
-UcxConnection& UcxContext::get_connection(uint64_t id) const {
-    conn_map_t::const_iterator it = _conns.find(id);
-    assert(it != _conns.end());
-    return *it->second;
-}
-
 void UcxContext::destroy_listener()
 {
     if (_listener) {
