@@ -4,6 +4,7 @@
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017-2020.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -1703,7 +1704,7 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
     if (perf->params.thread_count > 1) {
         /* when there is more than one thread, a ucp_worker would be created for
          * each. all of them will share the same ucp_context */
-        ucp_params.features          |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+        ucp_params.field_mask        |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
         ucp_params.mt_workers_shared  = 1;
     }
 
