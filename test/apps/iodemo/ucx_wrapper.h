@@ -266,6 +266,10 @@ public:
         return _ucx_status;
     }
 
+    const char* get_log_prefix() const {
+        return _log_prefix;
+    }
+
     bool is_established() const {
         return _establish_cb == NULL;
     }

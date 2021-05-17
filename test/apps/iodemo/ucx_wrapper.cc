@@ -454,6 +454,7 @@ void UcxContext::add_connection(UcxConnection *conn)
 {
     assert(_conns.find(conn->id()) == _conns.end());
     _conns[conn->id()] = conn;
+    UCX_LOG << "added " << conn->get_log_prefix() << " to connection map";
 }
 
 void UcxContext::remove_connection(UcxConnection *conn)
@@ -461,6 +462,8 @@ void UcxContext::remove_connection(UcxConnection *conn)
     conn_map_t::iterator i = _conns.find(conn->id());
     if (i != _conns.end()) {
         _conns.erase(i);
+        UCX_LOG << "removed " << conn->get_log_prefix()
+                << " from connection map";
     }
 }
 
@@ -949,6 +952,8 @@ void UcxConnection::connect_common(ucp_ep_params_t &ep_params,
     } else {
         connect_tag(callback);
     }
+
+    _context.add_connection(this);
 }
 
 void UcxConnection::established(ucs_status_t status)
@@ -960,9 +965,6 @@ void UcxConnection::established(ucs_status_t status)
 
     _ucx_status = status;
     _context.remove_connection_inprogress(this);
-    if (status == UCS_OK) {
-        _context.add_connection(this);
-    }
 
     (*_establish_cb)(status);
     _establish_cb = NULL;
