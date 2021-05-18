@@ -366,7 +366,7 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
 
     return uct_rdmacm_cm_ack_event(event);
 err_reject:
-    uct_rdmacm_cm_reject(cep->id);
+    uct_rdmacm_cm_reject(cm, cep->id);
 err:
     uct_rdmacm_cm_destroy_id(cep->id);
     cep->id = NULL;
@@ -431,7 +431,7 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
         if (rdma_accept(cep->id, &conn_param)) {
             uct_cm_ep_peer_error(&cep->super,
                                  "rdma_accept(on id=%p) failed: %m", cep->id);
-            status = UCS_ERR_IO_ERROR;
+            status = UCS_ERR_CONNECTION_RESET;
             goto err;
         }
     }

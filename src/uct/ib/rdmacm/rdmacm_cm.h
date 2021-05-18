@@ -76,7 +76,7 @@ ucs_status_t uct_rdmacm_cm_destroy_id(struct rdma_cm_id *id);
 
 ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event);
 
-ucs_status_t uct_rdmacm_cm_reject(struct rdma_cm_id *id);
+ucs_status_t uct_rdmacm_cm_reject(uct_rdmacm_cm_t *cm, struct rdma_cm_id *id);
 
 ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
                                   struct ibv_cq **cq);

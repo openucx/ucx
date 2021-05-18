@@ -113,15 +113,16 @@ err:
 ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
                                         uct_conn_request_h conn_request)
 {
-    uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener, uct_rdmacm_listener_t);
+    uct_rdmacm_listener_t *rdmacm_listener = ucs_derived_of(listener,
+                                                            uct_rdmacm_listener_t);
+    uct_rdmacm_cm_t *rdmacm_cm             = ucs_derived_of(listener->cm,
+                                                            uct_rdmacm_cm_t);
     struct rdma_cm_event *event            = (struct rdma_cm_event*)conn_request;
 
     ucs_assert_always(rdmacm_listener->id == event->listen_id);
 
-    uct_rdmacm_cm_reject(event->id);
-
+    uct_rdmacm_cm_reject(rdmacm_cm, event->id);
     uct_rdmacm_cm_destroy_id(event->id);
-
     return uct_rdmacm_cm_ack_event(event);
 }
 
