@@ -1673,7 +1673,7 @@ struct ucp_am_recv_param {
     uint64_t           recv_attr;
 
     /**
-     * Endpoint, which can be used for reply to this message.
+     * Endpoint, which can be used for the reply to this message.
      */
     ucp_ep_h           reply_ep;
 };
@@ -3020,7 +3020,7 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
 
 /**
  * @ingroup UCP_COMM
- * @brief Receive Active Message sent with rendezvous protocol.
+ * @brief Receive Active Message as defined by provided data descriptor.
  *
  * This routine receives a message that is described by the data descriptor
  * @a data_desc, local address @a buffer, size @a count and @a param
@@ -3029,10 +3029,19 @@ ucs_status_ptr_t ucp_am_send_nbx(ucp_ep_h ep, unsigned id,
  * message is delivered to the @a buffer. If the receive operation cannot be
  * started the routine returns an error.
  *
+ * @note This routine can be performed on any valid data descriptor delivered in
+ *       @ref ucp_am_recv_callback_t.
+ *       Data descriptor is considered to be valid if:
+ *       - It is a rendezvous request (@a UCP_AM_RECV_ATTR_FLAG_RNDV is set in
+ *         @ref ucp_am_recv_param_t.recv_attr) or
+ *       - It is a persistent data pointer (@a UCP_AM_RECV_ATTR_FLAG_DATA is set
+ *         in @ref ucp_am_recv_param_t.recv_attr). In this case receive
+ *         operation may be needed to unpack data to device memory (for example
+ *         GPU device) or some specific datatype.
  * @note After this call UCP takes ownership of @a data_desc descriptor, so
  *       there is no need to release it even if the operation fails.
- *       The routine returns a request handle instead, which can further be used
- *       for tracking operation progress.
+ *       The routine returns a request handle instead, which can be used for
+ *       tracking operation progress.
  *
  * @param [in]  worker     Worker that is used for the receive operation.
  * @param [in]  data_desc  Data descriptor, provided in

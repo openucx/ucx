@@ -198,9 +198,7 @@ public:
     ucs_status_t am_rndv_recv(void *data, size_t length,
                               const ucp_am_recv_param_t *rx_params)
     {
-        ucs_assert(!(rx_params->recv_attr &
-                     (UCP_AM_RECV_ATTR_FLAG_DATA | UCP_AM_RECV_ATTR_FLAG_FIRST |
-                      UCP_AM_RECV_ATTR_FLAG_ONLY)));
+        ucs_assert(!(rx_params->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA));
         ucs_assert(length == ucx_perf_get_message_size(&m_perf.params));
 
         ucs_status_ptr_t sp = ucp_am_recv_data_nbx(m_perf.ucp.worker, data,
