@@ -1056,8 +1056,9 @@ static int uct_tcp_ep_is_conn_closed_by_peer(ucs_status_t io_status)
 ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
                                       ucs_status_t io_status)
 {
-    uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                            uct_tcp_iface_t);
+    uct_tcp_iface_t *iface    = ucs_derived_of(ep->super.super.iface,
+                                               uct_tcp_iface_t);
+    ucs_log_level_t log_level = UCS_LOG_LEVEL_DIAG;
     ucs_status_t status;
     char str_local_addr[UCS_SOCKADDR_STRING_LEN];
     char str_remote_addr[UCS_SOCKADDR_STRING_LEN];
@@ -1070,6 +1071,7 @@ ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
 
     if (!uct_tcp_ep_is_conn_closed_by_peer(io_status)) {
         /* IO operation failed with the unrecoverable error */
+        log_level = UCS_LOG_LEVEL_ERROR;
         goto err;
     }
 
@@ -1129,9 +1131,9 @@ ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
     }
 
 err:
-    ucs_error("tcp_ep %p (state=%s): %s(%d) failed: %s",
-              ep, uct_tcp_ep_cm_state[ep->conn_state].name,
-              op_str, ep->fd, ucs_status_string(io_status));
+    ucs_log(log_level, "tcp_ep %p (state=%s): %s(%d) failed: %s",
+            ep, uct_tcp_ep_cm_state[ep->conn_state].name,
+            op_str, ep->fd, ucs_status_string(io_status));
     return io_status;
 }
 
