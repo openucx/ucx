@@ -93,15 +93,19 @@ mem_err:
     return status;
 }
 
-static ucs_status_t uct_ugni_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t uct_ugni_mem_dereg(uct_md_h md,
+                                       const uct_md_mem_dereg_params_t *params)
 {
     uct_ugni_md_t *ugni_md = ucs_derived_of(md, uct_ugni_md_t);
-    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
+    gni_mem_handle_t *mem_hndl;
     gni_return_t ugni_rc;
     ucs_status_t status = UCS_OK;
 
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
     uct_ugni_cdm_lock(&ugni_md->cdm);
-    ugni_rc = GNI_MemDeregister(ugni_md->cdm.nic_handle, mem_hndl);
+    mem_hndl = (gni_mem_handle_t *)params->memh;
+    ugni_rc  = GNI_MemDeregister(ugni_md->cdm.nic_handle, mem_hndl);
     uct_ugni_cdm_unlock(&ugni_md->cdm);
     if (GNI_RC_SUCCESS != ugni_rc) {
         ucs_error("GNI_MemDeregister failed, Error status: %s %d",

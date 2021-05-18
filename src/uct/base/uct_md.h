@@ -14,13 +14,30 @@
 #include "uct_component.h"
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/config/parser.h>
 #include <ucs/memory/rcache.h>
+#include <ucs/type/param.h>
 #include <string.h>
 
 
 #define uct_md_log_mem_reg_error(_flags, _fmt, ...) \
     ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ## __VA_ARGS__)
+
+
+#define UCT_MD_MEM_DEREG_FIELD_VALUE(_params, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCT_MD_MEM_DEREG, _params, _name, _flag, _default)
+
+
+#define UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, _invalidate_supported) \
+    if (!UCT_MD_MEM_DEREG_FIELD_VALUE(_params, memh, FIELD_MEMH, NULL)) { \
+        return UCS_ERR_INVALID_PARAM; \
+    } \
+    if (ENABLE_PARAMS_CHECK && !(_invalidate_supported) && \
+        (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, flags, FIELD_FLAGS, 0) & \
+                UCT_MD_MEM_DEREG_FLAG_INVALIDATE)) { \
+        return UCS_ERR_UNSUPPORTED; \
+    }
 
 
 typedef struct uct_md_rcache_config {
@@ -70,7 +87,9 @@ typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
                                               unsigned flags,
                                               uct_mem_h *memh_p);
 
-typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh);
+typedef ucs_status_t
+(*uct_md_mem_dereg_func_t)(uct_md_h md,
+                           const uct_md_mem_dereg_params_t *param);
 
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,

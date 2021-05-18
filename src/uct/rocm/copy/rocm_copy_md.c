@@ -147,10 +147,18 @@ static ucs_status_t uct_rocm_copy_mem_reg(uct_md_h md, void *address, size_t len
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t
+uct_rocm_copy_mem_dereg(uct_md_h md,
+                        const uct_md_mem_dereg_params_t *params)
 {
-    uct_rocm_copy_mem_t *mem_hndl = (uct_rocm_copy_mem_t *)memh;
-    void *address = mem_hndl->vaddr;
+    uct_rocm_copy_mem_t *mem_hndl;
+    void *address;
+    hsa_status_t status;
+
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    mem_hndl = (uct_rocm_copy_mem_t *)params->memh;
+    address  = mem_hndl->vaddr;
     hsa_status_t status;
 
     if (address == NULL) {
@@ -214,11 +222,16 @@ uct_rocm_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_rocm_copy_mem_rcache_dereg(uct_md_h uct_md,
+                               const uct_md_mem_dereg_params_t *params)
 {
     uct_rocm_copy_md_t *md = ucs_derived_of(uct_md, uct_rocm_copy_md_t);
-    uct_rocm_copy_rcache_region_t *region = uct_rocm_copy_rache_region_from_memh(memh);
+    uct_rocm_copy_rcache_region_t *region;
 
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    region = uct_rocm_copy_rache_region_from_memh(params->memh);
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
 }

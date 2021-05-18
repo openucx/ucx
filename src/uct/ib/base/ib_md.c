@@ -852,13 +852,17 @@ static ucs_status_t uct_ib_mem_reg(uct_md_h uct_md, void *address, size_t length
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
+                                     const uct_md_mem_dereg_params_t *params)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_mem_t *ib_memh = memh;
+    uct_ib_mem_t *ib_memh;
     ucs_status_t status;
 
-    status = uct_ib_memh_dereg(md, ib_memh);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ib_memh = params->memh;
+    status  = uct_ib_memh_dereg(md, ib_memh);
     uct_ib_memh_free(ib_memh);
     return status;
 }
@@ -1026,11 +1030,16 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_ib_mem_rcache_dereg(uct_md_h uct_md,
+                        const uct_md_mem_dereg_params_t *params)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_rcache_region_t *region = uct_ib_rcache_region_from_memh(memh);
+    uct_ib_rcache_region_t *region;
 
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    region = uct_ib_rcache_region_from_memh(params->memh);
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
 }
@@ -1131,15 +1140,24 @@ static ucs_status_t uct_ib_mem_global_odp_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mem_global_odp_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_ib_mem_global_odp_dereg(uct_md_h uct_md,
+                            const uct_md_mem_dereg_params_t *params)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_mem_t *ib_memh;
+    ucs_status_t status;
 
-    if (memh == md->global_odp) {
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    if (params->memh == md->global_odp) {
         return UCS_OK;
     }
 
-    return uct_ib_mem_dereg(uct_md, memh);
+    ib_memh = params->memh;
+    status  = uct_ib_memh_dereg(md, ib_memh);
+    uct_ib_memh_free(ib_memh);
+    return status;
 }
 
 static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
