@@ -604,6 +604,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                              ucp_ep_h *ep_p)
 {
     unsigned addr_indices[UCP_MAX_LANES];
+    ucp_tl_bitmap_t ep_tl_bitmap;
     ucs_status_t status;
     ucp_ep_h ep;
 
@@ -621,10 +622,8 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
-    ucs_assert(UCS_BITMAP_IS_ZERO(
-        UCP_TL_BITMAP_AND_NOT(ucp_ep_get_tl_bitmap(ep),
-                           *local_tl_bitmap),
-            UCP_MAX_RESOURCES));
+    ucp_ep_get_tl_bitmap(ep, &ep_tl_bitmap);
+    ucp_tl_bitmap_validate(&ep_tl_bitmap, local_tl_bitmap);
 
     *ep_p = ep;
     return UCS_OK;
@@ -2624,12 +2623,12 @@ int ucp_ep_is_cm_local_connected(ucp_ep_h ep)
            (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 }
 
-ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
+void ucp_ep_get_tl_bitmap(ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
 {
-    ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_lane_index_t lane;
     ucp_rsc_index_t rsc_idx;
 
+    UCS_BITMAP_CLEAR(tl_bitmap);
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         if (lane == ucp_ep_get_cm_lane(ep)) {
             continue;
@@ -2640,10 +2639,8 @@ ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep)
             continue;
         }
 
-        UCS_BITMAP_SET(tl_bitmap, rsc_idx);
+        UCS_BITMAP_SET(*tl_bitmap, rsc_idx);
     }
-
-    return tl_bitmap;
 }
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
