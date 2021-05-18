@@ -605,7 +605,9 @@ ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
     }
 
     if (recv_req->recv.remaining == 0) {
-        ucs_ptr_map_del(&worker->ptr_map, rndv_data_hdr->rreq_id);
+        status = ucs_ptr_map_del(&worker->ptr_map, rndv_data_hdr->rreq_id);
+        ucs_assert((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS));
+
         ucp_proto_rndv_rtr_common_complete(req, recv_req->status);
     }
 
