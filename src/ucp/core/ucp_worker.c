@@ -3006,7 +3006,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
                                       &worker->keepalive.cb_id);
 }
 
-/* EP is removed from worker */
+/* EP is removed from worker, advance iterator if it points to the EP */
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
@@ -3017,8 +3017,6 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
         return;
     }
-
-    ucs_assert(!ucs_list_is_empty(&worker->all_eps));
 
     if (ucs_list_is_only(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list)) {
         /* this is the last EP in worker */
