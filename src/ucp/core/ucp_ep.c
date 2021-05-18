@@ -459,7 +459,7 @@ ucs_status_t ucp_ep_evaluate_perf(ucp_ep_h ep,
     return UCS_OK;
 }
 
-ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker)
+ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 {
     ucp_context_h context = worker->context;
     unsigned pack_flags   = ucp_worker_default_address_pack_flags(worker);
@@ -522,11 +522,11 @@ err_free_address_list:
 err_free_address_buffer:
     ucs_free(address_buffer);
 err_cleanup_eps:
-    ucp_worker_destroy_mem_type_endpoints(worker);
+    ucp_worker_mem_type_eps_destroy(worker);
     return status;
 }
 
-void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker)
+void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
 {
     ucs_memory_type_t mem_type;
     ucp_ep_h ep;
@@ -2499,7 +2499,8 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
     }
 }
 
-void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
+static void ucp_ep_print_info_internal(ucp_ep_h ep, const char *name,
+                                       FILE *stream)
 {
     ucp_worker_h worker     = ep->worker;
     ucp_ep_config_t *config = ucp_ep_config(ep);
@@ -2511,7 +2512,7 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     fprintf(stream, "#\n");
-    fprintf(stream, "# UCP endpoint\n");
+    fprintf(stream, "# UCP endpoint %s\n", name);
     fprintf(stream, "#\n");
     fprintf(stream, "#               peer: %s\n", ucp_ep_peer_name(ep));
 
@@ -2537,6 +2538,30 @@ void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+}
+
+void ucp_ep_print_info(ucp_ep_h ep, FILE *stream)
+{
+    return ucp_ep_print_info_internal(ep, "", stream);
+}
+
+void ucp_worker_mem_type_eps_print_info(ucp_worker_h worker, FILE *stream)
+{
+    ucs_memory_type_t mem_type;
+    ucp_ep_h ep;
+
+    ucs_memory_type_for_each(mem_type) {
+        UCS_STRING_BUFFER_ONSTACK(strb, 128);
+
+        ep = worker->mem_type_ep[mem_type];
+        if (ep == NULL) {
+            continue;
+        }
+
+        ucs_string_buffer_appendf(&strb, "for %s",
+                                  ucs_memory_type_descs[mem_type]);
+        ucp_ep_print_info_internal(ep, ucs_string_buffer_cstr(&strb), stream);
+    }
 }
 
 size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,

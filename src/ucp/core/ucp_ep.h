@@ -606,9 +606,12 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            const ucp_context_h context,
                                            double bandwidth);
 
-ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker);
 
-void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
+void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker);
+
+void ucp_worker_mem_type_eps_print_info(ucp_worker_h worker,
+                                              FILE *stream);
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
