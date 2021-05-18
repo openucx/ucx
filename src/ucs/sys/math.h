@@ -25,6 +25,7 @@ BEGIN_C_DECLS
 #define UCS_MBYTE    (1ull << 20)
 #define UCS_GBYTE    (1ull << 30)
 #define UCS_TBYTE    (1ull << 40)
+#define UCS_PBYTE    (1ull << 50)
 
 #define ucs_min(_a, _b) \
 ({ \

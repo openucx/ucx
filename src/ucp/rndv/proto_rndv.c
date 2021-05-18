@@ -504,8 +504,11 @@ static ucs_status_t
 ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
                           const ucp_rndv_rtr_hdr_t *rtr, size_t header_length)
 {
-    size_t rkey_length = header_length - sizeof(*rtr);
     ucs_status_t status;
+    size_t rkey_length;
+
+    ucs_assert(header_length >= sizeof(*rtr));
+    rkey_length = header_length - sizeof(*rtr);
 
     ucp_proto_rndv_check_rkey_length(rtr->address, rkey_length, "rtr");
     req->send.rndv.remote_address = rtr->address;

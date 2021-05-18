@@ -15,8 +15,8 @@
 #include <ucp/rma/rma.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
-#include <ucs/type/serialize.h>
 #include <ucs/type/float8.h>
+#include <ucs/type/serialize.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/topo.h>
 #include <inttypes.h>
@@ -90,12 +90,12 @@ static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
                                    const ucs_sys_dev_distance_t *distance,
                                    ucp_rkey_packed_distance_t *packed_distance)
 {
+    double latency_nsec = distance->latency * UCS_NSEC_PER_SEC;
+
     packed_distance->sys_dev   = sys_dev;
+    packed_distance->latency   = UCS_FP8_PACK(RKEY_LATENCY, latency_nsec);
     packed_distance->bandwidth = UCS_FP8_PACK(RKEY_BANDWIDTH,
                                               distance->bandwidth);
-    packed_distance->latency   = UCS_FP8_PACK(RKEY_LATENCY,
-                                              distance->latency *
-                                                      UCS_NSEC_PER_SEC);
 }
 
 static void
@@ -103,11 +103,13 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
                          ucs_sys_device_t *sys_dev_p,
                          ucs_sys_dev_distance_t *distance)
 {
+    double latency_nsec = UCS_FP8_UNPACK(RKEY_LATENCY,
+                                         packed_distance->latency);
+
     *sys_dev_p          = packed_distance->sys_dev;
+    distance->latency   = latency_nsec / UCS_NSEC_PER_SEC;
     distance->bandwidth = UCS_FP8_UNPACK(RKEY_BANDWIDTH,
                                          packed_distance->bandwidth);
-    distance->latency = UCS_FP8_UNPACK(RKEY_LATENCY, packed_distance->latency) /
-                        UCS_NSEC_PER_SEC;
 }
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
@@ -248,15 +250,14 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
                                ucs_sys_dev_distance_t *lanes_distance,
                                const void *buffer, const void *buffer_end)
 {
-    const void *p = buffer;
+    const void *p        = buffer;
+    uint64_t sys_dev_map = 0;
     ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_MAX];
     ucs_sys_device_t sys_dev;
     ucp_lane_index_t lane;
-    uint64_t sys_dev_map;
     char buf[128];
 
     /* Unpack lane distances and update distance_by_dev lookup */
-    sys_dev_map = 0;
     while (p < buffer_end) {
         ucp_rkey_unpack_distance(
                 ucs_serialize_next(&p, const ucp_rkey_packed_distance_t),
@@ -451,7 +452,6 @@ void ucp_rkey_dump_packed(const void *buffer, size_t length,
 {
     const void *p          = buffer;
     const void *buffer_end = UCS_PTR_BYTE_OFFSET(buffer, length);
-    const ucp_rkey_packed_distance_t *packed_distance;
     ucs_sys_dev_distance_t distance;
     ucs_memory_type_t mem_type;
     ucs_sys_device_t sys_dev;
@@ -479,11 +479,10 @@ void ucp_rkey_dump_packed(const void *buffer, size_t length,
     }
 
     while (p < buffer_end) {
-        packed_distance    = ucs_serialize_next(&p,
-                                                const ucp_rkey_packed_distance_t);
-        distance.bandwidth = packed_distance->bandwidth;
-        distance.latency   = packed_distance->latency;
-        ucs_string_buffer_appendf(strb, ",dev:%u:%s", packed_distance->sys_dev,
+        ucp_rkey_unpack_distance(
+                ucs_serialize_next(&p, const ucp_rkey_packed_distance_t),
+                &sys_dev, &distance);
+        ucs_string_buffer_appendf(strb, ",dev:%u:%s", sys_dev,
                                   ucs_topo_distance_str(&distance, buf,
                                                         sizeof(buf)));
     }
