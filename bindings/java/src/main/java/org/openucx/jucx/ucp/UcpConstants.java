@@ -155,5 +155,31 @@ public class UcpConstants {
     public static long UCP_AM_SEND_FLAG_EAGER;
     public static long UCP_AM_SEND_FLAG_RNDV;
 
+    /**
+     * Flags for a UCP Active Message callback.
+     */
+
+    /**
+     * Indicates that the entire message will be handled in one callback. With this
+     * option, message ordering is not guaranteed (i.e. receive callbacks may be
+     * invoked in a different order than messages were sent).
+     * If this flag is not set, the data callback may be invoked several times for
+     * the same message (if, for example, it was split into several fragments by
+     * the transport layer). It is guaranteed that the first data callback for a
+     * particular message is invoked for the first fragment. The ordering of first
+     * message fragments is guaranteed (i.e. receive callbacks will be called
+     * in the order the messages were sent). The order of other fragments is not
+     * guaranteed. User header is passed with the first fragment only.
+     */
+    public static long UCP_AM_FLAG_WHOLE_MSG;
+
+    /**
+     * Guarantees that the specified {@link UcpAmRecvCallback#onReceive} callback,
+     * will always be called with {@link UcpConstants#UCP_AM_RECV_ATTR_FLAG_DATA} flag set,
+     * and {@link UcpAmData#canPersist()} will return true, so the data will be accessible outside
+     * the callback, until {@link UcpWorker#amDataRelease} is called.
+     */
+    public static long UCP_AM_FLAG_PERSISTENT_DATA;
+
     private static native void loadConstants();
 }

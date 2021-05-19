@@ -42,7 +42,22 @@ public class UcpAmData implements Closeable {
      * Whether actual data is received or need to call {@link UcpAmData#receive(long, UcxCallback)}
      */
     public boolean isDataValid() {
+        return (flags & UcpConstants.UCP_AM_RECV_ATTR_FLAG_RNDV) == 0;
+    }
+
+    /**
+     * Whether this amData descriptor can be persisted outside {@link UcpAmRecvCallback#onReceive}
+     * callback by returning {@link UcsConstants.STATUS#UCS_INPROGRESS}
+     */
+    public boolean canPersist() {
         return (flags & UcpConstants.UCP_AM_RECV_ATTR_FLAG_DATA) != 0;
+    }
+
+    /**
+     * Receive operation flags.
+     */
+    public long getFlags() {
+        return flags;
     }
 
     /**
