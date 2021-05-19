@@ -599,7 +599,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
     if ((wireup_ep == NULL) ||
         !ucp_wireup_aux_ep_is_owner(wireup_ep, uct_ep) ||
-        !(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED)) {
+        !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
         return ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep, lane, status);
