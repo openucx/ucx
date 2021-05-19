@@ -793,7 +793,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_2sided, async_connect,
     EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
 
     ucs_time_t deadline = ucs::get_deadline();
-    /* waiting of async reply on wiriup without calling progress on receiver */
+    /* waiting of async reply on wireup without calling progress on receiver */
     while(!(send_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) &&
           (ucs_get_time() < deadline)) {
         ucp_worker_progress(sender().worker());
@@ -1064,7 +1064,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
 /* Test two scalable enough transports */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               dc_ud, "dc_x,ud_x,ud_v")
-/* Test unsacalable transports only */
+/* Test unscalable transports only */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               rc, "rc_x,rc_v")
 /* Test all available IB transports */
@@ -1145,7 +1145,7 @@ public:
 
 UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
 {
-    // Accelerated transports have better performance charasteristics than their
+    // Accelerated transports have better performance characteristics than their
     // verbs counterparts. Check that corresponding verbs transports are not used
     // by workers in unified mode.
     check_unified_ifaces(&sender(), "rc_mlx5", "rc_verbs");

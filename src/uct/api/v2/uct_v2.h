@@ -126,7 +126,7 @@ typedef struct {
  * @brief Get interface performance attributes, by memory types and operation.
  *        A pointer to uct_perf_attr_t struct must be passed, with the memory
  *        types and operation members initialized. Overhead and bandwidth
- *        for the opration on the given memory types will be reported.
+ *        for the operation on the given memory types will be reported.
  *
  * @param [in]    tl_iface  Interface to query.
  * @param [inout] perf_attr Filled with performance attributes.

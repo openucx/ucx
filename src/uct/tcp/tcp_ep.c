@@ -958,7 +958,7 @@ static inline ucs_status_t uct_tcp_ep_handle_send_err(uct_tcp_ep_t *ep,
     status = uct_tcp_ep_handle_io_err(ep, "send", status);
     if (status == UCS_ERR_CANCELED) {
         /* If no data were read to the allocated buffer,
-         * we can safely reset it for futher re-use and to
+         * we can safely reset it for further re-use and to
          * avoid overwriting this buffer, because `rx::length == 0` */
         if (ep->tx.length == 0) {
             uct_tcp_ep_ctx_reset(&ep->tx);
@@ -968,7 +968,7 @@ static inline ucs_status_t uct_tcp_ep_handle_send_err(uct_tcp_ep_t *ep,
         if (iface->super.err_handler != NULL) {
             /* Translate the error to EP timeout error, since user expects that
              * status returned from UCT error callback is the same as it is
-             * returned from the UCT EP send operation (or from UCT competion
+             * returned from the UCT EP send operation (or from UCT completion
              * callback)
              * TODO: revise this behavior */
             return UCS_ERR_ENDPOINT_TIMEOUT;
@@ -1141,7 +1141,7 @@ static inline void uct_tcp_ep_handle_recv_err(uct_tcp_ep_t *ep,
     status = uct_tcp_ep_handle_io_err(ep, "recv", status);
     if ((status == UCS_ERR_NO_PROGRESS) || (status == UCS_ERR_CANCELED)) {
         /* If no data were read to the allocated buffer,
-         * we can safely reset it for futher re-use and to
+         * we can safely reset it for further re-use and to
          * avoid overwriting this buffer, because `rx::length == 0` */
         if (ep->rx.length == 0) {
             uct_tcp_ep_ctx_reset(&ep->rx);
@@ -1298,7 +1298,7 @@ static inline void uct_tcp_ep_handle_put_req(uct_tcp_ep_t *ep,
 
     ucs_assert(ep->rx.offset == ep->rx.length);
     uct_tcp_ep_ctx_rewind(&ep->rx);
-    /* Since RX buffer and PUT request can be ovelapped, use memmove() */
+    /* Since RX buffer and PUT request can be overlapped, use memmove() */
     memmove(ep->rx.buf, put_req, sizeof(*put_req));
     ep->flags |= UCT_TCP_EP_FLAG_PUT_RX;
 }
