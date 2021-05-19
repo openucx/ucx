@@ -1,0 +1,47 @@
+# See https://aka.ms/yaml
+
+trigger: none
+pr: none
+
+resources:
+  pipelines:
+  - pipeline: myTest
+    source: 'UCX snapshot'
+    trigger: true
+
+stages:
+  - stage: Rebase
+    jobs:
+      - job: rebase
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
+        displayName: rebase on openucx/ucx@master
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 200
+          - bash: |
+              set -eEx
+              source buildlib/az-helpers.sh
+              # Checkout integration4 branch from Mellanox/ucx
+              git remote set-url origin git@github.com:Mellanox/ucx.git
+              git fetch origin integration4
+              git checkout integration4
+              # Checkout master branch from openucx/ucx
+              git remote add upstream https://github.com/openucx/ucx.git
+              git fetch upstream master
+              git log --oneline -10 upstream/master
+              # Rebase integration4 branch on master branch
+              if ! git rebase upstream/master
+              then
+                  # Automatic rebase failed - show merge conflicts
+                  git status
+                  git diff
+                  head=$(git rev-parse --short HEAD)
+                  azure_log_issue "Rebase on ${head} failed, see https://github.com/Mellanox/ucx/wiki/Manual-rebase-of-integration4-branch for details"
+              else
+                  # Automatic rebase was successful - update the branch
+                  git push origin HEAD --force
+              fi
