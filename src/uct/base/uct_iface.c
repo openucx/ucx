@@ -411,7 +411,8 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 }
 
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
-    .iface_estimate_perf = uct_base_iface_estimate_perf
+    .iface_estimate_perf = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
