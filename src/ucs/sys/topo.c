@@ -15,6 +15,7 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
+#include <ucs/time/time.h>
 #include <inttypes.h>
 #include <float.h>
 
@@ -161,13 +162,17 @@ const char *ucs_topo_distance_str(const ucs_sys_dev_distance_t *distance,
 {
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
 
-    if (distance->bandwidth < 1e20) {
-        /* Print bandwidth only if limited */
-        ucs_string_buffer_appendf(&strb, "%.2fMBs/",
+    ucs_string_buffer_appendf(&strb, "%.0fns ",
+                              distance->latency * UCS_NSEC_PER_SEC);
+
+    if (distance->bandwidth <= UCS_PBYTE) {
+        /* Print bandwidth value only if limited */
+        ucs_string_buffer_appendf(&strb, "%.2fMB/s",
                                   distance->bandwidth / UCS_MBYTE);
+    } else {
+        ucs_string_buffer_appendf(&strb, ">1PB/s");
     }
 
-    ucs_string_buffer_appendf(&strb, "%.0fns", distance->latency * 1e9);
     return ucs_string_buffer_cstr(&strb);
 }
 

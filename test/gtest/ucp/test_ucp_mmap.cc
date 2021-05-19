@@ -74,11 +74,11 @@ protected:
     void test_length0(unsigned flags);
     void test_rkey_management(ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
-    void test_rkey_proto(ucp_mem_h memh);
 
 private:
-    void compare_distance(const ucs_sys_dev_distance_t &dist1,
-                          const ucs_sys_dev_distance_t &dist2);
+    void expect_same_distance(const ucs_sys_dev_distance_t &dist1,
+                              const ucs_sys_dev_distance_t &dist2);
+    void test_rkey_proto(ucp_mem_h memh);
 };
 
 bool test_ucp_mmap::resolve_rma(entity *e, ucp_rkey_h rkey)
@@ -232,11 +232,17 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
     ucp_rkey_destroy(rkey);
     ucp_rkey_buffer_release(rkey_buffer);
+
+    /* Test remote key protocols selection */
+    test_rkey_proto(memh);
 }
 
-void test_ucp_mmap::compare_distance(const ucs_sys_dev_distance_t &dist1,
-                                     const ucs_sys_dev_distance_t &dist2)
+void test_ucp_mmap::expect_same_distance(const ucs_sys_dev_distance_t &dist1,
+                                         const ucs_sys_dev_distance_t &dist2)
 {
+    /* Expect the implementation to always provide a reasonable precision w.r.t.
+     * real-world bandwidth and latency ballpark numbers.
+     */
     EXPECT_NEAR(dist1.bandwidth, dist2.bandwidth, 600e6); /* 600 MBs accuracy */
     EXPECT_NEAR(dist1.latency, dist2.latency, 20e-9); /* 20 nsec accuracy */
 }
@@ -289,10 +295,10 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
         for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes;
              ++lane) {
             ucs_sys_device_t sys_dev = ep_config->key.lanes[lane].dst_sys_dev;
-            compare_distance(rkey_config->lanes_distance[lane],
-                             (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
-                                     ucs_topo_default_distance :
-                                     sys_distance[sys_dev]);
+            expect_same_distance(rkey_config->lanes_distance[lane],
+                                 (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
+                                         ucs_topo_default_distance :
+                                         sys_distance[sys_dev]);
         }
     }
 
@@ -321,7 +327,6 @@ UCS_TEST_P(test_ucp_mmap, alloc) {
 
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
-        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -353,7 +358,6 @@ UCS_TEST_P(test_ucp_mmap, reg) {
 
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma());
-        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -398,7 +402,6 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
                              is_tl_rdma() &&
                                      !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
                                      !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type));
-        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
@@ -490,7 +493,6 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
 
     is_dummy = (size == 0);
     test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
-    test_rkey_proto(memh);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -534,7 +536,6 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     ASSERT_UCS_OK(status);
     is_dummy = (size == 0);
     test_rkey_management(memh, is_dummy, is_tl_rdma());
-    test_rkey_proto(memh);
 
     status = ucp_mem_unmap(sender().ucph(), memh);
     ASSERT_UCS_OK(status);
@@ -567,7 +568,6 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
 
         is_dummy = (size == 0);
         test_rkey_management(memh, is_dummy, is_tl_rdma());
-        test_rkey_proto(memh);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
