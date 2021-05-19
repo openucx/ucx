@@ -885,7 +885,7 @@ ucp_send_request_get_id(const ucp_request_t *req)
     return req->id;
 }
 
-/* Since release functuion resets request ID to @ref UCS_PTR_MAP_KEY_INVALID and
+/* Since release function resets request ID to @ref UCS_PTR_MAP_KEY_INVALID and
  * PTR MAP considers @ref UCS_PTR_MAP_KEY_INVALID as direct key, release request
  * ID is re-entrant function */
 static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)

@@ -100,7 +100,7 @@ struct ucs_rcache_ops {
 
     /**
      * Dump memory region information to a string buffer.
-     * (Only the user-defined part of the memory regoin should be dumped)
+     * (Only the user-defined part of the memory region should be dumped)
      *
      * @param [in]  context    User context, as passed to @ref ucs_rcache_create
      * @param [in]  rcache     Pointer to the registration cache.

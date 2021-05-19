@@ -176,7 +176,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_dereg_internal,
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_trace("deregistered memorory. info.va:0x%"PRIx64" bar_ptr:%p",
+    ucs_trace("deregistered memory. info.va:0x%"PRIx64" bar_ptr:%p",
               mem_hndl->info.va, mem_hndl->bar_ptr);
     return UCS_OK;
 }
