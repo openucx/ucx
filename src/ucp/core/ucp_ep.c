@@ -884,6 +884,16 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     }
 
     if (status == UCS_OK) {
+#if ENABLE_DEBUG_DATA
+        if ((params->field_mask & UCP_EP_PARAM_FIELD_NAME) &&
+            (params->name != NULL)) {
+            ucs_snprintf_zero(ep->name, UCP_ENTITY_NAME_MAX, "%s",
+                              params->name);
+        } else {
+            ucs_snprintf_zero(ep->name, UCP_ENTITY_NAME_MAX, "%p", ep);
+        }
+#endif
+
         ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
         *ep_p = ep;
     }
@@ -2878,4 +2888,17 @@ void ucp_ep_vfs_init(ucp_ep_h ep)
     ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive,
                             (void*)ucp_err_handling_mode_names[err_mode],
                             UCS_VFS_TYPE_STRING, "error_mode");
+}
+
+ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
+{
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_NAME) {
+#if ENABLE_DEBUG_DATA
+        ucs_strncpy_safe(attr->name, ep->name, UCP_ENTITY_NAME_MAX);
+#else
+        ucs_snprintf_zero(attr->name, UCP_ENTITY_NAME_MAX, "%p", ep);
+#endif
+    }
+
+    return UCS_OK;
 }

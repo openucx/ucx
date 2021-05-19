@@ -385,6 +385,8 @@ typedef struct ucp_ep {
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_ADDRESS_NAME_MAX];
+    /* Endpoint name for tracing and analysis */
+    char                          name[UCP_ENTITY_NAME_MAX];
 #endif
 
 #if UCS_ENABLE_ASSERT

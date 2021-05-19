@@ -244,7 +244,9 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_USER_DATA         = UCS_BIT(3), /**< User data pointer */
     UCP_EP_PARAM_FIELD_SOCK_ADDR         = UCS_BIT(4), /**< Socket address field */
     UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5), /**< Endpoint flags */
-    UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6)  /**< Connection request field */
+    /**< Connection request field */
+    UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
+    UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7) /**< Endpoint name */
 };
 
 
@@ -4467,6 +4469,56 @@ ucs_status_ptr_t ucp_worker_flush_nb(ucp_worker_h worker, unsigned flags,
  */
 ucs_status_ptr_t ucp_worker_flush_nbx(ucp_worker_h worker,
                                       const ucp_request_param_t *param);
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref ucp_ep_attr_t are
+ * present. It is used to enable backward compatibility support.
+ */
+enum ucp_ep_attr_field {
+    UCP_EP_ATTR_FIELD_NAME = UCS_BIT(0) /**< UCP endpoint name */
+};
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief UCP endpoint attributes.
+ *
+ * The structure defines the attributes that characterize the particular
+ * endpoint.
+ */
+typedef struct ucp_ep_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_ep_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Endpoint name. Tracing and analysis tools can identify the endpoint using
+     * this name.
+     */
+    char     name[UCP_ENTITY_NAME_MAX];
+} ucp_ep_attr_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Get attributes specific to a particular endpoint.
+ *
+ * This routine fetches information about the endpoint.
+ *
+ * @param [in]  ep   Endpoint object to query.
+ * @param [out] attr Filled with attributes of the endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
 
 
 /**
