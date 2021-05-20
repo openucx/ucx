@@ -2924,6 +2924,10 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
         goto out;
     }
 
+    /* Async must be blocked before doing KA, because EP lanes could be
+     * initialized and new EP configuration set from an asynchronous thread
+     * when processing WIREUP_MSGs */
+    UCS_ASYNC_BLOCK(&worker->async);
     ucs_trace_func("worker %p: keepalive round", worker);
 
     if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
@@ -2932,7 +2936,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
                   worker);
         uct_worker_progress_unregister_safe(worker->uct,
                                             &worker->keepalive.cb_id);
-        goto out;
+        goto out_unblock;
     }
 
     if (ucs_unlikely(worker->keepalive.iter == &worker->all_eps)) {
@@ -2956,7 +2960,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
              * then just return without update of last_round timestamp,
              * on next progress iteration we will continue from this point */
             worker->keepalive.ep_count += ka_ep_count;
-            goto out;
+            goto out_unblock;
         }
 
         ka_ep_count++;
@@ -2967,6 +2971,8 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
 
+out_unblock:
+    UCS_ASYNC_UNBLOCK(&worker->async);
 out:
     return ka_ep_count;
 }

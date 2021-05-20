@@ -2745,6 +2745,8 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
     ucs_status_t status;
     ucp_rsc_index_t rsc_index;
 
+    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
+
     if (ep->flags & UCP_EP_FLAG_FAILED) {
         *lane_map = 0;
         return;
