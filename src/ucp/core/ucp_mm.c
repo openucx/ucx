@@ -212,7 +212,7 @@ static ucs_status_t ucp_mem_alloc(ucp_context_h context, size_t length,
                                  UCT_MEM_ALLOC_PARAM_FIELD_NAME;
         params.flags           = uct_flags;
         params.name            = name;
-        params.mem_type        = UCS_MEMORY_TYPE_HOST;
+        params.mem_type        = memh->mem_type;
         params.address         = memh->address;
         params.mds.mds         = mds;
         params.mds.count       = num_mds;
@@ -292,23 +292,18 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
         goto out;
     }
 
-    memh->address = address;
-    memh->length  = length;
+    memh->address  = address;
+    memh->length   = length;
+    memh->mem_type = memory_type;
 
     if (is_allocate) {
-        if (memory_type != UCS_MEMORY_TYPE_HOST) {
-            ucs_error("memory allocation not supported with non-host memory");
-            status = UCS_ERR_INVALID_PARAM;
-            goto err_free_memh;
-        }
-
-        ucs_debug("allocating %s at %p length %zu", alloc_name, address, length);
+        ucs_debug("allocating %s at %p length %zu of %s type", alloc_name,
+                  address, length, ucs_memory_type_names[memory_type]);
         status = ucp_mem_alloc(context, length, uct_flags, alloc_name, memh);
         if (status != UCS_OK) {
             goto err_free_memh;
         }
     } else {
-        memh->mem_type     = memory_type;
         memh->alloc_method = UCT_ALLOC_METHOD_LAST;
         memh->alloc_md     = NULL;
         memh->md_map       = 0;
@@ -325,9 +320,11 @@ static ucs_status_t ucp_mem_map_common(ucp_context_h context, void *address,
         }
     }
 
-    ucs_debug("%s buffer %p length %zu memh %p md_map 0x%"PRIx64,
-              (memh->alloc_method == UCT_ALLOC_METHOD_LAST) ? "mapped" : "allocated",
-              memh->address, memh->length, memh, memh->md_map);
+    ucs_debug("%s buffer %p length %zu type %s memh %p md_map 0x%" PRIx64,
+              (memh->alloc_method == UCT_ALLOC_METHOD_LAST) ? "mapped" :
+                                                              "allocated",
+              memh->address, memh->length,
+              ucs_memory_type_names[memh->mem_type], memh, memh->md_map);
     *memh_p = memh;
     status  = UCS_OK;
     goto out;
@@ -436,7 +433,8 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
     }
 
     if (flags & UCP_MEM_MAP_ALLOCATE) {
-        memory_type = UCS_MEMORY_TYPE_HOST;
+        memory_type = UCP_PARAM_VALUE(MEM_MAP, params, memory_type, MEMORY_TYPE,
+                                      UCS_MEMORY_TYPE_HOST);
     } else if (!(params->field_mask & UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE) ||
                (params->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {
         ucp_memory_detect(context, address, params->length, &mem_info);
