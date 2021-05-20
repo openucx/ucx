@@ -179,6 +179,9 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ucp_ep_ext_control(ep)->err_cb       = NULL;
     ucp_ep_ext_control(ep)->local_ep_id  = UCS_PTR_MAP_KEY_INVALID;
     ucp_ep_ext_control(ep)->remote_ep_id = UCS_PTR_MAP_KEY_INVALID;
+#if UCS_ENABLE_ASSERT
+    ucp_ep_ext_control(ep)->ka_count     = 0;
+#endif
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->flush_state));
@@ -2759,8 +2762,9 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     return (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
 }
 
-void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
+int ucp_ep_do_keepalive(ucp_ep_h ep)
 {
+    ucp_worker_h worker = ep->worker;
     ucp_lane_index_t lane;
     ucs_status_t status;
     ucp_rsc_index_t rsc_index;
@@ -2768,14 +2772,17 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
 
     if (ep->flags & UCP_EP_FLAG_FAILED) {
-        *lane_map = 0;
-        return;
+        worker->keepalive.lane_map = 0;
+        return 1;
     }
 
     /* Take updated ep_check_map, in case ep configuration has changed */
-    *lane_map &= ucp_ep_config(ep)->key.ep_check_map;
+    worker->keepalive.lane_map &= ucp_ep_config(ep)->key.ep_check_map;
+    if (worker->keepalive.lane_map == 0) {
+        return 1;
+    }
 
-    ucs_for_each_bit(lane, *lane_map) {
+    ucs_for_each_bit(lane, worker->keepalive.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
         rsc_index = ucp_ep_get_rsc_index(ep, lane);
         ucs_assert((rsc_index != UCP_NULL_RESOURCE) ||
@@ -2788,12 +2795,29 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
         } else if (status != UCS_OK) {
             ucs_diag("unexpected return status from doing keepalive(ep=%p, "
                      "lane[%d]=%p): %s",
-                     ep, lane, ep->uct_eps[lane],
-                     ucs_status_string(status));
+                     ep, lane, ep->uct_eps[lane], ucs_status_string(status));
         }
 
-        *lane_map &= ~UCS_BIT(lane);
+        worker->keepalive.lane_map &= ~UCS_BIT(lane);
     }
+
+    if (worker->keepalive.lane_map == 0) {
+#if UCS_ENABLE_ASSERT
+        ucp_ep_ext_control(ep)->ka_count++;
+        /* Difference between the number of EP keepalive rounds and total number
+         * of KA rounds done on Worker must be <= 2, because keepalive could be
+         * done twice for the same EP in case of number of EPs was decreased */
+        ucs_assertv((ucp_ep_ext_control(ep)->ka_count /
+                             (worker->keepalive.round_count + 1)) <= 2,
+                    "ep %p: keepalive.round_count=%" PRIu64
+                    " ep.ka_count=%" PRIu64,
+                    ep, worker->keepalive.round_count,
+                    ucp_ep_ext_control(ep)->ka_count);
+#endif
+        return 1;
+    }
+
+    return 0;
 }
 
 static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
