@@ -56,8 +56,12 @@ static void uct_srd_ep_reset(uct_srd_ep_t *ep)
 static void uct_srd_ep_purge(uct_srd_ep_t *ep, ucs_status_t status)
 {
     uct_srd_send_op_t *send_op;
-    ucs_queue_for_each_extract(send_op, &ep->tx.outstanding_q, out_queue, 1) {
-        uct_srd_iface_send_op_release(send_op);
+    ucs_queue_for_each(send_op, &ep->tx.outstanding_q, out_queue) {
+        /* Do not release send op here because it might be reused
+         * for another send op while the old send request is still
+         * pending for completion in the QP.
+         */
+        send_op->flags |= UCT_SRD_SEND_OP_FLAG_PURGED;
     }
 }
 
@@ -920,9 +924,10 @@ void uct_srd_ep_send_completion(uct_srd_send_op_t *send_op)
     uct_srd_send_op_t *q_send_op;
     ucs_queue_iter_t iter;
 
-    /* If the completed send op is still in ep outstanding queue
-     * remove it from the queue and call the user callback.
-     * ep purge might have already removed the completed send op */
+    /* TODO:Do a linear search in the queue to find the completed send op.
+     * We can do better by using a hash table, and use a frag_list
+     * instead of the queue to keep track of order for flush/rma.
+     */
     ucs_queue_for_each_safe(q_send_op, iter, &ep->tx.outstanding_q, out_queue) {
         if (q_send_op == send_op) {
             ucs_queue_del_iter(&ep->tx.outstanding_q, iter);
@@ -930,6 +935,8 @@ void uct_srd_ep_send_completion(uct_srd_send_op_t *send_op)
             break;
         }
     }
+    /* The send op must be found in the queue and released */
+    ucs_assert(send_op->flags & UCT_SRD_SEND_OP_FLAG_INVALID);
 
     /* while queue head is flush desc, remove it and call user callback */
     ucs_queue_for_each_extract(q_send_op, &ep->tx.outstanding_q, out_queue,
@@ -1146,8 +1153,10 @@ uct_srd_ep_get_bcopy_comp_handler_ucomp(uct_srd_send_op_t *send_op)
     uct_srd_send_desc_t *desc = ucs_derived_of(send_op, uct_srd_send_desc_t);
 
     desc->unpack_cb(desc->unpack_arg, desc + 1, desc->super.len);
+    if (!(send_op->flags & UCT_SRD_SEND_OP_FLAG_PURGED)) {
+        uct_invoke_completion(desc->super.user_comp, UCS_OK);
+    }
     uct_srd_iface_send_op_release(send_op);
-    uct_invoke_completion(desc->super.user_comp, UCS_OK);
 }
 
 static void

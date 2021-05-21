@@ -94,6 +94,7 @@ typedef struct uct_srd_neth {
 enum {
     UCT_SRD_SEND_OP_FLAG_FLUSH   = UCS_BIT(0), /* dummy send op for flush */
     UCT_SRD_SEND_OP_FLAG_RMA     = UCS_BIT(1), /* send op is for an RMA op */
+    UCT_SRD_SEND_OP_FLAG_PURGED  = UCS_BIT(2), /* send op has been purged */
 
 #if UCS_ENABLE_ASSERT
     UCT_SRD_SEND_OP_FLAG_INVALID = UCS_BIT(7), /* send op has been released */

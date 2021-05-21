@@ -614,7 +614,9 @@ void uct_srd_iface_send_op_release(uct_srd_send_op_t *send_op)
 void uct_srd_iface_send_op_ucomp_release(uct_srd_send_op_t *send_op)
 {
     ucs_assert(!(send_op->flags & UCT_SRD_SEND_OP_FLAG_INVALID));
-    uct_invoke_completion(send_op->user_comp, UCS_OK);
+    if (!(send_op->flags & UCT_SRD_SEND_OP_FLAG_PURGED)) {
+        uct_invoke_completion(send_op->user_comp, UCS_OK);
+    }
     uct_srd_iface_send_op_release(send_op);
 }
 
