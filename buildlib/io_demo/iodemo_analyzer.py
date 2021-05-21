@@ -6,6 +6,7 @@ import datetime,time
 import traceback,sys
 
 allow_error_list = [
+    'UCX\s+DIAG',
     'Connection reset by remote peer',
     'UCX-connection.*detected error:',
     'ERROR Remote QP on mlx',
@@ -14,16 +15,18 @@ allow_error_list = [
     'setting error flag on connection',
     'Operation rejected by remote peer',
     'got error event RDMA_CM_EVENT_ADDR_ERROR',
+    'got error event RDMA_CM_EVENT_UNREACHABLE',
     'rdma_accept',
     'UCX  ERROR Remote access on',
     'UCX  ERROR Transport retry count exceeded on',
     'UCX  WARN  failed to disconnect CM lane',
+    'failed to connect CM lane on device.*status Input/output error',
     'ucp_ep_create\(\) failed: Input/output error',
     'terminate connection.*due to Input/output error',
     'UCX  ERROR Local QP operation on',
     'conn_id send request.*failed: Input/output error',
     'deleting connection with status Input/output error',
-    'UCX  WARN  failed to disconnect CM lane .* Operation rejected by remote peer',
+    'disconnecting connection.*',
     'ucp_ep_query\(\) failed: Endpoint timeout',
     'UCX  ERROR rdma_reject.*failed with error: Invalid argument',
     'UCX  ERROR rdma_init_qp_attr.*failed: Invalid argument',
@@ -35,8 +38,8 @@ allow_error_list = [
 re_allow_list = re.compile("|".join(allow_error_list), re.I)
 re_timestamp = re.compile(r"\[(\d+\.\d+)\].*")
 re_traffic = re.compile(r"\[(\d+\.\d+)\].*read (\d+.\d+).*min:(\d+).*write (\d+.\d+).*min:(\d+).*")
-re_traffic_read = re.compile(r"\[(\d+\.\d+)\].*read (\d+.\d+) MB\/s min:(\d+).*")
-re_traffic_write = re.compile(r"\[(\d+\.\d+)\].*write (\d+.\d+) MB\/s min:(\d+).*")
+re_traffic_read = re.compile(r"\[(\d+\.\d+)\].*read (\d+.\d+) MB\/?s min:(\d+).*")
+re_traffic_write = re.compile(r"\[(\d+\.\d+)\].*write (\d+.\d+) MB\/?s min:(\d+).*")
 re_error = re.compile(r".*(error|assert|backtrace|segmentation).*", re.I)
 re_warning = re.compile(r".*warn.*", re.I)
 
