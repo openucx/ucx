@@ -36,6 +36,8 @@
 
 #define UCP_WORKER_KEEPALIVE_ITER_SKIP 32
 
+#define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
+
 #define UCP_WORKER_HEADROOM_SIZE \
     (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
 
@@ -2588,6 +2590,10 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_NAME) {
         ucs_strncpy_safe(attr->name, worker->name, UCP_ENTITY_NAME_MAX);
+    }
+
+    if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING) {
+        attr->max_debug_string = UCP_WORKER_MAX_DEBUG_STRING_SIZE;
     }
 
     return status;
