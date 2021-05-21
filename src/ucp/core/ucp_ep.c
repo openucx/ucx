@@ -2902,7 +2902,14 @@ void ucp_ep_vfs_init(ucp_ep_h ep)
 {
     ucp_err_handling_mode_t err_mode;
 
+#if ENABLE_DEBUG_DATA
+    ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%s", ep->name);
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_memory_address, NULL, 0,
+                            "memory_address");
+#else
     ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%p", ep);
+#endif
+
     ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_peer_name, NULL, 0,
                             "peer_name");
 
