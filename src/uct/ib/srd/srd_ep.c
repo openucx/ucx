@@ -1102,7 +1102,8 @@ uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     iface->tx.wr_desc.num_sge =
         uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1, iov, iovcnt) + 1;
 
-    uct_srd_ep_tx_desc(iface, ep, desc, 0, iface->tx.wr_desc.num_sge);
+    uct_srd_ep_tx_desc(iface, ep, desc, 0,
+                       UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super));
     uct_srd_iface_complete_tx_desc(iface, ep, desc);
     iface->tx.wr_desc.num_sge = 1;
 
