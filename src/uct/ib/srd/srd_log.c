@@ -38,24 +38,24 @@ void uct_srd_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
     } else if (neth->packet_type & UCT_SRD_PACKET_FLAG_CTLX) {
         ctlh = (uct_srd_ctl_hdr_t *)(neth + 1);
         switch (ctlh->type) {
-        case UCT_SRD_PACKET_CREQ:
-            snprintf(p, endp - p,
-                     " CREQ from %s:%d qpn 0x%x %s epid %d cid %d path %d",
-                     ctlh->peer.name, ctlh->peer.pid,
-                     uct_ib_unpack_uint24(ctlh->conn_req.ep_addr.iface_addr.qp_num),
-                     uct_ib_address_str(uct_srd_creq_ib_addr(ctlh), buf, sizeof(buf)),
-                     uct_ib_unpack_uint24(ctlh->conn_req.ep_addr.ep_id),
-                     ctlh->conn_req.conn_sn, ctlh->conn_req.path_index);
-            break;
-        case UCT_SRD_PACKET_CREP:
-            snprintf(p, endp - p, " CREP from %s:%d src_ep_id %d",
-                     ctlh->peer.name, ctlh->peer.pid,
-                     ctlh->conn_rep.src_ep_id);
-            break;
-        default:
-            snprintf(p, endp - p, " <unknown control packet %d> from %s:%d",
-                     ctlh->type, ctlh->peer.name, ctlh->peer.pid);
-            break;
+            case UCT_SRD_PACKET_CREQ:
+                snprintf(p, endp - p,
+                         " CREQ from %s:%d qpn 0x%x %s epid %d cid %d path %d",
+                         ctlh->peer.name, ctlh->peer.pid,
+                         uct_ib_unpack_uint24(ctlh->conn_req.ep_addr.iface_addr.qp_num),
+                         uct_ib_address_str(uct_srd_creq_ib_addr(ctlh), buf, sizeof(buf)),
+                         uct_ib_unpack_uint24(ctlh->conn_req.ep_addr.ep_id),
+                         ctlh->conn_req.conn_sn, ctlh->conn_req.path_index);
+                break;
+            case UCT_SRD_PACKET_CREP:
+                snprintf(p, endp - p, " CREP from %s:%d src_ep_id %d",
+                         ctlh->peer.name, ctlh->peer.pid,
+                         ctlh->conn_rep.src_ep_id);
+                break;
+            default:
+                snprintf(p, endp - p, " <unknown control packet %d> from %s:%d",
+                         ctlh->type, ctlh->peer.name, ctlh->peer.pid);
+                break;
         }
     }
 }
