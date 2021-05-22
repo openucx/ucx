@@ -73,6 +73,13 @@ typedef struct ucs_rcache_inv_entry {
 } ucs_rcache_inv_entry_t;
 
 
+typedef struct ucs_rcache_comp_entry {
+    ucs_list_link_t                   list;
+    ucs_rcache_invalidate_comp_func_t func;
+    void                              *arg;
+} ucs_rcache_comp_entry_t;
+
+
 typedef struct {
     ucs_rcache_t        *rcache;
     ucs_rcache_region_t *region;
@@ -165,7 +172,7 @@ static ucs_status_t ucs_rcache_mp_chunk_alloc(ucs_mpool_t *mp, size_t *size_p,
     ptr = ucm_orig_mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS,
                         -1, 0);
     if (ptr == MAP_FAILED) {
-        ucs_error("mmmap(size=%zu) failed: %m", size);
+        ucs_error("mmap(size=%zu) failed: %m", size);
         return UCS_ERR_NO_MEMORY;
     }
 
@@ -340,6 +347,8 @@ ucs_rcache_region_lru_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
                                             ucs_rcache_region_t *region)
 {
+    ucs_rcache_comp_entry_t *comp;
+
     ucs_rcache_region_trace(rcache, region, "destroy");
 
     ucs_assertv(region->refcount == 0, "region 0x%lx..0x%lx of %s",
@@ -367,6 +376,15 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 
     --rcache->num_regions;
     rcache->total_size -= region->super.end - region->super.start;
+
+    while (!ucs_list_is_empty(&region->comp_list)) {
+        comp = ucs_list_extract_head(&region->comp_list,
+                                     ucs_rcache_comp_entry_t, list);
+        comp->func(comp->arg);
+        ucs_spin_lock(&rcache->lock);
+        ucs_mpool_put(comp);
+        ucs_spin_unlock(&rcache->lock);
+    }
 
     ucs_free(region);
 }
@@ -405,9 +423,9 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
 }
 
 /* Lock must be held in write mode */
-static void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
-                                         ucs_rcache_region_t *region,
-                                         unsigned flags)
+static void ucs_rcache_region_invalidate_internal(ucs_rcache_t *rcache,
+                                                  ucs_rcache_region_t *region,
+                                                  unsigned flags)
 {
     ucs_status_t status;
 
@@ -423,11 +441,10 @@ static void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
                                    ucs_status_string(status));
         }
         region->flags &= ~UCS_RCACHE_REGION_FLAG_PGTABLE;
+        ucs_rcache_region_put_internal(rcache, region, flags);
     } else {
         ucs_assert(!(flags & UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE));
     }
-
-     ucs_rcache_region_put_internal(rcache, region, flags);
 }
 
 /* Lock must be held in write mode */
@@ -442,8 +459,8 @@ static void ucs_rcache_invalidate_range(ucs_rcache_t *rcache, ucs_pgt_addr_t sta
     ucs_rcache_find_regions(rcache, start, end - 1, &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, tmp_list) {
         /* all regions on the list are in the page table */
-        ucs_rcache_region_invalidate(rcache, region,
-                                     flags | UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+        ucs_rcache_region_invalidate_internal(
+                rcache, region, flags | UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAP_INVALIDATES, 1);
     }
 }
@@ -608,7 +625,7 @@ static void ucs_rcache_lru_evict(ucs_rcache_t *rcache)
          * would be destroyed immediately by this function
          */
         ucs_rcache_region_trace(rcache, region, "evict");
-        ucs_rcache_region_invalidate(
+        ucs_rcache_region_invalidate_internal(
                 rcache, region,
                 UCS_RCACHE_REGION_PUT_FLAG_MUST_DESTROY |
                         UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
@@ -688,8 +705,8 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
                  * region. However mem_reg still may be able to deal with it.
                  * Do the safest thing: invalidate cached region
                  */
-                ucs_rcache_region_invalidate(rcache, region,
-                                             UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+                ucs_rcache_region_invalidate_internal(
+                        rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
                 continue;
             } else if (ucs_test_all_flags(mem_prot, region->prot)) {
                 *prot |= region->prot;
@@ -703,8 +720,8 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
                 ucs_rcache_region_trace(rcache, region,
                                         "do not merge mem "UCS_RCACHE_PROT_FMT" with",
                                         UCS_RCACHE_PROT_ARG(mem_prot));
-                ucs_rcache_region_invalidate(rcache, region,
-                                             UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+                ucs_rcache_region_invalidate_internal(
+                        rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
                 continue;
             }
         }
@@ -715,8 +732,8 @@ ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
         *start  = ucs_min(*start, region->super.start);
         *end    = ucs_max(*end,   region->super.end);
         *merged = 1;
-        ucs_rcache_region_invalidate(rcache, region,
-                                     UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
+        ucs_rcache_region_invalidate_internal(
+                rcache, region, UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE);
     }
     return UCS_OK;
 }
@@ -806,6 +823,7 @@ retry:
     }
 
     memset(region, 0, rcache->params.region_struct_size);
+    ucs_list_head_init(&region->comp_list);
 
     region->super.start = start;
     region->super.end   = end;
@@ -845,9 +863,10 @@ retry:
              */
             ucs_debug("failed to register merged region " UCS_PGT_REGION_FMT ": %s, retrying",
                       UCS_PGT_REGION_ARG(&region->super), ucs_status_string(status));
-            ucs_rcache_region_invalidate(rcache, region,
-                                         UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE |
-                                         UCS_RCACHE_REGION_PUT_FLAG_MUST_DESTROY);
+            ucs_rcache_region_invalidate_internal(
+                    rcache, region,
+                    UCS_RCACHE_REGION_PUT_FLAG_IN_PGTABLE |
+                            UCS_RCACHE_REGION_PUT_FLAG_MUST_DESTROY);
             goto retry;
         } else {
             ucs_debug("failed to register region " UCS_PGT_REGION_FMT ": %s",
@@ -933,6 +952,33 @@ void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
     ucs_rcache_region_lru_put(rcache, region);
     ucs_rcache_region_put_internal(rcache, region,
                                    UCS_RCACHE_REGION_PUT_FLAG_TAKE_PGLOCK);
+    UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);
+}
+
+void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
+                                  ucs_rcache_region_t *region,
+                                  ucs_rcache_invalidate_comp_func_t cb,
+                                  void *arg)
+{
+    ucs_rcache_comp_entry_t *comp;
+
+    /* Completion entry should be added before region is invalidated */
+    ucs_spin_lock(&rcache->lock);
+    comp = ucs_mpool_get(&rcache->mp);
+    ucs_spin_unlock(&rcache->lock);
+
+    pthread_rwlock_wrlock(&rcache->pgt_lock);
+    if (comp != NULL) {
+        comp->func = cb;
+        comp->arg  = arg;
+        ucs_list_add_tail(&region->comp_list, &comp->list);
+    } else {
+        ucs_rcache_region_error(rcache, region,
+                                "failed to allocate completion object");
+    }
+
+    ucs_rcache_region_invalidate_internal(rcache, region, 0);
+    pthread_rwlock_unlock(&rcache->pgt_lock);
     UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_PUTS, 1);
 }
 
@@ -1102,6 +1148,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     }
 
     mp_obj_size = ucs_max(sizeof(ucs_pgt_dir_t), sizeof(ucs_rcache_inv_entry_t));
+    mp_obj_size = ucs_max(mp_obj_size, sizeof(ucs_rcache_comp_entry_t));
+
     mp_align    = ucs_max(sizeof(void *), UCS_PGT_ENTRY_MIN_ALIGN);
     status      = ucs_mpool_init(&self->mp, 0, mp_obj_size, 0, mp_align, 1024,
                                  UINT_MAX, &ucs_rcache_mp_ops, "rcache_mp");

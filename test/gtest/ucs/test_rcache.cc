@@ -63,7 +63,8 @@ protected:
         uint32_t            id;
     };
 
-    test_rcache() : m_reg_count(0), m_ptr(NULL) {
+    test_rcache() : m_reg_count(0), m_ptr(NULL), m_comp_count(0)
+    {
     }
 
     virtual void init() {
@@ -162,11 +163,19 @@ protected:
         return ptr;
     }
 
+    static void completion_cb(void *arg)
+    {
+        test_rcache *test = (test_rcache*)arg;
+
+        test->m_comp_count++;
+    }
+
     static const uint32_t MAGIC = 0x05e905e9;
     static volatile uint32_t next_id;
     volatile uint32_t m_reg_count;
     ucs::handle<ucs_rcache_t*> m_rcache;
     void * volatile m_ptr;
+    size_t m_comp_count;
 
 private:
 
@@ -284,6 +293,50 @@ UCS_MT_TEST_F(test_rcache, get_unmapped, 6) {
         ucs_debug("physical address not changed (0x%lx)", pa);
     }
     put(region);
+    free(ptr);
+}
+
+/* This test gets region N times and later puts it N times and invalidates N/2
+ * times - mix multiple put and invalidate calls */
+UCS_MT_TEST_F(test_rcache, put_and_invalidate, 1)
+{
+    static const size_t size = 1 * UCS_MBYTE;
+    std::vector<region*> regions;
+    region *reg;
+    void *ptr;
+    size_t region_get_count; /* how many get operation to apply */
+    size_t iter;
+    size_t comp_count;
+
+    ptr = malloc(size);
+    for (region_get_count = 1; region_get_count < 100; region_get_count++) {
+        comp_count   = (region_get_count + 1) / 2;
+        m_comp_count = 0;
+        for (iter = 0; iter < region_get_count; iter++) {
+            regions.push_back(get(ptr, size));
+        }
+
+        for (iter = 0; iter < region_get_count; iter++) {
+            /* mix region put and invalidate operations on same region */
+            ASSERT_EQ(0, m_comp_count);
+            region *region = regions.back();
+            if ((iter & 1) == 0) { /* on even iteration invalidate region */
+                ucs_rcache_region_invalidate(m_rcache, &region->super,
+                                             &completion_cb, this);
+                /* after invalidation region should not be acquired again */
+                reg = get(ptr, size);
+                EXPECT_NE(reg, region);
+                put(reg);
+            }
+
+            put(region);
+            regions.pop_back();
+        }
+
+        ASSERT_TRUE(regions.empty());
+        EXPECT_EQ(comp_count, m_comp_count);
+    }
+
     free(ptr);
 }
 
