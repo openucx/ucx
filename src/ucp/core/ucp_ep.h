@@ -432,6 +432,9 @@ typedef struct {
     ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
     ucp_err_handler_cb_t     err_cb; /* Error handler */
     ucp_ep_close_proto_req_t close_req; /* Close protocol request */
+#if UCS_ENABLE_ASSERT
+    size_t                   ka_count; /* Number of KA rounds done */
+#endif
 } ucp_ep_ext_control_t;
 
 
@@ -667,13 +670,11 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 /**
  * @brief Do keepalive operation.
  *
- * @param [in]     ep       Endpoint object to operate keepalive.
- * @param [in/out] lane_map Map of lanes to process. During processing bit
- *                          corresponding to processed lane is set to 0.
- *                          Used for processing situation when any UCT lane
- *                          has no resources.
+ * @param [in] ep    UCP Endpoint object to operate keepalive.
+ *
+ * @return Indication whether keepalive was fully done for UCP Endpoint or not.
  */
-void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);
+int ucp_ep_do_keepalive(ucp_ep_h ep);
 
 /**
  * @brief Purge flush and protocol requests scheduled on a given UCP endpoint.

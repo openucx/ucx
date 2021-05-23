@@ -306,6 +306,7 @@ typedef struct ucp_worker {
         unsigned                     ep_count;            /* Number of EPs processed in current time slot */
         unsigned                     iter_count;          /* Number of progress iterations to skip,
                                                            * used to minimize call of ucs_get_time */
+        size_t                       round_count;         /* Number of rounds done */
     } keepalive;
 } ucp_worker_t;
 
