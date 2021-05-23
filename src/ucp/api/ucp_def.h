@@ -3,6 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 * Copyright (C) IBM 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
+* Copyright (C) Arm, Ltd. 2021. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -507,7 +508,7 @@ typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
  *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
  *                        Otherwise, an @ref ucs_status_t "error status" is
  *                        returned.
- * @param [in]  info      @ref ucp_tag_recv_info_t "Completion information"
+ * @param [in]  tag_info  @ref ucp_tag_recv_info_t "Completion information"
  *                        The @a info descriptor is Valid only if the status is
  *                        UCS_OK.
  * @param [in]  user_data User data passed to "user_data" value,
