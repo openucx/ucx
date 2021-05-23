@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Arm, Ltd. 2021. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -123,9 +124,9 @@
 /**
  * Get a pointer to a struct containing a member.
  *
- * @param __ptr   Pointer to the member.
- * @param type    Container type.
- * @param member  Element member inside the container.
+ * @param _ptr     Pointer to the member.
+ * @param _type    Container type.
+ * @param _member  Element member inside the container.
 
  * @return Address of the container structure.
  */
