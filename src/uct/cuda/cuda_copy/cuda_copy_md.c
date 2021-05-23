@@ -30,7 +30,9 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
 
 static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC;
+    md_attr->cap.flags            = UCT_MD_FLAG_REG       |
+                                    UCT_MD_FLAG_NEED_MEMH |
+                                    UCT_MD_FLAG_ALLOC;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
@@ -51,6 +53,10 @@ static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 static ucs_status_t uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
                                             void *rkey_buffer)
 {
+    uct_cuda_copy_key_t *packed   = (uct_cuda_copy_key_t *) rkey_buffer;
+    uct_cuda_copy_key_t *mem_hndl = (uct_cuda_copy_key_t *) memh;
+
+    *packed  = *mem_hndl;
     return UCS_OK;
 }
 
@@ -59,8 +65,18 @@ static ucs_status_t uct_cuda_copy_rkey_unpack(uct_component_t *component,
                                               uct_rkey_t *rkey_p,
                                               void **handle_p)
 {
-    *rkey_p   = 0xdeadbeef;
+    uct_cuda_copy_key_t *packed = (uct_cuda_copy_key_t *) rkey_buffer;
+    uct_cuda_copy_key_t *key;
+
+    key = ucs_malloc(sizeof(uct_cuda_copy_key_t), "uct_cuda_copy_key_t");
+    if (NULL == key) {
+        ucs_error("failed to allocate memory for uct_cuda_copy_key_t");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *key = *packed;
     *handle_p = NULL;
+    *rkey_p   = (uintptr_t) key;
     return UCS_OK;
 }
 
@@ -70,61 +86,98 @@ static ucs_status_t uct_cuda_copy_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_copy_mem_reg_internal(uct_md_h uct_md, void *address, size_t length,
+                               unsigned flags, uct_cuda_copy_key_t *key)
+{
+    CUmemorytype mem_type;
+    ucs_log_level_t log_level;
+    CUresult result;
+    ucs_status_t status;
+
+    key->mem_type        = UCS_MEMORY_TYPE_HOST;
+    key->address         = address;
+    key->host_registered = 0;
+
+    if (address == NULL) {
+        return UCS_OK;
+    }
+
+    result = cuPointerGetAttribute(&mem_type, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                   (CUdeviceptr)(address));
+    if ((result == CUDA_SUCCESS) && ((mem_type == CU_MEMORYTYPE_HOST)    ||
+                                     (mem_type == CU_MEMORYTYPE_UNIFIED) ||
+                                     (mem_type == CU_MEMORYTYPE_DEVICE))) {
+        switch (mem_type) {
+            case CU_MEMORYTYPE_HOST:
+                key->mem_type = UCS_MEMORY_TYPE_HOST;
+                break;
+            case CU_MEMORYTYPE_DEVICE:
+                key->mem_type = UCS_MEMORY_TYPE_CUDA;
+                break;
+            case CU_MEMORYTYPE_UNIFIED:
+                key->mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+                break;
+            default:
+                ucs_fatal("unknown memory type unhandled");
+                break;
+        }
+        return UCS_OK;
+    }
+
+    /* only host memory not allocated by cuda needs to be registered */
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                UCS_LOG_LEVEL_ERROR;
+    status    = UCT_CUDA_FUNC(cudaHostRegister(key->address, length,
+                                               cudaHostRegisterPortable),
+                              log_level);
+    if (status == UCS_OK) {
+        key->host_registered = 1;
+    } else {
+        return status;
+    }
+
+    return UCS_OK;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
                  (md, address, length, flags, memh_p),
                  uct_md_h md, void *address, size_t length,
                  unsigned flags, uct_mem_h *memh_p)
 {
-    ucs_log_level_t log_level;
-    CUmemorytype memType;
-    CUresult result;
     ucs_status_t status;
+    uct_cuda_copy_key_t *key;
 
-    if (address == NULL) {
-        *memh_p = address;
-        return UCS_OK;
+    key = ucs_malloc(sizeof(uct_cuda_copy_key_t), "uct_cuda_copy_key_t");
+    if (NULL == key) {
+        ucs_error("failed to allocate memory for uct_cuda_copy_key_t");
+        return UCS_ERR_NO_MEMORY;
     }
 
-    result = cuPointerGetAttribute(&memType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-                                   (CUdeviceptr)(address));
-    if ((result == CUDA_SUCCESS) && ((memType == CU_MEMORYTYPE_HOST)    ||
-                                     (memType == CU_MEMORYTYPE_UNIFIED) ||
-                                     (memType == CU_MEMORYTYPE_DEVICE))) {
-        /* only host memory not allocated by cuda needs to be registered */
-        /* using deadbeef as VA to avoid gtest error */
-        UCS_STATIC_ASSERT((uint64_t)0xdeadbeef != (uint64_t)UCT_MEM_HANDLE_NULL);
-        *memh_p = (void *)0xdeadbeef;
-        return UCS_OK;
-    }
-
-    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
-                UCS_LOG_LEVEL_ERROR;
-    status    = UCT_CUDA_FUNC(cudaHostRegister(address, length,
-                                               cudaHostRegisterPortable),
-                              log_level);
+    status = uct_cuda_copy_mem_reg_internal(md, address, length, 0, key);
     if (status != UCS_OK) {
+        ucs_free(key);
         return status;
     }
+    *memh_p = key;
 
-    *memh_p = address;
     return UCS_OK;
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
                  (md, memh), uct_md_h md, uct_mem_h memh)
 {
-    void *address = (void *)memh;
+    uct_cuda_copy_key_t *key = (uct_cuda_copy_key_t *)memh;
     ucs_status_t status;
 
-    if (address == (void*)0xdeadbeef) {
-        return UCS_OK;
+    if (key->host_registered) {
+        status = UCT_CUDA_FUNC_LOG_ERR(cudaHostUnregister(key->address));
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaHostUnregister(address));
-    if (status != UCS_OK) {
-        return status;
-    }
-
+    ucs_free(key);
     return UCS_OK;
 }
 
