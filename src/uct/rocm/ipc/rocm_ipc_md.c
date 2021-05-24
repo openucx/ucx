@@ -54,14 +54,15 @@ static ucs_status_t uct_rocm_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
 static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
 {
+    void *base_ptr = NULL;
+    size_t size    = 0;
     hsa_status_t status;
     hsa_agent_t agent;
-    void *base_ptr;
-    size_t size;
 
     status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size, &agent);
-    if (status != HSA_STATUS_SUCCESS) {
-        ucs_error("pack none ROCM ptr %p/%lx", address, length);
+    if ((status != HSA_STATUS_SUCCESS) || (size < length)) {
+        ucs_error("failed to get base ptr for %p/%lx, ROCm returned %p/%lx",
+                   address, length, base_ptr, size);
         return status;
     }
 
@@ -72,7 +73,7 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     }
 
     key->address = (uintptr_t)base_ptr;
-    key->length = size;
+    key->length  = size;
     key->dev_num = uct_rocm_base_get_dev_num(agent);
 
     return HSA_STATUS_SUCCESS;

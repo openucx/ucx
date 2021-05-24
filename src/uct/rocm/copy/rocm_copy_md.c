@@ -92,21 +92,52 @@ static ucs_status_t uct_rocm_copy_rkey_release(uct_component_t *component,
     return UCS_OK;
 }
 
+static void uct_rocm_copy_pg_align_addr(void **address, size_t *length)
+{
+    void *start, *end;
+    size_t page_size;
+
+    page_size = ucs_get_page_size();
+    start     = ucs_align_down_pow2_ptr(*address, page_size);
+    end       = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(*address, *length), page_size);
+    ucs_assert_always(start <= end);
+
+    *address  = start;
+    *length   = UCS_PTR_BYTE_DIFF(start, end);
+}
+
 static ucs_status_t uct_rocm_copy_mem_reg_internal(
         uct_md_h uct_md, void *address, size_t length,
-        unsigned flags, uct_rocm_copy_mem_t *mem_hndl)
+        int pg_align_addr, uct_rocm_copy_mem_t *mem_hndl)
 {
     void *dev_addr = NULL;
     hsa_status_t status;
+    ucs_status_t err;
+    ucs_memory_type_t mem_type;
 
     if(address == NULL) {
         memset(mem_hndl, 0, sizeof(*mem_hndl));
         return UCS_OK;
     }
 
-    status = hsa_amd_memory_lock(address, length, NULL, 0, &dev_addr);
-    if ((status != HSA_STATUS_SUCCESS) || (dev_addr == NULL)) {
-        return UCS_ERR_IO_ERROR;
+    err = uct_rocm_base_detect_memory_type(uct_md, address, length, &mem_type);
+    if (err != UCS_OK) {
+        ucs_error("failed to detect memory type for addr %p len %zu", address, length);
+        return err;
+    }
+
+    if (mem_type == UCS_MEMORY_TYPE_ROCM) {
+        /* No need to register GPU memory */
+        dev_addr = address;
+    } else {
+        if (pg_align_addr) {
+            uct_rocm_copy_pg_align_addr(&address, &length);
+        }
+
+        status = hsa_amd_memory_lock(address, length, NULL, 0, &dev_addr);
+        if ((status != HSA_STATUS_SUCCESS) || (dev_addr == NULL)) {
+            return UCS_ERR_IO_ERROR;
+        }
     }
 
     mem_hndl->vaddr    = address;
@@ -121,8 +152,6 @@ static ucs_status_t uct_rocm_copy_mem_reg(uct_md_h md, void *address, size_t len
                                           unsigned flags, uct_mem_h *memh_p)
 {
     uct_rocm_copy_mem_t *mem_hndl = NULL;
-    void *start, *end;
-    size_t len, page_size;
     ucs_status_t status;
 
     mem_hndl = ucs_malloc(sizeof(uct_rocm_copy_mem_t), "rocm_copy handle");
@@ -131,13 +160,7 @@ static ucs_status_t uct_rocm_copy_mem_reg(uct_md_h md, void *address, size_t len
         return UCS_ERR_NO_MEMORY;
     }
 
-    page_size = ucs_get_page_size();
-    start     = ucs_align_down_pow2_ptr(address, page_size);
-    end       = ucs_align_up_pow2_ptr(UCS_PTR_BYTE_OFFSET(address, length), page_size);
-    len       = UCS_PTR_BYTE_DIFF(start, end);
-    ucs_assert_always(start <= end);
-
-    status = uct_rocm_copy_mem_reg_internal(md, address, len, 0, mem_hndl);
+    status = uct_rocm_copy_mem_reg_internal(md, address, length, 1, mem_hndl);
     if (status != UCS_OK) {
         ucs_free(mem_hndl);
         return status;
@@ -259,14 +282,13 @@ uct_rocm_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
                                 uint16_t rcache_mem_reg_flags)
 {
     uct_rocm_copy_md_t *md = context;
-    int *flags = arg;
     uct_rocm_copy_rcache_region_t *region;
 
     region = ucs_derived_of(rregion, uct_rocm_copy_rcache_region_t);
     return uct_rocm_copy_mem_reg_internal(&md->super, (void*)region->super.super.start,
                                           region->super.super.end -
                                           region->super.super.start,
-                                          *flags, &region->memh);
+                                          0, &region->memh);
 }
 
 static void uct_rocm_copy_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcache,
