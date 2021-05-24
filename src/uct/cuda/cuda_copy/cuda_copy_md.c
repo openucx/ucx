@@ -111,11 +111,15 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_reg,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_mem_dereg,
-                 (md, memh), uct_md_h md, uct_mem_h memh)
+                 (md, params),
+                 uct_md_h md, const uct_md_mem_dereg_params_t *params)
 {
-    void *address = (void *)memh;
+    void *address;
     ucs_status_t status;
 
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    address = (void *)params->memh;
     if (address == (void*)0xdeadbeef) {
         return UCS_OK;
     }

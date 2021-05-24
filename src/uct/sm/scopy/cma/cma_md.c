@@ -138,6 +138,16 @@ static ucs_status_t uct_cma_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 }
 
+static ucs_status_t uct_cma_mem_dereg(uct_md_h uct_md,
+                                      const uct_md_mem_dereg_params_t *params)
+{
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ucs_assert(params->memh == (void*)0xdeadbeef);
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_cma_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
@@ -149,7 +159,7 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
         .mem_free               = (uct_md_mem_free_func_t)ucs_empty_function_return_success,
         .mkey_pack              = (uct_md_mkey_pack_func_t)ucs_empty_function_return_success,
         .mem_reg                = uct_cma_mem_reg,
-        .mem_dereg              = (uct_md_mem_dereg_func_t)ucs_empty_function_return_success,
+        .mem_dereg              = uct_cma_mem_dereg,
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported,
     };

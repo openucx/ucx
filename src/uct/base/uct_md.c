@@ -474,7 +474,12 @@ ucs_status_t uct_md_mem_reg(uct_md_h md, void *address, size_t length,
 
 ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
 {
-    return md->ops->mem_dereg(md, memh);
+    uct_md_mem_dereg_params_t params = {
+        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH,
+        .memh       = memh
+    };
+
+    return md->ops->mem_dereg(md, &params);
 }
 
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,

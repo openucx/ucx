@@ -101,11 +101,16 @@ static ucs_status_t uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t leng
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_ipc_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t
+uct_rocm_ipc_mem_dereg(uct_md_h md,
+                       const uct_md_mem_dereg_params_t *params)
 {
-    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t *)memh;
+    uct_rocm_ipc_mem_t *mem_hndl;
 
-    ucs_free(key);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    mem_hndl = params->memh;
+    ucs_free(mem_hndl);
     return UCS_OK;
 }
 

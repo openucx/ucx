@@ -18,6 +18,9 @@
 #include <ucm/api/ucm.h>
 
 
+#define UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(_params) \
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, 0)
+
 static ucs_config_field_t uct_knem_md_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_knem_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
@@ -179,11 +182,15 @@ static ucs_status_t uct_knem_mem_dereg_internal(uct_md_h md, uct_knem_key_t *key
     return UCS_OK;
 }
 
-static ucs_status_t uct_knem_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t uct_knem_mem_dereg(uct_md_h md,
+                                       const uct_md_mem_dereg_params_t *params)
 {
-    uct_knem_key_t *key = (uct_knem_key_t *)memh;
+    uct_knem_key_t *key;
     ucs_status_t status;
 
+    UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(params);
+
+    key    = (uct_knem_key_t *)params->memh;
     status = uct_knem_mem_dereg_internal(md, key);
     if (status == UCS_OK) {
         ucs_free(key);
@@ -266,10 +273,16 @@ static ucs_status_t uct_knem_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_knem_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_knem_mem_rcache_dereg(uct_md_h uct_md,
+                          const uct_md_mem_dereg_params_t *params)
 {
-    uct_knem_md_t *md                = ucs_derived_of(uct_md, uct_knem_md_t);
-    uct_knem_rcache_region_t *region = uct_knem_rcache_region_from_memh(memh);
+    uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
+    uct_knem_rcache_region_t *region;
+ 
+    UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(params);
+ 
+    region = uct_knem_rcache_region_from_memh(params->memh);
 
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;

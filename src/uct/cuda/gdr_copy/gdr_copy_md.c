@@ -210,12 +210,17 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_gdr_copy_mem_dereg(uct_md_h uct_md,
+                       const uct_md_mem_dereg_params_t *params)
 {
-    uct_gdr_copy_mem_t *mem_hndl = memh;
+    uct_gdr_copy_mem_t *mem_hndl;
     ucs_status_t status;
 
-    status = uct_gdr_copy_mem_dereg_internal(uct_md, mem_hndl);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    mem_hndl = params->memh;
+    status   = uct_gdr_copy_mem_dereg_internal(uct_md, mem_hndl);
     if (status != UCS_OK) {
         ucs_warn("failed to deregister memory handle");
     }
@@ -296,11 +301,17 @@ uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md,
+                              const uct_md_mem_dereg_params_t *params)
+
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    uct_gdr_copy_rcache_region_t *region = uct_gdr_copy_rache_region_from_memh(memh);
+    uct_gdr_copy_rcache_region_t *region;
 
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    region = uct_gdr_copy_rache_region_from_memh(params->memh);
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
 }

@@ -122,6 +122,78 @@ typedef struct {
 
 
 /**
+ * @ingroup UCT_MD
+ * @brief MD memory de-registration operation flags.
+ */
+typedef enum {
+    UCT_MD_MEM_DEREG_FIELD_MEMH     = UCS_BIT(0), /**< memh field */
+    UCT_MD_MEM_DEREG_FIELD_FLAGS    = UCS_BIT(1), /**< flags field */
+    UCT_MD_MEM_DEREG_FIELD_CALLBACK = UCS_BIT(2), /**< cb field */
+    UCT_MD_MEM_DEREG_FIELD_ARG      = UCS_BIT(3)  /**< arg field */
+} uct_md_mem_dereg_field_mask_t;
+
+
+typedef enum {
+    /**
+     * Invalidate memory region. If this flag is set then memory region is
+     * invalidated after de-registration and callback (see @ref
+     * uct_md_mem_dereg_params_t) is is called when the memory is fully
+     * invalidated and would not be accessed anymore by zero-copy or remote
+     * memory access operations.
+     */
+    UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0) 
+} uct_md_mem_dereg_flags_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Completion callback for memory region invalidation.
+ *
+ * This callback routine is invoked when when it is no longer accessible by
+ * remote peer.
+ *
+ * @param [in]  arg User data passed to "arg" value, see
+ *                  @ref uct_md_mem_dereg_params_t
+ */
+typedef void (*uct_md_mem_invalidate_cb_t)(void *arg);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Operation parameters passed to @ref uct_md_mem_dereg_v2.
+ */
+typedef struct uct_md_mem_dereg_params {
+    /**
+     * Mask of valid fields in this structure and operation flags, using
+     * bits from @ref uct_md_mem_dereg_field_mask_t. Fields not specified
+     * in this mask will be ignored. Provides ABI compatibility with respect
+     * to adding new fields.
+     */
+    uint64_t                     field_mask;
+
+    /**
+     * Operation specific flags, using bits from @ref uct_md_mem_dereg_flags_t.
+     */
+    unsigned                     flags;
+
+    /**
+     * Memory handle to deregister.
+     */
+    uct_mem_h                    memh;
+
+    /**
+     * Callback function that is invoked when region is invalidated.
+     */
+    uct_md_mem_invalidate_cb_t   cb;
+
+    /**
+     * User-defined argument for the callback function.
+     */
+    void                         *arg;
+} uct_md_mem_dereg_params_t;
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Get interface performance attributes, by memory types and operation.
  *        A pointer to uct_perf_attr_t struct must be passed, with the memory
@@ -133,6 +205,19 @@ typedef struct {
  */
 ucs_status_t
 uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Undo the operation of @ref uct_md_mem_reg() and invalidate memory
+ *        region.
+ *
+ * @param [in]  md          Memory domain which was used to register the memory.
+ * @param [in]  params      Operation parameters, see @ref 
+ *                          uct_md_mem_dereg_params_t.
+ */
+ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
+                                 const uct_md_mem_dereg_params_t *params);
 
 END_C_DECLS
 
