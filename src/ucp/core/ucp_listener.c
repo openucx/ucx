@@ -149,12 +149,14 @@ ucp_listen(ucp_listener_h listener, const ucp_listener_params_t *params)
     ucs_assert_always(num_cms > 0);
 
     uct_params.field_mask       = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
-                                  UCT_LISTENER_PARAM_FIELD_USER_DATA       |
-                                  UCT_LISTENER_PARAM_FIELD_BACKLOG;
+                                  UCT_LISTENER_PARAM_FIELD_USER_DATA;
     uct_params.conn_request_cb  = ucp_cm_server_conn_request_cb;
     uct_params.user_data        = listener;
-    uct_params.backlog          = ucs_min((size_t)INT_MAX,
-                                          worker->context->config.ext.listener_backlog);
+
+    if (worker->context->config.ext.listener_backlog != UCS_ULUNITS_AUTO) {
+        uct_params.field_mask |= UCT_LISTENER_PARAM_FIELD_BACKLOG;
+        uct_params.backlog     = worker->context->config.ext.listener_backlog;
+    }
 
     listener->num_rscs          = 0;
     uct_listeners               = ucs_calloc(num_cms, sizeof(*uct_listeners),
