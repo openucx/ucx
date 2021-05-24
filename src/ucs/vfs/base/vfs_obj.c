@@ -193,25 +193,12 @@ static void ucs_vfs_node_init(ucs_vfs_node_t *node, ucs_vfs_node_type_t type,
 
 /* must be called with lock held */
 static ucs_vfs_node_t *ucs_vfs_node_create(ucs_vfs_node_t *parent_node,
-                                           const char *name,
+                                           const char *path,
                                            ucs_vfs_node_type_t type, void *obj)
 {
-    char path_buf[PATH_MAX];
     ucs_vfs_node_t *node;
 
-    if (parent_node == &ucs_vfs_obj_context.root) {
-        ucs_snprintf_safe(path_buf, sizeof(path_buf), "/%s", name);
-    } else {
-        ucs_snprintf_safe(path_buf, sizeof(path_buf), "%s/%s",
-                          parent_node->path, name);
-    }
-
-    node = ucs_vfs_node_find_by_path(path_buf);
-    if (node != NULL) {
-        return node;
-    }
-
-    node = ucs_malloc(sizeof(*node) + strlen(path_buf) + 1, "vfs_node");
+    node = ucs_malloc(sizeof(*node) + strlen(path) + 1, "vfs_node");
     if (node == NULL) {
         ucs_error("Failed to allocate vfs_node");
         return NULL;
@@ -219,7 +206,7 @@ static ucs_vfs_node_t *ucs_vfs_node_create(ucs_vfs_node_t *parent_node,
 
     /* initialize node */
     ucs_vfs_node_init(node, type, obj, parent_node);
-    strcpy(node->path, path_buf);
+    strcpy(node->path, path);
 
     /* add to parent */
     ucs_list_add_head(&parent_node->children, &node->list);
@@ -237,21 +224,58 @@ static ucs_vfs_node_t *ucs_vfs_node_create(ucs_vfs_node_t *parent_node,
 }
 
 /* must be called with lock held */
-static ucs_vfs_node_t *ucs_vfs_node_add(void *parent_obj,
-                                        ucs_vfs_node_type_t type, void *obj,
-                                        const char *rel_path, va_list ap)
+static ucs_vfs_node_t *ucs_vfs_node_get_by_obj(void *obj)
 {
-    ucs_vfs_node_t *parent_node;
+    if (obj == NULL) {
+        return &ucs_vfs_obj_context.root;
+    }
+
+    return ucs_vfs_node_find_by_obj(obj);
+}
+
+/* must be called with lock held */
+static void ucs_vfs_node_build_path(ucs_vfs_node_t *parent_node,
+                                    const char *name, char *path_buf,
+                                    size_t path_buf_size)
+{
+    if (parent_node == &ucs_vfs_obj_context.root) {
+        ucs_snprintf_safe(path_buf, path_buf_size, "/%s", name);
+    } else {
+        ucs_snprintf_safe(path_buf, path_buf_size, "%s/%s", parent_node->path,
+                          name);
+    }
+}
+
+/* must be called with lock held */
+static ucs_vfs_node_t *
+ucs_vfs_node_add_subdir(ucs_vfs_node_t *parent_node, const char *name)
+{
+    char path_buf[PATH_MAX];
+    ucs_vfs_node_t *node;
+
+    ucs_vfs_node_build_path(parent_node, name, path_buf, sizeof(path_buf));
+    node = ucs_vfs_node_find_by_path(path_buf);
+    if (node != NULL) {
+        return node;
+    }
+
+    return ucs_vfs_node_create(parent_node, path_buf, UCS_VFS_NODE_TYPE_SUBDIR,
+                               NULL);
+}
+
+/* must be called with lock held */
+static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
+                                     void *obj, const char *rel_path,
+                                     va_list ap, ucs_vfs_node_t **new_node)
+{
+    ucs_vfs_node_t *current_node;
     char rel_path_buf[PATH_MAX];
+    char abs_path_buf[PATH_MAX];
     char *token, *next_token;
 
-    if (parent_obj == NULL) {
-        parent_node = &ucs_vfs_obj_context.root;
-    } else {
-        parent_node = ucs_vfs_node_find_by_obj(parent_obj);
-        if (parent_node == NULL) {
-            return NULL;
-        }
+    current_node = ucs_vfs_node_get_by_obj(parent_obj);
+    if (current_node == NULL) {
+        return UCS_ERR_INVALID_PARAM;
     }
 
     /* generate the relative path */
@@ -261,12 +285,28 @@ static ucs_vfs_node_t *ucs_vfs_node_add(void *parent_obj,
     next_token = rel_path_buf;
     token      = strsep(&next_token, "/");
     while (next_token != NULL) {
-        parent_node = ucs_vfs_node_create(parent_node, token,
-                                          UCS_VFS_NODE_TYPE_SUBDIR, NULL);
-        token       = strsep(&next_token, "/");
+        current_node = ucs_vfs_node_add_subdir(current_node, token);
+        if (current_node == NULL) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        token = strsep(&next_token, "/");
     }
 
-    return ucs_vfs_node_create(parent_node, token, type, obj);
+    ucs_vfs_node_build_path(current_node, token, abs_path_buf,
+                            sizeof(abs_path_buf));
+    if (ucs_vfs_node_find_by_path(abs_path_buf) != NULL) {
+        return UCS_ERR_ALREADY_EXISTS;
+    }
+
+    current_node = ucs_vfs_node_create(current_node, abs_path_buf, type, obj);
+    if (current_node == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    *new_node = current_node;
+
+    return UCS_OK;
 }
 
 /* must be called with lock held */
@@ -371,39 +411,49 @@ static void ucs_vfs_path_list_dir_cb(ucs_vfs_node_t *node,
     }
 }
 
-void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
-{
-    va_list ap;
-
-    ucs_spin_lock(&ucs_vfs_obj_context.lock);
-
-    va_start(ap, rel_path);
-    ucs_vfs_node_add(parent_obj, UCS_VFS_NODE_TYPE_DIR, obj, rel_path, ap);
-    va_end(ap);
-
-    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
-}
-
-void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
-                             void *arg_ptr, uint64_t arg_u64,
-                             const char *rel_path, ...)
+ucs_status_t
+ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
 {
     ucs_vfs_node_t *node;
     va_list ap;
+    ucs_status_t status;
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     va_start(ap, rel_path);
-    node = ucs_vfs_node_add(obj, UCS_VFS_NODE_TYPE_RO_FILE, NULL, rel_path, ap);
+    status = ucs_vfs_node_add(parent_obj, UCS_VFS_NODE_TYPE_DIR, obj, rel_path,
+                              ap, &node);
     va_end(ap);
 
-    if (node != NULL) {
+    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
+
+    return status;
+}
+
+ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
+                                     void *arg_ptr, uint64_t arg_u64,
+                                     const char *rel_path, ...)
+{
+    ucs_vfs_node_t *node;
+    va_list ap;
+    ucs_status_t status;
+
+    ucs_spin_lock(&ucs_vfs_obj_context.lock);
+
+    va_start(ap, rel_path);
+    status = ucs_vfs_node_add(obj, UCS_VFS_NODE_TYPE_RO_FILE, NULL, rel_path,
+                              ap, &node);
+    va_end(ap);
+
+    if (status == UCS_OK) {
         node->text_cb = text_cb;
         node->arg_ptr = arg_ptr;
         node->arg_u64 = arg_u64;
     }
 
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
+
+    return status;
 }
 
 void ucs_vfs_obj_remove(void *obj)

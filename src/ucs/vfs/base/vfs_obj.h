@@ -152,9 +152,15 @@ typedef void (*ucs_vfs_list_dir_cb_t)(const char *name, void *arg);
  * @param [in] obj        Pointer to the object to be represented in VFS.
  * @param [in] rel_path   Format string which specifies relative path
  *                        @a obj directory.
+ *
+ * @return UCS_ERR_ALREADY_EXISTS if directory with specified name already
+ *                                exists.
+ *         UCS_ERR_INVALID_PARAM  if node for @a parent_obj does not exist.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for @a obj.
+ *         UCS_OK                 otherwise.
  */
-void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
-        UCS_F_PRINTF(3, 4);
+ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
+                                 const char *rel_path, ...) UCS_F_PRINTF(3, 4);
 
 
 /**
@@ -169,10 +175,16 @@ void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
  * @param [in] arg_u64  Optional numeric argument that is passed to the callback
  *                      method.
  * @param [in] rel_path Format string which specifies relative path to the file.
+ *
+ * @return UCS_ERR_ALREADY_EXISTS if file with specified name already exists.
+ *         UCS_ERR_INVALID_PARAM  if node for @a obj does not exist.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for @a obj.
+ *         UCS_OK                 otherwise.
  */
-void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
-                             void *arg_ptr, uint64_t arg_u64,
-                             const char *rel_path, ...) UCS_F_PRINTF(5, 6);
+ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
+                                     void *arg_ptr, uint64_t arg_u64,
+                                     const char *rel_path, ...)
+        UCS_F_PRINTF(5, 6);
 
 
 /**

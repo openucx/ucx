@@ -257,3 +257,22 @@ UCS_MT_TEST_F(test_vfs_obj, set_dirty_and_refresh, 4) {
     barrier();
     ucs_vfs_obj_remove(&obj);
 }
+
+UCS_TEST_F(test_vfs_obj, check_ret) {
+    char obj1, obj2;
+
+    EXPECT_UCS_OK(ucs_vfs_obj_add_dir(NULL, &obj1, "obj"));
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS, ucs_vfs_obj_add_dir(NULL, &obj1, "obj"));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_vfs_obj_add_dir(&obj2, &obj1, "obj"));
+
+    EXPECT_UCS_OK(ucs_vfs_obj_add_ro_file(&obj1, test_vfs_obj::file_show_cb,
+                                          NULL, 0, "info"));
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS,
+              ucs_vfs_obj_add_ro_file(&obj1, test_vfs_obj::file_show_cb, NULL,
+                                      0, "info"));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucs_vfs_obj_add_ro_file(&obj2, test_vfs_obj::file_show_cb, NULL,
+                                      0, "info"));
+
+    ucs_vfs_obj_remove(&obj1);
+}
