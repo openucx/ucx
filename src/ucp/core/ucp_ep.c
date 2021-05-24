@@ -180,7 +180,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ucp_ep_ext_control(ep)->local_ep_id  = UCS_PTR_MAP_KEY_INVALID;
     ucp_ep_ext_control(ep)->remote_ep_id = UCS_PTR_MAP_KEY_INVALID;
 #if UCS_ENABLE_ASSERT
-    ucp_ep_ext_control(ep)->ka_count     = 0;
+    ucp_ep_ext_control(ep)->ka_count     = SIZE_MAX;
 #endif
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
@@ -554,8 +554,9 @@ void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       ucp_wireup_ep_t **wireup_ep)
+static ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep,
+                                              unsigned ep_init_flags,
+                                              ucp_wireup_ep_t **wireup_ep)
 {
     ucp_ep_config_key_t key;
     ucs_status_t status;
@@ -586,6 +587,8 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ep->am_lane = key.am_lane;
+    ucp_worker_keepalive_add_ep(ep);
+
     if (!ucp_ep_has_cm_lane(ep)) {
         ucp_ep_update_flags(ep, UCP_EP_FLAG_CONNECT_REQ_QUEUED, 0);
     }
@@ -2762,17 +2765,6 @@ int ucp_ep_do_keepalive(ucp_ep_h ep)
     ucp_rsc_index_t rsc_index;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
-
-    if (ep->flags & UCP_EP_FLAG_FAILED) {
-        worker->keepalive.lane_map = 0;
-        return 1;
-    }
-
-    /* Take updated ep_check_map, in case ep configuration has changed */
-    worker->keepalive.lane_map &= ucp_ep_config(ep)->key.ep_check_map;
-    if (worker->keepalive.lane_map == 0) {
-        return 1;
-    }
 
     ucs_for_each_bit(lane, worker->keepalive.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);

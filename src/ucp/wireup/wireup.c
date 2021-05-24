@@ -1302,6 +1302,8 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         goto out;
     }
 
+    cm_idx = ucp_ep_ext_control(ep)->cm_idx;
+
     if (ep->cfg_index == new_cfg_index) {
 #if UCS_ENABLE_ASSERT
         for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -1310,34 +1312,42 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 #endif
         status = UCS_OK; /* No change */
         goto out;
-    }
+    } else if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+        /* Reconfiguration is allowed for CM flow */
+        if (!ucp_ep_has_cm_lane(ep)) {
+            /*
+             * TODO handle a case where we have to change lanes and reconfigure
+             * the ep:
+             *
+             * - if we already have uct ep connected to an address - move it to
+             *   the new lane index
+             * - if we don't yet have connection to an address - create it
+             * - if an existing lane is not connected anymore - delete it
+             *   (possibly)
+             * - if the configuration has changed - replay all pending
+             *   operations on all lanes - need that every pending callback
+             *   would return, in case of failure, the number of lane it wants
+             *   to be queued on.
+             */
+            ucs_debug("cannot reconfigure ep %p from [%d] to [%d]", ep,
+                      ep->cfg_index, new_cfg_index);
+            ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, "old",
+                                    NULL, cm_idx, UCS_LOG_LEVEL_ERROR);
+            ucp_wireup_print_config(worker, &key, "new", NULL,
+                                    cm_idx, UCS_LOG_LEVEL_ERROR);
+            ucs_fatal("endpoint reconfiguration not supported yet");
+        }
 
-    cm_idx = ucp_ep_ext_control(ep)->cm_idx;
-
-    if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-        /* reconfiguration is allowed for CM flow */
-        !ucp_ep_has_cm_lane(ep)) {
-        /*
-         * TODO handle a case where we have to change lanes and reconfigure the ep:
-         *
-         * - if we already have uct ep connected to an address - move it to the new lane index
-         * - if we don't yet have connection to an address - create it
-         * - if an existing lane is not connected anymore - delete it (possibly)
-         * - if the configuration has changed - replay all pending operations on all lanes -
-         *   need that every pending callback would return, in case of failure, the number
-         *   of lane it wants to be queued on.
-         */
-        ucs_debug("cannot reconfigure ep %p from [%d] to [%d]", ep, ep->cfg_index,
-                  new_cfg_index);
-        ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, "old",
-                                NULL, cm_idx, UCS_LOG_LEVEL_ERROR);
-        ucp_wireup_print_config(worker, &key, "new", NULL,
-                                cm_idx, UCS_LOG_LEVEL_ERROR);
-        ucs_fatal("endpoint reconfiguration not supported yet");
+        /* If the endpoint uses some configuration, need to remove from
+         * keepalive to make sure that won't do keepalive for the endpoint with
+         * empty 'ep_check_map' from the new configuration */
+        ucp_worker_keepalive_remove_ep(ep);
     }
 
     ep->cfg_index = new_cfg_index;
     ep->am_lane   = key.am_lane;
+
+    ucp_worker_keepalive_add_ep(ep);
 
     snprintf(str, sizeof(str), "ep %p", ep);
     ucp_wireup_print_config(worker, &ucp_ep_config(ep)->key, str,
@@ -1367,8 +1377,6 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucp_wireup_replay_pending_requests(ep, &replay_pending_queue);
-
-    ucp_worker_keepalive_add_ep(ep);
     status = UCS_OK;
 
 out:

@@ -2028,13 +2028,17 @@ err:
 
 static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
 {
-    worker->keepalive.cb_id       = UCS_CALLBACKQ_ID_NULL;
-    worker->keepalive.last_round  = 0;
-    worker->keepalive.lane_map    = 0;
-    worker->keepalive.ep_count    = 0;
-    worker->keepalive.iter_count  = 0;
-    worker->keepalive.iter        = &worker->all_eps;
-    worker->keepalive.round_count = 0;
+    worker->keepalive.cb_id         = UCS_CALLBACKQ_ID_NULL;
+    worker->keepalive.last_round    = 0;
+    worker->keepalive.lane_map      = 0;
+    worker->keepalive.ep_count      = 0;
+    worker->keepalive.num_eps       = 0;
+    worker->keepalive.iter_count    = 0;
+    worker->keepalive.iter          = &worker->all_eps;
+    worker->keepalive.round_count   = 0;
+#if UCS_ENABLE_ASSERT
+    worker->keepalive.init_lane_map = 0;
+#endif
 }
 
 static void ucp_worker_destroy_configs(ucp_worker_h worker)
@@ -2095,6 +2099,9 @@ void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
                             &worker->keepalive.ep_count, UCS_VFS_TYPE_UNSIGNED,
                             "keepalive/ep_count");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
+                            &worker->keepalive.num_eps, UCS_VFS_TYPE_UNSIGNED,
+                            "keepalive/num_eps");
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
                             &worker->keepalive.round_count, UCS_VFS_TYPE_SIZET,
                             "keepalive/round_count");
@@ -2529,6 +2536,11 @@ void ucp_worker_destroy(ucp_worker_h worker)
                  worker->num_all_eps);
     }
 
+    if (worker->keepalive.num_eps != 0) {
+        ucs_warn("worker %p: %u endpoints were not removed from keepalive",
+                 worker, worker->keepalive.num_eps);
+    }
+
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_vfs_obj_remove(worker);
@@ -2909,10 +2921,13 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
     }
 
     ucs_assert(worker->keepalive.iter != &worker->all_eps);
-    ep                         = ucp_worker_keepalive_current_ep(worker);
-    worker->keepalive.lane_map = ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
-                                  !(ep->flags & UCP_EP_FLAG_FAILED)) ?
-                                 ucp_ep_config(ep)->key.ep_check_map : 0;
+    ep                              = ucp_worker_keepalive_current_ep(worker);
+    worker->keepalive.lane_map      = (ep->cfg_index !=
+                                               UCP_WORKER_CFG_INDEX_NULL) ?
+                                      ucp_ep_config(ep)->key.ep_check_map : 0;
+#if UCS_ENABLE_ASSERT
+    worker->keepalive.init_lane_map = worker->keepalive.lane_map;
+#endif
 }
 
 static UCS_F_NOINLINE unsigned
@@ -2937,8 +2952,13 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
     UCS_ASYNC_BLOCK(&worker->async);
     ucs_trace_func("worker %p: keepalive round", worker);
 
-    if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
-        ucs_assert(worker->keepalive.iter == &worker->all_eps);
+    if (ucs_unlikely(worker->keepalive.num_eps == 0)) {
+        ucs_assert(worker->keepalive.cb_id == UCS_CALLBACKQ_ID_NULL);
+
+        if (ucs_list_is_empty(&worker->all_eps)) {
+            ucs_assert(worker->keepalive.iter == &worker->all_eps);
+        }
+
         ucs_trace("worker %p: keepalive ep list is empty - disabling",
                   worker);
         uct_worker_progress_unregister_safe(worker->uct,
@@ -2951,7 +2971,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
     }
 
     max_ep_count = ucs_min(worker->context->config.ext.keepalive_num_eps,
-                           worker->num_all_eps);
+                           worker->keepalive.num_eps);
 
     /* Use own loop for elements because standard for_each skips
      * head element */
@@ -2959,9 +2979,23 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
      * (linked list) */
     while (worker->keepalive.ep_count < max_ep_count) {
         ep = ucp_worker_keepalive_current_ep(worker);
+
+        ucs_assertv(ucp_ep_config(ep)->key.ep_check_map ==
+                            worker->keepalive.init_lane_map,
+                    "ep %p: configuration was changed during keepalive (from"
+                    "0x%x to 0x%x)",
+                    ep, worker->keepalive.init_lane_map,
+                    ucp_ep_config(ep)->key.ep_check_map);
+
+        if (worker->keepalive.lane_map == 0) {
+            ucp_worker_keepalive_next_ep(worker);
+            continue;
+        }
+
         ucs_trace_func("worker %p: do keepalive on ep %p lane_map 0x%x", worker,
                        ep, worker->keepalive.lane_map);
-        if (!ucp_ep_do_keepalive(ep)) {
+        if (ucs_likely(!(ep->flags & UCP_EP_FLAG_FAILED)) &&
+            !ucp_ep_do_keepalive(ep)) {
             /* In case if EP has no resources to send keepalive message
              * then just return without update of last_round timestamp,
              * on next progress iteration we will continue from this point */
@@ -3012,6 +3046,12 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
         return;
     }
 
+#if UCS_ENABLE_ASSERT
+    ucp_ep_ext_control(ep)->ka_count = 0;
+#endif
+    ucs_assert(worker->keepalive.num_eps < UINT_MAX);
+    ++worker->keepalive.num_eps;
+
     ucs_trace("ep %p flags 0x%x: adding to keepalive lane_map 0x%x", ep,
               ep->flags, ucp_ep_config(ep)->key.ep_check_map);
     uct_worker_progress_register_safe(worker->uct,
@@ -3032,6 +3072,11 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         return;
     }
 
+    if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
+        (ucp_ep_config(ep)->key.ep_check_map == 0)) {
+        return;
+    }
+
     if (ucs_list_is_only(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list)) {
         /* this is the last EP in worker */
         worker->keepalive.iter = &worker->all_eps;
@@ -3039,6 +3084,21 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         /* if iterator points into EP to be removed - then
          * step to next EP */
         ucp_worker_keepalive_next_ep(worker);
+    }
+
+    ucs_trace("ep %p flags 0x%x: removing from keepalive lane_map 0x%x", ep,
+              ep->flags, ucp_ep_config(ep)->key.ep_check_map);
+    ucs_assert(worker->keepalive.num_eps > 0);
+    --worker->keepalive.num_eps;
+
+#if UCS_ENABLE_ASSERT
+    ucp_ep_ext_control(ep)->ka_count = SIZE_MAX;
+#endif
+
+    if (worker->keepalive.num_eps == 0) {
+        uct_worker_progress_unregister_safe(worker->uct,
+                                            &worker->keepalive.cb_id);
+        ucp_worker_keepalive_reset(worker);
     }
 }
 

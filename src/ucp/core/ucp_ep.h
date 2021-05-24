@@ -546,9 +546,6 @@ void ucp_ep_delete(ucp_ep_h ep);
 
 void ucp_ep_release_id(ucp_ep_h ep);
 
-ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       ucp_wireup_ep_t **wireup_ep);
-
 ucs_status_t
 ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                              const ucp_tl_bitmap_t *local_tl_bitmap,

@@ -303,7 +303,11 @@ typedef struct ucp_worker {
         ucs_time_t                   last_round;          /* Last round timestamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
         ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
+#if UCS_ENABLE_ASSERT
+        ucp_lane_map_t               init_lane_map;       /* Initial lane map taken from EP configuration */
+#endif
         unsigned                     ep_count;            /* Number of EPs processed in current time slot */
+        unsigned                     num_eps;             /* Total number of EPs processed in keepalive */
         unsigned                     iter_count;          /* Number of progress iterations to skip,
                                                            * used to minimize call of ucs_get_time */
         size_t                       round_count;         /* Number of rounds done */

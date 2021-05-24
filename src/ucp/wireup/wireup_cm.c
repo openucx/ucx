@@ -328,6 +328,11 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
         uct_ep_destroy(ucp_ep->uct_eps[lane_idx]);
         ucp_ep->uct_eps[lane_idx] = NULL;
     }
+
+    /* If the endpoint uses some configuration, need to remove from keepalive
+     * to make sure that won't do keepalive for the endpoint with empty
+     * 'ep_check_map' from the new configuration */
+    ucp_worker_keepalive_remove_ep(ucp_ep);
 }
 
 static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
@@ -415,6 +420,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     }
 
     ep->am_lane = key.am_lane;
+    ucp_worker_keepalive_add_ep(ep);
 
     status = ucp_cm_ep_init_lanes(ep, &tl_bitmap, &dev_index);
     if (status != UCS_OK) {
