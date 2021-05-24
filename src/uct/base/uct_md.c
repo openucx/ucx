@@ -482,6 +482,12 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh)
     return md->ops->mem_dereg(md, &params);
 }
 
+ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
+                                 const uct_md_mem_dereg_params_t *params)
+{
+    return md->ops->mem_dereg(md, params);
+}
+
 ucs_status_t uct_md_mem_query(uct_md_h md, const void *address, size_t length,
                               uct_md_mem_attr_t *mem_attr)
 {
