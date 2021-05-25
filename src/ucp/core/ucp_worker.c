@@ -433,7 +433,22 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucp_ep_h ucp_ep                             = err_handle_arg->ucp_ep;
     ucs_status_t status                         = err_handle_arg->status;
     ucp_worker_h worker                         = ucp_ep->worker;
+    ucs_time_t curr_time                        = ucs_get_time();
     ucp_request_t *close_req;
+    uct_worker_cb_id_t prog_id;
+
+    if (curr_time < err_handle_arg->timeout) {
+        ucs_debug("ep %p: delay error handler by %.2f usec, flags: 0x%x, status %s",
+                  ucp_ep, ucs_time_to_usec(err_handle_arg->timeout - curr_time),
+                  ucp_ep->flags, ucs_status_string(status));
+
+        prog_id = UCS_CALLBACKQ_ID_NULL;
+        uct_worker_progress_register_safe(worker->uct,
+                                          ucp_worker_iface_err_handle_progress,
+                                          err_handle_arg,
+                                          UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+        return 0;
+    }
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -535,8 +550,10 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         goto out;
     }
 
-    err_handle_arg->ucp_ep      = ucp_ep;
-    err_handle_arg->status      = status;
+    err_handle_arg->ucp_ep  = ucp_ep;
+    err_handle_arg->status  = status;
+    err_handle_arg->timeout = ucs_get_time() +
+            worker->context->config.ext.err_handler_delay;
 
     /* invoke the rest of the error handling flow from the main thread */
     uct_worker_progress_register_safe(worker->uct,
@@ -3003,7 +3020,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
                                       &worker->keepalive.cb_id);
 }
 
-/* EP is removed from worker */
+/* EP is removed from worker, advance iterator if it points to the EP */
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
@@ -3014,8 +3031,6 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
         return;
     }
-
-    ucs_assert(!ucs_list_is_empty(&worker->all_eps));
 
     if (ucs_list_is_only(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list)) {
         /* this is the last EP in worker */
