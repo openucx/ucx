@@ -1167,7 +1167,7 @@ static void ucs_debug_signal_handler(int signo)
 {
     ucs_log_flush();
     ucs_global_opts.log_component.log_level = UCS_LOG_LEVEL_TRACE_DATA;
-    ucs_profile_dump();
+    ucs_profile_dump(ucs_profile_default_ctx);
 }
 
 static void ucs_debug_set_signal_alt_stack()
