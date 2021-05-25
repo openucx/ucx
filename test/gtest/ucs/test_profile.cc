@@ -19,28 +19,32 @@ extern "C" {
 class scoped_profile {
 public:
     scoped_profile(ucs::test_base& test, const std::string &file_name,
-                   const char *mode) : m_test(test), m_file_name(file_name)
-{
-        ucs_profile_global_cleanup();
-        ucs_profile_reset_locations();
+                   const char *mode) : m_test(test), m_file_name(file_name) {
+        ucs_profile_cleanup(ucs_profile_default_ctx);
         m_test.push_config();
         m_test.modify_config("PROFILE_MODE", mode);
         m_test.modify_config("PROFILE_FILE", m_file_name.c_str());
-        ucs_profile_global_init();
+        ucs_profile_init(ucs_global_opts.profile_mode,
+                         ucs_global_opts.profile_file,
+                         ucs_global_opts.profile_log_size,
+                         &ucs_profile_default_ctx);
     }
 
     std::string read() {
-        ucs_profile_dump();
+        ucs_profile_dump(ucs_profile_default_ctx);
         std::ifstream f(m_file_name.c_str());
         return std::string(std::istreambuf_iterator<char>(f),
                            std::istreambuf_iterator<char>());
     }
 
     ~scoped_profile() {
-        ucs_profile_global_cleanup();
+        ucs_profile_cleanup(ucs_profile_default_ctx);
         unlink(m_file_name.c_str());
         m_test.pop_config();
-        ucs_profile_global_init();
+        ucs_profile_init(ucs_global_opts.profile_mode,
+                         ucs_global_opts.profile_file,
+                         ucs_global_opts.profile_log_size,
+                         &ucs_profile_default_ctx);
     }
 private:
     ucs::test_base&   m_test;
