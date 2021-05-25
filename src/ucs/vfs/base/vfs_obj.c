@@ -263,6 +263,23 @@ ucs_vfs_node_add_subdir(ucs_vfs_node_t *parent_node, const char *name)
                                NULL);
 }
 
+static int ucs_vfs_node_need_update_path(ucs_vfs_node_type_t type,
+                                         const char *path, void *obj)
+{
+    return (type == UCS_VFS_NODE_TYPE_DIR) &&
+           (ucs_vfs_node_find_by_path(path) != NULL) &&
+           (ucs_vfs_node_find_by_obj(obj) == NULL);
+}
+
+/* must be called with lock held */
+static void
+ucs_vfs_node_update_path(void *obj, char *path_buf, size_t path_buf_size)
+{
+    size_t pos = strlen(path_buf);
+
+    ucs_snprintf_safe(path_buf + pos, path_buf_size - pos, "_%p", obj);
+}
+
 /* must be called with lock held */
 static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
                                      void *obj, const char *rel_path,
@@ -295,6 +312,11 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
 
     ucs_vfs_node_build_path(current_node, token, abs_path_buf,
                             sizeof(abs_path_buf));
+
+    if (ucs_vfs_node_need_update_path(type, abs_path_buf, obj)) {
+        ucs_vfs_node_update_path(obj, abs_path_buf, sizeof(abs_path_buf));
+    }
+
     if (ucs_vfs_node_find_by_path(abs_path_buf) != NULL) {
         return UCS_ERR_ALREADY_EXISTS;
     }

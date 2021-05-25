@@ -274,5 +274,9 @@ UCS_TEST_F(test_vfs_obj, check_ret) {
               ucs_vfs_obj_add_ro_file(&obj2, test_vfs_obj::file_show_cb, NULL,
                                       0, "info"));
 
+    /* Check creating dir with same name */
+    EXPECT_UCS_OK(ucs_vfs_obj_add_dir(NULL, &obj2, "obj"));
+
     ucs_vfs_obj_remove(&obj1);
+    ucs_vfs_obj_remove(&obj2);
 }
