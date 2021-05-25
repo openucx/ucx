@@ -373,6 +373,12 @@ void UcxContext::progress_io_message()
         UCX_LOG << "could not find connection with id " << conn_id;
     } else {
         UcxConnection *conn = iter->second;
+        if (!conn->is_established()) {
+            // tag-recv request can be completed before stream-recv callback has
+            // been invoked, go to another progress round and handle this io-msg
+            return;
+        }
+
         dispatch_io_message(conn, &_iomsg_buffer[0],
                             _iomsg_recv_request->recv_length);
     }
