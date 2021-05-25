@@ -1,4 +1,5 @@
 /**
+* Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -28,6 +29,22 @@ enum {
     UCS_PROFILE_MODE_LOG,   /**< Record all events */
     UCS_PROFILE_MODE_LAST
 };
+
+
+/**
+ * Profile range colors
+ */
+typedef enum {
+    UCS_PROFILE_COLOR_GREEN      = 0xff00ff00,
+    UCS_PROFILE_COLOR_BLUE       = 0xff0000ff,
+    UCS_PROFILE_COLOR_YELLOW     = 0xffffff00,
+    UCS_PROFILE_COLOR_PURPLE     = 0xffff00ff,
+    UCS_PROFILE_COLOR_CYAN       = 0xff00ffff,
+    UCS_PROFILE_COLOR_RED        = 0xffff0000,
+    UCS_PROFILE_COLOR_WHITE      = 0xffffffff,
+    UCS_PROFILE_COLOR_DARK_GREEN = 0xff006600,
+    UCS_PROFILE_COLOR_ORANGE     = 0xffffa500
+} ucs_profile_color_t;
 
 
 /**
@@ -136,6 +153,58 @@ void ucs_profile_global_cleanup();
  * Save and reset profiling.
  */
 void ucs_profile_dump();
+
+
+/*
+ * Start a range trace on an arbitrary event in a potentially nested fashion.
+ * A range tracing can be started in a function and potentially end in an
+ * another function or a recursive invocation of the same function.
+ *
+ * @param [in]     name        String name for the range.
+ * @param [in]     color       Color for the range.
+ * @param [inout]  id          Unique ID returned to stop tracing the event
+ *
+ * @return ID to be used to stop tracing a range
+ */
+void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
+                             uint64_t *id);
+
+
+/*
+ * Stop range trace.
+ *
+ * @param [in]     id          id that was returned from range start.
+ *
+ */
+void ucs_profile_range_stop(uint64_t id);
+
+
+/*
+ * Add a marker on trace profiles.
+ *
+ * @param [in]     name        String name for the marker.
+ *
+ */
+void ucs_profile_range_add_marker(const char *name);
+
+
+/*
+ * Start a range trace in a non-nested fashion. Range tracing must start and end
+ * in the same function.
+ *
+ * @param [in]     name        String name for the marker.
+ * @param [in]     color       Color for the range.
+ *
+ */
+void ucs_profile_range_push(const char *name, ucs_profile_color_t color);
+
+
+/*
+ * Stop a range trace in a non-nested fashion.
+ *
+ */
+void ucs_profile_range_pop();
+
 
 END_C_DECLS
 

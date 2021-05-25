@@ -17,6 +17,11 @@
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <pthread.h>
+#ifdef HAVE_NVTX
+#include <nvtx3/nvToolsExt.h>
+#include <ucs/datastruct/khash.h>
+#include <ucs/profile/profile.h>
+#endif
 
 
 typedef struct ucs_profile_global_location {
@@ -59,6 +64,7 @@ typedef struct ucs_profile_thread_context {
         ucs_profile_thread_location_t *locations;    /**< Statistics per location */
         int                           stack_top;     /**< Index of stack top */
         ucs_time_t                    stack[UCS_PROFILE_STACK_MAX]; /**< Timestamps for each nested scope */
+        uint64_t                      range_id[UCS_PROFILE_STACK_MAX]; /**< range_ids for each nested scope */
     } accum;
 } ucs_profile_thread_context_t;
 
@@ -509,8 +515,11 @@ void ucs_profile_record(ucs_profile_type_t type, const char *name,
         switch (type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
             ctx->accum.stack[++ctx->accum.stack_top] = current_time;
+            ucs_profile_range_start(name, UCS_PROFILE_COLOR_ORANGE,
+                                    &ctx->accum.range_id[ctx->accum.stack_top]);
             break;
         case UCS_PROFILE_TYPE_SCOPE_END:
+            ucs_profile_range_stop(ctx->accum.range_id[ctx->accum.stack_top]);
             loc->total_time += current_time - ctx->accum.stack[ctx->accum.stack_top];
             --ctx->accum.stack_top;
             break;
@@ -611,3 +620,70 @@ void ucs_profile_global_cleanup()
     ucs_profile_check_active_threads();
     pthread_key_delete(ucs_profile_global_ctx.tls_key);
 }
+
+#ifdef HAVE_NVTX
+void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
+		             uint64_t *id)
+{
+    nvtxEventAttributes_t attrib = {0};
+
+    attrib.version       = NVTX_VERSION;
+    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    attrib.colorType     = NVTX_COLOR_ARGB;
+    attrib.color         = color;
+    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
+    attrib.message.ascii = name;
+
+    *id = (uint64_t)nvtxRangeStartEx(&attrib);
+}
+
+void ucs_profile_range_stop(uint64_t id)
+{
+    nvtxRangeEnd(id);
+}
+
+void ucs_profile_range_add_marker(const char *name)
+{
+    nvtxMarkA(name);
+}
+
+void ucs_profile_range_push(const char *name, ucs_profile_color_t color)
+{
+    nvtxEventAttributes_t attrib = {0};
+
+    attrib.version       = NVTX_VERSION;
+    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    attrib.colorType     = NVTX_COLOR_ARGB;
+    attrib.color         = color;
+    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
+    attrib.message.ascii = name;
+
+    nvtxRangePushEx(&attrib);
+}
+
+void ucs_profile_range_pop()
+{
+    nvtxRangePop();
+}
+#else
+void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
+		             uint64_t *id)
+{
+}
+
+void ucs_profile_range_stop(uint64_t id)
+{
+}
+
+void ucs_profile_range_add_marker(const char *name)
+{
+}
+
+void ucs_profile_range_push(const char *name, ucs_profile_color_t color)
+{
+}
+
+void ucs_profile_range_pop()
+{
+}
+#endif
