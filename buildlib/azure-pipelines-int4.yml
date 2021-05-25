@@ -21,7 +21,7 @@ stages:
           - bash: |
               set -eEx
               git remote set-url origin git@github.com:Mellanox/ucx.git
-              git checkout avildema-patch-1
+              git checkout integration4
               git remote add upstream https://github.com/openucx/ucx.git
               git fetch upstream
               git rebase upstream/master
