@@ -13,6 +13,8 @@
 #include "dc_mlx5.h"
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <ucs/time/time.h>
+
 
 #define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, (_ep)->dci, _txqp, _txwq)
@@ -889,6 +891,8 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                                 uct_dc_mlx5_iface_t);
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
     struct ibv_ah_attr ah_attr = {.is_global = 0};
+    uint8_t init_dci_index     = dc_ep->dci;
+    uct_dc_mlx5_ep_fc_entry_t *fc_entry;
     uct_dc_fc_sender_data_t sender;
     uct_dc_fc_request_t *dc_req;
     struct mlx5_wqe_av mlx5_av;
@@ -896,6 +900,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     ucs_status_t status;
     uintptr_t sender_ep;
     struct ibv_ah *ah;
+    ucs_time_t now;
     khiter_t it;
     int ret;
 
@@ -923,7 +928,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 
             status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
             if (status != UCS_OK) {
-                return status;
+                goto out_dci_put;
             }
 
             uct_ib_mlx5_get_av(ah, &mlx5_av);
@@ -955,19 +960,37 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     } else {
         ucs_assert(op == UCT_RC_EP_FLAG_FC_HARD_REQ);
 
-        it = kh_put(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)dc_ep, &ret);
-        if (ret == UCS_KH_PUT_KEY_PRESENT) {
-            return UCS_OK;
-        } else if (ret == UCS_KH_PUT_FAILED) {
+        now = ucs_get_time();
+        it  = kh_put(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)dc_ep,
+                     &ret);
+        if (ucs_unlikely(ret == UCS_KH_PUT_FAILED)) {
             ucs_error("failed to create hash entry for fc hard req");
-            return UCS_ERR_NO_MEMORY;
+            status = UCS_ERR_NO_MEMORY;
+            goto out_dci_put;
+        } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
+            fc_entry = &kh_value(&iface->tx.fc_hash, it);
+
+            /* Do not resend FC request if timeout is not reached, or window is
+             * still not empty */
+            if (ucs_likely(((now - fc_entry->send_time) <
+                            iface->tx.fc_hard_req_timeout) ||
+                           (dc_ep->fc.fc_wnd > 0))) {
+                status = UCS_OK;
+                goto out_dci_put;
+            }
+        } else {
+            ucs_assert(dc_ep->fc.fc_wnd ==
+                       iface->super.super.config.fc_hard_thresh);
+            fc_entry = &kh_value(&iface->tx.fc_hash, it);
         }
 
-        sender.ep                        = (uint64_t)dc_ep;
-        sender.payload.seq               = iface->tx.fc_seq++;
-        sender.payload.gid               = ib_iface->gid_info.gid;
-        sender.payload.is_global         = dc_ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
-        kh_value(&iface->tx.fc_hash, it) = sender.payload.seq;
+        sender.ep                = (uint64_t)dc_ep;
+        sender.payload.seq       = iface->tx.fc_seq++;
+        sender.payload.gid       = ib_iface->gid_info.gid;
+        sender.payload.is_global = dc_ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
+
+        fc_entry->seq       = sender.payload.seq;
+        fc_entry->send_time = now;
 
         UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
                                  UCT_RC_FC_STAT_TX_HARD_REQ, 1);
@@ -983,6 +1006,15 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     }
 
     return UCS_OK;
+
+out_dci_put:
+    if (init_dci_index == UCT_DC_MLX5_EP_NO_DCI) {
+        /* If the DCI was allocated here (i.e. initial DCI was NO_DCI), release
+         * allocated DCI before leaving the function to avoid DC leak */
+        ucs_assert(dc_ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+        uct_dc_mlx5_iface_dci_put(iface, dc_ep->dci);
+    }
+    return status;
 }
 
 static void uct_dc_mlx5_ep_keepalive_cleanup(uct_dc_mlx5_ep_t *ep)
@@ -1343,25 +1375,36 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     }
 }
 
-ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
+                                     uct_dc_mlx5_ep_t *ep)
 {
     ucs_status_t status;
 
-    if (iface->super.super.config.fc_enabled) {
-        UCT_RC_CHECK_FC_WND(&ep->fc, ep->super.stats);
-        if (ep->fc.fc_wnd == iface->super.super.config.fc_hard_thresh) {
-            status = uct_rc_fc_ctrl(&ep->super.super,
-                                    UCT_RC_EP_FLAG_FC_HARD_REQ,
-                                    NULL);
-            if (status != UCS_OK) {
-                return status;
-            }
-        }
-    } else {
+    if (!iface->super.super.config.fc_enabled) {
         /* Set fc_wnd to max, to send as much as possible without checks */
         ep->fc.fc_wnd = INT16_MAX;
+        return UCS_OK;
     }
-    return UCS_OK;
+
+    if (ucs_likely((ep->fc.fc_wnd > 0) &&
+                   (ep->fc.fc_wnd !=
+                            iface->super.super.config.fc_hard_thresh))) {
+        /* Do not send a grant request */
+        return UCS_OK;
+    }
+
+    status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FLAG_FC_HARD_REQ,
+                            NULL);
+
+    if ((ep->dci != UCT_DC_MLX5_EP_NO_DCI) && 
+        !uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_assertv(uct_dc_mlx5_iface_dci_has_outstanding(iface, ep->dci),
+                    "iface %p ep %p: dci leak detected: dci=%d fc_wnd=%d",
+                    iface, ep, ep->dci, ep->fc.fc_wnd);
+    }
+
+    return ((ep->fc.fc_wnd > 0) || (status != UCS_OK)) ?
+           status : UCS_ERR_NO_RESOURCE;
 }
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
@@ -1435,6 +1478,13 @@ uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
         /* in case if EP has DCI and some TX resources are involved in
          * communications, then keepalive operation is not needed */
         return UCS_OK;
+    }
+
+    if (ucs_unlikely(ep->fc.fc_wnd <= 0)) {
+        /* If FC window is fully consumed, need to check whether the endpoint
+         * needs to re-send FC_HARD_REQ */
+        status = uct_dc_mlx5_ep_check_fc(iface, ep);
+        ucs_assert(status != UCS_OK);
     }
 
     status = uct_dc_mlx5_iface_keepalive_init(iface);
