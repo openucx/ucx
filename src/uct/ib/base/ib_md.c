@@ -308,7 +308,8 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.flags     = UCT_MD_FLAG_REG       |
                              UCT_MD_FLAG_NEED_MEMH |
                              UCT_MD_FLAG_NEED_RKEY |
-                             UCT_MD_FLAG_ADVISE;
+                             UCT_MD_FLAG_ADVISE    |
+                             UCT_MD_FLAG_INVALIDATE;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
@@ -859,11 +860,17 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
     uct_ib_mem_t *ib_memh;
     ucs_status_t status;
 
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
 
     ib_memh = params->memh;
     status  = uct_ib_memh_dereg(md, ib_memh);
     uct_ib_memh_free(ib_memh);
+    if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
+        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+        ucs_assert(params->cb != NULL); /* suppress coverity false-positive */
+        params->cb(UCT_MD_MEM_DEREG_FIELD_VALUE(params, arg, FIELD_ARG, NULL));
+    }
+
     return status;
 }
 
@@ -1035,11 +1042,19 @@ uct_ib_mem_rcache_dereg(uct_md_h uct_md,
                         const uct_md_mem_dereg_params_t *params)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    void *arg;
     uct_ib_rcache_region_t *region;
 
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
 
     region = uct_ib_rcache_region_from_memh(params->memh);
+    if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
+        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
+        arg = UCT_MD_MEM_DEREG_FIELD_VALUE(params, arg, FIELD_ARG, NULL);
+        ucs_rcache_region_invalidate(md->rcache, &region->super, params->cb,
+                                     arg);
+    }
+
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
 }
