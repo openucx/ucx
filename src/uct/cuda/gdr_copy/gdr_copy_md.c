@@ -110,6 +110,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     CUdeviceptr d_ptr     = ((CUdeviceptr )(char *) address);
+    ucs_log_level_t log_level;
     int ret;
 
     if (!length) {
@@ -117,15 +118,19 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
         return UCS_OK;
     }
 
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                UCS_LOG_LEVEL_ERROR;
+
     ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mem_hndl->mh);
     if (ret) {
-        ucs_error("gdr_pin_buffer failed. length :%lu ret:%d", length, ret);
+        ucs_log(log_level, "gdr_pin_buffer failed. length :%lu ret:%d",
+                length, ret);
         goto err;
     }
 
     ret = gdr_map(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->bar_ptr, length);
     if (ret) {
-        ucs_error("gdr_map failed. length :%lu ret:%d", length, ret);
+        ucs_log(log_level, "gdr_map failed. length :%lu ret:%d", length, ret);
         goto unpin_buffer;
     }
 
@@ -331,8 +336,12 @@ uct_gdr_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
                                uint16_t rcache_mem_reg_flags)
 {
     uct_gdr_copy_md_t *md = context;
-    int *flags = arg;
+    int *flags            = arg;
     uct_gdr_copy_rcache_region_t *region;
+
+    if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
+        *flags |= UCT_MD_MEM_FLAG_HIDE_ERRORS;
+    }
 
     region = ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
     return uct_gdr_copy_mem_reg_internal(&md->super, (void*)region->super.super.start,
