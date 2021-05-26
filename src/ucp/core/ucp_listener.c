@@ -77,6 +77,10 @@ ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
         }
     }
 
+    if (attr->field_mask & UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID) {
+        attr->client_id = conn_request->sa_data.client_id;
+    }
+
     return UCS_OK;
 }
 

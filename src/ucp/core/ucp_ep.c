@@ -443,6 +443,10 @@ ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
         ucp_ep_ext_gen(ep)->user_data = params->user_data;
     }
 
+    if (params->field_mask & UCP_EP_PARAM_FIELD_CLIENT_ID) {
+        ucp_ep_ext_control(ep)->client_id = params->client_id;
+    }
+
     return UCS_OK;
 }
 

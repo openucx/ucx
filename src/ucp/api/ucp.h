@@ -246,7 +246,8 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5), /**< Endpoint flags */
     /**< Connection request field */
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
-    UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7) /**< Endpoint name */
+    UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
+    UCP_EP_PARAM_FIELD_CLIENT_ID         = UCS_BIT(8)  /**< Endpoint id */
 };
 
 
@@ -464,7 +465,8 @@ enum ucp_listener_attr_field {
  * are present. It is used to enable backward compatibility support.
  */
 enum ucp_conn_request_attr_field {
-    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR = UCS_BIT(0) /**< Client's address */
+    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR = UCS_BIT(0), /**< Client's address */
+    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID   = UCS_BIT(1)  /**< Client's id */
 };
 
 
@@ -1360,6 +1362,11 @@ typedef struct ucp_conn_request_attr {
      * server.
      */
     struct sockaddr_storage client_address;
+
+    /**
+     * User defined endpoint id of the remote client.
+     */
+    uint64_t                client_id;
 } ucp_conn_request_attr_t;
 
 

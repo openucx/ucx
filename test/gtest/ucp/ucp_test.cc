@@ -642,11 +642,13 @@ void ucp_test_base::entity::accept(int worker_index,
     ucs_status_t status;
     ucp_ep_h ep;
 
-    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR |
+                      UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
     status = ucp_conn_request_query(conn_request, &attr);
     EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_UNSUPPORTED));
     if (status == UCS_OK) {
         EXPECT_TRUE(verify_client_address(&attr.client_address));
+        EXPECT_EQ(1L, attr.client_id);
     }
 
     ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST |
