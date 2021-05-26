@@ -53,24 +53,26 @@ EmptyCallback* EmptyCallback::get() {
     return &instance;
 }
 
-bool UcxLog::use_human_time = false;
+bool UcxLog::use_human_time      = false;
+const double UcxLog::timeout_inf = std::numeric_limits<double>::max();
+double UcxLog::timeout_sec       = std::numeric_limits<double>::max();
 
 UcxLog::UcxLog(const char* prefix, bool enable)
 {
     if (!enable) {
+        memset(&_tv, 0, sizeof(_tv));
         _ss = NULL;
         return;
     }
 
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
+    gettimeofday(&_tv, NULL);
 
     struct tm tm;
     char str[32];
     if (use_human_time) {
-        strftime(str, sizeof(str), "[%a %b %d %T] ", localtime_r(&tv.tv_sec, &tm));
+        strftime(str, sizeof(str), "[%a %b %d %T] ", localtime_r(&_tv.tv_sec, &tm));
     } else {
-        snprintf(str, sizeof(str), "[%lu.%06lu] ", tv.tv_sec, tv.tv_usec);
+        snprintf(str, sizeof(str), "[%lu.%06lu] ", _tv.tv_sec, _tv.tv_usec);
     }
 
     _ss = new std::stringstream();
@@ -81,10 +83,28 @@ UcxLog::~UcxLog()
 {
     if (_ss != NULL) {
         (*_ss) << std::endl;
-        std::cout << (*_ss).str();
+        std::cout << _ss->str();
+        check_timeout();
         delete _ss;
     }
 }
+
+void UcxLog::check_timeout() const
+{
+    if (timeout_sec == timeout_inf) {
+        return;
+    }
+
+    double life_time = UcxContext::get_time() - UcxContext::get_time(_tv);
+    if (life_time < timeout_sec) {
+        return;
+    }
+
+    std::cout << "WARNING: too long living (" << life_time
+              << " from " << timeout_sec << " sec) UcxLog object: "
+              << _ss->str();
+}
+
 
 #define UCX_LOG UcxLog("[UCX]", true)
 
@@ -527,10 +547,17 @@ void UcxContext::destroy_connections()
     }
 }
 
-double UcxContext::get_time() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
+double UcxContext::get_time(const struct timeval &tv)
+{
     return tv.tv_sec + (tv.tv_usec * 1e-6);
+}
+
+double UcxContext::get_time()
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+    return get_time(tv);
 }
 
 void UcxContext::destroy_listener()
