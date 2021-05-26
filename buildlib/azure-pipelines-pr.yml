@@ -318,3 +318,11 @@ stages:
         parameters:
           name: gpu
           demands: ucx_gpu -equals yes
+
+  - stage: go
+    dependsOn: [Static_check]
+    jobs:
+      - template: go/go-test.yml
+        parameters:
+          name: new
+          demands: ucx_new -equals yes
