@@ -425,7 +425,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     ucp_unpacked_address unpacked_address;
 
     status = ucp_address_unpack(sender().worker(), buffer,
-                                UCP_ADDRESS_PACK_FLAGS_ALL, &unpacked_address);
+                                UCP_ADDRESS_PACK_FLAGS_ALL, &unpacked_address,
+                                NULL);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
@@ -468,7 +469,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
     ucp_unpacked_address unpacked_address;
 
     status = ucp_address_unpack(sender().worker(), buffer,
-                                UCP_ADDRESS_PACK_FLAGS_ALL, &unpacked_address);
+                                UCP_ADDRESS_PACK_FLAGS_ALL, &unpacked_address,
+                                NULL);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);
@@ -494,7 +496,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     ucp_unpacked_address unpacked_address;
 
     status = ucp_address_unpack(sender().worker(), buffer,
-                                UCP_ADDRESS_PACK_FLAGS_ALL, &unpacked_address);
+                                UCP_ADDRESS_PACK_FLAGS_ALL, &unpacked_address,
+                                NULL);
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(sender().worker()->uuid, unpacked_address.uuid);

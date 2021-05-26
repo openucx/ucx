@@ -478,6 +478,7 @@ typedef struct {
 
 
 enum {
+    UCP_WIREUP_SA_DATA_AM_ONLY = 1,     /* Address has only AM lane information. */
     UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
                                            for CM based wireup: there is only
                                            iface and ep address of transport
@@ -501,6 +502,11 @@ struct ucp_wireup_sockaddr_data {
 } UCS_S_PACKED;
 
 
+struct ucp_wireup_user_data {
+    uint64_t                client_id;      /**< Endpoint client ID */
+};
+
+
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
     uct_listener_h              uct_listener;
@@ -510,8 +516,9 @@ typedef struct ucp_conn_request {
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
     ucp_ep_h                    ep; /* valid only if request is handled internally */
+    ucp_wireup_user_data_t      user_data;
     ucp_wireup_sockaddr_data_t  sa_data;
-    /* packed worker address follows */
+    ucp_unpacked_address_t      *remote_addr;
 } ucp_conn_request_t;
 
 

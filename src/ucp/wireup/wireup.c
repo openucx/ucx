@@ -787,7 +787,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
 
     status = ucp_address_unpack(worker, msg + 1,
                                 UCP_ADDRESS_PACK_FLAGS_ALL,
-                                &remote_address);
+                                &remote_address, NULL);
     if (status != UCS_OK) {
         ucs_error("failed to unpack address: %s", ucs_status_string(status));
         goto out;
@@ -1524,7 +1524,7 @@ static void ucp_wireup_msg_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     status = ucp_address_unpack(worker, msg + 1,
                                 UCP_ADDRESS_PACK_FLAGS_ALL |
                                 UCP_ADDRESS_PACK_FLAG_NO_TRACE,
-                                &unpacked_address);
+                                &unpacked_address, NULL);
     if (status != UCS_OK) {
         strncpy(unpacked_address.name, "<malformed address>",
                 UCP_WORKER_ADDRESS_NAME_MAX);

@@ -204,7 +204,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
     }
 
     status = ucp_address_unpack(worker, ucp_addr, addr_pack_flags,
-                                &unpacked_addr);
+                                &unpacked_addr, NULL);
     if (status != UCS_OK) {
         goto free_ucp_addr;
     }
@@ -230,9 +230,13 @@ out:
     return status;
 }
 
-static size_t ucp_cm_priv_data_length(size_t addr_size)
+static size_t ucp_cm_priv_data_length(size_t addr_size, uint8_t consider_user_data)
 {
-    return sizeof(ucp_wireup_sockaddr_data_t) + addr_size;
+    size_t result = sizeof(ucp_wireup_sockaddr_data_t) + addr_size;
+    if (consider_user_data) {
+        result += sizeof(ucp_wireup_user_data_t);
+    }
+    return result;
 }
 
 static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
@@ -244,7 +248,8 @@ static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
 static ucs_status_t
 ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
                          ucp_rsc_index_t dev_index, int can_fallback,
-                         void **data_buf_p, size_t *data_buf_length_p)
+                         void **data_buf_p, size_t *data_buf_length_p,
+                         uint8_t consider_user_data, uint8_t addr_mode)
 {
     ucp_worker_h worker = ep->worker;
     void *ucp_addr      = NULL;
@@ -253,6 +258,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
     ucs_log_level_t log_level;
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_wireup_user_data_t user_data;
 
     ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
     ucs_assert(dev_index != UCP_NULL_RESOURCE);
@@ -269,7 +276,7 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
 
     cm_idx = ucp_ep_ext_control(ep)->cm_idx;
     if (worker->cms[cm_idx].attr.max_conn_priv <
-        ucp_cm_priv_data_length(ucp_addr_size)) {
+        ucp_cm_priv_data_length(ucp_addr_size, consider_user_data)) {
         log_level = can_fallback ?
                     UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
         ucs_log(log_level,
@@ -282,7 +289,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
         goto err;
     }
 
-    sa_data = ucs_malloc(ucp_cm_priv_data_length(ucp_addr_size),
+    sa_data = ucs_malloc(ucp_cm_priv_data_length(ucp_addr_size,
+                                                 consider_user_data),
                          "client_priv_data");
     if (sa_data == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -291,12 +299,20 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
 
     sa_data->ep_id     = ucp_ep_local_id(ep);
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
+    sa_data->addr_mode = addr_mode;
     sa_data->dev_index = dev_index;
     memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
 
+    if (consider_user_data) {
+        wireup_ep           = ucp_ep_get_cm_wireup_ep(ep);
+        user_data.client_id = wireup_ep->client_id;
+        /* Write user data to the end of sa_data and ucp_address block */
+        memcpy(UCS_PTR_BYTE_OFFSET(sa_data + 1, ucp_addr_size), &user_data,
+               sizeof(ucp_wireup_user_data_t));
+    }
+
     *data_buf_p        = sa_data;
-    *data_buf_length_p = ucp_cm_priv_data_length(ucp_addr_size);
+    *data_buf_length_p = ucp_cm_priv_data_length(ucp_addr_size, consider_user_data);
     status             = UCS_OK;
 
 err:
@@ -390,6 +406,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     void *ucp_addr                = NULL; /* Set to NULL to call ucs_free
                                              safely */
     unsigned ep_init_flags        = 0;
+    uint8_t address_mode          = UCP_WIREUP_SA_DATA_CM_ADDR;
     ucp_tl_bitmap_t tl_bitmap;
     uct_ep_connect_params_t params;
     void *priv_data;
@@ -431,9 +448,14 @@ initial_config_retry:
 
     can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
                    (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
+
+    if (ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
+        address_mode = UCP_WIREUP_SA_DATA_AM_ONLY;
+    }
     status       = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index,
                                             can_fallback,
-                                            &priv_data, &priv_data_length);
+                                            &priv_data, &priv_data_length, 1,
+                                            address_mode);
     if (status == UCS_ERR_BUFFER_TOO_SMALL) {
         if (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
             /* Create endpoint configuration with AM lane only to fit CM private
@@ -573,7 +595,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
 
     status = ucp_address_unpack(worker, progress_arg->sa_data + 1,
-                                ucp_cm_address_pack_flags(worker), &addr);
+                                ucp_cm_address_pack_flags(worker), &addr, NULL);
     if (status != UCS_OK) {
         goto out;
     }
@@ -586,6 +608,10 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
         addr.address_list[addr_idx].dev_addr  = progress_arg->dev_addr;
         addr.address_list[addr_idx].dev_index = progress_arg->sa_data->dev_index;
+    }
+
+    if (progress_arg->sa_data->addr_mode == UCP_WIREUP_SA_DATA_AM_ONLY) {
+        wireup_ep->ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE_ONLY;
     }
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
@@ -1006,6 +1032,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     const uct_cm_remote_data_t *remote_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
+    size_t ucp_addr_size;
+    uint64_t addr_flags;
 
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
                                          (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
@@ -1033,8 +1061,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
               ucp_context_cm_name(worker->context, cm_idx),
               worker, listener->cm, cm_idx);
 
-    ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
-                                  remote_data->conn_priv_data_length,
+    ucp_conn_request = ucs_malloc(sizeof(ucp_conn_request_t),
                                   "ucp_conn_request_h");
     if (ucp_conn_request == NULL) {
         ucs_error("failed to allocate connect request, rejecting connection "
@@ -1068,8 +1095,33 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                      UCT_DEVICE_NAME_MAX);
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
            remote_data->dev_addr_length);
+
+    /* [ sa_data | ucp_address | user_data ]
+     * |      conn_priv_data_length        |
+     * 1. sa_data is fixed of size, so copy it directly */
     memcpy(&ucp_conn_request->sa_data, remote_data->conn_priv_data,
-           remote_data->conn_priv_data_length);
+           sizeof(ucp_conn_request->sa_data));
+
+    /* 2. Unpack ucp_address and get it's length in buffer */
+    addr_flags                    = ucp_cm_address_pack_flags(worker);
+    ucp_conn_request->remote_addr = ucs_malloc(sizeof(ucp_unpacked_address_t),
+                                               "ucp_unpacked_address_t");
+
+    status = ucp_address_unpack(ucp_conn_request->listener->worker,
+                                UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
+                                                    sizeof(ucp_conn_request->sa_data)),
+                                addr_flags, ucp_conn_request->remote_addr,
+                                &ucp_addr_size);
+    if (status != UCS_OK) {
+        goto err_free_remote_addr;
+    }
+
+    /* 3. Copy user_data */
+    memcpy(&ucp_conn_request->user_data,
+           UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
+                               sizeof(ucp_conn_request->sa_data) +
+                                       ucp_addr_size),
+           sizeof(ucp_wireup_user_data_t));
 
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_server_conn_request_progress,
@@ -1081,6 +1133,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_worker_signal_internal(worker);
     return;
 
+err_free_remote_addr:
+    ucs_free(ucp_conn_request->remote_addr);
 err_free_remote_dev_addr:
     ucs_free(ucp_conn_request->remote_dev_addr);
 err_free_ucp_conn_request:
@@ -1146,7 +1200,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     status = ucp_ep_cm_connect_server_lane(ep, conn_request->uct_listener,
                                            conn_request->uct_req,
                                            conn_request->cm_idx,
-                                           conn_request->dev_name);
+                                           conn_request->dev_name,
+                                           ep_init_flags);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect CM lane on device %s, "
                  "tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
@@ -1170,6 +1225,8 @@ err_destroy_ep:
     ucp_ep_destroy_internal(ep);
 out_free_request:
     ucs_free(conn_request->remote_dev_addr);
+    ucs_free(conn_request->remote_addr->address_list);
+    ucs_free(conn_request->remote_addr);
     ucs_free(conn_request);
 out:
     if (status == UCS_OK) {
@@ -1181,13 +1238,15 @@ out:
 
 static ucs_status_t
 ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
-                             const void **data_buf_p, size_t *data_buf_size_p)
+                             const void **data_buf_p, size_t *data_buf_size_p,
+                             uint8_t address_mode)
 {
     ucp_worker_h worker = ep->worker;
     ucp_tl_bitmap_t tl_bitmap;
     ucp_tl_bitmap_t ctx_tl_bitmap;
     ucp_rsc_index_t dev_index;
     ucs_status_t status;
+
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -1204,7 +1263,8 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
 
     dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, &tl_bitmap);
     status    = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index, 0,
-                                         (void **)data_buf_p, data_buf_size_p);
+                                         (void**)data_buf_p, data_buf_size_p, 0,
+                                         address_mode);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1270,10 +1330,12 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            uct_listener_h uct_listener,
                                            uct_conn_request_h uct_conn_req,
                                            ucp_rsc_index_t cm_idx,
-                                           const char *dev_name)
+                                           const char *dev_name,
+                                           unsigned ep_init_flags)
 {
     ucp_worker_h worker   = ep->worker;
     ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+    uint8_t address_mode  = UCP_WIREUP_SA_DATA_CM_ADDR;
     uct_ep_params_t uct_ep_params;
     uct_ep_h uct_ep;
     ucs_status_t status;
@@ -1291,6 +1353,10 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     }
 
     ucp_ep_ext_control(ep)->cm_idx = cm_idx;
+
+    if (ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
+        address_mode = UCP_WIREUP_SA_DATA_AM_ONLY;
+    }
 
     /* create a server side CM endpoint */
     ucs_trace("server ep %p: uct_ep[%d], worker %p, cm_idx=%d, cm=%s",
@@ -1313,7 +1379,8 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     uct_ep_params.disconnect_cb      = ucp_cm_disconnect_cb;
     status = ucp_ep_server_init_priv_data(ep, dev_name,
                                           &uct_ep_params.private_data,
-                                          &uct_ep_params.private_data_length);
+                                          &uct_ep_params.private_data_length,
+                                          address_mode);
     if (status != UCS_OK) {
         goto err;
     }

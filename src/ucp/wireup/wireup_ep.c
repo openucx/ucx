@@ -448,6 +448,7 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->pending_count = 0;
     self->flags         = 0;
     self->progress_id   = UCS_CALLBACKQ_ID_NULL;
+    self->client_id     = 0;
     ucs_queue_head_init(&self->pending_q);
     UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
 

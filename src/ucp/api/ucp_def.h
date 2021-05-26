@@ -750,6 +750,13 @@ typedef struct ucp_ep_params {
      * unique name will be created for you.
      */
     const char              *name;
+
+    /**
+     * User defined endpoint id, that would be transmitted from client to server
+     * as part of connection request payload and can be obtained from
+     * @ref ucp_conn_request_query
+     */
+    uint64_t                client_id;
 } ucp_ep_params_t;
 
 
