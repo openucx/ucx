@@ -1,5 +1,6 @@
 ..
 .. Copyright (C) Mellanox Technologies Ltd. 2019.  ALL RIGHTS RESERVED.
+.. Copyright (C) Arm Ltd. 2021.  ALL RIGHTS RESERVED.
 ..
 .. See file LICENSE for terms.
 ..
@@ -38,6 +39,7 @@ UCX is a member of `UCF consortium <https://www.ucfconsortium.org>`_.
    ucx_features
    download
    running
+   api
    faq
    glossaries
 
@@ -67,13 +69,6 @@ and run a simple client/server example:
     UCX Client-Server Hello World
 
     ------------------------------
-
-
-Documentation
-*************
-
-*  API doc: `HTML <https://openucx.github.io/ucx/api/v{VERSION}/html/index.html>`_ `PDF <https://openucx.github.io/ucx/api/v{VERSION}/ucx-v{VERSION}.pdf>`_
-* `Examples <https://github.com/openucx/ucx/tree/v{VERSION}.x/examples>`_
 
 
 Projects using UCX
