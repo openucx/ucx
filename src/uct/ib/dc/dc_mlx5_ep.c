@@ -985,6 +985,16 @@ ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
+static void uct_dc_mlx5_ep_check_send_completion(uct_rc_iface_send_op_t *op,
+                                                 const void *resp)
+{
+    uct_dc_mlx5_ep_t *ep = ucs_derived_of(op->ep, uct_dc_mlx5_ep_t);
+
+    ucs_assert(ep->flags & UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED);
+    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED;
+    ucs_mpool_put(op);
+}
+
 static void uct_dc_mlx5_ep_keepalive_cleanup(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -997,12 +1007,13 @@ static void uct_dc_mlx5_ep_keepalive_cleanup(uct_dc_mlx5_ep_t *ep)
         return;
     }
 
-    /* clean keepalive requests */
+    /* Clean keepalive requests */
     txqp = &iface->tx.dcis[iface->keepalive_dci].txqp;
     ucs_queue_for_each_safe(op, iter, &txqp->outstanding, queue) {
-        if (op->ep == &ep->super.super) {
+        if ((op->ep == &ep->super.super) &&
+            (op->handler == uct_dc_mlx5_ep_check_send_completion)) {
             ucs_queue_del_iter(&txqp->outstanding, iter);
-            ucs_mpool_put(op);
+            op->handler(op, NULL);
             break;
         }
     }
@@ -1406,16 +1417,6 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     }
 
     uct_dc_mlx5_iface_progress_pending(iface, pool_index);
-}
-
-static void
-uct_dc_mlx5_ep_check_send_completion(uct_rc_iface_send_op_t *op, const void *resp)
-{
-    uct_dc_mlx5_ep_t *ep = ucs_derived_of(op->ep, uct_dc_mlx5_ep_t);
-
-    ucs_assert(ep->flags & UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED);
-    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_KEEPALIVE_POSTED;
-    ucs_mpool_put(op);
 }
 
 ucs_status_t

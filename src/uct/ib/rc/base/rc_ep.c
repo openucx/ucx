@@ -452,8 +452,10 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
             /* Allow clean flush cancel op from destroy flow */
-            if (warn && (op->handler != uct_rc_ep_flush_op_completion_handler)) {
-                ucs_warn("destroying txqp %p with uncompleted operation %p handler %s",
+            if (warn &&
+                (op->handler != uct_rc_ep_flush_op_completion_handler)) {
+                ucs_warn("destroying txqp %p with uncompleted operation %p"
+                         " handler %s",
                          txqp, op, ucs_debug_get_symbol_name(op->handler));
             }
 
@@ -477,16 +479,25 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                 uct_rc_iface_update_reads(iface);
             }
         }
+
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+
         if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
             (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
             ucs_mpool_put(op);
-        } else {
+        } else if ((op->handler == iface->config.atomic32_ext_handler) ||
+                   (op->handler == iface->config.atomic64_ext_handler) ||
+                   (op->handler == iface->config.atomic64_handler) ||
+                   (op->handler == uct_rc_ep_get_bcopy_handler) ||
+                   (op->handler == uct_rc_ep_get_bcopy_handler_no_completion) ||
+                   (op->handler == uct_rc_ep_am_zcopy_handler)) {
             desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
             ucs_mpool_put(desc);
+        } else {
+            op->handler(op, NULL);
         }
     }
 }
