@@ -145,7 +145,9 @@ typedef void (*ucs_vfs_list_dir_cb_t)(const char *name, void *arg);
 
 /**
  * Add directory representing object in VFS. If @a parent_obj is NULL, the mount
- * directory will be used as the base for @a rel_path.
+ * directory will be used as the base for @a rel_path. If directory with
+ * specified name already exists, the pointer value will be added to directory
+ * name.
  *
  * @param [in] parent_obj Pointer to the parent object. @a rel_path is relative
  *                        to @a parent_obj directory.
@@ -154,7 +156,7 @@ typedef void (*ucs_vfs_list_dir_cb_t)(const char *name, void *arg);
  *                        @a obj directory.
  *
  * @return UCS_ERR_ALREADY_EXISTS if directory with specified name already
- *                                exists.
+ *                                exists for given @a obj.
  *         UCS_ERR_INVALID_PARAM  if node for @a parent_obj does not exist.
  *         UCS_ERR_NO_MEMORY      if cannot create a new node for @a obj.
  *         UCS_OK                 otherwise.
