@@ -1144,7 +1144,6 @@ static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
         return;
     }
 
-    ep = uct_dc_mlx5_ep_from_dci(iface, dci_index);
     uct_dc_mlx5_ep_handle_failure(ep, cqe, status);
 }
 
