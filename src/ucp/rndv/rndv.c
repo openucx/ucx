@@ -221,6 +221,8 @@ ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq)
         if (status != UCS_OK) {
             return status;
         }
+
+        sreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
     }
 
     return UCS_OK;

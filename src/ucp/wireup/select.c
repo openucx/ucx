@@ -92,6 +92,7 @@ typedef struct {
 static const char *ucp_wireup_md_flags[] = {
     [ucs_ilog2(UCT_MD_FLAG_ALLOC)]               = "memory allocation",
     [ucs_ilog2(UCT_MD_FLAG_REG)]                 = "memory registration",
+    [ucs_ilog2(UCT_MD_FLAG_INVALIDATE)]          = "memory invalidation",
     [ucs_ilog2(UCT_MD_FLAG_RKEY_PTR)]            = "obtain remote memory pointer"
 };
 
@@ -206,7 +207,8 @@ static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
 static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
                                       uint64_t flags, uint64_t required_flags,
                                       int op_size, int fetch,
-                                      const char *title, char *reason, size_t max)
+                                      const char *title, char *reason,
+                                      size_t max)
 {
     char missing_flag_desc[256];
 
@@ -1323,11 +1325,16 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     /* First checked RNDV mode has to be a mode specified in config */
-    bw_info.lane_type                = UCP_LANE_TYPE_RMA_BW;
-    bw_info.criteria.title           = "high-bw remote memory access";
-    bw_info.criteria.local_md_flags  = md_reg_flag;
-    bw_info.max_lanes                = context->config.ext.max_rndv_lanes;
     ucs_assert(rndv_modes[0] == context->config.ext.rndv_mode);
+    bw_info.lane_type               = UCP_LANE_TYPE_RMA_BW;
+    bw_info.criteria.title          = "high-bw remote memory access";
+    bw_info.max_lanes               = context->config.ext.max_rndv_lanes;
+    bw_info.criteria.local_md_flags = md_reg_flag;
+    /* in case if error handling is requested we require memory invalidation
+     * support to provide correct data integrity in in case of error */
+    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
+        bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE;
+    }
 
     /* RNDV protocol can't mix different schemes, i.e. wireup has to
      * select lanes with the same iface flags depends on a requested

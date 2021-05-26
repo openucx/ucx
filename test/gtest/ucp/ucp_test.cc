@@ -209,6 +209,22 @@ void ucp_test::disconnect(entity& e) {
     }
 }
 
+ucp_tag_message_h ucp_test::message_wait(entity& e, ucp_tag_t tag,
+                                         ucp_tag_t tag_mask,
+                                         ucp_tag_recv_info_t *info, int remove,
+                                         int worker_index)
+{
+    ucs_time_t deadline = ucs::get_deadline();
+    ucp_tag_message_h message;
+    do {
+        progress(worker_index);
+        message = ucp_tag_probe_nb(e.worker(worker_index), tag, tag_mask,
+                                   remove, info);
+    } while ((message == NULL) && (ucs_get_time() < deadline));
+
+    return message;
+}
+
 ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
 {
     if (req == NULL) {
@@ -1058,4 +1074,9 @@ ucp_mem_h ucp_test::mapped_buffer::memh() const
 void test_ucp_context::get_test_variants(std::vector<ucp_test_variant> &variants)
 {
     add_variant(variants, UCP_FEATURE_TAG | UCP_FEATURE_WAKEUP);
+}
+
+void ucp_test::disable_keepalive()
+{
+    modify_config("KEEPALIVE_INTERVAL", "inf");
 }

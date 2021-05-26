@@ -39,7 +39,7 @@
             if (!(_invalidate_supported)) { \
                 return UCS_ERR_UNSUPPORTED; \
             } \
-            if (!UCT_MD_MEM_DEREG_FIELD_VALUE(params, cb, FIELD_CALLBACK, \
+            if (!UCT_MD_MEM_DEREG_FIELD_VALUE(params, comp, FIELD_COMPLETION, \
                                               NULL)) { \
                 return UCS_ERR_INVALID_PARAM; \
             } \

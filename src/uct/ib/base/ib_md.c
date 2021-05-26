@@ -867,8 +867,8 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
     uct_ib_memh_free(ib_memh);
     if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
         UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
-        ucs_assert(params->cb != NULL); /* suppress coverity false-positive */
-        params->cb(UCT_MD_MEM_DEREG_FIELD_VALUE(params, arg, FIELD_ARG, NULL));
+        ucs_assert(params->comp != NULL); /* suppress coverity false-positive */
+        uct_invoke_completion(params->comp, UCS_OK);
     }
 
     return status;
@@ -1037,12 +1037,18 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
+static void ucs_ib_mem_region_invalidate_cb(void *arg)
+{
+    uct_completion_t *comp = arg;
+
+    uct_invoke_completion(comp, UCS_OK);
+}
+
 static ucs_status_t
 uct_ib_mem_rcache_dereg(uct_md_h uct_md,
                         const uct_md_mem_dereg_params_t *params)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
-    void *arg;
     uct_ib_rcache_region_t *region;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
@@ -1050,9 +1056,9 @@ uct_ib_mem_rcache_dereg(uct_md_h uct_md,
     region = uct_ib_rcache_region_from_memh(params->memh);
     if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
         UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
-        arg = UCT_MD_MEM_DEREG_FIELD_VALUE(params, arg, FIELD_ARG, NULL);
-        ucs_rcache_region_invalidate(md->rcache, &region->super, params->cb,
-                                     arg);
+        ucs_rcache_region_invalidate(md->rcache, &region->super,
+                                     ucs_ib_mem_region_invalidate_cb,
+                                     params->comp);
     }
 
     ucs_rcache_region_put(md->rcache, &region->super);

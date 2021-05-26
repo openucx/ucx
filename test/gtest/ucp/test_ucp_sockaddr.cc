@@ -2149,3 +2149,108 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_put_scheme,
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err)
+
+class test_ucp_sockaddr_protocols_err_sender
+      : public test_ucp_sockaddr_protocols {
+public:
+    virtual void init() {
+        m_err_count = 0;
+        modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
+        modify_config("ERROR_HANDLER_DELAY", "inf");
+        /* receiver should try to read wrong data, instead of detecting error
+           in keepalive process and closing the connection */
+        disable_keepalive();
+        get_sockaddr();
+        ucp_test::init();
+        skip_loopback();
+        start_listener(cb_type());
+        client_ep_connect();
+    }
+
+protected:
+    static void tag_recv_cb(void *request, ucs_status_t status,
+                            ucp_tag_recv_info_t *info) {
+    }
+
+    test_ucp_sockaddr_protocols_err_sender() {
+        set_tl_timeouts(m_env);
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
+                                               "rcache,odp,direct"));
+    }
+
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
+};
+
+/* This test is quite tricky: it checks for incorrect behavior on RNDV send
+ * on DC transport: in case if sender EP was killed right after sent RTS
+ * then receiver may get incorrect/corrupted data */
+UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender, tag_rndv_killed_sender,
+           "RNDV_THRESH=10k", "RNDV_SCHEME=get_zcopy")
+{
+    static size_t size = 64 * UCS_KBYTE;
+    static const std::string dc_tls[] = { "dc", "dc_x" };
+    bool has_dc = has_any_transport(
+        std::vector<std::string>(dc_tls,
+                                 dc_tls + ucs_static_array_size(dc_tls)));
+
+    if (!has_dc)
+    {
+        UCS_TEST_SKIP_R("Unsupported");
+    }
+
+    /* Warmup */
+    test_tag_send_recv(size, false);
+    request_wait(sender().flush_worker_nb());
+    request_wait(receiver().flush_worker_nb());
+
+    std::string send_buf(size, 'x');
+    std::string recv_buf(size, 'y');
+    std::string recv_copy(size, 'y');
+    std::string str_z(size, 'z');
+
+    void *rreq = NULL, *sreq = NULL;
+    ucp_tag_message_h message;
+    ucp_tag_recv_info_t info;
+    ucs_status_t status;
+
+    /* Ignore all errors - it is expected */
+    scoped_log_handler slh(wrap_errors_logger);
+    sreq = ucp_tag_send_nbx(sender().ep(), &send_buf[0], size, 0,
+                            &ucp_request_null_param);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(sreq));
+    ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
+
+    /* Allow receiver to get RTS notification, but do not receive message
+     * body */
+    message = message_wait(receiver(), 0, 0, &info);
+    ASSERT_NE((void*)NULL, message);
+    ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
+
+    /* Close sender EP to force send operation to complete with CANCEL status */
+    ucp_worker_h sender_worker = sender().worker();
+    void *close_req = sender().disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
+    if (UCS_PTR_IS_PTR(close_req)) {
+        while (ucp_request_check_status(close_req) == UCS_INPROGRESS) {
+            ucp_worker_progress(sender_worker);
+        }
+    }
+
+    status = request_wait(sreq);
+    ASSERT_EQ(UCS_ERR_CANCELED, status);
+
+    /* Receive buffer should not be updated */
+    ASSERT_EQ(recv_buf, recv_copy);
+    /* Update send buffer by new data - emulation of free(buffer) */
+    memset(&send_buf[0], 'z', size);
+
+    /* Complete receive operation */
+    rreq = ucp_tag_msg_recv_nb(receiver().worker(), &recv_buf[0], size,
+                               ucp_dt_make_contig(1), message, tag_recv_cb);
+    ASSERT_TRUE(UCS_PTR_IS_PTR(rreq));
+    status = request_wait(rreq);
+
+    /* Receive request should fail or data should be valid */
+    EXPECT_TRUE((status != UCS_OK) || (recv_buf == send_buf));
+}
+
+UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)
