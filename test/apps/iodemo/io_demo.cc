@@ -73,6 +73,7 @@ typedef struct {
     bool                     verbose;
     bool                     validate;
     bool                     use_am;
+    bool                     use_epoll;
     ucs_memory_type_t        memory_type;
 } options_t;
 
@@ -654,7 +655,7 @@ protected:
 
     P2pDemoCommon(const options_t &test_opts) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
-                   test_opts.use_am),
+                   test_opts.use_am, test_opts.use_epoll),
         _test_opts(test_opts),
         _io_msg_pool(test_opts.iomsg_size, "io messages"),
         _send_callback_pool(0, "send callbacks"),
@@ -2161,10 +2162,11 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->verbose               = false;
     test_opts->validate              = false;
     test_opts->use_am                = false;
+    test_opts->use_epoll             = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
 
-    while ((c = getopt(argc, argv, "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqAHP:m:")) !=
-           -1) {
+    while ((c = getopt(argc, argv,
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeAHP:m:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2278,6 +2280,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'A':
             test_opts->use_am = true;
+            break;
+        case 'e':
+            test_opts->use_epoll = true;
             break;
         case 'H':
             UcxLog::use_human_time = true;
