@@ -43,6 +43,13 @@ typedef struct uct_srd_iface_config {
     struct {
         size_t max_get_zcopy;
     } tx;
+
+    struct {
+        double               soft_thresh;
+        double               hard_thresh;
+        unsigned             wnd_size;
+    } fc;
+
 } uct_srd_iface_config_t;
 
 
@@ -75,6 +82,16 @@ struct uct_srd_iface {
         size_t                 max_send_sge;
         size_t                 max_get_bcopy;
         size_t                 max_get_zcopy;
+
+        /* Threshold to send "soft" FC credit request. The peer will try to
+         * piggy-back credits grant to the counter AM, if any. */
+        int16_t              fc_soft_thresh;
+
+        /* Threshold to sent "hard" credits request. The peer will grant
+         * credits in a separate ctrl message as soon as it handles this request. */
+        int16_t              fc_hard_thresh;
+
+        uint16_t             fc_wnd_size;
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)

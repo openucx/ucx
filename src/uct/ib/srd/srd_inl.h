@@ -148,15 +148,3 @@ uct_srd_neth_set_psn(const uct_srd_ep_t *ep, uct_srd_neth_t *neth)
 {
     neth->psn = ep->tx.psn;
 }
-
-static UCS_F_ALWAYS_INLINE void
-uct_srd_am_common(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
-                  uint8_t id, uct_srd_neth_t *neth)
-{
-    /* either we are executing pending operations,
-     * or there are no any pending elements. */
-    UCT_SRD_EP_ASSERT_PENDING(ep);
-
-    uct_srd_neth_set_type_am(ep, neth, id);
-    uct_srd_neth_set_psn(ep, neth);
-}
