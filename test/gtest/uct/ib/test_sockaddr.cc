@@ -196,15 +196,22 @@ protected:
         m_connect_addr.set_port(m_listen_addr.get_port());
     }
 
+    void connect(uct_test::entity &e, unsigned index,
+                 uct_ep_disconnect_cb_t disconnect_cb) {
+        client_user_data *user_data = new client_user_data(*this, e, index);
+        ucs::scoped_async_lock lock(e.async());
+        e.connect_to_sockaddr(index, m_connect_addr, client_resolve_cb,
+                              client_connect_cb, disconnect_cb, user_data);
+        add_user_data(user_data);
+    }
+
+    void connect(unsigned index = 0) {
+        connect(*m_client, index, client_disconnect_cb);
+    }
+
     void listen_and_connect() {
         start_listen(test_uct_sockaddr::conn_request_cb);
-
-        client_user_data *user_data = new client_user_data(*this, *m_client, 0);
-        m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
-                                      client_connect_cb, client_disconnect_cb,
-                                      user_data);
-        add_user_data(user_data);
-
+        connect();
         wait_for_bits(&m_state, TEST_STATE_CONNECT_REQUESTED);
         EXPECT_TRUE(m_state & TEST_STATE_CONNECT_REQUESTED);
     }
@@ -806,11 +813,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
     /* Connect */
     /* multiple clients, on the same cm, connecting to the same server */
     for (int i = 0; i < num_conns_on_client; ++i) {
-        client_user_data *user_data = new client_user_data(*this, *m_client, i);
-        m_client->connect_to_sockaddr(i, m_connect_addr, client_resolve_cb,
-                                      client_connect_cb, client_disconnect_cb,
-                                      user_data);
-        add_user_data(user_data);
+        connect(i);
     }
 
     /* wait for the server to connect to all the endpoints on the cm */
@@ -839,12 +842,7 @@ UCS_TEST_P(test_uct_sockaddr, many_conns_on_client)
 UCS_TEST_P(test_uct_sockaddr, err_handle)
 {
     /* client - try to connect to a server that isn't listening */
-    client_user_data *user_data = new client_user_data(*this, *m_client, 0);
-    m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
-                                  client_connect_cb, client_disconnect_cb,
-                                  user_data);
-    add_user_data(user_data);
-
+    connect();
     EXPECT_FALSE(m_state & TEST_STATE_CONNECT_REQUESTED);
 
     /* with the TCP port space (which is currently tested with rdmacm),
@@ -868,11 +866,7 @@ UCS_TEST_P(test_uct_sockaddr, conn_to_non_exist_server_port)
     scoped_log_handler slh(detect_reject_error_logger);
 
     /* client - try to connect to a non-existing port on the server side. */
-    client_user_data *user_data = new client_user_data(*this, *m_client, 0);
-    m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
-                                  client_connect_cb, client_disconnect_cb,
-                                  user_data);
-    add_user_data(user_data);
+    connect();
 
     /* with the TCP port space (which is currently tested with rdmacm),
      * a REJECT event will be generated on the client side and since it's a
@@ -1004,12 +998,7 @@ UCS_TEST_P(test_uct_sockaddr_err_handle_non_exist_ip, conn_to_non_exist_ip)
     {
         scoped_log_handler slh(detect_addr_route_error_logger);
         /* client - try to connect to a non-existing IP */
-        client_user_data *user_data = new client_user_data(*this, *m_client, 0);
-        m_client->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
-                                      client_connect_cb, client_disconnect_cb,
-                                      user_data);
-        add_user_data(user_data);
-
+        connect();
         wait_for_bits(&m_state, TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE, 300);
         EXPECT_TRUE(m_state & TEST_STATE_CLIENT_GOT_SERVER_UNAVAILABLE);
 
@@ -1151,12 +1140,7 @@ UCS_TEST_P(test_uct_sockaddr_stress, many_clients_to_one_server)
         m_entities.push_back(client_test);
 
         client_test->max_conn_priv  = client_test->cm_attr().max_conn_priv;
-        client_user_data *user_data = new client_user_data(*this, *client_test,
-                                                           0);
-        client_test->connect_to_sockaddr(0, m_connect_addr, client_resolve_cb,
-                                         client_connect_cb,
-                                         client_disconnect_cb, user_data);
-        add_user_data(user_data);
+        connect(*client_test, 0, client_disconnect_cb);
     }
 
     /* wait for the server to connect to all the clients */
