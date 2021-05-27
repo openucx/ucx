@@ -12,12 +12,16 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/debug/debug_int.h>
+#include <ucs/datastruct/khash.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
+#include <ucs/type/spinlock.h>
 #include <ucs/config/parser.h>
+#include <fnmatch.h>
+
 
 #define UCS_MAX_LOG_HANDLERS    32
 
@@ -48,6 +52,8 @@
     UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG(), \
     UCS_LOG_METADATA_ARG(_short_file, _line, _level, _comp_conf), (_message)
 
+KHASH_MAP_INIT_STR(ucs_log_filter, char);
+
 const char *ucs_log_level_names[] = {
     [UCS_LOG_LEVEL_FATAL]        = "FATAL",
     [UCS_LOG_LEVEL_ERROR]        = "ERROR",
@@ -77,6 +83,8 @@ static int ucs_log_file_last_idx             = 0;
 static uint32_t ucs_log_thread_count         = 0;
 static char __thread ucs_log_thread_name[32] = {0};
 static ucs_log_func_t ucs_log_handlers[UCS_MAX_LOG_HANDLERS];
+static ucs_spinlock_t ucs_log_global_filter_lock;
+static khash_t(ucs_log_filter) ucs_log_global_filter;
 
 
 static const char *ucs_log_get_thread_name()
@@ -232,11 +240,34 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
     char *saveptr      = "";
     const char *short_file;
     struct timeval tv;
+    khiter_t khiter;
     char *log_line;
+    char match;
+    int khret;
     char *buf;
 
-    if (!ucs_log_component_is_enabled(level, comp_conf) && (level != UCS_LOG_LEVEL_PRINT)) {
-         return UCS_LOG_FUNC_RC_CONTINUE;
+    if (!ucs_log_component_is_enabled(level, comp_conf) &&
+        (level != UCS_LOG_LEVEL_PRINT)) {
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    ucs_spin_lock(&ucs_log_global_filter_lock);
+    khiter = kh_get(ucs_log_filter, &ucs_log_global_filter, file);
+    if (ucs_unlikely(khiter == kh_end(&ucs_log_global_filter))) {
+        /* Add source file name to the hash */
+        match  = fnmatch(ucs_global_opts.log_component.file_filter, file, 0) !=
+                 FNM_NOMATCH;
+        khiter = kh_put(ucs_log_filter, &ucs_log_global_filter, file, &khret);
+        ucs_assert((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+                   (khret == UCS_KH_PUT_BUCKET_CLEAR));
+        kh_val(&ucs_log_global_filter, khiter) = match;
+    } else {
+        match = kh_val(&ucs_log_global_filter, khiter);
+    }
+    ucs_spin_unlock(&ucs_log_global_filter_lock);
+
+    if (!match) {
+        return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
     buf = ucs_alloca(buffer_size + 1);
@@ -441,6 +472,8 @@ void ucs_log_init()
                   ucs_global_opts.log_file_rotate, INT_MAX);
     }
 
+    ucs_spinlock_init(&ucs_log_global_filter_lock, 0);
+    kh_init_inplace(ucs_log_filter, &ucs_log_global_filter);
 
     strcpy(ucs_log_hostname, ucs_get_host_name());
     ucs_log_file           = stdout;
@@ -466,6 +499,8 @@ void ucs_log_cleanup()
         fclose(ucs_log_file);
     }
 
+    ucs_spinlock_destroy(&ucs_log_global_filter_lock);
+    kh_destroy_inplace(ucs_log_filter, &ucs_log_global_filter);
     ucs_free(ucs_log_file_base_name);
     ucs_log_file_base_name = NULL;
     ucs_log_file           = NULL;
