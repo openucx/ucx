@@ -293,7 +293,7 @@ stages:
         test_perf: 1
     - template: tests.yml
       parameters:
-        name: new
+        name: amd_instinct
         demands: ucx_instinct -equals yes
         test_perf: 1
     - template: tests.yml
