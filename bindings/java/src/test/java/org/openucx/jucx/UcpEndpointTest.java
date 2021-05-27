@@ -149,10 +149,11 @@ public class UcpEndpointTest extends UcxTest {
     @Theory
     public void testSendRecv(int memType) throws Exception {
         System.out.println("Running testSendRecv with memType: " + memType);
+        long tagSender = 0xFFFFFFFFFFFF0000L;
         // Crerate 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
-        UcpContext context1 = new UcpContext(params);
+        UcpContext context1 = new UcpContext(params.setTagSenderMask(tagSender));
         UcpContext context2 = new UcpContext(params);
         UcpWorker worker1 = context1.newWorker(rdmaWorkerParams);
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
@@ -176,7 +177,7 @@ public class UcpEndpointTest extends UcxTest {
             });
 
         worker2.recvTaggedNonBlocking(dst2.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE,
-            1, -1, new UcxCallback() {
+            1, tagSender, new UcxCallback() {
                 @Override
                 public void onSuccess(UcpRequest request) {
                     receivedMessages.incrementAndGet();
