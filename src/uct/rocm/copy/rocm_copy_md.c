@@ -148,17 +148,10 @@ static ucs_status_t uct_rocm_copy_mem_reg(uct_md_h md, void *address, size_t len
 }
 
 static ucs_status_t
-uct_rocm_copy_mem_dereg(uct_md_h md,
-                        const uct_md_mem_dereg_params_t *params)
+uct_rocm_copy_mem_dereg_internal(uct_md_h md,
+                                 uct_rocm_copy_mem_t *mem_hndl)
 {
-    uct_rocm_copy_mem_t *mem_hndl;
-    void *address;
-    hsa_status_t status;
-
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
-
-    mem_hndl = (uct_rocm_copy_mem_t *)params->memh;
-    address  = mem_hndl->vaddr;
+    void *address = mem_hndl->vaddr;
     hsa_status_t status;
 
     if (address == NULL) {
@@ -172,6 +165,19 @@ uct_rocm_copy_mem_dereg(uct_md_h md,
 
     ucs_trace("Deregistered addr %p len %zu", address, mem_hndl->reg_size);
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_rocm_copy_mem_dereg(uct_md_h md,
+                        const uct_md_mem_dereg_params_t *params)
+{
+    uct_rocm_copy_mem_t *mem_hndl;
+
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    mem_hndl = (uct_rocm_copy_mem_t *)params->memh;
+
+    return uct_rocm_copy_mem_dereg_internal(md, mem_hndl);
 }
 
 static void uct_rocm_copy_md_close(uct_md_h uct_md) {
@@ -270,7 +276,7 @@ static void uct_rocm_copy_rcache_mem_dereg_cb(void *context, ucs_rcache_t *rcach
     uct_rocm_copy_rcache_region_t *region;
 
     region = ucs_derived_of(rregion, uct_rocm_copy_rcache_region_t);
-    (void)uct_rocm_copy_mem_dereg(&md->super, &region->memh);
+    (void)uct_rocm_copy_mem_dereg_internal(&md->super, &region->memh);
 }
 
 static void uct_rocm_copy_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,

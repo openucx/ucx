@@ -105,7 +105,7 @@ static ucs_status_t
 uct_rocm_ipc_mem_dereg(uct_md_h md,
                        const uct_md_mem_dereg_params_t *params)
 {
-    uct_rocm_ipc_mem_t *mem_hndl;
+    uct_rocm_ipc_key_t *mem_hndl;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
