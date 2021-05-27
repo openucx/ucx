@@ -29,21 +29,35 @@ typedef uint32_t uct_srd_ep_conn_sn_t;
  * pending requests added by uct user.
  */
 enum {
-    UCT_SRD_EP_OP_NONE       = 0,
-    UCT_SRD_EP_OP_CREP       = UCS_BIT(0),  /* send connection reply */
-    UCT_SRD_EP_OP_CREQ       = UCS_BIT(1),  /* send connection request */
+    UCT_SRD_EP_OP_NONE      = 0,
+    UCT_SRD_EP_OP_CREP      = UCS_BIT(0),  /* send connection reply */
+    UCT_SRD_EP_OP_CREQ      = UCS_BIT(1),  /* send connection request */
+    UCT_SRD_EP_OP_FC_PGRANT = UCS_BIT(2),  /* send pure fc grant */
 };
 
-#define UCT_SRD_EP_OP_CTL_HI_PRIO  (UCT_SRD_EP_OP_CREQ|UCT_SRD_EP_OP_CREP)
+#define UCT_SRD_EP_OP_CTL_HI_PRIO  (UCT_SRD_EP_OP_CREQ | \
+                                    UCT_SRD_EP_OP_CREP | \
+                                    UCT_SRD_EP_OP_FC_PGRANT)
 
 typedef struct uct_srd_ep_pending_op {
     ucs_arbiter_group_t   group;
-    uint32_t              ops;    /* bitmask that describes what control ops are sceduled */
+    uint8_t               ops;    /* bitmask that describes what
+                                     control ops are sceduled */
     ucs_arbiter_elem_t    elem;
 } uct_srd_ep_pending_op_t;
 
 enum {
-    UCT_SRD_EP_STAT_TODO
+    UCT_SRD_FC_STAT_NO_CRED,
+    UCT_SRD_FC_STAT_TX_GRANT,
+    UCT_SRD_FC_STAT_TX_PURE_GRANT,
+    UCT_SRD_FC_STAT_TX_SOFT_REQ,
+    UCT_SRD_FC_STAT_TX_HARD_REQ,
+    UCT_SRD_FC_STAT_RX_GRANT,
+    UCT_SRD_FC_STAT_RX_PURE_GRANT,
+    UCT_SRD_FC_STAT_RX_SOFT_REQ,
+    UCT_SRD_FC_STAT_RX_HARD_REQ,
+    UCT_SRD_FC_STAT_FC_WND,
+    UCT_SRD_FC_STAT_LAST
 };
 
 /* TODO: optimize endpoint memory footprint */
@@ -55,12 +69,15 @@ enum {
     UCT_SRD_EP_FLAG_ON_CEP            = UCS_BIT(4),  /* EP was inserted to connection
                                                        matching context */
 
+    /* ep should piggy-back a credit grant on the next outgoing AM */
+    UCT_SRD_EP_FLAG_FC_GRANT          = UCS_BIT(5),
+
     /* debug flags */
-    UCT_SRD_EP_FLAG_CREQ_RCVD         = UCS_BIT(5),  /* CREQ message was received */
-    UCT_SRD_EP_FLAG_CREP_RCVD         = UCS_BIT(6),  /* CREP message was received */
-    UCT_SRD_EP_FLAG_CREQ_SENT         = UCS_BIT(7),  /* CREQ message was sent */
-    UCT_SRD_EP_FLAG_CREP_SENT         = UCS_BIT(8),  /* CREP message was sent */
-    UCT_SRD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(9),  /* CREQ message is NOT sent, because
+    UCT_SRD_EP_FLAG_CREQ_RCVD         = UCS_BIT(6),  /* CREQ message was received */
+    UCT_SRD_EP_FLAG_CREP_RCVD         = UCS_BIT(7),  /* CREP message was received */
+    UCT_SRD_EP_FLAG_CREQ_SENT         = UCS_BIT(8),  /* CREQ message was sent */
+    UCT_SRD_EP_FLAG_CREP_SENT         = UCS_BIT(9),  /* CREP message was sent */
+    UCT_SRD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(10), /* CREQ message is NOT sent, because
                                                        connection establishment process
                                                        is driven by remote side. */
 
@@ -71,15 +88,6 @@ enum {
     UCT_SRD_EP_FLAG_IN_PENDING        = 0
 #endif
 };
-
-
-#define UCT_SRD_EP_ASSERT_PENDING(_ep) \
-    ucs_assertv((_ep->flags & UCT_SRD_EP_FLAG_IN_PENDING) ||    \
-                !uct_srd_ep_has_pending(_ep),                   \
-                "out-of-order send detected for"                \
-                " ep %p ep_pending %d arbelem %p",              \
-                _ep, (_ep->flags & UCT_SRD_EP_FLAG_IN_PENDING), \
-                &_ep->tx.pending.elem);
 
 
 typedef struct uct_srd_peer_name {
@@ -107,6 +115,11 @@ struct uct_srd_ep {
                                                    can not be processed yet */
         UCS_STATS_NODE_DECLARE(stats)
     } rx;
+    struct {
+        int16_t                       fc_wnd; /* Not more than fc_wnd active messages
+                                                 can be sent without acknowledgment */
+        UCS_STATS_NODE_DECLARE(stats)
+    } fc;
     ucs_conn_match_elem_t             conn_match;
     /* connection sequence number. assigned in connect_to_iface() */
     uct_srd_ep_conn_sn_t              conn_sn;
@@ -254,6 +267,12 @@ uct_srd_ep_is_connected_and_no_pending(uct_srd_ep_t *ep)
     return (ep->flags & (UCT_SRD_EP_FLAG_CONNECTED |
                          UCT_SRD_EP_FLAG_HAS_PENDING))
            == UCT_SRD_EP_FLAG_CONNECTED;
+}
+
+static UCS_F_ALWAYS_INLINE int
+uct_srd_ep_has_fc_resources(const uct_srd_ep_t *ep)
+{
+    return ep->fc.fc_wnd > 0;
 }
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_srd_ep_t, uct_ep_t, const uct_ep_params_t *);

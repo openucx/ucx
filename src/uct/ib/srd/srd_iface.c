@@ -594,6 +594,34 @@ uct_srd_ep_get_conn_address(const ucs_conn_match_elem_t *elem)
     return uct_srd_ep_get_peer_address(ep);
 }
 
+static ucs_status_t
+uct_srd_iface_init_fc_thresh(uct_srd_iface_t *iface,
+                             uct_srd_iface_config_t *config)
+{
+    iface->config.fc_wnd_size = ucs_min(config->fc.wnd_size,
+                                        config->super.rx.queue_len);
+
+    if (config->fc.hard_thresh >= 1) {
+        ucs_error("The factor for hard FC threshold should be less than 1");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    iface->config.fc_hard_thresh = iface->config.fc_wnd_size *
+                                   config->fc.hard_thresh;
+
+    if ((config->fc.soft_thresh <= config->fc.hard_thresh) ||
+        (config->fc.soft_thresh >= 1)) {
+        ucs_error("The factor for soft FC threshold should be bigger"
+                  " than FC_HARD_THRESH value and less than 1 (s=%f, h=%f)",
+                  config->fc.soft_thresh, config->fc.hard_thresh);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    iface->config.fc_soft_thresh = iface->config.fc_wnd_size *
+                                   config->fc.soft_thresh;
+    return UCS_OK;
+}
+
 void uct_srd_iface_release_recv_desc(uct_recv_desc_t *self, void *desc)
 {
     uct_srd_iface_t *iface =
@@ -896,6 +924,12 @@ UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_release_stats;
     }
 
+    /* Check and set FC parameters */
+    status = uct_srd_iface_init_fc_thresh(self, config);
+    if (status != UCS_OK) {
+        goto err_release_stats;
+    }
+
     while (self->rx.available >= self->super.config.rx_max_batch) {
         uct_srd_iface_post_recv(self);
     }
@@ -962,6 +996,21 @@ ucs_config_field_t uct_srd_iface_config_table[] = {
     {"MAX_GET_ZCOPY", "auto",
      "Maximal size of get operation with zcopy protocol.",
      ucs_offsetof(uct_srd_iface_config_t, tx.max_get_zcopy), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {"FC_WND_SIZE", "512",
+     "The size of flow control window per endpoint. limits the number of AM\n"
+     "which can be sent w/o acknowledgment.",
+     ucs_offsetof(uct_srd_iface_config_t, fc.wnd_size), UCS_CONFIG_TYPE_UINT},
+
+    {"FC_SOFT_THRESH", "0.5",
+     "Threshold for sending soft request for FC credits to the peer. This value\n"
+     "refers to the percentage of the FC_WND_SIZE value. (must be > HARD_THRESH and < 1)",
+     ucs_offsetof(uct_srd_iface_config_t, fc.soft_thresh), UCS_CONFIG_TYPE_DOUBLE},
+
+    {"FC_HARD_THRESH", "0.25",
+     "Threshold for sending hard request for FC credits to the peer. This value\n"
+     "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
+     ucs_offsetof(uct_srd_iface_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
 
     {NULL}
 };

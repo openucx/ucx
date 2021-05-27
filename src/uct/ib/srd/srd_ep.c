@@ -20,6 +20,94 @@
 #include <ucs/time/time.h>
 
 
+#define UCT_SRD_CHECK_FC_WND(_fc, _stats)\
+    if ((_fc)->fc_wnd == 0) { \
+        UCS_STATS_UPDATE_COUNTER((_fc)->stats, UCT_SRD_FC_STAT_NO_CRED, 1); \
+        UCS_STATS_UPDATE_COUNTER(_stats, UCT_EP_STAT_NO_RES, 1); \
+        return UCS_ERR_NO_RESOURCE; \
+    } \
+
+#define UCT_SRD_CHECK_FC(_iface, _ep, _fc_hdr) \
+    { \
+        if (ucs_unlikely((_ep)->fc.fc_wnd <= (_iface)->config.fc_soft_thresh)) { \
+            UCT_SRD_CHECK_FC_WND(&(_ep)->fc, (_ep)->super.stats); \
+            (_fc_hdr) = uct_srd_ep_fc_get_request(_ep, _iface); \
+        } \
+        if ((_ep)->flags & UCT_SRD_EP_FLAG_FC_GRANT) { \
+            (_fc_hdr) |= UCT_SRD_PACKET_FLAG_FC_GRANT; \
+        } \
+    }
+
+#define UCT_SRD_UPDATE_FC_WND(_iface, _fc) \
+    { \
+        ucs_assert((_fc)->fc_wnd > 0); \
+        (_fc)->fc_wnd--; \
+        UCS_STATS_SET_COUNTER((_fc)->stats, UCT_SRD_FC_STAT_FC_WND, (_fc)->fc_wnd); \
+    }
+
+#define UCT_SRD_UPDATE_FC(_iface, _ep, _fc_hdr) \
+    { \
+        if ((_fc_hdr) & UCT_SRD_PACKET_FLAG_FC_GRANT) { \
+            UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_SRD_FC_STAT_TX_GRANT, 1); \
+        } \
+        if ((_fc_hdr) & UCT_SRD_PACKET_FLAG_FC_SREQ) { \
+            UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_SRD_FC_STAT_TX_SOFT_REQ, 1); \
+        } else if ((_fc_hdr) & UCT_SRD_PACKET_FLAG_FC_HREQ) { \
+            UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_SRD_FC_STAT_TX_HARD_REQ, 1); \
+        } \
+        \
+        (_ep)->flags &= ~UCT_SRD_EP_FLAG_FC_GRANT; \
+        \
+        UCT_SRD_UPDATE_FC_WND(_iface, &(_ep)->fc) \
+    }
+
+#define UCT_SRD_EP_ASSERT_PENDING(_ep) \
+    ucs_assertv(((_ep)->flags & UCT_SRD_EP_FLAG_IN_PENDING) ||  \
+                !uct_srd_ep_has_pending(_ep),                   \
+                "out-of-order send detected for"                \
+                " ep %p ep_pending %d arbelem %p",              \
+                _ep, ((_ep)->flags & UCT_SRD_EP_FLAG_IN_PENDING), \
+                &(_ep)->tx.pending.elem);
+
+#define UCT_SRD_AM_COMMON(_iface, _ep, _id, _neth) \
+    { \
+        /* either we are executing pending operations, \
+         * or there are no pending elements. */ \
+        UCT_SRD_EP_ASSERT_PENDING(_ep); \
+        \
+        UCT_SRD_CHECK_FC(_iface, _ep, (_neth)->fc); \
+        uct_srd_neth_set_type_am(_ep, _neth, _id); \
+        uct_srd_neth_set_psn(_ep, _neth); \
+    }
+
+#ifdef ENABLE_STATS
+static ucs_stats_class_t uct_srd_fc_stats_class = {
+    .name = "srd_fc",
+    .num_counters = UCT_SRD_FC_STAT_LAST,
+    .counter_names = {
+        [UCT_SRD_FC_STAT_NO_CRED]            = "no_cred",
+        [UCT_SRD_FC_STAT_TX_GRANT]           = "tx_grant",
+        [UCT_SRD_FC_STAT_TX_PURE_GRANT]      = "tx_pure_grant",
+        [UCT_SRD_FC_STAT_TX_SOFT_REQ]        = "tx_soft_req",
+        [UCT_SRD_FC_STAT_TX_HARD_REQ]        = "tx_hard_req",
+        [UCT_SRD_FC_STAT_RX_GRANT]           = "rx_grant",
+        [UCT_SRD_FC_STAT_RX_PURE_GRANT]      = "rx_pure_grant",
+        [UCT_SRD_FC_STAT_RX_SOFT_REQ]        = "rx_soft_req",
+        [UCT_SRD_FC_STAT_RX_HARD_REQ]        = "rx_hard_req",
+        [UCT_SRD_FC_STAT_FC_WND]             = "fc_wnd"
+    }
+};
+#endif
+
+static UCS_F_ALWAYS_INLINE uint8_t
+uct_srd_ep_fc_get_request(uct_srd_ep_t *ep, uct_srd_iface_t *iface)
+{
+    return (ep->fc.fc_wnd == iface->config.fc_hard_thresh) ?
+            UCT_SRD_PACKET_FLAG_FC_HREQ:
+           (ep->fc.fc_wnd == iface->config.fc_soft_thresh) ?
+            UCT_SRD_PACKET_FLAG_FC_SREQ: 0;
+}
+
 static void uct_srd_peer_name(uct_srd_peer_name_t *peer)
 {
     ucs_strncpy_zero(peer->name, ucs_get_host_name(), sizeof(peer->name));
@@ -45,9 +133,12 @@ static void uct_srd_peer_copy(uct_srd_peer_name_t *dst,
 
 static void uct_srd_ep_reset(uct_srd_ep_t *ep)
 {
+    uct_srd_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
+
     ep->tx.psn             = UCT_SRD_INITIAL_PSN;
     ep->tx.pending.ops     = UCT_SRD_EP_OP_NONE;
     ep->rx_creq_count      = 0;
+    ep->fc.fc_wnd          = iface->config.fc_wnd_size;
     ucs_queue_head_init(&ep->tx.outstanding_q);
     ucs_frag_list_init(ep->tx.psn - 1, &ep->rx.ooo_pkts, -1
                        UCS_STATS_ARG(ep->super.stats));
@@ -257,6 +348,34 @@ static uct_srd_send_desc_t *uct_srd_ep_prepare_crep(uct_srd_ep_t *ep)
     desc->super.ep           = ep;
     desc->super.len          = sizeof(*neth) + sizeof(*crep);
     desc->super.comp_handler = uct_srd_iface_send_op_release;
+
+    return desc;
+}
+
+static uct_srd_send_desc_t *uct_srd_ep_prepare_fc_pgrant(uct_srd_ep_t *ep)
+{
+    uct_srd_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_srd_iface_t);
+    uct_srd_send_desc_t *desc;
+    uct_srd_neth_t *neth;
+
+    ucs_assert_always(ep->dest_ep_id != UCT_SRD_EP_NULL_ID);
+    ucs_assert_always(ep->ep_id != UCT_SRD_EP_NULL_ID);
+
+    desc = uct_srd_iface_get_send_desc(iface);
+    if (!desc) {
+        return NULL;
+    }
+
+    neth               = uct_srd_send_desc_neth(desc);
+    neth->packet_type  = ep->dest_ep_id;
+    neth->packet_type |= UCT_SRD_PACKET_FLAG_FC_PGRANT;
+    uct_srd_neth_set_psn(ep, neth);
+
+    desc->super.ep           = ep;
+    desc->super.len          = sizeof(*neth);
+    desc->super.comp_handler = uct_srd_iface_send_op_release;
+
+    uct_srd_ep_ctl_op_del(ep, UCT_SRD_EP_OP_FC_PGRANT);
 
     return desc;
 }
@@ -496,12 +615,55 @@ static void uct_srd_ep_rx_crep(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
 }
 
 static void inline
+uct_srd_ep_am_fc_handler(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
+                         uct_srd_neth_t *neth)
+{
+    uint8_t fc      = neth->fc;
+    int16_t old_wnd = ep->fc.fc_wnd;
+    uct_srd_send_desc_t *desc;
+
+    if (fc & UCT_SRD_PACKET_FLAG_FC_GRANT) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_RX_GRANT, 1);
+        ep->fc.fc_wnd = iface->config.fc_wnd_size;
+
+        /* To preserve ordering we have to dispatch
+         * all pending operations if fc_wnd was 0
+         * (otherwise it will be dispatched by tx progress) */
+        if (old_wnd == 0) {
+            uct_srd_iface_progress_pending(iface);
+        }
+    }
+
+    if (fc & UCT_SRD_PACKET_FLAG_FC_SREQ) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_RX_SOFT_REQ, 1);
+
+        /* Got soft credit request. Mark ep that it needs to grant
+         * credits to the peer in outgoing AM (if any). */
+        uct_srd_ep_set_state(ep, UCT_SRD_EP_FLAG_FC_GRANT);
+    } else if (fc & UCT_SRD_PACKET_FLAG_FC_HREQ) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_RX_HARD_REQ, 1);
+        desc = uct_srd_ep_prepare_fc_pgrant(ep);
+        if (desc) {
+            uct_srd_ep_tx_desc(iface, ep, desc, 0, 1);
+            uct_srd_iface_complete_tx_desc(iface, ep, desc);
+        } else {
+            uct_srd_ep_ctl_op_add(iface, ep, UCT_SRD_EP_OP_FC_PGRANT);
+        }
+    }
+}
+
+static void inline
 uct_srd_ep_process_rx_desc(uct_srd_iface_t *iface, uct_srd_ep_t *ep, int is_am,
                           uct_srd_neth_t *neth, uct_srd_recv_desc_t *desc)
 {
     if (ucs_likely(is_am)) {
+        uct_srd_ep_am_fc_handler(iface, ep, neth);
         uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
                                     neth + 1, desc->am.len, &desc->super);
+    } else if (uct_srd_neth_is_pure_grant(neth)) {
+        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_RX_PURE_GRANT, 1);
+        ep->fc.fc_wnd = iface->config.fc_wnd_size;
+        ucs_mpool_put(desc);
     } else {
         /* must be connection reply packet */
         uct_srd_ep_rx_crep(iface, ep, neth, desc);
@@ -596,8 +758,9 @@ ucs_status_t uct_srd_ep_flush_nolock(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
         return UCS_OK; /* Nothing was ever sent */
     }
 
-    if (!uct_srd_iface_has_all_tx_resources(iface)) {
-        /* iface does not have all tx resources. Prevent reordering
+    if (!uct_srd_iface_has_all_tx_resources(iface) ||
+        !uct_srd_ep_has_fc_resources(ep)) {
+        /* iface/ep does not have all tx resources. Prevent reordering
          * with possible pending operations by not starting the flush.
          */
         return UCS_ERR_NO_RESOURCE;
@@ -700,6 +863,13 @@ static void uct_srd_ep_do_pending_ctl(uct_srd_ep_t *ep, uct_srd_iface_t *iface)
             uct_srd_ep_tx_desc(iface, ep, desc, 0, 1);
             uct_srd_iface_complete_tx_desc(iface, ep, desc);
         }
+    } else if (uct_srd_ep_ctl_op_check(ep, UCT_SRD_EP_OP_FC_PGRANT)) {
+        desc = uct_srd_ep_prepare_fc_pgrant(ep);
+        if (desc) {
+            uct_srd_ep_ctl_op_del(ep, UCT_SRD_EP_OP_FC_PGRANT);
+            uct_srd_ep_tx_desc(iface, ep, desc, 0, 1);
+            uct_srd_iface_complete_tx_desc(iface, ep, desc);
+        }
     } else {
         ucs_assertv(!uct_srd_ep_ctl_op_isany(ep),
                     "unsupported pending op mask: %x", ep->tx.pending.ops);
@@ -739,9 +909,12 @@ uct_srd_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
 
     ucs_assert(arg == NULL);
 
-    /* we should check for all iface tx resources
+    /* we should check for all iface/ep tx resources
      * because we do not know what the pending op is */
-    if (!uct_srd_iface_has_all_tx_resources(iface)) {
+    if (!uct_srd_iface_has_all_tx_resources(iface) ||
+        !uct_srd_ep_has_fc_resources(ep)) {
+        /* FIXME: should move to the next element if ep does not
+         * have fc credits. Next element might correspond to another ep */
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
@@ -827,8 +1000,9 @@ ucs_status_t uct_srd_ep_pending_add(uct_ep_h ep_h, uct_pending_req_t *req,
 
     uct_srd_enter(iface);
 
-    if (uct_srd_iface_has_all_tx_resources(iface) &&
-        uct_srd_ep_is_connected_and_no_pending(ep)) {
+    if (uct_srd_iface_has_all_tx_resources(iface)  &&
+        uct_srd_ep_is_connected_and_no_pending(ep) &&
+        uct_srd_ep_has_fc_resources(ep)) {
 
         uct_srd_leave(iface);
         return UCS_ERR_BUSY;
@@ -976,10 +1150,12 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
         uct_srd_leave(iface);
         return UCS_ERR_NO_RESOURCE;
     }
-    send_op->comp_handler = uct_srd_iface_send_op_release;
 
-    uct_srd_am_common(iface, ep, id, &am->neth);
+    UCT_SRD_AM_COMMON(iface, ep, id, &am->neth);
+
     am->hdr = hdr;
+
+    send_op->comp_handler = uct_srd_iface_send_op_release;
 
     iface->tx.sge[0].addr    = (uintptr_t)am;
     iface->tx.sge[0].length  = sizeof(*am);
@@ -991,6 +1167,8 @@ ucs_status_t uct_srd_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     uct_srd_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE, 2);
     ucs_queue_push(&ep->tx.outstanding_q, &send_op->out_queue);
     uct_srd_iface_complete_tx_op(iface, ep, send_op);
+
+    UCT_SRD_UPDATE_FC(iface, ep, am->neth.fc);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(hdr) + length);
     uct_srd_leave(iface);
@@ -1019,9 +1197,10 @@ ucs_status_t uct_srd_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
         uct_srd_leave(iface);
         return UCS_ERR_NO_RESOURCE;
     }
-    send_op->comp_handler = uct_srd_iface_send_op_release;
 
-    uct_srd_am_common(iface, ep, id, &am->neth);
+    UCT_SRD_AM_COMMON(iface, ep, id, &am->neth);
+
+    send_op->comp_handler = uct_srd_iface_send_op_release;
 
     iface->tx.sge[0].length  = sizeof(am->neth);
     iface->tx.sge[0].addr    = (uintptr_t)&am->neth;
@@ -1033,6 +1212,8 @@ ucs_status_t uct_srd_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
                       iface->tx.wr_inl.num_sge);
     ucs_queue_push(&ep->tx.outstanding_q, &send_op->out_queue);
     uct_srd_iface_complete_tx_op(iface, ep, send_op);
+
+    UCT_SRD_UPDATE_FC(iface, ep, am->neth.fc);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, uct_iov_total_length(iov, iovcnt));
     uct_srd_leave(iface);
@@ -1058,7 +1239,9 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     }
 
     neth = uct_srd_send_desc_neth(desc);
-    uct_srd_am_common(iface, ep, id, neth);
+
+    UCT_SRD_AM_COMMON(iface, ep, id, neth);
+
     length = pack_cb(neth + 1, arg);
 
     UCT_SRD_CHECK_AM_BCOPY(iface, id, length);
@@ -1069,6 +1252,8 @@ ssize_t uct_srd_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     ucs_assert(iface->tx.wr_desc.num_sge == 1);
     uct_srd_ep_tx_desc(iface, ep, desc, 0, INT_MAX);
     uct_srd_iface_complete_tx_desc(iface, ep, desc);
+
+    UCT_SRD_UPDATE_FC(iface, ep, neth->fc);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
     uct_srd_leave(iface);
@@ -1100,7 +1285,9 @@ uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     }
 
     neth = uct_srd_send_desc_neth(desc);
-    uct_srd_am_common(iface, ep, id, neth);
+
+    UCT_SRD_AM_COMMON(iface, ep, id, neth);
+
     memcpy(neth + 1, header, header_length);
 
     uct_srd_zcopy_op_set_comp(&desc->super, comp);
@@ -1113,6 +1300,8 @@ uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
                        UCT_IB_MAX_ZCOPY_LOG_SGE(&iface->super));
     uct_srd_iface_complete_tx_desc(iface, ep, desc);
     iface->tx.wr_desc.num_sge = 1;
+
+    UCT_SRD_UPDATE_FC(iface, ep, neth->fc);
 
     UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, header_length +
                       uct_iov_total_length(iov, iovcnt));
@@ -1261,9 +1450,34 @@ ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
 }
 #endif /* HAVE_DECL_EFA_DV_RDMA_READ */
 
+static ucs_status_t
+uct_srd_ep_fc_init(uct_srd_ep_t *ep, int16_t wnd_size
+                   UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
+{
+    ucs_status_t status;
+
+    ep->fc.fc_wnd = wnd_size;
+
+    status = UCS_STATS_NODE_ALLOC(&ep->fc.stats, &uct_srd_fc_stats_class,
+                                  stats_parent, "");
+    if (status != UCS_OK) {
+       return status;
+    }
+
+    UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_FC_WND, ep->fc.fc_wnd);
+
+    return UCS_OK;
+}
+
+static void uct_srd_ep_fc_cleanup(uct_srd_ep_t *ep)
+{
+    UCS_STATS_NODE_FREE(ep->fc.stats);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t* params)
 {
     uct_srd_iface_t *iface = ucs_derived_of(params->iface, uct_srd_iface_t);
+    ucs_status_t status;
 
     ucs_trace_func("");
 
@@ -1275,6 +1489,13 @@ static UCS_CLASS_INIT_FUNC(uct_srd_ep_t, const uct_ep_params_t* params)
     self->dest_ep_id         = UCT_SRD_EP_NULL_ID;
     self->path_index         = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->peer_address.ah    = NULL;
+
+    status = uct_srd_ep_fc_init(self, iface->config.fc_wnd_size
+                                UCS_STATS_ARG(self->super.stats));
+    if (status != UCS_OK) {
+       return status;
+    }
+
     uct_srd_ep_reset(self);
     uct_srd_iface_add_ep(iface, self);
     ucs_arbiter_group_init(&self->tx.pending.group);
@@ -1296,6 +1517,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_srd_ep_t)
     uct_srd_enter(iface);
 
     uct_srd_ep_purge(self, UCS_ERR_CANCELED);
+
+    uct_srd_ep_fc_cleanup(self);
 
     uct_srd_iface_remove_ep(iface, self);
     uct_srd_iface_cep_remove_ep(iface, self);

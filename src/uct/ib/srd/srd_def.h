@@ -40,6 +40,9 @@ enum {
     UCT_SRD_PACKET_FLAG_AM        = UCS_BIT(24),
     UCT_SRD_PACKET_FLAG_CTLX      = UCS_BIT(25),
 
+    /* Pure credit grant: empty control message indicating credit grant */
+    UCT_SRD_PACKET_FLAG_FC_PGRANT = UCS_BIT(26),
+
     UCT_SRD_PACKET_AM_ID_MASK     = UCS_MASK(UCT_SRD_PACKET_AM_ID_SHIFT),
     UCT_SRD_PACKET_DEST_ID_MASK   = UCS_MASK(UCT_SRD_PACKET_DEST_ID_SHIFT),
 };
@@ -49,44 +52,78 @@ enum {
     UCT_SRD_PACKET_CREP = 2,
 };
 
+/* Used for the fc member in uct_srd_neth */
+enum {
+    /* Piggy-backed credit Grant: ep should update its FC wnd as soon as iteceives AM with
+     * this bit set. Can be bundled with either soft or hard request bits */
+    UCT_SRD_PACKET_FLAG_FC_GRANT = UCS_BIT(0),
+
+    /* Soft Credit Request: indicates that receiving peer needs to piggy-back credits
+     * grant to counter AM (if any). Can be bundled with
+     * UCT_SRD_PACKET_FLAG_FC_GRANT  */
+    UCT_SRD_PACKET_FLAG_FC_SREQ  = UCS_BIT(1),
+
+    /* Hard Credit Request: indicates that sender wnd is close to be exhausted.
+     * The receiving peer must send a pure fc grant control message as soon as it
+     * receives AM  with this bit set. Can be bundled with
+     * UCT_SRD_PACKET_FLAG_FC_GRANT */
+    UCT_SRD_PACKET_FLAG_FC_HREQ  = UCS_BIT(2),
+};
+
 /*
 network header layout
 
-C - control packet extended header
-
 Active message packet header
+G - piggy-backed fc grant
+H - fc hard request
+S - fc soft request
 
 +---------------------------------------------------------------+
-| am_id   |rsv|1|            dest_ep_id (24 bit)                |
+| am_id | rsv |1|            dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
-|       psn (16 bit)        |
-+----------------------------
+|  rsv  |H|S|G|      psn (16 bit)     |
++--------------------------------------
 
 Control packet header
+C - control packet extended header (CREQ/CREP)
+G - fc pure grant
 
 +---------------------------------------------------------------+
-|rsv|C|0|                    dest_ep_id (24 bit)                |
+| rsv |G|C|0|                dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
-|       psn (16 bit)        |
-+----------------------------
+|    rsv    |        psn (16 bit)     |
++--------------------------------------
 
     // neth layout in human readable form
     uint32_t           dest_ep_id:24;
     uint8_t            is_am:1;
     union {
-        struct { // am false
-            uint8_t ctl:1;
-            uint8_t reserved:6;
-        } ctl;
         struct { // am true
             uint8_t reserved:2;
             uint8_t am_id:5;
         } am;
+        struct { // am false
+            uint8_t ctlx:1;
+            uint8_t fc_grant_pure:1;
+            uint8_t reserved:5;
+        } ctl;
+    };
+    union {
+        struct { // am true
+            uint8_t fc_grant:1;
+            uint8_t fc_soft_req:1;
+            uint8_t fc_hard_req:1;
+            uint8_t reserved:5;
+        } am;
+        struct { // am false
+            uint8_t reserved:8;
+        } ctl;
     };
 */
 
 typedef struct uct_srd_neth {
     uint32_t             packet_type;
+    uint8_t              fc;
     uct_srd_psn_t        psn;
 } UCS_S_PACKED uct_srd_neth_t;
 
@@ -198,6 +235,12 @@ static inline uct_srd_neth_t*
 uct_srd_send_desc_neth(uct_srd_send_desc_t *desc)
 {
     return (uct_srd_neth_t*)(desc + 1);
+}
+
+static inline uint32_t
+uct_srd_neth_is_pure_grant(uct_srd_neth_t *neth)
+{
+    return neth->packet_type & UCT_SRD_PACKET_FLAG_FC_PGRANT;
 }
 
 #endif
