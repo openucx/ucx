@@ -1305,7 +1305,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     if (ucp_worker_keepalive_is_enabled(worker)) {
         iface_params->field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;
-        iface_params->keepalive_interval = context->config.keepalive_interval;
+        iface_params->keepalive_interval =
+                context->config.ext.keepalive_interval;
     }
 
     /* Open UCT interface */
@@ -2927,7 +2928,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
 
     now = ucs_get_time();
     if (ucs_likely((now - worker->keepalive.last_round) <
-                   worker->context->config.keepalive_interval)) {
+                   worker->context->config.ext.keepalive_interval)) {
         goto out;
     }
 
