@@ -2090,10 +2090,10 @@ void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
                             UCS_VFS_TYPE_STRING, "thread_mode");
 
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
-                            &worker->num_all_eps, UCS_VFS_TYPE_UNSIGNED,
+                            &worker->num_all_eps, UCS_VFS_TYPE_U32,
                             "num_all_eps");
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
-                            &worker->keepalive.ep_count, UCS_VFS_TYPE_UNSIGNED,
+                            &worker->keepalive.ep_count, UCS_VFS_TYPE_U32,
                             "keepalive/ep_count");
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
                             &worker->keepalive.round_count, UCS_VFS_TYPE_SIZET,

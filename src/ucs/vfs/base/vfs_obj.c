@@ -95,15 +95,15 @@ void ucs_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
     unsigned long ulvalue;
     long lvalue;
 
-    UCS_STATIC_ASSERT(UCS_VFS_TYPE_UNSIGNED >= UCS_VFS_TYPE_LAST);
-    UCS_STATIC_ASSERT(UCS_VFS_TYPE_HEX >= UCS_VFS_TYPE_LAST);
+    UCS_STATIC_ASSERT(UCS_VFS_TYPE_FLAG_UNSIGNED >= UCS_VFS_TYPE_LAST);
+    UCS_STATIC_ASSERT(UCS_VFS_TYPE_FLAG_HEX >= UCS_VFS_TYPE_LAST);
 
     if (type == UCS_VFS_TYPE_POINTER) {
         ucs_string_buffer_appendf(strb, "%p\n", *(void**)arg_ptr);
     } else if (type == UCS_VFS_TYPE_STRING) {
         ucs_string_buffer_appendf(strb, "%s\n", (char*)arg_ptr);
     } else {
-        switch (type & ~(UCS_VFS_TYPE_UNSIGNED | UCS_VFS_TYPE_HEX)) {
+        switch (type & ~(UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_FLAG_HEX)) {
         case UCS_VFS_TYPE_CHAR:
             lvalue  = *(char*)arg_ptr;
             ulvalue = *(unsigned char*)arg_ptr;
@@ -121,12 +121,15 @@ void ucs_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
             ulvalue = *(unsigned long*)arg_ptr;
             break;
         default:
+            ucs_warn("vfs object %p attribute %p: incorrect type 0x%lx", obj,
+                     arg_ptr, arg_u64);
+            ucs_string_buffer_appendf(strb, "<unable to get the value>\n");
             return;
         }
 
-        if (type & UCS_VFS_TYPE_HEX) {
+        if (type & UCS_VFS_TYPE_FLAG_HEX) {
             ucs_string_buffer_appendf(strb, "%lx\n", ulvalue);
-        } else if (type & UCS_VFS_TYPE_UNSIGNED) {
+        } else if (type & UCS_VFS_TYPE_FLAG_UNSIGNED) {
             ucs_string_buffer_appendf(strb, "%lu\n", ulvalue);
         } else {
             ucs_string_buffer_appendf(strb, "%ld\n", lvalue);
