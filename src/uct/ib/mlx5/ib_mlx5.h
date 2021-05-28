@@ -495,6 +495,10 @@ ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
                                          uct_ib_mlx5_qp_t *qp,
                                          enum ibv_qp_state state);
 
+ucs_status_t
+uct_ib_mlx5_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
+                               struct ibv_ah_attr *ah_attr, uint32_t *dest_qpn);
+
 void uct_ib_mlx5_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
 
 /**
@@ -611,6 +615,11 @@ void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
                                             uint8_t path_index, void *qpc,
                                             uint32_t *opt_param_mask);
 
+ucs_status_t
+uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
+                                    struct ibv_ah_attr *ah_attr,
+                                    uint32_t *dest_qpn);
+
 static inline ucs_status_t
 uct_ib_mlx5_md_buf_alloc(uct_ib_mlx5_md_t *md, size_t size, int silent,
                          void **buf_p, uct_ib_mlx5_devx_umem_t *mem,
@@ -696,6 +705,14 @@ uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 
 static inline ucs_status_t
 uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+static inline ucs_status_t
+uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
+                                    struct ibv_ah_attr *ah_attr,
+                                    uint32_t *dest_qpn)
 {
     return UCS_ERR_UNSUPPORTED;
 }
