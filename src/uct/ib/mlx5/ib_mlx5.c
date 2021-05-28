@@ -738,6 +738,20 @@ ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
     }
 }
 
+ucs_status_t
+uct_ib_mlx5_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
+                               struct ibv_ah_attr *ah_attr, uint32_t *dest_qpn)
+{
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
+
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
+        return uct_ib_mlx5_devx_query_qp_peer_info(iface, qp, ah_attr,
+                                                   dest_qpn);
+    } else {
+        return uct_ib_query_qp_peer_info(qp->verbs.qp, ah_attr, dest_qpn);
+    }
+}
+
 ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *ibmd, uint8_t *mr_id)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
