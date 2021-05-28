@@ -740,7 +740,7 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_process_recv_data(ucp_request_t *req, const void *data,
                               size_t length, size_t offset, int is_zcopy,
-                              int is_am)
+                              int is_am, int should_complete)
 {
     ucs_status_t status;
     int last;
@@ -763,14 +763,17 @@ ucp_request_process_recv_data(ucp_request_t *req, const void *data,
     }
 
     status = req->status;
-    if (is_zcopy) {
-        ucp_request_recv_buffer_dereg(req);
-    }
 
-    if (is_am) {
-        ucp_request_complete_am_recv(req, status);
-    } else {
-        ucp_request_complete_tag_recv(req, status);
+    if (should_complete) {
+       if (is_zcopy) {
+           ucp_request_recv_buffer_dereg(req);
+       }
+     
+       if (is_am) {
+            ucp_request_complete_am_recv(req, status);
+        } else {
+            ucp_request_complete_tag_recv(req, status);
+        }
     }
 
     ucs_assert(status != UCS_INPROGRESS);
