@@ -1253,7 +1253,7 @@ public:
 
     void init()
     {
-        modify_config("RNDV_THRESH", "128");
+        modify_config("RNDV_THRESH", "0");
 
         test_ucp_am_nbx::init();
         m_rx_memtype = static_cast<ucs_memory_type_t>(get_variant_value(1));
@@ -1261,6 +1261,12 @@ public:
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
+{
+    ucs_memory_type_t mt = static_cast<ucs_memory_type_t>(get_variant_value(0));
+    test_am_send_recv(64 * UCS_KBYTE, 8, 0, mt);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv_am, "RNDV_SCHEME=am")
 {
     ucs_memory_type_t mt = static_cast<ucs_memory_type_t>(get_variant_value(0));
     test_am_send_recv(64 * UCS_KBYTE, 8, 0, mt);

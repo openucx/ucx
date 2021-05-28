@@ -1243,6 +1243,7 @@ static uint64_t ucp_wireup_get_rma_bw_iface_flags(ucp_rndv_mode_t rndv_mode)
         return UCT_IFACE_FLAG_GET_ZCOPY;
     case UCP_RNDV_MODE_PUT_ZCOPY:
         return UCT_IFACE_FLAG_PUT_ZCOPY;
+    case UCP_RNDV_MODE_AM:
     default:
         return 0;
     }

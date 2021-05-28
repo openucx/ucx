@@ -1407,30 +1407,28 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             src_mem_type        = ucp_rkey_packed_mem_type(rkey_buf);
         }
 
-        if (rndv_mode == UCP_RNDV_MODE_AUTO) {
-            /* check if we need pipelined memtype staging */
-            if (UCP_MEM_IS_GPU(rreq->recv.mem_type) &&
-                ucp_rndv_is_recv_pipeline_needed(rndv_req, rndv_rts_hdr,
-                                                 rkey_buf, rreq->recv.mem_type,
-                                                 is_get_zcopy_failed)) {
-                ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
-                if (ucp_rndv_is_put_pipeline_needed(rndv_rts_hdr->address,
-                                                    rndv_rts_hdr->size,
-                                                    get_zcopy->min,
-                                                    get_zcopy->max,
-                                                    is_get_zcopy_failed)) {
-                    /* send FRAG RTR for sender to PUT the fragment. */
-                    ucp_rndv_send_frag_rtr(worker, rndv_req, rreq, rndv_rts_hdr);
-                } else {
-                    /* sender address is present. do GET pipeline */
-                    ucp_rndv_recv_start_get_pipeline(worker, rndv_req, rreq,
-                                                     rndv_rts_hdr->sreq.req_id,
-                                                     rkey_buf,
-                                                     rndv_rts_hdr->address,
-                                                     rndv_rts_hdr->size, 0);
-                }
-                goto out;
+        /* Check if we need pipelined memtype staging */
+        if ((rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&
+            UCP_MEM_IS_GPU(rreq->recv.mem_type) &&
+            ucp_rndv_is_recv_pipeline_needed(rndv_req, rndv_rts_hdr, rkey_buf,
+                                             rreq->recv.mem_type,
+                                             is_get_zcopy_failed)) {
+            ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
+            if (ucp_rndv_is_put_pipeline_needed(rndv_rts_hdr->address,
+                                                rndv_rts_hdr->size,
+                                                get_zcopy->min, get_zcopy->max,
+                                                is_get_zcopy_failed)) {
+                /* Send FRAG RTR for sender to PUT the fragment. */
+                ucp_rndv_send_frag_rtr(worker, rndv_req, rreq, rndv_rts_hdr);
+            } else {
+                /* Sender address is present, do GET pipeline */
+                ucp_rndv_recv_start_get_pipeline(worker, rndv_req, rreq,
+                                                 rndv_rts_hdr->sreq.req_id,
+                                                 rkey_buf,
+                                                 rndv_rts_hdr->address,
+                                                 rndv_rts_hdr->size, 0);
             }
+            goto out;
         }
 
         if (!is_get_zcopy_failed || !UCP_MEM_IS_HOST(src_mem_type)) {
@@ -1910,6 +1908,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         }
 
         if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&
+            (context->config.ext.rndv_mode != UCP_RNDV_MODE_AM) &&
             ucp_rndv_test_zcopy_scheme_support(sreq->send.length,
                                                put_zcopy->min, put_zcopy->max,
                                                put_zcopy->split)) {
