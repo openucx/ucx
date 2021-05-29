@@ -1668,8 +1668,8 @@ typedef struct {
 
     /**
      * Size of the @ref debug_string. String will be filled up to this size.
-     * Maximum possible size debug string can be obtained by quering the worker via
-     * @ref ucp_worker_query.
+     * Maximum possible size debug string can be obtained by querying the worker
+     * via @ref ucp_worker_query.
      */
     size_t            debug_string_size;
 
