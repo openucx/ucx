@@ -107,8 +107,8 @@ typedef struct ucp_context_config {
     size_t                                 listener_backlog;
     /** Enable new protocol selection logic */
     int                                    proto_enable;
-    /** Time period between keepalive rounds (0 - disabled) */
-    double                                 keepalive_interval;
+    /** Time period between keepalive rounds */
+    ucs_time_t                             keepalive_interval;
     /** Maximal number of endpoints to check on every keepalive round
      * (0 - disabled, inf - check all endpoints on every round) */
     unsigned                               keepalive_num_eps;
@@ -252,9 +252,6 @@ typedef struct ucp_context {
 
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
-
-        /* Time period between keepalive rounds */
-        ucs_time_t                keepalive_interval;
 
         /* MD to compare for transport selection scores */
         char                      *selection_cmp;
