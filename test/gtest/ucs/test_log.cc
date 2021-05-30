@@ -166,15 +166,17 @@ protected:
 
 class log_test_info : public log_test {
 protected:
-    log_test_info() : m_spacer("  "), m_log_str("hello world")
+    log_test_info() :
+        m_spacer("  "), m_log_str("hello world"), m_exp_found(true)
     {
     }
 
     virtual void check_log_file()
     {
         std::string log_str = "UCX  INFO" + m_spacer + m_log_str;
-        if (!do_grep(log_str)) {
-            ADD_FAILURE() << read_logfile();
+        if (m_exp_found != do_grep(log_str)) {
+            ADD_FAILURE() << read_logfile() << " Expected to "
+                          << (m_exp_found ? "" : "not ") << "find " << log_str;
         }
     }
 
@@ -185,6 +187,7 @@ protected:
 
     std::string m_spacer;
     std::string m_log_str;
+    bool m_exp_found;
 };
 
 UCS_TEST_F(log_test_info, hello) {
@@ -196,6 +199,15 @@ UCS_TEST_F(log_test_info, hello_indent) {
     log_info();
     ucs_log_indent(-1);
     m_spacer += "  ";
+}
+
+UCS_TEST_F(log_test_info, filter_on, "LOG_FILE_FILTER=*test_lo*.cc") {
+    log_info();
+}
+
+UCS_TEST_F(log_test_info, filter_off, "LOG_FILE_FILTER=file.c") {
+    log_info();
+    m_exp_found = false;
 }
 
 class log_test_print : public log_test {
