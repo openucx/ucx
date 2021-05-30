@@ -592,12 +592,11 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
                          (_iface)->super.super.config.fc_hard_thresh)) { \
             ucs_status_t _status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
             if (ucs_unlikely(_status != UCS_OK)) { \
-                if (((_ep)->dci != UCT_DC_MLX5_EP_NO_DCI) && \
-                    !uct_dc_mlx5_iface_is_dci_rand(_iface)) { \
-                    ucs_assertv_always(uct_dc_mlx5_iface_dci_has_outstanding(_iface, \
-                                                                             (_ep)->dci), \
-                                       "iface (%p) ep (%p) dci leak detected: dci=%d", \
-                                       _iface, _ep, (_ep)->dci); \
+                if ((_ep)->fc.fc_wnd <= 0) { \
+                    UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, \
+                                             UCT_RC_FC_STAT_NO_CRED, 1); \
+                    UCS_STATS_UPDATE_COUNTER((_ep)->super.stats, \
+                                             UCT_EP_STAT_NO_RES, 1); \
                 } \
                 return _status; \
             } \

@@ -135,6 +135,7 @@ typedef struct uct_dc_mlx5_iface_config {
     int                                 dct_full_handshake;
     unsigned                            quota;
     unsigned                            rand_seed;
+    ucs_time_t                          fc_hard_req_timeout;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
 } uct_dc_mlx5_iface_config_t;
 
@@ -186,7 +187,13 @@ typedef struct uct_dc_fc_request {
 } uct_dc_fc_request_t;
 
 
-KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uint64_t);
+typedef struct uct_dc_mlx5_ep_fc_entry {
+    uint64_t   seq; /* Sequence number in FC_HARD_REQ's sender data */
+    ucs_time_t send_time; /* Last time FC_HARD_REQ was sent */
+} uct_dc_mlx5_ep_fc_entry_t;
+
+
+KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
 
 typedef struct {
@@ -223,6 +230,9 @@ struct uct_dc_mlx5_iface {
 
         /* Sequence number of expected FC grants */
         uint64_t                  fc_seq;
+
+        /* Timeout for sending FC_HARD_REQ when FC window is empty */
+        ucs_time_t                fc_hard_req_timeout;
 
         /* Seed used for random dci allocation */
         unsigned                  rand_seed;
