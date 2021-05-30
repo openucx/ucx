@@ -159,6 +159,7 @@ gtest_SOURCES = \
 	ucs/test_config.cc \
 	ucs/test_conn_match.cc \
 	ucs/test_datatype.cc \
+	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \

@@ -295,6 +295,16 @@ void test_uct_ib_with_specific_port::cleanup() {
     }
 }
 
+class test_uct_ib_roce : public test_uct_ib {
+};
+
+UCS_TEST_P(test_uct_ib_roce, local_subnet_only, "IB_ROCE_LOCAL_SUBNET=y")
+{
+    send_recv_short();
+}
+
+UCT_INSTANTIATE_IB_TEST_CASE(test_uct_ib_roce);
+
 class test_uct_ib_lmc : public test_uct_ib_with_specific_port {
 public:
     void init() {
