@@ -10,17 +10,19 @@
 #include <uct/base/uct_cm.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/string.h>
+#include <ucs/datastruct/bitmap.h>
+#include <uct/ib/mlx5/ib_mlx5.h>
 
 #include <rdma/rdma_cma.h>
 
 
-KHASH_MAP_INIT_INT64(uct_rdmacm_cm_cqs, struct ibv_cq*);
+KHASH_MAP_INIT_INT64(uct_rdmacm_cm_device_contexts, struct uct_rdmacm_cm_device_context*);
 
 
-#define UCT_RDMACM_TCP_PRIV_DATA_LEN    56    /** See rdma_connect(3) */
-#define UCT_RDMACM_EP_FLAGS_STRING_LEN  128   /** A string to hold the
-                                                  representation of the ep flags */
-#define UCT_RDMACM_EP_STRING_LEN        192   /** A string to hold the ep info */
+#define UCT_RDMACM_TCP_PRIV_DATA_LEN            56    /** See rdma_connect(3) */
+#define UCT_RDMACM_EP_FLAGS_STRING_LEN          128   /** A string to hold the
+                                                          representation of the ep flags */
+#define UCT_RDMACM_EP_STRING_LEN                192   /** A string to hold the ep info */
 
 
 typedef struct uct_rdmacm_priv_data_hdr {
@@ -33,22 +35,43 @@ typedef struct uct_rdmacm_priv_data_hdr {
  * An rdmacm connection manager
  */
 typedef struct uct_rdmacm_cm {
-    uct_cm_t                   super;
-    struct rdma_event_channel  *ev_ch;
-    khash_t(uct_rdmacm_cm_cqs) cqs;
+    uct_cm_t                               super;
+    struct rdma_event_channel              *ev_ch;
+    khash_t(uct_rdmacm_cm_device_contexts) ctxs;
 
     struct {
-        struct sockaddr        *src_addr;
-        double                 timeout;
+        struct sockaddr                    *src_addr;
+        double                             timeout;
+        ucs_ternary_auto_value_t           reserved_qpn;
     } config;
 } uct_rdmacm_cm_t;
 
 
 typedef struct uct_rdmacm_cm_config {
-    uct_cm_config_t super;
-    char            *src_addr;
-    double          timeout;
+    uct_cm_config_t          super;
+    char                     *src_addr;
+    double                   timeout;
+    ucs_ternary_auto_value_t reserved_qpn;
 } uct_rdmacm_cm_config_t;
+
+
+/** A reserved qpn block */
+typedef struct uct_rdmacm_cm_reserved_qpn_blk {
+    uint32_t               first_qpn;             /** Number of the first qpn in the block */
+    uint32_t               next_avail_qpn_offset; /** Offset of next available qpn */
+    uint32_t               refcount;              /** The counter of qpns which were created and hasn't been destroyed */
+    ucs_list_link_t        entry;                 /** List link of blocks */
+    struct mlx5dv_devx_obj *obj;                  /** The devx obj used to create the block */
+} uct_rdmacm_cm_reserved_qpn_blk_t;
+
+
+typedef struct uct_rdmacm_cm_device_context {
+    int             use_reserved_qpn;
+    ucs_spinlock_t  lock;                         /** Avoid competed condition on the qpn resource for multi-threads */ 
+    ucs_list_link_t blk_list;
+    uint32_t        log_reserved_qpn_granularity;
+    struct ibv_cq   *cq;
+} uct_rdmacm_cm_device_context_t;
 
 
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_t, uct_cm_t, uct_component_h,
@@ -78,11 +101,17 @@ ucs_status_t uct_rdmacm_cm_ack_event(struct rdma_cm_event *event);
 
 ucs_status_t uct_rdmacm_cm_reject(uct_rdmacm_cm_t *cm, struct rdma_cm_id *id);
 
-ucs_status_t uct_rdmacm_cm_get_cq(uct_rdmacm_cm_t *cm, struct ibv_context *verbs,
-                                  struct ibv_cq **cq);
-
-void uct_rdmacm_cm_cqs_cleanup(uct_rdmacm_cm_t *cm);
-
 size_t uct_rdmacm_cm_get_max_conn_priv();
+
+ucs_status_t uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_t *cm,
+                                              struct ibv_context *verbs,
+                                              uct_rdmacm_cm_device_context_t **ctx_p);
+
+ucs_status_t
+uct_rdmacm_cm_reserved_qpn_blk_add(uct_rdmacm_cm_device_context_t *ctx,
+                                   struct ibv_context *verbs,
+                                   uct_rdmacm_cm_reserved_qpn_blk_t **blk_p);
+
+void uct_rdmacm_cm_reserved_qpn_blk_destroy(uct_rdmacm_cm_reserved_qpn_blk_t *blk);
 
 #endif
