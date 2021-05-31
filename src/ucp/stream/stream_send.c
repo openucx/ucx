@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -38,10 +39,11 @@ static void ucp_stream_send_req_init(ucp_request_t* req, ucp_ep_h ep,
                                      ucs_memory_type_t memory_type, size_t count,
                                      uint32_t flags)
 {
-    req->flags             = flags;
+    req->flags             = flags | UCP_REQUEST_FLAG_SEND_STREAM;
     req->send.ep           = ep;
     req->send.buffer       = (void*)buffer;
     req->send.datatype     = datatype;
+    req->send.dt_count     = count;
     req->send.lane         = ep->am_lane;
     ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
@@ -77,8 +79,18 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
      * Otherwise, return the request.
      */
     ucp_request_send(req, 0);
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_REPLAY)) {
+        return req + 1;
+    }
+
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);
+    } else if (ucs_unlikely(!ucp_ep_is_connected(req->send.ep))) {
+        /* EP may be reconfigured during connection. After reconfiguration,
+           the request needs to be replayed. UCP_OP_ATTR_FLAG_FAST_CMPL
+           will affect the threshold calculation during replay and need to
+           be saved. */
+        req->send.replay_flags = param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL;
     }
 
     ucp_request_set_send_callback_param(param, req, send);
@@ -192,6 +204,19 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
+}
+
+void ucp_stream_replay_request(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucp_request_param_t param = {
+        .op_attr_mask = req->send.replay_flags,
+    };
+
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_REPLAY);
+    req->send.lane = ep->am_lane;
+    ucp_stream_send_req(req, req->send.dt_count, &ucp_ep_config(ep)->am, &param,
+                        ucp_ep_config(ep)->stream.proto);
 }
 
 static ucs_status_t ucp_stream_contig_am_short(uct_pending_req_t *self)

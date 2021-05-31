@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -2407,4 +2408,10 @@ void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map)
                      ep, ucs_status_string(status));
         }
     }
+}
+
+int ucp_ep_is_connected(ucp_ep_h ep)
+{
+    return (ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) &&
+           (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED);
 }

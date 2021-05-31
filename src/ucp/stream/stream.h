@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2017.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -66,5 +67,7 @@ ucp_stream_worker_dequeue_ep_head(ucp_worker_h worker)
     ucp_stream_ep_dequeue(ep_ext);
     return ep_ext;
 }
+
+void ucp_stream_replay_request(ucp_request_t *req);
 
 #endif /* UCP_STREAM_H_ */

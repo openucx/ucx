@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
  * Copyright (C) Mellanox Technologies Ltd. 2020. ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -95,6 +96,8 @@ size_t ucp_am_max_header_size(ucp_worker_h worker);
 
 ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                      unsigned tl_flags);
+
+void ucp_am_replay_request(ucp_request_t *req);
 
 UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
 

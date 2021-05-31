@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -18,6 +19,9 @@
 #include <ucp/core/ucp_proxy_ep.h>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_listener.h>
+#include <ucp/core/ucp_am.h>
+#include <ucp/stream/stream.h>
+#include <ucp/tag/tag_send.h>
 #include <ucp/proto/proto_am.inl>
 #include <ucp/tag/eager.h>
 #include <ucs/async/async.h>
@@ -753,7 +757,18 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, void *arg)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     ucs_assert(req->send.ep == (ucp_ep_h)arg);
-    ucp_request_send(req, 0);
+
+    req->flags |= UCP_REQUEST_FLAG_REPLAY;
+    if (req->flags & UCP_REQUEST_FLAG_SEND_TAG) {
+        ucp_tag_replay_request(req);
+    } else if (req->flags & UCP_REQUEST_FLAG_SEND_AM ) {
+        ucp_am_replay_request(req);
+    } else if (req->flags & UCP_REQUEST_FLAG_SEND_STREAM) {
+        ucp_stream_replay_request(req);
+    } else {
+        /* RMA send case. */
+        ucp_request_send(req, 0);
+    }
 }
 
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,

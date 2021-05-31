@@ -2,6 +2,7 @@
  * Copyright (C) Mellanox Technologies Ltd. 2001-2020.  ALL RIGHTS RESERVED.
  * Copyright (c) UT-Battelle, LLC. 2015-2017. ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -56,12 +57,14 @@ enum {
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV          = UCS_BIT(18),
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = UCS_BIT(19),
-    UCP_REQUEST_FLAG_IN_PTR_MAP           = UCS_BIT(20)
+    UCP_REQUEST_FLAG_IN_PTR_MAP           = UCS_BIT(20),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV          = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL       = 0,
-    UCP_REQUEST_FLAG_IN_PTR_MAP           = 0
+    UCP_REQUEST_FLAG_IN_PTR_MAP           = 0,
 #endif
+    UCP_REQUEST_FLAG_SEND_STREAM          = UCS_BIT(21),
+    UCP_REQUEST_FLAG_REPLAY               = UCS_BIT(22),
 };
 
 
@@ -127,6 +130,8 @@ struct ucp_request {
             ucp_ep_h                ep;
             void                    *buffer;    /* Send buffer */
             ucp_datatype_t          datatype;   /* Send type */
+            size_t                  dt_count;
+            uint32_t                replay_flags;
             size_t                  length;     /* Total length, in bytes */
             ucp_send_nbx_callback_t cb;         /* Completion callback */
 

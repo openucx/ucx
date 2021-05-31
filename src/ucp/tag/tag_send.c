@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -11,6 +12,7 @@
 #include "tag_match.inl"
 #include "eager.h"
 #include "tag_rndv.h"
+#include "tag_send.h"
 
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_worker.h>
@@ -114,8 +116,18 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
      * Otherwise, return the request.
      */
     ucp_request_send(req, 0);
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_REPLAY)) {
+        return req + 1;
+    }
+
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);
+    } else if (ucs_unlikely(!ucp_ep_is_connected(req->send.ep))) {
+        /* EP may be reconfigured during connection. After reconfiguration,
+           the request needs to be replayed. UCP_OP_ATTR_FLAG_FAST_CMPL
+           will affect the threshold calculation during replay and need to
+           be saved. */
+        req->send.replay_flags = param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL;
     }
 
     ucp_request_set_send_callback_param(param, req, send);
@@ -132,6 +144,7 @@ ucp_tag_send_req_init(ucp_request_t* req, ucp_ep_h ep, const void* buffer,
     req->send.ep                = ep;
     req->send.buffer            = (void*)buffer;
     req->send.datatype          = datatype;
+    req->send.dt_count          = count;
     req->send.msg_proto.tag.tag = tag;
     ucp_request_send_state_init(req, datatype, count);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
@@ -344,4 +357,37 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
+}
+
+void ucp_tag_replay_request(ucp_request_t *req)
+{
+    size_t contig_length = 0;
+    ucp_ep_h ep = req->send.ep;
+    ucp_request_param_t param = {
+        .op_attr_mask = req->send.replay_flags,
+    };
+
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_REPLAY);
+    if (req->flags & UCP_REQUEST_FLAG_SYNC) {
+        req->send.lane = ucp_ep_config(ep)->tag.lane;
+        ucp_tag_send_req(req, req->send.dt_count, &ucp_ep_config(ep)->tag.eager,
+                         &param, ucp_ep_config(ep)->tag.sync_proto);
+        return;
+    }
+
+    if (ep->worker->context->config.ext.proto_enable) {
+        if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
+            contig_length = ucp_contig_dt_length(req->send.datatype,
+                                                 req->send.dt_count);
+        }
+        ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
+                                  UCP_WORKER_CFG_INDEX_NULL, req,
+                                  UCP_OP_ID_TAG_SEND, req->send.buffer,
+                                  req->send.dt_count, req->send.datatype,
+                                  contig_length, &param);
+    } else {
+        req->send.lane = ucp_ep_config(ep)->tag.lane;
+        ucp_tag_send_req(req, req->send.dt_count, &ucp_ep_config(ep)->tag.eager,
+                         &param, ucp_ep_config(ep)->tag.proto);
+    }
 }
