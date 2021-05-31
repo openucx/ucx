@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -153,6 +154,9 @@ struct uct_ib_iface_config {
     /* Number of paths to expose for the interface  */
     unsigned long           num_paths;
 
+    /* Whether to use local IP address and subnet mask for RoCE(v2) routing */
+    int                     rocev2_use_netmask;
+
     /* Multiplier for RoCE LAG UDP source port calculation */
     unsigned                roce_path_factor;
 
@@ -252,6 +256,7 @@ struct uct_ib_iface {
     uint16_t                  pkey_index;
     uint16_t                  pkey;
     uint8_t                   addr_size;
+    uint8_t                   addr_prefix_bits;
     uct_ib_device_gid_info_t  gid_info;
 
     struct {

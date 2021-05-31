@@ -1668,8 +1668,8 @@ typedef struct {
 
     /**
      * Size of the @ref debug_string. String will be filled up to this size.
-     * Maximum possible size debug string can be obtained by quering the worker via
-     * @ref ucp_worker_query.
+     * Maximum possible size debug string can be obtained by querying the worker
+     * via @ref ucp_worker_query.
      */
     size_t            debug_string_size;
 
@@ -3282,7 +3282,7 @@ ucs_status_ptr_t ucp_tag_send_nb(ucp_ep_h ep, const void *buffer, size_t count,
  * This routine provides a convenient and efficient way to implement a
  * blocking send pattern. It also completes requests faster than
  * @ref ucp_tag_send_nb() because:
- * @li it always uses @ref uct_ep_am_bcopy() to send data up to the
+ * @li it always uses eager protocol to send data up to the
  *     rendezvous threshold.
  * @li its rendezvous threshold is higher than the one used by
  *     the @ref ucp_tag_send_nb(). The threshold is controlled by

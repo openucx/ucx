@@ -54,6 +54,10 @@ protected:
         return m_md_attr;
     }
 
+    static void dereg_cb(void *arg);
+
+    size_t                        m_comp_count;
+
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
     ucs::handle<uct_md_h>         m_md;

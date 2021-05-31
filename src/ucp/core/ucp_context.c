@@ -315,8 +315,9 @@ static ucs_config_field_t ucp_config_table[] = {
 
   /* TODO: set for keepalive more reasonable values */
   {"KEEPALIVE_INTERVAL", "60s",
-   "Time interval between keepalive rounds (0 - disabled).",
-   ucs_offsetof(ucp_config_t, ctx.keepalive_interval), UCS_CONFIG_TYPE_TIME},
+   "Time interval between keepalive rounds.",
+   ucs_offsetof(ucp_config_t, ctx.keepalive_interval),
+   UCS_CONFIG_TYPE_TIME_UNITS},
 
   {"KEEPALIVE_NUM_EPS", "128",
    "Maximal number of endpoints to check on every keepalive round\n"
@@ -328,6 +329,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "A value of 'auto' means to enable only if error handling is enabled on the\n"
    "endpoint.",
    ucs_offsetof(ucp_config_t, ctx.proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+  {"ERROR_HANDLER_DELAY", "0us",
+   "Artificial delay between detecting an error and processing it (0 - disabled).\n"
+   "Used for testing purposes",
+   ucs_offsetof(ucp_config_t, ctx.err_handler_delay),
+   UCS_CONFIG_TYPE_TIME_UNITS},
 
    {NULL}
 };
@@ -1466,7 +1473,6 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err_free_alloc_methods;
     }
 
-    context->config.keepalive_interval = ucs_time_from_sec(context->config.ext.keepalive_interval);
     return UCS_OK;
 
 err_free_alloc_methods:

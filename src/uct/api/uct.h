@@ -2397,7 +2397,6 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @ingroup UCT_MD
  * @brief Detect memory type
  *
- *
  * @param [in]     md           Memory domain to detect memory type
  * @param [in]     addr         Memory address to detect.
  * @param [in]     length       Size of memory

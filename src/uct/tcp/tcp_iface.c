@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
  * Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
 
@@ -687,8 +688,12 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_cleanup_tx_mpool;
     }
 
-    status = uct_tcp_netif_inaddr(self->if_name, &self->config.ifaddr,
-                                  &self->config.netmask);
+    status = ucs_sockaddr_get_ifaddr(self->if_name, &self->config.ifaddr);
+    if (status != UCS_OK) {
+        goto err_cleanup_rx_mpool;
+    }
+
+    status = ucs_sockaddr_get_ifmask(self->if_name, &self->config.netmask);
     if (status != UCS_OK) {
         goto err_cleanup_rx_mpool;
     }

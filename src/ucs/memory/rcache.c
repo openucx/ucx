@@ -1123,7 +1123,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
 
     self->params = *params;
 
-    self->name = strdup(name);
+    self->name = ucs_strdup(name, "ucs rcache name");
     if (self->name == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_destroy_stats;
@@ -1192,7 +1192,7 @@ err_destroy_inv_q_lock:
 err_destroy_rwlock:
     pthread_rwlock_destroy(&self->pgt_lock);
 err_free_name:
-    free(self->name);
+    ucs_free(self->name);
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
 err:
@@ -1226,7 +1226,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
     ucs_spinlock_destroy(&self->lock);
     pthread_rwlock_destroy(&self->pgt_lock);
     UCS_STATS_NODE_FREE(self->stats);
-    free(self->name);
+    ucs_free(self->name);
 }
 
 UCS_CLASS_DEFINE(ucs_rcache_t, void);

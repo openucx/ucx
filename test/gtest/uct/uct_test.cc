@@ -1212,8 +1212,6 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
     uct_ep_h ep;
     ucs_status_t status;
 
-    ucs::scoped_async_lock lock(async());
-
     reserve_ep(index);
     ASSERT_FALSE(m_eps[index]) << "Already connected";
 

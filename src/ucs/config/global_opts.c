@@ -20,7 +20,7 @@
 
 
 ucs_global_opts_t ucs_global_opts = {
-    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX"},
+    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX", "*"},
     .log_print_enable      = 0,
     .log_file              = "",
     .log_file_size         = SIZE_MAX,
@@ -71,8 +71,15 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "UCS logging level. Messages with a level higher or equal to the selected "
   "will be printed.\n"
   "Possible values are: fatal, error, warn, info, debug, trace, data, func, poll.",
-  ucs_offsetof(ucs_global_opts_t, log_component),
+  ucs_offsetof(ucs_global_opts_t, log_component.log_level),
   UCS_CONFIG_TYPE_LOG_COMP},
+
+ {"LOG_FILE_FILTER", "*",
+  "Set a filter for log message according to source file path. See glob (7) for\n"
+  "pattern syntax.\n"
+  "NOTE: The source file path must fully match the given pattern.",
+  ucs_offsetof(ucs_global_opts_t, log_component.file_filter),
+               UCS_CONFIG_TYPE_STRING},
 
  {"LOG_FILE", "",
   "If not empty, UCS will print log messages to the specified file instead of stdout.\n"

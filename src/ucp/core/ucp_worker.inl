@@ -75,7 +75,7 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
 {
-    return worker->context->config.keepalive_interval != 0;
+    return worker->context->config.ext.keepalive_interval != UCS_TIME_INFINITY;
 }
 
 /**

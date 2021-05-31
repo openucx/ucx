@@ -455,9 +455,6 @@ extern const uct_tcp_ep_progress_t uct_tcp_ep_progress_rx_cb[];
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
 
-ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifaddr,
-                                  struct sockaddr_in *netmask);
-
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 
 int uct_tcp_sockaddr_cmp(const struct sockaddr *sa1,

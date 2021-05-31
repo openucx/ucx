@@ -10,6 +10,7 @@ pr:
   paths:
     exclude:
     - .gitignore
+    - .readthedocs.yaml
     - docs/source
     - docs/CodeStyle.md
     - docs/LoggingStyle.md

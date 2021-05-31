@@ -28,18 +28,18 @@ typedef enum {
     UCS_VFS_TYPE_LAST,
 
     /* Type modifiers */
-    UCS_VFS_TYPE_UNSIGNED = UCS_BIT(14),
-    UCS_VFS_TYPE_HEX      = UCS_BIT(15),
+    UCS_VFS_TYPE_FLAG_UNSIGNED = UCS_BIT(14),
+    UCS_VFS_TYPE_FLAG_HEX      = UCS_BIT(15),
 
     /* Convenience flags */
     UCS_VFS_TYPE_I8       = UCS_VFS_TYPE_CHAR,
-    UCS_VFS_TYPE_U8       = UCS_VFS_TYPE_UNSIGNED | UCS_VFS_TYPE_CHAR,
+    UCS_VFS_TYPE_U8       = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_CHAR,
     UCS_VFS_TYPE_I16      = UCS_VFS_TYPE_SHORT,
-    UCS_VFS_TYPE_U16      = UCS_VFS_TYPE_UNSIGNED | UCS_VFS_TYPE_SHORT,
+    UCS_VFS_TYPE_U16      = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_SHORT,
     UCS_VFS_TYPE_I32      = UCS_VFS_TYPE_INT,
-    UCS_VFS_TYPE_U32      = UCS_VFS_TYPE_UNSIGNED | UCS_VFS_TYPE_INT,
-    UCS_VFS_TYPE_U32_HEX  = UCS_VFS_TYPE_U32 | UCS_VFS_TYPE_HEX,
-    UCS_VFS_TYPE_ULONG    = UCS_VFS_TYPE_UNSIGNED | UCS_VFS_TYPE_LONG,
+    UCS_VFS_TYPE_U32      = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_INT,
+    UCS_VFS_TYPE_U32_HEX  = UCS_VFS_TYPE_U32 | UCS_VFS_TYPE_FLAG_HEX,
+    UCS_VFS_TYPE_ULONG    = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_LONG,
     UCS_VFS_TYPE_SSIZET   = UCS_VFS_TYPE_LONG,
     UCS_VFS_TYPE_SIZET    = UCS_VFS_TYPE_ULONG
 } ucs_vfs_primitive_type_t;
@@ -145,16 +145,24 @@ typedef void (*ucs_vfs_list_dir_cb_t)(const char *name, void *arg);
 
 /**
  * Add directory representing object in VFS. If @a parent_obj is NULL, the mount
- * directory will be used as the base for @a rel_path.
+ * directory will be used as the base for @a rel_path. If directory with
+ * specified name already exists, the pointer value will be added to directory
+ * name.
  *
  * @param [in] parent_obj Pointer to the parent object. @a rel_path is relative
  *                        to @a parent_obj directory.
  * @param [in] obj        Pointer to the object to be represented in VFS.
  * @param [in] rel_path   Format string which specifies relative path
  *                        @a obj directory.
+ *
+ * @return UCS_ERR_ALREADY_EXISTS if directory with specified name already
+ *                                exists for given @a obj.
+ *         UCS_ERR_INVALID_PARAM  if node for @a parent_obj does not exist.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for @a obj.
+ *         UCS_OK                 otherwise.
  */
-void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
-        UCS_F_PRINTF(3, 4);
+ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
+                                 const char *rel_path, ...) UCS_F_PRINTF(3, 4);
 
 
 /**
@@ -169,10 +177,16 @@ void ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
  * @param [in] arg_u64  Optional numeric argument that is passed to the callback
  *                      method.
  * @param [in] rel_path Format string which specifies relative path to the file.
+ *
+ * @return UCS_ERR_ALREADY_EXISTS if file with specified name already exists.
+ *         UCS_ERR_INVALID_PARAM  if node for @a obj does not exist.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for @a obj.
+ *         UCS_OK                 otherwise.
  */
-void ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
-                             void *arg_ptr, uint64_t arg_u64,
-                             const char *rel_path, ...) UCS_F_PRINTF(5, 6);
+ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
+                                     void *arg_ptr, uint64_t arg_u64,
+                                     const char *rel_path, ...)
+        UCS_F_PRINTF(5, 6);
 
 
 /**

@@ -457,6 +457,29 @@ public:
         return &ucs_derived_of(e->ep(ep_idx), uct_dc_mlx5_ep_t)->fc;
     }
 
+    void set_fc_wnd(entity *e, int ep_idx = 0, int16_t fc_wnd = 0)
+    {
+        uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->ep(ep_idx)->iface,
+                                                    uct_dc_mlx5_iface_t);
+
+        get_fc_ptr(e, ep_idx)->fc_wnd = fc_wnd;
+
+        if (fc_wnd <= iface->super.super.config.fc_hard_thresh) {
+            int ret;
+            khiter_t it = kh_put(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash,
+                                 (uint64_t)e->ep(ep_idx), &ret);
+            if ((ret == UCS_KH_PUT_FAILED) || (ret == UCS_KH_PUT_KEY_PRESENT)) {
+                return;
+            }
+
+            uct_dc_mlx5_ep_fc_entry_t *fc_entry = &kh_value(&iface->tx.fc_hash,
+                                                            it);
+
+            fc_entry->seq       = iface->tx.fc_seq++;
+            fc_entry->send_time = ucs_get_time();
+        }
+    }
+
     virtual void disable_entity(entity *e) {
         uct_dc_mlx5_iface_t *iface = ucs_derived_of(e->iface(),
                                                     uct_dc_mlx5_iface_t);
@@ -518,7 +541,7 @@ UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
         ucs_status_t status = uct_ep_am_short(m_e1->ep(ep_index), 0, 0, NULL, 0);
         if (status == UCS_ERR_NO_RESOURCE) {
             /* if FC is disabled, it should be OK to set fc_wnd to 0 */
-            get_fc_ptr(m_e1, ep_index)->fc_wnd = 0;
+            set_fc_wnd(m_e1, ep_index);
 
             /* Add to pending */
             status = uct_ep_pending_add(m_e1->ep(ep_index), &pending_req.uct, 0);
@@ -670,7 +693,7 @@ UCS_TEST_P(test_dc_fc_deadlock, basic, "DC_NUM_DCI=1")
         status = uct_ep_am_short(m_e1->ep(0), 0, 0, NULL, 0);
     } while (status == UCS_OK);
     send_am_messages(m_e1, 1, UCS_ERR_NO_RESOURCE);
-    get_fc_ptr(m_e1)->fc_wnd = 0;
+    set_fc_wnd(m_e1);
 
     // Add am send to pending
     struct dc_pending preq;

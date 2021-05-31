@@ -433,7 +433,22 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
     ucp_ep_h ucp_ep                             = err_handle_arg->ucp_ep;
     ucs_status_t status                         = err_handle_arg->status;
     ucp_worker_h worker                         = ucp_ep->worker;
+    ucs_time_t curr_time                        = ucs_get_time();
     ucp_request_t *close_req;
+    uct_worker_cb_id_t prog_id;
+
+    if (curr_time < err_handle_arg->timeout) {
+        ucs_debug("ep %p: delay error handler by %.2f usec, flags: 0x%x, status %s",
+                  ucp_ep, ucs_time_to_usec(err_handle_arg->timeout - curr_time),
+                  ucp_ep->flags, ucs_status_string(status));
+
+        prog_id = UCS_CALLBACKQ_ID_NULL;
+        uct_worker_progress_register_safe(worker->uct,
+                                          ucp_worker_iface_err_handle_progress,
+                                          err_handle_arg,
+                                          UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
+        return 0;
+    }
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -535,8 +550,10 @@ ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
         goto out;
     }
 
-    err_handle_arg->ucp_ep      = ucp_ep;
-    err_handle_arg->status      = status;
+    err_handle_arg->ucp_ep  = ucp_ep;
+    err_handle_arg->status  = status;
+    err_handle_arg->timeout = ucs_get_time() +
+            worker->context->config.ext.err_handler_delay;
 
     /* invoke the rest of the error handling flow from the main thread */
     uct_worker_progress_register_safe(worker->uct,
@@ -1288,7 +1305,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     if (ucp_worker_keepalive_is_enabled(worker)) {
         iface_params->field_mask        |= UCT_IFACE_PARAM_FIELD_KEEPALIVE_INTERVAL;
-        iface_params->keepalive_interval = context->config.keepalive_interval;
+        iface_params->keepalive_interval =
+                context->config.ext.keepalive_interval;
     }
 
     /* Open UCT interface */
@@ -2073,10 +2091,10 @@ void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
                             UCS_VFS_TYPE_STRING, "thread_mode");
 
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
-                            &worker->num_all_eps, UCS_VFS_TYPE_UNSIGNED,
+                            &worker->num_all_eps, UCS_VFS_TYPE_U32,
                             "num_all_eps");
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
-                            &worker->keepalive.ep_count, UCS_VFS_TYPE_UNSIGNED,
+                            &worker->keepalive.ep_count, UCS_VFS_TYPE_U32,
                             "keepalive/ep_count");
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
                             &worker->keepalive.round_count, UCS_VFS_TYPE_SIZET,
@@ -2910,7 +2928,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
 
     now = ucs_get_time();
     if (ucs_likely((now - worker->keepalive.last_round) <
-                   worker->context->config.keepalive_interval)) {
+                   worker->context->config.ext.keepalive_interval)) {
         goto out;
     }
 
@@ -3003,7 +3021,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
                                       &worker->keepalive.cb_id);
 }
 
-/* EP is removed from worker */
+/* EP is removed from worker, advance iterator if it points to the EP */
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
@@ -3014,8 +3032,6 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
         return;
     }
-
-    ucs_assert(!ucs_list_is_empty(&worker->all_eps));
 
     if (ucs_list_is_only(&worker->all_eps, &ucp_ep_ext_gen(ep)->ep_list)) {
         /* this is the last EP in worker */

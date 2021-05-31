@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2016.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -102,37 +103,6 @@ ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
     *latency_p   = 576.0 / (speed_mbps * 1e6) + 5.2e-6;
     *bandwidth_p = (speed_mbps * 1e6) / 8 *
                    (mtu - 40) / (mtu + ll_headers); /* TCP/IP header is 40 bytes */
-    return UCS_OK;
-}
-
-ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifaddr,
-                                  struct sockaddr_in *netmask)
-{
-    ucs_status_t status;
-    struct ifreq ifra, ifrnm;
-
-    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, &ifra);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (netmask != NULL) {
-        status = ucs_netif_ioctl(if_name, SIOCGIFNETMASK, &ifrnm);
-        if (status != UCS_OK) {
-            return status;
-        }
-    }
-
-    if ((ifra.ifr_addr.sa_family != AF_INET) ) {
-        ucs_error("%s address is not INET", if_name);
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    memcpy(ifaddr,  (struct sockaddr_in*)&ifra.ifr_addr,  sizeof(*ifaddr));
-    if (netmask != NULL) {
-        memcpy(netmask, (struct sockaddr_in*)&ifrnm.ifr_addr, sizeof(*netmask));
-    }
-
     return UCS_OK;
 }
 
