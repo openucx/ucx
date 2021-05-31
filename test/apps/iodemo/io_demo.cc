@@ -1647,6 +1647,7 @@ public:
         long total_iter              = 0;
         long total_prev_iter         = 0;
         op_info_t op_info[IO_OP_MAX] = {{0,0}};
+        bool re_audit                = true;
 
         while ((total_iter < opts().iter_count) && (_status == OK)) {
             connect_all(is_control_iter(total_iter));
@@ -1663,7 +1664,12 @@ public:
                 } else {
                     progress();
                 }
+                re_audit = true;
                 continue;
+            }
+            if (re_audit == true) {
+                prev_time = get_time();
+                re_audit = false;
             }
 
             VERBOSE_LOG << " <<<< iteration " << total_iter << " >>>>";
@@ -1681,6 +1687,7 @@ public:
                 // after wait_for_responses(), if some clients were closed in
                 // UCP Worker progress during handling of remote disconnection
                 // from servers
+                re_audit = true;
                 continue;
             }
 
@@ -1722,6 +1729,7 @@ public:
                                        curr_time - prev_time, op_info);
                     total_prev_iter = total_iter;
                     prev_time       = curr_time;
+                    re_audit        = true;
 
                     check_time_limit(curr_time);
                 }
