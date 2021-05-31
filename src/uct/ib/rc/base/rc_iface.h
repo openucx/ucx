@@ -178,19 +178,36 @@ struct uct_rc_iface_config {
 };
 
 
+typedef ucs_status_t
+(*uct_rc_iface_init_rx_func_t)(uct_rc_iface_t *iface,
+                               const uct_rc_iface_common_config_t *config);
+
+typedef void (*uct_rc_iface_cleanup_rx_func_t)(uct_rc_iface_t *iface);
+
+typedef ucs_status_t (*uct_rc_iface_fc_ctrl_func_t)(uct_ep_t *ep, unsigned op,
+                                                    uct_rc_pending_req_t *req);
+
+typedef ucs_status_t (*uct_rc_iface_fc_handler_func_t)(uct_rc_iface_t *iface,
+                                                       unsigned qp_num,
+                                                       uct_rc_hdr_t *hdr,
+                                                       unsigned length,
+                                                       uint32_t imm_data,
+                                                       uint16_t lid,
+                                                       unsigned flags);
+
+typedef unsigned (*uct_rc_iface_cleanup_qp_func_t)(void *arg);
+
+typedef void (*uct_rc_iface_ep_post_check_func_t)(uct_ep_h tl_ep);
+
+
 typedef struct uct_rc_iface_ops {
-    uct_ib_iface_ops_t   super;
-    ucs_status_t         (*init_rx)(uct_rc_iface_t *iface,
-                                    const uct_rc_iface_common_config_t *config);
-    void                 (*cleanup_rx)(uct_rc_iface_t *iface);
-    ucs_status_t         (*fc_ctrl)(uct_ep_t *ep, unsigned op,
-                                    uct_rc_pending_req_t *req);
-    ucs_status_t         (*fc_handler)(uct_rc_iface_t *iface, unsigned qp_num,
-                                       uct_rc_hdr_t *hdr, unsigned length,
-                                       uint32_t imm_data, uint16_t lid,
-                                       unsigned flags);
-    unsigned             (*cleanup_qp)(void *arg);
-    void                 (*ep_post_check)(uct_ep_h tl_ep);
+    uct_ib_iface_ops_t                super;
+    uct_rc_iface_init_rx_func_t       init_rx;
+    uct_rc_iface_cleanup_rx_func_t    cleanup_rx;
+    uct_rc_iface_fc_ctrl_func_t       fc_ctrl;
+    uct_rc_iface_fc_handler_func_t    fc_handler;
+    uct_rc_iface_cleanup_qp_func_t    cleanup_qp;
+    uct_rc_iface_ep_post_check_func_t ep_post_check;
 } uct_rc_iface_ops_t;
 
 

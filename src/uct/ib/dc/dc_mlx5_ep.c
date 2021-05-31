@@ -883,138 +883,109 @@ ucs_status_t uct_dc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 }
 #endif
 
-ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
-                                    uct_rc_pending_req_t *req)
+ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
+                                               uct_dc_fc_request_t *fc_req)
 {
-    uct_dc_mlx5_ep_t *dc_ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
+    uintptr_t sender_ep        = (uintptr_t)fc_req->sender.ep;
     struct ibv_ah_attr ah_attr = {.is_global = 0};
-    uint8_t init_dci_index     = dc_ep->dci;
-    uct_dc_mlx5_ep_fc_entry_t *fc_entry;
     uct_dc_fc_sender_data_t sender;
-    uct_dc_fc_request_t *dc_req;
-    struct mlx5_wqe_av mlx5_av;
     uct_ib_mlx5_base_av_t av;
-    ucs_status_t status;
-    uintptr_t sender_ep;
+    struct mlx5_wqe_av mlx5_av;
     struct ibv_ah *ah;
-    ucs_time_t now;
-    khiter_t it;
-    int ret;
+    ucs_status_t status;
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     ucs_assert((sizeof(uint8_t) + sizeof(sender_ep)) <=
-                UCT_IB_MLX5_AV_FULL_SIZE);
+               UCT_IB_MLX5_AV_FULL_SIZE);
 
-    UCT_DC_MLX5_CHECK_DCI_RES(iface, dc_ep);
-    UCT_DC_MLX5_IFACE_TXQP_GET(iface, dc_ep, txqp, txwq);
+    UCT_DC_MLX5_CHECK_DCI_RES(iface, ep);
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
-    dc_req = ucs_derived_of(req, uct_dc_fc_request_t);
+    /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
+    if (fc_req->sender.payload.is_global) {
+        uct_ib_iface_fill_ah_attr_from_gid_lid(
+                ib_iface, fc_req->lid,
+                ucs_unaligned_ptr(&fc_req->sender.payload.gid),
+                iface->super.super.super.gid_info.gid_index, 0, &ah_attr);
 
-    if (op == UCT_RC_EP_FC_PURE_GRANT) {
-        ucs_assert(req != NULL);
-
-        sender_ep = (uintptr_t)dc_req->sender.ep;
-
-        /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
-        if (dc_req->sender.payload.is_global) {
-            uct_ib_iface_fill_ah_attr_from_gid_lid(ib_iface, dc_req->lid,
-                                                   ucs_unaligned_ptr(&dc_req->sender.payload.gid),
-                                                   iface->super.super.super.gid_info.gid_index,
-                                                   0, &ah_attr);
-
-            status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
-            if (status != UCS_OK) {
-                goto out_dci_put;
-            }
-
-            uct_ib_mlx5_get_av(ah, &mlx5_av);
+        status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
+        if (status != UCS_OK) {
+            goto err_dci_put;
         }
 
-        /* Note av initialization is copied from exp verbs */
-        av.stat_rate_sl = ib_iface->config.sl; /* (attr->static_rate << 4) | attr->sl */
-        av.fl_mlid      = ib_iface->path_bits[0] & 0x7f;
-
-        /* lid in dc_req is in BE already  */
-        if (uct_ib_iface_is_roce(ib_iface)) {
-            av.rlid     = htons(UCT_IB_ROCE_UDP_SRC_PORT_BASE);
-        } else {
-            av.rlid     = dc_req->lid | htons(ib_iface->path_bits[0]);
-        }
-        av.dqp_dct      = htonl(dc_req->dct_num);
-
-        if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
-            av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
-        }
-
-        uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
-                                     txqp, txwq, MLX5_OPCODE_SEND,
-                                     &dc_req->sender.payload.seq,
-                                     sizeof(sender.payload.seq),
-                                     op, sender_ep, 0, 0, 0,
-                                     &av, ah_attr.is_global ? mlx5_av_grh(&mlx5_av) : NULL,
-                                     uct_ib_mlx5_wqe_av_size(&av), 0, INT_MAX);
-    } else {
-        ucs_assert(op == UCT_RC_EP_FLAG_FC_HARD_REQ);
-
-        now = ucs_get_time();
-        it  = kh_put(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)dc_ep,
-                     &ret);
-        if (ucs_unlikely(ret == UCS_KH_PUT_FAILED)) {
-            ucs_error("failed to create hash entry for fc hard req");
-            status = UCS_ERR_NO_MEMORY;
-            goto out_dci_put;
-        } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
-            fc_entry = &kh_value(&iface->tx.fc_hash, it);
-
-            /* Do not resend FC request if timeout is not reached, or window is
-             * still not empty */
-            if (ucs_likely(((now - fc_entry->send_time) <
-                            iface->tx.fc_hard_req_timeout) ||
-                           (dc_ep->fc.fc_wnd > 0))) {
-                status = UCS_OK;
-                goto out_dci_put;
-            }
-        } else {
-            ucs_assert(dc_ep->fc.fc_wnd ==
-                       iface->super.super.config.fc_hard_thresh);
-            fc_entry = &kh_value(&iface->tx.fc_hash, it);
-        }
-
-        sender.ep                = (uint64_t)dc_ep;
-        sender.payload.seq       = iface->tx.fc_seq++;
-        sender.payload.gid       = ib_iface->gid_info.gid;
-        sender.payload.is_global = dc_ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
-
-        fc_entry->seq       = sender.payload.seq;
-        fc_entry->send_time = now;
-
-        UCS_STATS_UPDATE_COUNTER(dc_ep->fc.stats,
-                                 UCT_RC_FC_STAT_TX_HARD_REQ, 1);
-
-        uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
-                                     txqp, txwq, MLX5_OPCODE_SEND_IMM,
-                                     &sender.payload, sizeof(sender.payload),
-                                     op, sender.ep, iface->rx.dct.qp_num,
-                                     0, 0, &dc_ep->av,
-                                     uct_dc_mlx5_ep_get_grh(dc_ep),
-                                     uct_ib_mlx5_wqe_av_size(&dc_ep->av),
-                                     MLX5_WQE_CTRL_SOLICITED, INT_MAX);
+        uct_ib_mlx5_get_av(ah, &mlx5_av);
     }
+
+    /* Note: AV initialization is copied from exp verbs */
+    av.stat_rate_sl = ib_iface->config.sl; /* (attr->static_rate << 4) |
+                                              attr->sl */
+    av.fl_mlid      = ib_iface->path_bits[0] & 0x7f;
+
+    /* lid in fc_req is in BE already  */
+    if (uct_ib_iface_is_roce(ib_iface)) {
+        av.rlid = htons(UCT_IB_ROCE_UDP_SRC_PORT_BASE);
+    } else {
+        av.rlid = fc_req->lid | htons(ib_iface->path_bits[0]);
+    }
+
+    av.dqp_dct = htonl(fc_req->dct_num);
+
+    if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
+        av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
+    }
+
+    UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_PURE_GRANT, 1);
+
+    uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
+                                 txqp, txwq, MLX5_OPCODE_SEND,
+                                 &fc_req->sender.payload.seq,
+                                 sizeof(sender.payload.seq),
+                                 UCT_RC_EP_FC_PURE_GRANT, sender_ep, 0, 0, 0,
+                                 &av, ah_attr.is_global ?
+                                      mlx5_av_grh(&mlx5_av) : NULL,
+                                 uct_ib_mlx5_wqe_av_size(&av), 0, INT_MAX);
 
     return UCS_OK;
 
-out_dci_put:
-    if (init_dci_index == UCT_DC_MLX5_EP_NO_DCI) {
-        /* If the DCI was allocated here (i.e. initial DCI was NO_DCI), release
-         * allocated DCI before leaving the function to avoid DC leak */
-        ucs_assert(dc_ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-        uct_dc_mlx5_iface_dci_put(iface, dc_ep->dci);
-    }
+err_dci_put:
+    uct_dc_mlx5_iface_dci_put(iface, ep->dci);
     return status;
+}
+
+static ucs_status_t
+uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    uct_ib_iface_t *ib_iface   = &iface->super.super.super;
+    uct_dc_fc_sender_data_t sender;
+
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+
+    UCT_DC_MLX5_CHECK_DCI_RES(iface, ep);
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+
+    sender.ep                = (uint64_t)ep;
+    sender.payload.seq       = seq;
+    sender.payload.gid       = ib_iface->gid_info.gid;
+    sender.payload.is_global = ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
+
+    UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1);
+
+    uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
+                                 txqp, txwq, MLX5_OPCODE_SEND_IMM,
+                                 &sender.payload, sizeof(sender.payload),
+                                 UCT_RC_EP_FLAG_FC_HARD_REQ, sender.ep,
+                                 iface->rx.dct.qp_num, 0, 0, &ep->av,
+                                 uct_dc_mlx5_ep_get_grh(ep),
+                                 uct_ib_mlx5_wqe_av_size(&ep->av),
+                                 MLX5_WQE_CTRL_SOLICITED, INT_MAX);
+
+    return UCS_OK;
 }
 
 static void uct_dc_mlx5_ep_check_send_completion(uct_rc_iface_send_op_t *op,
@@ -1389,7 +1360,11 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
 ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
                                      uct_dc_mlx5_ep_t *ep)
 {
+    uct_dc_mlx5_ep_fc_entry_t *fc_entry;
+    ucs_time_t now;
     ucs_status_t status;
+    khiter_t it;
+    int ret;
 
     if (!iface->super.super.config.fc_enabled) {
         /* Set fc_wnd to max, to send as much as possible without checks */
@@ -1404,18 +1379,41 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
         return UCS_OK;
     }
 
-    status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FLAG_FC_HARD_REQ,
-                            NULL);
+    now = ucs_get_time();
+    it  = kh_put(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)ep,
+                 &ret);
+    if (ucs_unlikely(ret == UCS_KH_PUT_FAILED)) {
+        ucs_error("failed to create hash entry for fc hard req");
+        status = UCS_ERR_NO_MEMORY;
+        goto out;
+    } else if (ret == UCS_KH_PUT_KEY_PRESENT) {
+        fc_entry = &kh_value(&iface->tx.fc_hash, it);
 
-    if ((ep->dci != UCT_DC_MLX5_EP_NO_DCI) && 
-        !uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        ucs_assertv(uct_dc_mlx5_iface_dci_has_outstanding(iface, ep->dci),
-                    "iface %p ep %p: dci leak detected: dci=%d fc_wnd=%d",
-                    iface, ep, ep->dci, ep->fc.fc_wnd);
+        /* Do not resend FC request if timeout is not reached */
+        if (ucs_likely((now - fc_entry->send_time) <
+                               iface->tx.fc_hard_req_timeout)) {
+            goto out_set_status;
+        }
+    } else {
+        fc_entry = &kh_value(&iface->tx.fc_hash, it);
     }
 
-    return ((ep->fc.fc_wnd > 0) || (status != UCS_OK)) ?
-           status : UCS_ERR_NO_RESOURCE;
+    fc_entry->seq       = iface->tx.fc_seq++;
+    fc_entry->send_time = now;
+
+    status = uct_dc_mlx5_ep_fc_hard_req_send(ep, fc_entry->seq);
+    if (status != UCS_OK) {
+        if (ret != UCS_KH_PUT_KEY_PRESENT) {
+            kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
+        }
+
+        goto out;
+    }
+
+out_set_status:
+    status = ucs_likely(ep->fc.fc_wnd > 0) ? UCS_OK : UCS_ERR_NO_RESOURCE;
+out:
+    return status;
 }
 
 void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,

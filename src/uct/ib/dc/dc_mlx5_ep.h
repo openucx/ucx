@@ -183,8 +183,8 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
-ucs_status_t uct_dc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
-                                    uct_rc_pending_req_t *req);
+ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
+                                               uct_dc_fc_request_t *fc_req);
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
@@ -367,6 +367,8 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 #endif
 }
 
+/* Release endpoint's DCI below, if the endpoint does not have outstanding
+ * operations */
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 {
@@ -479,6 +481,10 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     ucs_assert(!iface->super.super.config.tx_moderation);
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        /* Silence Coverity - in random policy the endpoint always has an
+         * assigned DCI */
+        ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+
         if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
             return UCS_OK;
         } else {
