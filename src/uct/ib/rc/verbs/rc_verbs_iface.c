@@ -495,15 +495,61 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
 };
 
 static ucs_status_t
+uct_rc_verbs_can_create_qp(struct ibv_context *ctx, struct ibv_pd *pd)
+{
+    struct ibv_qp_init_attr qp_init_attr = {
+        .qp_type             = IBV_QPT_RC,
+        .sq_sig_all          = 0,
+        .cap.max_send_wr     = 1,
+        .cap.max_recv_wr     = 1,
+        .cap.max_send_sge    = 1,
+        .cap.max_recv_sge    = 1,
+        .cap.max_inline_data = 0
+    };
+    struct ibv_cq *cq;
+    struct ibv_qp *qp;
+    ucs_status_t status;
+
+    cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
+    if (cq == NULL) {
+        ucs_error("failed to create cq %m");
+        status = UCS_ERR_IO_ERROR;
+        goto err;
+    }
+
+    qp_init_attr.send_cq = cq;
+    qp_init_attr.recv_cq = cq;
+
+    qp = ibv_create_qp(pd, &qp_init_attr);
+    if (qp == NULL) {
+        status = UCS_ERR_UNSUPPORTED;
+        goto err_destroy_cq;
+    }
+
+    status = UCS_OK;
+
+    ibv_destroy_qp(qp);
+err_destroy_cq:
+    ibv_destroy_cq(cq);
+err:
+    return status;
+}
+
+static ucs_status_t
 uct_rc_verbs_query_tl_devices(uct_md_h md,
                               uct_tl_device_resource_t **tl_devices_p,
                               unsigned *num_tl_devices_p)
 {
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
-    int flags;
+    ucs_status_t status;
 
-    flags = ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB;
-    return uct_ib_device_query_ports(&ib_md->dev, flags, tl_devices_p,
+    /* device does not support RC if we cannot create an RC QP */
+    status = uct_rc_verbs_can_create_qp(ib_md->dev.ibv_context, ib_md->pd);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return uct_ib_device_query_ports(&ib_md->dev, 0, tl_devices_p,
                                      num_tl_devices_p);
 }
 
