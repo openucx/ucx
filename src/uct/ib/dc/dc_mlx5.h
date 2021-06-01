@@ -393,6 +393,9 @@ static UCS_F_ALWAYS_INLINE int
 uct_dc_mlx5_iface_dci_has_tx_resources(uct_dc_mlx5_iface_t *iface,
                                        uint8_t dci_index)
 {
+    ucs_assertv(dci_index < UCT_DC_MLX5_IFACE_MAX_DCIS,
+                "dci_index (%u) must be less than %u",
+                dci_index, UCT_DC_MLX5_IFACE_MAX_DCIS);
     return uct_rc_txqp_available(&iface->tx.dcis[dci_index].txqp) > 0;
 }
 

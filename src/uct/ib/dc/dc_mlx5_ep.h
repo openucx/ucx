@@ -478,17 +478,17 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 
     ucs_assert(!iface->super.super.config.tx_moderation);
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
-            return UCS_OK;
-        } else {
-            UCS_STATS_UPDATE_COUNTER(iface->tx.dcis[ep->dci].txqp.stats,
-                                     UCT_RC_TXQP_STAT_QP_FULL, 1);
-            goto out_no_res;
-        }
-    }
-
     if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            if (uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
+                return UCS_OK;
+            } else {
+                UCS_STATS_UPDATE_COUNTER(iface->tx.dcis[ep->dci].txqp.stats,
+                                         UCT_RC_TXQP_STAT_QP_FULL, 1);
+                goto out_no_res;
+            }
+        }
+
         /* dci is already assigned - keep using it */
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&
             (ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) {
