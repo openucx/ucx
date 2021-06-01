@@ -1723,9 +1723,8 @@ ucp_ep_config_rndv_zcopy_set(ucp_context_t *context, uint64_t cap_flag,
     }
 }
 
-static void
-ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
-                                ucp_ep_rndv_zcopy_config_t *rndv_zcopy)
+void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
+                                     ucp_ep_rndv_zcopy_config_t *rndv_zcopy)
 {
     if (lanes_count == 0) {
         /* if there are no RNDV RMA BW lanes that support Zcopy operation, reset

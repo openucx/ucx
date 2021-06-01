@@ -1267,3 +1267,50 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_memtype, rndv)
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype);
+
+
+class test_ucp_am_nbx_rndv_memtype_disable_zcopy :
+        public test_ucp_am_nbx_rndv_memtype {
+protected:
+    void disable_rndv_zcopy_config(entity &e, uint64_t zcopy_caps)
+    {
+        ucp_ep_h ep             = e.ep();
+        ucp_ep_config_t *config = ucp_ep_config(ep);
+
+        if (zcopy_caps & UCT_IFACE_FLAG_PUT_ZCOPY) {
+            ucp_ep_config_rndv_zcopy_commit(0, &config->rndv.put_zcopy);
+        }
+
+        if (zcopy_caps & UCT_IFACE_FLAG_GET_ZCOPY) {
+            ucp_ep_config_rndv_zcopy_commit(0, &config->rndv.get_zcopy);
+        }
+    }
+
+    void test_disabled_rndv_zcopy(uint64_t zcopy_caps)
+    {
+        disable_rndv_zcopy_config(sender(), zcopy_caps);
+        disable_rndv_zcopy_config(receiver(), zcopy_caps);
+
+        ucs_memory_type_t mt = static_cast<ucs_memory_type_t>(get_variant_value(0));
+        test_am_send_recv(64 * UCS_KBYTE, 8, 0, mt);
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy, rndv_disable_put_zcopy)
+{
+    test_disabled_rndv_zcopy(UCT_IFACE_FLAG_PUT_ZCOPY);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy, rndv_disable_get_zcopy)
+{
+    test_disabled_rndv_zcopy(UCT_IFACE_FLAG_GET_ZCOPY);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy,
+           rndv_disable_put_and_get_zcopy)
+{
+    test_disabled_rndv_zcopy(UCT_IFACE_FLAG_PUT_ZCOPY |
+                             UCT_IFACE_FLAG_GET_ZCOPY);
+}
+
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
