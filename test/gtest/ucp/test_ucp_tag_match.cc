@@ -478,6 +478,7 @@ public:
         RNDV_SCHEME_AUTO = 0,
         RNDV_SCHEME_PUT_ZCOPY,
         RNDV_SCHEME_GET_ZCOPY,
+        RNDV_SCHEME_AM,
         RNDV_SCHEME_LAST,
         PUT_ZCOPY_FLUSH = ENABLE_PROTO << 1
     };
@@ -485,7 +486,7 @@ public:
     static const std::string rndv_schemes[];
 
     void init() {
-        ASSERT_LE(rndv_scheme(), (int)RNDV_SCHEME_GET_ZCOPY);
+        ASSERT_LT(rndv_scheme(), (int)RNDV_SCHEME_LAST);
         UCS_STATIC_ASSERT(!(ENABLE_PROTO & UCS_MASK(RNDV_SCHEME_LAST)));
         modify_config("RNDV_SCHEME", rndv_schemes[rndv_scheme()]);
         modify_config("RNDV_PUT_FORCE_FLUSH", force_flush() ? "y" : "n");
@@ -522,9 +523,13 @@ protected:
     }
 };
 
-const std::string test_ucp_tag_match_rndv::rndv_schemes[] = { "auto",
-                                                              "put_zcopy",
-                                                              "get_zcopy" };
+const std::string test_ucp_tag_match_rndv::rndv_schemes[] = {
+    "auto",
+    "put_zcopy",
+    "get_zcopy",
+    "am"
+};
+
 
 UCS_TEST_P(test_ucp_tag_match_rndv, length0, "RNDV_THRESH=0")
 {

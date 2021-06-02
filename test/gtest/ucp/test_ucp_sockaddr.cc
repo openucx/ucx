@@ -2377,6 +2377,12 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_put_scheme,
     test_tag_send_recv(64 * UCS_KBYTE, false, false);
 }
 
+UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_am_scheme,
+           "RNDV_THRESH=0", "RNDV_SCHEME=am")
+{
+    test_tag_send_recv(64 * UCS_KBYTE, false, false);
+}
+
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err)
 
 class test_ucp_sockaddr_protocols_err_sender

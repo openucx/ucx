@@ -1920,6 +1920,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         }
 
         if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&
+            (context->config.ext.rndv_mode != UCP_RNDV_MODE_AM) &&
             is_put_supported) {
             ucp_request_send_state_reset(sreq, ucp_rndv_put_completion,
                                          UCP_REQUEST_SEND_PROTO_RNDV_PUT);

@@ -26,6 +26,7 @@ public:
         VARIANT_ERR_HANDLING,
         VARIANT_RNDV_PUT_ZCOPY,
         VARIANT_RNDV_GET_ZCOPY,
+        VARIANT_RNDV_AM,
         VARIANT_RNDV_AUTO,
         VARIANT_SEND_NBR,
     };
@@ -49,6 +50,8 @@ public:
             modify_config("RNDV_SCHEME", "put_zcopy");
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
             modify_config("RNDV_SCHEME", "get_zcopy");
+        } else if (get_variant_value() == VARIANT_RNDV_AM) {
+            modify_config("RNDV_SCHEME", "am");
         } else if (get_variant_value() == VARIANT_RNDV_AUTO) {
             modify_config("RNDV_SCHEME", "auto");
         }
