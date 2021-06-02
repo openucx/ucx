@@ -1629,7 +1629,8 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
     desc = ucs_mpool_get_inline(&iface->dm.dm->mp);
     if (ucs_unlikely(desc == NULL)) {
         /* in case if no resources available - fallback to bcopy */
-        UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc);
+        UCT_RC_IFACE_GET_TX_DESC(&iface->super, &iface->super.tx.mp, desc,
+                                 return UCS_ERR_NO_RESOURCE);
         desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
         buffer = desc + 1;
 

@@ -16,6 +16,26 @@
 #define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
 
+#if UCS_ENABLE_ASSERT
+#define UCT_DC_MLX5_IFACE_DCI_ALLOC_TRACK(_ep, _dci_waitq) \
+    { \
+        _ep->dci_alloc.file      = __FILE__; \
+        _ep->dci_alloc.line      = __LINE__; \
+        _ep->dci_alloc.dci_waitq = _dci_waitq; \
+    }
+
+#else
+#define UCT_DC_MLX5_IFACE_DCI_ALLOC_TRACK(_ep, _dci_waitq)
+#endif
+
+
+#define UCT_DC_MLX5_IFACE_DCI_ALLOC(_iface, _ep, _dci_waitq) \
+    { \
+        UCT_DC_MLX5_IFACE_DCI_ALLOC_TRACK(_ep, _dci_waitq); \
+        uct_dc_mlx5_iface_dci_alloc(_iface, _ep); \
+    }
+
+
 enum uct_dc_mlx5_ep_flags {
     /* DCI pool EP assigned to according to it's lag port */
     UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK     = UCS_MASK(3),
@@ -59,6 +79,17 @@ struct uct_dc_mlx5_ep {
     uint16_t                      atomic_mr_offset;
     uct_rc_fc_t                   fc;
     uct_ib_mlx5_base_av_t         av;
+
+#if UCS_ENABLE_ASSERT
+    struct {
+        const char                *file; /* Filename where DCI was allocated
+                                          * last time */
+        unsigned                  line; /* Line number where DCI was allocated
+                                         * last time */
+        int                       dci_waitq; /* Indicates if DCI was allocated
+                                              * from waiting DCI allocation */
+    } dci_alloc;
+#endif
 };
 
 typedef struct {
@@ -284,6 +315,8 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         ep->dci = UCT_DC_MLX5_EP_NO_DCI;
     }
 
+    UCT_DC_MLX5_IFACE_DCI_ALLOC_TRACK(ep, 0);
+
     return uct_rc_fc_init(&ep->fc, iface->super.super.config.fc_wnd_size
                           UCS_STATS_ARG(ep->super.stats));
 }
@@ -351,6 +384,23 @@ uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     ucs_assert(iface->tx.dcis[dci_index].pool_index <
                UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
     return iface->tx.dcis[dci_index].pool_index;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_mlx5_ep_check_dci_leak(uct_dc_mlx5_ep_t *ep)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+
+    if ((ep->dci != UCT_DC_MLX5_EP_NO_DCI) &&
+        !uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        ucs_assertv(uct_dc_mlx5_iface_dci_has_outstanding(iface, ep->dci) ||
+                    ep->dci_alloc.dci_waitq,
+                    "iface %p ep %p: dci leak detected: dci=%d dci_waitq=%d"
+                    " fc_wnd=%d (previously allocated at %s:%u)",
+                    iface, ep, ep->dci, ep->dci_alloc.dci_waitq, ep->fc.fc_wnd,
+                    ep->dci_alloc.file, ep->dci_alloc.line);
+    }
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -495,6 +545,8 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 
     if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        uct_dc_mlx5_ep_check_dci_leak(ep);
+
         /* dci is already assigned - keep using it */
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&
             (ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) {
@@ -527,7 +579,7 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
      * otherwise this dci may never be released. */
     if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index) &&
         uct_dc_mlx5_iface_has_tx_resources(iface)) {
-        uct_dc_mlx5_iface_dci_alloc(iface, ep);
+        UCT_DC_MLX5_IFACE_DCI_ALLOC(iface, ep, 0);
         return UCS_OK;
     }
 

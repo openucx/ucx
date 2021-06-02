@@ -289,10 +289,10 @@ KHASH_INIT(uct_rc_mlx5_mp_hash_gid, uct_rc_mlx5_mp_hash_key_t,
 
 #if IBV_HW_TM
 #  define UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
-                                              _pack_cb, _arg, _length) \
+                                              _pack_cb, _arg, _length, _failure) \
        { \
            void *hdr; \
-           UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+           UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
            (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
            hdr = (_desc) + 1; \
            uct_rc_mlx5_fill_tmh(hdr, _tag, _app_ctx, IBV_TMH_EAGER); \
@@ -487,19 +487,21 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t*,
        uct_rc_mlx5_tag_imm_data_pack(&(_ib_imm), &(_app_ctx), _imm_data); \
    }
 
-#define UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr) \
+#define UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr, \
+                                   _failure) \
    { \
-       UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+       UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
        _hdr = _desc + 1; \
        uct_rc_mlx5_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
        _hdr += sizeof(struct ibv_tmh); \
    }
 
 #define UCT_RC_MLX5_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
-                                      _pack_cb, _arg, _length) \
+                                      _pack_cb, _arg, _length, _failure) \
    { \
        void *hdr; \
-       UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
+       UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr, \
+                                  _failure) \
        (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
        _length = _pack_cb(hdr, _arg); \
    }
