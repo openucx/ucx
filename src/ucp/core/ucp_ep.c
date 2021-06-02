@@ -164,23 +164,23 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ep->refcount                         = 1;
-    ep->cfg_index                        = UCP_WORKER_CFG_INDEX_NULL;
-    ep->worker                           = worker;
-    ep->am_lane                          = UCP_NULL_LANE;
-    ep->flags                            = 0;
-    ep->conn_sn                          = UCP_EP_MATCH_CONN_SN_MAX;
+    ep->refcount                          = 1;
+    ep->cfg_index                         = UCP_WORKER_CFG_INDEX_NULL;
+    ep->worker                            = worker;
+    ep->am_lane                           = UCP_NULL_LANE;
+    ep->flags                             = 0;
+    ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
 #if UCS_ENABLE_ASSERT
-    ep->flush_iter_refcount              = 0;
-    ep->discard_refcount                 = 0;
+    ep->flush_iter_refcount               = 0;
+    ep->discard_refcount                  = 0;
 #endif
-    ucp_ep_ext_gen(ep)->user_data        = NULL;
-    ucp_ep_ext_control(ep)->cm_idx       = UCP_NULL_RESOURCE;
-    ucp_ep_ext_control(ep)->err_cb       = NULL;
-    ucp_ep_ext_control(ep)->local_ep_id  = UCS_PTR_MAP_KEY_INVALID;
-    ucp_ep_ext_control(ep)->remote_ep_id = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_gen(ep)->user_data         = NULL;
+    ucp_ep_ext_control(ep)->cm_idx        = UCP_NULL_RESOURCE;
+    ucp_ep_ext_control(ep)->err_cb        = NULL;
+    ucp_ep_ext_control(ep)->local_ep_id   = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->remote_ep_id  = UCS_PTR_MAP_KEY_INVALID;
 #if UCS_ENABLE_ASSERT
-    ucp_ep_ext_control(ep)->ka_count     = 0;
+    ucp_ep_ext_control(ep)->ka_last_round = 0;
 #endif
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
@@ -2754,7 +2754,7 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     return (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
 }
 
-int ucp_ep_do_keepalive(ucp_ep_h ep)
+int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
 {
     ucp_worker_h worker = ep->worker;
     ucp_lane_index_t lane;
@@ -2763,16 +2763,8 @@ int ucp_ep_do_keepalive(ucp_ep_h ep)
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
 
-    if (ep->flags & UCP_EP_FLAG_FAILED) {
-        worker->keepalive.lane_map = 0;
-        return 1;
-    }
-
-    /* Take updated ep_check_map, in case ep configuration has changed */
-    worker->keepalive.lane_map &= ucp_ep_config(ep)->key.ep_check_map;
-    if (worker->keepalive.lane_map == 0) {
-        return 1;
-    }
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
+    ucs_assert(worker->keepalive.lane_map != 0);
 
     ucs_for_each_bit(lane, worker->keepalive.lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
@@ -2793,23 +2785,23 @@ int ucp_ep_do_keepalive(ucp_ep_h ep)
         worker->keepalive.lane_map &= ~UCS_BIT(lane);
     }
 
-    if (worker->keepalive.lane_map == 0) {
-#if UCS_ENABLE_ASSERT
-        ucp_ep_ext_control(ep)->ka_count++;
-        /* Difference between the number of EP keepalive rounds and total number
-         * of KA rounds done on Worker must be <= 2, because keepalive could be
-         * done twice for the same EP in case of number of EPs was decreased */
-        ucs_assertv((ucp_ep_ext_control(ep)->ka_count /
-                             (worker->keepalive.round_count + 1)) <= 2,
-                    "ep %p: keepalive.round_count=%" PRIu64
-                    " ep.ka_count=%" PRIu64,
-                    ep, worker->keepalive.round_count,
-                    ucp_ep_ext_control(ep)->ka_count);
-#endif
-        return 1;
+    /* Keepalive round is still not finished for this ep - skip ka_last_round
+     * update */
+    if (worker->keepalive.lane_map != 0) {
+        return 0;
     }
 
-    return 0;
+#if UCS_ENABLE_ASSERT
+    ucs_assertv((now - ucp_ep_ext_control(ep)->ka_last_round) >=
+                        worker->context->config.ext.keepalive_interval,
+                "ep %p: now=%" PRIu64 " ka_last_round=%" PRIu64
+                " ka_interval=%" PRIu64,
+                ep, now, ucp_ep_ext_control(ep)->ka_last_round,
+                worker->context->config.ext.keepalive_interval);
+    ucp_ep_ext_control(ep)->ka_last_round = now;
+#endif
+
+    return 1;
 }
 
 static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
