@@ -98,19 +98,11 @@ void UcxContext::UcxAcceptCallback::operator()(ucs_status_t status)
 {
     if (status == UCS_OK) {
         _context.dispatch_connection_accepted(&_connection);
+    } else {
+        _connection.disconnect(new UcxDisconnectCallback());
     }
 
     delete this;
-}
-
-UcxContext::UcxDisconnectCallback::UcxDisconnectCallback(UcxConnection &conn)
-    : _conn(&conn)
-{
-}
-
-UcxContext::UcxDisconnectCallback::~UcxDisconnectCallback()
-{
-    delete _conn;
 }
 
 void UcxContext::UcxDisconnectCallback::operator()(ucs_status_t status)
@@ -402,6 +394,7 @@ void UcxContext::progress_disconnected_connections()
         UcxConnection *conn = *it;
         if (conn->disconnect_progress()) {
             it = _disconnecting_conns.erase(it);
+            delete conn;
         } else {
             ++it;
         }
@@ -517,14 +510,14 @@ void UcxContext::destroy_connections()
     while (!_conns_in_progress.empty()) {
         UcxConnection &conn = *_conns_in_progress.begin()->second;
         _conns_in_progress.erase(_conns_in_progress.begin());
-        conn.disconnect(new UcxDisconnectCallback(conn));
+        conn.disconnect(new UcxDisconnectCallback());
     }
 
     UCX_LOG << "destroy_connections";
     while (!_conns.empty()) {
         UcxConnection &conn = *_conns.begin()->second;
         _conns.erase(_conns.begin());
-        conn.disconnect(new UcxDisconnectCallback(conn));
+        conn.disconnect(new UcxDisconnectCallback());
     }
 
     while (!_disconnecting_conns.empty()) {
@@ -682,7 +675,6 @@ void UcxConnection::disconnect(UcxCallback *callback)
      * the connection */
     assert(_establish_cb == NULL);
     assert(_disconnect_cb == NULL);
-    assert(_ep != NULL);
 
     UCX_CONN_LOG << "destroying, ep is " << _ep;
     ep_close(UCP_EP_CLOSE_MODE_FORCE);
@@ -710,10 +702,7 @@ bool UcxConnection::disconnect_progress()
     }
 
     assert(ucs_list_is_empty(&_all_requests));
-    UcxCallback *cb = _disconnect_cb;
-    _disconnect_cb  = NULL;
-    // invoke last since it can delete this object
-    (*cb)(UCS_OK);
+    invoke_callback(_disconnect_cb, UCS_OK);
     return true;
 }
 
@@ -971,9 +960,7 @@ void UcxConnection::established(ucs_status_t status)
 
     _ucx_status = status;
     _context.remove_connection_inprogress(this);
-
-    (*_establish_cb)(status);
-    _establish_cb = NULL;
+    invoke_callback(_establish_cb, status);
 }
 
 bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag,
@@ -1023,8 +1010,8 @@ void UcxConnection::handle_connection_error(ucs_status_t status)
     if (is_established()) {
         _context.handle_connection_error(this);
     } else {
-        (*_establish_cb)(status);
-        _establish_cb = NULL;
+        _context.remove_connection_inprogress(this);
+        invoke_callback(_establish_cb, status);
     }
 }
 
@@ -1076,4 +1063,11 @@ bool UcxConnection::process_request(const char *what,
             return true;
         }
     }
+}
+
+void UcxConnection::invoke_callback(UcxCallback *&callback, ucs_status_t status)
+{
+    UcxCallback *cb = callback;
+    callback        = NULL;
+    (*cb)(status);
 }
