@@ -335,13 +335,11 @@ typedef struct uct_rc_mlx5_ctx_priv {
     uint32_t                    tag_handle;
 } uct_rc_mlx5_ctx_priv_t;
 
-#if HAVE_IBV_DM
+#if HAVE_DM
 typedef struct uct_mlx5_dm_data {
     uct_worker_tl_data_t super;
     ucs_mpool_t          mp;
-    struct ibv_mr        *mr;
-    struct ibv_dm        *dm;
-    void                 *start_va;
+    uct_ib_mlx5_dm_t     dm;
     size_t               seg_len;
     unsigned             seg_count;
     unsigned             seg_attached;
@@ -409,7 +407,7 @@ typedef struct uct_rc_mlx5_iface_common {
         uct_rc_mlx5_release_desc_t     am_desc;
         UCS_STATS_NODE_DECLARE(stats)
     } tm;
-#if HAVE_IBV_DM
+#if HAVE_DM
     struct {
         uct_mlx5_dm_data_t             *dm;
         size_t                         seg_len; /* cached value to avoid double-pointer access */

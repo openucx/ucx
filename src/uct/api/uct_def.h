@@ -80,6 +80,7 @@ typedef struct uct_md_config         uct_md_config_t;
 typedef struct uct_cm_config         uct_cm_config_t;
 typedef struct uct_ep                *uct_ep_h;
 typedef void *                       uct_mem_h;
+typedef struct uct_atomic            *uct_atomic_h;
 typedef uintptr_t                    uct_rkey_t;
 typedef struct uct_md                *uct_md_h;          /**< @brief Memory domain handler */
 typedef struct uct_md_ops            uct_md_ops_t;

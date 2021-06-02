@@ -237,7 +237,7 @@ typedef enum {
 
 
 typedef struct uct_ib_mlx5_iface_config {
-#if HAVE_IBV_DM
+#if HAVE_DM
     struct {
         size_t               seg_len;
         unsigned             count;

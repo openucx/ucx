@@ -514,3 +514,123 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
 }
+
+ucs_status_t uct_md_atomic_create(uct_md_h md, void **address_p,
+                                  ucs_memory_type_t mem_type, unsigned flags,
+                                  const char *alloc_name,
+                                  uct_atomic_h *atomic_p)
+{
+    size_t alloc_size;
+    uct_md_attr_t attrs;
+    ucs_status_t status;
+    uct_atomic_h atomic;
+    int is_allocated = 0;
+
+    if (address_p == NULL) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    atomic = ucs_malloc(sizeof(*atomic), "uct_md_atomic_handle");
+    if (atomic == NULL) {
+        ucs_error("failed to allocate an atomic object");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    status = md->ops->query(md, &attrs);
+    if (status != UCS_OK) {
+        goto alloc_cleanup;
+    }
+
+    if ((atomic->var = *address_p) == NULL) {
+        if (attrs.cap.alloc_mem_types & mem_type) {
+            alloc_size = sizeof(uint64_t);
+
+            status = md->ops->mem_alloc(md, &alloc_size, &atomic->var, mem_type, 0,
+                                        "uct_md_atomic_var", &atomic->memh);
+            if (status != UCS_OK) {
+                goto alloc_cleanup;
+            }
+
+            ucs_assert(atomic->memh != NULL);
+            *address_p = atomic->var;
+        } else {
+            atomic->var = ucs_malloc(2 * UCS_SYS_CACHE_LINE_SIZE,
+                                     "uct_md_atomic_var");
+            if (atomic->var == NULL) {
+                ucs_error("failed to allocate an atomic variable");
+                goto alloc_cleanup;
+            }
+
+            atomic->memh = NULL;
+            *address_p   = UCS_PTR_BYTE_OFFSET(atomic->var,
+                                               UCS_SYS_CACHE_LINE_SIZE);
+        }
+
+        is_allocated = 1;
+    } else {
+        atomic->memh = NULL;
+    }
+
+    if ((atomic->memh == NULL) && (attrs.cap.reg_mem_types & mem_type)) {
+        status = md->ops->mem_reg(md, atomic->var, sizeof(uint64_t), 0,
+                                  &atomic->memh);
+        if (status != UCS_OK) {
+            goto reg_cleanup;
+        }
+
+        ucs_assert(atomic->memh != NULL);
+    }
+
+    if (atomic->memh == NULL) {
+        ucs_error("failed to allocate or register an atomic variable");
+        goto reg_cleanup;
+    }
+
+    atomic->type = mem_type;
+    *atomic_p    = atomic;
+    return UCS_OK;
+
+reg_cleanup:
+    if (is_allocated) {
+        if (attrs.cap.alloc_mem_types & mem_type) {
+            (void)md->ops->mem_free(md, &atomic->memh);
+        } else {
+            ucs_free(UCS_PTR_BYTE_OFFSET(atomic->var, -UCS_SYS_CACHE_LINE_SIZE));
+        }
+    }
+
+alloc_cleanup:
+    ucs_free(atomic);
+    return status;
+}
+
+ucs_status_t uct_md_atomic_destroy(uct_md_h md, uct_atomic_h atomic)
+{
+    uct_md_mem_dereg_params_t params;
+    uct_md_attr_t attrs;
+    ucs_status_t status;
+
+    status = md->ops->query(md, &attrs);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (attrs.cap.reg_mem_types & atomic->type) {
+        params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
+        params.memh       = atomic->memh;
+        status            = md->ops->mem_dereg(md, &params);
+        if (status != UCS_OK) {
+            ucs_warn("failed to deregister an atomic variable");
+        }
+    }
+
+    if (attrs.cap.alloc_mem_types & atomic->type) {
+        status = md->ops->mem_free(md, &atomic->memh);
+    } else {
+        ucs_free(UCS_PTR_BYTE_OFFSET(atomic->var, -UCS_SYS_CACHE_LINE_SIZE));
+        status = UCS_OK;
+    }
+
+    ucs_free(atomic);
+    return status;
+}

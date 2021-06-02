@@ -13,6 +13,7 @@
 
 #include <ucs/type/status.h>
 #include <infiniband/verbs.h>
+#include <uct/ib/base/ib_md.h>
 
 typedef struct {
     struct mlx5dv_obj  dv;
@@ -67,12 +68,17 @@ void *uct_dv_get_info_uar0(void *uar);
 /*
  * DM backports
  */
-#ifdef HAVE_IBV_EXP_DM
-#  define ibv_dm            ibv_exp_dm
-#  define ibv_alloc_dm_attr ibv_exp_alloc_dm_attr
-#  define ibv_alloc_dm      ibv_exp_alloc_dm
-#  define ibv_free_dm       ibv_exp_free_dm
+#ifdef HAVE_DM
+typedef union uct_ib_mlx5_dm {
+    uct_ib_dm_t                super;
+    void                       *start_va;
+} uct_ib_mlx5_dm_t;
 
+ucs_status_t uct_ib_mlx5dv_md_dm_create(uct_ib_md_t *md, size_t length,
+                                        uct_ib_mlx5_dm_t *dm);
+void uct_ib_mlx5dv_md_dm_destroy(uct_ib_mlx5_dm_t *dm);
+
+#ifdef HAVE_IBV_EXP_DM
 struct mlx5dv_dm {
     void                *buf;
     uint64_t            length;
@@ -82,18 +88,6 @@ struct mlx5dv_dm {
 enum {
     MLX5DV_OBJ_DM   = 1 << 4,
 };
-
-static struct ibv_mr * UCS_F_MAYBE_UNUSED
-ibv_reg_dm_mr(struct ibv_pd *pd, struct ibv_dm *dm,
-              uint64_t dm_offset, size_t length, unsigned int access_flags)
-{
-    struct ibv_exp_reg_mr_in mr_in = {};
-    mr_in.pd        = pd;
-    mr_in.comp_mask = IBV_EXP_REG_MR_DM;
-    mr_in.dm        = dm;
-    mr_in.length    = length;
-    return ibv_exp_reg_mr(&mr_in);
-}
 
 typedef struct uct_mlx5_dm_va {
     struct ibv_dm      ibv_dm;
@@ -111,6 +105,7 @@ uct_ib_mlx5_get_dm_info(struct ibv_exp_dm *dm, struct mlx5dv_dm *dm_info)
 # define UCT_IB_MLX5_DV_DM(_obj) _obj.dv_dm
 #else
 # define UCT_IB_MLX5_DV_DM(_obj) _obj.dv.dm
+#endif
 #endif
 
 #endif

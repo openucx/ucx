@@ -166,7 +166,7 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     size_t max_put_inline      = UCT_IB_MLX5_PUT_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE);
     ucs_status_t status;
 
-#if HAVE_IBV_DM
+#if HAVE_DM
     if (iface->super.dm.dm != NULL) {
         max_am_inline  = ucs_max(iface->super.dm.dm->seg_len,
                                  UCT_IB_MLX5_AM_MAX_SHORT(UCT_IB_MLX5_AV_FULL_SIZE));

@@ -29,6 +29,27 @@
 #define UCT_IB_MEM_DEREG          0
 #define UCT_IB_CONFIG_PREFIX      "IB_"
 
+#ifdef HAVE_IBV_EXP_DM
+#ifndef HAVE_IBV_DM
+#  define ibv_dm            ibv_exp_dm
+#  define ibv_alloc_dm_attr ibv_exp_alloc_dm_attr
+#  define ibv_alloc_dm      ibv_exp_alloc_dm
+#  define ibv_free_dm       ibv_exp_free_dm
+
+static struct ibv_mr * UCS_F_MAYBE_UNUSED
+ibv_reg_dm_mr(struct ibv_pd *pd, struct ibv_dm *dm,
+              uint64_t dm_offset, size_t length, unsigned int access_flags)
+{
+    struct ibv_exp_reg_mr_in mr_in = {};
+    mr_in.pd        = pd;
+    mr_in.comp_mask = IBV_EXP_REG_MR_DM;
+    mr_in.dm        = dm;
+    mr_in.length    = length;
+    return ibv_exp_reg_mr(&mr_in);
+}
+#endif
+#endif
+
 
 /**
  * IB MD statistics counters
@@ -101,6 +122,14 @@ typedef struct uct_ib_mem {
 typedef union uct_ib_mr {
     struct ibv_mr           *ib;
 } uct_ib_mr_t;
+
+
+#if HAVE_DM
+typedef struct uct_ib_dm {
+    uct_ib_mr_t             mr;
+    struct ibv_dm           *dm;
+} uct_ib_dm_t;
+#endif
 
 
 typedef enum {
@@ -471,4 +500,11 @@ ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
                                  size_t length, uint64_t access_flags,
                                  uct_ib_mem_t *memh, uct_ib_mr_t *mrs,
                                  uct_ib_mr_type_t mr_type, int silent);
+
+#if HAVE_DM
+ucs_status_t
+uct_ib_md_dm_create(uct_ib_md_t *md, size_t length, uct_ib_dm_t *dm);
+void uct_ib_md_dm_destroy(uct_ib_dm_t *dm);
+#endif
+
 #endif

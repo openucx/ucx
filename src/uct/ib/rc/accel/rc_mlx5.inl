@@ -1540,7 +1540,7 @@ done:
     return count;
 }
 
-#if HAVE_IBV_DM
+#if HAVE_DM
 /* DM memory should be written by 8 bytes to eliminate
  * processor cache issues. To make this used uct_rc_mlx5_dm_copy_data_t
  * datatype where first hdr_len bytes are filled by message header
@@ -1646,7 +1646,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_common_dm_make_data(
          * hint to valgrind to make it defined */
         VALGRIND_MAKE_MEM_DEFINED(desc, sizeof(*desc));
         ucs_assert(desc->super.buffer != NULL);
-        buffer = (void*)UCS_PTR_BYTE_DIFF(iface->dm.dm->start_va,
+        buffer = (void*)UCS_PTR_BYTE_DIFF(iface->dm.dm->dm.start_va,
                                           desc->super.buffer);
 
         uct_rc_mlx5_iface_common_copy_to_dm(cache, hdr_len, iov, iovcnt,

@@ -230,6 +230,7 @@ void *ucs_mpool_get_grow(ucs_mpool_t *mp);
  * heap-based chunk allocator.
  */
 ucs_status_t ucs_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
+ucs_status_t ucs_mpool_chunk_malloc_zero(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 void ucs_mpool_chunk_free(ucs_mpool_t *mp, void *chunk);
 
 

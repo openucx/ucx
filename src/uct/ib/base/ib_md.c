@@ -315,6 +315,11 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
 
+#ifdef HAVE_DM
+    md_attr->cap.alloc_mem_types |= UCS_BIT(UCS_MEMORY_TYPE_RDMA_DM);
+    md_attr->cap.reg_mem_types   |= UCS_BIT(UCS_MEMORY_TYPE_RDMA_DM);
+#endif
+
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
         uct_ib_check_gpudirect_driver(md, md_attr,
@@ -874,6 +879,85 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
     return status;
 }
 
+#if HAVE_DM
+ucs_status_t
+uct_ib_md_dm_create(uct_ib_md_t *md, size_t length, uct_ib_dm_t *dm)
+{
+    struct ibv_alloc_dm_attr dm_attr;
+    ucs_status_t status;
+
+    dm_attr.length        = length;
+    dm_attr.comp_mask     = 0;
+    dm->dm                = ibv_alloc_dm(md->dev.ibv_context, &dm_attr);
+    if (dm->dm == NULL) {
+        ucs_error("ibv_alloc_dm(dev=%s length=%zu) failed: %m",
+                  uct_ib_device_name(&md->dev), length);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    dm->mr.ib = ibv_reg_dm_mr(md->pd, dm->dm, 0, length,
+                              IBV_ACCESS_ZERO_BASED   |
+                              IBV_ACCESS_LOCAL_WRITE  |
+                              IBV_ACCESS_REMOTE_READ  |
+                              IBV_ACCESS_REMOTE_WRITE |
+                              IBV_ACCESS_REMOTE_ATOMIC);
+    if (dm->mr.ib == NULL) {
+        ucs_error("ibv_reg_mr_dm(dev=%s length=%zu) failed, %d %m",
+                  uct_ib_device_name(&md->dev), length, errno);
+        status = UCS_ERR_NO_RESOURCE;
+        goto failed_mr;
+    }
+
+    return UCS_OK;
+
+failed_mr:
+    ibv_free_dm(dm->dm);
+    return status;
+}
+
+void uct_ib_md_dm_destroy(uct_ib_dm_t *dm)
+{
+    ibv_dereg_mr(dm->mr.ib);
+    ibv_free_dm(dm->dm);
+}
+
+static ucs_status_t uct_ib_mem_dm_alloc(uct_md_h uct_md, size_t *length_p,
+                                        void **address_p,
+                                        ucs_memory_type_t mem_type,
+                                        unsigned flags, const char *alloc_name,
+                                        uct_mem_h *memh_p)
+{
+    uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    ucs_status_t status;
+    uct_ib_mem_t *memh;
+
+    memh = uct_ib_memh_alloc(md);
+    if (memh == NULL) {
+        ucs_error("failed to allocate a device memory handle");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucs_assert(md->memh_struct_size >= (sizeof(*memh) + sizeof(uct_ib_dm_t)));
+
+    status = uct_ib_md_dm_create(md, *length_p, (uct_ib_dm_t*)(memh + 1));
+    if (status != UCS_OK) {
+        uct_ib_memh_free(memh);
+        return status;
+    }
+
+    *address_p = NULL; /* No guarantee the DM address is accessible! */
+    *memh_p    = memh;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ib_mem_dm_free(uct_md_h uct_md, uct_mem_h memh)
+{
+    uct_ib_md_dm_destroy((uct_ib_dm_t*)((uct_ib_mem_t*)memh + 1));
+
+    return UCS_OK;
+}
+#endif
+
 static ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
                                          size_t length, uint64_t access_flags,
                                          uct_ib_mem_t *ib_memh,
@@ -997,6 +1081,10 @@ static ucs_status_t uct_ib_rkey_unpack(uct_component_t *component,
 static uct_md_ops_t uct_ib_md_ops = {
     .close              = uct_ib_md_close,
     .query              = uct_ib_md_query,
+#if HAVE_DM
+    .mem_alloc          = uct_ib_mem_dm_alloc,
+    .mem_free           = uct_ib_mem_dm_free,
+#endif
     .mem_reg            = uct_ib_mem_reg,
     .mem_dereg          = uct_ib_mem_dereg,
     .mem_advise         = uct_ib_mem_advise,

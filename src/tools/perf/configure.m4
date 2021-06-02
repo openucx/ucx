@@ -8,6 +8,7 @@ ucx_perftest_modules=""
 m4_include([src/tools/perf/lib/configure.m4])
 m4_include([src/tools/perf/cuda/configure.m4])
 m4_include([src/tools/perf/rocm/configure.m4])
+m4_include([src/tools/perf/dm/configure.m4])
 AC_DEFINE_UNQUOTED([ucx_perftest_MODULES], ["${ucx_perftest_modules}"],
                    [Perftest loadable modules])
 

@@ -24,6 +24,11 @@
 #define uct_md_log_mem_reg_error(_flags, _fmt, ...) \
     ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ## __VA_ARGS__)
 
+typedef struct uct_atomic {
+    ucs_memory_type_t type;
+    uct_mem_h memh;
+    void     *var;
+} uct_atomic_t;
 
 #define UCT_MD_MEM_DEREG_FIELD_VALUE(_params, _name, _flag, _default) \
     UCS_PARAM_VALUE(UCT_MD_MEM_DEREG, _params, _name, _flag, _default)
@@ -115,6 +120,15 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
                                                          size_t length,
                                                          ucs_memory_type_t *mem_type_p);
 
+typedef ucs_status_t (*uct_md_atomic_alloc_func_t)(uct_md_h md,
+                                                   void **address_p,
+                                                   ucs_memory_type_t mem_type,
+                                                   unsigned flags,
+                                                   const char *alloc_name,
+                                                   uct_atomic_h *atomic_p);
+
+typedef ucs_status_t (*uct_md_atomic_free_func_t)(uct_md_h md,
+                                                  uct_atomic_h atomic);
 
 /**
  * Memory domain operations
@@ -207,6 +221,36 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
  * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
  */
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Create an atomic variable for remote operations.
+ *
+ * Allocate an register memory to be used for a 64-bit atomic variable.
+ *
+ * @param [in]     md          Memory domain to allocate memory on.
+ * @param [in,out] address_p   The address
+ * @param [in]     mem_type    Memory type of the allocation
+ * @param [in]     flags       Reserved
+ * @param [in]     name        Name of the allocated region, used to track memory
+ *                             usage for debugging and profiling.
+ * @param [out]    memh_p      Filled with handle for allocated region.
+ */
+ucs_status_t uct_md_atomic_create(uct_md_h md, void **address_p,
+                                  ucs_memory_type_t mem_type, unsigned flags,
+                                  const char *alloc_name,
+                                  uct_atomic_h *atomich_p);
+
+/**
+ * @ingroup UCT_MD
+ * @brief Release resources allocated by @ref uct_md_atomic_alloc.
+ *
+ * @param [in]     md          Memory domain memory was allocated on.
+ * @param [in]     atomich     Atomic handle, as returned from
+ *                             @ref uct_md_atomic_alloc.
+ */
+ucs_status_t uct_md_atomic_destroy(uct_md_h md, uct_atomic_h atomich);
 
 
 /**

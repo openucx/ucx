@@ -12,6 +12,7 @@
 
 #include <ucs/arch/bitops.h>
 #include <ucs/profile/profile.h>
+#include <uct/ib/base/ib_md.h>
 
 
 typedef struct {
@@ -751,3 +752,22 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
 
 UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);
 
+ucs_status_t
+uct_ib_mlx5dv_md_dm_create(uct_ib_md_t *md, size_t length, uct_ib_mlx5_dm_t *dm)
+{
+    ucs_status_t status;
+
+    status = uct_ib_md_dm_create(md, length, &dm->super);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    dm->start_va = dm->super.mr.ib->addr;
+
+    return UCS_OK;
+}
+
+void uct_ib_mlx5dv_md_dm_destroy(uct_ib_mlx5_dm_t *dm)
+{
+    uct_ib_md_dm_destroy(&dm->super);
+}

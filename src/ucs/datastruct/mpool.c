@@ -249,6 +249,19 @@ ucs_status_t ucs_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chun
     return (*chunk_p == NULL) ? UCS_ERR_NO_MEMORY : UCS_OK;
 }
 
+ucs_status_t ucs_mpool_chunk_malloc_zero(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucs_status_t status;
+
+    status = ucs_mpool_chunk_malloc(mp, size_p, chunk_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    memset(*chunk_p, 0, *size_p);
+    return UCS_OK;
+}
+
 void ucs_mpool_chunk_free(ucs_mpool_t *mp, void *chunk)
 {
     ucs_free(chunk);
