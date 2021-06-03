@@ -432,6 +432,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                       iface->super.config.timeout);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm,
                       iface->super.config.exp_backoff);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
+                      iface->config.log_ack_req_freq);
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
                                         out_2rts, sizeof(out_2rts));

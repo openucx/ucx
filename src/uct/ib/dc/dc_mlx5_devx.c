@@ -141,6 +141,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.super.config.rnr_retry);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, iface->super.super.config.timeout);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm, iface->super.super.config.exp_backoff);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
+                      iface->super.config.log_ack_req_freq);
 
     return uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
                                       out_2rts, sizeof(out_2rts));
