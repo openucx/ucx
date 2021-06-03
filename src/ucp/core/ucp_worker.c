@@ -1722,6 +1722,8 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     ucp_lane_map_t amo_lanes_map    = 0;
     ucp_lane_map_t stream_lanes_map = 0;
     ucp_lane_map_t am_lanes_map     = 0;
+    int rma_emul                    = 0;
+    int amo_emul                    = 0;
     ucp_lane_index_t lane;
     char *p, *endp;
 
@@ -1764,11 +1766,25 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
         }
     }
 
+    if ((context->config.features & UCP_FEATURE_RMA) && (rma_lanes_map == 0)) {
+        ucs_assert(key->am_lane != UCP_NULL_LANE);
+        rma_lanes_map |= UCS_BIT(key->am_lane);
+        rma_emul       = 1;
+    }
+
+    if ((context->config.features & UCP_FEATURE_AMO) && (amo_lanes_map == 0)) {
+        ucs_assert(key->am_lane != UCP_NULL_LANE);
+        amo_lanes_map |= UCS_BIT(key->am_lane);
+        amo_emul       = 1;
+    }
+
     p = ucp_worker_add_feature_rsc(context, key, tag_lanes_map, "tag",
                                    p, endp - p);
-    p = ucp_worker_add_feature_rsc(context, key, rma_lanes_map, "rma",
+    p = ucp_worker_add_feature_rsc(context, key, rma_lanes_map,
+                                   !rma_emul ? "rma" : "rma_am",
                                    p, endp - p);
-    p = ucp_worker_add_feature_rsc(context, key, amo_lanes_map, "amo",
+    p = ucp_worker_add_feature_rsc(context, key, amo_lanes_map,
+                                   !amo_emul ? "amo" : "amo_am",
                                    p, endp - p);
     p = ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am",
                                    p, endp - p);
@@ -1883,6 +1899,9 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     ucp_memtype_thresh_t *max_eager_short;
     ucs_status_t status;
     char tl_info[256];
+
+    ucs_assertv_always(key->num_lanes > 0,
+                       "empty endpoint configurations are not allowed");
 
     /* Search for the given key in the ep_config array */
     for (ep_cfg_index = 0; ep_cfg_index < worker->ep_config_count;
