@@ -135,10 +135,10 @@ typedef enum {
 
 typedef enum {
     /**
-     * Invalidate memory region. If this flag is set then memory region is
-     * invalidated after de-registration and callback (see @ref
-     * uct_md_mem_dereg_params_t) is is called when the memory is fully
-     * invalidated and would not be accessed anymore by zero-copy or remote
+     * Invalidate the memory region. If this flag is set then memory region is
+     * invalidated after de-registration and the callback (see @ref
+     * uct_md_mem_dereg_params_t) is called when the memory is fully
+     * invalidated and will not be accessed anymore by zero-copy or remote
      * memory access operations.
      */
     UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0) 
@@ -149,8 +149,13 @@ typedef enum {
  * @ingroup UCT_MD
  * @brief Completion callback for memory region invalidation.
  *
- * This callback routine is invoked when when it is no longer accessible by
- * remote peer.
+ * This callback routine is invoked when is no longer accessible by remote peer.
+ * 
+ * $note: in some implementations this callback may be called immediately after
+ *        @ref uct_md_mem_dereg_v2 is called, but it is possible that the
+ *        callback call will be delayed until all references to the memory
+ *        region, for example, when rcache is used in the implementation of the
+ *        memory domains.
  *
  * @param [in]  arg User data passed to "arg" value, see
  *                  @ref uct_md_mem_dereg_params_t
@@ -212,7 +217,11 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
  * @brief Undo the operation of @ref uct_md_mem_reg() and invalidate memory
  *        region.
  *
- * @param [in]  md          Memory domain which was used to register the memory.
+ * This routine deregisters the memory region registered by @ref uct_md_mem_reg
+ * and allow the memory region to be invalidated with callback called when the
+ * memory region is unregistered.
+ * 
+ * @param [in]  md          Memory domain that was used to register the memory.
  * @param [in]  params      Operation parameters, see @ref 
  *                          uct_md_mem_dereg_params_t.
  */
