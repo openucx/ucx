@@ -1717,6 +1717,7 @@ public:
                         break;
                     }
 
+                    curr_time = get_time();
                     report_performance(total_iter - total_prev_iter,
                                        curr_time - prev_time, op_info);
                     total_prev_iter = total_iter;
@@ -1844,13 +1845,9 @@ private:
             op_info[op_id].num_iters = 0;
         }
 
-        log << ", active:" << _active_servers.size();
-
-        if (opts().window_size == 1) {
-            log << ", latency:" << latency_usec << " usec";
-        }
-
-        log << ", buffers:" << _data_buffers_pool.allocated();
+        log << ", active:" << _active_servers.size()
+            << ", latency:" << latency_usec << " usec"
+            << ", buffers:" << _data_buffers_pool.allocated();
     }
 
     inline void check_time_limit(double current_time) {
