@@ -1710,7 +1710,6 @@ public:
             op_info[op].num_iters++;
 
             if (is_control_iter(total_iter) && (total_iter > total_prev_iter)) {
-                /* Print performance every 1 second */
                 double curr_time = get_time();
                 if (curr_time >= (prev_time + opts().print_interval)) {
                     wait_for_responses(0);
