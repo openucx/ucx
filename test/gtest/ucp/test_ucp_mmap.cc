@@ -13,6 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_mm.h>
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucp/dt/dt.h>
 }
 
 class test_ucp_mmap : public ucp_test {
@@ -252,7 +253,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ucs_status_t status;
 
     /* Detect system device of the allocated memory */
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     ucp_memory_detect(sender().ucph(), memh->address, memh->length, &mem_info);
     EXPECT_EQ(memh->mem_type, mem_info.type);
 

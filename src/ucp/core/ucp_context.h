@@ -14,6 +14,7 @@
 #include "ucp_thread.h"
 
 #include <ucp/api/ucp.h>
+#include <ucp/dt/dt.h>
 #include <ucp/proto/proto.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/mpool.h>
@@ -114,6 +115,8 @@ typedef struct ucp_context_config {
     unsigned                               keepalive_num_eps;
     /** Enable indirect IDs to object pointers in wire protocols */
     ucs_on_off_auto_value_t                proto_indirect_id;
+    /** Bitmap of memory types whose allocations are registered fully */
+    unsigned                               reg_whole_alloc_bitmap;
     /** Error handler delay */
     ucs_time_t                             err_handler_delay;
 } ucp_context_config_t;
@@ -450,15 +453,15 @@ static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h cont
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memory_info_set_host(ucs_memory_info_t *mem_info)
+ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
     mem_info->type    = UCS_MEMORY_TYPE_HOST;
     mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
-                  ucs_memory_info_t *mem_info)
+ucp_memory_detect_internal(ucp_context_h context, const void *address,
+                           size_t length, ucs_memory_info_t *mem_info)
 {
     ucs_status_t status;
 
@@ -494,7 +497,20 @@ ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
     return;
 
 out_host_mem:
-    ucp_memory_info_set_host(mem_info);
+    /* Memory type cache lookup failed - assume it is host memory */
+    ucs_memory_info_set_host(mem_info);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_memory_detect(ucp_context_h context, const void *address, size_t length,
+                  ucp_memory_info_t *mem_info)
+{
+    ucs_memory_info_t mem_info_internal;
+
+    ucp_memory_detect_internal(context, address, length, &mem_info_internal);
+
+    mem_info->type    = mem_info_internal.type;
+    mem_info->sys_dev = mem_info_internal.sys_dev;
 }
 
 

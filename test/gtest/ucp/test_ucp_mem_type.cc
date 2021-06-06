@@ -34,7 +34,7 @@ UCS_TEST_P(test_ucp_mem_type, detect) {
 
     const size_t size                      = 256;
     const ucs_memory_type_t alloc_mem_type = mem_type();
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
 
     mem_buffer b(size, alloc_mem_type);
 
@@ -71,7 +71,7 @@ protected:
 UCS_TEST_P(test_ucp_mem_type_alloc_before_init, xfer) {
     sender().connect(&receiver(), get_ep_params());
 
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     ucp_memory_detect(sender().ucph(), m_send_buffer->ptr(), m_size, &mem_info);
     EXPECT_EQ(mem_type(), mem_info.type) << "send buffer";
     ucp_memory_detect(receiver().ucph(), m_recv_buffer->ptr(), m_size,

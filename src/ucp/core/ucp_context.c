@@ -125,6 +125,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "MD whose distance is queried when evaluating transport selection score",
    ucs_offsetof(ucp_config_t, selection_cmp), UCS_CONFIG_TYPE_STRING},
 
+  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "",
+   "Memory types which have whole allocations registered.\n"
+   "Allowed memory types: cuda, rocm, rocm-managed",
+   ucs_offsetof(ucp_config_t, ctx.reg_whole_alloc_bitmap),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
   {"WARN_INVALID_CONFIG", "y",
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
@@ -1722,24 +1728,29 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     uct_md_h md;
 
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
+                          UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
+                          UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
                           UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
         md     = context->tl_mds[context->mem_type_detect_mds[i]].md;
         status = uct_md_mem_query(md, address, length, &mem_attr);
         if (status == UCS_OK) {
-            mem_info->type    = mem_attr.mem_type;
-            mem_info->sys_dev = mem_attr.sys_dev;
+            mem_info->type         = mem_attr.mem_type;
+            mem_info->sys_dev      = mem_attr.sys_dev;
+            mem_info->base_address = mem_attr.base_address;
+            mem_info->alloc_length = mem_attr.alloc_length;
             if (context->memtype_cache != NULL) {
-                ucs_memtype_cache_update(context->memtype_cache, address,
-                                         length, mem_info);
+                ucs_memtype_cache_update(context->memtype_cache,
+                                         mem_attr.base_address,
+                                         mem_attr.alloc_length, mem_info);
             }
             return;
         }
     }
 
     /* Memory type not detected by any memtype MD - assume it is host memory */
-    ucp_memory_info_set_host(mem_info);
+    ucs_memory_info_set_host(mem_info);
 }
 
 void

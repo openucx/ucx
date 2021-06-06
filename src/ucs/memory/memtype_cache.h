@@ -25,8 +25,10 @@ typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
 
 /* Memory information record */
 typedef struct ucs_memory_info {
-    uint8_t          type;    /**< Memory type, use uint8 for compact size */
-    ucs_sys_device_t sys_dev; /**< System device index */
+    ucs_memory_type_t type;          /**< Memory type, use uint8 for compact size */
+    ucs_sys_device_t  sys_dev;       /**< System device index */
+    void              *base_address; /**< Base address of the underlying allocation */
+    size_t            alloc_length;  /**< Whole length of the underlying allocation */
 } ucs_memory_info_t;
 
 
@@ -105,6 +107,14 @@ void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache,
  */
 void ucs_memtype_cache_remove(ucs_memtype_cache_t *memtype_cache,
                               const void *address, size_t size);
+
+
+/**
+ * Helper function to set memory info structure to host memory type.
+ *
+ * @param [out] mem_info        Pointer to memory info structure.
+ */
+void ucs_memory_info_set_host(ucs_memory_info_t *mem_info);
 
 END_C_DECLS
 

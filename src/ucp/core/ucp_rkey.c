@@ -116,7 +116,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
                  (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
                   buffer),
                  ucp_context_h context, ucp_md_map_t md_map,
-                 const uct_mem_h *memh, const ucs_memory_info_t *mem_info,
+                 const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
                  uint64_t sys_dev_map,
                  const ucs_sys_dev_distance_t *sys_distance, void *buffer)
 {
@@ -184,7 +184,7 @@ out:
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
 {
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     ucs_status_t status;
     ssize_t packed_size;
     void *rkey_buffer;
