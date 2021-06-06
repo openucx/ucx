@@ -45,8 +45,7 @@ typedef struct ucp_mem_desc {
 
 
 /**
- * Memory descriptor.
- * Contains a memory handle of the chunk it belongs to.
+ * Memory pool private data descriptor.
  */
 typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h                  worker;
