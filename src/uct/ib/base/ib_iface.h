@@ -629,4 +629,11 @@ uct_ib_cq_size(uct_ib_iface_t *iface, const uct_ib_iface_init_attr_t *init_attr,
     }
 }
 
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ib_iface_roce_dscp(uct_ib_iface_t *iface)
+{
+    ucs_assert(uct_ib_iface_is_roce(iface));
+    return iface->config.traffic_class >> 2;
+}
+
 #endif
