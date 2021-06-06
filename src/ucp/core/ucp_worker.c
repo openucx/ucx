@@ -456,6 +456,7 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
 
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FAILED);
 
+    /* the EP can be closed from last completion callback */
     ucp_ep_discard_lanes(ucp_ep, status);
     ucp_ep_reqs_purge(ucp_ep, status);
     ucp_stream_ep_cleanup(ucp_ep);
@@ -472,16 +473,16 @@ static unsigned ucp_worker_iface_err_handle_progress(void *arg)
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);
         }
-    } else if (!(ucp_ep->flags & UCP_EP_FLAG_INTERNAL)) {
+    } else if (ucp_ep->flags & (UCP_EP_FLAG_INTERNAL | UCP_EP_FLAG_CLOSED)) {
+        /* No additional actions are required, this is already closed EP or
+         * an internal one for sending WIREUP/EP_REMOVED messsage to a peer.
+         * So, close operation was already scheduled, this EP will be deleted
+         * after all lanes will be discarded successfully */
+        ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);
+    } else {
         ucs_debug("ep %p: destroy endpoint which is not exposed to a user due"
                   " to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
-    } else {
-        /* No additional actions are required, this is an internal EP created
-         * for sending WIREUP/EP_REMOVED messsage to a peer. So, close operation
-         * was already scheduled, this EP will be deleted after all lanes will
-         * be discarded successfully */
-        ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);
     }
 
     ucs_free(err_handle_arg);
