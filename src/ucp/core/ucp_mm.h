@@ -44,6 +44,15 @@ typedef struct ucp_mem_desc {
 } ucp_mem_desc_t;
 
 
+/**
+ * Memory descriptor.
+ * Contains a memory handle of the chunk it belongs to.
+ */
+typedef struct ucp_rndv_mpool_priv {
+    ucp_worker_h                  worker;
+} ucp_rndv_mpool_priv_t;
+
+
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
 void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk);
@@ -132,6 +141,7 @@ ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
 #define UCP_MEM_IS_ACCESSIBLE_FROM_CPU(_mem_type) \
     (UCS_BIT(_mem_type) & UCS_MEMORY_TYPES_CPU_ACCESSIBLE)
 #define UCP_MEM_IS_GPU(_mem_type) ((_mem_type) == UCS_MEMORY_TYPE_CUDA || \
+                                   (_mem_type) == UCS_MEMORY_TYPE_CUDA_MANAGED || \
                                    (_mem_type) == UCS_MEMORY_TYPE_ROCM)
 
 #endif

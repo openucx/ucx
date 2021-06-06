@@ -98,13 +98,6 @@ ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .obj_cleanup   = ucs_empty_function
 };
 
-ucs_mpool_ops_t ucp_frag_mpool_ops = {
-    .chunk_alloc   = ucp_frag_mpool_malloc,
-    .chunk_release = ucp_frag_mpool_free,
-    .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
-};
-
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -1833,19 +1826,8 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_am_mp_cleanup;
     }
 
-    /* Create memory pool for pipelined rndv fragments */
-    status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
-                            context->config.ext.rndv_frag_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_PCI_MAX_PAYLOAD, 128,
-                            UINT_MAX, &ucp_frag_mpool_ops, "ucp_rndv_frags");
-    if (status != UCS_OK) {
-        goto err_reg_mp_cleanup;
-    }
-
     return UCS_OK;
 
-err_reg_mp_cleanup:
-    ucs_mpool_cleanup(&worker->reg_mp, 0);
 err_am_mp_cleanup:
     ucs_mpool_cleanup(&worker->am_mp, 0);
 err_rkey_mp_cleanup:
@@ -1858,7 +1840,9 @@ err:
 
 static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 {
-    ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
+    ucs_mpool_t *mp;
+
+    kh_foreach_value(&worker->mpool_hash, mp, ucs_mpool_cleanup(mp, 1))
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
@@ -2134,6 +2118,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
+    kh_init_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
@@ -2319,6 +2304,7 @@ err_free:
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -2510,6 +2496,8 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
 
 void ucp_worker_destroy(ucp_worker_h worker)
 {
+    ucs_mpool_t *mp;
+
     ucs_debug("destroy worker %p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -2548,6 +2536,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_foreach_value(&worker->mpool_hash, mp, ucs_free(mp))
+    kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
 }

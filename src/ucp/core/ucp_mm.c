@@ -693,16 +693,20 @@ void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk)
 
 ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+    ucp_rndv_mpool_priv_t *mpriv;
 
-    return ucp_mpool_malloc(worker, mp, size_p, chunk_p);
+    mpriv = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+
+    return ucp_mpool_malloc(mpriv->worker, mp, size_p, chunk_p);
 }
 
 void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+    ucp_rndv_mpool_priv_t *mpriv;
 
-    ucp_mpool_free(worker, mp, chunk);
+    mpriv = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+
+    ucp_mpool_free(mpriv->worker, mp, chunk);
 }
 
 void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)

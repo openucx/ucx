@@ -979,6 +979,68 @@ ucp_rndv_send_frag_update_get_rkey(ucp_worker_h worker, ucp_request_t *freq,
     memset(rkey_index, 0, UCP_MAX_LANES * sizeof(uint8_t));
 }
 
+ucs_mpool_ops_t ucp_frag_mpool_ops = {
+    .chunk_alloc   = ucp_frag_mpool_malloc,
+    .chunk_release = ucp_frag_mpool_free,
+    .obj_init      = ucp_mpool_obj_init,
+    .obj_cleanup   = ucs_empty_function
+};
+
+static ucs_mpool_t *
+ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
+{
+    ucs_mpool_t *mpool;
+    khiter_t khiter;
+    int khret;
+    ucp_rndv_mpool_priv_t *mpriv;
+    ucs_status_t status;
+
+    khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash, *key);
+    if (ucs_likely(khiter != kh_end(&worker->mpool_hash))) {
+        mpool = kh_val(&worker->mpool_hash, khiter);
+    } else {
+        mpool = ucs_malloc(sizeof(ucs_mpool_t), "ucp_worker_mpool");
+        status = ucs_mpool_init(mpool, sizeof(ucp_rndv_mpool_priv_t),
+                                worker->context->config.ext.rndv_frag_size +
+                                sizeof(ucp_mem_desc_t), sizeof(ucp_mem_desc_t),
+                                UCS_SYS_PCI_MAX_PAYLOAD, 128, UINT_MAX,
+                                &ucp_frag_mpool_ops, "ucp_rndv_frags");
+        if (status != UCS_OK) {
+            return NULL;
+        }
+
+	mpriv         = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mpool);
+	mpriv->worker = worker;
+        khiter        = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash, *key,
+                               &khret);
+        if (khret == UCS_KH_PUT_FAILED) {
+            ucs_mpool_cleanup(mpool, 0);
+            return NULL;
+        }
+
+        ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
+        kh_value(&worker->mpool_hash, khiter) = mpool;
+    }
+
+    return mpool;
+}
+
+static ucp_mem_desc_t *
+ucp_rndv_mpool_get(ucp_worker_h worker, void *buffer, size_t length)
+{
+    ucs_memory_info_t mem_info;
+    ucp_worker_mpool_key_t key;
+    ucs_mpool_t *mpool;
+
+    ucp_memory_detect(worker->context, buffer, length, &mem_info);
+
+    key.sys_dev = mem_info.sys_dev;
+    key.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN; /* force host mpool for now */
+    mpool       = ucp_rndv_get_mpool(worker, &key);
+
+    return (mpool != NULL) ? ucp_worker_mpool_get(mpool) : NULL;
+}
+
 static void
 ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
                                 uint64_t remote_address,
@@ -998,7 +1060,7 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
         ucs_fatal("failed to allocate fragment receive request");
     }
 
-    mdesc = ucp_worker_mpool_get(&worker->rndv_frag_mp);
+    mdesc = ucp_rndv_mpool_get(worker, (void *)remote_address, length);
     if (ucs_unlikely(mdesc == NULL)) {
         ucs_fatal("failed to allocate fragment memory desc");
     }
@@ -1147,7 +1209,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         }
 
         /* allocate fragment recv buffer desc*/
-        mdesc = ucp_worker_mpool_get(&worker->rndv_frag_mp);
+        mdesc = ucp_rndv_mpool_get(worker, (void *)rreq->recv.buffer, frag_size);
         if (mdesc == NULL) {
             ucs_fatal("failed to allocate fragment memory buffer");
         }
