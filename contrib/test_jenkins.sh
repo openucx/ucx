@@ -592,16 +592,22 @@ run_io_demo() {
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 	server_loopback_addr="127.0.0.1"
 	mem_types_list="host "
+	config_args=""
 
 	if [ "X$have_cuda" == "Xyes" ]
 	then
 		mem_types_list+="cuda cuda-managed "
+		config_args+="--with-iodemo-cuda"
 	fi
 
 	if [ -z "$server_rdma_addr" ] && [ -z "$server_nonrdma_addr" ]
 	then
 		return
 	fi
+
+	../contrib/configure-devel --prefix=$ucx_inst $config_args
+	$MAKEP
+	$MAKEP install
 
 	for mem_type in $mem_types_list
 	do
