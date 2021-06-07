@@ -197,6 +197,7 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 typedef struct ucp_worker_mpool_key {
+    ucs_memory_type_t             mem_type;  /* memory type of the buffer pool */
     ucs_sys_device_t              sys_dev;   /* identifier for the device,
                                                 UINT_MAX for default device */
 } ucp_worker_mpool_key_t;
