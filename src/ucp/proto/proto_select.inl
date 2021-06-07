@@ -102,7 +102,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
                             ucp_operation_id_t op_id, uint32_t op_attr_mask,
                             ucp_dt_class_t dt_class,
-                            const ucs_memory_info_t *mem_info, uint8_t sg_count)
+                            const ucp_memory_info_t *mem_info, uint8_t sg_count)
 {
     if (dt_class == UCP_DATATYPE_CONTIG) {
         ucs_assert(sg_count == 1);

@@ -115,7 +115,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucp_proto_perf_range_t *perf_range;
     const uct_iface_attr_t *iface_attr;
     ucs_linear_func_t send_overheads;
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     ucp_md_index_t md_index;
     ucp_proto_caps_t *caps;
     ucs_status_t status;

@@ -831,7 +831,7 @@ static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_request_get_memory_type(ucp_context_h context, const void *address,
                             size_t length, const ucp_request_param_t *param)
 {
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
 
     if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ||
         (param->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {

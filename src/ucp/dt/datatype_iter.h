@@ -20,7 +20,7 @@
  */
 typedef struct {
     ucp_dt_class_t    dt_class; /* Datatype class (contig/iov/...) */
-    ucs_memory_info_t mem_info; /* Memory type and locality, needed to
+    ucp_memory_info_t mem_info; /* Memory type and locality, needed to
                                    pack/unpack */
     size_t            length; /* Total packed flat length */
     size_t            offset; /* Current flat offset */

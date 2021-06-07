@@ -48,6 +48,15 @@ typedef struct ucp_dt_state {
 } ucp_dt_state_t;
 
 
+/**
+ * UCP layer memory information
+ */
+typedef struct {
+    uint8_t          type;    /**< Memory type, use uint8 for compact size */
+    ucs_sys_device_t sys_dev; /**< System device index */
+} ucp_memory_info_t;
+
+
 extern const char *ucp_datatype_class_names[];
 
 size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,

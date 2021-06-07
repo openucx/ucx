@@ -146,7 +146,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           const void *buffer, size_t count, ucp_datatype_t datatype,
                           size_t contig_length, const ucp_request_param_t *param)
 {
-    ucp_worker_h worker     = ep->worker;
+    ucp_worker_h worker = ep->worker;
     ucp_proto_select_param_t sel_param;
     ucs_status_t status;
     uint8_t sg_count;

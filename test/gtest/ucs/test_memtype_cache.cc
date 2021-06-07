@@ -505,11 +505,11 @@ UCS_TEST_P(test_memtype_cache_deferred_create, allocate_and_update) {
 }
 
 UCS_TEST_P(test_memtype_cache_deferred_create, lookup_adjacent_regions) {
-    test_alloc_before_init(1000000, true, 0);
+    test_alloc_before_init(1000000, false, 0);
 }
 
 UCS_TEST_P(test_memtype_cache_deferred_create, lookup_overlapped_regions) {
-    test_alloc_before_init(1000000, true, 1);
+    test_alloc_before_init(1000000, false, 1);
 }
 
 INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache_deferred_create,

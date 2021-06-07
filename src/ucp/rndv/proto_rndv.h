@@ -74,7 +74,7 @@ typedef struct {
     double                         perf_bias;
 
     /* Memory type of the transfer */
-    ucs_memory_info_t              mem_info;
+    ucp_memory_info_t              mem_info;
 
     /* Minimal data length */
     size_t                         min_length;

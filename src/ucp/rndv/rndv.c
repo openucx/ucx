@@ -98,7 +98,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                          ucp_rndv_rts_opcode_t opcode)
 {
     ucp_worker_h worker = sreq->send.ep->worker;
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
     void *rkey_buf;
 
@@ -141,7 +141,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = dest;
     ucp_request_t *rreq              = ucp_request_get_super(rndv_req);
     ucp_ep_h ep                      = rndv_req->send.ep;
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
 
     /* Request ID of sender side (remote) */

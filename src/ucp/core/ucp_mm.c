@@ -44,6 +44,9 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     unsigned md_index;
     ucs_status_t status;
     ucs_log_level_t level;
+    ucs_memory_info_t mem_info;
+    size_t reg_length;
+    void *base_address;
 
     if (reg_md_map == *md_map_p) {
         return UCS_OK; /* shortcut - no changes required */
@@ -112,13 +115,22 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                 continue;
             }
 
+            base_address = address;
+            reg_length   = length;
+
+            if (context->config.ext.reg_whole_alloc_bitmap & UCS_BIT(mem_type)) {
+                ucp_memory_detect_internal(context, address, length, &mem_info);
+                base_address = mem_info.base_address;
+                reg_length   = mem_info.alloc_length;
+            }
+
             /* MD supports registration, register new memh on it */
-            status = uct_md_mem_reg(context->tl_mds[md_index].md, address,
-                                    length, uct_flags, &uct_memh[memh_index]);
+            status = uct_md_mem_reg(context->tl_mds[md_index].md, base_address,
+                                    reg_length, uct_flags, &uct_memh[memh_index]);
             if (status == UCS_OK) {
                 ucs_trace("registered address %p length %zu on md[%d]"
                           " memh[%d]=%p",
-                          address, length, md_index, memh_index,
+                          base_address, reg_length, md_index, memh_index,
                           uct_memh[memh_index]);
                 new_md_map |= UCS_BIT(md_index);
                 ++memh_index;
@@ -131,7 +143,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
             ucs_log(level,
                     "failed to register address %p mem_type bit 0x%lx length %zu on "
                     "md[%d]=%s: %s (md reg_mem_types 0x%"PRIx64")",
-                    address, UCS_BIT(mem_type), length, md_index,
+                    base_address, UCS_BIT(mem_type), reg_length, md_index,
                     context->tl_mds[md_index].rsc.md_name,
                     ucs_status_string(status),
                     md_attr->cap.reg_mem_types);
@@ -387,7 +399,7 @@ ucs_status_t ucp_mem_map(ucp_context_h context, const ucp_mem_map_params_t *para
                          ucp_mem_h *memh_p)
 {
     ucs_memory_type_t memory_type;
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     ucs_status_t status;
     unsigned flags;
     void *address;

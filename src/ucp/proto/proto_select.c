@@ -1007,7 +1007,7 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
     const ucp_proto_threshold_elem_t *thresh;
     ucp_proto_select_param_t select_param;
     const ucp_proto_single_priv_t *spriv;
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
     uint32_t op_attr;
 
     ucp_memory_info_set_host(&mem_info);
