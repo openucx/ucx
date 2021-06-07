@@ -649,7 +649,7 @@ typedef enum ucs_kh_put {
 		code;												\
 	} }
 
-/* More conenient interfaces */
+/* More convenient interfaces */
 
 /*! @function
   @abstract     Instantiate a hash set containing integer keys
