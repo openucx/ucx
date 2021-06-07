@@ -49,6 +49,7 @@ typedef struct ucp_mem_desc {
  */
 typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h                  worker;
+    ucs_memory_type_t             mem_type;
 } ucp_rndv_mpool_priv_t;
 
 
