@@ -65,7 +65,7 @@ typedef struct ucp_context_config {
     size_t                                 seg_size;
     /** RNDV pipeline fragment size */
     size_t                                 rndv_frag_size;
-    /** RNDV pipline send threshold */
+    /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
      *  will not be posted to the transport. */
@@ -260,7 +260,7 @@ typedef struct ucp_context {
         char                      *selection_cmp;
     } config;
 
-    /* Configuration of multi-threadiing support */
+    /* Configuration of multi-threading support */
     ucp_mt_lock_t                 mt_lock;
 
     char                          name[UCP_ENTITY_NAME_MAX];
