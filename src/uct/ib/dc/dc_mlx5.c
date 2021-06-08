@@ -1030,19 +1030,20 @@ void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
 {
-    uct_rc_pending_req_t *freq = ucs_derived_of(self, uct_rc_pending_req_t);
-    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(freq->ep, uct_dc_mlx5_ep_t);
-    uct_rc_iface_t *iface      = ucs_derived_of(ep->super.super.iface,
-                                                uct_rc_iface_t);
+    uct_dc_fc_request_t *fc_req = ucs_derived_of(self, uct_dc_fc_request_t);
+    uct_dc_mlx5_ep_t *ep        = ucs_derived_of(fc_req->super.ep,
+                                                 uct_dc_mlx5_ep_t);
+    uct_rc_iface_t *iface       = ucs_derived_of(ep->super.super.iface,
+                                                 uct_rc_iface_t);
     ucs_status_t status;
 
     ucs_assert_always(iface->config.fc_enabled);
 
-    status = uct_rc_fc_ctrl(&ep->super.super, UCT_RC_EP_FC_PURE_GRANT, freq);
-    if (status == UCS_OK) {
-        ucs_mpool_put(freq);
-        UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_PURE_GRANT, 1);
+    status = uct_dc_mlx5_ep_fc_pure_grant_send(ep, fc_req);
+    if (ucs_likely(status == UCS_OK)) {
+        ucs_mpool_put(fc_req);
     }
+
     return status;
 }
 
@@ -1179,7 +1180,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     },
     .init_rx    = uct_dc_mlx5_init_rx,
     .cleanup_rx = uct_dc_mlx5_cleanup_rx,
-    .fc_ctrl    = uct_dc_mlx5_ep_fc_ctrl,
+    .fc_ctrl    = (uct_rc_iface_fc_ctrl_func_t)ucs_empty_function_do_assert,
     .fc_handler = uct_dc_mlx5_iface_fc_handler,
 };
 
