@@ -41,6 +41,7 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_dest            = "",
     .tuning_path           = "",
     .memtrack_dest         = "",
+    .memtrack_limit        = UCS_MEMUNITS_INF,
     .stats_trigger         = "exit",
     .profile_mode          = 0,
     .profile_file          = "",
@@ -218,6 +219,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "  stdout            - print to standard output.\n"
   "  stderr            - print to standard error.\n",
   ucs_offsetof(ucs_global_opts_t, memtrack_dest), UCS_CONFIG_TYPE_STRING},
+
+ {"MEMTRACK_LIMIT", "inf",
+  "Memory limit allocated by memtrack. In case if limit is reached then\n"
+  "memtrack report is generated and process is terminated.\n",
+  ucs_offsetof(ucs_global_opts_t, memtrack_limit), UCS_CONFIG_TYPE_MEMUNITS},
 #endif
 
   {"PROFILE_MODE", "",

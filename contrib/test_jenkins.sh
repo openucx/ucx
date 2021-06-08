@@ -941,6 +941,16 @@ test_memtrack() {
 	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
 }
 
+test_memtrack_limit() {
+	../contrib/configure-devel --prefix=$ucx_inst
+	make_clean
+	$MAKEP
+
+	echo "==== Running memtrack limit test ===="
+	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
+	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=412MB ./test/apps/test_memtrack_limit |& grep -C 100 'reached'
+}
+
 test_unused_env_var() {
 	# We must create a UCP worker to get the warning about unused variables
 	echo "==== Running ucx_info env vars test ===="
@@ -1277,6 +1287,7 @@ run_tests() {
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load
 	do_distributed_task 3 4 test_memtrack
+	do_distributed_task 3 4 test_memtrack_limit
 	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 2 4 test_env_var_aliases
 	do_distributed_task 1 4 test_malloc_hook
