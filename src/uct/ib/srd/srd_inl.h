@@ -144,6 +144,12 @@ uct_srd_neth_set_type_am(const uct_srd_ep_t *ep,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_srd_neth_set_type_put(const uct_srd_ep_t *ep, uct_srd_neth_t *neth)
+{
+    neth->packet_type = ep->dest_ep_id | UCT_SRD_PACKET_FLAG_PUT;
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_srd_neth_set_psn(const uct_srd_ep_t *ep, uct_srd_neth_t *neth)
 {
     neth->psn = ep->tx.psn;

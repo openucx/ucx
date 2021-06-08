@@ -38,10 +38,11 @@ enum {
 
 enum {
     UCT_SRD_PACKET_FLAG_AM        = UCS_BIT(24),
-    UCT_SRD_PACKET_FLAG_CTLX      = UCS_BIT(25),
+    UCT_SRD_PACKET_FLAG_PUT       = UCS_BIT(25),
+    UCT_SRD_PACKET_FLAG_CTLX      = UCS_BIT(26),
 
     /* Pure credit grant: empty control message indicating credit grant */
-    UCT_SRD_PACKET_FLAG_FC_PGRANT = UCS_BIT(26),
+    UCT_SRD_PACKET_FLAG_FC_PGRANT = UCS_BIT(27),
 
     UCT_SRD_PACKET_AM_ID_MASK     = UCS_MASK(UCT_SRD_PACKET_AM_ID_SHIFT),
     UCT_SRD_PACKET_DEST_ID_MASK   = UCS_MASK(UCT_SRD_PACKET_DEST_ID_SHIFT),
@@ -79,7 +80,15 @@ H - fc hard request
 S - fc soft request
 
 +---------------------------------------------------------------+
-| am_id | rsv |1|            dest_ep_id (24 bit)                |
+| am_id |rsv|1|              dest_ep_id (24 bit)                |
++---------------------------------------------------------------+
+|  rsv  |H|S|G|      psn (16 bit)     |
++--------------------------------------
+
+Put emulation packet header
+
++---------------------------------------------------------------+
+|   rsv   |1|0|              dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
 |  rsv  |H|S|G|      psn (16 bit)     |
 +--------------------------------------
@@ -89,24 +98,30 @@ C - control packet extended header (CREQ/CREP)
 G - fc pure grant
 
 +---------------------------------------------------------------+
-| rsv |G|C|0|                dest_ep_id (24 bit)                |
+| rsv |G|C|0|0|              dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
-|    rsv    |        psn (16 bit)     |
+|     rsv     |      psn (16 bit)     |
 +--------------------------------------
 
     // neth layout in human readable form
-    uint32_t           dest_ep_id:24;
-    uint8_t            is_am:1;
+    uint32_t            dest_ep_id:24;
+    uint8_t             is_am:1;
+    uint8_t             is_put:1;
     union {
         struct { // am true
-            uint8_t reserved:2;
-            uint8_t am_id:5;
+            uint8_t     reserved:2;
+            uint8_t     am_id:5;
         } am;
-        struct { // am false
-            uint8_t ctlx:1;
-            uint8_t fc_grant_pure:1;
-            uint8_t reserved:5;
-        } ctl;
+        union { // am false
+            struct { // put true
+                uint8_t reserved:6;
+            } put;
+            struct { // put false
+                uint8_t ctlx:1;
+                uint8_t fc_grant_pure:1;
+                uint8_t reserved:4;
+            } ctl;
+        }
     };
     union {
         struct { // am true
@@ -188,9 +203,7 @@ typedef struct uct_srd_recv_desc {
     struct {
         ucs_frag_list_elem_t     elem;
     } ooo;
-    struct {
-        uint32_t                 len;
-    } am;
+    uint32_t                     data_len;
 } uct_srd_recv_desc_t;
 
 
@@ -198,6 +211,12 @@ typedef struct uct_srd_am_short_hdr {
     uct_srd_neth_t neth;
     uint64_t       hdr;
 } UCS_S_PACKED uct_srd_am_short_hdr_t;
+
+
+typedef struct uct_srd_put_hdr {
+    uct_srd_neth_t neth;
+    uint64_t       rva;
+} UCS_S_PACKED uct_srd_put_hdr_t;
 
 
 struct uct_srd_iface_addr {
@@ -238,9 +257,21 @@ uct_srd_send_desc_neth(uct_srd_send_desc_t *desc)
 }
 
 static inline uint32_t
+uct_srd_neth_is_am(uct_srd_neth_t *neth)
+{
+    return neth->packet_type & UCT_SRD_PACKET_FLAG_AM;
+}
+
+static inline uint32_t
 uct_srd_neth_is_pure_grant(uct_srd_neth_t *neth)
 {
     return neth->packet_type & UCT_SRD_PACKET_FLAG_FC_PGRANT;
+}
+
+static inline uint32_t
+uct_srd_neth_is_put(uct_srd_neth_t *neth)
+{
+    return neth->packet_type & UCT_SRD_PACKET_FLAG_PUT;
 }
 
 #endif
