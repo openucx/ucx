@@ -184,7 +184,11 @@ ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags);
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
-                                               uct_dc_fc_request_t *fc_req);
+                                               uct_rc_iface_send_op_t *send_op);
+
+void
+uct_dc_mlx5_ep_fc_pure_grant_send_completion(uct_rc_iface_send_op_t *send_op,
+                                             const void *resp);
 
 ucs_arbiter_cb_result_t
 uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,

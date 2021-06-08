@@ -1019,13 +1019,36 @@ err:
     return status;
 }
 
-void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
+static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
 {
-    uct_dc_mlx5_ep_pending_purge(&iface->tx.fc_ep->super.super, NULL, NULL);
-    ucs_arbiter_group_cleanup(&iface->tx.fc_ep->arb_group);
-    uct_rc_fc_cleanup(&iface->tx.fc_ep->fc);
-    UCS_CLASS_CLEANUP(uct_base_ep_t, iface->tx.fc_ep);
-    ucs_free(iface->tx.fc_ep);
+    uct_dc_mlx5_ep_t *fc_ep = iface->tx.fc_ep;
+    uct_rc_iface_send_op_t *op;
+    ucs_queue_iter_t iter;
+    uct_rc_txqp_t *txqp;
+
+    uct_dc_mlx5_ep_pending_purge(&fc_ep->super.super, NULL, NULL);
+    ucs_arbiter_group_cleanup(&fc_ep->arb_group);
+    uct_rc_fc_cleanup(&fc_ep->fc);
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        txqp = &iface->tx.dcis[fc_ep->dci].txqp;
+        ucs_queue_for_each_safe(op, iter, &txqp->outstanding, queue) {
+            if (op->handler == uct_dc_mlx5_ep_fc_pure_grant_send_completion) {
+                ucs_queue_del_iter(&txqp->outstanding, iter);
+                op->handler(op, NULL);
+            }
+        }
+    } else if (fc_ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        /* All outstanding operations on this DCI are FC_PURE_GRANT packets */
+        txqp = &iface->tx.dcis[fc_ep->dci].txqp;
+        uct_rc_txqp_purge_outstanding(&iface->super.super, txqp,
+                                      /* complete with OK to avoid re-sending */
+                                      UCS_OK,
+                                      iface->tx.dcis[fc_ep->dci].txwq.sw_pi, 0);
+    }
+
+    UCS_CLASS_CLEANUP(uct_base_ep_t, fc_ep);
+    ucs_free(fc_ep);
 }
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
@@ -1033,15 +1056,26 @@ ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
     uct_dc_fc_request_t *fc_req = ucs_derived_of(self, uct_dc_fc_request_t);
     uct_dc_mlx5_ep_t *ep        = ucs_derived_of(fc_req->super.ep,
                                                  uct_dc_mlx5_ep_t);
-    uct_rc_iface_t *iface       = ucs_derived_of(ep->super.super.iface,
+    uct_rc_iface_t *rc_iface    = ucs_derived_of(ep->super.super.iface,
                                                  uct_rc_iface_t);
+    uct_rc_iface_send_op_t *send_op;
     ucs_status_t status;
 
-    ucs_assert_always(iface->config.fc_enabled);
+    ucs_assert_always(rc_iface->config.fc_enabled);
 
-    status = uct_dc_mlx5_ep_fc_pure_grant_send(ep, fc_req);
-    if (ucs_likely(status == UCS_OK)) {
-        ucs_mpool_put(fc_req);
+    send_op = ucs_mpool_get(&rc_iface->tx.send_op_mp);
+    if (ucs_unlikely(send_op == NULL)) {
+        ucs_error("failed to allocate FC_PURE_GRANT op");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    uct_rc_ep_init_send_op(send_op, 0, NULL,
+                           uct_dc_mlx5_ep_fc_pure_grant_send_completion);
+
+    send_op->buffer = fc_req;
+    status          = uct_dc_mlx5_ep_fc_pure_grant_send(ep, send_op);
+    if (status != UCS_OK) {
+        ucs_mpool_put(send_op);
     }
 
     return status;
@@ -1364,8 +1398,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 
     uct_dc_mlx5_destroy_dct(self);
     kh_destroy_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
-    uct_dc_mlx5_iface_dcis_destroy(self, uct_dc_mlx5_iface_total_ndci(self));
     uct_dc_mlx5_iface_cleanup_fc_ep(self);
+    uct_dc_mlx5_iface_dcis_destroy(self, uct_dc_mlx5_iface_total_ndci(self));
+
     for (pool_index = 0; pool_index < self->tx.num_dci_pools; pool_index++) {
         ucs_arbiter_cleanup(&self->tx.dci_pool[pool_index].arbiter);
     }

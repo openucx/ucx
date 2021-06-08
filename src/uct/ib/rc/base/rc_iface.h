@@ -98,6 +98,7 @@ enum {
 
 /* flags for uct_rc_iface_send_op_t */
 enum {
+    UCT_RC_IFACE_SEND_OP_STATUS     = UCS_BIT(11), /* status field is valid */
 #ifdef NVALGRIND
     UCT_RC_IFACE_SEND_OP_FLAG_IOV   = 0,
 #else
@@ -305,13 +306,15 @@ struct uct_rc_iface_send_op {
     union {
         ucs_queue_elem_t          queue;  /* used when enqueued on a txqp */
         uct_rc_iface_send_op_t    *next;  /* used when on free list */
+        ucs_status_t              status; /* used when purging outstanding */
     };
     uct_rc_send_handler_t         handler;
     uint16_t                      sn;
     uint16_t                      flags;
     unsigned                      length;
     union {
-        void                      *buffer;     /* atomics / desc */
+        void                      *buffer;     /* atomics / desc /
+                                                  FC_PURE_GRANT request */
         void                      *unpack_arg; /* get_bcopy / desc */
         uct_rc_iface_t            *iface;      /* should not be used with
                                                   get_bcopy completions */
@@ -457,7 +460,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 {
     uct_rc_iface_t *iface = op->iface;
-    ucs_assert(op->flags == UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
+
+    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
+
     op->next = iface->tx.free_ops;
     iface->tx.free_ops = op;
 }
