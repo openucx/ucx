@@ -227,6 +227,11 @@ ucs_status_t uct_srd_ep_get_bcopy(uct_ep_h tl_ep,
                                   uct_completion_t *comp);
 #endif
 
+ucs_status_t uct_srd_ep_put_short(uct_ep_h tl_ep,
+                                  const void *buffer, unsigned length,
+                                  uint64_t remote_addr, uct_rkey_t rkey);
+
+
 static UCS_F_ALWAYS_INLINE void
 uct_srd_ep_ctl_op_del(uct_srd_ep_t *ep, uint32_t ops)
 {

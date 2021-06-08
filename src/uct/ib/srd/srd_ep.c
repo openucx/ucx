@@ -615,8 +615,8 @@ static void uct_srd_ep_rx_crep(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
 }
 
 static void inline
-uct_srd_ep_am_fc_handler(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
-                         uct_srd_neth_t *neth)
+uct_srd_ep_fc_handler(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
+                      uct_srd_neth_t *neth)
 {
     uint8_t fc      = neth->fc;
     int16_t old_wnd = ep->fc.fc_wnd;
@@ -638,7 +638,7 @@ uct_srd_ep_am_fc_handler(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_RX_SOFT_REQ, 1);
 
         /* Got soft credit request. Mark ep that it needs to grant
-         * credits to the peer in outgoing AM (if any). */
+         * credits to the peer in outgoing AM/PUT (if any). */
         uct_srd_ep_set_state(ep, UCT_SRD_EP_FLAG_FC_GRANT);
     } else if (fc & UCT_SRD_PACKET_FLAG_FC_HREQ) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_RX_HARD_REQ, 1);
@@ -652,14 +652,25 @@ uct_srd_ep_am_fc_handler(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
     }
 }
 
+static inline void uct_srd_ep_rx_put(uct_srd_neth_t *neth, uint32_t byte_len)
+{
+    uct_srd_put_hdr_t *put_hdr = (uct_srd_put_hdr_t*)neth;
+
+    memcpy((void *)put_hdr->rva, put_hdr+1, byte_len - sizeof(put_hdr->rva));
+}
+
 static void inline
-uct_srd_ep_process_rx_desc(uct_srd_iface_t *iface, uct_srd_ep_t *ep, int is_am,
+uct_srd_ep_process_rx_desc(uct_srd_iface_t *iface, uct_srd_ep_t *ep,
                           uct_srd_neth_t *neth, uct_srd_recv_desc_t *desc)
 {
-    if (ucs_likely(is_am)) {
-        uct_srd_ep_am_fc_handler(iface, ep, neth);
+    if (ucs_likely(uct_srd_neth_is_am(neth))) {
+        uct_srd_ep_fc_handler(iface, ep, neth);
         uct_ib_iface_invoke_am_desc(&iface->super, uct_srd_neth_get_am_id(neth),
-                                    neth + 1, desc->am.len, &desc->super);
+                                    neth + 1, desc->data_len, &desc->super);
+    } else if (uct_srd_neth_is_put(neth)) {
+        uct_srd_ep_fc_handler(iface, ep, neth);
+        uct_srd_ep_rx_put(neth, desc->data_len);
+        ucs_mpool_put(desc);
     } else if (uct_srd_neth_is_pure_grant(neth)) {
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_SRD_FC_STAT_RX_PURE_GRANT, 1);
         ep->fc.fc_wnd = iface->config.fc_wnd_size;
@@ -675,7 +686,6 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
                            unsigned byte_len, uct_srd_recv_desc_t *desc)
 {
     uint32_t dest_id;
-    uint32_t is_am;
     uct_srd_ep_t *ep = 0;
     ucs_frag_list_elem_t *elem;
     ucs_frag_list_ooo_type_t ooo_type;
@@ -683,7 +693,6 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
     ucs_trace_func("");
 
     dest_id = uct_srd_neth_get_dest_id(neth);
-    is_am   = neth->packet_type & UCT_SRD_PACKET_FLAG_AM;
 
     if (ucs_unlikely(dest_id == UCT_SRD_EP_NULL_ID)) {
         /* must be connection request packet */
@@ -708,9 +717,7 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
 
     ucs_assert(ep->ep_id != UCT_SRD_EP_NULL_ID);
 
-    if (ucs_likely(is_am)) {
-        desc->am.len = byte_len - sizeof(*neth);
-    }
+    desc->data_len = byte_len - sizeof(*neth);
 
     ooo_type = ucs_frag_list_insert(&ep->rx.ooo_pkts, &desc->ooo.elem, neth->psn);
     ucs_assert(ooo_type != UCS_FRAG_LIST_INSERT_DUP);
@@ -723,7 +730,7 @@ void uct_srd_ep_process_rx(uct_srd_iface_t *iface, uct_srd_neth_t *neth,
     if (ooo_type == UCS_FRAG_LIST_INSERT_FAST ||
         ooo_type == UCS_FRAG_LIST_INSERT_FIRST) {
         /* desc has not been inserted into the frag list */
-        uct_srd_ep_process_rx_desc(iface, ep, is_am, neth, desc);
+        uct_srd_ep_process_rx_desc(iface, ep, neth, desc);
     }
 
 pull_ooo_pkts:
@@ -732,8 +739,7 @@ pull_ooo_pkts:
         desc  = ucs_container_of(elem, typeof(*desc), ooo.elem);
         neth  = (typeof(neth))uct_ib_iface_recv_desc_hdr(&iface->super,
                                                         (uct_ib_iface_recv_desc_t*)desc);
-        is_am = neth->packet_type & UCT_SRD_PACKET_FLAG_AM;
-        uct_srd_ep_process_rx_desc(iface, ep, is_am, neth, desc);
+        uct_srd_ep_process_rx_desc(iface, ep, neth, desc);
     }
 
     return;
@@ -834,13 +840,20 @@ ucs_status_t uct_srd_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *
     uct_srd_ep_t *ep       = ucs_derived_of(tl_ep, uct_srd_ep_t);
     uct_srd_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_srd_iface_t);
+    char dummy = 0;
 
     UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
-    /* FIXME: implement ep check for srd */
     uct_srd_enter(iface);
+
+    if (!uct_srd_ep_is_connected(ep) ||
+        !uct_srd_ep_has_fc_resources(ep)) {
+        uct_srd_leave(iface);
+        return UCS_OK;
+    }
     uct_srd_leave(iface);
-    return UCS_OK;
+
+    return uct_srd_ep_put_short(tl_ep, &dummy, 0, 0, 0);
 }
 
 static void uct_srd_ep_do_pending_ctl(uct_srd_ep_t *ep, uct_srd_iface_t *iface)
@@ -1449,6 +1462,53 @@ ucs_status_t uct_srd_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     return status;
 }
 #endif /* HAVE_DECL_EFA_DV_RDMA_READ */
+
+ucs_status_t uct_srd_ep_put_short(uct_ep_h tl_ep,
+                                  const void *buffer, unsigned length,
+                                  uint64_t remote_addr, uct_rkey_t rkey)
+{
+    uct_srd_ep_t *ep           = ucs_derived_of(tl_ep, uct_srd_ep_t);
+    uct_srd_iface_t *iface     = ucs_derived_of(tl_ep->iface, uct_srd_iface_t);
+    uct_srd_put_hdr_t *put_hdr = &iface->tx.put_hdr;
+    uct_srd_neth_t *neth       = &put_hdr->neth;
+    uct_srd_send_op_t *send_op;
+
+    UCT_CHECK_LENGTH(sizeof(*put_hdr) + length,
+                     0, iface->config.max_inline, "put_short");
+
+    uct_srd_enter(iface);
+
+    send_op = uct_srd_ep_get_send_op(iface, ep);
+    if (!send_op) {
+        uct_srd_leave(iface);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    put_hdr->rva          = remote_addr;
+    send_op->comp_handler = uct_srd_iface_send_op_release;
+
+    UCT_SRD_EP_ASSERT_PENDING(ep);
+    UCT_SRD_CHECK_FC(iface, ep, neth->fc);
+    uct_srd_neth_set_type_put(ep, neth);
+    uct_srd_neth_set_psn(ep, neth);
+
+    iface->tx.sge[0].addr    = (uintptr_t)put_hdr;
+    iface->tx.sge[0].length  = sizeof(*put_hdr);
+    iface->tx.sge[1].addr    = (uintptr_t)buffer;
+    iface->tx.sge[1].length  = length;
+    iface->tx.wr_inl.num_sge = 2;
+    iface->tx.wr_inl.wr_id   = (uintptr_t)send_op;
+
+    uct_srd_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE, 2);
+    ucs_queue_push(&ep->tx.outstanding_q, &send_op->out_queue);
+    uct_srd_iface_complete_tx_op(iface, ep, send_op);
+
+    UCT_SRD_UPDATE_FC(iface, ep, neth->fc);
+
+    UCT_TL_EP_STAT_OP(&ep->super, PUT, SHORT, length);
+    uct_srd_leave(iface);
+    return UCS_OK;
+}
 
 static ucs_status_t
 uct_srd_ep_fc_init(uct_srd_ep_t *ep, int16_t wnd_size

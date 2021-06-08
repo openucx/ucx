@@ -66,8 +66,9 @@ struct uct_srd_iface {
     } rx;
     struct {
         uct_srd_am_short_hdr_t am_inl_hdr;
-        uct_srd_send_desc_t    *desc;          /* cached ready to use desc */
-        uct_srd_send_op_t      *send_op;       /* cached ready to use send op */
+        uct_srd_put_hdr_t      put_hdr;     /* to emulate put with send/recv */
+        uct_srd_send_desc_t    *desc;       /* cached ready to use desc */
+        uct_srd_send_op_t      *send_op;    /* cached ready to use send op */
         ucs_mpool_t            desc_mp;
         ucs_mpool_t            send_op_mp;
         int32_t                available;

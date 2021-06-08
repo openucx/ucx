@@ -751,6 +751,7 @@ static uct_iface_ops_t uct_srd_iface_tl_ops = {
     .ep_get_bcopy             = uct_srd_ep_get_bcopy,
     .ep_get_zcopy             = uct_srd_ep_get_zcopy,
 #endif
+    .ep_put_short             = uct_srd_ep_put_short,
     .ep_pending_add           = uct_srd_ep_pending_add,
     .ep_pending_purge         = uct_srd_ep_pending_purge,
     .ep_flush                 = uct_srd_ep_flush,
@@ -897,6 +898,7 @@ UCS_CLASS_INIT_FUNC(uct_srd_iface_t, uct_md_h md, uct_worker_h worker,
     self->tx.send_op                     = NULL;
 
     memset(&self->tx.am_inl_hdr, 0, sizeof(self->tx.am_inl_hdr));
+    memset(&self->tx.put_hdr,    0, sizeof(self->tx.put_hdr));
 
     self->super.config.sl = uct_ib_iface_config_select_sl(&config->super);
 
