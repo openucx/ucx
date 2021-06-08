@@ -995,6 +995,8 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
     ucp_rndv_mpool_priv_t *mpriv;
     ucs_status_t status;
 
+    ucs_recursive_spin_lock(&worker->mpool_hash_lock);
+
     khiter = kh_get(ucp_worker_mpool_hash, &worker->mpool_hash, *key);
     if (ucs_likely(khiter != kh_end(&worker->mpool_hash))) {
         mpool = kh_val(&worker->mpool_hash, khiter);
@@ -1022,6 +1024,8 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
         ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
         kh_value(&worker->mpool_hash, khiter) = mpool;
     }
+
+    ucs_recursive_spin_unlock(&worker->mpool_hash_lock);
 
     return mpool;
 }

@@ -1826,6 +1826,8 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_am_mp_cleanup;
     }
 
+    ucs_recursive_spinlock_init(&worker->mpool_hash_lock, 0);
+
     return UCS_OK;
 
 err_am_mp_cleanup:
@@ -2537,6 +2539,7 @@ void ucp_worker_destroy(ucp_worker_h worker)
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_foreach_value(&worker->mpool_hash, mp, ucs_free(mp))
+    ucs_recursive_spinlock_destroy(&worker->mpool_hash_lock);
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
