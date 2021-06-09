@@ -191,6 +191,9 @@ struct ucp_ep_config_key {
 
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
+
+    /* Endpoint client id */
+    uint64_t                 client_id;
 };
 
 
@@ -436,7 +439,6 @@ typedef struct {
 #if UCS_ENABLE_ASSERT
     ucs_time_t               ka_last_round; /* Time of last KA round done */
 #endif
-    uint64_t                 client_id; /* Client EP ID */
 } ucp_ep_ext_control_t;
 
 
@@ -550,6 +552,7 @@ void ucp_ep_delete(ucp_ep_h ep);
 void ucp_ep_release_id(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
+                                       uint64_t client_id,
                                        ucp_wireup_ep_t **wireup_ep);
 
 ucs_status_t

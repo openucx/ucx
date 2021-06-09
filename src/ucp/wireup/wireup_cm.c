@@ -291,7 +291,7 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
     sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
     sa_data->dev_index = dev_index;
-    sa_data->client_id = ucp_ep_ext_control(ep)->client_id;
+    sa_data->client_id = ucp_ep_config(ep)->key.client_id;
     memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
 
     *data_buf_p        = sa_data;
