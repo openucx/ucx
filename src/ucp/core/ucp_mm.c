@@ -703,18 +703,126 @@ void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_mpool_free(worker, mp, chunk);
 }
 
-ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+static inline ucs_status_t
+ucp_mem_type_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+    unsigned elems_per_chunk;
+    size_t frag_size;
+    ucp_mem_desc_t *chunk_hdr;
+    ucp_mem_type_mem_desc_t *mem_type_chunk_hdr;
+    ucp_mem_h mem_type_memh;
+    ucp_mem_h memh;
+    ucs_status_t status;
+    ucp_mem_map_params_t mem_params;
+    ucs_memory_type_t *mpool_mem_type;
 
-    return ucp_mpool_malloc(worker, mp, size_p, chunk_p);
+    elems_per_chunk = worker->context->config.ext.mem_type_frag_elems_per_chunk;
+    frag_size       = worker->context->config.ext.mem_type_rndv_frag_size;
+
+    mpool_mem_type = (ucs_memory_type_t *)ucs_mpool_priv(mp);
+    ucs_assert(*mpool_mem_type < UCS_MEMORY_TYPE_LAST);
+
+    /* Assumes that a minimum of elems_per_chunk elems are created by mpool */
+    mem_params.field_mask = 0;
+    status = ucp_mem_map_common(worker->context, NULL,
+                                frag_size * elems_per_chunk, *mpool_mem_type,
+                                ucp_mem_map_params2uct_flags(&mem_params),
+                                1, ucs_mpool_name(mp), &mem_type_memh);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    /* Need to get default flags from ucp_mem_map_params2uct_flags() */
+    mem_params.field_mask = 0;
+    status = ucp_mem_map_common(worker->context, NULL,
+                                *size_p + sizeof(*chunk_hdr)
+                                + sizeof(*mem_type_chunk_hdr),
+                                UCS_MEMORY_TYPE_HOST,
+                                ucp_mem_map_params2uct_flags(&mem_params),
+                                1, ucs_mpool_name(mp), &memh);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    chunk_hdr                     = memh->address;
+    chunk_hdr->memh               = memh;
+    mem_type_chunk_hdr            = (ucp_mem_type_mem_desc_t *)
+                                    ((ucp_mem_desc_t *)chunk_hdr + 1);
+    mem_type_chunk_hdr->memh      = mem_type_memh;
+    mem_type_chunk_hdr->num_frags = 0;
+    mem_type_chunk_hdr->frag_size = frag_size;
+    *chunk_p                      = mem_type_chunk_hdr + 1;
+    *size_p                       = memh->length - sizeof(*chunk_hdr)
+                                    - sizeof(*mem_type_chunk_hdr);
+out:
+    return status;
 }
 
-void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
+static inline void
+ucp_mem_type_mpool_free(ucp_worker_h worker, ucs_mpool_t *mp, void *chunk)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+    ucp_mem_desc_t *chunk_hdr;
+    ucp_mem_type_mem_desc_t *mem_type_chunk_hdr;
 
-    ucp_mpool_free(worker, mp, chunk);
+    mem_type_chunk_hdr = (ucp_mem_type_mem_desc_t*)chunk - 1;
+    chunk_hdr          = (ucp_mem_desc_t*)mem_type_chunk_hdr - 1;
+
+    ucp_mem_unmap_common(worker->context, mem_type_chunk_hdr->memh);
+    ucp_mem_unmap_common(worker->context, chunk_hdr->memh);
+}
+
+void ucp_mem_type_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    ucp_mem_desc_t *elem_hdr;
+    ucp_mem_desc_t *chunk_hdr;
+    ucp_mem_type_mem_desc_t *mem_type_elem_hdr;
+    ucp_mem_type_mem_desc_t *mem_type_chunk_hdr;
+#if UCS_ENABLE_ASSERT
+    void *boundary;
+#endif
+    size_t offset;
+    size_t frag_size;
+
+    mem_type_elem_hdr             = (ucp_mem_type_mem_desc_t*)
+                                    ((ucp_mem_desc_t *)obj + 1);
+    mem_type_chunk_hdr            = (ucp_mem_type_mem_desc_t*)
+                                    ((ucp_mem_type_mem_desc_t*)chunk - 1);
+    mem_type_elem_hdr->memh       = mem_type_chunk_hdr->memh;
+    frag_size                     = mem_type_chunk_hdr->frag_size;
+    offset                        = mem_type_chunk_hdr->num_frags * frag_size;
+    mem_type_chunk_hdr->num_frags = mem_type_chunk_hdr->num_frags + 1;
+    mem_type_elem_hdr->address    = (void *)
+                                    ((char *)mem_type_chunk_hdr->memh->address
+                                     + offset);
+#if UCS_ENABLE_ASSERT
+    boundary                      = (void *)mem_type_chunk_hdr->memh->address
+		                     + mem_type_chunk_hdr->memh->length
+				     - frag_size;
+    ucs_assert((void *)mem_type_elem_hdr->address <= boundary);
+#endif
+    mem_type_elem_hdr->length     = mem_type_chunk_hdr->memh->length;
+    mem_type_elem_hdr->frag_size  = frag_size;
+
+    chunk_hdr                     = (ucp_mem_desc_t*)
+                                    ((ucp_mem_desc_t*)mem_type_chunk_hdr - 1);
+    elem_hdr                      = obj;
+    elem_hdr->memh                = chunk_hdr->memh;
+}
+
+ucs_status_t ucp_mem_type_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucp_worker_h *worker_ptr = (ucp_worker_h *)
+	                       ((ucs_memory_type_t *)ucs_mpool_priv(mp) + 1);
+
+    return ucp_mem_type_mpool_malloc(*worker_ptr, mp, size_p, chunk_p);
+}
+
+void ucp_mem_type_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_worker_h *worker_ptr = (ucp_worker_h *)
+	                       ((ucs_memory_type_t *)ucs_mpool_priv(mp) + 1);
+
+    ucp_mem_type_mpool_free(*worker_ptr, mp, chunk);
 }
 
 void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)

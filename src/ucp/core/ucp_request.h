@@ -314,6 +314,7 @@ struct ucp_request {
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
+            ucp_mem_desc_t        *mdesc;
             ssize_t               remaining;  /* How much more data
                                                * to be received */
 

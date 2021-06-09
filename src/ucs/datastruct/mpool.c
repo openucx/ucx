@@ -201,6 +201,7 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
     chunk->elems     = UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
     chunk->num_elems = ucs_min(data->quota, (chunk_size - chunk_padding - sizeof(*chunk)) /
                        ucs_mpool_elem_total_size(data));
+    chunk->num_elems = ucs_min(num_elems, chunk->num_elems);
 
     ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
               ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);

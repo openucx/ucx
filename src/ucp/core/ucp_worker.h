@@ -27,6 +27,7 @@
  * use for its own needs. This size does not include ucp_recv_desc_t length,
  * because it is common for all cases and protocols (TAG, STREAM). */
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 32
+#define UCP_WORKER_MPOOL_DEFAULT_DEVICE_ID UINT_MAX
 
 
 #define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker) \
@@ -196,6 +197,18 @@ typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
 KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
+typedef struct ucp_worker_mpool_key {
+    ucs_memory_type_t             mem_type;  /* mem_type of the memory pool */
+    unsigned                      device_id; /* identifier for the device,
+                                                UINT_MAX for default device */
+} ucp_worker_mpool_key_t;
+
+/* Hash map to find mpool by mpool key */
+KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*);
+typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
+
+ucs_mpool_t *ucp_worker_get_mem_type_mpool(ucp_worker_h worker,
+                                           const ucp_worker_mpool_key_t *key);
 
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
@@ -273,7 +286,7 @@ typedef struct ucp_worker {
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
     ucs_mpool_t                      am_mp;               /* Memory pool for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
-    ucs_mpool_t                      rndv_frag_mp;        /* Memory pool for RNDV fragments */
+    ucp_worker_mpool_hash_t          mem_type_mpool_hash; /* Hash table of mem_type memory pools */
     ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that
                                                            * are in-progress */
     uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */

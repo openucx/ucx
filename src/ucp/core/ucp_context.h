@@ -63,8 +63,10 @@ typedef struct ucp_context_config {
     double                                 bcopy_bw;
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
-    /** RNDV pipeline fragment size */
-    size_t                                 rndv_frag_size;
+    /** RNDV pipeline non-host mem_type fragment size */
+    size_t                                 mem_type_rndv_frag_size;
+    /** Non-host mem_type frags per chunk */
+    unsigned                               mem_type_frag_elems_per_chunk;
     /** RNDV pipline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Threshold for using tag matching offload capabilities. Smaller buffers

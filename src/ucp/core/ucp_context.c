@@ -279,9 +279,13 @@ static ucs_config_field_t ucp_config_table[] = {
    "and the resulting performance.\n",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_SIZE", "512k",
-   "RNDV fragment size \n",
-   ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+  {"MEM_TYPE_RNDV_FRAG_SIZE", "512k",
+   "Mem_type RNDV fragment size \n",
+   ucs_offsetof(ucp_config_t, ctx.mem_type_rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"MEM_TYPE_RNDV_FRAG_ELEMS_PER_CHUNK", "128",
+   "Mem_type RNDV elements per chunk allocation\n",
+   ucs_offsetof(ucp_config_t, ctx.mem_type_frag_elems_per_chunk), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type\n",

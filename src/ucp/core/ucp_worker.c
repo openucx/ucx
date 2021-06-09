@@ -98,10 +98,10 @@ ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .obj_cleanup   = ucs_empty_function
 };
 
-ucs_mpool_ops_t ucp_frag_mpool_ops = {
-    .chunk_alloc   = ucp_frag_mpool_malloc,
-    .chunk_release = ucp_frag_mpool_free,
-    .obj_init      = ucp_mpool_obj_init,
+ucs_mpool_ops_t ucp_mem_type_frag_mpool_ops = {
+    .chunk_alloc   = ucp_mem_type_frag_mpool_malloc,
+    .chunk_release = ucp_mem_type_frag_mpool_free,
+    .obj_init      = ucp_mem_type_mpool_obj_init,
     .obj_cleanup   = ucs_empty_function
 };
 
@@ -1795,10 +1795,29 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     return info;
 }
 
+ucs_mpool_t *ucp_worker_get_mem_type_mpool(ucp_worker_h worker,
+                                           const ucp_worker_mpool_key_t *key)
+{
+    khiter_t khiter = kh_get(ucp_worker_mpool_hash, &worker->mem_type_mpool_hash,
+                             *key);
+    if (ucs_likely(khiter != kh_end(&worker->mem_type_mpool_hash))) {
+        return kh_val(&worker->mem_type_mpool_hash, khiter);
+    } else {
+        return NULL;
+    }
+}
+
 static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 {
     size_t           max_mp_entry_size = 0;
     ucp_context_t    *context          = worker->context;
+    ucp_worker_mpool_key_t key;
+    ucs_memory_type_t mem_type;
+    ucs_memory_type_t *mem_type_ptr;
+    ucs_mpool_t *mem_type_frag_mp;
+    ucp_worker_h *worker_ptr;
+    khiter_t khiter;
+    int khret;
     uct_iface_attr_t *if_attr;
     ucp_rsc_index_t  iface_id;
     ucs_status_t     status;
@@ -1850,13 +1869,37 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_am_mp_cleanup;
     }
 
-    /* Create memory pool for pipelined rndv fragments */
-    status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
-                            context->config.ext.rndv_frag_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_PCI_MAX_PAYLOAD, 128,
-                            UINT_MAX, &ucp_frag_mpool_ops, "ucp_rndv_frags");
-    if (status != UCS_OK) {
-        goto err_reg_mp_cleanup;
+    /* Create memory pool for pipelined rndv fragments on device*/
+    ucs_memory_type_for_each(mem_type) {
+        mem_type_frag_mp = ucs_malloc(sizeof(ucs_mpool_t), "ucp_worker_mem_type_mpool");
+        status = ucs_mpool_init(mem_type_frag_mp, sizeof(ucp_worker_h) + sizeof(ucs_memory_type_t),
+                                sizeof(ucp_mem_type_mem_desc_t)
+                                + sizeof(ucp_mem_desc_t), 0,
+                                UCS_SYS_CACHE_LINE_SIZE,
+                                context->config.ext.mem_type_frag_elems_per_chunk,
+                                UINT_MAX, &ucp_mem_type_frag_mpool_ops,
+                                "ucp_rndv_device_frags");
+        if (status != UCS_OK) {
+            goto err_reg_mp_cleanup;
+        }
+
+        mem_type_ptr  = ucs_mpool_priv(mem_type_frag_mp);
+        *mem_type_ptr = mem_type;
+        worker_ptr    = (ucp_worker_h *)((ucs_memory_type_t *)mem_type_ptr + 1);
+        *worker_ptr   = worker;
+
+        /* add mpool to worker mem_type mpool hash */
+        key.mem_type  = mem_type;
+        key.device_id = UCP_WORKER_MPOOL_DEFAULT_DEVICE_ID;
+
+        khiter = kh_put(ucp_worker_mpool_hash, &worker->mem_type_mpool_hash, key,
+                        &khret);
+        if (khret == UCS_KH_PUT_FAILED) {
+            return UCS_ERR_NO_MEMORY;
+        }
+
+        ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
+        kh_value(&worker->mem_type_mpool_hash, khiter) = mem_type_frag_mp;
     }
 
     return UCS_OK;
@@ -1875,7 +1918,9 @@ err:
 
 static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 {
-    ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
+    ucs_mpool_t *mp;
+
+    kh_foreach_value(&worker->mem_type_mpool_hash, mp, ucs_mpool_cleanup(mp, 1))
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
@@ -2153,6 +2198,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->all_eps);
     ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_init_inplace(ucp_worker_mpool_hash, &worker->mem_type_mpool_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
@@ -2339,6 +2385,7 @@ err_free:
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mem_type_mpool_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
     return status;
@@ -2530,7 +2577,9 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
 
 void ucp_worker_destroy(ucp_worker_h worker)
 {
-    ucs_debug("destroy worker %p", worker);
+
+    ucs_mpool_t *mp;
+    ucs_trace_func("worker=%p", worker);
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
@@ -2568,6 +2617,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
+    kh_foreach_value(&worker->mem_type_mpool_hash, mp, ucs_free(mp))
+    kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mem_type_mpool_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
 }
