@@ -25,7 +25,7 @@ BEGIN_C_DECLS
 /** @file parser.h */
 
 /*
- * Configuration varaibles syntax:
+ * Configuration variables syntax:
  *
  * name: <env_prefix><table_prefix><field_name>
  *
@@ -389,7 +389,7 @@ ucs_status_t ucs_config_parse_config_file(const char *path, int override);
  * @param opts           User-defined options structure to fill.
  * @param fields         Array of fields which define how to parse.
  * @param env_prefix     Prefix to add to all environment variables,
- *                       env_prefix may consist of multiple sub preifxes
+ *                       env_prefix may consist of multiple sub prefixes
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param ignore_errors  Whether to ignore parsing errors and continue parsing
  *                       other fields.
@@ -472,7 +472,7 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
  * that ensures that this is called once
  *
  * @param env_prefix     Environment variable prefix.
- *                       env_prefix may consist of multiple sub prefixex
+ *                       env_prefix may consist of multiple sub prefixes
  */
 
 void ucs_config_parser_print_env_vars_once(const char *env_prefix);
