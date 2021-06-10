@@ -350,7 +350,10 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
     ucs_assert(iface->config.fc_enabled);
 
     if ((ep == NULL) || (ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        /* We get fc for ep which is being removed or canceled so should ignore it */
+        /* We get fc for ep which is being removed or cancelled, so should ignore it */
+        if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
+            return UCS_OK;
+        }
         goto out;
     }
 
