@@ -50,6 +50,9 @@ typedef struct ucp_mem_desc {
 typedef struct ucp_rndv_mpool_priv {
     ucp_worker_h                  worker;
     ucs_memory_type_t             mem_type;
+    int                           num_frags;
+    size_t                        frag_size;
+    size_t                        elem_offset;
 } ucp_rndv_mpool_priv_t;
 
 

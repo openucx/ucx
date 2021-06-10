@@ -673,8 +673,17 @@ ucp_mpool_free(ucp_worker_h worker, ucs_mpool_t *mp, void *chunk)
 void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
     ucp_mem_desc_t *elem_hdr  = obj;
+    void *buffer              = (void*)((ucp_mem_desc_t *)obj + 1);
     ucp_mem_desc_t *chunk_hdr = (ucp_mem_desc_t*)((ucp_mem_desc_t*)chunk - 1);
+    ucp_rndv_mpool_priv_t *mpriv;
+    ucp_worker_h worker;
+
     elem_hdr->memh = chunk_hdr->memh;
+    mpriv          = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+    worker         = mpriv->worker;
+
+    ucp_worker_buf_mdesc_hash_put(worker, buf_to_mdesc, buffer, elem_hdr);
+    ucp_worker_buf_mdesc_hash_put(worker, mdesc_to_buf, elem_hdr, buffer);
 }
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
