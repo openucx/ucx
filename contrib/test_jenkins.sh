@@ -29,6 +29,11 @@ ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda11.1.1"
 GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
 
+if [[ "$RUNNING_IN_AZURE" == "yes" ]]; then
+	realdir=$(realpath $(dirname $0))
+	source ${realdir}/../buildlib/az-helpers.sh
+fi
+
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
