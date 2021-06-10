@@ -265,13 +265,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                               &uct_rc_verbs_iface_tl_ops, tl_md, worker, params,
                               &config->super.super, &init_attr);
 
-    self->config.tx_max_wr           = ucs_min(config->tx_max_wr,
-                                               self->super.config.tx_qp_len);
-    self->super.config.tx_moderation = ucs_min(config->super.tx_cq_moderation,
-                                               self->config.tx_max_wr / 4);
-    self->super.config.fence_mode    = (uct_rc_fence_mode_t)config->super.super.fence_mode;
-    self->super.progress             = uct_rc_verbs_iface_progress;
-    self->super.super.config.sl      = uct_ib_iface_config_select_sl(ib_config);
+    self->config.tx_max_wr               = ucs_min(config->tx_max_wr,
+                                                   self->super.config.tx_qp_len);
+    self->super.config.tx_moderation     = ucs_min(config->super.tx_cq_moderation,
+                                                   self->config.tx_max_wr / 4);
+    self->super.config.fence_mode        = (uct_rc_fence_mode_t)config->super.super.fence_mode;
+    self->super.progress                 = uct_rc_verbs_iface_progress;
+    self->super.super.config.sl          = uct_ib_iface_config_select_sl(ib_config);
 
     if ((config->super.super.fence_mode == UCT_RC_FENCE_MODE_WEAK) ||
         (config->super.super.fence_mode == UCT_RC_FENCE_MODE_AUTO)) {

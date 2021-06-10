@@ -73,6 +73,12 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "                  treats it as a linked list. Doesn`t require DEVX.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
+   
+  {"LOG_ACK_REQ_FREQ", "8",
+   "Log of the ack frequency for requests, when using DevX. Valid values are: 0-"
+    UCS_PP_MAKE_STRING(UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ) ".",
+   ucs_offsetof(uct_rc_mlx5_iface_common_config_t, log_ack_req_freq),
+   UCS_CONFIG_TYPE_UINT},
 
   {NULL}
 };

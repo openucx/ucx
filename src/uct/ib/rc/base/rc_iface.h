@@ -175,6 +175,8 @@ struct uct_rc_iface_config {
     unsigned                       tx_cq_moderation; /* How many TX messages are
                                                         batched to one CQE */
     unsigned                       tx_cq_len;
+    unsigned                       log_ack_req_freq; /* Log of requests ack
+                                                        frequency on DevX */
 };
 
 
