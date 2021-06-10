@@ -297,12 +297,12 @@ int ucp_test::max_connections() {
     }
 }
 
-void ucp_test::set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env)
+void ucp_test::set_tl_small_timeouts()
 {
     /* Set small TL timeouts to reduce testing time */
-    env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
-    env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
-    env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
 }
 
 void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)

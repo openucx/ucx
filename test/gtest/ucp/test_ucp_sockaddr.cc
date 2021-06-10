@@ -67,14 +67,6 @@ public:
         modify_config("KEEPALIVE_INTERVAL", "10s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
 
-        /*
-         * FIXME: this is a workaround of the issue reproduced by
-         *        the 'close_ep_force_before_err_cb' test with RC transport
-         *        where TX-queue less than FC_WND, so uct_flush cancel returns
-         *        UCS_ERR_NO_RESOURCES and can not be handled after error
-         */
-        modify_config("RC_FC_WND_SIZE", "128", SETENV_IF_NOT_EXIST); 
-
         get_sockaddr();
         ucp_test::init();
         skip_loopback();
@@ -1351,18 +1343,19 @@ UCS_TEST_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes)
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_check_lanes)
 
+
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
 public:
     test_ucp_sockaddr_destroy_ep_on_err() {
-        set_tl_timeouts(m_env);
+        set_tl_small_timeouts();
     }
 
     virtual ucp_ep_params_t get_server_ep_params() {
         ucp_ep_params_t params = test_ucp_sockaddr::get_server_ep_params();
 
         params.field_mask      |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
-                                 UCP_EP_PARAM_FIELD_ERR_HANDLER        |
-                                 UCP_EP_PARAM_FIELD_USER_DATA;
+                                  UCP_EP_PARAM_FIELD_ERR_HANDLER       |
+                                  UCP_EP_PARAM_FIELD_USER_DATA;
         params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
         params.err_handler.cb   = err_handler_cb;
         params.err_handler.arg  = NULL;
@@ -1375,9 +1368,6 @@ public:
         entity *e = reinterpret_cast<entity *>(arg);
         e->disconnect_nb(0, 0, UCP_EP_CLOSE_MODE_FORCE);
     }
-
-private:
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 UCS_TEST_P(test_ucp_sockaddr_destroy_ep_on_err, empty) {
@@ -2205,7 +2195,7 @@ public:
 
 protected:
     test_ucp_sockaddr_protocols_err() {
-        set_tl_timeouts(m_env);
+        set_tl_small_timeouts();
     }
 
     void test_tag_send_recv(size_t size, bool is_exp,
@@ -2219,8 +2209,6 @@ protected:
                                                         variants & SEND_STOP,
                                                         variants & RECV_STOP);
     }
-
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 
@@ -2302,7 +2290,7 @@ protected:
     }
 
     test_ucp_sockaddr_protocols_err_sender() {
-        set_tl_timeouts(m_env);
+        set_tl_small_timeouts();
         m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
                                                "rcache,odp,direct"));
     }
