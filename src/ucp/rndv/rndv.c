@@ -886,7 +886,6 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
                                 ucs_memory_type_t mem_type, size_t length,
                                 uct_pending_callback_t uct_func)
 {
-    void *buffer = ucp_worker_buf_mdesc_hash_get(worker, mdesc_to_buf, mdesc);
     ucp_ep_h mem_type_ep;
     ucp_md_index_t md_index;
     ucp_lane_index_t mem_type_rma_lane;
@@ -895,10 +894,10 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
     ucp_request_send_state_reset(freq, comp_cb, rndv_op);
 
     freq->flags             = 0;
-    freq->send.buffer       = buffer;
+    freq->send.buffer       = mdesc->ptr;
     freq->send.length       = length;
     freq->send.datatype     = ucp_dt_make_contig(1);
-    freq->send.mem_type     = mem_type;
+    freq->send.mem_type     = mem_type; /*is this send.buffer mem_type or target mem_type */
     freq->send.mdesc        = mdesc;
     freq->send.uct.func     = uct_func;
     freq->send.pending_lane = UCP_NULL_LANE;
@@ -1078,7 +1077,8 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
         ucs_fatal("failed to allocate fragment memory desc");
     }
 
-    freq->send.ep = sreq->send.ep;
+    freq->send.ep    = sreq->send.ep;
+    freq->send.mdesc = mdesc;
 
     ucp_rndv_init_mem_type_frag_req(worker, freq, UCP_REQUEST_SEND_PROTO_RNDV_GET,
                                     comp_cb, mdesc, remote_mem_type, length,
@@ -1101,8 +1101,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),
                                            send.state.uct_comp);
     ucp_request_t *rndv_req, *rreq;
     uint64_t offset;
-    ucp_worker_h worker;
-    ucp_mem_desc_t *mdesc;
 
     if (freq->send.state.dt.offset != freq->send.length) {
         return;
@@ -1112,9 +1110,6 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),
     rreq     = ucp_request_get_super(rndv_req);
     offset   = freq->send.rndv.remote_address -
                rndv_req->send.rndv.remote_address;
-    worker   = rreq->recv.worker;
-    mdesc    = ucp_worker_buf_mdesc_hash_get(worker, buf_to_mdesc,
-                                             freq->send.buffer);
 
     ucs_trace_req("freq:%p: recv_frag_get done. rreq:%p length:%"PRIu64
                   " offset:%"PRIu64,
@@ -1123,7 +1118,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),
     /* fragment GET completed from remote to staging buffer, issue PUT from
      * staging buffer to recv buffer */
     ucp_rndv_recv_frag_put_mem_type(rreq, freq,
-                                    mdesc,
+                                    freq->send.mdesc,
                                     freq->send.length, offset);
 }
 
@@ -1232,11 +1227,9 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
             ucs_fatal("failed to allocate fragment memory buffer");
         }
 
-        freq->recv.buffer                 = ucp_worker_buf_mdesc_hash_get(worker,
-                                                                          mdesc_to_buf,
-                                                                          mdesc);
+        freq->recv.buffer                 = mdesc->ptr;
         freq->recv.datatype               = ucp_dt_make_contig(1);
-        freq->recv.mem_type               = UCS_MEMORY_TYPE_HOST;
+        freq->recv.mem_type               = mdesc->mem_type;
         freq->recv.length                 = frag_size;
         freq->recv.state.dt.contig.md_map = 0;
         freq->recv.frag.offset            = offset;
@@ -1255,6 +1248,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
 
         frndv_req->flags             = 0;
         frndv_req->send.ep           = rndv_req->send.ep;
+        frndv_req->send.mdesc        = mdesc;
         frndv_req->send.pending_lane = UCP_NULL_LANE;
 
         ucp_rndv_req_send_rtr(frndv_req, freq, rndv_rts_hdr->sreq.req_id,
@@ -1910,15 +1904,14 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     UCP_SEND_REQUEST_GET_BY_ID(&rtr_sreq, worker, rep_hdr->req_id, 1,
                                return UCS_OK, "RNDV ATP %p", rep_hdr);
 
-    req = ucp_request_get_super(rtr_sreq);
+    req   = ucp_request_get_super(rtr_sreq);
+    mdesc = rtr_sreq->send.mdesc;
     ucs_assert(req != NULL);
     ucp_request_put(rtr_sreq);
 
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_frag_atp_recv", 0);
-        mdesc = ucp_worker_buf_mdesc_hash_get(worker, buf_to_mdesc,
-                                              req->recv.buffer);
         ucp_rndv_recv_frag_put_mem_type(ucp_request_get_super(req), req,
                                         mdesc,
                                         req->recv.length,

@@ -41,6 +41,8 @@ typedef struct ucp_mem {
  */
 typedef struct ucp_mem_desc {
     ucp_mem_h                     memh;
+    void                          *ptr;
+    ucs_memory_type_t             mem_type;
 } ucp_mem_desc_t;
 
 

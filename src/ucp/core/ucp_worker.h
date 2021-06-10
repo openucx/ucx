@@ -186,38 +186,6 @@ enum {
         _rdesc; \
     })
 
-#define ucp_worker_buf_mdesc_hash_put(_worker, _name, _key, _val) \
-    { \
-        khiter_t __khiter; \
-        int __khret; \
-        ucs_recursive_spin_lock(&_worker->_name##_lock); \
-        __khiter = kh_put(ucp_worker_##_name##_hash, &worker->_name##_hash, \
-                          (void*)_key, &__khret); \
-        if (__khret == UCS_KH_PUT_FAILED) { \
-            ucs_fatal("unable to insert into hash"); \
-        } \
-        kh_value(&worker->_name##_hash, __khiter) = (void*)_val; \
-        ucs_debug("worker %p buffer %p mdesc %p hash %p", worker, (void*)_key, \
-              (void*)_val, &worker->_name##_hash); \
-        ucs_recursive_spin_unlock(&worker->_name##_lock); \
-    }
-
-#define ucp_worker_buf_mdesc_hash_get(_worker, _name, _key) \
-    ({ \
-        void *__ret = NULL; \
-        khiter_t khiter; \
-        khiter = kh_get(ucp_worker_##_name##_hash, &_worker->_name##_hash, \
-                        _key); \
-        if (ucs_likely(khiter != kh_end(&_worker->_name##_hash))) { \
-            __ret = kh_val(&_worker->_name##_hash, khiter);\
-        } \
-        if (__ret == NULL) { \
-            ucs_fatal("unable to find key" "worker %p key %p val %p hash %p", \
-                      _worker, __ret, _key, &_worker->_name##_hash); \
-        } \
-        __ret; \
-    })
-
 /* Hash map to find rkey config index by rkey config key, for fast rkey unpack */
 KHASH_TYPE(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t);
 typedef khash_t(ucp_worker_rkey_config) ucp_worker_rkey_config_hash_t;
@@ -236,17 +204,6 @@ typedef struct ucp_worker_mpool_key {
 /* Hash map to find mpool by mpool key */
 KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*);
 typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
-
-#define ucp_worker_buf_to_mdesc_hash_func(_ptr) kh_int64_hash_func((uintptr_t)(_ptr))
-KHASH_INIT(ucp_worker_buf_to_mdesc_hash, void*, void*,
-           1, ucp_worker_buf_to_mdesc_hash_func, kh_int64_hash_equal);
-
-#define ucp_worker_mdesc_to_buf_hash_func(_ptr) kh_int64_hash_func((uintptr_t)(_ptr))
-KHASH_INIT(ucp_worker_mdesc_to_buf_hash, void*, void*,
-           1, ucp_worker_mdesc_to_buf_hash_func, kh_int64_hash_equal);
-
-typedef khash_t(ucp_worker_buf_to_mdesc_hash) ucp_worker_buf_to_mdesc_hash_t;
-typedef khash_t(ucp_worker_mdesc_to_buf_hash) ucp_worker_mdesc_to_buf_hash_t;
 
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
@@ -326,10 +283,6 @@ typedef struct ucp_worker {
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
     ucp_worker_mpool_hash_t          mpool_hash;          /* Hash table of memory pools */
     ucs_recursive_spinlock_t         mpool_hash_lock;     /* Lock to safely update memory pools hash table */
-    ucp_worker_buf_to_mdesc_hash_t   buf_to_mdesc_hash;   /* Hash map to get mdesc from buffer */
-    ucs_recursive_spinlock_t         buf_to_mdesc_lock;   /* Lock to safely update buf_to_mdesc hash map */
-    ucp_worker_mdesc_to_buf_hash_t   mdesc_to_buf_hash;   /* Hash map to get buffer from mdesc */
-    ucs_recursive_spinlock_t         mdesc_to_buf_lock;   /* Lock to safely update mdesc_to_buf hash map */
     ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that
                                                            * are in-progress */
     uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */

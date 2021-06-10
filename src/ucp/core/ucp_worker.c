@@ -1827,8 +1827,6 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     }
 
     ucs_recursive_spinlock_init(&worker->mpool_hash_lock, 0);
-    ucs_recursive_spinlock_init(&worker->buf_to_mdesc_lock, 0);
-    ucs_recursive_spinlock_init(&worker->mdesc_to_buf_lock, 0);
 
     return UCS_OK;
 
@@ -2123,8 +2121,6 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
     kh_init_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
-    kh_init_inplace(ucp_worker_buf_to_mdesc_hash, &worker->buf_to_mdesc_hash);
-    kh_init_inplace(ucp_worker_mdesc_to_buf_hash, &worker->mdesc_to_buf_hash);
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
@@ -2310,8 +2306,6 @@ err_free:
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
     kh_destroy_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
-    kh_destroy_inplace(ucp_worker_buf_to_mdesc_hash, &worker->buf_to_mdesc_hash);
-    kh_destroy_inplace(ucp_worker_mdesc_to_buf_hash, &worker->mdesc_to_buf_hash);
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
@@ -2547,10 +2541,6 @@ void ucp_worker_destroy(ucp_worker_h worker)
     kh_foreach_value(&worker->mpool_hash, mp, ucs_free(mp))
     ucs_recursive_spinlock_destroy(&worker->mpool_hash_lock);
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
-    ucs_recursive_spinlock_destroy(&worker->buf_to_mdesc_lock);
-    kh_destroy_inplace(ucp_worker_buf_to_mdesc_hash, &worker->buf_to_mdesc_hash);
-    ucs_recursive_spinlock_destroy(&worker->mdesc_to_buf_lock);
-    kh_destroy_inplace(ucp_worker_mdesc_to_buf_hash, &worker->mdesc_to_buf_hash);
     ucp_worker_destroy_configs(worker);
     ucs_free(worker);
 }
