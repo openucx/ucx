@@ -15,6 +15,7 @@
  * basic rendezvous implementation.
  */
 #include <ucp/tag/tag_rndv.h>
+#include <ucp/core/ucp_context.h>
 #include <ucp/tag/tag_match.inl>
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_am.inl>
