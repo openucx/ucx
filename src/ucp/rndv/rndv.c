@@ -897,7 +897,7 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
     freq->send.buffer       = mdesc->ptr;
     freq->send.length       = length;
     freq->send.datatype     = ucp_dt_make_contig(1);
-    freq->send.mem_type     = mem_type; /*is this send.buffer mem_type or target mem_type */
+    freq->send.mem_type     = mdesc->mem_type;
     freq->send.mdesc        = mdesc;
     freq->send.uct.func     = uct_func;
     freq->send.pending_lane = UCP_NULL_LANE;
