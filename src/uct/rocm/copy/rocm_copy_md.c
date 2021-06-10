@@ -175,9 +175,11 @@ uct_rocm_copy_mem_dereg_internal(uct_md_h md,
                                  uct_rocm_copy_mem_t *mem_hndl)
 {
     void *address = mem_hndl->vaddr;
+    void *dev_ptr = mem_hndl->dev_ptr;
     hsa_status_t status;
 
-    if (address == NULL) {
+    /* address == dev_ptr implies address was not host memory */
+    if ((address == NULL) || (address == dev_ptr)) {
         return UCS_OK;
     }
 
@@ -194,13 +196,16 @@ static ucs_status_t
 uct_rocm_copy_mem_dereg(uct_md_h md,
                         const uct_md_mem_dereg_params_t *params)
 {
+    ucs_status_t status;
     uct_rocm_copy_mem_t *mem_hndl;
 
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     mem_hndl = (uct_rocm_copy_mem_t *)params->memh;
+    status   = uct_rocm_copy_mem_dereg_internal(md, mem_hndl);
+    ucs_free(mem_hndl);
 
-    return uct_rocm_copy_mem_dereg_internal(md, mem_hndl);
+    return status;
 }
 
 static void uct_rocm_copy_md_close(uct_md_h uct_md) {
