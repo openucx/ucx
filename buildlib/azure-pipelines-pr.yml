@@ -252,12 +252,44 @@ stages:
               set -eE
               . buildlib/tools/common.sh
               prepare_build
-              ${WORKSPACE}/configure $(CONFIGURE_OPTS)
+              ${WORKSPACE}/configure $(CONFIGURE_OPTS) --prefix=$(Build.Repository.LocalPath)/install
               gcc -v
               make -s -j `nproc`
-              set +eE
+              make install
+            displayName: Build ucx artifact
+          - task: CopyFiles@2
+            inputs:
+              sourceFolder: '$(Build.Repository.LocalPath)'
+              contents: |
+                install/**
+              targetFolder: '$(Build.ArtifactStagingDirectory)'
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)'
+              artifactName: ucx_bin_$(Build.BuildId)
+      - job: Test_in_containers
+        dependsOn: Distros
+        displayName: UCX tests in containers
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
+        strategy:
+          matrix:
+            ubuntu20:
+              CONTAINER: ubuntu2004
+        container: $[ variables['CONTAINER'] ]
+        steps:
+          - checkout: none
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Build Artifacts'
+            inputs:
+              artifactName: ucx_bin_$(Build.BuildId)
+              downloadPath: $(System.DefaultWorkingDirectory)
+          - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId) -R
+          - bash: |
               set -x
-              ./src/tools/info/ucx_info -e -u t 2>&1 | tee info.txt
+              ./bin/ucx_info -e -u t 2>&1 | tee info.txt
               grep -i error info.txt
               retVal=$?
               if [ $retVal -eq 0 ]; then
@@ -265,6 +297,21 @@ stages:
               fi
               exit 0;
             displayName: Test ucx_info
+            workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
+            env: 
+              LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
+          - bash: |
+              set -Eex
+              ./bin/ucx_perftest -t tag_bw &
+              server_pid=$!
+              sleep 1;
+              ./bin/ucx_perftest -t tag_bw localhost 2>&1 | tee perf.txt
+              wait $server_pid
+              grep "Final:" perf.txt
+            displayName: Test ucx_perftest
+            workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
+            env: 
+              LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
 
   - stage: Coverity
     dependsOn: [Static_check]
