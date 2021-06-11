@@ -615,7 +615,7 @@ typedef struct {
  * @param _type     Message type (send/receive)
  * @param _am_id    Active message ID.
  * @param _payload  Active message payload.
- * @paral _length   Active message length
+ * @param _length   Active message length
  */
 #define uct_iface_trace_am(_iface, _type, _am_id, _payload, _length, _fmt, ...) \
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
