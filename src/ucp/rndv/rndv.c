@@ -1044,7 +1044,7 @@ ucp_rndv_mpool_get(ucp_worker_h worker, void *buffer, size_t length)
     ucp_memory_detect(worker->context, buffer, length, &mem_info);
 
     key.sys_dev  = mem_info.sys_dev;
-    key.mem_type = mem_info.sys_dev;
+    key.mem_type = mem_info.type;
     key.sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN; /* force host mpool for now */
     key.mem_type = UCS_MEMORY_TYPE_HOST;
     mpool        = ucp_rndv_get_mpool(worker, &key);
@@ -1071,7 +1071,7 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
         ucs_fatal("failed to allocate fragment receive request");
     }
 
-    mdesc = ucp_rndv_mpool_get(worker, (void *)remote_address, length);
+    mdesc = ucp_rndv_mpool_get(worker, sreq->send.buffer, length);
     if (ucs_unlikely(mdesc == NULL)) {
         ucs_fatal("failed to allocate fragment memory desc");
     }
