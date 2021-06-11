@@ -13,6 +13,7 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
 #include <sys/un.h>
 #include <pthread.h>
@@ -26,10 +27,6 @@
 #ifdef HAVE_INOTIFY
 #include <sys/inotify.h>
 #endif
-
-
-#define UCS_VFS_DUMMY_FILE_NAME   "dummy"
-#define UCS_VFS_DUMMY_FILE_DATA   "UCX FUSE\n"
 
 
 typedef struct {
@@ -311,6 +308,26 @@ out:
 #endif
 }
 
+static void ucs_vfs_fuse_thread_reset_affinity()
+{
+    ucs_sys_cpuset_t cpuset;
+    long i, num_cpus;
+
+    num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    if (num_cpus == -1) {
+        ucs_diag("failed to get number of CPUs: %m");
+        return;
+    }
+
+    for (i = 0; i < num_cpus; ++i) {
+        CPU_SET(i, &cpuset);
+    }
+
+    if (ucs_sys_setaffinity(&cpuset) == -1) {
+        ucs_diag("failed to set affinity: %m");
+    }
+}
+
 static void *ucs_vfs_fuse_thread_func(void *arg)
 {
     ucs_vfs_sock_message_t vfs_msg_in, vfs_msg_out;
@@ -318,6 +335,10 @@ static void *ucs_vfs_fuse_thread_func(void *arg)
     ucs_status_t status;
     int connfd;
     int ret;
+
+    if (!ucs_global_opts.vfs_thread_affinity) {
+        ucs_vfs_fuse_thread_reset_affinity();
+    }
 
     connfd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (connfd < 0) {
