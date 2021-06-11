@@ -981,9 +981,9 @@ ucp_rndv_send_frag_update_get_rkey(ucp_worker_h worker, ucp_request_t *freq,
 }
 
 ucs_mpool_ops_t ucp_frag_mpool_ops = {
-    .chunk_alloc   = ucp_frag_mpool_malloc,
-    .chunk_release = ucp_frag_mpool_free,
-    .obj_init      = ucp_mpool_obj_init,
+    .chunk_alloc   = ucp_rndv_frag_mpool_malloc,
+    .chunk_release = ucp_rndv_frag_mpool_free,
+    .obj_init      = ucp_rndv_frag_mpool_obj_init,
     .obj_cleanup   = ucs_empty_function
 };
 
@@ -1018,7 +1018,6 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
         mpriv->mem_type    = key->mem_type;
         mpriv->num_frags   = num_frags;
         mpriv->frag_size   = worker->context->config.ext.rndv_frag_size;
-        mpriv->elem_offset = -1;
         khiter             = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash,
                                     *key, &khret);
         if (khret == UCS_KH_PUT_FAILED) {
