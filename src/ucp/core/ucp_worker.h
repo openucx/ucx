@@ -365,6 +365,12 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                 ucp_worker_cfg_index_t config_idx, char *info,
                                 size_t max);
 
+void ucp_worker_vfs_refresh(void *obj);
+
+void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self);
+
+unsigned ucp_worker_discard_uct_ep_progress(void *arg);
+
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
 {
@@ -381,7 +387,5 @@ ucp_worker_flush_ops_count_dec(ucp_worker_h worker)
     ucs_assert(worker->flush_ops_count > 0);
     --worker->flush_ops_count;
 }
-
-void ucp_worker_vfs_refresh(void *obj);
 
 #endif

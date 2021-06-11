@@ -581,6 +581,13 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
                   uct_ep, worker);
+        /* FLUSH_CANCEL operation might be on pending queue due to
+         * UCS_ERR_NO_RESOURCES, so need to purge the queue to resubmit the
+         * operation. We need to resubmit the FLUSH_CANCEL operation on the same
+         * failed lane, in order to make sure all previous outstanding
+         * operations are completed before destroying the failed endpoint. */
+        uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
+                             UCS_STATUS_PTR(UCS_ERR_CANCELED));
         ret_status = UCS_OK;
         goto out;
     }
@@ -2298,7 +2305,7 @@ static void ucp_worker_discard_uct_ep_progress_register(ucp_request_t *req,
                                       &req->send.discard_uct_ep.cb_id);
 }
 
-static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
+void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -2322,12 +2329,11 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
     if (status == UCS_OK) {
-        /* don't destroy UCT EP from the pending callback, schedule a progress
-         * callback on the main thread to destroy UCT EP */
-        ucp_worker_discard_uct_ep_progress_register(
-                req, ucp_worker_discard_uct_ep_destroy_progress);
+        ucs_assert(req->send.state.uct_comp.count == 0);
+        ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp);
         return UCS_OK;
     } else if (status == UCS_INPROGRESS) {
+        req->send.state.uct_comp.count++;
         return UCS_OK;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
@@ -2338,7 +2344,7 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     return UCS_OK;
 }
 
-static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
+unsigned ucp_worker_discard_uct_ep_progress(void *arg)
 {
     ucp_request_t *req = (ucp_request_t*)arg;
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
@@ -3038,7 +3044,7 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.ep                            = ucp_ep;
     req->send.uct.func                      = ucp_worker_discard_uct_ep_pending_cb;
     req->send.state.uct_comp.func           = ucp_worker_discard_uct_ep_flush_comp;
-    req->send.state.uct_comp.count          = 1;
+    req->send.state.uct_comp.count          = 0;
     req->send.state.uct_comp.status         = UCS_OK;
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
