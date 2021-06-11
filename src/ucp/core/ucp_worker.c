@@ -3066,8 +3066,10 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
         ucp_worker_keepalive_next_ep(worker);
         ucs_assert(worker->keepalive.iter != &ucp_ep_ext_gen(ep)->ep_list);
+    }
 
-        worker->keepalive.iter_begin = worker->keepalive.iter;
+    if (worker->keepalive.iter_begin == &ucp_ep_ext_gen(ep)->ep_list) {
+        worker->keepalive.iter_begin = worker->keepalive.iter_begin->next;
     }
 }
 
