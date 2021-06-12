@@ -107,7 +107,7 @@ typedef struct uct_dc_mlx5_iface_addr {
  *            ep goes back to normal state
  * - random
  *    - dci is choosen by random() % ndci
- *    - ep keeps using dci as long as it has oustanding sends
+ *    - ep keeps using dci as long as it has outstanding sends
  *
  * Not implemented policies:
  *

@@ -1561,7 +1561,7 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     /* User does not want to receive the data, fall through to send ATS. */
 
 out_send_ats:
-    /* Some error occured or user does not need this data. Send ATS back to the
+    /* Some error occurred or user does not need this data. Send ATS back to the
      * sender to complete its send request. */
     ucp_am_rndv_send_ats(worker, rts, status);
 

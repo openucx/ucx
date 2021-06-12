@@ -1227,7 +1227,7 @@ static void ucs_config_parser_mark_env_var_used(const char *name, int *added)
 
 #ifndef __clang_analyzer__
     /* Exclude this code from Clang examination as it generates
-     * false-postive warning about potential leak of memory
+     * false-positive warning about potential leak of memory
      * pointed to by 'key' variable */
     iter = kh_put(ucs_config_env_vars, &ucs_config_parser_env_vars, key, &ret);
     if ((ret <= 0) || (iter == kh_end(&ucs_config_parser_env_vars))) {
@@ -1704,7 +1704,7 @@ ucs_config_parser_print_opts_recurs(FILE *stream, const void *opts,
              * We start the leaf prefix and continue up the hierarchy.
              */
             /* Do not add the same prefix several times in a sequence. It can
-             * happen when similiar prefix names were used during config
+             * happen when similar prefix names were used during config
              * table inheritance, e.g. "IB_" -> "RC_" -> "RC_". We check the
              * previous entry only, since it is currently impossible if
              * something like "RC_" -> "IB_" -> "RC_" will be used. */

@@ -337,7 +337,7 @@ typedef struct uct_cm_listener_conn_request_args {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_cm_listener_conn_request_args_field.
-     * Fields not specified by this mask should not be acceessed by the callback.
+     * Fields not specified by this mask should not be accessed by the callback.
      */
     uint64_t                   field_mask;
 
