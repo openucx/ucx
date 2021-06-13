@@ -182,6 +182,10 @@ ucs_bitwise_is_equal(const void *ptr1, const void *ptr2, uint64_t bit_length)
         return 0;
     }
 
+    if (remainder == 0) {
+        return 1;
+    }
+
     /* Compare up to 7 last bits */
     return ((*((uint8_t*)ptr1 + length) & ~UCS_MASK(8 - remainder)) ==
             (*((uint8_t*)ptr2 + length) & ~UCS_MASK(8 - remainder)));
