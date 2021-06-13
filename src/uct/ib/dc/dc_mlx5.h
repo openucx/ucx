@@ -161,9 +161,6 @@ typedef struct uct_dc_dci {
     };
     uint8_t                       pool_index; /* DCI pool index. */
     uint8_t                       path_index; /* Path index */
-#if UCS_ENABLE_ASSERT
-    uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
-#endif
 } uct_dc_dci_t;
 
 

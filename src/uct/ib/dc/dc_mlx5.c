@@ -377,10 +377,6 @@ init_qp:
         dci->ep = NULL;
     }
 
-#if UCS_ENABLE_ASSERT
-    dci->flags = 0;
-#endif
-
     if (dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
                                        iface->super.tx.mmio_mode, &dci->txwq,

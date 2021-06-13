@@ -366,9 +366,6 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 
     pool->stack_top--;
     pool->stack[pool->stack_top] = dci_index;
-#if UCS_ENABLE_ASSERT
-    iface->tx.dcis[dci_index].flags = 0;
-#endif
 }
 
 /* Release endpoint's DCI below, if the endpoint does not have outstanding
@@ -444,7 +441,6 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     ucs_assert(ep->dci >= (iface->tx.ndci * pool_index));
     ucs_assert(ep->dci < (iface->tx.ndci * (pool_index + 1)));
     ucs_assert(uct_dc_mlx5_ep_from_dci(iface, ep->dci) == NULL);
-    ucs_assert(iface->tx.dcis[ep->dci].flags == 0);
     iface->tx.dcis[ep->dci].ep = ep;
     pool->stack_top++;
 }
