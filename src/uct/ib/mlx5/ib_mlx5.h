@@ -197,6 +197,12 @@ enum {
     UCT_IB_MLX5_SRQ_TOPO_CYCLIC_MP_RQ = 0x3
 };
 
+
+enum {
+    UCT_IB_MLX5_TXWQ_FLAG_FAILED = UCS_BIT(0)
+};
+
+
 #if HAVE_DEVX
 typedef struct uct_ib_mlx5_devx_umem {
     struct mlx5dv_devx_umem  *mem;
@@ -384,6 +390,7 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
 #if UCS_ENABLE_ASSERT
     uint16_t                    hw_ci;
+    uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
 } uct_ib_mlx5_txwq_t;
