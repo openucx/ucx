@@ -128,7 +128,10 @@ typedef struct {
     ucs_log_level_t            module_log_level;
 
     /* arch-specific global options */
-    ucs_arch_global_opts_t arch;
+    ucs_arch_global_opts_t     arch;
+
+    /* Enable affinity for virtual monitoring filesystem service thread */
+    int                        vfs_thread_affinity;
 } ucs_global_opts_t;
 
 

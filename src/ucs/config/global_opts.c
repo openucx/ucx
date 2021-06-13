@@ -47,6 +47,7 @@ ucs_global_opts_t ucs_global_opts = {
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
     .vfs_enable            = 1,
+    .vfs_thread_affinity   = 0,
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
@@ -209,6 +210,13 @@ static ucs_config_field_t ucs_global_opts_table[] = {
  {"VFS_ENABLE", "y",
   "Enable virtual monitoring filesystem",
   ucs_offsetof(ucs_global_opts_t, vfs_enable), UCS_CONFIG_TYPE_BOOL},
+
+ {"VFS_THREAD_AFFINITY", "n",
+  "Enable inheriting main process affinity for virtual monitoring filesystem\n"
+  "service thread. Setting this value to 'n' will allow the service thread to\n"
+  "run on any CPU core.",
+  ucs_offsetof(ucs_global_opts_t, vfs_thread_affinity),
+  UCS_CONFIG_TYPE_BOOL},
 
 #ifdef ENABLE_MEMTRACK
  {"MEMTRACK_DEST", "",
