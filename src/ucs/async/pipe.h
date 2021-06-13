@@ -11,6 +11,13 @@
 
 BEGIN_C_DECLS
 
+
+/**
+ * An invalid fd value which represents a closed pipe
+ */
+#define UCS_ASYNC_PIPE_INVALID_FD (-1)
+
+
 /**
  * A pipe for event signaling.
  */
@@ -20,11 +27,23 @@ typedef struct ucs_async_pipe {
 } ucs_async_pipe_t ;
 
 
+#define UCS_ASYNC_PIPE_INITIALIZER \
+    { \
+        UCS_ASYNC_PIPE_INVALID_FD, UCS_ASYNC_PIPE_INVALID_FD \
+    }
+
 /**
  * Create/destroy a pipe for event signaling.
  */
 ucs_status_t ucs_async_pipe_create(ucs_async_pipe_t *p);
 void ucs_async_pipe_destroy(ucs_async_pipe_t *p);
+
+
+/**
+ * Set both file descriptors of a pipe to an invalid value.
+ */
+void ucs_async_pipe_invalidate(ucs_async_pipe_t *p);
+
 
 /**
  * Push an event to the signaling pipe.

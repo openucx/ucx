@@ -9,6 +9,7 @@
 #endif
 
 #include <ucs/arch/atomic.h>
+#include <ucs/async/pipe.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
@@ -106,8 +107,26 @@ static ucs_stats_class_t ucs_rcache_stats_class = {
 #endif
 
 
-static pthread_mutex_t ucs_rcache_global_list_lock = PTHREAD_MUTEX_INITIALIZER;
-static UCS_LIST_HEAD(ucs_rcache_global_list);
+/*
+ * Global rcache context
+ */
+typedef struct {
+    /* Protects access to context members */
+    pthread_mutex_t  lock;
+
+    /* List of all rcaches */
+    ucs_list_link_t  list;
+
+    /* Used for triggering an rcache cleanup */
+    ucs_async_pipe_t pipe;
+} ucs_rcache_global_context_t;
+
+static ucs_rcache_global_context_t ucs_rcache_global_context = {
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+    .list = UCS_LIST_INITIALIZER(&ucs_rcache_global_context.list,
+             &ucs_rcache_global_context.list),
+    .pipe = UCS_ASYNC_PIPE_INITIALIZER
+};
 
 static void __ucs_rcache_region_log(const char *file, int line, const char *function,
                                     ucs_log_level_t level, ucs_rcache_t *rcache,
@@ -405,6 +424,7 @@ static inline void ucs_rcache_region_put_internal(ucs_rcache_t *rcache,
         /* Put the region on garbage collection list */
         ucs_spin_lock(&rcache->lock);
         ucs_rcache_region_trace(rcache, region, "put on GC list", flags);
+        rcache->unreleased_size += (region->super.end - region->super.start);
         ucs_list_add_tail(&rcache->gc_list, &region->tmp_list);
         ucs_spin_unlock(&rcache->lock);
         return;
@@ -465,6 +485,15 @@ static void ucs_rcache_invalidate_range(ucs_rcache_t *rcache, ucs_pgt_addr_t sta
     }
 }
 
+static void ucs_rcache_remove_from_unreleased(ucs_rcache_t *rcache,
+                                              ucs_pgt_addr_t entry_start,
+                                              ucs_pgt_addr_t entry_end)
+{
+    size_t entry_size = entry_end - entry_start;
+    ucs_assert(rcache->unreleased_size >= entry_size);
+    rcache->unreleased_size -= entry_size;
+}
+
 /* Lock must be held in write mode */
 static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache, unsigned flags)
 {
@@ -476,6 +505,7 @@ static void ucs_rcache_check_inv_queue(ucs_rcache_t *rcache, unsigned flags)
     while (!ucs_queue_is_empty(&rcache->inv_q)) {
         entry = ucs_queue_pull_elem_non_empty(&rcache->inv_q,
                                               ucs_rcache_inv_entry_t, queue);
+        ucs_rcache_remove_from_unreleased(rcache, entry->start, entry->end);
 
         /* We need to drop the lock since the following code may trigger memory
          * operations, which could trigger vm_unmapped event which also takes
@@ -503,6 +533,8 @@ static void ucs_rcache_check_gc_list(ucs_rcache_t *rcache)
     while (!ucs_list_is_empty(&rcache->gc_list)) {
         region = ucs_list_extract_head(&rcache->gc_list, ucs_rcache_region_t,
                                        tmp_list);
+        ucs_rcache_remove_from_unreleased(rcache, region->super.start,
+                                          region->super.end);
 
         /* We need to drop the lock since the following code may trigger memory
          * operations, which could trigger vm_unmapped event which also takes
@@ -526,6 +558,11 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
 
     ucs_assert(event_type == UCM_EVENT_VM_UNMAPPED ||
                event_type == UCM_EVENT_MEM_TYPE_FREE);
+
+    if (rcache->unreleased_size > rcache->params.max_unreleased) {
+        /* Trigger a cleanup when the pending size exceeds the threshold */
+        ucs_async_pipe_push(&ucs_rcache_global_context.pipe);
+    }
 
     if (event_type == UCM_EVENT_VM_UNMAPPED) {
         start = (uintptr_t)event->vm_unmapped.address;
@@ -558,8 +595,9 @@ static void ucs_rcache_unmapped_callback(ucm_event_type_t event_type,
     ucs_spin_lock(&rcache->lock);
     entry = ucs_mpool_get(&rcache->mp);
     if (entry != NULL) {
-        entry->start = start;
-        entry->end   = end;
+        entry->start             = start;
+        entry->end               = end;
+        rcache->unreleased_size += (entry->end - entry->start);
         ucs_queue_push(&rcache->inv_q, &entry->queue);
         UCS_STATS_UPDATE_COUNTER(rcache->stats, UCS_RCACHE_UNMAPS, 1);
     } else {
@@ -592,6 +630,15 @@ static void ucs_rcache_purge(ucs_rcache_t *rcache)
         }
         ucs_mem_region_destroy_internal(rcache, region);
     }
+}
+
+/* Lock must be held in write mode */
+static void ucs_rcache_clean(ucs_rcache_t *rcache)
+{
+    pthread_rwlock_wrlock(&rcache->pgt_lock);
+    ucs_rcache_check_inv_queue(rcache, 0);
+    ucs_rcache_check_gc_list(rcache);
+    pthread_rwlock_unlock(&rcache->pgt_lock);
 }
 
 /* Lock must be held in write mode */
@@ -986,8 +1033,8 @@ static void ucs_rcache_before_fork(void)
 {
     ucs_rcache_t *rcache;
 
-    pthread_mutex_lock(&ucs_rcache_global_list_lock);
-    ucs_list_for_each(rcache, &ucs_rcache_global_list, list) {
+    pthread_mutex_lock(&ucs_rcache_global_context.lock);
+    ucs_list_for_each(rcache, &ucs_rcache_global_context.list, list) {
         if (rcache->params.flags & UCS_RCACHE_FLAG_PURGE_ON_FORK) {
             /* Fork will trigger process memory invalidation. Cache
              * invalidation intended to solve following cases:
@@ -1008,7 +1055,21 @@ static void ucs_rcache_before_fork(void)
             pthread_rwlock_unlock(&rcache->pgt_lock);
         }
     }
-    pthread_mutex_unlock(&ucs_rcache_global_list_lock);
+    pthread_mutex_unlock(&ucs_rcache_global_context.lock);
+}
+
+static void
+ucs_rcache_invalidate_handler(int id, ucs_event_set_types_t events, void *arg)
+{
+    ucs_rcache_t *rcache;
+
+    ucs_async_pipe_drain(&ucs_rcache_global_context.pipe);
+
+    pthread_mutex_lock(&ucs_rcache_global_context.lock);
+    ucs_list_for_each(rcache, &ucs_rcache_global_context.list, list) {
+        ucs_rcache_clean(rcache);
+    }
+    pthread_mutex_unlock(&ucs_rcache_global_context.lock);
 }
 
 static ucs_status_t ucs_rcache_global_list_add(ucs_rcache_t *rcache)
@@ -1017,7 +1078,7 @@ static ucs_status_t ucs_rcache_global_list_add(ucs_rcache_t *rcache)
     static int atfork_installed = 0;
     int ret;
 
-    pthread_mutex_lock(&ucs_rcache_global_list_lock);
+    pthread_mutex_lock(&ucs_rcache_global_context.lock);
     if (atfork_installed ||
         !(rcache->params.flags & UCS_RCACHE_FLAG_PURGE_ON_FORK)) {
         goto out_list_add;
@@ -1027,23 +1088,52 @@ static ucs_status_t ucs_rcache_global_list_add(ucs_rcache_t *rcache)
     if (ret != 0) {
         ucs_warn("pthread_atfork failed: %m");
         status = UCS_ERR_IO_ERROR;
-        goto out;
+        goto out_list_add;
     }
 
     atfork_installed = 1;
 
 out_list_add:
-    ucs_list_add_tail(&ucs_rcache_global_list, &rcache->list);
+    if (ucs_list_is_empty(&ucs_rcache_global_context.list)) {
+        status = ucs_async_pipe_create(&ucs_rcache_global_context.pipe);
+        if (status != UCS_OK) {
+            goto out;
+        }
 
+        status = ucs_async_set_event_handler(
+                UCS_ASYNC_MODE_THREAD,
+                ucs_async_pipe_rfd(&ucs_rcache_global_context.pipe),
+                UCS_EVENT_SET_EVREAD, ucs_rcache_invalidate_handler, NULL,
+                NULL);
+        if (status != UCS_OK) {
+            goto out;
+        }
+    }
+
+    ucs_list_add_tail(&ucs_rcache_global_context.list, &rcache->list);
+    assert(!ucs_list_is_empty(&ucs_rcache_global_context.list));
 out:
-    pthread_mutex_unlock(&ucs_rcache_global_list_lock);
+    pthread_mutex_unlock(&ucs_rcache_global_context.lock);
     return status;
 }
 
-static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache) {
-    pthread_mutex_lock(&ucs_rcache_global_list_lock);
+static void ucs_rcache_global_list_remove(ucs_rcache_t *rcache)
+{
+    ucs_async_pipe_t pipe;
+
+    pthread_mutex_lock(&ucs_rcache_global_context.lock);
+    pipe = ucs_rcache_global_context.pipe;
     ucs_list_del(&rcache->list);
-    pthread_mutex_unlock(&ucs_rcache_global_list_lock);
+    if (!ucs_list_is_empty(&ucs_rcache_global_context.list)) {
+        pthread_mutex_unlock(&ucs_rcache_global_context.lock);
+        return;
+    }
+
+    ucs_async_pipe_invalidate(&ucs_rcache_global_context.pipe);
+    pthread_mutex_unlock(&ucs_rcache_global_context.lock);
+    ucs_async_remove_handler(pipe.read_fd,
+                             1);
+    ucs_async_pipe_destroy(&pipe);
 }
 
 static void ucs_rcache_vfs_show_inv_q_length(void *obj,
@@ -1158,6 +1248,9 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     }
 
     ucs_queue_head_init(&self->inv_q);
+
+    /* coverity[missing_lock] */
+    self->unreleased_size = 0;
     ucs_list_head_init(&self->gc_list);
     self->lru.count   = 0;
     self->num_regions = 0;
@@ -1165,24 +1258,24 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     ucs_list_head_init(&self->lru.list);
     ucs_spinlock_init(&self->lru.lock, 0);
 
-    status = ucm_set_event_handler(params->ucm_events, params->ucm_event_priority,
-                                   ucs_rcache_unmapped_callback, self);
+    status = ucs_rcache_global_list_add(self);
     if (status != UCS_OK) {
         goto err_destroy_mp;
     }
 
-    status = ucs_rcache_global_list_add(self);
-    if (status != UCS_OK) {
-        goto err_unset_event;
-    }
-
     ucs_rcache_vfs_init(self);
+
+    status = ucm_set_event_handler(params->ucm_events, params->ucm_event_priority,
+                                   ucs_rcache_unmapped_callback, self);
+    if (status != UCS_OK) {
+        goto err_remove_vfs;
+    }
 
     return UCS_OK;
 
-err_unset_event:
-    ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
-                            self);
+err_remove_vfs:
+    ucs_vfs_obj_remove(self);
+    ucs_rcache_global_list_remove(self);
 err_destroy_mp:
     ucs_mpool_cleanup(&self->mp, 1);
 err_cleanup_pgtable:
@@ -1201,10 +1294,10 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
 {
-    ucs_vfs_obj_remove(self);
-    ucs_rcache_global_list_remove(self);
     ucm_unset_event_handler(self->params.ucm_events, ucs_rcache_unmapped_callback,
                             self);
+    ucs_vfs_obj_remove(self);
+    ucs_rcache_global_list_remove(self);
     ucs_rcache_check_inv_queue(self, 0);
     ucs_rcache_check_gc_list(self);
     ucs_rcache_purge(self);

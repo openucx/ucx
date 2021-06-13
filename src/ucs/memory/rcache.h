@@ -135,6 +135,7 @@ struct ucs_rcache_params {
     int                    flags;               /**< Flags */
     unsigned long          max_regions;         /**< Maximal number of regions */
     size_t                 max_size;            /**< Maximal total size of regions */
+    size_t                 max_unreleased;      /**< Threshold for triggering a cleanup */
 };
 
 
