@@ -3,6 +3,7 @@
 * Copyright (C) The University of Tennessee and The University 
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2017-2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -40,7 +41,7 @@
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:"
 #define TEST_ID_UNDEFINED       -1
 
 enum {
@@ -265,14 +266,14 @@ static void print_progress(char **test_names, unsigned num_names,
                result->msgrate.total_average);
     } else {
         fmt_csv     = "%4.0f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f\n";
-        fmt_numeric = "%'18.0f %9.3f %9.3f %9.3f %11.2f %10.2f %'11.0f %'11.0f\n";
-        fmt_plain   = "%18.0f %9.3f %9.3f %9.3f %11.2f %10.2f %11.0f %11.0f\n";
+        fmt_numeric = "%'18.0f %10.3f %9.3f %9.3f %11.2f %10.2f %'11.0f %'11.0f\n";
+        fmt_plain   = "%18.0f %10.3f %9.3f %9.3f %11.2f %10.2f %11.0f %11.0f\n";
 
         printf((flags & TEST_FLAG_PRINT_CSV)   ? fmt_csv :
                (flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric :
                                                  fmt_plain,
                (double)result->iters,
-               result->latency.typical * 1000000.0,
+               result->latency.percentile * 1000000.0,
                result->latency.moment_average * 1000000.0,
                result->latency.total_average * 1000000.0,
                result->bandwidth.moment_average / (1024.0 * 1024.0),
@@ -341,17 +342,17 @@ static void print_header(struct perftest_context *ctx)
             for (i = 0; i < ctx->num_batch_files; ++i) {
                 printf("%s,", ucs_basename(ctx->batch_files[i]));
             }
-            printf("iterations,typical_lat,avg_lat,overall_lat,avg_bw,overall_bw,avg_mr,overall_mr\n");
+            printf("iterations,%.1f_percentile_lat,avg_lat,overall_lat,avg_bw,overall_bw,avg_mr,overall_mr\n", ctx->params.super.percentile_rank);
         }
     } else {
         if (ctx->flags & TEST_FLAG_PRINT_RESULTS) {
             overhead_lat_str = (test == NULL) ? "overhead" : test->overhead_lat;
 
-            printf("+--------------+--------------+-----------------------------+---------------------+-----------------------+\n");
-            printf("|              |              |      %8s (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n", overhead_lat_str);
-            printf("+--------------+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
-            printf("|    Stage     | # iterations | typical | average | overall |  average |  overall |  average  |  overall  |\n");
-            printf("+--------------+--------------+---------+---------+---------+----------+----------+-----------+-----------+\n");
+            printf("+--------------+--------------+------------------------------+---------------------+-----------------------+\n");
+            printf("|              |              |       %8s (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n", overhead_lat_str);
+            printf("+--------------+--------------+----------+---------+---------+----------+----------+-----------+-----------+\n");
+            printf("|    Stage     | # iterations | %4.1f%%ile | average | overall |  average |  overall |  average  |  overall  |\n", ctx->params.super.percentile_rank);
+            printf("+--------------+--------------+----------+---------+---------+----------+----------+-----------+-----------+\n");
         } else if (ctx->flags & TEST_FLAG_PRINT_TEST) {
             printf("+------------------------------------------------------------------------------------------+\n");
         }
@@ -364,7 +365,7 @@ static void print_test_name(struct perftest_context *ctx)
     unsigned i, pos;
 
     if (!(ctx->flags & TEST_FLAG_PRINT_CSV) && (ctx->num_batch_files > 0)) {
-        strcpy(buf, "+--------------+--------------+---------+---------+---------+----------+----------+-----------+-----------+");
+        strcpy(buf, "+--------------+--------------+----------+---------+---------+----------+----------+-----------+-----------+");
 
         pos = 1;
         for (i = 0; i < ctx->num_batch_files; ++i) {
@@ -446,6 +447,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
     printf("                    file is a test to run, first word is test name, the rest of\n");
     printf("                    the line is command-line arguments for the test.\n");
+    printf("     -R <rank>      percentile rank of the percentile data in latency tests (%.1f)\n",
+                                ctx->params.super.percentile_rank);
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
 #ifdef HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
@@ -615,6 +618,7 @@ static ucs_status_t init_test_params(perftest_params_t *params)
     params->super.max_iter          = 1000000l;
     params->super.max_time          = 0.0;
     params->super.report_interval   = 1.0;
+    params->super.percentile_rank   = 50.0;
     params->super.flags             = UCX_PERF_TEST_FLAG_VERBOSE;
     params->super.uct.fc_window     = UCT_PERF_TEST_MAX_FC_WINDOW;
     params->super.uct.data_layout   = UCT_PERF_DATA_LAYOUT_SHORT;
@@ -790,6 +794,14 @@ static ucs_status_t parse_test_params(perftest_params_t *params, char opt,
             return UCS_OK;
         }
         return UCS_ERR_INVALID_PARAM;
+    case 'R':
+        params->super.percentile_rank = atof(opt_arg);
+        if ((0.0 <= params->super.percentile_rank) && (params->super.percentile_rank <= 100.0)) {
+            return UCS_OK;
+        } else {
+            ucs_error("Invalid option argument for -R");
+            return UCS_ERR_INVALID_PARAM;
+        }
     case 'm':
         if (UCS_OK != parse_mem_type_params(opt_arg,
                                             &params->super.send_mem_type,

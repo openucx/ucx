@@ -3,7 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015-2016. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2017-2020.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2017-2021.  ALL RIGHTS RESERVED.
 * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
@@ -109,55 +109,60 @@ static const char *perf_atomic_fop[] = {
  *  Cambridge University Press, 1992, Section 8.5, ISBN 0-521-43108-5
  *  This code by Nicolas Devillard - 1998. Public domain.
  */
-static ucs_time_t __find_median_quick_select(ucs_time_t arr[], int n)
+static ucs_time_t __find_percentile_quick_select(ucs_time_t arr[], int n, double rank)
 {
-    int low, high ;
-    int median;
+    int low, high;
+    int percentile_idx;
     int middle, ll, hh;
 
 #define ELEM_SWAP(a,b) { register ucs_time_t t=(a);(a)=(b);(b)=t; }
 
-    low = 0 ; high = n-1 ; median = (low + high) / 2;
+    low = 0; high = n - 1; percentile_idx = high * (rank / 100.0);
     for (;;) {
-        if (high <= low) /* One element only */
-            return arr[median] ;
+        if (high <= low) { /* One element only */
+            return arr[percentile_idx];
+        }
 
         if (high == low + 1) {  /* Two elements only */
-            if (arr[low] > arr[high])
-                ELEM_SWAP(arr[low], arr[high]) ;
-            return arr[median] ;
+            if (arr[low] > arr[high]) {
+                ELEM_SWAP(arr[low], arr[high]);
+            }
+            return arr[percentile_idx];
         }
 
         /* Find median of low, middle and high items; swap into position low */
         middle = (low + high) / 2;
-        if (arr[middle] > arr[high])    ELEM_SWAP(arr[middle], arr[high]) ;
-        if (arr[low] > arr[high])       ELEM_SWAP(arr[low], arr[high]) ;
-        if (arr[middle] > arr[low])     ELEM_SWAP(arr[middle], arr[low]) ;
+        if (arr[middle] > arr[high])    { ELEM_SWAP(arr[middle], arr[high]); }
+        if (arr[low] > arr[high])       { ELEM_SWAP(arr[low], arr[high]); }
+        if (arr[middle] > arr[low])     { ELEM_SWAP(arr[middle], arr[low]); }
 
         /* Swap low item (now in position middle) into position (low+1) */
-        ELEM_SWAP(arr[middle], arr[low+1]) ;
+        ELEM_SWAP(arr[middle], arr[low + 1]);
 
         /* Nibble from each end towards middle, swapping items when stuck */
         ll = low + 1;
         hh = high;
         for (;;) {
-            do ll++; while (arr[low] > arr[ll]) ;
-            do hh--; while (arr[hh]  > arr[low]) ;
+            do ll++; while (arr[low] > arr[ll]);
+            do hh--; while (arr[hh]  > arr[low]);
 
-            if (hh < ll)
+            if (hh < ll) {
                 break;
+            }
 
-            ELEM_SWAP(arr[ll], arr[hh]) ;
+            ELEM_SWAP(arr[ll], arr[hh]);
         }
 
-        /* Swap middle item (in position low) back into correct position */
-        ELEM_SWAP(arr[low], arr[hh]) ;
+        /* Swap middle item (in position 'low') back into correct position */
+        ELEM_SWAP(arr[low], arr[hh]);
 
         /* Re-set active partition */
-        if (hh <= median)
+        if (hh <= percentile_idx) {
             low = ll;
-        if (hh >= median)
+        }
+        if (hh >= percentile_idx) {
             high = hh - 1;
+        }
     }
 }
 
@@ -322,7 +327,7 @@ static void ucx_perf_test_init(ucx_perf_context_t *perf,
 
 void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 {
-    ucs_time_t median;
+    ucs_time_t percentile;
     double factor;
 
     if ((perf->params.test_type == UCX_PERF_TEST_TYPE_PINGPONG) ||
@@ -337,8 +342,10 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
     result->elapsed_time = perf->current.time_acc - perf->start_time_acc;
 
     /* Latency */
-    median = __find_median_quick_select(perf->timing_queue, TIMING_QUEUE_SIZE);
-    result->latency.typical = ucs_time_to_sec(median) / factor;
+    percentile = __find_percentile_quick_select(perf->timing_queue,
+                                                ucs_min(TIMING_QUEUE_SIZE, perf->current.iters),
+                                                perf->params.percentile_rank);
+    result->latency.percentile = ucs_time_to_sec(percentile) / factor;
 
     result->latency.moment_average =
         (perf->current.time_acc - perf->prev.time_acc)
@@ -353,7 +360,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
     /* Bandwidth */
 
-    result->bandwidth.typical = 0.0; // Undefined
+    result->bandwidth.percentile = 0.0; // Undefined
 
     result->bandwidth.moment_average =
         (perf->current.bytes - perf->prev.bytes) /
@@ -366,7 +373,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result)
 
     /* Packet rate */
 
-    result->msgrate.typical = 0.0; // Undefined
+    result->msgrate.percentile = 0.0; // Undefined
 
     result->msgrate.moment_average =
         (perf->current.msgs - perf->prev.msgs) /
@@ -1965,17 +1972,17 @@ static void ucx_perf_thread_report_aggregated_results(ucx_perf_context_t *perf)
     agg_result.elapsed_time = tctx[0].result.elapsed_time;
 
     agg_result.bandwidth.total_average  = 0.0;
-    agg_result.bandwidth.typical        = 0.0; /* Undefined since used only for latency calculations */
+    agg_result.bandwidth.percentile     = 0.0; /* Undefined since used only for latency calculations */
     agg_result.latency.total_average    = 0.0;
     agg_result.msgrate.total_average    = 0.0;
-    agg_result.msgrate.typical          = 0.0; /* Undefined since used only for latency calculations */
+    agg_result.msgrate.percentile       = 0.0; /* Undefined since used only for latency calculations */
 
     /* when running with multiple threads, the moment average value is
      * undefined since we don't capture the values of the last iteration */
     agg_result.msgrate.moment_average   = 0.0;
     agg_result.bandwidth.moment_average = 0.0;
     agg_result.latency.moment_average   = 0.0;
-    agg_result.latency.typical          = 0.0;
+    agg_result.latency.percentile       = 0.0;
 
     /* in case of multiple threads, we have to aggregate the results so that the
      * final output of the result would show the performance numbers that were
