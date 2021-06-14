@@ -23,12 +23,11 @@
 
 
 #define UCP_REQUEST_FLAGS_FMT \
-    "%c%c%c%c%c%c%c"
+    "%c%c%c%c%c%c"
 
 #define UCP_REQUEST_FLAGS_ARG(_flags) \
     (((_flags) & UCP_REQUEST_FLAG_COMPLETED)       ? 'd' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_RELEASED)        ? 'f' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_EXPECTED)        ? 'e' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED) ? 'L' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
     (((_flags) & (UCP_REQUEST_FLAG_RECV_TAG | \

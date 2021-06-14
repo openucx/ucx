@@ -25,10 +25,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     ucp_request_t *req, ucp_recv_desc_t *rdesc,
                     const ucp_request_param_t *param, const char *debug_name)
 {
-    unsigned common_flags = UCP_REQUEST_FLAG_RECV_TAG |
-                            UCP_REQUEST_FLAG_EXPECTED;
-    uint32_t req_flags    = (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
-                            UCP_REQUEST_FLAG_CALLBACK : 0;
+    uint32_t req_flags = (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
+                         UCP_REQUEST_FLAG_CALLBACK : 0;
     ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_request_queue_t *req_queue;
     ucs_memory_type_t memory_type;
@@ -84,14 +82,14 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->recv.worker        = worker;
     req->recv.buffer        = buffer;
     req->recv.datatype      = datatype;
+    req->flags              = UCP_REQUEST_FLAG_RECV_TAG | req_flags;
 
     ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
 
     if (!UCP_DT_IS_CONTIG(datatype)) {
-        common_flags       |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
+        req->flags         |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
     }
 
-    req->flags              = common_flags | req_flags;
     req->recv.length        = ucp_dt_length(datatype, count, buffer,
                                             &req->recv.state);
     req->recv.mem_type      = ucp_request_get_memory_type(worker->context, buffer,

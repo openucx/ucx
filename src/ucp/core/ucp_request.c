@@ -194,7 +194,7 @@ UCS_PROFILE_FUNC_VOID(ucp_request_cancel, (worker, request),
         return;
     }
 
-    if (req->flags & UCP_REQUEST_FLAG_EXPECTED) {
+    if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
         UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
         removed = ucp_tag_exp_remove(&worker->tm, req);
