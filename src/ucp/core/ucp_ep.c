@@ -586,7 +586,7 @@ void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker)
 }
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       uint64_t client_id, ucp_wireup_ep_t **wireup_ep)
+                                       ucp_wireup_ep_t **wireup_ep)
 {
     ucp_ep_config_key_t key;
     ucs_status_t status;
@@ -598,7 +598,6 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
     key.num_lanes           = 1;
-    key.client_id           = client_id;
     /* all operations will use the first lane, which is a stub endpoint before
      * reconfiguration */
     key.am_lane             = 0;
@@ -698,14 +697,13 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err;
     }
 
-    uint64_t client_id = 0L;
-    if (params->field_mask & UCP_EP_PARAM_FIELD_CLIENT_ID) {
-        client_id = params->client_id;
-    }
-
-    status = ucp_ep_init_create_wireup(ep, ep_init_flags, client_id, &wireup_ep);
+    status = ucp_ep_init_create_wireup(ep, ep_init_flags, &wireup_ep);
     if (status != UCS_OK) {
         goto err_delete;
+    }
+
+    if (params->field_mask & UCP_EP_PARAM_FIELD_CLIENT_ID) {
+        wireup_ep->client_id = params->client_id;
     }
 
     status = ucp_ep_adjust_params(ep, params);

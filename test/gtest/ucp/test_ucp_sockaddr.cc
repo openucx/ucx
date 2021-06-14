@@ -219,7 +219,8 @@ public:
         m_test_addr   = saddrs[saddr_idx];
     }
 
-    void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
+    void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
+                        ucp_listener_conn_handler_t* custom_cb)
     {
         ucs_time_t deadline = ucs::get_deadline();
         ucs_status_t status;
@@ -227,7 +228,9 @@ public:
         do {
             status = receiver().listen(cb_type, m_test_addr.get_sock_addr_ptr(),
                                        m_test_addr.get_addr_size(),
-                                       get_server_ep_params());
+                                       get_server_ep_params(),
+                                       0,
+                                       custom_cb);
             if (m_test_addr.get_port() == 0) {
                 /* any port can't be busy */
                 break;
@@ -250,11 +253,31 @@ public:
         UCS_TEST_MESSAGE << "server listening on " << m_test_addr.to_str();
     }
 
+     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
+     {
+         start_listener(cb_type, NULL);
+     }
+
     ucs_status_t create_listener_wrap_err(const ucp_listener_params_t &params,
                                           ucp_listener_h &listener)
     {
         scoped_log_handler wrap_err(wrap_errors_logger);
         return ucp_listener_create(receiver().worker(), &params, &listener);
+    }
+
+    static void conn_handler_cb(ucp_conn_request_h conn_request, void *arg)
+    {
+        ucp_conn_request_attr_t attr;
+        ucs_status_t status;
+
+
+        attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
+        status = ucp_conn_request_query(conn_request, &attr);
+        EXPECT_TRUE(status == UCS_OK);
+        EXPECT_EQ(reinterpret_cast<uint64_t>(arg), attr.client_id);
+
+        test_ucp_sockaddr *self = reinterpret_cast<test_ucp_sockaddr*>(arg);
+        ucp_listener_reject(self->receiver().listenerh(), conn_request);
     }
 
     static void complete_err_handling_status_verify(ucs_status_t status)
@@ -489,7 +512,7 @@ public:
         ep_params.sockaddr.addr    = m_test_addr.get_sock_addr_ptr();
         ep_params.sockaddr.addrlen = m_test_addr.get_addr_size();
         ep_params.user_data        = &sender();
-        ep_params.client_id        = 1L;
+        ep_params.client_id        = reinterpret_cast<uint64_t>(this);
 
         sender().connect(&receiver(), ep_params);
     }
@@ -852,6 +875,24 @@ UCS_TEST_P(test_ucp_sockaddr, listener_query) {
     EXPECT_UCS_OK(status);
 
     EXPECT_EQ(m_test_addr, listener_attr.sockaddr);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, conn_hander_query)
+{
+    ucp_listener_conn_handler_t conn_handler;
+
+    conn_handler.cb  = conn_handler_cb;
+    conn_handler.arg = reinterpret_cast<void*>(this);
+
+    start_listener(ucp_test_base::entity::LISTEN_CB_CUSTOM, &conn_handler);
+
+    {
+        scoped_log_handler slh(detect_error_logger);
+        client_ep_connect();
+        /* Check reachability with tagged send */
+        send_recv(sender(), receiver(), SEND_RECV_TAG, false,
+                  ucp_test_base::entity::LISTEN_CB_REJECT);
+    }
 }
 
 UCS_TEST_P(test_ucp_sockaddr, err_handle)

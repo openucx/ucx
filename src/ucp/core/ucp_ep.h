@@ -191,9 +191,6 @@ struct ucp_ep_config_key {
 
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
-
-    /* Endpoint client id */
-    uint64_t                 client_id;
 };
 
 
@@ -500,10 +497,12 @@ struct ucp_wireup_sockaddr_data {
                                                   build remote address in
                                                   UCP_WIREUP_SA_DATA_CM_ADDR
                                                   mode */
-    uint64_t                  client_id;     /**< Endpoint client id */
     /* packed worker address follows */
 } UCS_S_PACKED;
 
+struct ucp_wireup_user_data {
+    uint64_t                client_id;      /**< Endpoint client ID */
+};
 
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
@@ -514,6 +513,7 @@ typedef struct ucp_conn_request {
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
     ucp_ep_h                    ep; /* valid only if request is handled internally */
+    ucp_wireup_user_data_t      user_data;
     ucp_wireup_sockaddr_data_t  sa_data;
     /* packed worker address follows */
 } ucp_conn_request_t;
@@ -552,7 +552,6 @@ void ucp_ep_delete(ucp_ep_h ep);
 void ucp_ep_release_id(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
-                                       uint64_t client_id,
                                        ucp_wireup_ep_t **wireup_ep);
 
 ucs_status_t

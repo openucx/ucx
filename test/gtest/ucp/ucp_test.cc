@@ -642,13 +642,11 @@ void ucp_test_base::entity::accept(int worker_index,
     ucs_status_t status;
     ucp_ep_h ep;
 
-    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR |
-                      UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
+    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
     status = ucp_conn_request_query(conn_request, &attr);
     EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_UNSUPPORTED));
     if (status == UCS_OK) {
         EXPECT_TRUE(verify_client_address(&attr.client_address));
-        EXPECT_EQ(1L, attr.client_id);
     }
 
     ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST |
@@ -820,7 +818,8 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
                                            const struct sockaddr* saddr,
                                            socklen_t addrlen,
                                            const ucp_ep_params_t& ep_params,
-                                           int worker_index)
+                                           int worker_index,
+                                           ucp_listener_conn_handler_t* custom_cb)
 {
     ucp_listener_params_t params;
     ucp_listener_h        listener;
@@ -844,6 +843,11 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
         params.conn_handler.cb    = reject_conn_cb;
         params.conn_handler.arg   = reinterpret_cast<void*>(this);
+        break;
+    case LISTEN_CB_CUSTOM:
+        params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+        params.conn_handler.cb    = custom_cb->cb;
+        params.conn_handler.arg   = custom_cb->arg;
         break;
     default:
         UCS_TEST_ABORT("invalid test parameter");

@@ -230,7 +230,7 @@ out:
 
 static size_t ucp_cm_priv_data_length(size_t addr_size)
 {
-    return sizeof(ucp_wireup_sockaddr_data_t) + addr_size;
+    return sizeof(ucp_wireup_sockaddr_data_t) + addr_size + sizeof(ucp_wireup_user_data_t);
 }
 
 static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
@@ -251,6 +251,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
     ucs_log_level_t log_level;
+    ucp_wireup_ep_t *wireup_ep;
+    ucp_wireup_user_data_t user_data;
 
     ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
     ucs_assert(dev_index != UCP_NULL_RESOURCE);
@@ -291,8 +293,12 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
     sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
     sa_data->dev_index = dev_index;
-    sa_data->client_id = ucp_ep_config(ep)->key.client_id;
     memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+
+    wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
+    user_data.client_id = wireup_ep->client_id;
+    // Write user data to the end of sa_data and ucp_address block.
+    memcpy((void*)(sa_data + 1) + ucp_addr_size, &user_data, sizeof(user_data));
 
     *data_buf_p        = sa_data;
     *data_buf_length_p = ucp_cm_priv_data_length(ucp_addr_size);
@@ -1004,11 +1010,13 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_listener_h ucp_listener = arg;
     ucp_worker_h worker         = ucp_listener->worker;
     uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
+    size_t user_data_size       = sizeof(ucp_wireup_user_data_t);
     ucp_conn_request_h ucp_conn_request;
     uct_conn_request_h conn_request;
     const uct_cm_remote_data_t *remote_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
+    size_t user_data_offset;
 
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
                                          (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
@@ -1071,8 +1079,14 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                      UCT_DEVICE_NAME_MAX);
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
            remote_data->dev_addr_length);
+
+    // | sa_data || ucp_address || user_data |
+    // |      conn_priv_data_length          |
+    user_data_offset = ucs_max(0, remote_data->conn_priv_data_length - user_data_size);
+    memcpy(&ucp_conn_request->user_data, remote_data->conn_priv_data + user_data_offset,
+           user_data_size);
     memcpy(&ucp_conn_request->sa_data, remote_data->conn_priv_data,
-           remote_data->conn_priv_data_length);
+           remote_data->conn_priv_data_length - user_data_size);
 
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_server_conn_request_progress,
