@@ -52,6 +52,12 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_LAST]      = NULL,
 };
 
+static const char *ucp_rndv_frag_mem_types[] = {
+    [UCP_RNDV_FRAG_MEM_TYPE_AUTO]      = "auto",
+    [UCP_RNDV_FRAG_MEM_TYPE_HOST]      = "host",
+    [UCP_RNDV_FRAG_MEM_TYPE_LAST]      = NULL,
+};
+
 const char *ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND]      = "tag_send",
     [UCP_OP_ID_TAG_SEND_SYNC] = "tag_send_sync",
@@ -276,6 +282,12 @@ static ucs_config_field_t ucp_config_table[] = {
   {"RNDV_FRAG_SIZE", "512k",
    "RNDV fragment size \n",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_FRAG_MEM_TYPE", "host",
+   "RNDV frag memory type.\n"
+   " host      - Use host memory fragments.\n"
+   " auto      - Runtime automatically chooses optimal frag mem_type.\n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_frag_mem_type), UCS_CONFIG_TYPE_ENUM(ucp_rndv_frag_mem_types)},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type\n",
