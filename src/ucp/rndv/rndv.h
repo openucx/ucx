@@ -9,6 +9,7 @@
 
 #include <ucp/core/ucp_types.h>
 #include <ucp/proto/proto_am.h>
+#include <ucp/core/ucp_mm.h>
 #include <ucs/datastruct/ptr_map.h>
 
 

@@ -17,6 +17,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucs/arch/atomic.h>
 #include <string.h>
 #include <inttypes.h>
 
@@ -686,7 +687,107 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
 {
     ucp_mem_desc_t *elem_hdr  = obj;
     ucp_mem_desc_t *chunk_hdr = (ucp_mem_desc_t*)((ucp_mem_desc_t*)chunk - 1);
-    elem_hdr->memh = chunk_hdr->memh;
+    ucp_rndv_mpool_priv_t *mpriv;
+
+    mpriv              = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+    elem_hdr->memh     = chunk_hdr->memh;
+    elem_hdr->ptr      = (void*)((ucp_mem_desc_t *)obj + 1);
+    elem_hdr->mem_type = mpriv->mem_type;
+}
+
+static inline ucs_status_t
+ucp_rndv_frag_malloc_mpools(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+    ucp_worker_h worker;
+    ucp_mem_desc_t *chunk_hdr;
+    ucp_mem_h memh;
+    ucp_mem_h meta_memh;
+    ucs_status_t status;
+    ucp_mem_map_params_t mem_params;
+    ucp_rndv_mpool_priv_t *mpriv;
+    int num_frags, frag_size;
+
+    /* Need to get default flags from ucp_mem_map_params2uct_flags() */
+    mem_params.field_mask = 0;
+
+    mpriv                 = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+    worker                = mpriv->worker;
+    num_frags             = mpriv->num_frags;
+    frag_size             = mpriv->frag_size;
+
+    /* metadata */
+    status = ucp_mem_map_common(worker->context, NULL,
+                                (*size_p + sizeof(*chunk_hdr)),
+                                UCS_MEMORY_TYPE_HOST,
+                                ucp_mem_map_params2uct_flags(&mem_params),
+                                1, ucs_mpool_name(mp), &meta_memh);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    /* payload */
+    status = ucp_mem_map_common(worker->context, NULL,
+                                (frag_size * num_frags), mpriv->mem_type,
+                                ucp_mem_map_params2uct_flags(&mem_params),
+                                1, ucs_mpool_name(mp), &memh);
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    chunk_hdr            = meta_memh->address;
+    chunk_hdr->meta_memh = meta_memh;
+    chunk_hdr->memh      = memh;
+    chunk_hdr->count     = 0;
+    *chunk_p             = chunk_hdr + 1;
+    *size_p              = meta_memh->length - sizeof(*chunk_hdr);
+
+out:
+    return status;
+}
+
+static inline void
+ucp_rndv_frag_free_mpools(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_mem_desc_t *chunk_hdr;
+    ucp_worker_h worker;
+    ucp_rndv_mpool_priv_t *mpriv;
+
+    mpriv  = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+    worker = mpriv->worker;
+
+    chunk_hdr = (ucp_mem_desc_t*)chunk - 1;
+    ucp_mem_unmap_common(worker->context, chunk_hdr->memh);
+    ucp_mem_unmap_common(worker->context, chunk_hdr->meta_memh);
+}
+
+void ucp_rndv_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk)
+{
+    ucp_mem_desc_t *elem_hdr  = obj;
+    ucp_mem_desc_t *chunk_hdr = (ucp_mem_desc_t*)((ucp_mem_desc_t*)chunk - 1);
+    ucp_rndv_mpool_priv_t *mpriv;
+    uint32_t index;
+
+    ucs_atomic_add32(&(chunk_hdr->count), 1);
+
+    index               = chunk_hdr->count - 1;
+    mpriv               = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+    elem_hdr->memh      = chunk_hdr->memh;
+    elem_hdr->meta_memh = chunk_hdr->meta_memh;
+    elem_hdr->ptr       = (void*)((char*)chunk_hdr->memh->address
+	                          + (index * mpriv->frag_size));
+    elem_hdr->meta_ptr  = (void*)((ucp_mem_desc_t *)obj + 1);
+    elem_hdr->mem_type  = mpriv->mem_type;
+}
+
+ucs_status_t ucp_rndv_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+{
+
+    return ucp_rndv_frag_malloc_mpools(mp, size_p, chunk_p);
+}
+
+void ucp_rndv_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
+{
+    ucp_rndv_frag_free_mpools(mp, chunk);
 }
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
@@ -705,16 +806,20 @@ void ucp_reg_mpool_free(ucs_mpool_t *mp, void *chunk)
 
 ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+    ucp_rndv_mpool_priv_t *mpriv;
 
-    return ucp_mpool_malloc(worker, mp, size_p, chunk_p);
+    mpriv = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+
+    return ucp_mpool_malloc(mpriv->worker, mp, size_p, chunk_p);
 }
 
 void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
 {
-    ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
+    ucp_rndv_mpool_priv_t *mpriv;
 
-    ucp_mpool_free(worker, mp, chunk);
+    mpriv = (ucp_rndv_mpool_priv_t *)ucs_mpool_priv(mp);
+
+    ucp_mpool_free(mpriv->worker, mp, chunk);
 }
 
 void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)
