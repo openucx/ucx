@@ -15,6 +15,7 @@
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/string.h>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
@@ -108,11 +109,75 @@ static void ucs_memtrack_entry_update(ucs_memtrack_entry_t *entry, ssize_t size)
     entry->peak_size   = ucs_max(entry->peak_size,  entry->size);
 }
 
+static int ucs_memtrack_cmp_entries(const void *ptr1, const void *ptr2)
+{
+    ucs_memtrack_entry_t * const *e1 = ptr1;
+    ucs_memtrack_entry_t * const *e2 = ptr2;
+
+    return (int)((ssize_t)(*e2)->peak_size - (ssize_t)(*e1)->peak_size);
+}
+
+static void ucs_memtrack_dump_internal(FILE* output_stream)
+{
+    ucs_memtrack_entry_t *entry, **all_entries;
+    unsigned num_entries, i;
+
+    if (!ucs_memtrack_is_enabled()) {
+        return;
+    }
+
+    /* collect all entries to one array */
+    all_entries = ucs_alloca(sizeof(*all_entries) *
+                             kh_size(&ucs_memtrack_context.entries));
+    num_entries = 0;
+    kh_foreach_value(&ucs_memtrack_context.entries, entry, {
+        all_entries[num_entries++] = entry;
+    });
+    ucs_assert(num_entries <= kh_size(&ucs_memtrack_context.entries));
+
+    /* sort entries according to peak size */
+    qsort(all_entries, num_entries, sizeof(*all_entries), ucs_memtrack_cmp_entries);
+
+    /* print title */
+    fprintf(output_stream, "%31s current / peak  %16s current / peak\n", "", "");
+    fprintf(output_stream, UCS_MEMTRACK_FORMAT_STRING, "TOTAL",
+            ucs_memtrack_context.total.size, ucs_memtrack_context.total.peak_size,
+            ucs_memtrack_context.total.count, ucs_memtrack_context.total.peak_count);
+
+    /* print sorted entries */
+    for (i = 0; i < num_entries; ++i) {
+        entry = all_entries[i];
+        fprintf(output_stream, UCS_MEMTRACK_FORMAT_STRING, entry->name,
+                entry->size, entry->peak_size, entry->count, entry->peak_count);
+    }
+}
+
+static void ucs_memtrack_generate_report()
+{
+    ucs_status_t status;
+    FILE* output_stream;
+    const char *next_token;
+    int need_close;
+
+    status = ucs_open_output_stream(ucs_global_opts.memtrack_dest,
+                                    UCS_LOG_LEVEL_ERROR, &output_stream,
+                                    &need_close, &next_token, NULL);
+    if (status != UCS_OK) {
+        return;
+    }
+
+    ucs_memtrack_dump_internal(output_stream);
+    if (need_close) {
+        fclose(output_stream);
+    }
+}
+
 void ucs_memtrack_allocated(void *ptr, size_t size, const char *name)
 {
     ucs_memtrack_entry_t *entry;
     khiter_t iter;
     int ret;
+    char limit_str[256];
 
 #ifdef UCX_ALLOC_ALIGN
     UCS_STATIC_ASSERT(UCX_ALLOC_ALIGN >= 16);
@@ -141,6 +206,16 @@ void ucs_memtrack_allocated(void *ptr, size_t size, const char *name)
     /* update specific and global entries */
     ucs_memtrack_entry_update(entry, size);
     ucs_memtrack_entry_update(&ucs_memtrack_context.total, size);
+    if (ucs_memtrack_context.total.size >= ucs_global_opts.memtrack_limit) {
+        ucs_memtrack_generate_report();
+        ucs_memunits_to_str(ucs_global_opts.memtrack_limit, limit_str,
+                            sizeof(limit_str));
+        /* disable memtrack to prevent hang */
+        ucs_memtrack_context.enabled = 0;
+        /* unlock memtrack context to eliminate deadlock */
+        pthread_mutex_unlock(&ucs_memtrack_context.lock);
+        ucs_fatal("reached memtrack memory limit %s", limit_str);
+    }
 
     UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_COUNT, 1);
     UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_SIZE, size);
@@ -264,74 +339,11 @@ void ucs_memtrack_total(ucs_memtrack_entry_t* total)
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
 }
 
-static int ucs_memtrack_cmp_entries(const void *ptr1, const void *ptr2)
-{
-    ucs_memtrack_entry_t * const *e1 = ptr1;
-    ucs_memtrack_entry_t * const *e2 = ptr2;
-
-    return (int)((ssize_t)(*e2)->peak_size - (ssize_t)(*e1)->peak_size);
-}
-
-static void ucs_memtrack_dump_internal(FILE* output_stream)
-{
-    ucs_memtrack_entry_t *entry, **all_entries;
-    unsigned num_entries, i;
-
-    if (!ucs_memtrack_is_enabled()) {
-        return;
-    }
-
-    /* collect all entries to one array */
-    all_entries = ucs_alloca(sizeof(*all_entries) *
-                             kh_size(&ucs_memtrack_context.entries));
-    num_entries = 0;
-    kh_foreach_value(&ucs_memtrack_context.entries, entry, {
-        all_entries[num_entries++] = entry;
-    });
-    ucs_assert(num_entries <= kh_size(&ucs_memtrack_context.entries));
-
-    /* sort entries according to peak size */
-    qsort(all_entries, num_entries, sizeof(*all_entries), ucs_memtrack_cmp_entries);
-
-    /* print title */
-    fprintf(output_stream, "%31s current / peak  %16s current / peak\n", "", "");
-    fprintf(output_stream, UCS_MEMTRACK_FORMAT_STRING, "TOTAL",
-            ucs_memtrack_context.total.size, ucs_memtrack_context.total.peak_size,
-            ucs_memtrack_context.total.count, ucs_memtrack_context.total.peak_count);
-
-    /* print sorted entries */
-    for (i = 0; i < num_entries; ++i) {
-        entry = all_entries[i];
-        fprintf(output_stream, UCS_MEMTRACK_FORMAT_STRING, entry->name,
-                entry->size, entry->peak_size, entry->count, entry->peak_count);
-    }
-}
-
 void ucs_memtrack_dump(FILE* output_stream)
 {
     pthread_mutex_lock(&ucs_memtrack_context.lock);
     ucs_memtrack_dump_internal(output_stream);
     pthread_mutex_unlock(&ucs_memtrack_context.lock);
-}
-
-static void ucs_memtrack_generate_report()
-{
-    ucs_status_t status;
-    FILE* output_stream;
-    const char *next_token;
-    int need_close;
-
-    status = ucs_open_output_stream(ucs_global_opts.memtrack_dest,
-                                    UCS_LOG_LEVEL_ERROR, &output_stream,
-                                    &need_close, &next_token, NULL);
-    if (status != UCS_OK) {
-        return;
-    }
-
-    ucs_memtrack_dump_internal(output_stream);
-    if (need_close) {
-        fclose(output_stream);
-    }
 }
 
 void ucs_memtrack_init()

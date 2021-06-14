@@ -100,6 +100,9 @@ typedef struct {
      */
     char                       *memtrack_dest;
 
+    /* Memory limit handled by memtrack to abort application */
+    size_t                     memtrack_limit;
+
     /* Profiling mode */
     unsigned                   profile_mode;
 
