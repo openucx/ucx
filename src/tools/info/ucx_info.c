@@ -53,6 +53,10 @@ static void usage() {
     printf("                    'shm'  : shared memory devices only\n");
     printf("                    'net'  : network devices only\n");
     printf("                    'self' : self transport only\n");
+    printf("  -P <type>       Set peer process placement for printing UCP endpoint configuration:\n");
+    printf("                    'self'  : same process (default)\n");
+    printf("                    'intra' : same node\n");
+    printf("                    'inter' : different node\n");
     /* TODO: add IPv6 support */
     printf("  -A <ipv4>       Local IPv4 device address to use for creating\n"
            "                  endpoint in client/server mode");
@@ -66,6 +70,7 @@ int main(int argc, char **argv)
     ucs_config_print_flags_t print_flags;
     ucp_ep_params_t ucp_ep_params;
     unsigned dev_type_bitmap;
+    process_placement_t proc_placement;
     uint64_t ucp_features;
     size_t ucp_num_eps;
     size_t ucp_num_ppn;
@@ -82,9 +87,10 @@ int main(int argc, char **argv)
     ucp_num_ppn              = 1;
     mem_size                 = NULL;
     dev_type_bitmap          = UINT_MAX;
+    proc_placement           = PROCESS_PLACEMENT_SELF;
     ucp_ep_params.field_mask = 0;
 
-    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:m:N:A:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:P:m:N:A:")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -169,10 +175,23 @@ int main(int argc, char **argv)
             } else if (!strcasecmp(optarg, "shm")) {
                 dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SHM);
             } else if (!strcasecmp(optarg, "self")) {
-                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SELF);
-            } else if (!strcasecmp(optarg, "all")) {
-                dev_type_bitmap = UINT_MAX;
-            } else {
+                dev_type_bitmap = (UCS_BIT(UCT_DEVICE_TYPE_SELF) |
+                                   UCS_BIT(UCT_DEVICE_TYPE_ACC));
+            } else if (strcasecmp(optarg, "all")) {
+                usage();
+                return -1;
+            }
+            break;
+        case 'P':
+            if (!strcasecmp(optarg, "intra")) {
+                /* Only Network and SHM devices are allowed for processes on the
+                 * same node */
+                proc_placement = PROCESS_PLACEMENT_INTRA;
+            } else if (!strcasecmp(optarg, "inter")) {
+                /* Only Network devices are allowed for processes on the
+                 * different node */
+                proc_placement = PROCESS_PLACEMENT_INTER;
+            } else if (strcasecmp(optarg, "self")) {
                 usage();
                 return -1;
             }
@@ -231,7 +250,8 @@ int main(int argc, char **argv)
 
         return print_ucp_info(print_opts, print_flags, ucp_features,
                               &ucp_ep_params, ucp_num_eps, ucp_num_ppn,
-                              dev_type_bitmap, mem_size, ip_addr);
+                              dev_type_bitmap, proc_placement, mem_size,
+                              ip_addr);
     }
 
     return 0;
