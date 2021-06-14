@@ -46,6 +46,7 @@ SUBDIRS += \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \
+	bindings/go \
 	bindings/java \
 	test/apps \
 	examples

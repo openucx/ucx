@@ -1184,7 +1184,8 @@ run_gtest_default() {
 run_gtest_armclang() {
 	if module_load arm-compiler/arm-hpc-compiler && armclang -v
 	then
-		run_gtest "armclang" CC=armclang CXX=armclang++
+		# armclang has some old go compiler, disabling go build.
+		run_gtest "armclang" CC=armclang CXX=armclang++ --with-go=no
 	else
 		echo "==== Not running with armclang compiler ===="
 		echo "1..1"                                          > armclang_skipped.tap
