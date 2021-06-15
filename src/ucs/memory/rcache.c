@@ -845,6 +845,7 @@ static void ucs_rcache_before_fork(void)
              * - Other use cases shouldn't be affected
              */
             pthread_rwlock_wrlock(&rcache->pgt_lock);
+            /* coverity[double_lock] */
             ucs_rcache_invalidate_range(rcache, 0, UCS_PGT_ADDR_MAX, 0);
             pthread_rwlock_unlock(&rcache->pgt_lock);
         }

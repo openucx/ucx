@@ -433,6 +433,7 @@ void uct_ib_mlx5_av_dump(char *buf, size_t max,
     p    = buf;
     endp = buf + max - 1;
 
+    /* cppcheck-suppress[uninitvar] */
     snprintf(p, endp - p, " [rqpn 0x%x",
              ntohl(base_av->dqp_dct & ~UCT_IB_MLX5_EXTENDED_UD_AV));
     p += strlen(p);
@@ -442,6 +443,7 @@ void uct_ib_mlx5_av_dump(char *buf, size_t max,
         p += strlen(p);
     }
 
+    /* cppcheck-suppress[uninitvar] */
     if (base_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
         if (is_eth || (grh_av->grh_gid_fl & UCT_IB_MLX5_AV_GRH_PRESENT)) {
             if (is_eth) {

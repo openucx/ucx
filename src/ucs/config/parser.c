@@ -438,6 +438,7 @@ int ucs_config_sscanf_time(const char *buf, void *dest, const void *arg)
         return 0;
     }
 
+    /* cppcheck-suppress[uninitvar] */
     *(double*)dest = value / per_sec;
     return 1;
 }
