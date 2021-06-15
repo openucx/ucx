@@ -66,13 +66,14 @@ public:
     void fill_resources(bool expect_error, ucs_time_t loop_end_limit);
 
 protected:
-    entity               *m_sender;
-    std::vector<entity *> m_receivers;
-    size_t                m_nreceivers;
-    size_t                m_tx_window;
-    size_t                m_err_count;
-    size_t                m_am_count;
-    static size_t         m_req_purge_count;
-    static const uint64_t m_required_caps;
+    entity                           *m_sender;
+    std::vector<entity *>            m_receivers;
+    std::map<uct_ep_h, ucs_status_t> m_failed_eps;
+    size_t                           m_nreceivers;
+    size_t                           m_tx_window;
+    size_t                           m_err_count;
+    size_t                           m_am_count;
+    static size_t                    m_req_purge_count;
+    static const uint64_t            m_required_caps;
 };
 

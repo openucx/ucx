@@ -450,6 +450,12 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
     struct mlx5_wqe_ctrl_seg *ctrl;
     uint16_t res_count;
 
+    if (opcode != MLX5_OPCODE_NOP) {
+        /* If FAILED, allow only NOP sends to be posted (used by endpoint
+         * flush operations) */
+        ucs_assert(!(txwq->flags & UCT_IB_MLX5_TXWQ_FLAG_FAILED));
+    }
+
     ctrl = txwq->curr;
 
     if (opcode == MLX5_OPCODE_SEND_IMM) {

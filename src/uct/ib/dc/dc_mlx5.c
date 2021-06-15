@@ -1189,6 +1189,10 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
     struct mlx5_cqe64 *cqe     = arg;
     uint8_t dci_index          = uct_dc_mlx5_iface_dci_find(iface, cqe);
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+
+    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
+    uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if (uct_dc_mlx5_iface_is_dci_keepalive(iface, dci_index)) {
         uct_dc_mlx5_dci_keepalive_handle_failure(iface, cqe, dci_index, status);
@@ -1536,6 +1540,8 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
                   iface, dci_index, txwq->super.qp_num,
                   ucs_status_string(status));
     }
+
+    uct_ib_mlx5_txwq_update_flags(txwq, 0, UCT_IB_MLX5_TXWQ_FLAG_FAILED);
 }
 
 void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
