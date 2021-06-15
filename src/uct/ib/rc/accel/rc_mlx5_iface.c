@@ -622,8 +622,8 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
     return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t *ops,
-                    uct_iface_ops_t *tl_ops, uct_md_h tl_md,
+UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
+                    uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     uct_rc_iface_common_config_t *rc_config,
                     uct_rc_mlx5_iface_common_config_t *mlx5_config,
@@ -644,7 +644,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_rc_iface_ops_t *ops,
     init_attr->rx_hdr_len            = UCT_RC_MLX5_MP_ENABLED(self) ?
                                        0 : sizeof(uct_rc_mlx5_hdr_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, ops, tl_ops, tl_md, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, tl_ops, ops, tl_md, worker,
                               params, rc_config, init_attr);
 
     dev                       = uct_ib_iface_device(&self->super.super);
@@ -803,7 +803,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     }
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
-                              &uct_rc_mlx5_iface_ops, &uct_rc_mlx5_iface_tl_ops,
+                              &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
                               tl_md, worker, params, &config->super.super,
                               &config->rc_mlx5_common, &init_attr);
 
