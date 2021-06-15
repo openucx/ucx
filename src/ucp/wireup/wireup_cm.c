@@ -298,7 +298,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     user_data.client_id = wireup_ep->client_id;
     // Write user data to the end of sa_data and ucp_address block.
-    memcpy((void*)(sa_data + 1) + ucp_addr_size, &user_data, sizeof(user_data));
+    memcpy((char*)sa_data + sizeof(sa_data) + ucp_addr_size,
+           &user_data, sizeof(user_data));
 
     *data_buf_p        = sa_data;
     *data_buf_length_p = ucp_cm_priv_data_length(ucp_addr_size);
@@ -1083,7 +1084,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     // | sa_data || ucp_address || user_data |
     // |      conn_priv_data_length          |
     user_data_offset = ucs_max(0, remote_data->conn_priv_data_length - user_data_size);
-    memcpy(&ucp_conn_request->user_data, remote_data->conn_priv_data + user_data_offset,
+    memcpy(&ucp_conn_request->user_data, (char*)remote_data->conn_priv_data + user_data_offset,
            user_data_size);
     memcpy(&ucp_conn_request->sa_data, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length - user_data_size);
