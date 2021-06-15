@@ -18,6 +18,7 @@
 #include <ucs/debug/memtrack.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
+#include <uct/cuda/base/cuda_md.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -32,7 +33,8 @@ static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG |
                                     UCT_MD_FLAG_NEED_RKEY;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
+    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cap.detect_mem_types = 0;
@@ -204,6 +206,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_ipc_rkey_unpack,
     *handle_p = NULL;
     *rkey_p   = (uintptr_t) key;
 
+    if (key->type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+        return UCS_ERR_NOT_CONNECTED;
+    }
+
     return UCS_OK;
 }
 
@@ -219,6 +225,9 @@ static ucs_status_t
 uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
                               unsigned flags, uct_cuda_ipc_key_t *key)
 {
+    ucs_memory_type_t *mem_type = (ucs_memory_type_t*)&key->type;
+    uct_cuda_ipc_md_t *md       = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
+    CUdeviceptr handle_addr;
     ucs_log_level_t log_level;
     CUdevice cu_device;
     ucs_status_t status;
@@ -227,23 +236,36 @@ uct_cuda_ipc_mem_reg_internal(uct_md_h uct_md, void *addr, size_t length,
         return UCS_OK;
     }
 
-    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
-                UCS_LOG_LEVEL_ERROR;
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
+    key->dev_num = (int) cu_device;
+    key->pid     = getpid();
 
-    status    = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph, (CUdeviceptr)addr),
-                                 log_level);
-    if (UCS_OK != status) {
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                                                        UCS_LOG_LEVEL_ERROR;
+
+    status = uct_cuda_base_detect_memory_type(NULL, addr, length, mem_type);
+    if (status == UCS_OK) {
+        if (*mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED) {
+            handle_addr = md->dummy[key->dev_num];
+            if ((void*)handle_addr == NULL) {
+                UCT_CUDADRV_FUNC(cuMemAlloc(&handle_addr, 1), log_level);
+            }
+        } else {
+            handle_addr = (CUdeviceptr)addr;
+        }
+
+        UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
+                                              handle_addr), log_level);
+
+        status    = UCT_CUDADRV_FUNC(cuIpcGetMemHandle(&key->ph, handle_addr),
+                                     log_level);
+        if (UCS_OK != status) {
+            return status;
+        }
+    } else {
         return status;
     }
 
-    UCT_CUDA_IPC_GET_DEVICE(cu_device);
-
-    UCT_CUDADRV_FUNC(cuMemGetAddressRange(&key->d_bptr, &key->b_len,
-                                          (CUdeviceptr)addr),
-                     log_level);
-
-    key->dev_num  = (int) cu_device;
-    key->pid      = getpid();
     ucs_trace("registered memory:%p..%p length:%lu dev_num:%d",
               addr, UCS_PTR_BYTE_OFFSET(addr, length), length, (int) cu_device);
     return UCS_OK;
@@ -285,6 +307,13 @@ uct_cuda_ipc_mem_dereg(uct_md_h md,
 static void uct_cuda_ipc_md_close(uct_md_h uct_md)
 {
     uct_cuda_ipc_md_t *md = ucs_derived_of(uct_md, uct_cuda_ipc_md_t);
+    int i;
+
+    for (i = 0; i < UCT_CUDA_IPC_MAX_DEVICES; i++) {
+        if (((void*)md->dummy[i]) != NULL) {
+            UCT_CUDADRV_FUNC_LOG_ERR(cuMemFree(md->dummy[i]));
+        }
+    }
 
     ucs_free(md->uuid_map);
     ucs_free(md->peer_accessible_cache);
@@ -295,6 +324,8 @@ static ucs_status_t
 uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
                      const uct_md_config_t *config, uct_md_h *md_p)
 {
+    int i;
+
     static uct_md_ops_t md_ops = {
         .close                  = uct_cuda_ipc_md_close,
         .query                  = uct_cuda_ipc_md_query,
@@ -324,6 +355,10 @@ uct_cuda_ipc_md_open(uct_component_t *component, const char *md_name,
     md->uuid_map_capacity     = 0;
     md->uuid_map              = NULL;
     md->peer_accessible_cache = NULL;
+
+    for (i = 0; i < UCT_CUDA_IPC_MAX_DEVICES; i++) {
+        md->dummy[i] = (CUdeviceptr)NULL;
+    }
 
     com     = ucs_derived_of(md->super.component, uct_cuda_ipc_component_t);
     com->md = md;

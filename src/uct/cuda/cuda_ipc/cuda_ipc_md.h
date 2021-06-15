@@ -14,6 +14,9 @@
 #include <ucs/config/types.h>
 
 
+#define UCT_CUDA_IPC_MAX_DEVICES 16
+
+
 /**
  * @brief cuda ipc MD descriptor
  */
@@ -23,6 +26,7 @@ typedef struct uct_cuda_ipc_md {
     ucs_ternary_auto_value_t *peer_accessible_cache;
     int                      uuid_map_size;
     int                      uuid_map_capacity;
+    CUdeviceptr              dummy[UCT_CUDA_IPC_MAX_DEVICES];
 } uct_cuda_ipc_md_t;
 
 /**
@@ -52,6 +56,7 @@ typedef struct uct_cuda_ipc_key {
     CUdeviceptr    d_bptr;  /* Allocation base address */
     size_t         b_len;   /* Allocation size */
     int            dev_num; /* GPU Device number */
+    uint8_t        type;    /* GPU Memory type */
     CUuuid         uuid;    /* GPU Device UUID */
 } uct_cuda_ipc_key_t;
 
