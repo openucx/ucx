@@ -405,6 +405,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
             rkey->md_map &= ~UCS_BIT(remote_md_index);
             ucs_trace("rkey[%d] for remote md %d is 0x%lx not reachable",
                       rkey_index, remote_md_index, tl_rkey->rkey.rkey);
+        } else if (status == UCS_ERR_NOT_CONNECTED) {
+            rkey->md_map &= ~UCS_BIT(remote_md_index);
         } else {
             ucs_error("failed to unpack remote key from remote md[%d]: %s",
                       remote_md_index, ucs_status_string(status));

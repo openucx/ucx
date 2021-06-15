@@ -55,6 +55,7 @@ typedef struct {
     uint64_t                  address;  /* holds the address of the data buffer on the receiver's side */
     size_t                    size;     /* size of the data to receive */
     size_t                    offset;   /* offset of the data in the recv buffer */
+    uint8_t                   type;     /* memory type of the recv buffer */
     /* packed rkeys follow */
 } UCS_S_PACKED ucp_rndv_rtr_hdr_t;
 
