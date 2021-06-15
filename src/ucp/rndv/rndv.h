@@ -87,8 +87,8 @@ void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
                       const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                       const void *rkey_buf);
 
-ucs_status_t ucp_rndv_rts_handle_status_from_pending(ucp_request_t *sreq,
-                                                     ucs_status_t status);
+ucs_status_t ucp_rndv_send_handle_status_from_pending(ucp_request_t *sreq,
+                                                      ucs_status_t status);
 
 static UCS_F_ALWAYS_INLINE int
 ucp_rndv_rts_is_am(const ucp_rndv_rts_hdr_t *rts_hdr)
