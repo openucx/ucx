@@ -590,6 +590,11 @@ public:
         rkey        = m_perf.ucp.rkey;
         sn          = 0;
 
+        if (CMD == UCX_PERF_CMD_PUT) {
+            *(uint8_t*)send_buffer = 0;
+            *(uint8_t*)recv_buffer = 0;
+        }
+
         ucp_perf_init_common_params(&length, &send_length, &send_datatype,
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
