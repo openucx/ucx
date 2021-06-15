@@ -8,6 +8,7 @@
 #  include "config.h"
 #endif
 
+#include <uct/api/v2/uct_v2.h>
 #include "ucp_context.h"
 #include "ucp_worker.h"
 #include "ucp_request.inl"
@@ -271,6 +272,108 @@ int ucp_request_pending_add(ucp_request_t *req, unsigned pending_flags)
     /* Unexpected error while adding to pending */
     ucs_fatal("invalid return status from uct_ep_pending_add(): %s",
               ucs_status_string(status));
+}
+
+static unsigned ucp_request_dt_invalidate_progress(void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucp_request_complete_send(req, req->status);
+    return 1;
+}
+
+static void ucp_request_mem_invalidate_completion(uct_completion_t *comp)
+{
+    ucp_request_t *req         = ucs_container_of(comp, ucp_request_t,
+                                                  send.state.uct_comp);
+    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
+
+    uct_worker_progress_register_safe(req->send.ep->worker->uct,
+                                      ucp_request_dt_invalidate_progress,
+                                      req, UCS_CALLBACKQ_FLAG_ONESHOT,
+                                      &prog_id);
+}
+
+static ucp_md_map_t ucp_request_get_invalidation_map(ucp_request_t *req)
+{
+    ucp_ep_h ep              = req->send.ep;
+    ucp_ep_config_key_t *key = &ucp_ep_config(ep)->key;
+    ucp_lane_index_t lane;
+    ucp_lane_index_t i;
+    ucp_md_map_t inv_map;
+    uint64_t cap_flags;
+
+    for (i = 0, inv_map = 0;
+         (key->rma_bw_lanes[i] != UCP_NULL_LANE) && (i < UCP_MAX_LANES); i++) {
+        lane      = key->rma_bw_lanes[i];
+        cap_flags = ucp_ep_get_iface_attr(ep, lane)->cap.flags;
+
+        if (cap_flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+            ucs_assert(cap_flags & UCT_IFACE_FLAG_GET_ZCOPY);
+            ucs_assert(ucp_ep_md_attr(ep, lane)->cap.flags &
+                       UCT_MD_FLAG_INVALIDATE);
+            inv_map |= UCS_BIT(ucp_ep_md_index(ep, lane));
+        }
+    }
+
+    return inv_map & req->send.state.dt.dt.contig.md_map;
+}
+
+void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
+{
+    uct_md_mem_dereg_params_t params = {
+        .field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
+                      UCT_MD_MEM_DEREG_FIELD_FLAGS |
+                      UCT_MD_MEM_DEREG_FIELD_COMPLETION,
+        .flags      = UCT_MD_MEM_DEREG_FLAG_INVALIDATE,
+        .comp       = &req->send.state.uct_comp
+    };
+    ucp_context_t *context = req->send.ep->worker->context;
+    uct_mem_h *uct_memh    = req->send.state.dt.dt.contig.memh;
+    ucp_md_map_t invalidate_map;
+    unsigned md_index;
+    unsigned memh_index;
+
+    ucs_assert(status != UCS_OK);
+    ucs_assert(ucp_ep_config(req->send.ep)->key.err_mode !=
+               UCP_ERR_HANDLING_MODE_NONE);
+    ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
+
+    req->send.state.uct_comp.count  = 1;
+    req->send.state.uct_comp.func   = ucp_request_mem_invalidate_completion;
+    req->send.state.uct_comp.status = UCS_OK;
+    req->status                     = status;
+    invalidate_map                  = ucp_request_get_invalidation_map(req);
+
+    ucp_trace_req(req, "mem dereg buffer md_map 0x%"PRIx64, invalidate_map);
+    /* dereg all lanes except for 'invalidate_map' */
+    ucp_mem_rereg_mds(context, invalidate_map, NULL, 0, 0, NULL,
+                      UCS_MEMORY_TYPE_HOST, NULL,
+                      req->send.state.dt.dt.contig.memh,
+                      &req->send.state.dt.dt.contig.md_map);
+    ucp_trace_req(req, "mem invalidate buffer md_map 0x%"PRIx64,    
+                  req->send.state.dt.dt.contig.md_map);
+
+    memh_index = 0;
+    ucs_log_indent(1);
+    ucs_for_each_bit(md_index, req->send.state.dt.dt.contig.md_map) {
+        ucs_trace_req("invalidating memh[%d]=%p from md[%d]", memh_index,
+                      uct_memh[memh_index], md_index);
+        req->send.state.uct_comp.count++;
+        params.memh = uct_memh[memh_index];
+        status      = uct_md_mem_dereg_v2(context->tl_mds[md_index].md,
+                                          &params);
+        if (status != UCS_OK) {
+            ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
+                     context->tl_mds[md_index].rsc.md_name,
+                     ucs_status_string(status));
+            req->send.state.uct_comp.count--;
+        }
+        memh_index++;
+    }
+
+    ucs_log_indent(-1);
+    ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }
 
 static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,

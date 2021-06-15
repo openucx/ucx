@@ -126,10 +126,9 @@ typedef struct {
  * @brief MD memory de-registration operation flags.
  */
 typedef enum {
-    UCT_MD_MEM_DEREG_FIELD_MEMH     = UCS_BIT(0), /**< memh field */
-    UCT_MD_MEM_DEREG_FIELD_FLAGS    = UCS_BIT(1), /**< flags field */
-    UCT_MD_MEM_DEREG_FIELD_CALLBACK = UCS_BIT(2), /**< cb field */
-    UCT_MD_MEM_DEREG_FIELD_ARG      = UCS_BIT(3)  /**< arg field */
+    UCT_MD_MEM_DEREG_FIELD_MEMH       = UCS_BIT(0), /**< memh field */
+    UCT_MD_MEM_DEREG_FIELD_FLAGS      = UCS_BIT(1), /**< flags field */
+    UCT_MD_MEM_DEREG_FIELD_COMPLETION = UCS_BIT(2)  /**< comp field */
 } uct_md_mem_dereg_field_mask_t;
 
 
@@ -187,14 +186,10 @@ typedef struct uct_md_mem_dereg_params {
     uct_mem_h                    memh;
 
     /**
-     * Callback function that is invoked when region is invalidated.
+     * Pointer to UCT completion object that is invoked when region is
+     * invalidated.
      */
-    uct_md_mem_invalidate_cb_t   cb;
-
-    /**
-     * User-defined argument for the callback function.
-     */
-    void                         *arg;
+    uct_completion_t             *comp;
 } uct_md_mem_dereg_params_t;
 
 

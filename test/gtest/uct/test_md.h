@@ -54,7 +54,16 @@ protected:
         return m_md_attr;
     }
 
-    static void dereg_cb(void *arg);
+    typedef struct {
+        test_md          *self;
+        uct_completion_t comp;
+    } test_md_comp_t;
+
+    test_md_comp_t &comp() {
+        return m_comp;
+    }
+
+    static void dereg_cb(uct_completion_t *comp);
 
     size_t                        m_comp_count;
 
@@ -62,6 +71,7 @@ private:
     ucs::handle<uct_md_config_t*> m_md_config;
     ucs::handle<uct_md_h>         m_md;
     uct_md_attr_t                 m_md_attr;
+    test_md_comp_t                m_comp;
 };
 
 

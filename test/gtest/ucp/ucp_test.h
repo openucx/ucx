@@ -211,6 +211,8 @@ public:
     void stats_activate();
     void stats_restore();
 
+    void disable_keepalive();
+
 private:
     static void set_ucp_config(ucp_config_t *config, const std::string& tls);
     static bool check_tls(const std::string& tls);
@@ -236,6 +238,9 @@ protected:
     void disconnect(entity& entity);
     ucs_status_t request_wait(void *req, int worker_index = 0);
     ucs_status_t requests_wait(std::vector<void*> &reqs, int worker_index = 0);
+    ucp_tag_message_h message_wait(entity& e, ucp_tag_t tag, ucp_tag_t tag_mask,
+                                   ucp_tag_recv_info_t *info, int remove = 1,
+                                   int worker_index = 0);
     void request_release(void *req);
     int max_connections();
     void set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env);

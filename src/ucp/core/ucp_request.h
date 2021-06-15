@@ -50,10 +50,11 @@ enum {
     UCP_REQUEST_FLAG_RNDV_FRAG             = UCS_BIT(15),
     UCP_REQUEST_FLAG_RECV_AM               = UCS_BIT(16),
     UCP_REQUEST_FLAG_RECV_TAG              = UCS_BIT(17),
+    UCP_REQUEST_FLAG_RKEY_INUSE            = UCS_BIT(18),
 #if UCS_ENABLE_ASSERT
-    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(18),
-    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(19),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(20)
+    UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(19),
+    UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(20),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(21)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
@@ -439,6 +440,8 @@ ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
                               ucp_dt_state_t *state, ucp_request_t *req_dbg);
+
+void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,

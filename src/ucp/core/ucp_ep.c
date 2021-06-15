@@ -2804,6 +2804,19 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
     return 1;
 }
 
+static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
+{
+    if ((status != UCS_OK) &&
+        (ucp_ep_config(req->send.ep)->key.err_mode !=
+         UCP_ERR_HANDLING_MODE_NONE) &&
+        (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
+        ucp_request_dt_invalidate(req, status);
+        return;
+    }
+
+    ucp_request_complete_and_dereg_send(req, status);
+}
+
 static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
                              ucs_status_t status, int recursive)
 {
@@ -2819,7 +2832,7 @@ static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(req->send.ep == ucp_ep);
-        ucp_request_complete_and_dereg_send(req, status);
+        ucp_ep_req_purge_send(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RECV_AM) {
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list

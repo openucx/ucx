@@ -150,11 +150,11 @@ bool test_md::is_device_detected(ucs_memory_type_t mem_type)
            (mem_type != UCS_MEMORY_TYPE_ROCM_MANAGED);
 }
 
-void test_md::dereg_cb(void *arg)
+void test_md::dereg_cb(uct_completion_t *comp)
 {
-    test_md *self = (test_md*)arg;
+    test_md_comp_t *md_comp = ucs_container_of(comp, test_md_comp_t, comp);
 
-    self->m_comp_count++;
+    md_comp->self->m_comp_count++;
 }
 
 UCS_TEST_SKIP_COND_P(test_md, rkey_ptr,
@@ -656,19 +656,19 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
     void *ptr;
     size_t mem_reg_count; /* how many mem_reg operations to apply */
     size_t iter;
-    size_t comp_count;
     ucs_status_t status;
     uct_md_mem_dereg_params_t params;
 
-    params.field_mask = UCT_MD_MEM_DEREG_FIELD_FLAGS |
-                        UCT_MD_MEM_DEREG_FIELD_MEMH |
-                        UCT_MD_MEM_DEREG_FIELD_CALLBACK |
-                        UCT_MD_MEM_DEREG_FIELD_ARG;
-    params.cb         = dereg_cb;
-    params.arg        = this;
-    ptr               = malloc(size);
+    params.field_mask  = UCT_MD_MEM_DEREG_FIELD_FLAGS |
+                         UCT_MD_MEM_DEREG_FIELD_MEMH |
+                         UCT_MD_MEM_DEREG_FIELD_COMPLETION;
+    comp().comp.func   = dereg_cb;
+    comp().comp.status = UCS_OK;
+    comp().self        = this;
+    params.comp        = &comp().comp;
+    ptr                = malloc(size);
     for (mem_reg_count = 1; mem_reg_count < 100; mem_reg_count++) {
-        comp_count   = (mem_reg_count + 1) / 2;
+        comp().comp.count = (mem_reg_count + 1) / 2;
         m_comp_count = 0;
         for (iter = 0; iter < mem_reg_count; iter++) {
             status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
@@ -694,7 +694,7 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
         }
 
         ASSERT_TRUE(memhs.empty());
-        EXPECT_EQ(comp_count, m_comp_count);
+        EXPECT_EQ(1, m_comp_count);
     }
 
     free(ptr);
@@ -713,14 +713,16 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
     status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL, &memh);
     ASSERT_UCS_OK(status);
 
-    params.cb    = dereg_cb;
-    params.arg   = this;
-    params.memh  = memh;
-    params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
+    comp().comp.func   = dereg_cb;
+    comp().comp.count  = 1;
+    comp().comp.status = UCS_OK;
+    comp().self        = this;
+    params.memh        = memh;
+    params.flags       = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
+    params.comp        = &comp().comp;
 
     if (!check_caps(UCT_MD_FLAG_INVALIDATE)) {
-        params.field_mask = UCT_MD_MEM_DEREG_FIELD_CALLBACK |
-                            UCT_MD_MEM_DEREG_FIELD_ARG |
+        params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS |
                             UCT_MD_MEM_DEREG_FIELD_MEMH;
         status            = uct_md_mem_dereg_v2(md(), &params);
@@ -729,26 +731,22 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
         status            = uct_md_mem_dereg_v2(md(), &params);
     } else {
-        params.field_mask = UCT_MD_MEM_DEREG_FIELD_CALLBACK |
-                            UCT_MD_MEM_DEREG_FIELD_ARG;
+        params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION;
         status            = uct_md_mem_dereg_v2(md(), &params);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 
-        params.field_mask = UCT_MD_MEM_DEREG_FIELD_CALLBACK |
-                            UCT_MD_MEM_DEREG_FIELD_ARG |
+        params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
-                            UCT_MD_MEM_DEREG_FIELD_ARG |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
         EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
-                            UCT_MD_MEM_DEREG_FIELD_CALLBACK |
-                            UCT_MD_MEM_DEREG_FIELD_ARG |
+                            UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
     }
