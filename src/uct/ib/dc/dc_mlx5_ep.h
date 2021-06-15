@@ -295,6 +295,24 @@ uct_dc_mlx5_iface_dci_can_alloc(uct_dc_mlx5_iface_t *iface, uint8_t pool_index)
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_dc_mlx5_iface_check_tx(uct_dc_mlx5_iface_t *iface)
+{
+#if UCS_ENABLE_ASSERT
+    uint8_t pool_index;
+
+    for (pool_index = 0; pool_index < iface->tx.num_dci_pools; ++pool_index) {
+        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+            ucs_assertv(ucs_arbiter_is_empty(
+                                uct_dc_mlx5_iface_dci_waitq(iface, pool_index)),
+                        "dc_iface %p pool %d: can allocate dci, but pending is "
+                        "not empty",
+                        iface, pool_index);
+        }
+    }
+#endif
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
                                    uint8_t pool_index)
 {
@@ -322,6 +340,7 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
 
     } while (ucs_unlikely(!ucs_arbiter_is_empty(dci_waitq) &&
                           uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)));
+    uct_dc_mlx5_iface_check_tx(iface);
 }
 
 static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
@@ -523,10 +542,7 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         return UCS_OK;
     }
 
-    /* Do not alloc dci if no TX desc resources,
-     * otherwise this dci may never be released. */
-    if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index) &&
-        uct_dc_mlx5_iface_has_tx_resources(iface)) {
+    if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
     }
@@ -562,15 +578,14 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
 
 #define UCT_DC_CHECK_RES_PTR(_iface, _ep) \
     { \
-        UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
-                                       UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
         { \
-            ucs_status_t status = \
-                uct_dc_mlx5_iface_dci_get(_iface, _ep); \
+            ucs_status_t status = uct_dc_mlx5_iface_dci_get(_iface, _ep); \
             if (ucs_unlikely(status != UCS_OK)) { \
                 return UCS_STATUS_PTR(status); \
             } \
         } \
+        UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
+                                       UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE)) \
     }
 
 
@@ -582,9 +597,9 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
  */
 #define UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
     { \
+        UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \
         UCT_RC_CHECK_NUM_RDMA_READ_RET(&(_iface)->super.super, \
                                        UCS_ERR_NO_RESOURCE) \
-        UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \
     }
 
 
@@ -594,6 +609,7 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
  * available TX resources. */
 #define UCT_DC_CHECK_RES_AND_FC(_iface, _ep) \
     { \
+        UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
         if (ucs_unlikely((_ep)->fc.fc_wnd <= \
                          (_iface)->super.super.config.fc_hard_thresh)) { \
             ucs_status_t _status = uct_dc_mlx5_ep_check_fc(_iface, _ep); \
@@ -607,7 +623,6 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
                 return _status; \
             } \
         } \
-        UCT_DC_MLX5_CHECK_RES(_iface, _ep) \
         if (!uct_dc_mlx5_iface_is_dci_rand(_iface)) { \
             uct_rc_iface_check_pending(&(_iface)->super.super, \
                                        &(_ep)->arb_group); \
