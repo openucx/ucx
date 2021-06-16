@@ -1330,8 +1330,9 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.title          = "high-bw remote memory access";
     bw_info.max_lanes               = context->config.ext.max_rndv_lanes;
     bw_info.criteria.local_md_flags = md_reg_flag;
-    /* in case if error handling is requested we require memory invalidation
-     * support to provide correct data integrity in in case of error */
+
+    /* If error handling is requested we require memory invalidation
+     * support to provide correct data integrity in case of error */
     if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
         bw_info.criteria.local_md_flags |= UCT_MD_FLAG_INVALIDATE;
     }
