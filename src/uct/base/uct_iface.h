@@ -176,14 +176,28 @@ enum {
     }
 
 /**
+ * Skip if this is a zero-length operation and do user-defined action prior
+ * returning UCS_OK.
+ */
+#define UCT_SKIP_ZERO_LENGTH_ACTION(_length, _action, ...) \
+    if (0 == (_length)) { \
+        ucs_trace_data("Zero length request: skip it"); \
+        UCS_PP_FOREACH(_UCT_RELEASE_DESC, _, __VA_ARGS__) \
+        _action; \
+        return UCS_OK; \
+    }
+
+
+/**
  * Skip if this is a zero-length operation.
  */
 #define UCT_SKIP_ZERO_LENGTH(_length, ...) \
-    if (0 == (_length)) { \
-        ucs_trace_data("Zero length request: skip it"); \
-        UCS_PP_FOREACH(_UCT_RELEASE_DESC, _, __VA_ARGS__)  \
-        return UCS_OK; \
-    }
+        UCT_SKIP_ZERO_LENGTH_ACTION(_length, (void)_length, ## __VA_ARGS__)
+
+
+/**
+ * Auxiliary macro for releasing desc.
+ */
 #define _UCT_RELEASE_DESC(_, _desc) \
     ucs_mpool_put(_desc);
 

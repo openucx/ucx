@@ -167,7 +167,10 @@ ssize_t uct_rc_mlx5_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
 
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(&iface->super, &iface->super.tx.mp,
-                                       desc, pack_cb, arg, length);
+                                       desc, pack_cb, arg, length,
+                                       return UCS_ERR_NO_RESOURCE);
+    UCT_SKIP_ZERO_LENGTH(length, desc);
+
     uct_rc_mlx5_ep_fence_put(iface, &ep->tx.wq, &rkey, &remote_addr,
                              ep->super.atomic_mr_offset);
     uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
@@ -219,7 +222,8 @@ ucs_status_t uct_rc_mlx5_ep_get_bcopy(uct_ep_h tl_ep,
     UCT_CHECK_LENGTH(length, 0, iface->super.super.config.seg_size, "get_bcopy");
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
-                                       unpack_cb, comp, arg, length);
+                                       unpack_cb, comp, arg, length,
+                                       return UCS_ERR_NO_RESOURCE);
 
     uct_rc_mlx5_ep_fence_get(iface, &ep->tx.wq, &rkey, &fm_ce_se);
     uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
@@ -346,7 +350,8 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     UCT_RC_CHECK_RES_AND_FC(&iface->super, &ep->super, id);
     UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(&iface->super, &iface->super.tx.mp, desc,
                                       id, uct_rc_mlx5_am_hdr_fill, uct_rc_mlx5_hdr_t,
-                                      pack_cb, arg, &length);
+                                      pack_cb, arg, &length,
+                                      return UCS_ERR_NO_RESOURCE);
 
     uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
                                        &ep->tx.wq, MLX5_OPCODE_SEND,
@@ -423,9 +428,10 @@ uct_rc_mlx5_ep_atomic_fop(uct_ep_h tl_ep, int opcode, void *result, int ext,
     UCT_RC_CHECK_RES(&iface->super, &ep->super);
     UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(&iface->super,
                                           &iface->tx.atomic_desc_mp, desc,
-                                          uct_rc_iface_atomic_handler(&iface->super,
-                                                                      ext, length),
-                                          result, comp);
+                                          uct_rc_iface_atomic_handler(
+                                                  &iface->super, ext, length),
+                                          result, comp,
+                                          return UCS_ERR_NO_RESOURCE);
     uct_rc_mlx5_ep_atomic_post(tl_ep, opcode, desc, length, remote_addr, rkey,
                                compare_mask, compare, swap_mask, swap_add);
     return UCS_INPROGRESS;
@@ -457,7 +463,7 @@ uct_rc_mlx5_ep_atomic_op_post(uct_ep_h tl_ep, unsigned opcode, unsigned size,
     }
 
     UCT_RC_IFACE_GET_TX_ATOMIC_DESC(&iface->super, &iface->tx.atomic_desc_mp,
-                                    desc);
+                                    desc, return UCS_ERR_NO_RESOURCE);
 
     uct_rc_mlx5_ep_atomic_post(tl_ep, op, desc, size, remote_addr, rkey,
                                compare_mask, compare, swap_mask, swap);
@@ -826,7 +832,8 @@ ssize_t uct_rc_mlx5_ep_tag_eager_bcopy(uct_ep_h tl_ep, uct_tag_t tag,
                              _IMM);
 
     UCT_RC_MLX5_IFACE_GET_TM_BCOPY_DESC(&iface->super, iface->tm.bcopy_mp,
-                                        desc, tag, app_ctx, pack_cb, arg, length);
+                                        desc, tag, app_ctx, pack_cb, arg,
+                                        length, return UCS_ERR_NO_RESOURCE);
 
     uct_rc_mlx5_common_txqp_bcopy_post(iface, IBV_QPT_RC, &ep->super.txqp,
                                        &ep->tx.wq, opcode,

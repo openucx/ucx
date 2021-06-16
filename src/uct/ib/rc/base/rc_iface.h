@@ -37,34 +37,38 @@
     UCT_CHECK_LENGTH(sizeof(uct_rc_hdr_t) + _header_length, 0, _desc_size, "am_zcopy header");
 
 
-#define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+#define UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     UCT_TL_IFACE_GET_TX_DESC(&(_iface)->super.super, _mp, _desc, \
-                             return UCS_ERR_NO_RESOURCE);
+                             _failure);
 
 #define UCT_RC_IFACE_GET_TX_AM_BCOPY_DESC(_iface, _mp, _desc, _id, _pk_hdr_cb, \
-                                          _hdr, _pack_cb, _arg, _length) ({ \
+                                          _hdr, _pack_cb, _arg, _length, \
+                                          _failure) \
+({ \
     _hdr *rch; \
-    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
     rch = (_hdr *)(_desc + 1); \
     _pk_hdr_cb(rch, _id); \
     *(_length) = _pack_cb(rch + 1, _arg); \
 })
 
-#define UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, \
-                                          _id, _header, _header_length, _comp, _send_flags) \
-    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc); \
+#define UCT_RC_IFACE_GET_TX_AM_ZCOPY_DESC(_iface, _mp, _desc, _id, _header, \
+                                          _header_length, _comp, _send_flags, \
+                                          _failure) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure); \
     uct_rc_zcopy_desc_set_comp(_desc, _comp, _send_flags); \
     uct_rc_zcopy_desc_set_header((uct_rc_hdr_t*)(_desc + 1), _id, _header, _header_length);
 
-#define UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(_iface, _mp, _desc, _pack_cb, _arg, _length) \
-    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+#define UCT_RC_IFACE_GET_TX_PUT_BCOPY_DESC(_iface, _mp, _desc, _pack_cb, _arg, \
+                                           _length, _failure) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-    _length = _pack_cb(_desc + 1, _arg); \
-    UCT_SKIP_ZERO_LENGTH(_length, _desc);
+    _length = _pack_cb(_desc + 1, _arg);
 
-#define UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(_iface, _mp, _desc, _unpack_cb, _comp, _arg, _length) \
-    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+#define UCT_RC_IFACE_GET_TX_GET_BCOPY_DESC(_iface, _mp, _desc, _unpack_cb, \
+                                           _comp, _arg, _length, _failure) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     ucs_assert(_length <= (_iface)->super.config.seg_size); \
     _desc->super.handler     = (_comp == NULL) ? \
                                 uct_rc_ep_get_bcopy_handler_no_completion : \
@@ -75,13 +79,14 @@
     _desc->unpack_cb         = _unpack_cb;
 
 
-#define UCT_RC_IFACE_GET_TX_ATOMIC_DESC(_iface, _mp, _desc) \
-    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+#define UCT_RC_IFACE_GET_TX_ATOMIC_DESC(_iface, _mp, _desc, _failure) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     _desc->super.handler = (uct_rc_send_handler_t)ucs_mpool_put;
 
-#define UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(_iface, _mp, _desc, _handler, _result, _comp) \
+#define UCT_RC_IFACE_GET_TX_ATOMIC_FETCH_DESC(_iface, _mp, _desc, _handler, \
+                                              _result, _comp, _failure) \
     UCT_CHECK_PARAM(_comp != NULL, "completion must be non-NULL"); \
-    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
+    UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc, _failure) \
     _desc->super.handler   = _handler; \
     _desc->super.buffer    = _result; \
     _desc->super.user_comp = _comp;
