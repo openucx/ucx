@@ -33,9 +33,10 @@ ucp_rndv_is_get_zcopy(ucp_request_t *req, ucp_context_h context)
               (req->send.length < context->config.ext.rndv_pipeline_send_thresh))));
 }
 
-ucs_status_t ucp_rndv_rkey_unpack_check(ucp_ep_h ep, const void *buffer,
-                                        ucs_memory_type_t check_mem_type,
-                                        ucs_status_t check_status)
+UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rkey_unpack_check_status,
+                 (ep, buffer, check_mem_type, check_status), ucp_ep_h ep,
+                 const void *buffer, ucs_memory_type_t check_mem_type,
+                 ucs_status_t check_status)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -79,9 +80,8 @@ ucs_status_t ucp_rndv_rkey_unpack_check(ucp_ep_h ep, const void *buffer,
         status = uct_rkey_unpack(tl_rkey.cmpt, tl_rkey_buf, &tl_rkey.rkey);
         if (status == UCS_OK) {
             ++rkey_index;
-        } else if (status == UCS_ERR_UNREACHABLE) {
-            md_map &= ~UCS_BIT(remote_md_index);
-        } else if (status == UCS_ERR_NOT_CONNECTED) {
+        } else if ((status == UCS_ERR_UNREACHABLE)
+                   || (status == UCS_ERR_NOT_CONNECTED)) {
             md_map &= ~UCS_BIT(remote_md_index);
         } else {
             ucs_error("failed to unpack remote key from remote md[%d]%s: %s",
@@ -129,9 +129,11 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
             md_attr = &context->tl_mds[md_index].attr;
             if (ucs_test_all_flags(md_attr->cap.reg_mem_types,
                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
-                status = ucp_rndv_rkey_unpack_check(rndv_req->send.ep, rkey_buf,
-                                                    UCS_MEMORY_TYPE_CUDA_MANAGED,
-                                                    UCS_ERR_NOT_CONNECTED);
+                status =
+                    ucp_rndv_rkey_unpack_check_status(rndv_req->send.ep,
+                                                      rkey_buf,
+                                                      UCS_MEMORY_TYPE_CUDA_MANAGED,
+                                                      UCS_ERR_NOT_CONNECTED);
                 if (status == UCS_OK) {
                     *frag_mem_type = UCS_MEMORY_TYPE_CUDA;
                 }
