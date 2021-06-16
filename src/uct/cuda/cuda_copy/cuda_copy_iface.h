@@ -65,6 +65,7 @@ typedef struct uct_cuda_copy_iface {
         unsigned                max_poll;
         unsigned                max_cuda_events;
         int                     enable_memtype_cache;
+        size_t                  detect_thresh;
     } config;
     struct {
         void                    *event_arg;
@@ -78,6 +79,7 @@ typedef struct uct_cuda_copy_iface_config {
     unsigned                max_poll;
     unsigned                max_cuda_events;
     int                     enable_memtype_cache;
+    size_t                  detect_thresh;
 } uct_cuda_copy_iface_config_t;
 
 

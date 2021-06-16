@@ -37,6 +37,10 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      "Enable memory type cache in cuda_copy UCT\n",
      ucs_offsetof(uct_cuda_copy_iface_config_t, enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
+    {"DETECT_THRESH", "128k",
+     "Threshold for detecting src/dst mem_types for stream picking",
+     ucs_offsetof(uct_cuda_copy_iface_config_t, detect_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
     {NULL}
 };
 
@@ -445,6 +449,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->memtype_cache               = NULL;
     self->config.max_poll             = config->max_poll;
     self->config.max_cuda_events      = config->max_cuda_events;
+    self->config.detect_thresh        = config->detect_thresh;
     self->config.enable_memtype_cache = config->enable_memtype_cache;
 
     if (self->config.enable_memtype_cache) {

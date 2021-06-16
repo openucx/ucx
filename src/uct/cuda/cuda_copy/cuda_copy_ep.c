@@ -78,8 +78,18 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_OK;
     }
 
-    uct_cuda_copy_memory_detect(iface, src, length, &src_info);
-    uct_cuda_copy_memory_detect(iface, dst, length, &dst_info);
+    if (length < iface->config.detect_thresh) {
+        /* pick random mem_types */
+        /* TODO: how expensive is random number generation wrt pointer query */
+        ucs_rand_range(UCS_MEMORY_TYPE_HOST, (UCS_MEMORY_TYPE_LAST - 1),
+                       (int*)&src_info.type);
+        ucs_rand_range(UCS_MEMORY_TYPE_HOST, (UCS_MEMORY_TYPE_LAST - 1),
+                       (int*)&dst_info.type);
+
+    } else {
+        uct_cuda_copy_memory_detect(iface, src, length, &src_info);
+        uct_cuda_copy_memory_detect(iface, dst, length, &dst_info);
+    }
 
     stream  = uct_cuda_copy_get_stream(iface, src_info.type, dst_info.type);
     event_q = &iface->outstanding_event_q[src_info.type][dst_info.type];
