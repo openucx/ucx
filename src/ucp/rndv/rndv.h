@@ -81,6 +81,8 @@ ucs_status_t ucp_rndv_progress_rma_put_zcopy(uct_pending_req_t *self);
 size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                          ucp_rndv_rts_opcode_t opcode);
 
+ucs_status_t ucp_proto_progress_rndv_rtr(uct_pending_req_t *self);
+
 ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq);
 
 void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
