@@ -120,9 +120,10 @@ enum {
                                                            CM phase */
     UCP_EP_INIT_FLAG_INTERNAL          = UCS_BIT(6),  /**< Endpoint for internal usage
                                                            (e.g. memtype, reply on keepalive) */
-    UCP_EP_INIT_CONNECT_TO_IFACE_ONLY  = UCS_BIT(7)   /**< Select transports which
+    UCP_EP_INIT_CONNECT_TO_IFACE_ONLY  = UCS_BIT(7),  /**< Select transports which
                                                            support CONNECT_TO_IFACE
                                                            mode only */
+    UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8)   /**< Endpoint requires an AM lane only */
 };
 
 

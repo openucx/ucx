@@ -325,7 +325,7 @@ std::string sockaddr_to_str(const S *saddr) {
  */
 class sock_addr_storage {
 public:
-    sock_addr_storage(bool is_rdmacm_netdev = false);
+    sock_addr_storage();
 
     sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr,
                       bool is_rdmacm_netdev = false);

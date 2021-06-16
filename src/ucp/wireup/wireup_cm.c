@@ -175,7 +175,7 @@ ucp_cm_tl_bitmap_get_dev_idx(ucp_context_h context,
 }
 
 static ucs_status_t
-ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep,
+ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
                                     const ucp_tl_bitmap_t *tl_bitmap,
                                     ucp_ep_config_key_t *key)
 {
@@ -217,7 +217,8 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep,
     ucs_assert(unpacked_addr.address_count <= UCP_MAX_RESOURCES);
     ucp_ep_config_key_reset(key);
     ucp_ep_config_key_set_err_mode(key, wireup_ep->ep_init_flags);
-    status = ucp_wireup_select_lanes(ucp_ep, wireup_ep->ep_init_flags,
+    status = ucp_wireup_select_lanes(ucp_ep,
+                                     wireup_ep->ep_init_flags | ep_init_flags,
                                      *tl_bitmap, &unpacked_addr, addr_indices,
                                      key);
 
@@ -241,7 +242,7 @@ static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
 
 static ucs_status_t
 ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
-                         ucp_rsc_index_t dev_index,
+                         ucp_rsc_index_t dev_index, int can_fallback,
                          void **data_buf_p, size_t *data_buf_length_p)
 {
     ucp_worker_h worker = ep->worker;
@@ -268,7 +269,7 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     cm_idx = ucp_ep_ext_control(ep)->cm_idx;
     if (worker->cms[cm_idx].attr.max_conn_priv <
         ucp_cm_priv_data_length(ucp_addr_size)) {
-        log_level = (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE) ?
+        log_level = can_fallback ?
                     UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
         ucs_log(log_level,
                 "CM private data buffer is too small to pack UCP endpoint"
@@ -387,6 +388,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_rsc_index_t dev_index     = UCP_NULL_RESOURCE;
     void *ucp_addr                = NULL; /* Set to NULL to call ucs_free
                                              safely */
+    unsigned ep_init_flags        = 0;
     ucp_tl_bitmap_t tl_bitmap;
     uct_ep_connect_params_t params;
     void *priv_data;
@@ -394,16 +396,18 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_ep_config_key_t key;
     ucs_queue_head_t tmp_pending_queue;
     ucs_status_t status;
+    int can_fallback;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     ucs_queue_head_init(&tmp_pending_queue);
 
+initial_config_retry:
     /* Cleanup the previously created UCP EP. The one that was created on the
      * previous call to this client's resolve_cb */
     ucp_wireup_cm_ep_cleanup(ep, &tmp_pending_queue);
 
-    status = ucp_cm_ep_client_initial_config_get(ep,
+    status = ucp_cm_ep_client_initial_config_get(ep, ep_init_flags,
                                     &cm_wireup_ep->cm_resolve_tl_bitmap, &key);
     if (status != UCS_OK) {
         goto try_fallback;
@@ -424,9 +428,19 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     /* Replay pending requests from the tmp_pending_queue */
     ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
 
-    status = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index, &priv_data,
-                                      &priv_data_length);
+    can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
+                   (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
+    status       = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index,
+                                            can_fallback,
+                                            &priv_data, &priv_data_length);
     if (status == UCS_ERR_BUFFER_TOO_SMALL) {
+        if (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
+            /* Create endpoint configuration with AM lane only to fit CM private
+             * data length limit */
+            ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE_ONLY;
+            goto initial_config_retry;
+        }
+
         goto try_fallback;
     } else if (status != UCS_OK) {
         goto err;
@@ -1199,7 +1213,7 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
     ucp_tl_bitmap_validate(&tl_bitmap, &ctx_tl_bitmap);
 
     dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, &tl_bitmap);
-    status    = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index,
+    status    = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index, 0,
                                          (void **)data_buf_p, data_buf_size_p);
 
 out:

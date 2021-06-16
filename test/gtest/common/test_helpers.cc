@@ -588,8 +588,8 @@ std::string exit_status_info(int exit_status)
     return ss.str().substr(2, std::string::npos);
 }
 
-sock_addr_storage::sock_addr_storage(bool is_rdmacm_netdev) :
-        m_size(0), m_is_valid(false), m_is_rdmacm_netdev(is_rdmacm_netdev)
+sock_addr_storage::sock_addr_storage() :
+        m_size(0), m_is_valid(false), m_is_rdmacm_netdev(false)
 {
     memset(&m_storage, 0, sizeof(m_storage));
 }
