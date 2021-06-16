@@ -34,9 +34,9 @@ ucp_rndv_is_get_zcopy(ucp_request_t *req, ucp_context_h context)
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rkey_unpack_check_status,
-                 (ep, buffer, check_mem_type, check_status), ucp_ep_h ep,
-                 const void *buffer, ucs_memory_type_t check_mem_type,
-                 ucs_status_t check_status)
+                 (ep, buffer, md_index, check_mem_type, check_status),
+                 ucp_ep_h ep, const void *buffer, unsigned md_index,
+                 ucs_memory_type_t check_mem_type, ucs_status_t check_status)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -51,8 +51,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rkey_unpack_check_status,
     size_t tl_rkey_size;
     unsigned rkey_index;
     ucs_status_t status;
-
-    ucs_log_indent(1);
 
     /* MD map for the unpacked rkey */
     remote_md_map = *ucs_serialize_next(&p, const ucp_md_map_t);
@@ -69,6 +67,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rkey_unpack_check_status,
 
         /* Unpack only reachable rkeys */
         if (!(UCS_BIT(remote_md_index) & md_map)) {
+            continue;
+        }
+
+        if (remote_md_index != md_index) {
             continue;
         }
 
@@ -93,7 +95,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rkey_unpack_check_status,
             md_attr = &worker->context->tl_mds[remote_md_index].attr;
             if (ucs_test_all_flags(md_attr->cap.reg_mem_types,
                                    UCS_BIT(check_mem_type))) {
-                return UCS_OK;
+                status = UCS_OK;
+                goto out;
             }
         }
     }
@@ -101,7 +104,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rkey_unpack_check_status,
     status  = UCS_ERR_NO_RESOURCE;
 
 out:
-    ucs_log_indent(-1);
     return status;
 }
 
@@ -129,13 +131,26 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
             md_attr = &context->tl_mds[md_index].attr;
             if (ucs_test_all_flags(md_attr->cap.reg_mem_types,
                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
+                /* check if intra-node cuda-ipc transfers are possible */
                 status =
                     ucp_rndv_rkey_unpack_check_status(rndv_req->send.ep,
-                                                      rkey_buf,
+                                                      rkey_buf, md_index,
                                                       UCS_MEMORY_TYPE_CUDA_MANAGED,
                                                       UCS_ERR_NOT_CONNECTED);
                 if (status == UCS_OK) {
                     *frag_mem_type = UCS_MEMORY_TYPE_CUDA;
+                    ucs_debug("md %s allows use of cuda fragments",
+                              context->tl_mds[md_index].rsc.md_name);
+                    break;
+                }
+
+                /* check if inter-node CUDA transfers are possible */
+                if (!(ucs_test_all_flags(md_attr->cap.reg_mem_types,
+                                         UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED)))) {
+                    *frag_mem_type = UCS_MEMORY_TYPE_CUDA;
+                    ucs_debug("md %s allows use of cuda fragments",
+                              context->tl_mds[md_index].rsc.md_name);
+                    break;
                 }
             }
         }
@@ -146,7 +161,7 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
          (i < UCP_MAX_LANES) &&
          (ep_config->key.rma_bw_lanes[i] != UCP_NULL_LANE); i++) {
         md_index = ep_config->md_index[ep_config->key.rma_bw_lanes[i]];
-        if (context->tl_mds[md_index].attr.cap.access_mem_types
+        if (context->tl_mds[md_index].attr.cap.reg_mem_types
             & UCS_BIT(*frag_mem_type)) {
             found = 1;
             break;
