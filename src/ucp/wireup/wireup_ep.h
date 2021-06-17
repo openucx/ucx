@@ -114,6 +114,8 @@ int ucp_wireup_ep_is_owner(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
 void ucp_wireup_ep_disown(uct_ep_h uct_ep, uct_ep_h owned_ep);
 
+uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep);
+
 ucs_status_t ucp_wireup_ep_progress_pending(uct_pending_req_t *self);
 
 ucp_wireup_ep_t *ucp_wireup_ep(uct_ep_h uct_ep);

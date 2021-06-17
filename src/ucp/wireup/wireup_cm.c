@@ -1213,16 +1213,15 @@ out:
 static unsigned ucp_cm_server_conn_notify_progress(void *arg)
 {
     ucp_ep_h ucp_ep = arg;
-    ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
     if (!ucp_ep->worker->context->config.ext.cm_use_all_devices) {
         ucp_wireup_remote_connected(ucp_ep);
     } else {
-        status = ucp_wireup_send_pre_request(ucp_ep);
-        ucs_assert_always(status == UCS_OK);
+        ucp_wireup_send_pre_request(ucp_ep);
     }
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
+
     return 1;
 }
 

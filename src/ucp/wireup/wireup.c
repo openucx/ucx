@@ -209,10 +209,6 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     return status;
 }
 
-/*
- * @param [in] rsc_tli  Resource index for every lane.
- */
-
 static ucs_status_t
 ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
                     const ucp_lane_index_t *lanes2remote)
@@ -234,7 +230,8 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     req = ucp_request_mem_alloc("wireup_msg_req");
     if (req == NULL) {
         ucs_error("failed to allocate request for sending WIREUP message");
-        return UCS_ERR_NO_MEMORY;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     req->flags         = 0;
@@ -248,12 +245,16 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
                                     &req->send.length);
     if (status != UCS_OK) {
         ucp_request_mem_free(req);
-        return status;
+        goto err;
     }
 
     ucp_request_send(req, 0);
     /* coverity[leaked_storage] */
     return UCS_OK;
+
+err:
+    ucp_worker_set_ep_failed(ep->worker, ep, NULL, UCP_NULL_LANE, status);
+    return status;
 }
 
 static ucp_tl_bitmap_t
@@ -477,10 +478,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
         return;
     }
 
-    status = ucp_wireup_send_request(ep);
-    if (status != UCS_OK) {
-        ucp_ep_cleanup_lanes(ep);
-    }
+    ucp_wireup_send_request(ep);
 }
 
 static UCS_F_NOINLINE void
