@@ -132,21 +132,23 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
             if (ucs_test_all_flags(md_attr->cap.reg_mem_types,
                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA))) {
                 /* check if intra-node cuda-ipc transfers are possible */
-                status =
-                    ucp_rndv_rkey_unpack_check_status(rndv_req->send.ep,
-                                                      rkey_buf, md_index,
-                                                      UCS_MEMORY_TYPE_CUDA_MANAGED,
-                                                      UCS_ERR_NOT_CONNECTED);
-                if (status == UCS_OK) {
-                    *frag_mem_type = UCS_MEMORY_TYPE_CUDA;
-                    ucs_debug("md %s allows use of cuda fragments",
-                              context->tl_mds[md_index].rsc.md_name);
-                    break;
-                }
-
-                /* check if inter-node CUDA transfers are possible */
-                if (!(ucs_test_all_flags(md_attr->cap.reg_mem_types,
-                                         UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED)))) {
+                /* assumes that unpacking uct_rkey for ipc-accessibility with
+                 * managed memory results in NOT_CONNECTED return status and
+                 * that cuda_ipc transport alone can register managed memory */
+                if (ucs_test_all_flags(md_attr->cap.reg_mem_types,
+                                       UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED))) {
+                    status =
+                        ucp_rndv_rkey_unpack_check_status(rndv_req->send.ep,
+                                                          rkey_buf, md_index,
+                                                          UCS_MEMORY_TYPE_CUDA_MANAGED,
+                                                          UCS_ERR_NOT_CONNECTED);
+                    if (status == UCS_OK) {
+                        *frag_mem_type = UCS_MEMORY_TYPE_CUDA;
+                        ucs_debug("md %s allows use of cuda fragments",
+                                context->tl_mds[md_index].rsc.md_name);
+                        break;
+                    }
+                } else {
                     *frag_mem_type = UCS_MEMORY_TYPE_CUDA;
                     ucs_debug("md %s allows use of cuda fragments",
                               context->tl_mds[md_index].rsc.md_name);
