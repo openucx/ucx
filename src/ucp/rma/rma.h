@@ -99,5 +99,4 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
         return UCS_ERR_UNSUPPORTED; \
     }
 
-
 #endif

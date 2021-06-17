@@ -14,13 +14,26 @@ extern "C" {
 template <typename T>
 class test_ucp_atomic : public test_ucp_memheap {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    /* Test variants */
+    enum {
+        ATOMIC_MODE  = UCS_MASK(2),
+        ENABLE_PROTO = UCS_BIT(2)
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants,
+                                  int variant, const std::string& name)
     {
         uint64_t features = (sizeof(T) == sizeof(uint32_t)) ?
                             UCP_FEATURE_AMO32 : UCP_FEATURE_AMO64;
-        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_CPU, "cpu");
-        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_DEVICE, "device");
-        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_GUESS, "guess");
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_CPU, "cpu" + name);
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_DEVICE, "device" + name);
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_GUESS, "guess" + name);
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        get_test_variants(variants, 0, "");
+        get_test_variants(variants, ENABLE_PROTO, "/proto");
     }
 
     void post(size_t size, void *target_ptr, ucp_rkey_h rkey,
@@ -81,12 +94,18 @@ protected:
                                              UCS_BIT(UCP_ATOMIC_OP_CSWAP);
 
     virtual void init() {
-        const char *atomic_mode =
-                        (get_variant_value() == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
-                        (get_variant_value() == UCP_ATOMIC_MODE_DEVICE) ? "device" :
-                        (get_variant_value() == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
+        int atomic_mode = get_variant_value() & ATOMIC_MODE;
+        const char *atomic_mode_cfg =
+                        (atomic_mode == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
+                        (atomic_mode == UCP_ATOMIC_MODE_DEVICE) ? "device" :
+                        (atomic_mode == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                         "";
-        modify_config("ATOMIC_MODE", atomic_mode);
+        modify_config("ATOMIC_MODE", atomic_mode_cfg);
+
+        if (get_variant_value() & ENABLE_PROTO) {
+            modify_config("PROTO_ENABLE", "y");
+        }
+
         test_ucp_memheap::init();
     }
 
