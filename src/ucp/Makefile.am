@@ -55,6 +55,7 @@ noinst_HEADERS = \
 	proto/proto_single.h \
 	proto/proto_single.inl \
 	proto/proto.h \
+	rma/amo.inl \
 	rma/rma.h \
 	rma/rma.inl \
 	rndv/proto_rndv.h \
@@ -111,6 +112,7 @@ libucp_la_SOURCES = \
 	proto/proto_single.c \
 	proto/proto.c \
 	rma/amo_basic.c \
+	rma/amo_offload.c \
 	rma/amo_send.c \
 	rma/amo_sw.c \
 	rma/get_am.c \
