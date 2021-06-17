@@ -14,6 +14,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/proto/proto_am.h>
+#include <ucp/tag/tag_rndv.h>
 
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/debug/debug_int.h>
@@ -613,6 +614,12 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
              */
             req->send.state.uct_comp.func(&req->send.state.uct_comp);
         }
+    } else if ((req->send.uct.func == ucp_proto_progress_rndv_rtr) ||
+               (req->send.uct.func == ucp_proto_progress_am_rndv_rts) ||
+               (req->send.uct.func == ucp_proto_progress_tag_rndv_rts)) {
+        /* Canceling control message which asks for remote side to reply is
+         * equivalent to reply not being received */
+        ucp_ep_req_purge(req->send.ep, req, status, 1);
     } else {
         ucp_request_complete_send(req, status);
     }

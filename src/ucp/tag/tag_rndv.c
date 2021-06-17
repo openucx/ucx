@@ -77,7 +77,7 @@ size_t ucp_tag_rndv_rts_pack(void *dest, void *arg)
     return ucp_rndv_rts_pack(sreq, rts_hdr, UCP_RNDV_RTS_TAG_OK);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rts, (self),
+UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_tag_rndv_rts, (self),
                  uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
@@ -107,7 +107,7 @@ ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *sreq)
         status = ucp_tag_offload_start_rndv(sreq);
     } else {
         ucs_assert(sreq->send.lane == ucp_ep_get_am_lane(ep));
-        sreq->send.uct.func = ucp_proto_progress_rndv_rts;
+        sreq->send.uct.func = ucp_proto_progress_tag_rndv_rts;
         status              = ucp_rndv_reg_send_buffer(sreq);
     }
 

@@ -2823,6 +2823,12 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
     ucp_trace_req(req, "purged with status %s (%d) on ep %p",
                   ucs_status_string(status), status, ucp_ep);
 
+    /* RNDV GET/PUT Zcopy operations shouldn't be handled here, because they
+     * don't allocate local request ID, so they are not added on a list of
+     * tracked operations */
+    ucs_assert((req->send.uct.func != ucp_rndv_progress_rma_get_zcopy) &&
+               (req->send.uct.func != ucp_rndv_progress_rma_put_zcopy));
+
     /* Only send operations could have request ID allocated */
     if (!(req->flags &
           (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG))) {
@@ -2837,11 +2843,13 @@ void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
+        ucp_request_recv_buffer_dereg(req);
         ucp_request_complete_am_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RECV_TAG) {
         ucs_assert(!(req->flags & UCP_REQUEST_FLAG_SUPER_VALID));
         ucs_assert(recursive); /* Mustn't be directly contained in an EP list
                                 * of tracking requests */
+        ucp_request_recv_buffer_dereg(req);
         ucp_request_complete_tag_recv(req, status);
     } else if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         ucs_assert(req->flags & UCP_REQUEST_FLAG_SUPER_VALID);

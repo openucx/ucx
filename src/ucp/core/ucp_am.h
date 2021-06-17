@@ -90,6 +90,8 @@ void ucp_am_ep_cleanup(ucp_ep_h ep);
 
 size_t ucp_am_max_header_size(ucp_worker_h worker);
 
+ucs_status_t ucp_proto_progress_am_rndv_rts(uct_pending_req_t *self);
+
 ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
                                      unsigned tl_flags);
 
