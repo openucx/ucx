@@ -563,7 +563,7 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self)
     status = uct_ep_tag_rndv_request(ep->uct_eps[req->send.lane],
                                      req->send.msg_proto.tag, rndv_rts_hdr,
                                      packed_len, 0);
-    return ucp_rndv_rts_handle_status_from_pending(req, status);
+    return ucp_rndv_send_handle_status_from_pending(req, status);
 }
 
 static void ucp_tag_offload_rndv_zcopy_completion(uct_completion_t *self)
@@ -609,7 +609,7 @@ ucs_status_t ucp_tag_offload_rndv_zcopy(uct_pending_req_t *self)
                                     &req->send.state.uct_comp);
     if (ucs_unlikely(UCS_PTR_IS_ERR(rndv_op))) {
         status = UCS_PTR_STATUS(rndv_op);
-        return ucp_rndv_rts_handle_status_from_pending(req, status);
+        return ucp_rndv_send_handle_status_from_pending(req, status);
     }
 
     ucp_request_send_state_advance(req, &dt_state,

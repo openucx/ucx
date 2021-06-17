@@ -186,18 +186,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
     packed_rkey_size = ucp_ep_config(rndv_req->send.ep)->rndv.rkey_size;
     status           = ucp_do_am_single(self, UCP_AM_ID_RNDV_RTR, ucp_rndv_rtr_pack,
                                         sizeof(ucp_rndv_rtr_hdr_t) + packed_rkey_size);
-    if (ucs_unlikely(status != UCS_OK)) {
-        if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
-            return UCS_ERR_NO_RESOURCE;
-        }
-
-        ucp_request_put(rndv_req);
-    }
-
-    /* Don't release rndv request in case of success, since it was sent to
-     * a peer as a remote request ID */
-
-    return UCS_OK;
+    return ucp_rndv_send_handle_status_from_pending(rndv_req, status);
 }
 
 ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq)
@@ -369,7 +358,7 @@ ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,
 
     status = ucp_do_am_single(&sreq->send.uct, UCP_AM_ID_RNDV_RTS, pack_cb,
                               max_rts_size);
-    return ucp_rndv_rts_handle_status_from_pending(sreq, status);
+    return ucp_rndv_send_handle_status_from_pending(sreq, status);
 }
 
 static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
@@ -1500,10 +1489,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_ats_handler,
     return UCS_OK;
 }
 
-ucs_status_t ucp_rndv_rts_handle_status_from_pending(ucp_request_t *sreq,
-                                                     ucs_status_t status)
+ucs_status_t ucp_rndv_send_handle_status_from_pending(ucp_request_t *sreq,
+                                                      ucs_status_t status)
 {
-    /* we rely on the fact that the RTS isn't being sent by an AM Bcopy multi */
+    /* We rely on the fact that the RTS and RTR should not be sent by AM bcopy
+     * multi */
     ucs_assert((status != UCP_STATUS_PENDING_SWITCH) &&
                (status != UCS_INPROGRESS));
 
@@ -1512,10 +1502,11 @@ ucs_status_t ucp_rndv_rts_handle_status_from_pending(ucp_request_t *sreq,
             return UCS_ERR_NO_RESOURCE;
         }
 
-        ucp_send_request_id_release(sreq);
-        ucp_request_complete_and_dereg_send(sreq, status);
+        ucp_ep_req_purge(sreq->send.ep, sreq, status, 0);
     }
 
+    /* Don't release RNDV send request in case of success, since it was sent to
+     * a peer as a remote request ID */
     return UCS_OK;
 }
 

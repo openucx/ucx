@@ -2817,8 +2817,8 @@ static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
     ucp_request_complete_and_dereg_send(req, status);
 }
 
-static void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
-                             ucs_status_t status, int recursive)
+void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
+                      ucs_status_t status, int recursive)
 {
     ucp_trace_req(req, "purged with status %s (%d) on ep %p",
                   ucs_status_string(status), status, ucp_ep);

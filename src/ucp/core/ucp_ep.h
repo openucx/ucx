@@ -677,6 +677,21 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
  */
 int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now);
 
+
+/**
+ * @brief Purge the protocol request scheduled on a given UCP endpoint.
+ *
+ * @param [in]     ucp_ep           Endpoint object on which the request should
+ *                                  be purged.
+ * @param [in]     req              The request to purge.
+ * @param [in]     status           Completion status.
+ * @param [in]     recursive        Indicates if the function was called from
+ *                                  the @ref ucp_ep_req_purge recursively.
+ */
+void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
+                      ucs_status_t status, int recursive);
+
+
 /**
  * @brief Purge flush and protocol requests scheduled on a given UCP endpoint.
  *
