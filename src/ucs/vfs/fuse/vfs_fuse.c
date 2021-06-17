@@ -94,11 +94,9 @@ static int ucs_vfs_fuse_getattr(const char *path, struct stat *stbuf,
 static int ucs_vfs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
     ucs_string_buffer_t strb;
-    ucs_status_t status;
 
     ucs_string_buffer_init(&strb);
-    status = ucs_vfs_path_read_file(path, &strb);
-    if (status != UCS_OK) {
+    if (ucs_vfs_path_read_file(path, &strb) != UCS_OK) {
         return -ENOENT;
     }
 
@@ -126,6 +124,18 @@ static int ucs_vfs_fuse_read(const char *path, char *buf, size_t size,
     memcpy(buf, data + offset, nread);
 
     return nread;
+}
+
+static int ucs_vfs_fuse_readlink(const char *path, char *buf, size_t size)
+{
+    ucs_string_buffer_t strb;
+
+    ucs_string_buffer_init_fixed(&strb, buf, size);
+    if (ucs_vfs_path_get_link(path, &strb) != UCS_OK) {
+        return -ENOENT;
+    }
+
+    return 0;
 }
 
 static int ucs_vfs_fuse_readdir(const char *path, void *buf,
@@ -158,11 +168,12 @@ static int ucs_vfs_fuse_release(const char *path, struct fuse_file_info *fi)
 }
 
 struct fuse_operations ucs_vfs_fuse_operations = {
-    .getattr = ucs_vfs_fuse_getattr,
-    .open    = ucs_vfs_fuse_open,
-    .read    = ucs_vfs_fuse_read,
-    .readdir = ucs_vfs_fuse_readdir,
-    .release = ucs_vfs_fuse_release,
+    .getattr  = ucs_vfs_fuse_getattr,
+    .open     = ucs_vfs_fuse_open,
+    .read     = ucs_vfs_fuse_read,
+    .readlink = ucs_vfs_fuse_readlink,
+    .readdir  = ucs_vfs_fuse_readdir,
+    .release  = ucs_vfs_fuse_release,
 };
 
 static void ucs_vfs_fuse_main()

@@ -280,3 +280,26 @@ UCS_TEST_F(test_vfs_obj, check_ret) {
     ucs_vfs_obj_remove(&obj1);
     ucs_vfs_obj_remove(&obj2);
 }
+
+UCS_MT_TEST_F(test_vfs_obj, add_sym_link, 4)
+{
+    static const char path_to_target[] = "target";
+
+    static char target;
+    ucs_vfs_obj_add_dir(NULL, &target, "target");
+    ucs_vfs_obj_add_sym_link(NULL, &target, "link");
+
+    ucs_vfs_path_info_t path_info;
+    EXPECT_UCS_OK(ucs_vfs_path_get_info("/link", &path_info));
+    EXPECT_EQ(strlen(path_to_target), path_info.size);
+    EXPECT_TRUE(path_info.mode & S_IFLNK);
+
+    ucs_string_buffer_t strb;
+    ucs_string_buffer_init(&strb);
+    EXPECT_UCS_OK(ucs_vfs_path_get_link("/link", &strb));
+    EXPECT_STREQ(path_to_target, ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
+
+    barrier();
+    ucs_vfs_obj_remove(&target);
+}
