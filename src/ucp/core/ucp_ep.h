@@ -515,7 +515,7 @@ typedef struct ucp_conn_request {
     ucp_ep_h                    ep; /* valid only if request is handled internally */
     ucp_wireup_user_data_t      user_data;
     ucp_wireup_sockaddr_data_t  sa_data;
-    /* packed worker address follows */
+    ucp_unpacked_address_t      *remote_addr;
 } ucp_conn_request_t;
 
 

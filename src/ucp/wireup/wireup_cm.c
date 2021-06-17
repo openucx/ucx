@@ -1008,16 +1008,17 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                    const uct_cm_listener_conn_request_args_t
                                    *conn_req_args)
 {
-    ucp_listener_h ucp_listener = arg;
-    ucp_worker_h worker         = ucp_listener->worker;
-    uct_worker_cb_id_t prog_id  = UCS_CALLBACKQ_ID_NULL;
-    size_t user_data_size       = sizeof(ucp_wireup_user_data_t);
-    ucp_conn_request_h ucp_conn_request;
+    ucp_listener_h ucp_listener          = arg;
+    ucp_worker_h worker                  = ucp_listener->worker;
+    uct_worker_cb_id_t prog_id           = UCS_CALLBACKQ_ID_NULL;
+    size_t user_data_size                = sizeof(ucp_wireup_user_data_t);
+    ucp_conn_request_h ucp_conn_request  = NULL;
     uct_conn_request_h conn_request;
     const uct_cm_remote_data_t *remote_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
-    size_t user_data_offset;
+    size_t ucp_addr_size;
+    uint64_t addr_flags;
 
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
                                          (UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CONN_REQUEST |
@@ -1045,8 +1046,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
               ucp_context_cm_name(worker->context, cm_idx),
               worker, listener->cm, cm_idx);
 
-    ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
-                                  remote_data->conn_priv_data_length,
+    ucp_conn_request = ucs_malloc(sizeof(ucp_conn_request_t),
                                   "ucp_conn_request_h");
     if (ucp_conn_request == NULL) {
         ucs_error("failed to allocate connect request, rejecting connection "
@@ -1081,13 +1081,32 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
            remote_data->dev_addr_length);
 
-    // | sa_data || ucp_address || user_data |
-    // |      conn_priv_data_length          |
-    user_data_offset = ucs_max(0, remote_data->conn_priv_data_length - user_data_size);
-    memcpy(&ucp_conn_request->user_data, (char*)remote_data->conn_priv_data + user_data_offset,
-           user_data_size);
+    // [ sa_data | ucp_address | user_data ]
+    // |      conn_priv_data_length        |
+
+    // 1. sa_data is fixed of size, so copy it directly
     memcpy(&ucp_conn_request->sa_data, remote_data->conn_priv_data,
-           remote_data->conn_priv_data_length - user_data_size);
+           sizeof(ucp_conn_request->sa_data));
+
+    // 2. Unpack ucp_address and get it's length in buffer
+    addr_flags = ucp_worker_common_address_pack_flags(worker) |
+                 UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
+    ucp_conn_request->remote_addr = ucs_malloc(sizeof(ucp_unpacked_address_t),
+                                               "ucp_unpacked_address_t");
+
+    status = ucp_address_unpack_size(ucp_conn_request->listener->worker,
+                                     UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
+                                                         sizeof(ucp_conn_request->sa_data)),
+                                     addr_flags, ucp_conn_request->remote_addr,
+                                     &ucp_addr_size);
+    if (status != UCS_OK) {
+        goto err_free_remote_addr;
+    }
+
+    // 3. Copy user_data
+    memcpy(&ucp_conn_request->user_data, UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
+           sizeof(ucp_conn_request->sa_data) + ucp_addr_size), user_data_size);
+
 
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_server_conn_request_progress,
@@ -1099,6 +1118,8 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_worker_signal_internal(worker);
     return;
 
+err_free_remote_addr:
+    ucs_free(ucp_conn_request->remote_addr);
 err_free_remote_dev_addr:
     ucs_free(ucp_conn_request->remote_dev_addr);
 err_free_ucp_conn_request:
@@ -1188,6 +1209,8 @@ err_destroy_ep:
     ucp_ep_destroy_internal(ep);
 out_free_request:
     ucs_free(conn_request->remote_dev_addr);
+    ucs_free(conn_request->remote_addr->address_list);
+    ucs_free(conn_request->remote_addr);
     ucs_free(conn_request);
 out:
     if (status == UCS_OK) {

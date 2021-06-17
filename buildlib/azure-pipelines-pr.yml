@@ -320,6 +320,22 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
             env:
               LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
+          - bash: |
+              set -Eex
+              curl -L -o /tmp/ucx.deb -s https://github.com/openucx/ucx/releases/download/v1.10.1/ucx-v1.10.1-ubuntu20.04-mofed5.x-cuda11.2.debgit
+              apt install /tmp/ucx.deb
+              # Start server on ucx-1.10 and connect client from master
+              /usr/bin/ucp_client_server -c tag &
+              server_pid=$!
+              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib ./bin/ucp_client_server -c tag -a `hostname -I`
+              kill -9 $server_pid
+              # Start server on ucx master and connect 1.10 to it
+              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib ./bin/ucp_client_server -c tag &
+              server_pid=$!
+              /usr/bin/ucp_client_server -c tag -a `hostname -I`
+              kill -9 $server_pid
+            workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
+            displayName: Test binary compatibility
 
   - stage: Coverity
     dependsOn: [Static_check]

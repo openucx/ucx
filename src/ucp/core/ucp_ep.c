@@ -739,7 +739,6 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     const ucp_wireup_sockaddr_data_t *sa_data = &conn_request->sa_data;
     unsigned ep_init_flags                    = 0;
     ucp_unpacked_address_t           remote_addr;
-    uint64_t                         addr_flags;
     unsigned                         i;
     ucs_status_t                     status;
 
@@ -752,15 +751,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                   sa_data->addr_mode);
     }
 
-    addr_flags = ucp_worker_common_address_pack_flags(worker) |
-                 UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
-
-    /* coverity[overrun-local] */
-    status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
-    if (status != UCS_OK) {
-        ucp_listener_reject(conn_request->listener, conn_request);
-        return status;
-    }
+    remote_addr = *conn_request->remote_addr;
 
     for (i = 0; i < remote_addr.address_count; ++i) {
         remote_addr.address_list[i].dev_addr  = conn_request->remote_dev_addr;
@@ -770,7 +761,6 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     status = ucp_ep_cm_server_create_connected(worker, ep_init_flags,
                                                &remote_addr, conn_request,
                                                ep_p);
-    ucs_free(remote_addr.address_list);
     return status;
 }
 
