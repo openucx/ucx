@@ -79,12 +79,15 @@ uct_rc_verbs_update_tx_res(uct_rc_iface_t *iface, uct_rc_verbs_ep_t *ep,
 static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                         ucs_status_t ep_status)
 {
-    struct ibv_wc     *wc      = arg;
-    uct_rc_iface_t    *iface   = ucs_derived_of(ib_iface, uct_rc_iface_t);
-    ucs_log_level_t    log_lvl = UCS_LOG_LEVEL_FATAL;
+    struct ibv_wc *wc       = arg;
+    uct_rc_iface_t *iface   = ucs_derived_of(ib_iface, uct_rc_iface_t);
+    ucs_log_level_t log_lvl = UCS_LOG_LEVEL_FATAL;
+    char peer_info[128]     = {};
+    unsigned dest_qpn;
     uct_rc_verbs_ep_t *ep;
-    ucs_status_t       status;
-    unsigned           count;
+    ucs_status_t status;
+    unsigned count;
+    struct ibv_ah_attr ah_attr;
 
     ep = ucs_derived_of(uct_rc_iface_lookup_ep(iface, wc->qp_num),
                         uct_rc_verbs_ep_t);
@@ -111,10 +114,16 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                       &ep->super.super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
+    status  = uct_ib_query_qp_peer_info(ep->qp, &ah_attr, &dest_qpn);
+    if (status == UCS_OK) {
+        uct_ib_log_dump_qp_peer_info(ib_iface, &ah_attr, dest_qpn, peer_info,
+                                     sizeof(peer_info));
+    }
 
     ucs_log(log_lvl,
-            "send completion with error: %s qpn 0x%x wrid 0x%lx vendor_err 0x%x",
-            ibv_wc_status_str(wc->status), wc->qp_num, wc->wr_id, wc->vendor_err);
+            "send completion with error: %s [qpn 0x%x wrid 0x%lx"
+            "vendor_err 0x%x]\n%s", ibv_wc_status_str(wc->status), wc->qp_num,
+            wc->wr_id, wc->vendor_err, peer_info);
 }
 
 ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
