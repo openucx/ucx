@@ -1106,7 +1106,8 @@ ucs_mpool_ops_t ucp_frag_mpool_ops = {
 static ucs_mpool_t *
 ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
 {
-    int num_frags = 128;
+    int num_frags    = 128;
+    size_t frag_size = worker->context->config.ext.rndv_frag_size[key->mem_type];
     ucs_mpool_t *mpool;
     khiter_t khiter;
     int khret;
@@ -1121,8 +1122,8 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
     } else {
         mpool = ucs_malloc(sizeof(ucs_mpool_t), "ucp_worker_mpool");
         status = ucs_mpool_init(mpool, sizeof(ucp_rndv_mpool_priv_t),
-                                worker->context->config.ext.rndv_frag_size +
-                                sizeof(ucp_mem_desc_t), sizeof(ucp_mem_desc_t),
+                                frag_size + sizeof(ucp_mem_desc_t),
+                                sizeof(ucp_mem_desc_t),
                                 UCS_SYS_PCI_MAX_PAYLOAD, 128, UINT_MAX,
                                 &ucp_frag_mpool_ops, "ucp_rndv_frags");
         if (status != UCS_OK) {
@@ -1133,7 +1134,7 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
         mpriv->worker      = worker;
         mpriv->mem_type    = key->mem_type;
         mpriv->num_frags   = num_frags;
-        mpriv->frag_size   = worker->context->config.ext.rndv_frag_size;
+        mpriv->frag_size   = frag_size;
         khiter             = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash,
                                     *key, &khret);
         if (khret == UCS_KH_PUT_FAILED) {
@@ -1252,11 +1253,14 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
     size_t max_frag_size, offset, length;
     size_t min_zcopy, max_zcopy;
     ucs_memory_type_t frag_mem_type;
+    size_t frag_size;
+
+    frag_mem_type = ucp_rkey_packed_mem_type(rndv_req->send.rndv.rkey);
+    frag_size     = context->config.ext.rndv_frag_size[frag_mem_type];
 
     min_zcopy                          = config->rndv.get_zcopy.min;
     max_zcopy                          = config->rndv.get_zcopy.max;
-    max_frag_size                      = ucs_min(context->config.ext.rndv_frag_size,
-                                                 max_zcopy);
+    max_frag_size                      = ucs_min(frag_size, max_zcopy);
     rndv_req->send.rndv.remote_req_id  = remote_req_id;
     rndv_req->send.rndv.remote_address = remote_address - base_offset;
     rndv_req->send.length              = size;
@@ -1278,8 +1282,6 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
         ucs_fatal("failed to unpack rendezvous remote key received from %s: %s",
                   ucp_ep_peer_name(rndv_req->send.ep), ucs_status_string(status));
     }
-
-    frag_mem_type = ucp_rkey_packed_mem_type(rndv_req->send.rndv.rkey);
 
     ucp_rndv_req_init_zcopy_lane_map(rndv_req, rndv_req->send.mem_type,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
@@ -1310,7 +1312,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
                                    const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                                    ucs_memory_type_t frag_mem_type)
 {
-    size_t max_frag_size = worker->context->config.ext.rndv_frag_size;
+    size_t max_frag_size = worker->context->config.ext.rndv_frag_size[frag_mem_type];
     int i, num_frags;
     size_t frag_size;
     size_t offset;
@@ -1931,9 +1933,10 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
     min_zcopy        = config->rndv.put_zcopy.min;
     max_zcopy        = config->rndv.put_zcopy.max;
     rndv_size        = ucs_min(rndv_rtr_hdr->size, sreq->send.length);
-    max_frag_size    = ucs_min(context->config.ext.rndv_frag_size, max_zcopy);
-    rndv_base_offset = rndv_rtr_hdr->offset;
     frag_mem_type    = rndv_rtr_hdr->type;
+    max_frag_size    = ucs_min(context->config.ext.rndv_frag_size[frag_mem_type],
+                               max_zcopy);
+    rndv_base_offset = rndv_rtr_hdr->offset;
 
     /* initialize send req state on first fragment rndv request */
     if (rndv_base_offset == 0) {

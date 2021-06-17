@@ -20,6 +20,7 @@
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/bitmap.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
@@ -63,7 +64,7 @@ typedef struct ucp_context_config {
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
     /** RNDV pipeline fragment size */
-    size_t                                 rndv_frag_size;
+    size_t                                 rndv_frag_size[UCS_MEMORY_TYPE_LAST];
     /** RNDV pipeline fragment size */
     ucp_rndv_frag_mem_type_t               rndv_frag_mem_type;
     /** RNDV pipline send threshold */
@@ -294,7 +295,13 @@ typedef struct ucp_tl_iface_atomic_flags {
                              UCS_BIT(UCT_ATOMIC_OP_SWAP) | \
                              UCS_BIT(UCT_ATOMIC_OP_CSWAP))
 
+#define UCP_CONFIG_RNDV_FRAG_STRINGIFY(_name) #_name
 
+#define UCP_CONFIG_RNDV_FRAG_SIZE(_name, _size) \
+  { UCP_CONFIG_RNDV_FRAG_STRINGIFY(_name##_RNDV_FRAG_SIZE), \
+      _size, #_name " RNDV fragment size.\n", \
+   ucs_offsetof(ucp_config_t, ctx.rndv_frag_size[UCS_MEMORY_TYPE_##_name]), \
+   UCS_CONFIG_TYPE_MEMUNITS}
 /*
  * Define UCP active message handler.
  */

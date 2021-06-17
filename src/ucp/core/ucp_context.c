@@ -279,9 +279,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "and the resulting performance.\n",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_SIZE", "512k",
-   "RNDV fragment size \n",
-   ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+  UCP_CONFIG_RNDV_FRAG_SIZE(HOST, "512k"),
+  UCP_CONFIG_RNDV_FRAG_SIZE(CUDA, "4M"),
+  UCP_CONFIG_RNDV_FRAG_SIZE(CUDA_MANAGED, "512k"),
+  UCP_CONFIG_RNDV_FRAG_SIZE(ROCM, "512k"),
+  UCP_CONFIG_RNDV_FRAG_SIZE(ROCM_MANAGED, "512k"),
 
   {"RNDV_FRAG_MEM_TYPE", "host",
    "RNDV frag memory type.\n"
