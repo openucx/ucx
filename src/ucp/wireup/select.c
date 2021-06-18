@@ -859,7 +859,7 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
 
     if ((!(ucp_ep_get_context_features(select_params->ep) & UCP_FEATURE_RMA) &&
          !(ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE)) ||
-        (ep_init_flags & UCP_EP_INIT_CM_PHASE)) {
+        (ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY)) {
         return UCS_OK;
     }
 
@@ -910,7 +910,8 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (!ucs_test_flags(context->config.features, UCP_FEATURE_AMO32,
                         UCP_FEATURE_AMO64) ||
-        (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE | UCP_EP_INIT_CM_PHASE))) {
+        (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
+                          UCP_EP_INIT_CREATE_AM_LANE_ONLY))) {
         return UCS_OK;
     }
 
@@ -1187,7 +1188,8 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     /* Check if we need active message BW lanes */
     if (!(ucp_ep_get_context_features(ep) &
           (UCP_FEATURE_TAG | UCP_FEATURE_AM)) ||
-        (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE | UCP_EP_INIT_CM_PHASE)) ||
+        (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
+                          UCP_EP_INIT_CREATE_AM_LANE_ONLY)) ||
         (context->config.ext.max_eager_lanes < 2)) {
         return UCS_OK;
     }
@@ -1271,7 +1273,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_tl_bitmap_t tl_bitmap;
     uint8_t i;
 
-    if (ep_init_flags & UCP_EP_INIT_CM_PHASE) {
+    if (ep_init_flags & UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
         return UCS_OK;
     }
 
@@ -1401,7 +1403,8 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
     ucs_status_t status;
 
     if (!(ucp_ep_get_context_features(ep) & UCP_FEATURE_TAG) ||
-        (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE | UCP_EP_INIT_CM_PHASE)) ||
+        (ep_init_flags & (UCP_EP_INIT_FLAG_MEM_TYPE |
+                          UCP_EP_INIT_CREATE_AM_LANE_ONLY)) ||
         /* TODO: remove check below when UCP_ERR_HANDLING_MODE_PEER supports
          *       RNDV-protocol or HW TM supports fragmented protocols
          */
@@ -1798,8 +1801,11 @@ out:
     ucp_wireup_construct_lanes(&select_params, &select_ctx, addr_indices, key);
 
     /* Only two lanes must be created during CM phase (CM lane and TL lane) of
-     * connection setup between two peers */
-    ucs_assert(!(ep_init_flags & UCP_EP_INIT_CM_PHASE) || key->num_lanes == 2);
+     * connection setup between two peers, if an AM lane only requested */
+    ucs_assert(!ucs_test_all_flags(ep_init_flags,
+                                   UCP_EP_INIT_CREATE_AM_LANE_ONLY |
+                                   UCP_EP_INIT_CM_PHASE) ||
+               (key->num_lanes == 2));
 
     return UCS_OK;
 }
