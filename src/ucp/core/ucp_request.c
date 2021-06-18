@@ -302,15 +302,14 @@ static ucp_md_map_t ucp_request_get_invalidation_map(ucp_request_t *req)
     ucp_lane_index_t lane;
     ucp_lane_index_t i;
     ucp_md_map_t inv_map;
-    uint64_t cap_flags;
 
     for (i = 0, inv_map = 0;
          (key->rma_bw_lanes[i] != UCP_NULL_LANE) && (i < UCP_MAX_LANES); i++) {
-        lane      = key->rma_bw_lanes[i];
-        cap_flags = ucp_ep_get_iface_attr(ep, lane)->cap.flags;
+        lane = key->rma_bw_lanes[i];
 
-        if (cap_flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
-            ucs_assert(cap_flags & UCT_IFACE_FLAG_GET_ZCOPY);
+        if (!ucp_ep_is_lane_p2p(ep, lane)) {
+            ucs_assert(ucp_ep_get_iface_attr(ep, lane)->cap.flags &
+                       UCT_IFACE_FLAG_GET_ZCOPY);
             ucs_assert(ucp_ep_md_attr(ep, lane)->cap.flags &
                        UCT_MD_FLAG_INVALIDATE);
             inv_map |= UCS_BIT(ucp_ep_md_index(ep, lane));

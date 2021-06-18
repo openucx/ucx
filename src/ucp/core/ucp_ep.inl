@@ -272,16 +272,13 @@ static UCS_F_ALWAYS_INLINE ucp_lane_index_t ucp_ep_get_cm_lane(ucp_ep_h ep)
     return ucp_ep_config(ep)->key.cm_lane;
 }
 
-static inline int
+static UCS_F_ALWAYS_INLINE int
 ucp_ep_config_connect_p2p(ucp_worker_h worker,
                           const ucp_ep_config_key_t *ep_config_key,
                           ucp_rsc_index_t rsc_index)
 {
-    /* The EP with CM lane has to be connected to remote EP, so prefer native
-     * UCT p2p capability. */
-    return ucp_ep_config_key_has_cm_lane(ep_config_key) ?
-           ucp_worker_is_tl_p2p(worker, rsc_index) :
-           !ucp_worker_is_tl_2iface(worker, rsc_index);
+    return ucp_wireup_connect_p2p(worker, rsc_index,
+                                  ucp_ep_config_key_has_cm_lane(ep_config_key));
 }
 
 static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)

@@ -686,6 +686,29 @@ protected:
                      ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane2)));
     }
 
+    bool has_rndv_lanes(ucp_ep_h ep)
+    {
+        for (ucp_lane_index_t lane_idx = 0;
+             lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
+            if ((lane_idx != ucp_ep_get_cm_lane(ep)) &&
+                (ucp_ep_get_iface_attr(ep, lane_idx)->cap.flags &
+                 (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY)) &&
+                /* RNDV lanes should be selected if transport supports GET/PUT
+                 * Zcopy and: */
+                (/* - either memory invalidation can be done on its MD */
+                 (ucp_ep_md_attr(ep, lane_idx)->cap.flags &
+                  UCT_MD_FLAG_INVALIDATE) ||
+                 /* - or CONNECT_TO_EP connection establishment mode is used */
+                 (ucp_ep_is_lane_p2p(ep, lane_idx)))) {
+                EXPECT_NE(UCP_NULL_LANE, ucp_ep_config(ep)->key.rma_bw_lanes[0])
+                        << "RNDV lanes should be selected";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 protected:
     static unsigned m_err_count;
 };
@@ -968,11 +991,15 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
                      !cm_use_all_devices()) {
     ucp_worker_cfg_index_t cm_ep_cfg_index, wireup_ep_cfg_index;
     ucp_ep_config_key_t *cm_ep_cfg_key, *wireup_ep_cfg_key;
+    bool should_check_rndv_lanes;
 
     /* get configuration index for EP created through CM */
     listen_and_communicate(false, SEND_DIRECTION_C2S);
-    cm_ep_cfg_index = sender().ep()->cfg_index;
-    cm_ep_cfg_key   = &ucp_ep_config(sender().ep())->key;
+    cm_ep_cfg_index         = sender().ep()->cfg_index;
+    cm_ep_cfg_key           = &ucp_ep_config(sender().ep())->key;
+    /* Don't check RNDV lanes, because CM prefers p2p connection mode for RNDV
+     * lanes and they don't support memory invalidation on MD */
+    should_check_rndv_lanes = !has_rndv_lanes(sender().ep());
     EXPECT_NE(UCP_NULL_LANE, ucp_ep_get_cm_lane(sender().ep()));
     disconnect(sender());
     disconnect(receiver());
@@ -993,10 +1020,6 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
      * the other doesn't */
     EXPECT_NE(cm_ep_cfg_index, wireup_ep_cfg_index);
 
-    /* EP config RMA BW must be equal */
-    EXPECT_EQ(cm_ep_cfg_key->rma_bw_md_map,
-              wireup_ep_cfg_key->rma_bw_md_map);
-
     /* compare AM lanes */
     cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->am_lane,
                   wireup_ep_cfg_key, wireup_ep_cfg_key->am_lane);
@@ -1013,10 +1036,17 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
     }
 
     /* compare RMA BW lanes */
-    for (ucp_lane_index_t lane = 0;
-         cm_ep_cfg_key->rma_bw_lanes[lane] != UCP_NULL_LANE; ++lane) {
-        cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->rma_bw_lanes[lane],
-                      wireup_ep_cfg_key, wireup_ep_cfg_key->rma_bw_lanes[lane]);
+    if (should_check_rndv_lanes) {
+        /* EP config RMA BW must be equal */
+        EXPECT_EQ(cm_ep_cfg_key->rma_bw_md_map,
+                  wireup_ep_cfg_key->rma_bw_md_map);
+
+        for (ucp_lane_index_t lane = 0;
+             cm_ep_cfg_key->rma_bw_lanes[lane] != UCP_NULL_LANE; ++lane) {
+            cmp_cfg_lanes(cm_ep_cfg_key, cm_ep_cfg_key->rma_bw_lanes[lane],
+                          wireup_ep_cfg_key,
+                          wireup_ep_cfg_key->rma_bw_lanes[lane]);
+        }
     }
 
     /* compare RKEY PTR lanes */
@@ -1223,25 +1253,6 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_cm_private_data, all, "all")
 
 
 class test_ucp_sockaddr_check_lanes : public test_ucp_sockaddr {
-protected:
-    void check_rndv_lanes(ucp_ep_h ep)
-    {
-        for (ucp_lane_index_t lane_idx = 0;
-             lane_idx < ucp_ep_num_lanes(ep); ++lane_idx) {
-            if ((lane_idx != ucp_ep_get_cm_lane(ep)) &&
-                (ucp_ep_get_iface_attr(ep, lane_idx)->cap.flags &
-                         (UCT_IFACE_FLAG_GET_ZCOPY |
-                          UCT_IFACE_FLAG_PUT_ZCOPY)) &&
-                /* RNDV lanes should be selected if transport supports GET/PUT
-                 * Zcopy and memory invalidation */
-                (ucp_ep_md_attr(ep, lane_idx)->cap.flags &
-                         UCT_MD_FLAG_INVALIDATE)) {
-                EXPECT_NE(UCP_NULL_LANE, ucp_ep_config(ep)->key.rma_bw_lanes[0])
-                        << "RNDV lanes should be selected";
-                break;
-            }
-        }
-    }
 };
 
 
@@ -1249,8 +1260,8 @@ UCS_TEST_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes)
 {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
-    check_rndv_lanes(sender().ep());
-    check_rndv_lanes(receiver().ep());
+    EXPECT_EQ(has_rndv_lanes(sender().ep()),
+              has_rndv_lanes(receiver().ep()));
 
     concurrent_disconnect(UCP_EP_CLOSE_MODE_FLUSH);
 }
