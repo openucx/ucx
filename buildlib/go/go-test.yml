@@ -43,7 +43,9 @@ jobs:
         try_load_cuda_env
         set -eE
         ./autogen.sh
-        ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
+        mkdir build
+        cd build
+        ../contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
           --with-go --enable-gtest=no --with-cuda=$have_cuda
         make -j`nproc`
         make install
@@ -60,5 +62,5 @@ jobs:
           exit 0;
         fi
         set -Eex
-        make -C bindings/go test
+        make -C build/bindings/go test
       displayName: Run go tests
