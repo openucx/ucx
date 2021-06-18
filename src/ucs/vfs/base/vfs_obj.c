@@ -26,6 +26,7 @@ typedef enum {
     UCS_VFS_NODE_TYPE_DIR,
     UCS_VFS_NODE_TYPE_RO_FILE,
     UCS_VFS_NODE_TYPE_SUBDIR,
+    UCS_VFS_NODE_TYPE_SYM_LINK,
     UCS_VFS_NODE_TYPE_LAST
 } ucs_vfs_node_type_t;
 
@@ -35,18 +36,39 @@ typedef enum {
 
 typedef struct ucs_vfs_node ucs_vfs_node_t;
 struct ucs_vfs_node {
-    ucs_vfs_node_type_t    type;
-    int                    refcount;
-    uint8_t                flags;
-    void                   *obj;
-    ucs_vfs_node_t         *parent;
-    ucs_list_link_t        children;
-    ucs_vfs_file_show_cb_t text_cb;
-    ucs_vfs_refresh_cb_t   refresh_cb;
-    ucs_list_link_t        list;
-    void                   *arg_ptr;
-    uint64_t               arg_u64;
-    char                   path[0];
+    /* Node type. ucs_vfs_node_type_t contains possible node types. */
+    ucs_vfs_node_type_t type;
+    /* Reference count. Increase the value to avoid deletion while executing
+       updating callbacks. */
+    int                 refcount;
+    /* Node flags. E.g. to indicate need for an update. */
+    uint8_t             flags;
+    /* Pointer to an object describing by the node. */
+    void                *obj;
+    /* Pointer to parent node in VFS hierarchy. */
+    ucs_vfs_node_t      *parent;
+    /* List of children in VFS hierarchy. */
+    ucs_list_link_t     children;
+    /* List item to represent the node in parent's list of children. */
+    ucs_list_link_t     list;
+    union {
+        /* Callback method to show content of the file. */
+        ucs_vfs_file_show_cb_t text_cb;
+        /* Callback method to update content of the directory. */
+        ucs_vfs_refresh_cb_t   refresh_cb;
+        /* Pointer to the target node of symbolic link. */
+        ucs_vfs_node_t         *target;
+    };
+    /* Pointer to an optional argument passed to the text_cb. */
+    void                *arg_ptr;
+    /* Type of value passed to ucs_vfs_show_primitive referenced by arg_ptr. */
+    uint64_t            arg_u64;
+    /* List of symbolic links targeting to the node. */
+    ucs_list_link_t     links;
+    /* List item to represent the node in target node's list of links. */
+    ucs_list_link_t     link_list;
+    /* Path to the node in VFS. */
+    char                path[0];
 };
 
 KHASH_MAP_INIT_STR(vfs_path, ucs_vfs_node_t*);
@@ -191,7 +213,9 @@ static void ucs_vfs_node_init(ucs_vfs_node_t *node, ucs_vfs_node_type_t type,
     node->refresh_cb = NULL;
     node->arg_ptr    = NULL;
     node->arg_u64    = 0;
+    node->target     = NULL;
     ucs_list_head_init(&node->children);
+    ucs_list_head_init(&node->links);
 }
 
 /* must be called with lock held */
@@ -350,7 +374,7 @@ static void ucs_vfs_node_increase_refcount(ucs_vfs_node_t *node)
 static void ucs_vfs_node_decrease_refcount(ucs_vfs_node_t *node)
 {
     ucs_vfs_node_t *parent_node = node->parent;
-    ucs_vfs_node_t *child_node, *tmp_node;
+    ucs_vfs_node_t *child_node, *tmp_node, *link_node;
 
     if (--node->refcount > 0) {
         return;
@@ -364,6 +388,17 @@ static void ucs_vfs_node_decrease_refcount(ucs_vfs_node_t *node)
         ucs_vfs_node_decrease_refcount(child_node);
     }
 
+    /* Remove symbolic link nodes targeting to the node.
+       This is a workaround for the following scenario:
+       1. Link to target is created.
+       2. Target is removed.
+       3. A new directory is created with the same path as the original target.
+       This is not an issue for regular file system. However, it can lead to an
+       incorrect linking in case of representing UCX objects in VFS. */
+    ucs_list_for_each_safe(link_node, tmp_node, &node->links, link_list) {
+        ucs_vfs_node_decrease_refcount(link_node);
+    }
+
     /* remove from object hash */
     if (node->obj != NULL) {
         ucs_vfs_kh_del_key(vfs_obj, &ucs_vfs_obj_context.obj_hash,
@@ -375,6 +410,11 @@ static void ucs_vfs_node_decrease_refcount(ucs_vfs_node_t *node)
 
     /* remove from parent's list */
     ucs_list_del(&node->list);
+
+    /* for symbolic link: remove from target's list */
+    if (node->type == UCS_VFS_NODE_TYPE_SYM_LINK) {
+        ucs_list_del(&node->link_list);
+    }
 
     ucs_free(node);
 
@@ -436,6 +476,24 @@ static void ucs_vfs_path_list_dir_cb(ucs_vfs_node_t *node,
     }
 }
 
+/* must be called with lock held */
+static void
+ucs_vfs_get_link_path(ucs_vfs_node_t *node, ucs_string_buffer_t *strb)
+{
+    size_t i, n;
+
+    ucs_assert(ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_SYM_LINK));
+
+    n = ucs_string_count_char(node->path, '/');
+    for (i = 1; i < n; ++i) {
+        ucs_string_buffer_appendf(strb, "../");
+    }
+
+    if (node->target != NULL) {
+        ucs_string_buffer_appendf(strb, "%s", &node->target->path[1]);
+    }
+}
+
 ucs_status_t
 ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
 {
@@ -476,6 +534,38 @@ ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
         node->arg_u64 = arg_u64;
     }
 
+    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
+
+    return status;
+}
+
+ucs_status_t
+ucs_vfs_obj_add_sym_link(void *obj, void *target_obj, const char *rel_path, ...)
+{
+    ucs_vfs_node_t *link_node;
+    ucs_vfs_node_t *target_node;
+    va_list ap;
+    ucs_status_t status;
+
+    ucs_spin_lock(&ucs_vfs_obj_context.lock);
+
+    target_node = ucs_vfs_node_find_by_obj(target_obj);
+    if (target_node == NULL) {
+        status = UCS_ERR_INVALID_PARAM;
+        goto out;
+    }
+
+    va_start(ap, rel_path);
+    status = ucs_vfs_node_add(obj, UCS_VFS_NODE_TYPE_SYM_LINK, NULL, rel_path,
+                              ap, &link_node);
+    va_end(ap);
+
+    if (status == UCS_OK) {
+        link_node->target = target_node;
+        ucs_list_add_head(&target_node->links, &link_node->link_list);
+    }
+
+out:
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
 
     return status;
@@ -541,6 +631,14 @@ ucs_status_t ucs_vfs_path_get_info(const char *path, ucs_vfs_path_info_t *info)
         info->mode = S_IFDIR | S_IRUSR | S_IXUSR;
         info->size = ucs_list_length(&node->children);
         status     = UCS_OK;
+        break;
+    case UCS_VFS_NODE_TYPE_SYM_LINK:
+        ucs_string_buffer_init(&strb);
+        ucs_vfs_get_link_path(node, &strb);
+        info->mode = S_IFLNK | S_IRUSR | S_IXUSR;
+        info->size = ucs_string_buffer_length(&strb);
+        ucs_string_buffer_cleanup(&strb);
+        status = UCS_OK;
         break;
     default:
         status = UCS_ERR_NO_ELEM;
@@ -610,6 +708,28 @@ ucs_vfs_path_list_dir(const char *path, ucs_vfs_list_dir_cb_t dir_cb, void *arg)
     status = UCS_OK;
 
     ucs_vfs_node_decrease_refcount(node);
+
+out_unlock:
+    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
+
+    return status;
+}
+
+ucs_status_t ucs_vfs_path_get_link(const char *path, ucs_string_buffer_t *strb)
+{
+    ucs_vfs_node_t *node;
+    ucs_status_t status;
+
+    ucs_spin_lock(&ucs_vfs_obj_context.lock);
+
+    node = ucs_vfs_node_find_by_path(path);
+    if (!ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_SYM_LINK)) {
+        status = UCS_ERR_NO_ELEM;
+        goto out_unlock;
+    }
+
+    ucs_vfs_get_link_path(node, strb);
+    status = UCS_OK;
 
 out_unlock:
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);

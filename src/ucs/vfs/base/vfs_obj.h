@@ -158,7 +158,7 @@ typedef void (*ucs_vfs_list_dir_cb_t)(const char *name, void *arg);
  * @return UCS_ERR_ALREADY_EXISTS if directory with specified name already
  *                                exists for given @a obj.
  *         UCS_ERR_INVALID_PARAM  if node for @a parent_obj does not exist.
- *         UCS_ERR_NO_MEMORY      if cannot create a new node for @a obj.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for directory.
  *         UCS_OK                 otherwise.
  */
 ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
@@ -180,13 +180,35 @@ ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
  *
  * @return UCS_ERR_ALREADY_EXISTS if file with specified name already exists.
  *         UCS_ERR_INVALID_PARAM  if node for @a obj does not exist.
- *         UCS_ERR_NO_MEMORY      if cannot create a new node for @a obj.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for read-only
+ *                                file.
  *         UCS_OK                 otherwise.
  */
 ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
                                      void *arg_ptr, uint64_t arg_u64,
                                      const char *rel_path, ...)
         UCS_F_PRINTF(5, 6);
+
+
+/**
+ * Add symbolic link to directory representing @a target_obj. If @a obj is NULL,
+ * the mount directory will be used as the base for @a rel_path.
+ *
+ * @param [in] obj        Pointer to the object. @a rel_path is relative to
+ *                        @a obj directory.
+ * @param [in] target_obj Pointer to object to be linked.
+ * @param [in] rel_path   Format string which specifies relative path to the
+ *                        symbolic link.
+ *
+ * @return UCS_ERR_ALREADY_EXISTS if file with specified name already exists.
+ *         UCS_ERR_INVALID_PARAM  if node for @a obj or for @a target_obj does
+ *                                not exist.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for symbolic link.
+ *         UCS_OK                 otherwise.
+ */
+ucs_status_t
+ucs_vfs_obj_add_sym_link(void *obj, void *target_obj, const char *rel_path, ...)
+        UCS_F_PRINTF(3, 4);
 
 
 /**
@@ -258,6 +280,21 @@ ucs_vfs_path_read_file(const char *path, ucs_string_buffer_t *strb);
  */
 ucs_status_t ucs_vfs_path_list_dir(const char *path,
                                    ucs_vfs_list_dir_cb_t dir_cb, void *arg);
+
+
+/**
+ * Fill the string buffer @a strb with the target of a symbolic link.
+ *
+ * @param [in]    path     String which specifies path to the symbolic link node
+ *                         in VFS.
+ * @param [inout] strb     String buffer to be filled with relative path to the
+ *                         target.
+ *
+ * @return UCS_OK          VFS node corresponding to specified path exists and
+ *                         the node is a symbolic link.
+ *         UCS_ERR_NO_ELEM Otherwise.
+ */
+ucs_status_t ucs_vfs_path_get_link(const char *path, ucs_string_buffer_t *strb);
 
 END_C_DECLS
 
