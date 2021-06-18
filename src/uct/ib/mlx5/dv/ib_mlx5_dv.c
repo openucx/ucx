@@ -246,6 +246,41 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
+                          void *out, size_t outlen)
+{
+    int ret;
+
+    UCT_IB_MLX5DV_SET(query_qp_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_QP);
+    UCT_IB_MLX5DV_SET(query_qp_in, in, qpn, qp->qp_num);
+
+    switch (qp->type) {
+    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
+        ret = mlx5dv_devx_qp_query(qp->verbs.qp, in, inlen, out, outlen);
+        if (ret) {
+            ucs_error("mlx5dv_devx_qp_query(%x) failed, syndrome %x: %m",
+                      UCT_IB_MLX5_CMD_OP_QUERY_QP,
+                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+            return UCS_ERR_IO_ERROR;
+        }
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
+        ret = mlx5dv_devx_obj_query(qp->devx.obj, in, inlen, out, outlen);
+        if (ret) {
+            ucs_error("mlx5dv_devx_obj_query(%x) failed, syndrome %x: %m",
+                      UCT_IB_MLX5_CMD_OP_QUERY_QP,
+                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+            return UCS_ERR_IO_ERROR;
+        }
+        break;
+    case UCT_IB_MLX5_OBJ_TYPE_LAST:
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state)
 {
@@ -329,6 +364,55 @@ void uct_ib_mlx5_devx_set_qpc_port_affinity(uct_ib_mlx5_md_t *md,
     }
     UCT_IB_MLX5DV_SET(qpc, qpc, lag_tx_port_affinity, tx_port);
 }
+
+ucs_status_t
+uct_ib_mlx5_devx_query_qp_peer_info(uct_ib_iface_t *iface, uct_ib_mlx5_qp_t *qp,
+                                    struct ibv_ah_attr *ah_attr,
+                                    uint32_t *dest_qpn)
+{
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
+    void *ctx;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_query_qp(qp, in, sizeof(in), out, sizeof(out));
+    if (status != UCS_OK) {
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ctx                        = UCT_IB_MLX5DV_ADDR_OF(query_qp_out, out, qpc);
+    *dest_qpn                  = UCT_IB_MLX5DV_GET(qpc, ctx, remote_qpn);
+    ah_attr->dlid              = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                                   primary_address_path.rlid);
+    ah_attr->sl                = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                                   primary_address_path.sl);
+    ah_attr->port_num          = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                            primary_address_path.vhca_port_num);
+    ah_attr->static_rate       = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                                primary_address_path.stat_rate);
+    ah_attr->src_path_bits     = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                                     primary_address_path.mlid);
+    ah_attr->is_global         = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                                   primary_address_path.grh) ||
+                                                   uct_ib_iface_is_roce(iface);
+    ah_attr->grh.sgid_index    = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                           primary_address_path.src_addr_index);
+    ah_attr->grh.traffic_class = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                                   primary_address_path.tclass);
+    ah_attr->grh.flow_label    = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                               primary_address_path.flow_label);
+    ah_attr->grh.hop_limit     = UCT_IB_MLX5DV_GET(qpc, ctx,
+                                                primary_address_path.hop_limit);
+
+    if (ah_attr->is_global) {
+        memcpy(ah_attr->grh.dgid.raw,
+               UCT_IB_MLX5DV_ADDR_OF(qpc, ctx, primary_address_path.rgid_rip),
+               sizeof(ah_attr->grh.dgid.raw));
+    }
+
+    return UCS_OK;
+}
+
 #endif
 
 ucs_status_t uct_ib_mlx5dv_arm_cq(uct_ib_mlx5_cq_t *cq, int solicited)

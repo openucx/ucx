@@ -110,6 +110,22 @@ void uct_ib_log_dump_atomic_masked_cswap(int argsize, uint64_t compare, uint64_t
              argsize * 8, compare, compare_mask, swap, swap_mask);
 }
 
+void uct_ib_log_dump_qp_peer_info(uct_ib_iface_t *iface,
+                                  const struct ibv_ah_attr *ah_attr,
+                                  uint32_t dest_qpn, char *buf, size_t max)
+{
+    char *s    = buf;
+    char *ends = buf + max;
+
+    snprintf(s, ends - s, "[rqpn 0x%x ", dest_qpn);
+    s += strlen(s);
+
+    uct_ib_ah_attr_str(s, ends - s, ah_attr);
+    s += strlen(s);
+
+    snprintf(s, ends - s, "]");
+}
+
 void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
                                      uint32_t sender_qp, uint16_t sender_lid,
                                      void *data, size_t length,

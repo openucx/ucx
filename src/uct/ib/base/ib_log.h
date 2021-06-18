@@ -53,6 +53,10 @@ void uct_ib_log_dump_atomic_masked_cswap(int argsize, uint64_t compare, uint64_t
                                          uint64_t swap, uint64_t swap_mask,
                                          char *buf, size_t max);
 
+void uct_ib_log_dump_qp_peer_info(uct_ib_iface_t *iface,
+                                  const struct ibv_ah_attr *ah_attr,
+                                  uint32_t dest_qpn, char *buf, size_t max);
+
 void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
                                      uint32_t sender_qp, uint16_t sender_lid,
                                      void *data, size_t length,
