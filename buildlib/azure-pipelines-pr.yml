@@ -323,7 +323,7 @@ stages:
           - bash: |
               set -Eex
               curl -L -o /tmp/ucx.deb -s https://github.com/openucx/ucx/releases/download/v1.10.1/ucx-v1.10.1-ubuntu20.04-mofed5.x-cuda11.2.debgit
-              apt install /tmp/ucx.deb
+              sudo apt install /tmp/ucx.deb
               # Start server on ucx-1.10 and connect client from master
               /usr/bin/ucp_client_server -c tag &
               server_pid=$!
