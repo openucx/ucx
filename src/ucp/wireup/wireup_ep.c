@@ -110,7 +110,7 @@ static ssize_t ucp_wireup_ep_bcopy_send_func(uct_ep_h uct_ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
-static uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
+uct_ep_h ucp_wireup_ep_get_msg_ep(ucp_wireup_ep_t *wireup_ep)
 {
     uct_ep_h wireup_msg_ep;
 
