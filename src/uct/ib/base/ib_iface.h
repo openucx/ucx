@@ -290,7 +290,7 @@ typedef struct uct_ib_fence_info {
 } uct_ib_fence_info_t;
 
 
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_iface_ops_t*,
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
                   const uct_ib_iface_config_t*,
                   const uct_ib_iface_init_attr_t*);

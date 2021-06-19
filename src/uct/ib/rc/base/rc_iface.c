@@ -513,8 +513,8 @@ static int uct_rc_iface_config_limit_value(const char *name,
      }
 }
 
-UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops,
-                    uct_iface_ops_t *tl_ops, uct_md_h md, uct_worker_h worker,
+UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
+                    uct_rc_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
                     const uct_rc_iface_common_config_t *config,
                     const uct_ib_iface_init_attr_t *init_attr)
@@ -524,7 +524,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_rc_iface_ops_t *ops,
     ucs_status_t status;
     unsigned tx_cq_size;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, tl_ops, md, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
                               params, &config->super, init_attr);
 
     tx_cq_size                  = uct_ib_cq_size(&self->super, init_attr,
