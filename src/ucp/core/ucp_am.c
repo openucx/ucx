@@ -777,6 +777,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.msg_proto.am.header_length = header_length;
     req->send.buffer                     = (void*)buffer;
     req->send.datatype                   = datatype;
+    req->send.dt_count                   = count;
     req->send.mem_type                   = UCS_MEMORY_TYPE_HOST;
     req->send.lane                       = ep->am_lane;
     req->send.pending_lane               = UCP_NULL_LANE;
@@ -874,6 +875,12 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
         }
     }
 
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_REPLAY)) {
+        /* Return from here to avoid packing user header multiple times. */
+        ucp_request_send(req, 0);
+        return req + 1;
+    }
+
     if ((req->send.uct.func == proto->zcopy_single) ||
         (req->send.uct.func == proto->zcopy_multi))
     {
@@ -890,6 +897,12 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
     ucp_request_send(req, 0);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);
+    } else if (ucs_unlikely(!ucp_ep_is_connected(req->send.ep))) {
+        /* EP may be reconfigured during connection. After reconfiguration,
+           the request needs to be replayed. UCP_OP_ATTR_FLAG_FAST_CMPL
+           will affect the threshold calculation during replay and need to
+           be saved. */
+        req->send.replay_flags = param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL;
     }
 
     ucp_request_set_send_callback_param(param, req, send);
@@ -999,6 +1012,27 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
 out:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
     return ret;
+}
+
+void ucp_am_replay_request(ucp_request_t *req)
+{
+    ucp_ep_h ep = req->send.ep;
+    ucp_request_param_t param = {
+        .op_attr_mask = req->send.replay_flags,
+    };
+    uint32_t flags = req->send.msg_proto.am.flags;
+
+    ucs_assert(req->flags & UCP_REQUEST_FLAG_REPLAY);
+    req->send.lane = ep->am_lane;
+    if (flags & UCP_AM_SEND_REPLY) {
+        ucp_am_send_req(req, req->send.dt_count, &ucp_ep_config(ep)->am, &param,
+                        ucp_ep_config(ep)->am_u.reply_proto,
+                        ucp_am_get_short_max_reply(ep), flags);
+    } else {
+        ucp_am_send_req(req, req->send.dt_count, &ucp_ep_config(ep)->am, &param,
+                        ucp_ep_config(ep)->am_u.proto,
+                        ucp_ep_config(ep)->am_u.max_eager_short, flags);
+    }
 }
 
 ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id, const void *payload,

@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2020.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -144,6 +145,10 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     }
 
     ucp_request_send(req, 0);
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_REPLAY)) {
+        return req + 1;
+    }
+
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         goto out_put_request;
     }

@@ -1,6 +1,7 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
  * Copyright (C) Los Alamos National Security, LLC. 2019 ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -612,5 +613,7 @@ void ucp_ep_discard_lanes(ucp_ep_h ucp_ep, ucs_status_t status);
  *                          has no resources.
  */
 void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);
+
+int ucp_ep_is_connected(ucp_ep_h ep);
 
 #endif
