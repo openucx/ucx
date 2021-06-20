@@ -430,7 +430,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     attr.path_mtu                   = iface->super.super.super.config.path_mtu;
     attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
     attr.ah_attr.sl                 = iface->super.super.super.config.sl;
-    /* ib_core expects valied ah_attr::port_num when IBV_QP_AV is set */
+    /* ib_core expects valid ah_attr::port_num when IBV_QP_AV is set */
     attr.ah_attr.port_num           = iface->super.super.super.config.port_num;
     attr_mask                       = IBV_QP_STATE     |
                                       IBV_QP_PATH_MTU  |
@@ -1464,7 +1464,7 @@ uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,
         ucs_assert(ep != iface->tx.fc_ep);
         uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
     } else {
-        /* ep has another dci assinged to post operations, which sould be
+        /* ep has another dci assigned to post operations, which should be
          * restarted too */
         uct_dc_mlx5_ep_handle_failure(ep, cqe, ep_status);
     }
