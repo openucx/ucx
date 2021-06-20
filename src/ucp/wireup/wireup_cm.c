@@ -572,6 +572,8 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
               ucp_ep->flags, ucp_ep->cfg_index);
     ucs_log_indent(1);
 
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+
     wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
@@ -1229,13 +1231,16 @@ static unsigned ucp_cm_server_conn_notify_progress(void *arg)
     ucp_ep_h ucp_ep = arg;
 
     UCS_ASYNC_BLOCK(&ucp_ep->worker->async);
+
+    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
+
     if (!ucp_ep->worker->context->config.ext.cm_use_all_devices) {
         ucp_wireup_remote_connected(ucp_ep);
     } else {
         ucp_wireup_send_pre_request(ucp_ep);
     }
-    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
 
+    UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
     return 1;
 }
 
@@ -1344,6 +1349,27 @@ err:
     return status;
 }
 
+static int
+ucp_cm_connect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
+                                      void *arg)
+{
+    ucp_cm_client_connect_progress_arg_t *client_connect_arg;
+
+    if (elem->cb == ucp_cm_client_connect_progress) {
+        client_connect_arg = elem->arg;
+        if (client_connect_arg->ucp_ep == arg) {
+            ucp_cm_client_connect_prog_arg_free(client_connect_arg);
+            return 1;
+        }
+    } else if (((elem->cb == ucp_cm_server_conn_notify_progress) ||
+                (elem->cb == ucp_cm_client_uct_connect_progress)) &&
+               (elem->arg == arg)) {
+        return 1;
+    }
+
+    return 0;
+}
+
 void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
 {
     uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ucp_ep);
@@ -1357,6 +1383,13 @@ void ucp_ep_cm_disconnect_cm_lane(ucp_ep_h ucp_ep)
 
     ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_DISCONNECTED_CM_LANE,
                         UCP_EP_FLAG_LOCAL_CONNECTED);
+
+    /* Remove the client's connect_progress or the server's connect notify
+     * callbacks from the callbackq to make sure it won't be invoked after
+     * CM lane has already been disconnected */
+    ucs_callbackq_remove_if(&ucp_ep->worker->uct->progress_q,
+                            ucp_cm_connect_progress_remove_filter,
+                            ucp_ep);
 
     /* this will invoke @ref ucp_cm_disconnect_cb on remote side */
     status = uct_ep_disconnect(uct_cm_ep, 0);
@@ -1385,29 +1418,15 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep, const ucp_request_param_
     return request;
 }
 
-static int ucp_cm_cbs_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
+static int ucp_cm_progress_remove_filter(const ucs_callbackq_elem_t *elem,
+                                         void *arg)
 {
-    ucp_cm_client_connect_progress_arg_t *client_connect_arg;
-
-    if (elem->cb == ucp_cm_client_connect_progress) {
-        client_connect_arg = elem->arg;
-        if (client_connect_arg->ucp_ep == arg) {
-            ucp_cm_client_connect_prog_arg_free(client_connect_arg);
-            return 1;
-        } else {
-            return 0;
-        }
-    } else if ((elem->cb == ucp_ep_cm_disconnect_progress)      ||
-               (elem->cb == ucp_cm_server_conn_notify_progress) ||
-               (elem->cb == ucp_cm_client_uct_connect_progress)) {
-        return arg == elem->arg;
-    } else {
-        return 0;
-    }
+    return ucp_cm_connect_progress_remove_filter(elem, arg) ||
+           ((elem->cb == ucp_ep_cm_disconnect_progress) && (elem->arg == arg));
 }
 
 void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep)
 {
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q,
-                            ucp_cm_cbs_remove_filter, ep);
+                            ucp_cm_progress_remove_filter, ep);
 }
