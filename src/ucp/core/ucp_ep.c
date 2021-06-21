@@ -262,9 +262,6 @@ static UCS_F_NOINLINE void ucp_ep_remove_progress_callbacks(ucp_ep_h ep)
                             ucp_wireup_msg_ack_cb_pred, ep);
 
     ucs_callbackq_remove_if(&worker->uct->progress_q,
-                            ucp_worker_err_handle_remove_filter, ep);
-
-    ucs_callbackq_remove_if(&worker->uct->progress_q,
                             ucp_listener_accept_cb_remove_filter, ep);
 
     ucs_callbackq_remove_if(&worker->uct->progress_q,
@@ -1159,6 +1156,9 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
 
 void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
 {
+    unsigned ep_flush_flags = (ucp_ep_config(ep)->key.err_mode ==
+                                       UCP_ERR_HANDLING_MODE_NONE) ?
+                              UCT_FLUSH_FLAG_LOCAL: UCT_FLUSH_FLAG_CANCEL;
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
@@ -1176,7 +1176,7 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
         }
 
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
-        ucp_worker_discard_uct_ep(ep, uct_ep, UCT_FLUSH_FLAG_CANCEL,
+        ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
                                   ucp_ep_err_pending_purge,
                                   UCS_STATUS_PTR(status),
                                   (ucp_send_nbx_callback_t)ucs_empty_function,
@@ -2668,14 +2668,34 @@ void ucp_ep_get_tl_bitmap(ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap)
     }
 }
 
+void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                              ucs_string_buffer_t *lane_info_strb)
+{
+    ucp_rsc_index_t rsc_index;
+    uct_tl_resource_desc_t *tl_rsc;
+
+    if (lane == UCP_NULL_LANE) {
+        ucs_string_buffer_appendf(lane_info_strb, "NULL lane");
+    } else if (lane == ucp_ep_get_cm_lane(ucp_ep)) {
+        ucs_string_buffer_appendf(lane_info_strb, "CM lane");
+    } else {
+        rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
+        tl_rsc    = &ucp_ep->worker->context->tl_rscs[rsc_index].tl_rsc;
+
+        ucs_string_buffer_appendf(lane_info_strb,
+                                  UCT_TL_RESOURCE_DESC_FMT,
+                                  UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
+    }
+}
+
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
 {
-    /* Do not invoke error handler if it's not enabled */
-    if ((ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
-        /* error callback is not set */
-        (ucp_ep_ext_control(ep)->err_cb == NULL) ||
-        /* the EP has been closed by user, or error callback already called */
-        (ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_ERR_HANDLER_INVOKED))) {
+    ucs_assert(ucp_ep_ext_control(ep)->err_cb != NULL);
+    ucs_assert(ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_NONE);
+
+    /* Do not invoke error handler if the EP has been closed by user, or error
+     * callback already called */
+    if ((ep->flags & (UCP_EP_FLAG_CLOSED | UCP_EP_FLAG_ERR_HANDLER_INVOKED))) {
         return;
     }
 
