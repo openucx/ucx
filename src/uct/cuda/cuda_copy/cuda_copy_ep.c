@@ -100,16 +100,13 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
                                    size_t length, uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
-    int found                    = 0;
     uct_cuda_copy_event_desc_t *cuda_event;
     uct_cuda_copy_queue_desc_t *q_desc;
-    uct_cuda_copy_queue_desc_t *q_elem;
     ucs_status_t status;
     ucs_memory_type_t src_type;
     ucs_memory_type_t dst_type;
     cudaStream_t *stream;
     ucs_queue_head_t *event_q;
-    ucs_queue_iter_t q_iter;
 
     if (!length) {
         return UCS_OK;
@@ -149,14 +146,8 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     ucs_queue_push(event_q, &cuda_event->queue);
     cuda_event->comp = comp;
 
-    ucs_queue_for_each_safe(q_elem, q_iter, &iface->active_queue, queue) {
-        if (q_elem == q_desc) {
-            found = 1;
-            break;
-        }
-    }
-
-    if (!found) {
+    if (q_desc->active_queue == NULL) {
+        q_desc->active_queue = &iface->active_queue;
         ucs_queue_push(&iface->active_queue, &q_desc->queue);
     }
 

@@ -200,6 +200,7 @@ static unsigned uct_cuda_copy_iface_progress(uct_iface_h tl_iface)
         count  += uct_cuda_copy_progress_event_queue(iface, event_q,
                                                     (max_events - count));
         if (ucs_queue_is_empty(event_q)) {
+            q_desc->active_queue = NULL;
             ucs_queue_del_iter(&iface->active_queue, iter);
         }
     }
@@ -369,6 +370,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     ucs_status_t status;
     cudaStream_t *stream;
     ucs_queue_head_t *event_q;
+    uct_cuda_copy_queue_desc_t *q_desc;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_copy_iface_ops,
                               &uct_cuda_copy_iface_internal_ops, md, worker,
@@ -406,6 +408,10 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
                                      &self->async.event_arg);
 
     ucs_queue_head_init(&self->active_queue);
+
+    uct_cuda_copy_for_each_q_desc(self, q_desc, {
+        q_desc->active_queue = NULL;
+    });
 
     uct_cuda_copy_for_each_event_q(self, event_q, {
         ucs_queue_head_init(event_q);

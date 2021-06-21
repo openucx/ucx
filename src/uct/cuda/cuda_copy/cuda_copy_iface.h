@@ -18,6 +18,17 @@
 #define UCT_CUDA_COPY_IFACE_OVERHEAD          (0)
 
 
+#define uct_cuda_copy_for_each_q_desc(iface, q_var, code) { \
+    int __i,__j; \
+    for (__i = 0; __i < UCS_MEMORY_TYPE_LAST; ++__i) { \
+        for (__j = 0; __j < UCS_MEMORY_TYPE_LAST; ++__j) { \
+            (q_var) = &iface->queue_desc[__i][__j]; \
+            code; \
+        } \
+    } \
+}
+
+
 #define uct_cuda_copy_for_each_stream(iface, stream_var, code) { \
     int __i,__j; \
     for (__i = 0; __i < UCS_MEMORY_TYPE_LAST; ++__i) { \
@@ -56,6 +67,7 @@ typedef uint64_t uct_cuda_copy_iface_addr_t;
 typedef struct uct_cuda_copy_queue_desc {
     cudaStream_t                stream;
     ucs_queue_head_t            outstanding_event_q;
+    ucs_queue_head_t            *active_queue;
     ucs_queue_elem_t            queue;
 } uct_cuda_copy_queue_desc_t;
 
