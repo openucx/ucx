@@ -27,6 +27,7 @@ struct ucx_request {
     uint32_t                     conn_id;
     size_t                       recv_length;
     ucs_list_link_t              pos;
+    const char                   *what;
 };
 
 // Holds details of arrived AM message
@@ -701,6 +702,8 @@ bool UcxConnection::disconnect_progress()
         }
     }
 
+    UCX_CONN_LOG << "disconnection completed";
+
     assert(ucs_list_is_empty(&_all_requests));
     invoke_callback(_disconnect_cb, UCS_OK);
     return true;
@@ -788,7 +791,8 @@ void UcxConnection::cancel_all()
     unsigned     count = 0;
     ucs_list_for_each_safe(request, tmp, &_all_requests, pos) {
         ++count;
-        UCX_CONN_LOG << "canceling " << request << " request #" << count;
+        UCX_CONN_LOG << "canceling " << request->what << " request " << request
+                     << " #" << count;
         ucp_request_cancel(_context.worker(), request);
     }
 }
@@ -987,9 +991,9 @@ void UcxConnection::request_completed(ucx_request *r)
     ucs_list_del(&r->pos);
 
     if (_disconnect_cb != NULL) {
-        UCX_CONN_LOG << "completing request " << r << " with status \""
-                     << ucs_status_string(r->status) << "\" (" << r->status
-                     << ")" << " during disconnect";
+        UCX_CONN_LOG << "completing " << r->what << " request " << r
+                     << " with status \"" << ucs_status_string(r->status)
+                     << "\" (" << r->status << ")" << " during disconnect";
 
         if (ucs_list_is_empty(&_all_requests)) {
             _context.move_connection_to_disconnecting(this);
@@ -1059,6 +1063,7 @@ bool UcxConnection::process_request(const char *what,
             // will be completed by callback
             r->callback = callback;
             r->conn     = this;
+            r->what     = what;
             request_started(r);
             return true;
         }
