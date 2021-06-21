@@ -33,12 +33,9 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      "Max number of cuda events. -1 is infinite",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
 
-    {"MEMTYPE_CACHE", "y",
-     "Enable memory type cache in cuda_copy UCT\n",
-     ucs_offsetof(uct_cuda_copy_iface_config_t, enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
-
     {"DETECT_THRESH", "128k",
-     "Threshold for detecting src/dst mem_types for stream picking",
+     "Threshold for detecting buffer memory types for picking the best stream to use. "
+     "Messages smaller than this value will pick a random stream.",
      ucs_offsetof(uct_cuda_copy_iface_config_t, detect_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
     {NULL}
@@ -127,17 +124,18 @@ static ucs_status_t uct_cuda_copy_iface_flush(uct_iface_h tl_iface, unsigned fla
                                               uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
-    ucs_queue_head_t *event_q;
+    uct_cuda_copy_queue_desc_t *q_desc;
+    ucs_queue_iter_t iter;
 
     if (comp != NULL) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    uct_cuda_copy_for_each_event_q(iface, event_q, {
-        if (!ucs_queue_is_empty(event_q)) {
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        if (!ucs_queue_is_empty(&q_desc->outstanding_event_q)) {
 	        goto not_empty;
         }
-    });
+    }
 
     UCT_TL_IFACE_STAT_FLUSH(ucs_derived_of(tl_iface, uct_base_iface_t));
     return UCS_OK;
@@ -184,6 +182,7 @@ uct_cuda_copy_progress_event_queue(uct_cuda_copy_iface_t *iface,
             break;
         }
     }
+
     return count;
 }
 
@@ -193,12 +192,17 @@ static unsigned uct_cuda_copy_iface_progress(uct_iface_h tl_iface)
     unsigned max_events = iface->config.max_poll;
     unsigned count      = 0;
     ucs_queue_head_t *event_q;
+    uct_cuda_copy_queue_desc_t *q_desc;
+    ucs_queue_iter_t iter;
 
-
-    uct_cuda_copy_for_each_event_q(iface, event_q, {
-        count += uct_cuda_copy_progress_event_queue(iface, event_q,
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        event_q = &q_desc->outstanding_event_q;
+        count  += uct_cuda_copy_progress_event_queue(iface, event_q,
                                                     (max_events - count));
-    });
+        if (ucs_queue_is_empty(event_q)) {
+            ucs_queue_del_iter(&iface->active_queue, iter);
+        }
+    }
 
     return count;
 }
@@ -226,15 +230,19 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
     ucs_status_t status;
     cudaStream_t *stream;
     ucs_queue_head_t *event_q;
+    uct_cuda_copy_queue_desc_t *q_desc;
+    ucs_queue_iter_t iter;
 
-
-    uct_cuda_copy_for_each_event_q(iface, event_q, {
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        event_q = &q_desc->outstanding_event_q;
         if (uct_cuda_copy_queue_head_ready(event_q)) {
             return UCS_ERR_BUSY;
         }
-    });
+    }
 
-    uct_cuda_copy_for_each_stream_event_q(iface, stream, event_q, {
+    ucs_queue_for_each_safe(q_desc, iter, &iface->active_queue, queue) {
+        event_q = &q_desc->outstanding_event_q;
+        stream  = &q_desc->stream;
         if (!ucs_queue_is_empty(event_q)) {
             status =
 #if (__CUDACC_VER_MAJOR__ >= 100000)
@@ -249,7 +257,7 @@ static ucs_status_t uct_cuda_copy_iface_event_fd_arm(uct_iface_h tl_iface,
                 return status;
             }
         }
-    });
+    }
 
     return UCS_OK;
 }
@@ -340,77 +348,6 @@ uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
-static void
-uct_cuda_copy_memory_info_set_host(ucs_memory_info_t *mem_info)
-{
-    mem_info->type    = UCS_MEMORY_TYPE_HOST;
-    mem_info->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-}
-
-static void
-uct_cuda_copy_memory_detect_slowpath(uct_cuda_copy_iface_t *iface,
-                                     const void *address, size_t length,
-                                     ucs_memory_info_t *mem_info)
-{
-    uct_md_mem_attr_t mem_attr;
-    ucs_status_t status;
-
-    mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
-                          UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
-
-    status = uct_cuda_base_mem_query(NULL, address, length, &mem_attr);
-    if (status == UCS_OK) {
-        mem_info->type    = mem_attr.mem_type;
-        mem_info->sys_dev = mem_attr.sys_dev;
-        /*TODO: Update logic here to add whole allocations not just length */
-        if (iface->memtype_cache != NULL) {
-            ucs_memtype_cache_update(iface->memtype_cache, address,
-                                     length, mem_info);
-        }
-        return;
-    }
-
-    /* Memory type not detected by any memtype MD - assume it is host memory */
-    uct_cuda_copy_memory_info_set_host(mem_info);
-}
-
-void uct_cuda_copy_memory_detect(uct_cuda_copy_iface_t *iface,
-                                 const void *address, size_t length,
-                                 ucs_memory_info_t *mem_info)
-{
-    ucs_status_t status;
-
-    if (ucs_likely(iface->memtype_cache != NULL)) {
-        if (!iface->memtype_cache->pgtable.num_regions) {
-            goto out_host_mem;
-        }
-
-        status = ucs_memtype_cache_lookup(iface->memtype_cache, address,
-                                          length, mem_info);
-        if (ucs_likely(status != UCS_OK)) {
-            ucs_assert(status == UCS_ERR_NO_ELEM);
-            goto out_host_mem;
-        }
-
-        if ((mem_info->type != UCS_MEMORY_TYPE_UNKNOWN) &&
-            ((mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN))) {
-            return;
-        }
-
-        /* Fall thru to slow-path memory type and system device detection by UCT
-         * memory domains. In any case, the memory type cache is not expected to
-         * return HOST memory type.
-         */
-        ucs_assert(mem_info->type != UCS_MEMORY_TYPE_HOST);
-    }
-
-    uct_cuda_copy_memory_detect_slowpath(iface, address, length, mem_info);
-    return;
-
-out_host_mem:
-    uct_cuda_copy_memory_info_set_host(mem_info);
-}
-
 static ucs_mpool_ops_t uct_cuda_copy_event_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -446,19 +383,9 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     }
 
     self->id                          = ucs_generate_uuid((uintptr_t)self);
-    self->memtype_cache               = NULL;
     self->config.max_poll             = config->max_poll;
     self->config.max_cuda_events      = config->max_cuda_events;
     self->config.detect_thresh        = config->detect_thresh;
-    self->config.enable_memtype_cache = config->enable_memtype_cache;
-
-    if (self->config.enable_memtype_cache) {
-        status = ucs_memtype_cache_create(&self->memtype_cache);
-        if (status != UCS_OK) {
-            ucs_error("could not create memtype cache for cuda_copy UCT");
-            return UCS_ERR_IO_ERROR;
-        }
-    }
 
     status = ucs_mpool_init(&self->cuda_event_desc,
                             0,
@@ -478,6 +405,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     uct_iface_set_async_event_params(params, &self->async.event_cb,
                                      &self->async.event_arg);
 
+    ucs_queue_head_init(&self->active_queue);
+
     uct_cuda_copy_for_each_event_q(self, event_q, {
         ucs_queue_head_init(event_q);
     });
@@ -485,6 +414,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     uct_cuda_copy_for_each_stream(self, stream, {
         *stream = 0;
     });
+
+    self->short_stream = 0;
 
     return UCS_OK;
 }
@@ -501,10 +432,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
     if (active) {
 
-        if (self->memtype_cache != NULL) {
-            ucs_memtype_cache_destroy(self->memtype_cache);
-        }
-
         uct_cuda_copy_for_each_stream_event_q(self, stream, event_q, {
             if (*stream != 0) {
                 if (!ucs_queue_is_empty(event_q)) {
@@ -513,6 +440,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_copy_iface_t)
                 UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(*stream));
            }
         });
+
+        if (self->short_stream) {
+            UCT_CUDA_FUNC_LOG_ERR(cudaStreamDestroy(self->short_stream));
+        }
     }
 
     ucs_mpool_cleanup(&self->cuda_event_desc, 1);

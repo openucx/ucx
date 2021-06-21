@@ -13,7 +13,6 @@
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
 #include <ucs/profile/profile.h>
-#include <ucs/memory/memtype_cache.h>
 #include <ucs/debug/memtrack.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
@@ -50,7 +49,13 @@ uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
     cudaStream_t *stream;
     ucs_status_t status;
 
-    stream = &iface->stream[src_type][dst_type];
+    if ((src_type == UCS_MEMORY_TYPE_LAST) &&
+        (dst_type == UCS_MEMORY_TYPE_LAST)) {
+        stream = &iface->short_stream;
+    } else {
+        stream = &iface->queue_desc[src_type][dst_type].stream;
+    }
+
     if (*stream == 0) {
         status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(stream,
                                                                  cudaStreamNonBlocking));
@@ -62,17 +67,49 @@ uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
     return stream;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_memory_type_t
+uct_cuda_copy_get_mem_type(void *address)
+{
+    CUmemorytype mem_type;
+    CUresult cu_err;
+
+    cu_err = cuPointerGetAttribute(&mem_type, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+                                   (CUdeviceptr)address);
+    if (cu_err == CUDA_SUCCESS) {
+        switch(mem_type) {
+            case CU_MEMORYTYPE_UNIFIED:
+                mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+                break;
+            case CU_MEMORYTYPE_DEVICE:
+                mem_type = UCS_MEMORY_TYPE_CUDA;
+                break;
+            case CU_MEMORYTYPE_HOST:
+            default:
+                mem_type = UCS_MEMORY_TYPE_HOST;
+                break;
+        }
+    } else {
+        mem_type = UCS_MEMORY_TYPE_HOST;
+    }
+
+    return mem_type;
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
                                    size_t length, uct_completion_t *comp)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
+    int found                    = 0;
     uct_cuda_copy_event_desc_t *cuda_event;
+    uct_cuda_copy_queue_desc_t *q_desc;
+    uct_cuda_copy_queue_desc_t *q_elem;
     ucs_status_t status;
-    ucs_memory_info_t src_info;
-    ucs_memory_info_t dst_info;
+    ucs_memory_type_t src_type;
+    ucs_memory_type_t dst_type;
     cudaStream_t *stream;
     ucs_queue_head_t *event_q;
+    ucs_queue_iter_t q_iter;
 
     if (!length) {
         return UCS_OK;
@@ -82,17 +119,18 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         /* pick random mem_types */
         /* TODO: how expensive is random number generation wrt pointer query */
         ucs_rand_range(UCS_MEMORY_TYPE_HOST, (UCS_MEMORY_TYPE_LAST - 1),
-                       (int*)&src_info.type);
+                       (int*)&src_type);
         ucs_rand_range(UCS_MEMORY_TYPE_HOST, (UCS_MEMORY_TYPE_LAST - 1),
-                       (int*)&dst_info.type);
+                       (int*)&dst_type);
 
     } else {
-        uct_cuda_copy_memory_detect(iface, src, length, &src_info);
-        uct_cuda_copy_memory_detect(iface, dst, length, &dst_info);
+        src_type = uct_cuda_copy_get_mem_type(src);
+        dst_type = uct_cuda_copy_get_mem_type(dst);
     }
 
-    stream  = uct_cuda_copy_get_stream(iface, src_info.type, dst_info.type);
-    event_q = &iface->outstanding_event_q[src_info.type][dst_info.type];
+    stream  = uct_cuda_copy_get_stream(iface, src_type, dst_type);
+    q_desc  = &iface->queue_desc[src_type][dst_type];
+    event_q = &q_desc->outstanding_event_q;
 
     cuda_event = ucs_mpool_get(&iface->cuda_event_desc);
     if (ucs_unlikely(cuda_event == NULL)) {
@@ -111,9 +149,20 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
     ucs_queue_push(event_q, &cuda_event->queue);
     cuda_event->comp = comp;
 
+    ucs_queue_for_each_safe(q_elem, q_iter, &iface->active_queue, queue) {
+        if (q_elem == q_desc) {
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found) {
+        ucs_queue_push(&iface->active_queue, &q_desc->queue);
+    }
+
     ucs_trace("cuda async issued :%p dst:%p[%s], src:%p[%s] len:%ld",
-              cuda_event, dst, ucs_memory_type_names[src_info.type], src,
-              ucs_memory_type_names[dst_info.type], length);
+              cuda_event, dst, ucs_memory_type_names[src_type], src,
+              ucs_memory_type_names[dst_type], length);
     return UCS_INPROGRESS;
 }
 
@@ -166,15 +215,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
-    ucs_memory_info_t src_info;
-    ucs_memory_info_t dst_info;
     cudaStream_t *stream;
 
-    uct_cuda_copy_memory_detect(iface, buffer, (size_t)length, &src_info);
-    uct_cuda_copy_memory_detect(iface, (void *)remote_addr, (size_t)length,
-                                &dst_info);
-
-    stream  = uct_cuda_copy_get_stream(iface, src_info.type, dst_info.type);
+    stream  = uct_cuda_copy_get_stream(iface, UCS_MEMORY_TYPE_LAST,
+                                       UCS_MEMORY_TYPE_LAST);
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
                                           cudaMemcpyDefault, *stream));
@@ -193,15 +237,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     ucs_status_t status;
-    ucs_memory_info_t src_info;
-    ucs_memory_info_t dst_info;
     cudaStream_t *stream;
 
-    uct_cuda_copy_memory_detect(iface, (void *)remote_addr, (size_t)length,
-                                &src_info);
-    uct_cuda_copy_memory_detect(iface, buffer, (size_t)length, &dst_info);
-
-    stream  = uct_cuda_copy_get_stream(iface, src_info.type, dst_info.type);
+    stream  = uct_cuda_copy_get_stream(iface, UCS_MEMORY_TYPE_LAST,
+                                       UCS_MEMORY_TYPE_LAST);
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
                                           cudaMemcpyDefault, *stream));
