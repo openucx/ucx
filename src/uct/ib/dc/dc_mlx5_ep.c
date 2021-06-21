@@ -1244,14 +1244,13 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
-        return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+            return UCS_ARBITER_CB_RESULT_STOP;
+        }
+        uct_dc_mlx5_iface_dci_alloc(iface, ep);
     }
 
-    if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-        return UCS_ARBITER_CB_RESULT_STOP;
-    }
-    uct_dc_mlx5_iface_dci_alloc(iface, ep);
     ucs_assert_always(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
