@@ -130,6 +130,11 @@ static uct_iface_ops_t uct_rocm_copy_iface_ops = {
     .iface_is_reachable       = uct_rocm_copy_iface_is_reachable,
 };
 
+static uct_iface_internal_ops_t uct_rocm_copy_iface_internal_ops = {
+    .iface_estimate_perf = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_success,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+};
+
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -137,7 +142,8 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h work
     uct_rocm_copy_iface_config_t *config = ucs_derived_of(tl_config,
                                                           uct_rocm_copy_iface_config_t);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_copy_iface_ops, NULL,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_copy_iface_ops,
+                              &uct_rocm_copy_iface_internal_ops,
                               md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_COPY_TL_NAME));
