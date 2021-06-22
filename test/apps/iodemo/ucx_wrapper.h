@@ -10,6 +10,7 @@
 #include <ucp/api/ucp.h>
 #include <ucs/algorithm/crc.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/sys/math.h>
 #include <ucs/sys/sock.h>
 #include <deque>
 #include <exception>
@@ -270,6 +271,10 @@ public:
         return _establish_cb == NULL;
     }
 
+    const std::string& get_peer_name() const {
+        return _remote_address;
+    }
+
     bool is_disconnecting() const {
         return _disconnect_cb != NULL;
     }
@@ -336,6 +341,7 @@ private:
     uint64_t        _remote_conn_id;
     char            _log_prefix[MAX_LOG_PREFIX_SIZE];
     ucp_ep_h        _ep;
+    std::string     _remote_address;
     void            *_close_request;
     ucs_list_link_t _all_requests;
     ucs_status_t    _ucx_status;
