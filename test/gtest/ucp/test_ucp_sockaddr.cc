@@ -600,52 +600,6 @@ public:
         m_test_addr.set_port(1);
     }
 
-    void connect_and_fail_wireup(entity &e, uint32_t wait_ep_flags,
-                                 bool fail_msg_send)
-    {
-        start_listener(cb_type());
-
-        scoped_log_handler slh(wrap_errors_logger);
-        client_ep_connect();
-        if (!wait_for_server_ep(false)) {
-            UCS_TEST_SKIP_R("cannot connect to server");
-        }
-
-        if (fail_msg_send) {
-            /* Emulate failure of WIREUP MSG sending by setting the AM Bcopy
-             * function which always return EP_TIMEOUT error */
-            for (ucp_lane_index_t lane_idx = 0;
-                 lane_idx < ucp_ep_num_lanes(e.ep()); ++lane_idx) {
-                uct_ep_h uct_ep = e.ep()->uct_eps[lane_idx];
-
-                uct_ep->iface->ops.ep_am_bcopy =
-                        reinterpret_cast<uct_ep_am_bcopy_func_t>(
-                                ucs_empty_function_return_bc_ep_timeout);
-            }
-        }
-
-        while (!(e.ep()->flags & wait_ep_flags)) {
-            progress();
-        }
-
-        if (!fail_msg_send) {
-            /* Emulate failure of preparation of WIREUP MSG sending by setting
-             * the device address getter to the function that always returns
-             * error */
-            for (ucp_lane_index_t lane_idx = 0;
-                 lane_idx < ucp_ep_num_lanes(e.ep()); ++lane_idx) {
-                uct_ep_h uct_ep = e.ep()->uct_eps[lane_idx];
-
-                uct_ep->iface->ops.iface_get_device_address =
-                        reinterpret_cast<uct_iface_get_device_address_func_t>(
-                                ucs_empty_function_return_ep_timeout);
-            }
-        }
-
-        wait_for_flag(&m_err_count);
-        concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
-    }
-
     static ucs_log_func_rc_t
     detect_fail_no_err_cb(const char *file, unsigned line, const char *function,
                           ucs_log_level_t level,
@@ -723,13 +677,6 @@ protected:
 
     bool cm_use_all_devices() const {
         return get_variant_value() & TEST_MODIFIER_CM_USE_ALL_DEVICES;
-    }
-
-    static void cmp_cfg_lanes(ucp_ep_config_key_t *key1, ucp_lane_index_t lane1,
-                              ucp_ep_config_key_t *key2, ucp_lane_index_t lane2) {
-        EXPECT_TRUE(((lane1 == UCP_NULL_LANE) && (lane2 == UCP_NULL_LANE)) ||
-                    ((lane1 != UCP_NULL_LANE) && (lane2 != UCP_NULL_LANE) &&
-                     ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane2)));
     }
 
     bool has_rndv_lanes(ucp_ep_h ep)
@@ -1033,7 +980,101 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listener_invalid_params,
     ucp_listener_destroy(listener);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
+
+
+class test_ucp_sockaddr_wireup : public test_ucp_sockaddr {
+public:
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants,
+                      uint64_t features = UCP_FEATURE_TAG) {
+        /* It is enough to check TAG-only, since we are interested in WIREUP
+         * testing only */
+        get_test_variants_cm_mode(variants, features, CONN_REQ_TAG, "tag");
+    }
+
+protected:
+    static void cmp_cfg_lanes(ucp_ep_config_key_t *key1, ucp_lane_index_t lane1,
+                              ucp_ep_config_key_t *key2, ucp_lane_index_t lane2) {
+        EXPECT_TRUE(((lane1 == UCP_NULL_LANE) && (lane2 == UCP_NULL_LANE)) ||
+                    ((lane1 != UCP_NULL_LANE) && (lane2 != UCP_NULL_LANE) &&
+                     ucp_ep_config_lane_is_peer_match(key1, lane1, key2, lane2)));
+    }
+
+    bool check_ep_flags(entity &e, uint32_t wait_ep_flags)
+    {
+        bool result;
+
+        UCS_ASYNC_BLOCK(&e.worker()->async);
+        result = ucs_test_all_flags(e.ep()->flags, wait_ep_flags);
+        UCS_ASYNC_UNBLOCK(&e.worker()->async);
+
+        return result;
+    }
+
+    typedef enum {
+        FAIL_WIREUP_MSG_SEND,
+        FAIL_WIREUP_MSG_ADDR_PACK,
+        FAIL_WIREUP_SET_EP_FAILED
+    } fail_wireup_t;
+
+    void connect_and_fail_wireup(entity &e, uint32_t wait_ep_flags,
+                                 fail_wireup_t fail_wireup_type)
+    {
+        start_listener(cb_type());
+
+        scoped_log_handler slh(wrap_errors_logger);
+        client_ep_connect();
+        if (!wait_for_server_ep(false)) {
+            UCS_TEST_SKIP_R("cannot connect to server");
+        }
+
+        if (fail_wireup_type == FAIL_WIREUP_MSG_SEND) {
+            /* Emulate failure of WIREUP MSG sending by setting the AM Bcopy
+             * function which always return EP_TIMEOUT error */
+            UCS_ASYNC_BLOCK(&e.worker()->async);
+            for (ucp_lane_index_t lane_idx = 0;
+                 lane_idx < ucp_ep_num_lanes(e.ep()); ++lane_idx) {
+                uct_ep_h uct_ep = e.ep()->uct_eps[lane_idx];
+                uct_ep->iface->ops.ep_am_bcopy =
+                        reinterpret_cast<uct_ep_am_bcopy_func_t>(
+                                ucs_empty_function_return_bc_ep_timeout);
+            }
+            UCS_ASYNC_UNBLOCK(&e.worker()->async);
+        }
+
+        while (!check_ep_flags(e, wait_ep_flags)) {
+            progress();
+        }
+
+        if (fail_wireup_type == FAIL_WIREUP_MSG_ADDR_PACK) {
+            /* Emulate failure of preparation of WIREUP MSG sending by setting
+             * the device address getter to the function that always returns
+             * error */
+            UCS_ASYNC_BLOCK(&e.worker()->async);
+            for (ucp_lane_index_t lane_idx = 0;
+                 lane_idx < ucp_ep_num_lanes(e.ep()); ++lane_idx) {
+                uct_ep_h uct_ep = e.ep()->uct_eps[lane_idx];
+                uct_ep->iface->ops.iface_get_device_address =
+                        reinterpret_cast<uct_iface_get_device_address_func_t>(
+                                ucs_empty_function_return_ep_timeout);
+            }
+            UCS_ASYNC_UNBLOCK(&e.worker()->async);
+        } else if (fail_wireup_type == FAIL_WIREUP_SET_EP_FAILED) {
+            /* Emulate failure of the endpoint by invoking error handling
+             * procedure */
+            UCS_ASYNC_BLOCK(&e.worker()->async);
+            ucp_worker_set_ep_failed(e.worker(), e.ep(), NULL, UCP_NULL_LANE,
+                                     UCS_ERR_ENDPOINT_TIMEOUT);
+            UCS_ASYNC_UNBLOCK(&e.worker()->async);
+        }
+
+        wait_for_flag(&m_err_count);
+        concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
+    }    
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup, compare_cm_and_wireup_configs,
                      !cm_use_all_devices()) {
     ucp_worker_cfg_index_t cm_ep_cfg_index, wireup_ep_cfg_index;
     ucp_ep_config_key_t *cm_ep_cfg_key, *wireup_ep_cfg_key;
@@ -1114,32 +1155,53 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, compare_cm_and_wireup_configs,
     }
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, connect_and_fail_wireup_msg_on_client,
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup,
+                     connect_and_fail_wireup_msg_send_on_client,
                      !cm_use_all_devices())
 {
-    connect_and_fail_wireup(sender(), UCP_EP_FLAG_CONNECT_REQ_QUEUED, true);
+    connect_and_fail_wireup(sender(), UCP_EP_FLAG_CONNECT_REQ_QUEUED,
+                            FAIL_WIREUP_MSG_SEND);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, connect_and_fail_wireup_msg_on_server,
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup,
+                     connect_and_fail_wireup_msg_send_on_server,
                      !cm_use_all_devices())
 {
     connect_and_fail_wireup(receiver(), UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED,
-                            true);
+                            FAIL_WIREUP_MSG_SEND);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, connect_and_fail_wireup_on_client,
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup,
+                     connect_and_fail_wireup_msg_pack_addr_on_client,
                      !cm_use_all_devices())
 {
-    connect_and_fail_wireup(sender(), UCP_EP_FLAG_CLIENT_CONNECT_CB, false);
+    connect_and_fail_wireup(sender(), UCP_EP_FLAG_CLIENT_CONNECT_CB,
+                            FAIL_WIREUP_MSG_ADDR_PACK);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, connect_and_fail_wireup_on_server,
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup,
+                     connect_and_fail_wireup_msg_pack_addr_on_server,
                      !cm_use_all_devices())
 {
-    connect_and_fail_wireup(receiver(), UCP_EP_FLAG_SERVER_NOTIFY_CB, false);
+    connect_and_fail_wireup(receiver(), UCP_EP_FLAG_SERVER_NOTIFY_CB,
+                            FAIL_WIREUP_MSG_ADDR_PACK);
 }
 
-UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
+UCS_TEST_P(test_ucp_sockaddr_wireup,
+           connect_and_fail_wireup_set_ep_failed_on_client)
+{
+    connect_and_fail_wireup(sender(), UCP_EP_FLAG_CLIENT_CONNECT_CB,
+                            FAIL_WIREUP_SET_EP_FAILED);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_wireup,
+           connect_and_fail_wireup_set_ep_failed_on_server)
+{
+    connect_and_fail_wireup(receiver(), UCP_EP_FLAG_SERVER_NOTIFY_CB,
+                            FAIL_WIREUP_SET_EP_FAILED);
+}
+
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_wireup)
 
 
 class test_ucp_sockaddr_different_tl_rsc : public test_ucp_sockaddr
