@@ -372,7 +372,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    /* No any other pending operations (except no-op, flush(CANEL), and others
+    /* No any other pending operations (except no-op, flush(CANCEL), and others
      * which don't consume TX resources) allowed to be still scheduled on an
      * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL));

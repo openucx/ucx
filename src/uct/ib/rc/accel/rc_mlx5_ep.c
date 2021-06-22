@@ -27,7 +27,7 @@
  */
 typedef struct {
     uct_rc_ep_cleanup_ctx_t    super;           /* Base class */
-    uct_ib_mlx5_qp_t           tm_qp;           /* TM Renezvous QP */
+    uct_ib_mlx5_qp_t           tm_qp;           /* TM Rendezvous QP */
     uct_ib_mlx5_qp_t           qp;              /* Main QP */
     uct_ib_mlx5_mmio_reg_t     *reg;            /* Doorbell register */
 } uct_rc_mlx5_ep_cleanup_ctx_t;
