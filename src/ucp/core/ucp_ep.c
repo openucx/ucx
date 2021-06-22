@@ -2794,10 +2794,13 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
 #if UCS_ENABLE_ASSERT
     ucs_assertv((now - ucp_ep_ext_control(ep)->ka_last_round) >=
                         worker->context->config.ext.keepalive_interval,
-                "ep %p: now=%" PRIu64 " ka_last_round=%" PRIu64
-                " ka_interval=%" PRIu64,
-                ep, now, ucp_ep_ext_control(ep)->ka_last_round,
-                worker->context->config.ext.keepalive_interval);
+                "ep %p: now=<%lf sec> ka_last_round=<%lf sec>"
+                "(diff=<%lf sec>) ka_interval=<%lf sec>",
+                ep, ucs_time_to_sec(now),
+                ucs_time_to_sec(ucp_ep_ext_control(ep)->ka_last_round),
+                ucs_time_to_sec(now - ucp_ep_ext_control(ep)->ka_last_round),
+                ucs_time_to_sec(
+                        worker->context->config.ext.keepalive_interval));
     ucp_ep_ext_control(ep)->ka_last_round = now;
 #endif
 
