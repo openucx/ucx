@@ -275,6 +275,16 @@ ucp_wireup_get_ep_tl_bitmap(ucp_ep_h ep, ucp_lane_map_t lane_map)
     return tl_bitmap;
 }
 
+int ucp_wireup_connect_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
+                           int has_cm_lane)
+{
+    /* The EP with CM lane has to be connected to remote EP, so prefer native
+     * UCT p2p capability. */
+    return has_cm_lane ?
+           ucp_worker_is_tl_p2p(worker, rsc_index) :
+           !ucp_worker_is_tl_2iface(worker, rsc_index);
+}
+
 /*
  * Select remote ep address for every remote address entry (because there
  * could be multiple ep addresses per entry). This selection is used to create
