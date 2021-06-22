@@ -353,10 +353,10 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
 {
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
-        .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.latency       = 1e-5,
+        .super.overhead      = 0,
         .super.cfg_thresh    = 0,
-        .super.cfg_priority  = 10,
+        .super.cfg_priority  = 20,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
@@ -399,7 +399,8 @@ static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
 static ucs_status_t
 ucp_proto_amo_sw_init_fetch(const ucp_proto_init_params_t *init_params)
 {
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_AMO_FETCH);
+    UCP_RMA_PROTO_INIT_CHECK_MASK(init_params, UCS_BIT(UCP_OP_ID_AMO_FETCH) |
+                                               UCS_BIT(UCP_OP_ID_AMO_CSWAP));
 
     return ucp_proto_amo_sw_init(init_params,
                                  UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE |

@@ -46,6 +46,8 @@ typedef struct {
     double                  overhead;      /* protocol overhead */
     size_t                  cfg_thresh;    /* user-configured threshold */
     unsigned                cfg_priority;  /* user configuration priority */
+    size_t                  min_length;    /* Minimal payload size */
+    size_t                  max_length;    /* Maximal payload size */
     ptrdiff_t               min_frag_offs; /* offset in uct_iface_attr_t of the
                                               minimal size of a single fragment */
     ptrdiff_t               max_frag_offs; /* offset in uct_iface_attr_t of the

@@ -8,7 +8,6 @@
 #  include "config.h"
 #endif
 
-#include "amo.inl"
 #include "rma.inl"
 
 #include <ucp/core/ucp_worker.h>
@@ -17,95 +16,140 @@
 #include <ucp/proto/proto_single.inl>
 
 
-static void ucp_proto_amo_progress_prep(uct_pending_req_t *self,
-                                        ucp_request_t **req_p,
-                                        uct_rkey_t *rkey_p)
+static void ucp_proto_amo_completed(uct_completion_t *self)
 {
-    const ucp_proto_single_priv_t *spriv;
-    ucp_request_t *req;
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
 
-    req            = ucs_container_of(self, ucp_request_t, send.uct);
-    spriv          = req->send.proto_config->priv;
+    ucp_request_complete_send(req, self->status);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_amo_progress(uct_pending_req_t *self, int op_id, size_t op_size)
+{
+    ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
+                                                            send.uct);
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+    ucp_ep_t *ep                         = req->send.ep;
+    uint64_t value                       = req->send.amo.value;
+    uint64_t remote_addr                 = req->send.amo.remote_addr;
+    uct_atomic_op_t op                   = req->send.amo.uct_op;
+    uint64_t *result64                   = req->send.buffer;
+    uint32_t *result32                   = req->send.buffer;
+    ucs_status_t status;
+    uct_rkey_t tl_rkey;
+
     req->send.lane = spriv->super.lane;
+    tl_rkey        = ucp_rma_request_get_tl_rkey(req, spriv->super.rkey_index);
 
-    *rkey_p        = ucp_rma_request_get_tl_rkey(req, spriv->super.rkey_index);
-    *req_p         = req;
+    if ((op_id != UCP_OP_ID_AMO_POST) &&
+        !(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
+        req->send.state.uct_comp.count  = 1;
+        req->send.state.uct_comp.status = UCS_OK;
+        req->send.state.uct_comp.func   = ucp_proto_amo_completed;
+        req->flags                     |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    }
+
+    if (op_size == sizeof(uint64_t)) {
+        if (op_id == UCP_OP_ID_AMO_POST) {
+            status = UCS_PROFILE_CALL(uct_ep_atomic64_post,
+                                      ep->uct_eps[req->send.lane], op, value,
+                                      remote_addr, tl_rkey);
+        } else if (op_id == UCP_OP_ID_AMO_FETCH) {
+            status = UCS_PROFILE_CALL(uct_ep_atomic64_fetch,
+                                      ep->uct_eps[req->send.lane], op, value,
+                                      result64, remote_addr, tl_rkey,
+                                      &req->send.state.uct_comp);
+        } else {
+            ucs_assert(op_id == UCP_OP_ID_AMO_CSWAP);
+            status = UCS_PROFILE_CALL(uct_ep_atomic_cswap64,
+                                      ep->uct_eps[req->send.lane], value,
+                                      *result64, remote_addr, tl_rkey, result64,
+                                      &req->send.state.uct_comp);
+        }
+    } else {
+        ucs_assert(op_size == sizeof(uint32_t));
+        if (op_id == UCP_OP_ID_AMO_POST) {
+            status = UCS_PROFILE_CALL(uct_ep_atomic32_post,
+                                      ep->uct_eps[req->send.lane], op, value,
+                                      remote_addr, tl_rkey);
+        } else if (op_id == UCP_OP_ID_AMO_FETCH) {
+            status = UCS_PROFILE_CALL(uct_ep_atomic32_fetch,
+                                      ep->uct_eps[req->send.lane], op, value,
+                                      result32, remote_addr, tl_rkey,
+                                      &req->send.state.uct_comp);
+        } else {
+            ucs_assert(op_id == UCP_OP_ID_AMO_CSWAP);
+            status = UCS_PROFILE_CALL(uct_ep_atomic_cswap32,
+                                      ep->uct_eps[req->send.lane], value,
+                                      *result32, remote_addr, tl_rkey, result32,
+                                      &req->send.state.uct_comp);
+        }
+    }
+
+    if (status == UCS_INPROGRESS) {
+        return UCS_OK;
+    }
+
+    /* Complete for UCS_OK and unexpected errors */
+    if (status != UCS_ERR_NO_RESOURCE) {
+        ucp_request_complete_send(req, status);
+    }
+
+    return status;
 }
 
 static ucs_status_t
-ucp_proto_amo_init(const ucp_proto_init_params_t *init_params, unsigned flags)
+ucp_proto_amo_init(const ucp_proto_init_params_t *init_params, int op_id,
+                   size_t length)
 {
     ucp_proto_single_init_params_t params = {
         .super.super         = *init_params,
         .super.latency       = 0,
-        .super.overhead      = 40e-9,
+        .super.overhead      = 0,
         .super.cfg_thresh    = 0,
         .super.cfg_priority  = 20,
+        .super.min_length    = length,
+        .super.max_length    = length,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
-        .super.flags         = flags,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG,
         .lane_type           = UCP_LANE_TYPE_AMO,
         .tl_cap_flags        = 0
     };
 
+    if (op_id != UCP_OP_ID_AMO_POST) {
+        params.super.flags |= UCP_PROTO_COMMON_INIT_FLAG_RESPONSE;
+    }
+
     return ucp_proto_single_init(&params);
 }
 
-static ucs_status_t ucp_proto_amo_progress_post(uct_pending_req_t *self)
-{
-    ucp_request_t *req;
-    uct_rkey_t rkey;
+#define UCP_PROTO_AMO_REGISTER(_id, _size, _op_id)                         \
+static ucs_status_t                                                        \
+ucp_amo_progress##_id##_size(uct_pending_req_t *self) {                    \
+    return ucp_proto_amo_progress(self, (_op_id), (_size)/8);              \
+}                                                                          \
+static ucs_status_t                                                        \
+ucp_amo_init##_id##_size(const ucp_proto_init_params_t *init_params) {     \
+    UCP_RMA_PROTO_INIT_CHECK(init_params, (_op_id));                       \
+    return ucp_proto_amo_init(init_params, (_op_id), (_size)/8);           \
+}                                                                          \
+static ucp_proto_t ucp_amo_proto##_id##_size = {                           \
+    .name       = "amo" #_size "/" #_id "/offload",                        \
+    .init       = ucp_amo_init##_id##_size,                                \
+    .progress   = ucp_amo_progress##_id##_size,                            \
+    .config_str = ucp_proto_single_config_str,                             \
+};                                                                         \
+UCP_PROTO_REGISTER(&ucp_amo_proto##_id##_size)
 
-    ucp_proto_amo_progress_prep(self, &req, &rkey);
-    return ucp_amo_progress_post(req, rkey);
-}
+UCP_PROTO_AMO_REGISTER(post,  32, UCP_OP_ID_AMO_POST);
+UCP_PROTO_AMO_REGISTER(fetch, 32, UCP_OP_ID_AMO_FETCH);
+UCP_PROTO_AMO_REGISTER(cswap, 32, UCP_OP_ID_AMO_CSWAP);
 
-static ucs_status_t
-ucp_proto_amo_init_post(const ucp_proto_init_params_t *init_params)
-{
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_AMO_POST);
-
-    return ucp_proto_amo_init(init_params,
-                              UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                              UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS);
-}
-
-static ucp_proto_t ucp_get_amo_post_proto = {
-    .name       = "amo/offload/post",
-    .flags      = 0,
-    .init       = ucp_proto_amo_init_post,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_amo_progress_post
-};
-UCP_PROTO_REGISTER(&ucp_get_amo_post_proto);
-
-static ucs_status_t ucp_proto_amo_progress_fetch(uct_pending_req_t *self)
-{
-    ucp_request_t *req;
-    uct_rkey_t rkey;
-
-    ucp_proto_amo_progress_prep(self, &req, &rkey);
-    return ucp_amo_progress_fetch(req, rkey);
-}
-
-static ucs_status_t
-ucp_proto_amo_init_fetch(const ucp_proto_init_params_t *init_params)
-{
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_AMO_FETCH);
-
-    return ucp_proto_amo_init(init_params,
-                              UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                              UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                              UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                              UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
-}
-
-static ucp_proto_t ucp_get_amo_fetch_proto = {
-    .name       = "amo/offload/fetch",
-    .flags      = 0,
-    .init       = ucp_proto_amo_init_fetch,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_amo_progress_fetch
-};
-UCP_PROTO_REGISTER(&ucp_get_amo_fetch_proto);
+UCP_PROTO_AMO_REGISTER(post,  64, UCP_OP_ID_AMO_POST);
+UCP_PROTO_AMO_REGISTER(fetch, 64, UCP_OP_ID_AMO_FETCH);
+UCP_PROTO_AMO_REGISTER(cswap, 64, UCP_OP_ID_AMO_CSWAP);
