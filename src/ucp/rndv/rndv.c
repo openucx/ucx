@@ -507,14 +507,14 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
         }
 
         ucp_request_send_state_advance(req, &state, proto, status);
-        if (req->send.state.dt.offset == req->send.length) {
-            if (req->send.state.uct_comp.count == 0) {
-                uct_completion_update_status(&req->send.state.uct_comp, status);
-                req->send.state.uct_comp.func(&req->send.state.uct_comp);
+        if (ucs_likely(!UCS_STATUS_IS_ERR(status))) {
+            if (req->send.state.dt.offset == req->send.length) {
+                ucp_send_request_invoke_uct_completion(req);
+                return UCS_OK;
             }
-            return UCS_OK;
-        } else if (!UCS_STATUS_IS_ERR(status)) {
-            /* return in_progress status in case if not all chunks are transmitted */
+
+            /* Return in_progress status in case if not all chunks are
+             * transmitted */
             ucp_rndv_zcopy_next_lane(req);
             return UCS_INPROGRESS;
         } else if (status == UCS_ERR_NO_RESOURCE) {
@@ -529,7 +529,6 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
             }
             return UCS_ERR_NO_RESOURCE;
         } else {
-            ucp_request_send_state_ff(req, status);
             return UCS_OK;
         }
     }

@@ -81,13 +81,14 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
 {
     ucs_assert(status != UCS_ERR_NOT_IMPLEMENTED);
 
+    ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
+                                   status);
+
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         if (status == UCS_ERR_NO_RESOURCE) {
             return UCS_ERR_NO_RESOURCE;
         }
 
-        ucp_request_send_buffer_dereg(req);
-        ucp_request_complete_send(req, status);
         return UCS_OK;
     }
 
@@ -96,13 +97,7 @@ ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
     req->send.length -= frag_length;
     if (req->send.length == 0) {
         /* bcopy is the fast path */
-        if (ucs_likely(req->send.state.uct_comp.count == 0)) {
-            if (req_id != UCS_PTR_MAP_KEY_INVALID) {
-                ucp_send_request_id_release(req);
-            }
-            ucp_request_send_buffer_dereg(req);
-            ucp_request_complete_send(req, UCS_OK);
-        }
+        ucp_send_request_invoke_uct_completion(req);
         return UCS_OK;
     }
     req->send.buffer           = UCS_PTR_BYTE_OFFSET(req->send.buffer, frag_length);
@@ -116,6 +111,7 @@ static void ucp_rma_request_bcopy_completion(uct_completion_t *self)
                                           send.state.uct_comp);
 
     if (ucs_likely(req->send.length == req->send.state.dt.offset)) {
+        ucp_send_request_id_release(req);
         ucp_request_complete_send(req, self->status);
     }
 }
@@ -126,6 +122,7 @@ static void ucp_rma_request_zcopy_completion(uct_completion_t *self)
                                           send.state.uct_comp);
 
     if (ucs_likely(req->send.length == req->send.state.dt.offset)) {
+        ucp_send_request_id_release(req);
         ucp_request_send_buffer_dereg(req);
         ucp_request_complete_send(req, self->status);
     }

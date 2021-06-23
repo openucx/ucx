@@ -607,12 +607,10 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         req->send.state.dt.offset = req->send.length;
         uct_completion_update_status(&req->send.state.uct_comp, status);
 
-        if (req->send.state.uct_comp.count == 0) {
-            /* If nothing is in-flight, call completion callback to ensure
-             * cleanup of zero-copy resources
-             */
-            req->send.state.uct_comp.func(&req->send.state.uct_comp);
-        }
+        /* If nothing is in-flight, call completion callback to ensure cleanup
+         * of zero-copy resources
+         */
+        ucp_send_request_invoke_uct_completion(req);
     } else if ((req->send.uct.func == ucp_proto_progress_rndv_rtr) ||
                (req->send.uct.func == ucp_proto_progress_am_rndv_rts) ||
                (req->send.uct.func == ucp_proto_progress_tag_rndv_rts)) {
@@ -620,6 +618,7 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
          * equivalent to reply not being received */
         ucp_ep_req_purge(req->send.ep, req, status, 1);
     } else {
+        ucp_request_send_buffer_dereg(req);
         ucp_request_complete_send(req, status);
     }
 }
