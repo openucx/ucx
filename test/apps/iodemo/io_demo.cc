@@ -1013,9 +1013,8 @@ public:
     }
 
     virtual void dispatch_connection_error(UcxConnection *conn) {
-        LOG << "disconnecting connection with status "
-            << ucs_status_string(conn->ucx_status());
-
+        LOG << "disconnecting connection " << conn->get_log_prefix()
+            << " with status " << ucs_status_string(conn->ucx_status());
         conn->disconnect(new DisconnectCallback(_conn_stat_map, conn));
     }
 
@@ -1410,6 +1409,44 @@ public:
         return data_size;
     }
 
+    static void dump_server_info(const server_info_t& server_info,
+                                 UcxLog &log)
+    {
+        log << server_info.conn->get_log_prefix()
+            << " read " << server_info.num_completed[IO_READ] << "/"
+            << server_info.num_sent[IO_READ] << " write "
+            << server_info.num_completed[IO_WRITE] << "/"
+            << server_info.num_sent[IO_WRITE];
+
+        if (server_info.conn->is_disconnecting()) {
+            log << " (disconnecting)";
+        }
+    }
+
+    void dump_timeout_waiting_for_replies_info()
+    {
+        size_t total_uncompleted = 0;
+        UcxLog log(LOG_PREFIX);
+
+        log << "timeout waiting for " << (_num_sent - _num_completed)
+            << " replies on the following connections:";
+
+        for (size_t i = 0; i < _active_servers.size(); ++i) {
+            if (get_num_uncompleted(_active_servers[i]) == 0) {
+                continue;
+            }
+
+            log << "\n";
+
+            server_info_t& server_info = _server_info[_active_servers[i]];
+            dump_server_info(server_info, log);
+
+            total_uncompleted++;
+        }
+
+        log << "\ntotal: " << total_uncompleted;
+    }
+
     void disconnect_uncompleted_servers(const char *reason) {
         std::vector<size_t> server_idxs;
         server_idxs.reserve(_active_servers.size());
@@ -1520,28 +1557,29 @@ public:
 
     void disconnect_server(size_t server_index, const char *reason) {
         server_info_t& server_info = _server_info[server_index];
+        bool disconnecting         = server_info.conn->is_disconnecting();
 
-        if (server_info.conn->is_disconnecting()) {
-            LOG << "not disconnecting " << server_info.conn << " with "
-                << get_num_uncompleted(server_info) << " uncompleted operations"
-                " (read: " << server_info.num_completed[IO_READ] << "/"
-                << server_info.num_sent[IO_READ] << "; write: "
-                << server_info.num_completed[IO_WRITE] << "/"
-                << server_info.num_sent[IO_WRITE] << ") due to \"" << reason
-                << "\" because disconnection is already in progress";
-            return;
+        {
+            UcxLog log(LOG_PREFIX);
+            if (disconnecting) {
+                log << "not ";
+            }
+
+            log << "disconnecting ";
+            dump_server_info(server_info, log);
+            log << " due to \"" << reason << "\"";
+
+            if (disconnecting) {
+                log << " because disconnection is already in progress";
+            }
         }
 
-        LOG << "disconnecting connection " << server_info.conn << " with "
-            << get_num_uncompleted(server_info) << " uncompleted operations"
-            " (read: " << server_info.num_completed[IO_READ] << "/"
-            << server_info.num_sent[IO_READ] << "; write: "
-            << server_info.num_completed[IO_WRITE] << "/"
-            << server_info.num_sent[IO_WRITE] << ") due to \"" << reason
-            << "\"";
-
-        // Destroying the connection will complete its outstanding operations
-        server_info.conn->disconnect(new DisconnectCallback(*this, server_info));
+        if (!disconnecting) {
+            /* Destroying the connection will complete its outstanding
+             * operations */
+            server_info.conn->disconnect(new DisconnectCallback(*this,
+                                                                server_info));
+        }
     }
 
     void wait_for_responses(long max_outstanding) {
@@ -1569,8 +1607,7 @@ public:
 
             elapsed_time = curr_time - start_time;
             if (elapsed_time > _test_opts.client_timeout) {
-                LOG << "timeout waiting for " << (_num_sent - _num_completed)
-                    << " replies";
+                dump_timeout_waiting_for_replies_info();
                 disconnect_uncompleted_servers("timeout for replies");
                 timer_finished = true;
             }
@@ -1826,14 +1863,11 @@ public:
 
         for (size_t server_index = 0; server_index < _server_info.size();
              ++server_index) {
-            LOG << "Disconnecting from " << server_name(server_index);
-            server_info_t &server_info = _server_info[server_index];
-            server_info.conn->disconnect(new DisconnectCallback(*this,
-                                                                server_info));
+            disconnect_server(server_index, "End of the Client run");
         }
 
         if (!_active_servers.empty()) {
-            LOG << "Waiting for " << _active_servers.size()
+            LOG << "waiting for " << _active_servers.size()
                 << " disconnects to complete";
             do {
                 progress();
