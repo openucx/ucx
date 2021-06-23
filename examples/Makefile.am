@@ -37,7 +37,7 @@ installcheck-local:
 
 if HAVE_EXAMPLES
 
-noinst_PROGRAMS = \
+bin_PROGRAMS = \
 	ucp_hello_world \
 	uct_hello_world \
 	ucp_client_server
