@@ -252,7 +252,7 @@ stages:
               set -eE
               . buildlib/tools/common.sh
               prepare_build
-              ${WORKSPACE}/configure $(CONFIGURE_OPTS) --prefix=$(Build.Repository.LocalPath)/install
+              ${WORKSPACE}/configure $(CONFIGURE_OPTS) --prefix=$(Build.Repository.LocalPath)/install --enable-examples
               gcc -v
               make -s -j `nproc`
               make install
@@ -325,18 +325,18 @@ stages:
               git clone -b v1.10.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.10
               cd $(System.DefaultWorkingDirectory)/ucx-1.10
               ./autogen.sh
-              ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.10/install
+              ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.10/install --enable-examples
               make -s -j `nproc`
               make install
               # Start server on ucx-1.10 and connect client from master
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-1.10/install/lib/ $(System.DefaultWorkingDirectory)/ucx-1.10/install/examples/ucp_client_server -c tag &
+              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-1.10/install/lib/ $(System.DefaultWorkingDirectory)/ucx-1.10/install/bin/ucp_client_server -c tag &
               server_pid=$!
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/ucp_client_server -c tag -a `hostname -I`
+              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/bin/ucp_client_server -c tag -a `hostname -I`
               kill -9 $server_pid
               # Start server on ucx master and connect 1.10 to it
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/examples/ucp_client_server -c tag &
+              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/bin/ucp_client_server -c tag &
               server_pid=$!
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-1.10/install/lib/ $(System.DefaultWorkingDirectory)/ucx-1.10/install/examples/ucp_client_server -c tag -a `hostname -I`
+              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-1.10/install/lib/ $(System.DefaultWorkingDirectory)/ucx-1.10/install/bin/ucp_client_server -c tag -a `hostname -I`
               kill -9 $server_pid
             displayName: Test binary compatibility
 
