@@ -43,7 +43,9 @@ UCS_TEST_P(test_uct_query, query_perf)
     /* At least one type of bandwidth must be non-zero */
     EXPECT_NE(0, perf_attr.bandwidth.shared + perf_attr.bandwidth.dedicated);
 
-    if (has_transport("cuda_copy") || has_transport("gdr_copy")) {
+    if (has_transport("cuda_copy") ||
+        has_transport("gdr_copy")  ||
+        has_transport("rocm_copy")) {
         uct_perf_attr_t perf_attr_get;
         perf_attr_get.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
                                    UCT_PERF_ATTR_FIELD_BANDWIDTH;
