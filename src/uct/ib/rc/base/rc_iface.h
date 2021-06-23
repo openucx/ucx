@@ -438,7 +438,7 @@ uct_rc_iface_have_tx_cqe_avail(uct_rc_iface_t* iface)
  * RDMA_READ credits are freed in completion callbacks, but not released to
  * RC iface to avoid OOO sends. Otherwise, if read credit is the only missing
  * resource and is released in completion callback, next completion callback
- * will be able to send even if pedning queue is not empty.
+ * will be able to send even if pending queue is not empty.
  */
 static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_update_reads(uct_rc_iface_t *iface)
