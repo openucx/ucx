@@ -1906,8 +1906,8 @@ private:
             // Collect min/max among all connections
             long delta_min = std::numeric_limits<long>::max(), delta_max = 0;
             size_t min_index = 0;
-            for (size_t server_index = 0; server_index < _server_info.size();
-                 ++server_index) {
+            for (size_t i = 0; i < _active_servers.size(); ++i) {
+                size_t server_index        = _active_servers[i];
                 server_info_t& server_info = _server_info[server_index];
                 long delta_completed       = server_info.num_completed[op_id] -
                                              server_info.prev_completed[op_id];
