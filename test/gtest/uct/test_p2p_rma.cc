@@ -71,7 +71,8 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
 {
     ucs_memory_type_t src_mem_type = UCS_MEMORY_TYPE_HOST;
 
-    if (has_transport("cuda_ipc")) {
+    if (has_transport("cuda_ipc") ||
+        has_transport("rocm_copy")) {
         src_mem_type = mem_type;
     }
 
