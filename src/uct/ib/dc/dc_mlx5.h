@@ -235,6 +235,8 @@ struct uct_dc_mlx5_iface {
         unsigned                  rand_seed;
 
         ucs_arbiter_callback_t    pend_cb;
+
+        uct_worker_cb_id_t        dci_release_prog_id;
     } tx;
 
     struct {
