@@ -1140,6 +1140,7 @@ public:
         long           retry_count;               /* Connect retry counter */
         double         prev_connect_time;         /* timestamp of last connect attempt */
         size_t         active_index;              /* Index in active vector */
+        size_t         empty_index;               /* Index in empty vector */
         long           num_sent[IO_OP_MAX];       /* Number of sent operations */
         long           num_completed[IO_OP_MAX];  /* Number of completed operations */
         long           prev_completed[IO_OP_MAX]; /* Completed in last report */
@@ -1162,6 +1163,12 @@ private:
             if (_server_info.active_index !=
                 std::numeric_limits<size_t>::max()) {
                 _client.active_servers_remove(_server_info.active_index);
+            }
+
+            // Remove empty servers entry
+            if (_server_info.empty_index !=
+                std::numeric_limits<size_t>::max()) {
+                _client.empty_servers_remove(_server_info.empty_index);
             }
 
             reset_server_info(_server_info);
@@ -1281,6 +1288,7 @@ public:
     DemoClient(const options_t &test_opts) :
         P2pDemoCommon(test_opts),
         _num_active_servers_to_use(0),
+        _num_empty_servers_to_use(0),
         _num_sent(0),
         _num_completed(0),
         _status(OK),
@@ -1306,19 +1314,26 @@ public:
 
     void commit_operation(size_t server_index, io_op_t op) {
         server_info_t& server_info = _server_info[server_index];
+        bool is_empty              = is_server_empty(server_info);
 
         assert(get_num_uncompleted(server_info) < opts().conn_window_size);
 
         ++server_info.num_sent[op];
         ++_num_sent;
+
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_make_unused(server_info.active_index);
+        }
+
+        if (is_empty && !is_server_empty(server_info)) {
+            empty_servers_make_unused(server_info.empty_index);
         }
     }
 
     void handle_operation_completion(size_t server_index, io_op_t op) {
         assert(server_index < _server_info.size());
         server_info_t& server_info = _server_info[server_index];
+        bool is_empty              = is_server_empty(server_info);
 
         assert(get_num_uncompleted(server_info) <= opts().conn_window_size);
         assert(_server_index_lookup.find(server_info.conn) !=
@@ -1331,6 +1346,10 @@ public:
 
         ++_num_completed;
         ++server_info.num_completed[op];
+
+        if (is_empty && !is_server_empty(server_info)) {
+            empty_servers_make_unused(server_info.empty_index);
+        }
     }
 
     size_t do_io_read(size_t server_index, uint32_t sn) {
@@ -1497,27 +1516,58 @@ public:
         }
     }
 
-    static long get_num_uncompleted(const server_info_t& server_info) {
-        long num_uncompleted;
-
-        num_uncompleted = (server_info.num_sent[IO_READ] +
-                           server_info.num_sent[IO_WRITE]) -
-                          (server_info.num_completed[IO_READ] +
-                           server_info.num_completed[IO_WRITE]);
+    static long get_num_uncompleted(const server_info_t& server_info,
+                                    io_op_t op)
+    {
+        long num_uncompleted = server_info.num_sent[op] -
+                               server_info.num_completed[op];
 
         assert(num_uncompleted >= 0);
-
         return num_uncompleted;
     }
 
-    long get_num_uncompleted(size_t server_index) const {
+    static long get_num_uncompleted(const server_info_t& server_info)
+    {
+        return get_num_uncompleted(server_info, IO_READ) +
+               get_num_uncompleted(server_info, IO_WRITE);
+    }
+
+    long get_num_uncompleted(size_t server_index) const
+    {
         assert(server_index < _server_info.size());
         return get_num_uncompleted(_server_info[server_index]);
+    }
+
+    static long get_num_completed_round(const server_info_t& server_info,
+                                        io_op_t op)
+    {
+        return server_info.num_completed[op] - server_info.prev_completed[op];
+    }
+
+    bool is_server_empty(const server_info_t& server_info) const
+    {
+        for (size_t i = 0; i < opts().operations.size(); ++i) {
+            io_op_t op = opts().operations[i];
+
+            if ((get_num_completed_round(server_info, op) == 0) &&
+                (get_num_uncompleted(server_info, op) == 0)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool is_server_empty(size_t server_index) const
+    {
+        assert(server_index < _server_info.size());
+        return is_server_empty(_server_info[server_index]);   
     }
 
     static void reset_server_info(server_info_t& server_info) {
         server_info.conn                   = NULL;
         server_info.active_index           = std::numeric_limits<size_t>::max();
+        server_info.empty_index            = std::numeric_limits<size_t>::max();
         for (int op = 0; op < IO_OP_MAX; ++op) {
             server_info.num_sent[op]       = 0;
             server_info.num_completed[op]  = 0;
@@ -1649,6 +1699,7 @@ public:
         server_info.prev_connect_time          = 0.;
         _server_index_lookup[server_info.conn] = server_index;
         active_servers_add(server_index);
+        empty_servers_add(server_index);
         LOG << "Connected to " << server_name(server_index) << " after "
             << attempts << " attempts";
     }
@@ -1717,14 +1768,29 @@ public:
     size_t pick_server_index() const {
         assert(_num_active_servers_to_use != 0);
 
-        /* Pick a random connected server to which the client has credits
-         * to send (its conn's window is not full) */
-        size_t active_index = IoDemoRandom::rand(size_t(0),
-                                                 _num_active_servers_to_use - 1);
-        size_t server_index = _active_servers[active_index];
-        assert(get_num_uncompleted(server_index) < opts().conn_window_size);
-        assert(_server_info[server_index].conn != NULL);
+        size_t server_index;
+        if (_num_empty_servers_to_use != 0) {
+            /* Pick a random connected server to which the client has credits
+             * to send (its conn's window is not full) and no uncompleted
+             * operations are currently scheduled */
+            size_t empty_index =
+                    IoDemoRandom::rand(size_t(0),
+                                       _num_empty_servers_to_use - 1);
 
+            server_index = _empty_servers[empty_index];
+            assert(is_server_empty(server_index));
+        } else {
+            /* Pick a random connected server to which the client has credits
+             * to send (its conn's window is not full) */
+            size_t active_index =
+                    IoDemoRandom::rand(size_t(0),
+                                       _num_active_servers_to_use - 1);
+
+            server_index = _active_servers[active_index];
+            assert(get_num_uncompleted(server_index) < opts().conn_window_size);
+        }
+
+        assert(_server_info[server_index].conn != NULL);
         return server_index;
     }
 
@@ -1786,8 +1852,9 @@ public:
             }
 
             size_t server_index = pick_server_index();
-            io_op_t op          = get_op();
             size_t size;
+
+            io_op_t op = get_op(server_index);
             switch (op) {
             case IO_READ:
                 if (opts().use_am) {
@@ -1811,20 +1878,24 @@ public:
             op_info[op].num_iters++;
 
             if (is_control_iter(total_iter) && (total_iter > total_prev_iter)) {
-                /* Print performance every 1 second */
-                double curr_time = get_time();
-                if (curr_time >= (prev_time + opts().print_interval)) {
-                    wait_for_responses(0);
-                    if (_status != OK) {
-                        break;
+                if (_num_empty_servers_to_use == 0) {
+                    /* Print performance every <print_interval> */
+                    double curr_time = get_time();
+                    if (curr_time >= (prev_time + opts().print_interval)) {
+                        wait_for_responses(0);
+                        if (_status != OK) {
+                            break;
+                        }
+
+                        report_performance(total_iter - total_prev_iter,
+                                           curr_time - prev_time, op_info);
+                        total_prev_iter = total_iter;
+                        prev_time       = curr_time;
+
+                        check_time_limit(curr_time);
                     }
-
-                    report_performance(total_iter - total_prev_iter,
-                                       curr_time - prev_time, op_info);
-                    total_prev_iter = total_iter;
-                    prev_time       = curr_time;
-
-                    check_time_limit(curr_time);
+                } else {
+                    progress();
                 }
             }
 
@@ -1883,13 +1954,24 @@ private:
         size_t    total_bytes;
     } op_info_t;
 
-    inline io_op_t get_op() {
+    inline io_op_t get_op(size_t server_index) {
         if (opts().operations.size() == 1) {
             return opts().operations[0];
         }
 
+        for (size_t i = 0; i < opts().operations.size(); ++i) {
+            io_op_t op                 = opts().operations[i];
+            server_info_t& server_info = _server_info[server_index];
+
+            if ((get_num_completed_round(server_info, op) +
+                         get_num_uncompleted(server_info, op)) == 0) {
+                return op;
+            }
+        }
+
         return opts().operations[IoDemoRandom::rand(
-                                 size_t(0), opts().operations.size() - 1)];
+                                         size_t(0),
+                                         opts().operations.size() - 1)];
     }
 
     void report_performance(long num_iters, double elapsed, op_info_t *op_info) {
@@ -1924,6 +2006,7 @@ private:
             for (size_t server_index = 0; server_index < _server_info.size();
                  ++server_index) {
                 server_info_t& server_info = _server_info[server_index];
+                bool is_empty              = is_server_empty(server_info);
                 long delta_completed       = server_info.num_completed[op_id] -
                                              server_info.prev_completed[op_id];
                 if ((delta_completed < delta_min) ||
@@ -1938,17 +2021,25 @@ private:
 
                 server_info.prev_completed[op_id] =
                         server_info.num_completed[op_id];
+                if (!is_empty && is_server_empty(server_info)) {
+                    empty_servers_make_used(server_info.empty_index);
+                }
             }
 
             // Report delta of min/max/total operations for every connection
             log << " min:" << delta_min << "(" << opts().servers[min_index]
-                << ") max:" << delta_max << " total:"
-                << op_info[op_id].num_iters;
+                << " write: " << _server_info[min_index].num_completed[IO_WRITE]
+                << "/" << _server_info[min_index].num_sent[IO_WRITE]
+                << " read: " << _server_info[min_index].num_completed[IO_READ]
+                << "/" << _server_info[min_index].num_sent[IO_READ]
+                << ") max:"
+                << delta_max << " total:" << op_info[op_id].num_iters;
             op_info[op_id].num_iters = 0;
         }
 
         log << " | active:" << _active_servers.size() << "/"
-            << UcxConnection::get_num_instances();
+            << UcxConnection::get_num_instances() << "/"
+            << opts().servers.size();
 
         if (opts().window_size == 1) {
             log << " latency:" << latency_usec << "usec";
@@ -2007,15 +2098,65 @@ private:
         ++_num_active_servers_to_use;
     }
 
+    void empty_servers_swap(size_t index1, size_t index2) {
+        size_t& empty_server1 = _empty_servers[index1];
+        size_t& empty_server2 = _empty_servers[index2];
+
+        std::swap(_server_info[empty_server1].empty_index,
+                  _server_info[empty_server2].empty_index);
+        std::swap(empty_server1, empty_server2);
+    }
+
+    void empty_servers_add(size_t server_index) {
+        assert(_num_empty_servers_to_use <= _empty_servers.size());
+
+        _empty_servers.push_back(server_index);
+        _server_info[server_index].empty_index = _empty_servers.size() - 1;
+        empty_servers_make_used(_server_info[server_index].empty_index);
+        assert(_num_empty_servers_to_use <= _empty_servers.size());
+    }
+
+    void empty_servers_remove(size_t empty_index) {
+        assert(empty_index < _empty_servers.size());
+
+        if (empty_index < _num_empty_servers_to_use) {
+            empty_servers_make_unused(empty_index);
+            empty_index = _num_empty_servers_to_use;
+        }
+
+        assert(empty_index >= _num_empty_servers_to_use);
+        empty_servers_swap(empty_index, _empty_servers.size() - 1);
+        _empty_servers.pop_back();
+    }
+
+    void empty_servers_make_unused(size_t empty_index) {
+        assert(empty_index < _num_empty_servers_to_use);
+        --_num_empty_servers_to_use;
+        empty_servers_swap(empty_index, _num_empty_servers_to_use);
+    }
+
+    void empty_servers_make_used(size_t empty_index) {
+        assert(empty_index >= _num_empty_servers_to_use);
+        empty_servers_swap(empty_index, _num_empty_servers_to_use);
+        ++_num_empty_servers_to_use;
+    }
+
 private:
     std::vector<server_info_t>              _server_info;
     // Connection establishment is in progress
     std::set<size_t>                        _connecting_servers;
     // Active servers is the list of communicating servers
     std::vector<size_t>                     _active_servers;
-    // Num active servers to use handles window size, server becomes "unused" if
-    // its window is full
+    // Unused servers is the list of communicating servers that have no
+    // completed operations for at least one of the operations in the
+    // current round
+    std::vector<size_t>                     _empty_servers;
+    // Number of active servers to use handles window size, server becomes
+    // "unused" if its window is full
     size_t                                  _num_active_servers_to_use;
+    // Number of active servers that are unused for at least one of the
+    // operations in the current round
+    size_t                                  _num_empty_servers_to_use;
     std::map<const UcxConnection*, size_t>  _server_index_lookup;
     long                                    _num_sent;
     long                                    _num_completed;
