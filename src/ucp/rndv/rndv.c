@@ -1007,6 +1007,7 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
                                 UCS_SYS_PCI_MAX_PAYLOAD, 128, UINT_MAX,
                                 &ucp_frag_mpool_ops, "ucp_rndv_frags");
         if (status != UCS_OK) {
+            ucs_free(mpool);
             return NULL;
         }
 
@@ -1018,6 +1019,7 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
         khiter             = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash,
                                     *key, &khret);
         if (khret == UCS_KH_PUT_FAILED) {
+            ucs_free(mpool);
             ucs_mpool_cleanup(mpool, 0);
             return NULL;
         }
