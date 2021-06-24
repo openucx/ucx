@@ -1344,7 +1344,6 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     return UCS_OK;
 
 err:
-    ucp_worker_set_ep_failed(worker, ep, ep->uct_eps[lane], lane, status);
     /* coverity[leaked_storage] (uct_ep) */
     return status;
 }

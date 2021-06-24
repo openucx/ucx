@@ -313,16 +313,6 @@ typedef struct ucp_worker {
 } ucp_worker_t;
 
 
-/**
- * UCP worker argument for the error handling callback
- */
-typedef struct ucp_worker_err_handle_arg {
-    ucp_ep_h         ucp_ep;
-    ucs_time_t       timeout;
-    ucs_status_t     status;
-} ucp_worker_err_handle_arg_t;
-
-
 ucs_status_t
 ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                          int print_cfg, ucp_worker_cfg_index_t *cfg_index_p);
@@ -349,9 +339,6 @@ void ucp_worker_iface_unprogress_ep(ucp_worker_iface_t *wiface);
 void ucp_worker_signal_internal(ucp_worker_h worker);
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
-
-int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
-                                        void *arg);
 
 ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
                                       uct_ep_h uct_ep, ucp_lane_index_t lane,
