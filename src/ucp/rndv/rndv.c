@@ -1019,8 +1019,8 @@ ucp_rndv_get_mpool(ucp_worker_h worker, const ucp_worker_mpool_key_t *key)
         khiter             = kh_put(ucp_worker_mpool_hash, &worker->mpool_hash,
                                     *key, &khret);
         if (khret == UCS_KH_PUT_FAILED) {
-            ucs_free(mpool);
             ucs_mpool_cleanup(mpool, 0);
+            ucs_free(mpool);
             return NULL;
         }
 
