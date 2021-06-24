@@ -1165,8 +1165,6 @@ void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
 
     ucs_debug("ep %p: discarding lanes", ep);
 
-    /* flush CANCEL mustn't be called for EPs without error handling support */
-    ucs_assert(ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER);
     ucp_ep_set_lanes_failed(ep, uct_eps);
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
