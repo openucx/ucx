@@ -243,7 +243,7 @@ protected:
                                    int worker_index = 0);
     void request_release(void *req);
     int max_connections();
-    void set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env);
+    void set_tl_small_timeouts();
 
     // Add test variant without values, with given context params
     static ucp_test_variant&
@@ -339,6 +339,8 @@ protected:
         ucp_mem_h     m_memh;
         void*         m_rkey_buffer;
     };
+
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 
