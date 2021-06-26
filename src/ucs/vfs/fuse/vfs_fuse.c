@@ -330,6 +330,7 @@ static void ucs_vfs_fuse_thread_reset_affinity()
         return;
     }
 
+    CPU_ZERO(&cpuset);
     for (i = 0; i < num_cpus; ++i) {
         CPU_SET(i, &cpuset);
     }
