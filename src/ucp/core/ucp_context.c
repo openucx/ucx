@@ -995,8 +995,8 @@ static void ucp_fill_sockaddr_cms_prio_list(ucp_context_h context,
     }
 }
 
-static ucs_status_t ucp_fill_sockaddr_prio_list(ucp_context_h context,
-                                                const ucp_config_t *config)
+static void
+ucp_fill_sockaddr_prio_list(ucp_context_h context, const ucp_config_t *config)
 {
     const char **sockaddr_tl_names = (const char**)config->sockaddr_cm_tls.cm_tls;
     unsigned num_sockaddr_tls      = config->sockaddr_cm_tls.count;
@@ -1010,12 +1010,6 @@ static ucs_status_t ucp_fill_sockaddr_prio_list(ucp_context_h context,
 
     ucp_fill_sockaddr_cms_prio_list(context, sockaddr_tl_names,
                                     num_sockaddr_tls);
-    if (context->config.num_cm_cmpts == 0) {
-        ucs_diag("none of the available components supports sockaddr connection management");
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    return UCS_OK;
 }
 
 static ucs_status_t ucp_check_resources(ucp_context_h context,
@@ -1208,13 +1202,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         max_mds += context->tl_cmpts[i].attr.md_resource_count;
     }
 
-    if (UCS_BITMAP_IS_ZERO(context->config.cm_cmpts_bitmap,
-                           UCP_MAX_RESOURCES)) {
-        ucs_debug("there are no UCT components with CM capability");
-        status = UCS_ERR_UNSUPPORTED;
-        goto err_free_resources;
-    }
-
     /* Allocate actual array of MDs */
     context->tl_mds = ucs_malloc(max_mds * sizeof(*context->tl_mds),
                                  "ucp_tl_mds");
@@ -1274,15 +1261,8 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         goto err_free_resources;
     }
 
-    status = ucp_fill_sockaddr_prio_list(context, config);
-    if (status != UCS_OK) {
-        goto err_free_resources;
-    }
+    ucp_fill_sockaddr_prio_list(context, config);
 
-    goto out_release_components;
-
-err_free_resources:
-    ucp_free_resources(context);
 out_release_components:
     uct_release_component_list(uct_components);
 out_cleanup_avail_devices:
@@ -1292,6 +1272,10 @@ out_cleanup_avail_devices:
     }
     ucs_string_set_cleanup(&avail_tls);
     return status;
+
+err_free_resources:
+    ucp_free_resources(context);
+    goto out_release_components;
 }
 
 static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,

@@ -288,17 +288,25 @@ stages:
               downloadPath: $(System.DefaultWorkingDirectory)
           - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId) -R
           - bash: |
-              set -x
-              ./bin/ucx_info -e -u t 2>&1 | tee info.txt
-              grep -i error info.txt
-              retVal=$?
-              if [ $retVal -eq 0 ]; then
-                  exit 1;
-              fi
-              exit 0;
+              set -xEe
+              check_ucx_info() {
+                 ./bin/ucx_info -e -u t $@ |& tee ucx_info.txt
+                 ## the word "lane" should be found
+                 egrep 'lane' ucx_info.txt
+                 ## no failures
+                 ! egrep -i 'error|fail|warn|assert|fatal' ucx_info.txt
+              }
+              # version check
+              ./bin/ucx_info -v
+              # test default
+              check_ucx_info
+              # test without CM components
+              UCX_SOCKADDR_TLS_PRIORITY="" check_ucx_info
+              # test intra-node
+              check_ucx_info -P intra
             displayName: Test ucx_info
             workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
-            env: 
+            env:
               LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
           - bash: |
               set -Eex
@@ -310,7 +318,7 @@ stages:
               grep "Final:" perf.txt
             displayName: Test ucx_perftest
             workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
-            env: 
+            env:
               LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
 
   - stage: Coverity
