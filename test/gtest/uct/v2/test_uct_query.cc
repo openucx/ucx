@@ -20,7 +20,7 @@ public:
 
 UCS_TEST_P(test_uct_query, query_perf)
 {
-    uct_perf_attr_t perf_attr;
+    uct_iface_perf_attr_t perf_attr;
     ucs_status_t status;
 
     perf_attr.field_mask         = UCT_PERF_ATTR_FIELD_OPERATION |
@@ -44,7 +44,7 @@ UCS_TEST_P(test_uct_query, query_perf)
     EXPECT_NE(0, perf_attr.bandwidth.shared + perf_attr.bandwidth.dedicated);
 
     if (has_transport("cuda_copy") || has_transport("gdr_copy")) {
-        uct_perf_attr_t perf_attr_get;
+        uct_iface_perf_attr_t perf_attr_get;
         perf_attr_get.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
                                    UCT_PERF_ATTR_FIELD_BANDWIDTH;
         perf_attr_get.operation  = UCT_OP_GET_SHORT;

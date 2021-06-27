@@ -286,7 +286,7 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 }
 
 static ucs_status_t
-uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_iface_perf_attr_t *perf_attr)
 {
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;

@@ -55,23 +55,23 @@ typedef enum uct_ep_operation {
  * @ingroup UCT_RESOURCE
  * @brief UCT interface query by @ref uct_iface_estimate_perf parameters field mask.
  *
- * The enumeration allows specifying which fields in @ref uct_perf_attr_t are
+ * The enumeration allows specifying which fields in @ref uct_iface_perf_attr_t are
  * present, for backward compatibility support.
  */
 enum uct_perf_attr_field {
-    /** Enables @ref uct_perf_attr_t::operation */
+    /** Enables @ref uct_iface_perf_attr_t::operation */
     UCT_PERF_ATTR_FIELD_OPERATION          = UCS_BIT(0),
 
-    /** Enables @ref uct_perf_attr_t::local_memory_type */
+    /** Enables @ref uct_iface_perf_attr_t::local_memory_type */
     UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE  = UCS_BIT(1),
 
-    /** Enables @ref uct_perf_attr_t::remote_memory_type */
+    /** Enables @ref uct_iface_perf_attr_t::remote_memory_type */
     UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE = UCS_BIT(2),
 
-    /** Enables @ref uct_perf_attr_t::overhead */
+    /** Enables @ref uct_iface_perf_attr_t::overhead */
     UCT_PERF_ATTR_FIELD_OVERHEAD           = UCS_BIT(3),
 
-    /** Enables @ref uct_perf_attr_t::bandwidth */
+    /** Enables @ref uct_iface_perf_attr_t::bandwidth */
     UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(4)
 };
 
@@ -118,7 +118,7 @@ typedef struct {
      * Bandwidth model. This field is set by the UCT layer.
      */
     uct_ppn_bandwidth_t bandwidth;
-} uct_perf_attr_t;
+} uct_iface_perf_attr_t;
 
 
 /**
@@ -196,7 +196,7 @@ typedef struct uct_md_mem_dereg_params {
 /**
  * @ingroup UCT_RESOURCE
  * @brief Get interface performance attributes, by memory types and operation.
- *        A pointer to uct_perf_attr_t struct must be passed, with the memory
+ *        A pointer to uct_iface_perf_attr_t struct must be passed, with the memory
  *        types and operation members initialized. Overhead and bandwidth
  *        for the operation on the given memory types will be reported.
  *
@@ -204,7 +204,7 @@ typedef struct uct_md_mem_dereg_params {
  * @param [inout] perf_attr Filled with performance attributes.
  */
 ucs_status_t
-uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
+uct_iface_estimate_perf(uct_iface_h tl_iface, uct_iface_perf_attr_t *perf_attr);
 
 
 /**

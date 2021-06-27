@@ -228,7 +228,7 @@ typedef struct uct_am_handler {
 
 /* Performance estimation operation */
 typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
-        uct_iface_h iface, uct_perf_attr_t *perf_attr);
+        uct_iface_h iface, uct_iface_perf_attr_t *perf_attr);
 
 
 /* Refresh the VFS representation of the interface */
@@ -727,7 +727,7 @@ void uct_base_iface_progress_enable_cb(uct_base_iface_t *iface,
 void uct_base_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 ucs_status_t
-uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr);
+uct_base_iface_estimate_perf(uct_iface_h iface, uct_iface_perf_attr_t *perf_attr);
 
 ucs_status_t uct_base_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                uct_completion_t *comp);
