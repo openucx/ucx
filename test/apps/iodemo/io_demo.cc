@@ -1149,8 +1149,9 @@ public:
 private:
     class DisconnectCallback : public UcxCallback {
     public:
-        DisconnectCallback(DemoClient &client, server_info_t &server_info) :
-            _client(client), _server_info(server_info) {
+        DisconnectCallback(DemoClient &client, size_t server_index) :
+            _client(client), _server_index(server_index),
+            _server_info(client._server_info[server_index]) {
         }
 
         virtual void operator()(ucs_status_t status) {
@@ -1162,13 +1163,13 @@ private:
             // Remove active servers entry
             if (_server_info.active_index !=
                 std::numeric_limits<size_t>::max()) {
-                _client.active_servers_remove(_server_info.active_index);
+                _client._active_servers.remove(_server_index);
             }
 
             // Remove empty servers entry
             if (_server_info.empty_index !=
                 std::numeric_limits<size_t>::max()) {
-                _client.empty_servers_remove(_server_info.empty_index);
+                _client._empty_servers.remove(_server_index);
             }
 
             reset_server_info(_server_info);
@@ -1177,6 +1178,7 @@ private:
 
     private:
         DemoClient    &_client;
+        size_t        _server_index;
         server_info_t &_server_info;
     };
 
@@ -1287,8 +1289,8 @@ public:
 
     DemoClient(const options_t &test_opts) :
         P2pDemoCommon(test_opts),
-        _num_active_servers_to_use(0),
-        _num_empty_servers_to_use(0),
+        _active_servers(this),
+        _empty_servers(this),
         _num_sent(0),
         _num_completed(0),
         _status(OK),
@@ -1302,6 +1304,127 @@ public:
         CONN_RETRIES_EXCEEDED,
         RUNTIME_EXCEEDED
     } status_t;
+
+    class Servers {
+    public:
+        Servers(DemoClient *demo_client) :
+                _num_servers_to_use(0), _demo_client(demo_client) {}
+
+        void add(size_t server_index)
+        {
+            assert(_num_servers_to_use <= _servers.size());
+
+            _servers.push_back(server_index);
+            get_index(server_index) = _servers.size() - 1;
+            make_used(server_index);
+            assert(_num_servers_to_use <= _servers.size());
+        }
+
+        void remove(size_t server_index)
+        {
+            size_t index = get_index(server_index);
+
+            assert(index < _servers.size());
+            if (index < _num_servers_to_use) {
+                make_unused(server_index);
+                index = _num_servers_to_use;
+            }
+
+            assert(index >= _num_servers_to_use);
+            swap(index, _servers.size() - 1);
+            _servers.pop_back();
+        }
+
+        void make_unused(size_t server_index)
+        {
+            size_t index = get_index(server_index);
+
+            assert(index < _num_servers_to_use);
+            --_num_servers_to_use;
+            swap(index, _num_servers_to_use);
+        }
+
+        void make_used(size_t server_index)
+        {
+            size_t index = get_index(server_index);
+
+            assert(index >= _num_servers_to_use);
+            swap(index, _num_servers_to_use);
+            ++_num_servers_to_use;
+        }
+
+        size_t size() const
+        {
+            return _servers.size();
+        }
+
+        size_t num_to_use() const
+        {
+            return _num_servers_to_use;
+        }
+
+        bool empty() const
+        {
+            return _servers.empty();
+        }
+
+        const size_t& operator[](size_t index) const
+        {
+            return _servers[index];
+        }
+
+        size_t& operator[](size_t index)
+        {
+            return _servers[index];
+        }
+
+    protected:
+        server_info_t& get_server_info(size_t server_index)
+        {
+            return _demo_client->_server_info[server_index];
+        }
+
+    private:
+        virtual size_t& get_index(size_t server_index) = 0;
+
+        void swap(size_t index1, size_t index2)
+        {
+            size_t& server_index1 = _servers[index1];
+            size_t& server_index2 = _servers[index2];
+
+            std::swap(get_index(server_index1), get_index(server_index2));
+            std::swap(server_index1, server_index2);
+        }
+
+    private:
+        std::vector<size_t> _servers;
+        size_t              _num_servers_to_use;
+        DemoClient          *_demo_client;
+    };
+
+    class ActiveServers : public Servers {
+    public:
+        ActiveServers(DemoClient *demo_client) : Servers(demo_client) {}
+
+    private:
+        size_t& get_index(size_t server_index)
+        {
+            server_info_t &server_info = get_server_info(server_index);
+            return server_info.active_index;
+        }
+    };
+
+    class EmptyServers : public Servers {
+    public:
+        EmptyServers(DemoClient *demo_client) : Servers(demo_client) {}
+
+    private:
+        size_t& get_index(size_t server_index)
+        {
+            server_info_t &server_info = get_server_info(server_index);
+            return server_info.empty_index;
+        }
+    };
 
     size_t get_active_server_index(const UcxConnection *conn) {
         assert(_server_index_lookup.size() == _active_servers.size());
@@ -1322,11 +1445,11 @@ public:
         ++_num_sent;
 
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
-            active_servers_make_unused(server_info.active_index);
+            _active_servers.make_unused(server_index);
         }
 
         if (is_empty && !is_server_empty(server_info)) {
-            empty_servers_make_unused(server_info.empty_index);
+            _empty_servers.make_unused(server_index);
         }
     }
 
@@ -1341,14 +1464,14 @@ public:
         assert(_num_completed < _num_sent);
 
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
-            active_servers_make_used(server_info.active_index);
+            _active_servers.make_used(server_index);
         }
 
         ++_num_completed;
         ++server_info.num_completed[op];
 
         if (is_empty && !is_server_empty(server_info)) {
-            empty_servers_make_unused(server_info.empty_index);
+            _empty_servers.make_unused(server_index);
         }
     }
 
@@ -1606,7 +1729,8 @@ public:
             << "\"";
 
         // Destroying the connection will complete its outstanding operations
-        server_info.conn->disconnect(new DisconnectCallback(*this, server_info));
+        server_info.conn->disconnect(new DisconnectCallback(*this,
+                                                            server_index));
     }
 
     void wait_for_responses(long max_outstanding) {
@@ -1698,8 +1822,8 @@ public:
         server_info.retry_count                = 0;
         server_info.prev_connect_time          = 0.;
         _server_index_lookup[server_info.conn] = server_index;
-        active_servers_add(server_index);
-        empty_servers_add(server_index);
+        _active_servers.add(server_index);
+        _empty_servers.add(server_index);
         LOG << "Connected to " << server_name(server_index) << " after "
             << attempts << " attempts";
     }
@@ -1766,16 +1890,16 @@ public:
     }
 
     size_t pick_server_index() const {
-        assert(_num_active_servers_to_use != 0);
+        assert(_active_servers.num_to_use() != 0);
 
         size_t server_index;
-        if (_num_empty_servers_to_use != 0) {
+        if (_empty_servers.num_to_use() != 0) {
             /* Pick a random connected server to which the client has credits
              * to send (its conn's window is not full) and no uncompleted
              * operations are currently scheduled */
             size_t empty_index =
                     IoDemoRandom::rand(size_t(0),
-                                       _num_empty_servers_to_use - 1);
+                                       _empty_servers.num_to_use() - 1);
 
             server_index = _empty_servers[empty_index];
             assert(is_server_empty(server_index));
@@ -1784,7 +1908,7 @@ public:
              * to send (its conn's window is not full) */
             size_t active_index =
                     IoDemoRandom::rand(size_t(0),
-                                       _num_active_servers_to_use - 1);
+                                       _active_servers.num_to_use() - 1);
 
             server_index = _active_servers[active_index];
             assert(get_num_uncompleted(server_index) < opts().conn_window_size);
@@ -1843,7 +1967,7 @@ public:
                 break;
             }
 
-            if (_num_active_servers_to_use == 0) {
+            if (_active_servers.num_to_use() == 0) {
                 // It is possible that the number of active servers to use is 0
                 // after wait_for_responses(), if some clients were closed in
                 // UCP Worker progress during handling of remote disconnection
@@ -1878,7 +2002,7 @@ public:
             op_info[op].num_iters++;
 
             if (is_control_iter(total_iter) && (total_iter > total_prev_iter)) {
-                if (_num_empty_servers_to_use == 0) {
+                if (_empty_servers.num_to_use() == 0) {
                     /* Print performance every <print_interval> */
                     double curr_time = get_time();
                     if (curr_time >= (prev_time + opts().print_interval)) {
@@ -1915,7 +2039,7 @@ public:
             LOG << "Disconnecting from " << server_name(server_index);
             server_info_t &server_info = _server_info[server_index];
             server_info.conn->disconnect(new DisconnectCallback(*this,
-                                                                server_info));
+                                                                server_index));
         }
 
         if (!_active_servers.empty()) {
@@ -2022,7 +2146,7 @@ private:
                 server_info.prev_completed[op_id] =
                         server_info.num_completed[op_id];
                 if (!is_empty && is_server_empty(server_info)) {
-                    empty_servers_make_used(server_info.empty_index);
+                    _empty_servers.make_used(server_index);
                 }
             }
 
@@ -2055,108 +2179,16 @@ private:
         }
     }
 
-    void active_servers_swap(size_t index1, size_t index2) {
-        size_t& active_server1 = _active_servers[index1];
-        size_t& active_server2 = _active_servers[index2];
-
-        std::swap(_server_info[active_server1].active_index,
-                  _server_info[active_server2].active_index);
-        std::swap(active_server1, active_server2);
-    }
-
-    void active_servers_add(size_t server_index) {
-        assert(_num_active_servers_to_use <= _active_servers.size());
-
-        _active_servers.push_back(server_index);
-        _server_info[server_index].active_index = _active_servers.size() - 1;
-        active_servers_make_used(_server_info[server_index].active_index);
-        assert(_num_active_servers_to_use <= _active_servers.size());
-    }
-
-    void active_servers_remove(size_t active_index) {
-        assert(active_index < _active_servers.size());
-
-        if (active_index < _num_active_servers_to_use) {
-            active_servers_make_unused(active_index);
-            active_index = _num_active_servers_to_use;
-        }
-
-        assert(active_index >= _num_active_servers_to_use);
-        active_servers_swap(active_index, _active_servers.size() - 1);
-        _active_servers.pop_back();
-    }
-
-    void active_servers_make_unused(size_t active_index) {
-        assert(active_index < _num_active_servers_to_use);
-        --_num_active_servers_to_use;
-        active_servers_swap(active_index, _num_active_servers_to_use);
-    }
-
-    void active_servers_make_used(size_t active_index) {
-        assert(active_index >= _num_active_servers_to_use);
-        active_servers_swap(active_index, _num_active_servers_to_use);
-        ++_num_active_servers_to_use;
-    }
-
-    void empty_servers_swap(size_t index1, size_t index2) {
-        size_t& empty_server1 = _empty_servers[index1];
-        size_t& empty_server2 = _empty_servers[index2];
-
-        std::swap(_server_info[empty_server1].empty_index,
-                  _server_info[empty_server2].empty_index);
-        std::swap(empty_server1, empty_server2);
-    }
-
-    void empty_servers_add(size_t server_index) {
-        assert(_num_empty_servers_to_use <= _empty_servers.size());
-
-        _empty_servers.push_back(server_index);
-        _server_info[server_index].empty_index = _empty_servers.size() - 1;
-        empty_servers_make_used(_server_info[server_index].empty_index);
-        assert(_num_empty_servers_to_use <= _empty_servers.size());
-    }
-
-    void empty_servers_remove(size_t empty_index) {
-        assert(empty_index < _empty_servers.size());
-
-        if (empty_index < _num_empty_servers_to_use) {
-            empty_servers_make_unused(empty_index);
-            empty_index = _num_empty_servers_to_use;
-        }
-
-        assert(empty_index >= _num_empty_servers_to_use);
-        empty_servers_swap(empty_index, _empty_servers.size() - 1);
-        _empty_servers.pop_back();
-    }
-
-    void empty_servers_make_unused(size_t empty_index) {
-        assert(empty_index < _num_empty_servers_to_use);
-        --_num_empty_servers_to_use;
-        empty_servers_swap(empty_index, _num_empty_servers_to_use);
-    }
-
-    void empty_servers_make_used(size_t empty_index) {
-        assert(empty_index >= _num_empty_servers_to_use);
-        empty_servers_swap(empty_index, _num_empty_servers_to_use);
-        ++_num_empty_servers_to_use;
-    }
-
 private:
     std::vector<server_info_t>              _server_info;
     // Connection establishment is in progress
     std::set<size_t>                        _connecting_servers;
     // Active servers is the list of communicating servers
-    std::vector<size_t>                     _active_servers;
+    ActiveServers                           _active_servers;
     // Unused servers is the list of communicating servers that have no
     // completed operations for at least one of the operations in the
     // current round
-    std::vector<size_t>                     _empty_servers;
-    // Number of active servers to use handles window size, server becomes
-    // "unused" if its window is full
-    size_t                                  _num_active_servers_to_use;
-    // Number of active servers that are unused for at least one of the
-    // operations in the current round
-    size_t                                  _num_empty_servers_to_use;
+    EmptyServers                            _empty_servers;
     std::map<const UcxConnection*, size_t>  _server_index_lookup;
     long                                    _num_sent;
     long                                    _num_completed;
