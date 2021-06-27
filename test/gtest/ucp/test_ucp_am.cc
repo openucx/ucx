@@ -1096,6 +1096,11 @@ UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_put, "RNDV_SCHEME=put_zcopy")
     test_am_send_recv(64 * UCS_KBYTE);
 }
 
+UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_am, "RNDV_SCHEME=am")
+{
+    test_am_send_recv(64 * UCS_KBYTE);
+}
+
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_flag_zero_send, "RNDV_THRESH=inf")
 {
     test_am_send_recv(0, 0, UCP_AM_SEND_FLAG_RNDV);

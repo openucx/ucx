@@ -1901,6 +1901,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         }
 
         if ((context->config.ext.rndv_mode != UCP_RNDV_MODE_GET_ZCOPY) &&
+            (context->config.ext.rndv_mode != UCP_RNDV_MODE_AM) &&
             ucp_rndv_test_zcopy_scheme_support(sreq->send.length,
                                                put_zcopy->min, put_zcopy->max,
                                                put_zcopy->split)) {

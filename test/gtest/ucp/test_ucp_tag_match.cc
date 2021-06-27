@@ -19,7 +19,7 @@ using namespace ucs; /* For vector<char> serialization */
 class test_ucp_tag_match : public test_ucp_tag {
 public:
     enum {
-        ENABLE_PROTO = UCS_BIT(2)
+        ENABLE_PROTO = UCS_BIT(3)
     };
 
     test_ucp_tag_match() {
@@ -478,13 +478,14 @@ public:
         RNDV_SCHEME_AUTO = 0,
         RNDV_SCHEME_PUT_ZCOPY,
         RNDV_SCHEME_GET_ZCOPY,
+        RNDV_SCHEME_AM,
         RNDV_SCHEME_LAST
     };
 
     static const std::string rndv_schemes[];
 
     void init() {
-        ASSERT_LE(rndv_scheme(), (int)RNDV_SCHEME_GET_ZCOPY);
+        ASSERT_LT(rndv_scheme(), (int)RNDV_SCHEME_LAST);
         modify_config("RNDV_SCHEME", rndv_schemes[rndv_scheme()]);
         test_ucp_tag_match::init();
     }
@@ -513,9 +514,13 @@ protected:
     }
 };
 
-const std::string test_ucp_tag_match_rndv::rndv_schemes[] = { "auto",
-                                                              "put_zcopy",
-                                                              "get_zcopy" };
+const std::string test_ucp_tag_match_rndv::rndv_schemes[] = {
+    "auto",
+    "put_zcopy",
+    "get_zcopy",
+    "am"
+};
+
 
 UCS_TEST_P(test_ucp_tag_match_rndv, length0, "RNDV_THRESH=0")
 {
