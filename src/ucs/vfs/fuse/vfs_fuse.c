@@ -239,7 +239,14 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     /* Create inotify channel */
     ucs_vfs_fuse_context.inotify_fd = inotify_init();
     if (ucs_vfs_fuse_context.inotify_fd < 0) {
-        ucs_error("inotify_init() failed: %m");
+        if ((errno == EMFILE) &&
+            (ucs_sys_check_fd_limit_per_process() == UCS_OK)) {
+            ucs_diag("inotify_init() failed: Too many inotify instances. "
+                     "Please increase sysctl fs.inotify.max_user_instances to "
+                     "avoid the error");
+        } else {
+            ucs_error("inotify_init() failed: %m");
+        }
         status = UCS_ERR_IO_ERROR;
         goto out;
     }

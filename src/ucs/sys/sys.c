@@ -1501,3 +1501,19 @@ ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
         return UCS_ERR_INVALID_PARAM;
     }
 }
+
+ucs_status_t ucs_sys_check_fd_limit_per_process()
+{
+    int fd;
+
+    fd = open("/dev/null", O_RDONLY);
+    if ((fd == -1) && (errno == EMFILE)) {
+        return UCS_ERR_EXCEEDS_LIMIT;
+    }
+
+    if (fd != -1) {
+        close(fd);
+    }
+
+    return UCS_OK;
+}

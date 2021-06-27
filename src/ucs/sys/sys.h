@@ -617,6 +617,15 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
 ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
                                    ucs_time_t *time);
 
+
+/**
+ * Check the per-process limit on the number of open file descriptors.
+ *
+ * @return UCS_OK if the limit has not been reached. UCS_ERR_EXCEEDS_LIMIT,
+ *         otherwise.
+ */
+ucs_status_t ucs_sys_check_fd_limit_per_process();
+
 END_C_DECLS
 
 #endif
