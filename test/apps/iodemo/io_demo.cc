@@ -610,8 +610,8 @@ protected:
     public:
         SendCompleteCallback(size_t buffer_size,
                              MemoryPool<SendCompleteCallback>& pool) :
-            _op_counter(NULL), _counter(0), _iov(NULL), _io_msg(NULL),
-            _pool(pool) {
+            _status(UCS_OK), _op_counter(NULL), _counter(0), _iov(NULL),
+            _io_msg(NULL), _pool(pool) {
         }
 
         void init(BufferIov* iov, long* op_counter, IoMessage *io_msg = NULL) {
@@ -619,10 +619,14 @@ protected:
             _counter    = iov->size();
             _iov        = iov;
             _io_msg     = io_msg;
+            _status     = UCS_OK;
             assert(_counter > 0);
         }
 
         virtual void operator()(ucs_status_t status) {
+            if (_status == UCS_OK) {
+                _status = status;
+            }
             if (--_counter > 0) {
                 return;
             }
@@ -632,7 +636,7 @@ protected:
             }
 
             if (_io_msg != NULL) {
-                (*_io_msg)(status);
+                (*_io_msg)(_status);
             }
 
             _iov->release();
@@ -640,6 +644,7 @@ protected:
         }
 
     private:
+        ucs_status_t                      _status;
         long*                             _op_counter;
         size_t                            _counter;
         BufferIov*                        _iov;
@@ -765,8 +770,8 @@ public:
     public:
         IoWriteResponseCallback(size_t buffer_size,
             MemoryPool<IoWriteResponseCallback>& pool) :
-            _server(NULL), _conn(NULL), _op_cnt(NULL), _chunk_cnt(0), _sn(0),
-            _iov(NULL), _pool(pool) {
+            _status(UCS_OK), _server(NULL), _conn(NULL), _op_cnt(NULL),
+            _chunk_cnt(0), _sn(0), _iov(NULL), _pool(pool) {
         }
 
         void init(DemoServer *server, UcxConnection* conn, uint32_t sn,
@@ -777,14 +782,18 @@ public:
             _sn        = sn;
             _iov       = iov;
             _chunk_cnt = iov->size();
+            _status    = UCS_OK;
         }
 
         virtual void operator()(ucs_status_t status) {
+            if (_status == UCS_OK) {
+                _status = status;
+            }
             if (--_chunk_cnt > 0) {
                 return;
             }
 
-            if (status == UCS_OK) {
+            if (_status == UCS_OK) {
                 if (_server->opts().use_am) {
                     IoMessage *m = _server->_io_msg_pool.get();
                     m->init(IO_WRITE_COMP, _sn, 0, _server->opts().validate);
@@ -807,6 +816,7 @@ public:
         }
 
     private:
+        ucs_status_t                         _status;
         DemoServer*                          _server;
         UcxConnection*                       _conn;
         long*                                _op_cnt;
@@ -1193,7 +1203,7 @@ public:
     public:
         IoReadResponseCallback(size_t buffer_size,
             MemoryPool<IoReadResponseCallback>& pool) :
-            _comp_counter(0), _client(NULL),
+            _status(UCS_OK), _comp_counter(0), _client(NULL),
             _server_index(std::numeric_limits<size_t>::max()),
             _sn(0), _validate(false), _iov(NULL), _buffer(malloc(buffer_size)),
             _buffer_size(buffer_size), _meta_comp_counter(0), _pool(pool) {
@@ -1214,6 +1224,7 @@ public:
             _validate          = validate;
             _iov               = iov;
             _meta_comp_counter = meta_comp_counter;
+            _status            = UCS_OK;
         }
 
         ~IoReadResponseCallback() {
@@ -1221,6 +1232,9 @@ public:
         }
 
         virtual void operator()(ucs_status_t status) {
+            if (_status == UCS_OK) {
+                _status = status;
+            }
             if (--_comp_counter > 0) {
                 return;
             }
@@ -1228,7 +1242,7 @@ public:
             assert(_server_index != std::numeric_limits<size_t>::max());
             _client->handle_operation_completion(_server_index, IO_READ);
 
-            if (_validate && (status == UCS_OK)) {
+            if (_validate && (_status == UCS_OK)) {
                 validate(*_iov, _sn);
 
                 if (_meta_comp_counter != 0) {
@@ -1251,6 +1265,7 @@ public:
         }
 
     private:
+        ucs_status_t                        _status;
         long                                _comp_counter;
         DemoClient*                         _client;
         size_t                              _server_index;
