@@ -15,6 +15,9 @@
 #define UCT_GDR_COPY_IFACE_OVERHEAD (0)
 
 
+#define UCT_GDR_COPY_IFACE_LATENCY (ucs_linear_func_make(1e-6, 0))
+
+
 typedef uint64_t uct_gdr_copy_iface_addr_t;
 
 

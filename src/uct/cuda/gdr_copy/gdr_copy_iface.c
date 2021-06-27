@@ -86,7 +86,7 @@ uct_gdr_copy_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_hdr          = 0;
     iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->latency                 = ucs_linear_func_make(1e-6, 0);
+    iface_attr->latency                 = UCT_GDR_COPY_IFACE_LATENCY;
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = UCT_GDR_COPY_IFACE_DEFAULT_BANDWIDTH;
     iface_attr->overhead                = UCT_GDR_COPY_IFACE_OVERHEAD;
@@ -121,6 +121,11 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_iface_perf_attr_t *perf_attr)
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
         perf_attr->overhead = UCT_GDR_COPY_IFACE_OVERHEAD;
     }
+    
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = UCT_GDR_COPY_IFACE_LATENCY;
+    }
+
 
     return UCS_OK;
 }
