@@ -122,8 +122,8 @@ typedef struct ucp_context_config {
 
 struct ucp_config {
     /** Array of device lists names to use.
-     *  This array holds three lists - network devices, shared memory devices
-     *  and acceleration devices */
+     *  This array holds four lists - network devices, shared memory devices
+     *  and acceleration devices and loop-back device */
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
