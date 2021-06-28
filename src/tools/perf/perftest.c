@@ -468,7 +468,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        shortiov - short io-vector messages (only for active messages)\n");
     printf("                        bcopy    - copy-out (cannot be used for atomics)\n");
     printf("                        zcopy    - zero-copy (cannot be used for atomics)\n");
-    printf("                        iov      - scatter-gather list (iovec)\n");
     printf("     -W <count>     flow control window size, for active messages (%u)\n",
                                 ctx->params.super.uct.fc_window);
     printf("     -H <size>      active message header size (%zu), included in message size\n",
@@ -1627,7 +1626,18 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
 
     ucs_trace_func("depth=%u, num_files=%u", depth, ctx->num_batch_files);
 
-    if (parent_params->super.api == UCX_PERF_API_UCP) {
+    switch (parent_params->super.api) {
+    case UCX_PERF_API_UCT:
+        if (!strcmp(parent_params->super.uct.dev_name, TL_RESOURCE_NAME_NONE)) {
+            ucs_error("A device must be specified with -d flag for UCT test");
+            return UCS_ERR_INVALID_PARAM;
+        }
+        if (!strcmp(parent_params->super.uct.tl_name, TL_RESOURCE_NAME_NONE)) {
+            ucs_error("A transport must be specified with -x flag for UCT test");
+            return UCS_ERR_INVALID_PARAM;
+        }
+        break;
+    case UCX_PERF_API_UCP:
         if (strcmp(parent_params->super.uct.dev_name, TL_RESOURCE_NAME_NONE)) {
             ucs_warn("-d '%s' ignored for UCP test; see NOTES section in help message",
                      parent_params->super.uct.dev_name);
@@ -1636,6 +1646,10 @@ static ucs_status_t run_test_recurs(struct perftest_context *ctx,
             ucs_warn("-x '%s' ignored for UCP test; see NOTES section in help message",
                      parent_params->super.uct.tl_name);
         }
+        break;
+    default:
+        ucs_error("Invalid test case");
+        return UCS_ERR_INVALID_PARAM;
     }
 
     if (depth >= ctx->num_batch_files) {
