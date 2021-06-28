@@ -231,6 +231,15 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
     return length;
 }
 
+static inline int ucx_perf_cmd_is_atomic(ucx_perf_cmd_t command) {
+    if ((command == UCX_PERF_CMD_ADD) || (command == UCX_PERF_CMD_FADD) ||
+        (command == UCX_PERF_CMD_SWAP) || (command == UCX_PERF_CMD_CSWAP)) {
+        return 1;
+    }
+
+    return 0;
+}
+
 END_C_DECLS
 
 #endif

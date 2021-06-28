@@ -968,6 +968,7 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     case UCX_PERF_CMD_FADD:
     case UCX_PERF_CMD_SWAP:
     case UCX_PERF_CMD_CSWAP:
+        ucp_params->features |= UCP_FEATURE_RMA;
         if (message_size == sizeof(uint32_t)) {
             ucp_params->features |= UCP_FEATURE_AMO32;
         } else if (message_size == sizeof(uint64_t)) {
@@ -1085,6 +1086,10 @@ static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
         buffer_size = params->msg_size_cnt * params->iov_stride;
     } else {
         buffer_size = ucx_perf_get_message_size(params);
+    }
+
+    if (ucx_perf_cmd_is_atomic(params->command)) {
+        buffer_size *= 2;
     }
 
     /* Allocate send buffer memory */
@@ -1733,6 +1738,10 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
 
     thread_count = perf->params.thread_count;
     message_size = ucx_perf_get_message_size(&perf->params);
+
+    if (ucx_perf_cmd_is_atomic(perf->params.command)) {
+        message_size *= 2;
+    }
 
     status = ucp_perf_test_alloc_mem(perf);
     if (status != UCS_OK) {
