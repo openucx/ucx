@@ -504,6 +504,22 @@ public:
         ucp_worker_fence(m_perf.ucp.worker);
     }
 
+    void reset_buffers(const psn_t psn, size_t offset)
+    {
+        psn_t src = psn;
+
+        if (CMD == UCX_PERF_CMD_PUT) {
+            m_perf.allocator->memcpy(UCS_PTR_BYTE_OFFSET(m_perf.recv_buffer, offset),
+                                     m_perf.allocator->mem_type,
+                                     &src, UCS_MEMORY_TYPE_HOST,
+                                     sizeof(src));
+            m_perf.allocator->memcpy(UCS_PTR_BYTE_OFFSET(m_perf.send_buffer, offset),
+                                     m_perf.allocator->mem_type,
+                                     &src, UCS_MEMORY_TYPE_HOST,
+                                     sizeof(src));
+        }
+    }
+
     ucs_status_t run_pingpong()
     {
         const psn_t unknown_psn = std::numeric_limits<psn_t>::max();
@@ -529,12 +545,7 @@ public:
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
 
-        if (CMD == UCX_PERF_CMD_PUT) {
-            m_perf.allocator->memcpy((psn_t*)m_perf.recv_buffer + length - 1,
-                                     m_perf.allocator->mem_type,
-                                     &unknown_psn, UCS_MEMORY_TYPE_HOST,
-                                     sizeof(unknown_psn));
-        }
+        reset_buffers(unknown_psn, length - 1);
 
         ucp_perf_barrier(&m_perf);
 
@@ -593,6 +604,8 @@ public:
         ucp_perf_init_common_params(&length, &send_length, &send_datatype,
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
+
+        reset_buffers(0, 0);
 
         ucp_perf_barrier(&m_perf);
 
