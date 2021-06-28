@@ -427,95 +427,14 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
-/*
- * Caller must acquire lock
- */
-ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
-                                      uct_ep_h uct_ep, ucp_lane_index_t lane,
-                                      ucs_status_t status)
-{
-    UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
-    ucs_status_t ret_status = UCS_OK;
-    ucs_log_level_t log_level;
-    ucp_request_t *close_req;
-
-    ucs_assert((lane != UCP_NULL_LANE) || (uct_ep == NULL));
-
-    ucs_debug("ep %p: set_ep_failed status %s on lane[%d]=%p", ucp_ep,
-              ucs_status_string(status), lane, uct_ep);
-
-    /* In case if this is a local failure we need to notify remote side */
-    if (ucp_ep_is_cm_local_connected(ucp_ep)) {
-        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
-    }
-
-    /* set endpoint to failed to prevent wireup_ep switch */
-    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        goto out_ok;
-    }
-
-    /* The EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, status);
-    ucp_ep_reqs_purge(ucp_ep, status);
-    ucp_stream_ep_cleanup(ucp_ep);
-
-    if (ucp_ep->flags & UCP_EP_FLAG_USED) {
-        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-            /* Promote close operation to CANCEL in case of transport error,
-             * since the disconnect event may never arrive. */
-            close_req                        = ucp_ep_ext_control(ucp_ep)->
-                close_req.req;
-            close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
-            ucp_ep_local_disconnect_progress(close_req);
-        } else if (ucp_ep_ext_control(ucp_ep)->err_cb == NULL) {
-            /* Do not print error if connection reset by remote peer since it
-             * can be part of user level close protocol */
-            log_level = (status == UCS_ERR_CONNECTION_RESET) ?
-                        UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
-
-            ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
-            ucs_log(log_level, "ep %p: error '%s' on %s will not be handled"
-                    " since no error callback is installed",
-                    ucp_ep, ucs_status_string(status),
-                    ucs_string_buffer_cstr(&lane_info_strb));
-            ret_status = status;
-            goto out;
-        } else {
-            ucp_ep_invoke_err_cb(ucp_ep, status);
-        }
-    } else if (ucp_ep->flags & (UCP_EP_FLAG_INTERNAL | UCP_EP_FLAG_CLOSED)) {
-        /* No additional actions are required, this is already closed EP or
-         * an internal one for sending WIREUP/EP_REMOVED messsage to a peer.
-         * So, close operation was already scheduled, this EP will be deleted
-         * after all lanes will be discarded successfully */
-        ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);
-    } else {
-        ucs_debug("ep %p: destroy endpoint which is not exposed to a user due"
-                  " to peer failure", ucp_ep);
-        ucp_ep_disconnected(ucp_ep, 1);
-    }
-
-out_ok:
-    ret_status = UCS_OK;
-
-out:
-    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
-     * that he can wake-up on this event */
-    ucp_worker_signal_internal(worker);
-
-    return ret_status;
-}
-
-static ucs_status_t
+static void
 ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                        uct_ep_h uct_ep, ucs_status_t status)
 {
-    ucp_worker_h worker = ucp_ep->worker;
     ucp_wireup_ep_t *wireup_ep;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        return UCS_OK;
+        return;
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
@@ -524,13 +443,14 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        return ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep, lane, status);
+        ucp_ep_set_failed(ucp_ep, lane, status);
+        return;
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
          * pending requests have to be handled there */
-        return UCS_OK;
+        return;
     }
 
     /**
@@ -542,7 +462,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                  ucp_destroyed_ep_pending_purge, ucp_ep);
     ucp_wireup_remote_connected(ucp_ep);
-    return UCS_OK;
 }
 
 static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
@@ -570,7 +489,6 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
     ucp_lane_index_t lane;
-    ucs_status_t ret_status;
     ucp_ep_h ucp_ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -588,28 +506,28 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
          * operations are completed before destroying the failed endpoint. */
         uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
                              UCS_STATUS_PTR(UCS_ERR_CANCELED));
-        ret_status = UCS_OK;
+        status = UCS_OK;
         goto out;
     }
 
     ucp_ep = ucp_worker_find_lane(&worker->all_eps, uct_ep, &lane);
     if (ucp_ep == NULL) {
         ucp_ep = ucp_worker_find_lane(&worker->internal_eps, uct_ep, &lane);
+        if (ucp_ep == NULL) {
+            ucs_error("worker %p: uct_ep %p isn't associated with any UCP"
+                      " endpoint and was not scheduled to be discarded",
+                      worker, uct_ep);
+            status = UCS_ERR_NO_ELEM;
+            goto out;
+        }
     }
 
-    if (ucp_ep != NULL) {
-        ret_status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane,
-                                                            uct_ep, status);
-    } else {
-        ucs_error("worker %p: uct_ep %p isn't associated with any ucp endpoint"
-                  " and was not scheduled to be discarded",
-                  worker, uct_ep);
-        ret_status = UCS_ERR_NO_ELEM;
-    }
+    ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep, status);
+    status = UCS_OK;
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    return ret_status;
+    return status;
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)

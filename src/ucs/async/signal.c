@@ -619,6 +619,8 @@ static void ucs_async_signal_global_cleanup()
 ucs_async_ops_t ucs_async_signal_ops = {
     .init               = ucs_async_signal_global_init,
     .cleanup            = ucs_async_signal_global_cleanup,
+    .is_from_async      =
+            (ucs_async_is_from_async_t)ucs_empty_function_return_zero,
     .block              = ucs_async_signal_block_all,
     .unblock            = ucs_async_signal_unblock_all,
     .context_init       = ucs_async_signal_init,

@@ -1031,8 +1031,7 @@ protected:
             /* Emulate failure of the endpoint by invoking error handling
              * procedure */
             UCS_ASYNC_BLOCK(&e.worker()->async);
-            ucp_worker_set_ep_failed(e.worker(), e.ep(), NULL, UCP_NULL_LANE,
-                                     UCS_ERR_ENDPOINT_TIMEOUT);
+            ucp_ep_set_failed(e.ep(), UCP_NULL_LANE, UCS_ERR_ENDPOINT_TIMEOUT);
             UCS_ASYNC_UNBLOCK(&e.worker()->async);
         }
 

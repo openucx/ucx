@@ -253,7 +253,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
     return UCS_OK;
 
 err:
-    ucp_worker_set_ep_failed(ep->worker, ep, NULL, UCP_NULL_LANE, status);
+    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
     return status;
 }
 
@@ -450,7 +450,7 @@ ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
         return UCS_OK;
     }
 
-    ucp_worker_set_ep_failed(worker, ep, NULL, UCP_NULL_LANE, status);
+    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
     return status;
 }
 
@@ -805,8 +805,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
-        ucp_worker_set_ep_failed(worker, ep, NULL, UCP_NULL_LANE,
-                                 UCS_ERR_CONNECTION_RESET);
+        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
     } else {
         ucs_bug("invalid wireup message");
     }
