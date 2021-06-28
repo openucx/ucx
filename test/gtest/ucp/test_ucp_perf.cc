@@ -9,6 +9,7 @@
 #include "ucp_test.h"
 
 #include <common/test_perf.h>
+#include <ucp/core/ucp_types.h>
 
 
 #define MB   pow(1024.0, -2)
@@ -17,8 +18,38 @@
 
 class test_ucp_perf : public ucp_test, public test_perf {
 public:
+    enum {
+        VARIANT_TEST_TYPE,
+        VARIANT_ATOMIC_MODE
+    };
+
+    enum {
+        ATOMIC_CPU = 1,
+        ATOMIC_DEVICE
+    };
+
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, 0);
+        ucp_test_variant* variant;
+
+        for (int i = 0; i < tests_num; i++) {
+            const test_spec *test = &tests[i];
+
+            if ((test->command == UCX_PERF_CMD_ADD) ||
+                (test->command == UCX_PERF_CMD_FADD) ||
+                (test->command == UCX_PERF_CMD_SWAP) ||
+                (test->command == UCX_PERF_CMD_CSWAP)) {
+                variant = &add_variant(variants, 0);
+                add_variant_value(variant->values, i, test->title);
+                add_variant_value(variant->values, ATOMIC_CPU, "cpu");
+
+                variant = &add_variant(variants, 0);
+                add_variant_value(variant->values, i, test->title);
+                add_variant_value(variant->values, ATOMIC_DEVICE, "device");
+            } else {
+                variant = &add_variant(variants, 0);
+                add_variant_value(variant->values, i, test->title);
+            }
+        }
     }
 
 protected:
@@ -51,236 +82,237 @@ protected:
     }
 
     const static test_spec tests[];
+    const static size_t tests_num;
 };
 
 
 const test_perf::test_spec test_ucp_perf::tests[] =
 {
-  { "tag 0-msg latency", "usec",
+  { "tag0_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 0 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "tag latency", "usec",
+  { "tag_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "tag latency errh", "usec",
+  { "tag_lat_errh", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     UCX_PERF_TEST_FLAG_ERR_HANDLING },
 
-  { "blocking tag latency", "usec",
+  { "tag_lat_b", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_SLEEP,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "tag iov latency", "usec",
+  { "tag_lat_iov", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_IOV, 8192, 3, { 1024, 1024, 1024 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "tag mr", "Mpps",
+  { "tag_mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
     0 },
 
-  { "blocking tag mr", "Mpps",
+  { "tag_mr_b", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_SLEEP,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
     0 },
 
-  { "tag sync mr", "Mpps",
+  { "tag_mr_sync", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG_SYNC, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 200000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.05, 100.0, 0},
 
-  { "tag wild mr", "Mpps",
+  { "tag_mr_wild", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
     UCX_PERF_TEST_FLAG_TAG_WILDCARD },
 
-  { "tag bw", "MB/sec",
+  { "tag_bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
-  { "blocking tag bw", "MB/sec",
+  { "tag_bw_b", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_SLEEP,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
-  { "tag bw_zcopy_multi", "MB/sec",
+  { "tag_bw_zcopy", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_TAG, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 16, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
-  { "put latency", "usec",
+  { "put_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
-  { "put rate", "Mpps",
+  { "put_rate", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.5, 100.0,
     0 },
 
-  { "put bw", "MB/sec",
+  { "put_bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_PUT, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 2048 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
     0 },
 
-  { "get latency", "usec",
+  { "get_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
-  { "get bw", "MB/sec",
+  { "get_bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_GET, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
     0 },
 
-  { "stream latency", "usec",
+  { "str_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0, 0 },
 
-  { "stream bw", "MB/sec",
+  { "str_bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0, 0 },
 
-  { "stream recv-data latency", "usec",
+  { "str_recv_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     UCX_PERF_TEST_FLAG_STREAM_RECV_DATA },
 
-  { "stream recv-data bw", "MB/sec",
+  { "str_recv_lat", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_STREAM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 16384 }, 1, 10000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 200.0, 100000.0,
     UCX_PERF_TEST_FLAG_STREAM_RECV_DATA },
 
-  { "atomic add rate", "Mpps",
+  { "amo_add", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_ADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 1000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 500.0,
     0 },
 
-  { "atomic fadd latency", "usec",
+  { "amo_fadd", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_FADD, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
-  { "atomic swap latency", "usec",
+  { "amo_swap", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_SWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
-  { "atomic cswap latency", "usec",
+  { "amo_cswap", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_CSWAP, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 30.0,
     0 },
 
-  { "am 0-msg latency", "usec",
+  { "am0_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 0 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "am latency", "usec",
+  { "am_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "blocking am latency", "usec",
+  { "am_lat_b", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_SLEEP,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "am iov latency", "usec",
+  { "am_iov_lat", "usec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_IOV, 8192, 3, { 1024, 1024, 1024 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, latency.total_average), 1e6, 0.001, 60.0,
     0 },
 
-  { "am mr", "Mpps",
+  { "am_mr", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
     0 },
 
-  { "blocking am mr", "Mpps",
+  { "am_mr_b", "Mpps",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_SLEEP,
     UCP_PERF_DATATYPE_CONTIG, 0, 1, { 8 }, 1, 2000000lu,
     ucs_offsetof(ucx_perf_result_t, msgrate.total_average), 1e-6, 0.1, 100.0,
     0 },
 
-  { "am bw", "MB/sec",
+  { "am_bw", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_POLL,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
 
-  { "blocking am bw", "MB/sec",
+  { "am_bw_b", "MB/sec",
     UCX_PERF_API_UCP, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_STREAM_UNI,
     UCX_PERF_WAIT_MODE_SLEEP,
     UCT_PERF_DATA_LAYOUT_LAST, 0, 1, { 2048 }, 1, 100000lu,
     ucs_offsetof(ucx_perf_result_t, bandwidth.total_average), MB, 100.0, 100000.0 },
-
-  { NULL }
 };
+
+const size_t test_ucp_perf::tests_num = ucs_static_array_size(test_ucp_perf::tests);
 
 
 UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
@@ -294,27 +326,33 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     }
 
     std::stringstream ss;
-    ss << GetParam();
+    ss << GetParam().transports;
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv tls("UCX_TLS", ss.str().c_str());
     ucs::scoped_setenv warn_invalid("UCX_WARN_INVALID_CONFIG", "no");
+    const char* atomic_mode_str = "guess";
 
-    /* Run all tests */
-    for (const test_spec *test_iter = tests; test_iter->title != NULL;
-         ++test_iter) {
-        test_spec test = *test_iter;
-
-        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-            test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
-            test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
-        } else {
-            test.max *= UCT_PERF_TEST_MULTIPLIER;
-            test.min /= UCT_PERF_TEST_MULTIPLIER;
-        }
-        test.iters = ucs_min(test.iters, max_iter);
-
-        run_test(test, 0, check_perf, "", "");
+    if (get_variant_value(VARIANT_ATOMIC_MODE) == ATOMIC_CPU) {
+        atomic_mode_str = "cpu";
+    } else if (get_variant_value(VARIANT_ATOMIC_MODE) == ATOMIC_DEVICE) {
+        atomic_mode_str = "device";
     }
+
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv atomic_mode("UCX_ATOMIC_MODE", atomic_mode_str);
+
+    test_spec test = tests[get_variant_value(VARIANT_TEST_TYPE)];
+
+    if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+        test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
+        test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
+    } else {
+        test.max *= UCT_PERF_TEST_MULTIPLIER;
+        test.min /= UCT_PERF_TEST_MULTIPLIER;
+    }
+    test.iters = ucs_min(test.iters, max_iter);
+
+    run_test(test, 0, check_perf, "", "");
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_perf)

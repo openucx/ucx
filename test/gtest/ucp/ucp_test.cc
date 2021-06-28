@@ -23,8 +23,8 @@ namespace ucp {
 const uint32_t MAGIC = 0xd7d7d7d7U;
 }
 
-static std::ostream& operator<<(std::ostream& os,
-                                const std::vector<std::string>& str_vector)
+std::ostream& operator<<(std::ostream& os,
+                         const std::vector<std::string>& str_vector)
 {
     for (std::vector<std::string>::const_iterator iter = str_vector.begin();
          iter != str_vector.end(); ++iter) {
@@ -339,7 +339,7 @@ ucp_test_variant& ucp_test::add_variant(std::vector<ucp_test_variant>& variants,
 }
 
 int ucp_test::get_variant_value(unsigned index) const {
-    if (GetParam().variant.values.empty()) {
+    if (GetParam().variant.values.size() <= index) {
         return DEFAULT_PARAM_VARIANT;
     }
     return GetParam().variant.values.at(index).value;
