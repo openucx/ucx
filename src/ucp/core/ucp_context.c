@@ -381,7 +381,7 @@ const ucp_tl_bitmap_t ucp_tl_bitmap_min = UCS_BITMAP_ZERO;
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
-    unsigned full_prefix_len = sizeof(UCS_DEFAULT_ENV_PREFIX) + 1;
+    unsigned full_prefix_len = sizeof(UCS_DEFAULT_ENV_PREFIX);
     unsigned env_prefix_len  = 0;
     ucp_config_t *config;
     ucs_status_t status;
