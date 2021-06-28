@@ -41,6 +41,24 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
     return ucp_worker_add_rkey_config(worker, key, lanes_distance, cfg_index_p);
 }
 
+static UCS_F_ALWAYS_INLINE khint_t
+ucp_worker_mpool_hash_func(ucp_worker_mpool_key_t mpool_key)
+{
+    return (khint_t)mpool_key.mem_type ^ (mpool_key.sys_dev << 16);
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
+                              ucp_worker_mpool_key_t mpool_key2)
+{
+    return (mpool_key1.sys_dev == mpool_key2.sys_dev) &&
+           (mpool_key1.mem_type  == mpool_key2.mem_type);
+}
+
+KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t*,
+           1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
+
+
 /**
  * @return Worker name
  */

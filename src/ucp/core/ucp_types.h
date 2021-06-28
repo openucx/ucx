@@ -182,6 +182,16 @@ typedef enum {
 
 
 /**
+ * RNDV fragment memory type.
+ */
+typedef enum {
+    UCP_RNDV_FRAG_MEM_TYPE_AUTO, /* Runtime automatically chooses optimal frag mem_type */
+    UCP_RNDV_FRAG_MEM_TYPE_HOST, /* Use host memory fragments */
+    UCP_RNDV_FRAG_MEM_TYPE_LAST
+} ucp_rndv_frag_mem_type_t;
+
+
+/**
  * Active message tracer.
  */
 typedef void (*ucp_am_tracer_t)(ucp_worker_h worker, uct_am_trace_type_t type,
