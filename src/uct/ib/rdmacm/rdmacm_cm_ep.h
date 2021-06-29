@@ -77,6 +77,8 @@ ucs_status_t uct_rdmacm_cm_ep_pack_cb(uct_rdmacm_cm_ep_t *cep,
                                       void *private_data,
                                       size_t *priv_data_length);
 
+ucs_status_t uct_rdmacm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
 ucs_status_t uct_rdmacm_cm_ep_resolve_cb(uct_rdmacm_cm_ep_t *cep);
 
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,

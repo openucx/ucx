@@ -128,8 +128,8 @@ UCS_CLASS_DECLARE_DELETE_FUNC(uct_cm_base_ep_t, uct_base_ep_t);
 
 extern ucs_config_field_t uct_cm_config_table[];
 
-UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_worker_h,
-                  uct_component_h, const uct_cm_config_t*);
+UCS_CLASS_DECLARE(uct_cm_t, uct_cm_ops_t*, uct_iface_ops_t*, uct_iface_internal_ops_t*,
+                  uct_worker_h, uct_component_h, const uct_cm_config_t*);
 
 ucs_status_t uct_listener_backlog_adjust(const uct_listener_params_t *params,
                                          int max_value, int *backlog);

@@ -429,6 +429,19 @@ int ucs_sockaddr_is_known_af(const struct sockaddr *sa);
 
 
 /**
+ * Extract the IP address from a given socket fd.
+ *
+ * @param [in]   fd          Socket fd.
+ * @param [out]  sock_addr   IP address.
+ * @param [out]  addr_len    Length of the IP address.
+ *
+ * @return UCS_OK if sock_addr has a valid IP address.
+ */
+ucs_status_t ucs_socket_getname(int fd, struct sockaddr_storage *sock_addr,
+                                socklen_t *addr_len);
+
+
+/**
  * Extract the IP address from a given socket fd and return it as a string.
  *
  * @param [in]   fd          Socket fd.

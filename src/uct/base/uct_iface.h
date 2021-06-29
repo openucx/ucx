@@ -235,10 +235,15 @@ typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
 typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
 
 
+/* Query the attributes of the ep */
+typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_estimate_perf_func_t iface_estimate_perf;
     uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
+    uct_ep_query_func_t            ep_query;
 } uct_iface_internal_ops_t;
 
 
