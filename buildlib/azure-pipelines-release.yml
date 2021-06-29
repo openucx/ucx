@@ -52,7 +52,8 @@ stages:
               set -eE
               source ./buildlib/az-helpers.sh
               set -x
-              check_commit_message $(Build.SourceVersion) "AZP/RELEASE: " $(Build.Reason)
+              CommitID=$(system.pullRequest.sourceCommitId)||$(Build.SourceVersion)
+              check_commit_message $(system.pullRequest.sourceCommitId) "AZP/RELEASE: " $(Build.Reason)
             name: Commit
   # Create an empty draft to avoid race condition in distro releases
   - stage: GitHubDraft
