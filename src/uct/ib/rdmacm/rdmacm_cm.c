@@ -113,7 +113,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
         ucs_debug("%s general_obj_types_caps: reserved qpn is not support", dev_name);
         goto dummy_qp_ctx_init;
     }
-    
+
     UCT_IB_MLX5DV_SET(query_hca_cap_in, in, op_mod,
                       (UCT_IB_MLX5_CAP_2_GENERAL << 1) |
                       UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR);
@@ -161,7 +161,7 @@ uct_rdmacm_cm_device_context_cleanup(uct_rdmacm_cm_device_context_t *ctx)
     int ret;
 
     if (ctx->use_reserved_qpn) {
-        /* There can be some blks are not fully used, then they won't be 
+        /* There can be some blks are not fully used, then they won't be
            destroyed in RDMACM CM EP, so need to be destroyed here. */
         ucs_list_for_each_safe(blk, tmp, &ctx->blk_list, entry) {
             uct_rdmacm_cm_reserved_qpn_blk_destroy(blk);
@@ -877,12 +877,9 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
 
     self->ev_ch = rdma_create_event_channel();
     if (self->ev_ch == NULL) {
-        if (errno == ENODEV) {
-            status  = UCS_ERR_NO_DEVICE;
-            log_lvl = UCS_LOG_LEVEL_DIAG;
-        } else if (errno == ENOENT) {
+        if ((errno == ENODEV) || (errno == ENOENT)) {
             status  = UCS_ERR_IO_ERROR;
-            log_lvl = UCS_LOG_LEVEL_WARN;
+            log_lvl = UCS_LOG_LEVEL_DIAG;
         } else {
             status  = UCS_ERR_IO_ERROR;
             log_lvl = UCS_LOG_LEVEL_ERROR;

@@ -59,7 +59,7 @@ static void usage() {
     printf("                    'inter' : different node\n");
     /* TODO: add IPv6 support */
     printf("  -A <ipv4>       Local IPv4 device address to use for creating\n"
-           "                  endpoint in client/server mode");
+           "                  endpoint in client/server mode\n");
     printf("  -h              Show this help message\n");
     printf("\n");
 }
