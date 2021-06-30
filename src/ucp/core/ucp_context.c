@@ -1360,7 +1360,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
               context->config.ext.bcopy_bw);
 
     /* always init MT lock in context even though it is disabled by user,
-     * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
+     * because we need to use context lock to protect ucp_mem_ and ucp_rkey_
      * routines */
     UCP_THREAD_LOCK_INIT(&context->mt_lock);
 
