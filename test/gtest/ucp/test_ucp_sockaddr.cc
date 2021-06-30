@@ -67,14 +67,6 @@ public:
         modify_config("KEEPALIVE_INTERVAL", "10s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
 
-        /*
-         * FIXME: this is a workaround of the issue reproduced by
-         *        the 'close_ep_force_before_err_cb' test with RC transport
-         *        where TX-queue less than FC_WND, so uct_flush cancel returns
-         *        UCS_ERR_NO_RESOURCES and can not be handled after error
-         */
-        modify_config("RC_FC_WND_SIZE", "128", SETENV_IF_NOT_EXIST);
-
         get_sockaddr();
         ucp_test::init();
         skip_loopback();
@@ -1088,7 +1080,7 @@ protected:
 
         wait_for_flag(&m_err_count);
         concurrent_disconnect(UCP_EP_CLOSE_MODE_FORCE);
-    }    
+    }
 };
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup, compare_cm_and_wireup_configs,
