@@ -73,12 +73,9 @@ stages:
 
           - bash: |
               set -eE
-              BASE_SOURCEVERSION=$(git rev-parse HEAD^)
-              range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
-              ok=1
-              for sha1 in `git log $range --format="%h"`
-              do
-                  title=`git log -1 --format="%s" $sha1`
+              source ./buildlib/az-helpers.sh
+              titles="`get_pr_commits $(Build.SourceVersion)`"
+              while IFS= read -r title; do
                   if echo $title | grep -qP '^Merge |^[0-9A-Z/_\-]*: \w'
                   then
                       echo "Good commit title: '$title'"
@@ -86,7 +83,8 @@ stages:
                       echo "Bad commit title: '$title'"
                       ok=0
                   fi
-              done
+              done <<< "$titles"
+
               if [ $ok -ne 1 ]
               then
                  url="https://github.com/openucx/ucx/wiki/Guidance-for-contributors#general-guidelines"
