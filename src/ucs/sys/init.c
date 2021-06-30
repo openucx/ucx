@@ -14,7 +14,7 @@
 #include <ucs/config/parser.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
 #include <ucs/stats/stats.h>
 #include <ucs/async/async.h>

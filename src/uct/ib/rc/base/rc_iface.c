@@ -12,7 +12,7 @@
 #include "rc_ep.h"
 
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 #include <ucs/vfs/base/vfs_obj.h>

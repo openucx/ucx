@@ -13,7 +13,7 @@
 #include "ud_inl.h"
 
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>

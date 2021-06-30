@@ -15,7 +15,7 @@
 
 #include <uct/api/uct.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/module.h>

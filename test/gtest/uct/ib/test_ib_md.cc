@@ -48,8 +48,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 
     buffer     = NULL;
     alloc_size = size;
-    status     = ucs_mmap_alloc(&alloc_size, &buffer, 0
-                                UCS_MEMTRACK_NAME("test_umr"));
+    status     = ucs_mmap_alloc(&alloc_size, &buffer, 0, "test_umr");
     ASSERT_UCS_OK(status);
 
     uct_mem_h memh;

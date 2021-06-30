@@ -924,7 +924,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
         }
     }
 
-    ucs_memtrack_allocated(ptr, alloc_size UCS_MEMTRACK_VAL);
+    ucs_memtrack_allocated(ptr, alloc_size, alloc_name);
     *address_p = ptr;
     *size      = alloc_size;
     return UCS_OK;
@@ -945,7 +945,7 @@ ucs_status_t ucs_sysv_free(void *address)
 }
 
 ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
-                            int flags UCS_MEMTRACK_ARG)
+                            int flags, const char *alloc_name)
 {
     size_t alloc_length;
     void *addr;
@@ -953,7 +953,7 @@ ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
     alloc_length = ucs_align_up_pow2(*size, ucs_get_page_size());
 
     addr = ucs_mmap(*address_p, alloc_length, PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANON | flags, -1, 0 UCS_MEMTRACK_VAL);
+                    MAP_PRIVATE | MAP_ANON | flags, -1, 0, alloc_name);
     if (addr == MAP_FAILED) {
         return UCS_ERR_NO_MEMORY;
     }

@@ -13,7 +13,7 @@
 #include "ib_md.h"
 
 #include <ucs/arch/bitops.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/compiler.h>

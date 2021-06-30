@@ -174,7 +174,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_GTEST], [false])
      AM_CONDITIONAL([HAVE_STATS], [false])
      AM_CONDITIONAL([HAVE_TUNING], [false])
-     AM_CONDITIONAL([HAVE_MEMTRACK], [false])
      AM_CONDITIONAL([HAVE_IB], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW_UD], [false])

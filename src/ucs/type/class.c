@@ -11,7 +11,7 @@
 #include "class.h"
 
 #include <ucs/debug/assert.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
 
 

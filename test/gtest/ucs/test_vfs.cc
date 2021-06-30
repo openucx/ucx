@@ -6,7 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 }

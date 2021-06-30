@@ -8,7 +8,7 @@
 #include "config.h"
 #endif
 
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/sys/compiler.h>

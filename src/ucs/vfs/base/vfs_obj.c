@@ -14,7 +14,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log_def.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
 #include <stdarg.h>

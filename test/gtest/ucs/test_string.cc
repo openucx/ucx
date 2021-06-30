@@ -6,7 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/sys/string.h>

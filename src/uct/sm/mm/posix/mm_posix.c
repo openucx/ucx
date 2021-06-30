@@ -11,7 +11,7 @@
 
 #include <uct/sm/mm/base/mm_md.h>
 #include <uct/sm/mm/base/mm_iface.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
 #include <sys/mman.h>
@@ -300,7 +300,7 @@ uct_posix_mmap(void **address_p, size_t *length_p, int flags, int fd,
 #endif
 
     result = ucs_mmap(*address_p, aligned_length, UCT_POSIX_MMAP_PROT,
-                      MAP_SHARED | flags, fd, 0 UCS_MEMTRACK_VAL);
+                      MAP_SHARED | flags, fd, 0, alloc_name);
     if (result == MAP_FAILED) {
         ucs_log(err_level,
                 "shared memory mmap(addr=%p, length=%zu, flags=%s%s, fd=%d) failed: %m",
