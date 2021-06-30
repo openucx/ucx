@@ -133,16 +133,41 @@ try_load_cuda_env() {
 
 
 check_commit_message() {
-    git_id=$1
+    build_reason=$1
     title_mask=$2
-    build_reason=$3
-    echo "Get commit message target $git_id"
-    title=`git log -1 --format="%s" $git_id`
+    titles=$3
 
-    if [[ ( "$build_reason" == "IndividualCI" ) || ( "$title" == "$title_mask"* && "$build_reason" == "PullRequest" ) ]]
+    ok=0
+    if [[ "$build_reason" == "IndividualCI" ]]
+    then
+        ok=1
+    elif [[ "$build_reason" == "PullRequest" ]]
+    then
+        while IFS= read -r title; do
+            if [[ "$title" == "$title_mask"* ]]
+            then
+                ok=1
+                break
+            fi
+        done <<< "$titles"
+    fi
+
+    if [ $ok -eq 1 ]
     then
         echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
     else
         echo "##vso[task.setvariable variable=Launch;isOutput=true]No"
     fi
+}
+
+
+get_pr_commits() {
+    git_id=$1
+    BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+    range="$BASE_SOURCEVERSION..${git_id}"
+    for sha1 in `git log $range --format="%h"`
+    do
+      title=`git log -1 --format="%s" $sha1`
+      echo $title
+    done
 }
