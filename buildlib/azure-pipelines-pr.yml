@@ -73,6 +73,7 @@ stages:
 
           - bash: |
               set -eE
+              source ./buildlib/az-helpers.sh
               titles="`get_pr_commits $(Build.SourceVersion)`"
               while IFS= read -r title; do
                   if echo $title | grep -qP '^Merge |^[0-9A-Z/_\-]*: \w'
