@@ -340,10 +340,6 @@ void ucp_worker_signal_internal(ucp_worker_h worker);
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
 
-ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
-                                      uct_ep_h uct_ep, ucp_lane_index_t lane,
-                                      ucs_status_t status);
-
 void ucp_worker_keepalive_add_ep(ucp_ep_h );
 
 /* EP should be removed from worker all_eps prior to call this function */

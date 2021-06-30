@@ -74,6 +74,17 @@ void ucs_async_context_cleanup(ucs_async_context_t *async);
 
 
 /**
+ * Returns whether a function called from an async thread or not.
+ *
+ * @param async Event context to check `is_called_from_async` status for.
+ *
+ * @return 0 - isn't called from an async thread, otherwise - from an async
+ *         thread.
+ */
+int ucs_async_is_from_async(const ucs_async_context_t *async);
+
+
+/**
  * Check if an async callback was missed because the main thread has blocked
  * the async context. This works as edge-triggered.
  * Should be called with the lock held.
