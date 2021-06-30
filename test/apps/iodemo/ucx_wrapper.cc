@@ -875,7 +875,8 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 {
     std::stringstream ss;
     _remote_address = UcxContext::sockaddr_str(saddr, addrlen);
-    ss << "[UCX-connection #" << _conn_id << " " << _remote_address << "]";
+    ss << "[UCX-connection " << this << ": #" << _conn_id << " "
+       << _remote_address << "]";
     memset(_log_prefix, 0, MAX_LOG_PREFIX_SIZE);
     int length = ss.str().length();
     if (length >= MAX_LOG_PREFIX_SIZE) {
