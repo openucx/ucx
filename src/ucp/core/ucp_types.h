@@ -187,6 +187,7 @@ typedef enum {
 typedef enum {
     UCP_RNDV_FRAG_MEM_TYPE_AUTO, /* Runtime automatically chooses optimal frag mem_type */
     UCP_RNDV_FRAG_MEM_TYPE_HOST, /* Use host memory fragments */
+    UCP_RNDV_FRAG_MEM_TYPE_CUDA, /* Use cuda memory fragments */
     UCP_RNDV_FRAG_MEM_TYPE_LAST
 } ucp_rndv_frag_mem_type_t;
 

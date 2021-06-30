@@ -55,6 +55,7 @@ static const char *ucp_rndv_modes[] = {
 static const char *ucp_rndv_frag_mem_types[] = {
     [UCP_RNDV_FRAG_MEM_TYPE_AUTO]      = "auto",
     [UCP_RNDV_FRAG_MEM_TYPE_HOST]      = "host",
+    [UCP_RNDV_FRAG_MEM_TYPE_CUDA]      = "cuda",
     [UCP_RNDV_FRAG_MEM_TYPE_LAST]      = NULL,
 };
 
