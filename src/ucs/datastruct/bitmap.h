@@ -90,7 +90,7 @@ _ucs_bitmap_word_index(size_t bitmap_words, size_t bit_index)
  * @param _bitmap    Take the word from this bitmap
  * @param _bit_index Index of the bit for fetching the word
  *
- * @return The word which containt
+ * @return The word which contains requested bit index
  */
 #define _UCS_BITMAP_WORD_BY_BIT(_bitmap, _bit_index) \
     _UCS_BITMAP_WORD((_bitmap), UCS_BITMAP_WORD_INDEX(_bitmap, _bit_index))
@@ -527,7 +527,7 @@ ucs_bitmap_is_zero(const void *bitmap, size_t num_words)
  * past the last bit (bitmap size).
  *
  * @param bitmap_words Look for the first bit in the words of this bitmap
- * @param num_words    Number of words in the bitmsp
+ * @param num_words    Number of words in the bitmap
  * @param start_index  The first bit to look from
  */
 static UCS_F_ALWAYS_INLINE int
