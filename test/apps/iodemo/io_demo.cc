@@ -1756,8 +1756,8 @@ public:
 
         /* Pick a random connected server to which the client has credits
          * to send (its conn's window is not full) */
-        size_t active_index = IoDemoRandom::rand(size_t(0),
-                                                 _num_active_servers_to_use - 1);
+        size_t active_index =
+                IoDemoRandom::urand<size_t>(_num_active_servers_to_use);
         size_t server_index = _active_servers[active_index];
         assert(get_num_uncompleted(server_index) < opts().conn_window_size);
         assert(_server_info[server_index].conn != NULL);
@@ -1922,8 +1922,8 @@ private:
             return opts().operations[0];
         }
 
-        return opts().operations[IoDemoRandom::rand(
-                                 size_t(0), opts().operations.size() - 1)];
+        return opts().operations[IoDemoRandom::urand<size_t>(
+                                         opts().operations.size())];
     }
 
     void report_performance(long num_iters, double elapsed, op_info_t *op_info) {
