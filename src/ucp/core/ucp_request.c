@@ -642,3 +642,13 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
 
     return UCS_ERR_MESSAGE_TRUNCATED;
 }
+
+void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg)
+{
+    ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_queue_head_t *queue = arg;
+
+    ucs_trace_req("ep %p: extracted request %p from pending queue",
+                  req->send.ep, req);
+    ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+}

@@ -316,7 +316,7 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
         /* Transfer the pending queues content from the previosly configured
          * UCP EP to a temporary queue for futher replaying */
         uct_ep_pending_purge(ucp_ep->uct_eps[lane_idx],
-                             ucp_wireup_pending_purge_cb, &queue);
+                             ucp_request_purge_enqueue_cb, &queue);
 
         if (ucp_ep_config(ucp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
             uct_ep = ucp_wireup_extract_lane(ucp_ep, lane_idx);

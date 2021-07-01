@@ -153,6 +153,4 @@ ucp_wireup_connect_local(ucp_ep_h ep,
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
 
-void ucp_wireup_pending_purge_cb(uct_pending_req_t *self, void *arg);
-
 #endif

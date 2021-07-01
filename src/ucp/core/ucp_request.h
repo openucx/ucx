@@ -456,4 +456,6 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
 ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
 
+void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
+
 #endif
