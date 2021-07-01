@@ -17,6 +17,7 @@ pr:
     - docs/OptimizationStyle.md
     - README.md
     - NEWS
+    - AUTHORS
 
 resources:
   containers:
