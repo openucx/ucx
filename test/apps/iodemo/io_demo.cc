@@ -1079,11 +1079,13 @@ private:
                    conn_stat_map_t::iterator& min,
                    conn_stat_map_t::iterator& max)
     {
-        long i_bytes = i->second.bytes<op_type>();
+        long i_completions = i->second.completions<op_type>();
 
-        if (i_bytes <= min->second.bytes<op_type>()) {
+        if (i_completions <= min->second.completions<op_type>()) {
             min = i;
-        } else if (i_bytes >= max->second.bytes<op_type>()) {
+        }
+
+        if (i_completions >= max->second.completions<op_type>()) {
             max = i;
         }
     }
@@ -1780,11 +1782,11 @@ public:
         _num_sent      = 0;
         _num_completed = 0;
 
-        uint32_t sn                  = IoDemoRandom::rand<uint32_t>();
-        double prev_time             = get_time();
-        long total_iter              = 0;
-        long total_prev_iter         = 0;
-        op_info_t op_info[IO_OP_MAX] = {{0,0}};
+        uint32_t sn                   = IoDemoRandom::rand<uint32_t>();
+        double prev_time              = get_time();
+        long total_iter               = 0;
+        long total_prev_iter          = 0;
+        size_t total_bytes[IO_OP_MAX] = {0};
 
         while ((total_iter < opts().iter_count) && (_status == OK)) {
             connect_all(is_control_iter(total_iter));
@@ -1844,8 +1846,7 @@ public:
                 abort();
             }
 
-            op_info[op].total_bytes += size;
-            op_info[op].num_iters++;
+            total_bytes[op] += size;
 
             if (is_control_iter(total_iter) && (total_iter > total_prev_iter)) {
                 /* Print performance every 1 second */
@@ -1857,7 +1858,7 @@ public:
                     }
 
                     report_performance(total_iter - total_prev_iter,
-                                       curr_time - prev_time, op_info);
+                                       curr_time - prev_time, total_bytes);
                     total_prev_iter = total_iter;
                     prev_time       = curr_time;
 
@@ -1873,7 +1874,7 @@ public:
         if (_status == OK) {
             double curr_time = get_time();
             report_performance(total_iter - total_prev_iter,
-                               curr_time - prev_time, op_info);
+                               curr_time - prev_time, total_bytes);
         }
 
         for (size_t server_index = 0; server_index < _server_info.size();
@@ -1912,11 +1913,6 @@ public:
     }
 
 private:
-    typedef struct {
-        long      num_iters;
-        size_t    total_bytes;
-    } op_info_t;
-
     inline io_op_t get_op() {
         if (opts().operations.size() == 1) {
             return opts().operations[0];
@@ -1926,7 +1922,8 @@ private:
                                  size_t(0), opts().operations.size() - 1)];
     }
 
-    void report_performance(long num_iters, double elapsed, op_info_t *op_info) {
+    void report_performance(long num_iters, double elapsed,
+                            size_t total_bytes[IO_OP_MAX]) {
         if (num_iters == 0) {
             return;
         }
@@ -1937,7 +1934,7 @@ private:
         UcxLog log(LOG_PREFIX);
 
         for (unsigned op_id = 0; op_id < IO_OP_MAX; ++op_id) {
-            if (!op_info[op_id].total_bytes) {
+            if (total_bytes[op_id] == 0) {
                 continue;
             }
 
@@ -1947,14 +1944,13 @@ private:
             first_print = false;
 
             // Report bandwidth
-            double throughput_mbs = op_info[op_id].total_bytes /
-                                    elapsed / (1024.0 * 1024.0);
+            double throughput_mbs = total_bytes[op_id] / UCS_MBYTE / elapsed;
             log << io_op_names[op_id] << " " << throughput_mbs << " MBs";
-            op_info[op_id].total_bytes = 0;
+            total_bytes[op_id] = 0;
 
             // Collect min/max among all connections
             long delta_min = std::numeric_limits<long>::max(), delta_max = 0;
-            size_t min_index = 0;
+            size_t min_index = 0, total_completed = 0;
             for (size_t server_index = 0; server_index < _server_info.size();
                  ++server_index) {
                 server_info_t& server_info = _server_info[server_index];
@@ -1967,8 +1963,9 @@ private:
                     min_index = server_index;
                 }
 
-                delta_min = std::min(delta_completed, delta_min);
-                delta_max = std::max(delta_completed, delta_max);
+                delta_min        = std::min(delta_completed, delta_min);
+                delta_max        = std::max(delta_completed, delta_max);
+                total_completed += delta_completed;
 
                 server_info.prev_completed[op_id] =
                         server_info.num_completed[op_id];
@@ -1976,9 +1973,7 @@ private:
 
             // Report delta of min/max/total operations for every connection
             log << " min:" << delta_min << "(" << opts().servers[min_index]
-                << ") max:" << delta_max << " total:"
-                << op_info[op_id].num_iters;
-            op_info[op_id].num_iters = 0;
+                << ") max:" << delta_max << " total:" << total_completed;
         }
 
         log << " | active:" << _active_servers.size() << "/"
