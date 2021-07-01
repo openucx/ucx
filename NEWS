@@ -7,11 +7,173 @@
 ##
 #
 
-## Current
+## 1.11.0 RC2 (TBD)
 ### Features:
+#### Core
+* Added support for UCX monitoring using virtual file system (VFS)/FUSE
+* Added support for applications with static libcuda linking
+* Added support for configuration files
+* Updated clang format configuration
+#### CI
+* Added RHEL 7.6 with MOFED 4.7
+* Added Fedora 34, RHEL 7.2, 7.4
+* Added PGI support from HPC-SDK module
+* Added docker image with CUDA 11.2
+* Added IODEMO test
+* Added Ubuntu 20.4
+* Added test for connection manager fallback in client-server testing
+* Added loopback interface for tcp testing
 #### UCP
-* Added API for querying UCP library attributes
+* Added new API for active messages
+* Added context name to UCP parameters
+* Added name to endpoint parameters
+* Added name to worker parameters
+* Added flag to silence request leak check
+* Added API for endpoint performance evaluation
+* Added API for multi-fragment eager messages
+* Added API - ucp_request_query
+* Added API - ucp_lib_query
+* Ported connection manager to a new UCT API
+* Added bandwidth optimizations for new protocols multi-lane
+* Added support for multi-rail over lanes with BW ratio >= 1/4
+* Refactored request ID
+* Refactored keep-alive protocol
+* Added device id to wireup protocol
+* Added support up to 128 transport layer resources in UCP context
+* Added support CUDA memory allocations with ucp_mem_map
+* Increased UCP_WORKER_MAX_EP_CONFIG to 64
+* Adjusted memory type zcopy threshold when UCX_ZCOPY_THRESH set
+* Refactored wireup protocols, rendezvous, get, zcopy protocols
+* Added put zcopy multi-rail
+* Improved logging for new protocols
+* Added system topology information
+* Added new protocols for eager offload protocols
+#### UCT
+* Extended connection establishment API
+* Added active message AM alignment in iface params
+* Added active message short IOV API.
+* Added support for interface query by operation and memory type
+* Added base address and allocted length to md_mem_query return
+* Added md_dereg_v2 API
+#### UCS
+* Added log filter by source file name.
+* Added checking for last element in fraglist queue
+* Added a method to get IP address from sockaddr.
+* Added memory usage limits to registration cache
+#### UCM
+* Improved x86 parser to recognize some mov flavors
+* Added check for ElfW macro
+#### CUDA
+* Added registration for whole CUDA allocations
+* Added CUDA-IPC keepalive
+* Adjusted performance estimations
+* Added Improve logging
+* Added allocation methods for CUDA pinned/managed memory
+* Added support for a global  cuda_ipc cache
+#### RDMA CORE (IB, ROCE, etc.)
+* Added remote QP info for tx error CQEs 
+* Refactored of FC send operations
+* Added support for  DevX unique QPN allocation
+* Optimized endpoint lookup for  DCI
+* Added support for fetching device/vendor ids based on parent PCIe
+* Added support for DCI via DEVX
+* Added DCI pool per LAG port
+* Added support  for RoCE IP reachability check using a subnet mask
+* Added active message short IOV for UD/DC/RC mlx, UD/RC verbs
+* Added endpoint keep alive check for UD
+* Suppressed warning if device can't be opened
+* Added support for multiple flush cancel without completion
+* Added ignore for  devices with invalid GID
+* Added support for SRQ linked list reordering
+* Added flush by flow control on old devices
+* Added support for configurable rdma_resolve_addr/route timeout
+#### Shared memory
+* Added active message short IOV support for posix, sysv, and self transports
+#### TCP
+* Added support for peer failure in case of CONNECT_TO_EP
+* Added support for active message short IOV
+#### Java
+* Added full support for UCP Java API
+#### Tests
+* Added length/mem_type for UCP client server example
+* Added port sockaddr tests for a new API
+* Added test send-recv between client/server with diff UCX_IB_NUM_PATHS
+* Added support for CUDA and CUDA managed memory in io_demoo
+* Added support for a custom watchdog timeout from command line
+* Extended  memtype hook tests
+#### Tools
+* Added UCP active message support to perftest
+* Added error handling option to perftest
+* Added wakeup option
+* Added performance tests for am short iov
+
 ### Bugfixes:
+#### Build
+* Fixes in libnuma detection macro
+* Fixes for cross compilation support
+* Fixes for --without-dc compilation
+#### Continues Integration
+* Fixes in Azure pipeline build system
+* Fixes in Coverity CI
+#### Packaging
+* Fixes in RPM installation script - remove generation of default ucx.conf
+* Fixed in DEB package - added essential system dependencies
+#### Documentation
+* Fixes in UCP, UCT, Readme, FAQ, and Read-the-docs documentation
+#### Tests
+* Fixes in CMA peer failure test
+* Fixes in SRQ tests
+* Fixes in the usage requests_wait
+* Fixes in test_uct_query
+* Fixes addressing race conditions on client user data in test_uct_sockaddr
+* Fixes in IODEMO app
+* Fixes in error handling flow for perftest
+* Fixes in perftest batch tests
+* Fixes addressing hang issues for rendezvous protocol in UCP client server example
+#### UCP
+* Fixes in endpoint error handling
+* Fixes in error reporting failed CM lanes
+* Fixes in progress worker flush
+* Fixes in rendezvous pipeline flow
+* Fixes in recursive protocol selection
+* Fixes in error handling for AM_ZCOPY
+* Fixes in length check condition in RMA PUT short
+* Fixes in failure handling rendezvous offload send
+* Fixes in offload completion with inlined data
+* Fixes in statistics calculations for rendezvous protocol
+* Fixes in ucp_worker_query() thread mode for SERIALIZED
+* Fixes preventing leaks of UCP requests
+#### ROCM
+* Fixes in device memory registration and de-registration
+* Fixes in missing mem_query definition for rocm_copy
+* Fixes addressing build failure due to const violation
+* Fixes in sockaddr_accessibility test for rocm_copy and rocm_ipc
+* Fixes in bandwidth estimation for rocm_ipc
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixes addressing deadlock between DCI resources and RDMA_READ credits
+* Fixes in DSCP for RoCE DCT
+* Fixes in flush(cancel) flow
+* Fixes preventing segfault in uct_rdmacm_cm_ep_str
+* Fixes in scatter-gather entries logging
+* Fixes for compilation with experimental verbs
+* Fixes in UD dgid filtering
+* Fixes in domain resources destroying
+* Fixes in PCIe bandwidth calculation
+* Fixes addressing  CQ creation failure using legacy ibv API
+* Fixes in iov2sge converter
+* Fixes in port width check on HDR100
+* Fixes in SL selection
+* Fixes in hardware tag matching compilation
+* Fixes in uct_rdmacm_cm_cqs hash key
+#### Java
+* Fixes in tag sender mask
+#### UCT
+* Fixes in reachability of loopback ifaces
+* Fixes addressing  possible uninitialized memory accesses
+* Fixes in error flow for endpoints created upon receiving connection request
+#### UCM
+* Fixes addressing heap corruption caused by ucp_set_event_handler()
+* Fixes in mmap events test
 
 ## 1.10.0 (March 9, 2021)
 ### Features:
