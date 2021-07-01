@@ -110,9 +110,10 @@ advanced users, or for specific tunings or workarounds recommended by the UCX co
 
 #### UCX configuration file
 
-Upon installing the UCX package (RPM/DEB), a `/etc/ucx/ucx.conf` file is created.
+UCX looks for a configuration file in `{prefix}/etc/ucx/ucx.conf`, where `{prefix}` is the installation prefix configured during compilation.
 It allows customization of the various parameters. An environment variable
 has precedence over the value defined in `ucx.conf`.
+The file can be created using `ucx_info -Cf`.
 
 
 <br/>
