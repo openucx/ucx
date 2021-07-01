@@ -7,36 +7,24 @@
 ##
 #
 
-## 1.11.0 RC2 (TBD)
+## 1.11.0 RC2 (July 1, 2021)
 ### Features:
 #### Core
 * Added support for UCX monitoring using virtual file system (VFS)/FUSE
-* Added support for applications with static libcuda linking
-* Added support for configuration files
+* Added support for applications with static CUDA runtime linking
+* Added support for a configuration file
 * Updated clang format configuration
-#### CI
-* Added RHEL 7.6 with MOFED 4.7
-* Added Fedora 34, RHEL 7.2, 7.4
-* Added PGI support from HPC-SDK module
-* Added docker image with CUDA 11.2
-* Added IODEMO test
-* Added Ubuntu 20.4
-* Added test for connection manager fallback in client-server testing
-* Added loopback interface for tcp testing
 #### UCP
-* Added new API for active messages
-* Added context name to UCP parameters
-* Added name to endpoint parameters
-* Added name to worker parameters
+* Added rendezvous API for active messages
+* Added user-defined name to context, worker, and endpoint objects
 * Added flag to silence request leak check
 * Added API for endpoint performance evaluation
-* Added API for multi-fragment eager messages
 * Added API - ucp_request_query
 * Added API - ucp_lib_query
 * Ported connection manager to a new UCT API
 * Added bandwidth optimizations for new protocols multi-lane
 * Added support for multi-rail over lanes with BW ratio >= 1/4
-* Refactored request ID
+* Added support for tracking outstanding requests and aborting those in case of connection failure
 * Refactored keep-alive protocol
 * Added device id to wireup protocol
 * Added support up to 128 transport layer resources in UCP context
@@ -53,7 +41,7 @@
 * Added active message AM alignment in iface params
 * Added active message short IOV API.
 * Added support for interface query by operation and memory type
-* Added base address and allocted length to md_mem_query return
+* Added API to get allocation base address and length
 * Added md_dereg_v2 API
 #### UCS
 * Added log filter by source file name.
@@ -62,20 +50,19 @@
 * Added memory usage limits to registration cache
 #### UCM
 * Improved x86 parser to recognize some mov flavors
-* Added check for ElfW macro
 #### CUDA
 * Added registration for whole CUDA allocations
 * Added CUDA-IPC keepalive
 * Adjusted performance estimations
 * Added Improve logging
 * Added allocation methods for CUDA pinned/managed memory
-* Added support for a global  cuda_ipc cache
+* Added support for a global cuda_ipc cache
 #### RDMA CORE (IB, ROCE, etc.)
-* Added remote QP info for tx error CQEs 
+* Added report of QP info in case of completion with error
 * Refactored of FC send operations
 * Added support for  DevX unique QPN allocation
 * Optimized endpoint lookup for  DCI
-* Added support for fetching device/vendor ids based on parent PCIe
+* Added support for RDMA sub-function (SF)
 * Added support for DCI via DEVX
 * Added DCI pool per LAG port
 * Added support  for RoCE IP reachability check using a subnet mask
@@ -83,7 +70,7 @@
 * Added endpoint keep alive check for UD
 * Suppressed warning if device can't be opened
 * Added support for multiple flush cancel without completion
-* Added ignore for  devices with invalid GID
+* Added ignore for devices with invalid GID
 * Added support for SRQ linked list reordering
 * Added flush by flow control on old devices
 * Added support for configurable rdma_resolve_addr/route timeout
@@ -106,6 +93,15 @@
 * Added error handling option to perftest
 * Added wakeup option
 * Added performance tests for am short iov
+#### CI
+* Added RHEL 7.6 with MOFED 4.7
+* Added Fedora 34, RHEL 7.2, 7.4
+* Added PGI support from HPC-SDK module
+* Added docker image with CUDA 11.2
+* Added IODEMO test
+* Added Ubuntu 20.4
+* Added test for connection manager fallback in client-server testing
+* Added loopback interface for tcp testing
 
 ### Bugfixes:
 #### Build
@@ -116,7 +112,6 @@
 * Fixes in Azure pipeline build system
 * Fixes in Coverity CI
 #### Packaging
-* Fixes in RPM installation script - remove generation of default ucx.conf
 * Fixed in DEB package - added essential system dependencies
 #### Documentation
 * Fixes in UCP, UCT, Readme, FAQ, and Read-the-docs documentation
@@ -159,7 +154,7 @@
 * Fixes in UD dgid filtering
 * Fixes in domain resources destroying
 * Fixes in PCIe bandwidth calculation
-* Fixes addressing  CQ creation failure using legacy ibv API
+* Fixes addressing CQ creation failure using legacy ibv API
 * Fixes in iov2sge converter
 * Fixes in port width check on HDR100
 * Fixes in SL selection
@@ -174,6 +169,19 @@
 #### UCM
 * Fixes addressing heap corruption caused by ucp_set_event_handler()
 * Fixes in mmap events test
+
+## 1.10.1 (May 12, 2021)
+### Bugfixes:
+* Fixes in Infiniband port speed detection for HDR100
+* Fixes in building gtest-all.cc and sock.c with GCC11
+* Fixes addressing performance degradation with cuda memory on a self endpoint
+* Fixes in JUCX listener connection handler
+* Fixed in configuration of loopback TCP transport (disable by default)
+* Fixes in RPM dependency on libibverbs
+* Fixes in ABI backward compatibility for active message protocol
+* Fixes in the DC transport - adding support for full-handshake mode (off by default)
+* Fixes in Active Messages short reply protocol
+* Fixes for segmentation fault while listening for connections
 
 ## 1.10.0 (March 9, 2021)
 ### Features:
