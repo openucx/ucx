@@ -1137,6 +1137,13 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                 context->config.ext.keepalive_interval;
     }
 
+    if (worker->am.alignment > 1) {
+        iface_params->field_mask     |= UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT |
+                                        UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET;
+        iface_params->am_align_offset = sizeof(ucp_am_hdr_t);
+        iface_params->am_alignment    = worker->am.alignment;
+    }
+
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,
                             &wiface->iface);
@@ -1661,7 +1668,8 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 
     /* Create memory pool for incoming UCT messages without a UCT descriptor */
     status = ucs_mpool_init(&worker->am_mp, 0,
-                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE,
+                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE +
+                            worker->am.alignment,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                             &ucp_am_mpool_ops, "ucp_am_bufs");
     if (status != UCS_OK) {
@@ -2025,8 +2033,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 2);
     }
 
-    worker->user_data = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
-                                        NULL);
+    worker->user_data    = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
+                                           NULL);
+    worker->am.alignment = UCP_PARAM_VALUE(WORKER, params, am_alignment,
+                                           AM_ALIGNMENT, 1);
 
     if ((params->field_mask & UCP_WORKER_PARAM_FIELD_NAME) &&
         (params->name != NULL)) {

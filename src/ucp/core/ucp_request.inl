@@ -651,21 +651,22 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    int data_offset, unsigned am_flags, uint16_t hdr_len,
-                   uint16_t rdesc_flags, int priv_length,
+                   uint16_t rdesc_flags, int priv_length, size_t alignment,
                    ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;
     void *data_hdr;
     ucs_status_t status;
+    size_t padding;
 
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
         ucs_assert(priv_length <= UCP_WORKER_HEADROOM_PRIV_SIZE);
-        data_hdr               = UCS_PTR_BYTE_OFFSET(data, -data_offset);
-        rdesc                  = (ucp_recv_desc_t *)data_hdr - 1;
-        rdesc->flags           = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
-        rdesc->uct_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
-        status                 = UCS_INPROGRESS;
+        data_hdr                   = UCS_PTR_BYTE_OFFSET(data, -data_offset);
+        rdesc                      = (ucp_recv_desc_t *)data_hdr - 1;
+        rdesc->flags               = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
+        status                     = UCS_INPROGRESS;
     } else {
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         if (rdesc == NULL) {
@@ -673,9 +674,12 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
+        padding = ucs_padding((uintptr_t)(rdesc + 1), worker->am.alignment);
+        rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
+        rdesc->release_desc_offset = padding;
+
         /* No need to initialize rdesc->priv_length here, because it is only
          * needed for releasing UCT descriptor. */
-
         rdesc->flags = rdesc_flags;
         status       = UCS_OK;
         memcpy(UCS_PTR_BYTE_OFFSET(rdesc + 1, data_offset), data, length);
@@ -690,15 +694,15 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
 {
-    void *uct_desc;
+    void *desc = UCS_PTR_BYTE_OFFSET(rdesc, -rdesc->release_desc_offset);
 
     ucs_trace_req("release receive descriptor %p", rdesc);
+
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         /* uct desc is slowpath */
-        uct_desc = UCS_PTR_BYTE_OFFSET(rdesc, -rdesc->uct_desc_offset);
-        uct_iface_release_desc(uct_desc);
+        uct_iface_release_desc(desc);
     } else {
-        ucs_mpool_put_inline(rdesc);
+        ucs_mpool_put_inline(desc);
     }
 }
 
