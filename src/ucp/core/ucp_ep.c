@@ -1098,7 +1098,7 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         }
     } else if (ucp_ep->flags & (UCP_EP_FLAG_INTERNAL | UCP_EP_FLAG_CLOSED)) {
         /* No additional actions are required, this is already closed EP or
-         * an internal one for sending WIREUP/EP_REMOVED messsage to a peer.
+         * an internal one for sending WIREUP/EP_REMOVED message to a peer.
          * So, close operation was already scheduled, this EP will be deleted
          * after all lanes will be discarded successfully */
         ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);

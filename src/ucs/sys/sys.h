@@ -220,7 +220,7 @@ int ucs_sys_max_open_files();
  *                             fclose() should be called to release resources (1)
  *                             or not (0).
  * @param [out] p_next_token   Pointer that is set to remainder of @config_str.
- * @oaram [out] p_filename     Pointer to the variable that is filled with the
+ * @param [out] p_filename     Pointer to the variable that is filled with the
  *                             resulted name of the log file (if it is not NULL).
  *                             Caller is responsible to release memory then.
  *
