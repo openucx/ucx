@@ -16,6 +16,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>

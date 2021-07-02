@@ -19,6 +19,7 @@
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucm/api/ucm.h>
 

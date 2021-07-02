@@ -15,6 +15,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
 
