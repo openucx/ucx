@@ -1339,6 +1339,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                          uct_dc_mlx5_iface_dci_do_rand_pending_tx :
                          uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
+    UCS_BITMAP_CLEAR(&self->tx.dci_release_bitmap);
+
     if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_DEVX_DCI |
                                       UCT_IB_MLX5_MD_FLAG_CQE_V1)) {
         self->flags           |= UCT_DC_MLX5_IFACE_FLAG_UIDX;

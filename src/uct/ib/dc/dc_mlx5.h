@@ -14,6 +14,7 @@
 #include <uct/ib/ud/base/ud_iface_common.h>
 #include <uct/ib/ud/accel/ud_mlx5_common.h>
 #include <ucs/debug/assert.h>
+#include <ucs/datastruct/bitmap.h>
 
 
 /*
@@ -237,6 +238,8 @@ struct uct_dc_mlx5_iface {
         ucs_arbiter_callback_t    pend_cb;
 
         uct_worker_cb_id_t        dci_release_prog_id;
+
+        ucs_bitmap_t(128)         dci_release_bitmap;
     } tx;
 
     struct {
