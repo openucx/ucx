@@ -600,17 +600,17 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uint16_t            sn;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-            return UCS_ERR_NO_RESOURCE; /* waiting for dci */
-        } else {
+        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
             UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
             return UCS_OK;
         }
+
+        return UCS_ERR_NO_RESOURCE; /* waiting for dci */
+    }
+
+    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
@@ -1243,13 +1243,16 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     uint8_t pool_index = uct_dc_mlx5_ep_pool_index(ep);
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assertv(ep->dci == UCT_DC_MLX5_EP_NO_DCI,
+                "ep %p (iface=%p) has DCI=%d (pool %d) while it is scheduled "
+                "in DCI wait queue", ep, iface, ep->dci,
+                iface->tx.dcis[ep->dci].pool_index);
 
-    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-            return UCS_ARBITER_CB_RESULT_STOP;
-        }
-        uct_dc_mlx5_iface_dci_alloc(iface, ep);
+    if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+        return UCS_ARBITER_CB_RESULT_STOP;
     }
+
+    uct_dc_mlx5_iface_dci_alloc(iface, ep);
 
     ucs_assert_always(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
@@ -1285,6 +1288,47 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
+static unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
+{
+    uct_dc_mlx5_iface_t *iface = arg;
+    size_t ndci                = iface->tx.ndci * iface->tx.num_dci_pools;
+    uint64_t pool_map          = 0;
+    uint8_t pool_index;
+    uint8_t dci;
+
+    ucs_assert(iface->tx.dci_release_prog_id != UCS_CALLBACKQ_ID_NULL);
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+
+    for (dci = 0; dci < ndci; dci++) {
+        ucs_assert(!uct_dc_mlx5_iface_is_dci_keepalive(iface, dci));
+
+        if (iface->tx.dcis[dci].ep != UCT_DC_IFACE_DCI_EP_DETACHED) {
+            continue;
+        }
+
+        uct_dc_mlx5_iface_dci_release(iface, dci);
+        iface->tx.dcis[dci].ep = NULL;
+        pool_index             = uct_dc_mlx5_iface_dci_pool_index(iface, dci);
+        ucs_assert(pool_index < iface->tx.num_dci_pools);
+        /* save all pools where dcis were released into map */
+        pool_map |= UCS_BIT(pool_index);
+    }
+
+    /* run progress pending on all pools where dcis were released */
+    ucs_for_each_bit(pool_index, pool_map) {
+        ucs_assert(pool_index < iface->tx.num_dci_pools);
+        /* coverity[overrun-call] */
+        uct_dc_mlx5_iface_progress_pending(iface, pool_index);
+        /* do not call uct_dc_mlx5_iface_check_tx here - wait for processing of
+         * all pools because multiple pools may be affected by dci_release
+         * loop above */
+    }
+
+    uct_dc_mlx5_iface_check_tx(iface);
+    iface->tx.dci_release_prog_id = UCS_CALLBACKQ_ID_NULL;
+    return 1;
+}
+
 /**
  * dispatch requests waiting for tx resources (dcs* DCI policies)
  */
@@ -1303,15 +1347,23 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
     ucs_arbiter_cb_result_t res;
 
     res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
-    if (res == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
-        /* For dcs* policies release dci if this is the last elem in the group
-         * and the dci has no outstanding operations. For example pending
-         * callback did not send anything. (uct_ep_flush or just return ok)
-         */
-        if (is_only) {
-            uct_dc_mlx5_iface_dci_free(iface, ep);
-        }
+    if ((res != UCS_ARBITER_CB_RESULT_REMOVE_ELEM) || !is_only) {
+        return res;
     }
+
+    /* For dcs* policies release dci if this is the last elem in the group
+     * and the dci has no outstanding operations. For example pending
+     * callback did not send anything. (uct_ep_flush or just return ok)
+     */
+    if (!uct_dc_mlx5_iface_dci_detach(iface, ep,
+                                      UCT_DC_IFACE_DCI_EP_DETACHED)) {
+        return res;
+    }
+
+    uct_worker_progress_register_safe(
+            &iface->super.super.super.super.worker->super,
+            uct_dc_mlx5_ep_dci_release_progress, iface,
+            UCS_CALLBACKQ_FLAG_ONESHOT, &iface->tx.dci_release_prog_id);
 
     return res;
 }
@@ -1397,9 +1449,19 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     ucs_arbiter_group_purge(waitq, group, uct_dc_mlx5_ep_arbiter_purge_cb,
                             &args);
 
-    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
-        uct_dc_mlx5_iface_dci_free(iface, ep);
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        return;
     }
+
+    if (!uct_dc_mlx5_iface_dci_detach(iface, ep,
+                                      UCT_DC_IFACE_DCI_EP_DETACHED)) {
+        return;
+    }
+
+    uct_worker_progress_register_safe(
+            &iface->super.super.super.super.worker->super,
+            uct_dc_mlx5_ep_dci_release_progress, iface,
+            UCS_CALLBACKQ_FLAG_ONESHOT, &iface->tx.dci_release_prog_id);
 }
 
 ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
@@ -1511,6 +1573,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     }
 
     uct_dc_mlx5_iface_progress_pending(iface, pool_index);
+    uct_dc_mlx5_iface_check_tx(iface);
 }
 
 ucs_status_t

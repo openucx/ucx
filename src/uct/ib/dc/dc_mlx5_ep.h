@@ -14,7 +14,7 @@
 #include "dc_mlx5.h"
 
 #define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
-
+#define UCT_DC_IFACE_DCI_EP_DETACHED ((uct_dc_mlx5_ep_t*)-1)
 
 enum uct_dc_mlx5_ep_flags {
     /* DCI pool EP assigned to according to it's lag port */
@@ -344,7 +344,6 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
 
     } while (ucs_unlikely(!ucs_arbiter_is_empty(dci_waitq) &&
                           uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)));
-    uct_dc_mlx5_iface_check_tx(iface);
 }
 
 static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
@@ -433,8 +432,7 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 
     uct_dc_mlx5_iface_dci_release(iface, dci_index);
 
-    ucs_assert(uct_dc_mlx5_ep_from_dci(iface, dci_index)->dci !=
-               UCT_DC_MLX5_EP_NO_DCI);
+    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
     ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
     iface->tx.dcis[dci_index].ep = NULL;
@@ -464,13 +462,14 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     pool->stack_top++;
 }
 
-static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface,
-                                              uct_dc_mlx5_ep_t *ep)
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
+                             uct_dc_mlx5_ep_t *new_ep)
 {
     uint8_t dci_index;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        return;
+        return 0;
     }
 
     dci_index = ep->dci;
@@ -479,14 +478,14 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface,
     ucs_assert(iface->tx.dci_pool[uct_dc_mlx5_ep_pool_index(ep)].stack_top > 0);
 
     if (uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index)) {
-        return;
+        return 0;
     }
 
-    uct_dc_mlx5_iface_dci_release(iface, dci_index);
-
-    iface->tx.dcis[dci_index].ep = NULL;
     ep->dci                      = UCT_DC_MLX5_EP_NO_DCI;
     ep->flags                   &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
+    iface->tx.dcis[dci_index].ep = new_ep;
+
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -543,6 +542,10 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 
     if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+        /* TODO: disabled due to shot on some tests where resources are updated
+         * manually: dc_mlx5/test_dc_flow_control.pending_grant for instance. */
+        /* TODO: look how to eliminate assert on such tests */
+        /* ucs_assert(ucs_arbiter_is_empty(waitq)); */
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
     }
