@@ -9,8 +9,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <unistd.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 
 #include <algorithm>
 #include <limits>
@@ -111,11 +113,16 @@ void UcxContext::UcxDisconnectCallback::operator()(ucs_status_t status)
     delete this;
 }
 
-UcxContext::UcxContext(size_t iomsg_size, double connect_timeout, bool use_am) :
+UcxContext::UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
+                       bool use_epoll) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
     _iomsg_buffer(iomsg_size, '\0'), _connect_timeout(connect_timeout),
-    _use_am(use_am)
+    _use_am(use_am), _worker_fd(-1), _epoll_fd(-1)
 {
+    if (use_epoll) {
+        _epoll_fd = epoll_create(1);
+        assert(_epoll_fd >= 0);
+    }
 }
 
 UcxContext::~UcxContext()
@@ -142,6 +149,9 @@ bool UcxContext::init()
                               UCP_PARAM_FIELD_REQUEST_SIZE;
     ucp_params.features     = _use_am ? UCP_FEATURE_AM :
                                         UCP_FEATURE_TAG | UCP_FEATURE_STREAM;
+    if (_epoll_fd != -1) {
+        ucp_params.features |= UCP_FEATURE_WAKEUP;
+    }
     ucp_params.request_init = request_init;
     ucp_params.request_size = sizeof(ucx_request);
     ucs_status_t status = ucp_init(&ucp_params, NULL, &_context);
@@ -162,6 +172,14 @@ bool UcxContext::init()
         ucp_cleanup(_context);
         _context = NULL;
         UCX_LOG << "ucp_worker_create() failed: " << ucs_status_string(status);
+        return false;
+    }
+
+    status = epoll_init();
+    if (status != UCS_OK) {
+        destroy_worker();
+        ucp_cleanup(_context);
+        _context = NULL;
         return false;
     }
 
@@ -201,7 +219,7 @@ bool UcxContext::listen(const struct sockaddr* saddr, size_t addrlen)
 
 void UcxContext::progress()
 {
-    ucp_worker_progress(_worker);
+    progress_worker_event();
     progress_io_message();
     progress_timed_out_conns();
     progress_conn_requests();
@@ -320,6 +338,61 @@ int UcxContext::is_timeout_elapsed(struct timeval const *tv_prior, double timeou
     gettimeofday(&tv_current, NULL);
     timersub(&tv_current, tv_prior, &elapsed);
     return ((elapsed.tv_sec + (elapsed.tv_usec * 1e-6)) > timeout);
+}
+
+ucs_status_t UcxContext::epoll_init()
+{
+    ucs_status_t status;
+    epoll_event  ev;
+
+    if (_epoll_fd == -1) {
+        return UCS_OK;
+    }
+
+    status = ucp_worker_get_efd(_worker, &_worker_fd);
+    if (status != UCS_OK) {
+        UCX_LOG << "failed to get ucp_worker fd to be epoll monitored";
+        return status;
+    }
+
+    status = ucp_worker_arm(_worker);
+    if (status == UCS_ERR_BUSY) {
+        UCX_LOG << "some events are arrived already";
+    } else if (status != UCS_OK) {
+        UCX_LOG << "ucp_epoll error: " << ucs_status_string(status);
+        return status;
+    }
+
+    memset(&ev, 0, sizeof(ev));
+    ev.events  = EPOLLIN;
+    ev.data.fd = _worker_fd;
+
+    if (epoll_ctl(_epoll_fd, EPOLL_CTL_ADD, _worker_fd, &ev) == -1) {
+        UCX_LOG << "epoll add worker fd: " << _worker_fd << " failed.";
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
+void UcxContext::progress_worker_event()
+{
+    int         ret;
+    epoll_event ev;
+
+    if (ucp_worker_progress(_worker)) {
+        return;
+    }
+
+    if ((_epoll_fd == -1) || (ucp_worker_arm(_worker) == UCS_ERR_BUSY)) {
+        return;
+    }
+
+    do {
+         ret = epoll_wait(_epoll_fd, &ev, 1, -1);
+    } while ((ret == -1) && (errno == EINTR || errno == EAGAIN));
+
+    assert(ev.data.fd == _worker_fd);
 }
 
 void UcxContext::progress_timed_out_conns()
@@ -552,6 +625,11 @@ void UcxContext::destroy_worker()
     }
 
     ucp_worker_destroy(_worker);
+    if (_epoll_fd >= 0) {
+        close(_epoll_fd);
+        _epoll_fd = -1;
+    }
+    _worker = NULL;
 }
 
 ucs_status_t UcxContext::am_recv_callback(void *arg, const void *header,
