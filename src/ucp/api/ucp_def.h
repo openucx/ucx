@@ -637,7 +637,11 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * @param [in]  length        Length of data. If @a UCP_AM_RECV_ATTR_FLAG_RNDV
  *                            flag is set in @ref ucp_am_recv_param_t.recv_attr,
  *                            it indicates the required receive buffer size for
- *                            initiating rendezvous protocol.
+ *                            initiating rendezvous protocol. If this receive
+ *                            handler was registered without UCP_AM_FLAG_WHOLE_MSG
+ *                            flag set, it represents length of received fragment.
+ *                            In this case the whole message length is available in
+ *                            @ref ucp_am_recv_param_t.total_length.
  * @param [in]  param         Data receive parameters.
  *
  * @return UCS_OK         @a data will not persist after the callback returns.
