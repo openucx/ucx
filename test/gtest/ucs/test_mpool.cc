@@ -244,3 +244,36 @@ UCS_TEST_F(test_mpool, leak_check) {
     scoped_log_handler log_handler(mpool_log_leak_handler);
     ucs_mpool_cleanup(&mp, 1);
 }
+
+UCS_TEST_F(test_mpool, alloc_4g) {
+    const unsigned elems_per_chunk = 128;
+    const size_t elem_size         = 32 * UCS_MBYTE;
+    ucs_mpool_ops_t mpool_ops = {ucs_mpool_chunk_malloc, ucs_mpool_chunk_free,
+                                 NULL, NULL};
+    ucs_mpool_t mp;
+
+    ucs_status_t status = ucs_mpool_init(&mp, 0, header_size + elem_size,
+                                         header_size, align, elems_per_chunk,
+                                         elems_per_chunk, &mpool_ops, "test");
+    ASSERT_UCS_OK(status);
+
+    // Allocate objects per one chunk size
+    std::vector<void*> objs;
+    for (unsigned i = 0; i < elems_per_chunk; ++i) {
+        void *obj = ucs_mpool_get(&mp);
+        if (obj == NULL) {
+            ADD_FAILURE() << "Could not allocate object [" << i
+                          << "] from mpool";
+            break;
+        }
+        objs.push_back(obj);
+    }
+
+    // Release allocated objects
+    while (!objs.empty()) {
+        ucs_mpool_put(objs.back());
+        objs.pop_back();
+    }
+
+    ucs_mpool_cleanup(&mp, 1);
+}

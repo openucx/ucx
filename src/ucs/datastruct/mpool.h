@@ -71,9 +71,9 @@ struct ucs_mpool {
  * Memory pool slow-path data.
  */
 struct ucs_mpool_data {
-    unsigned               elem_size;       /* Size of element in the chunk */
-    unsigned               alignment;       /* Element alignment */
-    unsigned               align_offset;    /* Offset to alignment point */
+    size_t                 elem_size;       /* Size of element in the chunk */
+    size_t                 alignment;       /* Element alignment */
+    size_t                 align_offset;    /* Offset to alignment point */
     unsigned               elems_per_chunk; /* Number of elements per chunk */
     unsigned               quota;           /* How many more elements can be allocated */
     ucs_mpool_elem_t       *tail;           /* Free list tail */
