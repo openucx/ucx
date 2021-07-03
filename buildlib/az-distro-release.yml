@@ -1,6 +1,5 @@
 jobs:
   - job: distro_release
-    condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
     displayName: distro
     variables:
       ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
@@ -101,8 +100,8 @@ jobs:
           AZ_ARTIFACT_NAME: $(artifact_name)
 
       - task: GithubRelease@0
-        condition: eq(variables['Build.Reason'], 'ResourceTrigger')
-        displayName: Upload artifacts to draft release
+        condition: eq(variables['Build.Reason'], 'IndividualCI')
+        displayName: Upload artifacts
         inputs:
           githubConnection: release
           repositoryName: openucx/ucx
