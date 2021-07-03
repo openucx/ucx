@@ -7,7 +7,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
 #include <ucs/type/spinlock.h>
 

@@ -7,7 +7,7 @@
 #include <common/test.h>
 
 extern "C" {
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/sys.h>
 }
 
@@ -18,8 +18,6 @@ extern "C" {
 #include <fcntl.h>
 #include <limits>
 
-
-#ifdef ENABLE_MEMTRACK
 
 class test_memtrack : public ucs::test {
 protected:
@@ -230,5 +228,3 @@ UCS_TEST_F(test_memtrack, custom) {
 
     test_total(1, ALLOC_SIZE);
 }
-
-#endif

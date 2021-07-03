@@ -14,7 +14,7 @@
 #include <ucs/arch/atomic.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/assert.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 
 
 ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc, uint32_t length)

@@ -14,7 +14,7 @@
 #include <uct/sm/mm/base/mm_md.h>
 #include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/datastruct/khash.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/memory/rcache.h>

@@ -11,7 +11,7 @@
 #  include "config.h"
 #endif
 
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 
 #if HAVE_NUMA
 #include <numaif.h>

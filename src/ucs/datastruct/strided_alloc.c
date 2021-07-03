@@ -11,7 +11,7 @@
 #include "queue.h"
 
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/sys.h>
 
@@ -33,8 +33,8 @@ struct ucs_strided_alloc_elem {
 };
 
 static ucs_strided_alloc_chunk_t *
-ucs_strided_alloc_chunk_alloc(ucs_strided_alloc_t *sa, size_t chunk_size
-                              UCS_MEMTRACK_ARG)
+ucs_strided_alloc_chunk_alloc(ucs_strided_alloc_t *sa, size_t chunk_size,
+                              const char *alloc_name)
 {
     ucs_status_t status;
     size_t size;
@@ -42,7 +42,7 @@ ucs_strided_alloc_chunk_alloc(ucs_strided_alloc_t *sa, size_t chunk_size
 
     size   = chunk_size;
     ptr    = NULL;
-    status = ucs_mmap_alloc(&size, &ptr, 0 UCS_MEMTRACK_VAL);
+    status = ucs_mmap_alloc(&size, &ptr, 0, alloc_name);
     if (status != UCS_OK) {
         ucs_error("failed to allocate a chunk of %zu bytes", chunk_size);
         return NULL;
@@ -76,7 +76,7 @@ static void ucs_strided_alloc_calc(ucs_strided_alloc_t *sa, size_t *chunk_size,
 }
 
 static ucs_status_t
-ucs_strided_alloc_grow(ucs_strided_alloc_t *sa UCS_MEMTRACK_ARG)
+ucs_strided_alloc_grow(ucs_strided_alloc_t *sa, const char *alloc_name)
 {
     size_t chunk_size, elems_per_chunk;
     ucs_strided_alloc_chunk_t *chunk;
@@ -86,7 +86,7 @@ ucs_strided_alloc_grow(ucs_strided_alloc_t *sa UCS_MEMTRACK_ARG)
 
     ucs_strided_alloc_calc(sa, &chunk_size, &elems_per_chunk);
 
-    chunk = ucs_strided_alloc_chunk_alloc(sa, chunk_size UCS_MEMTRACK_VAL);
+    chunk = ucs_strided_alloc_chunk_alloc(sa, chunk_size, alloc_name);
     if (chunk == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -146,7 +146,7 @@ void* ucs_strided_alloc_get(ucs_strided_alloc_t *sa, const char *alloc_name)
     unsigned i;
 
     if (sa->freelist == NULL) {
-        status = ucs_strided_alloc_grow(sa UCS_MEMTRACK_VAL);
+        status = ucs_strided_alloc_grow(sa, alloc_name);
         if (status != UCS_OK) {
             return NULL;
         }

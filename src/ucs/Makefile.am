@@ -45,6 +45,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/string_set.h \
 	debug/log_def.h \
 	debug/debug.h \
+	debug/memtrack.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -99,7 +100,7 @@ noinst_HEADERS = \
 	debug/assert.h \
 	debug/debug_int.h \
 	debug/log.h \
-	debug/memtrack.h \
+	debug/memtrack_int.h \
 	memory/numa.h \
 	memory/rcache_int.h \
 	profile/profile.h \

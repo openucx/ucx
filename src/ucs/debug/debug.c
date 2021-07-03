@@ -382,8 +382,7 @@ ucs_status_t ucs_debug_backtrace_create(backtrace_h *bckt, int strip)
     ucs_status_t status;
 
     *bckt  = NULL;
-    status = ucs_mmap_alloc(&size, (void**)bckt, 0
-                            UCS_MEMTRACK_NAME("debug backtrace object"));
+    status = ucs_mmap_alloc(&size, (void**)bckt, 0, "debug backtrace object");
     if (status != UCS_OK) {
         return status;
     }
@@ -589,8 +588,7 @@ ucs_status_t ucs_debug_backtrace_create(backtrace_h *bckt, int strip)
     ucs_status_t status;
 
     *bckt  = NULL;
-    status = ucs_mmap_alloc(&size, (void**)bckt, 0
-                            UCS_MEMTRACK_NAME("debug backtrace object"));
+    status = ucs_mmap_alloc(&size, (void**)bckt, 0, "debug backtrace object");
     if (status != UCS_OK) {
         return status;
     }

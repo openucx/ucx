@@ -11,7 +11,7 @@
 #include "uct_component.h"
 
 #include <ucs/debug/assert.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <limits.h>

@@ -9,7 +9,7 @@
 #define PTR_ARRAY_H_
 
 #include <ucs/sys/math.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/debug/assert.h>
 
@@ -68,9 +68,7 @@ typedef struct ucs_ptr_array {
     unsigned                 freelist; /* Index of first free slot (see above) */
     unsigned                 size;     /* Number of allocated array slots */
     unsigned                 count;    /* Actual number of occupied slots */
-#ifdef ENABLE_MEMTRACK
-    char                     name[64]; /* Name of this pointer array */
-#endif
+    const char               *name;    /* Name of this pointer array */
 } ucs_ptr_array_t;
 
 
