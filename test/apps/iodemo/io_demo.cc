@@ -2139,20 +2139,9 @@ static void adjust_opts(options_t *test_opts) {
         std::cout << "ignoring chunk size parameter, because it is not supported"
                      " with AM API" << std::endl;
         test_opts->chunk_size = test_opts->max_data_size;
-        return;
-    }
-
-    test_opts->chunk_size = std::min(test_opts->chunk_size,
-                                     test_opts->max_data_size);
-
-    // randomize servers to optimize startup
-    std::random_shuffle(test_opts->servers.begin(), test_opts->servers.end(),
-                        IoDemoRandom::urand<size_t>);
-
-    UcxLog vlog(LOG_PREFIX, test_opts->verbose);
-    vlog << "List of servers:";
-    for (size_t i = 0; i < test_opts->servers.size(); ++i) {
-        vlog << " " << test_opts->servers[i];
+    } else {
+        test_opts->chunk_size = std::min(test_opts->chunk_size,
+                                         test_opts->max_data_size);
     }
 }
 
@@ -2401,10 +2390,20 @@ static int do_server(const options_t& test_opts)
     return 0;
 }
 
-static int do_client(const options_t& test_opts)
+static int do_client(options_t& test_opts)
 {
     IoDemoRandom::srand(test_opts.random_seed);
     LOG << "random seed: " << test_opts.random_seed;
+
+    // randomize servers to optimize startup
+    std::random_shuffle(test_opts.servers.begin(), test_opts.servers.end(),
+                        IoDemoRandom::urand<size_t>);
+
+    UcxLog vlog(LOG_PREFIX, test_opts.verbose);
+    vlog << "List of servers:";
+    for (size_t i = 0; i < test_opts.servers.size(); ++i) {
+        vlog << " " << test_opts.servers[i];
+    }
 
     DemoClient client(test_opts);
     if (!client.init()) {
