@@ -38,11 +38,22 @@ typedef uint64_t ucs_bitmap_word_t;
 /**
  * Get the number of words in a given bitmap
  *
- * @param _bitmap Words number in this bitmap
+ * @param _bitmap Bitmap variable to get words number
  *
  * @return Number of words
  */
 #define _UCS_BITMAP_NUM_WORDS(_bitmap) ucs_static_array_size((_bitmap).bits)
+
+
+/**
+ * Get the number of bits in a given bitmap
+ *
+ * @param _bitmap Bitmap variable to get bits number
+ *
+ * @return Number of bits
+ */
+#define UCS_BITMAP_NUM_BITS(_bitmap) \
+    (_UCS_BITMAP_NUM_WORDS(_bitmap) * UCS_BITMAP_BITS_IN_WORD)
 
 
 /**
