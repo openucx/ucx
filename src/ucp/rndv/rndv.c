@@ -330,15 +330,17 @@ static void ucp_rndv_complete_rma_put_zcopy(ucp_request_t *sreq, int is_frag_put
     } else {
         ucp_rkey_destroy(sreq->send.rndv.rkey);
 
-        atp_req = ucp_request_get(sreq->send.ep->worker);
-        if (ucs_unlikely(atp_req == NULL)) {
-            ucs_fatal("failed to allocate request for sending ATP");
-        }
+        if (status == UCS_OK) {
+            atp_req = ucp_request_get(sreq->send.ep->worker);
+            if (ucs_unlikely(atp_req == NULL)) {
+                ucs_fatal("failed to allocate request for sending ATP");
+            }
 
-        atp_req->send.ep = sreq->send.ep;
-        atp_req->flags   = 0;
-        ucp_rndv_req_send_ack(atp_req, sreq, sreq->send.rndv.remote_req_id,
-                              status, UCP_AM_ID_RNDV_ATP, "send_atp");
+            atp_req->send.ep = sreq->send.ep;
+            atp_req->flags   = 0;
+            ucp_rndv_req_send_ack(atp_req, sreq, sreq->send.rndv.remote_req_id,
+                                  status, UCP_AM_ID_RNDV_ATP, "send_atp");
+        }
     }
 
     ucp_request_send_buffer_dereg(sreq);
