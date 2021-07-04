@@ -484,6 +484,27 @@ static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
     return NULL;
 }
 
+/**
+ * FLUSH_CANCEL operation might be on pending queue due to
+ * UCS_ERR_NO_RESOURCES, so need to purge the queue to resubmit the
+ * operation. We need to resubmit the FLUSH_CANCEL operation on the same
+ * failed lane, in order to make sure all previous outstanding
+ * operations are completed before destroying the failed endpoint.
+ */
+static void ucp_discard_lane_ff(uct_ep_h uct_ep)
+{
+    ucs_queue_head_t tmp_q;
+    ucp_request_t *req;
+
+    /* @ref ucs_arbiter_t does not support recursive calls, so use temporary
+     * queue */
+    ucs_queue_head_init(&tmp_q);
+    uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb, &tmp_q);
+    ucs_queue_for_each_extract(req, &tmp_q, send.uct.priv, 1) {
+        ucp_request_send_state_ff(req, UCS_ERR_CANCELED);
+    }
+}
+
 static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
@@ -499,13 +520,7 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
                   uct_ep, worker);
-        /* FLUSH_CANCEL operation might be on pending queue due to
-         * UCS_ERR_NO_RESOURCES, so need to purge the queue to resubmit the
-         * operation. We need to resubmit the FLUSH_CANCEL operation on the same
-         * failed lane, in order to make sure all previous outstanding
-         * operations are completed before destroying the failed endpoint. */
-        uct_ep_pending_purge(uct_ep, ucp_ep_err_pending_purge,
-                             UCS_STATUS_PTR(UCS_ERR_CANCELED));
+        ucp_discard_lane_ff(uct_ep);
         status = UCS_OK;
         goto out;
     }

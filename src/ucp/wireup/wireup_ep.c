@@ -484,7 +484,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
          * but it will make sure that no completions will be received if some
          * error was detected */
         ucp_wireup_ep_discard_aux_ep(self, UCT_FLUSH_FLAG_CANCEL,
-                                     ucp_wireup_pending_purge_cb,
+                                     ucp_request_purge_enqueue_cb,
                                      &tmp_pending_queue);
         self->aux_ep = NULL;
         ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
