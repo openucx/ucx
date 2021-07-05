@@ -12,7 +12,7 @@ lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
 libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\" \
-                     -DUCX_CONF_DIR=\"$(ucx_conf_dir)\"
+                     -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
@@ -106,6 +106,7 @@ noinst_HEADERS = \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
+	sys/lib.h \
 	sys/module.h \
 	sys/sys.h \
 	sys/iovec.h \
@@ -168,6 +169,7 @@ libucs_la_SOURCES = \
 	sys/string.c \
 	sys/sys.c \
 	sys/iovec.c \
+	sys/lib.c \
 	sys/sock.c \
 	sys/topo.c \
 	sys/stubs.c \
