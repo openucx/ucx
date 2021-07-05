@@ -1282,6 +1282,7 @@ public:
 
     DemoClient(const options_t &test_opts) :
         P2pDemoCommon(test_opts),
+        _next_active_index(0),
         _num_active_servers_to_use(0),
         _num_sent(0),
         _num_completed(0),
@@ -1537,22 +1538,39 @@ public:
         }
     }
 
-    static long get_num_uncompleted(const server_info_t& server_info) {
-        long num_uncompleted;
-
-        num_uncompleted = (server_info.num_sent[IO_READ] +
-                           server_info.num_sent[IO_WRITE]) -
-                          (server_info.num_completed[IO_READ] +
-                           server_info.num_completed[IO_WRITE]);
+    static long get_num_uncompleted(const server_info_t& server_info,
+                                    io_op_t op)
+    {
+        long num_uncompleted = server_info.num_sent[op] -
+                               server_info.num_completed[op];
 
         assert(num_uncompleted >= 0);
-
         return num_uncompleted;
     }
 
-    long get_num_uncompleted(size_t server_index) const {
+    static long get_num_uncompleted(const server_info_t& server_info)
+    {
+        return get_num_uncompleted(server_info, IO_READ) +
+               get_num_uncompleted(server_info, IO_WRITE);
+    }
+
+    long get_num_uncompleted(size_t server_index) const
+    {
         assert(server_index < _server_info.size());
         return get_num_uncompleted(_server_info[server_index]);
+    }
+
+    static long get_num_completed_round(const server_info_t& server_info,
+                                        io_op_t op)
+    {
+        return server_info.num_completed[op] - server_info.prev_completed[op];
+    }
+
+    static long get_num_posted_round(const server_info_t& server_info,
+                                     io_op_t op)
+    {
+        return get_num_completed_round(server_info, op) +
+               get_num_uncompleted(server_info, op);
     }
 
     static void reset_server_info(server_info_t& server_info) {
@@ -1754,16 +1772,16 @@ public:
         }
     }
 
-    size_t pick_server_index() const {
+    size_t pick_server_index() {
         assert(_num_active_servers_to_use != 0);
 
-        /* Pick a random connected server to which the client has credits
-         * to send (its conn's window is not full) */
-        size_t active_index =
-                IoDemoRandom::urand<size_t>(_num_active_servers_to_use);
-        size_t server_index = _active_servers[active_index];
+        size_t server_index = _active_servers[_next_active_index];
         assert(get_num_uncompleted(server_index) < opts().conn_window_size);
         assert(_server_info[server_index].conn != NULL);
+
+        if (++_next_active_index == _num_active_servers_to_use) {
+            _next_active_index = 0;
+        }
 
         return server_index;
     }
@@ -1848,9 +1866,12 @@ public:
             }
 
             total_bytes[op] += size;
+            ++total_iter;
+            ++sn;
 
-            if (is_control_iter(total_iter) && (total_iter > total_prev_iter)) {
-                /* Print performance every 1 second */
+            if (is_control_iter(total_iter) &&
+                ((total_iter - total_prev_iter) >= _active_servers.size())) {
+                // Print performance every <print_interval> seconds
                 double curr_time = get_time();
                 if (curr_time >= (prev_time + opts().print_interval)) {
                     wait_for_responses(0);
@@ -1860,15 +1881,16 @@ public:
 
                     report_performance(total_iter - total_prev_iter,
                                        curr_time - prev_time, total_bytes);
+
                     total_prev_iter = total_iter;
                     prev_time       = curr_time;
+                    for (int op = 0; op < IO_OP_MAX; ++op) {
+                        total_bytes[op] = 0;
+                    }
 
                     check_time_limit(curr_time);
                 }
             }
-
-            ++total_iter;
-            ++sn;
         }
 
         wait_for_responses(0);
@@ -1923,58 +1945,82 @@ private:
                                          opts().operations.size())];
     }
 
+    struct io_op_perf_info_t {
+        long min; // Minimum number of completed operations on some server
+        long max; // Maximum number of completed operations on some server
+        size_t min_index; // Server index with the smallest number of completed
+                          // operations
+        long total; // Total number of completed operations
+    };
+
     void report_performance(long num_iters, double elapsed,
-                            size_t total_bytes[IO_OP_MAX]) {
+                            const size_t total_bytes[IO_OP_MAX]) {
         if (num_iters == 0) {
             return;
         }
 
         double latency_usec = (elapsed / num_iters) * 1e6;
-        bool first_print    = true;
-
+        std::vector<io_op_perf_info_t> io_op_perf_info;
         UcxLog log(LOG_PREFIX);
 
-        for (unsigned op_id = 0; op_id < IO_OP_MAX; ++op_id) {
-            if (total_bytes[op_id] == 0) {
-                continue;
-            }
+        io_op_perf_info.resize(IO_OP_MAX + 1);
+        for (int op = 0; op <= IO_OP_MAX; ++op) {
+            io_op_perf_info[op].min       = std::numeric_limits<long>::max();
+            io_op_perf_info[op].max       = 0;
+            io_op_perf_info[op].min_index = _server_info.size();
+            io_op_perf_info[op].total     = 0;
+        }
 
-            if (!first_print) {
-                log << " | "; // print separator for non-first operation
-            }
-            first_print = false;
+        // Collect min/max among all connections
+        for (size_t server_index = 0; server_index < _server_info.size();
+             ++server_index) {
+            server_info_t& server_info = _server_info[server_index];
+            long total_completed       = 0;
+            for (int op = 0; op <= IO_OP_MAX; ++op) {
+                long delta_completed;
+                if (op != IO_OP_MAX) {
+                    delta_completed =
+                            get_num_completed_round(server_info,
+                                                    static_cast<io_op_t>(op));
 
-            // Report bandwidth
-            double throughput_mbs = total_bytes[op_id] / UCS_MBYTE / elapsed;
-            log << io_op_names[op_id] << " " << throughput_mbs << " MBs";
-            total_bytes[op_id] = 0;
+                    size_t min_index = io_op_perf_info[op].min_index;
+                    if ((delta_completed < io_op_perf_info[op].min) ||
+                        ((delta_completed == io_op_perf_info[op].min) &&
+                         (server_info.retry_count >
+                                  _server_info[min_index].retry_count))) {
+                        io_op_perf_info[op].min_index = server_index;
+                    }
 
-            // Collect min/max among all connections
-            long delta_min = std::numeric_limits<long>::max(), delta_max = 0;
-            size_t min_index = 0, total_completed = 0;
-            for (size_t server_index = 0; server_index < _server_info.size();
-                 ++server_index) {
-                server_info_t& server_info = _server_info[server_index];
-                long delta_completed       = server_info.num_completed[op_id] -
-                                             server_info.prev_completed[op_id];
-                if ((delta_completed < delta_min) ||
-                    ((delta_completed == delta_min) &&
-                     (server_info.retry_count >
-                      _server_info[min_index].retry_count))) {
-                    min_index = server_index;
+                    total_completed               += delta_completed;
+                    server_info.prev_completed[op] =
+                            server_info.num_completed[op];
+                } else {
+                    delta_completed = total_completed;
                 }
 
-                delta_min        = std::min(delta_completed, delta_min);
-                delta_max        = std::max(delta_completed, delta_max);
-                total_completed += delta_completed;
-
-                server_info.prev_completed[op_id] =
-                        server_info.num_completed[op_id];
+                io_op_perf_info[op].min    = std::min(delta_completed,
+                                                      io_op_perf_info[op].min);
+                io_op_perf_info[op].max    = std::max(delta_completed,
+                                                      io_op_perf_info[op].max);
+                io_op_perf_info[op].total += delta_completed;
             }
+        }
 
-            // Report delta of min/max/total operations for every connection
-            log << " min:" << delta_min << "(" << opts().servers[min_index]
-                << ") max:" << delta_max << " total:" << total_completed;
+        log << "total min:" << io_op_perf_info[IO_OP_MAX].min
+            << " max:" << io_op_perf_info[IO_OP_MAX].max
+            << " total:" << io_op_perf_info[IO_OP_MAX].total;
+
+        // Report bandwidth and min/max/total for every operation
+        for (int op = 0; op < IO_OP_MAX; ++op) {
+            log << " | ";
+
+            double throughput_mbs = (total_bytes[op] / elapsed) /
+                                    UCS_MBYTE;
+            log << io_op_names[op] << " " << throughput_mbs << " MBs"
+                << " min:" << io_op_perf_info[op].min << "("
+                << opts().servers[io_op_perf_info[op].min_index]
+                << ") max:" << io_op_perf_info[op].max
+                << " total:" << io_op_perf_info[op].total;
         }
 
         log << " | active:" << _active_servers.size() << "/"
@@ -2010,6 +2056,12 @@ private:
         _server_info[server_index].active_index = _active_servers.size() - 1;
         active_servers_make_used(_server_info[server_index].active_index);
         assert(_num_active_servers_to_use <= _active_servers.size());
+
+        /* Insert new connection into random index and it could be sent in
+         * either this round or the next round */
+        size_t active_index =
+                IoDemoRandom::urand<size_t>(_num_active_servers_to_use);
+        active_servers_swap(active_index, _num_active_servers_to_use - 1);
     }
 
     void active_servers_remove(size_t active_index) {
@@ -2028,7 +2080,17 @@ private:
     void active_servers_make_unused(size_t active_index) {
         assert(active_index < _num_active_servers_to_use);
         --_num_active_servers_to_use;
+        // Swap the removed element and the last element to use
         active_servers_swap(active_index, _num_active_servers_to_use);
+
+        if (active_index < _next_active_index) {
+            --_next_active_index;
+            // Swap the last element to use (which is saved in active_index now)
+            // and the last element for which IO was already done. Also, it
+            // guarantees that _next_active_index won't point to
+            // _num_active_servers_to_use, which shouldn't be used for IO
+            active_servers_swap(active_index, _next_active_index);
+        }
     }
 
     void active_servers_make_used(size_t active_index) {
@@ -2043,8 +2105,10 @@ private:
     std::set<size_t>                        _connecting_servers;
     // Active servers is the list of communicating servers
     std::vector<size_t>                     _active_servers;
-    // Num active servers to use handles window size, server becomes "unused" if
-    // its window is full
+    // Active server index to use for communications
+    size_t                                  _next_active_index;
+    // Number of active servers to use handles window size, server becomes
+    // "unused" if its window is full
     size_t                                  _num_active_servers_to_use;
     std::map<const UcxConnection*, size_t>  _server_index_lookup;
     long                                    _num_sent;
