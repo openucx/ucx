@@ -104,7 +104,9 @@ stages:
 
   - stage: Build
     displayName: Build binary packages
-    dependsOn: Prepare
+    dependsOn:
+      - Prepare
+      - GitHubDraft
     condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
     jobs:
       - template: az-distro-release.yml

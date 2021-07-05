@@ -24,6 +24,7 @@ while test "$1" != ""; do
         --binrpm|-b)  opt_binrpm=1 ;;
         --no-dist)    opt_no_dist=1 ;;
         --nodeps)     opt_no_deps=1 ;;
+        --noclean)    rpmopts="$rpmopts --noclean" ;;
         --define|-d)  defines="$defines --define '$2'"; shift ;;
         --strict-ibverbs-dep) opt_strict_ibverb_dep=1 ;;
         *)
