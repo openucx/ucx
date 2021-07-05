@@ -3,9 +3,11 @@ jobs:
     displayName: distro
     variables:
       ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
+        POSTFIX: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/heads/', '') }}
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
         POSTFIX: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}
       ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-        POSTFIX: ucx-test
+        POSTFIX: ucx-pr$(System.PullRequest.PullRequestNumber)
 
     pool:
       name: MLNX
@@ -67,7 +69,7 @@ jobs:
         # ^ Avoid rpmbuild error: Dest dir longer than base dir is not supported
 
       - bash: |
-          set -eE
+          set -eEx
           ./autogen.sh
           mkdir pkg-build
           cd pkg-build
@@ -75,9 +77,9 @@ jobs:
         displayName: Configure
 
       - bash: |
-          set -eE
+          set -eEx
           cd pkg-build
-          ../contrib/buildrpm.sh -s -t -b
+          ../contrib/buildrpm.sh -s -t -b --noclean
           cd rpm-dist/`uname -m`
           tar -cjf "../../../${AZ_ARTIFACT_NAME}" *.rpm
           cd ../../..
@@ -88,7 +90,7 @@ jobs:
           AZ_ARTIFACT_NAME: $(artifact_name)
 
       - bash: |
-          set -eE
+          set -eEx
           cd pkg-build
           dpkg-buildpackage -us -uc
           find .. -name '*.deb'
