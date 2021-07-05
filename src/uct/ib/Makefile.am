@@ -5,7 +5,7 @@
 
 if HAVE_IB
 
-SUBDIRS = . rdmacm
+SUBDIRS = . rdmacm efa
 
 module_LTLIBRARIES    = libuct_ib.la
 libuct_ib_la_CPPFLAGS = $(BASE_CPPFLAGS) $(IBVERBS_CPPFLAGS)
@@ -144,18 +144,6 @@ libuct_ib_la_SOURCES += \
 endif # HAVE_MLX5_HW_UD
 
 endif # HAVE_TL_UD
-
-
-if HAVE_EFA_DV
-libuct_ib_la_LDFLAGS +=  $(LIB_EFA)
-
-noinst_HEADERS += \
-	efa/ib_efa.h
-
-libuct_ib_la_SOURCES += \
-	efa/ib_efa_dv.c \
-	efa/ib_efa_md.c
-endif # HAVE_EFA_DV
 
 include $(top_srcdir)/config/module.am
 
