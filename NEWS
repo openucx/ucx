@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.11.0 RC2 (July 1, 2021)
+## 1.11.0 RC3 (July 6, 2021)
 ### Features:
 #### Core
 * Added support for UCX monitoring using virtual file system (VFS)/FUSE
@@ -111,6 +111,7 @@
 #### Continues Integration
 * Fixes in Azure pipeline build system
 * Fixes in Coverity CI
+* Fixes in Azure release pipeline
 #### Packaging
 * Fixed in DEB package - added essential system dependencies
 #### Documentation
