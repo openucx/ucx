@@ -78,14 +78,6 @@ AC_ARG_WITH([dm],
 AC_ARG_WITH([devx], [], [], [with_devx=check])
 
 #
-# EFA DV Support
-#
-AC_ARG_WITH([efa-dv],
-            [AC_HELP_STRING([--with-efa-dv], [Compile with EFA device support])],
-            [],
-            [with_efa_dv=yes])
-
-#
 # Check basic IB support: User wanted at least one IB transport, and we found
 # verbs header file and library.
 #
@@ -427,9 +419,6 @@ AS_IF([test "x$with_ib" = "xyes"],
                [AC_MSG_NOTICE([Added $mlnx_valg_libdir to valgrind LD_LIBRARY_PATH])
                valgrind_libpath="$mlnx_valg_libdir:$valgrind_libpath"])
 
-       # EFA device support
-       m4_include([src/uct/ib/efa/configure.m4])
-
        LDFLAGS="$save_LDFLAGS"
        CFLAGS="$save_CFLAGS"
        CPPFLAGS="$save_CPPFLAGS"
@@ -442,7 +431,6 @@ AS_IF([test "x$with_ib" = "xyes"],
         with_ud=no
         with_mlx5_hw=no
         with_mlx5_dv=no
-        with_efa_dv=no
     ])
 
 #
@@ -459,9 +447,9 @@ AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" = xyes])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
 AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
-AM_CONDITIONAL([HAVE_EFA_DV],  [test "x$with_efa_dv" != xno])
 
 uct_ib_modules=""
 m4_include([src/uct/ib/rdmacm/configure.m4])
+m4_include([src/uct/ib/efa/configure.m4])
 AC_DEFINE_UNQUOTED([uct_ib_MODULES], ["${uct_ib_modules}"], [IB loadable modules])
 AC_CONFIG_FILES([src/uct/ib/Makefile])
