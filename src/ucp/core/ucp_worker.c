@@ -1905,7 +1905,7 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
     worker->keepalive.ep_count    = 0;
     worker->keepalive.iter_count  = 0;
     worker->keepalive.iter        = &worker->all_eps;
-    worker->keepalive.iter_begin  = worker->keepalive.iter;
+    worker->keepalive.iter_end    = worker->keepalive.iter;
     worker->keepalive.round_count = 0;
 }
 
@@ -2801,7 +2801,7 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
 
     ucs_assert(worker->keepalive.lane_map == 0);
 
-    worker->keepalive.iter_begin = worker->keepalive.iter;
+    worker->keepalive.iter_end   = worker->keepalive.iter;
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
     worker->keepalive.round_count++;   
@@ -2863,7 +2863,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
         progress_count++;
         worker->keepalive.ep_count++;
     } while ((worker->keepalive.ep_count < max_ep_count) &&
-             (worker->keepalive.iter != worker->keepalive.iter_begin));
+             (worker->keepalive.iter != worker->keepalive.iter_end));
 
     ucp_worker_keepalive_complete(worker, now);
 
@@ -2928,13 +2928,12 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         ucs_assert(worker->keepalive.iter != &ucp_ep_ext_gen(ep)->ep_list);
     }
 
-    if (worker->keepalive.iter_begin == &ucp_ep_ext_gen(ep)->ep_list) {
-        worker->keepalive.iter_begin = worker->keepalive.iter_begin->next;
-        ucs_assert(worker->keepalive.iter_begin !=
-                           &ucp_ep_ext_gen(ep)->ep_list);
+    if (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list) {
+        worker->keepalive.iter_end = worker->keepalive.iter_end->prev;
+        ucs_assert(worker->keepalive.iter_end != &ucp_ep_ext_gen(ep)->ep_list);
     }
 
-    if (worker->keepalive.iter == worker->keepalive.iter_begin) {
+    if (worker->keepalive.iter == worker->keepalive.iter_end) {
         /* If the keepalive iterator points to the stop element after moving the
          * keepalive iterator or the stop element as a result of removing the
          * endpoint, need to finish the current round to avoid doing keepalive
