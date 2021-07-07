@@ -1156,7 +1156,6 @@ err_free:
     return UCS_ERR_INVALID_PARAM;
 }
 
-
 ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                 unsigned unpack_flags,
                                 ucp_unpacked_address_t *unpacked_address)

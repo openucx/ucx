@@ -210,6 +210,4 @@ ucs_status_t ucp_address_unpack_size(ucp_worker_h worker, const void *buffer,
                                      ucp_unpacked_address_t *unpacked_address,
                                      size_t *size_p);
 
-
-
 #endif

@@ -262,7 +262,6 @@ public:
         ucp_conn_request_attr_t attr;
         ucs_status_t status;
 
-
         attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
         status = ucp_conn_request_query(conn_request, &attr);
         EXPECT_TRUE(status == UCS_OK);
@@ -711,7 +710,7 @@ protected:
                  /* - or CONNECT_TO_EP connection establishment mode is used */
                  (ucp_ep_is_lane_p2p(ep, lane_idx)))) {
                 EXPECT_NE(UCP_NULL_LANE, ucp_ep_config(ep)->key.rma_bw_lanes[0])
-                    << "RNDV lanes should be selected";
+                          << "RNDV lanes should be selected";
                 return true;
             }
         }
@@ -875,7 +874,6 @@ UCS_TEST_P(test_ucp_sockaddr, conn_hander_query)
 
     conn_handler.cb  = conn_handler_cb;
     conn_handler.arg = reinterpret_cast<void*>(this);
-
     start_listener(ucp_test_base::entity::LISTEN_CB_CUSTOM, &conn_handler);
 
     {

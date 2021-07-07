@@ -1100,7 +1100,6 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
 
     // [ sa_data | ucp_address | user_data ]
     // |      conn_priv_data_length        |
-
     // 1. sa_data is fixed of size, so copy it directly
     memcpy(&ucp_conn_request->sa_data, remote_data->conn_priv_data,
            sizeof(ucp_conn_request->sa_data));
