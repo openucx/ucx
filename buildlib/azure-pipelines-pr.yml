@@ -383,3 +383,7 @@ stages:
         parameters:
           name: new
           demands: ucx_new -equals yes
+      - template: go/go-test.yml
+        parameters:
+            name: gpu
+            demands: ucx_gpu -equals yes

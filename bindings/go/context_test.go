@@ -11,7 +11,7 @@ import (
 
 func TestUcpContext(t *testing.T) {
 	ucpParams := &UcpParams{}
-	ucpParams.SetTagSenderMask(9).EnableStream()
+	ucpParams.SetTagSenderMask(9).EnableStream().SetName("GO_Test").SetEstimatedNumPPN(1)
 
 	context, err := NewUcpContext(ucpParams)
 
@@ -21,7 +21,7 @@ func TestUcpContext(t *testing.T) {
 
 	context.Close()
 
-	if context.context !=nil {
+	if context.context != nil {
 		t.Fatalf("context not nil")
 	}
 }
