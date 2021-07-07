@@ -9,6 +9,7 @@
 #endif
 
 #include <ucp/tag/eager.h>
+#include <ucp/tag/offload.h>
 #include <ucp/proto/proto_single.inl>
 
 
@@ -58,7 +59,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_SHORT
     };
 
-    if (!ucp_proto_eager_check_op_id(init_params, 1) ||
+    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1) ||
         /* short protocol requires contig/host */
         (select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !UCP_MEM_IS_HOST(select_param->mem_type)) {
@@ -89,26 +90,22 @@ static size_t ucp_eager_tag_offload_pack(void *dest, void *arg)
                                        &next_iter, dest);
 }
 
-static ucs_status_t
-ucp_proto_eager_tag_offload_bcopy_progress(uct_pending_req_t *self)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_eager_tag_offload_bcopy_common(ucp_request_t *req,
+                                         const ucp_proto_single_priv_t *spriv,
+                                         uint64_t imm_data)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ssize_t packed_len;
-    ucs_status_t status;
 
     packed_len = uct_ep_tag_eager_bcopy(req->send.ep->uct_eps[spriv->super.lane],
-                                        req->send.msg_proto.tag, 0ul,
+                                        req->send.msg_proto.tag, imm_data,
                                         ucp_eager_tag_offload_pack, req, 0);
-    status     = ucs_likely(packed_len >= 0) ? UCS_OK : packed_len;
 
-    return ucp_proto_single_status_handle(
-            req, ucp_proto_request_bcopy_complete_success, spriv->super.lane,
-            status);
+    return ucs_likely(packed_len >= 0) ? UCS_OK : packed_len;
 }
 
-static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init(
-        const ucp_proto_init_params_t *init_params)
+static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
+        const ucp_proto_init_params_t *init_params, ucp_proto_id_t op_id)
 {
     ucp_context_t *context                = init_params->worker->context;
     ucp_proto_single_init_params_t params = {
@@ -128,11 +125,33 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 1)) {
+    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     return ucp_proto_single_init(&params);
+}
+
+
+static ucs_status_t
+ucp_proto_eager_tag_offload_bcopy_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    status = ucp_proto_eager_tag_offload_bcopy_common(req, spriv, 0ul);
+
+    return ucp_proto_single_status_handle(
+            req, ucp_proto_request_bcopy_complete_success, spriv->super.lane,
+            status);
+}
+
+static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_eager_tag_offload_bcopy_init_common(init_params,
+                                                         UCP_OP_ID_TAG_SEND);
 }
 
 static ucp_proto_t ucp_eager_bcopy_single_proto = {
@@ -144,8 +163,42 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
-static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init(
+static ucs_status_t
+ucp_proto_eager_sync_tag_offload_bcopy_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+    ucs_status_t status;
+
+    status = ucp_proto_eager_tag_offload_bcopy_common(
+            req, spriv, ucp_send_request_get_ep_remote_id(req));
+    if (ucs_likely(status == UCS_OK)) {
+        ucp_tag_offload_sync_posted(req->send.ep->worker, req);
+    }
+
+    return ucp_proto_single_status_handle(
+            req, ucp_proto_request_bcopy_complete_success, spriv->super.lane,
+            status);
+}
+
+static ucs_status_t ucp_proto_eager_sync_tag_offload_bcopy_init(
         const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_eager_tag_offload_bcopy_init_common(
+            init_params, UCP_OP_ID_TAG_SEND_SYNC);
+}
+
+static ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
+    .name       = "egrsnc/offload/bcopy",
+    .flags      = 0,
+    .init       = ucp_proto_eager_sync_tag_offload_bcopy_init,
+    .config_str = ucp_proto_single_config_str,
+    .progress   = ucp_proto_eager_sync_tag_offload_bcopy_progress
+};
+UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_single_proto);
+
+static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
+        const ucp_proto_init_params_t *init_params, ucp_proto_id_t op_id)
 {
     ucp_context_t *context                = init_params->worker->context;
     ucp_proto_single_init_params_t params = {
@@ -166,11 +219,18 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 1)) {
+    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
     return ucp_proto_single_init(&params);
+}
+
+static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_eager_tag_offload_zcopy_init_common(init_params,
+                                                         UCP_OP_ID_TAG_SEND);
 }
 
 static ucs_status_t
@@ -201,3 +261,40 @@ static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .progress   = ucp_proto_eager_tag_offload_zcopy_progress,
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);
+
+static ucs_status_t ucp_proto_eager_sync_tag_offload_zcopy_init(
+        const ucp_proto_init_params_t *init_params)
+{
+    return ucp_proto_eager_tag_offload_zcopy_init_common(
+            init_params, UCP_OP_ID_TAG_SEND_SYNC);
+}
+
+static ucs_status_t
+ucp_proto_tag_offload_zcopy_sync_send_func(ucp_request_t *req,
+                                           const ucp_proto_single_priv_t *spriv,
+                                           const uct_iov_t *iov)
+{
+    return uct_ep_tag_eager_zcopy(req->send.ep->uct_eps[spriv->super.lane],
+                                  req->send.msg_proto.tag,
+                                  ucp_send_request_get_ep_remote_id(req), iov,
+                                  1, 0, &req->send.state.uct_comp);
+}
+
+static ucs_status_t
+ucp_proto_eager_sync_tag_offload_zcopy_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    return ucp_proto_zcopy_single_progress(
+            req, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            ucp_proto_tag_offload_zcopy_sync_send_func, "tag_eager_sync_zcopy");
+}
+
+static ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
+    .name       = "egrsnc/offload/zcopy",
+    .flags      = 0,
+    .init       = ucp_proto_eager_sync_tag_offload_zcopy_init,
+    .config_str = ucp_proto_single_config_str,
+    .progress   = ucp_proto_eager_sync_tag_offload_zcopy_progress
+};
+UCP_PROTO_REGISTER(&ucp_eager_sync_zcopy_single_proto);
