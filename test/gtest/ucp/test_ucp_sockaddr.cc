@@ -711,7 +711,7 @@ protected:
                  /* - or CONNECT_TO_EP connection establishment mode is used */
                  (ucp_ep_is_lane_p2p(ep, lane_idx)))) {
                 EXPECT_NE(UCP_NULL_LANE, ucp_ep_config(ep)->key.rma_bw_lanes[0])
-                        << "RNDV lanes should be selected";
+                    << "RNDV lanes should be selected";
                 return true;
             }
         }
@@ -1373,7 +1373,7 @@ class test_ucp_sockaddr_check_lanes : public test_ucp_sockaddr {
 };
 
 
-UCS_TEST_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes)
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes, !cm_use_all_devices())
 {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 

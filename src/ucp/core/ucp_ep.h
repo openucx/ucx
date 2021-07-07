@@ -89,7 +89,7 @@ enum {
                                                         @uct_ep_disconnect was called for CM EP */
     UCP_EP_FLAG_CLIENT_CONNECT_CB      = UCS_BIT(23),/* DEBUG: Client connect callback invoked */
     UCP_EP_FLAG_SERVER_NOTIFY_CB       = UCS_BIT(24),/* DEBUG: Server notify callback invoked */
-    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25) /* DEBUG: Got disconnect notification */
+    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25), /* DEBUG: Got disconnect notification */
 };
 
 
@@ -478,12 +478,13 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
+    UCP_WIREUP_SA_DATA_CM_ADDR = 2,     /* Sockaddr client data contains address
                                            for CM based wireup: there is only
                                            iface and ep address of transport
                                            lanes, remote device address is
                                            provided by CM and has to be added to
                                            unpacked UCP address locally. */
+    UCP_WIREUP_SA_DATA_AM_ONLY = 4      /* Address has only AM lane information. */
 };
 
 

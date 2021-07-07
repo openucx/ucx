@@ -746,7 +746,9 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     }
 
-    if (sa_data->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
+    if (sa_data->addr_mode == UCP_WIREUP_SA_DATA_AM_ONLY) {
+        ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE_ONLY;
+    } else if (sa_data->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
         ucs_fatal("client sockaddr data contains invalid address mode %d",
                   sa_data->addr_mode);
     }
