@@ -591,7 +591,7 @@ enum ucp_cb_param_flags {
  * @brief Atomic operation requested for ucp_atomic_post
  *
  * This enumeration defines which atomic memory operation should be
- * performed by the ucp_atomic_post family of fuctions. All of these are
+ * performed by the ucp_atomic_post family of functions. All of these are
  * non-fetching atomics and will not result in a request handle.
  */
 typedef enum {
