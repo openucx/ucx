@@ -74,7 +74,10 @@ typedef enum {
     UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE_FULL_HANDSHAKE = UCS_BIT(1),
 
     /** uidx is set to dci idx */
-    UCT_DC_MLX5_IFACE_FLAG_UIDX                     = UCS_BIT(2)
+    UCT_DC_MLX5_IFACE_FLAG_UIDX                     = UCS_BIT(2),
+
+    /** Flow control endpoint is using a DCI in error state */
+    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3)
 } uct_dc_mlx5_iface_flags_t;
 
 
