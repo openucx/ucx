@@ -1316,6 +1316,9 @@ public:
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_make_unused(server_info.active_index);
         }
+
+        assert(server_info.num_completed[op] < server_info.num_sent[op]);
+        assert(_num_completed < _num_sent);
     }
 
     void handle_operation_completion(size_t server_index, io_op_t op) {
@@ -1326,6 +1329,7 @@ public:
         assert(_server_index_lookup.find(server_info.conn) !=
                _server_index_lookup.end());
         assert(_num_completed < _num_sent);
+        assert(server_info.num_completed[op] < server_info.num_sent[op]);
 
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_make_used(server_info.active_index);
