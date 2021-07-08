@@ -483,8 +483,7 @@ static ucs_status_t ucp_tag_offload_eager_short(uct_pending_req_t *self)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_do_tag_offload_bcopy(uct_pending_req_t *self, uint64_t imm_data,
-                         uct_pack_callback_t pack_cb)
+ucp_do_tag_offload_bcopy(uct_pending_req_t *self, uint64_t imm_data)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep       = req->send.ep;
@@ -493,7 +492,7 @@ ucp_do_tag_offload_bcopy(uct_pending_req_t *self, uint64_t imm_data,
     req->send.lane = ucp_ep_get_tag_lane(ep);
     packed_len     = uct_ep_tag_eager_bcopy(ep->uct_eps[req->send.lane],
                                             req->send.msg_proto.tag, imm_data,
-                                            pack_cb, req, 0);
+                                            ucp_tag_offload_pack_eager, req, 0);
     if (packed_len < 0) {
         return (ucs_status_t)packed_len;
     }
@@ -527,8 +526,7 @@ ucp_do_tag_offload_zcopy(uct_pending_req_t *self, uint64_t imm_data,
 
 static ucs_status_t ucp_tag_offload_eager_bcopy(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_tag_offload_bcopy(self, 0ul,
-                                                   ucp_tag_offload_pack_eager);
+    ucs_status_t status = ucp_do_tag_offload_bcopy(self, 0ul);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
 }
@@ -704,8 +702,7 @@ static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
     ucs_status_t status;
 
     status = ucp_do_tag_offload_bcopy(self,
-                                      ucp_send_request_get_ep_remote_id(req),
-                                      ucp_tag_offload_pack_eager);
+                                      ucp_send_request_get_ep_remote_id(req));
     if (status == UCS_OK) {
         ucp_tag_offload_sync_posted(worker, req);
     }
