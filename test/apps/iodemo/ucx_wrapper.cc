@@ -13,9 +13,12 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <malloc.h>
 
 #include <algorithm>
 #include <limits>
+
+#include <ucs/debug/memtrack.h>
 
 
 #define AM_MSG_ID 0
@@ -671,6 +674,32 @@ void UcxContext::set_am_handler(ucp_am_recv_callback_t cb, void *arg)
     param.cb         = cb;
     param.arg        = arg;
     ucp_worker_set_am_recv_handler(_worker, &param);
+}
+
+void *UcxContext::malloc(size_t size, const char *name)
+{
+    void *ptr;
+
+    ptr = ::malloc(size);
+    ucs_memtrack_allocated(ptr, size, name);
+
+    return ptr;
+}
+
+void *UcxContext::memalign(size_t alignment, size_t size, const char *name)
+{
+    void *ptr;
+
+    ptr = ::memalign(alignment, size);
+    ucs_memtrack_allocated(ptr, size, name);
+
+    return ptr;
+}
+
+void UcxContext::free(void *ptr)
+{
+    ucs_memtrack_releasing(ptr);
+    ::free(ptr);
 }
 
 #define UCX_CONN_LOG UcxLog(_log_prefix, true)

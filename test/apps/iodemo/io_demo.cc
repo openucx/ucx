@@ -136,6 +136,11 @@ public:
         return UCS_MEMORY_TYPE_HOST;
     }
 
+    const std::string& name() const
+    {
+        return _name;
+    }
+
 protected:
     size_t buffer_size() const
     {
@@ -403,7 +408,8 @@ protected:
                 break;
 #endif
             case UCS_MEMORY_TYPE_HOST:
-                buffer = memalign(ALIGNMENT, size);
+                buffer = UcxContext::memalign(ALIGNMENT, size,
+                                              pool.name().c_str());
                 break;
             default:
                 LOG << "ERROR: Unsupported memory type requested: "
@@ -564,7 +570,8 @@ protected:
     class IoMessage : public UcxCallback {
     public:
         IoMessage(size_t io_msg_size, MemoryPool<IoMessage>& pool) :
-            _buffer(malloc(io_msg_size)), _pool(pool),
+            _buffer(UcxContext::malloc(io_msg_size, pool.name().c_str())),
+            _pool(pool),
             _io_msg_size(io_msg_size) {
 
             if (_buffer == NULL) {
@@ -586,7 +593,7 @@ protected:
         }
 
         ~IoMessage() {
-            free(_buffer);
+            UcxContext::free(_buffer);
         }
 
         virtual void operator()(ucs_status_t status) {
@@ -1207,7 +1214,8 @@ public:
             MemoryPool<IoReadResponseCallback>& pool) :
             _status(UCS_OK), _comp_counter(0), _client(NULL),
             _server_index(std::numeric_limits<size_t>::max()),
-            _sn(0), _validate(false), _iov(NULL), _buffer(malloc(buffer_size)),
+            _sn(0), _validate(false), _iov(NULL),
+            _buffer(UcxContext::malloc(buffer_size, pool.name().c_str())),
             _buffer_size(buffer_size), _meta_comp_counter(0), _pool(pool) {
 
             if (_buffer == NULL) {
@@ -1230,7 +1238,7 @@ public:
         }
 
         ~IoReadResponseCallback() {
-            free(_buffer);
+            UcxContext::free(_buffer);
         }
 
         virtual void operator()(ucs_status_t status) {

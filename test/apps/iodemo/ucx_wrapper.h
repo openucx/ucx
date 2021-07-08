@@ -114,6 +114,12 @@ public:
 
     static double get_time();
 
+    static void *malloc(size_t size, const char *name);
+
+    static void *memalign(size_t alignment, size_t size, const char *name);
+
+    static void free(void *ptr);
+
 protected:
 
     // Called when new IO message is received
