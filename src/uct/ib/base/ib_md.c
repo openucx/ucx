@@ -286,10 +286,10 @@ typedef struct {
 } uct_ib_md_mem_reg_thread_t;
 
 static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_attr,
-                                          const char *file,
+                                          const char *file1, const char *file2,
                                           ucs_memory_type_t mem_type)
 {
-    if (!access(file, F_OK)) {
+    if (!access(file1, F_OK) || (file2 && !access(file2, F_OK))) {
         md_attr->cap.reg_mem_types |= UCS_BIT(mem_type);
     }
 
@@ -319,10 +319,11 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
         /* check if GDR driver is loaded */
         uct_ib_check_gpudirect_driver(md, md_attr,
                                       "/sys/kernel/mm/memory_peers/nv_mem/version",
+                                      "/sys/kernel/mm/memory_peers/nvidia-peermem/version",
                                       UCS_MEMORY_TYPE_CUDA);
 
         /* check if ROCM KFD driver is loaded */
-        uct_ib_check_gpudirect_driver(md, md_attr, "/dev/kfd",
+        uct_ib_check_gpudirect_driver(md, md_attr, "/dev/kfd", NULL,
                                       UCS_MEMORY_TYPE_ROCM);
 
         if (!(md_attr->cap.reg_mem_types & ~UCS_MEMORY_TYPES_CPU_ACCESSIBLE) &&
