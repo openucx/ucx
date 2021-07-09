@@ -1567,14 +1567,16 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
         return;
     }
 
-    if (ep_status == UCS_ERR_CANCELED) {
-        return;
-    }
-
     if (ep == iface->tx.fc_ep) {
+        iface->flags |= UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
+
         /* Do not report errors on flow control endpoint */
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
+        return;
+    }
+
+    if (ep_status == UCS_ERR_CANCELED) {
         return;
     }
 

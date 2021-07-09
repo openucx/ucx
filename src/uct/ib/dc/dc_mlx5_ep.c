@@ -906,6 +906,16 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     UCT_DC_MLX5_CHECK_DCI_RES(iface, ep);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
+    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED) {
+        /* Failed endpoint should not be scheduled on arbiter */
+        ucs_assertv(!ucs_arbiter_group_is_scheduled(
+                             uct_dc_mlx5_ep_arb_group(iface, ep)), "fc_ep %p",
+                    ep);
+        /* Do not send on a failed endpoint, caller can add the operation to
+         * pending */
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
     if (fc_req->sender.payload.is_global) {
         uct_ib_iface_fill_ah_attr_from_gid_lid(
@@ -1561,6 +1571,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         uct_dc_mlx5_iface_reset_dci(iface, dci_index);
 
         if (ep == iface->tx.fc_ep) {
+            iface->flags &= ~UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
+
             /* Since DCI isn't assigned for the FC endpoint, schedule DCI
              * allocation for progressing possible FC_PURE_GRANT re-sending
              * operation which are scheduled on the pending queue */
