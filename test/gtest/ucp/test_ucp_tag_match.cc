@@ -740,7 +740,8 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
 
     /* small sizes should warm-up tag cache */
     for (unsigned i = 0; i < ucs_static_array_size(sizes); ++i) {
-        const size_t size = sizes[i] / ucs::test_time_multiplier();
+        const size_t size = sizes[i] / ucs::test_time_multiplier() /
+                            ucs::test_time_multiplier();
         request *my_send_req, *my_recv_req;
 
         std::vector<char> sendbuf(size, 0);
