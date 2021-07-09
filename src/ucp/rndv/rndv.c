@@ -1342,12 +1342,11 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
         goto err;
     }
 
-    rndv_req->flags        = 0;
-    rndv_req->send.ep      = ep;
-    rndv_req->send.mdesc   = NULL;
-    is_get_zcopy_failed    = 0;
-    is_get_zcopy_supported = 0;
-    src_mem_type           = UCS_MEMORY_TYPE_HOST;
+    rndv_req->flags      = 0;
+    rndv_req->send.ep    = ep;
+    rndv_req->send.mdesc = NULL;
+    is_get_zcopy_failed  = 0;
+    src_mem_type         = UCS_MEMORY_TYPE_HOST;
 
     ucp_trace_req(rreq,
                   "rndv matched remote {address 0x%"PRIx64" size %zu sreq_id "
