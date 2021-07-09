@@ -204,7 +204,9 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
         params.max_iter    = test.iters;
     } else {
         params.warmup_iter = 0;
-        params.max_iter    = ucs_min(20u, test.iters / ucs::test_time_multiplier());
+        params.max_iter    = ucs_min(20u, test.iters /
+                                                  ucs::test_time_multiplier() /
+                                                  ucs::test_time_multiplier());
     }
     params.max_time        = 0.0;
     params.report_interval = 1.0;

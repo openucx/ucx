@@ -245,7 +245,7 @@ UCS_TEST_F(test_mpool, leak_check) {
     ucs_mpool_cleanup(&mp, 1);
 }
 
-UCS_TEST_F(test_mpool, alloc_4g) {
+UCS_TEST_SKIP_COND_F(test_mpool, alloc_4g, RUNNING_ON_VALGRIND) {
     const unsigned elems_per_chunk = 128;
     const size_t elem_size         = 32 * UCS_MBYTE;
     ucs_mpool_ops_t mpool_ops = {ucs_mpool_chunk_malloc, ucs_mpool_chunk_free,
