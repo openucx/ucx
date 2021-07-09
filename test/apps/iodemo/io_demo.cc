@@ -83,13 +83,9 @@ typedef struct {
 
 template<class BufferType, bool use_offcache = false> class ObjectPool {
 public:
-    ObjectPool(size_t buffer_size, const std::string &name,
-               size_t offcache = 0) :
+    ObjectPool(size_t buffer_size, const std::string &name) :
         _buffer_size(buffer_size), _num_allocated(0), _name(name)
     {
-        for (size_t i = 0; i < offcache; ++i) {
-            _offcache_queue.push(get_free());
-        }
     }
 
     ~ObjectPool()
@@ -106,6 +102,13 @@ public:
 
         for (size_t i = 0; i < _free_stack.size(); i++) {
             delete _free_stack[i];
+        }
+    }
+
+    void init(size_t offcache)
+    {
+        for (size_t i = 0; i < offcache; ++i) {
+            _offcache_queue.push(get_free());
         }
     }
 
@@ -177,9 +180,9 @@ class MemoryPool : public ObjectPool<BufferType, use_offcache> {
 public:
     MemoryPool(size_t buffer_size, const std::string &name,
                size_t offcache = 0) :
-        ObjectPool<BufferType, use_offcache>::ObjectPool(buffer_size, name,
-                                                         offcache)
+        ObjectPool<BufferType, use_offcache>::ObjectPool(buffer_size, name)
     {
+        this->init(offcache);
     }
 
 public:
@@ -194,9 +197,10 @@ class BufferMemoryPool : public ObjectPool<BufferType, true> {
 public:
     BufferMemoryPool(size_t buffer_size, const std::string &name,
                      ucs_memory_type_t memory_type, size_t offcache = 0) :
-        ObjectPool<BufferType, true>(buffer_size, name, offcache),
+        ObjectPool<BufferType, true>(buffer_size, name),
         _memory_type(memory_type)
     {
+        this->init(offcache);
     }
 
     virtual BufferType *construct()
@@ -670,7 +674,7 @@ protected:
                                          test_opts.chunk_size),
                            "data iovs"),
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
-                          test_opts.memory_type)
+                          test_opts.memory_type, test_opts.num_offcache_buffers)
     {
     }
 
