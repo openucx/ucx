@@ -1371,7 +1371,8 @@ class test_ucp_sockaddr_check_lanes : public test_ucp_sockaddr {
 };
 
 
-UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes, !cm_use_all_devices())
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes,
+                     !cm_use_all_devices())
 {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 
