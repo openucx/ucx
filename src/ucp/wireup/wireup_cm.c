@@ -310,7 +310,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     }
 
     *data_buf_p        = sa_data;
-    *data_buf_length_p = ucp_cm_priv_data_length(ucp_addr_size, put_client_data);
+*data_buf_length_p = ucp_cm_priv_data_length(ucp_addr_size,
+                                             put_client_data);
     status             = UCS_OK;
 
 err:
