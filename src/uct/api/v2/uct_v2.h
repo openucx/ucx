@@ -11,6 +11,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/memory/memory_type.h>
 #include <uct/api/uct.h>
+#include <ucs/sys/topo.h>
 
 #include <stdint.h>
 
@@ -68,11 +69,17 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::remote_memory_type */
     UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE = UCS_BIT(2),
 
+    /** Enables @ref uct_perf_attr_t::local_sys_device */
+    UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE   = UCS_BIT(3),
+
+    /** Enables @ref uct_perf_attr_t::remote_sys_device */
+    UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE  = UCS_BIT(4),
+
     /** Enables @ref uct_perf_attr_t::overhead */
-    UCT_PERF_ATTR_FIELD_OVERHEAD           = UCS_BIT(3),
+    UCT_PERF_ATTR_FIELD_OVERHEAD           = UCS_BIT(5),
 
     /** Enables @ref uct_perf_attr_t::bandwidth */
-    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(4)
+    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(6)
 };
 
 
@@ -108,6 +115,20 @@ typedef struct {
      * This field must be initialized by the caller.
      */
     ucs_memory_type_t   remote_memory_type;
+
+    /**
+     * System device where the local memory type resides.
+     * Can be UCS_SYS_DEVICE_ID_UNKNOWN.
+     * This field must be initialized by the caller.
+     */
+    ucs_sys_device_t    local_sys_device;
+
+    /**
+     * System device where the remote memory type resides.
+     * Can be UCS_SYS_DEVICE_ID_UNKNOWN and be the same as local system device.
+     * This field must be initialized by the caller.
+     */
+    ucs_sys_device_t    remote_sys_device;
 
     /**
      * Message overhead time, in seconds. This field is set by the UCT layer.
