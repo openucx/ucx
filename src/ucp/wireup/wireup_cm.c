@@ -287,7 +287,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
         goto err;
     }
 
-    sa_data = ucs_malloc(ucp_cm_priv_data_length(ucp_addr_size, put_client_data),
+    sa_data = ucs_malloc(ucp_cm_priv_data_length(ucp_addr_size,
+                                                 put_client_data),
                          "client_priv_data");
     if (sa_data == NULL) {
         status = UCS_ERR_NO_MEMORY;
