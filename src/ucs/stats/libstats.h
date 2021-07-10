@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -54,6 +55,7 @@ typedef enum ucs_stats_children_sel {
 struct ucs_stats_class {
     const char           *name;
     unsigned             num_counters;
+    unsigned             class_id;
     const char*          counter_names[];
 };
 
