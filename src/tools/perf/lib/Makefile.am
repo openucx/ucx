@@ -26,5 +26,7 @@ noinst_HEADERS = \
 
 libucxperf_la_SOURCES = \
 	libperf.c \
+	libperf_memory.c \
+	libperf_thread.c \
 	uct_tests.cc \
 	ucp_tests.cc

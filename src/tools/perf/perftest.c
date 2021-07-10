@@ -8,7 +8,24 @@
 * See file LICENSE for terms.
 */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+
 #include "perftest.h"
+
+#include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
+#include <ucs/sys/sock.h>
+#include <ucs/debug/log.h>
+
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <sys/poll.h>
+
 
 test_type_t tests[] = {
     {"am_lat", UCX_PERF_API_UCT, UCX_PERF_CMD_AM, UCX_PERF_TEST_TYPE_PINGPONG,

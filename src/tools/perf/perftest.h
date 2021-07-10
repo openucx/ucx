@@ -7,37 +7,15 @@
 #ifndef UCX_PERFTEST_H
 #define UCX_PERFTEST_H
 
-#ifdef HAVE_CONFIG_H
-#  include "config.h"
-#endif
-
 #include "api/libperf.h"
 #include "lib/libperf_int.h"
 
-#include <ucs/sys/string.h>
-#include <ucs/sys/sys.h>
-#include <ucs/sys/sock.h>
-#include <ucs/debug/log.h>
-
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <netdb.h>
-#include <getopt.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/poll.h>
-#include <locale.h>
-
 #if defined (HAVE_MPI)
 #  include <mpi.h>
-
 #elif defined (HAVE_RTE)
 #   include<rte.h>
-
 #endif
+
 
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
@@ -74,7 +52,6 @@ typedef struct perftest_params {
     int                          test_id;
 } perftest_params_t;
 
-
 struct perftest_context {
     perftest_params_t            params;
     const char                   *server_addr;
@@ -96,14 +73,12 @@ extern test_type_t tests[];
 ucs_status_t run_test(struct perftest_context *ctx);
 ucs_status_t clone_params(perftest_params_t *dest,
                           const perftest_params_t *src);
-ucs_status_t read_batch_file(FILE *batch_file, const char *file_name,
-                             int *line_num, perftest_params_t *params,
-                             char** test_name_p);
 ucs_status_t check_params(const perftest_params_t *params);
 ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
                         int argc, char **argv);
 ucs_status_t init_test_params(perftest_params_t *params);
-void usage(const struct perftest_context *ctx, const char *program);
+ucs_status_t parse_test_params(perftest_params_t *params, char opt,
+                               const char *opt_arg);
 ucs_status_t adjust_test_params(perftest_params_t *params,
                                 const char *error_prefix);
 void print_progress(char **test_names, unsigned num_names,
