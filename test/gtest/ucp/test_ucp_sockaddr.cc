@@ -243,10 +243,10 @@ public:
         UCS_TEST_MESSAGE << "server listening on " << m_test_addr.to_str();
     }
 
-     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
-     {
-         start_listener(cb_type, NULL);
-     }
+    void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
+    {
+        start_listener(cb_type, NULL);
+    }
 
     ucs_status_t create_listener_wrap_err(const ucp_listener_params_t &params,
                                           ucp_listener_h &listener)
@@ -261,7 +261,7 @@ public:
         ucs_status_t status;
 
         attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
-        status = ucp_conn_request_query(conn_request, &attr);
+        status          = ucp_conn_request_query(conn_request, &attr);
         EXPECT_TRUE(status == UCS_OK);
         EXPECT_EQ(reinterpret_cast<uint64_t>(arg), attr.client_id);
 

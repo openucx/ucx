@@ -520,7 +520,7 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
         }
 
         status = ucp_address_unpack(worker, address_buffer, pack_flags,
-                                    &local_address);
+                                    &local_address, NULL);
         if (status != UCS_OK) {
             goto err_free_address_buffer;
         }
@@ -774,6 +774,11 @@ ucp_ep_create_api_conn_request(ucp_worker_h worker,
     ucp_ep_h           ep;
     ucs_status_t       status;
 
+    if (params->field_mask & UCP_EP_PARAM_FIELD_CLIENT_ID) {
+        ucs_error("client id is supported only for sockaddr connection establishment");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = ucp_ep_create_server_accept(worker, conn_request, &ep);
     if (status != UCS_OK) {
         return status;
@@ -805,11 +810,17 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out;
     }
 
+    if (params->field_mask & UCP_EP_PARAM_FIELD_CLIENT_ID) {
+        status = UCS_ERR_INVALID_PARAM;
+        ucs_error("client id is supported only for sockaddr connection establishment");
+        goto out;
+    }
+
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
     status = ucp_address_unpack(worker, params->address,
                                 ucp_worker_default_address_pack_flags(worker),
-                                &remote_address);
+                                &remote_address, NULL);
     if (status != UCS_OK) {
         goto out;
     }

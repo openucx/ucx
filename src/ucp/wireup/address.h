@@ -176,6 +176,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  *                               address format, must be the same as the address
  *                               which was packed by @ref ucp_address_pack.
  * @param [out] unpacked_address Filled with remote address data.
+ * @param [out] size_p           Filled with buffer size.
  *
  * @note Entries in the address list could point into the data buffer, so it
  *       should not be released as long as the remote address is used.
@@ -185,29 +186,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  */
 ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
                                 unsigned unpack_flags,
-                                ucp_unpacked_address_t *unpacked_address);
-
-
-/**
- * Unpack a list of addresses.
- *
- * @param [in]  worker           Worker object.
- * @param [in]  buffer           Buffer with data to unpack.
- * @param [in]  unpack_flags     UCP_ADDRESS_PACK_FLAG_xx flags to specify
- *                               address format, must be the same as the address
- *                               which was packed by @ref ucp_address_pack.
- * @param [out] unpacked_address Filled with remote address data.
- * @param [out] size_p           Filled with buffer size.
- *
- * @note Entries in the address list could point into the data buffer, so it
- *       should not be released as long as the remote address is used.
- *
- * @note The address list inside @ref ucp_remote_address_t should be released
- *       by ucs_free().
- */
-ucs_status_t ucp_address_unpack_size(ucp_worker_h worker, const void *buffer,
-                                     unsigned unpack_flags,
-                                     ucp_unpacked_address_t *unpacked_address,
-                                     size_t *size_p);
+                                ucp_unpacked_address_t *unpacked_address,
+                                size_t *size_p);
 
 #endif

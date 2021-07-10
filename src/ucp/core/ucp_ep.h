@@ -478,13 +478,13 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SA_DATA_CM_ADDR = 2,     /* Sockaddr client data contains address
+    UCP_WIREUP_SA_DATA_AM_ONLY = 1,     /* Address has only AM lane information. */
+    UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
                                            for CM based wireup: there is only
                                            iface and ep address of transport
                                            lanes, remote device address is
                                            provided by CM and has to be added to
                                            unpacked UCP address locally. */
-    UCP_WIREUP_SA_DATA_AM_ONLY = 4      /* Address has only AM lane information. */
 };
 
 
@@ -501,9 +501,11 @@ struct ucp_wireup_sockaddr_data {
     /* packed worker address follows */
 } UCS_S_PACKED;
 
+
 struct ucp_wireup_user_data {
     uint64_t                client_id;      /**< Endpoint client ID */
 };
+
 
 typedef struct ucp_conn_request {
     ucp_listener_h              listener;
