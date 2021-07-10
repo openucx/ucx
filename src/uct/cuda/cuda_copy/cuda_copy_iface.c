@@ -32,6 +32,10 @@ static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
      "Max number of cuda events. -1 is infinite",
      ucs_offsetof(uct_cuda_copy_iface_config_t, max_cuda_events), UCS_CONFIG_TYPE_UINT},
 
+    {"BW", "10000MBs",
+     "Effective memory bandwidth",
+     ucs_offsetof(uct_cuda_copy_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
+
     {NULL}
 };
 
@@ -107,7 +111,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = ucs_linear_func_make(8e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+    iface_attr->bandwidth.shared        = iface->config.bandwidth;
     iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
@@ -286,12 +290,14 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 }
 
 static ucs_status_t
-uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;
         if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
-            perf_attr->bandwidth.shared = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+            perf_attr->bandwidth.shared = iface->config.bandwidth;
         } else {
             switch (perf_attr->operation) {
             case UCT_OP_GET_SHORT:
@@ -307,8 +313,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
                 perf_attr->bandwidth.shared = 9980.0 * UCS_MBYTE;
                 break;
             default:
-                perf_attr->bandwidth.shared =
-                        UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+                perf_attr->bandwidth.shared = iface->config.bandwidth;
                 break;
             }
         }
@@ -357,6 +362,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
     self->id                     = ucs_generate_uuid((uintptr_t)self);
     self->config.max_poll        = config->max_poll;
     self->config.max_cuda_events = config->max_cuda_events;
+    self->config.bandwidth       = config->bandwidth;
 
     status = ucs_mpool_init(&self->cuda_event_desc,
                             0,
