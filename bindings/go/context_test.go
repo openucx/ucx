@@ -16,12 +16,12 @@ func TestUcpContext(t *testing.T) {
 	context, err := NewUcpContext(ucpParams)
 
 	if err != nil {
-		t.Fatalf("failed to create a context %v", err)
+		t.Fatalf("Failed to create a context %v", err)
 	}
 
 	context.Close()
 
 	if context.context != nil {
-		t.Fatalf("context not nil")
+		t.Fatalf("Context not nil")
 	}
 }
