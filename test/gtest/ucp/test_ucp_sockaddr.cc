@@ -212,7 +212,7 @@ public:
     }
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
-                        ucp_listener_conn_handler_t* custom_cb)
+                        ucp_listener_conn_handler_t *custom_cb)
     {
         ucs_time_t deadline = ucs::get_deadline();
         ucs_status_t status;
