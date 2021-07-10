@@ -565,8 +565,6 @@ int main(int argc, char **argv)
 
     /* OOB connection establishment */
     if (client_target_name) {
-        peer_addr_len = local_addr_len;
-
         oob_sock = client_connect(client_target_name, server_port);
         CHKERR_JUMP(oob_sock < 0, "client_connect\n", err_addr);
 
