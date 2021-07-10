@@ -8,6 +8,7 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <ucs/memory/memtype_cache.h>
 #include <pthread.h>
 
 
@@ -30,12 +31,14 @@ typedef enum uct_cuda_copy_stream {
 typedef struct uct_cuda_copy_iface {
     uct_base_iface_t            super;
     uct_cuda_copy_iface_addr_t  id;
+    ucs_memtype_cache_t         *memtype_cache;
     ucs_mpool_t                 cuda_event_desc;
     ucs_queue_head_t            outstanding_event_q[UCT_CUDA_COPY_STREAM_LAST];
     cudaStream_t                stream[UCT_CUDA_COPY_STREAM_LAST];
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
+        int                     enable_memtype_cache;
     } config;
     struct {
         void                    *event_arg;
@@ -48,6 +51,7 @@ typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     unsigned                max_cuda_events;
+    int                     enable_memtype_cache;
 } uct_cuda_copy_iface_config_t;
 
 
@@ -57,4 +61,8 @@ typedef struct uct_cuda_copy_event_desc {
     ucs_queue_elem_t  queue;
 } uct_cuda_copy_event_desc_t;
 
+
+void uct_cuda_copy_memory_detect(uct_cuda_copy_iface_t *iface,
+                                 const void *address, size_t length,
+                                 ucs_memory_info_t *mem_info);
 #endif
