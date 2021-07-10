@@ -305,8 +305,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
         wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
         user_data.client_id = wireup_ep->client_id;
         // Write user data to the end of sa_data and ucp_address block.
-        memcpy(UCS_PTR_BYTE_OFFSET(sa_data + 1, ucp_addr_size),
-               &user_data, sizeof(ucp_wireup_user_data_t));
+    memcpy(UCS_PTR_BYTE_OFFSET(sa_data + 1, ucp_addr_size), &user_data,
+           sizeof(ucp_wireup_user_data_t));
     }
 
     *data_buf_p        = sa_data;
