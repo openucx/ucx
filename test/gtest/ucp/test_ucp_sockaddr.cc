@@ -220,9 +220,7 @@ public:
         do {
             status = receiver().listen(cb_type, m_test_addr.get_sock_addr_ptr(),
                                        m_test_addr.get_addr_size(),
-                                       get_server_ep_params(),
-                                       0,
-                                       custom_cb);
+                                       get_server_ep_params(), 0, custom_cb);
             if (m_test_addr.get_port() == 0) {
                 /* any port can't be busy */
                 break;
