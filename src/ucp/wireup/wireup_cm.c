@@ -1268,7 +1268,7 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
 
     dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, &tl_bitmap);
     status    = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index, 0,
-                                         (void **)data_buf_p, data_buf_size_p, 0,
+                                         (void**)data_buf_p, data_buf_size_p, 0,
                                          address_mode);
 
 out:
