@@ -1119,8 +1119,11 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     }
 
     // 3. Copy user_data
-    memcpy(&ucp_conn_request->user_data, UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
-           sizeof(ucp_conn_request->sa_data) + ucp_addr_size), sizeof(ucp_wireup_user_data_t));
+    memcpy(&ucp_conn_request->user_data,
+           UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
+                               sizeof(ucp_conn_request->sa_data) +
+                                       ucp_addr_size),
+           sizeof(ucp_wireup_user_data_t);
 
 
     uct_worker_progress_register_safe(worker->uct,
