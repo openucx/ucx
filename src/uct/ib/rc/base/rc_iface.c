@@ -579,7 +579,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
-    ucs_list_head_init(&self->ep_gc_list);
+    ucs_list_head_init(&self->qp_gc_list);
 
     /* Check FC parameters correctness */
     if ((config->fc.hard_thresh <= 0) || (config->fc.hard_thresh >= 1)) {
@@ -679,16 +679,38 @@ err:
     return status;
 }
 
-void uct_rc_iface_cleanup_eps(uct_rc_iface_t *iface)
+unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
 {
-    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
-    uct_rc_ep_cleanup_ctx_t *cleanup_ctx, *tmp;
+    uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx = arg;
+    uct_rc_iface_t *iface                      = cleanup_ctx->iface;
+    uct_rc_iface_ops_t *ops;
 
-    ucs_list_for_each_safe(cleanup_ctx, tmp, &iface->ep_gc_list, list) {
-        ops->cleanup_qp(&cleanup_ctx->super);
+    uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         cleanup_ctx->qp_num);
+
+    ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+    ops->cleanup_qp(cleanup_ctx);
+
+    if (cleanup_ctx->cq_credits > 0) {
+        uct_rc_iface_add_cq_credits_dispatch(iface, cleanup_ctx->cq_credits);
     }
 
-    ucs_assert(ucs_list_is_empty(&iface->ep_gc_list));
+    ucs_list_del(&cleanup_ctx->list);
+    ucs_free(cleanup_ctx);
+    return 1;
+}
+
+void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface)
+{
+    uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx, *tmp;
+
+    ucs_list_for_each_safe(cleanup_ctx, tmp, &iface->qp_gc_list, list) {
+        cleanup_ctx->cq_credits = 0; /* prevent arbiter dispatch */
+        uct_rc_iface_qp_cleanup_progress(cleanup_ctx);
+    }
+
+    ucs_assert(ucs_list_is_empty(&iface->qp_gc_list));
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)

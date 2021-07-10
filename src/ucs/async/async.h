@@ -109,8 +109,7 @@ static inline int ucs_async_check_miss(ucs_async_context_t *async)
 static inline int ucs_async_is_blocked(const ucs_async_context_t *async)
 {
     if (async->mode == UCS_ASYNC_MODE_THREAD_SPINLOCK) {
-        return ucs_recursive_spin_is_owner(&async->thread.spinlock,
-                                           pthread_self());
+        return ucs_recursive_spinlock_is_held(&async->thread.spinlock);
     } else if (async->mode == UCS_ASYNC_MODE_THREAD_MUTEX) {
         return ucs_recursive_mutex_is_blocked(&async->thread.mutex);
     } else if (async->mode == UCS_ASYNC_MODE_SIGNAL) {

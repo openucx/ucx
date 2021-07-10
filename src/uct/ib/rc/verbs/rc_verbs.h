@@ -58,6 +58,13 @@ typedef struct uct_rc_verbs_ep {
 } uct_rc_verbs_ep_t;
 
 
+/* Context for cleaning QP */
+typedef struct {
+    uct_rc_iface_qp_cleanup_ctx_t super;
+    struct ibv_qp                 *qp;
+} uct_rc_verbs_iface_qp_cleanup_ctx_t;
+
+
 /**
  * RC verbs interface configuration.
  */
@@ -161,7 +168,5 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_ep_addr_t *ep_addr);
-
-unsigned uct_rc_verbs_ep_cleanup_qp(void *arg);
 
 #endif

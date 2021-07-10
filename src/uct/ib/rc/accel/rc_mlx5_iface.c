@@ -119,15 +119,7 @@ uct_rc_mlx5_iface_update_tx_res(uct_rc_iface_t *rc_iface,
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
     uct_rc_iface_update_reads(rc_iface);
-
-    rc_iface->tx.cq_available += bb_num;
-    ucs_assertv(rc_iface->tx.cq_available <= rc_iface->config.tx_cq_len,
-                "cq_available=%d tx_cq_len=%d bb_num=%d txwq=%p txqp=%p",
-                rc_iface->tx.cq_available, rc_iface->config.tx_cq_len, bb_num,
-                txwq, txqp);
-
-    ucs_arbiter_dispatch(&rc_iface->tx.arbiter, 1, uct_rc_ep_process_pending,
-                         NULL);
+    uct_rc_iface_add_cq_credits_dispatch(rc_iface, bb_num);
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -245,7 +237,11 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     ucs_log_level_t    log_lvl;
     ucs_status_t       status;
 
-    ucs_assert(ep != NULL);
+    if (ep == NULL) {
+        ucs_diag("ignoring failure on removed qpn 0x%x wqe[%d]", qp_num, pi);
+        uct_rc_iface_add_cq_credits_dispatch(iface, 1);
+        return;
+    }
 
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
@@ -592,6 +588,36 @@ static void uct_rc_mlx5_iface_cleanup_rx(uct_rc_iface_t *rc_iface)
     uct_rc_mlx5_destroy_srq(md, &iface->rx.srq);
 }
 
+static void
+uct_rc_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
+{
+    uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx =
+            ucs_derived_of(rc_cleanup_ctx, uct_rc_mlx5_iface_qp_cleanup_ctx_t);
+    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(
+            cleanup_ctx->super.iface, uct_rc_mlx5_iface_common_t);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
+                                          uct_ib_mlx5_md_t);
+
+#if !HAVE_DECL_MLX5DV_INIT_OBJ
+    iface->super.rx.srq.available += uct_rc_mlx5_iface_commom_clean(
+            &iface->cq[UCT_IB_DIR_RX], &iface->rx.srq, cleanup_ctx->qp.qp_num);
+    uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
+#endif
+
+#if IBV_HW_TM
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        /* Using uct_ib_mlx5_iface_put_res_domain and not
+         * uct_ib_mlx5_qp_mmio_cleanup: in case of devx, we don't have uar,
+         * and uct_ib_mlx5_qp_mmio_cleanup would try to release uar */
+        uct_ib_mlx5_iface_put_res_domain(&cleanup_ctx->tm_qp);
+        uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->tm_qp);
+    }
+#endif
+
+    uct_ib_mlx5_qp_mmio_cleanup(&cleanup_ctx->qp, cleanup_ctx->reg);
+    uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->qp);
+}
+
 static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(tl_iface,
@@ -766,7 +792,7 @@ cleanup_stats:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_common_t)
 {
-    uct_rc_iface_cleanup_eps(&self->super);
+    uct_rc_iface_cleanup_qps(&self->super);
 #if HAVE_DEVX
     uct_rc_mlx5_devx_iface_free_events(self);
 #endif
@@ -849,7 +875,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .cleanup_rx    = uct_rc_mlx5_iface_cleanup_rx,
     .fc_ctrl       = uct_rc_mlx5_ep_fc_ctrl,
     .fc_handler    = uct_rc_iface_fc_handler,
-    .cleanup_qp    = uct_rc_mlx5_ep_cleanup_qp,
+    .cleanup_qp    = uct_rc_mlx5_iface_qp_cleanup,
     .ep_post_check = uct_rc_mlx5_ep_post_check,
 };
 
