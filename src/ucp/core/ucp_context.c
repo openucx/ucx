@@ -24,6 +24,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <ucs/type/init_once.h>
 #include <string.h>
 
 
@@ -433,15 +434,102 @@ err:
 
 void ucp_config_release(ucp_config_t *config)
 {
+    ucs_config_cached_key_t *key_val;
+    while (!ucs_list_is_empty(&config->list)) {
+        key_val = ucs_list_extract_head(&config->list, typeof(*key_val), list);
+        free(key_val->key);
+        free(key_val->val);
+        free(key_val->subfield_prefix);
+        ucs_free(key_val);
+    }
+
     ucs_config_parser_release_opts(config, ucp_config_table);
     ucs_free(config->env_prefix);
     ucs_free(config);
 }
 
+static UCS_LIST_HEAD(key_list);
+
+static void UCS_F_DTOR ucp_config_free_keys(void)
+{
+    ucs_config_parser_release_keys(&key_list);
+}
+
+static ucs_status_t ucp_config_setup_keys(void)
+{
+    static ucs_init_once_t setup_key_list = UCS_INIT_ONCE_INITIALIZER;
+    static ucs_status_t ucs_status;
+    uct_component_h *components;
+    unsigned num_components;
+
+    UCS_INIT_ONCE(&setup_key_list) {
+        ucs_status = uct_query_components(&components, &num_components);
+        if (ucs_status == UCS_OK) {
+            uct_release_component_list(components);
+        }
+
+        ucs_status = ucs_config_setup_keys(&key_list);
+    }
+    return ucs_status;
+}
+
 ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
                                const char *value)
 {
-    return ucs_config_parser_set_value(config, ucp_config_table, name, value);
+    ucs_status_t ucs_status;
+    ucs_config_cached_key_t *key_val;
+    size_t match_level;
+    char subfield_prefix[64];
+
+    ucs_status = ucs_config_parser_set_value(config, ucp_config_table, name,
+                                             value);
+    if (ucs_status == UCS_OK) {
+        return UCS_OK;
+    }
+
+    ucs_status = ucp_config_setup_keys();
+    if (ucs_status != UCS_OK) {
+        return UCS_ERR_CANCELED;
+    }
+
+    memset(subfield_prefix, 0, sizeof(subfield_prefix));
+    ucs_status = ucs_config_parser_audit_key(&key_list, name, &match_level,
+                                             subfield_prefix);
+    if (ucs_status != UCS_OK) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    key_val = ucs_calloc(1, sizeof(*key_val), "cached config key");
+    if (key_val == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    key_val->key = strdup(name);
+    key_val->val = strdup(value);
+    if (key_val->key == NULL || key_val->val == NULL) {
+        ucs_status = UCS_ERR_NO_MEMORY;
+        goto err_free_key;
+    }
+    key_val->match_level = match_level;
+    if (match_level == 0) {
+        key_val->subfield_prefix = strdup(subfield_prefix);
+        if (key_val->subfield_prefix == NULL) {
+            ucs_status = UCS_ERR_NO_MEMORY;
+            goto err_free_key;
+        }
+    }
+
+    ucs_list_add_tail(&config->list, &key_val->list);
+
+    return ucs_status;
+
+err_free_key:
+    free(key_val->key);
+    free(key_val->val);
+    free(key_val->subfield_prefix);
+    ucs_free(key_val);
+
+    return ucs_status;
 }
 
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
