@@ -64,7 +64,7 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
     struct knem_cmd_param_iovec local_iov[UCT_SM_MAX_IOV];
     size_t UCS_V_UNUSED total_iov_length;
     struct knem_cmd_inline_copy icopy;
-    int ret;
+    int i, ret;
 
     ucs_assert(*length_p != 0);
 
@@ -98,6 +98,11 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
         return UCS_ERR_IO_ERROR;
     }
 
+    if (tx_op == UCT_SCOPY_TX_GET_ZCOPY) {
+        for (i = 0; i < local_iov_cnt; ++i) {
+            VALGRIND_MAKE_MEM_DEFINED(local_iov[i].base, local_iov[i].len);
+        }
+    }
     *length_p = total_iov_length;
     return UCS_OK;
 }
