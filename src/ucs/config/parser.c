@@ -1420,6 +1420,117 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
     return UCS_OK;
 }
 
+void ucs_config_parser_release_keys(ucs_list_link_t *list)
+{
+    ucs_config_key_t *key_entry;
+
+    while (!ucs_list_is_empty(list)) {
+        key_entry = ucs_list_extract_head(list, typeof(*key_entry), list);
+        ucs_free(key_entry);
+    }
+}
+
+static
+ucs_status_t ucs_config_parser_fill_keys(ucs_list_link_t *list,
+                                         const char *table_prefix,
+                                         const char *subfield_prefix,
+                                         const ucs_config_field_t *fields)
+{
+    const ucs_config_field_t *field, *sub_fields;
+    ucs_config_key_t *key_entry;
+    ucs_status_t status;
+    size_t prefix_len;
+
+    prefix_len = (table_prefix == NULL) ? 0 : strlen(table_prefix);
+
+    for (field = fields; !ucs_config_field_is_last(field); ++field) {
+        if (ucs_config_is_table_field(field)) {
+            sub_fields = (ucs_config_field_t*)field->parser.arg;
+            if (prefix_len) {
+                status = ucs_config_parser_fill_keys(list, table_prefix,
+                                                     field->name, sub_fields);
+            } else {
+                status = ucs_config_parser_fill_keys(list, subfield_prefix,
+                                                     field->name, sub_fields);
+            }
+
+            if (status != UCS_OK) {
+                return status;
+            }
+        } else if (ucs_config_is_deprecated_field(field)) {
+            continue;
+        } else {
+            key_entry = ucs_calloc(1, sizeof(*key_entry), "config key");
+            if (key_entry == NULL) {
+                return UCS_ERR_NO_MEMORY;
+            }
+            key_entry->table_prefix = table_prefix;
+            key_entry->subfield_prefix = subfield_prefix;
+            key_entry->key = field->name;
+            key_entry->parser = &(field->parser);
+            ucs_list_add_tail(list, &key_entry->list);
+            key_entry = NULL;
+        }
+    }
+    return UCS_OK;
+}
+
+ucs_status_t ucs_config_setup_keys(ucs_list_link_t *list)
+{
+    const ucs_config_global_list_entry_t *entry;
+    ucs_status_t status;
+
+    ucs_assert(ucs_list_is_empty(list));
+    ucs_list_for_each(entry, &ucs_config_global_list, list) {
+        if (entry->table == NULL ||
+            !strcmp(entry->name, "UCS global") ||
+            !strcmp(entry->name, "UCP context")) {
+            continue;
+        }
+        status = ucs_config_parser_fill_keys(list, entry->prefix,
+                                             NULL, entry->table);
+        if (status != UCS_OK) {
+            ucs_error("Failed to query configuration table %s : %s",
+                      entry->name, ucs_status_string(status));
+            ucs_config_parser_release_keys(list);
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_config_parser_audit_key(const ucs_list_link_t *list,
+                                         const char *name, size_t *match_level,
+                                         char subfield_prefix[])
+{
+    ucs_config_key_t *key_entry;
+    const char* prefix;
+    size_t prefix_len;
+
+    ucs_list_for_each(key_entry, list, list) {
+        prefix = key_entry->table_prefix;
+        prefix_len = prefix == NULL ? 0 : strlen(prefix);
+        if (((prefix_len == 0) || !strncmp(name, prefix, prefix_len)) &&
+            !strcmp(name + prefix_len, key_entry->key)) {
+            *match_level = 0;
+            if (key_entry->subfield_prefix) {
+                strcpy(subfield_prefix, key_entry->subfield_prefix);
+            }
+            return UCS_OK;
+        }
+
+        prefix = key_entry->subfield_prefix;
+        prefix_len = prefix == NULL ? 0 : strlen(prefix);
+        if (((prefix_len == 0) || !strncmp(name, prefix, prefix_len)) &&
+            !strcmp(name + prefix_len, key_entry->key)) {
+            *match_level = 1;
+            return UCS_OK;
+        }
+    }
+    return UCS_ERR_NO_ELEM;
+}
+
 ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
                                          const char *env_prefix,
                                          const char *table_prefix,
