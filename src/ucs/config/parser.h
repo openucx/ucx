@@ -73,6 +73,15 @@ typedef struct ucs_config_key {
 } ucs_config_key_t;
 
 
+typedef struct ucs_config_cached_key {
+    char *key;
+    char *val;
+    char *subfield_prefix;
+    size_t match_level;
+    ucs_list_link_t list;
+} ucs_config_cached_key_t;
+
+
 typedef struct ucs_ib_port_spec {
     char                     *device_name;
     unsigned                 port_num;

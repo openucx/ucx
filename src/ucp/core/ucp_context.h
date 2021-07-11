@@ -141,6 +141,8 @@ struct ucp_config {
     char                                   *selection_cmp;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
+    /** Save effective ucx configurations not listed in ucp_config_table **/
+    ucs_list_link_t                        list;
 };
 
 

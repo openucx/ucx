@@ -417,6 +417,9 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
         goto err_free_prefix;
     }
 
+    config->list.next = &config->list;
+    config->list.prev = &config->list;
+
     *config_p = config;
     return UCS_OK;
 
