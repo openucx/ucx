@@ -1833,6 +1833,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucs_assert(req != NULL);
     ucp_request_put(rtr_sreq);
 
+    VALGRIND_MAKE_MEM_DEFINED(req->recv.buffer, req->recv.length);
     if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
         /* received ATP for frag RTR request */
         UCS_PROFILE_REQUEST_EVENT(req, "rndv_frag_atp_recv", 0);
