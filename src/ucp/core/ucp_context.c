@@ -982,6 +982,8 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
         return status;
     }
 
+    uct_apply_config_list(md_config, &context->list);
+
     status = uct_md_open(context->tl_cmpts[cmpt_index].cmpt, md_rsc->md_name,
                          md_config, &tl_md->md);
     uct_config_release(md_config);
