@@ -41,8 +41,24 @@ typedef struct {
  * @param [in]    arg_ptr  Optional pointer argument passed to the function.
  * @param [in]    arg_u64  Optional numeric argument passed to the function.
  */
-typedef void (*ucs_vfs_file_show_cb_t)(void *obj, ucs_string_buffer_t *strb,
+typedef void (*ucs_vfs_file_read_cb_t)(void *obj, ucs_string_buffer_t *strb,
                                        void *arg_ptr, uint64_t arg_u64);
+
+
+/**
+ * Function type to update object property with data from the buffer.
+ *
+ * @param [in] obj     Pointer to the object.
+ * @param [in] buffer  String buffer filled with the object's information.
+ * @param [in] size    The size of buffer.
+ * @param [in] arg_ptr Optional pointer argument passed to the function.
+ * @param [in] arg_u64 Optional numeric argument passed to the function.
+ *
+ * @return UCS_OK or an error if cannot update the object property.
+ */
+typedef ucs_status_t (*ucs_vfs_file_write_cb_t)(void *obj, const char *buffer,
+                                                size_t size, void *arg_ptr,
+                                                uint64_t arg_u64);
 
 
 /**
@@ -90,7 +106,7 @@ ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
  *
  * @param [in] obj      Pointer to the object. @a rel_path is relative to @a obj
  *                      directory.
- * @param [in] text_cb  Callback method that generates the content of the file.
+ * @param [in] read_cb  Callback method that reads the content of the file.
  * @param [in] arg_ptr  Optional pointer argument that is passed to the callback
  *                      method.
  * @param [in] arg_u64  Optional numeric argument that is passed to the callback
@@ -103,10 +119,37 @@ ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
  *                                file.
  *         UCS_OK                 otherwise.
  */
-ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
+ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_read_cb_t read_cb,
                                      void *arg_ptr, uint64_t arg_u64,
                                      const char *rel_path, ...)
         UCS_F_PRINTF(5, 6);
+
+
+/**
+ * Add read-write file describing an object feature in VFS. If @a obj is NULL,
+ * the mount directory will be used as the base for @a rel_path.
+ *
+ * @param [in] obj      Pointer to the object. @a rel_path is relative to @a obj
+ *                      directory.
+ * @param [in] read_cb  Callback method that reads the content of the file.
+ * @param [in] write_cb Callback method that writes the content to the file.
+ * @param [in] arg_ptr  Optional pointer argument that is passed to the callback
+ *                      methods.
+ * @param [in] arg_u64  Optional numeric argument that is passed to the callback
+ *                      methods.
+ * @param [in] rel_path Format string which specifies relative path to the file.
+ *
+ * @return UCS_ERR_ALREADY_EXISTS if file with specified name already exists.
+ *         UCS_ERR_INVALID_PARAM  if node for @a obj does not exist.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for read-only
+ *                                file.
+ *         UCS_OK                 otherwise.
+ */
+ucs_status_t
+ucs_vfs_obj_add_rw_file(void *obj, ucs_vfs_file_read_cb_t read_cb,
+                        ucs_vfs_file_write_cb_t write_cb, void *arg_ptr,
+                        uint64_t arg_u64, const char *rel_path, ...)
+        UCS_F_PRINTF(6, 7);
 
 
 /**
@@ -179,6 +222,23 @@ ucs_status_t ucs_vfs_path_get_info(const char *path, ucs_vfs_path_info_t *info);
  */
 ucs_status_t
 ucs_vfs_path_read_file(const char *path, ucs_string_buffer_t *strb);
+
+
+/**
+ * Write the content to VFS node corresponding to the specified path.
+ *
+ * @param [in] path String which specifies path to find the node in VFS.
+ * @param [in] buf  String buffer filled with the content of the file.
+ * @param [in] size The size of the buffer.
+ *
+ * @return UCS_ERR_NO_ELEM       if node with specified path does not exists or
+ *                               the node is not a RW file.
+ *         UCS_ERR_INVALID_PARAM if cannot write content of the buffer to the
+ *                               file.
+ *         UCS_OK                otherwise.
+ */
+ucs_status_t
+ucs_vfs_path_write_file(const char *path, const char *buffer, size_t size);
 
 
 /**
