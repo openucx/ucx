@@ -265,6 +265,8 @@ typedef struct ucp_context {
 
     char                          name[UCP_ENTITY_NAME_MAX];
 
+    /* Save cached uct configurations */
+    ucs_list_link_t               list;
 } ucp_context_t;
 
 

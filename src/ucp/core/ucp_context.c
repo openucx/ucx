@@ -1421,6 +1421,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 {
     unsigned i, num_alloc_methods, method;
     const char *method_name;
+    ucs_config_cached_key_t *key_val;
+    ucs_config_cached_key_t *key_val_clone;
     ucs_status_t status;
 
     ucp_apply_params(context, params,
@@ -1548,8 +1550,38 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err_free_alloc_methods;
     }
 
+    ucs_list_for_each(key_val, &config->list, list) {
+        key_val_clone = ucs_calloc(1, sizeof(*key_val_clone), "cached config key");
+        if (key_val_clone == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_free_key_list;
+        }
+        key_val_clone->key = strdup(key_val->key);
+        key_val_clone->val = strdup(key_val->val);
+        key_val_clone->match_level = key_val->match_level;
+        if (key_val_clone->key == NULL || key_val_clone->val == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_free_key_list;
+        } else if (key_val_clone->match_level == 0) {
+            key_val_clone->subfield_prefix = strdup(key_val->subfield_prefix);
+            if (key_val_clone->subfield_prefix == NULL) {
+                status = UCS_ERR_NO_MEMORY;
+                goto err_free_key_list;
+            }
+        }
+        ucs_list_add_tail(&context->list, &key_val_clone->list);
+    }
+
     return UCS_OK;
 
+err_free_key_list:
+    while (!ucs_list_is_empty(&context->list)) {
+        key_val = ucs_list_extract_head(&context->list, typeof(*key_val), list);
+        free(key_val->key);
+        free(key_val->val);
+        free(key_val->subfield_prefix);
+        ucs_free(key_val);
+    }
 err_free_alloc_methods:
     ucs_free(context->config.alloc_methods);
 err_free_env_prefix:
@@ -1563,9 +1595,19 @@ err:
 
 static void ucp_free_config(ucp_context_h context)
 {
+    ucs_config_cached_key_t *key_val;
+
     ucs_free(context->config.alloc_methods);
     ucs_free(context->config.env_prefix);
     ucs_free(context->config.selection_cmp);
+
+    while (!ucs_list_is_empty(&context->list)) {
+        key_val = ucs_list_extract_head(&context->list, typeof(*key_val), list);
+        free(key_val->key);
+        free(key_val->val);
+        free(key_val->subfield_prefix);
+        ucs_free(key_val);
+    }
 }
 
 static void ucp_context_create_vfs(ucp_context_h context)
@@ -1610,6 +1652,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         status = UCS_ERR_NO_MEMORY;
         goto err_release_config;
     }
+    context->list.prev = &context->list;
+    context->list.next = &context->list;
 
     status = ucp_fill_config(context, params, config);
     if (status != UCS_OK) {
