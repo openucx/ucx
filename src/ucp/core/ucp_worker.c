@@ -28,6 +28,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>

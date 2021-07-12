@@ -16,6 +16,7 @@
 #include <uct/ib/base/ib_verbs.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/type/class.h>
 #include <endian.h>
