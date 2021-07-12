@@ -1,6 +1,7 @@
 parameters:
   temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/tmp-settings.xml
   gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
+  target: package
 
 jobs:
   - job: jucx_release
@@ -12,14 +13,6 @@ jobs:
 
     # we need to use lowest version for compatible
     container: centos7_cuda10_1
-
-    variables:
-      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
-        target: publish-release
-      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-        target: package
-      ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
-        target: publish-snapshot
 
     steps:
       - checkout: self

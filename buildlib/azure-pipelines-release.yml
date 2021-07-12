@@ -111,3 +111,8 @@ stages:
     jobs:
       - template: az-distro-release.yml
       - template: jucx/jucx-publish.yml
+        parameters:
+          ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+            target: publish-release
+          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            target: package
