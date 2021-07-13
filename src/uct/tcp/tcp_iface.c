@@ -89,18 +89,19 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
 #ifdef UCT_TCP_EP_KEEPALIVE
   {"KEEPIDLE", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE) "s",
    "The time the connection needs to remain idle before TCP starts sending "
-   "keepalive probes.",
+   "keepalive probes. Specifying \"inf\" disables keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.idle),
                 UCS_CONFIG_TYPE_TIME_UNITS},
 
-  {"KEEPCNT", "3",
+  {"KEEPCNT", "auto",
    "The maximum number of keepalive probes TCP should send before "
-   "dropping the connection.",
+   "dropping the connection. Specifying \"inf\" disables keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.cnt),
-                UCS_CONFIG_TYPE_UINT},
+                UCS_CONFIG_TYPE_ULUNITS},
 
   {"KEEPINTVL", UCS_PP_MAKE_STRING(UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL) "s",
-   "The time between individual keepalive probes.",
+   "The time between individual keepalive probes. Specifying \"inf\" disables"
+   " keepalive.",
    ucs_offsetof(uct_tcp_iface_config_t, keepalive.intvl),
                 UCS_CONFIG_TYPE_TIME_UNITS},
 #endif /* UCT_TCP_EP_KEEPALIVE */
@@ -872,7 +873,7 @@ int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface)
 {
 #ifdef UCT_TCP_EP_KEEPALIVE
     return (iface->config.keepalive.idle != UCS_TIME_INFINITY) &&
-           (iface->config.keepalive.cnt != 0) &&
+           (iface->config.keepalive.cnt != UCS_ULUNITS_INF) &&
            (iface->config.keepalive.intvl != UCS_TIME_INFINITY);
 #else /* UCT_TCP_EP_KEEPALIVE */
     return 0;

@@ -168,6 +168,7 @@
 * Fixes in reachability of loopback ifaces
 * Fixes addressing  possible uninitialized memory accesses
 * Fixes in error flow for endpoints created upon receiving connection request
+* Fixes in TCP keepalive to avoid false-positive error detection
 #### UCM
 * Fixes addressing heap corruption caused by ucp_set_event_handler()
 * Fixes in mmap events test
