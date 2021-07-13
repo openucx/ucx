@@ -429,7 +429,7 @@ extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 extern const ucp_request_param_t ucp_request_null_param;
 
 
-int ucp_request_pending_add(ucp_request_t *req, unsigned pending_flags);
+int ucp_request_pending_add(ucp_request_t *req);
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,

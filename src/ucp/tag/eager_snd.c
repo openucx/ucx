@@ -334,5 +334,5 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
 
     ucs_trace_req("send_sync_ack req %p ep %p", req, req->send.ep);
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
 }

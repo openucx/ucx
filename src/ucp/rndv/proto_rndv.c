@@ -404,7 +404,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                   req->send.rndv.remote_req_id,
                   req->send.proto_config->proto->name);
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     return UCS_OK;
 
 err_destroy_rkey:

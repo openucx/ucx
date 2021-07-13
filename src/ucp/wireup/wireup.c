@@ -248,7 +248,7 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
         goto err;
     }
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     /* coverity[leaked_storage] */
     return UCS_OK;
 
@@ -835,7 +835,7 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, void *arg)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     ucs_assert(req->send.ep == (ucp_ep_h)arg);
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
 }
 
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,

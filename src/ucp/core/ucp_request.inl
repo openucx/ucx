@@ -291,8 +291,7 @@ static UCS_F_ALWAYS_INLINE void ucp_request_mem_free(ucp_request_t *req)
  * @return Whether completed.
  *         *req_status if filled with the completion status if completed.
  */
-static int UCS_F_ALWAYS_INLINE
-ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
+static int UCS_F_ALWAYS_INLINE ucp_request_try_send(ucp_request_t *req)
 {
     ucs_status_t status;
 
@@ -307,7 +306,7 @@ ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
         return 0;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         /* No send resources, try to add to pending queue */
-        return ucp_request_pending_add(req, pending_flags);
+        return ucp_request_pending_add(req);
     }
 
     ucs_fatal("unexpected error: %s", ucs_status_string(status));
@@ -317,13 +316,11 @@ ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
  * Start sending a request.
  *
  * @param [in]  req             Request to start.
- * @param [in]  pending_flags   flags to be passed to UCT if request will be
- *                              added to pending queue.
  * */
 static UCS_F_ALWAYS_INLINE void
-ucp_request_send(ucp_request_t *req, unsigned pending_flags)
+ucp_request_send(ucp_request_t *req)
 {
-    while (!ucp_request_try_send(req, pending_flags));
+    while (!ucp_request_try_send(req));
 }
 
 static UCS_F_ALWAYS_INLINE

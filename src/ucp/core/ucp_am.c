@@ -914,7 +914,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
      * If it is completed immediately, release the request and return the status.
      * Otherwise, return the request.
      */
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);
     }
