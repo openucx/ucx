@@ -381,6 +381,10 @@ AC_CONFIG_FILES([
                  bindings/java/pom.xml
                  bindings/java/src/main/native/Makefile
                  examples/Makefile
+                 cmake/Makefile
+                 cmake/ucx-config-version.cmake
+                 cmake/ucx-config.cmake
+                 cmake/ucx-targets.cmake
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])
