@@ -149,7 +149,7 @@ check_release_build() {
         for sha1 in `git log $range --format="%h"`
         do
             title=`git log -1 --format="%s" $sha1`
-            [[ "$title" == "$title_mask"* ]] && launch=True
+            [[ "$title" == "AZP/RELEASE: "* ]] && launch=True
         done
     fi
 
