@@ -171,6 +171,8 @@ uct_ib_mlx5_inline_copy(void *restrict dest, const void *restrict src, unsigned
 {
     ptrdiff_t n;
 
+    ucs_assert(dest >= wq->qstart);
+    ucs_assert(dest <= wq->qend);
     ucs_assert(dest != NULL);
     ucs_assert((src != NULL) || (length == 0));
 
@@ -386,7 +388,7 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 #endif
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
-    
+
 #if defined(__SSE4_2__)
     *(__m128i *) ctrl = _mm_shuffle_epi8(
                     _mm_set_epi32(qp_num, imm, (ds << 16) | pi,

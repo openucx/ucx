@@ -234,6 +234,7 @@ struct uct_ud_ep {
         ucs_time_t             send_time;    /* tx time of last packet */
         ucs_time_t             resend_time;  /* tx time of last resent packet */
         ucs_time_t             tick;         /* timeout to trigger timer */
+        uint32_t               remote_qpn;
         UCS_STATS_NODE_DECLARE(stats)
         UCT_UD_EP_HOOK_DECLARE(tx_hook)
     } tx;
@@ -351,11 +352,14 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface,
                           uct_ud_recv_skb_t *skb, int is_async);
 
 
+void uct_ud_set_neth_ext(uct_ud_ep_t *ep, uct_ud_neth_t *neth);
+
 static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_init_data(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 {
     neth->psn = ep->tx.psn;
     neth->ack_psn = ep->rx.acked_psn = ucs_frag_list_sn(&ep->rx.ooo_pkts);
+    uct_ud_set_neth_ext(ep, neth);
 }
 
 

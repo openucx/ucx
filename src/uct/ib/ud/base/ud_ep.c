@@ -363,6 +363,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
 
     self->dest_ep_id = UCT_UD_EP_NULL_ID;
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
+    self->tx.remote_qpn = 0;
     uct_ud_ep_reset(self);
     uct_ud_iface_add_ep(iface, self);
     self->tx.tick = iface->tx.tick;
@@ -388,7 +389,7 @@ uct_ud_ep_is_last_pending_elem(uct_ud_ep_t *ep, ucs_arbiter_elem_t *elem)
              /* only two elements are in the group (the 1st element is the
               * current one, the 2nd (or the last) element is the control one) */
              (ucs_arbiter_group_tail(&ep->tx.pending.group) == &ep->tx.pending.elem)));
-            
+
 }
 
 static ucs_arbiter_cb_result_t
@@ -538,6 +539,7 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         status     = UCS_OK;
         uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
                                    conn_sn, ep);
+        ep->tx.remote_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
         goto out_set_ep;
     }
 
@@ -551,8 +553,9 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto out;
     }
 
-    ep          = ucs_derived_of(new_ep_h, uct_ud_ep_t);
-    ep->conn_sn = conn_sn;
+    ep                = ucs_derived_of(new_ep_h, uct_ud_ep_t);
+    ep->conn_sn       = conn_sn;
+    ep->tx.remote_qpn = uct_ib_unpack_uint24(if_addr->qp_num);
 
     status = uct_ud_ep_connect_to_iface(ep, ib_addr, if_addr);
     if (status != UCS_OK) {
@@ -605,6 +608,7 @@ ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_trace_func("");
 
     uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ep_addr->ep_id));
+    ep->tx.remote_qpn = uct_ib_unpack_uint24(ep_addr->iface_addr.qp_num);
 
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_ud_ep_reset(ep);
@@ -1639,4 +1643,22 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
                    UCT_UD_SLOW_TIMER_MAX_TICK(iface));
 
     uct_ud_leave(iface);
+}
+
+void uct_ud_set_neth_ext(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_ud_iface_t);
+    const char *hostname  = ucs_get_host_name();
+    ssize_t offset;
+
+    offset = ucs_max((ssize_t)strlen(hostname) -
+                             (ssize_t)sizeof(neth->ext.sender_hostname),
+                     0);
+
+    neth->ext.dest_qpn = ep->tx.remote_qpn;
+    ucs_strncpy_safe(neth->ext.sender_hostname, &hostname[offset],
+                     sizeof(neth->ext.sender_hostname));
+    neth->ext.sender_pid = getpid();
+    neth->ext.sender_qpn = iface->qp->qp_num;
 }

@@ -470,6 +470,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     self->rx.available           = config->super.rx.queue_len;
     self->rx.quota               = 0;
+    self->rx.started             = !(params->field_mask & UCT_IFACE_PARAM_FIELD_STOPPED);
+
     self->config.tx_qp_len       = config->super.tx.queue_len;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.min_poke_time   = ucs_time_from_sec(config->min_poke_time);
@@ -1093,4 +1095,11 @@ union ibv_gid* uct_ud_grh_get_dgid(struct ibv_grh *grh, size_t dgid_len)
     }
 
     return &grh->dgid;
+}
+
+void uct_ud_iface_started(uct_iface_h tl_iface)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(tl_iface, uct_ud_iface_t);
+
+    ++iface->rx.started;
 }

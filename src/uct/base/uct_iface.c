@@ -165,7 +165,7 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       void **event_arg)
 {
     *event_cb  = UCT_IFACE_PARAM_VALUE(params, async_event_cb, ASYNC_EVENT_CB,
-                                       NULL);                                       
+                                       NULL);
     *event_arg = UCT_IFACE_PARAM_VALUE(params, async_event_arg, ASYNC_EVENT_ARG,
                                        NULL);
 }
@@ -182,6 +182,16 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
     uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
     return iface->internal_ops->iface_estimate_perf(tl_iface, perf_attr);
+}
+
+void uct_iface_started(uct_iface_h tl_iface)
+{
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
+    if (iface->internal_ops->started == NULL) {
+        return;
+    }
+
+    return iface->internal_ops->started(tl_iface);
 }
 
 ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr)
@@ -416,6 +426,7 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .started             = NULL,
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)

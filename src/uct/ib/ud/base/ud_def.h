@@ -117,10 +117,19 @@ Control packet header
     };
 */
 
+typedef struct uct_ud_ext_neth {
+    char     sender_hostname[8];
+    uint16_t sender_pid;
+    uint32_t sender_qpn;
+    uint32_t dest_qpn;
+} uct_ud_ext_neth_t;
+
+
 typedef struct uct_ud_neth {
     uint32_t            packet_type;
     uct_ud_psn_t        psn;
     uct_ud_psn_t        ack_psn;
+    uct_ud_ext_neth_t   ext;
 } UCS_S_PACKED uct_ud_neth_t;
 
 

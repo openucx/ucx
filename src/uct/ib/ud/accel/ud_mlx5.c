@@ -270,6 +270,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
 
     /* set network header */
     neth              = (void*)(inl + 1);
+    ucs_assertv((void*)(neth + 1) <= iface->tx.wq.qend,
+                "neth=%p neth+1=%p sz=%zu ctrl=%p qend=%p", neth, neth + 1,
+                sizeof(*neth), ctrl, iface->tx.wq.qend);
     neth->packet_type = (am_id << UCT_UD_PACKET_AM_ID_SHIFT) |
                         ep->super.dest_ep_id |
                         packet_flags;
@@ -279,14 +282,15 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
         neth->packet_type |= uct_ud_ep_req_ack(&ep->super) << UCT_UD_PACKET_ACK_REQ_SHIFT;
     }
 
-    /* copy inline "header", assume it fits to one BB so we won't have to check
-     * for QP wrap-around. This is either the "put" header or the 64-bit
-     * am_short header, not the am_zcopy header.
-     */
-    wqe_data = UCS_PTR_BYTE_OFFSET(neth + 1, header_size);
-    ucs_assert(wqe_data <= iface->tx.wq.qend);
-    memcpy(neth + 1, header, header_size);
+    /* copy inline "header" */
+    uct_ib_mlx5_inline_copy(neth + 1, header, header_size, &iface->tx.wq);
 
+    wqe_data = UCS_PTR_BYTE_OFFSET(neth + 1, header_size);
+    if (wqe_data >= iface->tx.wq.qend) {
+        wqe_data = UCS_PTR_BYTE_OFFSET(iface->tx.wq.qstart,
+                                       UCS_PTR_BYTE_DIFF(iface->tx.wq.qend,
+                                                         wqe_data));
+    }
     /* copy inline "data" */
     uct_ib_mlx5_inline_copy(wqe_data, data, data_size, &iface->tx.wq);
 
@@ -505,6 +509,14 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
         goto out;
     }
 
+    if (!iface->super.rx.started) {
+        uct_ud_neth_t *neth = UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN);
+        ucs_fatal("unexpected recv from %s:%d qpn 0x%x->0x%x myqpn=0x%x neth=%p cqe=%p ci=%d cq.sqpn=0x%x",
+                  neth->ext.sender_hostname, neth->ext.sender_pid,
+                  neth->ext.sender_qpn, neth->ext.dest_qpn,
+                  iface->super.qp->qp_num, neth, cqe, ci,
+                  (uint32_t)(ntohl(cqe->flags_rqpn) & UCS_MASK(24)));
+    }
     uct_ib_mlx5_log_rx(&iface->super.super, cqe, packet, uct_ud_dump_packet);
     /* coverity[tainted_data] */
     uct_ud_ep_process_rx(&iface->super,
@@ -755,6 +767,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
         .super = {
             .iface_estimate_perf = uct_base_iface_estimate_perf,
             .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .started             = uct_ud_iface_started,
         },
         .create_cq      = uct_ib_mlx5_create_cq,
         .arm_cq         = uct_ud_mlx5_iface_arm_cq,

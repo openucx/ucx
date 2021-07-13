@@ -140,7 +140,7 @@ typedef enum {
      * invalidated and will not be accessed anymore by zero-copy or remote
      * memory access operations.
      */
-    UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0) 
+    UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0)
 } uct_md_mem_dereg_flags_t;
 
 
@@ -149,7 +149,7 @@ typedef enum {
  * @brief Completion callback for memory region invalidation.
  *
  * This callback routine is invoked when is no longer accessible by remote peer.
- * 
+ *
  * $note: in some implementations this callback may be called immediately after
  *        @ref uct_md_mem_dereg_v2 is called, but it is possible that the
  *        callback call will be delayed until all references to the memory
@@ -215,13 +215,16 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
  * This routine deregisters the memory region registered by @ref uct_md_mem_reg
  * and allow the memory region to be invalidated with callback called when the
  * memory region is unregistered.
- * 
+ *
  * @param [in]  md          Memory domain that was used to register the memory.
- * @param [in]  params      Operation parameters, see @ref 
+ * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mem_dereg_params_t.
  */
 ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
                                  const uct_md_mem_dereg_params_t *params);
+
+
+void uct_iface_started(uct_iface_h iface);
 
 END_C_DECLS
 

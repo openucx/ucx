@@ -33,6 +33,7 @@
 #include <sys/poll.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 #define UCP_WORKER_KEEPALIVE_ITER_SKIP 32
@@ -1126,7 +1127,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
-                                      UCT_IFACE_PARAM_FIELD_CPU_MASK;
+                                      UCT_IFACE_PARAM_FIELD_CPU_MASK |
+                                      UCT_IFACE_PARAM_FIELD_STOPPED;
     iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
     iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
     iface_params->err_handler_arg   = worker;
@@ -2164,6 +2166,18 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     ucp_worker_create_vfs(context, worker);
 
+    {
+        ucp_rsc_index_t iface_id;
+        ucp_worker_iface_t *wiface;
+
+        for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+            wiface = worker->ifaces[iface_id];
+            if (wiface != NULL) {
+                uct_iface_started(wiface->iface);
+            }
+        }
+    }
+
     *worker_p = worker;
     return UCS_OK;
 
@@ -2807,7 +2821,7 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
     worker->keepalive.iter_end   = worker->keepalive.iter;
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
-    worker->keepalive.round_count++;   
+    worker->keepalive.round_count++;
 }
 
 static UCS_F_NOINLINE unsigned

@@ -406,6 +406,16 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
             ucs_mpool_put_inline((void*)wc[i].wr_id);
             continue;
         }
+
+        if (!iface->super.rx.started) {
+            uct_ud_neth_t *neth = UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN);
+            ucs_fatal("unexpected recv from %s:%d qpn 0x%x->0x%x myqpn=0x%x "
+                      "neth=%p wr_id=0x%lx src_qp=0x%x",
+                      neth->ext.sender_hostname, neth->ext.sender_pid,
+                      neth->ext.sender_qpn, neth->ext.dest_qpn,
+                      iface->super.qp->qp_num, neth, wc[i].wr_id,
+                      wc[i].src_qp);
+        }
         uct_ib_log_recv_completion(&iface->super.super, &wc[i], packet,
                                    wc[i].byte_len, uct_ud_dump_packet);
         uct_ud_ep_process_rx(&iface->super,
@@ -558,6 +568,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
         .super = {
             .iface_estimate_perf = uct_base_iface_estimate_perf,
             .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .started             = uct_ud_iface_started,
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .arm_cq         = uct_ib_iface_arm_cq,

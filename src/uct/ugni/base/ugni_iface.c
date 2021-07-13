@@ -75,10 +75,10 @@ UCS_CLASS_INIT_FUNC(uct_ugni_iface_t, uct_md_h md, uct_worker_h worker,
 
     ucs_assert(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE);
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops, NULL, md,
-                              worker, params,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, uct_ugni_iface_ops,
+                              &uct_base_iface_internal_ops, md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
-                              UCS_STATS_ARG(UCT_UGNI_MD_NAME));
+                                      UCS_STATS_ARG(UCT_UGNI_MD_NAME));
     dev = uct_ugni_device_by_name(params->mode.device.dev_name);
     if (NULL == dev) {
         ucs_error("No device was found: %s", params->mode.device.dev_name);

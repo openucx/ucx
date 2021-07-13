@@ -162,6 +162,7 @@ struct uct_ud_iface {
         unsigned             quota;
         unsigned             async_max_poll;
         ucs_queue_head_t     pending_q;
+        int                  started;
         UCT_UD_IFACE_HOOK_DECLARE(hook)
     } rx;
     struct {
@@ -569,6 +570,8 @@ uct_ud_iface_dispatch_async_comps(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 
     return uct_ud_iface_dispatch_async_comps_do(iface, ep);
 }
+
+void uct_ud_iface_started(uct_iface_h tl_iface);
 
 #if ENABLE_PARAMS_CHECK
 #define UCT_UD_CHECK_LENGTH(iface, header_len, payload_len, msg) \

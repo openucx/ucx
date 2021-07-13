@@ -239,6 +239,7 @@ typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
 typedef struct uct_iface_internal_ops {
     uct_iface_estimate_perf_func_t iface_estimate_perf;
     uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
+    void (*started)(uct_iface_h iface);
 } uct_iface_internal_ops_t;
 
 
