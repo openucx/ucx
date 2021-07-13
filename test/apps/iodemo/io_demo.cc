@@ -1957,7 +1957,8 @@ private:
             first_print = false;
 
             // Report bandwidth
-            double throughput_mbs = total_bytes[op_id] / UCS_MBYTE / elapsed;
+            double throughput_mbs = (total_bytes[op_id] / elapsed) /
+                                    UCS_MBYTE;
             log << io_op_names[op_id] << " " << throughput_mbs << " MBs";
             total_bytes[op_id] = 0;
 
