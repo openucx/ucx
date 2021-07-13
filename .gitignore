@@ -93,3 +93,7 @@ compile_commands.json
 .vscode
 src/tools/vfs/ucx_vfs
 test/apps/test_init_mt
+test/apps/iodemo/io_demo
+test/apps/test_cuda_hook_dynamic
+test/apps/test_memtrack_limit
+test/apps/profiling/ucx_profiling
