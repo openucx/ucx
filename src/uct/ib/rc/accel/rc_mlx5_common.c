@@ -938,7 +938,7 @@ void uct_rc_mlx5_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
 {
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        ucs_ptr_array_cleanup(&iface->tm.rndv_comps);
+        ucs_ptr_array_cleanup(&iface->tm.rndv_comps, 1);
         UCS_STATS_NODE_FREE(iface->tm.stats);
     }
 #endif
