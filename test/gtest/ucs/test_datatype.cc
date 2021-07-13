@@ -8,7 +8,7 @@
 #include <common/test.h>
 
 extern "C" {
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/array.inl>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>

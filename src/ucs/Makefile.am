@@ -41,6 +41,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/mpool.h \
 	datastruct/mpool_set.h \
 	datastruct/pgtable.h \
+	datastruct/ptr_array_fwd.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
 	datastruct/string_buffer.h \

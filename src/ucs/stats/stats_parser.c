@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -27,7 +28,7 @@ dump_stats_recurs(FILE *stream, ucs_stats_node_t *node, unsigned indent)
 
     for (i = 0; i < node->cls->num_counters; ++i) {
         fprintf(stream, "%*s%s: %" PRIu64 "\n", (indent + 1) * 2, "",
-                node->cls->counter_names[i], node->counters[i]);
+                node->cls->counter_names[i], UCS_STATS_COUNTER(node, i));
     }
     ucs_list_for_each(child, &node->children[UCS_STATS_ACTIVE_CHILDREN], list) {
         dump_stats_recurs(stream, child, indent + 1);
@@ -38,6 +39,7 @@ dump_stats_recurs(FILE *stream, ucs_stats_node_t *node, unsigned indent)
 
 static ucs_status_t dump_file(const char *filename)
 {
+    ucs_ptr_array_t counters;
     ucs_stats_node_t *root;
     ucs_status_t status;
     FILE *stream;
@@ -49,12 +51,13 @@ static ucs_status_t dump_file(const char *filename)
     }
 
     while (!feof(stream)) {
-        status = ucs_stats_deserialize(stream, &root);
+        status = ucs_stats_deserialize(stream, &counters, &root);
         if (status != UCS_OK) {
             goto out;
         }
 
         dump_stats_recurs(stdout, root, 0);
+        ucs_ptr_array_cleanup(&counters, 0);
         ucs_stats_free(root);
     }
 

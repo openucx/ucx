@@ -10,6 +10,11 @@
 
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/datastruct/khash.h>
+#include <ucs/datastruct/mpool.h>
+#include <ucs/datastruct/ptr_array_fwd.h>
+#include <ucs/datastruct/array.inl>
+#include <ucs/time/time_def.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/math.h>
 #include <stdarg.h>
@@ -129,7 +134,7 @@ struct ucs_stats_node {
     ucs_list_link_t          type_list;          /* nodes with same class/es
                                                     hierarchy */
     ucs_stats_filter_node_t  *filter_node;       /* ptr to type list head */
-    ucs_stats_counter_t      counters[1];        /* instance counters */
+    unsigned                 base_counter_index; /* sub-array base index */
 };
 
 struct ucs_stats_filter_node {
@@ -141,6 +146,59 @@ struct ucs_stats_filter_node {
     int                       ref_count;          /* report node when non zero */
     uint64_t                  counters_bitmask;   /* which counters to print */
 };
+
+struct ucs_stats_aggrgt_counter_name {
+    /* Counter class name */
+    const char *class_name;
+
+    /* Counter name */
+    const char *counter_name;
+
+};
+
+KHASH_TYPE(ucs_stats_cls, kh_cstr_t, ucs_stats_class_t*)
+
+UCS_ARRAY_DEFINE_INLINE(aggrt_class_offsets, unsigned, size_t);
+
+UCS_ARRAY_DEFINE_INLINE(aggrgt_counter_names, unsigned,
+                        ucs_stats_aggrgt_counter_name_t);
+
+typedef struct {
+    ucs_ptr_array_t         counters;
+    volatile unsigned       flags;
+
+    ucs_time_t              start_time;
+    ucs_stats_filter_node_t root_filter_node;
+    ucs_stats_node_t        root_node;
+    ucs_mpool_t             fnode_mp;
+    ucs_mpool_t             snode_mp;
+
+    /* Offset of each stats class in the aggregate counters array */
+    ucs_array_t(aggrt_class_offsets) aggrt_class_offsets;
+
+    /* Statistics counters names database */
+    ucs_array_t(aggrgt_counter_names) aggrgt_counter_names;
+
+    union {
+        FILE             *stream;         /* Output stream */
+        ucs_stats_client_h client;       /* UDP client */
+    };
+
+    union {
+        int              signo;
+        double           interval;
+    };
+
+    khash_t(ucs_stats_cls) cls;
+
+    pthread_mutex_t      lock;
+#ifndef HAVE_LINUX_FUTEX_H
+    pthread_cond_t       cv;
+#endif
+    pthread_t            thread;
+} ucs_stats_context_t;
+
+extern ucs_stats_context_t ucs_stats_context;
 
 /**
  * Initialize statistics node.
@@ -168,11 +226,13 @@ ucs_status_t ucs_stats_serialize(FILE *stream, ucs_stats_node_t *root, int optio
  * De-serialize statistics.
  *
  * @param stream   Source data.
- * @param p_roo    Filled with statistics node root.
+ * @param counters Filled with counter values.
+ * @param p_root   Filled with statistics node root.
  *
  * @return UCS_ERR_NO_ELEM if hit EOF.
  */
-ucs_status_t ucs_stats_deserialize(FILE *stream, ucs_stats_node_t **p_root);
+ucs_status_t ucs_stats_deserialize(FILE *stream, ucs_ptr_array_t *counters,
+                                   ucs_stats_node_t **p_root);
 
 
 /**

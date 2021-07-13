@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -618,6 +619,7 @@ int ucs_stats_server_get_port(ucs_stats_server_h server)
 ucs_list_link_t *ucs_stats_server_get_stats(ucs_stats_server_h server)
 {
     struct sglib_hashed_stats_entity_t_iterator it;
+    ucs_ptr_array_t counters;
     stats_entity_t *entity;
     ucs_stats_node_t *node;
     ucs_status_t status;
@@ -632,7 +634,7 @@ ucs_list_link_t *ucs_stats_server_get_stats(ucs_stats_server_h server)
         /* Parse the statistics data */
         pthread_mutex_lock(&entity->lock);
         stream = fmemopen(entity->completed_buffer, entity->buffer_size, "rb");
-        status = ucs_stats_deserialize(stream, &node);
+        status = ucs_stats_deserialize(stream, &counters, &node);
         fclose(stream);
         pthread_mutex_unlock(&entity->lock);
 
@@ -641,6 +643,8 @@ ucs_list_link_t *ucs_stats_server_get_stats(ucs_stats_server_h server)
         }
     }
     pthread_mutex_unlock(&server->entities_lock);
+
+    ucs_ptr_array_cleanup(&counters, 0);
 
     return &server->curr_stats;
 }
