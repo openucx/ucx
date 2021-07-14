@@ -144,7 +144,7 @@ static inline void ucs_clear_cache(void *start, void *end)
 
 /**
  * Get memory copy bandwidth.
- * 
+ *
  * @return Memory copy bandwidth estimation based on CPU used.
  */
 double ucs_cpu_get_memcpy_bw();

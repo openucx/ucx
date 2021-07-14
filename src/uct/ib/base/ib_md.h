@@ -153,6 +153,7 @@ typedef struct uct_ib_md_config {
                                                 without using the cache */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */
     int                      async_events; /**< Whether async events should be delivered */
+    int                      nb_close;     /**< Cleanup resources in background */
 
     uct_ib_md_ext_config_t   ext;          /**< External configuration */
 
