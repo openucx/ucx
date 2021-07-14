@@ -551,6 +551,13 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
                                    uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
                                    uct_ib_mlx5_txwq_t *txwq, struct ibv_qp *verbs_qp);
 
+/* Get pointer to a WQE by producer index */
+void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi);
+
+/* Count how many WQEs are currently posted */
+uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
+                                          uint16_t outstanding);
+
 void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,
                                  uct_ib_mlx5_mmio_reg_t *reg);
 

@@ -321,6 +321,13 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_set_ctrl_qpn_ds(struct mlx5_wqe_ctrl_seg *ctrl, uint32_t qp_num,
+                            uint8_t ds)
+{
+    ctrl->qpn_ds = htonl((qp_num << 8) | ds);
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                          uint8_t opcode, uint8_t opmod, uint32_t qp_num,
                          uint8_t fm_ce_se, unsigned wqe_size)
@@ -359,7 +366,7 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
     ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;
-    ctrl->qpn_ds           = htonl((qp_num << 8) | ds);
+    uct_ib_mlx5_set_ctrl_qpn_ds(ctrl, qp_num, ds);
     ctrl->fm_ce_se         = fm_ce_se;
 #endif
 }
@@ -386,7 +393,7 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 #endif
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
-    
+
 #if defined(__SSE4_2__)
     *(__m128i *) ctrl = _mm_shuffle_epi8(
                     _mm_set_epi32(qp_num, imm, (ds << 16) | pi,
@@ -405,7 +412,7 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
     ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;
-    ctrl->qpn_ds           = htonl((qp_num << 8) | ds);
+    uct_ib_mlx5_set_ctrl_qpn_ds(ctrl, qp_num, ds);
     ctrl->fm_ce_se         = fm_ce_se;
     ctrl->imm              = imm;
 #endif
