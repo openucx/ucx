@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.11.0 RC3 (July 6, 2021)
+## 1.11.0 RC4 (July 14, 2021)
 ### Features:
 #### Core
 * Added support for UCX monitoring using virtual file system (VFS)/FUSE
@@ -161,6 +161,7 @@
 * Fixes in SL selection
 * Fixes in hardware tag matching compilation
 * Fixes in uct_rdmacm_cm_cqs hash key
+* Fixes for compilation with rdma-core 20
 #### Java
 * Fixes in tag sender mask
 #### UCT
