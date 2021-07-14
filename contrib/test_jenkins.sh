@@ -29,6 +29,11 @@ ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda11.1.1"
 GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
 
+if [[ "$RUNNING_IN_AZURE" == "yes" ]]; then
+	realdir=$(realpath $(dirname $0))
+	source ${realdir}/../buildlib/az-helpers.sh
+fi
+
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
 	BUILD_NUMBER=1
@@ -71,6 +76,9 @@ num_pinned_threads=$(nproc)
 MAKE="make"
 MAKEP="make -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
+
+have_ib=$(ibv_devinfo -vv | grep GID || echo "")
+have_ptrace=$(capsh --print | grep Current | grep ptrace || echo "")
 
 #
 # Set initial port number for client/server applications
@@ -880,6 +888,11 @@ test_profiling() {
 }
 
 test_ucs_load() {
+	if [ -z have_ptrace ]
+	then
+		echo "==== Not running UCS library loading test ===="
+		return
+	fi
 	../contrib/configure-release --prefix=$ucx_inst
 	make_clean
 	$MAKEP
@@ -916,8 +929,7 @@ test_ucp_dlopen() {
 	if [ -n "$LIB_CMA" ]
 	then
 		echo "==== Running UCP library loading test ===="
-		./test/apps/test_ucp_dlopen # just to save output to log
-		./test/apps/test_ucp_dlopen | grep 'cma/memory'
+		./test/apps/test_ucp_dlopen | grep 'cma'
 	else
 		echo "==== Not running UCP library loading test ===="
 	fi
@@ -1278,9 +1290,12 @@ run_tests() {
 	$MAKEP
 	$MAKEP install
 
+if [ -n have_ib ]
+then
 	do_distributed_task 2 4 run_ucx_tl_check
-	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
+fi
+	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 2 4 run_ucx_perftest
 	do_distributed_task 1 4 run_io_demo

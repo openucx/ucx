@@ -22,7 +22,7 @@ pr:
 resources:
   containers:
     - container: centos7
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:3
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
@@ -231,6 +231,7 @@ stages:
   - stage: Distro
     dependsOn: [Static_check]
     jobs:
+# <<<<<<< HEAD
        # Perform test builds on relevant distributions.
       - job: Distros
         displayName: Build for
@@ -321,6 +322,11 @@ stages:
             workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
             env:
               LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
+      - template: docker_tests.yml
+        parameters:
+          demands:
+            - ucx_docker -equals yes
+            - ucx_amd -nequals yes
 
   - stage: Coverity
     dependsOn: [Static_check]

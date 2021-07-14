@@ -1365,7 +1365,7 @@ struct uct_listener_params {
  */
 struct uct_md_attr {
     struct {
-        size_t               max_alloc; /**< Maximal allocation size */
+        uint64_t             max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
