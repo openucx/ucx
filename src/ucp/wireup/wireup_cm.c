@@ -62,7 +62,7 @@ int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
  * The main thread progress part of attempting connecting the client to the server
  * through the next available cm.
  */
-static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
+unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 {
     ucp_ep_h ucp_ep       = arg;
     ucp_worker_h worker   = ucp_ep->worker;
@@ -72,6 +72,8 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
     ucp_rsc_index_t cm_idx;
 
     UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
 
     cm_idx = ucp_ep_ext_control(ucp_ep)->cm_idx;
     ucs_assert(cm_idx != UCP_NULL_RESOURCE);
@@ -1348,7 +1350,8 @@ ucp_cm_connect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
             return 1;
         }
     } else if (((elem->cb == ucp_cm_server_conn_notify_progress) ||
-                (elem->cb == ucp_cm_client_uct_connect_progress)) &&
+                (elem->cb == ucp_cm_client_uct_connect_progress) ||
+                (elem->cb == ucp_cm_client_try_next_cm_progress)) &&
                (elem->arg == arg)) {
         return 1;
     }
