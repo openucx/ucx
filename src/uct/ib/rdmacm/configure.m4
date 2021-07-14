@@ -12,6 +12,8 @@ AC_ARG_WITH([rdmacm],
            [AS_HELP_STRING([--with-rdmacm=(DIR)], [Enable the use of RDMACM (default is guess).])],
            [], [with_rdmacm=guess])
 
+AS_IF([test "x$with_mlx5" = "xno"], [with_rdmacm=no])
+
 AS_IF([test "x$with_rdmacm" != xno],
       [AS_IF([test "x$with_rdmacm" = xguess -o "x$with_rdmacm" = xyes -o "x$with_rdmacm" = x],
              [ucx_check_rdmacm_dir=/usr],

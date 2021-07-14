@@ -26,6 +26,17 @@ libuct_rdmacm_la_SOURCES = \
 	rdmacm_listener.c \
 	rdmacm_cm_ep.c
 
+if HAVE_MLX5
+libuct_rdmacm_la_CPPFLAGS += $(MLX5_CPPFLAGS)
+libuct_rdmacm_la_CFLAGS   += $(MLX5_CFLAGS)
+libuct_rdmacm_la_LDFLAGS  += $(MLX5_LDFLAGS)
+libuct_rdmacm_la_LIBADD   += $(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
+endif
+
+if HAVE_MLX5_DV
+libuct_rdmacm_la_LIBADD += $(MLX5_LIBS)
+endif
+
 include $(top_srcdir)/config/module.am
 
 endif # HAVE_RDMACM
