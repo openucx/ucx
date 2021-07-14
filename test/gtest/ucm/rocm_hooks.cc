@@ -123,6 +123,15 @@ UCS_TEST_F(rocm_hooks, test_hipMem_Alloc_Free) {
 UCS_TEST_F(rocm_hooks, test_hipMallocManaged) {
     hipError_t ret;
     void * dptr;
+    int deviceId;
+    int isSupported = 0;
+
+    /* Only perform test if hipMallocManaged is available on this device */
+    if (hipGetDevice(&deviceId) != hipSuccess) return;
+    if (hipDeviceGetAttribute(&isSupported,
+                              hipDeviceAttributeManagedMemory,
+                              deviceId) != hipSuccess) return;
+    if (isSupported == 0) return;
 
     ret = hipMallocManaged(&dptr, 64);
     ASSERT_EQ(ret, hipSuccess);
@@ -190,4 +199,3 @@ UCS_TEST_F(rocm_hooks, test_hip_Malloc_Free) {
     ret = hipFree(NULL);
     ASSERT_EQ(ret, hipSuccess);
 }
-
