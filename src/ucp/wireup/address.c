@@ -951,7 +951,8 @@ out:
 
 ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                 unsigned unpack_flags,
-                                ucp_unpacked_address_t *unpacked_address)
+                                ucp_unpacked_address_t *unpacked_address,
+                                size_t *size_p)
 {
     ucp_address_entry_t *address_list, *address;
     uint8_t address_header, address_version;
@@ -1145,6 +1146,9 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         ++dev_index;
     } while (!last_dev);
 
+    if (size_p != NULL) {
+        *size_p = UCS_PTR_BYTE_DIFF(buffer, ptr);
+    }
     unpacked_address->address_count = address - address_list;
     unpacked_address->address_list  = address_list;
     return UCS_OK;

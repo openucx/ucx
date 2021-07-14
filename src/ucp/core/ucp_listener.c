@@ -28,6 +28,8 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
     ucp_ep_h ep                     = conn_request->ep;
 
     ucs_free(conn_request->remote_dev_addr);
+    ucs_free(conn_request->remote_addr->address_list);
+    ucs_free(conn_request->remote_addr);
     ucs_free(conn_request);
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
@@ -75,6 +77,10 @@ ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (attr->field_mask & UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID) {
+        attr->client_id = conn_request->user_data.client_id;
     }
 
     return UCS_OK;
@@ -378,6 +384,8 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
     UCS_ASYNC_BLOCK(&worker->async);
     uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
     ucs_free(conn_request->remote_dev_addr);
+    ucs_free(conn_request->remote_addr->address_list);
+    ucs_free(conn_request->remote_addr);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_free(conn_request);
