@@ -1,0 +1,10 @@
+#
+# Copyright (C) NVIDIA Corporation. 2021.  ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+include("${CMAKE_CURRENT_LIST_DIR}/ucx-targets.cmake")
+
+set(UCX_LIBRARIES "@libdir@")
+set(UCX_INCLUDE_DIRS "@includedir@")

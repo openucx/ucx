@@ -97,3 +97,4 @@ test/apps/iodemo/io_demo
 test/apps/test_cuda_hook_dynamic
 test/apps/test_memtrack_limit
 test/apps/profiling/ucx_profiling
+cmake/*.cmake
