@@ -740,7 +740,7 @@ void ucp_tag_offload_sync_send_ack(ucp_worker_h worker, ucs_ptr_map_key_t ep_id,
     ucs_trace_req("tag_offload send_sync_ack ep_id 0x%lx tag %"PRIx64, ep_id,
                   stag);
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
 }
 
 const ucp_request_send_proto_t ucp_tag_offload_sync_proto = {

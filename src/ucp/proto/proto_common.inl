@@ -168,7 +168,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
         goto out_put_request;
     }
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         goto out_put_request;
     }

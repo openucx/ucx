@@ -59,7 +59,7 @@ static void ucp_proto_rndv_get_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_trace_req(req, "%s completed", req->send.proto_config->proto->name);
-    ucp_request_send(req, 0); /* reschedule to send ATS */
+    ucp_request_send(req); /* reschedule to send ATS */
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_zcopy_send_func(

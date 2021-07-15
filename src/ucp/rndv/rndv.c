@@ -286,7 +286,7 @@ void ucp_rndv_req_send_ack(ucp_request_t *ack_req, ucp_request_t *req,
     ucp_request_send_state_reset(ack_req, NULL,
                                  UCP_REQUEST_SEND_PROTO_BCOPY_AM);
 
-    ucp_request_send(ack_req, 0);
+    ucp_request_send(ack_req);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -389,7 +389,7 @@ static void ucp_rndv_req_send_rtr(ucp_request_t *rndv_req, ucp_request_t *rreq,
     ucp_request_set_super(rndv_req, rreq);
     ucp_send_request_id_alloc(rndv_req);
 
-    ucp_request_send(rndv_req, 0);
+    ucp_request_send(rndv_req);
 }
 
 static ucp_lane_index_t ucp_rndv_zcopy_get_lane(ucp_request_t *rndv_req,
@@ -525,7 +525,7 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
         } else if (status == UCS_ERR_NO_RESOURCE) {
             if (lane != req->send.pending_lane) {
                 /* switch to new pending lane */
-                pending_add_res = ucp_request_pending_add(req, 0);
+                pending_add_res = ucp_request_pending_add(req);
                 if (!pending_add_res) {
                     /* failed to switch req to pending queue, try again */
                     continue;
@@ -788,7 +788,7 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     }
 
     UCP_WORKER_STAT_RNDV(ep->worker, GET_ZCOPY, 1);
-    ucp_request_send(rndv_req, 0);
+    ucp_request_send(rndv_req);
 
     return UCS_OK;
 
@@ -909,7 +909,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
     ucp_rndv_req_init_zcopy_lane_map(freq, freq->send.mem_type,
                                      UCP_REQUEST_SEND_PROTO_RNDV_PUT);
 
-    ucp_request_send(freq, 0);
+    ucp_request_send(freq);
 }
 
 static void
@@ -988,7 +988,7 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
     UCP_WORKER_STAT_RNDV(freq->send.ep->worker, GET_ZCOPY, 1);
 
     freq->status = UCS_INPROGRESS;
-    ucp_request_send(freq, 0);
+    ucp_request_send(freq);
 }
 
 UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_get_completion, (self),
@@ -1689,7 +1689,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_put_pipeline_frag_get_completion, (self),
     freq->send.lane                      = fsreq->send.lane;
     freq->send.state.dt.dt.contig.md_map = 0;
 
-    ucp_request_send(freq, 0);
+    ucp_request_send(freq);
 }
 
 static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
@@ -1789,7 +1789,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
             freq->send.mdesc        = NULL;
             freq->send.pending_lane = UCP_NULL_LANE;
 
-            ucp_request_send(freq, 0);
+            ucp_request_send(freq);
         } else {
             ucp_rndv_send_frag_get_mem_type(
                     fsreq, length,
@@ -1970,7 +1970,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
 out_send:
     /* if it is not a PUT pipeline protocol, delete the send request ID */
     ucp_send_request_id_release(sreq);
-    ucp_request_send(sreq, 0);
+    ucp_request_send(sreq);
     return UCS_OK;
 }
 

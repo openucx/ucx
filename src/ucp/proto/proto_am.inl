@@ -101,7 +101,7 @@ ucs_status_t ucp_do_am_bcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
             if ((packed_len == UCS_ERR_NO_RESOURCE) &&
                 (req->send.lane != req->send.pending_lane)) {
                 /* switch to new pending lane */
-                pending_add_res = ucp_request_pending_add(req, 0);
+                pending_add_res = ucp_request_pending_add(req);
                 if (!pending_add_res) {
                     /* failed to switch req to pending queue, try again */
                     continue;
@@ -449,7 +449,7 @@ ucs_status_t ucp_do_am_zcopy_multi(uct_pending_req_t *self, uint8_t am_id_first,
         if (status == UCS_ERR_NO_RESOURCE) {
             if (req->send.lane != req->send.pending_lane) {
                 /* switch to new pending lane */
-                pending_add_res = ucp_request_pending_add(req, 0);
+                pending_add_res = ucp_request_pending_add(req);
                 if (!pending_add_res) {
                     /* failed to switch req to pending queue, try again */
                     continue;
