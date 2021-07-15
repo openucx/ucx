@@ -13,6 +13,7 @@
 
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 
@@ -120,11 +121,11 @@ void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, const char *name)
     ptr_array->name = name;
 }
 
-void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array)
+void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array, int leak_check)
 {
     unsigned i;
 
-    if (ptr_array->count > 0) {
+    if (leak_check && (ptr_array->count > 0)) {
         ucs_warn("releasing ptr_array with %u used items", ptr_array->count);
         for (i = 0; i < ptr_array->size; ++i) {
             if (!ucs_ptr_array_is_free(ptr_array, i)) {
@@ -202,11 +203,51 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value)
     return element_index;
 }
 
+unsigned ucs_ptr_array_alloc(ucs_ptr_array_t *ptr_array, unsigned element_count)
+{
+    unsigned free_iter, new_size, element_index;
+
+    if (element_count == 0) {
+        return 0;
+    }
+
+    free_iter     = 1;
+    element_index = ptr_array->freelist;
+    while (element_index != UCS_PTR_ARRAY_SENTINEL) {
+        while ((free_iter < element_count) &&
+               (ucs_ptr_array_is_free(ptr_array, element_index + free_iter))) {
+            free_iter++;
+        }
+
+        if (free_iter == element_count) {
+            goto alloc_init;
+        }
+
+        free_iter     = ptr_array->start[element_index];
+        element_index = ucs_ptr_array_freelist_get_next(free_iter);
+        free_iter     = 1;
+    }
+
+    element_index = ptr_array->size;
+    new_size = ucs_max(2 * ptr_array->size, ptr_array->size + element_count);
+    ucs_ptr_array_grow(ptr_array, new_size);
+
+alloc_init:
+    for (free_iter = 0; free_iter < element_count; free_iter++) {
+        /* set the value and remove from the free-list */
+        ucs_ptr_array_set(ptr_array, element_index + free_iter, 0);
+    }
+
+    return element_index;
+}
+
 void ucs_ptr_array_set(ucs_ptr_array_t *ptr_array, unsigned element_index,
                        void *new_val)
 {
     ucs_ptr_array_elem_t *elem;
     unsigned next, free_iter, free_ahead, new_size;
+
+    ucs_assert_always(((uintptr_t)new_val & UCS_PTR_ARRAY_FLAG_FREE) == 0);
 
     if (ucs_unlikely(element_index >= ptr_array->size)) {
         new_size = ucs_max(ptr_array->size * 2, element_index + 1);
@@ -303,11 +344,12 @@ ucs_ptr_array_locked_init(ucs_ptr_array_locked_t *locked_ptr_array,
     return UCS_OK;
 }
 
-void ucs_ptr_array_locked_cleanup(ucs_ptr_array_locked_t *locked_ptr_array)
+void ucs_ptr_array_locked_cleanup(ucs_ptr_array_locked_t *locked_ptr_array,
+                                  int leak_check)
 {
     ucs_recursive_spin_lock(&locked_ptr_array->lock);
     /* Call unlocked function */
-    ucs_ptr_array_cleanup(&locked_ptr_array->super);
+    ucs_ptr_array_cleanup(&locked_ptr_array->super, leak_check);
     ucs_recursive_spin_unlock(&locked_ptr_array->lock);
 
     /* Destroy spinlock */
@@ -322,6 +364,20 @@ unsigned ucs_ptr_array_locked_insert(ucs_ptr_array_locked_t *locked_ptr_array,
     ucs_recursive_spin_lock(&locked_ptr_array->lock);
     /* Call unlocked function */
     element_index = ucs_ptr_array_insert(&locked_ptr_array->super, value);
+    ucs_recursive_spin_unlock(&locked_ptr_array->lock);
+
+    return element_index;
+}
+
+unsigned ucs_ptr_array_locked_alloc(ucs_ptr_array_locked_t *locked_ptr_array,
+                                    unsigned element_count)
+{
+    unsigned element_index;
+
+    ucs_recursive_spin_lock(&locked_ptr_array->lock);
+    /* Call unlocked function */
+    element_index = ucs_ptr_array_alloc(&locked_ptr_array->super,
+                                        element_count);
     ucs_recursive_spin_unlock(&locked_ptr_array->lock);
 
     return element_index;

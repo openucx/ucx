@@ -222,8 +222,26 @@ UCS_TEST_F(test_memtrack, custom) {
 
     memset(ptr, 0, ALLOC_SIZE);
 
-    ucs_memtrack_releasing(ptr);
+    ucs_memtrack_releasing(ptr, NULL);
     ASSERT_EQ(initial_ptr, ptr);
+    free(ptr);
+
+    test_total(1, ALLOC_SIZE);
+}
+
+UCS_TEST_F(test_memtrack, name_reuse) {
+    void *ptr, *initial_ptr;
+    const char *alloc_name = NULL;
+
+    initial_ptr = ptr = malloc(ALLOC_SIZE);
+    ucs_memtrack_allocated(ptr, ALLOC_SIZE, ALLOC_NAME);
+
+    memset(ptr, 0, ALLOC_SIZE);
+
+    ucs_memtrack_releasing(ptr, &alloc_name);
+    ASSERT_STREQ(alloc_name, ALLOC_NAME);
+    ASSERT_EQ(initial_ptr, ptr);
+    ucs_free((void*)alloc_name);
     free(ptr);
 
     test_total(1, ALLOC_SIZE);

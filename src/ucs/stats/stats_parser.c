@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -17,6 +18,7 @@
 
 static ucs_status_t dump_file(const char *filename)
 {
+    ucs_ptr_array_t counters;
     ucs_stats_node_t *root;
     ucs_status_t status;
     FILE *stream;
@@ -28,12 +30,13 @@ static ucs_status_t dump_file(const char *filename)
     }
 
     while (!feof(stream)) {
-        status = ucs_stats_deserialize(stream, &root);
+        status = ucs_stats_deserialize(stream, &counters, &root);
         if (status != UCS_OK) {
             goto out;
         }
 
         ucs_stats_serialize(stdout, root, 0);
+        ucs_ptr_array_cleanup(&counters, 0);
         ucs_stats_free(root);
     }
 

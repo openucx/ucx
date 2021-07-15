@@ -585,7 +585,7 @@ err_rx_mpool:
 err_qp:
     uct_ud_iface_destroy_qp(self);
 err_eps_array:
-    ucs_ptr_array_cleanup(&self->eps);
+    ucs_ptr_array_cleanup(&self->eps, 1);
     return status;
 }
 
@@ -620,7 +620,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_mpool_cleanup(&self->rx.mp, 0);
     uct_ud_iface_destroy_qp(self);
     ucs_debug("iface(%p): ptr_array cleanup", self);
-    ucs_ptr_array_cleanup(&self->eps);
+    ucs_ptr_array_cleanup(&self->eps, 1);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     UCS_STATS_NODE_FREE(self->stats);
     kh_destroy_inplace(uct_ud_iface_gid, &self->gid_table.hash);
