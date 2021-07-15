@@ -12,7 +12,8 @@ extern "C" {
 #include <ucs/time/time.h>
 }
 
-#define TEST_CONFIG_FILE TOP_SRCDIR "/test/gtest/ucs/ucx.conf"
+#define TEST_CONFIG_DIR  TOP_SRCDIR "/test/gtest/ucs"
+#define TEST_CONFIG_FILE "ucx_test.conf"
 
 typedef enum {
     COLOR_RED,
@@ -326,9 +327,13 @@ protected:
 
         static car_opts_t parse(const char *env_prefix,
                                 const char *table_prefix) {
+            /* coverity[tainted_string_argument] */
+            ucs::scoped_setenv ucx_config_dir("UCX_CONFIG_DIR",
+                                              TEST_CONFIG_DIR);
             car_opts_t tmp;
-            ucs_status_t status = ucs_config_parse_config_file(TEST_CONFIG_FILE, 1);
-            ASSERT_UCS_OK(status);
+            ucs_status_t status;
+
+            ucs_config_parse_config_files();
 
             status = ucs_config_parser_fill_opts(&tmp,
                                                  car_opts_table,
@@ -683,4 +688,27 @@ UCS_TEST_F(test_config, test_config_file) {
 
     /* Overriding INI file by env vars */
     EXPECT_EQ(std::string("Ford"), std::string(opts->brand));
+}
+
+UCS_TEST_F(test_config, test_config_file_parse_files) {
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv ucx_config_dir("UCX_CONFIG_DIR", TEST_CONFIG_DIR);
+    
+    car_opts_t opts;
+    ucs_status_t status;
+
+    ucs_config_parse_config_file(TEST_CONFIG_DIR, TEST_CONFIG_FILE, 1);
+    status = ucs_config_parser_fill_opts(&opts, car_opts_table,
+                                         UCS_DEFAULT_ENV_PREFIX, NULL, 0);
+    EXPECT_EQ(200, opts.price);
+    ucs_config_parser_release_opts(&opts, car_opts_table);
+    
+    ucs_config_parse_config_files();
+    status = ucs_config_parser_fill_opts(&opts, car_opts_table,
+                                         UCS_DEFAULT_ENV_PREFIX, NULL, 0);
+    ASSERT_UCS_OK(status);
+
+    /* Verify ucs_config_parse_config_files() overrides config */
+    EXPECT_EQ(100, opts.price);
+    ucs_config_parser_release_opts(&opts, car_opts_table);
 }
