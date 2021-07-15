@@ -38,7 +38,7 @@ func BenchmarkUcpMmap(b *testing.B) {
 	memTypeMask, _ := context.MemoryTypesMask()
 
 	if err != nil {
-		b.Fatalf("failed to create a context %v", err)
+		b.Fatalf("Failed to create a context %v", err)
 	}
 
 	for i := 0; i < b.N; i++ {
@@ -48,7 +48,7 @@ func BenchmarkUcpMmap(b *testing.B) {
 				allocatedMemory, err := MemoryAllocate(context, size, UCS_MEMORY_TYPE_HOST)
 
 				if err != nil {
-					b.Fatalf("failed to allocate memory %v", err)
+					b.Fatalf("Failed to allocate memory %v", err)
 				}
 
 				allocatedMemory.Close()
@@ -65,7 +65,7 @@ func BenchmarkUcpMmap(b *testing.B) {
 					gpuMemory, err := MemoryAllocate(context, size, UCS_MEMORY_TYPE_CUDA)
 
 					if err != nil {
-						b.Fatalf("failed to allocate GPU memory %v", err)
+						b.Fatalf("Failed to allocate GPU memory %v", err)
 					}
 
 					gpuMemory.Close()
@@ -85,7 +85,7 @@ func TestUcpMmap(t *testing.T) {
 	defer context.Close()
 
 	if err != nil {
-		t.Fatalf("failed to create a context %v", err)
+		t.Fatalf("Failed to create a context %v", err)
 	}
 
 	allocatedMemory, err := MemoryAllocate(context, testMemorySize, UCS_MEMORY_TYPE_HOST)
