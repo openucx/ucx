@@ -1517,3 +1517,27 @@ ucs_status_t ucs_sys_check_fd_limit_per_process()
 
     return UCS_OK;
 }
+
+ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
+                                void *(*start_routine)(void*), void *arg,
+                                const char *fmt, ...)
+{
+    char thread_name[NAME_MAX];
+    pthread_t thread_id;
+    va_list ap;
+    int ret;
+
+    ret = pthread_create(&thread_id, NULL, start_routine, arg);
+    if (ret != 0) {
+        ucs_error("pthread_create() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    va_start(ap, fmt);
+    ucs_vsnprintf_safe(thread_name, sizeof(thread_name), fmt, ap);
+    va_end(ap);
+
+    pthread_setname_np(thread_id, thread_name);
+    *thread_id_p = thread_id;
+    return UCS_OK;
+}

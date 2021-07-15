@@ -172,7 +172,7 @@ void* test_perf::thread_func(void *arg)
     rte *r        = reinterpret_cast<rte*>(a->params.rte_group);
     test_result *result;
 
-    ucs_log_set_thread_name("perf-%d", r->index());
+    ucs_log_set_thread_name("p-%d", r->index());
     set_affinity(a->cpu);
     result = new test_result();
     result->status = ucx_perf_run(&a->params, &result->result);
@@ -223,42 +223,37 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.ucp.send_datatype = (ucp_perf_datatype_t)test.data_layout;
     params.ucp.recv_datatype = (ucp_perf_datatype_t)test.data_layout;
 
-    thread_arg arg0;
-    arg0.params   = params;
-    arg0.cpu      = cpus[0];
-
     rte rte0(0, c0to1, c1to0);
-    arg0.params.rte_group = &rte0;
-
-    pthread_t thread0, thread1;
-    int ret = pthread_create(&thread0, NULL, thread_func, &arg0);
-    if (ret) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
-    }
-
-    thread_arg arg1;
-    arg1.params   = params;
-    arg1.cpu      = cpus[1];
-
     rte rte1(1, c1to0, c0to1);
-    arg1.params.rte_group = &rte1;
+    rte *rtes[2] = {&rte0, &rte1};
 
-    ret = pthread_create(&thread1, NULL, thread_func, &arg1);
-    if (ret) {
-        UCS_TEST_MESSAGE << strerror(errno);
-        throw ucs::test_abort_exception();
+    /* Run 2 test threads */
+    thread_arg args[2];
+    pthread_t threads[2];
+    for (unsigned i = 0; i < 2; ++i) {
+        args[i].params           = params;
+        args[i].cpu              = cpus[i];
+        args[i].params.rte_group = rtes[i];
+
+        ucs_status_t status = ucs_pthread_create(&threads[i], thread_func,
+                                                 &args[i], "perf%d", i);
+        if (status != UCS_OK) {
+            throw ucs::test_abort_exception();
+        }
     }
 
-    void *ptr0, *ptr1;
-    pthread_join(thread0, &ptr0);
-    pthread_join(thread1, &ptr1);
+    /* Collect results */
+    test_result *results[2], result;
+    for (unsigned i = 0; i < 2; ++i) {
+        void *ptr;
+        pthread_join(threads[i], &ptr);
+        results[i] = reinterpret_cast<test_result*>(ptr);
+        if (i == 1) {
+            result = *results[i];
+        }
+        delete results[i];
+    }
 
-    test_result *result0 = reinterpret_cast<test_result*>(ptr0),
-                *result1 = reinterpret_cast<test_result*>(ptr1);
-    test_result result = *result1;
-    delete result0;
-    delete result1;
     return result;
 }
 
