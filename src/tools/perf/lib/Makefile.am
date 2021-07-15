@@ -21,10 +21,11 @@ libucxperf_la_LIBADD   = \
 # C-linkable C++ code - must override any inherited CXXFLAGS
 CXXFLAGS              += -nostdlib $(PERF_LIB_CXXFLAGS) 
 
-noinst_HEADERS = \
-	libperf_int.h
+noinst_HEADERS = libperf_int.h
 
 libucxperf_la_SOURCES = \
 	libperf.c \
+	libperf_memory.c \
+	libperf_thread.c \
 	uct_tests.cc \
 	ucp_tests.cc
