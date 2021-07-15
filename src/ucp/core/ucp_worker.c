@@ -1118,6 +1118,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto err_free_iface;
     }
 
+    uct_apply_config_list(iface_config, &context->list);
+
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >= sizeof(ucp_eager_sync_hdr_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
@@ -1343,6 +1345,8 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
                       context->tl_cmpts[cmpt_index].attr.name);
             goto err_free_cms;
         }
+
+        uct_apply_config_list(cm_config, &context->list);
 
         status = uct_cm_open(cmpt, worker->uct, cm_config, &worker->cms[i].cm);
         uct_config_release(cm_config);
