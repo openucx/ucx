@@ -2470,6 +2470,8 @@ ucs_status_t uct_md_config_read(uct_component_h component,
                                 uct_md_config_t **config_p);
 
 
+void uct_apply_config_list(void *config, ucs_list_link_t *config_kv_list);
+
 
 /**
  * @ingroup UCT_MD

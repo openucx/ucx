@@ -64,6 +64,24 @@ typedef struct ucs_config_field {
 } ucs_config_field_t;
 
 
+typedef struct ucs_config_key {
+    const char *table_prefix;
+    const char *subfield_prefix;
+    const char *key;
+    const ucs_config_parser_t *parser;
+    ucs_list_link_t list;
+} ucs_config_key_t;
+
+
+typedef struct ucs_config_cached_key {
+    char *key;
+    char *val;
+    char *subfield_prefix;
+    size_t match_level;
+    ucs_list_link_t list;
+} ucs_config_cached_key_t;
+
+
 typedef struct ucs_ib_port_spec {
     char                     *device_name;
     unsigned                 port_num;
@@ -382,6 +400,14 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
  */
 ucs_status_t ucs_config_parse_config_file(const char *path, int override);
 
+
+void ucs_config_parser_release_keys(ucs_list_link_t *list);
+
+ucs_status_t ucs_config_setup_keys(ucs_list_link_t *list);
+
+ucs_status_t ucs_config_parser_audit_key(const ucs_list_link_t *list,
+                                         const char *name, size_t *match_level,
+                                         char subfield_prefix[]);
 
 /**
  * Fill existing opts structure.
