@@ -167,7 +167,7 @@ typedef enum uct_tcp_cm_conn_event {
     /* Connection acknowledgment from a EP that accepts a connection from
      * initiator of a connection request. */
     UCT_TCP_CM_CONN_ACK               = UCS_BIT(1),
-    /* Connection acknowledgment + Connection request. The mesasge is sent
+    /* Connection acknowledgment + Connection request. The message is sent
      * from a EP that accepts remote connection when it was in
      * `UCT_TCP_EP_CONN_STATE_CONNECTING` state (i.e. original
      * `UCT_TCP_CM_CONN_REQ` wasn't sent yet) and want to have RX capability
@@ -181,8 +181,8 @@ typedef enum uct_tcp_cm_conn_event {
  * TCP connection request packet flags
  */
 enum {
-    /* Inditicates whether both EPs of the connection has to use CONNECT_TO_EP
-     * CONNECT_TO_EP of connection establishmnet */
+    /* Indicates whether both EPs of the connection has to use CONNECT_TO_EP
+     * CONNECT_TO_EP of connection establishment */
     UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP = UCS_BIT(0)
 };
 

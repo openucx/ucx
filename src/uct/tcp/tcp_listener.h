@@ -16,7 +16,7 @@ typedef struct uct_tcp_listener {
 
     uct_tcp_sockcm_t                        *sockcm;
 
-    /** Callback to invoke upon receving a connection request from a client */
+    /** Callback to invoke upon receiving a connection request from a client */
     uct_cm_listener_conn_request_callback_t conn_request_cb;
 
     /** User's data to be passed as argument to the conn_request_cb */
