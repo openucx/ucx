@@ -66,6 +66,18 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
 
 /**
+ * Find pci bus id of the given system device.
+ *
+ * @param [in]  sys_dev system device index.
+ * @param [out] bus_id  pointer to bus id to be populated.
+ *
+ * @return UCS_OK or error in case system device or its bus id cannot be found.
+ */
+ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
+                                        ucs_sys_bus_id_t *bus_id);
+
+
+/**
  * Find the distance between two system devices (in terms of latency,
  * bandwidth, hops, etc).
  *

@@ -107,6 +107,17 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
     return UCS_OK;
 }
 
+ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
+                                        ucs_sys_bus_id_t *bus_id)
+{
+    if (sys_dev < ucs_topo_ctx.sys_dev_to_bus_lookup.count) {
+        *bus_id = ucs_topo_ctx.sys_dev_to_bus_lookup.bus_arr[sys_dev];
+        return UCS_OK;
+    } else {
+        return UCS_ERR_NO_ELEM;
+    }
+}
+
 static void
 ucs_topo_get_bus_path(const ucs_sys_bus_id_t *bus_id, char *path, size_t max)
 {
