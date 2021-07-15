@@ -65,7 +65,7 @@
 #define UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE    10
 
 /* The seconds between individual keepalive probes */
-#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   1
+#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   2
 
 
 /**
@@ -402,7 +402,7 @@ typedef struct uct_tcp_iface {
             ucs_time_t            idle;              /* The time the connection needs to remain
                                                       * idle before TCP starts sending keepalive
                                                       * probes (TCP_KEEPIDLE socket option) */
-            unsigned              cnt;               /* The maximum number of keepalive probes TCP
+            unsigned long         cnt;               /* The maximum number of keepalive probes TCP
                                                       * should send before dropping the connection
                                                       * (TCP_KEEPCNT socket option). */
             ucs_time_t            intvl;             /* The time between individual keepalive
@@ -440,7 +440,7 @@ typedef struct uct_tcp_iface_config {
     ucs_range_spec_t               port_range;
     struct {
         ucs_time_t                 idle;
-        unsigned                   cnt;
+        unsigned long              cnt;
         ucs_time_t                 intvl;
     } keepalive;
 } uct_tcp_iface_config_t;
