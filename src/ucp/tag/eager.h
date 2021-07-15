@@ -82,9 +82,9 @@ void ucp_tag_eager_sync_zcopy_completion(uct_completion_t *self);
 
 static UCS_F_ALWAYS_INLINE int
 ucp_proto_eager_check_op_id(const ucp_proto_init_params_t *init_params,
-                            int offload_enabled)
+                            ucp_operation_id_t op_id, int offload_enabled)
 {
-    return (init_params->select_param->op_id == UCP_OP_ID_TAG_SEND) &&
+    return (init_params->select_param->op_id == op_id) &&
            (offload_enabled ==
             ucp_ep_config_key_has_tag_lane(init_params->ep_config_key));
 }

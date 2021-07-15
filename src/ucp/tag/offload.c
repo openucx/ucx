@@ -688,13 +688,6 @@ const ucp_request_send_proto_t ucp_tag_offload_proto = {
 };
 
 /* Eager sync */
-static UCS_F_ALWAYS_INLINE void
-ucp_tag_offload_sync_posted(ucp_worker_t *worker, ucp_request_t *req)
-{
-    req->send.tag_offload.ssend_tag = req->send.msg_proto.tag;
-    ucs_queue_push(&worker->tm.offload.sync_reqs, &req->send.tag_offload.queue);
-}
-
 static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
 {
     ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);

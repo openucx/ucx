@@ -62,7 +62,7 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 0) ||
+    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0) ||
         /* short protocol requires contig/host */
         (select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !UCP_MEM_IS_HOST(select_param->mem_type)) {
@@ -126,7 +126,7 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 0)) {
+    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -162,7 +162,7 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 0)) {
+    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
