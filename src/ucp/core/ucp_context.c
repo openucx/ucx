@@ -24,6 +24,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <ucs/type/init_once.h>
 #include <string.h>
 
 
@@ -381,7 +382,7 @@ const ucp_tl_bitmap_t ucp_tl_bitmap_min = UCS_BITMAP_ZERO;
 ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
                              ucp_config_t **config_p)
 {
-    unsigned full_prefix_len = sizeof(UCS_DEFAULT_ENV_PREFIX) + 1;
+    unsigned full_prefix_len = sizeof(UCS_DEFAULT_ENV_PREFIX);
     unsigned env_prefix_len  = 0;
     ucp_config_t *config;
     ucs_status_t status;
@@ -417,6 +418,9 @@ ucs_status_t ucp_config_read(const char *env_prefix, const char *filename,
         goto err_free_prefix;
     }
 
+    config->list.next = &config->list;
+    config->list.prev = &config->list;
+
     *config_p = config;
     return UCS_OK;
 
@@ -430,15 +434,102 @@ err:
 
 void ucp_config_release(ucp_config_t *config)
 {
+    ucs_config_cached_key_t *key_val;
+    while (!ucs_list_is_empty(&config->list)) {
+        key_val = ucs_list_extract_head(&config->list, typeof(*key_val), list);
+        free(key_val->key);
+        free(key_val->val);
+        free(key_val->subfield_prefix);
+        ucs_free(key_val);
+    }
+
     ucs_config_parser_release_opts(config, ucp_config_table);
     ucs_free(config->env_prefix);
     ucs_free(config);
 }
 
+static UCS_LIST_HEAD(key_list);
+
+static void UCS_F_DTOR ucp_config_free_keys(void)
+{
+    ucs_config_parser_release_keys(&key_list);
+}
+
+static ucs_status_t ucp_config_setup_keys(void)
+{
+    static ucs_init_once_t setup_key_list = UCS_INIT_ONCE_INITIALIZER;
+    static ucs_status_t ucs_status;
+    uct_component_h *components;
+    unsigned num_components;
+
+    UCS_INIT_ONCE(&setup_key_list) {
+        ucs_status = uct_query_components(&components, &num_components);
+        if (ucs_status == UCS_OK) {
+            uct_release_component_list(components);
+        }
+
+        ucs_status = ucs_config_setup_keys(&key_list);
+    }
+    return ucs_status;
+}
+
 ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
                                const char *value)
 {
-    return ucs_config_parser_set_value(config, ucp_config_table, name, value);
+    ucs_status_t ucs_status;
+    ucs_config_cached_key_t *key_val;
+    size_t match_level;
+    char subfield_prefix[64];
+
+    ucs_status = ucs_config_parser_set_value(config, ucp_config_table, name,
+                                             value);
+    if (ucs_status == UCS_OK) {
+        return UCS_OK;
+    }
+
+    ucs_status = ucp_config_setup_keys();
+    if (ucs_status != UCS_OK) {
+        return UCS_ERR_CANCELED;
+    }
+
+    memset(subfield_prefix, 0, sizeof(subfield_prefix));
+    ucs_status = ucs_config_parser_audit_key(&key_list, name, &match_level,
+                                             subfield_prefix);
+    if (ucs_status != UCS_OK) {
+        return UCS_ERR_NO_ELEM;
+    }
+
+    key_val = ucs_calloc(1, sizeof(*key_val), "cached config key");
+    if (key_val == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    key_val->key = strdup(name);
+    key_val->val = strdup(value);
+    if (key_val->key == NULL || key_val->val == NULL) {
+        ucs_status = UCS_ERR_NO_MEMORY;
+        goto err_free_key;
+    }
+    key_val->match_level = match_level;
+    if (match_level == 0) {
+        key_val->subfield_prefix = strdup(subfield_prefix);
+        if (key_val->subfield_prefix == NULL) {
+            ucs_status = UCS_ERR_NO_MEMORY;
+            goto err_free_key;
+        }
+    }
+
+    ucs_list_add_tail(&config->list, &key_val->list);
+
+    return ucs_status;
+
+err_free_key:
+    free(key_val->key);
+    free(key_val->val);
+    free(key_val->subfield_prefix);
+    ucs_free(key_val);
+
+    return ucs_status;
 }
 
 void ucp_config_print(const ucp_config_t *config, FILE *stream,
@@ -891,6 +982,8 @@ static ucs_status_t ucp_fill_tl_md(ucp_context_h context,
         return status;
     }
 
+    uct_apply_config_list(md_config, &context->list);
+
     status = uct_md_open(context->tl_cmpts[cmpt_index].cmpt, md_rsc->md_name,
                          md_config, &tl_md->md);
     uct_config_release(md_config);
@@ -1330,6 +1423,8 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 {
     unsigned i, num_alloc_methods, method;
     const char *method_name;
+    ucs_config_cached_key_t *key_val;
+    ucs_config_cached_key_t *key_val_clone;
     ucs_status_t status;
 
     ucp_apply_params(context, params,
@@ -1360,7 +1455,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
               context->config.ext.bcopy_bw);
 
     /* always init MT lock in context even though it is disabled by user,
-     * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
+     * because we need to use context lock to protect ucp_mem_ and ucp_rkey_
      * routines */
     UCP_THREAD_LOCK_INIT(&context->mt_lock);
 
@@ -1457,8 +1552,38 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         goto err_free_alloc_methods;
     }
 
+    ucs_list_for_each(key_val, &config->list, list) {
+        key_val_clone = ucs_calloc(1, sizeof(*key_val_clone), "cached config key");
+        if (key_val_clone == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_free_key_list;
+        }
+        key_val_clone->key = strdup(key_val->key);
+        key_val_clone->val = strdup(key_val->val);
+        key_val_clone->match_level = key_val->match_level;
+        if (key_val_clone->key == NULL || key_val_clone->val == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_free_key_list;
+        } else if (key_val_clone->match_level == 0) {
+            key_val_clone->subfield_prefix = strdup(key_val->subfield_prefix);
+            if (key_val_clone->subfield_prefix == NULL) {
+                status = UCS_ERR_NO_MEMORY;
+                goto err_free_key_list;
+            }
+        }
+        ucs_list_add_tail(&context->list, &key_val_clone->list);
+    }
+
     return UCS_OK;
 
+err_free_key_list:
+    while (!ucs_list_is_empty(&context->list)) {
+        key_val = ucs_list_extract_head(&context->list, typeof(*key_val), list);
+        free(key_val->key);
+        free(key_val->val);
+        free(key_val->subfield_prefix);
+        ucs_free(key_val);
+    }
 err_free_alloc_methods:
     ucs_free(context->config.alloc_methods);
 err_free_env_prefix:
@@ -1472,9 +1597,19 @@ err:
 
 static void ucp_free_config(ucp_context_h context)
 {
+    ucs_config_cached_key_t *key_val;
+
     ucs_free(context->config.alloc_methods);
     ucs_free(context->config.env_prefix);
     ucs_free(context->config.selection_cmp);
+
+    while (!ucs_list_is_empty(&context->list)) {
+        key_val = ucs_list_extract_head(&context->list, typeof(*key_val), list);
+        free(key_val->key);
+        free(key_val->val);
+        free(key_val->subfield_prefix);
+        ucs_free(key_val);
+    }
 }
 
 static void ucp_context_create_vfs(ucp_context_h context)
@@ -1519,6 +1654,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         status = UCS_ERR_NO_MEMORY;
         goto err_release_config;
     }
+    context->list.prev = &context->list;
+    context->list.next = &context->list;
 
     status = ucp_fill_config(context, params, config);
     if (status != UCS_OK) {

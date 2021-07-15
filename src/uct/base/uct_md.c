@@ -324,6 +324,48 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
     return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
 }
 
+void uct_apply_config_list(void *config, ucs_list_link_t *config_kv_list)
+{
+    const char *config_table_prefix;
+    ucs_config_cached_key_t *key_val;
+    char key_buf[256];
+    ucs_status_t status;
+
+    config_table_prefix = ((uct_config_bundle_t *)config - 1)->table_prefix;
+
+    ucs_list_for_each(key_val, config_kv_list, list) {
+        if (key_val->match_level != 0) {
+            status = uct_config_modify(config, key_val->key, key_val->val);
+            if (status != UCS_OK && status != UCS_ERR_NO_ELEM) {
+               ucs_info("Invalid setting %s:%s", key_val->key, key_val->val);
+            }
+            if (status == UCS_OK) {
+               ucs_info("apply coarse setting to table %s, %s:%s",
+                        config_table_prefix, key_val->key, key_val->val);
+            }
+        } else {
+            if (strncmp(key_val->key, config_table_prefix,
+                        strlen(config_table_prefix))) {
+                continue;
+            }
+
+            memset(key_buf, 0, sizeof(key_buf));
+            ucs_snprintf_safe(key_buf, sizeof(key_buf), "%s%s",
+                              key_val->subfield_prefix,
+                              key_val->key + strlen(config_table_prefix));
+
+            status = uct_config_modify(config, key_buf, key_val->val);
+            if (status != UCS_OK && status != UCS_ERR_NO_ELEM) {
+               ucs_info("Invalid setting %s:%s", key_val->key, key_val->val);
+            }
+            if (status == UCS_OK) {
+               ucs_info("apply fine setting to table %s, %s:%s",
+                        config_table_prefix, key_val->key, key_val->val);
+            }
+        }
+    }
+}
+
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
     void *rbuf = uct_md_fill_md_name(md, rkey_buffer);

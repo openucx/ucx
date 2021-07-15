@@ -122,8 +122,8 @@ typedef struct ucp_context_config {
 
 struct ucp_config {
     /** Array of device lists names to use.
-     *  This array holds three lists - network devices, shared memory devices
-     *  and acceleration devices */
+     *  This array holds four lists - network devices, shared memory devices
+     *  and acceleration devices and loop-back device */
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
@@ -141,6 +141,8 @@ struct ucp_config {
     char                                   *selection_cmp;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
+    /** Save effective ucx configurations not listed in ucp_config_table **/
+    ucs_list_link_t                        list;
 };
 
 
@@ -263,6 +265,8 @@ typedef struct ucp_context {
 
     char                          name[UCP_ENTITY_NAME_MAX];
 
+    /* Save cached uct configurations */
+    ucs_list_link_t               list;
 } ucp_context_t;
 
 
