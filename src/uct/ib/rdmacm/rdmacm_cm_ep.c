@@ -111,6 +111,26 @@ void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
+ucs_status_t uct_rdmacm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
+{
+    uct_rdmacm_cm_ep_t *rdmacm_ep = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
+    struct sockaddr *local_saddr, *remote_saddr;
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
+        local_saddr = rdma_get_local_addr(rdmacm_ep->id);
+        ucp_sockaddr_copy_always((struct sockaddr *)&ep_attr->local_address,
+                                 local_saddr);
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
+        remote_saddr = rdma_get_peer_addr(rdmacm_ep->id);
+        ucp_sockaddr_copy_always((struct sockaddr *)&ep_attr->remote_address,
+                                 remote_saddr);
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
 {
     uct_rdmacm_cm_ep_t *cep                 = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);

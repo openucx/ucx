@@ -850,6 +850,19 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
     return UCS_OK;
 }
 
+void ucp_sockaddr_copy_always(struct sockaddr *dst_addr,
+                              const struct sockaddr *src_addr)
+{
+    ucs_status_t status;
+
+    if (!ucs_sockaddr_is_known_af(src_addr)) {
+        memset(dst_addr, 0, sizeof(*dst_addr));
+    } else {
+        status = ucs_sockaddr_copy(dst_addr, src_addr);
+        ucs_assert_always(status == UCS_OK);
+    }
+}
+
 ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen)
 {
     ucs_status_t status = UCS_ERR_NO_DEVICE;

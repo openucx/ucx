@@ -402,6 +402,7 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
     .ep_pending_add           = uct_tcp_ep_pending_add,
     .ep_pending_purge         = uct_tcp_ep_pending_purge,
     .ep_flush                 = uct_tcp_ep_flush,
+    .ep_query                 = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .ep_fence                 = uct_base_ep_fence,
     .ep_check                 = uct_tcp_ep_check,
     .ep_create                = uct_tcp_ep_create,

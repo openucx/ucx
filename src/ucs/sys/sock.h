@@ -511,6 +511,19 @@ int ucs_sockaddr_is_inaddr_loopback(const struct sockaddr *addr);
 ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
                                const struct sockaddr *src_addr);
 
+/**
+ * Copy the src_addr sockaddr to dst_addr sockaddr. The length to copy is
+ * the size of the src_addr sockaddr. If src_addr contains an address family
+ * that is not IPv4 or IPv6, the dst_addr sockaddr structure will be set to
+ * all zeroes.
+ *
+ * @param [in] dst_addr  Pointer to destination sockaddr (to copy to).
+ * @param [in] src_addr  Pointer to source sockaddr (to copy from).
+ *
+ */
+void ucp_sockaddr_copy_always(struct sockaddr *dst_addr,
+                              const struct sockaddr *src_addr);
+
 
 /**
  * Copy into ifname_name the interface associated the IP on which the socket

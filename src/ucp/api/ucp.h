@@ -4501,7 +4501,9 @@ ucs_status_ptr_t ucp_worker_flush_nbx(ucp_worker_h worker,
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_ep_attr_field {
-    UCP_EP_ATTR_FIELD_NAME = UCS_BIT(0) /**< UCP endpoint name */
+    UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
+    UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
+    UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2)  /**< Sockaddr the endpoint is connected to */
 };
 
 
@@ -4526,17 +4528,29 @@ typedef struct ucp_ep_attr {
      * this name.
      */
     char     name[UCP_ENTITY_NAME_MAX];
+
+    /**
+     * The local sockaddr that this ep is using.
+     */
+    struct sockaddr_storage local_sockaddr;
+
+    /**
+     * The remote sockaddr this ep is connected to.
+     */
+    struct sockaddr_storage remote_sockaddr;
 } ucp_ep_attr_t;
 
 
 /**
- * @ingroup UCP_ENDPOINT
- * @brief Get attributes specific to a particular endpoint.
+ * @ingroup UCP_WORKER
+ * @brief Get attributes of a given endpoint.
  *
  * This routine fetches information about the endpoint.
+ * It should be called only if the endpoint was created with the
+ * UCP_EP_PARAM_FIELD_SOCK_ADDR or UCP_EP_PARAM_FIELD_CONN_REQUEST flags.
  *
- * @param [in]  ep   Endpoint object to query.
- * @param [out] attr Filled with attributes of the endpoint.
+ * @param [in]  ep         Endpoint object to query.
+ * @param [out] attr       Filled with attributes of the endpoint.
  *
  * @return Error code as defined by @ref ucs_status_t
  */

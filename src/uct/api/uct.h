@@ -765,6 +765,21 @@ enum uct_cm_attr_field {
 
 
 /**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT endpoint attributes field mask.
+ *
+ * The enumeration allows specifying which fields in @ref uct_ep_attr_t are
+ * present, for backward compatibility support.
+ */
+enum uct_ep_attr_field {
+    /** Enables @ref uct_ep_attr::local_address */
+    UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(0),
+    /** Enables @ref uct_ep_attr::remote_address */
+    UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(1)
+};
+
+
+/**
  * @ingroup UCT_CLIENT_SERVER
  * @brief UCT listener attributes field mask.
  *
@@ -1256,6 +1271,30 @@ struct uct_ep_params {
      * indicated by the @ref uct_cm_attr::max_conn_priv.
      */
     size_t                              private_data_length;
+};
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Endpoint attributes, capabilities and limitations.
+ */
+struct uct_ep_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_ep_attr_field. Fields not specified by this mask
+     * will be ignored.
+     */
+    uint64_t                field_mask;
+
+    /**
+     * Local sockaddr used by the endpoint.
+     */
+    struct sockaddr_storage local_address;
+
+    /**
+     * Remote sockaddr the endpoint is connected to.
+     */
+    struct sockaddr_storage remote_address;
 };
 
 
@@ -3493,6 +3532,21 @@ ucs_status_t uct_cm_config_read(uct_component_h component,
  * @return Error code.
  */
 ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Get ep's attributes.
+ *
+ * This routine should be called only if the endpoint was created with the
+ * UCT_EP_PARAM_FIELD_SOCKADDR or UCT_EP_PARAM_FIELD_CONN_REQUEST flags.
+ *
+ * @param [in]  ep         Endpoint to query.
+ * @param [out] ep_attr    Filled with endpoint attributes.
+ *
+ * @return Error code.
+ */
+ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 
 /**

@@ -153,6 +153,7 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
     .ep_check                 = (uct_ep_check_func_t)ucs_empty_function_return_unsupported,
     .ep_create                = (uct_ep_create_func_t)ucs_empty_function_return_unsupported,
     .iface_flush              = (uct_iface_flush_func_t)ucs_empty_function_return_unsupported,
+    .ep_query                 = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
     .iface_fence              = (uct_iface_fence_func_t)ucs_empty_function_return_unsupported,
     .iface_progress_enable    = ucs_empty_function,
     .iface_progress_disable   = ucs_empty_function,

@@ -566,6 +566,11 @@ ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)
     return ep->iface->ops.cm_ep_conn_notify(ep);
 }
 
+ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
+{
+    return ep->iface->ops.ep_query(ep, ep_attr);
+}
+
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
 {
     ep->iface = iface;

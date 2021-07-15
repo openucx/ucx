@@ -784,6 +784,8 @@ void UcxConnection::disconnect(UcxCallback *callback)
     assert(_establish_cb == NULL);
     assert(_disconnect_cb == NULL);
 
+    print_addresses();
+
     UCX_CONN_LOG << "destroying, ep is " << _ep;
     ep_close(UCP_EP_CLOSE_MODE_FORCE);
 
@@ -992,6 +994,32 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
     memcpy(_log_prefix, ss.str().c_str(), length);
 }
 
+void UcxConnection::print_addresses()
+{
+    ucp_ep_attr_t ep_attr;
+
+    if (_ep == NULL) {
+        return;
+    }
+
+    ep_attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                         UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+
+    ucs_status_t status = ucp_ep_query(_ep, &ep_attr);
+    if (status == UCS_OK) {
+        UCX_CONN_LOG << "endpoint " << _ep << ", local address "
+                     << UcxContext::sockaddr_str(
+                                     (const struct sockaddr*)&ep_attr.local_sockaddr,
+                                     sizeof(ep_attr.local_sockaddr))
+                     << " remote address "
+                     << UcxContext::sockaddr_str(
+                                     (const struct sockaddr*)&ep_attr.remote_sockaddr,
+                                     sizeof(ep_attr.remote_sockaddr));
+    } else {
+        UCX_CONN_LOG << "ucp_ep_query() failed: " << ucs_status_string(status);
+    }
+}
+
 void UcxConnection::connect_tag(UcxCallback *callback)
 {
     const ucp_datatype_t dt_int = ucp_dt_make_contig(sizeof(uint32_t));
@@ -1068,6 +1096,7 @@ void UcxConnection::established(ucs_status_t status)
     if (!_use_am && (status == UCS_OK)) {
         assert(_remote_conn_id != 0);
         UCX_CONN_LOG << "Remote id is " << _remote_conn_id;
+        print_addresses();
     }
 
     _ucx_status = status;
