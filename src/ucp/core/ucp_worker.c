@@ -2223,7 +2223,6 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     req->send.discard_uct_ep.cb_id = UCS_CALLBACKQ_ID_NULL;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_worker_discard_uct_ep_complete(req);
     iter = kh_get(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep);
     if (iter == kh_end(&worker->discard_uct_ep_hash)) {
@@ -2231,11 +2230,12 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
                   uct_ep, worker);
     }
 
+    uct_ep_destroy(uct_ep);
+    ucp_worker_discard_uct_ep_complete(req);
+
     ucs_assert(kh_value(&worker->discard_uct_ep_hash, iter) == req);
     kh_del(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash, iter);
     UCS_ASYNC_UNBLOCK(&worker->async);
-
-    uct_ep_destroy(uct_ep);
 
     return 1;
 }
