@@ -25,4 +25,5 @@ stages:
     dependsOn: Check_Commit
     jobs:
       - template: jucx/jucx-publish.yml
-
+        parameters:
+          target: publish-snapshot
