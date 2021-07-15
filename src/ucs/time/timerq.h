@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,21 +12,22 @@
 #include <ucs/time/time.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucm/util/sys.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/datastruct/ptr_array.h>
+#include <ucs/datastruct/mpool.h>
 
 
 typedef struct ucs_timer {
     ucs_time_t                 expiration;/* Absolute timer expiration time */
     ucs_time_t                 interval;  /* Re-scheduling interval */
-    int                        id;
 } ucs_timer_t;
 
 
 typedef struct ucs_timer_queue {
-    ucs_recursive_spinlock_t   lock;
     ucs_time_t                 min_interval; /* Expiration of next timer */
-    ucs_timer_t                *timers;      /* Array of timers */
-    unsigned                   num_timers;   /* Number of timers */
+    ucs_ptr_array_locked_t     timers;       /* Array of timers */
+    ucs_mpool_t                timers_mp;    /* Mem pool for the timers */
 } ucs_timer_queue_t;
 
 
@@ -33,8 +35,9 @@ typedef struct ucs_timer_queue {
  * Initialize the timer queue.
  *
  * @param timerq        Timer queue to initialize.
+ * @param name          Name for the timer queue
  */
-ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq);
+ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq, const char *name);
 
 
 /**
@@ -49,12 +52,11 @@ void ucs_timerq_cleanup(ucs_timer_queue_t *timerq);
  * Add a periodic timer.
  *
  * @param timerq     Timer queue to schedule on.
- * @param timer_id   Timer ID to add.
  * @param interval   Timer interval.
+ * @param timer_id_p Filled with the ID of the new timer in the queue.
  */
-ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
-                            ucs_time_t interval);
-
+ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, ucs_time_t interval,
+                            unsigned *timer_id_p);
 
 /**
  * Remove a timer.
@@ -62,7 +64,7 @@ ucs_status_t ucs_timerq_add(ucs_timer_queue_t *timerq, int timer_id,
  * @param timerq     Time queue this timer was scheduled on.
  * @param timer_id   Timer ID to remove.
  */
-ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id);
+ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, unsigned timer_id);
 
 
 /**
@@ -76,8 +78,8 @@ static inline ucs_time_t ucs_timerq_min_interval(ucs_timer_queue_t *timerq) {
 /**
  * @return Number of timers in the queue.
  */
-static inline int ucs_timerq_size(ucs_timer_queue_t *timerq) {
-    return timerq->num_timers;
+static inline unsigned ucs_timerq_size(ucs_timer_queue_t *timerq) {
+    return ucs_ptr_array_locked_get_elem_count(&timerq->timers);
 }
 
 
@@ -85,7 +87,7 @@ static inline int ucs_timerq_size(ucs_timer_queue_t *timerq) {
  * @return Whether there are no timers.
  */
 static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
-    return ucs_timerq_size(timerq) == 0;
+    return ucs_ptr_array_locked_is_empty(&timerq->timers);
 }
 
 
@@ -102,18 +104,17 @@ static inline int ucs_timerq_is_empty(ucs_timer_queue_t *timerq) {
 #define ucs_timerq_for_each_expired(_timer, _timerq, _current_time, _code) \
     { \
         ucs_time_t __current_time = _current_time; \
-        ucs_recursive_spin_lock(&(_timerq)->lock); /* Grab lock */ \
-        for (_timer = (_timerq)->timers; \
-             _timer != (_timerq)->timers + (_timerq)->num_timers; \
-             ++_timer) \
+        unsigned _index; \
+        void *_ptr; \
+        ucs_ptr_array_locked_for_each(_ptr, _index, &(_timerq)->timers) \
         { \
+            timer = (ucs_timer_t *)_ptr; \
             if (__current_time >= (_timer)->expiration) { \
                 /* Update expiration time */ \
                 (_timer)->expiration = __current_time + (_timer)->interval; \
                 _code; \
             } \
         } \
-        ucs_recursive_spin_unlock(&(_timerq)->lock); /* Release lock  */ \
     }
 
 #endif

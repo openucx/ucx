@@ -139,7 +139,7 @@ protected:
     }
 
 private:
-    int          m_timer_id;
+    unsigned m_timer_id;
 };
 
 
@@ -439,9 +439,9 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
     ASSERT_UCS_OK(status);
 
     /* 4 timers should be OK */
-    std::vector<int> timers;
+    std::vector<unsigned> timers;
     for (unsigned count = 0; count < 4; ++count) {
-        int timer_id;
+        unsigned timer_id;
         status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
                                      (ucs_async_event_cb_t)ucs_empty_function,
                                      NULL, &async, &timer_id);
@@ -450,7 +450,7 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
     }
 
     /* 5th timer should fail */
-    int timer_id;
+    unsigned timer_id;
     status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
                                  (ucs_async_event_cb_t)ucs_empty_function,
                                  NULL, &async, &timer_id);
@@ -461,7 +461,8 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
     }
 
     /* Release timers */
-    for (std::vector<int>::iterator iter = timers.begin(); iter != timers.end(); ++iter) {
+    for (std::vector<unsigned>::iterator iter = timers.begin();
+         iter != timers.end(); ++iter) {
         status = ucs_async_remove_handler(*iter, 1);
         ASSERT_UCS_OK(status);
     }
@@ -472,9 +473,9 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
 UCS_TEST_P(test_async, many_timers) {
     int max_iters = 4010 / ucs::test_time_multiplier();
     for (int count = 0; count < max_iters; ++count) {
-        std::vector<int> timers;
+        std::vector<unsigned> timers;
         ucs_status_t status;
-        int timer_id;
+        unsigned timer_id;
 
         for (int count2 = 0; count2 < 250; ++count2) {
             status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
