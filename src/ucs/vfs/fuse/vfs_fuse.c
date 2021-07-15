@@ -164,6 +164,28 @@ static int ucs_vfs_fuse_release(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
+static int ucs_vfs_fuse_write(const char *path, const char *buf, size_t size,
+                              off_t offset, struct fuse_file_info *fi)
+{
+    ucs_status_t status;
+
+    if (offset > 0) {
+        ucs_warn("cannot write to %s with non-zero offset", path);
+        return 0;
+    }
+
+    status = ucs_vfs_path_write_file(path, buf, size);
+    if (status == UCS_ERR_NO_ELEM) {
+        return -ENOENT;
+    } else if (status == UCS_ERR_INVALID_PARAM) {
+        return -EINVAL;
+    } else if (status != UCS_OK) {
+        return -EIO;
+    }
+
+    return size;
+}
+
 struct fuse_operations ucs_vfs_fuse_operations = {
     .getattr  = ucs_vfs_fuse_getattr,
     .open     = ucs_vfs_fuse_open,
@@ -171,6 +193,7 @@ struct fuse_operations ucs_vfs_fuse_operations = {
     .readlink = ucs_vfs_fuse_readlink,
     .readdir  = ucs_vfs_fuse_readdir,
     .release  = ucs_vfs_fuse_release,
+    .write    = ucs_vfs_fuse_write,
 };
 
 static void ucs_vfs_fuse_main()
