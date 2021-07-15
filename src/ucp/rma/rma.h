@@ -99,5 +99,11 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
         return UCS_ERR_UNSUPPORTED; \
     }
 
+#define UCP_RMA_PROTO_INIT_CHECK_MASK(_init_params, _op_id_mask) \
+    if (!(UCS_BIT((_init_params)->select_param->op_id) & (_op_id_mask)) || \
+        ((_init_params)->select_param->dt_class != UCP_DATATYPE_CONTIG)) { \
+        return UCS_ERR_UNSUPPORTED; \
+    }
+
 
 #endif

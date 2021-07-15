@@ -97,9 +97,14 @@ size_t
 ucp_proto_common_get_max_frag(const ucp_proto_common_init_params_t *params,
                               const uct_iface_attr_t *iface_attr)
 {
+    size_t max = SIZE_MAX;
+
+    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG) {
+        max = params->max_length;
+    }
+
     return ucp_proto_common_get_iface_attr_field(iface_attr,
-                                                 params->max_frag_offs,
-                                                 SIZE_MAX);
+                                                 params->max_frag_offs, max);
 }
 
 double
@@ -501,8 +506,8 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
      */
     caps->cfg_thresh   = params->cfg_thresh;
     caps->cfg_priority = params->cfg_priority;
+    caps->min_length   = params->min_length;
     caps->num_ranges   = 0;
-    caps->min_length   = 0;
 
     /* Collect latency and overhead from all lanes */
     overhead = 0;

@@ -1625,8 +1625,8 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
         rma_emul       = 1;
     }
 
-    if ((context->config.features & UCP_FEATURE_AMO) && (amo_lanes_map == 0)) {
-        ucs_assert(key->am_lane != UCP_NULL_LANE);
+    if ((context->config.features & UCP_FEATURE_AMO) && (amo_lanes_map == 0) &&
+        (key->am_lane != UCP_NULL_LANE)) {
         amo_lanes_map |= UCS_BIT(key->am_lane);
         amo_emul       = 1;
     }

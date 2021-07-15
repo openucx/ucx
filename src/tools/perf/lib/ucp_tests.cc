@@ -466,7 +466,7 @@ public:
     {
         volatile uint8_t *ptr = (uint8_t*)buffer;
 
-        if ((CMD == UCX_PERF_CMD_PUT) &&
+        if (((CMD == UCX_PERF_CMD_PUT) || ucx_perf_cmd_is_atomic(CMD)) &&
             (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI)) {
             while (*ptr != UCP_PERF_LAST_ITER_SN) {
                 progress_responder();
@@ -480,7 +480,7 @@ public:
     ucs_status_t send_last_iter(ucp_ep_h ep, void *buffer,
                                 uint64_t remote_addr, ucp_rkey_h rkey)
     {
-        if ((CMD == UCX_PERF_CMD_PUT) &&
+        if (((CMD == UCX_PERF_CMD_PUT) || ucx_perf_cmd_is_atomic(CMD)) &&
             (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI)) {
             fence();
             *(uint8_t*)buffer = UCP_PERF_LAST_ITER_SN;
@@ -592,6 +592,7 @@ public:
         ucp_rkey_h rkey;
         size_t length, send_length, recv_length;
         uint8_t sn;
+        off_t sn_offset;
 
         send_buffer = m_perf.send_buffer;
         recv_buffer = m_perf.recv_buffer;
@@ -600,12 +601,17 @@ public:
         remote_addr = m_perf.ucp.remote_addr;
         rkey        = m_perf.ucp.rkey;
         sn          = 0;
+        sn_offset   = 0;
 
         ucp_perf_init_common_params(&length, &send_length, &send_datatype,
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
 
-        reset_buffers(0, 0);
+        if (ucx_perf_cmd_is_atomic(CMD)) {
+            sn_offset = length;
+        }
+
+        reset_buffers(0, sn_offset);
 
         ucp_perf_barrier(&m_perf);
 
@@ -622,7 +628,7 @@ public:
                 ++sn;
             }
 
-            wait_last_iter(recv_buffer);
+            wait_last_iter(UCS_PTR_BYTE_OFFSET(recv_buffer, sn_offset));
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn,
@@ -631,7 +637,8 @@ public:
                 ++sn;
             }
 
-            send_last_iter(ep, send_buffer, remote_addr, rkey);
+            send_last_iter(ep, UCS_PTR_BYTE_OFFSET(send_buffer, sn_offset),
+                           remote_addr + sn_offset, rkey);
         }
 
         wait_window(m_max_outstanding, true);

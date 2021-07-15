@@ -9,38 +9,72 @@
 
 extern "C" {
 #include <ucp/core/ucp_types.h> /* for atomic mode */
+#include <ucp/core/ucp_mm.h>
 }
 
 template <typename T>
 class test_ucp_atomic : public test_ucp_memheap {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    /* Test variants */
+    enum {
+        ATOMIC_MODE  = UCS_MASK(2),
+        ENABLE_PROTO = UCS_BIT(2)
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants,
+                                  int variant, const std::string& name)
     {
         uint64_t features = (sizeof(T) == sizeof(uint32_t)) ?
                             UCP_FEATURE_AMO32 : UCP_FEATURE_AMO64;
-        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_CPU, "cpu");
-        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_DEVICE, "device");
-        add_variant_with_value(variants, features, UCP_ATOMIC_MODE_GUESS, "guess");
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_CPU, "cpu" + name);
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_DEVICE, "device" + name);
+        add_variant_with_value(variants, features, variant | UCP_ATOMIC_MODE_GUESS, "guess" + name);
     }
+
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        get_test_variants(variants, 0, "");
+        get_test_variants(variants, ENABLE_PROTO, "/proto");
+    }
+
+    struct send_func_data {
+        ucp_atomic_op_t op;
+        ucs_memory_type_t send_mem_type;
+        ucs_memory_type_t target_mem_type;
+    };
 
     void post(size_t size, void *target_ptr, ucp_rkey_h rkey,
               void *expected_data, void *arg)
     {
-        ucp_atomic_op_t op = *(ucp_atomic_op_t*)arg;
-        T value            = (T)ucs::rand() * (T)ucs::rand();
-        T prev             = *(T*)target_ptr;
-        *(T*)expected_data = atomic_op_result(op, value, prev, 0);
+        send_func_data* data = (send_func_data*)arg;
+        T value              = (T)ucs::rand() * (T)ucs::rand();
+        T prev;
+        T result;
+
+        mem_buffer::copy_from(&prev, target_ptr, sizeof(T),
+                              data->target_mem_type);
+        result = atomic_op_result(data->op, value, prev, 0);
+        mem_buffer::copy_to(expected_data, &result, sizeof(T),
+                            data->send_mem_type);
 
         ucp_request_param_t param;
         param.op_attr_mask = 0;
-        ucs_status_t status = do_atomic(op, size, target_ptr, rkey, value, param);
+        ucs_status_t status = do_atomic(data->op, size, target_ptr, rkey,
+                                        value, param);
         ASSERT_UCS_OK(status);
     }
 
     void misaligned_post(size_t size, void *target_ptr, ucp_rkey_h rkey,
                          void *expected_data, void *arg)
     {
-        *(T*)expected_data = *(T*)target_ptr; /* remote should not change */
+        send_func_data* data = (send_func_data*)arg;
+        T tmp;
+
+        /* remote should not change */
+        mem_buffer::copy_from(&tmp, target_ptr, sizeof(T),
+                              data->target_mem_type);
+        mem_buffer::copy_to(expected_data, &tmp, sizeof(T),
+                            data->send_mem_type);
 
         ucp_request_param_t param;
         param.op_attr_mask  = 0;
@@ -53,19 +87,27 @@ public:
     void fetch(size_t size, void *target_ptr, ucp_rkey_h rkey,
                void *expected_data, void *arg)
     {
-        ucp_atomic_op_t op = *(ucp_atomic_op_t*)arg;
-        T value            = (T)ucs::rand() * (T)ucs::rand();
-        T prev             = *(T*)target_ptr;
-        T reply_data       = ((op == UCP_ATOMIC_OP_CSWAP) && (ucs::rand() % 2)) ?
-                             prev : /* cswap success */
-                             ((T)ucs::rand() * (T)ucs::rand());
-        *(T*)expected_data = atomic_op_result(op, value, prev, reply_data);
+        send_func_data* data = (send_func_data*)arg;
+        T value              = (T)ucs::rand() * (T)ucs::rand();
+        T prev;
+        T reply_data;
+        T result;
+
+        mem_buffer::copy_from(&prev, target_ptr, sizeof(T),
+                              data->target_mem_type);
+        reply_data = ((data->op == UCP_ATOMIC_OP_CSWAP) && (ucs::rand() % 2)) ?
+                     prev : /* cswap success */
+                     ((T)ucs::rand() * (T)ucs::rand());
+        result = atomic_op_result(data->op, value, prev, reply_data);
+        mem_buffer::copy_to(expected_data, &result, sizeof(T),
+                            data->send_mem_type);
 
         ucp_request_param_t param;
         param.op_attr_mask = UCP_OP_ATTR_FIELD_REPLY_BUFFER;
         param.reply_buffer = &reply_data;
 
-        ucs_status_t status = do_atomic(op, size, target_ptr, rkey, value, param);
+        ucs_status_t status = do_atomic(data->op, size, target_ptr, rkey,
+                                        value, param);
         ASSERT_UCS_OK(status);
 
         EXPECT_EQ(prev, reply_data); /* expect the previous value */
@@ -81,12 +123,18 @@ protected:
                                              UCS_BIT(UCP_ATOMIC_OP_CSWAP);
 
     virtual void init() {
-        const char *atomic_mode =
-                        (get_variant_value() == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
-                        (get_variant_value() == UCP_ATOMIC_MODE_DEVICE) ? "device" :
-                        (get_variant_value() == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
+        int atomic_mode = get_variant_value() & ATOMIC_MODE;
+        const char *atomic_mode_cfg =
+                        (atomic_mode == UCP_ATOMIC_MODE_CPU)    ? "cpu" :
+                        (atomic_mode == UCP_ATOMIC_MODE_DEVICE) ? "device" :
+                        (atomic_mode == UCP_ATOMIC_MODE_GUESS)  ? "guess" :
                         "";
-        modify_config("ATOMIC_MODE", atomic_mode);
+        modify_config("ATOMIC_MODE", atomic_mode_cfg);
+
+        if (get_variant_value() & ENABLE_PROTO) {
+            modify_config("PROTO_ENABLE", "y");
+        }
+
         test_ucp_memheap::init();
     }
 
@@ -96,8 +144,8 @@ protected:
 
     void test(send_func_t send_func, uint64_t op_mask,
               unsigned num_iters = default_num_iters()) {
-        test_all_opcodes(send_func, num_iters, op_mask, true);
-        test_all_opcodes(send_func, num_iters, op_mask, false);
+        test_mem_types(send_func, num_iters, op_mask, true);
+        test_mem_types(send_func, num_iters, op_mask, false);
     }
 
 private:
@@ -153,17 +201,60 @@ private:
         return request_wait(status_ptr);
     }
 
+    void test_mem_types(send_func_t send_func, unsigned num_iters,
+                        uint64_t op_mask, int is_ep_flush) {
+        int atomic_mode = get_variant_value() & ATOMIC_MODE;
+        std::vector<std::vector<ucs_memory_type_t> > pairs =
+                ucs::supported_mem_type_pairs();
+
+        for (size_t i = 0; i < pairs.size(); ++i) {
+            if (!UCP_MEM_IS_HOST(pairs[i][0]) || !UCP_MEM_IS_HOST(pairs[i][1])) {
+                /* Memory type atomics are fully supported only with new protocols */
+                if (!(get_variant_value() & ENABLE_PROTO)) {
+                    continue;
+                }
+
+                static const std::string tls[] = { "ud_v", "ud_x", "rc_v", "tcp" };
+                /* Memory type atomics emulation not supported yet */
+                if (atomic_mode == UCP_ATOMIC_MODE_CPU ||
+                    has_any_transport(std::vector<std::string>(tls,
+                            tls + ucs_static_array_size(tls)))) {
+                    continue;
+                }
+
+                /* GPU-direct to managed not supported yet */
+                if (atomic_mode != UCP_ATOMIC_MODE_CPU &&
+                    UCP_MEM_IS_CUDA_MANAGED(pairs[i][1])) {
+                    continue;
+                }
+            }
+
+            test_all_opcodes(send_func, num_iters, op_mask, is_ep_flush,
+                             pairs[i][0], pairs[i][1]);
+        }
+    }
+
     void test_all_opcodes(send_func_t send_func, unsigned num_iters,
-                          uint64_t op_mask, int is_ep_flush) {
+                          uint64_t op_mask, int is_ep_flush,
+                          ucs_memory_type_t send_mem_type,
+                          ucs_memory_type_t target_mem_type) {
         ucs::detail::message_stream ms("INFO");
+
+        ms << ucs_memory_type_names[send_mem_type] << "->" <<
+              ucs_memory_type_names[target_mem_type] << " ";
 
         unsigned op_value;
         ucs_for_each_bit(op_value, op_mask) {
-            ucp_atomic_op_t op = static_cast<ucp_atomic_op_t>(op_value);
-            ms << opcode_name(op) << " ";
+            send_func_data data;
+
+            data.op              = static_cast<ucp_atomic_op_t>(op_value);
+            data.send_mem_type   = send_mem_type;
+            data.target_mem_type = target_mem_type;
+
+            ms << opcode_name(data.op) << " ";
             test_xfer(send_func, sizeof(T), num_iters, sizeof(T),
-                      UCS_MEMORY_TYPE_HOST, UCS_MEMORY_TYPE_HOST, 0,
-                      is_ep_flush, &op);
+                      send_mem_type, target_mem_type, 0,
+                      is_ep_flush, &data);
         }
     }
 };
@@ -179,7 +270,7 @@ UCS_TEST_P(test_ucp_atomic32, fetch) {
     test(static_cast<send_func_t>(&test_ucp_atomic32::fetch), FETCH_ATOMIC_OPS);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic32)
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_atomic32)
 
 class test_ucp_atomic64 : public test_ucp_atomic<uint64_t> {
 };
@@ -213,4 +304,4 @@ UCS_TEST_P(test_ucp_atomic64, misaligned_post) {
 }
 #endif
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_atomic64)
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_atomic64)
