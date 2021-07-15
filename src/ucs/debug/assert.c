@@ -41,13 +41,13 @@ void ucs_fatal_error_message(const char *file, unsigned line,
 void ucs_fatal_error_format(const char *file, unsigned line,
                             const char *function, const char *format, ...)
 {
-    size_t buffer_size = ucs_log_get_buffer_size();
+    const size_t buffer_size = ucs_log_get_buffer_size();
     char *buffer;
     va_list ap;
 
-    buffer = ucs_alloca(buffer_size + 1);
+    buffer = ucs_alloca(buffer_size);
     va_start(ap, format);
-    vsnprintf(buffer, buffer_size, format, ap);
+    ucs_vsnprintf_safe(buffer, buffer_size, format, ap);
     va_end(ap);
 
     ucs_fatal_error_message(file, line, function, buffer);

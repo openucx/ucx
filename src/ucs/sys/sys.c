@@ -399,7 +399,7 @@ static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
     ssize_t read_bytes;
     int fd;
 
-    vsnprintf(filename, MAXPATHLEN, filename_fmt, ap);
+    ucs_vsnprintf_safe(filename, MAXPATHLEN, filename_fmt, ap);
 
     fd = open(filename, O_RDONLY);
     if (fd < 0) {
