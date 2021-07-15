@@ -65,7 +65,11 @@
     { \
         /* NOTE: external request can't have RELEASE flag and we */ \
         /* will never put it into mpool */ \
-        uint32_t _flags = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
+        uint32_t _flags; \
+        \
+        ucs_assert(!((_req)->flags & UCP_REQUEST_FLAG_COMPLETED)); \
+        \
+        _flags         = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
         (_req)->status = (_status); \
         \
         ucp_request_id_check(_req, ==, UCS_PTR_MAP_KEY_INVALID); \
