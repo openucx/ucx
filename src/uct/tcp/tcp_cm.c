@@ -479,7 +479,7 @@ static unsigned uct_tcp_cm_handle_simult_conn(uct_tcp_iface_t *iface,
         /* If the EP created through API is not connected yet, don't close
          * the fd from accepted connection to avoid possible connection
          * retries from the remote peer. Save the fd to the separate field
-         * for futher destroying when the connection is established */
+         * for further destroying when the connection is established */
         if (connect_ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED) {
             uct_tcp_ep_mod_events(accept_ep, 0, UCS_EVENT_SET_EVREAD);
             ucs_assert(connect_ep->stale_fd == -1);
