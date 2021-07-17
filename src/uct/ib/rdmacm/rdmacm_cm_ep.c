@@ -137,7 +137,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
                              cep, ucs_sockaddr_str(remote_addr, ip_port_str,
                                                    UCS_SOCKADDR_STRING_LEN));
         UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
-        cep->status = UCS_ERR_IO_ERROR;
+        cep->status = UCS_ERR_CONNECTION_RESET;
         cep->flags |= UCT_RDMACM_CM_EP_FAILED;
         goto ep_failed;
     }
