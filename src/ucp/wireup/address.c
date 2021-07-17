@@ -620,6 +620,11 @@ ucp_address_unpack_iface_length(ucp_worker_h worker, const void *flags_ptr,
     return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 }
 
+uint64_t ucp_address_get_uuid(const void *address)
+{
+    return *(uint64_t*)UCS_PTR_TYPE_OFFSET(address, uint8_t);
+}
+
 static ucs_status_t
 ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     unsigned pack_flags, const ucp_lane_index_t *lanes2remote,
@@ -990,10 +995,11 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     }
 
     if (unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
-        unpacked_address->uuid = *(uint64_t*)ptr;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, unpacked_address->uuid);
+        unpacked_address->uuid = ucp_address_get_uuid(buffer);
+        ptr                    = UCS_PTR_TYPE_OFFSET(ptr,
+                                                     unpacked_address->uuid);
     } else {
-        unpacked_address->uuid = 0;
+        unpacked_address->uuid = 0ul;
     }
 
     if ((address_header & UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO) &&

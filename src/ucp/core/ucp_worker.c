@@ -26,6 +26,7 @@
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/type/cpu_set.h>
+#include <ucs/type/serialize.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/atomic.h>
 #include <ucs/vfs/base/vfs_cb.h>
@@ -2427,38 +2428,53 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_free(worker);
 }
 
+static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
+                                            uint32_t address_flags,
+                                            size_t *address_length_p,
+                                            void **address_p)
+{
+    ucp_context_h context = worker->context;
+    unsigned flags        = ucp_worker_default_address_pack_flags(worker);
+    ucp_tl_bitmap_t tl_bitmap;
+    ucp_rsc_index_t tl_id;
+
+    /* Make sure that UUID is packed to the address intended for the user,
+     * because ucp_worker_address_query routine assumes that uuid is always
+     * packed.
+     */
+    ucs_assert(flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID);
+
+    if (address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
+        UCS_BITMAP_CLEAR(&tl_bitmap);
+        UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, tl_id) {
+            if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
+                UCS_BITMAP_SET(tl_bitmap, tl_id);
+            }
+        }
+    } else {
+        UCS_BITMAP_SET_ALL(tl_bitmap);
+    }
+
+    return ucp_address_pack(worker, NULL, &tl_bitmap, flags, NULL,
+                            address_length_p, (void**)address_p);
+}
+
 ucs_status_t ucp_worker_query(ucp_worker_h worker,
                               ucp_worker_attr_t *attr)
 {
-    ucp_context_h context = worker->context;
-    ucs_status_t status   = UCS_OK;
-    ucp_tl_bitmap_t tl_bitmap;
-    ucp_rsc_index_t tl_id;
+    ucs_status_t status = UCS_OK;
+    uint32_t address_flags;
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_THREAD_MODE) {
         attr->thread_mode = ucp_worker_get_thread_mode(worker->flags);
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS) {
-        /* If UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS is not set,
-         * pack all tl addresses */
-        UCS_BITMAP_SET_ALL(tl_bitmap);
-
-        if (attr->field_mask & UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS) {
-            if (attr->address_flags & UCP_WORKER_ADDRESS_FLAG_NET_ONLY) {
-                UCS_BITMAP_CLEAR(&tl_bitmap);
-                UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
-                    if (context->tl_rscs[tl_id].tl_rsc.dev_type == UCT_DEVICE_TYPE_NET) {
-                        UCS_BITMAP_SET(tl_bitmap, tl_id);
-                    }
-                }
-            }
-        }
-
-        status = ucp_address_pack(worker, NULL, &tl_bitmap,
-                                  ucp_worker_default_address_pack_flags(worker),
-                                  NULL, &attr->address_length,
-                                  (void**)&attr->address);
+        address_flags = UCP_ATTR_VALUE(WORKER, attr, address_flags,
+                                       ADDRESS_FLAGS, 0);
+        status        = ucp_worker_address_pack(worker, address_flags,
+                                                &attr->address_length,
+                                                (void**)&attr->address);
     }
 
     if (attr->field_mask & UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER) {
@@ -2474,6 +2490,16 @@ ucs_status_t ucp_worker_query(ucp_worker_h worker,
     }
 
     return status;
+}
+
+ucs_status_t ucp_worker_address_query(ucp_address_t *address,
+                                      ucp_worker_address_attr_t *attr)
+{
+    if (attr->field_mask & UCP_WORKER_ADDRESS_ATTR_FIELD_UID) {
+        attr->worker_uid = ucp_address_get_uuid(address);
+    }
+
+    return UCS_OK;
 }
 
 unsigned ucp_worker_progress(ucp_worker_h worker)
@@ -2682,16 +2708,16 @@ ucs_status_t ucp_worker_signal(ucp_worker_h worker)
     return ucp_worker_wakeup_signal_fd(worker);
 }
 
-ucs_status_t ucp_worker_get_address(ucp_worker_h worker, ucp_address_t **address_p,
+ucs_status_t ucp_worker_get_address(ucp_worker_h worker,
+                                    ucp_address_t **address_p,
                                     size_t *address_length_p)
 {
     ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
-    status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
-                              ucp_worker_default_address_pack_flags(worker),
-                              NULL, address_length_p, (void**)address_p);
+    status = ucp_worker_address_pack(worker, 0, address_length_p,
+                                     (void**)address_p);
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
