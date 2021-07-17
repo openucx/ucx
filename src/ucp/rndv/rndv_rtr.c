@@ -140,6 +140,6 @@ static ucp_proto_t ucp_rndv_rtr_proto = {
     .flags      = 0,
     .init       = ucp_proto_rndv_rtr_init,
     .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = ucp_proto_rndv_rtr_progress
+    .progress   = {ucp_proto_rndv_rtr_progress}
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rtr_proto);

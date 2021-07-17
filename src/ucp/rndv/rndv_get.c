@@ -11,6 +11,11 @@
 #include "proto_rndv.inl"
 
 
+enum {
+    UCP_PROTO_RNDV_GET_STAGE_FETCH = UCP_PROTO_STAGE_START,
+    UCP_PROTO_RNDV_GET_STAGE_ATS
+};
+
 static ucs_status_t
 ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
 {
@@ -46,20 +51,15 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rndv_bulk_init(&params);
 }
 
-static ucs_status_t ucp_proto_rndv_get_complete(ucp_request_t *req)
-{
-    ucp_rkey_destroy(req->send.rndv.rkey);
-    ucp_proto_request_zcopy_complete(req, req->send.state.uct_comp.status);
-    return UCS_OK;
-}
-
-static void ucp_proto_rndv_get_completion(uct_completion_t *uct_comp)
+static void
+ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
 {
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_trace_req(req, "%s completed", req->send.proto_config->proto->name);
-    ucp_request_send(req); /* reschedule to send ATS */
+    ucp_rkey_destroy(req->send.rndv.rkey);
+    ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
+    ucp_request_send(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_zcopy_send_func(
@@ -80,23 +80,29 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_zcopy_send_func(
                             tl_rkey, &req->send.state.uct_comp);
 }
 
-static ucs_status_t ucp_proto_rndv_get_zcopy_progress(uct_pending_req_t *self)
+static ucs_status_t
+ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
 
-    if (ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
-        if (req->send.state.dt_iter.length > 0) {
-            ucs_assert(req->send.state.uct_comp.count == 0);
-        }
-        return ucp_proto_rndv_ack_progress(req, UCP_AM_ID_RNDV_ATS,
-                                           ucp_proto_rndv_get_complete);
-    } else {
-        return ucp_proto_multi_zcopy_progress(req, &rpriv->mpriv, NULL,
-                                              UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                                              ucp_proto_rndv_get_zcopy_send_func,
-                                              ucp_proto_rndv_get_completion);
+    return ucp_proto_multi_zcopy_progress(
+            req, &rpriv->mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+            ucp_proto_rndv_get_zcopy_send_func,
+            ucp_proto_rndv_get_zcopy_fetch_completion);
+}
+
+static ucs_status_t
+ucp_proto_rndv_get_common_ats_progress(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+
+    ucs_assert(ucp_datatype_iter_is_end(&req->send.state.dt_iter));
+    if (req->send.state.dt_iter.length > 0) {
+        ucs_assert(req->send.state.uct_comp.count == 0);
     }
+    return ucp_proto_rndv_ack_progress(
+            req, UCP_AM_ID_RNDV_ATS, ucp_proto_request_zcopy_complete_success);
 }
 
 static ucp_proto_t ucp_rndv_get_zcopy_proto = {
@@ -104,7 +110,10 @@ static ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .flags      = 0,
     .init       = ucp_proto_rndv_get_zcopy_init,
     .config_str = ucp_proto_rndv_bulk_config_str,
-    .progress   = ucp_proto_rndv_get_zcopy_progress
+    .progress   = {
+         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_zcopy_fetch_progress,
+         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_get_common_ats_progress
+    }
 };
 UCP_PROTO_REGISTER(&ucp_rndv_get_zcopy_proto);
 
@@ -140,19 +149,11 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     return UCS_OK;
 }
 
-static ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *self)
-{
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
-
-    return ucp_proto_rndv_ack_progress(
-            req, UCP_AM_ID_RNDV_ATS, ucp_proto_request_zcopy_complete_success);
-}
-
 static ucp_proto_t ucp_rndv_ats_proto = {
     .name       = "rndv/ats",
     .flags      = 0,
     .init       = ucp_proto_rndv_ats_init,
     .config_str = ucp_proto_rndv_ack_config_str,
-    .progress   = ucp_proto_rndv_ats_progress
+    .progress   = {ucp_proto_rndv_get_common_ats_progress}
 };
 UCP_PROTO_REGISTER(&ucp_rndv_ats_proto);

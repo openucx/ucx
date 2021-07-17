@@ -68,7 +68,7 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
      * key lookups during protocol progress.
      */
     ucs_assertv((req->send.state.dt_iter.type.contig.reg.md_map == md_map) ||
-                        (req->send.state.dt_iter.length == 0),
+                (req->send.state.dt_iter.length == 0),
                 "md_map=0x%" PRIx64 " reg.md_map=0x%" PRIx64, md_map,
                 req->send.state.dt_iter.type.contig.reg.md_map);
 
@@ -98,6 +98,26 @@ ucp_proto_request_zcopy_complete_success(ucp_request_t *req)
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
+{
+    const ucp_proto_t *proto = req->send.proto_config->proto;
+
+    ucs_assert(proto_stage < UCP_PROTO_STAGE_LAST);
+    ucs_assert(proto->progress[proto_stage] != NULL);
+
+    ucp_trace_req(req, "set to stage %u, progress function '%s'", proto_stage,
+                  ucs_debug_get_symbol_name(proto->progress[proto_stage]));
+    req->send.proto_stage = proto_stage;
+
+    /* Set pointer to progress function */
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+        req->send.uct.func = ucp_request_progress_wrapper;
+    } else {
+        req->send.uct.func = proto->progress[proto_stage];
+    }
+}
+
 /* Select protocol for the request and initialize protocol-related fields */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
@@ -107,8 +127,6 @@ ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
                             size_t msg_length)
 {
     const ucp_proto_threshold_elem_t *thresh_elem;
-    const ucp_proto_t *proto;
-    ucs_string_buffer_t strb;
 
     thresh_elem = ucp_proto_select_lookup(worker, proto_select, ep->cfg_index,
                                           rkey_cfg_index, sel_param, msg_length);
@@ -123,19 +141,12 @@ ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
     /* Set pointer to request's protocol configuration */
     ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
     ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
-
-    proto                  = thresh_elem->proto_config.proto;
-    req->send.proto_config = &thresh_elem->proto_config;
-    req->send.uct.func     = proto->progress;
-
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
-        ucs_string_buffer_init(&strb);
-        ucp_proto_select_param_str(sel_param, &strb);
-        ucp_trace_req(req, "selected protocol %s for %s length %zu",
-                      proto->name, ucs_string_buffer_cstr(&strb), msg_length);
-        ucs_string_buffer_cleanup(&strb);
+        ucp_proto_trace_selected(req, msg_length);
     }
 
+    req->send.proto_config = &thresh_elem->proto_config;
+    ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
     return UCS_OK;
 }
 
