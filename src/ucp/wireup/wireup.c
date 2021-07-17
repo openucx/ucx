@@ -196,6 +196,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
         msg_hdr->dst_ep_id = ucp_ep_remote_id(ep);
     } else {
+        /* Destination UCP endpoint ID must be packed in case of CM */
+        ucs_assert(!ucp_ep_has_cm_lane(ep));
         msg_hdr->dst_ep_id = UCS_PTR_MAP_KEY_INVALID;
     }
 
