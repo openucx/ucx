@@ -410,8 +410,10 @@ again:
                 goto again;
             }
 
-            ucs_diag("failed to watch on '%s', VFS will be disabled",
-                     un_addr.sun_path);
+            if (!ucs_vfs_fuse_context.stop) {
+                ucs_diag("failed to watch on '%s': %s, VFS will be disabled",
+                         un_addr.sun_path, ucs_status_string(status));
+            }
         } else {
             ucs_warn("failed to connect to vfs socket '%s': %m",
                      un_addr.sun_path);
