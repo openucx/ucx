@@ -484,7 +484,7 @@ protected:
     class BufferIov {
     public:
         BufferIov(size_t size, MemoryPool<BufferIov> &pool) :
-            _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool)
+            _data_size(0lu), _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool)
         {
             _iov.reserve(size);
         }
@@ -493,11 +493,16 @@ protected:
             return _iov.size();
         }
 
+        size_t data_size() const {
+            return _data_size;
+        }
+
         void init(size_t data_size, BufferMemoryPool<Buffer> &chunk_pool,
                   uint32_t sn, bool validate)
         {
             assert(_iov.empty());
 
+            _data_size    = data_size;
             _memory_type  = chunk_pool.memory_type();
             Buffer *chunk = chunk_pool.get();
             _iov.resize(get_chunk_cnt(data_size, chunk->capacity()));
@@ -565,7 +570,8 @@ protected:
         }
 
         static const size_t    _npos = static_cast<size_t>(-1);
-        ucs_memory_type_t _memory_type;
+        size_t                 _data_size;
+        ucs_memory_type_t      _memory_type;
         std::vector<Buffer*>   _iov;
         MemoryPool<BufferIov>& _pool;
     };
@@ -806,13 +812,16 @@ public:
             }
 
             if (_status == UCS_OK) {
+                size_t data_size = _iov->data_size();
                 if (_server->opts().use_am) {
                     IoMessage *m = _server->_io_msg_pool.get();
-                    m->init(IO_WRITE_COMP, _sn, 0, _server->opts().validate);
+                    m->init(IO_WRITE_COMP, _sn, data_size,
+                            _server->opts().validate);
                     _conn->send_am(m->buffer(), _server->opts().iomsg_size,
                                    NULL, 0ul, m);
                 } else {
-                    _server->send_io_message(_conn, IO_WRITE_COMP, _sn, 0,
+                    _server->send_io_message(_conn, IO_WRITE_COMP, _sn,
+                                             data_size,
                                              _server->opts().validate);
                 }
                 if (_server->opts().validate) {
@@ -1156,6 +1165,8 @@ public:
         long           num_sent[IO_OP_MAX];       /* Number of sent operations */
         long           num_completed[IO_OP_MAX];  /* Number of completed operations */
         long           prev_completed[IO_OP_MAX]; /* Completed in last report */
+        size_t         bytes_sent[IO_OP_MAX];
+        size_t         bytes_completed[IO_OP_MAX];
     } server_info_t;
 
 private:
@@ -1254,7 +1265,8 @@ public:
             }
 
             assert(_server_index != std::numeric_limits<size_t>::max());
-            _client->handle_operation_completion(_server_index, IO_READ);
+            _client->handle_operation_completion(_server_index, IO_READ,
+                                                 _iov->data_size());
 
             if (_validate && (_status == UCS_OK)) {
                 validate(*_iov, _sn);
@@ -1319,13 +1331,14 @@ public:
                i->second;
     }
 
-    void commit_operation(size_t server_index, io_op_t op) {
+    void commit_operation(size_t server_index, io_op_t op, size_t data_size) {
         server_info_t& server_info = _server_info[server_index];
 
         assert(get_num_uncompleted(server_info) < opts().conn_window_size);
 
         ++server_info.num_sent[op];
         ++_num_sent;
+        server_info.bytes_sent[op] += data_size;
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_make_unused(server_info.active_index);
         }
@@ -1334,7 +1347,8 @@ public:
         assert(_num_completed < _num_sent);
     }
 
-    void handle_operation_completion(size_t server_index, io_op_t op) {
+    void handle_operation_completion(size_t server_index, io_op_t op,
+                                     size_t data_size) {
         assert(server_index < _server_info.size());
         server_info_t& server_info = _server_info[server_index];
 
@@ -1348,8 +1362,11 @@ public:
             active_servers_make_used(server_info.active_index);
         }
 
+        server_info.bytes_completed[op] += data_size;
         ++_num_completed;
         ++server_info.num_completed[op];
+
+        assert(server_info.bytes_completed[op] <= server_info.bytes_sent[op]);
     }
 
     size_t do_io_read(size_t server_index, uint32_t sn) {
@@ -1362,7 +1379,7 @@ public:
             return 0;
         }
 
-        commit_operation(server_index, IO_READ);
+        commit_operation(server_index, IO_READ, data_size);
 
         BufferIov *iov            = _data_buffers_pool.get();
         IoReadResponseCallback *r = _read_callback_pool.get();
@@ -1380,7 +1397,7 @@ public:
         server_info_t& server_info = _server_info[server_index];
         size_t data_size           = get_data_size();
 
-        commit_operation(server_index, IO_READ);
+        commit_operation(server_index, IO_READ, data_size);
 
         IoMessage *m = _io_msg_pool.get();
         m->init(IO_READ, sn, data_size, opts().validate);
@@ -1400,7 +1417,7 @@ public:
             return 0;
         }
 
-        commit_operation(server_index, IO_WRITE);
+        commit_operation(server_index, IO_WRITE, data_size);
 
         BufferIov *iov           = _data_buffers_pool.get();
         SendCompleteCallback *cb = _send_callback_pool.get();
@@ -1420,7 +1437,7 @@ public:
         size_t data_size           = get_data_size();
         bool validate              = opts().validate;
 
-        commit_operation(server_index, IO_WRITE);
+        commit_operation(server_index, IO_WRITE, data_size);
 
         IoMessage *m = _io_msg_pool.get();
         m->init(IO_WRITE, sn, data_size, validate);
@@ -1511,7 +1528,8 @@ public:
 
             size_t server_index = get_active_server_index(conn);
             if (server_index < _server_info.size()) {
-                handle_operation_completion(server_index, IO_WRITE);
+                handle_operation_completion(server_index, IO_WRITE,
+                                            msg->data_size);
             } else {
                 /* do not increment _num_completed here since we decremented
                  * _num_sent on connection termination */
@@ -1540,7 +1558,8 @@ public:
         size_t server_index = get_active_server_index(conn);
         if (msg->op == IO_WRITE_COMP) {
             assert(msg->op == IO_WRITE_COMP);
-            handle_operation_completion(server_index, IO_WRITE);
+            handle_operation_completion(server_index, IO_WRITE,
+                                        msg->data_size);
         } else if (msg->op == IO_READ_COMP) {
             BufferIov *iov = _data_buffers_pool.get();
             iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
@@ -1590,12 +1609,15 @@ public:
     }
 
     static void reset_server_info(server_info_t& server_info) {
-        server_info.conn                   = NULL;
-        server_info.active_index           = std::numeric_limits<size_t>::max();
+        server_info.conn         = NULL;
+        server_info.active_index = std::numeric_limits<size_t>::max();
+
         for (int op = 0; op < IO_OP_MAX; ++op) {
-            server_info.num_sent[op]       = 0;
-            server_info.num_completed[op]  = 0;
-            server_info.prev_completed[op] = 0;
+            server_info.num_sent[op]        = 0;
+            server_info.num_completed[op]   = 0;
+            server_info.prev_completed[op]  = 0;
+            server_info.bytes_sent[op]      = 0;
+            server_info.bytes_completed[op] = 0;
         }
     }
 
@@ -1817,11 +1839,10 @@ public:
         _num_sent      = 0;
         _num_completed = 0;
 
-        uint32_t sn                   = IoDemoRandom::rand<uint32_t>();
-        double prev_time              = get_time();
-        long total_iter               = 0;
-        long total_prev_iter          = 0;
-        size_t total_bytes[IO_OP_MAX] = {0};
+        uint32_t sn          = IoDemoRandom::rand<uint32_t>();
+        double prev_time     = get_time();
+        long total_iter      = 0;
+        long total_prev_iter = 0;
 
         while ((total_iter < opts().iter_count) && (_status == OK)) {
             connect_all(is_control_iter(total_iter));
@@ -1861,27 +1882,25 @@ public:
 
             size_t server_index = pick_server_index();
             io_op_t op          = get_op();
-            size_t size;
             switch (op) {
             case IO_READ:
                 if (opts().use_am) {
-                    size = do_io_read_am(server_index, sn);
+                    do_io_read_am(server_index, sn);
                 } else {
-                    size = do_io_read(server_index, sn);
+                    do_io_read(server_index, sn);
                 }
                 break;
             case IO_WRITE:
                 if (opts().use_am) {
-                    size = do_io_write_am(server_index, sn);
+                    do_io_write_am(server_index, sn);
                 } else {
-                    size = do_io_write(server_index, sn);
+                    do_io_write(server_index, sn);
                 }
                 break;
             default:
                 abort();
             }
 
-            total_bytes[op] += size;
             ++total_iter;
             ++sn;
 
@@ -1896,13 +1915,10 @@ public:
                     }
 
                     report_performance(total_iter - total_prev_iter,
-                                       curr_time - prev_time, total_bytes);
+                                       curr_time - prev_time);
 
                     total_prev_iter = total_iter;
                     prev_time       = curr_time;
-                    for (int op = 0; op < IO_OP_MAX; ++op) {
-                        total_bytes[op] = 0;
-                    }
 
                     check_time_limit(curr_time);
                 }
@@ -1913,7 +1929,7 @@ public:
         if (_status == OK) {
             double curr_time = get_time();
             report_performance(total_iter - total_prev_iter,
-                               curr_time - prev_time, total_bytes);
+                               curr_time - prev_time);
         }
 
         for (size_t server_index = 0; server_index < _server_info.size();
@@ -1967,10 +1983,10 @@ private:
         size_t min_index; // Server index with the smallest number of completed
                           // operations
         long total; // Total number of completed operations
+        size_t total_bytes; // Total number of bytes of completed operations
     };
 
-    void report_performance(long num_iters, double elapsed,
-                            const size_t total_bytes[IO_OP_MAX]) {
+    void report_performance(long num_iters, double elapsed) {
         if (num_iters == 0) {
             return;
         }
@@ -1981,20 +1997,26 @@ private:
 
         io_op_perf_info.resize(IO_OP_MAX + 1);
         for (int op = 0; op <= IO_OP_MAX; ++op) {
-            io_op_perf_info[op].min       = std::numeric_limits<long>::max();
-            io_op_perf_info[op].max       = 0;
-            io_op_perf_info[op].min_index = _server_info.size();
-            io_op_perf_info[op].total     = 0;
+            io_op_perf_info[op].min         = std::numeric_limits<long>::max();
+            io_op_perf_info[op].max         = 0;
+            io_op_perf_info[op].min_index   = _server_info.size();
+            io_op_perf_info[op].total       = 0;
+            io_op_perf_info[op].total_bytes = 0;
         }
 
         // Collect min/max among all connections
         for (size_t server_index = 0; server_index < _server_info.size();
              ++server_index) {
-            server_info_t& server_info = _server_info[server_index];
-            long total_completed       = 0;
+            server_info_t& server_info   = _server_info[server_index];
+            long total_completed         = 0;
+            size_t total_bytes_completed = 0;
             for (int op = 0; op <= IO_OP_MAX; ++op) {
+                size_t bytes_completed;
                 long delta_completed;
                 if (op != IO_OP_MAX) {
+                    assert(server_info.bytes_sent[op] ==
+                                   server_info.bytes_completed[op]);
+                    bytes_completed = server_info.bytes_completed[op];
                     delta_completed =
                             get_num_completed_round(server_info,
                                                     static_cast<io_op_t>(op));
@@ -2007,18 +2029,21 @@ private:
                         io_op_perf_info[op].min_index = server_index;
                     }
 
+                    total_bytes_completed         += bytes_completed;
                     total_completed               += delta_completed;
                     server_info.prev_completed[op] =
                             server_info.num_completed[op];
                 } else {
+                    bytes_completed = total_bytes_completed;
                     delta_completed = total_completed;
                 }
 
-                io_op_perf_info[op].min    = std::min(delta_completed,
-                                                      io_op_perf_info[op].min);
-                io_op_perf_info[op].max    = std::max(delta_completed,
-                                                      io_op_perf_info[op].max);
-                io_op_perf_info[op].total += delta_completed;
+                io_op_perf_info[op].min          =
+                        std::min(delta_completed, io_op_perf_info[op].min);
+                io_op_perf_info[op].max          =
+                        std::max(delta_completed, io_op_perf_info[op].max);
+                io_op_perf_info[op].total       += delta_completed;
+                io_op_perf_info[op].total_bytes += bytes_completed;
             }
         }
 
@@ -2030,8 +2055,8 @@ private:
         for (int op = 0; op < IO_OP_MAX; ++op) {
             log << " | ";
 
-            double throughput_mbs = (total_bytes[op] / elapsed) /
-                                    UCS_MBYTE;
+            double throughput_mbs = (io_op_perf_info[op].total_bytes /
+                                     elapsed) / UCS_MBYTE;
             log << io_op_names[op] << " " << throughput_mbs << " MBs"
                 << " min:" << io_op_perf_info[op].min << "("
                 << opts().servers[io_op_perf_info[op].min_index]
