@@ -1159,14 +1159,14 @@ class DemoClient : public P2pDemoCommon {
 public:
     typedef struct {
         UcxConnection* conn;
-        long           retry_count;               /* Connect retry counter */
-        double         prev_connect_time;         /* timestamp of last connect attempt */
-        size_t         active_index;              /* Index in active vector */
-        long           num_sent[IO_OP_MAX];       /* Number of sent operations */
-        long           num_completed[IO_OP_MAX];  /* Number of completed operations */
-        long           prev_completed[IO_OP_MAX]; /* Completed in last report */
-        size_t         bytes_sent[IO_OP_MAX];
-        size_t         bytes_completed[IO_OP_MAX];
+        long           retry_count;                /* Connect retry counter */
+        double         prev_connect_time;          /* timestamp of last connect attempt */
+        size_t         active_index;               /* Index in active vector */
+        long           num_sent[IO_OP_MAX];        /* Number of sent operations */
+        long           num_completed[IO_OP_MAX];   /* Number of completed operations */
+        long           prev_completed[IO_OP_MAX];  /* Completed in last report */
+        size_t         bytes_sent[IO_OP_MAX];      /* Number of bytes sent */
+        size_t         bytes_completed[IO_OP_MAX]; /* Number of bytes completed */
     } server_info_t;
 
 private:
@@ -1595,19 +1595,6 @@ public:
         return get_num_uncompleted(_server_info[server_index]);
     }
 
-    static long get_num_completed_round(const server_info_t& server_info,
-                                        io_op_t op)
-    {
-        return server_info.num_completed[op] - server_info.prev_completed[op];
-    }
-
-    static long get_num_posted_round(const server_info_t& server_info,
-                                     io_op_t op)
-    {
-        return get_num_completed_round(server_info, op) +
-               get_num_uncompleted(server_info, op);
-    }
-
     static void reset_server_info(server_info_t& server_info) {
         server_info.conn         = NULL;
         server_info.active_index = std::numeric_limits<size_t>::max();
@@ -2017,9 +2004,8 @@ private:
                     assert(server_info.bytes_sent[op] ==
                                    server_info.bytes_completed[op]);
                     bytes_completed = server_info.bytes_completed[op];
-                    delta_completed =
-                            get_num_completed_round(server_info,
-                                                    static_cast<io_op_t>(op));
+                    delta_completed = server_info.num_completed[op] -
+                                      server_info.prev_completed[op];
 
                     size_t min_index = io_op_perf_info[op].min_index;
                     if ((delta_completed < io_op_perf_info[op].min) ||
