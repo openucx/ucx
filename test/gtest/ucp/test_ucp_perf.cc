@@ -362,6 +362,7 @@ class test_ucp_wait_mem : public test_ucp_perf {};
 
 UCS_TEST_P(test_ucp_wait_mem, envelope) {
     double perf_avg    = 0;
+    double perf_min    = std::numeric_limits<double>::max();
     double perf_iter   = 0;
     const int max_iter = ucs_max(ucs::perf_retry_count, 1);
     int i;
@@ -379,6 +380,7 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
     for (i = 0; i < max_iter; i++) {
         perf_iter = run_test(test1, 0, false, "", "");
         perf_avg += perf_iter;
+        perf_min  = std::min(perf_min, perf_iter);
     }
     perf_avg /= max_iter;
 
@@ -394,7 +396,7 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
                               0, 1, { 8 }, 1, 1000lu,
                               ucs_offsetof(ucx_perf_result_t,
                                            latency.total_average),
-                              1e6, perf_avg * 0.7, perf_avg * 2, 0 };
+                              1e6, perf_min * 0.7, perf_avg * 2, 0 };
     run_test(test2, 0, true, "", "");
 }
 
