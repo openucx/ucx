@@ -70,6 +70,9 @@ public:
     /* set device context if compiled with GPU support */
     static void set_device_context();
 
+    /* returns whether ROCM device supports managed memory */
+    static bool is_rocm_managed_supported();
+
     mem_buffer(size_t size, ucs_memory_type_t mem_type);
     virtual ~mem_buffer();
 

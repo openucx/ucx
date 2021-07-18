@@ -71,6 +71,20 @@ bool mem_buffer::is_gpu_supported()
     return is_cuda_supported() || is_rocm_supported();
 }
 
+bool mem_buffer::is_rocm_managed_supported()
+{
+#if HAVE_ROCM
+    int device_id, has_managed_mem;
+    return ((hipGetDevice(&device_id) == hipSuccess) &&
+            (hipDeviceGetAttribute(&has_managed_mem,
+                                   hipDeviceAttributeManagedMemory,
+                                   device_id) == hipSuccess) &&
+            has_managed_mem);
+#else
+    return false;
+#endif
+}
+
 const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
 {
     static std::vector<ucs_memory_type_t> vec;
@@ -83,6 +97,8 @@ const std::vector<ucs_memory_type_t>&  mem_buffer::supported_mem_types()
         }
         if (is_rocm_supported()) {
             vec.push_back(UCS_MEMORY_TYPE_ROCM);
+        }
+        if (is_rocm_managed_supported()) {
             vec.push_back(UCS_MEMORY_TYPE_ROCM_MANAGED);
         }
     }
