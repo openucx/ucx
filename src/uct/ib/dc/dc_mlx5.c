@@ -1115,8 +1115,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
         status = uct_dc_mlx5_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
-            uct_dc_mlx5_ep_pending_common(iface, ep, &dc_req->super.super,
-                                          0, 1);
+            uct_dc_mlx5_ep_do_pending_fc(ep, dc_req);
         } else {
             ucs_assertv_always(status == UCS_OK,
                                "Failed to send FC grant msg: %s",
