@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.11.0 RC4 (July 14, 2021)
+## 1.11.0 RC4 (July 19, 2021)
 ### Features:
 #### Core
 * Added support for UCX monitoring using virtual file system (VFS)/FUSE
