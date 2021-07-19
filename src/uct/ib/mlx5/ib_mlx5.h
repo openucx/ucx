@@ -199,7 +199,11 @@ enum {
 
 
 enum {
+#if UCS_ENABLE_ASSERT
     UCT_IB_MLX5_TXWQ_FLAG_FAILED = UCS_BIT(0)
+#else
+    UCT_IB_MLX5_TXWQ_FLAG_FAILED = 0
+#endif
 };
 
 
