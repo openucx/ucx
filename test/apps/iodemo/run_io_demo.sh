@@ -595,7 +595,7 @@ make_scripts()
 		do
 			port_num=$((base_port_num + i))
 			log_file=${log_dir}/$(printf "iodemo_%s_server_%02d.log" ${host} $i)
-			echo ${log_file}
+			is_verbose && echo ${log_file}
 			cat >>${command_file} <<-EOF
 				function start_server_${i}() {
 				    mkdir -p ${log_dir}
@@ -613,7 +613,7 @@ make_scripts()
 		for ((i=0;i<num_clients_per_host[${host}];++i))
 		do
 			log_file=${log_dir}/$(printf "iodemo_%s_client_%02d.log" ${host} $i)
-			echo ${log_file}
+			is_verbose && echo ${log_file}
 			cat >>${command_file} <<-EOF
 				function start_client_${i}() {
 				    mkdir -p ${log_dir}
