@@ -16,6 +16,8 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <ctime>
+#include <csignal>
+#include <cerrno>
 #include <vector>
 #include <map>
 #include <queue>
@@ -370,6 +372,13 @@ public:
         uint64_t    data_size;
     } iomsg_t;
 
+    typedef enum {
+        OK,
+        CONN_RETRIES_EXCEEDED,
+        RUNTIME_EXCEEDED,
+        TERMINATE_SIGNALED
+    } status_t;
+
 protected:
     typedef enum {
         XFER_TYPE_SEND,
@@ -670,6 +679,11 @@ protected:
         MemoryPool<SendCompleteCallback>& _pool;
     };
 
+    static void signal_terminate_handler(int signo)
+    {
+        _status = TERMINATE_SIGNALED;
+    }
+
     P2pDemoCommon(const options_t &test_opts) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
                    test_opts.use_am, test_opts.use_epoll),
@@ -682,6 +696,18 @@ protected:
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
                           test_opts.memory_type, test_opts.num_offcache_buffers)
     {
+        _status                 = OK;
+
+        struct sigaction new_sigaction;
+        new_sigaction.sa_handler = signal_terminate_handler;
+        new_sigaction.sa_flags   = 0;
+        sigemptyset(&new_sigaction.sa_mask);
+
+        if (sigaction(SIGINT, &new_sigaction, NULL) != 0) {
+            LOG << "ERROR: failed to set SIGINT signal handler: "
+                << strerror(errno);
+            abort();
+        }
     }
 
     const options_t& opts() const {
@@ -778,8 +804,13 @@ protected:
     MemoryPool<IoMessage>            _io_msg_pool;
     MemoryPool<SendCompleteCallback> _send_callback_pool;
     MemoryPool<BufferIov>            _data_buffers_pool;
-    BufferMemoryPool<Buffer> _data_chunks_pool;
+    BufferMemoryPool<Buffer>         _data_chunks_pool;
+    static status_t                  _status;
 };
+
+
+P2pDemoCommon::status_t P2pDemoCommon::_status = OK;
+
 
 class DemoServer : public P2pDemoCommon {
 public:
@@ -944,7 +975,8 @@ public:
             sleep(opts().retry_interval);
         }
 
-        for (double prev_time = 0.0; ;) {
+        double prev_time = get_time();
+        while (_status == OK) {
             try {
                 for (size_t i = 0; i < BUSY_PROGRESS_COUNT; ++i) {
                     progress();
@@ -1310,17 +1342,10 @@ public:
         _num_active_servers_to_use(0),
         _num_sent(0),
         _num_completed(0),
-        _status(OK),
         _start_time(get_time()),
         _read_callback_pool(opts().iomsg_size, "read callbacks")
     {
     }
-
-    typedef enum {
-        OK,
-        CONN_RETRIES_EXCEEDED,
-        RUNTIME_EXCEEDED
-    } status_t;
 
     size_t get_active_server_index(const UcxConnection *conn) {
         assert(_server_index_lookup.size() == _active_servers.size());
@@ -1949,6 +1974,8 @@ public:
             return "connection retries exceeded";
         case RUNTIME_EXCEEDED:
             return "run-time exceeded";
+        case TERMINATE_SIGNALED:
+            return "run-time terminated by signal";
         default:
             return "invalid status";
         }
@@ -2140,7 +2167,6 @@ private:
     std::map<const UcxConnection*, size_t>  _server_index_lookup;
     long                                    _num_sent;
     long                                    _num_completed;
-    status_t                                _status;
     double                                  _start_time;
     MemoryPool<IoReadResponseCallback>      _read_callback_pool;
 };
