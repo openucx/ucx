@@ -28,26 +28,28 @@ BEGIN_C_DECLS
 */
 
 /**
+ * @ingroup UCT_RESOURCE
  * @brief All existing UCT operations
  *
  * This enumeration defines all available UCT operations.
  */
 typedef enum uct_ep_operation {
-    UCT_OP_AM_SHORT,     /**< Short active message */
-    UCT_OP_AM_BCOPY,     /**< Buffered active message */
-    UCT_OP_AM_ZCOPY,     /**< Zero-copy active message */
-    UCT_OP_PUT_SHORT,    /**< Short put */
-    UCT_OP_PUT_BCOPY,    /**< Buffered put */
-    UCT_OP_PUT_ZCOPY,    /**< Zero-copy put */
-    UCT_OP_GET_SHORT,    /**< Short get */
-    UCT_OP_GET_BCOPY,    /**< Buffered get */
-    UCT_OP_GET_ZCOPY,    /**< Zero-copy get */
-    UCT_OP_EAGER_SHORT,  /**< Tag matching short eager */
-    UCT_OP_EAGER_BCOPY,  /**< Tag matching bcopy eager */
-    UCT_OP_EAGER_ZCOPY,  /**< Tag matching zcopy eager */
-    UCT_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous eager */
-    UCT_OP_ATOMIC_POST,  /**< Atomic post */
-    UCT_OP_ATOMIC_FETCH  /**< Atomic fetch */
+    UCT_EP_OP_AM_SHORT,     /**< Short active message */
+    UCT_EP_OP_AM_BCOPY,     /**< Buffered active message */
+    UCT_EP_OP_AM_ZCOPY,     /**< Zero-copy active message */
+    UCT_EP_OP_PUT_SHORT,    /**< Short put */
+    UCT_EP_OP_PUT_BCOPY,    /**< Buffered put */
+    UCT_EP_OP_PUT_ZCOPY,    /**< Zero-copy put */
+    UCT_EP_OP_GET_SHORT,    /**< Short get */
+    UCT_EP_OP_GET_BCOPY,    /**< Buffered get */
+    UCT_EP_OP_GET_ZCOPY,    /**< Zero-copy get */
+    UCT_EP_OP_EAGER_SHORT,  /**< Tag matching short eager */
+    UCT_EP_OP_EAGER_BCOPY,  /**< Tag matching bcopy eager */
+    UCT_EP_OP_EAGER_ZCOPY,  /**< Tag matching zcopy eager */
+    UCT_EP_OP_RNDV_ZCOPY,   /**< Tag matching rendezvous eager */
+    UCT_EP_OP_ATOMIC_POST,  /**< Atomic post */
+    UCT_EP_OP_ATOMIC_FETCH, /**< Atomic fetch */
+    UCT_EP_OP_LAST
 } uct_ep_operation_t;
 
 
@@ -191,6 +193,13 @@ typedef struct uct_md_mem_dereg_params {
      */
     uct_completion_t             *comp;
 } uct_md_mem_dereg_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Names for UCT endpoint operations.
+ */
+extern const char *uct_ep_operation_names[];
 
 
 /**
