@@ -579,7 +579,7 @@ uint64_t ucs_iface_get_system_id();
  *
  * @return UCS_OK if directory is found and successfully iterated thought all
  *         entries, error code in all other cases, see NOTES.
- * 
+ *
  * @note ucs_sys_readdir function reads directory pointed by @a path argument
  *       and calls @a cb function for every entry in directory, including
  *       '.' and '..'. In case if @a cb function returns value different from
@@ -596,7 +596,7 @@ ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ct
  *
  * @return UCS_OK if directory is found and successfully iterated thought all
  *         entries, error code in all other cases, see NOTES.
- * 
+ *
  * @note ucs_sys_enum_threads function enumerates current process threads
  *       and calls @a cb function for every thread. In case if @a cb function
  *       returns value different from UCS_OK then function breaks
@@ -625,6 +625,21 @@ ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
  *         otherwise.
  */
 ucs_status_t ucs_sys_check_fd_limit_per_process();
+
+
+/*
+ * Create a named thread.
+ *
+ * @param [out] thread_id_p     If successful, set to the new thread id.
+ * @param [in]  start_routine   Thread function.
+ * @param [in]  arg             Custom argument for start_routine.
+ * @param [in]  fmt             Thread name format string.
+ *
+ * @return UCS_OK if successful, or error status if failed.
+ */
+ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
+                                void *(*start_routine)(void*), void *arg,
+                                const char *fmt, ...) UCS_F_PRINTF(4, 5);
 
 END_C_DECLS
 

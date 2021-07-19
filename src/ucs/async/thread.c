@@ -105,7 +105,7 @@ static void *ucs_async_thread_func(void *arg)
     cb_arg.thread    = thread;
     cb_arg.is_missed = &is_missed;
 
-    ucs_log_set_thread_name("async");
+    ucs_log_set_thread_name("a");
 
     while (!thread->stop) {
         num_events = ucs_min(UCS_ASYNC_EPOLL_MAX_EVENTS,
@@ -156,7 +156,6 @@ static ucs_status_t ucs_async_thread_start(ucs_async_thread_t **thread_p)
     ucs_async_thread_t *thread;
     ucs_status_t status;
     int wakeup_rfd;
-    int ret;
 
     ucs_trace_func("");
 
@@ -203,10 +202,9 @@ static ucs_status_t ucs_async_thread_start(ucs_async_thread_t **thread_p)
         goto err_free_event_set;
     }
 
-    ret = pthread_create(&thread->thread_id, NULL, ucs_async_thread_func, thread);
-    if (ret != 0) {
-        ucs_error("pthread_create() returned %d: %m", ret);
-        status = UCS_ERR_IO_ERROR;
+    status = ucs_pthread_create(&thread->thread_id, ucs_async_thread_func,
+                                thread, "async");
+    if (status != UCS_OK) {
         goto err_free_event_set;
     }
 

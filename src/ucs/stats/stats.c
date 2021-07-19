@@ -649,7 +649,7 @@ static void* ucs_stats_thread_func(void *arg)
     unsigned flags;
     long nsec;
 
-    ucs_log_set_thread_name("stats");
+    ucs_log_set_thread_name("s");
 
     if (ucs_stats_context.interval > 0) {
         nsec = (long)(ucs_stats_context.interval * UCS_NSEC_PER_SEC + 0.5);
@@ -785,7 +785,8 @@ static void ucs_stats_set_trigger()
         }
 
         ucs_stats_context.flags |= UCS_STATS_FLAG_ON_TIMER;
-        pthread_create(&ucs_stats_context.thread, NULL, ucs_stats_thread_func, NULL);
+        ucs_pthread_create(&ucs_stats_context.thread, ucs_stats_thread_func,
+                           NULL, "stats");
    } else if (!strncmp(ucs_global_opts.stats_trigger, "signal:", 7)) {
         p = ucs_global_opts.stats_trigger + 7;
         if (!ucs_config_sscanf_signo(p, &ucs_stats_context.signo, NULL)) {

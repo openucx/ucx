@@ -146,6 +146,18 @@ size_t ucs_string_quantity_prefix_value(char prefix);
 
 
 /**
+ * Format a vararg string to a buffer of given size, and guarantee that the last
+ * char in the buffer is '\0'.
+ *
+ * @param buf  Buffer to format the string to.
+ * @param size Buffer size.
+ * @param fmt  Format string.
+ * @param ap   Variable argument list for the format string.
+ */
+void ucs_vsnprintf_safe(char *buf, size_t size, const char *fmt, va_list ap);
+
+
+/**
  * Format a string to a buffer of given size, and guarantee that the last char
  * in the buffer is '\0'.
  *
