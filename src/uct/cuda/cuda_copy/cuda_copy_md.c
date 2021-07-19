@@ -25,6 +25,21 @@ static ucs_config_field_t uct_cuda_copy_md_config_table[] = {
     {"", "", NULL,
         ucs_offsetof(uct_cuda_copy_md_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
 
+    {"REG_WHOLE_ALLOC", "auto",
+     "Allow registration of whole allocation\n"
+     " auto - Let runtime decide where whole allocation registration is turned on.\n"
+     "        By default this will be turned off for limited BAR GPUs (eg. T4)\n"
+     " on   - Whole allocation registration is always turned on.\n"
+     " off  - Whole allocation registration is always turned off.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, alloc_whole_reg),
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+    {"MAX_REG_RATIO", "0.1",
+     "If the ratio of the length of the allocation to which the user buffer belongs to"
+     " to the total GPU memory capacity is below this ratio, then the whole allocation"
+     " is registered. Otherwise only the user specified region is registered.",
+     ucs_offsetof(uct_cuda_copy_md_config_t, max_reg_ratio), UCS_CONFIG_TYPE_DOUBLE},
+
     {NULL}
 };
 
@@ -197,8 +212,10 @@ static uct_md_ops_t md_ops = {
 
 static ucs_status_t
 uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
-                      const uct_md_config_t *config, uct_md_h *md_p)
+                      const uct_md_config_t *md_config, uct_md_h *md_p)
 {
+    uct_cuda_copy_md_config_t *config = ucs_derived_of(md_config,
+                                                       uct_cuda_copy_md_config_t);
     uct_cuda_copy_md_t *md;
 
     md = ucs_malloc(sizeof(uct_cuda_copy_md_t), "uct_cuda_copy_md_t");
@@ -207,9 +224,12 @@ uct_cuda_copy_md_open(uct_component_t *component, const char *md_name,
         return UCS_ERR_NO_MEMORY;
     }
 
-    md->super.ops       = &md_ops;
-    md->super.component = &uct_cuda_copy_component;
-    *md_p               = (uct_md_h)md;
+    md->super.ops              = &md_ops;
+    md->super.component        = &uct_cuda_copy_component;
+    md->config.alloc_whole_reg = config->alloc_whole_reg;
+    md->config.max_reg_ratio   = config->max_reg_ratio;
+    *md_p                      = (uct_md_h)md;
+
     return UCS_OK;
 }
 

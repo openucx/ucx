@@ -57,7 +57,8 @@ protected:
                                (ucs_memory_type_t)mem_info.type);
         } else {
             EXPECT_UCS_OK(status);
-            EXPECT_EQ(expected_type, mem_info.type)
+            EXPECT_TRUE((UCS_MEMORY_TYPE_UNKNOWN == mem_info.type) ||
+                        (expected_type == mem_info.type))
                     << "ptr=" << ptr << " size=" << size;
         }
     }

@@ -99,25 +99,13 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocPitch, cudaError_t, -1, void**,
 static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length,
                                         ucs_memory_type_t mem_type)
 {
-    unsigned sync_atr_value = 1;
-    const char *cu_err_str;
     ucm_event_t event;
-    CUresult ret;
-
-    if ((ptr != 0) && (mem_type == UCS_MEMORY_TYPE_CUDA)) {
-        /* Synchronous operation for GPU direct */
-        ret = cuPointerSetAttribute(&sync_atr_value,
-                                    CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, ptr);
-        if (ret != CUDA_SUCCESS) {
-            cuGetErrorString(ret, &cu_err_str);
-            ucm_warn("cuPointerSetAttribute(%p) failed: %s", (void*)ptr,
-                     cu_err_str);
-        }
-    }
 
     event.mem_type.address  = (void*)ptr;
     event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
+    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* indicate unknown type
+                                                       and let cuda_md detect
+                                                       attributes */
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
 }
 
