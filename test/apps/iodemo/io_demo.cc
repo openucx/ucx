@@ -2110,7 +2110,11 @@ private:
         // Swap the removed element and the last element to use
         active_servers_swap(active_index, _num_active_servers_to_use);
 
-        if (active_index < _next_active_index) {
+        if (_next_active_index == _num_active_servers_to_use) {
+            // If the next active index is the last one, then the next active
+            // index should be 0
+            _next_active_index = 0;
+        } else if (active_index < _next_active_index) {
             --_next_active_index;
             // Swap the last element to use (which is saved in active_index now)
             // and the last element for which IO was already done. Also, it
