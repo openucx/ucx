@@ -213,9 +213,8 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                                         unsigned flags);
 void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg);
 
-void uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface,
-                                   uct_dc_mlx5_ep_t *ep, uct_pending_req_t *r,
-                                   unsigned flags, int push_to_head);
+void uct_dc_mlx5_ep_do_pending_fc(uct_dc_mlx5_ep_t *fc_ep,
+                                  uct_dc_fc_request_t *fc_req);
 
 ucs_status_t
 uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
