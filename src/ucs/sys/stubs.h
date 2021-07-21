@@ -37,6 +37,7 @@ ucs_status_t ucs_empty_function_return_ep_timeout();
 ssize_t ucs_empty_function_return_bc_ep_timeout();
 ucs_status_t ucs_empty_function_return_busy();
 int ucs_empty_function_do_assert();
+void ucs_empty_function_do_assert_void();
 
 END_C_DECLS
 

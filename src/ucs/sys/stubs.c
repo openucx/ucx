@@ -96,3 +96,8 @@ int ucs_empty_function_do_assert()
     ucs_assert_always(0);
     return 0;
 }
+
+void ucs_empty_function_do_assert_void()
+{
+    ucs_assert_always(0);
+}

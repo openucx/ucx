@@ -171,6 +171,18 @@
     }
 
 
+#if UCS_ENABLE_ASSERT
+#  define UCP_REQUEST_RESET(_req) \
+    (_req)->send.uct.func = \
+            (uct_pending_callback_t)ucs_empty_function_do_assert; \
+    (_req)->send.state.uct_comp.func  = \
+            (uct_completion_callback_t)ucs_empty_function_do_assert_void; \
+    (_req)->send.state.uct_comp.count = 0;
+#else /* UCS_ENABLE_ASSERT */
+#  define UCP_REQUEST_RESET(_req)
+#endif /* UCS_ENABLE_ASSERT */
+
+
 static UCS_F_ALWAYS_INLINE void ucp_request_id_reset(ucp_request_t *req)
 {
     req->id = UCS_PTR_MAP_KEY_INVALID;
@@ -190,6 +202,7 @@ ucp_request_put(ucp_request_t *req)
     ucs_trace_req("put request %p", req);
     ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
     UCS_PROFILE_REQUEST_FREE(req);
+    UCP_REQUEST_RESET(req);
     ucs_mpool_put_inline(req);
 }
 
