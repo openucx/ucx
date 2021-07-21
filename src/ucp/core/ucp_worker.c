@@ -28,6 +28,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/atomic.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
@@ -50,6 +51,7 @@ typedef enum ucp_worker_event_fd_op {
 static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
     .name           = "tag_offload",
     .num_counters   = UCP_WORKER_STAT_TAG_OFFLOAD_LAST,
+    .class_id       = UCS_STATS_CLASS_ID_INVALID,
     .counter_names  = {
         [UCP_WORKER_STAT_TAG_OFFLOAD_POSTED]           = "posted",
         [UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED]          = "matched",
@@ -70,6 +72,7 @@ static ucs_stats_class_t ucp_worker_tm_offload_stats_class = {
 static ucs_stats_class_t ucp_worker_stats_class = {
     .name           = "ucp_worker",
     .num_counters   = UCP_WORKER_STAT_LAST,
+    .class_id       = UCS_STATS_CLASS_ID_INVALID,
     .counter_names  = {
         [UCP_WORKER_STAT_TAG_RX_EAGER_MSG]         = "rx_eager_msg",
         [UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG]    = "rx_sync_msg",
@@ -427,193 +430,14 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
-static unsigned ucp_worker_iface_err_handle_progress(void *arg)
-{
-    ucp_worker_err_handle_arg_t *err_handle_arg = arg;
-    ucp_ep_h ucp_ep                             = err_handle_arg->ucp_ep;
-    ucs_status_t status                         = err_handle_arg->status;
-    ucp_worker_h worker                         = ucp_ep->worker;
-    ucs_time_t curr_time                        = ucs_get_time();
-    ucp_request_t *close_req;
-    uct_worker_cb_id_t prog_id;
-
-    if (curr_time < err_handle_arg->timeout) {
-        ucs_debug("ep %p: delay error handler by %.2f usec, flags: 0x%x, status %s",
-                  ucp_ep, ucs_time_to_usec(err_handle_arg->timeout - curr_time),
-                  ucp_ep->flags, ucs_status_string(status));
-
-        prog_id = UCS_CALLBACKQ_ID_NULL;
-        uct_worker_progress_register_safe(worker->uct,
-                                          ucp_worker_iface_err_handle_progress,
-                                          err_handle_arg,
-                                          UCS_CALLBACKQ_FLAG_ONESHOT, &prog_id);
-        return 0;
-    }
-
-    UCS_ASYNC_BLOCK(&worker->async);
-
-    ucs_debug("ep %p: handle error: %s", ucp_ep, ucs_status_string(status));
-
-    ucs_assert(ucp_ep->flags & UCP_EP_FLAG_FAILED);
-
-    /* the EP can be closed from last completion callback */
-    ucp_ep_discard_lanes(ucp_ep, status);
-    ucp_ep_reqs_purge(ucp_ep, status);
-    ucp_stream_ep_cleanup(ucp_ep);
-
-    if (ucp_ep->flags & UCP_EP_FLAG_USED) {
-        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-            /* Promote close operation to CANCEL in case of transport error,
-             * since the disconnect event may never arrive. */
-            close_req                        = ucp_ep_ext_control(ucp_ep)->
-                                               close_req.req;
-            close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
-            ucp_ep_local_disconnect_progress(close_req);
-        } else {
-            ucp_ep_invoke_err_cb(ucp_ep, status);
-        }
-    } else if (ucp_ep->flags & (UCP_EP_FLAG_INTERNAL | UCP_EP_FLAG_CLOSED)) {
-        /* No additional actions are required, this is already closed EP or
-         * an internal one for sending WIREUP/EP_REMOVED messsage to a peer.
-         * So, close operation was already scheduled, this EP will be deleted
-         * after all lanes will be discarded successfully */
-        ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);
-    } else {
-        ucs_debug("ep %p: destroy endpoint which is not exposed to a user due"
-                  " to peer failure", ucp_ep);
-        ucp_ep_disconnected(ucp_ep, 1);
-    }
-
-    ucs_free(err_handle_arg);
-    UCS_ASYNC_UNBLOCK(&worker->async);
-    return 1;
-}
-
-int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
-                                        void *arg)
-{
-    ucp_worker_err_handle_arg_t *err_handle_arg = elem->arg;
-
-    if ((elem->cb == ucp_worker_iface_err_handle_progress) &&
-        (err_handle_arg->ucp_ep == arg)) {
-        /* release err handling argument to avoid memory leak */
-        ucs_free(err_handle_arg);
-        return 1;
-    }
-
-    return 0;
-}
-
-/*
- * Caller must acquire lock
- */
-ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
-                                      uct_ep_h uct_ep, ucp_lane_index_t lane,
-                                      ucs_status_t status)
-{
-    uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-    ucs_status_t ret_status    = UCS_OK;
-    char lane_info_str[64];
-    ucp_rsc_index_t rsc_index;
-    uct_tl_resource_desc_t *tl_rsc;
-    ucp_worker_err_handle_arg_t *err_handle_arg;
-    ucs_log_level_t log_level;
-
-    ucs_debug("ep %p: set_ep_failed status %s on lane[%d]=%p", ucp_ep,
-              ucs_status_string(status), lane, uct_ep);
-
-    /* In case if this is a local failure we need to notify remote side */
-    if (ucp_ep_is_cm_local_connected(ucp_ep)) {
-        ucp_ep_cm_disconnect_cm_lane(ucp_ep);
-    }
-
-    /* set endpoint to failed to prevent wireup_ep switch */
-    if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        goto out_ok;
-    }
-
-    /* Release EP ID here to prevent protocols from sending reply */
-    ucp_ep_release_id(ucp_ep);
-    ucp_ep_update_flags(ucp_ep, UCP_EP_FLAG_FAILED, 0);
-
-    if (ucp_ep_config(ucp_ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) {
-        /* NOTE: if user has not requested error handling on the endpoint,
-         *       the failure is considered unhandled */
-        ret_status = status;
-        goto out;
-    }
-
-    err_handle_arg = ucs_malloc(sizeof(*err_handle_arg), "ucp_worker_err_handle_arg");
-    if (err_handle_arg == NULL) {
-        ucs_error("failed to allocate ucp_worker_err_handle_arg");
-        ret_status = UCS_ERR_NO_MEMORY;
-        goto out;
-    }
-
-    err_handle_arg->ucp_ep  = ucp_ep;
-    err_handle_arg->status  = status;
-    err_handle_arg->timeout = ucs_get_time() +
-            worker->context->config.ext.err_handler_delay;
-
-    /* invoke the rest of the error handling flow from the main thread */
-    uct_worker_progress_register_safe(worker->uct,
-                                      ucp_worker_iface_err_handle_progress,
-                                      err_handle_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
-                                      &prog_id);
-
-    if ((ucp_ep_ext_control(ucp_ep)->err_cb == NULL) &&
-        (ucp_ep->flags & UCP_EP_FLAG_USED)) {
-        /* do not print error if connection reset by remote peer since it can
-         * be part of user level close protocol  */
-        log_level = (status == UCS_ERR_CONNECTION_RESET) ? UCS_LOG_LEVEL_DIAG :
-                    UCS_LOG_LEVEL_ERROR;
-
-        if (lane != UCP_NULL_LANE) {
-            if (lane == ucp_ep_get_cm_lane(ucp_ep)) {
-                ucs_strncpy_safe(lane_info_str, "CM lane",
-                                 sizeof(lane_info_str));
-            } else {
-                rsc_index = ucp_ep_get_rsc_index(ucp_ep, lane);
-                tl_rsc    = &worker->context->tl_rscs[rsc_index].tl_rsc;
-
-                ucs_snprintf_safe(lane_info_str, sizeof(lane_info_str),
-                                  UCT_TL_RESOURCE_DESC_FMT,
-                                  UCT_TL_RESOURCE_DESC_ARG(tl_rsc));
-            }
-        } else {
-            ucs_assert(uct_ep == NULL);
-            ucs_strncpy_safe(lane_info_str, "wireup lane",
-                             sizeof(lane_info_str));
-        }
-
-        ucs_log(log_level, "ep %p: error '%s' on %s will not be handled since"
-                " no error callback is installed",
-                ucp_ep, ucs_status_string(status), lane_info_str);
-        ret_status = status;
-        goto out;
-    }
-
-out_ok:
-    ret_status = UCS_OK;
-
-out:
-    /* If the worker supports the UCP_FEATURE_WAKEUP feature, signal the user so
-     * that he can wake-up on this event */
-    ucp_worker_signal_internal(worker);
-
-    return ret_status;
-}
-
-static ucs_status_t
+static void
 ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                        uct_ep_h uct_ep, ucs_status_t status)
 {
-    ucp_worker_h worker = ucp_ep->worker;
     ucp_wireup_ep_t *wireup_ep;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        return UCS_OK;
+        return;
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
@@ -622,13 +446,14 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        return ucp_worker_set_ep_failed(worker, ucp_ep, uct_ep, lane, status);
+        ucp_ep_set_failed(ucp_ep, lane, status);
+        return;
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
          * pending requests have to be handled there */
-        return UCS_OK;
+        return;
     }
 
     /**
@@ -640,7 +465,6 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                  ucp_destroyed_ep_pending_purge, ucp_ep);
     ucp_wireup_remote_connected(ucp_ep);
-    return UCS_OK;
 }
 
 static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
@@ -663,12 +487,32 @@ static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
     return NULL;
 }
 
+/**
+ * FLUSH_CANCEL operation might be on pending queue due to
+ * UCS_ERR_NO_RESOURCES, so need to purge the queue to resubmit the
+ * operation. We need to resubmit the FLUSH_CANCEL operation on the same
+ * failed lane, in order to make sure all previous outstanding
+ * operations are completed before destroying the failed endpoint.
+ */
+static void ucp_discard_lane_ff(uct_ep_h uct_ep)
+{
+    ucs_queue_head_t tmp_q;
+    ucp_request_t *req;
+
+    /* @ref ucs_arbiter_t does not support recursive calls, so use temporary
+     * queue */
+    ucs_queue_head_init(&tmp_q);
+    uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb, &tmp_q);
+    ucs_queue_for_each_extract(req, &tmp_q, send.uct.priv, 1) {
+        ucp_request_send_state_ff(req, UCS_ERR_CANCELED);
+    }
+}
+
 static ucs_status_t
 ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_worker_h worker = (ucp_worker_h)arg;
     ucp_lane_index_t lane;
-    ucs_status_t ret_status;
     ucp_ep_h ucp_ep;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -679,28 +523,29 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
     if (ucp_worker_is_uct_ep_discarding(worker, uct_ep)) {
         ucs_debug("UCT EP %p is being discarded on UCP Worker %p",
                   uct_ep, worker);
-        ret_status = UCS_OK;
+        ucp_discard_lane_ff(uct_ep);
+        status = UCS_OK;
         goto out;
     }
 
     ucp_ep = ucp_worker_find_lane(&worker->all_eps, uct_ep, &lane);
     if (ucp_ep == NULL) {
         ucp_ep = ucp_worker_find_lane(&worker->internal_eps, uct_ep, &lane);
+        if (ucp_ep == NULL) {
+            ucs_error("worker %p: uct_ep %p isn't associated with any UCP"
+                      " endpoint and was not scheduled to be discarded",
+                      worker, uct_ep);
+            status = UCS_ERR_NO_ELEM;
+            goto out;
+        }
     }
 
-    if (ucp_ep != NULL) {
-        ret_status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane,
-                                                            uct_ep, status);
-    } else {
-        ucs_error("worker %p: uct_ep %p isn't associated with any ucp endpoint"
-                  " and was not scheduled to be discarded",
-                  worker, uct_ep);
-        ret_status = UCS_ERR_NO_ELEM;
-    }
+    ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep, status);
+    status = UCS_OK;
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
-    return ret_status;
+    return status;
 }
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags)
@@ -1310,6 +1155,13 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                 context->config.ext.keepalive_interval;
     }
 
+    if (worker->am.alignment > 1) {
+        iface_params->field_mask     |= UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT |
+                                        UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET;
+        iface_params->am_align_offset = sizeof(ucp_am_hdr_t);
+        iface_params->am_alignment    = worker->am.alignment;
+    }
+
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,
                             &wiface->iface);
@@ -1834,7 +1686,8 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 
     /* Create memory pool for incoming UCT messages without a UCT descriptor */
     status = ucs_mpool_init(&worker->am_mp, 0,
-                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE,
+                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE +
+                            worker->am.alignment,
                             0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                             &ucp_am_mpool_ops, "ucp_am_bufs");
     if (status != UCS_OK) {
@@ -2055,7 +1908,7 @@ static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
     worker->keepalive.ep_count    = 0;
     worker->keepalive.iter_count  = 0;
     worker->keepalive.iter        = &worker->all_eps;
-    worker->keepalive.iter_begin  = worker->keepalive.iter;
+    worker->keepalive.iter_end    = worker->keepalive.iter;
     worker->keepalive.round_count = 0;
 }
 
@@ -2198,8 +2051,10 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 2);
     }
 
-    worker->user_data = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
-                                        NULL);
+    worker->user_data    = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
+                                           NULL);
+    worker->am.alignment = UCP_PARAM_VALUE(WORKER, params, am_alignment,
+                                           AM_ALIGNMENT, 1);
 
     if ((params->field_mask & UCP_WORKER_PARAM_FIELD_NAME) &&
         (params->name != NULL)) {
@@ -2368,7 +2223,6 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     req->send.discard_uct_ep.cb_id = UCS_CALLBACKQ_ID_NULL;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_worker_discard_uct_ep_complete(req);
     iter = kh_get(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep);
     if (iter == kh_end(&worker->discard_uct_ep_hash)) {
@@ -2376,11 +2230,12 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
                   uct_ep, worker);
     }
 
+    uct_ep_destroy(uct_ep);
+    ucp_worker_discard_uct_ep_complete(req);
+
     ucs_assert(kh_value(&worker->discard_uct_ep_hash, iter) == req);
     kh_del(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash, iter);
     UCS_ASYNC_UNBLOCK(&worker->async);
-
-    uct_ep_destroy(uct_ep);
 
     return 1;
 }
@@ -2396,7 +2251,7 @@ static void ucp_worker_discard_uct_ep_progress_register(ucp_request_t *req,
                                       &req->send.discard_uct_ep.cb_id);
 }
 
-static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
+void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -2420,12 +2275,11 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
     if (status == UCS_OK) {
-        /* don't destroy UCT EP from the pending callback, schedule a progress
-         * callback on the main thread to destroy UCT EP */
-        ucp_worker_discard_uct_ep_progress_register(
-                req, ucp_worker_discard_uct_ep_destroy_progress);
+        ucs_assert(req->send.state.uct_comp.count == 0);
+        ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp);
         return UCS_OK;
     } else if (status == UCS_INPROGRESS) {
+        req->send.state.uct_comp.count++;
         return UCS_OK;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
@@ -2436,7 +2290,7 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     return UCS_OK;
 }
 
-static unsigned ucp_worker_discard_uct_ep_progress(void *arg)
+unsigned ucp_worker_discard_uct_ep_progress(void *arg)
 {
     ucp_request_t *req = (ucp_request_t*)arg;
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
@@ -2947,7 +2801,10 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
 {
     ucs_trace("worker %p: sent keepalive on %u endpoints",
               worker, worker->keepalive.ep_count);
-    worker->keepalive.iter_begin = worker->keepalive.iter;
+
+    ucs_assert(worker->keepalive.lane_map == 0);
+
+    worker->keepalive.iter_end   = worker->keepalive.iter;
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
     worker->keepalive.round_count++;   
@@ -3009,7 +2866,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
         progress_count++;
         worker->keepalive.ep_count++;
     } while ((worker->keepalive.ep_count < max_ep_count) &&
-             (worker->keepalive.iter != worker->keepalive.iter_begin));
+             (worker->keepalive.iter != worker->keepalive.iter_end));
 
     ucp_worker_keepalive_complete(worker, now);
 
@@ -3072,17 +2929,21 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
         ucp_worker_keepalive_next_ep(worker);
         ucs_assert(worker->keepalive.iter != &ucp_ep_ext_gen(ep)->ep_list);
-
-        if (worker->keepalive.iter == worker->keepalive.iter_begin) {
-            /* If we moved the keepalive iterator to the stop element as a
-             * result of removing the endpoint, need to finish the current round
-             */
-            ucp_worker_keepalive_complete(worker, ucs_get_time());
-        }
     }
 
-    if (worker->keepalive.iter_begin == &ucp_ep_ext_gen(ep)->ep_list) {
-        worker->keepalive.iter_begin = worker->keepalive.iter_begin->next;
+    if (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list) {
+        worker->keepalive.iter_end = worker->keepalive.iter_end->prev;
+        ucs_assert(worker->keepalive.iter_end != &ucp_ep_ext_gen(ep)->ep_list);
+    }
+
+    if (worker->keepalive.iter == worker->keepalive.iter_end) {
+        /* If the keepalive iterator points to the stop element after moving the
+         * keepalive iterator or the stop element as a result of removing the
+         * endpoint, need to finish the current round to avoid doing keepalive
+         * for the same endpoint twice in the round
+         */
+        worker->keepalive.lane_map = 0;
+        ucp_worker_keepalive_complete(worker, ucs_get_time());
     }
 }
 
@@ -3128,7 +2989,7 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.ep                            = ucp_ep;
     req->send.uct.func                      = ucp_worker_discard_uct_ep_pending_cb;
     req->send.state.uct_comp.func           = ucp_worker_discard_uct_ep_flush_comp;
-    req->send.state.uct_comp.count          = 1;
+    req->send.state.uct_comp.count          = 0;
     req->send.state.uct_comp.status         = UCS_OK;
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;

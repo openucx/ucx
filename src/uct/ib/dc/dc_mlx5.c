@@ -16,6 +16,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
@@ -253,6 +254,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
     uct_dc_mlx5_iface_progress_pending(iface,
                                        iface->tx.dcis[dci_index].pool_index);
+    uct_dc_mlx5_iface_check_tx(iface);
 
     return 1;
 }
@@ -1113,8 +1115,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
         status = uct_dc_mlx5_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
-            uct_dc_mlx5_ep_pending_common(iface, ep, &dc_req->super.super,
-                                          0, 1);
+            uct_dc_mlx5_ep_do_pending_fc(ep, dc_req);
         } else {
             ucs_assertv_always(status == UCS_OK,
                                "Failed to send FC grant msg: %s",
@@ -1151,6 +1152,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                                            &pool_index);
             ucs_arbiter_group_schedule(waitq, group);
             uct_dc_mlx5_iface_progress_pending(iface, pool_index);
+            uct_dc_mlx5_iface_check_tx(iface);
         }
     }
 
@@ -1325,6 +1327,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.policy                        = (uct_dc_tx_policy_t)config->tx_policy;
     self->tx.fc_seq                        = 0;
     self->tx.fc_hard_req_timeout           = config->fc_hard_req_timeout;
+    self->tx.dci_release_prog_id           = UCS_CALLBACKQ_ID_NULL;
     self->keepalive_dci                    = -1;
     self->tx.num_dci_pools                 = 1;
     self->super.super.config.tx_moderation = 0; /* disable tx moderation for dcs */
@@ -1335,6 +1338,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.pend_cb   = uct_dc_mlx5_iface_is_dci_rand(self) ?
                          uct_dc_mlx5_iface_dci_do_rand_pending_tx :
                          uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
+
+    UCS_BITMAP_CLEAR(&self->tx.dci_release_bitmap);
 
     if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_DEVX_DCI |
                                       UCT_IB_MLX5_MD_FLAG_CQE_V1)) {
@@ -1399,6 +1404,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     uct_dc_mlx5_destroy_dct(self);
     kh_destroy_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
     uct_dc_mlx5_iface_cleanup_fc_ep(self);
+    uct_worker_progress_unregister_safe(
+            &self->super.super.super.super.worker->super,
+            &self->tx.dci_release_prog_id);
     uct_dc_mlx5_iface_dcis_destroy(self, uct_dc_mlx5_iface_total_ndci(self));
 
     for (pool_index = 0; pool_index < self->tx.num_dci_pools; pool_index++) {
@@ -1559,14 +1567,16 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
         return;
     }
 
-    if (ep_status == UCS_ERR_CANCELED) {
-        return;
-    }
-
     if (ep == iface->tx.fc_ep) {
+        iface->flags |= UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
+
         /* Do not report errors on flow control endpoint */
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
+        return;
+    }
+
+    if (ep_status == UCS_ERR_CANCELED) {
         return;
     }
 
@@ -1579,4 +1589,3 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
 
     ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
 }
-

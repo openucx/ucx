@@ -20,6 +20,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <sys/epoll.h>
 
 #define MAX_LOG_PREFIX_SIZE   64
 
@@ -95,7 +96,8 @@ protected:
     };
 
 public:
-    UcxContext(size_t iomsg_size, double connect_timeout, bool use_am);
+    UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
+               bool use_epoll = false);
 
     virtual ~UcxContext();
 
@@ -111,6 +113,12 @@ public:
     void destroy_connections();
 
     static double get_time();
+
+    static void *malloc(size_t size, const char *name);
+
+    static void *memalign(size_t alignment, size_t size, const char *name);
+
+    static void free(void *ptr);
 
 protected:
 
@@ -170,6 +178,10 @@ private:
 
     int is_timeout_elapsed(struct timeval const *tv_prior, double timeout);
 
+    ucs_status_t epoll_init();
+
+    void progress_worker_event();
+
     void progress_timed_out_conns();
 
     void progress_conn_requests();
@@ -216,6 +228,8 @@ private:
     std::string                 _iomsg_buffer;
     double                      _connect_timeout;
     bool                        _use_am;
+    int                         _worker_fd;
+    int                         _epoll_fd;
 };
 
 

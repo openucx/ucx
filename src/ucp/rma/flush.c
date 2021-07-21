@@ -294,10 +294,7 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status)
     ucs_assert(req->send.state.uct_comp.count >= num_comps);
     req->send.state.uct_comp.count -= num_comps;
     uct_completion_update_status(&req->send.state.uct_comp, status);
-
-    if (req->send.state.uct_comp.count == 0) {
-        req->send.state.uct_comp.func(&req->send.state.uct_comp);
-    }
+    ucp_send_request_invoke_uct_completion(req);
 }
 
 void ucp_ep_flush_remote_completed(ucp_request_t *req)

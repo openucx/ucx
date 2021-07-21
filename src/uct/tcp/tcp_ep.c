@@ -492,13 +492,16 @@ static inline void uct_tcp_ep_ctx_move(uct_tcp_ep_ctx_t *to_ctx,
     memset(from_ctx, 0, sizeof(*from_ctx));
 }
 
-static int uct_tcp_ep_time_seconds(ucs_time_t time_val, int auto_val)
+static int uct_tcp_ep_time_seconds(ucs_time_t time_val, int auto_val,
+                                   int max_val)
 {
     if (time_val == UCS_TIME_AUTO) {
         return auto_val;
+    } else if (time_val == UCS_TIME_INFINITY) {
+        return max_val;
     }
 
-    return ucs_max(1, (int)ucs_time_to_sec(time_val));
+    return ucs_min(max_val, ucs_max(1l, ucs_time_to_sec(time_val)));
 }
 
 static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
@@ -509,6 +512,7 @@ static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
     const int optval       = 1;
     int idle_sec;
     int intvl_sec;
+    int keepalive_cnt;
     ucs_status_t status;
 
     if (!uct_tcp_keepalive_is_enabled(iface)) {
@@ -516,9 +520,11 @@ static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
     }
 
     idle_sec  = uct_tcp_ep_time_seconds(iface->config.keepalive.idle,
-                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE);
+                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE,
+                                        INT16_MAX);
     intvl_sec = uct_tcp_ep_time_seconds(iface->config.keepalive.intvl,
-                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL);
+                                        UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL,
+                                        INT16_MAX);
 
     status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPINTVL,
                                &intvl_sec, sizeof(intvl_sec));
@@ -526,11 +532,18 @@ static ucs_status_t uct_tcp_ep_keepalive_enable(uct_tcp_ep_t *ep)
         return status;
     }
 
-    status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPCNT,
-                               &iface->config.keepalive.cnt,
-                               sizeof(iface->config.keepalive.cnt));
-    if (status != UCS_OK) {
-        return status;
+    if (iface->config.keepalive.cnt != UCS_ULUNITS_AUTO) {
+        if (iface->config.keepalive.cnt == UCS_ULUNITS_INF) {
+            keepalive_cnt = INT8_MAX;
+        } else {
+            keepalive_cnt = ucs_min(INT8_MAX, iface->config.keepalive.cnt);
+        }
+
+        status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPCNT,
+                                   &keepalive_cnt, sizeof(keepalive_cnt));
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     status = ucs_socket_setopt(ep->fd, IPPROTO_TCP, TCP_KEEPIDLE,

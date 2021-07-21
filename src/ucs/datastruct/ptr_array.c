@@ -107,18 +107,17 @@ static void UCS_F_MAYBE_UNUSED ucs_ptr_array_dump(ucs_ptr_array_t *ptr_array)
 
 static void ucs_ptr_array_clear(ucs_ptr_array_t *ptr_array)
 {
-    ptr_array->start            = NULL;
-    ptr_array->size             = 0;
-    ptr_array->count            = 0;
-    ptr_array->freelist         = UCS_PTR_ARRAY_SENTINEL;
+    ptr_array->start    = NULL;
+    ptr_array->size     = 0;
+    ptr_array->count    = 0;
+    ptr_array->freelist = UCS_PTR_ARRAY_SENTINEL;
+    ptr_array->name     = NULL;
 }
 
 void ucs_ptr_array_init(ucs_ptr_array_t *ptr_array, const char *name)
 {
     ucs_ptr_array_clear(ptr_array);
-#ifdef ENABLE_MEMTRACK
-    ucs_snprintf_zero(ptr_array->name, sizeof(ptr_array->name), "%s", name);
-#endif
+    ptr_array->name = name;
 }
 
 void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array)
@@ -139,14 +138,14 @@ void ucs_ptr_array_cleanup(ucs_ptr_array_t *ptr_array)
     ucs_ptr_array_clear(ptr_array);
 }
 
-static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array, unsigned new_size
-                               UCS_MEMTRACK_ARG)
+static void ucs_ptr_array_grow(ucs_ptr_array_t *ptr_array, unsigned new_size)
 {
     ucs_ptr_array_elem_t *new_array;
     unsigned curr_size, i, next;
 
     /* Allocate new array */
-    new_array = ucs_malloc(new_size * sizeof(ucs_ptr_array_elem_t) UCS_MEMTRACK_VAL);
+    new_array = ucs_malloc(new_size * sizeof(ucs_ptr_array_elem_t),
+                           ptr_array->name);
     ucs_assert_always(new_array != NULL);
     curr_size = ptr_array->size;
     memcpy(new_array, ptr_array->start, curr_size * sizeof(ucs_ptr_array_elem_t));
@@ -185,7 +184,7 @@ unsigned ucs_ptr_array_insert(ucs_ptr_array_t *ptr_array, void *value)
 
     if (ptr_array->freelist == UCS_PTR_ARRAY_SENTINEL) {
         new_size = ucs_max(UCS_PTR_ARRAY_INITIAL_SIZE, ptr_array->size * 2);
-        ucs_ptr_array_grow(ptr_array, new_size UCS_MEMTRACK_NAME(ptr_array->name));
+        ucs_ptr_array_grow(ptr_array, new_size);
     }
 
     /* Get the first item on the free list */
@@ -211,7 +210,7 @@ void ucs_ptr_array_set(ucs_ptr_array_t *ptr_array, unsigned element_index,
 
     if (ucs_unlikely(element_index >= ptr_array->size)) {
         new_size = ucs_max(ptr_array->size * 2, element_index + 1);
-        ucs_ptr_array_grow(ptr_array, new_size UCS_MEMTRACK_NAME(ptr_array->name));
+        ucs_ptr_array_grow(ptr_array, new_size);
     } else if (!__ucs_ptr_array_is_free(ptr_array->start[element_index])) {
         ptr_array->start[element_index] = (uintptr_t)new_val;
         return;

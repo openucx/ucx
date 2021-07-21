@@ -319,6 +319,36 @@ check_config_h() {
 }
 
 #
+# Test if cmake can correctly find and link ucx
+#
+build_cmake_examples() {
+	echo "==== Build CMake sample ===="
+
+	if which cmake
+	then
+		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst
+		$MAKEP
+		$MAKEP install
+
+		mkdir -p /tmp/cmake-ucx
+		pushd /tmp/cmake-ucx
+		cmake ${WORKSPACE}/examples/cmake -DCMAKE_PREFIX_PATH=$ucx_inst
+		cmake --build .
+
+		if ./test_ucp && ./test_uct
+		then
+			echo "Check successful "
+		else
+			azure_log_error "CMake test failed."
+			exit 1
+		fi
+		popd
+	else
+		azure_log_warning "cmake executable not found, skipping cmake test"
+	fi
+}
+
+#
 # Do a given task and update progress indicator
 #
 do_task() {
@@ -347,6 +377,7 @@ do_task "${prog}" build_disable_numa
 do_task "${prog}" build_cuda
 do_task "${prog}" build_no_verbs
 do_task "${prog}" build_release_pkg
+do_task "${prog}" build_cmake_examples
 
 if [ "${long_test}" = "yes" ]
 then

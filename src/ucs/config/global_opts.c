@@ -219,7 +219,6 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, vfs_thread_affinity),
   UCS_CONFIG_TYPE_BOOL},
 
-#ifdef ENABLE_MEMTRACK
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"
@@ -232,7 +231,6 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Memory limit allocated by memtrack. In case if limit is reached then\n"
   "memtrack report is generated and process is terminated.\n",
   ucs_offsetof(ucs_global_opts_t, memtrack_limit), UCS_CONFIG_TYPE_MEMUNITS},
-#endif
 
   {"PROFILE_MODE", "",
    "Profile collection modes. If none is specified, profiling is disabled.\n"

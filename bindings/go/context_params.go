@@ -41,6 +41,25 @@ func (p *UcpParams) SetEstimatedNumEPS(estimatedNumEPS uint64) *UcpParams {
 	return p
 }
 
+// An optimization hint for a single node. For example, when used from MPI or
+// OpenSHMEM libraries, this number will specify the number of Processes Per
+// Node (PPN) in the job. Does not affect semantics, only transport selection
+// criteria and the resulting performance.
+// The value can be also set by the UCX_NUM_PPN environment variable, which
+// will override the number of endpoints set by this method.
+func (p *UcpParams) SetEstimatedNumPPN(estimatedNumPPN uint64) *UcpParams {
+	p.params.estimated_num_ppn = C.ulong(estimatedNumPPN)
+	p.params.field_mask |= C.UCP_PARAM_FIELD_ESTIMATED_NUM_PPN
+	return p
+}
+
+// Tracing and analysis tools can identify the context using this name.
+func (p *UcpParams) SetName(name string) *UcpParams {
+	p.params.name = C.CString(name)
+	p.params.field_mask |= C.UCP_PARAM_FIELD_NAME
+	return p
+}
+
 // Indicates if this context is shared by multiple workers
 // from different threads. If so, this context needs thread safety
 // support; otherwise, the context does not need to provide thread

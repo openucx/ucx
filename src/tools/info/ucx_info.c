@@ -41,8 +41,8 @@ static void usage() {
     printf("                    'r' : remote memory access\n");
     printf("                    't' : tag matching \n");
     printf("                    'm' : active messages \n");
-    printf("                    'w' : wakeup\n");
     printf("                  Modifiers to use in combination with above features:\n");
+    printf("                    'w' : wakeup\n");
     printf("                    'e' : error handling\n");
     printf("\nOther settings:\n");
     printf("  -t <name>       Filter devices information using specified transport (requires -d)\n");
@@ -59,13 +59,16 @@ static void usage() {
     printf("                    'inter' : different node\n");
     /* TODO: add IPv6 support */
     printf("  -A <ipv4>       Local IPv4 device address to use for creating\n"
-           "                  endpoint in client/server mode");
+           "                  endpoint in client/server mode\n");
     printf("  -h              Show this help message\n");
     printf("\n");
 }
 
 int main(int argc, char **argv)
 {
+    const uint64_t required_ucp_features = UCP_FEATURE_AMO32 |
+                                           UCP_FEATURE_AMO64 | UCP_FEATURE_RMA |
+                                           UCP_FEATURE_TAG | UCP_FEATURE_AM;
     char *ip_addr = NULL;
     ucs_config_print_flags_t print_flags;
     ucp_ep_params_t ucp_ep_params;
@@ -153,11 +156,11 @@ int main(int argc, char **argv)
                 case 't':
                     ucp_features |= UCP_FEATURE_TAG;
                     break;
-                case 'w':
-                    ucp_features |= UCP_FEATURE_WAKEUP;
-                    break;
                 case 'm':
                     ucp_features |= UCP_FEATURE_AM;
+                    break;
+                case 'w':
+                    ucp_features |= UCP_FEATURE_WAKEUP;
                     break;
                 case 'e':
                     ucp_ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -242,8 +245,9 @@ int main(int argc, char **argv)
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {
-        if (ucp_features == 0) {
-            printf("Please select UCP features using -u switch: a|r|t|m|w\n");
+        if (!(ucp_features & required_ucp_features)) {
+            printf("Please select at least one of 'a','r','t','m' UCP features "
+                   "using -u switch.\n");
             usage();
             return -1;
         }

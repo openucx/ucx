@@ -345,9 +345,9 @@ public:
             return ucp_get(ep, buffer, length, remote_addr, rkey);
         case UCX_PERF_CMD_ADD:
             if (length == sizeof(uint32_t)) {
-                return ucp_atomic_add32(ep, 1, remote_addr, rkey);
+                return ucp_atomic_add32(ep, 0, remote_addr, rkey);
             } else if (length == sizeof(uint64_t)) {
-                return ucp_atomic_add64(ep, 1, remote_addr, rkey);
+                return ucp_atomic_add64(ep, 0, remote_addr, rkey);
             } else {
                 return UCS_ERR_INVALID_PARAM;
             }
@@ -466,26 +466,55 @@ public:
     {
         volatile uint8_t *ptr = (uint8_t*)buffer;
 
-        if ((CMD == UCX_PERF_CMD_PUT) &&
-            (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI)) {
+        if (use_psn()) {
             while (*ptr != UCP_PERF_LAST_ITER_SN) {
                 progress_responder();
             }
         }
     }
 
+    static void nop_cb(void *request, ucs_status_t status)
+    {
+        ucp_request_free(request);
+    }
+
     /* send the special flag as a last iteration in case of
      * unidirectional PUT test, since responder is waiting for
      * this message */
-    ucs_status_t send_last_iter(ucp_ep_h ep, void *buffer,
+    ucs_status_t send_last_iter(ucp_ep_h ep, void *buffer, size_t size,
                                 uint64_t remote_addr, ucp_rkey_h rkey)
     {
-        if ((CMD == UCX_PERF_CMD_PUT) &&
-            (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI)) {
-            fence();
-            *(uint8_t*)buffer = UCP_PERF_LAST_ITER_SN;
+        ucs_status_ptr_t status_p;
+
+        if (!use_psn()) {
+            return UCS_OK;
+        }
+
+        fence();
+        *(uint8_t*)buffer = UCP_PERF_LAST_ITER_SN;
+        /* coverity[switch_selector_expr_is_constant] */
+        switch (CMD) {
+        case UCX_PERF_CMD_PUT:
             return ucp_put(ep, buffer, sizeof(uint8_t), remote_addr, rkey);
-        } else {
+        case UCX_PERF_CMD_ADD:
+            return ucp_atomic_post(ep, UCP_ATOMIC_POST_OP_ADD, 1, size,
+                                   remote_addr, rkey);
+        case UCX_PERF_CMD_FADD:
+            status_p = ucp_atomic_fetch_nb(ep, UCP_ATOMIC_FETCH_OP_FADD, 1,
+                                           buffer, size, remote_addr, rkey,
+                                           nop_cb);
+            return UCS_PTR_STATUS(status_p);
+        case UCX_PERF_CMD_SWAP:
+            status_p = ucp_atomic_fetch_nb(ep, UCP_ATOMIC_FETCH_OP_SWAP, 1,
+                                           buffer, size, remote_addr, rkey,
+                                           nop_cb);
+            return UCS_PTR_STATUS(status_p);
+        case UCX_PERF_CMD_CSWAP:
+            status_p = ucp_atomic_fetch_nb(ep, UCP_ATOMIC_FETCH_OP_CSWAP, 0,
+                                           buffer, size, remote_addr, rkey,
+                                           nop_cb);
+            return UCS_PTR_STATUS(status_p);
+        default:
             return UCS_OK;
         }
     }
@@ -502,6 +531,29 @@ public:
     void fence()
     {
         ucp_worker_fence(m_perf.ucp.worker);
+    }
+
+
+    int use_psn() {
+        return ((CMD == UCX_PERF_CMD_PUT) || (CMD == UCX_PERF_CMD_ADD) ||
+                (CMD == UCX_PERF_CMD_FADD) || (CMD == UCX_PERF_CMD_SWAP) ||
+                (CMD == UCX_PERF_CMD_CSWAP));
+    }
+
+    void reset_buffers(const psn_t psn, size_t offset)
+    {
+        psn_t src = psn;
+
+        if (use_psn()) {
+            m_perf.allocator->memcpy(UCS_PTR_BYTE_OFFSET(m_perf.recv_buffer, offset),
+                                     m_perf.allocator->mem_type,
+                                     &src, UCS_MEMORY_TYPE_HOST,
+                                     sizeof(src));
+            m_perf.allocator->memcpy(UCS_PTR_BYTE_OFFSET(m_perf.send_buffer, offset),
+                                     m_perf.allocator->mem_type,
+                                     &src, UCS_MEMORY_TYPE_HOST,
+                                     sizeof(src));
+        }
     }
 
     ucs_status_t run_pingpong()
@@ -529,12 +581,7 @@ public:
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
 
-        if (CMD == UCX_PERF_CMD_PUT) {
-            m_perf.allocator->memcpy((psn_t*)m_perf.recv_buffer + length - 1,
-                                     m_perf.allocator->mem_type,
-                                     &unknown_psn, UCS_MEMORY_TYPE_HOST,
-                                     sizeof(unknown_psn));
-        }
+        reset_buffers(unknown_psn, length - 1);
 
         ucp_perf_barrier(&m_perf);
 
@@ -594,6 +641,8 @@ public:
                                     &send_buffer, &recv_length, &recv_datatype,
                                     &recv_buffer);
 
+        reset_buffers(0, 0);
+
         ucp_perf_barrier(&m_perf);
 
         my_index = rte_call(&m_perf, group_index);
@@ -618,7 +667,7 @@ public:
                 ++sn;
             }
 
-            send_last_iter(ep, send_buffer, remote_addr, rkey);
+            send_last_iter(ep, send_buffer, send_length, remote_addr, rkey);
         }
 
         wait_window(m_max_outstanding, true);

@@ -15,7 +15,6 @@
 
 #define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
-
 enum uct_dc_mlx5_ep_flags {
     /* DCI pool EP assigned to according to it's lag port */
     UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK     = UCS_MASK(3),
@@ -186,6 +185,8 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion
 ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                                                uct_rc_iface_send_op_t *send_op);
 
+unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg);
+
 void
 uct_dc_mlx5_ep_fc_pure_grant_send_completion(uct_rc_iface_send_op_t *send_op,
                                              const void *resp);
@@ -212,9 +213,8 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                                         unsigned flags);
 void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg);
 
-void uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface,
-                                   uct_dc_mlx5_ep_t *ep, uct_pending_req_t *r,
-                                   unsigned flags, int push_to_head);
+void uct_dc_mlx5_ep_do_pending_fc(uct_dc_mlx5_ep_t *fc_ep,
+                                  uct_dc_fc_request_t *fc_req);
 
 ucs_status_t
 uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
@@ -344,7 +344,6 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
 
     } while (ucs_unlikely(!ucs_arbiter_is_empty(dci_waitq) &&
                           uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)));
-    uct_dc_mlx5_iface_check_tx(iface);
 }
 
 static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
@@ -433,10 +432,9 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 
     uct_dc_mlx5_iface_dci_release(iface, dci_index);
 
-    ucs_assert(uct_dc_mlx5_ep_from_dci(iface, dci_index)->dci !=
-               UCT_DC_MLX5_EP_NO_DCI);
-    ep->dci    = UCT_DC_MLX5_EP_NO_DCI;
-    ep->flags &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
+    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+    ep->dci                      = UCT_DC_MLX5_EP_NO_DCI;
+    ep->flags                   &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
     iface->tx.dcis[dci_index].ep = NULL;
 
     /* it is possible that dci is released while ep still has scheduled pending ops.
@@ -464,13 +462,13 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     pool->stack_top++;
 }
 
-static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface,
-                                              uct_dc_mlx5_ep_t *ep)
+static UCS_F_ALWAYS_INLINE int
+uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
     uint8_t dci_index;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        return;
+        return 0;
     }
 
     dci_index = ep->dci;
@@ -479,14 +477,27 @@ static inline void uct_dc_mlx5_iface_dci_free(uct_dc_mlx5_iface_t *iface,
     ucs_assert(iface->tx.dci_pool[uct_dc_mlx5_ep_pool_index(ep)].stack_top > 0);
 
     if (uct_dc_mlx5_iface_dci_has_outstanding(iface, dci_index)) {
-        return;
+        return 0;
     }
 
-    uct_dc_mlx5_iface_dci_release(iface, dci_index);
-
-    iface->tx.dcis[dci_index].ep = NULL;
     ep->dci                      = UCT_DC_MLX5_EP_NO_DCI;
     ep->flags                   &= ~UCT_DC_MLX5_EP_FLAG_TX_WAIT;
+    iface->tx.dcis[dci_index].ep = NULL;
+
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
+{
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(dci != UCT_DC_MLX5_EP_NO_DCI);
+
+    UCS_BITMAP_SET(iface->tx.dci_release_bitmap, dci);
+    uct_worker_progress_register_safe(
+            &iface->super.super.super.super.worker->super,
+            uct_dc_mlx5_ep_dci_release_progress, iface,
+            UCS_CALLBACKQ_FLAG_ONESHOT, &iface->tx.dci_release_prog_id);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -543,6 +554,10 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 
     if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+        /* TODO: disabled due to shot on some tests where resources are updated
+         * manually: dc_mlx5/test_dc_flow_control.pending_grant for instance. */
+        /* TODO: look how to eliminate assert on such tests */
+        /* ucs_assert(ucs_arbiter_is_empty(waitq)); */
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
     }

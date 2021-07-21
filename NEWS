@@ -13,6 +13,19 @@
 * Added API for querying UCP library attributes
 ### Bugfixes:
 
+## 1.10.1 (May 12, 2021)
+### Bugfixes:
+* Fixes in Infiniband port speed detection for HDR100
+* Fixes in building gtest-all.cc and sock.c with GCC11
+* Fixes addressing performance degradation with cuda memory on a self endpoint
+* Fixes in JUCX listener connection handler
+* Fixed in configuration of loopback TCP transport (disable by default)
+* Fixes in RPM dependency on libibverbs
+* Fixes in ABI backward compatibility for active message protocol
+* Fixes in the DC transport - adding support for full-handshake mode (off by default)
+* Fixes in Active Messages short reply protocol
+* Fixes for segmentation fault while listening for connections
+
 ## 1.10.0 (March 9, 2021)
 ### Features:
 #### Core

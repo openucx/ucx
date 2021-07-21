@@ -15,7 +15,7 @@
 #include "module.h"
 
 #include <ucs/sys/preprocessor.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>

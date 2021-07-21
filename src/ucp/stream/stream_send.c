@@ -77,7 +77,7 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
      * If it is completed immediately, release the request and return the status.
      * Otherwise, return the request.
      */
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);
     }
@@ -286,11 +286,10 @@ static ucs_status_t ucp_stream_eager_zcopy_multi(uct_pending_req_t *self)
     ucp_stream_am_hdr_t hdr;
 
     hdr.ep_id = ucp_send_request_get_ep_remote_id(req);
-    return ucp_do_am_zcopy_multi(self,
-                                 UCP_AM_ID_STREAM_DATA,
-                                 UCP_AM_ID_STREAM_DATA,
-                                 &hdr, sizeof(hdr), &hdr, sizeof(hdr),
-                                 NULL, 0ul, ucp_proto_am_zcopy_req_complete, 0);
+    return ucp_do_am_zcopy_multi(self, UCP_AM_ID_STREAM_DATA,
+                                 UCP_AM_ID_STREAM_DATA, &hdr, sizeof(hdr), &hdr,
+                                 sizeof(hdr), NULL, 0ul, 0ul,
+                                 ucp_proto_am_zcopy_req_complete, 0);
 }
 
 const ucp_request_send_proto_t ucp_stream_am_proto = {

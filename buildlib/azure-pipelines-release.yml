@@ -41,25 +41,29 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.2:2
 
 stages:
-  - stage: Check_Commit
+  - stage: Prepare
     jobs:
-      - job: Check
+      - job: CheckRelease
         steps:
           - checkout: self
+            fetchDepth: 100
             clean: true
 
           - bash: |
               set -eE
               source ./buildlib/az-helpers.sh
               set -x
-              check_commit_message $(system.pullRequest.sourceCommitId) "AZP/RELEASE: " $(Build.Reason)
-            name: Commit
+              check_release_build $(Build.Reason) $(Build.SourceVersion)
+            name: Result
+            displayName: Check build condition
+
   # Create an empty draft to avoid race condition in distro releases
   - stage: GitHubDraft
-    dependsOn: Check_Commit
+    condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
+    dependsOn: Prepare
     jobs:
       - job: DraftRelease
-        condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
+        displayName: Create draft release
         container: centos7_cuda11_2
         pool:
           name: MLNX
@@ -98,15 +102,17 @@ stages:
               ./ucx-*.tar.gz
               ./rpm-dist/ucx-*.src.rpm
 
-  - stage: Release
-    dependsOn: Check_Commit
-    variables:
-      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
-        TARGET: publish-release
-      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-        TARGET: package
+  - stage: Build
+    displayName: Build binary packages
+    dependsOn:
+      - Prepare
+      - GitHubDraft
+    condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
     jobs:
       - template: az-distro-release.yml
       - template: jucx/jucx-publish.yml
         parameters:
-          target: $(TARGET)
+          ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+            target: publish-release
+          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            target: package

@@ -43,7 +43,6 @@ protected:
     static ucs_status_t
     am_callback(void *arg, const void *header, size_t header_length, void *data,
                 size_t length, const ucp_am_recv_param_t *param);
-    void set_timeouts();
     static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status);
     ucp_ep_h stable_sender();
     ucp_ep_h failing_sender();
@@ -75,7 +74,6 @@ protected:
     std::string                         m_sbuf, m_rbuf;
     mem_handle_t                        m_stable_memh, m_failing_memh;
     ucs::handle<ucp_rkey_h>             m_stable_rkey, m_failing_rkey;
-    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
@@ -85,7 +83,7 @@ test_ucp_peer_failure::test_ucp_peer_failure() :
     m_am_rx_count(0), m_err_count(0), m_err_status(UCS_OK)
 {
     ucs::fill_random(m_sbuf);
-    set_timeouts();
+    set_tl_small_timeouts();
 }
 
 void test_ucp_peer_failure::get_test_variants(
@@ -137,10 +135,6 @@ test_ucp_peer_failure::am_callback(void *arg, const void *header,
     test_ucp_peer_failure *self = reinterpret_cast<test_ucp_peer_failure*>(arg);
     ++self->m_am_rx_count;
     return UCS_OK;
-}
-
-void test_ucp_peer_failure::set_timeouts() {
-    set_tl_timeouts(m_env);
 }
 
 void test_ucp_peer_failure::err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {

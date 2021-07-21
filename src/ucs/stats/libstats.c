@@ -10,6 +10,7 @@
 
 #include "libstats.h"
 
+#include <ucs/sys/string.h>
 #include <ucs/debug/log.h>
 #include <errno.h>
 #include <string.h>
@@ -59,7 +60,7 @@ ucs_status_t ucs_stats_node_initv(ucs_stats_node_t *node, ucs_stats_class_t *cls
 
     /* Set up node */
     node->cls = cls;
-    vsnprintf(node->name, UCS_STAT_NAME_MAX, name, ap);
+    ucs_vsnprintf_safe(node->name, UCS_STAT_NAME_MAX, name, ap);
     ucs_list_head_init(&node->children[UCS_STATS_INACTIVE_CHILDREN]);
     ucs_list_head_init(&node->children[UCS_STATS_ACTIVE_CHILDREN]);
     memset(node->counters, 0, cls->num_counters * sizeof(ucs_stats_counter_t));

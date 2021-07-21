@@ -65,7 +65,7 @@
 #define UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE    10
 
 /* The seconds between individual keepalive probes */
-#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   1
+#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   2
 
 
 /**
@@ -167,7 +167,7 @@ typedef enum uct_tcp_cm_conn_event {
     /* Connection acknowledgment from a EP that accepts a connection from
      * initiator of a connection request. */
     UCT_TCP_CM_CONN_ACK               = UCS_BIT(1),
-    /* Connection acknowledgment + Connection request. The mesasge is sent
+    /* Connection acknowledgment + Connection request. The message is sent
      * from a EP that accepts remote connection when it was in
      * `UCT_TCP_EP_CONN_STATE_CONNECTING` state (i.e. original
      * `UCT_TCP_CM_CONN_REQ` wasn't sent yet) and want to have RX capability
@@ -181,8 +181,8 @@ typedef enum uct_tcp_cm_conn_event {
  * TCP connection request packet flags
  */
 enum {
-    /* Inditicates whether both EPs of the connection has to use CONNECT_TO_EP
-     * CONNECT_TO_EP of connection establishmnet */
+    /* Indicates whether both EPs of the connection has to use CONNECT_TO_EP
+     * CONNECT_TO_EP of connection establishment */
     UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP = UCS_BIT(0)
 };
 
@@ -402,7 +402,7 @@ typedef struct uct_tcp_iface {
             ucs_time_t            idle;              /* The time the connection needs to remain
                                                       * idle before TCP starts sending keepalive
                                                       * probes (TCP_KEEPIDLE socket option) */
-            unsigned              cnt;               /* The maximum number of keepalive probes TCP
+            unsigned long         cnt;               /* The maximum number of keepalive probes TCP
                                                       * should send before dropping the connection
                                                       * (TCP_KEEPCNT socket option). */
             ucs_time_t            intvl;             /* The time between individual keepalive
@@ -440,7 +440,7 @@ typedef struct uct_tcp_iface_config {
     ucs_range_spec_t               port_range;
     struct {
         ucs_time_t                 idle;
-        unsigned                   cnt;
+        unsigned long              cnt;
         ucs_time_t                 intvl;
     } keepalive;
 } uct_tcp_iface_config_t;

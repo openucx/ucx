@@ -18,14 +18,15 @@
 #include <ucs/sys/sys.h>
 
 
-static inline unsigned ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
+static UCS_F_ALWAYS_INLINE size_t
+ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
 {
     return ucs_align_up_pow2(data->elem_size, data->alignment);
 }
 
-static inline ucs_mpool_elem_t *ucs_mpool_chunk_elem(ucs_mpool_data_t *data,
-                                                     ucs_mpool_chunk_t *chunk,
-                                                     unsigned elem_index)
+static UCS_F_ALWAYS_INLINE ucs_mpool_elem_t *
+ucs_mpool_chunk_elem(ucs_mpool_data_t *data, ucs_mpool_chunk_t *chunk,
+                     unsigned elem_index)
 {
     return UCS_PTR_BYTE_OFFSET(chunk->elems,
                                elem_index * ucs_mpool_elem_total_size(data));
@@ -85,8 +86,9 @@ ucs_status_t ucs_mpool_init(ucs_mpool_t *mp, size_t priv_size,
 
     VALGRIND_CREATE_MEMPOOL(mp, 0, 0);
 
-    ucs_debug("mpool %s: align %u, maxelems %u, elemsize %u",
-              ucs_mpool_name(mp), mp->data->alignment, max_elems, mp->data->elem_size);
+    ucs_debug("mpool %s: align %zu, maxelems %u, elemsize %zu",
+              ucs_mpool_name(mp), mp->data->alignment, max_elems,
+              mp->data->elem_size);
     return UCS_OK;
 
 err_strdup:

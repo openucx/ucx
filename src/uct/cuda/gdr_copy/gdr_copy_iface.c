@@ -102,11 +102,11 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth.dedicated = 0;
         if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION) {
             switch (perf_attr->operation) {
-            case UCT_OP_GET_SHORT:
-            case UCT_OP_GET_ZCOPY:
+            case UCT_EP_OP_GET_SHORT:
+            case UCT_EP_OP_GET_ZCOPY:
                 perf_attr->bandwidth.shared = 440.0 * UCS_MBYTE;
                 break;
-            case UCT_OP_PUT_SHORT:
+            case UCT_EP_OP_PUT_SHORT:
                 perf_attr->bandwidth.shared = 10200.0 * UCS_MBYTE;
                 break;
             default:

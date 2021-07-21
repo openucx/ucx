@@ -40,8 +40,8 @@ if [ -z "$BUILD_NUMBER" ]; then
 else
 	echo "Running under jenkins"
 	WS_URL=$JOB_URL/ws
-	TIMEOUT="timeout 160m"
-	TIMEOUT_VALGRIND="timeout 200m"
+	TIMEOUT="timeout 200m"
+	TIMEOUT_VALGRIND="timeout 240m"
 fi
 
 
@@ -1186,12 +1186,12 @@ run_gtest_armclang() {
 	then
 		# armclang has some old go compiler, disabling go build.
 		run_gtest "armclang" CC=armclang CXX=armclang++ --with-go=no
+		module unload arm-compiler/arm-hpc-compiler
 	else
 		echo "==== Not running with armclang compiler ===="
 		echo "1..1"                                          > armclang_skipped.tap
 		echo "ok 1 - # SKIP because armclang not found"     >> armclang_skipped.tap
 	fi
-	module unload arm-compiler/arm-hpc-compiler
 }
 
 

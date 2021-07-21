@@ -15,7 +15,7 @@
 #include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <sys/types.h>

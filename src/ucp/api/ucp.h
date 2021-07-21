@@ -169,7 +169,9 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4), /**< External event file
                                                            descriptor */
     UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5), /**< Worker flags */
-    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6)  /**< Worker name */
+    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6), /**< Worker name */
+    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7) /**< Alignment of active
+                                                          messages on the receiver */
 };
 
 
@@ -589,7 +591,7 @@ enum ucp_cb_param_flags {
  * @brief Atomic operation requested for ucp_atomic_post
  *
  * This enumeration defines which atomic memory operation should be
- * performed by the ucp_atomic_post family of fuctions. All of these are
+ * performed by the ucp_atomic_post family of functions. All of these are
  * non-fetching atomics and will not result in a request handle.
  */
 typedef enum {
@@ -1264,6 +1266,12 @@ typedef struct ucp_worker_params {
      */
     const char              *name;
 
+    /**
+     * Minimal address alignment of the active message data pointer as passed
+     * in argument @a data to the active message handler, defined as
+     * @a ucp_am_recv_callback_t.
+     */
+    size_t                  am_alignment;
 } ucp_worker_params_t;
 
 

@@ -278,7 +278,7 @@ typedef struct ucp_worker {
                                                            * are in-progress */
     uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */
     ucp_tag_match_t                  tm;                  /* Tag-matching queues and offload info */
-    ucs_array_t(ucp_am_cbs)          am;                  /* Array of AM callbacks and their data */
+    ucp_am_info_t                    am;                  /* Array of AM callbacks and their data */
     uint64_t                         am_message_id;       /* For matching long AMs */
     ucp_ep_h                         mem_type_ep[UCS_MEMORY_TYPE_LAST]; /* Memory type EPs */
 
@@ -302,7 +302,7 @@ typedef struct ucp_worker {
         uct_worker_cb_id_t           cb_id;               /* Keepalive callback id */
         ucs_time_t                   last_round;          /* Last round timestamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
-        ucs_list_link_t              *iter_begin;         /* First EP processed keepalive in the
+        ucs_list_link_t              *iter_end;           /* Last EP processed keepalive in the
                                                            * current round */
         ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
         unsigned                     ep_count;            /* Number of EPs processed in current time slot */
@@ -311,16 +311,6 @@ typedef struct ucp_worker {
         size_t                       round_count;         /* Number of rounds done */
     } keepalive;
 } ucp_worker_t;
-
-
-/**
- * UCP worker argument for the error handling callback
- */
-typedef struct ucp_worker_err_handle_arg {
-    ucp_ep_h         ucp_ep;
-    ucs_time_t       timeout;
-    ucs_status_t     status;
-} ucp_worker_err_handle_arg_t;
 
 
 ucs_status_t
@@ -350,13 +340,6 @@ void ucp_worker_signal_internal(ucp_worker_h worker);
 
 void ucp_worker_iface_activate(ucp_worker_iface_t *wiface, unsigned uct_flags);
 
-int ucp_worker_err_handle_remove_filter(const ucs_callbackq_elem_t *elem,
-                                        void *arg);
-
-ucs_status_t ucp_worker_set_ep_failed(ucp_worker_h worker, ucp_ep_h ucp_ep,
-                                      uct_ep_h uct_ep, ucp_lane_index_t lane,
-                                      ucs_status_t status);
-
 void ucp_worker_keepalive_add_ep(ucp_ep_h );
 
 /* EP should be removed from worker all_eps prior to call this function */
@@ -378,6 +361,12 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                 ucp_worker_cfg_index_t config_idx, char *info,
                                 size_t max);
 
+void ucp_worker_vfs_refresh(void *obj);
+
+void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self);
+
+unsigned ucp_worker_discard_uct_ep_progress(void *arg);
+
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_inc(ucp_worker_h worker)
 {
@@ -394,7 +383,5 @@ ucp_worker_flush_ops_count_dec(ucp_worker_h worker)
     ucs_assert(worker->flush_ops_count > 0);
     --worker->flush_ops_count;
 }
-
-void ucp_worker_vfs_refresh(void *obj);
 
 #endif

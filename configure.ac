@@ -174,7 +174,6 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_GTEST], [false])
      AM_CONDITIONAL([HAVE_STATS], [false])
      AM_CONDITIONAL([HAVE_TUNING], [false])
-     AM_CONDITIONAL([HAVE_MEMTRACK], [false])
      AM_CONDITIONAL([HAVE_IB], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW_UD], [false])
@@ -382,6 +381,10 @@ AC_CONFIG_FILES([
                  bindings/java/pom.xml
                  bindings/java/src/main/native/Makefile
                  examples/Makefile
+                 cmake/Makefile
+                 cmake/ucx-config-version.cmake
+                 cmake/ucx-config.cmake
+                 cmake/ucx-targets.cmake
                  ])
 
 AC_CONFIG_FILES([test/mpi/run_mpi.sh], [chmod a+x test/mpi/run_mpi.sh])

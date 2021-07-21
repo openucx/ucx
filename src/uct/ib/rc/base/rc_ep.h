@@ -223,14 +223,6 @@ struct uct_rc_ep {
 };
 
 
-/* EP QP TX cleanup context */
-typedef struct {
-    uct_ib_async_event_wait_t super;      /* LAST_WQE event callback */
-    ucs_list_link_t           list;       /* entry in interface ep_gc_list */
-    uct_rc_iface_t            *iface;     /* interface */
-} uct_rc_ep_cleanup_ctx_t;
-
-
 UCS_CLASS_DECLARE(uct_rc_ep_t, uct_rc_iface_t*, uint32_t, const uct_ep_params_t*);
 
 
@@ -266,11 +258,6 @@ ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
 void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void*arg);
 
-ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
-                                                  ucs_arbiter_group_t *group,
-                                                  ucs_arbiter_elem_t *elem,
-                                                  void *arg);
-
 ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
                             UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
@@ -286,11 +273,9 @@ ucs_status_t uct_rc_ep_flush(uct_rc_ep_t *ep, int16_t max_available,
 ucs_status_t
 uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
-void uct_rc_ep_cleanup_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                          uct_rc_ep_cleanup_ctx_t *cleanup_ctx, uint32_t qp_num);
-
-void uct_rc_ep_cleanup_qp_done(uct_rc_ep_cleanup_ctx_t *cleanup_ctx,
-                               uint32_t qp_num);
+void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
+                          uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx,
+                          uint32_t qp_num, uint16_t cq_credits);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);

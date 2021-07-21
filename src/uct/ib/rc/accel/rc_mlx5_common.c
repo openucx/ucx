@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -245,8 +246,9 @@ UCT_RC_MLX5_DEFINE_ATOMIC_LE_HANDLER(64)
 #if IBV_HW_TM
 #  ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_mlx5_tag_stats_class = {
-    .name = "tag",
-    .num_counters = UCT_RC_MLX5_STAT_TAG_LAST,
+    .name          = "tag",
+    .num_counters  = UCT_RC_MLX5_STAT_TAG_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_MLX5_STAT_TAG_RX_EXP]            = "rx_exp",
         [UCT_RC_MLX5_STAT_TAG_RX_EAGER_UNEXP]    = "rx_unexp_eager",

@@ -600,17 +600,17 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     uint16_t            sn;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
-    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-            return UCS_ERR_NO_RESOURCE; /* waiting for dci */
-        } else {
+        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
             UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
             return UCS_OK;
         }
+
+        return UCS_ERR_NO_RESOURCE; /* waiting for dci */
+    }
+
+    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
+        return UCS_ERR_NO_RESOURCE;
     }
 
     if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
@@ -906,6 +906,16 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     UCT_DC_MLX5_CHECK_DCI_RES(iface, ep);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
+    if (iface->flags & UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED) {
+        /* Failed endpoint should not be scheduled on arbiter */
+        ucs_assertv(!ucs_arbiter_group_is_scheduled(
+                             uct_dc_mlx5_ep_arb_group(iface, ep)), "fc_ep %p",
+                    ep);
+        /* Do not send on a failed endpoint, caller can add the operation to
+         * pending */
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     /* TODO: look at common code with uct_ud_mlx5_iface_get_av */
     if (fc_req->sender.payload.is_global) {
         uct_ib_iface_fill_ah_attr_from_gid_lid(
@@ -958,6 +968,18 @@ err_dci_put:
     return status;
 }
 
+void uct_dc_mlx5_ep_do_pending_fc(uct_dc_mlx5_ep_t *fc_ep,
+                                  uct_dc_fc_request_t *fc_req)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(fc_ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+
+    ucs_assert(iface->tx.fc_ep == fc_ep);
+    uct_dc_mlx5_ep_pending_common(iface, fc_ep, &fc_req->super.super, 0, 1,
+                                  !(iface->flags &
+                                    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED));
+}
+
 void
 uct_dc_mlx5_ep_fc_pure_grant_send_completion(uct_rc_iface_send_op_t *send_op,
                                              const void *resp)
@@ -965,8 +987,6 @@ uct_dc_mlx5_ep_fc_pure_grant_send_completion(uct_rc_iface_send_op_t *send_op,
     uct_dc_fc_request_t *fc_req = (uct_dc_fc_request_t*)send_op->buffer;
     uct_dc_mlx5_ep_t *fc_ep     = ucs_derived_of(fc_req->super.ep,
                                                  uct_dc_mlx5_ep_t);
-    uct_dc_mlx5_iface_t *iface  = ucs_derived_of(fc_ep->super.super.iface,
-                                                 uct_dc_mlx5_iface_t);
     char gid_str[32];
 
     if (ucs_likely(!(send_op->flags & UCT_RC_IFACE_SEND_OP_STATUS) ||
@@ -986,7 +1006,7 @@ uct_dc_mlx5_ep_fc_pure_grant_send_completion(uct_rc_iface_send_op_t *send_op,
 
     /* Always add re-sending of FC_PURE_GRANT packet to the pending queue to
      * resend it when DCI will be restored after the failure */
-    uct_dc_mlx5_ep_pending_common(iface, fc_ep, &fc_req->super.super, 0, 1);
+    uct_dc_mlx5_ep_do_pending_fc(fc_ep, fc_req);
 }
 
 static ucs_status_t
@@ -1156,44 +1176,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_grh_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
                           uct_ib_mlx5_base_av_t *, uint8_t,
                           struct mlx5_grh_av *);
 
-void uct_dc_mlx5_ep_pending_common(uct_dc_mlx5_iface_t *iface,
-                                   uct_dc_mlx5_ep_t *ep, uct_pending_req_t *r,
-                                   unsigned flags, int push_to_head)
-{
-    int no_dci = (ep->dci == UCT_DC_MLX5_EP_NO_DCI);
-    ucs_arbiter_group_t *group;
-
-    UCS_STATIC_ASSERT(sizeof(uct_dc_mlx5_pending_req_priv) <=
-                      UCT_PENDING_REQ_PRIV_LEN);
-
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        uct_dc_mlx5_pending_req_priv(r)->ep = ep;
-        group = uct_dc_mlx5_ep_rand_arb_group(iface, ep);
-    } else {
-        group = &ep->arb_group;
-    }
-
-    if (push_to_head) {
-        uct_pending_req_arb_group_push_head(group, r);
-    } else {
-        uct_pending_req_arb_group_push(group, r);
-    }
-
-    if (no_dci) {
-        /* no dci:
-         *  Do not grab dci here. Instead put the group on dci allocation arbiter.
-         *  This way we can assure fairness between all eps waiting for
-         *  dci allocation. Relevant for dcs and dcs_quota policies.
-         */
-        uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
-    } else {
-        uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
-    }
-
-    UCT_TL_EP_STAT_PEND(&ep->super);
-}
-
-
 /* TODO:
    currently pending code supports only dcs policy
    support hash/random policies
@@ -1223,8 +1205,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
         }
     }
 
-    uct_dc_mlx5_ep_pending_common(iface, ep, r, flags, 0);
-
+    uct_dc_mlx5_ep_pending_common(iface, ep, r, flags, 0, 1);
     return UCS_OK;
 }
 
@@ -1243,13 +1224,16 @@ uct_dc_mlx5_iface_dci_do_pending_wait(ucs_arbiter_t *arbiter,
     uint8_t pool_index = uct_dc_mlx5_ep_pool_index(ep);
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assertv(ep->dci == UCT_DC_MLX5_EP_NO_DCI,
+                "ep %p (iface=%p) has DCI=%d (pool %d) while it is scheduled "
+                "in DCI wait queue", ep, iface, ep->dci,
+                iface->tx.dcis[ep->dci].pool_index);
 
-    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-            return UCS_ARBITER_CB_RESULT_STOP;
-        }
-        uct_dc_mlx5_iface_dci_alloc(iface, ep);
+    if (!uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+        return UCS_ARBITER_CB_RESULT_STOP;
     }
+
+    uct_dc_mlx5_iface_dci_alloc(iface, ep);
 
     ucs_assert_always(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     uct_dc_mlx5_iface_dci_sched_tx(iface, ep);
@@ -1285,6 +1269,48 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
+unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
+{
+    uct_dc_mlx5_iface_t *iface = arg;
+    uint64_t pool_map          = 0;
+    uint8_t pool_index;
+    uint8_t dci;
+
+    ucs_assert(iface->tx.dci_release_prog_id != UCS_CALLBACKQ_ID_NULL);
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    UCS_STATIC_ASSERT(UCT_DC_MLX5_IFACE_MAX_DCIS <
+                      UCS_BITMAP_NUM_BITS(iface->tx.dci_release_bitmap));
+
+    UCS_BITMAP_FOR_EACH_BIT(iface->tx.dci_release_bitmap, dci) {
+        ucs_assert(dci < iface->tx.ndci * iface->tx.num_dci_pools);
+        ucs_assert(!uct_dc_mlx5_iface_is_dci_keepalive(iface, dci));
+
+        /* coverity[overrun-call] */
+        uct_dc_mlx5_iface_dci_release(iface, dci);
+        /* coverity[overrun-call] */
+        pool_index = uct_dc_mlx5_iface_dci_pool_index(iface, dci);
+        ucs_assert(pool_index < iface->tx.num_dci_pools);
+        /* save all pools where dcis were released into map */
+        pool_map |= UCS_BIT(pool_index);
+    }
+
+    UCS_BITMAP_CLEAR(&iface->tx.dci_release_bitmap);
+
+    /* run progress pending on all pools where dcis were released */
+    ucs_for_each_bit(pool_index, pool_map) {
+        ucs_assert(pool_index < iface->tx.num_dci_pools);
+        /* coverity[overrun-call] */
+        uct_dc_mlx5_iface_progress_pending(iface, pool_index);
+        /* do not call uct_dc_mlx5_iface_check_tx here - wait for processing of
+         * all pools because multiple pools may be affected by dci_release
+         * loop above */
+    }
+
+    uct_dc_mlx5_iface_check_tx(iface);
+    iface->tx.dci_release_prog_id = UCS_CALLBACKQ_ID_NULL;
+    return 1;
+}
+
 /**
  * dispatch requests waiting for tx resources (dcs* DCI policies)
  */
@@ -1301,18 +1327,23 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
                                                 uct_dc_mlx5_iface_t);
     int is_only                = ucs_arbiter_elem_is_only(elem);
     ucs_arbiter_cb_result_t res;
+    uint8_t dci;
 
     res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
-    if (res == UCS_ARBITER_CB_RESULT_REMOVE_ELEM) {
-        /* For dcs* policies release dci if this is the last elem in the group
-         * and the dci has no outstanding operations. For example pending
-         * callback did not send anything. (uct_ep_flush or just return ok)
-         */
-        if (is_only) {
-            uct_dc_mlx5_iface_dci_free(iface, ep);
-        }
+    if ((res != UCS_ARBITER_CB_RESULT_REMOVE_ELEM) || !is_only) {
+        return res;
     }
 
+    /* For dcs* policies release dci if this is the last elem in the group
+     * and the dci has no outstanding operations. For example pending
+     * callback did not send anything. (uct_ep_flush or just return ok)
+     */
+    dci = ep->dci;
+    if (!uct_dc_mlx5_iface_dci_detach(iface, ep)) {
+        return res;
+    }
+
+    uct_dc_mlx5_iface_dci_schedule_release(iface, dci);
     return res;
 }
 
@@ -1385,6 +1416,7 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     ucs_arbiter_t *waitq;
     ucs_arbiter_group_t *group;
     uint8_t pool_index;
+    uint8_t dci;
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface),
@@ -1397,9 +1429,16 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t c
     ucs_arbiter_group_purge(waitq, group, uct_dc_mlx5_ep_arbiter_purge_cb,
                             &args);
 
-    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
-        uct_dc_mlx5_iface_dci_free(iface, ep);
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        return;
     }
+
+    dci = ep->dci;
+    if (!uct_dc_mlx5_iface_dci_detach(iface, ep)) {
+        return;
+    }
+
+    uct_dc_mlx5_iface_dci_schedule_release(iface, dci);
 }
 
 ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
@@ -1503,6 +1542,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         uct_dc_mlx5_iface_reset_dci(iface, dci_index);
 
         if (ep == iface->tx.fc_ep) {
+            iface->flags &= ~UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
+
             /* Since DCI isn't assigned for the FC endpoint, schedule DCI
              * allocation for progressing possible FC_PURE_GRANT re-sending
              * operation which are scheduled on the pending queue */
@@ -1511,6 +1552,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     }
 
     uct_dc_mlx5_iface_progress_pending(iface, pool_index);
+    uct_dc_mlx5_iface_check_tx(iface);
 }
 
 ucs_status_t

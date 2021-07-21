@@ -191,7 +191,7 @@ typedef struct uct_ib_async_event_wait {
  * IB async event state.
  */
 typedef struct {
-    unsigned                  flag;             /* Event happened */
+    unsigned                  fired;            /* Event happened */
     uct_ib_async_event_wait_t *wait_ctx;        /* Waiting context */
 } uct_ib_async_event_val_t;
 
@@ -415,6 +415,12 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
                                    uint32_t resource_id);
 
+/* Invoke the callback defined by 'wait_ctx' from callback queue when the event
+ * fires. If it has already been fired, the callback is scheduled immediately to
+ * the callback queue.
+ *
+ * @return UCS_OK, or UCS_ERR_BUSY if someone already waiting for this event.
+ */
 ucs_status_t
 uct_ib_device_async_event_wait(uct_ib_device_t *dev,
                                enum ibv_event_type event_type,

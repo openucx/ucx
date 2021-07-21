@@ -75,17 +75,12 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     char err_info[256]  = {};
     char wqe_info[256]  = {};
     char peer_info[128] = {};
-    uint16_t wqe_index;
-    uint32_t qp_num;
+    uint16_t pi         = ntohs(ecqe->wqe_counter);
+    uint32_t qp_num     = ntohl(ecqe->s_wqe_opcode_qpn) &
+                          UCS_MASK(UCT_IB_QPN_ORDER);
     void *wqe;
-    unsigned dest_qpn;
     struct ibv_ah_attr ah_attr;
-
-    wqe_index = ntohs(ecqe->wqe_counter);
-    qp_num    = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    if (txwq != NULL) {
-        wqe_index %= UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) / MLX5_SEND_WQE_BB;
-    }
+    unsigned dest_qpn;
 
     switch (ecqe->syndrome) {
     case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
@@ -145,7 +140,7 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     }
 
     if ((txwq != NULL) && ((ecqe->op_own >> 4) == MLX5_CQE_REQ_ERR)) {
-        wqe = UCS_PTR_BYTE_OFFSET(txwq->qstart, MLX5_SEND_WQE_BB * wqe_index);
+        wqe = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
         uct_ib_mlx5_wqe_dump(iface, wqe, txwq->qstart, txwq->qend, INT_MAX, 0,
                              NULL, wqe_info, sizeof(wqe_info) - 1, NULL);
 
@@ -165,13 +160,14 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     }
 
     ucs_log(log_level,
-            "%s on "UCT_IB_IFACE_FMT"/%s (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
+            "%s on " UCT_IB_IFACE_FMT
+            "/%s (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
             "%s QP 0x%x wqe[%d]: %s %s",
             err_info, UCT_IB_IFACE_ARG(iface),
-            uct_ib_iface_is_roce(iface) ? "RoCE" : "IB",
-            ecqe->syndrome, ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4,
-            ecqe->hw_err_synd, uct_ib_qp_type_str(iface->config.qp_type),
-            qp_num, wqe_index, wqe_info, peer_info);
+            uct_ib_iface_is_roce(iface) ? "RoCE" : "IB", ecqe->syndrome,
+            ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4, ecqe->hw_err_synd,
+            uct_ib_qp_type_str(iface->config.qp_type), qp_num, pi, wqe_info,
+            peer_info);
 
 out:
     return status;

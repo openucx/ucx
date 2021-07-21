@@ -216,8 +216,6 @@ public:
 private:
     static void set_ucp_config(ucp_config_t *config, const std::string& tls);
     static bool check_tls(const std::string& tls);
-    static void add_variant_value(std::vector<ucp_test_variant_value>& values,
-                                  int value, std::string name);
     ucs_status_t request_process(void *req, int worker_index, bool wait);
 
 protected:
@@ -243,7 +241,7 @@ protected:
                                    int worker_index = 0);
     void request_release(void *req);
     int max_connections();
-    void set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env);
+    void set_tl_small_timeouts();
 
     // Add test variant without values, with given context params
     static ucp_test_variant&
@@ -254,6 +252,11 @@ protected:
     static ucp_test_variant&
     add_variant(std::vector<ucp_test_variant>& variants, uint64_t ctx_features,
                 int thread_type = SINGLE_THREAD);
+
+    // Add value to test variant
+    static void
+    add_variant_value(std::vector<ucp_test_variant_value>& values,
+                      int value, std::string name);
 
     // Add test variant with context params and single value
     static void
@@ -339,6 +342,8 @@ protected:
         ucp_mem_h     m_memh;
         void*         m_rkey_buffer;
     };
+
+    ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
 
@@ -348,6 +353,8 @@ public:
 };
 
 
+std::ostream& operator<<(std::ostream& os,
+                         const std::vector<std::string>& str_vector);
 std::ostream& operator<<(std::ostream& os, const ucp_test_param& test_param);
 
 template <class T>

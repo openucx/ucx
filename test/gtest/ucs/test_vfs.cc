@@ -6,7 +6,8 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 }
@@ -142,6 +143,15 @@ public:
         ucs_vfs_obj_add_ro_file(&obj, test_vfs_obj::file_show_cb, NULL, 0,
                                 "info");
         return &obj;
+    }
+
+    static ucs_status_t file_write_cb(void *obj, const char *buffer,
+                                      size_t size, void *arg_ptr,
+                                      uint64_t arg_u64)
+    {
+        int *arg = (int*)arg_ptr;
+        *arg     = atoi(buffer);
+        return UCS_OK;
     }
 };
 
@@ -302,4 +312,58 @@ UCS_MT_TEST_F(test_vfs_obj, add_sym_link, 4)
 
     barrier();
     ucs_vfs_obj_remove(&target);
+}
+
+UCS_TEST_F(test_vfs_obj, add_rw_check_ret) {
+    int obj = 0, no_obj;
+
+    EXPECT_UCS_OK(ucs_vfs_obj_add_dir(NULL, &obj, "obj"));
+
+    EXPECT_UCS_OK(ucs_vfs_obj_add_rw_file(&obj, ucs_vfs_show_primitive,
+                                          test_vfs_obj::file_write_cb, &obj,
+                                          UCS_VFS_TYPE_INT, "info"));
+    EXPECT_EQ(UCS_ERR_ALREADY_EXISTS,
+              ucs_vfs_obj_add_rw_file(&obj, ucs_vfs_show_primitive,
+                                      test_vfs_obj::file_write_cb, &obj,
+                                      UCS_VFS_TYPE_INT, "info"));
+    EXPECT_EQ(UCS_ERR_INVALID_PARAM,
+              ucs_vfs_obj_add_rw_file(&no_obj, ucs_vfs_show_primitive,
+                                      test_vfs_obj::file_write_cb, &obj,
+                                      UCS_VFS_TYPE_INT, "info"));
+
+    ucs_vfs_obj_remove(&obj);
+}
+
+UCS_MT_TEST_F(test_vfs_obj, rw_file, 4)
+{
+    static int obj = 0;
+    ucs_vfs_obj_add_dir(NULL, &obj, "obj");
+    ucs_vfs_obj_add_rw_file(&obj, ucs_vfs_show_primitive,
+                            test_vfs_obj::file_write_cb, &obj, UCS_VFS_TYPE_INT,
+                            "info");
+
+    ucs_vfs_path_info_t path_info;
+    EXPECT_UCS_OK(ucs_vfs_path_get_info("/obj/info", &path_info));
+    EXPECT_EQ(2, path_info.size);
+    EXPECT_TRUE(path_info.mode & S_IWUSR);
+
+    barrier();
+
+    const char new_value[] = "777\n";
+    EXPECT_UCS_OK(
+            ucs_vfs_path_write_file("/obj/info", new_value, sizeof(new_value)));
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_vfs_path_write_file("/obj", new_value, sizeof(new_value)));
+
+    barrier();
+
+    ucs_string_buffer_t strb;
+    ucs_string_buffer_init(&strb);
+    EXPECT_UCS_OK(ucs_vfs_path_read_file("/obj/info", &strb));
+    EXPECT_STREQ(new_value, ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
+
+    barrier();
+
+    ucs_vfs_obj_remove(&obj);
 }

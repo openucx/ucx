@@ -10,7 +10,7 @@
 
 #include <uct/sm/mm/base/mm_md.h>
 #include <uct/sm/mm/base/mm_iface.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 

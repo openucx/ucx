@@ -45,6 +45,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/string_set.h \
 	debug/log_def.h \
 	debug/debug.h \
+	debug/memtrack.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -70,6 +71,7 @@ nobase_dist_libucs_la_HEADERS = \
 	type/thread_mode.h \
 	type/cpu_set.h \
 	vfs/base/vfs_obj.h \
+	vfs/base/vfs_cb.h \
 	arch/atomic.h \
 	arch/x86_64/global_opts.h \
 	arch/x86_64/atomic.h \
@@ -99,7 +101,7 @@ noinst_HEADERS = \
 	debug/assert.h \
 	debug/debug_int.h \
 	debug/log.h \
-	debug/memtrack.h \
+	debug/memtrack_int.h \
 	memory/numa.h \
 	memory/rcache_int.h \
 	profile/profile.h \
@@ -178,7 +180,8 @@ libucs_la_SOURCES = \
 	type/status.c \
 	type/spinlock.c \
 	type/thread_mode.c \
-	vfs/base/vfs_obj.c
+	vfs/base/vfs_obj.c \
+	vfs/base/vfs_cb.c
 
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \

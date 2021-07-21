@@ -396,18 +396,16 @@ struct ucp_recv_desc {
         ucs_queue_elem_t    am_mid_queue;    /* AM middle fragments queue */
     };
     uint32_t                length;          /* Received length */
-    union {
-        uint32_t            payload_offset;  /* Offset from end of the descriptor
-                                              * to AM data */
-        uint32_t            am_malloc_offset; /* Offset from rdesc, holding
-                                                 assembled multi-fragment active
-                                                 message, to the originally
-                                                 malloc'd buffer pointer */
-    };
+    uint32_t                payload_offset;  /* Offset from end of the
+                                                descriptor to AM data */
     uint16_t                flags;           /* Flags */
-    int16_t                 uct_desc_offset; /* Offset which needs to be
-                                                substructed from rdesc when
-                                                releasing it back to UCT */
+    int16_t                 release_desc_offset; /* Offset which needs to be
+                                                    substructed from rdesc when
+                                                    releasing it back to UCT or
+                                                    AM memory pool or freeing it
+                                                    in case of assembled
+                                                    multi-fragment active message */
+
 };
 
 
@@ -431,7 +429,7 @@ extern ucs_mpool_ops_t ucp_rndv_get_mpool_ops;
 extern const ucp_request_param_t ucp_request_null_param;
 
 
-int ucp_request_pending_add(ucp_request_t *req, unsigned pending_flags);
+int ucp_request_pending_add(ucp_request_t *req);
 
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,
@@ -455,5 +453,7 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);
 
 ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
+
+void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
 
 #endif

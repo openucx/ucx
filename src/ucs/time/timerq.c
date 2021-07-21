@@ -11,7 +11,7 @@
 #include "timerq.h"
 
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
 #include <stdlib.h>
 

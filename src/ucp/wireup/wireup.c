@@ -196,6 +196,8 @@ ucp_wireup_msg_prepare(ucp_ep_h ep, uint8_t type,
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
         msg_hdr->dst_ep_id = ucp_ep_remote_id(ep);
     } else {
+        /* Destination UCP endpoint ID must be packed in case of CM */
+        ucs_assert(!ucp_ep_has_cm_lane(ep));
         msg_hdr->dst_ep_id = UCS_PTR_MAP_KEY_INVALID;
     }
 
@@ -248,12 +250,12 @@ ucp_wireup_msg_send(ucp_ep_h ep, uint8_t type, const ucp_tl_bitmap_t *tl_bitmap,
         goto err;
     }
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     /* coverity[leaked_storage] */
     return UCS_OK;
 
 err:
-    ucp_worker_set_ep_failed(ep->worker, ep, NULL, UCP_NULL_LANE, status);
+    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
     return status;
 }
 
@@ -450,7 +452,7 @@ ucp_wireup_init_lanes_by_request(ucp_worker_h worker, ucp_ep_h ep,
         return UCS_OK;
     }
 
-    ucp_worker_set_ep_failed(worker, ep, NULL, UCP_NULL_LANE, status);
+    ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, status);
     return status;
 }
 
@@ -805,8 +807,7 @@ static ucs_status_t ucp_wireup_msg_handler(void *arg, void *data,
         ucp_wireup_send_ep_removed(worker, msg, &remote_address);
     } else if (msg->type == UCP_WIREUP_MSG_EP_REMOVED) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
-        ucp_worker_set_ep_failed(worker, ep, NULL, UCP_NULL_LANE,
-                                 UCS_ERR_CONNECTION_RESET);
+        ucp_ep_set_failed_schedule(ep, UCP_NULL_LANE, UCS_ERR_CONNECTION_RESET);
     } else {
         ucs_bug("invalid wireup message");
     }
@@ -836,7 +837,7 @@ ucp_wireup_replay_pending_request(uct_pending_req_t *self, void *arg)
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     ucs_assert(req->send.ep == (ucp_ep_h)arg);
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
 }
 
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
@@ -1221,7 +1222,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                               ucp_wireup_ep_extract_next_ep(ep->uct_eps[reuse_lane]),
                               old_key->lanes[reuse_lane].rsc_index);
         ucp_wireup_ep_pending_queue_purge(ep->uct_eps[reuse_lane],
-                                          ucp_wireup_pending_purge_cb,
+                                          ucp_request_purge_enqueue_cb,
                                           replay_pending_queue);
 
         /* reset the UCT EP from the previous WIREUP lane and destroy its WIREUP EP,
@@ -1241,7 +1242,7 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
                 ucp_worker_discard_uct_ep(
                         ep, ep->uct_eps[lane], UCT_FLUSH_FLAG_LOCAL,
-                        ucp_wireup_pending_purge_cb, replay_pending_queue,
+                        ucp_request_purge_enqueue_cb, replay_pending_queue,
                         (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
                 ep->uct_eps[lane] = NULL;
             }
@@ -1408,16 +1409,6 @@ ucs_status_t ucp_wireup_send_request(ucp_ep_h ep)
     return status;
 }
 
-void ucp_wireup_pending_purge_cb(uct_pending_req_t *self, void *arg)
-{
-    ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
-    ucs_queue_head_t *queue = arg;
-
-    ucs_trace_req("ep %p: extracted request %p from pending queue", req->send.ep,
-                  req);
-    ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
-}
-
 ucs_status_t ucp_wireup_send_pre_request(ucp_ep_h ep)
 {
     ucs_status_t status;
@@ -1481,7 +1472,7 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
      * could not be progressed any more after switching to wireup proxy).
      */
     ucs_queue_head_init(&tmp_q);
-    uct_ep_pending_purge(uct_ep, ucp_wireup_pending_purge_cb, &tmp_q);
+    uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb, &tmp_q);
 
     /* the wireup ep should use the existing [am_lane] as next_ep */
     ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);

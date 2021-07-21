@@ -13,7 +13,7 @@
 #include "ib_md.h"
 
 #include <ucs/arch/bitops.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/compiler.h>
@@ -74,8 +74,9 @@ KHASH_IMPL(uct_ib_async_event, uct_ib_async_event_t, uct_ib_async_event_val_t, 1
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ib_device_stats_class = {
-    .name           = "",
-    .num_counters   = UCT_IB_DEVICE_STAT_LAST,
+    .name          = "",
+    .num_counters  = UCT_IB_DEVICE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_IB_DEVICE_STAT_ASYNC_EVENT] = "async_event"
     }
@@ -197,6 +198,16 @@ static void uct_ib_device_get_locality(const char *dev_name,
 }
 
 static void
+uct_ib_device_async_event_schedule_callback(uct_ib_device_t *dev,
+                                            uct_ib_async_event_wait_t *wait_ctx)
+{
+    ucs_assert(ucs_spinlock_is_held(&dev->async_event_lock));
+    ucs_assert(wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
+    wait_ctx->cb_id = ucs_callbackq_add_safe(wait_ctx->cbq, wait_ctx->cb,
+                                             wait_ctx, 0);
+}
+
+static void
 uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
                                    const uct_ib_async_event_t *event)
 {
@@ -207,13 +218,9 @@ uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_async_event, &dev->async_events_hash, *event);
     if (iter != kh_end(&dev->async_events_hash)) {
         entry = &kh_value(&dev->async_events_hash, iter);
-        entry->flag = 1;
+        entry->fired = 1;
         if (entry->wait_ctx != NULL) {
-            /* someone is waiting */
-            ucs_assert(entry->wait_ctx->cb_id == UCS_CALLBACKQ_ID_NULL);
-            entry->wait_ctx->cb_id = ucs_callbackq_add_safe(
-                    entry->wait_ctx->cbq, entry->wait_ctx->cb,
-                    entry->wait_ctx, 0);
+            uct_ib_device_async_event_schedule_callback(dev, entry->wait_ctx);
         }
     }
     ucs_spin_unlock(&dev->async_event_lock);
@@ -243,12 +250,18 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
     ucs_assert(ret != UCS_KH_PUT_KEY_PRESENT);
     entry           = &kh_value(&dev->async_events_hash, iter);
     entry->wait_ctx = NULL;
-    entry->flag     = 0;
+    entry->fired    = 0;
     status          = UCS_OK;
 
 out:
     ucs_spin_unlock(&dev->async_event_lock);
     return status;
+}
+
+static int uct_ib_device_async_event_inprogress(uct_ib_async_event_val_t *entry)
+{
+    return (entry->wait_ctx != NULL) &&
+           (entry->wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL);
 }
 
 ucs_status_t
@@ -270,20 +283,19 @@ uct_ib_device_async_event_wait(uct_ib_device_t *dev,
     ucs_assert(iter != kh_end(&dev->async_events_hash));
     entry = &kh_value(&dev->async_events_hash, iter);
 
-    if (entry->flag) {
-        /* event already arrived */
-        status          = UCS_OK;
-        entry->wait_ctx = NULL;
-    } else if (entry->wait_ctx != NULL) {
-        /* someone is already waiting for this event */
-        status          = UCS_ERR_BUSY;
-    } else {
-        /* start waiting for this event */
-        wait_ctx->cb_id = UCS_CALLBACKQ_ID_NULL;
-        status          = UCS_INPROGRESS;
-        entry->wait_ctx = wait_ctx;
+    if (uct_ib_device_async_event_inprogress(entry)) {
+        status = UCS_ERR_BUSY;
+        goto out_unlock;
     }
 
+    status          = UCS_OK;
+    wait_ctx->cb_id = UCS_CALLBACKQ_ID_NULL;
+    entry->wait_ctx = wait_ctx;
+    if (entry->fired) {
+        uct_ib_device_async_event_schedule_callback(dev, wait_ctx);
+    }
+
+out_unlock:
     ucs_spin_unlock(&dev->async_event_lock);
     return status;
 }
@@ -303,8 +315,7 @@ void uct_ib_device_async_event_unregister(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_async_event, &dev->async_events_hash, event);
     ucs_assert(iter != kh_end(&dev->async_events_hash));
     entry = &kh_value(&dev->async_events_hash, iter);
-    if ((entry->wait_ctx != NULL) &&
-        (entry->wait_ctx->cb_id != UCS_CALLBACKQ_ID_NULL)) {
+    if (uct_ib_device_async_event_inprogress(entry)) {
         /* cancel scheduled callback */
         ucs_callbackq_remove_safe(entry->wait_ctx->cbq, entry->wait_ctx->cb_id);
     }

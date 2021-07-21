@@ -120,24 +120,6 @@ AM_CONDITIONAL([HAVE_TUNING],[test "x$HAVE_TUNING" = "xyes"])
 
 
 #
-# Enable memory tracking
-#
-AC_ARG_ENABLE([memtrack],
-	AS_HELP_STRING([--enable-memtrack], 
-	               [Enable memory tracking, useful for profiling, default: NO]),
-	[],
-	[enable_memtrack=no])
-	
-AS_IF([test "x$enable_memtrack" = xyes],
-	  [AS_MESSAGE([enabling memory tracking])
-	   AC_DEFINE([ENABLE_MEMTRACK], [1], [Enable memory tracking])
-	   HAVE_MEMTRACK=yes],
-	  [:]
-  )
-AM_CONDITIONAL([HAVE_MEMTRACK],[test "x$HAVE_MEMTRACK" = "xyes"])
-
-
-#
 # Disable logging levels below INFO
 #
 AC_ARG_ENABLE([logging],

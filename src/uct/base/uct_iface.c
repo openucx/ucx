@@ -1,7 +1,8 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
-*
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
+*
 * See file LICENSE for terms.
 */
 
@@ -22,10 +23,30 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
+const char *uct_ep_operation_names[] = {
+    [UCT_EP_OP_AM_SHORT]     = "am_short",
+    [UCT_EP_OP_AM_BCOPY]     = "am_bcopy",
+    [UCT_EP_OP_AM_ZCOPY]     = "am_zcopy",
+    [UCT_EP_OP_PUT_SHORT]    = "put_short",
+    [UCT_EP_OP_PUT_BCOPY]    = "put_bcopy",
+    [UCT_EP_OP_PUT_ZCOPY]    = "put_zcopy",
+    [UCT_EP_OP_GET_SHORT]    = "get_short",
+    [UCT_EP_OP_GET_BCOPY]    = "get_bcopy",
+    [UCT_EP_OP_GET_ZCOPY]    = "get_zcopy",
+    [UCT_EP_OP_EAGER_SHORT]  = "eager_short",
+    [UCT_EP_OP_EAGER_BCOPY]  = "eager_bcopy",
+    [UCT_EP_OP_EAGER_ZCOPY]  = "eager_zcopy",
+    [UCT_EP_OP_RNDV_ZCOPY]   = "rndv_zcopy",
+    [UCT_EP_OP_ATOMIC_POST]  = "atomic_post",
+    [UCT_EP_OP_ATOMIC_FETCH] = "atomic_fetch",
+    [UCT_EP_OP_LAST]         = NULL
+};
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ep_stats_class = {
-    .name = "uct_ep",
-    .num_counters = UCT_EP_STAT_LAST,
+    .name          = "uct_ep",
+    .num_counters  = UCT_EP_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_EP_STAT_AM]          = "am",
         [UCT_EP_STAT_PUT]         = "put",
@@ -46,8 +67,9 @@ static ucs_stats_class_t uct_ep_stats_class = {
 };
 
 static ucs_stats_class_t uct_iface_stats_class = {
-    .name = "uct_iface",
-    .num_counters = UCT_IFACE_STAT_LAST,
+    .name          = "uct_iface",
+    .num_counters  = UCT_IFACE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_IFACE_STAT_RX_AM]       = "rx_am",
         [UCT_IFACE_STAT_RX_AM_BYTES] = "rx_am_bytes",

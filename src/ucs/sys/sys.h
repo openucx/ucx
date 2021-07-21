@@ -17,7 +17,7 @@
 #include <ucs/type/status.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/time/time_def.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/config/types.h>
 #include <ucs/config/parser.h>
 
@@ -220,7 +220,7 @@ int ucs_sys_max_open_files();
  *                             fclose() should be called to release resources (1)
  *                             or not (0).
  * @param [out] p_next_token   Pointer that is set to remainder of @config_str.
- * @oaram [out] p_filename     Pointer to the variable that is filled with the
+ * @param [out] p_filename     Pointer to the variable that is filled with the
  *                             resulted name of the log file (if it is not NULL).
  *                             Caller is responsible to release memory then.
  *
@@ -356,7 +356,7 @@ ucs_status_t ucs_sysv_free(void *address);
  * @param flags     Flags to pass to the mmap() system call
  */
 ucs_status_t ucs_mmap_alloc(size_t *size, void **address_p,
-                            int flags UCS_MEMTRACK_ARG);
+                            int flags, const char *alloc_name);
 
 /**
  * Release memory allocated via mmap API.
@@ -579,7 +579,7 @@ uint64_t ucs_iface_get_system_id();
  *
  * @return UCS_OK if directory is found and successfully iterated thought all
  *         entries, error code in all other cases, see NOTES.
- * 
+ *
  * @note ucs_sys_readdir function reads directory pointed by @a path argument
  *       and calls @a cb function for every entry in directory, including
  *       '.' and '..'. In case if @a cb function returns value different from
@@ -596,7 +596,7 @@ ucs_status_t ucs_sys_readdir(const char *path, ucs_sys_readdir_cb_t cb, void *ct
  *
  * @return UCS_OK if directory is found and successfully iterated thought all
  *         entries, error code in all other cases, see NOTES.
- * 
+ *
  * @note ucs_sys_enum_threads function enumerates current process threads
  *       and calls @a cb function for every thread. In case if @a cb function
  *       returns value different from UCS_OK then function breaks
@@ -616,6 +616,30 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
  */
 ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
                                    ucs_time_t *time);
+
+
+/**
+ * Check the per-process limit on the number of open file descriptors.
+ *
+ * @return UCS_OK if the limit has not been reached. UCS_ERR_EXCEEDS_LIMIT,
+ *         otherwise.
+ */
+ucs_status_t ucs_sys_check_fd_limit_per_process();
+
+
+/*
+ * Create a named thread.
+ *
+ * @param [out] thread_id_p     If successful, set to the new thread id.
+ * @param [in]  start_routine   Thread function.
+ * @param [in]  arg             Custom argument for start_routine.
+ * @param [in]  fmt             Thread name format string.
+ *
+ * @return UCS_OK if successful, or error status if failed.
+ */
+ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
+                                void *(*start_routine)(void*), void *arg,
+                                const char *fmt, ...) UCS_F_PRINTF(4, 5);
 
 END_C_DECLS
 

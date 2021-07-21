@@ -219,17 +219,22 @@ char *ucs_dirname(char *path, int num_layers)
     return path;
 }
 
-void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
+void ucs_vsnprintf_safe(char *buf, size_t size, const char *fmt, va_list ap)
 {
-    va_list ap;
-
     if (size == 0) {
         return;
     }
 
-    va_start(ap, fmt);
     vsnprintf(buf, size, fmt, ap);
     buf[size - 1] = '\0';
+}
+
+void ucs_snprintf_safe(char *buf, size_t size, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    ucs_vsnprintf_safe(buf, size, fmt, ap);
     va_end(ap);
 }
 

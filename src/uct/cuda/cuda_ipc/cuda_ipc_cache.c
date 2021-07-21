@@ -11,7 +11,7 @@
 #include "cuda_ipc_cache.h"
 #include "cuda_ipc_iface.h"
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>

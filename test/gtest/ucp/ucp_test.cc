@@ -23,8 +23,8 @@ namespace ucp {
 const uint32_t MAGIC = 0xd7d7d7d7U;
 }
 
-static std::ostream& operator<<(std::ostream& os,
-                                const std::vector<std::string>& str_vector)
+std::ostream& operator<<(std::ostream& os,
+                         const std::vector<std::string>& str_vector)
 {
     for (std::vector<std::string>::const_iterator iter = str_vector.begin();
          iter != str_vector.end(); ++iter) {
@@ -297,12 +297,12 @@ int ucp_test::max_connections() {
     }
 }
 
-void ucp_test::set_tl_timeouts(ucs::ptr_vector<ucs::scoped_setenv> &env)
+void ucp_test::set_tl_small_timeouts()
 {
     /* Set small TL timeouts to reduce testing time */
-    env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
-    env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
-    env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_RNR_TIMEOUT", "10ms"));
+    m_env.push_back(new ucs::scoped_setenv("UCX_RC_RETRY_COUNT", "2"));
 }
 
 void ucp_test::set_ucp_config(ucp_config_t *config, const std::string& tls)
@@ -339,7 +339,7 @@ ucp_test_variant& ucp_test::add_variant(std::vector<ucp_test_variant>& variants,
 }
 
 int ucp_test::get_variant_value(unsigned index) const {
-    if (GetParam().variant.values.empty()) {
+    if (GetParam().variant.values.size() <= index) {
         return DEFAULT_PARAM_VARIANT;
     }
     return GetParam().variant.values.at(index).value;

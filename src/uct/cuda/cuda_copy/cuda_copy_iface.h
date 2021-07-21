@@ -11,9 +11,6 @@
 #include <pthread.h>
 
 
-#define UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH (10000.0 * UCS_MBYTE)
-
-
 #define UCT_CUDA_COPY_IFACE_OVERHEAD          (0)
 
 
@@ -36,6 +33,7 @@ typedef struct uct_cuda_copy_iface {
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
+        double                  bandwidth;
     } config;
     struct {
         void                    *event_arg;
@@ -48,6 +46,7 @@ typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     unsigned                max_cuda_events;
+    double                  bandwidth;
 } uct_cuda_copy_iface_config_t;
 
 

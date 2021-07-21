@@ -132,17 +132,26 @@ try_load_cuda_env() {
 }
 
 
-check_commit_message() {
-    git_id=$1
-    title_mask=$2
-    build_reason=$3
-    echo "Get commit message target $git_id"
-    title=`git log -1 --format="%s" $git_id`
+check_release_build() {
+    build_reason=$1
+    build_sourceversion=$2
 
-    if [[ ( "$build_reason" == "IndividualCI" ) || ( "$title" == "$title_mask"* && "$build_reason" == "PullRequest" ) ]]
+
+    if [ "${build_reason}" == "IndividualCI" ] || \
+       [ "${build_reason}" == "ResourceTrigger" ]
     then
-        echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
-    else
-        echo "##vso[task.setvariable variable=Launch;isOutput=true]No"
+        launch=True
+    elif [ "${build_reason}" == "PullRequest" ]
+    then
+        launch=False
+        # In case of pull request, HEAD^ is the branch commit we merge with
+        range="$(git rev-parse HEAD^)..${build_sourceversion}"
+        for sha1 in `git log $range --format="%h"`
+        do
+            title=`git log -1 --format="%s" $sha1`
+            [[ "$title" == "AZP/RELEASE: "* ]] && launch=True
+        done
     fi
+
+    echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
 }

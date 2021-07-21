@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,16 +14,18 @@
 #include "rc_iface.h"
 
 #include <uct/ib/base/ib_verbs.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/type/class.h>
 #include <endian.h>
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_fc_stats_class = {
-    .name = "rc_fc",
-    .num_counters = UCT_RC_FC_STAT_LAST,
+    .name          = "rc_fc",
+    .num_counters  = UCT_RC_FC_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_FC_STAT_NO_CRED]            = "no_cred",
         [UCT_RC_FC_STAT_TX_GRANT]           = "tx_grant",
@@ -38,8 +41,9 @@ static ucs_stats_class_t uct_rc_fc_stats_class = {
 };
 
 static ucs_stats_class_t uct_rc_txqp_stats_class = {
-    .name = "rc_txqp",
-    .num_counters = UCT_RC_TXQP_STAT_LAST,
+    .name          = "rc_txqp",
+    .num_counters  = UCT_RC_TXQP_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_TXQP_STAT_QP_FULL]          = "qp_full",
         [UCT_RC_TXQP_STAT_SIGNAL]           = "signal"
@@ -98,45 +102,31 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
     UCS_STATS_NODE_FREE(fc->stats);
 }
 
-void uct_rc_ep_cleanup_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                          uct_rc_ep_cleanup_ctx_t *cleanup_ctx, uint32_t qp_num)
+void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
+                          uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx,
+                          uint32_t qp_num, uint16_t cq_credits)
 {
-    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
-    uct_ib_md_t *md         = uct_ib_iface_md(&iface->super);
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_rc_iface_t);
+    uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
     ucs_status_t status;
 
-    cleanup_ctx->iface     = iface;
-    cleanup_ctx->super.cbq = &iface->super.super.worker->super.progress_q;
-    cleanup_ctx->super.cb  = ops->cleanup_qp;
+    ucs_assertv(cq_credits < (UINT16_MAX / 2), "cq_credits=%d", cq_credits);
 
     ucs_list_del(&ep->list);
-    ucs_list_add_tail(&iface->ep_gc_list, &cleanup_ctx->list);
-
     uct_rc_iface_remove_qp(iface, qp_num);
+
+    cleanup_ctx->super.cbq  = &iface->super.super.worker->super.progress_q;
+    cleanup_ctx->super.cb   = uct_rc_iface_qp_cleanup_progress;
+    cleanup_ctx->iface      = iface;
+    cleanup_ctx->qp_num     = qp_num;
+    cleanup_ctx->cq_credits = cq_credits;
+    ucs_list_add_tail(&iface->qp_gc_list, &cleanup_ctx->list);
 
     status = uct_ib_device_async_event_wait(&md->dev,
                                             IBV_EVENT_QP_LAST_WQE_REACHED,
                                             qp_num, &cleanup_ctx->super);
-    if (status == UCS_OK) {
-        /* event already arrived, finish cleaning up */
-        ops->cleanup_qp(&cleanup_ctx->super);
-    } else {
-        /* deferred cleanup callback was scheduled */
-        ucs_assert(status == UCS_INPROGRESS);
-    }
-}
-
-void uct_rc_ep_cleanup_qp_done(uct_rc_ep_cleanup_ctx_t *cleanup_ctx,
-                               uint32_t qp_num)
-{
-    uct_ib_md_t *md = ucs_derived_of(cleanup_ctx->iface->super.super.md,
-                                     uct_ib_md_t);
-
-    uct_ib_device_async_event_unregister(&md->dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         qp_num);
-    ucs_list_del(&cleanup_ctx->list);
-    ucs_free(cleanup_ctx);
+    ucs_assert_always(status == UCS_OK);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
@@ -372,7 +362,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    /* No any other pending operations (except no-op, flush(CANEL), and others
+    /* No any other pending operations (except no-op, flush(CANCEL), and others
      * which don't consume TX resources) allowed to be still scheduled on an
      * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL));

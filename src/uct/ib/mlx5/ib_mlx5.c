@@ -18,6 +18,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
@@ -481,6 +482,10 @@ void uct_ib_mlx5_txwq_reset(uct_ib_mlx5_txwq_t *txwq)
 #endif
     uct_ib_fence_info_init(&txwq->fi);
     memset(txwq->qstart, 0, UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend));
+
+    /* Make uct_ib_mlx5_txwq_num_posted_wqes() work if no wqe has completed by
+       setting number-of-segments (ds) field of the last wqe to 1 */
+    uct_ib_mlx5_set_ctrl_qpn_ds(uct_ib_mlx5_txwq_get_wqe(txwq, 0xffff), 0, 1);
 }
 
 void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
@@ -598,6 +603,36 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
 
     uct_ib_mlx5_txwq_reset(txwq);
     return UCS_OK;
+}
+
+void *uct_ib_mlx5_txwq_get_wqe(const uct_ib_mlx5_txwq_t *txwq, uint16_t pi)
+{
+    uint16_t num_bb = UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) /
+                      MLX5_SEND_WQE_BB;
+    return UCS_PTR_BYTE_OFFSET(txwq->qstart, (pi % num_bb) * MLX5_SEND_WQE_BB);
+}
+
+uint16_t uct_ib_mlx5_txwq_num_posted_wqes(const uct_ib_mlx5_txwq_t *txwq,
+                                          uint16_t outstanding)
+{
+    struct mlx5_wqe_ctrl_seg *ctrl;
+    uint16_t pi, count;
+    size_t wqe_size;
+
+    /* Start iteration with the most recently completed WQE, so count from -1.
+       uct_ib_mlx5_txwq_reset() sets qpn_ds in the last WQE in case no WQE has
+       completed */
+    pi    = txwq->prev_sw_pi - outstanding;
+    count = -1;
+    ucs_assert(pi == txwq->hw_ci);
+    do {
+        ctrl     = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
+        wqe_size = (ctrl->qpn_ds >> 24) * UCT_IB_MLX5_WQE_SEG_SIZE;
+        pi      += (wqe_size + MLX5_SEND_WQE_BB - 1) / MLX5_SEND_WQE_BB;
+        ++count;
+    } while (pi != txwq->sw_pi);
+
+    return count;
 }
 
 void uct_ib_mlx5_qp_mmio_cleanup(uct_ib_mlx5_qp_t *qp,

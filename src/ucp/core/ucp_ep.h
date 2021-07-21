@@ -583,6 +583,12 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
+void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                       ucs_status_t status);
+
+void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                ucs_status_t status);
+
 void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
@@ -632,6 +638,15 @@ int ucp_ep_is_local_connected(ucp_ep_h ep);
 unsigned ucp_ep_local_disconnect_progress(void *arg);
 
 size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
+
+void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
+                                     ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
+
+void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                              ucs_string_buffer_t *lane_info_strb);
+
+void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
+                                     ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 

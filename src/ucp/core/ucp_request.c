@@ -250,7 +250,7 @@ ucs_mpool_ops_t ucp_rndv_get_mpool_ops = {
     .obj_cleanup   = NULL
 };
 
-int ucp_request_pending_add(ucp_request_t *req, unsigned pending_flags)
+int ucp_request_pending_add(ucp_request_t *req)
 {
     ucs_status_t status;
     uct_ep_h uct_ep;
@@ -259,7 +259,7 @@ int ucp_request_pending_add(ucp_request_t *req, unsigned pending_flags)
                 ucs_debug_get_symbol_name(req->send.uct.func));
 
     uct_ep = req->send.ep->uct_eps[req->send.lane];
-    status = uct_ep_pending_add(uct_ep, &req->send.uct, pending_flags);
+    status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
     if (status == UCS_OK) {
         ucs_trace_data("ep %p: added pending uct request %p to lane[%d]=%p",
                        req->send.ep, req, req->send.lane, uct_ep);
@@ -600,6 +600,9 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         req->send.proto.comp_cb(req);
     } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
+    } else if (req->send.state.uct_comp.func ==
+               ucp_worker_discard_uct_ep_flush_comp) {
+        ucp_worker_discard_uct_ep_progress(req);
     } else if (req->send.state.uct_comp.func != NULL) {
         /* Fast-forward the sending state to complete the operation when last
          * network completion callback is called
@@ -607,12 +610,10 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         req->send.state.dt.offset = req->send.length;
         uct_completion_update_status(&req->send.state.uct_comp, status);
 
-        if (req->send.state.uct_comp.count == 0) {
-            /* If nothing is in-flight, call completion callback to ensure
-             * cleanup of zero-copy resources
-             */
-            req->send.state.uct_comp.func(&req->send.state.uct_comp);
-        }
+        /* If nothing is in-flight, call completion callback to ensure cleanup
+         * of zero-copy resources
+         */
+        ucp_send_request_invoke_uct_completion(req);
     } else if ((req->send.uct.func == ucp_proto_progress_rndv_rtr) ||
                (req->send.uct.func == ucp_proto_progress_am_rndv_rts) ||
                (req->send.uct.func == ucp_proto_progress_tag_rndv_rts)) {
@@ -620,6 +621,7 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
          * equivalent to reply not being received */
         ucp_ep_req_purge(req->send.ep, req, status, 1);
     } else {
+        ucp_request_send_buffer_dereg(req);
         ucp_request_complete_send(req, status);
     }
 }
@@ -639,4 +641,14 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
     }
 
     return UCS_ERR_MESSAGE_TRUNCATED;
+}
+
+void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg)
+{
+    ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
+    ucs_queue_head_t *queue = arg;
+
+    ucs_trace_req("ep %p: extracted request %p from pending queue",
+                  req->send.ep, req);
+    ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
 }

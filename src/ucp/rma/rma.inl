@@ -20,7 +20,7 @@ ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
 {
     ucs_status_t status;
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     status = req->status;
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
@@ -39,7 +39,7 @@ ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_rma_send_request(ucp_request_t *req, const ucp_request_param_t *param)
 {
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);

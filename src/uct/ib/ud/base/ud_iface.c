@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,7 +14,7 @@
 #include "ud_inl.h"
 
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
@@ -22,8 +23,9 @@
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ud_iface_stats_class = {
-    .name = "ud_iface",
-    .num_counters = UCT_UD_IFACE_STAT_LAST,
+    .name          = "ud_iface",
+    .num_counters  = UCT_UD_IFACE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_UD_IFACE_STAT_RX_DROP] = "rx_drop"
     }

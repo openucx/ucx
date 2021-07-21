@@ -12,7 +12,7 @@
 
 #include <ucs/sys/math.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 
 
 /* Increase the array buffer length by this factor, whenever it needs to grow */

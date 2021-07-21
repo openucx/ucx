@@ -15,7 +15,7 @@
 
 #include <uct/api/uct_def.h>
 #include <uct/ib/base/ib_verbs.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/time/time.h>
 

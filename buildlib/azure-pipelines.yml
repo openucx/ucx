@@ -27,4 +27,3 @@ stages:
       - template: jucx/jucx-publish.yml
         parameters:
           target: publish-snapshot
-
