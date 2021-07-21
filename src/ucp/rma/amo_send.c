@@ -65,11 +65,11 @@
     }
 
 
-static uct_atomic_op_t ucp_uct_op_table[] = {
-    [UCP_ATOMIC_POST_OP_ADD]    = UCT_ATOMIC_OP_ADD,
-    [UCP_ATOMIC_POST_OP_AND]    = UCT_ATOMIC_OP_AND,
-    [UCP_ATOMIC_POST_OP_OR]     = UCT_ATOMIC_OP_OR,
-    [UCP_ATOMIC_POST_OP_XOR]    = UCT_ATOMIC_OP_XOR
+static ucp_atomic_op_t ucp_post_atomic_op_table[] = {
+    [UCP_ATOMIC_POST_OP_ADD]    = UCP_ATOMIC_OP_ADD,
+    [UCP_ATOMIC_POST_OP_AND]    = UCP_ATOMIC_OP_AND,
+    [UCP_ATOMIC_POST_OP_OR]     = UCP_ATOMIC_OP_OR,
+    [UCP_ATOMIC_POST_OP_XOR]    = UCP_ATOMIC_OP_XOR
 };
 
 static uct_atomic_op_t ucp_uct_atomic_op_table[] = {
@@ -225,44 +225,20 @@ out:
 ucs_status_t ucp_atomic_post(ucp_ep_h ep, ucp_atomic_post_op_t opcode, uint64_t value,
                              size_t op_size, uint64_t remote_addr, ucp_rkey_h rkey)
 {
+    ucp_request_param_t param = {
+        .op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE,
+        .datatype     = ucp_dt_make_contig(op_size)
+    };
     ucs_status_ptr_t status_p;
-    ucs_status_t status;
-    ucp_request_t *req;
 
-    UCP_AMO_CHECK_PARAM(ep->worker->context, remote_addr, op_size, opcode,
-                        UCP_ATOMIC_POST_OP_LAST, return UCS_ERR_INVALID_PARAM);
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-
-    ucs_trace_req("atomic_post opcode %d value %"PRIu64" size %zu "
-                  "remote_addr %"PRIx64" rkey %p to %s",
-                  opcode, value, op_size, remote_addr, rkey,
-                  ucp_ep_peer_name(ep));
-
-    status = UCP_RKEY_RESOLVE(rkey, ep, amo);
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    req = ucp_request_get(ep->worker);
-    if (ucs_unlikely(NULL == req)) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
-    }
-
-    ucp_amo_init_post(req, ep, ucp_uct_op_table[opcode], op_size, remote_addr,
-                      rkey, value, rkey->cache.amo_proto);
-
-    status_p = ucp_rma_send_request_cb(req, (ucp_send_callback_t)ucs_empty_function);
+    status_p = ucp_atomic_op_nbx(ep, ucp_post_atomic_op_table[opcode], &value,
+                                 1, remote_addr, rkey, &param);
     if (UCS_PTR_IS_PTR(status_p)) {
         ucp_request_release(status_p);
-        status = UCS_OK;
-    } else {
-        status = UCS_PTR_STATUS(status_p);
+        return UCS_OK;
     }
 
-out:
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
-    return status;
+    return UCS_PTR_STATUS(status_p);
 }
 
 static inline ucs_status_t
