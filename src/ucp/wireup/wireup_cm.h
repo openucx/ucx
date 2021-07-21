@@ -32,7 +32,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            uct_conn_request_h uct_conn_req,
                                            ucp_rsc_index_t cm_idx,
                                            const char *dev_name,
-                                           unsigned ep_init_flags);
+                                           uint8_t address_mode);
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
                                             const ucp_ep_params_t *params);

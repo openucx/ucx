@@ -249,7 +249,7 @@ enum ucp_ep_params_field {
     /**< Connection request field */
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
     UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
-    UCP_EP_PARAM_FIELD_CLIENT_ID         = UCS_BIT(8)  /**< Endpoint id */
+    UCP_EP_PARAM_FIELD_CLIENT_ID         = UCS_BIT(8)  /**< Client id */
 };
 
 
@@ -1372,7 +1372,8 @@ typedef struct ucp_conn_request_attr {
     struct sockaddr_storage client_address;
 
     /**
-     * User defined endpoint id of the remote client.
+     * User defined client id when connecting to remote socket address.
+     * This value is available via @ref ucp_conn_request_query function on the server side.
      */
     uint64_t                client_id;
 } ucp_conn_request_attr_t;

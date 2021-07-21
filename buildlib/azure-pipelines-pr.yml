@@ -326,28 +326,30 @@ stages:
               . buildlib/tools/common.sh
               prepare_build
               gcc --version
-              git clone -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
+              git clone -–depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
               cd $(System.DefaultWorkingDirectory)/ucx-1.11
               ./autogen.sh
               ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install --enable-examples
               make -s -j `nproc`
-              make install
+              make install -s -j `nproc`
 
+              UCX_V11_LIB_PATH=$(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
+              UCX_PR_LIB_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
               # Start server on ucx-1.11 and connect client from master
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-1.11/install/lib/ $(System.DefaultWorkingDirectory)/ucx-1.11/install/bin/ucx_info -v
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-1.11/install/lib/ $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag &
+              LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/install/bin/ucx_info -v
+              LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag &
               server_pid=$!
               sleep 5
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/bin/ucx_info -v
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -a `hostname -I`
+              LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/bin/ucx_info -v
+              LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -a `hostname -I`
               kill -9 $server_pid
               # Start server on ucx master and connect 1.11 to it
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag &
+              LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag &
               server_pid=$!
               sleep 5
-              LD_LIBRARY_PATH=$(System.DefaultWorkingDirectory)/ucx-1.10/install/lib/ $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -a `hostname -I`
+              LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -a `hostname -I`
               kill -9 $server_pid
-            displayName: Test binary compatibility
+            displayName: Test wire compatibility
 
   - stage: Coverity
     dependsOn: [Static_check]
