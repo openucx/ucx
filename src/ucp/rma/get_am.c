@@ -99,6 +99,6 @@ static ucp_proto_t ucp_get_am_bcopy_proto = {
     .flags      = 0,
     .init       = ucp_proto_get_am_bcopy_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_get_am_bcopy_progress
+    .progress   = {ucp_proto_get_am_bcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_get_am_bcopy_proto);

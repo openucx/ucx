@@ -46,6 +46,16 @@ typedef unsigned ucp_proto_id_t;
 typedef uint64_t ucp_proto_id_mask_t;
 
 
+/* Protocol stage ID */
+enum {
+    /* Initial stage. All protocols start from this stage. */
+    UCP_PROTO_STAGE_START = 0,
+
+    /* Stage ID must be lower than this value */
+    UCP_PROTO_STAGE_LAST  = 8
+};
+
+
 /**
  * Protocol flags for internal usage, to allow searching for specific protocols
  */
@@ -179,7 +189,7 @@ struct ucp_proto {
     /* Initial UCT progress function, can be changed during the protocol
      * request lifetime to implement different stages
      */
-    uct_pending_callback_t          progress;
+    uct_pending_callback_t          progress[UCP_PROTO_STAGE_LAST];
 };
 
 

@@ -58,7 +58,7 @@ enum {
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
-    UCP_REQUEST_FLAG_SUPER_VALID           = 0    
+    UCP_REQUEST_FLAG_SUPER_VALID           = 0
 #endif
 };
 
@@ -293,6 +293,7 @@ struct ucp_request {
 
             union {
                 ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
+                ucp_lane_index_t  multi_lane_idx;  /* Index of the lane with multi-send */
                 ucp_lane_map_t    lanes_map_avail; /* Used lanes map */
             };
             uint8_t               mem_type;        /* Memory type, values are
@@ -300,7 +301,7 @@ struct ucp_request {
             ucp_lane_index_t      pending_lane;    /* Lane on which request was moved
                                                     * to pending state */
             ucp_lane_index_t      lane;            /* Lane on which this request is being sent */
-            ucp_lane_index_t      multi_lane_idx;  /* Index of the lane with multi-send */
+            uint8_t               proto_stage;     /* Protocol current stage */
             uct_pending_req_t     uct;             /* UCT pending request */
             ucp_mem_desc_t        *mdesc;
         } send;
@@ -455,5 +456,7 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
 
 void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
+
+ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self);
 
 #endif
