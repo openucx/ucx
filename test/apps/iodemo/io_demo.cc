@@ -2136,7 +2136,7 @@ private:
             _next_active_index = 0;
         } else if (active_index < _next_active_index) {
             // Swap the last element to use (which is saved in active_index now)
-            // and the most recent elemenet which was used for IO.
+            // and the most recent element which was used for IO.
             // It guarantees that we will not skip IO for the last element.
             --_next_active_index;
             active_servers_swap(active_index, _next_active_index);

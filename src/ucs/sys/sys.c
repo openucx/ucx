@@ -873,7 +873,7 @@ ucs_status_t ucs_sysv_alloc(size_t *size, size_t max_size, void **address_p,
 #ifdef SHM_HUGETLB
             if (!(flags & SHM_HUGETLB))
 #endif
-	    {
+            {
                 ucs_error("%s", error_string);
             }
             return UCS_ERR_NO_MEMORY;
