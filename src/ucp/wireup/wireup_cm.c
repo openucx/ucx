@@ -271,11 +271,9 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
         goto err;
     }
     priv_data_length = ucp_cm_priv_data_length(ucp_addr_size);
-    if (priv_data_pack) {
-        wireup_ep        = ucp_ep_get_cm_wireup_ep(ep);
-        if (wireup_ep->client_id != 0) {
-            priv_data_length += sizeof(ucp_wireup_user_data_t);
-        }
+    wireup_ep        = ucp_ep_get_cm_wireup_ep(ep);
+    if (priv_data_pack && wireup_ep->client_id != 0) {
+        priv_data_length += sizeof(ucp_wireup_user_data_t);
     }
 
     cm_idx = ucp_ep_ext_control(ep)->cm_idx;
