@@ -326,7 +326,7 @@ stages:
               . buildlib/tools/common.sh
               prepare_build
               gcc --version
-              git clone -–depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
+              git clone --depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
               cd $(System.DefaultWorkingDirectory)/ucx-1.11
               ./autogen.sh
               ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install --enable-examples

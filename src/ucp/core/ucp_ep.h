@@ -502,9 +502,9 @@ struct ucp_wireup_sockaddr_data {
 } UCS_S_PACKED;
 
 
-typedef struct ucp_wireup_user_data {
+struct ucp_wireup_user_data {
     uint64_t                client_id;      /**< Endpoint client ID */
-} UCS_S_PACKED ucp_wireup_user_data_t;
+} UCS_S_PACKED;
 
 
 typedef struct ucp_conn_request {
