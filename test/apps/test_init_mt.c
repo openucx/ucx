@@ -14,10 +14,19 @@
 #include <omp.h>
 #endif
 
+#include <time.h>
+#include <sys/time.h>
+
 
 int main(int argc, char **argv)
 {
     int count = 0;
+    struct timeval start;
+    struct timeval finish;
+
+    gettimeofday(&start, NULL);
+    printf("starting test [%ld.%06ld] .. ", start.tv_sec, start.tv_usec);
+    fflush(stdout);
 
 #pragma omp parallel
     {
@@ -50,6 +59,9 @@ int main(int argc, char **argv)
 
 #pragma omp barrier
 
-    printf("finished %d threads\n", count);
+    gettimeofday(&finish, NULL);
+    printf("[%ld.%06ld] finished %d threads\n",
+           finish.tv_sec, finish.tv_usec, count);
+    fflush(stdout);
     return 0;
 }
