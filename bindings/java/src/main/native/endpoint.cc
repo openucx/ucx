@@ -91,6 +91,11 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jobject 
         ep_params.err_handler.cb = error_handler;
     }
 
+    if (ep_params.field_mask & UCP_EP_PARAM_FIELD_CLIENT_ID) {
+        field = env->GetFieldID(ucp_ep_params_class, "clientId", "J");
+        ep_params.client_id = env->GetLongField(ucp_ep_params, field);
+    }
+
     ucs_status_t status = ucp_ep_create(ucp_worker, &ep_params, &endpoint);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);

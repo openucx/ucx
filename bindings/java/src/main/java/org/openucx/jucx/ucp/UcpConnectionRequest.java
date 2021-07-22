@@ -15,12 +15,20 @@ import java.net.InetSocketAddress;
 public class UcpConnectionRequest extends UcxNativeStruct {
 
     private InetSocketAddress clientAddress;
+    private long clientId;
 
     /**
      * The address of the remote client that sent the connection request to the server.
      */
     public InetSocketAddress getClientAddress() {
         return clientAddress;
+    }
+
+    /**
+     * Client id of remote endpoint.
+     */
+    public long getClientId() {
+        return clientId;
     }
 
     private UcpConnectionRequest(long nativeId, InetSocketAddress clientAddress) {

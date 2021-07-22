@@ -89,7 +89,8 @@ public class UcpListenerTest  extends UcxTest {
         UcpEndpoint clientToServer = clientWorker.newEndpoint(new UcpEndpointParams()
             .setErrorHandler((ep, status, errorMsg) ->
                 System.err.println("clientToServer error: " + errorMsg))
-            .setPeerErrorHandlingMode().setSocketAddress(serverListener.getAddress()));
+            .setClientId(1).setPeerErrorHandlingMode()
+            .setSocketAddress(serverListener.getAddress()));
 
         while (conRequest.get() == null) {
             serverWorker1.progress();
@@ -97,6 +98,7 @@ public class UcpListenerTest  extends UcxTest {
         }
 
         assertNotNull(conRequest.get().getClientAddress());
+        assertEquals(1, conRequest.get().getClientId());
         UcpEndpoint serverToClientListener = serverWorker2.newEndpoint(
             new UcpEndpointParams().setSocketAddress(conRequest.get().getClientAddress())
                                    .setPeerErrorHandlingMode()

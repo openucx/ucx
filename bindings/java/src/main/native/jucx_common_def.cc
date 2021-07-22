@@ -393,15 +393,18 @@ void process_request(JNIEnv *env, jobject jucx_request, ucs_status_ptr_t status)
 void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
 {
     jobject client_address = NULL;
+    long client_id;
 
     jobject jucx_conn_handler = reinterpret_cast<jobject>(arg);
     JNIEnv *env = get_jni_env();
     ucp_conn_request_attr_t attr;
-    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR;
+    attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR |
+                      UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
     ucs_status_t status = ucp_conn_request_query(conn_request, &attr);
 
     if (status == UCS_OK) {
         client_address = c2jInetSockAddr(env, &attr.client_address);
+        client_id = attr.client_id;
     }
 
     // Construct connection request class instance
@@ -410,7 +413,8 @@ void jucx_connection_handler(ucp_conn_request_h conn_request, void *arg)
                                                           "(JLjava/net/InetSocketAddress;)V");
     jobject jucx_conn_request = env->NewObject(conn_request_cls, conn_request_constructor,
                                                (native_ptr)conn_request, client_address);
-
+    jfieldID clientId = env->GetFieldID(conn_request_cls, "clientId", "J");
+    env->SetLongField(jucx_conn_request, clientId, client_id);
     // Call onConnectionRequest method
     jclass jucx_conn_hndl_cls = env->FindClass("org/openucx/jucx/ucp/UcpListenerConnectionHandler");
     jmethodID on_conn_request = env->GetMethodID(jucx_conn_hndl_cls, "onConnectionRequest",

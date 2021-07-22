@@ -61,6 +61,8 @@ public class UcpEndpointParams extends UcxParams {
 
     private long connectionRequest;
 
+    private long clientId;
+
     UcpEndpointErrorHandler errorHandler;
 
     /**
@@ -123,6 +125,17 @@ public class UcpEndpointParams extends UcxParams {
     public UcpEndpointParams setErrorHandler(UcpEndpointErrorHandler errorHandler) {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_ERR_HANDLER;
         this.errorHandler = errorHandler;
+        return this;
+    }
+
+    /**
+     * User defined client id when connecting to remote socket address.
+     * This value is available via {@link UcpConnectionRequest#getClientId}
+     * function on the server side.
+     */
+    public UcpEndpointParams setClientId(long clientId) {
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_CLIENT_ID;
+        this.clientId = clientId;
         return this;
     }
 }
