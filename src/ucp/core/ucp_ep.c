@@ -704,7 +704,7 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
-    wireup_ep->client_id = UCP_PARAM_VALUE(EP, params, client_id, CLIENT_ID, UINT64_MAX);
+    wireup_ep->client_id = UCP_PARAM_VALUE(EP, params, client_id, CLIENT_ID, 0);
 
     status = ucp_ep_adjust_params(ep, params);
     if (status != UCS_OK) {
