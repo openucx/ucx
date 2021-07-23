@@ -231,6 +231,11 @@ out_unlock:
     return status;
 }
 
+static int ucs_async_thread_is_from_async()
+{
+    return pthread_self() == ucs_async_thread_global_context.thread->thread_id;
+}
+
 static void ucs_async_thread_stop()
 {
     ucs_async_thread_t *thread = NULL;
@@ -434,6 +439,7 @@ static void ucs_async_signal_global_cleanup()
 ucs_async_ops_t ucs_async_thread_spinlock_ops = {
     .init               = ucs_empty_function,
     .cleanup            = ucs_async_signal_global_cleanup,
+    .is_from_async      = ucs_async_thread_is_from_async,
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
     .context_init       = ucs_async_thread_spinlock_init,
@@ -450,6 +456,7 @@ ucs_async_ops_t ucs_async_thread_spinlock_ops = {
 ucs_async_ops_t ucs_async_thread_mutex_ops = {
     .init               = ucs_empty_function,
     .cleanup            = ucs_async_signal_global_cleanup,
+    .is_from_async      = ucs_async_thread_is_from_async,
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
     .context_init       = ucs_async_thread_mutex_init,

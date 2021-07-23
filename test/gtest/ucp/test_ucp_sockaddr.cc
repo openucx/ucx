@@ -691,31 +691,6 @@ protected:
 
 unsigned test_ucp_sockaddr::m_err_count = 0;
 
-UCS_TEST_P(test_ucp_sockaddr, close_ep_force_before_err_cb,
-           "ERROR_HANDLER_DELAY=1s") {
-    const size_t num_sends = 3000; // should be big enough to fill up TX-queue
-    std::vector<char> buffer(20);
-
-    listen_and_communicate(false, SEND_DIRECTION_BIDI);
-    for (size_t i = 0; i < num_sends; ++i) {
-        ucs_status_ptr_t req = ucp_stream_send_nb(sender().ep(), &buffer[0],
-                                                  buffer.size(),
-                                                  ucp_dt_make_contig(1),
-                                                  scomplete_cb, 0);
-        if (UCS_PTR_IS_PTR(req)) {
-            ucp_request_free(req);
-        }
-    }
-
-    ucs_time_t deadline = ucs::get_deadline(10);
-
-    one_sided_disconnect(receiver(), UCP_EP_CLOSE_MODE_FORCE);
-    short_progress_loop();
-    one_sided_disconnect(sender(), UCP_EP_CLOSE_MODE_FORCE);
-
-    EXPECT_LT(ucs_get_time(), deadline);
-}
-
 UCS_TEST_P(test_ucp_sockaddr, listen) {
     listen_and_communicate(false, 0);
 }
