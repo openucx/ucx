@@ -165,6 +165,7 @@ public:
         size_t                          m_rejected_cntr;
         size_t                          m_accept_err_cntr;
         ucs::handle<ucp_ep_params_t*>   m_server_ep_params;
+        const ucp_test_base             *m_test;
 
     private:
         static void empty_send_completion(void *r, ucs_status_t status);

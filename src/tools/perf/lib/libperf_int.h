@@ -158,6 +158,7 @@ void ucx_perf_calc_result(ucx_perf_context_t *perf, ucx_perf_result_t *result);
 
 void uct_perf_barrier(ucx_perf_context_t *perf);
 
+void ucp_perf_thread_barrier(ucx_perf_context_t *perf);
 
 void ucp_perf_barrier(ucx_perf_context_t *perf);
 
