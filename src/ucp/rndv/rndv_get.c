@@ -48,7 +48,8 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_rndv_bulk_init(&params);
+    return ucp_proto_rndv_bulk_init(&params, init_params->priv,
+                                    init_params->priv_size);
 }
 
 static void
@@ -57,7 +58,9 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
                                           send.state.uct_comp);
 
-    ucp_rkey_destroy(req->send.rndv.rkey);
+    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
+                                &req->send.state.dt_iter);
+    ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
     ucp_request_send(req);
 }
@@ -80,6 +83,13 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_zcopy_send_func(
                             tl_rkey, &req->send.state.uct_comp);
 }
 
+static void ucp_proto_rndv_get_zcopy_request_init(ucp_request_t *req)
+{
+    const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
+
+    ucp_proto_rndv_bulk_request_init(req, rpriv);
+}
+
 static ucs_status_t
 ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
 {
@@ -87,8 +97,9 @@ ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
 
     return ucp_proto_multi_zcopy_progress(
-            req, &rpriv->mpriv, NULL, UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-            ucp_proto_rndv_get_zcopy_send_func,
+            req, &rpriv->mpriv, ucp_proto_rndv_get_zcopy_request_init,
+            UCT_MD_MEM_ACCESS_LOCAL_WRITE, ucp_proto_rndv_get_zcopy_send_func,
+            ucp_request_invoke_uct_completion_success,
             ucp_proto_rndv_get_zcopy_fetch_completion);
 }
 
@@ -101,8 +112,8 @@ ucp_proto_rndv_get_common_ats_progress(uct_pending_req_t *uct_req)
     if (req->send.state.dt_iter.length > 0) {
         ucs_assert(req->send.state.uct_comp.count == 0);
     }
-    return ucp_proto_rndv_ack_progress(
-            req, UCP_AM_ID_RNDV_ATS, ucp_proto_request_zcopy_complete_success);
+    return ucp_proto_rndv_ack_progress(req, UCP_AM_ID_RNDV_ATS,
+                                       ucp_proto_rndv_recv_complete);
 }
 
 static ucp_proto_t ucp_rndv_get_zcopy_proto = {
@@ -133,7 +144,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_ack_init(params);
+    status = ucp_proto_rndv_ack_init(params, params->priv);
     if (status != UCS_OK) {
         return status;
     }

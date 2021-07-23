@@ -15,9 +15,10 @@
 #include <ucs/debug/log.h>
 
 
-ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
+ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
+                                  ucp_proto_multi_priv_t *mpriv,
+                                  size_t *priv_size_p)
 {
-    ucp_proto_multi_priv_t *mpriv = params->super.super.priv;
     ucp_context_h context         = params->super.super.worker->context;
     const double max_bw_ratio     = context->config.ext.multi_lane_max_ratio;
     double max_bandwidth, max_frag_ratio, total_bandwidth;
@@ -29,6 +30,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
     const uct_iface_attr_t *iface_attr;
     ucp_proto_multi_lane_priv_t *lpriv;
     ucp_lane_map_t lane_map;
+    size_t max_frag;
 
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
@@ -91,23 +93,25 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params)
     /* Initialize multi-lane private data and relative weights */
     mpriv->reg_md_map = ucp_proto_common_reg_md_map(&params->super, lane_map);
     mpriv->num_lanes  = 0;
+    mpriv->lane_map   = lane_map;
     ucs_for_each_bit(lane, lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
         lpriv = &mpriv->lanes[mpriv->num_lanes++];
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map, lane,
                                         &lpriv->super);
+        max_frag = ucs_double_to_sizet(lanes_bandwidth[lane] / max_frag_ratio,
+                                       lanes_max_frag[lane]);
+        ucs_assert(max_frag > 0);
+
+        /* Due to floating-point accuracy, max_frag may be too large */
+        lpriv->max_frag = max_frag;
         lpriv->weight   = ucs_proto_multi_calc_weight(lanes_bandwidth[lane],
                                                       total_bandwidth);
-        lpriv->max_frag = ucs_double_to_sizet(lanes_bandwidth[lane] /
-                                                      max_frag_ratio,
-                                              SIZE_MAX);
-        ucs_assert(lpriv->max_frag <= lanes_max_frag[lane]);
-        ucs_assert(lpriv->max_frag > 0);
     }
 
     /* Fill the size of private data according to number of used lanes */
-    *params->super.super.priv_size = sizeof(ucp_proto_multi_priv_t) +
-                                     (mpriv->num_lanes * sizeof(*lpriv));
+    *priv_size_p = sizeof(ucp_proto_multi_priv_t) +
+                   (mpriv->num_lanes * sizeof(*lpriv));
 
     /* Calculate protocol performance */
     perf_params.reg_md_map = mpriv->reg_md_map;
