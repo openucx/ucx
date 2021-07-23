@@ -201,6 +201,14 @@ UCS_TEST_F(test_string_buffer, append_hex) {
     EXPECT_EQ(std::string("deadbeef:badc0fee"), ucs_string_buffer_cstr(&strb));
 }
 
+UCS_TEST_F(test_string_buffer, flags) {
+    static const char *flag_names[] = {"zero", "one", "two", "three", "four"};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    /* coverity[overrun-buffer-val] */
+    ucs_string_buffer_append_flags(&strb, UCS_BIT(1) | UCS_BIT(3), flag_names);
+    EXPECT_EQ(std::string("one|three"), ucs_string_buffer_cstr(&strb));
+}
+
 UCS_TEST_F(test_string_buffer, dump) {
     UCS_STRING_BUFFER_ONSTACK(strb, 128);
     ucs_string_buffer_appendf(&strb, "hungry\n");

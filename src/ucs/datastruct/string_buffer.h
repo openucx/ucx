@@ -10,6 +10,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <ucs/datastruct/array.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -154,6 +155,17 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
  */
 void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
                                   size_t size, size_t per_line);
+
+
+/**
+ * Append a flag bitmask representation to the string buffer.
+ *
+ * @param [inout] strb        String buffer to append to.
+ * @param [in]    mask        Append the representation of this mask value.
+ * @param [in]    flag_names  If non-NULL, use this array as flag names.
+ */
+void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
+                                    const char **flag_names);
 
 
 /**
