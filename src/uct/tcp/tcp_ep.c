@@ -92,13 +92,29 @@ static inline ucs_status_t uct_tcp_ep_check_tx_res(uct_tcp_ep_t *ep)
     return UCS_ERR_NO_RESOURCE;
 }
 
+static inline ucs_status_t uct_tcp_ep_ctx_buf_alloc(uct_tcp_ep_t *ep,
+                                                    uct_tcp_ep_ctx_t *ctx,
+                                                    ucs_mpool_t *mpool)
+{
+    ucs_assertv(ctx->buf == NULL, "tcp_ep=%p", ep);
+
+    ctx->buf = ucs_mpool_get_inline(mpool);
+    if (ucs_unlikely(ctx->buf == NULL)) {
+        ucs_warn("tcp_ep %p: unable to get a buffer from %p memory pool", ep,
+                 mpool);
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    return UCS_OK;
+}
+
 static inline void uct_tcp_ep_ctx_rewind(uct_tcp_ep_ctx_t *ctx)
 {
     ctx->offset = 0;
     ctx->length = 0;
 }
 
-static inline void uct_tcp_ep_ctx_init(uct_tcp_ep_ctx_t *ctx)
+static void uct_tcp_ep_ctx_init(uct_tcp_ep_ctx_t *ctx)
 {
     ctx->put_sn = UINT32_MAX;
     ctx->buf    = NULL;
@@ -622,7 +638,8 @@ void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
     to_ep->flags |= from_ep->flags & (UCT_TCP_EP_FLAG_ZCOPY_TX           |
                                       UCT_TCP_EP_FLAG_PUT_RX             |
                                       UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK |
-                                      UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK);
+                                      UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK |
+                                      UCT_TCP_EP_FLAG_NEED_FLUSH);
 
     if (uct_tcp_ep_ctx_buf_need_progress(&to_ep->rx)) {
         /* If some data was already read, we have to process it */
@@ -1331,10 +1348,8 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
     ucs_trace_func("ep=%p", ep);
 
     if (!uct_tcp_ep_ctx_buf_need_progress(&ep->rx)) {
-        ucs_assert(ep->rx.buf == NULL);
-        ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
-        if (ucs_unlikely(ep->rx.buf == NULL)) {
-            ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
+        if (ucs_unlikely(uct_tcp_ep_ctx_buf_alloc(
+                                ep, &ep->rx, &iface->rx_mpool) != UCS_OK)) {
             return 0;
         }
 
@@ -1442,15 +1457,14 @@ uct_tcp_ep_am_prepare(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep,
         return status;
     }
 
-    ucs_assertv(ep->tx.buf == NULL, "ep=%p", ep);
-
-    ep->tx.buf = ucs_mpool_get_inline(&iface->tx_mpool);
-    if (ucs_unlikely(ep->tx.buf == NULL)) {
+    status = uct_tcp_ep_ctx_buf_alloc(ep, &ep->tx, &iface->tx_mpool);
+    if (ucs_unlikely(status != UCS_OK)) {
         goto err_no_res;
     }
 
     *hdr          = ep->tx.buf;
     (*hdr)->am_id = am_id;
+    ep->flags    |= UCT_TCP_EP_FLAG_NEED_FLUSH;
 
     return UCS_OK;
 
@@ -1503,9 +1517,8 @@ static unsigned uct_tcp_ep_progress_magic_number_rx(void *arg)
     uint64_t magic_number;
 
     if (ep->rx.buf == NULL) {
-        ep->rx.buf = ucs_mpool_get_inline(&iface->rx_mpool);
-        if (ucs_unlikely(ep->rx.buf == NULL)) {
-            ucs_warn("tcp_ep %p: unable to get a buffer from RX memory pool", ep);
+        if (ucs_unlikely(uct_tcp_ep_ctx_buf_alloc(
+                                ep, &ep->rx, &iface->rx_mpool) != UCS_OK)) {
             return 0;
         }
     }
@@ -1669,8 +1682,8 @@ static void uct_tcp_ep_post_put_ack(uct_tcp_ep_t *ep)
     /* Make sure that we are sending nothing through this EP at the moment.
      * This check is needed to avoid mixing AM/PUT data sent from this EP
      * and this PUT ACK message */
-    status = uct_tcp_ep_am_prepare(iface, ep,
-                                   UCT_TCP_EP_PUT_ACK_AM_ID, &hdr);
+    status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_PUT_ACK_AM_ID,
+                                   &hdr);
     if (status != UCS_OK) {
         if (status == UCS_ERR_NO_RESOURCE) {
             ep->flags |= UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK;
@@ -2067,9 +2080,20 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     status = uct_tcp_ep_check_tx_res(ep);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
-        return UCS_ERR_NO_RESOURCE;
+    if (ucs_unlikely(status != UCS_OK)) {
+        return status;
+    }
+
+    if (ep->flags & UCT_TCP_EP_FLAG_NEED_FLUSH) {
+        status = uct_tcp_ep_put_zcopy(&ep->super.super, NULL, 0, 0, 0,
+                                      NULL);
+        ucs_assert(status != UCS_ERR_NO_RESOURCE);
+        if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+            return status;
+        }
+
+        ep->flags &= ~UCT_TCP_EP_FLAG_NEED_FLUSH;
+        ucs_assert(ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK);
     }
 
     if (ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK) {
@@ -2078,6 +2102,7 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
             return status;
         }
 
+        UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
         return UCS_INPROGRESS;
     }
 
@@ -2095,7 +2120,8 @@ uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 
     UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
-    status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_KEEPALIVE_AM_ID, &hdr);
+    status = uct_tcp_ep_am_prepare(iface, ep, UCT_TCP_EP_KEEPALIVE_AM_ID,
+                                   &hdr);
     if (status != UCS_OK) {
         return (status == UCS_ERR_NO_RESOURCE) ? UCS_OK : status;
     }

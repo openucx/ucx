@@ -516,8 +516,9 @@ bool ucp_test::check_tls(const std::string& tls)
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params,
-                              const ucp_test_base *test_owner)
-    : m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0)
+                              const ucp_test_base *test_owner) :
+        m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0),
+        m_test(test_owner)
 {
     const int thread_type                   = test_param.variant.thread_type;
     ucp_params_t local_ctx_params           = test_param.variant.ctx_params;
@@ -987,7 +988,10 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     ucs_status_t        status;
     ucp_tag_recv_info_t info;
     do {
-        e->progress();
+        const ucp_test *test = dynamic_cast<const ucp_test*>(e->m_test);
+        ASSERT_TRUE(test != NULL);
+
+        test->progress();
         status = ucp_request_test(req, &info);
     } while (status == UCS_INPROGRESS);
     EXPECT_EQ(UCS_OK, status);
