@@ -84,6 +84,19 @@ typedef ucs_status_t (*ucp_proto_send_multi_cb_t)(
                 ucp_datatype_iter_t *next_iter);
 
 
+/**
+ * Send callback for lane-map multi-send protocol
+ *
+ * @param [in] req   Request to send.
+ * @param [in] lane  Endpoint lane index to send on.
+ *
+ * @return Send operation status, using same semantics as returned from UCT send
+ *         functions.
+ */
+typedef ucs_status_t (*ucp_proto_multi_lane_send_func_t)(ucp_request_t *req,
+                                                         ucp_lane_index_t lane);
+
+
 ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   ucp_proto_multi_priv_t *mpriv,
                                   size_t *priv_size_p);

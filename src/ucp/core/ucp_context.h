@@ -117,6 +117,8 @@ typedef struct ucp_context_config {
     ucs_on_off_auto_value_t                proto_indirect_id;
     /** Bitmap of memory types whose allocations are registered fully */
     unsigned                               reg_whole_alloc_bitmap;
+    /** Always use flush operation in rendezvous put */
+    int                                    rndv_put_force_flush;
 } ucp_context_config_t;
 
 

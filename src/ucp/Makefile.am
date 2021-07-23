@@ -125,6 +125,7 @@ libucp_la_SOURCES = \
 	rndv/proto_rndv.c \
 	rndv/rndv_am.c \
 	rndv/rndv_get.c \
+	rndv/rndv_put.c \
 	rndv/rndv_rtr.c \
 	rndv/rndv.c \
 	tag/eager_multi.c \

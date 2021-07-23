@@ -209,21 +209,36 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t          remote_address;  /* address of the sender/receiver's data
-                                                          buffer for the GET/PUT operation */
-                    /* Remote request ID received from a peer */
+                    /* Remote request ID to acknowledge */
                     ucs_ptr_map_key_t remote_req_id;
-                    ucp_rkey_h        rkey;            /* key for remote send/receive buffer for
-                                                          the GET/PUT operation */
+
+                    /* Remote buffer address for get/put operation */
+                    uint64_t          remote_address;
+
+                    /* Key for remote buffer get/put operation */
+                    ucp_rkey_h        rkey;
+
                     union {
+                        /* Used by version 1 rendezvous protocols */
                         struct {
-                            ucp_lane_map_t lanes_map_all; /* actual lanes map */
-                            uint8_t        lanes_count; /* actual lanes count */
+                            /* Actual lanes map */
+                            ucp_lane_map_t lanes_map_all;
+
+                            /* Actual lanes count */
+                            uint8_t        lanes_count;
+
+                            /* Remote key index map */
                             uint8_t        rkey_index[UCP_MAX_LANES];
                         };
+
+                        /* Used by rndv/put */
                         struct {
-                            ucs_ptr_map_key_t rreq_id; /* id of receive request */
-                        } rtr;
+                            /* which lanes need to flush (0 in fence mode) */
+                            ucp_lane_map_t flush_map;
+
+                            /* which lanes need to send atp */
+                            ucp_lane_map_t atp_map;
+                        } put;
                     };
                 } rndv;
 

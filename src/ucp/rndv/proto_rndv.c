@@ -36,7 +36,8 @@ ucp_proto_rndv_ctrl_reg_md_map(const ucp_proto_rndv_ctrl_init_params_t *params)
         /* Check the lane supports get_zcopy */
         iface_attr = ucp_proto_common_get_iface_attr(&params->super.super,
                                                      lane);
-        if (!(iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY)) {
+        if (!(iface_attr->cap.flags &
+              (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY))) {
             continue;
         }
 

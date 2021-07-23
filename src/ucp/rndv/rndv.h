@@ -75,6 +75,18 @@ typedef struct {
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
 
 
+/*
+ * RNDV_ATP
+ */
+typedef struct {
+    ucp_reply_hdr_t super;
+
+    /* The receive is considered complete when this number of ATP packets
+       has arrived */
+    uint16_t        count;
+} UCS_S_PACKED ucp_rndv_atp_hdr_t;
+
+
 ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,
                                size_t rts_body_size);
 

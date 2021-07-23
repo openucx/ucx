@@ -336,6 +336,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "endpoint.",
    ucs_offsetof(ucp_config_t, ctx.proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
+  {"RNDV_PUT_FORCE_FLUSH", "n",
+   "When using rendezvous put protocol, force using a flush operation to ensure\n"
+   "remote data delivery before sending ATP message.\n"
+   "If flush mode is not forced, and the underlying transport supports both active\n"
+   "messages and put operations, the protocol will do {put,fence,ATP} on the same\n"
+   "lane without waiting for remote completion.",
+   ucs_offsetof(ucp_config_t, ctx.rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
+
    {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
