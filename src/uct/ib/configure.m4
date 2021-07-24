@@ -243,6 +243,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                        IBV_LINK_LAYER_ETHERNET,
                        IBV_EVENT_GID_CHANGE,
                        ibv_create_qp_ex,
+                       ibv_create_cq_ex,
                        ibv_create_srq_ex],
                       [], [], [[#include <infiniband/verbs.h>]])
 
