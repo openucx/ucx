@@ -659,7 +659,7 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_list_head_init(&self->ep_list);
     ucs_conn_match_init(&self->conn_match_ctx,
                         ucs_field_sizeof(uct_tcp_ep_t, peer_addr),
-                        &uct_tcp_cm_conn_match_ops);
+                        UCS_CONN_MATCH_SN_MAX, &uct_tcp_cm_conn_match_ops);
     status = ucs_ptr_map_init(&self->ep_ptr_map);
     ucs_assert_always(status == UCS_OK);
 

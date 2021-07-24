@@ -707,6 +707,36 @@ public:
                                            UCP_FEATURE_TAG | UCP_FEATURE_STREAM);
     }
 
+    void multi_ep_2sided_test()
+    {
+        const unsigned count = 10;
+
+        for (unsigned j = 0; j < 4; ++j) {
+            unsigned offset = j * count;
+
+            for (unsigned i = 0; i < count; ++i) {
+                unsigned ep_idx = offset + i;
+                sender().connect(&receiver(), get_ep_params(), ep_idx);
+                if (!is_loopback()) {
+                    receiver().connect(&sender(), get_ep_params(), ep_idx);
+                }
+                UCS_TEST_MESSAGE << "iteration " << j << " pair " << i << ": "
+                        << sender().ep(0, ep_idx) << " <--> "
+                        << receiver().ep(0, ep_idx);
+            }
+
+            for (unsigned i = 0; i < count; ++i) {
+                unsigned ep_idx = offset + i;
+                send_recv(sender().ep(0, ep_idx), receiver().worker(),
+                          receiver().ep(0, ep_idx), 8, 1);
+                send_recv(receiver().ep(0, ep_idx), sender().worker(),
+                          sender().ep(0, ep_idx), 8, 1);
+            }
+
+            short_progress_loop(0);
+        }
+    }
+
 protected:
     void test_connect_loopback(bool delay_before_connect, bool enable_loopback);
 };
@@ -843,33 +873,15 @@ UCS_TEST_P(test_ucp_wireup_2sided, close_nbx_callback) {
     requests_wait(reqs);
 }
 
-UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
-    const unsigned count = 10;
+UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided)
+{
+    multi_ep_2sided_test();
+}
 
-    for (unsigned j = 0; j < 4; ++j) {
-
-        unsigned offset = j * count;
-
-        for (unsigned i = 0; i < count; ++i) {
-            unsigned ep_idx = offset + i;
-            sender().connect(&receiver(), get_ep_params(), ep_idx);
-            if (!is_loopback()) {
-                receiver().connect(&sender(), get_ep_params(), ep_idx);
-            }
-            UCS_TEST_MESSAGE << "iteration " << j << " pair " << i << ": " <<
-                            sender().ep(0, ep_idx) << " <--> " << receiver().ep(0, ep_idx);
-        }
-
-        for (unsigned i = 0; i < count; ++i) {
-            unsigned ep_idx = offset + i;
-            send_recv(sender().ep(0, ep_idx), receiver().worker(),
-                      receiver().ep(0, ep_idx), 8, 1);
-            send_recv(receiver().ep(0, ep_idx), sender().worker(),
-                      sender().ep(0, ep_idx), 8, 1);
-        }
-
-        short_progress_loop(0);
-    }
+UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided_conn_match_off,
+           "INITIAL_CONN_SN=inf")
+{
+    multi_ep_2sided_test();
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_2sided)

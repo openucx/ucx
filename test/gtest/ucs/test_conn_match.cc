@@ -36,7 +36,7 @@ private:
         conn_match_ops.purge_cb    = purge_cb;
 
         ucs_conn_match_init(&m_conn_match_ctx, address_length,
-                            &conn_match_ops);
+                            UCS_CONN_MATCH_SN_MAX, &conn_match_ops);
         m_address_length = address_length;
     }
 
@@ -104,8 +104,10 @@ protected:
 
     void insert(const void *dest_address, ucs_conn_sn_t conn_sn,
                 ucs_conn_match_queue_type_t queue_type, conn_elem_t &elem) {
-        ucs_conn_match_insert(&m_conn_match_ctx, dest_address, conn_sn,
-                              &elem.elem, queue_type);
+        int ret = ucs_conn_match_insert(&m_conn_match_ctx, dest_address,
+                                        conn_sn, &elem.elem, queue_type);
+        ASSERT_TRUE(ret);
+
         elem.queue_type = queue_type;
         elem.conn_sn    = conn_sn;
         m_added_elems++;

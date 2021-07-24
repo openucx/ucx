@@ -199,9 +199,6 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP : 0;
         conn_pkt->iface_addr = iface->config.ifaddr;
         conn_pkt->cm_id      = ep->cm_id;
-        ucs_assert((conn_pkt->flags &
-                    UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP) ||
-                   (ep->cm_id.conn_sn < UCT_TCP_CM_CONN_SN_MAX));
     } else {
         /* CM events (except CONN_REQ) are not sent for EPs connected with
          * CONNECT_TO_EP connection method */
@@ -296,7 +293,7 @@ uct_tcp_ep_t *uct_tcp_cm_get_ep(uct_tcp_iface_t *iface,
     uct_tcp_ep_t *ep;
     int remove_from_ctx;
 
-    ucs_assert(conn_sn < UCT_TCP_CM_CONN_SN_MAX);
+    ucs_assert(conn_sn <= UCT_TCP_CM_CONN_SN_MAX);
     ucs_assert((with_ctx_cap == UCT_TCP_EP_FLAG_CTX_TYPE_TX) ||
                (with_ctx_cap == UCT_TCP_EP_FLAG_CTX_TYPE_RX));
 
@@ -356,13 +353,13 @@ void uct_tcp_cm_insert_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
     ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
     ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP));
 
-    ucs_conn_match_insert(&iface->conn_match_ctx, &ep->peer_addr,
-                          ep->cm_id.conn_sn, &ep->elem,
-                          (ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
-                          UCS_CONN_MATCH_QUEUE_EXP :
-                          UCS_CONN_MATCH_QUEUE_UNEXP);
-
-    ep->flags |= UCT_TCP_EP_FLAG_ON_MATCH_CTX;
+    if (ucs_conn_match_insert(&iface->conn_match_ctx, &ep->peer_addr,
+                              ep->cm_id.conn_sn, &ep->elem,
+                              (ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
+                              UCS_CONN_MATCH_QUEUE_EXP :
+                              UCS_CONN_MATCH_QUEUE_UNEXP)) {
+        ep->flags |= UCT_TCP_EP_FLAG_ON_MATCH_CTX;
+    }
 }
 
 void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)

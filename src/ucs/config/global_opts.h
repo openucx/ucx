@@ -135,6 +135,9 @@ typedef struct {
 
     /* Enable affinity for virtual monitoring filesystem service thread */
     int                        vfs_thread_affinity;
+
+    /* Initial value for the connection sequence number */
+    unsigned long              initial_conn_sn;
 } ucs_global_opts_t;
 
 

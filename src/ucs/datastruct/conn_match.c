@@ -14,6 +14,7 @@
 #include <ucs/debug/assert.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/algorithm/crc.h>
+#include <ucs/sys/string.h>
 
 
 /**
@@ -61,11 +62,12 @@ const static char *ucs_conn_match_queue_title[] = {
 
 
 void ucs_conn_match_init(ucs_conn_match_ctx_t *conn_match_ctx,
-                         size_t address_length,
+                         size_t address_length, size_t max_conn_sn,
                          const ucs_conn_match_ops_t *ops)
 {
     kh_init_inplace(ucs_conn_match, &conn_match_ctx->hash);
     conn_match_ctx->address_length = address_length;
+    conn_match_ctx->max_conn_sn    = max_conn_sn;
     conn_match_ctx->ops            = *ops;
 }
 
@@ -113,6 +115,14 @@ ucs_conn_match_peer_alloc(ucs_conn_match_ctx_t *conn_match_ctx,
                                                   UCS_CONN_MATCH_ADDRESS_STR_MAX));
     }
 
+    if (ucs_global_opts.initial_conn_sn == UCS_ULUNITS_INF) {
+        peer->next_conn_sn = conn_match_ctx->max_conn_sn;
+    } else if (ucs_global_opts.initial_conn_sn == UCS_ULUNITS_AUTO) {
+        peer->next_conn_sn = 0;
+    } else {
+        peer->next_conn_sn = ucs_global_opts.initial_conn_sn;
+    }
+
     peer->address_length = conn_match_ctx->address_length;
     memcpy(&peer->address, address, peer->address_length);
 
@@ -145,7 +155,6 @@ ucs_conn_match_get_conn(ucs_conn_match_ctx_t *conn_match_ctx,
     }
 
     /* initialize match list on first use */
-    peer->next_conn_sn = 0;
     ucs_hlist_head_init(&peer->conn_q[UCS_CONN_MATCH_QUEUE_EXP]);
     ucs_hlist_head_init(&peer->conn_q[UCS_CONN_MATCH_QUEUE_UNEXP]);
 
@@ -157,18 +166,34 @@ ucs_conn_sn_t ucs_conn_match_get_next_sn(ucs_conn_match_ctx_t *conn_match_ctx,
 {
     ucs_conn_match_peer_t *peer = ucs_conn_match_get_conn(conn_match_ctx,
                                                           address);
-    return peer->next_conn_sn++;
+    ucs_conn_sn_t conn_sn =
+            (peer->next_conn_sn != conn_match_ctx->max_conn_sn) ?
+            peer->next_conn_sn++ : peer->next_conn_sn;
+
+    if (conn_sn == conn_match_ctx->max_conn_sn) {
+        ucs_debug("connection ID reached the maximal possible value: %" PRIu64,
+                  conn_match_ctx->max_conn_sn);
+        /* If the connection sequence number reaches the maximal possible value
+         * for the current connection, return MAX to indicate that the
+         * connection shouldn't participate in the connection matching */
+    }
+
+    return conn_sn;
 }
 
-void ucs_conn_match_insert(ucs_conn_match_ctx_t *conn_match_ctx,
-                           const void *address, ucs_conn_sn_t conn_sn,
-                           ucs_conn_match_elem_t *conn_match,
-                           ucs_conn_match_queue_type_t conn_queue_type)
+int ucs_conn_match_insert(ucs_conn_match_ctx_t *conn_match_ctx,
+                          const void *address, ucs_conn_sn_t conn_sn,
+                          ucs_conn_match_elem_t *conn_match,
+                          ucs_conn_match_queue_type_t conn_queue_type)
 {
     ucs_conn_match_peer_t *peer = ucs_conn_match_get_conn(conn_match_ctx,
                                                           address);
     ucs_hlist_head_t *head      = &peer->conn_q[conn_queue_type];
     char UCS_V_UNUSED address_str[UCS_CONN_MATCH_ADDRESS_STR_MAX];
+
+    if (conn_sn == conn_match_ctx->max_conn_sn) {
+        return 0;
+    }
 
     ucs_hlist_add_tail(head, &conn_match->list);
     ucs_trace("match_ctx %p: conn_match %p added as %s address %s "
@@ -178,6 +203,8 @@ void ucs_conn_match_insert(ucs_conn_match_ctx_t *conn_match_ctx,
                                               address, address_str,
                                               UCS_CONN_MATCH_ADDRESS_STR_MAX),
               conn_sn);
+
+    return 1;
 }
 
 ucs_conn_match_elem_t *
@@ -192,6 +219,10 @@ ucs_conn_match_get_elem(ucs_conn_match_ctx_t *conn_match_ctx,
     ucs_conn_match_elem_t *elem;
     unsigned i, start_q, end_q;
     khiter_t iter;
+
+    if (conn_sn == conn_match_ctx->max_conn_sn) {
+        return NULL;
+    }
 
     peer = ucs_conn_match_peer_alloc(conn_match_ctx, address);
     iter = kh_get(ucs_conn_match, &conn_match_ctx->hash, peer);
@@ -252,11 +283,14 @@ void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
                                 ucs_conn_match_elem_t *elem,
                                 ucs_conn_match_queue_type_t conn_queue_type)
 {
-    const void *address = conn_match_ctx->ops.get_address(elem);
+    const void *address   = conn_match_ctx->ops.get_address(elem);
+    ucs_conn_sn_t conn_sn = conn_match_ctx->ops.get_conn_sn(elem);
     char UCS_V_UNUSED address_str[UCS_CONN_MATCH_ADDRESS_STR_MAX];
     ucs_conn_match_peer_t *peer;
     ucs_hlist_head_t *head;
     khiter_t iter;
+
+    ucs_assert(conn_sn != conn_match_ctx->max_conn_sn);
 
     peer = ucs_conn_match_peer_alloc(conn_match_ctx, address);
     iter = kh_get(ucs_conn_match, &conn_match_ctx->hash, peer);
@@ -266,8 +300,7 @@ void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
                   elem, conn_match_ctx->ops.address_str(conn_match_ctx,
                                                   address, address_str,
                                                   UCS_CONN_MATCH_ADDRESS_STR_MAX),
-                  conn_match_ctx->ops.get_conn_sn(elem),
-                  ucs_conn_match_queue_title[conn_queue_type]);
+                  conn_sn, ucs_conn_match_queue_title[conn_queue_type]);
     }
 
     ucs_free(peer);
@@ -282,5 +315,5 @@ void ucs_conn_match_remove_elem(ucs_conn_match_ctx_t *conn_match_ctx,
               elem, conn_match_ctx->ops.address_str(conn_match_ctx,
                                                     address, address_str,
                                                     UCS_CONN_MATCH_ADDRESS_STR_MAX),
-              conn_match_ctx->ops.get_conn_sn(elem));
+              conn_sn);
 }

@@ -52,6 +52,7 @@ ucs_global_opts_t ucs_global_opts = {
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
+    .initial_conn_sn       = 0,
     .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER
 };
 
@@ -261,6 +262,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   {"MODULE_LOG_LEVEL", "trace",
    "Logging level for module loader\n",
    ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+   {"INITIAL_CONN_SN", "0",
+    "Initial value for the connection sequence number",
+    ucs_offsetof(ucs_global_opts_t, initial_conn_sn), UCS_CONFIG_TYPE_ULUNITS},
 
   {"", "", NULL,
    ucs_offsetof(ucs_global_opts_t, arch),

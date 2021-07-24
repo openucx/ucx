@@ -17,6 +17,12 @@ BEGIN_C_DECLS
 
 
 /**
+ * Maximal value for connection sequence number 
+ */
+#define UCS_CONN_MATCH_SN_MAX ((ucs_conn_sn_t)-1)
+
+
+/**
  * Connection sequence number
  */
 typedef uint64_t ucs_conn_sn_t;
@@ -125,6 +131,8 @@ KHASH_TYPE(ucs_conn_match, ucs_conn_match_peer_t*, char)
  */
 struct ucs_conn_match_ctx {
     khash_t(ucs_conn_match)      hash;           /* Hash of matched connections */
+    ucs_conn_sn_t                max_conn_sn;    /* Maximum value for the connection sequence
+                                                  * number */
     size_t                       address_length; /* Length of the addresses used for the
                                                     connection between peers */
     ucs_conn_match_ops_t         ops;            /* User's connection matching operations */
@@ -137,11 +145,12 @@ struct ucs_conn_match_ctx {
  * @param [in] conn_match_ctx    Pointer to the connection matching context.
  * @param [in] address_length    Length of the addresses used for the connection
  *                               between peers.
+ * @param [in] max_conn_sn       Maximum value for the connection sequence number.
  * @param [in] ops               Pointer to the user-defined connection matching
  *                               operations.
  */
 void ucs_conn_match_init(ucs_conn_match_ctx_t *conn_match_ctx,
-                         size_t address_length,
+                         size_t address_length, size_t max_conn_sn,
                          const ucs_conn_match_ops_t *ops);
 
 
@@ -177,11 +186,14 @@ ucs_conn_sn_t ucs_conn_match_get_next_sn(ucs_conn_match_ctx_t *conn_match_ctx,
  * @param [in] elem              Pointer to the connection matching structure.
  * @param [in] conn_queue_type   Connection queue which should be used to insert
  *                               the connection matching element to.
+ *
+ * @return Flag that indicates whether connection element was added
+ *         successfully or not to the connection matching context.
  */
-void ucs_conn_match_insert(ucs_conn_match_ctx_t *conn_match_ctx,
-                           const void *address, ucs_conn_sn_t conn_sn,
-                           ucs_conn_match_elem_t *elem,
-                           ucs_conn_match_queue_type_t conn_queue_type);
+int ucs_conn_match_insert(ucs_conn_match_ctx_t *conn_match_ctx,
+                          const void *address, ucs_conn_sn_t conn_sn,
+                          ucs_conn_match_elem_t *elem,
+                          ucs_conn_match_queue_type_t conn_queue_type);
 
 
 /**

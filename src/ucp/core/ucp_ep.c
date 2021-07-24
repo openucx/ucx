@@ -875,8 +875,10 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
         ucp_ep_flush_state_reset(ep);
     } else {
-        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
-                            UCS_CONN_MATCH_QUEUE_EXP);
+        if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
+                                 UCS_CONN_MATCH_QUEUE_EXP)) {
+            ucp_ep_flush_state_reset(ep);
+        }
     }
 
     /* if needed, send initial wireup message */
@@ -3054,7 +3056,8 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     if (/* Flush state is already valid (i.e. EP doesn't exist on matching
          * context) and not invalidated yet, also remote EP ID is already set */
         !(ucp_ep->flags &
-          (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID))) {
+          (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID)) ||
+        (ucp_ep->conn_sn == UCP_EP_MATCH_CONN_SN_MAX)) {
         flush_state = ucp_ep_flush_state(ucp_ep);
 
         /* Adjust 'comp_sn' value to a value stored in 'send_sn' by emulating
