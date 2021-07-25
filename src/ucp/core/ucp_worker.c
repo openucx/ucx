@@ -1798,8 +1798,8 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
         /* TODO replace ep_config->tag.max_eager_short by this struct */
         max_eager_short = ucp_ep_config_key_has_tag_lane(key) ?
-                                  &ep_config->tag.max_eager_short :
-                                  &ep_config->tag.offload.max_eager_short;
+                                  &ep_config->tag.offload.max_eager_short :
+                                  &ep_config->tag.max_eager_short;
 
         max_eager_short->memtype_off = tag_short.max_length_unknown_mem;
         max_eager_short->memtype_on  = tag_short.max_length_host_mem;
