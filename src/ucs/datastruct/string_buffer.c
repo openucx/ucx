@@ -110,6 +110,21 @@ void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
     ucs_assert(*ucs_array_end(&strb->str) == '\0');
 }
 
+void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
+                                    const char **flag_names)
+{
+    unsigned flag;
+
+    ucs_for_each_bit(flag, mask) {
+        if (flag_names == NULL) {
+            ucs_string_buffer_appendf(strb, "%u,", flag);
+        } else {
+            ucs_string_buffer_appendf(strb, "%s|", flag_names[flag]);
+        }
+    }
+    ucs_string_buffer_rtrim(strb, ",|");
+}
+
 void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
 {
     char *ptr = ucs_array_end(&strb->str);
