@@ -141,11 +141,11 @@ ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
     /* Set pointer to request's protocol configuration */
     ucs_assert(thresh_elem->proto_config.ep_cfg_index == ep->cfg_index);
     ucs_assert(thresh_elem->proto_config.rkey_cfg_index == rkey_cfg_index);
+    req->send.proto_config = &thresh_elem->proto_config;
     if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
         ucp_proto_trace_selected(req, msg_length);
     }
 
-    req->send.proto_config = &thresh_elem->proto_config;
     ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
     return UCS_OK;
 }

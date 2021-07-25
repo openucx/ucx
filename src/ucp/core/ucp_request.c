@@ -671,11 +671,12 @@ ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
 
     ucs_log_indent(1);
     status = progress_cb(self);
-    if (status == UCS_OK) {
-        ucp_trace_req(req, "progress protocol %s returned OK", proto->name);
-    } else {
+    if (UCS_STATUS_IS_ERR(status)) {
         ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
                       proto->name, ucs_status_string(status), req->send.lane);
+    } else {
+        ucp_trace_req(req, "progress protocol %s returned: %s", proto->name,
+                      ucs_status_string(status));
     }
     ucs_log_indent(-1);
     return status;
