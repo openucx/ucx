@@ -52,6 +52,10 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
         return UCS_OK; /* shortcut - no changes required */
     }
 
+    ucs_assertv(reg_md_map <= UCS_MASK(context->num_mds),
+                "reg_md_map=0x%" PRIx64 " num_mds=%u", reg_md_map,
+                context->num_mds);
+
     prev_num_memh = ucs_popcount(*md_map_p & reg_md_map);
     prev_uct_memh = ucs_alloca(prev_num_memh * sizeof(*prev_uct_memh));
 
