@@ -12,6 +12,7 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucs/datastruct/string_buffer.h>
 
 
 /*
@@ -35,6 +36,9 @@ typedef struct {
         } generic;
         struct {
             const ucp_dt_iov_t    *iov;       /* IOV list */
+#if UCS_ENABLE_ASSERT
+            size_t                iov_count;  /* Number of IOV items */
+#endif
             size_t                iov_index;  /* Index of current IOV item */
             size_t                iov_offset; /* Offset in the current IOV item */
             /* TODO support memory registration with IOV */
@@ -48,5 +52,8 @@ typedef struct {
     } type;
 } ucp_datatype_iter_t;
 
+
+void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
+                           ucs_string_buffer_t *strb);
 
 #endif

@@ -390,6 +390,10 @@ static inline int rand() {
     return ::rand();
 }
 
+static inline int rand_range(int max) {
+    return rand() % max;
+}
+
 static inline void srand(unsigned seed) {
     /* coverity[dont_call] */
     return ::srand(seed);
