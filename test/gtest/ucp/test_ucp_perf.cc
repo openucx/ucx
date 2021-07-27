@@ -396,7 +396,7 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
                               0, 1, { 8 }, 1, 1000lu,
                               ucs_offsetof(ucx_perf_result_t,
                                            latency.total_average),
-                              1e6, perf_min * 0.7, perf_avg * 2, 0 };
+                              1e6, perf_min * 0.3, perf_avg * 3, 0 };
     run_test(test2, 0, true, "", "");
 }
 
