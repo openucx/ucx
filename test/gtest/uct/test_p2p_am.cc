@@ -718,20 +718,20 @@ UCS_TEST_P(uct_p2p_am_tx_bufs, am_tx_max_bufs) {
                                       this, UCT_CB_FLAG_ASYNC);
     ASSERT_UCS_OK(status);
     /* skip on cm, ud */
-    if (!m_inited) { 
+    if (!m_inited) {
         UCS_TEST_SKIP_R("Test does not apply to the current transport");
     }
-    if (has_transport("cm")) { 
+    if (has_transport("cm")) {
         UCS_TEST_SKIP_R("Test does not work with IB CM transport");
     }
-    if (has_rc()) { 
+    if (has_rc()) {
         UCS_TEST_SKIP_R("Test does not work with IB RC transports");
     }
     do {
         status = am_bcopy(sender_ep(), sendbuf_bcopy, recvbuf);
     } while (status == UCS_OK);
 
-    /* short progress shall release tx buffers and 
+    /* short progress shall release tx buffers and
      * the next message shall go out */
     ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(1.0);
     do {

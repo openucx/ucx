@@ -197,7 +197,7 @@ char *ucs_strtrim(char *str);
  * modify source string.
  *
  * @param path Path to parse.
- * 
+ *
  * @return file name
  */
 static UCS_F_ALWAYS_INLINE const char* ucs_basename(const char *path)
@@ -219,7 +219,7 @@ static UCS_F_ALWAYS_INLINE const char* ucs_basename(const char *path)
  *                 '\0' byte.
  * @param per_line Number of bytes in source array to print per line
  *                 or SIZE_MAX for single line.
- * 
+ *
  * @return address of destination buffer
  */
 const char *ucs_str_dump_hex(const void* data, size_t length, char *buf,

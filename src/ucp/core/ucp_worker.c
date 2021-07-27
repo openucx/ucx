@@ -2807,7 +2807,7 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
     worker->keepalive.iter_end   = worker->keepalive.iter;
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
-    worker->keepalive.round_count++;   
+    worker->keepalive.round_count++;
 }
 
 static UCS_F_NOINLINE unsigned

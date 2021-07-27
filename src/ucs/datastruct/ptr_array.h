@@ -27,7 +27,7 @@
  * free_ahead is the number of consecutive free elements ahead.
  *
  * The remove / insert algorithm works as follows:
- * On remove of an index: If start[index+1] is free ==> 
+ * On remove of an index: If start[index+1] is free ==>
  * start[index].free_elements_ahead = start[index+1].free_elements_ahead+1
  * Then, the removed index is pushed to the HEAD of the freelist.
  * NOTE, that if start[index+1] is free ==> It's already in the freelist !!!
@@ -441,7 +441,7 @@ __ucx_ptr_array_locked_foreach_finalize(ucs_ptr_array_locked_t *locked_ptr_array
 /**
  * Iterate over all valid elements in the locked array.
  *
- * Please notice that using break or return are not allowed in 
+ * Please notice that using break or return are not allowed in
  * this implementation.
  * Using break or return would require releasing the lock before by calling,
  * ucs_ptr_array_locked_release_lock(_locked_ptr_array);
@@ -460,4 +460,3 @@ __ucx_ptr_array_locked_foreach_finalize(ucs_ptr_array_locked_t *locked_ptr_array
             (void *)((&(_locked_ptr_array)->super)->start[(_index)]))))))
 
 #endif /* PTR_ARRAY_H_ */
-

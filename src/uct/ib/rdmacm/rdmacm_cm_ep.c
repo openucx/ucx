@@ -278,7 +278,7 @@ uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
     ucs_status_t status;
 
     if (ctx->use_reserved_qpn) {
-        status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);      
+        status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);
     } else {
         /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
         status = uct_rdmacm_cm_create_dummy_qp(cep->id, ctx->cq, &cep->qp);

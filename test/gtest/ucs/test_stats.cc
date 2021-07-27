@@ -117,7 +117,7 @@ public:
         }
     }
 
-protected:    
+protected:
     static const unsigned NUM_COUNTERS   = 4;
 
     ucs_stats_class_t *m_data_stats_class;

@@ -160,7 +160,7 @@ ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
     uct_scopy_iface_t *iface = ucs_derived_of(tl_iface, uct_scopy_iface_t);
 
     if (ucs_unlikely(comp != NULL)) {
-        return UCS_ERR_UNSUPPORTED;        
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (!ucs_arbiter_is_empty(&iface->arbiter)) {

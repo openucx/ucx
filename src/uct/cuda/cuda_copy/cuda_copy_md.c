@@ -156,7 +156,7 @@ static ucs_status_t uct_cuda_copy_mem_alloc(uct_md_h md, size_t *length_p,
         status = UCT_CUDADRV_FUNC_LOG_ERR(cuMemAlloc((CUdeviceptr*)address_p,
                                                      *length_p));
     } else {
-        status = 
+        status =
             UCT_CUDADRV_FUNC_LOG_ERR(cuMemAllocManaged((CUdeviceptr*)address_p,
                                                        *length_p,
                                                        CU_MEM_ATTACH_GLOBAL));
@@ -232,4 +232,3 @@ uct_component_t uct_cuda_copy_component = {
     .flags              = 0
 };
 UCT_COMPONENT_REGISTER(&uct_cuda_copy_component);
-
