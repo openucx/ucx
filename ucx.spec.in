@@ -304,6 +304,8 @@ library internals, protocol objects, transports status, and more.
 %endif
 
 %changelog
+* Tue Jul 27 2021 Yossi Itigin <yosefe@mellanox.com> 1.11.1-1
+- Bump version to 1.11.1
 * Tue Apr 27 2021 Leonid Genkin <lgenkin@nvidia.com> 1.11.0-1
 - Remove obsolete ib/cm code
 * Wed Dec 16 2020 Yossi Itigin <yosefe@mellanox.com> 1.11.0-1
