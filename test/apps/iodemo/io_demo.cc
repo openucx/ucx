@@ -1196,7 +1196,6 @@ public:
         size_t         active_index;               /* Index in active vector */
         long           num_sent[IO_OP_MAX];        /* Number of sent operations */
         long           num_completed[IO_OP_MAX];   /* Number of completed operations */
-        long           prev_completed[IO_OP_MAX];  /* Completed in last report */
         size_t         bytes_sent[IO_OP_MAX];      /* Number of bytes sent */
         size_t         bytes_completed[IO_OP_MAX]; /* Number of bytes completed */
     } server_info_t;
@@ -1627,7 +1626,6 @@ public:
         for (int op = 0; op < IO_OP_MAX; ++op) {
             server_info.num_sent[op]        = 0;
             server_info.num_completed[op]   = 0;
-            server_info.prev_completed[op]  = 0;
             server_info.bytes_sent[op]      = 0;
             server_info.bytes_completed[op] = 0;
         }
@@ -2025,36 +2023,37 @@ private:
             size_t total_bytes_completed = 0;
             for (int op = 0; op <= IO_OP_MAX; ++op) {
                 size_t bytes_completed;
-                long delta_completed;
+                long num_completed;
                 if (op != IO_OP_MAX) {
                     assert(server_info.bytes_sent[op] ==
                                    server_info.bytes_completed[op]);
                     bytes_completed = server_info.bytes_completed[op];
-                    delta_completed = server_info.num_completed[op] -
-                                      server_info.prev_completed[op];
+                    num_completed   = server_info.num_completed[op];
 
                     size_t min_index = io_op_perf_info[op].min_index;
-                    if ((delta_completed < io_op_perf_info[op].min) ||
-                        ((delta_completed == io_op_perf_info[op].min) &&
+                    if ((num_completed < io_op_perf_info[op].min) ||
+                        ((num_completed == io_op_perf_info[op].min) &&
                          (server_info.retry_count >
                                   _server_info[min_index].retry_count))) {
                         io_op_perf_info[op].min_index = server_index;
                     }
 
-                    total_bytes_completed         += bytes_completed;
-                    total_completed               += delta_completed;
-                    server_info.prev_completed[op] =
-                            server_info.num_completed[op];
+                    total_bytes_completed          += bytes_completed;
+                    total_completed                += num_completed;
+                    server_info.num_sent[op]        = 0;
+                    server_info.num_completed[op]   = 0;
+                    server_info.bytes_sent[op]      = 0;
+                    server_info.bytes_completed[op] = 0;
                 } else {
                     bytes_completed = total_bytes_completed;
-                    delta_completed = total_completed;
+                    num_completed   = total_completed;
                 }
 
                 io_op_perf_info[op].min          =
-                        std::min(delta_completed, io_op_perf_info[op].min);
+                        std::min(num_completed, io_op_perf_info[op].min);
                 io_op_perf_info[op].max          =
-                        std::max(delta_completed, io_op_perf_info[op].max);
-                io_op_perf_info[op].total       += delta_completed;
+                        std::max(num_completed, io_op_perf_info[op].max);
+                io_op_perf_info[op].total       += num_completed;
                 io_op_perf_info[op].total_bytes += bytes_completed;
             }
         }
