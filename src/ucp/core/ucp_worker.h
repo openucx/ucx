@@ -290,7 +290,9 @@ typedef struct ucp_worker {
 
     ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
     ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */
-    ucs_ptr_map_t                    ptr_map;             /* UCP objects key to ptr mapping */
+    ucs_ptr_map_t                    ep_map; /* UCP ep key to ptr mapping */
+    ucs_ptr_map_t                    request_map; /* UCP requests key to ptr
+                                                     mapping */
 
     unsigned                         ep_config_count;     /* Current number of ep configurations */
     ucp_ep_config_t                  ep_config[UCP_WORKER_MAX_EP_CONFIG];
