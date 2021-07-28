@@ -28,8 +28,7 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
     ucp_ep_h ep                     = conn_request->ep;
 
     ucs_free(conn_request->remote_dev_addr);
-    ucs_free(conn_request->remote_addr->address_list);
-    ucs_free(conn_request->remote_addr);
+    ucs_free(conn_request->remote_addr.address_list);
     ucs_free(conn_request);
 
     UCS_ASYNC_BLOCK(&ep->worker->async);
@@ -384,8 +383,7 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
     UCS_ASYNC_BLOCK(&worker->async);
     uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
     ucs_free(conn_request->remote_dev_addr);
-    ucs_free(conn_request->remote_addr->address_list);
-    ucs_free(conn_request->remote_addr);
+    ucs_free(conn_request->remote_addr.address_list);
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_free(conn_request);

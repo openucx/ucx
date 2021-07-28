@@ -12,6 +12,7 @@
 
 #include <ucp/proto/lane_type.h>
 #include <ucp/proto/proto_select.h>
+#include <ucp/wireup/address.h>
 #include <ucp/wireup/ep_match.h>
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
@@ -518,7 +519,7 @@ typedef struct ucp_conn_request {
     ucp_ep_h                    ep; /* valid only if request is handled internally */
     ucp_wireup_user_data_t      user_data;
     ucp_wireup_sockaddr_data_t  sa_data;
-    ucp_unpacked_address_t      *remote_addr;
+    ucp_unpacked_address_t      remote_addr;
 } ucp_conn_request_t;
 
 

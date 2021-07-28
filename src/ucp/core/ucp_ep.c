@@ -753,7 +753,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                   sa_data->addr_mode);
     }
 
-    remote_addr = *conn_request->remote_addr;
+    remote_addr = conn_request->remote_addr;
 
     for (i = 0; i < remote_addr.address_count; ++i) {
         remote_addr.address_list[i].dev_addr  = conn_request->remote_dev_addr;

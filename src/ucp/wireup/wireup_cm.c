@@ -13,6 +13,7 @@
 #include <ucp/core/ucp_request.inl>
 #include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_ep.h>
+#include <ucs/type/serialize.h>
 #include <ucs/sys/sock.h>
 #include <ucs/sys/string.h>
 
@@ -1033,7 +1034,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
     size_t ucp_addr_size;
-    void *user_data_offset;
+    const void *offset_iter;
     uint64_t addr_flags;
 
     ucs_assert_always(ucs_test_all_flags(conn_req_args->field_mask,
@@ -1103,26 +1104,26 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     memcpy(&ucp_conn_request->sa_data, remote_data->conn_priv_data,
            sizeof(ucp_conn_request->sa_data));
 
+    offset_iter = remote_data->conn_priv_data;
+    ucs_serialize_next_raw(&offset_iter, const void*,
+                           sizeof(ucp_wireup_sockaddr_data_t));
+
     /* 2. Unpack ucp_address and get it's length in buffer */
     addr_flags                    = ucp_cm_address_pack_flags(worker);
-    ucp_conn_request->remote_addr = ucs_malloc(sizeof(ucp_unpacked_address_t),
-                                               "ucp_unpacked_address_t");
-
     status = ucp_address_unpack(ucp_conn_request->listener->worker,
-                                UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
-                                                    sizeof(ucp_conn_request->sa_data)),
-                                addr_flags, ucp_conn_request->remote_addr,
+                                offset_iter,
+                                addr_flags, &ucp_conn_request->remote_addr,
                                 &ucp_addr_size);
     if (status != UCS_OK) {
-        goto err_free_remote_addr;
+        goto err_free_remote_dev_addr;
     }
 
+    offset_iter = UCS_PTR_BYTE_OFFSET(offset_iter, ucp_addr_size);
     /* 3. Copy user_data if it's present*/
-    user_data_offset = UCS_PTR_BYTE_OFFSET(remote_data->conn_priv_data,
-                        sizeof(ucp_conn_request->sa_data) + ucp_addr_size);
-    if (UCS_PTR_BYTE_DIFF(remote_data->conn_priv_data, user_data_offset) ==
+    if (UCS_PTR_BYTE_DIFF(remote_data->conn_priv_data, offset_iter) >=
         (remote_data->conn_priv_data_length - sizeof(ucp_wireup_user_data_t))) {
-        memcpy(&ucp_conn_request->user_data, user_data_offset,
+
+        memcpy(&ucp_conn_request->user_data, offset_iter,
                sizeof(ucp_wireup_user_data_t));
     }
 
@@ -1136,8 +1137,6 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
     ucp_worker_signal_internal(worker);
     return;
 
-err_free_remote_addr:
-    ucs_free(ucp_conn_request->remote_addr);
 err_free_remote_dev_addr:
     ucs_free(ucp_conn_request->remote_dev_addr);
 err_free_ucp_conn_request:
@@ -1235,8 +1234,7 @@ err_destroy_ep:
     ucp_ep_destroy_internal(ep);
 out_free_request:
     ucs_free(conn_request->remote_dev_addr);
-    ucs_free(conn_request->remote_addr->address_list);
-    ucs_free(conn_request->remote_addr);
+    ucs_free(conn_request->remote_addr.address_list);
     ucs_free(conn_request);
 out:
     if (status == UCS_OK) {
