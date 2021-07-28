@@ -389,8 +389,8 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
  * Creates an RC or DCI QP
  */
 ucs_status_t uct_rc_iface_qp_create(uct_rc_iface_t *iface, struct ibv_qp **qp_p,
-                                    uct_ib_qp_attr_t *attr, unsigned max_send_wr,
-                                    struct ibv_srq *srq);
+                                    uct_ib_qp_attr_t *attr,
+                                    unsigned *max_send_wr, struct ibv_srq *srq);
 
 void uct_rc_iface_fill_attr(uct_rc_iface_t *iface,
                             uct_ib_qp_attr_t *qp_init_attr,

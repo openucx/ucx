@@ -636,4 +636,15 @@ uct_ib_iface_roce_dscp(uct_ib_iface_t *iface)
     return iface->config.traffic_class >> 2;
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_ib_iface_check_cap_limit(uct_ib_iface_t *iface, uint32_t limit,
+                             const char* cap_name, uint32_t *cap_p)
+{
+    if (*cap_p > limit) {
+        ucs_debug("iface %p: reduced %s from %d to %d based on caps", iface,
+                  cap_name, *cap_p, limit);
+        *cap_p = limit;
+    }
+}
+
 #endif

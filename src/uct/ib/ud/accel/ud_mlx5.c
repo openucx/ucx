@@ -708,14 +708,14 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, &attr);
     if (status != UCS_OK) {
-        goto err_destroy_qp;
+        goto err;
     }
 
     status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
                                    iface->tx.mmio_mode, &iface->tx.wq,
                                    qp->verbs.qp);
     if (status != UCS_OK) {
-        return status;
+        goto err_destroy_qp;
     }
 
     *qp_p = qp->verbs.qp;
@@ -723,6 +723,7 @@ static ucs_status_t uct_ud_mlx5_iface_create_qp(uct_ib_iface_t *ib_iface,
 
 err_destroy_qp:
     uct_ib_mlx5_destroy_qp(ib_md, qp);
+err:
     return status;
 }
 

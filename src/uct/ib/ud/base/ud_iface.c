@@ -158,28 +158,28 @@ static void uct_ud_iface_destroy_qp(uct_ud_iface_t *ud_iface)
 }
 
 static ucs_status_t
-uct_ud_iface_create_qp(uct_ud_iface_t *self, const uct_ud_iface_config_t *config)
+uct_ud_iface_create_qp(uct_ud_iface_t *self, uct_ib_qp_attr_t *qp_init_attr,
+                       const uct_ud_iface_config_t *config)
 {
     uct_ud_iface_ops_t *ops = ucs_derived_of(self->super.ops, uct_ud_iface_ops_t);
-    uct_ib_qp_attr_t qp_init_attr = {};
     struct ibv_qp_attr qp_attr;
     static ucs_status_t status;
     int ret;
 
-    qp_init_attr.qp_type             = IBV_QPT_UD;
-    qp_init_attr.sq_sig_all          = 0;
-    qp_init_attr.cap.max_send_wr     = config->super.tx.queue_len;
-    qp_init_attr.cap.max_recv_wr     = config->super.rx.queue_len;
-    qp_init_attr.cap.max_send_sge    = config->super.tx.min_sge + 1;
-    qp_init_attr.cap.max_recv_sge    = 1;
-    qp_init_attr.cap.max_inline_data = config->super.tx.min_inline;
+    qp_init_attr->qp_type             = IBV_QPT_UD;
+    qp_init_attr->sq_sig_all          = 0;
+    qp_init_attr->cap.max_send_wr     = config->super.tx.queue_len;
+    qp_init_attr->cap.max_recv_wr     = config->super.rx.queue_len;
+    qp_init_attr->cap.max_send_sge    = config->super.tx.min_sge + 1;
+    qp_init_attr->cap.max_recv_sge    = 1;
+    qp_init_attr->cap.max_inline_data = config->super.tx.min_inline;
 
-    status = ops->create_qp(&self->super, &qp_init_attr, &self->qp);
+    status = ops->create_qp(&self->super, qp_init_attr, &self->qp);
     if (status != UCS_OK) {
         return status;
     }
 
-    self->config.max_inline = qp_init_attr.cap.max_inline_data;
+    self->config.max_inline = qp_init_attr->cap.max_inline_data;
 
     memset(&qp_attr, 0, sizeof(qp_attr));
     /* Modify QP to INIT state */
@@ -421,6 +421,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
                     const uct_ud_iface_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
+    uct_ib_qp_attr_t qp_init_attr = {};
     ucs_status_t status;
     size_t data_size;
     int mtu;
@@ -436,13 +437,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
                    params->mode.device.dev_name, self, ops, worker,
                    (params->field_mask & UCT_IFACE_PARAM_FIELD_RX_HEADROOM) ?
                    params->rx_headroom : 0);
-
-    if (config->super.tx.queue_len <= UCT_UD_TX_MODERATION) {
-        ucs_error("%s ud iface tx queue is too short (%d <= %d)",
-                  params->mode.device.dev_name,
-                  config->super.tx.queue_len, UCT_UD_TX_MODERATION);
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     status = uct_ib_device_mtu(params->mode.device.dev_name, md, &mtu);
     if (status != UCS_OK) {
@@ -463,14 +457,29 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         return UCS_ERR_INVALID_PARAM;
     }
 
+    ucs_ptr_array_init(&self->eps, "ud_eps");
+
+    status = uct_ud_iface_create_qp(self, &qp_init_attr, config);
+    if (status != UCS_OK) {
+        goto err_eps_array;
+    }
+
+    if (qp_init_attr.cap.max_send_wr <= UCT_UD_TX_MODERATION) {
+        ucs_error("%s ud iface tx queue is too short (%d <= %d)",
+                  params->mode.device.dev_name,
+                  config->super.tx.queue_len, UCT_UD_TX_MODERATION);
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_qp;
+    }
+
     self->tx.unsignaled          = 0;
-    self->tx.available           = config->super.tx.queue_len;
+    self->tx.available           = qp_init_attr.cap.max_send_wr;
     self->tx.timer_sweep_count   = 0;
     self->async.disable          = 0;
 
-    self->rx.available           = config->super.rx.queue_len;
+    self->rx.available           = qp_init_attr.cap.max_recv_wr;
     self->rx.quota               = 0;
-    self->config.tx_qp_len       = config->super.tx.queue_len;
+    self->config.tx_qp_len       = qp_init_attr.cap.max_send_wr;
     self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
     self->config.min_poke_time   = ucs_time_from_sec(config->min_poke_time);
     self->config.check_grh_dgid  = config->dgid_check &&
@@ -480,7 +489,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         (config->max_window > UCT_UD_CA_MAX_WINDOW)) {
         ucs_error("Max congestion avoidance window should be >= %d and <= %d (%d)",
                   UCT_UD_CA_MIN_WINDOW, UCT_UD_CA_MAX_WINDOW, config->max_window);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_qp;
     }
 
     self->config.max_window = config->max_window;
@@ -490,7 +500,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     if (config->timer_tick <= 0.) {
         ucs_error("The timer tick should be > 0 (%lf)",
                   config->timer_tick);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_qp;
     } else {
         self->tx.tick = ucs_time_from_sec(config->timer_tick);
     }
@@ -498,7 +509,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     if (config->timer_backoff < UCT_UD_MIN_TIMER_TIMER_BACKOFF) {
         ucs_error("The timer back off must be >= %lf (%lf)",
                   UCT_UD_MIN_TIMER_TIMER_BACKOFF, config->timer_backoff);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_qp;
     } else {
         self->tx.timer_backoff = config->timer_backoff;
     }
@@ -506,7 +518,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     if (config->event_timer_tick <= 0.) {
         ucs_error("The event timer tick should be > 0 (%lf)",
                   config->event_timer_tick);
-        return UCS_ERR_INVALID_PARAM;
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_qp;
     } else {
         self->async.tick = ucs_time_from_sec(config->event_timer_tick);
     }
@@ -521,13 +534,6 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     UCT_UD_IFACE_HOOK_INIT(self);
 
-    ucs_ptr_array_init(&self->eps, "ud_eps");
-
-    status = uct_ud_iface_create_qp(self, config);
-    if (status != UCS_OK) {
-        goto err_eps_array;
-    }
-
     status = uct_ib_iface_recv_mpool_init(&self->super, &config->super, params,
                                           "ud_recv_skb", &self->rx.mp);
     if (status != UCS_OK) {
@@ -535,8 +541,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     }
 
     self->rx.available = ucs_min(config->ud_common.rx_queue_len_init,
-                                 config->super.rx.queue_len);
-    self->rx.quota     = config->super.rx.queue_len - self->rx.available;
+                                 qp_init_attr.cap.max_recv_wr);
+    self->rx.quota     = qp_init_attr.cap.max_recv_wr - self->rx.available;
     ucs_mpool_grow(&self->rx.mp, self->rx.available);
 
     data_size = sizeof(uct_ud_ctl_hdr_t) + self->super.addr_size;

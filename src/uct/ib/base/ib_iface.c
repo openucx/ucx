@@ -923,8 +923,26 @@ static ucs_status_t uct_ib_iface_init_lmc(uct_ib_iface_t *iface,
     return UCS_OK;
 }
 
+static void
+uct_ib_iface_adjust_qp_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *qp_attr)
+{
+    uct_ib_device_t *dev    = uct_ib_iface_device(iface);
+    struct ibv_qp_cap *caps = &qp_attr->ibv.cap;
+
+    uct_ib_iface_check_cap_limit(iface, IBV_DEV_ATTR(dev, max_qp_wr),
+                                 "max_send_wr", &caps->max_send_wr);
+    uct_ib_iface_check_cap_limit(iface, IBV_DEV_ATTR(dev, max_qp_wr),
+                                 "max_recv_wr", &caps->max_recv_wr);
+    uct_ib_iface_check_cap_limit(iface, IBV_DEV_ATTR(dev, max_sge),
+                                 "max_send_sge", &caps->max_send_sge);
+    uct_ib_iface_check_cap_limit(iface, IBV_DEV_ATTR(dev, max_sge),
+                                 "max_recv_sge", &caps->max_recv_sge);
+}
+
 void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
 {
+    memset(&attr->ibv, 0, sizeof(attr->ibv));
+
     attr->ibv.send_cq             = iface->cq[UCT_IB_DIR_TX];
     attr->ibv.recv_cq             = iface->cq[UCT_IB_DIR_RX];
 
@@ -932,6 +950,8 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
     attr->ibv.cap                 = attr->cap;
     attr->ibv.qp_type             = (enum ibv_qp_type)attr->qp_type;
     attr->ibv.sq_sig_all          = attr->sq_sig_all;
+
+    uct_ib_iface_adjust_qp_attr(iface, attr);
 
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     if (!(attr->ibv.comp_mask & IBV_EXP_QP_INIT_ATTR_PD)) {
@@ -970,6 +990,7 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_attr(iface, attr);
 
+retry_qp_creation:
 #if HAVE_DECL_IBV_EXP_CREATE_QP
     qp = ibv_exp_create_qp(dev->ibv_context, &attr->ibv);
 #elif HAVE_DECL_IBV_CREATE_QP_EX
@@ -985,6 +1006,13 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
                   attr->cap.max_inline_data, attr->max_inl_cqe[UCT_IB_DIR_TX],
                   attr->cap.max_recv_wr, attr->cap.max_recv_sge,
                   attr->max_inl_cqe[UCT_IB_DIR_RX]);
+
+        /* Verbs have no way to detect max_inline_data, only to try and fail */
+        if (attr->cap.max_inline_data != 0) {
+            attr->cap.max_inline_data     = attr->cap.max_inline_data >> 1;
+            attr->ibv.cap.max_inline_data = attr->cap.max_inline_data;
+            goto retry_qp_creation;
+        }
         return UCS_ERR_IO_ERROR;
     }
 
