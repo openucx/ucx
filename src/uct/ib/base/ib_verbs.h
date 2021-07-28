@@ -20,6 +20,7 @@
 #endif
 
 #include <errno.h>
+#include <string.h>
 
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
