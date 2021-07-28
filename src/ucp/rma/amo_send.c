@@ -212,7 +212,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
 
         status_p = ucp_rma_send_request(req, param);
         if (UCS_PTR_IS_PTR(status_p)) {
-            ucp_request_release(status_p);
+            ucp_request_free(status_p);
         }
         status_p = UCS_STATUS_PTR(UCS_OK);
     }
