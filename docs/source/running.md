@@ -156,3 +156,14 @@ Example of the command line (with optional flag to select IB device mlx5_0 port 
 $ mpirun -np 2 -env UCX_NET_DEVICES=mlx5_0:1 ./executable
 ```
 
+## Running in Docker containers
+UCX can run in a container, but requires slight adjustments:
+
+* Some transports may be unsupported, depending on the runtime configuration.
+To see the available transports use `ucx_info -d`.
+
+* In order to enable shared memory transport, ptrace capability is required. The recommended shared memory size is 8GB. Add the following to `docker run` commandline: `--cap-add CAP_SYS_PTRACE --shm-size="8g"`.
+
+* To use the shared memory between several containers, add this instead: `--cap-add CAP_SYS_PTRACE --ipc host`.
+
+* To enable RDMA, the corresponding devices must be allowed: `--device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbsX` (replace `X` with the device number).
