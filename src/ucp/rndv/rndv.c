@@ -601,6 +601,7 @@ static void ucp_rndv_req_init_lanes(ucp_request_t *req,
 
 static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
                                              ucs_memory_type_t mem_type,
+                                             size_t length,
                                              unsigned proto)
 {
     ucp_ep_h ep                = rndv_req->send.ep;
@@ -654,6 +655,13 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
         if (ucs_unlikely((md_index != UCP_NULL_RESOURCE) &&
                          (!(md_attr->cap.reg_mem_types & UCS_BIT(mem_type))))) {
             continue;
+        }
+
+        /* Ignore GDR lane if length is greater than pipeline rndv threshold */
+        if ((mem_type != UCS_MEMORY_TYPE_HOST) &&
+            (md_attr->cap.reg_mem_types & UCS_BIT(UCS_MEMORY_TYPE_HOST)) &
+            (length > context->config.ext.rndv_pipeline_thresh)) {
+                continue;
         }
 
         dst_md_index = ep_config->key.lanes[lane].dst_md_index;
@@ -778,6 +786,7 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
                                  UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
     ucp_rndv_req_init_zcopy_lane_map(rndv_req, rndv_req->send.mem_type,
+                                     rndv_req->send.length,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
     rndv_req->send.lane =
@@ -907,6 +916,7 @@ ucp_rndv_recv_frag_put_mem_type(ucp_request_t *rreq, ucp_request_t *freq,
                       NULL);
 
     ucp_rndv_req_init_zcopy_lane_map(freq, freq->send.mem_type,
+                                     freq->send.length,
                                      UCP_REQUEST_SEND_PROTO_RNDV_PUT);
 
     ucp_request_send(freq);
@@ -1063,6 +1073,7 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
     }
 
     ucp_rndv_req_init_zcopy_lane_map(rndv_req, rndv_req->send.mem_type,
+                                     rndv_req->send.length,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
 
     lane = ucp_rndv_zcopy_get_lane(rndv_req, &uct_rkey,
@@ -1726,6 +1737,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
         ucp_request_send_state_reset(sreq, NULL,
                                      UCP_REQUEST_SEND_PROTO_RNDV_PUT);
         ucp_rndv_req_init_zcopy_lane_map(sreq, sreq->send.rndv.rkey->mem_type,
+                                         rndv_size,
                                          UCP_REQUEST_SEND_PROTO_RNDV_PUT);
 
         /* check if lane could be allocated */
@@ -1926,6 +1938,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             sreq->send.pending_lane        = UCP_NULL_LANE;
 
             ucp_rndv_req_init_zcopy_lane_map(sreq, sreq->send.mem_type,
+                                             sreq->send.length,
                                              UCP_REQUEST_SEND_PROTO_RNDV_PUT);
 
             sreq->send.lane =
