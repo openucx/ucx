@@ -134,6 +134,18 @@ typedef enum {
 } uct_md_mem_dereg_field_mask_t;
 
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief field mask of @ref uct_iface_is_reachable_v2
+ */
+typedef enum {
+    UCT_IFACE_IS_REACHABLE_FIELD_DEVICE_ADDR        = UCS_BIT(0), /**< device_addr field */
+    UCT_IFACE_IS_REACHABLE_FIELD_IFACE_ADDR         = UCS_BIT(1), /**< iface_addr field */
+    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING        = UCS_BIT(2), /**< info_string field */
+    UCT_IFACE_IS_REACHABLE_FIELD_INFO_STRING_LENGTH = UCS_BIT(3)  /**< info_string_length field */
+} uct_iface_is_reachable_field_mask_t;
+
+
 typedef enum {
     /**
      * Invalidate the memory region. If this flag is set then memory region is
@@ -204,6 +216,47 @@ extern const char *uct_ep_operation_names[];
 
 /**
  * @ingroup UCT_RESOURCE
+ * @brief Operation parameters passed to @ref uct_iface_is_reachable_v2.
+ */
+typedef struct uct_iface_is_reachable_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_iface_is_reachable_field_mask_t. Fields not specified in this
+     * mask will be ignored. Provides ABI compatibility with respect to adding
+     * new fields.
+     */
+    uint64_t                     field_mask;
+
+    /**
+     * Device address to check for reachability.
+     * This field must not be passed if iface_attr.dev_addr_len == 0.
+     */
+    const uct_device_addr_t      *device_addr;
+
+    /**
+     * Interface address to check for reachability.
+     * This field must not be passed if iface_attr.iface_addr_len == 0.
+     */
+    const uct_iface_addr_t       *iface_addr;
+
+    /**
+     * User-provided pointer to a string buffer.
+     * The function @ref uct_iface_is_reachable_v2 fills this buffer with a
+     * null-terminated information string explaining why the remote address is
+     * not reachable if the return value is 0.
+     */
+    char                         *info_string;
+
+    /**
+     * The length of the @a info_string is provided in bytes.
+     * This value must be specified in conjunction with @a info_string.
+     */
+    size_t                        info_string_length;
+} uct_iface_is_reachable_params_t;
+
+
+/**
+ * @ingroup UCT_RESOURCE
  * @brief Get interface performance attributes, by memory types and operation.
  *        A pointer to uct_perf_attr_t struct must be passed, with the memory
  *        types and operation members initialized. Overhead and bandwidth
@@ -231,6 +284,26 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
  */
 ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
                                  const uct_md_mem_dereg_params_t *params);
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Check if remote iface address is reachable.
+ *
+ * This function checks if a remote address can be reached from a local
+ * interface. If the function returns a non-zero value, it does not necessarily
+ * mean a connection and/or data transfer would succeed; as the reachability
+ * check is a local operation it does not detect issues such as network
+ * mis-configuration or lack of connectivity.
+ *
+ * @param [in]  iface       Local interface to check reachability from.
+ * @param [in]  params      Operation parameters, see @ref
+ *                          uct_iface_is_reachable_params_t.
+ *
+ * @return Nonzero if reachable, 0 if not.
+ */
+int uct_iface_is_reachable_v2(uct_iface_h iface,
+                              const uct_iface_is_reachable_params_t *params);
 
 END_C_DECLS
 

@@ -219,6 +219,13 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
 }
 
+int uct_iface_is_reachable_v2(const uct_iface_h iface,
+                              const uct_iface_is_reachable_params_t *params)
+{
+    ucs_fatal("uct_iface_is_reachable_v2 not supported yet");
+    return 0;
+}
+
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
                           uct_completion_t *comp)
 {
