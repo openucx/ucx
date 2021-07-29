@@ -48,9 +48,10 @@ typedef struct {
  * Base class for protocols with fragmentation
  */
 typedef struct {
-    ucp_lane_index_t               num_lanes;  /* Number of lanes to use */
-    ucp_md_map_t                   reg_md_map; /* Memory domains to register on */
-    ucp_proto_multi_lane_priv_t    lanes[0];   /* Array of lanes */
+    ucp_md_map_t                reg_md_map; /* Memory domains to register on */
+    ucp_lane_map_t              lane_map;   /* Map of used lanes */
+    ucp_lane_index_t            num_lanes;  /* Number of lanes to use */
+    ucp_proto_multi_lane_priv_t lanes[0];   /* Array of lanes */
 } ucp_proto_multi_priv_t;
 
 
@@ -83,7 +84,9 @@ typedef ucs_status_t (*ucp_proto_send_multi_cb_t)(
                 ucp_datatype_iter_t *next_iter);
 
 
-ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params);
+ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
+                                  ucp_proto_multi_priv_t *mpriv,
+                                  size_t *priv_size_p);
 
 
 void ucp_proto_multi_config_str(size_t min_length, size_t max_length,

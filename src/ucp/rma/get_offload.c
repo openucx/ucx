@@ -92,7 +92,8 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_GET);
 
-    return ucp_proto_multi_init(&params);
+    return ucp_proto_multi_init(&params, init_params->priv,
+                                init_params->priv_size);
 }
 
 static ucp_proto_t ucp_get_offload_bcopy_proto = {
@@ -127,10 +128,12 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_multi_zcopy_progress(req, req->send.proto_config->priv,
-                                          NULL, UCT_MD_MEM_ACCESS_LOCAL_WRITE,
-                                          ucp_proto_get_offload_zcopy_send_func,
-                                          ucp_proto_request_zcopy_completion);
+    return ucp_proto_multi_zcopy_progress(
+            req, req->send.proto_config->priv, NULL,
+            UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+            ucp_proto_get_offload_zcopy_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
 }
 
 static ucs_status_t
@@ -159,7 +162,8 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_GET);
 
-    return ucp_proto_multi_init(&params);
+    return ucp_proto_multi_init(&params, init_params->priv,
+                                init_params->priv_size);
 }
 
 static ucp_proto_t ucp_get_offload_zcopy_proto = {

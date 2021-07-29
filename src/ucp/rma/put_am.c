@@ -93,7 +93,8 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);
 
-    return ucp_proto_multi_init(&params);
+    return ucp_proto_multi_init(&params, init_params->priv,
+                                init_params->priv_size);
 }
 
 static ucp_proto_t ucp_put_am_bcopy_proto = {

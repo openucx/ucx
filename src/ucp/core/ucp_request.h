@@ -153,7 +153,13 @@ struct ucp_request {
                     ucp_datatype_iter_t  dt_iter;  /* Send buffer state */
                     ucp_dt_state_t       dt;       /* Position in the send buffer */
                 };
-                uct_completion_t         uct_comp; /* UCT completion used by flush */
+                union {
+                    /* UCT completion, used by flush and zero-copy operations */
+                    uct_completion_t uct_comp;
+
+                    /* Used by rndv/rtr protocol to count ATP or RNDV_DATA */
+                    size_t           completed_size;
+                };
             } state;
 
             union {

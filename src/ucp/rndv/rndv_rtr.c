@@ -39,21 +39,8 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rtr_common_request_init(ucp_request_t *req)
 {
-    ucp_request_t *recv_req = ucp_request_get_super(req);
-
-    recv_req->status         = UCS_OK;
-    recv_req->recv.remaining = req->send.state.dt_iter.length;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rdnv_rtr_common_comp_init(ucp_ep_h ep, uct_completion_t *comp,
-                                    ucs_ptr_map_key_t *ptr_id_p,
-                                    uct_completion_callback_t comp_func)
-{
-    /* RTR sends the id of its &req->comp field, and not of the request, to
-       support fragmented protocol with multiple RTRs per request */
-    ucp_proto_completion_init(comp, comp_func);
-    ucp_ep_ptr_id_alloc(ep, comp, ptr_id_p);
+    ucp_send_request_id_alloc(req);
+    req->send.state.completed_size = 0;
 }
 
 static ucs_status_t
@@ -67,11 +54,15 @@ ucp_proto_rndv_rtr_common_send(ucp_request_t *req, uct_pack_callback_t pack_cb)
                                               max_rtr_size, NULL);
 }
 
-static void ucp_proto_rndv_rtr_common_completion(uct_completion_t *uct_comp)
+static void ucp_proto_rndv_rtr_data_received(ucp_request_t *req)
 {
-    ucp_request_t *req = ucs_container_of(uct_comp, ucp_request_t,
-                                          send.state.uct_comp);
-    ucp_proto_rndv_rtr_common_complete(req, req->send.state.uct_comp.status);
+    ucp_send_request_id_release(req);
+    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
+                                &req->send.state.dt_iter);
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
+    ucp_proto_rndv_recv_complete(req);
 }
 
 static size_t ucp_proto_rndv_rtr_pack(void *dest, void *arg)
@@ -79,9 +70,10 @@ static size_t ucp_proto_rndv_rtr_pack(void *dest, void *arg)
     ucp_rndv_rtr_hdr_t *rtr = dest;
     ucp_request_t *req      = arg;
     const UCS_V_UNUSED ucp_proto_rndv_ctrl_priv_t *rpriv;
+    size_t rkey_size;
 
     rtr->sreq_id = req->send.rndv.remote_req_id;
-    rtr->rreq_id = req->send.rndv.rtr.rreq_id;
+    rtr->rreq_id = ucp_send_request_get_id(req);
     rtr->size    = req->send.state.dt_iter.length;
     rtr->offset  = 0;
     rtr->address = (uintptr_t)req->send.state.dt_iter.type.contig.buffer;
@@ -89,7 +81,10 @@ static size_t ucp_proto_rndv_rtr_pack(void *dest, void *arg)
     rpriv = req->send.proto_config->priv;
     ucs_assert(rtr->size > 0);
     ucs_assert(rpriv->md_map == req->send.state.dt_iter.type.contig.reg.md_map);
-    return sizeof(*rtr) + ucp_proto_request_pack_rkey(req, rtr + 1);
+
+    rkey_size = ucp_proto_request_pack_rkey(req, rtr + 1);
+    ucs_assert(rkey_size == rpriv->packed_rkey_size);
+    return sizeof(*rtr) + rkey_size;
 }
 
 static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
@@ -109,11 +104,6 @@ static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
         }
 
         ucp_proto_rtr_common_request_init(req);
-        ucp_proto_rdnv_rtr_common_comp_init(
-                req->send.ep, &req->send.state.uct_comp,
-                &req->send.rndv.rtr.rreq_id,
-                ucp_proto_rndv_rtr_common_completion);
-
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
@@ -143,3 +133,30 @@ static ucp_proto_t ucp_rndv_rtr_proto = {
     .progress   = {ucp_proto_rndv_rtr_progress}
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rtr_proto);
+
+ucs_status_t
+ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
+{
+    ucp_worker_h worker                = arg;
+    ucp_rndv_data_hdr_t *rndv_data_hdr = data;
+    size_t recv_len                    = length - sizeof(*rndv_data_hdr);
+    ucp_request_t *req;
+    size_t data_length;
+
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rndv_data_hdr->rreq_id, 0,
+                               return UCS_OK, "RNDV_DATA %p", rndv_data_hdr);
+
+    /* TODO handle unpack status */
+    ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker, recv_len,
+                             rndv_data_hdr->offset, rndv_data_hdr + 1);
+
+    req->send.state.completed_size += recv_len;
+
+    data_length = req->send.state.dt_iter.length;
+    ucs_assert(req->send.state.completed_size <= data_length);
+    if (req->send.state.completed_size == data_length) {
+        ucp_proto_rndv_rtr_data_received(req);
+    }
+
+    return UCS_OK;
+}
