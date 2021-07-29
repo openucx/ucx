@@ -8,7 +8,10 @@
 #define GTEST_MEM_BUFFER_H_
 
 #include <ucs/memory/memory_type.h>
+#ifndef UINT8_MAX
+#define __STDC_LIMIT_MACROS
 #include <stdint.h>
+#endif
 #include <string>
 #include <vector>
 
