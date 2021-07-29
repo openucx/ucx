@@ -208,7 +208,7 @@ unsigned uct_rc_mlx5_iface_srq_post_recv_ll(uct_rc_mlx5_iface_common_t *iface)
 void uct_rc_mlx5_iface_common_prepost_recvs(uct_rc_mlx5_iface_common_t *iface)
 {
     /* prepost recvs only if quota available (recvs were not preposted
-     * before) */ 
+     * before) */
     if (iface->super.rx.srq.quota == 0) {
         return;
     }
@@ -1227,4 +1227,3 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
 
     return nfreed;
 }
-

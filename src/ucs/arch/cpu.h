@@ -120,7 +120,7 @@ void __clear_cache(void* beg, void* end);
  *
  * @param type  Cache type.
  * @param value Filled with the cache size.
- * 
+ *
  * @return Cache size value or 0 if cache is not supported or can't be read.
  */
 size_t ucs_cpu_get_cache_size(ucs_cpu_cache_type_t type);
@@ -144,7 +144,7 @@ static inline void ucs_clear_cache(void *start, void *end)
 
 /**
  * Get memory copy bandwidth.
- * 
+ *
  * @return Memory copy bandwidth estimation based on CPU used.
  */
 double ucs_cpu_get_memcpy_bw();

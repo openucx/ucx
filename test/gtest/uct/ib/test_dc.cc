@@ -111,7 +111,7 @@ protected:
         int is_done;
     } preq;
 
-    static ucs_status_t uct_pending_flush(uct_pending_req_t *uct_req) 
+    static ucs_status_t uct_pending_flush(uct_pending_req_t *uct_req)
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
         ucs_status_t status;
@@ -127,7 +127,7 @@ protected:
         return status;
     }
 
-    static ucs_status_t uct_pending_dummy(uct_pending_req_t *uct_req) 
+    static ucs_status_t uct_pending_dummy(uct_pending_req_t *uct_req)
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
         uct_dc_mlx5_ep_t *ep;
@@ -223,10 +223,10 @@ UCS_TEST_P(test_dc, dcs_multi) {
     }
 }
 
-/** 
+/**
  * send message, destroy ep while it is still holding dci.
  * Do not crash.
- */ 
+ */
 UCS_TEST_P(test_dc, dcs_ep_destroy) {
 
     uct_dc_mlx5_ep_t *ep;

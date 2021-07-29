@@ -61,14 +61,14 @@ void ucs_frag_list_cleanup(ucs_frag_list_t *frag_list)
 }
 
 /*
- prevh--- h --- .. --- 
+ prevh--- h --- .. ---
           |
           e
           |
           e
  replace h with new_h:
 
-prevh --- new_h --- .. --- 
+prevh --- new_h --- .. ---
           |
           h
           |
@@ -88,7 +88,7 @@ frag_list_replace_head(ucs_frag_list_t *frag_list, ucs_frag_list_elem_t *prevh,
 
     new_h->head.first_sn = h->head.first_sn-1;
     new_h->head.last_sn = h->head.last_sn;
-    /* add new_h before h in holes list */ 
+    /* add new_h before h in holes list */
     /* take h from holes list */
     if (prevh == NULL) {
         e = ucs_queue_pull_elem_non_empty(&frag_list->list, ucs_frag_list_elem_t, list);
@@ -109,13 +109,13 @@ frag_list_replace_head(ucs_frag_list_t *frag_list, ucs_frag_list_elem_t *prevh,
 }
 
 /*
-    ..--- h --- .. --- 
+    ..--- h --- .. ---
           |
           e
 
   add new element to h:
 
-    ..--- h --- .. --- 
+    ..--- h --- .. ---
           |
           |
           e
@@ -132,14 +132,14 @@ static inline void frag_list_add_tail(ucs_frag_list_elem_t *h, ucs_frag_list_ele
     ucs_queue_push(&h->head.list, &elem->list);
 }
 
-/* 
+/*
   merge h2 into h1. Before:
 
-    ..--- h1 --- h2 --- 
+    ..--- h1 --- h2 ---
           |     |
           e     e2
  after:
-    ..--- h1 --- .. --- 
+    ..--- h1 --- .. ---
           |      |
           e      e
           |
@@ -162,9 +162,9 @@ static inline void frag_list_merge_heads(ucs_frag_list_t *head, ucs_frag_list_el
     ucs_queue_splice(&h1->head.list, &h2->head.list);
 }
 
-/* 
+/*
   insert new_h into h1. Before:
- prevh--- h --- .. --- 
+ prevh--- h --- .. ---
           |     |
           e     e
           |
@@ -175,7 +175,7 @@ static inline void frag_list_merge_heads(ucs_frag_list_t *head, ucs_frag_list_el
                     |      |
                     e      e
  */
-static inline void frag_list_insert_head(ucs_frag_list_t *head, 
+static inline void frag_list_insert_head(ucs_frag_list_t *head,
         ucs_frag_list_elem_t *prevh, ucs_frag_list_elem_t *h, ucs_frag_list_elem_t *new_h,  ucs_frag_list_sn_t sn)
 {
 
@@ -193,9 +193,9 @@ static inline void frag_list_insert_head(ucs_frag_list_t *head,
 }
 
 
-/* 
+/*
   insert new_h into h1. Before:
-   ..--- prevh --- h --- 
+   ..--- prevh --- h ---
           |        |
           e        e
           |
@@ -287,7 +287,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
 
         if (UCS_FRAG_LIST_SN_CMP(sn+1, ==, h->head.first_sn)) {
             frag_list_replace_head(head, prevh, h, elem);
-            /* no need to check merge here. merge iff prev->last_sn+1==sn & sn+1 == h->first_sn 
+            /* no need to check merge here. merge iff prev->last_sn+1==sn & sn+1 == h->first_sn
              * the condition is handled in next if */
             head->elem_count++;
             return UCS_FRAG_LIST_INSERT_SLOW;
@@ -315,7 +315,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
             if (prevh) {
                 ucs_assert(UCS_FRAG_LIST_SN_CMP(prevh->head.last_sn+1, <, sn));
             }
-            UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_LEN, 
+            UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_LEN,
                                      prevh ? sn-prevh->head.last_sn : sn-head->head_sn);
             UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAPS, 1);
             frag_list_insert_head(head, prevh, h, elem, sn);
@@ -333,7 +333,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
 
     head->elem_count++;
     head->list_count++;
-    UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_LEN, 
+    UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_LEN,
                              sn-head->head_sn);
     UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAPS, 1);
     return UCS_FRAG_LIST_INSERT_SLOW;
@@ -346,7 +346,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
         e
 
  * mode of action
- *  - check if we have elements on ready list, if we do take one from there 
+ *  - check if we have elements on ready list, if we do take one from there
  *  - see if h is ready for extraction (sn check), extract firt, move rest to the ready list
  */
 
@@ -382,14 +382,14 @@ void ucs_frag_list_dump(ucs_frag_list_t *head, int how)
     elem_count = 0;
 
     ucs_queue_for_each(e, &head->ready_list, list) {
-       elem_count++; 
+       elem_count++;
     }
 
     ucs_queue_for_each(h, &head->list, list) {
         list_count++;
         cnt = 0;
         ucs_queue_for_each(e, &h->head.list, list) {
-           cnt++; 
+           cnt++;
            elem_count++;
         }
         elem_count++;
@@ -409,4 +409,3 @@ void ucs_frag_list_dump(ucs_frag_list_t *head, int how)
     ucs_assert(head->elem_count == elem_count);
     ucs_assert(head->list_count == list_count);
 }
-

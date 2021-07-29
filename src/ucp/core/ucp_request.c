@@ -351,7 +351,7 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
                       UCS_MEMORY_TYPE_HOST, NULL,
                       req->send.state.dt.dt.contig.memh,
                       &req->send.state.dt.dt.contig.md_map);
-    ucp_trace_req(req, "mem invalidate buffer md_map 0x%"PRIx64,    
+    ucp_trace_req(req, "mem invalidate buffer md_map 0x%"PRIx64,
                   req->send.state.dt.dt.contig.md_map);
 
     memh_index = 0;

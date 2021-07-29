@@ -89,7 +89,7 @@ public:
         UCS_STATS_NODE_FREE(cat_node);
     }
 
-protected:    
+protected:
     static const unsigned NUM_DATA_NODES = 3;
     static const unsigned NUM_COUNTERS   = 4;
 

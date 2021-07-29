@@ -332,7 +332,7 @@ ucs_status_t ucs_sockaddr_sizeof(const struct sockaddr *addr, size_t *size_p);
 
 /**
  * Return port of a given sockaddr structure.
- * 
+ *
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  port_p     Pointer to variable where port (host notation)
  *                          of sockaddr_in/sockaddr_in6 structure will be
@@ -345,7 +345,7 @@ ucs_status_t ucs_sockaddr_get_port(const struct sockaddr *addr, uint16_t *port_p
 
 /**
  * Set port to a given sockaddr structure.
- * 
+ *
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [in]   port       Port (host notation) that will be written.
  *
@@ -356,7 +356,7 @@ ucs_status_t ucs_sockaddr_set_port(struct sockaddr *addr, uint16_t port);
 
 /**
  * Return IP addr of a given sockaddr structure.
- * 
+ *
  * @param [in]   addr       Pointer to sockaddr structure.
  *
  * @return IP address of sockaddr_in/sockaddr_in6 structure
@@ -367,7 +367,7 @@ const void *ucs_sockaddr_get_inet_addr(const struct sockaddr *addr);
 
 /**
  * Set IP addr to a given sockaddr structure.
- * 
+ *
  * @param [in]   addr        Pointer to sockaddr structure.
  * @param [in]   in_addr     IP address that will be written.
  *
@@ -379,7 +379,7 @@ ucs_status_t ucs_sockaddr_set_inet_addr(struct sockaddr *addr,
 
 /**
  * Return size of IP address of a given sockaddr structure.
- * 
+ *
  * @param [in]   addr       Pointer to sockaddr structure.
  * @param [out]  size_p     Pointer to variable where size of IP address
  *                          structure will be written.
@@ -478,7 +478,7 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2);
 
 /**
  * Indicate if given IP address is INADDR_ANY (IPV4) or in6addr_any (IPV6)
- * 
+ *
  * @param [in]   addr       Pointer to sockaddr structure.
  *
  * @return 1 if input is INADDR_ANY or in6addr_any
@@ -490,7 +490,7 @@ int ucs_sockaddr_is_inaddr_any(const struct sockaddr *addr);
 /**
  * Indicate if given IP address is INADDR_LOOPBACK (IPV4) or in6addr_loopback
  * (IPV6)
- * 
+ *
  * @param [in]   addr       Pointer to sockaddr structure.
  *
  * @return 1 if input is INADDR_LOOPBACK or in6addr_loopback
@@ -576,7 +576,7 @@ ucs_status_t ucs_sockaddr_get_ip_local_port_range(ucs_range_spec_t *port_range);
 
 /**
  * Get IP address of a given sockaddr structure.
- * 
+ *
  * @param [in]  addr     Pointer to the sockaddr structure.
  * @param [out] str      A string filled with the IP address.
  * @param [in]  max_size Size of the string including terminating

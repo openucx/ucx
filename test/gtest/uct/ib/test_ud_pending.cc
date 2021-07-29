@@ -22,9 +22,9 @@ public:
 
     void dispatch_req(uct_pending_req_t *r) {
         EXPECT_UCS_OK(tx(m_e1));
-    } 
+    }
 
-    void post_pending_reqs(void) 
+    void post_pending_reqs(void)
     {
         int i;
 
@@ -57,8 +57,8 @@ public:
         uct_ep_pending_purge(m_e1->ep(0), purge_cb, NULL);
     }
 
-    static const int N; 
-    static const int W; 
+    static const int N;
+    static const int W;
     static int req_count;
     static test_ud_pending *me;
 
@@ -87,8 +87,8 @@ public:
 
 };
 
-const int test_ud_pending::N = 13; 
-const int test_ud_pending::W = 6; 
+const int test_ud_pending::N = 13;
+const int test_ud_pending::W = 6;
 int test_ud_pending::req_count = 0;
 test_ud_pending *test_ud_pending::me = 0;
 

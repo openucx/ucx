@@ -15,7 +15,7 @@ class frag_list : public ucs::test {
 protected:
     struct pkt {
        uint32_t sn;
-       ucs_frag_list_elem_t elem; 
+       ucs_frag_list_elem_t elem;
     };
     ucs_frag_list_t m_frags;
     // @override
@@ -231,7 +231,7 @@ UCS_TEST_F(frag_list, two_holes_basic) {
 }
 
 /**
- * two holes 
+ * two holes
  */
 UCS_TEST_F(frag_list, two_holes_advanced) {
     pkt pkts[20], *out;
@@ -282,7 +282,7 @@ UCS_TEST_F(frag_list, two_holes_advanced) {
     EXPECT_EQ((unsigned)20, i);
 }
 
-/** 
+/**
  *
  * random arrival. Send/recv 10k packets in random order
  */
@@ -333,4 +333,3 @@ UCS_TEST_F(frag_list, random_arrival) {
         last_sn = out->sn;
     }
 }
-

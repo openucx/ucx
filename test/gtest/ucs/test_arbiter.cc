@@ -487,7 +487,7 @@ UCS_TEST_F(test_arbiter, resched) {
     ucs_arbiter_cleanup(&arbiter);
 }
 
-/* check that it is possible to reuse removed 
+/* check that it is possible to reuse removed
  * element
  */
 UCS_TEST_F(test_arbiter, reuse_elem) {

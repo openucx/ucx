@@ -152,7 +152,7 @@ struct ucs_rcache_region {
     uint8_t                lru_flags; /**< LRU flags */
     union {
         uint64_t           priv;      /**< Used internally */
-        unsigned long     *pfn;       /**< Pointer to PFN array. In case if requested 
+        unsigned long     *pfn;       /**< Pointer to PFN array. In case if requested
                                            evaluation more than 1 page - PFN array is
                                            allocated, if 1 page requested - used
                                            in-place priv value. */

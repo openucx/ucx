@@ -184,7 +184,7 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       void **event_arg)
 {
     *event_cb  = UCT_IFACE_PARAM_VALUE(params, async_event_cb, ASYNC_EVENT_CB,
-                                       NULL);                                       
+                                       NULL);
     *event_arg = UCT_IFACE_PARAM_VALUE(params, async_event_arg, ASYNC_EVENT_ARG,
                                        NULL);
 }

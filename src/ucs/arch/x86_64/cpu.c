@@ -614,7 +614,7 @@ ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes)
 
                     cache_sizes[type] = ucs_x86_cpu_cache_size_codes[tag].size;
                     cache_count++;
-                    break; 
+                    break;
                 }
             }
         }

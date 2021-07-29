@@ -1401,7 +1401,7 @@ ucs_config_apply_config_vars(void *opts, ucs_config_field_t *fields,
 
 /* Find if env_prefix consists of multiple prefixes and returns pointer
  * to rightmost in this case, otherwise returns NULL
- */ 
+ */
 static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
                                                      const char **sub_prefix_p)
 {

@@ -19,7 +19,7 @@ libucxperf_la_LIBADD   = \
 	$(abs_top_builddir)/src/ucs/libucs.la
 
 # C-linkable C++ code - must override any inherited CXXFLAGS
-CXXFLAGS              += -nostdlib $(PERF_LIB_CXXFLAGS) 
+CXXFLAGS              += -nostdlib $(PERF_LIB_CXXFLAGS)
 
 noinst_HEADERS = \
 	libperf_int.h

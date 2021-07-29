@@ -120,7 +120,7 @@ public:
         m_listen_addr  = GetParam()->listen_sock_addr;
         m_connect_addr = GetParam()->connect_sock_addr;
 
-        const ucs::sock_addr_storage &src_sock_addr = 
+        const ucs::sock_addr_storage &src_sock_addr =
                                                 GetParam()->source_sock_addr;
         if (src_sock_addr.get_sock_addr_ptr() != NULL) {
             int sa_family   = src_sock_addr.get_sock_addr_ptr()->sa_family;

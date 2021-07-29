@@ -149,7 +149,7 @@ struct uct_component {
     ucs_config_global_list_entry_t          cm_config;          /**< CM configuration entry */
     ucs_list_link_t                         tl_list;            /**< List of transports */
     ucs_list_link_t                         list;               /**< Entry in global list of components */
-    uint64_t                                flags;              /**< Flags as defined by 
+    uint64_t                                flags;              /**< Flags as defined by
                                                                      UCT_COMPONENT_FLAG_xx */
 };
 

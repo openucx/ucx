@@ -444,7 +444,7 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh)
     return md->ops->mem_free(md, memh);
 }
 
-ucs_status_t 
+ucs_status_t
 uct_md_mem_advise(uct_md_h md, uct_mem_h memh, void *addr, size_t length,
                   unsigned advice)
 {
