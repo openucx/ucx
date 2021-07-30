@@ -136,7 +136,7 @@ protected:
 
         EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
 
-        /* simulate arbiter stop because lack of global resorce
+        /* simulate arbiter stop because lack of global resource
          * operation still stands on pending
          */
         preq->is_done = 1;
@@ -638,7 +638,7 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     }
     EXPECT_EQ(0, iface->tx.dci_pool[0].stack_top);
 
-    /* Clean up FC and pending to avoid assetions during tear down */
+    /* Clean up FC and pending to avoid assertions during tear down */
     uct_ep_pending_purge(m_e1->ep(0),
            reinterpret_cast<void (*)(uct_pending_req*, void*)> (ucs_empty_function),
            NULL);
