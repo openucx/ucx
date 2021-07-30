@@ -77,7 +77,10 @@ typedef enum {
     UCT_DC_MLX5_IFACE_FLAG_UIDX                     = UCS_BIT(2),
 
     /** Flow control endpoint is using a DCI in error state */
-    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3)
+    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3),
+
+    /** Ignore DCI allocation reorder */
+    UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER      = UCS_BIT(4)
 } uct_dc_mlx5_iface_flags_t;
 
 

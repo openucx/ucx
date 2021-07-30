@@ -554,10 +554,11 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
     }
 
     if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-        /* TODO: disabled due to shot on some tests where resources are updated
-         * manually: dc_mlx5/test_dc_flow_control.pending_grant for instance. */
-        /* TODO: look how to eliminate assert on such tests */
-        /* ucs_assert(ucs_arbiter_is_empty(waitq)); */
+        if (!(iface->flags & UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER)) {
+            waitq = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
+            ucs_assert(ucs_arbiter_is_empty(waitq));
+        }
+
         uct_dc_mlx5_iface_dci_alloc(iface, ep);
         return UCS_OK;
     }
