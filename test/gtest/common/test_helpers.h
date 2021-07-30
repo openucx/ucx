@@ -10,10 +10,9 @@
 
 #include "gtest.h"
 
-#include <common/mem_buffer.h>
-
 #include <ucs/async/async_fwd.h>
 #include <ucs/config/types.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/sys/preprocessor.h>
 #include <ucs/sys/checker.h>
 #include <ucs/sys/string.h>

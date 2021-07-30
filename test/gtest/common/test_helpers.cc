@@ -4,6 +4,7 @@
 * See file LICENSE for terms.
 */
 
+#include "mem_buffer.h"
 #include "test_helpers.h"
 
 #include <ucs/async/async.h>

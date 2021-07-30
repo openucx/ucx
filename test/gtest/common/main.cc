@@ -11,6 +11,7 @@
 #include <ucs/config/global_opts.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
+#include "mem_buffer.h"
 #include "test_helpers.h"
 #include "tap.h"
 

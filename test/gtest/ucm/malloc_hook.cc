@@ -10,6 +10,7 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/type/status.h>
+#include <common/mem_buffer.h>
 #include <common/test.h>
 #include <common/test_helpers.h>
 #include <pthread.h>
