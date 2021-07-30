@@ -928,7 +928,7 @@ test_init_mt() {
 	$MAKEP
 	for ((i=0;i<50;++i))
 	do
-		$AFFINITY timeout 1m ./test/apps/test_init_mt
+		$AFFINITY timeout 5m ./test/apps/test_init_mt
 	done
 }
 
