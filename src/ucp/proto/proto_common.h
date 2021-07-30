@@ -10,6 +10,8 @@
 #include "proto.h"
 #include "proto_select.h"
 
+#include <uct/api/v2/uct_v2.h>
+
 
 /* Constant for "undefined"/"not-applicable" structure offset */
 #define UCP_PROTO_COMMON_OFFSET_INVALID          PTRDIFF_MAX
@@ -25,16 +27,16 @@ typedef enum {
     /* One-sided remote access (implies RECV_ZCOPY) */
     UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS = UCS_BIT(2),
 
-    /* Protocol supports non-host buffers */
-    UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE      = UCS_BIT(3),
-
     /* Only the header is sent from initiator side to target side, the data
      * (without headers) arrives back from target to initiator side, and only
      * then the operation is considered completed  */
-    UCP_PROTO_COMMON_INIT_FLAG_RESPONSE      = UCS_BIT(4),
+    UCP_PROTO_COMMON_INIT_FLAG_RESPONSE      = UCS_BIT(3),
 
-    /* Limit the protocol message size range by maximal fragment size */
-    UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG      = UCS_BIT(5)
+    /* The protocol can send only one fragment */
+    UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   = UCS_BIT(4),
+
+    /* The message does not contain payload from the send buffer  */
+    UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY      = UCS_BIT(5)
 } ucp_proto_common_init_flags_t;
 
 
@@ -53,23 +55,33 @@ typedef struct {
     ptrdiff_t               max_frag_offs; /* offset in uct_iface_attr_t of the
                                               maximal size of a single fragment */
     size_t                  hdr_size;      /* header size on first lane */
+    uct_ep_operation_t      memtype_op;    /* operation used for memtype copy */
     unsigned                flags;         /* see ucp_proto_common_init_flags_t */
 } ucp_proto_common_init_params_t;
 
 
+/*
+ * Lane performance characteristics
+ */
 typedef struct {
-    /* Which lanes are used for sending data in the protocol */
-    ucp_lane_map_t lane_map;
+    /* Operation overhead */
+    double overhead;
 
-    /* Which memory domains are used for registration */
-    ucp_md_map_t   reg_md_map;
+    /* Transport bandwidth (without protocol memory copies) */
+    double bandwidth;
 
-    /* Fragment size for performance estimation  */
-    size_t         frag_size;
+    /* Network latency */
+    double latency;
 
-    /* Total transport bandwidth on all lanes */
-    double         bandwidth;
-} ucp_proto_common_perf_params_t;
+    /* Latency of device to memory access */
+    double sys_latency;
+
+    /* Minimal single message length */
+    size_t min_frag;
+
+    /* Maximum single message length */
+    size_t max_frag;
+} ucp_proto_common_tl_perf_t;
 
 
 /* Private data per lane */
@@ -129,9 +141,9 @@ size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
                                              size_t dfl_value);
 
 
-double
-ucp_proto_common_iface_bandwidth(const ucp_proto_common_init_params_t *params,
-                                 const uct_iface_attr_t *iface_attr);
+void ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
+                                    ucp_lane_index_t lane,
+                                    ucp_proto_common_tl_perf_t *perf);
 
 
 /* @return number of lanes found */
@@ -149,11 +161,13 @@ ucp_proto_common_reg_md_map(const ucp_proto_common_init_params_t *params,
 
 
 ucp_lane_index_t
-ucp_proto_common_find_am_bcopy_lane(const ucp_proto_init_params_t *params);
+ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
-void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
-                                const ucp_proto_common_perf_params_t *perf_params);
+ucs_status_t
+ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
+                           const ucp_proto_common_tl_perf_t *perf,
+                           ucp_md_map_t reg_md_map);
 
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);

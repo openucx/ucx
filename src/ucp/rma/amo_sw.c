@@ -362,6 +362,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = flags,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = 0
@@ -380,8 +381,7 @@ ucp_proto_amo_sw_init_post(const ucp_proto_init_params_t *init_params)
 {
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_AMO_POST);
 
-    return ucp_proto_amo_sw_init(init_params,
-                                 UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE);
+    return ucp_proto_amo_sw_init(init_params, 0);
 }
 
 static ucp_proto_t ucp_get_amo_post_proto = {
@@ -408,7 +408,6 @@ ucp_proto_amo_sw_init_fetch(const ucp_proto_init_params_t *init_params)
     }
 
     return ucp_proto_amo_sw_init(init_params,
-                                 UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE |
                                  UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
 }
 
