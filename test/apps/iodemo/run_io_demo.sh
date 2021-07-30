@@ -694,7 +694,14 @@ make_scripts()
 			    for pid in \$(list_pids_with_role \${tag})
 			    do
 			        echo "Stopping process \${pid}"
-			        kill -9 \${pid}
+			        kill -INT \${pid}
+			    done
+			    ;;
+			kill)
+			    for pid in \$(list_pids_with_role \${tag})
+			    do
+			        echo "Killing process \${pid}"
+			        kill -KILL \${pid}
 			    done
 			    ;;
 			status)
