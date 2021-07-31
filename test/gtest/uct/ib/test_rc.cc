@@ -51,7 +51,7 @@ void test_rc::test_iface_ops(int cq_len)
     UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, sendbuf.ptr(), sendbuf.length(),
                             sendbuf.memh(), m_e1->iface_attr().cap.put.max_iov);
     // For _x transports several CQEs can be consumed per WQE, post less put zcopy
-    // ops, so that flush would be sucessfull (otherwise flush will return
+    // ops, so that flush would be successful (otherwise flush will return
     // NO_RESOURCES and completion will not be added for it).
     for (int i = 0; i < cq_len / 5; i++) {
         ASSERT_UCS_OK_OR_INPROGRESS(uct_ep_put_zcopy(e->ep(0), iov, iovcnt,
@@ -818,7 +818,7 @@ test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
     attr_map_t iov_map;
 
 #ifdef HAVE_MLX5_HW
-    // For RMA iovs can use all WQE space, remainig from control and
+    // For RMA iovs can use all WQE space, remaining from control and
     // remote address segments (and AV if relevant)
     size_t rma_iov = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
                       (sizeof(struct mlx5_wqe_raddr_seg) +
@@ -834,7 +834,7 @@ test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(ucs_derived_of(m_e->iface(),
                                               uct_rc_mlx5_iface_common_t))) {
-        // For TAG eager zcopy iovs can use all WQE space, remainig from control
+        // For TAG eager zcopy iovs can use all WQE space, remaining from control
         // segment, TMH header (+ inline data segment) and AV (if relevant)
         iov_map["tag"] = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
                           (sizeof(struct mlx5_wqe_ctrl_seg) +
