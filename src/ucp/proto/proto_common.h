@@ -164,6 +164,16 @@ ucp_lane_index_t
 ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
+/*
+ * Calculate the performance pipelining an operation with performance 'perf1'
+ * with an operation with performance 'perf2' by using fragments with size
+ * 'frag_size' bytes.
+*/
+ucs_linear_func_t ucp_proto_common_ppln_perf(ucs_linear_func_t perf1,
+                                             ucs_linear_func_t perf2,
+                                             double frag_size);
+
+
 ucs_status_t
 ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *perf,

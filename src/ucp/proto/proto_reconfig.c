@@ -84,6 +84,8 @@ static ucs_status_t ucp_proto_reconfig_progress(uct_pending_req_t *self)
 static ucs_status_t
 ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
 {
+    ucp_proto_perf_type_t perf_type;
+
     /* Default reconfiguration protocol is a fallback for any case protocol
      * selection is unsuccessful. The protocol keeps queuing requests until they
      * can be executed.
@@ -94,8 +96,10 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
     init_params->caps->min_length           = 0;
     init_params->caps->num_ranges           = 1;
     init_params->caps->ranges[0].max_length = SIZE_MAX;
-    init_params->caps->ranges[0].perf       = ucs_linear_func_make(INFINITY, 0);
-
+    for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
+        init_params->caps->ranges[0].perf[perf_type] =
+                ucs_linear_func_make(INFINITY, 0);
+    }
     return UCS_OK;
 }
 

@@ -24,6 +24,37 @@
 #define UCP_PROTO_SELECT_PARAM_STR_MAX 128
 
 
+typedef struct {
+    ucp_proto_perf_range_t super;
+    size_t                 cfg_thresh; /* Configured protocol threshold */
+} ucp_proto_select_range_t;
+
+
+/**
+ * Protocol and its private configuration
+ */
+typedef struct {
+    /* Protocol definition */
+    const ucp_proto_t        *proto;
+
+    /* Protocol private configuration space */
+    const void               *priv;
+
+    /* Endpoint configuration index this protocol was selected on */
+    ucp_worker_cfg_index_t   ep_cfg_index;
+
+    /* Remote key configuration index this protocol was selected on (can be
+     * UCP_WORKER_CFG_INDEX_NULL)
+     */
+    ucp_worker_cfg_index_t   rkey_cfg_index;
+
+    /* Copy of protocol selection parameters, used to re-select protocol for
+     * existing in-progress request
+     */
+    ucp_proto_select_param_t select_param;
+} ucp_proto_config_t;
+
+
 /**
  * Entry which defines which protocol should be used for a message size range.
  */
@@ -37,12 +68,14 @@ typedef struct {
  * Protocol selection per a particular buffer type and operation
  */
 typedef struct {
-    const ucp_proto_threshold_elem_t *thresholds; /* Array of which protocol to use
-                                                     for different message sizes */
-    const ucp_proto_perf_range_t     *perf_ranges;/* Estimated performance for
-                                                     the selected protocols */
-    void                             *priv_buf;   /* Private configuration area
-                                                     for the selected protocols */
+    /* Array of which protocol to use for different message sizes */
+    const ucp_proto_threshold_elem_t *thresholds;
+
+    /* Estimated performance for the selected protocols */
+    const ucp_proto_select_range_t   *perf_ranges;
+
+    /* Private configuration area for the selected protocols */
+    void                             *priv_buf;
 } ucp_proto_select_elem_t;
 
 
@@ -122,5 +155,11 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
                             ucp_operation_id_t op_id, uint32_t op_attr_mask,
                             unsigned proto_flags,
                             ucp_proto_select_short_t *proto_short);
+
+
+void ucp_proto_select_get_valid_range(
+        const ucp_proto_threshold_elem_t *thresholds, size_t *min_length_p,
+        size_t *max_length_p);
+
 
 #endif
