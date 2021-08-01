@@ -107,6 +107,17 @@ ucp_proto_rndv_ack_progress(ucp_request_t *req, ucp_am_id_t am_id,
                                               complete_func);
 }
 
+static size_t UCS_F_ALWAYS_INLINE
+ucp_proto_rndv_send_pack_atp(ucp_request_t *req, void *dest, uint16_t count)
+{
+    ucp_rndv_atp_hdr_t *atp = dest;
+
+    atp->super.req_id = req->send.rndv.remote_req_id;
+    atp->super.status = UCS_OK;
+    atp->count        = count;
+    return sizeof(*atp);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 {

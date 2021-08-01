@@ -1826,6 +1826,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_atp_handler,
     ucp_reply_hdr_t *rep_hdr = data;
     ucp_request_t *rtr_sreq, *req;
 
+    if (worker->context->config.ext.proto_enable) {
+        return ucp_proto_rndv_rtr_handle_atp(arg, data, length, flags);
+    }
+
     UCP_SEND_REQUEST_GET_BY_ID(&rtr_sreq, worker, rep_hdr->req_id, 1,
                                return UCS_OK, "RNDV ATP %p", rep_hdr);
 

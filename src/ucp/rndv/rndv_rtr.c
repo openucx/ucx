@@ -134,6 +134,28 @@ static ucp_proto_t ucp_rndv_rtr_proto = {
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rtr_proto);
 
+ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
+                                           unsigned flags)
+{
+    ucp_worker_h worker     = arg;
+    ucp_rndv_atp_hdr_t *atp = data;
+    ucp_request_t *req;
+
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, atp->super.req_id, 0,
+                               return UCS_OK, "ATP %p", atp);
+
+    ++req->send.state.completed_size;
+    ucp_trace_req(req, "got atp, count %zu", req->send.state.completed_size);
+
+    if (req->send.state.completed_size == atp->count) {
+        VALGRIND_MAKE_MEM_DEFINED(req->send.state.dt_iter.type.contig.buffer,
+                                  req->send.state.dt_iter.length);
+        ucp_proto_rndv_rtr_data_received(req);
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t
 ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
 {

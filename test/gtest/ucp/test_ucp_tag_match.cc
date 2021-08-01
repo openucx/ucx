@@ -19,7 +19,7 @@ using namespace ucs; /* For vector<char> serialization */
 class test_ucp_tag_match : public test_ucp_tag {
 public:
     enum {
-        ENABLE_PROTO = UCS_BIT(2)
+        ENABLE_PROTO = UCS_BIT(8)
     };
 
     test_ucp_tag_match() {
@@ -478,14 +478,17 @@ public:
         RNDV_SCHEME_AUTO = 0,
         RNDV_SCHEME_PUT_ZCOPY,
         RNDV_SCHEME_GET_ZCOPY,
-        RNDV_SCHEME_LAST
+        RNDV_SCHEME_LAST,
+        PUT_ZCOPY_FLUSH = ENABLE_PROTO << 1
     };
 
     static const std::string rndv_schemes[];
 
     void init() {
         ASSERT_LE(rndv_scheme(), (int)RNDV_SCHEME_GET_ZCOPY);
+        UCS_STATIC_ASSERT(!(ENABLE_PROTO & UCS_MASK(RNDV_SCHEME_LAST)));
         modify_config("RNDV_SCHEME", rndv_schemes[rndv_scheme()]);
+        modify_config("RNDV_PUT_FORCE_FLUSH", force_flush() ? "y" : "n");
         test_ucp_tag_match::init();
     }
 
@@ -493,15 +496,16 @@ public:
         for (int rndv_scheme = 0; rndv_scheme < RNDV_SCHEME_LAST; ++rndv_scheme) {
             add_variant_with_value(variants, get_ctx_params(), rndv_scheme,
                                    "rndv_" + rndv_schemes[rndv_scheme]);
+            add_variant_with_value(variants, get_ctx_params(),
+                                   rndv_scheme | ENABLE_PROTO,
+                                   rndv_schemes[rndv_scheme] + ",proto");
         }
 
-        // Generate variants with and new protocols
+        // Add variant with force flush
         add_variant_with_value(variants, get_ctx_params(),
-                               RNDV_SCHEME_AUTO | ENABLE_PROTO,
-                               "rndv_auto,proto");
-        add_variant_with_value(variants, get_ctx_params(),
-                               RNDV_SCHEME_GET_ZCOPY | ENABLE_PROTO,
-                               "rndv_get_zcopy,proto");
+                               RNDV_SCHEME_PUT_ZCOPY | ENABLE_PROTO |
+                                       PUT_ZCOPY_FLUSH,
+                               "rndv_put_flush,proto");
     }
 
 protected:
@@ -510,6 +514,11 @@ protected:
         int mask = ucs_roundup_pow2(static_cast<int>(RNDV_SCHEME_LAST) + 1) - 1;
         ucs_assert(!(mask & ENABLE_PROTO));
         return get_variant_value() & mask;
+    }
+
+    bool force_flush() const
+    {
+        return get_variant_value() & PUT_ZCOPY_FLUSH;
     }
 };
 
