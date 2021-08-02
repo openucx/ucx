@@ -1153,7 +1153,7 @@ static ucs_status_t ucp_perf_test_send_local_data(ucx_perf_context_t *perf,
 
 err_free_workers_vec:
     for (j = 0; j < i; j++) {
-        ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
+        ucp_worker_destroy(perf->ucp.tctx[j].perf.ucp.worker);
     }
     free(vec);
 err_rkey_release:
