@@ -90,8 +90,7 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
         ucs_error("failed to create a uct sockaddr endpoint on %s cm %p",
                   ucp_context_cm_name(context, cm_idx), worker->cms[cm_idx].cm);
 
-        ucp_worker_set_ep_failed(worker, ucp_ep, &cm_wireup_ep->super.super,
-                                 ucp_ep_get_cm_lane(ucp_ep), status);
+        ucp_ep_set_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -455,9 +454,7 @@ try_fallback:
     }
 
 err:
-    ucp_worker_set_ep_failed(worker, ep,
-                             &ucp_ep_get_cm_wireup_ep(ep)->super.super,
-                             ucp_ep_get_cm_lane(ep), status);
+    ucp_ep_set_failed(ep, ucp_ep_get_cm_lane(ep), status);
 out:
     ucs_free(ucp_addr);
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -499,10 +496,7 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
                  args->dev_name);
         status = UCS_ERR_UNREACHABLE;
         if (!ucp_cm_client_try_fallback_cms(ep)) {
-            ucp_worker_set_ep_failed(worker, ep,
-                                     &cm_wireup_ep->super.super,
-                                     ucp_ep_get_cm_lane(ep), status);
-
+            ucp_ep_set_failed_schedule(ep, ucp_ep_get_cm_lane(ep), status);
         }
         goto out;
     }
@@ -617,8 +611,7 @@ out_free_addr:
     ucs_free(addr.address_list);
 out:
     if (status != UCS_OK) {
-        ucp_worker_set_ep_failed(worker, ucp_ep, &wireup_ep->super.super,
-                                 ucp_ep_get_cm_lane(ucp_ep), status);
+        ucp_ep_set_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
     ucs_log_indent(-1);
@@ -735,8 +728,7 @@ err_free_arg:
     ucs_free(progress_arg);
 err_out:
     UCS_ASYNC_BLOCK(&worker->async);
-    ucp_worker_set_ep_failed(worker, ucp_ep, uct_cm_ep,
-                             ucp_ep_get_cm_lane(ucp_ep), status);
+    ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
@@ -775,9 +767,7 @@ static void ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
     }
 
 set_ep_failed:
-    ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
-                             ucp_ep_get_cm_uct_ep(ucp_ep),
-                             ucp_ep_get_cm_lane(ucp_ep), status);
+    ucp_ep_set_failed(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
 }
 
 static unsigned ucp_ep_cm_disconnect_progress(void *arg)
@@ -1235,7 +1225,6 @@ static void ucp_cm_server_conn_notify_cb(
 {
     ucp_ep_h ucp_ep            = arg;
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
-    ucp_lane_index_t cm_lane;
     ucs_status_t status;
 
     ucs_assert_always(notify_args->field_mask &
@@ -1257,9 +1246,7 @@ static void ucp_cm_server_conn_notify_cb(
     } else {
         /* if reject is arrived on server side, then UCT does something wrong */
         ucs_assert(status != UCS_ERR_REJECTED);
-        cm_lane = ucp_ep_get_cm_lane(ucp_ep);
-        ucp_worker_set_ep_failed(ucp_ep->worker, ucp_ep,
-                                 ucp_ep->uct_eps[cm_lane], cm_lane, status);
+        ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 }
 
@@ -1326,7 +1313,6 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     return UCS_OK;
 
 err:
-    ucp_worker_set_ep_failed(worker, ep, ep->uct_eps[lane], lane, status);
     /* coverity[leaked_storage] (uct_ep) */
     return status;
 }

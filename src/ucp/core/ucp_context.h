@@ -117,8 +117,6 @@ typedef struct ucp_context_config {
     ucs_on_off_auto_value_t                proto_indirect_id;
     /** Bitmap of memory types whose allocations are registered fully */
     unsigned                               reg_whole_alloc_bitmap;
-    /** Error handler delay */
-    ucs_time_t                             err_handler_delay;
 } ucp_context_config_t;
 
 

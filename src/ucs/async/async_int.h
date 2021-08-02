@@ -53,6 +53,8 @@ typedef void (*ucs_async_init_t)();
 
 typedef void (*ucs_async_cleanup_t)();
 
+typedef int (*ucs_async_is_from_async_t)();
+
 typedef void (*ucs_async_block_t)();
 
 typedef void (*ucs_async_unblock_t)();
@@ -90,6 +92,7 @@ typedef ucs_status_t (*ucs_async_remove_timer_t)(ucs_async_context_t *async,
 typedef struct ucs_async_ops {
     ucs_async_init_t              init;
     ucs_async_cleanup_t           cleanup;
+    ucs_async_is_from_async_t     is_from_async;
 
     ucs_async_block_t             block;
     ucs_async_unblock_t           unblock;

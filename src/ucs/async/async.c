@@ -412,6 +412,11 @@ void ucs_async_context_destroy(ucs_async_context_t *async)
     ucs_free(async);
 }
 
+int ucs_async_is_from_async(const ucs_async_context_t *async)
+{
+    return ucs_async_method_call(async->mode, is_from_async);
+}
+
 static ucs_status_t
 ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
                         ucs_event_set_types_t events, ucs_async_event_cb_t cb,
