@@ -5,11 +5,12 @@
 
 if HAVE_GO
 
-GOPATH=$(abs_top_builddir)/bindings/go/$(objdir)
+GOOBJDIR=$(abs_top_builddir)/bindings/go/$(objdir)
+GOPATH=$(abs_top_srcdir)/bindings/go/
 CGOCFLAGS=-I$(abs_top_builddir)/src -I$(top_srcdir)/src
 CGOLDFLAGS=-L$(abs_top_builddir)/src/ucp/$(objdir) -lucp -L$(abs_top_builddir)/src/ucs/$(objdir) -lucs
 UCX_SOPATH=$(abs_top_builddir)/src/ucp/$(objdir):$(abs_top_builddir)/src/ucs/$(objdir):$(abs_top_builddir)/src/ucm/$(objdir):$(abs_top_builddir)/src/uct/$(objdir)
-GOTMPDIR=$(GOPATH)/tmp
+GOTMPDIR=$(GOOBJDIR)/tmp
 
 export GOTMPDIR
 export GOPATH
@@ -20,16 +21,21 @@ $(GOTMPDIR):
 	$(AM_V_at)mkdir -p $(GOTMPDIR)
 
 build: $(GOTMPDIR)
-	$(AM_V_at)$(GO) build $(top_srcdir)/bindings/go/*.go
+	cd $(abs_top_srcdir)/bindings/go/src/ucx ;\
+	$(GO) build
 
 clean-local:
-	$(AM_V_at)-rm -rf $(GOPATH)
+	$(AM_V_at)-rm -rf $(GOOBJDIR)
 
 test: $(GOTMPDIR)
-	$(AM_V_at)LD_LIBRARY_PATH=$(UCX_SOPATH) $(GO) test -v $(top_srcdir)/bindings/go/*.go
+	cd $(abs_top_srcdir)/bindings/go/tests ;\
+	$(GO) env -w GO111MODULE=off ; \
+	LD_LIBRARY_PATH=$(UCX_SOPATH) $(GO) test -v
 
 bench: $(GOTMPDIR)
-	$(AM_V_at)LD_LIBRARY_PATH=$(UCX_SOPATH) $(GO) test -v -bench=. $(top_srcdir)/bindings/go/*.go
+	cd $(abs_top_srcdir)/bindings/go/tests ;\
+	$(GO) env -w GO111MODULE=off ; \
+	LD_LIBRARY_PATH=$(UCX_SOPATH) $(GO) test -v -bench=.
 
 all: build
 

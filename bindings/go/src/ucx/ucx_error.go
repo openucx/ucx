@@ -3,7 +3,7 @@
  * See file LICENSE for terms.
  */
 
-package ucp
+package ucx
 
 // #include <ucs/type/status.h>
 import "C"

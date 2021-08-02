@@ -3,12 +3,13 @@
  * See file LICENSE for terms.
  */
 
-package ucp
+package goucxtests
 
 import (
 	"flag"
 	"fmt"
 	"testing"
+	. "ucx"
 	"unsafe"
 )
 
@@ -96,7 +97,7 @@ func TestUcpMmap(t *testing.T) {
 
 	mmapAttrs, _ := allocatedMemory.Query(UCP_MEM_ATTR_FIELD_ADDRESS, UCP_MEM_ATTR_FIELD_LENGTH, UCP_MEM_ATTR_FIELD_MEM_TYPE)
 
-	if UcsMemoryType(mmapAttrs.mem_type) != UCS_MEMORY_TYPE_HOST {
+	if UcsMemoryType(mmapAttrs.MemType) != UCS_MEMORY_TYPE_HOST {
 		t.Fatalf("Allocated memory type is not host")
 	}
 

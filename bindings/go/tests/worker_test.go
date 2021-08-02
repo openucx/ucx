@@ -3,13 +3,14 @@
  * See file LICENSE for terms.
  */
 
-package ucp
+package goucxtests
 
 import (
 	"math/big"
 	"syscall"
 	"testing"
 	"time"
+	. "ucx"
 )
 
 func TestUcpWorkerEfd(t *testing.T) {

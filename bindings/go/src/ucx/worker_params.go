@@ -3,7 +3,7 @@
  * See file LICENSE for terms.
  */
 
-package ucp
+package ucx
 
 // #include <ucp/api/ucp.h>
 // void cpu_zero(ucs_cpu_set_t *cpu_mask) {

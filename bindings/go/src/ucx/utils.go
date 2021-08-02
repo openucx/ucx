@@ -3,7 +3,7 @@
  * See file LICENSE for terms.
  */
 
-package ucp
+package ucx
 
 // #include <stdlib.h>
 import "C"
@@ -15,4 +15,12 @@ func AllocateNativeMemory(size uint64) unsafe.Pointer {
 
 func FreeNativeMemory(pointer unsafe.Pointer) {
 	C.free(pointer)
+}
+
+func CBytes(data string) unsafe.Pointer {
+	return C.CBytes([]byte(data))
+}
+
+func GoBytes(p unsafe.Pointer, n uint64) []byte {
+	return C.GoBytes(p, C.int(n))
 }
