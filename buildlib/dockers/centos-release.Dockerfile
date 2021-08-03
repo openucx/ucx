@@ -5,7 +5,6 @@ FROM nvidia/cuda:${CUDA_VERSION}-devel-centos${OS_VERSION}
 RUN yum install -y \
     autoconf \
     automake \
-    doxygen \
     file \
     gcc-c++ \
     git \
@@ -22,6 +21,9 @@ RUN yum install -y \
     wget \
     libusbx \
     fuse-libs \
+    python36 \
+    lsof \
+    ethtool \
     && yum clean all
 
 # MOFED
@@ -40,6 +42,8 @@ RUN wget --no-verbose http://content.mellanox.com/ofed/${MOFED_SITE_PLACE}/${MOF
         --without-hcoll \
         --without-openmpi \
         --without-sharp \
+        --skip-distro-check \
+        --distro ${MOFED_OS} \
     && rm -rf ${MOFED_DIR} && rm -rf *.tgz
 
 ENV CPATH /usr/local/cuda/include:${CPATH}
