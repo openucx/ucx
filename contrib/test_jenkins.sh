@@ -24,8 +24,7 @@
 #  - COV_OPT  : command line options for Coverity static checker
 #
 
-realdir=$(realpath $(dirname $0))
-source ${realdir}/../az-helpers.sh
+source ${PWD}/../buildlib/az-helpers.sh
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
