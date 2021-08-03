@@ -820,7 +820,8 @@ uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
         dci_pool = &iface->tx.dci_pool[pool_index];
         ucs_debug("creating dci pool %d with %d QPs", pool_index,
                   iface->tx.ndci);
-        dci_pool->stack_top = 0;
+        dci_pool->stack_top         = 0;
+        dci_pool->release_stack_top = -1;
         ucs_arbiter_init(&dci_pool->arbiter);
 
         for (i = 0; i < iface->tx.ndci; ++i) {
@@ -1339,7 +1340,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                          uct_dc_mlx5_iface_dci_do_rand_pending_tx :
                          uct_dc_mlx5_iface_dci_do_dcs_pending_tx;
 
-    UCS_BITMAP_CLEAR(&self->tx.dci_release_bitmap);
+    self->tx.dci_pool_release_bitmap = 0;
 
     if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_DEVX_DCI |
                                       UCT_IB_MLX5_MD_FLAG_CQE_V1)) {

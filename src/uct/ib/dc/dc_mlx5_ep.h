@@ -383,6 +383,7 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
 
     pool->stack_top--;
+    ucs_assert(pool->release_stack_top < pool->stack_top);
     pool->stack[pool->stack_top] = dci_index;
 }
 
@@ -454,6 +455,7 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+    ucs_assert(pool->release_stack_top < pool->stack_top);
     ep->dci = pool->stack[pool->stack_top];
     ucs_assert(ep->dci >= (iface->tx.ndci * pool_index));
     ucs_assert(ep->dci < (iface->tx.ndci * (pool_index + 1)));
@@ -490,10 +492,19 @@ uct_dc_mlx5_iface_dci_detach(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 {
-    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
-    ucs_assert(dci != UCT_DC_MLX5_EP_NO_DCI);
+    uint8_t pool_index = uct_dc_mlx5_iface_dci_pool_index(iface, dci);
+    uint8_t stack_top;
 
-    UCS_BITMAP_SET(iface->tx.dci_release_bitmap, dci);
+    ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
+
+    /* adding current DCI into release stack and mark pool for
+     * processing, see details in @ref uct_dc_mlx5_dci_pool_t description */
+    stack_top = ++iface->tx.dci_pool[pool_index].release_stack_top;
+    ucs_assert(stack_top < iface->tx.dci_pool[pool_index].stack_top);
+
+    iface->tx.dci_pool_release_bitmap              |= UCS_BIT(pool_index);
+    iface->tx.dci_pool[pool_index].stack[stack_top] = dci;
+
     uct_worker_progress_register_safe(
             &iface->super.super.super.super.worker->super,
             uct_dc_mlx5_ep_dci_release_progress, iface,
