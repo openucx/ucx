@@ -148,12 +148,14 @@ static int safe_send(int sock, void *data, size_t size,
 {
     typedef ssize_t (*sock_call)(int, void *, size_t, int);
 
+    ucs_assert(sock >= 0);
     return sock_io(sock, (sock_call)send, POLLOUT, data, size, progress, arg, "send");
 }
 
 static int safe_recv(int sock, void *data, size_t size,
                      void (*progress)(void *arg), void *arg)
 {
+    ucs_assert(sock >= 0);
     return sock_io(sock, recv, POLLIN, data, size, progress, arg, "recv");
 }
 
@@ -202,7 +204,8 @@ ucs_status_t init_test_params(perftest_params_t *params)
 
 static unsigned sock_rte_group_size(void *rte_group)
 {
-    return 2;
+    sock_rte_group_t *group = rte_group;
+    return group->size;
 }
 
 static unsigned sock_rte_group_index(void *rte_group)
@@ -219,16 +222,19 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
 #pragma omp master
   {
     sock_rte_group_t *group = rte_group;
-    const unsigned magic = 0xdeadbeef;
-    unsigned snc;
 
-    snc = magic;
-    safe_send(group->connfd, &snc, sizeof(unsigned), progress, arg);
+    if (group->size > 1) {
+        const unsigned magic = 0xdeadbeef;
+        unsigned snc;
 
-    snc = 0;
-    
-    if (safe_recv(group->connfd, &snc, sizeof(unsigned), progress, arg) == 0) {
-        ucs_assert(snc == magic);
+        snc = magic;
+        safe_send(group->sendfd, &snc, sizeof(unsigned), progress, arg);
+
+        snc = 0;
+
+        if (safe_recv(group->recvfd, &snc, sizeof(unsigned), progress, arg) == 0) {
+            ucs_assert(snc == magic);
+        }
     }
   }
 #pragma omp barrier
@@ -246,9 +252,9 @@ static void sock_rte_post_vec(void *rte_group, const struct iovec *iovec,
         size += iovec[i].iov_len;
     }
 
-    safe_send(group->connfd, &size, sizeof(size), NULL, NULL);
+    safe_send(group->sendfd, &size, sizeof(size), NULL, NULL);
     for (i = 0; i < iovcnt; ++i) {
-        safe_send(group->connfd, iovec[i].iov_base, iovec[i].iov_len, NULL,
+        safe_send(group->sendfd, iovec[i].iov_base, iovec[i].iov_len, NULL,
                   NULL);
     }
 }
@@ -257,18 +263,15 @@ static void sock_rte_recv(void *rte_group, unsigned src, void *buffer,
                           size_t max, void *req)
 {
     sock_rte_group_t *group = rte_group;
-    int group_index;
     size_t size;
 
-    group_index = sock_rte_group_index(rte_group);
-    if (src == group_index) {
+    if (src != group->peer) {
         return;
     }
 
-    ucs_assert_always(src == (1 - group_index));
-    safe_recv(group->connfd, &size, sizeof(size), NULL, NULL);
+    safe_recv(group->recvfd, &size, sizeof(size), NULL, NULL);
     ucs_assert_always(size <= max);
-    safe_recv(group->connfd, buffer, size, NULL, NULL);
+    safe_recv(group->recvfd, buffer, size, NULL, NULL);
 }
 
 static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
@@ -289,7 +292,29 @@ static ucx_perf_rte_t sock_rte = {
     .report        = sock_rte_report,
 };
 
-static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
+static ucs_status_t setup_sock_rte_loobkack(struct perftest_context *ctx)
+{
+    int connfds[2];
+    int ret;
+
+    ctx->flags |= TEST_FLAG_PRINT_TEST | TEST_FLAG_PRINT_RESULTS;
+
+    ret = socketpair(AF_UNIX, SOCK_STREAM, 0, connfds);
+    if (ret < 0) {
+        ucs_error("socketpair() failed: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ctx->sock_rte_group.peer      =  0;
+    ctx->sock_rte_group.size      =  1;
+    ctx->sock_rte_group.is_server =  1;
+    ctx->sock_rte_group.sendfd    = connfds[0];
+    ctx->sock_rte_group.recvfd    = connfds[1];
+
+    return UCS_OK;
+}
+
+static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 {
     struct sockaddr_in inaddr;
     struct hostent *he;
@@ -306,7 +331,6 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
     }
 
     if (ctx->server_addr == NULL) {
-        optval = 1;
         status = ucs_socket_setopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
                                    &optval, sizeof(optval));
         if (status != UCS_OK) {
@@ -373,7 +397,9 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
             }
         }
 
-        ctx->sock_rte_group.connfd    = connfd;
+        ctx->sock_rte_group.sendfd    = connfd;
+        ctx->sock_rte_group.recvfd    = connfd;
+        ctx->sock_rte_group.peer      = 1;
         ctx->sock_rte_group.is_server = 1;
     } else {
         he = gethostbyname(ctx->server_addr);
@@ -405,9 +431,13 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
                       NULL, NULL);
         }
 
-        ctx->sock_rte_group.connfd    = sockfd;
-        ctx->sock_rte_group.is_server = 0;
+        ctx->sock_rte_group.sendfd     = sockfd;
+        ctx->sock_rte_group.recvfd     = sockfd;
+        ctx->sock_rte_group.peer       = 0;
+        ctx->sock_rte_group.is_server  = 0;
     }
+
+    ctx->sock_rte_group.size = 2;
 
     if (ctx->sock_rte_group.is_server) {
         ctx->flags |= TEST_FLAG_PRINT_TEST;
@@ -415,9 +445,6 @@ static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
-    ctx->params.super.rte_group  = &ctx->sock_rte_group;
-    ctx->params.super.rte        = &sock_rte;
-    ctx->params.super.report_arg = ctx;
     return UCS_OK;
 
 err_close_connfd:
@@ -429,9 +456,37 @@ err:
     return status;
 }
 
+static ucs_status_t setup_sock_rte(struct perftest_context *ctx)
+{
+    ucs_status_t status;
+
+    if (ctx->params.super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
+        status = setup_sock_rte_loobkack(ctx);
+    } else {
+        status = setup_sock_rte_p2p(ctx);
+    }
+
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ctx->params.super.rte_group  = &ctx->sock_rte_group;
+    ctx->params.super.rte        = &sock_rte;
+    ctx->params.super.report_arg = ctx;
+
+    return UCS_OK;
+}
+
 static ucs_status_t cleanup_sock_rte(struct perftest_context *ctx)
 {
-    close(ctx->sock_rte_group.connfd);
+    sock_rte_group_t *rte_group = &ctx->sock_rte_group;
+
+    close(rte_group->sendfd);
+
+    if (rte_group->sendfd != rte_group->recvfd) {
+        close(rte_group->recvfd);
+    }
+
     return UCS_OK;
 }
 
@@ -527,7 +582,7 @@ static void mpi_rte_post_vec(void *rte_group, const struct iovec *iovec,
     MPI_Comm_size(MPI_COMM_WORLD, &group_size);
 
     for (dest = 0; dest < group_size; ++dest) {
-        if (dest == my_rank) {
+        if (dest != rte_peer_index(group_size, my_rank)) {
             continue;
         }
 
@@ -545,12 +600,14 @@ static void mpi_rte_recv(void *rte_group, unsigned src, void *buffer, size_t max
                          void *req)
 {
     MPI_Status status;
+    int my_rank, size;
     size_t offset;
-    int my_rank;
     int count;
 
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-    if (src == my_rank) {
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    if (src != rte_peer_index(size, my_rank)) {
         return;
     }
 
@@ -712,13 +769,25 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ucs_trace_func("");
 
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-    if (size != 2) {
-        ucs_error("This test should run with exactly 2 processes (actual: %d)", size);
+
+    if ((ctx->params.super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (size != 1)) {
+        ucs_error("This test should be run with 1 process "
+                  "in loopback case (actual: %d)", size);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    if (!(ctx->params.super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (size != 2)) {
+        ucs_error("This test should be run with exactly 2 processes "
+                  "in p2p case (actual: %d)", size);
         return UCS_ERR_INVALID_PARAM;
     }
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    if (rank == 1) {
+
+    /* Let the last rank print the results */
+    if (rank == (size - 1)) {
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
@@ -734,7 +803,8 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     rte_group_t group;
 
     rte_init(NULL, NULL, &group);
-    if (1 == rte_group_rank(group)) {
+    /* Let the last rank print the results */
+    if (rte_group_rank(group) == (rte_group_size(group) - 1)) {
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
