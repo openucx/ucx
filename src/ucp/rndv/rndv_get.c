@@ -33,6 +33,8 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.latency       = 0,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
