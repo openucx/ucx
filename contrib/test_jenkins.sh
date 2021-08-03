@@ -1302,6 +1302,7 @@ run_tests() {
 	do_distributed_task 1 4 run_gtest_release
 }
 
+az_init_modules
 prepare
 try_load_cuda_env
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
