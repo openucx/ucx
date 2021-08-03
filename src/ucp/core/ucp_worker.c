@@ -1587,7 +1587,7 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     p += strlen(p);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
-        if ((key->am_lane == lane) ||
+        if ((key->am_lane == lane) || (key->rkey_ptr_lane == lane) ||
             (ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane) >= 0)  ||
             (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0)) {
             if (context->config.features & UCP_FEATURE_TAG) {
