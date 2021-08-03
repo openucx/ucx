@@ -177,7 +177,7 @@ typedef struct uct_mm_recv_desc {
 
 
 /**
- * MM trandport interface
+ * MM transport interface
  */
 typedef struct uct_mm_iface {
     uct_sm_iface_t          super;

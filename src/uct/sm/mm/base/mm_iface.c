@@ -173,7 +173,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     ucs_assert_always(status == UCS_OK);
     if (attach_shm_file) {
         /*
-         * Only MM tranports with attaching to SHM file can support error
+         * Only MM transports with attaching to SHM file can support error
          * handling mechanisms (e.g. EP checking) to check if a peer was down,
          * there is no safe way to check a process existence (touching a shared
          * memory block of a peer leads to "bus" error in case of a peer is
