@@ -139,7 +139,8 @@ ucp_tag_unexp_remove(ucp_recv_desc_t *rdesc)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_recv_desc_t *rdesc, ucp_tag_t tag)
+ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_recv_desc_t *rdesc, ucp_tag_t tag,
+                   uint64_t ep_id)
 {
     ucs_list_link_t *hash_list;
 
@@ -147,8 +148,8 @@ ucp_tag_unexp_recv(ucp_tag_match_t *tm, ucp_recv_desc_t *rdesc, ucp_tag_t tag)
     ucs_list_add_tail(hash_list,           &rdesc->tag_list[UCP_RDESC_HASH_LIST]);
     ucs_list_add_tail(&tm->unexpected.all, &rdesc->tag_list[UCP_RDESC_ALL_LIST]);
 
-    ucs_trace_req("unexp "UCP_RECV_DESC_FMT" tag %"PRIx64,
-                  UCP_RECV_DESC_ARG(rdesc), tag);
+    ucs_trace_req("unexp "UCP_RECV_DESC_FMT" tag %"PRIx64" ep_id %"PRIx64,
+                  UCP_RECV_DESC_ARG(rdesc), tag, ep_id);
 }
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*

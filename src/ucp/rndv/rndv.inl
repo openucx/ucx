@@ -20,7 +20,8 @@ ucp_rndv_rts_is_am(const ucp_rndv_rts_hdr_t *rts_hdr)
 static UCS_F_ALWAYS_INLINE int
 ucp_rndv_rts_is_tag(const ucp_rndv_rts_hdr_t *rts_hdr)
 {
-    return rts_hdr->opcode == UCP_RNDV_RTS_TAG_OK;
+    return (rts_hdr->opcode == UCP_RNDV_RTS_TAG_OK) ||
+           (rts_hdr->opcode == UCP_RNDV_RTS_TAG_CANCELED);
 }
 
 static UCS_F_ALWAYS_INLINE void

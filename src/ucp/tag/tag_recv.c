@@ -24,6 +24,7 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
 {
     ucp_eager_first_hdr_t *first_hdr;
     uint64_t msg_id;
+    uint64_t ep_id;
     ucs_status_t status;
 
     UCP_WORKER_STAT_EAGER_MSG(worker, rdesc->flags);
@@ -41,6 +42,7 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
         first_hdr           = (ucp_eager_first_hdr_t*)(rdesc + 1);
         req->recv.remaining = req->recv.tag.info.length = first_hdr->total_len;
         msg_id              = first_hdr->msg_id;
+        ep_id               = first_hdr->super.ep_id;
 
         if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC)) {
             ucp_tag_eager_sync_send_ack(worker, rdesc + 1, rdesc->flags);
@@ -48,9 +50,8 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
 
         status = ucp_tag_recv_request_process_rdesc(req, rdesc, 0, 0);
         if (status == UCS_INPROGRESS) {
-            ucp_tag_frag_list_process_queue(
-                    &worker->tm, req, msg_id
-                    UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
+            ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id, ep_id
+                                            UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
         }
     }
 }
@@ -135,6 +136,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
+    req->recv.tag.ep_id     = UCS_PTR_MAP_KEY_INVALID;
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {
         req->recv.tag.cb    = param->cb.recv;
 

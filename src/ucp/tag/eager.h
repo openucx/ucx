@@ -27,6 +27,7 @@
  */
 typedef struct {
     ucp_tag_hdr_t             super;
+    uint64_t                  ep_id;
 } UCS_S_PACKED ucp_eager_hdr_t;
 
 
@@ -45,6 +46,7 @@ typedef struct {
  */
 typedef struct {
     uint64_t                  msg_id;
+    uint64_t                  ep_id;
     size_t                    offset;
 } UCS_S_PACKED ucp_eager_middle_hdr_t;
 
@@ -93,6 +95,41 @@ ucp_proto_eager_check_op_id(const ucp_proto_init_params_t *init_params,
     return (init_params->select_param->op_id == op_id) &&
            (offload_enabled ==
             ucp_ep_config_key_has_tag_lane(init_params->ep_config_key));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_add_uct_iov_elem(uct_iov_t *iov, void *buffer, size_t length,
+                     uct_mem_h memh, size_t *iov_cnt)
+{
+    iov[*iov_cnt].buffer = buffer;
+    iov[*iov_cnt].length = length;
+    iov[*iov_cnt].count  = 1;
+    iov[*iov_cnt].stride = 0;
+    iov[*iov_cnt].memh   = memh;
+    ++(*iov_cnt);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_tag_send_am_short_iov(uct_ep_h ep, ucs_ptr_map_key_t remote_id,
+                          const void *buffer, size_t length, ucp_tag_t tag)
+{
+    size_t iov_cnt      = 0ul;
+    ucp_eager_hdr_t hdr = { .super.tag = tag,
+                            .ep_id     = remote_id };
+    uct_iov_t iov[2];
+
+    ucp_add_uct_iov_elem(iov, &hdr, sizeof(hdr), UCT_MEM_HANDLE_NULL, &iov_cnt);
+    ucp_add_uct_iov_elem(iov, (void*)buffer, length, UCT_MEM_HANDLE_NULL,
+                         &iov_cnt);
+    return uct_ep_am_short_iov(ep, UCP_AM_ID_EAGER_ONLY, iov, iov_cnt);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_ep_tag_send_am_short_iov(ucp_ep_h ep, const void *buffer, size_t length,
+                             ucp_tag_t tag)
+{
+    return ucp_tag_send_am_short_iov(ucp_ep_get_am_uct_ep(ep),
+                                     ucp_ep_remote_id(ep), buffer, length, tag);
 }
 
 #endif

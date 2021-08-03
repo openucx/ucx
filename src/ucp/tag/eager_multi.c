@@ -18,6 +18,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_eager_set_first_hdr(ucp_request_t *req, ucp_eager_first_hdr_t *hdr)
 {
     hdr->super.super.tag = req->send.msg_proto.tag;
+    hdr->super.ep_id     = ucp_send_request_get_ep_remote_id(req);
     hdr->total_len       = req->send.state.dt_iter.length;
     hdr->msg_id          = req->send.msg_proto.message_id;
 }
@@ -26,6 +27,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_eager_set_middle_hdr(ucp_request_t *req, ucp_eager_middle_hdr_t *hdr)
 {
     hdr->msg_id = req->send.msg_proto.message_id;
+    hdr->ep_id  = ucp_send_request_get_ep_remote_id(req);
     hdr->offset = req->send.state.dt_iter.offset;
 }
 

@@ -24,18 +24,6 @@
 typedef void (*ucp_req_complete_func_t)(ucp_request_t *req, ucs_status_t status);
 
 
-static UCS_F_ALWAYS_INLINE void
-ucp_add_uct_iov_elem(uct_iov_t *iov, void *buffer, size_t length,
-                     uct_mem_h memh, size_t *iov_cnt)
-{
-    iov[*iov_cnt].buffer = buffer;
-    iov[*iov_cnt].length = length;
-    iov[*iov_cnt].count  = 1;
-    iov[*iov_cnt].stride = 0;
-    iov[*iov_cnt].memh   = memh;
-    ++(*iov_cnt);
-}
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_do_am_bcopy_single(uct_pending_req_t *self, uint8_t am_id,
                        uct_pack_callback_t pack_cb)

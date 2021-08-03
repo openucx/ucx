@@ -21,8 +21,10 @@
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/tag/tag_match.inl>
 #include <ucp/proto/proto_common.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
@@ -333,6 +335,9 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_ep_deallocate;
     }
 
+    ucs_debug("ep %p: local id %"PRIuPTR, ep,
+              ucp_ep_ext_control(ep)->local_ep_id);
+
     ucp_ep_flush_state_reset(ep);
 
     /* Create endpoint VFS node on demand to avoid memory bloat */
@@ -493,6 +498,9 @@ void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
 void ucp_ep_release_id(ucp_ep_h ep)
 {
     ucs_status_t status;
+
+    ucs_debug("ep %p: released id %"PRIuPTR, ep,
+              ucp_ep_ext_control(ep)->local_ep_id);
 
     /* Don't use ucp_ep_local_id() function here to avoid assertion failure,
      * because local_ep_id can be set to @ref UCS_PTR_MAP_KEY_INVALID */
@@ -1232,6 +1240,7 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
     uct_ep_h uct_ep;
 
     ucp_ep_check_lanes(ep);
+    /* release id on failed EP to drop data by invalid ID */
     ucp_ep_release_id(ep);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_FAILED, UCP_EP_FLAG_LOCAL_CONNECTED);
 
@@ -1341,11 +1350,93 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
     ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
 }
 
+static void ucp_tm_ep_cleanup(ucp_ep_h ep, ucs_ptr_map_key_t ep_id,
+                              ucs_status_t status)
+{
+    ucp_tag_match_t *tm     = &ep->worker->tm;
+    const ucp_rndv_rts_hdr_t *rndv_rts_hdr;
+    const ucp_eager_middle_hdr_t *eager_mid_hdr;
+    const ucp_eager_hdr_t *eager_hdr;
+    ucp_recv_desc_t *rdesc, *tmp;
+    ucp_tag_frag_match_t *matchq;
+    ucp_request_t *rreq;
+    uint64_t msg_id;
+    khiter_t iter;
+    ucs_debug("cleanup ep %p", ep);
+
+    if (!(ep_id & UCS_PTR_MAP_KEY_INDIRECT_FLAG)) {
+        return;
+    }
+
+    if (ep_id == UCS_PTR_MAP_KEY_INVALID) {
+        ucs_assert(ep->flags & UCP_EP_FLAG_FAILED);
+        return;
+    }
+
+    /* remove from unexpected queue */
+    ucs_list_for_each_safe(rdesc, tmp, &tm->unexpected.all,
+                           tag_list[UCP_RDESC_ALL_LIST]) {
+        if (rdesc->flags & UCP_RECV_DESC_FLAG_RNDV) {
+            rndv_rts_hdr = (const void*)(rdesc + 1);
+            if (rndv_rts_hdr->sreq.ep_id != ep_id) {
+                /* rndv not matched */
+                continue;
+            }
+        } else {
+            eager_hdr = (const void*)(rdesc + 1);
+            if (eager_hdr->ep_id != ep_id) {
+                /* eager not matched */
+                continue;
+            }
+        }
+
+        ucs_debug("ep %p: ep_id %"PRIuPTR" releasing unexpected rdesc %p", ep,
+                  ep_id, rdesc);
+        ucp_tag_unexp_remove(rdesc);
+        ucp_recv_desc_release(rdesc);
+    }
+
+    /* remove from fragments hash */
+    kh_foreach_key(&tm->frag_hash, msg_id, {
+        iter   = kh_get(ucp_tag_frag_hash, &tm->frag_hash, msg_id);
+        matchq = &kh_val(&tm->frag_hash, iter);
+        if (!ucp_tag_frag_match_is_unexp(matchq)) {
+            /* remove receive request from expected hash */
+            rreq = matchq->exp_req;
+            if (rreq->recv.tag.ep_id != ep_id) {
+                continue;
+            }
+
+            ucs_debug("ep %p: ep_id %"PRIuPTR" completing expected receive request %p with status %s",
+                      ep, ep_id, rreq, ucs_status_string(status));
+            ucp_request_complete_tag_recv(rreq, status);
+        } else {
+            /* remove receive fragments from unexpected matchq */
+            rdesc = ucs_queue_head_elem_non_empty(&matchq->unexp_q, ucp_recv_desc_t,
+                                                  tag_frag_queue);
+            ucs_assert(!(rdesc->flags & UCP_RECV_DESC_FLAG_RNDV));
+            eager_mid_hdr = (void*)(rdesc + 1);
+            if (eager_mid_hdr->ep_id != ep_id) {
+                continue;
+            }
+
+            ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue, 1) {
+            ucs_debug("ep %p: ep_id %"PRIuPTR" releasing unexpected rdesc %p",
+                      ep, ep_id, rdesc);
+                ucp_recv_desc_release(rdesc);
+            }
+        }
+
+        kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);
+    });
+}
+
 ucs_status_t
 ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
     ucp_ep_ext_control_t *ep_ext_control = ucp_ep_ext_control(ucp_ep);
+    ucs_ptr_map_key_t ep_id;
     ucp_err_handling_mode_t err_mode;
     ucs_log_level_t log_level;
     ucp_request_t *close_req;
@@ -1370,9 +1461,14 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 
     ++ucp_ep->worker->counters.ep_failures;
 
+    /* Store local_ep_id because @ref ucp_ep_discard_lanes invalidates it,
+     * invalidated local ID is used to drop data on failed EP */
+    ep_id = ucp_ep_local_id(ucp_ep);
+
     /* The EP can be closed from last completion callback */
     ucp_ep_discard_lanes(ucp_ep, status);
     ucp_stream_ep_cleanup(ucp_ep, status);
+    ucp_tm_ep_cleanup(ucp_ep, ep_id, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
@@ -1484,6 +1580,8 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_stream_ep_cleanup(ep, UCS_ERR_CANCELED);
     ucp_am_ep_cleanup(ep);
+    ucp_tm_ep_cleanup(ep, ucp_ep_ext_control(ep)->local_ep_id,
+                      UCS_ERR_CANCELED);
 
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_USED);
 
@@ -1616,6 +1714,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
+        ucp_tm_ep_cleanup(ep, ucp_ep_ext_control(ep)->local_ep_id,
+                          UCS_ERR_CANCELED);
         ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
         ucp_ep_disconnected(ep, 1);
     } else {
@@ -2332,7 +2432,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     size_t max_rndv_thresh, max_am_rndv_thresh;
     size_t min_rndv_thresh, min_am_rndv_thresh;
     size_t rma_zcopy_thresh;
-    size_t am_max_eager_short;
+    ssize_t am_max_eager_short;
     double get_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     double put_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     ucs_status_t status;
@@ -2563,6 +2663,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
                                              config->tag.eager.max_short,
                                              context->num_mem_type_detect_mds);
+            /* TAG offload is disabled for compatibility reasons */
+            ucs_assert(config->tag.offload.max_eager_short.memtype_on < 0);
+            ucs_assert(config->tag.offload.max_eager_short.memtype_off < 0);
         }
     }
 
@@ -2635,7 +2738,13 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 /* TODO: set threshold level based on all available lanes */
 
                 config->tag.eager           = config->am;
-                config->tag.eager.max_short = am_max_eager_short;
+                /* short_iov which is used for compatibility path does not have
+                 * header, payload can be 8 bytes larger but we add ep_id to header,
+                 * so 8 - 16 = -8 bytes*/
+                config->tag.eager.max_short = (am_max_eager_short <
+                                               (ssize_t)sizeof(uint64_t)) ? -1 :
+                                              (am_max_eager_short -
+                                               sizeof(uint64_t));
                 config->tag.lane            = lane;
                 config->tag.rndv.am_thresh  = config->rndv.am_thresh;
                 config->tag.rndv.rma_thresh = config->rndv.rma_thresh;

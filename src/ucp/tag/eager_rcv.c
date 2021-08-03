@@ -65,7 +65,8 @@ ucp_eager_offload_handler(void *arg, void *data, size_t length,
         if (!UCS_STATUS_IS_ERR(status)) {
             rdesc_hdr  = (ucp_tag_t*)(rdesc + 1);
             *rdesc_hdr = recv_tag;
-            ucp_tag_unexp_recv(&worker->tm, rdesc, recv_tag);
+            ucp_tag_unexp_recv(&worker->tm, rdesc, recv_tag,
+                               UCS_PTR_MAP_KEY_INVALID);
         }
     }
 
@@ -89,6 +90,8 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
     ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
+    ucp_ep_h ep UCS_V_UNUSED;
+
 
     req = ucp_tag_exp_search(&worker->tm, recv_tag);
     if (req != NULL) {
@@ -117,17 +120,24 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
                                                    0);
             if (status == UCS_INPROGRESS) {
                 ucp_tag_frag_list_process_queue(
-                        &worker->tm, req, eagerf_hdr->msg_id
+                        &worker->tm, req, eagerf_hdr->msg_id,
+                        eagerf_hdr->super.ep_id
                         UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP));
             }
         }
 
         status = UCS_OK;
     } else {
+        /* check UCS_PTR_MAP_KEY_INVALID to pass CI */
+        if (ucs_likely(eager_hdr->ep_id != UCS_PTR_MAP_KEY_INVALID)) {
+            UCP_WORKER_GET_EP_BY_ID(&ep, worker, eager_hdr->ep_id, return UCS_OK,
+                                    "eager");
+        }
+
         status = ucp_recv_desc_init(worker, data, length, 0, am_flags, hdr_len,
                                     flags, priv_length, 1, name, &rdesc);
         if (!UCS_STATUS_IS_ERR(status)) {
-            ucp_tag_unexp_recv(&worker->tm, rdesc, eager_hdr->super.tag);
+            ucp_tag_unexp_recv(&worker->tm, rdesc, recv_tag, eager_hdr->ep_id);
         }
     }
 
@@ -163,12 +173,19 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_eager_middle_handler,
     ucp_worker_h worker         = arg;
     ucp_eager_middle_hdr_t *hdr = data;
     ucp_recv_desc_t *rdesc      = NULL;
+    ucp_ep_h ep UCS_V_UNUSED;
     ucp_tag_frag_match_t *matchq;
     ucp_request_t *req;
     ucs_status_t status;
     size_t recv_len;
     khiter_t iter;
     int ret;
+
+    /* check UCS_PTR_MAP_KEY_INVALID to pass CI */
+    if (ucs_likely(hdr->ep_id != UCS_PTR_MAP_KEY_INVALID)) {
+        UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, hdr->ep_id, return UCS_OK,
+                                      "eager_middle");
+    }
 
     iter   = kh_put(ucp_tag_frag_hash, &worker->tm.frag_hash, hdr->msg_id, &ret);
     ucs_assert(ret >= 0);
@@ -347,7 +364,7 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
         ucp_request_recv_offload_data(req, data, length, flags);
     } else {
         ucp_tag_frag_match_init_unexp(matchq);
-        ucp_tag_unexp_recv(&worker->tm, rdesc, stag);
+        ucp_tag_unexp_recv(&worker->tm, rdesc, stag, UCS_PTR_MAP_KEY_INVALID);
     }
 
     return status;
@@ -476,6 +493,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     priv->req.req_id      = UCS_PTR_MAP_KEY_INVALID;
     priv->req.ep_id       = imm;
     priv->super.super.tag = stag;
+    priv->super.ep_id     = UCS_PTR_MAP_KEY_INVALID;
     return ucp_eager_tagged_handler(worker, priv, length + priv_len,
                                     tl_flags, flags, priv_len, priv_len,
                                     "tag_offload_unexp_eager_sync");

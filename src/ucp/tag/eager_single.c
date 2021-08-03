@@ -26,10 +26,11 @@ static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucs_status_t status;
 
-    status = uct_ep_am_short(req->send.ep->uct_eps[spriv->super.lane],
-                             UCP_AM_ID_EAGER_ONLY, req->send.msg_proto.tag,
-                             req->send.state.dt_iter.type.contig.buffer,
-                             req->send.state.dt_iter.length);
+    status = ucp_tag_send_am_short_iov(req->send.ep->uct_eps[spriv->super.lane],
+                                       ucp_send_request_get_ep_remote_id(req),
+                                       req->send.state.dt_iter.type.contig.buffer,
+                                       req->send.state.dt_iter.length,
+                                       req->send.msg_proto.tag);
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req->send.lane = spriv->super.lane; /* for pending add */
         return status;
@@ -59,7 +60,7 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_short),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.hdr_size      = sizeof(ucp_tag_hdr_t),
+        .super.hdr_size      = sizeof(ucp_eager_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
@@ -95,6 +96,7 @@ static size_t ucp_eager_single_pack(void *dest, void *arg)
 
     ucs_assert(req->send.state.dt_iter.offset == 0);
     hdr->super.tag = req->send.msg_proto.tag;
+    hdr->ep_id     = ucp_send_request_get_ep_remote_id(req);
     packed_size    = ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
                                                  req->send.ep->worker,
                                                  SIZE_MAX, &next_iter, hdr + 1);
@@ -128,7 +130,7 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.hdr_size      = sizeof(ucp_tag_hdr_t),
+        .super.hdr_size      = sizeof(ucp_eager_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
@@ -170,7 +172,7 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
-        .super.hdr_size      = sizeof(ucp_tag_hdr_t),
+        .super.hdr_size      = sizeof(ucp_eager_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
@@ -194,7 +196,8 @@ ucp_proto_eager_zcopy_send_func(ucp_request_t *req,
                                 uct_iov_t *iov)
 {
     ucp_eager_hdr_t hdr = {
-        .super.tag = req->send.msg_proto.tag
+        .super.tag = req->send.msg_proto.tag,
+        .ep_id     = ucp_send_request_get_ep_remote_id(req)
     };
 
     return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],

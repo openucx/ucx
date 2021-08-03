@@ -407,6 +407,7 @@ struct ucp_request {
                     ucp_tag_t                   tag;        /* Expected tag */
                     ucp_tag_t                   tag_mask;   /* Expected tag mask */
                     uint64_t                    sn;         /* Tag match sequence */
+                    ucs_ptr_map_key_t           ep_id;      /* Endpoint local id */
                     ucp_tag_recv_nbx_callback_t cb;         /* Completion callback */
                     ucp_tag_recv_info_t         info;       /* Completion info to fill */
 
