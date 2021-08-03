@@ -150,10 +150,7 @@ ucp_tag_send_inline(ucp_ep_h ep, const void *buffer, size_t length, ucp_tag_t ta
     ucs_status_t status;
 
     if (ucp_proto_is_inline(ep, &ucp_ep_config(ep)->tag.max_eager_short, length)) {
-        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(ucp_eager_hdr_t));
-        UCS_STATIC_ASSERT(sizeof(ucp_tag_t) == sizeof(uint64_t));
-        status = uct_ep_am_short(ucp_ep_get_am_uct_ep(ep), UCP_AM_ID_EAGER_ONLY,
-                                 tag, buffer, length);
+        status = ucp_tag_send_am_short_iov(ep, buffer, length, tag);
     } else if (ucp_proto_is_inline(ep,
                                    &ucp_ep_config(ep)->tag.offload.max_eager_short,
                                    length)) {

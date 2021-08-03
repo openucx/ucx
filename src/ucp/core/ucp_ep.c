@@ -2005,7 +2005,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     size_t max_rndv_thresh, max_am_rndv_thresh;
     size_t min_rndv_thresh, min_am_rndv_thresh;
     size_t rma_zcopy_thresh;
-    size_t am_max_eager_short;
+    ssize_t am_max_eager_short;
     double get_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     double put_zcopy_max_bw[UCS_MEMORY_TYPE_LAST];
     ucs_status_t status;
@@ -2205,6 +2205,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             ucp_ep_config_set_memtype_thresh(&config->tag.offload.max_eager_short,
                                              config->tag.eager.max_short,
                                              context->num_mem_type_detect_mds);
+            /* TAG offload is disabled for compatibility reasons */
+            ucs_assert(config->tag.offload.max_eager_short.memtype_on < 0);
+            ucs_assert(config->tag.offload.max_eager_short.memtype_off < 0);
         }
     }
 
@@ -2272,7 +2275,13 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                 /* TODO: set threshold level based on all available lanes */
 
                 config->tag.eager           = config->am;
-                config->tag.eager.max_short = am_max_eager_short;
+                /* short_iov which is used for compatibility path does not have
+                 * header, payload can be 8 bytes larger but we add ep_id to header,
+                 * so 8 - 16 = -8 bytes*/
+                config->tag.eager.max_short = (am_max_eager_short <
+                                               (ssize_t)sizeof(uint64_t)) ? -1 :
+                                              (am_max_eager_short -
+                                               sizeof(uint64_t));
                 config->tag.lane            = lane;
                 config->tag.rndv.am_thresh  = config->rndv.am_thresh;
                 config->tag.rndv.rma_thresh = config->rndv.rma_thresh;

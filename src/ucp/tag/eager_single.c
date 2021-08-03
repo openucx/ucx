@@ -94,6 +94,7 @@ static size_t ucp_eager_single_pack(void *dest, void *arg)
 
     ucs_assert(req->send.state.dt_iter.offset == 0);
     hdr->super.tag = req->send.msg_proto.tag;
+    hdr->ep_id     = ucp_send_request_get_ep_remote_id(req);
     packed_size    = ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
                                                  req->send.ep->worker,
                                                  SIZE_MAX, &next_iter, hdr + 1);
@@ -188,7 +189,8 @@ ucp_proto_eager_zcopy_send_func(ucp_request_t *req,
                                 const uct_iov_t *iov)
 {
     ucp_eager_hdr_t hdr = {
-        .super.tag = req->send.msg_proto.tag
+        .super.tag = req->send.msg_proto.tag,
+        .ep_id     = ucp_send_request_get_ep_remote_id(req)
     };
 
     return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],

@@ -1469,6 +1469,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    if (context->config.ext.proto_enable) {
+        ucs_info("UCX_PROTO_ENABLE disabled for compatibilities reason");
+        context->config.ext.proto_enable = 0;
+    }
+
     if (context->config.ext.keepalive_num_eps == 0) {
         ucs_error("UCX_KEEPALIVE_NUM_EPS value must be greater than 0");
         status = UCS_ERR_INVALID_PARAM;
