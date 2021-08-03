@@ -500,6 +500,13 @@ public:
         }
         iface->tx.dci_pool[0].stack_top = 0;
     }
+
+    virtual void ignore_dci_waitq_reorder(uct_test::entity *e)
+    {
+        uct_dc_mlx5_iface_t *iface = test_dc::dc_iface(e);
+
+        iface->flags |= UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER;
+    }
 };
 
 UCS_TEST_P(test_dc_flow_control, general_enabled)
@@ -517,6 +524,10 @@ UCS_TEST_P(test_dc_flow_control, general_disabled)
 
 UCS_TEST_P(test_dc_flow_control, pending_grant)
 {
+    /* test uses manipulation with available TX resources which may break
+       DCI allocation ordering. allow out-of-order DCI waitq */
+    ignore_dci_waitq_reorder(m_e2);
+
     test_pending_grant(5);
     flush();
 }
@@ -582,6 +593,10 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
     int wnd = 5;
     ucs_status_t status;
 
+    /* test uses manipulation with available TX resources which may break
+       DCI allocation ordering. allow out-of-order DCI waitq */
+    ignore_dci_waitq_reorder(m_e2);
+
     disable_entity(m_e2);
 
     set_fc_attributes(m_e1, true, wnd,
@@ -618,6 +633,10 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
  * is scheduled for dci allocation. */
 UCS_TEST_P(test_dc_flow_control, dci_leak)
 {
+    /* test uses manipulation with available TX resources which may break
+       DCI allocation ordering. allow out-of-order DCI waitq */
+    ignore_dci_waitq_reorder(m_e2);
+
     disable_entity(m_e2);
     int wnd = 5;
     set_fc_attributes(m_e1, true, wnd,
