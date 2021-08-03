@@ -3099,6 +3099,51 @@ void ucp_ep_vfs_init(ucp_ep_h ep)
                             UCS_VFS_TYPE_STRING, "error_mode");
 }
 
+static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
+{
+    uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
+    uct_ep_attr_t uct_cm_ep_attr;
+    ucs_status_t status;
+
+    if ((uct_cm_ep == NULL) || ucp_is_uct_ep_failed(uct_cm_ep)) {
+        ucs_debug("ep %p: no cm", ep);
+        return UCS_ERR_NOT_CONNECTED;
+    }
+
+    memset(&uct_cm_ep_attr, 0, sizeof(uct_ep_attr_t));
+
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
+        uct_cm_ep_attr.field_mask |= UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR;
+    }
+
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
+        uct_cm_ep_attr.field_mask |= UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+    }
+
+    status = uct_ep_query(uct_cm_ep, &uct_cm_ep_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (uct_cm_ep_attr.field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
+        status = ucs_sockaddr_copy((struct sockaddr*)&attr->local_sockaddr,
+                                   (struct sockaddr*)&uct_cm_ep_attr.local_address);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+    
+    if (uct_cm_ep_attr.field_mask & UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
+        status = ucs_sockaddr_copy((struct sockaddr*)&attr->remote_sockaddr,
+                                   (struct sockaddr*)&uct_cm_ep_attr.remote_address);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
     if (attr->field_mask & UCP_EP_ATTR_FIELD_NAME) {
@@ -3109,5 +3154,11 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 #endif
     }
 
+    if (attr->field_mask &
+        (UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR | UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
+        return ucp_ep_query_sockaddr(ep, attr);
+    }
+
     return UCS_OK;
 }
+
