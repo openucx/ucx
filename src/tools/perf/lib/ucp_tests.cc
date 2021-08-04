@@ -39,10 +39,23 @@ public:
 
     {
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
+        memset(&m_send_params, 0, sizeof(m_send_params));
 
         ucs_assert_always(m_max_outstanding > 0);
 
         set_am_handler(am_data_handler, this, UCP_AM_FLAG_WHOLE_MSG);
+
+        if (CMD == UCX_PERF_CMD_ADD) {
+            m_atomic_op = UCP_ATOMIC_OP_ADD;
+        } else if (CMD == UCX_PERF_CMD_FADD) {
+            m_atomic_op = UCP_ATOMIC_OP_ADD;
+        } else if (CMD == UCX_PERF_CMD_SWAP) {
+            m_atomic_op = UCP_ATOMIC_OP_SWAP;
+        } else if (CMD == UCX_PERF_CMD_CSWAP) {
+            m_atomic_op = UCP_ATOMIC_OP_CSWAP;
+        } else {
+            m_atomic_op = UCP_ATOMIC_OP_LAST;
+        }
     }
 
     ~ucp_perf_test_runner()
@@ -97,7 +110,11 @@ public:
                                               size_t *length, void **buffer_p)
     {
         ucp_datatype_t type = ucp_dt_make_contig(1);
-        if (UCP_PERF_DATATYPE_IOV == datatype) {
+        if ((CMD == UCX_PERF_CMD_ADD) || (CMD == UCX_PERF_CMD_FADD) ||
+            (CMD == UCX_PERF_CMD_SWAP) || (CMD == UCX_PERF_CMD_CSWAP)) {
+            ucs_assert(m_atomic_op != UCP_ATOMIC_OP_LAST);
+            type      = ucp_dt_make_contig(*length);
+        } else if (UCP_PERF_DATATYPE_IOV == datatype) {
             *buffer_p = iov;
             *length   = m_perf.params.msg_size_cnt;
             type      = ucp_dt_make_iov();
@@ -150,6 +167,21 @@ public:
             m_am_rx_params.user_data    = this;
             m_am_rx_buffer              = *recv_buffer;
             m_am_rx_length              = *recv_length;
+        }
+
+        if ((CMD == UCX_PERF_CMD_AM) || (CMD == UCX_PERF_CMD_ADD) ||
+            (CMD == UCX_PERF_CMD_FADD) || (CMD == UCX_PERF_CMD_SWAP) ||
+            (CMD == UCX_PERF_CMD_CSWAP)) {
+            m_send_params.op_attr_mask  = UCP_OP_ATTR_FIELD_DATATYPE |
+                                          UCP_OP_ATTR_FIELD_CALLBACK;
+            m_send_params.datatype      = *send_dt;
+            m_send_params.cb.send       = send_nbx_cb;
+        }
+
+        if ((CMD == UCX_PERF_CMD_FADD) || (CMD == UCX_PERF_CMD_SWAP) ||
+            (CMD == UCX_PERF_CMD_CSWAP)) {
+            m_send_params.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
+            m_send_params.reply_buffer  = *send_buffer;
         }
     }
 
@@ -283,8 +315,8 @@ public:
     send(ucp_ep_h ep, void *buffer, unsigned length, ucp_datatype_t datatype,
          uint8_t sn, uint64_t remote_addr, ucp_rkey_h rkey)
     {
+        uint64_t value = 0;
         void *request;
-        ucp_request_param_t param;
 
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
@@ -308,14 +340,9 @@ public:
                                              send_cb, 0);
                 break;
             case UCX_PERF_CMD_AM:
-                param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
-                                     UCP_OP_ATTR_FIELD_CALLBACK;
-                param.cb.send      = send_nbx_cb;
-                param.datatype     = datatype;
-                request            = ucp_am_send_nbx(ep, AM_ID,
-                                         m_perf.ucp.am_hdr,
-                                         m_perf.params.ucp.am_hdr_size, buffer,
-                                         length, &param);
+                request = ucp_am_send_nbx(ep, AM_ID, m_perf.ucp.am_hdr,
+                                          m_perf.params.ucp.am_hdr_size, buffer,
+                                          length, &m_send_params);
                 break;
             default:
                 request = UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
@@ -344,37 +371,18 @@ public:
         case UCX_PERF_CMD_GET:
             return ucp_get(ep, buffer, length, remote_addr, rkey);
         case UCX_PERF_CMD_ADD:
-            if (length == sizeof(uint32_t)) {
-                return ucp_atomic_add32(ep, 0, remote_addr, rkey);
-            } else if (length == sizeof(uint64_t)) {
-                return ucp_atomic_add64(ep, 0, remote_addr, rkey);
-            } else {
-                return UCS_ERR_INVALID_PARAM;
-            }
         case UCX_PERF_CMD_FADD:
-            if (length == sizeof(uint32_t)) {
-                return ucp_atomic_fadd32(ep, 0, remote_addr, rkey, (uint32_t*)buffer);
-            } else if (length == sizeof(uint64_t)) {
-                return ucp_atomic_fadd64(ep, 0, remote_addr, rkey, (uint64_t*)buffer);
-            } else {
-                return UCS_ERR_INVALID_PARAM;
-            }
         case UCX_PERF_CMD_SWAP:
-            if (length == sizeof(uint32_t)) {
-                return ucp_atomic_swap32(ep, 0, remote_addr, rkey, (uint32_t*)buffer);
-            } else if (length == sizeof(uint64_t)) {
-                return ucp_atomic_swap64(ep, 0, remote_addr, rkey, (uint64_t*)buffer);
-            } else {
-                return UCS_ERR_INVALID_PARAM;
-            }
         case UCX_PERF_CMD_CSWAP:
-            if (length == sizeof(uint32_t)) {
-                return ucp_atomic_cswap32(ep, 0, 0, remote_addr, rkey, (uint32_t*)buffer);
-            } else if (length == sizeof(uint64_t)) {
-                return ucp_atomic_cswap64(ep, 0, 0, remote_addr, rkey, (uint64_t*)buffer);
-            } else {
-                return UCS_ERR_INVALID_PARAM;
+            wait_window(1, true);
+            request = ucp_atomic_op_nbx(ep, m_atomic_op, &value, 1,
+                                        remote_addr, rkey, &m_send_params);
+            if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
+                return UCS_PTR_STATUS(request);
             }
+            reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
+            op_started();
+            return UCS_OK;
         default:
             return UCS_ERR_INVALID_PARAM;
         }
@@ -765,6 +773,8 @@ private:
     void                *m_am_rx_buffer;
     size_t              m_am_rx_length;
     ucp_request_param_t m_am_rx_params;
+    ucp_request_param_t m_send_params;
+    ucp_atomic_op_t     m_atomic_op;
 };
 
 
