@@ -609,11 +609,14 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_ERR_NO_RESOURCE; /* waiting for dci */
     }
 
-    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
+    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
 
-    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
+    if (!uct_dc_mlx5_iface_has_tx_resources(iface) ||
+        (!uct_dc_mlx5_iface_dci_ep_can_send(ep) &&
+         ucs_likely(!(flags & UCT_FLUSH_FLAG_CANCEL))) ||
+        /* Allow flush(CANCEL) even if TX quota is not available on DCI or FC
+         * window is exhausted */
+        !uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 
@@ -624,14 +627,11 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     ucs_assert(status == UCS_INPROGRESS);
-    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
     sn = txwq->sig_pi;
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        UCT_DC_MLX5_CHECK_RES(iface, ep);
-
         if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
             return UCS_ERR_UNSUPPORTED;
         }
@@ -647,8 +647,10 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
         ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL;
         sn         = txwq->sw_pi;
-        /* post NOP operation which will complete with error, to trigger DCI
-         * reset. Otherwise, DCI could be returned to poll in error state */
+        /* Post NOP operation which will be completed with error, to trigger
+         * DCI reset. Otherwise, DCI could be returned to poll in error state.
+         * Allow posting this operation without checking resources on DCI and
+         * availalable reads on iface */
         uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
                                      txqp, txwq,
                                      MLX5_OPCODE_NOP, NULL, 0,
