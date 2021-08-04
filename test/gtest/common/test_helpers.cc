@@ -143,6 +143,7 @@ WATCHDOG_DEFINE_GETTER(kill_signal, int)
 int watchdog_start()
 {
     pthread_mutexattr_t mutex_attr;
+    ucs_status_t status;
     int ret;
 
     ret = pthread_mutexattr_init(&mutex_attr);
@@ -178,8 +179,9 @@ int watchdog_start()
     watchdog.watched_thread = pthread_self();
     pthread_mutex_unlock(&watchdog.mutex);
 
-    ret = pthread_create(&watchdog.thread, NULL, watchdog_func, NULL);
-    if (ret != 0) {
+    status = ucs_pthread_create(&watchdog.thread, watchdog_func, NULL,
+                                "watchdog");
+    if (status != UCS_OK) {
         goto err_destroy_barrier;
     }
 

@@ -15,6 +15,7 @@
 #include <ucp/wireup/ep_match.h>
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/queue.h>
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/strided_alloc.h>

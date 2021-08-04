@@ -1625,8 +1625,8 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
         rma_emul       = 1;
     }
 
-    if ((context->config.features & UCP_FEATURE_AMO) && (amo_lanes_map == 0)) {
-        ucs_assert(key->am_lane != UCP_NULL_LANE);
+    if ((context->config.features & UCP_FEATURE_AMO) && (amo_lanes_map == 0) &&
+        (key->am_lane != UCP_NULL_LANE)) {
         amo_lanes_map |= UCS_BIT(key->am_lane);
         amo_emul       = 1;
     }
@@ -1798,8 +1798,8 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
         /* TODO replace ep_config->tag.max_eager_short by this struct */
         max_eager_short = ucp_ep_config_key_has_tag_lane(key) ?
-                                  &ep_config->tag.max_eager_short :
-                                  &ep_config->tag.offload.max_eager_short;
+                                  &ep_config->tag.offload.max_eager_short :
+                                  &ep_config->tag.max_eager_short;
 
         max_eager_short->memtype_off = tag_short.max_length_unknown_mem;
         max_eager_short->memtype_on  = tag_short.max_length_host_mem;
@@ -2069,16 +2069,21 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_snprintf_zero(worker->address_name, name_length, "%s:%d",
                       ucs_get_host_name(), getpid());
 
-    status = ucs_ptr_map_init(&worker->ptr_map);
+    status = ucs_ptr_map_init(&worker->ep_map);
     if (status != UCS_OK) {
         goto err_free;
+    }
+
+    status = ucs_ptr_map_init(&worker->request_map);
+    if (status != UCS_OK) {
+        goto err_destroy_ep_map;
     }
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&worker->stats, &ucp_worker_stats_class,
                                   ucs_stats_get_root(), "-%p", worker);
     if (status != UCS_OK) {
-        goto err_destroy_ptr_map;
+        goto err_destroy_request_map;
     }
 
     status = UCS_STATS_NODE_ALLOC(&worker->tm_offload_stats,
@@ -2188,8 +2193,10 @@ err_free_tm_offload_stats:
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
-err_destroy_ptr_map:
-    ucs_ptr_map_destroy(&worker->ptr_map);
+err_destroy_request_map:
+    ucs_ptr_map_destroy(&worker->request_map);
+err_destroy_ep_map:
+    ucs_ptr_map_destroy(&worker->ep_map);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
@@ -2418,7 +2425,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
-    ucs_ptr_map_destroy(&worker->ptr_map);
+    ucs_ptr_map_destroy(&worker->request_map);
+    ucs_ptr_map_destroy(&worker->ep_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
@@ -2807,7 +2815,7 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
     worker->keepalive.iter_end   = worker->keepalive.iter;
     worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
-    worker->keepalive.round_count++;   
+    worker->keepalive.round_count++;
 }
 
 static UCS_F_NOINLINE unsigned

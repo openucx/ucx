@@ -9,6 +9,7 @@
 
 extern "C" {
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/atomic.h>
@@ -120,7 +121,7 @@ public:
         m_listen_addr  = GetParam()->listen_sock_addr;
         m_connect_addr = GetParam()->connect_sock_addr;
 
-        const ucs::sock_addr_storage &src_sock_addr = 
+        const ucs::sock_addr_storage &src_sock_addr =
                                                 GetParam()->source_sock_addr;
         if (src_sock_addr.get_sock_addr_ptr() != NULL) {
             int sa_family   = src_sock_addr.get_sock_addr_ptr()->sa_family;
@@ -214,6 +215,36 @@ protected:
         connect();
         wait_for_bits(&m_state, TEST_STATE_CONNECT_REQUESTED);
         EXPECT_TRUE(m_state & TEST_STATE_CONNECT_REQUESTED);
+    }
+
+    void ep_query(unsigned index = 0) {
+        uct_ep_attr_t attr;
+        ucs_status_t status;
+
+        attr.field_mask = UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                          UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+        status = uct_ep_query(m_server->ep(index), &attr);
+        ASSERT_UCS_OK(status);
+
+        EXPECT_EQ(m_connect_addr, attr.local_address);
+
+        /* The ports are expected to be different. Ignore them. */
+        ucs_sockaddr_set_port((struct sockaddr*)&attr.remote_address,
+                              m_connect_addr.get_port());
+        EXPECT_EQ(m_connect_addr, attr.remote_address);
+
+        memset(&attr, 0, sizeof(attr));
+        attr.field_mask = UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                          UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+        status = uct_ep_query(m_client->ep(index), &attr);
+        ASSERT_UCS_OK(status);
+
+        /* The ports are expected to be different. Ignore them. */
+        ucs_sockaddr_set_port((struct sockaddr*)&attr.local_address,
+                              m_connect_addr.get_port());
+        EXPECT_EQ(m_connect_addr, attr.local_address);
+
+        EXPECT_EQ(m_connect_addr, attr.remote_address);
     }
 
     size_t priv_data_do_pack(size_t pack_limit, void *priv_data) {
@@ -737,6 +768,20 @@ UCS_TEST_P(test_uct_sockaddr, listener_query)
     ASSERT_UCS_OK(status);
 
     EXPECT_EQ(m_listen_addr.get_port(), port);
+}
+
+UCS_TEST_P(test_uct_sockaddr, ep_query)
+{
+    listen_and_connect();
+
+    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
+                            TEST_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_state, (TEST_STATE_SERVER_CONNECTED |
+                                             TEST_STATE_CLIENT_CONNECTED)));
+
+    ep_query();
+
+    cm_disconnect(m_client);
 }
 
 UCS_TEST_P(test_uct_sockaddr, cm_open_listen_close)

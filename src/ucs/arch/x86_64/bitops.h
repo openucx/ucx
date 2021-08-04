@@ -11,6 +11,15 @@
 #include <stdint.h>
 
 
+static UCS_F_ALWAYS_INLINE unsigned ucs_ffs32(uint32_t n)
+{
+    uint32_t result;
+    asm("bsfl %1,%0"
+        : "=r" (result)
+        : "r" (n));
+    return result;
+}
+
 static UCS_F_ALWAYS_INLINE unsigned ucs_ffs64(uint64_t n)
 {
     uint64_t result;

@@ -13,6 +13,7 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
@@ -246,7 +247,7 @@ static void ucs_profile_write(ucs_profile_context_t *ctx)
     ucs_read_file(header.cmdline, sizeof(header.cmdline), 1, "/proc/self/cmdline");
     strncpy(header.hostname, ucs_get_host_name(), sizeof(header.hostname) - 1);
     header.version       = UCS_PROFILE_FILE_VERSION;
-    strncpy(header.ucs_path, ucs_debug_get_lib_path(), sizeof(header.ucs_path) - 1);
+    strncpy(header.ucs_path, ucs_sys_get_lib_path(), sizeof(header.ucs_path) - 1);
     header.pid           = getpid();
     header.mode          = ctx->profile_mode;
     header.num_locations = ctx->num_locations;

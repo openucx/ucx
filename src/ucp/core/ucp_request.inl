@@ -171,6 +171,18 @@
     }
 
 
+#if UCS_ENABLE_ASSERT
+#  define UCP_REQUEST_RESET(_req) \
+    (_req)->send.uct.func = \
+            (uct_pending_callback_t)ucs_empty_function_do_assert; \
+    (_req)->send.state.uct_comp.func  = \
+            (uct_completion_callback_t)ucs_empty_function_do_assert_void; \
+    (_req)->send.state.uct_comp.count = 0;
+#else /* UCS_ENABLE_ASSERT */
+#  define UCP_REQUEST_RESET(_req)
+#endif /* UCS_ENABLE_ASSERT */
+
+
 static UCS_F_ALWAYS_INLINE void ucp_request_id_reset(ucp_request_t *req)
 {
     req->id = UCS_PTR_MAP_KEY_INVALID;
@@ -190,6 +202,7 @@ ucp_request_put(ucp_request_t *req)
     ucs_trace_req("put request %p", req);
     ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
     UCS_PROFILE_REQUEST_FREE(req);
+    UCP_REQUEST_RESET(req);
     ucs_mpool_put_inline(req);
 }
 
@@ -851,7 +864,7 @@ ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
 {
     ucs_status_t status;
 
-    status = ucs_ptr_map_put(&ep->worker->ptr_map, ptr,
+    status = ucs_ptr_map_put(&ep->worker->request_map, ptr,
                              ucp_ep_use_indirect_id(ep), ptr_id_p);
     ucp_ep_ptr_map_check_status(ep, ptr, "allocate", status);
 
@@ -890,7 +903,7 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
                  (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));
     ep = req->send.ep;
 
-    status = ucs_ptr_map_del(&ep->worker->ptr_map, req->id);
+    status = ucs_ptr_map_del(&ep->worker->request_map, req->id);
     if (status == UCS_OK) {
         ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
     }
@@ -908,7 +921,7 @@ ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 
     ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
 
-    status = ucs_ptr_map_get(&worker->ptr_map, id, extract, &ptr);
+    status = ucs_ptr_map_get(&worker->request_map, id, extract, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }

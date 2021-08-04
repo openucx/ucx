@@ -47,6 +47,9 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
 
     dt_iter->length              = ucp_dt_iov_length(iov, count);
     dt_iter->type.iov.iov        = iov;
+#if UCS_ENABLE_ASSERT
+    dt_iter->type.iov.iov_count  = count;
+#endif
     dt_iter->type.iov.iov_index  = 0;
     dt_iter->type.iov.iov_offset = 0;
 
@@ -112,6 +115,14 @@ ucp_datatype_iter_cleanup(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_iov_check(const ucp_datatype_iter_t *dt_iter)
+{
+    ucs_assertv(dt_iter->type.iov.iov_index < dt_iter->type.iov.iov_count,
+                "index=%zu count=%zu", dt_iter->type.iov.iov_index,
+                dt_iter->type.iov.iov_count);
+}
+
 /*
  * Pack data and set some fields of next_iter as next iterator state
  */
@@ -134,6 +145,7 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
                            (ucs_memory_type_t)dt_iter->mem_info.type);
         break;
     case UCP_DATATYPE_IOV:
+        ucp_datatype_iter_iov_check(dt_iter);
         length = ucs_min(dt_iter->length - dt_iter->offset, max_length);
         next_iter->type.iov.iov_index  = dt_iter->type.iov.iov_index;
         next_iter->type.iov.iov_offset = dt_iter->type.iov.iov_offset;
@@ -159,45 +171,83 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
     return length;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_iov_seek(ucp_datatype_iter_t *dt_iter, size_t offset)
+{
+    const ucp_dt_iov_t *iov = dt_iter->type.iov.iov;
+    ssize_t iov_offset;
+    size_t length_it;
+
+    ucp_datatype_iter_iov_check(dt_iter);
+
+    if (ucs_likely(offset == dt_iter->offset)) {
+        return;
+    }
+
+    iov_offset = dt_iter->type.iov.iov_offset + (offset - dt_iter->offset);
+    if (iov_offset < 0) {
+        /* seek backwards */
+        do {
+            ucs_assert(dt_iter->type.iov.iov_index > 0);
+            --dt_iter->type.iov.iov_index;
+            iov_offset += iov[dt_iter->type.iov.iov_index].length;
+        } while (iov_offset < 0);
+    } else {
+        /* seek forward */
+        while (iov_offset >=
+               (length_it = iov[dt_iter->type.iov.iov_index].length)) {
+            iov_offset -= length_it;
+            ++dt_iter->type.iov.iov_index;
+            ucp_datatype_iter_iov_check(dt_iter);
+        }
+    }
+
+    dt_iter->offset              = offset;
+    dt_iter->type.iov.iov_offset = iov_offset;
+}
+
 /*
- * Unpack data and set some fields of next_iter as next iterator state
+ * Unpack data at the given offset. Some datatypes, such as iov, can cache
+ * offset information in the iterator.
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_datatype_iter_next_unpack(const ucp_datatype_iter_t *dt_iter,
-                              ucp_worker_h worker, size_t length,
-                              ucp_datatype_iter_t *next_iter, const void *src)
+ucp_datatype_iter_unpack(ucp_datatype_iter_t *dt_iter, ucp_worker_h worker,
+                         size_t length, size_t offset, const void *src)
 {
     ucp_dt_generic_t *dt_gen;
+    size_t unpacked_length;
     ucs_status_t status;
     void *dest;
 
-    if (ucs_unlikely(dt_iter->length - dt_iter->offset < length)) {
+    if (ucs_unlikely(dt_iter->length - offset < length)) {
         return UCS_ERR_MESSAGE_TRUNCATED;
     }
 
     switch (dt_iter->dt_class) {
     case UCP_DATATYPE_CONTIG:
         ucs_assert(dt_iter->mem_info.type < UCS_MEMORY_TYPE_LAST);
-        dest = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, dt_iter->offset);
+        dest = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, offset);
         ucp_dt_contig_unpack(worker, dest, src, length,
                              (ucs_memory_type_t)dt_iter->mem_info.type);
         status = UCS_OK;
         break;
     case UCP_DATATYPE_IOV:
-        next_iter->type.iov.iov_index  = dt_iter->type.iov.iov_index;
-        next_iter->type.iov.iov_offset = dt_iter->type.iov.iov_offset;
-        UCS_PROFILE_CALL_VOID(ucp_dt_iov_scatter, dt_iter->type.iov.iov,
-                              SIZE_MAX, src, length,
-                              &next_iter->type.iov.iov_offset,
-                              &next_iter->type.iov.iov_index);
-        status = UCS_OK;
+        ucp_datatype_iter_iov_seek(dt_iter, offset);
+        unpacked_length = UCS_PROFILE_CALL(ucp_dt_iov_scatter,
+                                           dt_iter->type.iov.iov, SIZE_MAX, src,
+                                           length,
+                                           &dt_iter->type.iov.iov_offset,
+                                           &dt_iter->type.iov.iov_index);
+        ucs_assert(unpacked_length <= length);
+        dt_iter->offset += unpacked_length;
+        status           = UCS_OK;
         break;
     case UCP_DATATYPE_GENERIC:
         if (length != 0) {
             dt_gen = dt_iter->type.generic.dt_gen;
             status = UCS_PROFILE_NAMED_CALL("dt_unpack", dt_gen->ops.unpack,
-                                            dt_iter->type.generic.state,
-                                            dt_iter->offset, src, length);
+                                            dt_iter->type.generic.state, offset,
+                                            src, length);
         } else {
             status = UCS_OK;
         }
@@ -206,7 +256,6 @@ ucp_datatype_iter_next_unpack(const ucp_datatype_iter_t *dt_iter,
         ucs_fatal("invalid data type");
     }
 
-    next_iter->offset = dt_iter->offset + length;
     return status;
 }
 

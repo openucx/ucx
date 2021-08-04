@@ -104,6 +104,6 @@ static ucp_proto_t ucp_reconfig_proto = {
     .flags      = UCP_PROTO_FLAG_INVALID,
     .init       = ucp_proto_reconfig_init,
     .config_str = (ucp_proto_config_str_func_t)ucs_empty_function,
-    .progress   = ucp_proto_reconfig_progress
+    .progress   = {ucp_proto_reconfig_progress}
 };
 UCP_PROTO_REGISTER(&ucp_reconfig_proto);

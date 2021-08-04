@@ -1272,33 +1272,27 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
 unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
 {
     uct_dc_mlx5_iface_t *iface = arg;
-    uint64_t pool_map          = 0;
     uint8_t pool_index;
     uint8_t dci;
+    uct_dc_mlx5_dci_pool_t *dci_pool;
 
     ucs_assert(iface->tx.dci_release_prog_id != UCS_CALLBACKQ_ID_NULL);
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
-    UCS_STATIC_ASSERT(UCT_DC_MLX5_IFACE_MAX_DCIS <
-                      UCS_BITMAP_NUM_BITS(iface->tx.dci_release_bitmap));
+    UCS_STATIC_ASSERT((sizeof(iface->tx.dci_pool_release_bitmap) * 8) <=
+                       UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
 
-    UCS_BITMAP_FOR_EACH_BIT(iface->tx.dci_release_bitmap, dci) {
-        ucs_assert(dci < iface->tx.ndci * iface->tx.num_dci_pools);
-        ucs_assert(!uct_dc_mlx5_iface_is_dci_keepalive(iface, dci));
-
-        /* coverity[overrun-call] */
-        uct_dc_mlx5_iface_dci_release(iface, dci);
-        /* coverity[overrun-call] */
-        pool_index = uct_dc_mlx5_iface_dci_pool_index(iface, dci);
+    ucs_for_each_bit(pool_index, iface->tx.dci_pool_release_bitmap) {
         ucs_assert(pool_index < iface->tx.num_dci_pools);
-        /* save all pools where dcis were released into map */
-        pool_map |= UCS_BIT(pool_index);
-    }
 
-    UCS_BITMAP_CLEAR(&iface->tx.dci_release_bitmap);
+        /* coverity[overrun-local] */
+        dci_pool = &iface->tx.dci_pool[pool_index];
+        while (dci_pool->release_stack_top >= 0) {
+            dci = dci_pool->stack[dci_pool->release_stack_top--];
+            ucs_assert(dci < iface->tx.ndci * iface->tx.num_dci_pools);
+            ucs_assert(!uct_dc_mlx5_iface_is_dci_keepalive(iface, dci));
+            uct_dc_mlx5_iface_dci_release(iface, dci);
+        }
 
-    /* run progress pending on all pools where dcis were released */
-    ucs_for_each_bit(pool_index, pool_map) {
-        ucs_assert(pool_index < iface->tx.num_dci_pools);
         /* coverity[overrun-call] */
         uct_dc_mlx5_iface_progress_pending(iface, pool_index);
         /* do not call uct_dc_mlx5_iface_check_tx here - wait for processing of
@@ -1307,7 +1301,8 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
     }
 
     uct_dc_mlx5_iface_check_tx(iface);
-    iface->tx.dci_release_prog_id = UCS_CALLBACKQ_ID_NULL;
+    iface->tx.dci_release_prog_id     = UCS_CALLBACKQ_ID_NULL;
+    iface->tx.dci_pool_release_bitmap = 0;
     return 1;
 }
 

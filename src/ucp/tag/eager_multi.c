@@ -49,7 +49,8 @@ ucp_proto_eager_multi_init_common(ucp_proto_multi_init_params_t *params,
     params->max_lanes        =
             params->super.super.worker->context->config.ext.max_eager_lanes;
 
-    return ucp_proto_multi_init(params);
+    return ucp_proto_multi_init(params, params->super.super.priv,
+                                params->super.super.priv_size);
 }
 
 static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
@@ -61,6 +62,8 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.hdr_size      = hdr_size,
@@ -160,7 +163,7 @@ static ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_bcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_eager_bcopy_multi_progress
+    .progress   = {ucp_proto_eager_bcopy_multi_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_multi_proto);
 
@@ -246,7 +249,7 @@ static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_sync_bcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_eager_sync_bcopy_multi_progress
+    .progress   = {ucp_proto_eager_sync_bcopy_multi_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_multi_proto);
 
@@ -258,6 +261,8 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 30,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .super.hdr_size      = sizeof(ucp_eager_first_hdr_t),
@@ -303,11 +308,11 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_multi_zcopy_progress(req, req->send.proto_config->priv,
-                                          ucp_proto_msg_multi_request_init,
-                                          UCT_MD_MEM_ACCESS_LOCAL_READ,
-                                          ucp_proto_eager_zcopy_multi_send_func,
-                                          ucp_proto_request_zcopy_completion);
+    return ucp_proto_multi_zcopy_progress(
+            req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
+            UCT_MD_MEM_ACCESS_LOCAL_READ, ucp_proto_eager_zcopy_multi_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
 }
 
 static ucp_proto_t ucp_eager_zcopy_multi_proto = {
@@ -315,6 +320,6 @@ static ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_zcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_eager_zcopy_multi_progress
+    .progress   = {ucp_proto_eager_zcopy_multi_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);

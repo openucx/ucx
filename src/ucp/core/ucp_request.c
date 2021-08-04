@@ -351,7 +351,7 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
                       UCS_MEMORY_TYPE_HOST, NULL,
                       req->send.state.dt.dt.contig.memh,
                       &req->send.state.dt.dt.contig.md_map);
-    ucp_trace_req(req, "mem invalidate buffer md_map 0x%"PRIx64,    
+    ucp_trace_req(req, "mem invalidate buffer md_map 0x%"PRIx64,
                   req->send.state.dt.dt.contig.md_map);
 
     memh_index = 0;
@@ -651,4 +651,33 @@ void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg)
     ucs_trace_req("ep %p: extracted request %p from pending queue",
                   req->send.ep, req);
     ucs_queue_push(queue, (ucs_queue_elem_t*)&req->send.uct.priv);
+}
+
+ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self)
+{
+    ucp_request_t *req       = ucs_container_of(self, ucp_request_t, send.uct);
+    const ucp_proto_t *proto = req->send.proto_config->proto;
+    uct_pending_callback_t progress_cb;
+    ucs_status_t status;
+
+    progress_cb = proto->progress[req->send.proto_stage];
+    ucp_trace_req(req,
+                  "progress %s {%s} ep_cfg[%d] rkey_cfg[%d] offset %zu/%zu",
+                  proto->name, ucs_debug_get_symbol_name(progress_cb),
+                  req->send.proto_config->ep_cfg_index,
+                  req->send.proto_config->rkey_cfg_index,
+                  req->send.state.dt_iter.offset,
+                  req->send.state.dt_iter.length);
+
+    ucs_log_indent(1);
+    status = progress_cb(self);
+    if (UCS_STATUS_IS_ERR(status)) {
+        ucp_trace_req(req, "progress protocol %s returned: %s lane %d",
+                      proto->name, ucs_status_string(status), req->send.lane);
+    } else {
+        ucp_trace_req(req, "progress protocol %s returned: %s", proto->name,
+                      ucs_status_string(status));
+    }
+    ucs_log_indent(-1);
+    return status;
 }

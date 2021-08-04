@@ -24,7 +24,7 @@ AS_IF([test "x$with_knem" != xno],
                     knem_happy="yes"],
                    [AS_IF([test "x$with_knem" != xguess],
                           [AC_MSG_ERROR([KNEM requested but required file (knem_io.h) could not be found])],
-                          [AC_MSG_WARN([KNEM requested but required file (knem_io.h) could not be found])])], 
+                          [AC_MSG_WARN([KNEM requested but required file (knem_io.h) could not be found])])],
                    [[#include <knem_io.h>]])
 
      CPPFLAGS="$save_CPPFLAGS"

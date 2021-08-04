@@ -111,6 +111,33 @@ void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 }
 
+ucs_status_t uct_rdmacm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
+{
+    uct_rdmacm_cm_ep_t *rdmacm_ep = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
+    struct sockaddr *local_saddr, *remote_saddr;
+    ucs_status_t status;
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
+        local_saddr = rdma_get_local_addr(rdmacm_ep->id);
+        status = ucs_sockaddr_copy((struct sockaddr*)&ep_attr->local_address,
+                                   local_saddr);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
+        remote_saddr = rdma_get_peer_addr(rdmacm_ep->id);
+        status = ucs_sockaddr_copy((struct sockaddr*)&ep_attr->remote_address,
+                                   remote_saddr);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
 {
     uct_rdmacm_cm_ep_t *cep                 = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
@@ -278,7 +305,7 @@ uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
     ucs_status_t status;
 
     if (ctx->use_reserved_qpn) {
-        status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);      
+        status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);
     } else {
         /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
         status = uct_rdmacm_cm_create_dummy_qp(cep->id, ctx->cq, &cep->qp);

@@ -46,6 +46,8 @@ typedef struct {
     double                  overhead;      /* protocol overhead */
     size_t                  cfg_thresh;    /* user-configured threshold */
     unsigned                cfg_priority;  /* user configuration priority */
+    size_t                  min_length;    /* Minimal payload size */
+    size_t                  max_length;    /* Maximal payload size */
     ptrdiff_t               min_frag_offs; /* offset in uct_iface_attr_t of the
                                               minimal size of a single fragment */
     ptrdiff_t               max_frag_offs; /* offset in uct_iface_attr_t of the
@@ -155,6 +157,9 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
 
 
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
+
+
+void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length);
 
 
 void ucp_proto_request_select_error(ucp_request_t *req,

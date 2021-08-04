@@ -691,7 +691,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
             if (test_string_length < 0) {
                 fprintf(stderr, "Wrong string size %ld\n", test_string_length);
                 return UCS_ERR_UNSUPPORTED;
-            }	
+            }
             break;
         case 'm':
             test_mem_type = parse_mem_type(optarg);

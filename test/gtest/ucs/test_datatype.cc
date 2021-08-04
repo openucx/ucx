@@ -6,7 +6,9 @@
 */
 
 #include <common/test.h>
+
 extern "C" {
+#include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/array.inl>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>
@@ -542,6 +544,14 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
 
     ucs_ptr_array_set(&pa, 100, &g);
 
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 7);
+
+    index = ucs_ptr_array_bulk_alloc(&pa, 200);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 207);
+
+    EXPECT_EQ(301u, pa.size);
+    EXPECT_EQ(101u, index);
+
     void *vc;
     int present = ucs_ptr_array_lookup(&pa, 2, vc);
     ASSERT_TRUE(present);
@@ -563,12 +573,16 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     present = ucs_ptr_array_lookup(&pa, 100, vc);
     EXPECT_EQ(&g, vc);
 
+    present = ucs_ptr_array_lookup(&pa, 101, vc);
+    EXPECT_EQ(NULL, vc);
+
+    present = ucs_ptr_array_lookup(&pa, 301, vc);
+    EXPECT_EQ(NULL, vc);
+
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 99, vc));
-    EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 101, vc));
+    EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 302, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5005, vc));
-
-    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 7);
 
     ucs_ptr_array_remove(&pa, 0);
     ucs_ptr_array_remove(&pa, 1);
@@ -577,15 +591,64 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     ucs_ptr_array_remove(&pa, 4);
     ucs_ptr_array_remove(&pa, 6);
 
-    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 1);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 201);
     EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 0);
 
-    ucs_ptr_array_remove(&pa, 100);
+    for (index = 100; index <= 300; index++) {
+        ucs_ptr_array_remove(&pa, index);
+    }
 
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 0);
     EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 1);
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
+}
+
+UCS_TEST_F(test_datatype, ptr_array_bulk_alloc) {
+    ucs_ptr_array_t pa;
+    unsigned idx, alloc1, alloc2;
+
+    ucs_ptr_array_init(&pa, "ptr_array alloc test");
+
+    alloc1 = ucs_ptr_array_bulk_alloc(&pa, 10);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 10);
+
+    EXPECT_GE(pa.size, 10u);
+    EXPECT_EQ(alloc1, 0u);
+
+    alloc2 = ucs_ptr_array_bulk_alloc(&pa, 100);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
+
+    EXPECT_GE(pa.size, 110u);
+    EXPECT_EQ(alloc2, alloc1 + 10u);
+
+    for (idx = 0; idx < alloc2; idx++) {
+        ucs_ptr_array_remove(&pa, idx);
+    }
+
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 100);
+    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10));
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
+
+    for (idx = alloc1 + 10; idx > alloc1; idx--) {
+        ucs_ptr_array_remove(&pa, idx - 1);
+    }
+
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 100);
+    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10));
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
+
+    for (idx = alloc1; idx < alloc1 + 10; idx++) {
+        ucs_ptr_array_remove(&pa, idx);
+    }
+
+    for (idx = alloc2; idx < alloc2 + 100; idx++) {
+        ucs_ptr_array_remove(&pa, idx);
+    }
+
+    EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 1);
+
+    ucs_ptr_array_cleanup(&pa, 1);
 }
 
 UCS_TEST_F(test_datatype, ptr_array_set_first) {
@@ -602,7 +665,7 @@ UCS_TEST_F(test_datatype, ptr_array_set_first) {
 
     ucs_ptr_array_remove(&pa, 0);
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
 }
 
 UCS_TEST_F(test_datatype, ptr_array_random) {
@@ -668,7 +731,7 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
 
     EXPECT_EQ(count_elements, expeced_count);
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
 }
 
 UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
@@ -711,7 +774,7 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
 
     ucs_time_t end_time = ucs_get_time();
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
 
     double insert_ns = ucs_time_to_nsec(lookup_start_time  - insert_start_time) / count;
     double lookup_ns = ucs_time_to_nsec(foreach_start_time - lookup_start_time) / count;
@@ -769,6 +832,10 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
 
     ucs_ptr_array_locked_set(&pa, 100, &g);
 
+    index = ucs_ptr_array_locked_bulk_alloc(&pa, 200);
+    EXPECT_EQ(301u, pa.super.size);
+    EXPECT_EQ(101u, index);
+
     void *vc;
     int present = ucs_ptr_array_locked_lookup(&pa, 2, &vc);
     ASSERT_TRUE(present);
@@ -790,9 +857,15 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
     present = ucs_ptr_array_locked_lookup(&pa, 100, &vc);
     EXPECT_EQ(&g, vc);
 
+    present = ucs_ptr_array_locked_lookup(&pa, 101, &vc);
+    EXPECT_EQ(NULL, vc);
+
+    present = ucs_ptr_array_locked_lookup(&pa, 301, &vc);
+    EXPECT_EQ(NULL, vc);
+
     EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 5, &vc));
     EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 99, &vc));
-    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 101, &vc));
+    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 302, &vc));
     EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 5005, &vc));
 
     ucs_ptr_array_locked_remove(&pa, 0);
@@ -803,7 +876,7 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
     ucs_ptr_array_locked_remove(&pa, 6);
     ucs_ptr_array_locked_remove(&pa, 100);
 
-    ucs_ptr_array_locked_cleanup(&pa);
+    ucs_ptr_array_locked_cleanup(&pa, 0);
 }
 
 UCS_TEST_F(test_datatype, ptr_array_locked_random) {
@@ -863,7 +936,7 @@ UCS_TEST_F(test_datatype, ptr_array_locked_random) {
         free(ptr);
     }
 
-    ucs_ptr_array_locked_cleanup(&pa);
+    ucs_ptr_array_locked_cleanup(&pa, 1);
 }
 
 UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
@@ -901,7 +974,7 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
 
     ucs_time_t end_time = ucs_get_time();
 
-    ucs_ptr_array_locked_cleanup(&pa);
+    ucs_ptr_array_locked_cleanup(&pa, 1);
 
     double insert_ns = ucs_time_to_nsec(lookup_start_time  - insert_start_time) / count;
     double lookup_ns = ucs_time_to_nsec(foreach_start_time - lookup_start_time) / count;

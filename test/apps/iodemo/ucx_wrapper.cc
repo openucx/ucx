@@ -1067,12 +1067,36 @@ void UcxConnection::connect_common(ucp_ep_params_t &ep_params,
 
 void UcxConnection::established(ucs_status_t status)
 {
-    if (!_use_am && (status == UCS_OK)) {
-        assert(_remote_conn_id != 0);
-        UCX_CONN_LOG << "Remote id is " << _remote_conn_id;
-    }
+    ucp_ep_attr_t ep_attr;
+    std::string local_address;
+    std::string remote_address;
 
     _ucx_status = status;
+
+    if (!_use_am && (status == UCS_OK)) {
+        assert(_remote_conn_id != 0);
+
+        ep_attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                             UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+        status = ucp_ep_query(_ep, &ep_attr);
+        if (status != UCS_OK) {
+            UCX_CONN_LOG << "Remote id is " << _remote_conn_id;
+            UCX_CONN_LOG << "ucp_ep_query() failed: "
+                         << ucs_status_string(status);
+        } else {
+            local_address  = UcxContext::sockaddr_str(
+                                 (const struct sockaddr*)&ep_attr.local_sockaddr,
+                                 sizeof(ep_attr.local_sockaddr));
+            remote_address = UcxContext::sockaddr_str(
+                                 (const struct sockaddr*)&ep_attr.remote_sockaddr,
+                                 sizeof(ep_attr.remote_sockaddr));
+            UCX_CONN_LOG << "Remote id is "    << _remote_conn_id
+                         << ", endpoint "      << _ep
+                         << ", local address " << local_address
+                         << " remote address " << remote_address;
+        }
+    }
+
     _context.remove_connection_inprogress(this);
     invoke_callback(_establish_cb, status);
 }

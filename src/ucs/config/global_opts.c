@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <sys/signal.h>
 
 
@@ -310,4 +311,42 @@ void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
     ucs_config_parser_print_opts(stream, "Global configuration", &ucs_global_opts,
                                  ucs_global_opts_table, NULL,
                                  UCS_DEFAULT_ENV_PREFIX, print_flags);
+}
+
+static void ucs_vfs_read_log_level(void *obj, ucs_string_buffer_t *strb,
+                                   void *arg_ptr, uint64_t arg_u64)
+{
+    ucs_log_level_t ucs_log_level = ucs_global_opts.log_component.log_level;
+    ucs_string_buffer_appendf(strb, "%s\n", ucs_log_level_names[ucs_log_level]);
+}
+
+static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
+                                            size_t size, void *arg_ptr,
+                                            uint64_t arg_u64)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, 32);
+    unsigned log_level;
+
+    ucs_string_buffer_appendf(&strb, "%s", buffer);
+    ucs_string_buffer_rtrim(&strb, "\n");
+    if (!ucs_config_sscanf_enum(ucs_string_buffer_cstr(&strb), &log_level,
+                                ucs_log_level_names)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_global_opts.log_component.log_level = log_level;
+    return UCS_OK;
+}
+
+/**
+ * VFS nodes representing global options are removed in UCS_STATIC_CLEANUP of
+ * vfs_obj.c file. Because removing elements using ucs_vfs_obj_remove in
+ * UCS_STATIC_CLEANUP in global_opts.c could happen after execution of
+ * UCS_STATIC_CLEANUP of vfs_obj.c file.
+ */
+UCS_STATIC_INIT
+{
+    ucs_vfs_obj_add_dir(NULL, &ucs_global_opts, "ucs/global_opts");
+    ucs_vfs_obj_add_rw_file(&ucs_global_opts, ucs_vfs_read_log_level,
+                            ucs_vfs_write_log_level, NULL, 0, "log_level");
 }

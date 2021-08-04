@@ -58,7 +58,7 @@ enum {
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
-    UCP_REQUEST_FLAG_SUPER_VALID           = 0    
+    UCP_REQUEST_FLAG_SUPER_VALID           = 0
 #endif
 };
 
@@ -153,7 +153,13 @@ struct ucp_request {
                     ucp_datatype_iter_t  dt_iter;  /* Send buffer state */
                     ucp_dt_state_t       dt;       /* Position in the send buffer */
                 };
-                uct_completion_t         uct_comp; /* UCT completion used by flush */
+                union {
+                    /* UCT completion, used by flush and zero-copy operations */
+                    uct_completion_t uct_comp;
+
+                    /* Used by rndv/rtr protocol to count ATP or RNDV_DATA */
+                    size_t           completed_size;
+                };
             } state;
 
             union {
@@ -203,21 +209,36 @@ struct ucp_request {
                 } proxy;
 
                 struct {
-                    uint64_t          remote_address;  /* address of the sender/receiver's data
-                                                          buffer for the GET/PUT operation */
-                    /* Remote request ID received from a peer */
+                    /* Remote request ID to acknowledge */
                     ucs_ptr_map_key_t remote_req_id;
-                    ucp_rkey_h        rkey;            /* key for remote send/receive buffer for
-                                                          the GET/PUT operation */
+
+                    /* Remote buffer address for get/put operation */
+                    uint64_t          remote_address;
+
+                    /* Key for remote buffer get/put operation */
+                    ucp_rkey_h        rkey;
+
                     union {
+                        /* Used by version 1 rendezvous protocols */
                         struct {
-                            ucp_lane_map_t lanes_map_all; /* actual lanes map */
-                            uint8_t        lanes_count; /* actual lanes count */
+                            /* Actual lanes map */
+                            ucp_lane_map_t lanes_map_all;
+
+                            /* Actual lanes count */
+                            uint8_t        lanes_count;
+
+                            /* Remote key index map */
                             uint8_t        rkey_index[UCP_MAX_LANES];
                         };
+
+                        /* Used by rndv/put */
                         struct {
-                            ucs_ptr_map_key_t rreq_id; /* id of receive request */
-                        } rtr;
+                            /* which lanes need to flush (0 in fence mode) */
+                            ucp_lane_map_t flush_map;
+
+                            /* which lanes need to send atp */
+                            ucp_lane_map_t atp_map;
+                        } put;
                     };
                 } rndv;
 
@@ -293,6 +314,7 @@ struct ucp_request {
 
             union {
                 ucp_lane_index_t  am_bw_index;     /* AM BW lane index */
+                ucp_lane_index_t  multi_lane_idx;  /* Index of the lane with multi-send */
                 ucp_lane_map_t    lanes_map_avail; /* Used lanes map */
             };
             uint8_t               mem_type;        /* Memory type, values are
@@ -300,7 +322,7 @@ struct ucp_request {
             ucp_lane_index_t      pending_lane;    /* Lane on which request was moved
                                                     * to pending state */
             ucp_lane_index_t      lane;            /* Lane on which this request is being sent */
-            ucp_lane_index_t      multi_lane_idx;  /* Index of the lane with multi-send */
+            uint8_t               proto_stage;     /* Protocol current stage */
             uct_pending_req_t     uct;             /* UCT pending request */
             ucp_mem_desc_t        *mdesc;
         } send;
@@ -455,5 +477,7 @@ ucs_status_t ucp_request_recv_msg_truncated(ucp_request_t *req, size_t length,
                                             size_t offset);
 
 void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
+
+ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self);
 
 #endif

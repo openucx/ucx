@@ -49,6 +49,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .super.overhead      = 0,
         .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_short),
@@ -74,7 +76,7 @@ static ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .flags      = UCP_PROTO_FLAG_TAG_SHORT,
     .init       = ucp_proto_eager_tag_offload_short_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_eager_tag_offload_short_progress
+    .progress   = {ucp_proto_eager_tag_offload_short_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_tag_offload_short_proto);
 
@@ -114,6 +116,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
         .super.overhead      = 5e-9,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_bcopy),
@@ -159,7 +163,7 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_tag_offload_bcopy_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_eager_tag_offload_bcopy_progress
+    .progress   = {ucp_proto_eager_tag_offload_bcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
@@ -193,7 +197,7 @@ static ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_sync_tag_offload_bcopy_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_eager_sync_tag_offload_bcopy_progress
+    .progress   = {ucp_proto_eager_sync_tag_offload_bcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_single_proto);
 
@@ -207,6 +211,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
         .super.overhead      = 0,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 30,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_zcopy),
@@ -258,7 +264,7 @@ static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_tag_offload_zcopy_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_eager_tag_offload_zcopy_progress,
+    .progress   = {ucp_proto_eager_tag_offload_zcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);
 
@@ -295,6 +301,6 @@ static ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_sync_tag_offload_zcopy_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_eager_sync_tag_offload_zcopy_progress
+    .progress   = {ucp_proto_eager_sync_tag_offload_zcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_sync_zcopy_single_proto);

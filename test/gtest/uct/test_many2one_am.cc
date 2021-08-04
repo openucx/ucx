@@ -103,7 +103,7 @@ public:
 protected:
     volatile uint32_t             m_am_count;
     std::vector<receive_desc_t*>  m_backlog;
-    entity                       *m_receiver;  
+    entity                       *m_receiver;
 };
 
 

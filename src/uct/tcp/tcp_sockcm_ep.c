@@ -426,7 +426,7 @@ ucs_status_t uct_tcp_sockcm_cm_ep_conn_notify(uct_ep_h ep)
     ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED));
 
     /* sending only the header in the notify message */
-    hdr->length          = 0; 
+    hdr->length          = 0;
     hdr->status          = (uint8_t)UCS_OK;
     cep->comm_ctx.length = sizeof(*hdr);
 

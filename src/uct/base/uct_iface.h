@@ -235,10 +235,15 @@ typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
 typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
 
 
+/* Query the attributes of the ep */
+typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_estimate_perf_func_t iface_estimate_perf;
     uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
+    uct_ep_query_func_t            ep_query;
 } uct_iface_internal_ops_t;
 
 
@@ -554,8 +559,6 @@ typedef struct {
  * @param _priv   Variable which will hold a pointer to request private data.
  * @param _queue  The pending queue.
  * @param _cond   Condition which should be true in order to keep dispatching.
- *
- * TODO support a callback returning UCS_INPROGRESS.
  */
 #define uct_pending_queue_dispatch(_priv, _queue, _cond) \
     while (!ucs_queue_is_empty(_queue)) { \
@@ -563,10 +566,8 @@ typedef struct {
         uct_pending_req_t *_req; \
         ucs_status_t _status; \
         \
-        _base_priv = \
-            ucs_queue_head_elem_non_empty((_queue), \
-                                          uct_pending_req_priv_queue_t, \
-                                          queue_elem); \
+        _base_priv = ucs_queue_head_elem_non_empty( \
+                (_queue), uct_pending_req_priv_queue_t, queue_elem); \
         \
         UCS_STATIC_ASSERT(sizeof(*(_priv)) <= UCT_PENDING_REQ_PRIV_LEN); \
         _priv = (typeof(_priv))(_base_priv); \
@@ -578,8 +579,15 @@ typedef struct {
         _req = ucs_container_of(_priv, uct_pending_req_t, priv); \
         ucs_queue_pull_non_empty(_queue); \
         _status = _req->func(_req); \
-        if ((_status == UCS_ERR_NO_RESOURCE) || (_status == UCS_INPROGRESS)) { \
-            ucs_queue_push_head(_queue, &_base_priv->queue_elem); \
+        if ((_status) == UCS_OK) { \
+            /* pending element should be removed from queue */ \
+            continue; \
+        } \
+        \
+        /* pending element did not complete; return it to the queue */ \
+        ucs_queue_push_head(_queue, &_base_priv->queue_elem); \
+        if (UCS_STATUS_IS_ERR(_status)) { \
+            break; \
         } \
     }
 

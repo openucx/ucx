@@ -209,12 +209,12 @@ UCS_TEST_F(test_math, for_each_submask) {
 }
 
 UCS_TEST_F(test_math, linear_func) {
-    ucs_linear_func_t func[2];
-    double x, y[2];
+    ucs_linear_func_t func[3];
+    double x, y[3];
 
     /* Generate 2 random functions */
     x = ucs::rand() / (double)RAND_MAX;
-    for (unsigned i = 0; i < 2; ++i) {
+    for (unsigned i = 0; i < 3; ++i) {
         func[i] = ucs_linear_func_make(ucs::rand() / (double)RAND_MAX,
                                        ucs::rand() / (double)RAND_MAX);
         y[i]    = ucs_linear_func_apply(func[i], x);
@@ -224,6 +224,13 @@ UCS_TEST_F(test_math, linear_func) {
     ucs_linear_func_t sum_func = ucs_linear_func_add(func[0], func[1]);
     double y_sum               = ucs_linear_func_apply(sum_func, x);
     EXPECT_NEAR(y[0] + y[1], y_sum, 1e-6);
+
+    /* Add */
+    ucs_linear_func_t sum3_func = ucs_linear_func_add3(func[0], func[1],
+                                                       func[2]);
+    double y_sum3               = ucs_linear_func_apply(sum3_func, x);
+    EXPECT_NEAR(y[0] + y[1] + y[2], y_sum3, 1e-6);
+
 
     /* Add in-place */
     ucs_linear_func_t sum_func_inplace = func[0];

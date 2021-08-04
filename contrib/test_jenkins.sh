@@ -543,7 +543,7 @@ run_uct_hello() {
 				run_hello uct -d ${ucx_dev} -t "rc_verbs" ${send_func} -m ${mem_type}
 			done
 		done
-		for ucx_dev in $(get_active_ip_iface)
+		for ucx_dev in $(get_active_ip_ifaces)
 		do
 			echo "==== Running UCT hello world server on tcp/${ucx_dev} with sending ${send_func} ===="
 			run_hello uct -d ${ucx_dev} -t "tcp" ${send_func}
@@ -928,7 +928,7 @@ test_init_mt() {
 	$MAKEP
 	for ((i=0;i<50;++i))
 	do
-		$AFFINITY timeout 1m ./test/apps/test_init_mt
+		$AFFINITY timeout 5m ./test/apps/test_init_mt
 	done
 }
 

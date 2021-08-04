@@ -284,7 +284,7 @@ void uct_p2p_test::blocking_send(send_func_t send, uct_ep_h ep,
             /* Call flush on local and remote ifaces to progress data
              * (e.g. if call flush only on local iface, a target side may
              *  not be able to send PUT ACK to an initiator in case of TCP) */
-            flush(); 
+            flush();
         } else {
             /* explicit non-blocking mode */
             while (m_completion_count <= prev_comp_count) {

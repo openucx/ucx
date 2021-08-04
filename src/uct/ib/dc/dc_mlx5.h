@@ -77,7 +77,10 @@ typedef enum {
     UCT_DC_MLX5_IFACE_FLAG_UIDX                     = UCS_BIT(2),
 
     /** Flow control endpoint is using a DCI in error state */
-    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3)
+    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3),
+
+    /** Ignore DCI allocation reorder */
+    UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER      = UCS_BIT(4)
 } uct_dc_mlx5_iface_flags_t;
 
 
@@ -197,11 +200,28 @@ typedef struct uct_dc_mlx5_ep_fc_entry {
 KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
 
+/* DCI pool
+ * same array is used to store DCI's to allocate and DCI's to release:
+ * 
+ * +--------------+-----+-------------+
+ * | to release   |     | to allocate |
+ * +--------------+-----+-------------+
+ * ^              ^     ^             ^
+ * |              |     |             |
+ * 0        release     stack      ndci
+ *              top     top
+ * 
+ * Overall count of DCI's to relase and allocated DCI's could not be more than
+ * ndci and these stacks are not intersected
+ */
 typedef struct {
-    uint8_t       stack_top;                               /* dci stack top */
+    int8_t        stack_top;                               /* dci stack top */
     uint8_t       stack[UCT_DC_MLX5_IFACE_MAX_USER_DCIS];  /* LIFO of indexes of available dcis */
     ucs_arbiter_t arbiter;                                 /* queue of requests
                                                               waiting for DCI */
+    int8_t        release_stack_top;                       /* releasing dci's stack,
+                                                              points to last DCI to release
+                                                              or -1 if no DCI's to release */
 } uct_dc_mlx5_dci_pool_t;
 
 
@@ -242,7 +262,7 @@ struct uct_dc_mlx5_iface {
 
         uct_worker_cb_id_t        dci_release_prog_id;
 
-        ucs_bitmap_t(128)         dci_release_bitmap;
+        uint8_t                   dci_pool_release_bitmap;
     } tx;
 
     struct {

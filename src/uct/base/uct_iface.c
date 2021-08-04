@@ -184,7 +184,7 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       void **event_arg)
 {
     *event_cb  = UCT_IFACE_PARAM_VALUE(params, async_event_cb, ASYNC_EVENT_CB,
-                                       NULL);                                       
+                                       NULL);
     *event_arg = UCT_IFACE_PARAM_VALUE(params, async_event_arg, ASYNC_EVENT_ARG,
                                        NULL);
 }
@@ -217,6 +217,13 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
                            const uct_iface_addr_t *iface_addr)
 {
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
+}
+
+int uct_iface_is_reachable_v2(const uct_iface_h iface,
+                              const uct_iface_is_reachable_params_t *params)
+{
+    ucs_fatal("uct_iface_is_reachable_v2 not supported yet");
+    return 0;
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -435,6 +442,7 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function,
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
@@ -583,6 +591,13 @@ ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr
 ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)
 {
     return ep->iface->ops.cm_ep_conn_notify(ep);
+}
+
+ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_query(ep, ep_attr);
 }
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)

@@ -99,7 +99,7 @@ ucp_proto_common_get_max_frag(const ucp_proto_common_init_params_t *params,
 {
     return ucp_proto_common_get_iface_attr_field(iface_attr,
                                                  params->max_frag_offs,
-                                                 SIZE_MAX);
+                                                 params->max_length);
 }
 
 double
@@ -501,8 +501,8 @@ void ucp_proto_common_calc_perf(const ucp_proto_common_init_params_t *params,
      */
     caps->cfg_thresh   = params->cfg_thresh;
     caps->cfg_priority = params->cfg_priority;
+    caps->min_length   = params->min_length;
     caps->num_ranges   = 0;
-    caps->min_length   = 0;
 
     /* Collect latency and overhead from all lanes */
     overhead = 0;
@@ -560,6 +560,21 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
      */
     ucp_proto_request_zcopy_cleanup(req);
     ucp_request_complete_send(req, req->send.state.uct_comp.status);
+}
+
+void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)
+{
+    UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
+    UCS_STRING_BUFFER_ONSTACK(proto_config_strb, UCP_PROTO_CONFIG_STR_MAX);
+    const ucp_proto_config_t *proto_config = req->send.proto_config;
+
+    ucp_proto_select_param_str(&proto_config->select_param, &sel_param_strb);
+    proto_config->proto->config_str(msg_length, msg_length, proto_config->priv,
+                                    &proto_config_strb);
+    ucp_trace_req(req, "%s length %zu using %s{%s}",
+                  ucs_string_buffer_cstr(&sel_param_strb), msg_length,
+                  proto_config->proto->name,
+                  ucs_string_buffer_cstr(&proto_config_strb));
 }
 
 void ucp_proto_request_select_error(ucp_request_t *req,

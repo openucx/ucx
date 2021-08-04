@@ -542,6 +542,36 @@ public:
         connect_and_reject(wakeup);
     }
 
+    void ep_query()
+    {
+        ucp_ep_attr_t attr;
+
+        attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                          UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+        ucs_status_t status = ucp_ep_query(receiver().ep(), &attr);
+        ASSERT_UCS_OK(status);
+
+        EXPECT_EQ(m_test_addr, attr.local_sockaddr);
+
+        /* The ports are expected to be different. Ignore them. */
+        ucs_sockaddr_set_port((struct sockaddr*)&attr.remote_sockaddr,
+                              m_test_addr.get_port());
+        EXPECT_EQ(m_test_addr, attr.remote_sockaddr);
+
+        memset(&attr, 0, sizeof(attr));
+        attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
+                          UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+        status = ucp_ep_query(sender().ep(), &attr);
+        ASSERT_UCS_OK(status);
+
+        EXPECT_EQ(m_test_addr, attr.remote_sockaddr);
+
+        /* The ports are expected to be different. Ignore them.*/
+        ucs_sockaddr_set_port((struct sockaddr*)&attr.local_sockaddr,
+                              m_test_addr.get_port());
+        EXPECT_EQ(m_test_addr, attr.local_sockaddr);
+    }
+    
     void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
         void *req           = e.disconnect_nb(0, 0, mode);
         ucs_time_t deadline = ucs::get_deadline();
@@ -715,6 +745,11 @@ UCS_TEST_P(test_ucp_sockaddr, listen_s2c) {
 
 UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, ep_query) {
+    listen_and_communicate(false, 0);
+    ep_query();
 }
 
 UCS_TEST_P(test_ucp_sockaddr, onesided_disconnect) {

@@ -24,8 +24,8 @@ void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
     rreq->recv.tag.info.length     = rts_hdr->size;
 
     if (worker->context->config.ext.proto_enable) {
-        ucp_proto_rndv_receive(worker, rreq, rts_hdr, rts_hdr + 1,
-                               hdr_length - sizeof(*rts_hdr));
+        ucp_proto_rndv_receive_start(worker, rreq, rts_hdr, rts_hdr + 1,
+                                     hdr_length - sizeof(*rts_hdr));
     } else {
         ucp_rndv_receive(worker, rreq, rts_hdr, rts_hdr + 1);
     }
@@ -153,6 +153,6 @@ static ucp_proto_t ucp_tag_rndv_proto = {
     .flags      = 0,
     .init       = ucp_proto_rndv_rts_init,
     .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = ucp_tag_rndv_rts_progress
+    .progress   = {ucp_tag_rndv_rts_progress}
 };
 UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);

@@ -73,19 +73,18 @@ ucp_proto_multi_data_pack(ucp_proto_multi_pack_ctx_t *pack_ctx, void *dest)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_multi_no_resource(ucp_request_t *req,
-                            const ucp_proto_multi_lane_priv_t *lpriv)
+ucp_proto_multi_no_resource(ucp_request_t *req, ucp_lane_index_t lane)
 {
     ucs_status_t status;
     uct_ep_h uct_ep;
 
-    if (lpriv->super.lane == req->send.lane) {
+    if (lane == req->send.lane) {
         /* if we failed to send on same lane, return error */
         return UCS_ERR_NO_RESOURCE;
     }
 
     /* failed to send on another lane - add to its pending queue */
-    uct_ep = req->send.ep->uct_eps[lpriv->super.lane];
+    uct_ep = req->send.ep->uct_eps[lane];
     status = uct_ep_pending_add(uct_ep, &req->send.uct, 0);
     if (status == UCS_ERR_BUSY) {
         /* try sending again */
@@ -93,11 +92,23 @@ ucp_proto_multi_no_resource(ucp_request_t *req,
     }
 
     ucs_assert(status == UCS_OK);
-    req->send.lane = lpriv->super.lane;
+    req->send.lane = lane;
 
     /* Remove the request from current pending queue because it was added to
      * other lane's pending queue.
      */
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_handle_send_error(
+        ucp_request_t *req, ucp_lane_index_t lane, ucs_status_t status)
+{
+    if (ucs_likely(status == UCS_ERR_NO_RESOURCE)) {
+        return ucp_proto_multi_no_resource(req, lane);
+    }
+
+    /* failed to send - call common error handler */
+    ucp_proto_request_abort(req, status);
     return UCS_OK;
 }
 
@@ -128,12 +139,9 @@ ucp_proto_multi_progress(ucp_request_t *req,
     } else if (status == UCS_INPROGRESS) {
         /* operation started and completion will be called later */
         ++req->send.state.uct_comp.count;
-    } else if (status == UCS_ERR_NO_RESOURCE) {
-        return ucp_proto_multi_no_resource(req, lpriv);
     } else {
-        /* failed to send - call common error handler */
-        ucp_proto_request_abort(req, status);
-        return UCS_OK;
+        return ucp_proto_multi_handle_send_error(req, lpriv->super.lane,
+                                                 status);
     }
 
     /* advance position in send buffer */
@@ -176,13 +184,14 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
         ucp_request_t *req, const ucp_proto_multi_priv_t *mpriv,
         ucp_proto_init_cb_t init_func, unsigned uct_mem_flags,
         ucp_proto_send_multi_cb_t send_func,
-        uct_completion_callback_t comp_func)
+        ucp_proto_complete_cb_t complete_func,
+        uct_completion_callback_t uct_comp_cb)
 {
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
-        status = ucp_proto_request_zcopy_init(req, mpriv->reg_md_map, comp_func,
-                                              uct_mem_flags);
+        status = ucp_proto_request_zcopy_init(req, mpriv->reg_md_map,
+                                              uct_comp_cb, uct_mem_flags);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */
@@ -196,9 +205,35 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    return ucp_proto_multi_progress(req, mpriv, send_func,
-                                    ucp_request_invoke_uct_completion_success,
+    return ucp_proto_multi_progress(req, mpriv, send_func, complete_func,
                                     UCS_BIT(UCP_DATATYPE_CONTIG));
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_multi_lane_map_progress(ucp_request_t *req, ucp_lane_map_t *lane_map,
+                                   ucp_proto_multi_lane_send_func_t send_func)
+{
+    ucp_lane_index_t lane = ucs_ffs32(*lane_map);
+    ucs_status_t status;
+
+    ucs_assert(*lane_map != 0);
+
+    status = send_func(req, lane);
+    if (ucs_likely(status == UCS_OK)) {
+        /* fast path is OK */
+    } else if (status == UCS_INPROGRESS) {
+        ++req->send.state.uct_comp.count;
+    } else {
+        return ucp_proto_multi_handle_send_error(req, lane, status);
+    }
+
+    *lane_map &= ~UCS_BIT(lane);
+    if (*lane_map != 0) {
+        return UCS_INPROGRESS; /* Not finished all lanes yet */
+    }
+
+    ucp_request_invoke_uct_completion_success(req);
+    return UCS_OK;
 }
 
 #endif

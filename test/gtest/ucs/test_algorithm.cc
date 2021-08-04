@@ -84,7 +84,7 @@ UCS_TEST_F(test_algorithm, crc16) {
     EXPECT_EQ(0x3c16u, ucs_crc16_string(test_str.c_str()));
 }
 
-UCS_TEST_F(test_algorithm, crc32) {    
+UCS_TEST_F(test_algorithm, crc32) {
     std::string test_str;
 
     test_str = "";

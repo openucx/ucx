@@ -124,14 +124,18 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
             wc->wr_id, wc->vendor_err, peer_info);
 }
 
-ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
+static ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
 {
     switch (status)
     {
     case IBV_WC_SUCCESS:
         return UCS_OK;
+    case IBV_WC_REM_ACCESS_ERR:
+    case IBV_WC_REM_OP_ERR:
+        return UCS_ERR_CONNECTION_RESET;
     case IBV_WC_RETRY_EXC_ERR:
     case IBV_WC_RNR_RETRY_EXC_ERR:
+    case IBV_WC_REM_ABORT_ERR:
         return UCS_ERR_ENDPOINT_TIMEOUT;
     case IBV_WC_WR_FLUSH_ERR:
         return UCS_ERR_CANCELED;

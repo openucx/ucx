@@ -19,7 +19,7 @@ typedef enum {
     /* RNDV TAG operation with status UCS_ERR_CANCELED (kept for wire
      * compatibility with the previous UCP versions) */
     UCP_RNDV_RTS_TAG_CANCELED = (uint8_t)UCS_ERR_CANCELED,
-    /* RNDV AM oepration */
+    /* RNDV AM operation */
     UCP_RNDV_RTS_AM           = 1
 } UCS_S_PACKED ucp_rndv_rts_opcode_t;
 
@@ -49,12 +49,20 @@ typedef struct {
  * Rendezvous RTR
  */
 typedef struct {
-    uint64_t                  sreq_id;  /* request ID on the rndv initiator side - sender */
-    uint64_t                  rreq_id;  /* request ID on the rndv receiver side */
-    uint64_t                  address;  /* holds the address of the data buffer on the receiver's side */
-    size_t                    size;     /* size of the data to receive */
-    size_t                    offset;   /* offset of the data in the recv buffer */
-    /* packed rkeys follow */
+    /* Request ID on the rndv initiator side - sender */
+    uint64_t sreq_id;
+
+    /* Request ID on the rndv receiver side */
+    uint64_t rreq_id;
+
+    /* Holds the address of the data buffer on the receiver's side */
+    uint64_t address;
+
+    /* Size of the data to receive */
+    size_t   size;
+
+    /* Offset of the data in the recv buffer */
+    size_t   offset;
 } UCS_S_PACKED ucp_rndv_rtr_hdr_t;
 
 
@@ -65,6 +73,18 @@ typedef struct {
     uint64_t                  rreq_id; /* request ID on the rndv receiver side */
     size_t                    offset;
 } UCS_S_PACKED ucp_rndv_data_hdr_t;
+
+
+/*
+ * RNDV_ATP
+ */
+typedef struct {
+    ucp_reply_hdr_t super;
+
+    /* The receive is considered complete when this number of ATP packets
+       has arrived */
+    uint16_t        count;
+} UCS_S_PACKED ucp_rndv_atp_hdr_t;
 
 
 ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,

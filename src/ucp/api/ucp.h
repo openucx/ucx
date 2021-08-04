@@ -4501,7 +4501,9 @@ ucs_status_ptr_t ucp_worker_flush_nbx(ucp_worker_h worker,
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_ep_attr_field {
-    UCP_EP_ATTR_FIELD_NAME = UCS_BIT(0) /**< UCP endpoint name */
+    UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
+    UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
+    UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2)  /**< Sockaddr the endpoint is connected to */
 };
 
 
@@ -4526,12 +4528,28 @@ typedef struct ucp_ep_attr {
      * this name.
      */
     char     name[UCP_ENTITY_NAME_MAX];
+
+    /**
+     * Local socket address for this endpoint. Valid only for endpoints created 
+     * by connecting to a socket address.
+     * If this field is specified for an endpoint not connected to a socket address,
+     * UCS_ERR_NOT_CONNECTED will be returned.
+     */
+    struct sockaddr_storage local_sockaddr;
+
+    /**
+     * Remote socket address this endpoint is connected to. Valid only for endpoints
+     * created by connecting to a socket address.
+     * If this field is specified for an endpoint not connected to a socket address,
+     * UCS_ERR_NOT_CONNECTED will be returned.
+     */
+    struct sockaddr_storage remote_sockaddr;
 } ucp_ep_attr_t;
 
 
 /**
  * @ingroup UCP_ENDPOINT
- * @brief Get attributes specific to a particular endpoint.
+ * @brief Get attributes of a given endpoint.
  *
  * This routine fetches information about the endpoint.
  *

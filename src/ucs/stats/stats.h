@@ -61,9 +61,9 @@ size_t ucs_stats_aggregate(ucs_stats_counter_t *counters, size_t max_counters);
 
 /**
  * A UCX statistics API to get the names of counters on the last call to
- * ucs_stats_aggregate(). 
+ * ucs_stats_aggregate().
  *
- * Note, that ucs_stats_aggregate() must be called before calling this 
+ * Note, that ucs_stats_aggregate() must be called before calling this
  * function.
  *
  * @param [out] names_p The aggregate-sum counters names database

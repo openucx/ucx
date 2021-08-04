@@ -57,7 +57,7 @@ struct ucs_rcache {
     size_t              total_size;      /**< Total size of registered memory */
     size_t              unreleased_size; /**< Total size of the regions in gc_list and in inv_q */
 
-    struct { 
+    struct {
         ucs_spinlock_t  lock;            /**< Lock for this structure */
         ucs_list_link_t list;            /**< List of regions, sorted by usage:
                                               The head of the list is the least

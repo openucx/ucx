@@ -181,17 +181,30 @@ ucs_status_t ucs_socket_getopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
+ucs_status_t ucs_socket_getname(int fd, struct sockaddr_storage *sock_addr,
+                                socklen_t *addr_len)
+{
+    int ret;
+
+    *addr_len = sizeof(struct sockaddr_storage);
+    ret       = getsockname(fd, (struct sockaddr*)sock_addr,
+                            addr_len);
+    if (ret < 0) {
+        ucs_error("getsockname(fd=%d) failed: %m", fd);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
 {
     struct sockaddr_storage sock_addr = {0}; /* Suppress Clang false-positive */
     socklen_t addr_size;
-    int ret;
+    ucs_status_t status;
 
-    addr_size = sizeof(sock_addr);
-    ret       = getsockname(fd, (struct sockaddr*)&sock_addr,
-                            &addr_size);
-    if (ret < 0) {
-        ucs_debug("getsockname(fd=%d) failed: %m", fd);
+    status = ucs_socket_getname(fd, &sock_addr, &addr_size);
+    if (status != UCS_OK) {
         ucs_strncpy_safe(str, "-", max_size);
         return str;
     }
@@ -875,7 +888,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_debug("check ifname for socket on %s", 
+    ucs_debug("check ifname for socket on %s",
               ucs_sockaddr_str(my_addr, str_local_addr, UCS_SOCKADDR_STRING_LEN));
 
     if (getifaddrs(&ifaddrs)) {
@@ -891,7 +904,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
             continue;
         }
 
-        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) && 
+        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) &&
             (!ucs_sockaddr_cmp(sa, my_addr, NULL))) {
             ucs_debug("matching ip found iface on %s", ifa->ifa_name);
             ucs_strncpy_safe(ifname_str, ifa->ifa_name, max_strlen);

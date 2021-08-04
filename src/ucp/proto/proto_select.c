@@ -144,11 +144,11 @@ ucp_proto_thresholds_select_best(ucp_proto_id_mask_t proto_mask,
     double x_intersect;
     size_t midpoint;
 
-    ucs_trace("  %-16s %-20s %-18s", "PROTOCOL", "TIME", "BANDWIDTH (MB/s)");
+    ucs_trace("  %-20s %-20s %-18s", "PROTOCOL", "TIME (nsec)", "BANDWIDTH (MB/s)");
     ucs_for_each_bit(curr.proto_id, proto_mask) {
         ucp_proto_select_perf_str(&proto_perf[curr.proto_id], time_str,
                                   sizeof(time_str), bw_str, sizeof(bw_str));
-        ucs_trace("  %-16s %-20s %-18s",
+        ucs_trace("  %-20s %-20s %-18s",
                   ucp_proto_id_field(curr.proto_id, name), time_str, bw_str);
     }
 

@@ -46,6 +46,9 @@ public:
     };
 
     data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
+                           size_t length, size_t iov_count);
+
+    data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
                            size_t length) {
         return make(datatype, buf, length, m_iov_cnt_limit);
     };
@@ -83,9 +86,6 @@ public:
     };
 
 private:
-    data_type_desc_t &make(ucp_datatype_t datatype, const void *buf,
-                           size_t length, size_t iov_count);
-
     uintptr_t       m_origin;
     size_t          m_length;
 
