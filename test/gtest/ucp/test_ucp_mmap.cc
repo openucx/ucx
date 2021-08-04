@@ -36,7 +36,7 @@ public:
 
     virtual void init() {
         ucs::skip_on_address_sanitizer();
-        if (get_variant_value() == VARIANT_PROTO_ENABLE) {
+        if (enable_proto()) {
             modify_config("PROTO_ENABLE", "y");
         }
         ucp_test::init();
@@ -75,6 +75,7 @@ protected:
     void test_length0(unsigned flags);
     void test_rkey_management(ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
+    bool enable_proto() const;
 
 private:
     void expect_same_distance(const ucs_sys_dev_distance_t &dist1,
@@ -189,36 +190,44 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     /* rkey->md_map is a subset of all possible keys */
     EXPECT_TRUE(ucs_test_all_flags(memh->md_map, rkey->md_map));
 
-    bool have_rma              = resolve_rma(&receiver(), rkey);
-    bool have_amo              = resolve_amo(&receiver(), rkey);
-    bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(&receiver(), rkey);
-    bool have_rma_bw_put_zcopy = resolve_rma_bw_put_zcopy(&receiver(), rkey);
+    /* Test remote key protocols selection */
+    if (enable_proto()) {
+        test_rkey_proto(memh);
+    } else {
+        bool have_rma              = resolve_rma(&receiver(), rkey);
+        bool have_amo              = resolve_amo(&receiver(), rkey);
+        bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(&receiver(),
+                                                              rkey);
+        bool have_rma_bw_put_zcopy = resolve_rma_bw_put_zcopy(&receiver(),
+                                                              rkey);
 
-    /* Test that lane resolution on the remote key returns consistent results */
-    for (int i = 0; i < 10; ++i) {
-        switch (ucs::rand() % 4) {
-        case 0:
-            EXPECT_EQ(have_rma, resolve_rma(&receiver(), rkey));
-            break;
-        case 1:
-            EXPECT_EQ(have_amo, resolve_amo(&receiver(), rkey));
-            break;
-        case 2:
-            EXPECT_EQ(have_rma_bw_get_zcopy,
-                      resolve_rma_bw_get_zcopy(&receiver(), rkey));
-            break;
-        case 3:
-            EXPECT_EQ(have_rma_bw_put_zcopy,
-                      resolve_rma_bw_put_zcopy(&receiver(), rkey));
-            break;
+        /* Test that lane resolution on the remote key returns consistent results */
+        for (int i = 0; i < 10; ++i) {
+            switch (ucs::rand() % 4) {
+            case 0:
+                EXPECT_EQ(have_rma, resolve_rma(&receiver(), rkey));
+                break;
+            case 1:
+                EXPECT_EQ(have_amo, resolve_amo(&receiver(), rkey));
+                break;
+            case 2:
+                EXPECT_EQ(have_rma_bw_get_zcopy,
+                          resolve_rma_bw_get_zcopy(&receiver(), rkey));
+                break;
+            case 3:
+                EXPECT_EQ(have_rma_bw_put_zcopy,
+                          resolve_rma_bw_put_zcopy(&receiver(), rkey));
+                break;
+            }
         }
-    }
 
-    if (expect_rma_offload) {
-        if (is_dummy) {
-            EXPECT_EQ(&ucp_rma_sw_proto, rkey->cache.rma_proto);
-        } else {
-            EXPECT_EQ(&ucp_rma_basic_proto, rkey->cache.rma_proto);
+        if (expect_rma_offload) {
+            if (is_dummy) {
+                EXPECT_EQ(&ucp_rma_sw_proto, rkey->cache.rma_proto);
+            } else {
+                ucs_assert(&ucp_rma_basic_proto == rkey->cache.rma_proto);
+                EXPECT_EQ(&ucp_rma_basic_proto, rkey->cache.rma_proto);
+            }
         }
     }
 
@@ -233,9 +242,11 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
     ucp_rkey_destroy(rkey);
     ucp_rkey_buffer_release(rkey_buffer);
+}
 
-    /* Test remote key protocols selection */
-    test_rkey_proto(memh);
+bool test_ucp_mmap::enable_proto() const
+{
+    return get_variant_value() == VARIANT_PROTO_ENABLE;
 }
 
 void test_ucp_mmap::expect_same_distance(const ucs_sys_dev_distance_t &dist1,
@@ -283,7 +294,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ASSERT_UCS_OK(status);
 
     /* Check rkey configuration */
-    if (receiver().ucph()->config.ext.proto_enable) {
+    if (enable_proto()) {
         ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
                                                          rkey);
         ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());
