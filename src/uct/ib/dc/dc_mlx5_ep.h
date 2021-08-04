@@ -453,6 +453,7 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
      */
     uint8_t pool_index           = uct_dc_mlx5_ep_pool_index(ep);
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
+    uct_rc_iface_t *rc_iface     = &iface->super.super;
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
     ucs_assert(pool->release_stack_top < pool->stack_top);
@@ -460,6 +461,13 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     ucs_assert(ep->dci >= (iface->tx.ndci * pool_index));
     ucs_assert(ep->dci < (iface->tx.ndci * (pool_index + 1)));
     ucs_assert(uct_dc_mlx5_ep_from_dci(iface, ep->dci) == NULL);
+
+    if (rc_iface->config.random_path) {
+        rand_r(&rc_iface->rand_value);
+        ep->av.rlid = htons((rc_iface->rand_value % (UCT_IB_ROCE_MAX_PATH_FACTOR + 1)) |
+                            UCT_IB_ROCE_UDP_SRC_PORT_BASE);
+    }
+
     iface->tx.dcis[ep->dci].ep = ep;
     pool->stack_top++;
 }
@@ -514,7 +522,8 @@ uct_dc_mlx5_iface_dci_schedule_release(uct_dc_mlx5_iface_t *iface, uint8_t dci)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
 {
-    uint8_t pool_index = uct_dc_mlx5_ep_pool_index(ep);
+    uct_rc_iface_t *rc_iface = &iface->super.super;
+    uint8_t pool_index       = uct_dc_mlx5_ep_pool_index(ep);
     ucs_arbiter_t *waitq;
     uct_rc_txqp_t *txqp;
     int16_t available;
@@ -550,8 +559,7 @@ uct_dc_mlx5_iface_dci_get(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         waitq     = uct_dc_mlx5_iface_dci_waitq(iface, pool_index);
         if ((iface->tx.policy == UCT_DC_TX_POLICY_DCS_QUOTA) &&
             (available <= iface->tx.available_quota) &&
-            !ucs_arbiter_is_empty(waitq))
-        {
+            (rc_iface->config.random_path || !ucs_arbiter_is_empty(waitq))) {
             ep->flags |= UCT_DC_MLX5_EP_FLAG_TX_WAIT;
             goto out_no_res;
         }

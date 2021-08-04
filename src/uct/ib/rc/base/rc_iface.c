@@ -81,6 +81,10 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_iface_common_config_t, fence_mode),
                 UCS_CONFIG_TYPE_ENUM(uct_rc_fence_mode_values)},
 
+  {"ROCE_RANDOM_PATH", "n",
+   "Enable/Disable random RoCE path generation.",
+   ucs_offsetof(uct_rc_iface_common_config_t, random_path), UCS_CONFIG_TYPE_BOOL},
+
   {"TX_NUM_GET_OPS", "",
    "The configuration parameter replaced by UCX_RC_TX_NUM_GET_BYTES.",
    UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
@@ -540,6 +544,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->config.tx_min_inline  = config->super.tx.min_inline;
     self->config.tx_poll_always = config->tx.poll_always;
     self->config.tx_ops_count   = tx_cq_size;
+    self->config.random_path    = config->random_path;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
     self->config.timeout        = uct_ib_to_qp_fabric_time(config->tx.timeout);
     self->config.rnr_retry      = uct_rc_iface_config_limit_value(
@@ -557,6 +562,10 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->tx.in_pending         = 0;
 #endif
     max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
+
+    if (config->random_path) {
+        self->rand_value        = ucs_generate_uuid(0);
+    }
 
     if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
         self->config.max_get_zcopy = max_ib_msg_size;

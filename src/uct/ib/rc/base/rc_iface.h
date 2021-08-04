@@ -149,6 +149,8 @@ typedef struct uct_rc_iface_common_config {
     uct_ib_iface_config_t    super;
     unsigned                 max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
+    /* Enable random path factor for RoCE LAG UDP source port calculation */
+    int                      random_path;
     int                      fence_mode;
 
     struct {
@@ -291,6 +293,7 @@ struct uct_rc_iface {
 #if UCS_ENABLE_ASSERT
         int                  tx_cq_len;
 #endif
+        uint8_t              random_path;
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
         size_t               max_get_zcopy;
@@ -302,6 +305,8 @@ struct uct_rc_iface {
     } config;
 
     UCS_STATS_NODE_DECLARE(stats)
+
+    unsigned                 rand_value;
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
