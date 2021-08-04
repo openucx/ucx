@@ -72,6 +72,8 @@ MAKE="make"
 MAKEP="make -j${parallel_jobs}"
 export AUTOMAKE_JOBS=$parallel_jobs
 
+have_ptrace=$(capsh --print | grep 'Bounding' | grep ptrace || true)
+
 #
 # Set initial port number for client/server applications
 #
@@ -257,7 +259,7 @@ check_machine() {
 # Get list of active IP interfaces
 #
 get_active_ip_ifaces() {
-	device_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/://)
+	device_list=$(ip addr | awk '/state UP/ {print $2}' | sed s/:// | cut -f 1 -d '@')
 	for netdev in ${device_list}
 	do
 		(ip addr show ${netdev} | grep -q 'inet ') && echo ${netdev} || true
@@ -880,6 +882,12 @@ test_profiling() {
 }
 
 test_ucs_load() {
+	if [ -z "${have_ptrace}" ]
+	then
+		log_warning "==== Not running UCS library loading test ===="
+		return
+	fi
+
 	../contrib/configure-release --prefix=$ucx_inst
 	make_clean
 	$MAKEP
@@ -916,8 +924,7 @@ test_ucp_dlopen() {
 	if [ -n "$LIB_CMA" ]
 	then
 		echo "==== Running UCP library loading test ===="
-		./test/apps/test_ucp_dlopen # just to save output to log
-		./test/apps/test_ucp_dlopen | grep 'cma/memory'
+		./test/apps/test_ucp_dlopen | grep 'cma'
 	else
 		echo "==== Not running UCP library loading test ===="
 	fi
@@ -925,10 +932,13 @@ test_ucp_dlopen() {
 
 test_init_mt() {
 	echo "==== Running multi-thread init ===="
+	# Each thread requires 5MB. Cap threads number by total available shared memory.
+	max_threads=$(df /dev/shm | awk '/shm/ {printf "%d", $4 / 5000}')
+	num_threads=$(($max_threads < $(nproc) ? $max_threads : $(nproc)))
 	$MAKEP
 	for ((i=0;i<50;++i))
 	do
-		$AFFINITY timeout 5m ./test/apps/test_init_mt
+		OMP_NUM_THREADS=$num_threads $AFFINITY timeout 5m ./test/apps/test_init_mt
 	done
 }
 

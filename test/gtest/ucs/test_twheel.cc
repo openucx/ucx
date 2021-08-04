@@ -38,6 +38,8 @@ protected:
     virtual void cleanup();
 
     static void timer_func(ucs_wtimer_t *self);
+    static bool check_all_timers_triggered(std::vector<struct hr_timer> &t);
+
     void timer_expired(struct hr_timer *t);
     void add_timer(struct hr_timer *t);
     void init_timer(struct hr_timer *t, int id);
@@ -60,6 +62,17 @@ void twheel::timer_func(ucs_wtimer_t *self)
 {
     struct hr_timer *t = ucs_container_of(self, struct hr_timer, timer);
     t->self->timer_expired(t);
+}
+
+bool twheel::check_all_timers_triggered(std::vector<struct hr_timer> &t)
+{
+    for (int i = 0; i < t.size(); i++) {
+        if (t[i].end_time == (ucs_time_t)0) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void twheel::timer_expired(struct hr_timer *t)
@@ -229,13 +242,18 @@ UCS_TEST_F(twheel, delayed_sweep) {
         add_timer(&t[i]);
     }
 
-    sleep(1);
+    /* Sleep up to to seconds. Finish the test if the timers are triggered
+       earlier, fail otherwise. */
+    for (int i = 0; i < 10; i++) {
+        sleep(1);
+        ucs_twheel_sweep(&m_wheel, ucs_get_time());
 
-    ucs_twheel_sweep(&m_wheel, ucs_get_time());
+        if (check_all_timers_triggered(t)) {
+            return;
+        }
+    }
 
     /* all timers should have been triggered */
-    for (int i = 0; i < N_TIMERS; i++) {
-        EXPECT_NE(t[i].end_time, (ucs_time_t)0);
-    }
+    GTEST_FAIL() << "Timers were not triggered after timeout";
 }
 

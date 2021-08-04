@@ -12,6 +12,10 @@
 #include <set>
 #include <vector>
 
+extern "C" {
+#include <ucp/core/ucp_request.inl>
+}
+
 
 class test_ucp_stream_base : public ucp_test {
 public:
@@ -564,6 +568,11 @@ UCS_TEST_P(test_ucp_stream, send_exp_recv_32) {
 
 UCS_TEST_P(test_ucp_stream, send_exp_recv_64) {
     ucp_datatype_t datatype = ucp_dt_make_contig(sizeof(uint64_t));
+    const uct_md_attr_t *md_attr = ucp_ep_md_attr(sender().ep(), 0);
+
+    if (has_transport("shm") && (md_attr->cap.max_alloc < UCS_GBYTE)) {
+        UCS_TEST_SKIP_R("Not enough shared memory");
+    }
 
     do_send_exp_recv_test<uint64_t, 0>(datatype);
     do_send_exp_recv_test<uint64_t, UCP_STREAM_RECV_FLAG_WAITALL>(datatype);

@@ -1186,11 +1186,33 @@ static uct_md_ops_t UCS_V_UNUSED uct_ib_md_global_odp_ops = {
     .detect_memory_type = ucs_empty_function_return_unsupported,
 };
 
+int uct_ib_device_is_accessible(struct ibv_device *device)
+{
+    /* Enough place to hold the full path */
+    char device_path[IBV_SYSFS_PATH_MAX];
+    struct stat st;
+
+    ucs_snprintf_safe(device_path, sizeof(device_path), "%s%s",
+                      "/dev/infiniband/", device->dev_name);
+
+    /* Could not stat the path or 
+       the path is not a char device file or
+       the device cannot be accessed for read & write
+    */
+    if ((stat(device_path, &st) != 0) || !S_ISCHR(st.st_mode) ||
+        (access(device_path, R_OK | W_OK) != 0)) {
+        return 0;
+    }
+
+    return 1;
+}
+
 static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
                                               uct_md_resource_desc_t **resources_p,
                                               unsigned *num_resources_p)
 {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_ib);
+    int num_resources = 0;
     uct_md_resource_desc_t *resources;
     struct ibv_device **device_list;
     ucs_status_t status;
@@ -1214,12 +1236,19 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     }
 
     for (i = 0; i < num_devices; ++i) {
-        ucs_snprintf_zero(resources[i].md_name, sizeof(resources[i].md_name),
+        /* Skip non-existent and non-accessible devices */
+        if (!uct_ib_device_is_accessible(device_list[i])) {
+            continue;
+        }
+
+        ucs_snprintf_zero(resources[num_resources].md_name,
+                          sizeof(resources[num_resources].md_name),
                           "%s", ibv_get_device_name(device_list[i]));
+        num_resources++;
     }
 
     *resources_p     = resources;
-    *num_resources_p = num_devices;
+    *num_resources_p = num_resources;
     status = UCS_OK;
 
 out_free_device_list:
