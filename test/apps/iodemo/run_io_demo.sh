@@ -514,6 +514,7 @@ make_scripts()
 			    echo "  -list-tags         List available tags and exit"
 			    echo "  -start <tag>       Start iodemo for given tag"
 			    echo "  -stop <tag>        Stop iodemo for given tag"
+			    echo "  -kill <tag>        Kill iodemo for given tag"
 			    echo "  -status <tag>      Show status of iodemo for given tag"
 			    echo
 			    echo "If no options are given, run all commands and wait for completion"
@@ -534,6 +535,11 @@ make_scripts()
 			            ;;
 			        -stop)
 			            action="stop"
+			            tag="\$2"
+			            shift
+			            ;;
+			        -kill)
+			            action="kill"
 			            tag="\$2"
 			            shift
 			            ;;
