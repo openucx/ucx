@@ -848,6 +848,16 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     free(perf->uct.peers);
 }
 
+static void ucp_perf_worker_progress(void *arg)
+{
+    ucx_perf_context_t *perf = arg;
+    int i;
+
+    for (i = 0; i < perf->params.thread_count; ++i) {
+        ucp_worker_progress(perf->ucp.tctx[i].perf.ucp.worker);
+    }
+}
+
 static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
                                               ucp_params_t *ucp_params)
 {
@@ -909,8 +919,10 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
 static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf)
 {
     unsigned i, thread_count = perf->params.thread_count;
-    ucs_status_ptr_t    *req;
-    ucs_status_t        status;
+    unsigned num_in_prog     = 0;
+    ucs_status_ptr_t **reqs  = ucs_alloca(thread_count * sizeof(*reqs));
+    ucs_status_ptr_t *req;
+    ucs_status_t status;
 
     for (i = 0; i < thread_count; ++i) {
         if (perf->ucp.tctx[i].perf.ucp.rkey != NULL) {
@@ -922,16 +934,22 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf)
                                   UCP_EP_CLOSE_MODE_FLUSH);
 
             if (UCS_PTR_IS_PTR(req)) {
-                do {
-                    ucp_worker_progress(perf->ucp.tctx[i].perf.ucp.worker);
-                    status = ucp_request_check_status(req);
-                } while (status == UCS_INPROGRESS);
-
-                ucp_request_release(req);
+                reqs[num_in_prog++] = req;
             } else if (UCS_PTR_STATUS(req) != UCS_OK) {
                 ucs_warn("failed to close ep %p on thread %d: %s\n",
                          perf->ucp.tctx[i].perf.ucp.ep, i,
                          ucs_status_string(UCS_PTR_STATUS(req)));
+            }
+        }
+    }
+
+    while (num_in_prog != 0) {
+        ucp_perf_worker_progress(perf);
+        for (i = 0; i < num_in_prog; ++i) {
+            status = ucp_request_check_status(reqs[i]);
+            if (status != UCS_INPROGRESS) {
+                ucp_request_release(reqs[i]);
+                reqs[i] = reqs[--num_in_prog];
             }
         }
     }
@@ -1323,7 +1341,7 @@ void uct_perf_barrier(ucx_perf_context_t *perf)
              (void*)perf->uct.worker);
 }
 
-void ucp_perf_barrier(ucx_perf_context_t *perf)
+void ucp_perf_thread_barrier(ucx_perf_context_t *perf)
 {
     rte_call(perf, barrier, (void(*)(void*))ucp_worker_progress,
 #if _OPENMP
@@ -1331,6 +1349,11 @@ void ucp_perf_barrier(ucx_perf_context_t *perf)
 #else
              (void*)perf->ucp.tctx[0].perf.ucp.worker);
 #endif
+}
+
+void ucp_perf_barrier(ucx_perf_context_t *perf)
+{
+    rte_call(perf, barrier, ucp_perf_worker_progress, perf);
 }
 
 static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
@@ -1566,7 +1589,7 @@ ucx_perf_funcs_t ucx_perf_funcs[] = {
     [UCX_PERF_API_UCT] = {uct_perf_setup, uct_perf_cleanup,
                           uct_perf_test_dispatch, uct_perf_barrier},
     [UCX_PERF_API_UCP] = {ucp_perf_setup, ucp_perf_cleanup,
-                          ucp_perf_test_dispatch, ucp_perf_barrier}
+                          ucp_perf_test_dispatch, ucp_perf_thread_barrier}
 };
 
 ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,

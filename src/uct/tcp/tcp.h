@@ -109,7 +109,9 @@ enum {
      * method. */
     UCT_TCP_EP_FLAG_CONNECT_TO_EP      = UCS_BIT(8),
     /* EP is on EP PTR map. */
-    UCT_TCP_EP_FLAG_ON_PTR_MAP         = UCS_BIT(9)
+    UCT_TCP_EP_FLAG_ON_PTR_MAP         = UCS_BIT(9),
+    /* EP has some operations done without flush */
+    UCT_TCP_EP_FLAG_NEED_FLUSH         = UCS_BIT(10)
 };
 
 
@@ -217,7 +219,7 @@ typedef enum uct_tcp_ep_am_id {
     UCT_TCP_EP_PUT_REQ_AM_ID   = UCT_AM_ID_MAX + 1,
     /* AM ID reserved for TCP internal PUT ACK message */
     UCT_TCP_EP_PUT_ACK_AM_ID   = UCT_AM_ID_MAX + 2,
-    /* AM ID reserved for TCP internal PUT ACK message */
+    /* AM ID reserved for TCP internal keepalive message */
     UCT_TCP_EP_KEEPALIVE_AM_ID = UCT_AM_ID_MAX + 3
 } uct_tcp_ep_am_id_t;
 
