@@ -62,6 +62,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/sock.h \
 	sys/topo.h \
 	sys/stubs.h \
+	sys/uid.h \
 	time/time_def.h \
 	type/class.h \
 	type/param.h \
@@ -175,6 +176,7 @@ libucs_la_SOURCES = \
 	sys/sock.c \
 	sys/topo.c \
 	sys/stubs.c \
+	sys/uid.c \
 	time/time.c \
 	time/timer_wheel.c \
 	time/timerq.c \

@@ -803,7 +803,7 @@ uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t **ka, pid_t pid,
 void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
                                  ucs_sys_namespace_type_t sys_ns_type)
 {
-    addr_ns->super.id = ucs_iface_get_system_id() &
+    addr_ns->super.id = ucs_get_system_id() &
                         ~UCT_IFACE_LOCAL_ADDR_FLAG_NS;
 
     if (!ucs_sys_ns_is_default(sys_ns_type)) {

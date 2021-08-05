@@ -11,6 +11,8 @@
 ### Features:
 #### UCP
 * Added API for querying UCP library attributes
+#### UCS
+* Added API to Read boot ID value or use machine_guid
 ### Bugfixes:
 
 ## 1.10.1 (May 12, 2021)
