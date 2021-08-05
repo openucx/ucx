@@ -8,7 +8,9 @@
 #
 
 ## 1.11.1 (TBD)
-
+### Features:
+#### UCS
+* Added API to Read boot ID value or use machine_guid
 
 ## 1.11.0 (July 26, 2021)
 ### Features:

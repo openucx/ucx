@@ -1,10 +1,10 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (c) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
-*
-* See file LICENSE for terms.
-*/
+ * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+ * Copyright (c) UT-Battelle, LLC. 2014-2019. ALL RIGHTS RESERVED.
+ * Copyright (C) ARM Ltd. 2016.  ALL RIGHTS RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
 
 #ifndef UCS_SYS_H
 #define UCS_SYS_H
@@ -560,15 +560,6 @@ int ucs_sys_ns_is_default(ucs_sys_namespace_type_t name);
  * @return UCS_OK or error in case of failure.
  */
 ucs_status_t ucs_sys_get_boot_id(uint64_t *high, uint64_t *low);
-
-
-/**
- * Read boot ID value or use machine_guid.
- *
- * @return 64-bit value representing system ID.
- */
-uint64_t ucs_iface_get_system_id();
-
 
 /**
  * Read directory
