@@ -40,14 +40,16 @@ typedef ssize_t (*ucs_socket_iov_func_t)(int fd, const struct msghdr *msg,
                                          int flags);
 
 
-static void ucs_socket_print_error_info(int sys_errno)
+static void ucs_socket_print_error_info(const char *err_str, int sys_errno)
 {
     if (sys_errno == EMFILE) {
-        ucs_error("the maximal number of files that could be opened "
+        ucs_error("%s: the maximal number of files that could be opened "
                   "simultaneously was reached, try to increase the limit "
                   "by setting the max open files limit (ulimit -n) to "
                   "a greater value (current: %d)",
-                  ucs_sys_max_open_files());
+                  err_str, ucs_sys_max_open_files());
+    } else {
+        ucs_error("%s: %m", err_str);
     }
 }
 
@@ -137,8 +139,7 @@ ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
 {
     int fd = socket(domain, type, 0);
     if (fd < 0) {
-        ucs_error("socket create failed: %m");
-        ucs_socket_print_error_info(errno);
+        ucs_socket_print_error_info("socket create failed", errno);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -293,6 +294,7 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
 {
     ucs_status_t status;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
 
     *accept_fd = accept(fd, addr, length_ptr);
     if (*accept_fd < 0) {
@@ -301,10 +303,10 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
             return status;
         }
 
-        ucs_error("accept() failed (client addr %s): %m",
-                  ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
-
-        ucs_socket_print_error_info(errno);
+        ucs_string_buffer_appendf(&strb, "accept() failed (client addr %s)",
+                                  ucs_sockaddr_str(addr, ip_port_str,
+                                                   UCS_SOCKADDR_STRING_LEN));
+        ucs_socket_print_error_info(ucs_string_buffer_cstr(&strb), errno);
 
         return status;
     }
