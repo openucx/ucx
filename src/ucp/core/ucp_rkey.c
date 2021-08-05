@@ -337,6 +337,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     ucs_status_t status;
     ucp_rkey_h rkey;
     uint8_t flags;
+    unsigned md_count;
 
     ucs_trace("ep %p: unpacking rkey buffer %p length %zu", ep, buffer, length);
     ucs_log_indent(1);
@@ -344,17 +345,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     /* MD map for the unpacked rkey */
     remote_md_map = *ucs_serialize_next(&p, const ucp_md_map_t);
     md_map        = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
+    md_count      = ucs_popcount(md_map);
 
     /* Allocate rkey handle which holds UCT rkeys for all remote MDs. Small key
      * allocations are done from a memory pool.
      * We keep all of them to handle a future transport switch.
      */
-    if (md_map <= UCS_BIT(UCP_RKEY_MPOOL_MAX_MD)) {
+    if (md_count <= UCP_RKEY_MPOOL_MAX_MD) {
         rkey  = ucs_mpool_get_inline(&worker->rkey_mp);
         flags = UCP_RKEY_DESC_FLAG_POOL;
     } else {
-        rkey  = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->tl_rkey[0]) *
-                                            ucs_popcount(md_map)),
+        rkey  = ucs_malloc(sizeof(*rkey) + (sizeof(rkey->tl_rkey[0]) * md_count),
                            "ucp_rkey");
         flags = 0;
     }
@@ -390,7 +391,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
             continue;
         }
 
-        ucs_assert(rkey_index < ucs_popcount(md_map));
+        ucs_assert(rkey_index < md_count);
         tl_rkey       = &rkey->tl_rkey[rkey_index];
         cmpt_index    = ucp_ep_config_get_dst_md_cmpt(&ep_config->key,
                                                       remote_md_index);
