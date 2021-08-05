@@ -83,6 +83,9 @@ typedef struct {
 /* ModR/M encoding for EBP/BP/CH/MM5/XMM5, AH/SP/ESP/MM4/XMM4 */
 #define UCM_BISTRO_X86_MODRM_BP_SP 0xE5 /* 11 100 101 */
 
+/* ModR/M encoding for CMP [RIP+x], Imm32 */
+#define UCM_BISTRO_X86_MODRM_CMP_RIP 0x3D /* 11 111 101 */
+
 
 /*
  * Find the minimal length of initial instructions in the function which can be
@@ -143,6 +146,12 @@ static size_t ucm_bistro_detect_pic_prefix(const void *func, size_t min_length)
         } else if ((rex == 0) &&
                    ((opcode & UCM_BISTRO_X86_MOV_IR_MASK) == UCM_BISTRO_X86_MOV_IR)) {
             offset += sizeof(uint32_t);
+            continue;
+        } else if ((rex == 0) && (opcode == UCM_BISTRO_X86_IMM_GRP1_EV_IZ)) {
+            modrm = *(uint8_t*)UCS_PTR_BYTE_OFFSET(func, offset++);
+            if (modrm == UCM_BISTRO_X86_MODRM_CMP_RIP) {
+                offset += sizeof(uint32_t) * 2; /* skip disp32 and imm32 */
+            }
             continue;
         }
 
