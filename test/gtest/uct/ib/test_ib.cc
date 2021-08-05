@@ -743,6 +743,11 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
         uct_ib_device_t *dev;
         uct_md_h md;
 
+        if (!uct_ib_device_is_accessible(ib_device_list[i])) {
+            /* Skip non-existing IB devices */
+            continue;
+        }
+
         status = uct_md_config_read(&uct_ib_component, NULL, NULL, &md_config);
         EXPECT_UCS_OK(status);
         if (status != UCS_OK) {

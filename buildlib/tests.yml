@@ -3,6 +3,7 @@ parameters:
   num_workers: 4
   demands: []
   name: subtest
+  container:
 
 jobs:
   - job: tests_${{ parameters.name }}
@@ -16,6 +17,8 @@ jobs:
         ${{ each wid in parameters.worker_ids }}:
           ${{ wid }}:
             worker_id: ${{ wid }}
+    ${{ if parameters.container }}:
+      container: ${{ parameters.container }}
     steps:
       # address permissions issue when some files created as read-only
       - bash: chmod u+rwx ./ -R

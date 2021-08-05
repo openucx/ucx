@@ -16,6 +16,7 @@
 #include <ucs/sys/string.h>
 #include <sys/mman.h>
 #include <ucs/sys/sys.h>
+#include <sys/statvfs.h>
 
 
 /* File open flags */
@@ -114,9 +115,20 @@ static size_t uct_posix_iface_addr_length(uct_mm_md_t *md)
 
 static ucs_status_t uct_posix_md_query(uct_md_h tl_md, uct_md_attr_t *md_attr)
 {
-    uct_mm_md_t *md = ucs_derived_of(tl_md, uct_mm_md_t);
+    uct_mm_md_t *md                           = ucs_derived_of(tl_md, uct_mm_md_t);
+    const uct_posix_md_config_t *posix_config =
+                    ucs_derived_of(md->config, uct_posix_md_config_t);
+    struct statvfs shm_statvfs;
 
-    uct_mm_md_query(&md->super, md_attr, 1);
+    if (statvfs(posix_config->dir, &shm_statvfs) < 0) {
+        ucs_error("could not stat shared memory device %s (%m)",
+                  UCT_POSIX_SHM_OPEN_DIR);
+        return UCS_ERR_NO_DEVICE;
+    }
+
+    uct_mm_md_query(&md->super, md_attr,
+                    shm_statvfs.f_bsize * shm_statvfs.f_bavail);
+
     md_attr->rkey_packed_size = sizeof(uct_posix_packed_rkey_t) +
                                 uct_posix_iface_addr_length(md);
     return UCS_OK;
