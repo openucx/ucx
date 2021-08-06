@@ -10,6 +10,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <ucs/datastruct/array.h>
+#include <sys/uio.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -166,6 +167,17 @@ void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
  */
 void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
                                     const char **flag_names);
+
+
+/**
+ * Append an IO vector representation to the string buffer.
+ *
+ * @param [inout] strb        String buffer to append to.
+ * @param [in]    iov         Pointer to an IO vector.
+ * @param [in]    iovcnt      Number of entries in the IO vector.
+ */
+void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
+                                    const struct iovec *iov, size_t iovcnt);
 
 
 /**
