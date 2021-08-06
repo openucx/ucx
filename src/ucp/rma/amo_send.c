@@ -228,11 +228,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         if (param->op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_BUFFER) {
             ucp_amo_init_fetch(req, ep, param->reply_buffer,
                                ucp_uct_atomic_op_table[opcode], op_size,
-                               remote_addr, rkey, value, rkey->cache.amo_proto);
+                               remote_addr, rkey, value,
+                               UCP_RKEY_AMO_PROTO(rkey->cache.amo_proto_index));
             status_p = ucp_rma_send_request(req, param);
         } else {
             ucp_amo_init_post(req, ep, ucp_uct_atomic_op_table[opcode], op_size,
-                              remote_addr, rkey, value, rkey->cache.amo_proto);
+                              remote_addr, rkey, value,
+                              UCP_RKEY_AMO_PROTO(rkey->cache.amo_proto_index));
             status_p = ucp_rma_send_request(req, param);
         }
     }
