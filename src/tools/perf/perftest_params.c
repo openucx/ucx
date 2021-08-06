@@ -73,8 +73,6 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -O <count>     maximal number of uncompleted outstanding sends\n");
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
                                 ctx->params.super.iov_stride);
-    printf("     -T <threads>   number of threads in the test (%d)\n",
-                                ctx->params.super.thread_count);
     printf("     -o             do not progress the responder in one-sided tests\n");
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
@@ -111,6 +109,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        signal - signal-based timer\n");
     printf("\n");
     printf("  UCP only:\n");
+    printf("     -T <threads>   number of threads in the test (%d)\n",
+           ctx->params.super.thread_count);
     printf("     -M <thread>    thread support level for progress engine (single)\n");
     printf("                        single     - only the master thread can access\n");
     printf("                        serialized - one thread can access at a time\n");
