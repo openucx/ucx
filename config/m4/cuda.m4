@@ -54,13 +54,20 @@ AS_IF([test "x$cuda_checked" != "xyes"],
 
          LDFLAGS="$save_LDFLAGS"
 
-         # Check for cuda static library
          have_cuda_static="no"
          AS_IF([test "x$cuda_happy" = "xyes"],
-               [AC_CHECK_LIB([cudart_static], [cudaGetDeviceCount],
+               [
+                # Check for cuda static library
+                AC_CHECK_LIB([cudart_static], [cudaGetDeviceCount],
                              [CUDA_STATIC_LIBS="$CUDA_STATIC_LIBS -lcudart_static"
                               have_cuda_static="yes"],
-                             [], [-ldl -lrt -lpthread])])
+                             [], [-ldl -lrt -lpthread])
+                # Check for async allocation APIs
+                AC_CHECK_DECLS([cuMemAllocAsync, cuMemFreeAsync], [], [],
+                               [[#include <cuda.h>]])
+                AC_CHECK_DECLS([cudaMallocAsync, cudaFreeAsync], [], [],
+                               [[#include <cuda_runtime.h>]])
+               ])
 
          CPPFLAGS="$save_CPPFLAGS"
          LDFLAGS="$save_LDFLAGS"

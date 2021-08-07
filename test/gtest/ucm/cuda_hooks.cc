@@ -96,44 +96,63 @@ protected:
     CUcontext  context;
 };
 
-UCS_TEST_F(cuda_hooks, test_cuMem_Alloc_Free) {
+UCS_TEST_F(cuda_hooks, test_cuMemAllocFree) {
     CUresult ret;
     CUdeviceptr dptr, dptr1;
 
     /* small allocation */
     ret = cuMemAlloc(&dptr, 64);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_alloc_events((void *)dptr, 64);
 
     ret = cuMemFree(dptr);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_free_events((void *)dptr, 64);
 
     /* large allocation */
     ret = cuMemAlloc(&dptr, (256 * 1024 *1024));
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_alloc_events((void *)dptr, (256 * 1024 *1024));
 
     ret = cuMemFree(dptr);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_free_events((void *)dptr, (256 * 1024 *1024));
 
     /* multiple allocations, cudafree in reverse order */
     ret = cuMemAlloc(&dptr, (1 * 1024 *1024));
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_alloc_events((void *)dptr, (1 * 1024 *1024));
 
     ret = cuMemAlloc(&dptr1, (1 * 1024 *1024));
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_alloc_events((void *)dptr1, (1 * 1024 *1024));
 
     ret = cuMemFree(dptr1);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_free_events((void *)dptr1, (1 * 1024 *1024));
 
     ret = cuMemFree(dptr);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_free_events((void *)dptr, (1 * 1024 *1024));
+}
+
+UCS_TEST_F(cuda_hooks, test_cuMemAllocAsync) {
+#if HAVE_DECL_CUMEMALLOCASYNC && HAVE_DECL_CUMEMFREEASYNC
+    CUresult ret;
+    CUdeviceptr dptr;
+
+    ret = cuMemAllocAsync(&dptr, 1024, CU_STREAM_PER_THREAD);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
+    cuStreamSynchronize(CU_STREAM_PER_THREAD);
+    check_mem_alloc_events((void*)dptr, 1024);
+
+    ret = cuMemFreeAsync(dptr, CU_STREAM_PER_THREAD);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
+    cuStreamSynchronize(CU_STREAM_PER_THREAD);
+    check_mem_free_events((void*)dptr, 1024);
+#else
+    UCS_TEST_SKIP_R("cuMemAllocAsync is unsupported");
+#endif
 }
 
 UCS_TEST_F(cuda_hooks, test_cuMemAllocManaged) {
@@ -141,11 +160,11 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocManaged) {
     CUdeviceptr dptr;
 
     ret = cuMemAllocManaged(&dptr, 64, CU_MEM_ATTACH_GLOBAL);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_alloc_events((void *)dptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
 
     ret = cuMemFree(dptr);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_free_events((void *)dptr, 0);
 }
 
@@ -155,11 +174,11 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {
     size_t pitch;
 
     ret = cuMemAllocPitch(&dptr, &pitch, 4, 8, 4);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_alloc_events((void *)dptr, (4 * 8));
 
     ret = cuMemFree(dptr);
-    ASSERT_EQ(ret, CUDA_SUCCESS);
+    ASSERT_EQ(CUDA_SUCCESS, ret);
     check_mem_free_events((void *)dptr, 0);
 }
 
@@ -169,42 +188,42 @@ UCS_TEST_F(cuda_hooks, test_cuda_Malloc_Free) {
 
     /* small allocation */
     ret = cudaMalloc(&ptr, 64);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_alloc_events(ptr, 64);
 
     ret = cudaFree(ptr);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_free_events(ptr, 64);
 
     /* large allocation */
     ret = cudaMalloc(&ptr, (256 * 1024 *1024));
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_alloc_events(ptr, (256 * 1024 *1024));
 
     ret = cudaFree(ptr);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_free_events(ptr, (256 * 1024 *1024));
 
     /* multiple allocations, cudafree in reverse order */
     ret = cudaMalloc(&ptr, (1 * 1024 *1024));
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_alloc_events(ptr, (1 * 1024 *1024));
 
     ret = cudaMalloc(&ptr1, (1 * 1024 *1024));
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_alloc_events(ptr1, (1 * 1024 *1024));
 
     ret = cudaFree(ptr1);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_free_events(ptr1, (1 * 1024 *1024));
 
     ret = cudaFree(ptr);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_free_events(ptr, (1 * 1024 *1024));
 
     /* cudaFree with NULL */
     ret = cudaFree(NULL);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
 }
 
 UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {
@@ -212,11 +231,11 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocManaged) {
     void *ptr;
 
     ret = cudaMallocManaged(&ptr, 64, cudaMemAttachGlobal);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_alloc_events(ptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
 
     ret = cudaFree(ptr);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_free_events(ptr, 0);
 }
 
@@ -226,10 +245,29 @@ UCS_TEST_F(cuda_hooks, test_cudaMallocPitch) {
     size_t pitch;
 
     ret = cudaMallocPitch(&devPtr, &pitch, 4, 8);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_alloc_events(devPtr, (4 * 8));
 
     ret = cudaFree(devPtr);
-    ASSERT_EQ(ret, cudaSuccess);
+    ASSERT_EQ(cudaSuccess, ret);
     check_mem_free_events(devPtr, 0);
+}
+
+UCS_TEST_F(cuda_hooks, test_cudaMallocAsync) {
+#if HAVE_DECL_CUDAMALLOCASYNC && HAVE_DECL_CUDAFREEASYNC
+    cudaError_t ret;
+    void *devPtr;
+
+    ret = cudaMallocAsync(&devPtr, 1024, cudaStreamPerThread);
+    ASSERT_EQ(ret, cudaSuccess);
+    cudaStreamSynchronize(cudaStreamPerThread);
+    check_mem_alloc_events(devPtr, 1024);
+
+    ret = cudaFreeAsync(devPtr, cudaStreamPerThread);
+    ASSERT_EQ(ret, cudaSuccess);
+    cudaStreamSynchronize(cudaStreamPerThread);
+    check_mem_free_events(devPtr, 1024);
+#else
+    UCS_TEST_SKIP_R("cudaMallocAsync is unsupported");
+#endif
 }
