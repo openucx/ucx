@@ -1374,6 +1374,12 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
     };
     UCS_CPU_ZERO(&iface_params.cpu_mask);
 
+    if (params->thread_count > 1) {
+        ucs_error("UCT tests do not support multi-thread mode");
+        status = UCS_ERR_UNSUPPORTED;
+        goto out;
+    }
+
     status = ucs_async_context_init(&perf->uct.async, params->async_mode);
     if (status != UCS_OK) {
         goto out;
