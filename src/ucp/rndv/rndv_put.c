@@ -172,6 +172,7 @@ ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
                                             cap.put.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.max_zcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
@@ -253,9 +254,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_zcopy_send_func(
     uct_iov_t iov;
 
     max_payload = ucp_proto_multi_max_payload(req, lpriv, 0);
-    ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                               lpriv->super.memh_index, max_payload, next_iter,
-                               &iov);
+    ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
+                               lpriv->super.memh_index,
+                               UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
+                               1);
     return uct_ep_put_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
                             req->send.rndv.remote_address +
                                     req->send.state.dt_iter.offset,
@@ -270,7 +272,8 @@ ucp_proto_rndv_put_zcopy_send_progress(uct_pending_req_t *uct_req)
 
     return ucp_proto_multi_zcopy_progress(
             req, &rpriv->bulk.mpriv, ucp_proto_rndv_put_common_request_init,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, ucp_proto_rndv_put_zcopy_send_func,
+            UCT_MD_MEM_ACCESS_LOCAL_READ, UCS_BIT(UCP_DATATYPE_CONTIG),
+            ucp_proto_rndv_put_zcopy_send_func,
             ucp_proto_rndv_put_common_data_sent, rpriv->put_comp_cb);
 }
 

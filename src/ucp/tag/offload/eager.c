@@ -54,6 +54,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_short),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
@@ -122,6 +123,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
@@ -218,6 +220,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_zcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
@@ -228,7 +231,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
     };
 
     /* offload proto can not be used if no tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1)) {
+    if (!ucp_proto_eager_check_op_id(init_params, op_id, 1) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

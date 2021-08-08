@@ -119,7 +119,7 @@ protected:
             /* TODO create non-NULL worker when using memtype */
             ucp_datatype_iter_next_pack(&m_dt_iter, NULL, seg_size, &next_iter,
                                         packed_ptr);
-            ucp_datatype_iter_copy_from_next(&m_dt_iter, &next_iter, UINT_MAX);
+            ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
         } while (!ucp_datatype_iter_is_end(&m_dt_iter));
 
         finalize_dt_iter();

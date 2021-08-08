@@ -41,22 +41,52 @@ typedef enum {
 
 
 /* Protocol common initialization parameters which are used to calculate
- * thresholds, performance, etc. */
+ * thresholds, performance, etc. for a specific selection criteria.
+ */
 typedef struct {
     ucp_proto_init_params_t super;
-    double                  latency;       /* protocol added latency */
-    double                  overhead;      /* protocol overhead */
-    size_t                  cfg_thresh;    /* user-configured threshold */
-    unsigned                cfg_priority;  /* user configuration priority */
-    size_t                  min_length;    /* Minimal payload size */
-    size_t                  max_length;    /* Maximal payload size */
-    ptrdiff_t               min_frag_offs; /* offset in uct_iface_attr_t of the
-                                              minimal size of a single fragment */
-    ptrdiff_t               max_frag_offs; /* offset in uct_iface_attr_t of the
-                                              maximal size of a single fragment */
-    size_t                  hdr_size;      /* header size on first lane */
-    uct_ep_operation_t      memtype_op;    /* operation used for memtype copy */
-    unsigned                flags;         /* see ucp_proto_common_init_flags_t */
+
+    /* Protocol added latency */
+    double                  latency;
+
+    /* Protocol overhead */
+    double                  overhead;
+
+    /* User-configured threshold */
+    size_t                  cfg_thresh;
+
+    /* User configuration priority */
+    unsigned                cfg_priority;
+
+    /* Minimal payload size */
+    size_t                  min_length;
+
+    /* Maximal payload size */
+    size_t                  max_length;
+
+    /* Offset in uct_iface_attr_t structure of the field which specifies the
+     * minimal fragment size for the UCT operation used by this protocol */
+    ptrdiff_t               min_frag_offs;
+
+    /* Offset in uct_iface_attr_t structure of the field which specifies the
+     * maximal fragment size for the UCT operation used by this protocol */
+    ptrdiff_t               max_frag_offs;
+
+    /* Offset in uct_iface_attr_t structure of the field which specifies the
+     * maximal number of iov elements for the UCT operation used by this
+    * protocol */
+    ptrdiff_t               max_iov_offs;
+
+    /* Header size on the first lane */
+    size_t                  hdr_size;
+
+    /* UCT operation used for copying from memory from request buffer to a
+     * bounce buffer used by the transport. If set to LAST, the protocol supports
+     * only host memory copy using memcpy(). */
+    uct_ep_operation_t      memtype_op;
+
+    /* Protocol instance flags, see @ref ucp_proto_common_init_flags_t */
+    unsigned                flags;
 } ucp_proto_common_init_params_t;
 
 
@@ -89,6 +119,7 @@ typedef struct {
     ucp_lane_index_t        lane;       /* Lane index in the endpoint */
     ucp_rsc_index_t         memh_index; /* Index of UCT memory handle (for zero copy) */
     ucp_md_index_t          rkey_index; /* Remote key index (for remote access) */
+    uint8_t                 max_iov;    /* Maximal number of IOVs on this lane */
 } ucp_proto_common_lane_priv_t;
 
 

@@ -92,9 +92,9 @@ ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         md_map = (spriv->reg_md == UCP_NULL_RESOURCE) ? 0 : UCS_BIT(spriv->reg_md);
-        status = ucp_proto_request_zcopy_init(req, md_map,
-                                              ucp_proto_request_zcopy_completion,
-                                              uct_mem_flags);
+        status = ucp_proto_request_zcopy_init(
+                req, md_map, ucp_proto_request_zcopy_completion, uct_mem_flags,
+                UCS_BIT(UCP_DATATYPE_CONTIG));
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */
@@ -103,8 +103,10 @@ ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
-    ucp_datatype_iter_next_iov(&req->send.state.dt_iter, spriv->super.memh_index,
-                               SIZE_MAX, &next_iter, &iov);
+    ucp_datatype_iter_next_iov(&req->send.state.dt_iter, SIZE_MAX,
+                               spriv->super.memh_index,
+                               UCS_BIT(UCP_DATATYPE_CONTIG), &next_iter, &iov,
+                               1);
     status = send_func(req, spriv, &iov);
     UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(req, name, iov.length, status);
 

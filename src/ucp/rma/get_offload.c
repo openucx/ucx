@@ -46,7 +46,8 @@ static void ucp_proto_get_offload_bcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter,
+                              UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_request_complete_send(req, req->send.state.uct_comp.status);
 }
 
@@ -82,6 +83,7 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
@@ -119,9 +121,10 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
     uct_iov_t iov;
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                               lpriv->super.memh_index,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
-                               next_iter, &iov);
+                               lpriv->super.memh_index,
+                               UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
+                               1);
     return uct_ep_get_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
                             req->send.rma.remote_addr +
                             req->send.state.dt_iter.offset,
@@ -134,7 +137,7 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 
     return ucp_proto_multi_zcopy_progress(
             req, req->send.proto_config->priv, NULL,
-            UCT_MD_MEM_ACCESS_LOCAL_WRITE,
+            UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCS_BIT(UCP_DATATYPE_CONTIG),
             ucp_proto_get_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);
@@ -156,6 +159,7 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                             cap.get.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.max_zcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |

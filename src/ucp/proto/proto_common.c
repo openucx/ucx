@@ -32,6 +32,8 @@ void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *param
 {
     const ucp_rkey_config_key_t *rkey_config_key = params->super.rkey_config_key;
     ucp_md_index_t md_index, dst_md_index;
+    const uct_iface_attr_t *iface_attr;
+    size_t uct_max_iov;
 
     md_index     = ucp_proto_common_get_md_index(&params->super, lane);
     dst_md_index = params->super.ep_config_key->lanes[lane].dst_md_index;
@@ -53,6 +55,16 @@ void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *param
     } else {
         lane_priv->rkey_index = UCP_NULL_RESOURCE;
     }
+
+    /* Get max IOV from UCT capabilities */
+    iface_attr  = ucp_proto_common_get_iface_attr(&params->super, lane);
+    uct_max_iov = ucp_proto_common_get_iface_attr_field(iface_attr,
+                                                        params->max_iov_offs,
+                                                        SIZE_MAX);
+
+    /* Final max_iov is limited both by UCP and UCT, so it can be uint8_t */
+    UCS_STATIC_ASSERT(UCP_MAX_IOV <= UINT8_MAX);
+    lane_priv->max_iov = ucs_min(uct_max_iov, UCP_MAX_IOV);
 }
 
 void ucp_proto_common_lane_priv_str(const ucp_proto_common_lane_priv_t *lpriv,
@@ -207,10 +219,8 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     if (flags & UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY) {
         /* Skip send payload check */
     } else if (flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        if ((select_param->dt_class == UCP_DATATYPE_GENERIC) ||
-            (select_param->dt_class == UCP_DATATYPE_IOV)) {
+        if ((select_param->dt_class == UCP_DATATYPE_GENERIC)) {
             /* Generic/IOV datatype cannot be used with zero-copy send */
-            /* TODO support IOV registration */
             ucs_trace("datatype %s cannot be used with zcopy",
                       ucp_datatype_class_names[select_param->dt_class]);
             goto out;
@@ -683,7 +693,7 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
     /* request should NOT be on pending queue because when we decrement the last
      * refcount the request is not on the pending queue any more
      */
-    ucp_proto_request_zcopy_cleanup(req);
+    ucp_proto_request_zcopy_cleanup(req, UCP_DT_MASK_ALL);
     ucp_request_complete_send(req, req->send.state.uct_comp.status);
 }
 

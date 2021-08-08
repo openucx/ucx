@@ -63,6 +63,8 @@ public:
     }
 
 protected:
+    void test_iov(const size_t *iov_sizes, size_t iov_count);
+
     static void recv_callback_release_req(void *request, ucs_status_t status,
                                           ucp_tag_recv_info_t *info)
     {
@@ -139,6 +141,71 @@ UCS_TEST_P(test_ucp_tag_match, send_recv_exp_medium) {
     EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
     EXPECT_EQ(sendbuf, recvbuf);
     request_free(my_recv_req);
+}
+
+void test_ucp_tag_match::test_iov(const size_t *iov_sizes, size_t iov_count)
+{
+    std::stringstream ss;
+    for (size_t i = 0; i < iov_count; ++i) {
+        ss << iov_sizes[i] << " ";
+    }
+    UCS_TEST_MESSAGE << "{ " << ss.str() << "}";
+
+    std::vector<std::string> sendbufs(iov_count);
+    std::vector<std::string> recvbufs(iov_count);
+
+    std::string send_flat_data;
+    ucp_dt_iov_t send_iov[iov_count], recv_iov[iov_count];
+    for (size_t i = 0; i < iov_count; ++i) {
+        sendbufs[i].resize(iov_sizes[i]);
+        ucs::fill_random(sendbufs[i]);
+        send_iov[i].buffer = &sendbufs[i][0];
+        send_iov[i].length = sendbufs[i].size();
+        send_flat_data    += sendbufs[i];
+
+        recvbufs[i].resize(iov_sizes[iov_count - i - 1], 'x');
+        recv_iov[i].buffer = &recvbufs[i][0];
+        recv_iov[i].length = recvbufs[i].size();
+    }
+
+    request *my_recv_req = recv_nb(recv_iov, iov_count, UCP_DATATYPE_IOV,
+                                   0x1337, 0xffff);
+    ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));
+
+    send_b(send_iov, iov_count, UCP_DATATYPE_IOV, 0x111337);
+    wait(my_recv_req);
+
+    EXPECT_EQ(send_flat_data.size(), my_recv_req->info.length);
+    EXPECT_EQ((ucp_tag_t)0x111337, my_recv_req->info.sender_tag);
+    request_free(my_recv_req);
+
+    /* Compare data */
+    std::string recv_flat_data;
+    for (size_t i = 0; i < iov_count; ++i) {
+        recv_flat_data += recvbufs[i];
+    }
+    EXPECT_EQ(send_flat_data, recv_flat_data);
+}
+
+UCS_TEST_P(test_ucp_tag_match, send_recv_exp_iov, "RNDV_THRESH=inf")
+{
+    test_iov(NULL, 0);
+
+    static const size_t iov_sizes0[] = {0};
+    test_iov(iov_sizes0, ucs_static_array_size(iov_sizes0));
+
+    static const size_t iov_sizes1[] = {1000, 3000, 10000};
+    test_iov(iov_sizes1, ucs_static_array_size(iov_sizes1));
+
+    static const size_t iov_sizes2[] = {1000, 0, 10000, 0};
+    test_iov(iov_sizes2, ucs_static_array_size(iov_sizes2));
+
+    static const size_t iov_sizes3[] = {0, 3000, 0, 10000, 0, 0, 0};
+    test_iov(iov_sizes3, ucs_static_array_size(iov_sizes3));
+
+    static const size_t iov_sizes4[] = {32, 16, 18, 15, 0, 0, 1, 78, 54, 198,
+                                        234354, 1, 10, 100000, 0, 6};
+    test_iov(iov_sizes4, ucs_static_array_size(iov_sizes4));
 }
 
 UCS_TEST_P(test_ucp_tag_match, send2_nb_recv_exp_medium) {
