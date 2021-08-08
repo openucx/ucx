@@ -201,6 +201,16 @@ UCS_TEST_F(test_string_buffer, append_hex) {
     EXPECT_EQ(std::string("deadbeef:badc0fee"), ucs_string_buffer_cstr(&strb));
 }
 
+UCS_TEST_F(test_string_buffer, append_iovec) {
+    static const struct iovec iov[3] = {{NULL, 0},
+                                        {(void*)0x1234, 100},
+                                        {(void*)0x4567, 200}};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_append_iovec(&strb, iov, ucs_static_array_size(iov));
+    EXPECT_EQ(std::string("(nil),0|0x1234,100|0x4567,200"),
+              ucs_string_buffer_cstr(&strb));
+}
+
 UCS_TEST_F(test_string_buffer, flags) {
     static const char *flag_names[] = {"zero", "one", "two", "three", "four"};
     UCS_STRING_BUFFER_ONSTACK(strb, 128);

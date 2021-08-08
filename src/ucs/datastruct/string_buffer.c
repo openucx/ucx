@@ -125,6 +125,18 @@ void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
     ucs_string_buffer_rtrim(strb, ",|");
 }
 
+void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
+                                    const struct iovec *iov, size_t iovcnt)
+{
+    size_t iov_index;
+
+    for (iov_index = 0; iov_index < iovcnt; ++iov_index) {
+        ucs_string_buffer_appendf(strb, "%p,%zu|", iov[iov_index].iov_base,
+                                  iov[iov_index].iov_len);
+    }
+    ucs_string_buffer_rtrim(strb, "|");
+}
+
 void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
 {
     char *ptr = ucs_array_end(&strb->str);
