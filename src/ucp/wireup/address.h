@@ -188,4 +188,14 @@ ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
                                 ucp_unpacked_address_t *unpacked_address);
 
 
+/**
+ * Unpack worker unique id from the given address.
+ *
+ * @param [in] address Worker address.
+ *
+ * @return Worker unique id.
+  */
+uint64_t ucp_address_get_uuid(const void *address);
+
+
 #endif

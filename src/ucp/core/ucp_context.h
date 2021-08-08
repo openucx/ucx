@@ -363,6 +363,11 @@ typedef struct ucp_tl_iface_atomic_flags {
     UCS_PARAM_VALUE(UCP_PARAM_FIELD, _params, _name, _flag, _default)
 
 
+#define UCP_ATTR_VALUE(_obj, _attrs, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCS_PP_TOKENPASTE3(UCP_, _obj, _ATTR_FIELD), _attrs, \
+                    _name, _flag, _default)
+
+
 #define ucp_assert_memtype(_context, _buffer, _length, _mem_type) \
     ucs_assert(ucp_memory_type_detect(_context, _buffer, _length) == (_mem_type))
 

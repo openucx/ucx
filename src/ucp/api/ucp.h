@@ -448,6 +448,19 @@ enum ucp_worker_attr_field {
 
 /**
  * @ingroup UCP_WORKER
+ * @brief UCP worker address attributes field mask.
+ *
+ * The enumeration allows specifying which fields in
+ * @ref ucp_worker_address_attr_t are present. It is used to enable backward
+ * compatibility support.
+ */
+enum ucp_worker_address_attr_field {
+    UCP_WORKER_ADDRESS_ATTR_FIELD_UID = UCS_BIT(0) /**< Unique id of the worker */
+};
+
+
+/**
+ * @ingroup UCP_WORKER
  * @brief UCP listener attributes field mask.
  *
  * The enumeration allows specifying which fields in @ref ucp_listener_attr_t are
@@ -1276,6 +1289,28 @@ typedef struct ucp_worker_params {
 
 
 /**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker address attributes.
+ *
+ * The structure defines the attributes of the particular worker address.
+ */
+typedef struct ucp_worker_address_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref ucp_worker_address_attr_field.
+     * Fields not specified in this mask will be ignored.
+     * Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t              field_mask;
+
+    /**
+     * Unique id of the worker this address belongs to.
+     */
+    uint64_t              worker_uid;
+} ucp_worker_address_attr_t;
+
+
+/**
  * @ingroup UCP_ENDPOINT
  * @brief UCP endpoint performance evaluation request attributes.
  *
@@ -2089,6 +2124,22 @@ ucs_status_t ucp_worker_get_address(ucp_worker_h worker,
  * errors when worker != address
  */
 void ucp_worker_release_address(ucp_worker_h worker, ucp_address_t *address);
+
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief Get attributes of the particular worker address.
+ *
+ * This routine fetches information about the worker address. The address can be
+ * either of local or remote worker.
+ *
+ * @param [in]  address    Worker address to query.
+ * @param [out] attr       Filled with attributes of the worker address.
+ *
+ * @return Error code as defined by @ref ucs_status_t.
+ */
+ucs_status_t ucp_worker_address_query(ucp_address_t *address,
+                                      ucp_worker_address_attr_t *attr);
 
 
 /**
