@@ -206,9 +206,10 @@ static ucm_cuda_func_t ucm_cuda_runtime_funcs[] = {
     {{NULL}, NULL}
 };
 
-static ucm_mmap_hook_mode_t ucm_cuda_hook_mode()
+static int ucm_cuda_allow_hook_mode(ucm_mmap_hook_mode_t mode)
 {
-    return ucm_get_hook_mode(ucm_global_opts.cuda_hook_mode);
+    return (ucm_global_opts.cuda_hook_modes & UCS_BIT(mode)) &&
+           (ucm_get_hook_mode(mode) == mode);
 }
 
 static ucs_status_t
@@ -231,7 +232,7 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
 
         status = UCS_ERR_UNSUPPORTED;
 
-        if (ucm_cuda_hook_mode() == UCM_MMAP_HOOK_BISTRO) {
+        if (ucm_cuda_allow_hook_mode(UCM_MMAP_HOOK_BISTRO)) {
             status = ucm_bistro_patch(func_ptr, func->patch.value,
                                       func->patch.symbol, func->orig_func_ptr,
                                       NULL);
@@ -242,19 +243,24 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
                 continue;
             }
 
-            ucm_debug("failed to install bistro hook for '%s', trying reloc",
+            ucm_debug("failed to install bistro hook for '%s'",
                       func->patch.symbol);
         }
 
-        status = ucm_reloc_modify(&func->patch);
-        if (status != UCS_OK) {
-            ucm_diag("failed to install relocation table entry for '%s'",
-                     func->patch.symbol);
-            return status;
+        if (ucm_cuda_allow_hook_mode(UCM_MMAP_HOOK_RELOC)) {
+            status = ucm_reloc_modify(&func->patch);
+            if (status == UCS_OK) {
+                ++num_reloc;
+                ucm_trace("installed reloc hook on '%s'", func->patch.symbol);
+                continue;
+            }
+
+            ucm_debug("failed to install relocation table hook for '%s'",
+                      func->patch.symbol);
         }
 
-        ++num_reloc;
-        ucm_trace("installed reloc hook on '%s'", func->patch.symbol);
+        ucm_diag("failed to install hook for '%s'", func->patch.symbol);
+        return status;
     }
 
     *used_reloc = num_reloc > 0;
@@ -274,7 +280,7 @@ static ucs_status_t ucm_cudamem_install(int events)
         goto out;
     }
 
-    if (ucm_cuda_hook_mode() == UCM_MMAP_HOOK_NONE) {
+    if (ucm_global_opts.cuda_hook_modes == 0) {
         ucm_info("cuda memory hooks are disabled by configuration");
         status = UCS_ERR_UNSUPPORTED;
         goto out;

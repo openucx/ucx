@@ -1044,6 +1044,10 @@ test_malloc_hook() {
 			${cuda_dynamic_exe} -d
 			[ -x ${cuda_static_exe} ] && ${cuda_static_exe} -d
 
+			# Test hooks in gtest
+			UCX_MEM_LOG_LEVEL=diag \
+				./test/gtest/gtest --gtest_filter='cuda_hooks.*'
+
 			unset UCX_MEM_CUDA_HOOK_MODE
 		done
 	fi
