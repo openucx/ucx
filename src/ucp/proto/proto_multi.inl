@@ -48,16 +48,23 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
                             const ucp_proto_multi_lane_priv_t *lpriv,
                             size_t hdr_size)
 {
-    size_t scaled_length =
-            ucp_proto_multi_scaled_length(lpriv, req->send.state.dt_iter.length);
-    size_t max_payload   = ucs_min(scaled_length, lpriv->max_frag - hdr_size);
+    size_t length   = req->send.state.dt_iter.length;
+    size_t max_frag = lpriv->max_frag - hdr_size;
+    size_t max_payload;
 
+    /* Do not split very small sends to chunks, it's not worth it, and
+       generic datatype may not be able to pack to a smaller buffer */
+    if (length < UCP_MIN_BCOPY) {
+        return max_frag;
+    }
+
+    max_payload = ucs_min(ucp_proto_multi_scaled_length(lpriv, length),
+                          max_frag);
     ucs_assertv(max_payload > 0,
-                "length=%zu weight=%.2f scaled_length=%zu max_frag=%zu "
-                "hdr_size=%zu",
+                "length=%zu weight=%zu%% lpriv->max_frag=%zu hdr_size=%zu",
                 req->send.state.dt_iter.length,
-                lpriv->weight / (double)UCS_BIT(UCP_PROTO_MULTI_WEIGHT_SHIFT),
-                scaled_length, lpriv->max_frag, hdr_size);
+                ucp_proto_multi_scaled_length(lpriv, 100), lpriv->max_frag,
+                hdr_size);
     return max_payload;
 }
 
@@ -127,7 +134,6 @@ ucp_proto_multi_progress(ucp_request_t *req,
     ucs_assertv(req->send.multi_lane_idx < mpriv->num_lanes,
                 "lane_idx=%d num_lanes=%d", req->send.multi_lane_idx,
                 mpriv->num_lanes);
-    ucs_assert(!ucp_datatype_iter_is_end(&req->send.state.dt_iter));
 
     lane_idx = req->send.multi_lane_idx;
     lpriv    = &mpriv->lanes[lane_idx];

@@ -201,9 +201,10 @@ ucp_proto_eager_zcopy_single_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_zcopy_single_progress(req, UCT_MD_MEM_ACCESS_LOCAL_READ,
-                                           ucp_proto_eager_zcopy_send_func,
-                                           "am_zcopy_only");
+    return ucp_proto_zcopy_single_progress(
+            req, UCT_MD_MEM_ACCESS_LOCAL_READ, ucp_proto_eager_zcopy_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {

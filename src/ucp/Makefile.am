@@ -61,6 +61,7 @@ noinst_HEADERS = \
 	rndv/proto_rndv.inl \
 	rndv/rndv.h \
 	tag/eager.h \
+	tag/proto_eager.inl \
 	tag/tag_rndv.h \
 	tag/tag_match.h \
 	tag/tag_match.inl \

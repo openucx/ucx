@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "eager.h"
+#include "proto_eager.inl"
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto_multi.inl>
@@ -199,18 +199,6 @@ ucp_proto_eager_sync_bcopy_multi_send_func(
             req, lpriv, next_iter, UCP_AM_ID_EAGER_SYNC_FIRST,
             ucp_eager_sync_bcopy_pack_first,
             sizeof(ucp_eager_sync_first_hdr_t));
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_eager_sync_bcopy_send_completed(ucp_request_t *req)
-{
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
-
-    req->flags |= UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED;
-    if (req->flags & UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-    return UCS_OK;
 }
 
 void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,

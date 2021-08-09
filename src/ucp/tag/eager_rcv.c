@@ -77,6 +77,7 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
     ucp_eager_hdr_t *eager_hdr = data;
     ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_recv_desc_t *rdesc;
+    const void *payload;
     ucp_request_t *req;
     ucs_status_t status;
     ucp_tag_t recv_tag;
@@ -96,22 +97,18 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
             ucp_tag_eager_sync_send_ack(worker, data, flags);
         }
 
+        payload = UCS_PTR_BYTE_OFFSET(data, hdr_len);
         if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
             req->recv.tag.info.length = recv_len;
-            status = ucp_request_recv_data_unpack(req,
-                                                  UCS_PTR_BYTE_OFFSET(data, hdr_len),
-                                                  recv_len, 0, 1);
+            status = ucp_request_recv_data_unpack(req, payload, recv_len, 0, 1);
             ucp_request_complete_tag_recv(req, status);
         } else {
             eagerf_hdr                = data;
             req->recv.tag.info.length =
             req->recv.remaining       = eagerf_hdr->total_len;
 
-            status = ucp_tag_request_process_recv_data(req,
-                                                       UCS_PTR_BYTE_OFFSET(data, hdr_len),
-                                                       recv_len, 0, 0, flags);
-            ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS));
-
+            ucp_tag_request_process_recv_data(req, payload, recv_len, 0, 0,
+                                              flags);
             ucp_tag_frag_list_process_queue(&worker->tm, req, eagerf_hdr->msg_id
                                             UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP));
         }

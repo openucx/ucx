@@ -8,8 +8,8 @@
 #  include "config.h"
 #endif
 
-#include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/tag/proto_eager.inl>
 #include <ucp/proto/proto_single.inl>
 
 
@@ -151,7 +151,7 @@ ucp_proto_eager_tag_offload_bcopy_progress(uct_pending_req_t *self)
     status = ucp_proto_eager_tag_offload_bcopy_common(req, spriv, 0ul);
 
     return ucp_proto_single_status_handle(
-            req, ucp_proto_request_bcopy_complete_success, spriv->super.lane,
+            req, 0, ucp_proto_request_bcopy_complete_success, spriv->super.lane,
             status);
 }
 
@@ -171,6 +171,13 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_eager_sync_tag_offload_bcopy_posted(ucp_request_t *req)
+{
+    ucp_tag_offload_sync_posted(req);
+    return ucp_proto_eager_sync_bcopy_send_completed(req);
+}
+
 static ucs_status_t
 ucp_proto_eager_sync_tag_offload_bcopy_progress(uct_pending_req_t *self)
 {
@@ -180,13 +187,9 @@ ucp_proto_eager_sync_tag_offload_bcopy_progress(uct_pending_req_t *self)
 
     status = ucp_proto_eager_tag_offload_bcopy_common(
             req, spriv, ucp_send_request_get_ep_remote_id(req));
-    if (ucs_likely(status == UCS_OK)) {
-        ucp_tag_offload_sync_posted(req->send.ep->worker, req);
-    }
-
     return ucp_proto_single_status_handle(
-            req, ucp_proto_request_bcopy_complete_success, spriv->super.lane,
-            status);
+            req, 0, ucp_proto_eager_sync_tag_offload_bcopy_posted,
+            spriv->super.lane, status);
 }
 
 static ucs_status_t ucp_proto_eager_sync_tag_offload_bcopy_init(
@@ -261,9 +264,11 @@ ucp_proto_eager_tag_offload_zcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_zcopy_single_progress(req, UCT_MD_MEM_ACCESS_LOCAL_READ,
-                                           ucp_proto_tag_offload_zcopy_send_func,
-                                           "tag_eager_zcopy");
+    return ucp_proto_zcopy_single_progress(
+            req, UCT_MD_MEM_ACCESS_LOCAL_READ,
+            ucp_proto_tag_offload_zcopy_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {
@@ -293,6 +298,23 @@ ucp_proto_tag_offload_zcopy_sync_send_func(ucp_request_t *req,
                                   1, 0, &req->send.state.uct_comp);
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_eager_sync_tag_offload_zcopy_send_completion(uct_completion_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_proto_request_zcopy_cleanup(req, UCS_BIT(UCP_DATATYPE_CONTIG));
+    ucp_proto_eager_sync_send_completed_common(req);
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_eager_sync_tag_offload_zcopy_posted(ucp_request_t *req)
+{
+    ucp_tag_offload_sync_posted(req);
+    return ucp_request_invoke_uct_completion_success(req);
+}
+
 static ucs_status_t
 ucp_proto_eager_sync_tag_offload_zcopy_progress(uct_pending_req_t *self)
 {
@@ -300,7 +322,9 @@ ucp_proto_eager_sync_tag_offload_zcopy_progress(uct_pending_req_t *self)
 
     return ucp_proto_zcopy_single_progress(
             req, UCT_MD_MEM_ACCESS_LOCAL_READ,
-            ucp_proto_tag_offload_zcopy_sync_send_func, "tag_eager_sync_zcopy");
+            ucp_proto_tag_offload_zcopy_sync_send_func,
+            ucp_proto_eager_sync_tag_offload_zcopy_posted,
+            ucp_proto_eager_sync_tag_offload_zcopy_send_completion);
 }
 
 static ucp_proto_t ucp_eager_sync_zcopy_single_proto = {

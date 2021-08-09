@@ -262,7 +262,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
             ucp_request_send_check_status(status, ret, goto out);
         }
     } else {
-        datatype = ucp_dt_make_contig(1);
+        datatype      = ucp_dt_make_contig(1);
+        contig_length = count;
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {

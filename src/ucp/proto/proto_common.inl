@@ -46,7 +46,7 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
     ucp_ep_h ep = req->send.ep;
     ucs_status_t status;
 
-    ucp_trace_req(req, "ucp_proto_zcopy_request_init for %s",
+    ucp_trace_req(req, "ucp_proto_request_zcopy_init for %s",
                   req->send.proto_config->proto->name);
 
     ucp_proto_completion_init(&req->send.state.uct_comp, comp_func);
@@ -153,7 +153,8 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     req->send.ep = ep;
 
     ucp_datatype_iter_init(worker->context, (void*)buffer, count, datatype,
-                           contig_length, &req->send.state.dt_iter, &sg_count);
+                           contig_length, 1, &req->send.state.dt_iter,
+                           &sg_count);
 
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
                                 req->send.state.dt_iter.dt_class,

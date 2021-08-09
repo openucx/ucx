@@ -24,7 +24,10 @@ ucp_datatype_iter_is_class(const ucp_datatype_iter_t *dt_iter,
      * We still expect that the actual dt_iter->dt_class will be part of dt_mask,
      * and check for it if assertions are enabled.
      */
-    ucs_assert(UCS_BIT(dt_iter->dt_class) & dt_mask);
+    ucs_assertv(UCS_BIT(dt_iter->dt_class) & dt_mask,
+                "dt_iter %p type %d (%s) but expected mask is 0x%x", dt_iter,
+                dt_iter->dt_class, ucp_datatype_class_names[dt_iter->dt_class],
+                dt_mask);
     return (dt_mask & UCS_BIT(dt_class)) && (dt_iter->dt_class == dt_class);
 }
 
@@ -40,12 +43,12 @@ ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer, size_t length
 
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
-                           ucp_datatype_t datatype, ucp_datatype_iter_t *dt_iter,
-                           uint8_t *sg_count)
+                           ucp_datatype_t datatype, size_t length,
+                           ucp_datatype_iter_t *dt_iter, uint8_t *sg_count)
 {
     const ucp_dt_iov_t *iov = (const ucp_dt_iov_t*)buffer;
 
-    dt_iter->length              = ucp_dt_iov_length(iov, count);
+    dt_iter->length              = length;
     dt_iter->type.iov.iov        = iov;
 #if UCS_ENABLE_ASSERT
     dt_iter->type.iov.iov_count  = count;
@@ -54,7 +57,7 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
     dt_iter->type.iov.iov_offset = 0;
 
     if (ucs_likely(count > 0)) {
-        *sg_count         = ucs_min(count, (size_t)UINT8_MAX);
+        *sg_count = ucs_min(count, (size_t)UINT8_MAX);
         ucp_memory_detect(context, iov->buffer, iov->length, &dt_iter->mem_info);
     } else {
         *sg_count = 1;
@@ -63,14 +66,19 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer, size_t count,
-                               ucp_datatype_t datatype, ucp_datatype_iter_t *dt_iter)
+ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer,
+                               size_t count, ucp_datatype_t datatype,
+                               int is_pack, ucp_datatype_iter_t *dt_iter)
 {
     ucp_dt_generic_t *dt_gen = ucp_dt_to_generic(datatype);
     void *state;
 
-    state                        = dt_gen->ops.start_pack(dt_gen->context,
-                                                          buffer, count);
+    if (is_pack) {
+        state = dt_gen->ops.start_pack(dt_gen->context, buffer, count);
+    } else {
+        state = dt_gen->ops.start_unpack(dt_gen->context, buffer, count);
+    }
+
     dt_iter->length              = dt_gen->ops.packed_size(state);
     dt_iter->type.generic.dt_gen = dt_gen;
     dt_iter->type.generic.state  = state;
@@ -84,8 +92,11 @@ ucp_datatype_generic_iter_init(ucp_context_h context, void *buffer, size_t count
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                        ucp_datatype_t datatype, size_t contig_length,
-                       ucp_datatype_iter_t *dt_iter, uint8_t *sg_count)
+                       int is_pack, ucp_datatype_iter_t *dt_iter,
+                       uint8_t *sg_count)
 {
+    size_t iov_length;
+
     dt_iter->offset   = 0;
     dt_iter->dt_class = ucp_datatype_class(datatype);
 
@@ -94,12 +105,54 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
                                       dt_iter);
         *sg_count = 1;
     } else if (dt_iter->dt_class == UCP_DATATYPE_IOV) {
-        ucp_datatype_iov_iter_init(context, buffer, count, datatype, dt_iter,
-                                   sg_count);
+        iov_length = ucp_dt_iov_length((const ucp_dt_iov_t*)buffer, count);
+        ucp_datatype_iov_iter_init(context, buffer, count, datatype, iov_length,
+                                   dt_iter, sg_count);
     } else {
         ucs_assert(dt_iter->dt_class == UCP_DATATYPE_GENERIC);
-        ucp_datatype_generic_iter_init(context, buffer, count, datatype, dt_iter);
+        ucp_datatype_generic_iter_init(context, buffer, count, datatype,
+                                       is_pack, dt_iter);
+        *sg_count = 0;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_init_empty(ucp_datatype_iter_t *dt_iter, uint8_t *sg_count)
+{
+    dt_iter->dt_class               = UCP_DATATYPE_CONTIG;
+    dt_iter->length                 = 0;
+    dt_iter->offset                 = 0;
+    dt_iter->type.contig.buffer     = NULL;
+    dt_iter->type.contig.reg.md_map = 0;
+    *sg_count                       = 1;
+    ucp_memory_info_set_host(&dt_iter->mem_info);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_init_from_dt_state(ucp_context_h context, void *buffer,
+                                     size_t length, ucp_datatype_t datatype,
+                                     const ucp_dt_state_t *dt_state,
+                                     ucp_datatype_iter_t *dt_iter,
+                                     uint8_t *sg_count)
+{
+    dt_iter->offset   = 0;
+    dt_iter->dt_class = ucp_datatype_class(datatype);
+
+    if (ucs_likely(dt_iter->dt_class == UCP_DATATYPE_CONTIG)) {
+        ucp_datatype_contig_iter_init(context, buffer, length, datatype,
+                                      dt_iter);
         *sg_count = 1;
+    } else if (dt_iter->dt_class == UCP_DATATYPE_IOV) {
+        ucp_datatype_iov_iter_init(context, buffer, dt_state->dt.iov.iovcnt,
+                                   datatype, length, dt_iter, sg_count);
+    } else {
+        ucs_assert(dt_iter->dt_class == UCP_DATATYPE_GENERIC);
+        /* Transfer ownership from dt_state to dt_iter */
+        dt_iter->length              = length;
+        dt_iter->type.generic.dt_gen = ucp_dt_to_generic(datatype);
+        dt_iter->type.generic.state  = dt_state->dt.generic.state;
+        ucp_memory_info_set_host(&dt_iter->mem_info);
+        *sg_count = 0;
     }
 }
 
