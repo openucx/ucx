@@ -173,6 +173,7 @@ ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.max_zcopy),
         .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,

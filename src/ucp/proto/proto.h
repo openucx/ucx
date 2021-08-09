@@ -134,6 +134,8 @@ typedef struct {
     ucp_worker_h                   worker;           /* Worker to initialize on */
     const ucp_proto_select_param_t *select_param;    /* Operation parameters */
     ucp_worker_cfg_index_t         ep_cfg_index;     /* Endpoint configuration index */
+    ucp_worker_cfg_index_t         rkey_cfg_index;   /* Remote key configuration index,
+                                                        may be UCP_WORKER_CFG_INDEX_NULL */
     const ucp_ep_config_key_t      *ep_config_key;   /* Endpoint configuration */
     const ucp_rkey_config_key_t    *rkey_config_key; /* Remote key configuration,
                                                         may be NULL */

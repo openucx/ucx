@@ -43,9 +43,9 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         const ucp_proto_init_params_t *init_params)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucp_proto_single_init_params_t params = {
+    ucp_proto_single_init_params_t params        = {
         .super.super         = *init_params,
-        .super.latency       = -150e-9, /* no extra memory access to fetch data */
+        .super.latency       = -150e-9, /* no extra mem access to fetch data */
         .super.overhead      = 0,
         .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
@@ -55,7 +55,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_short),
         .super.hdr_size      = sizeof(ucp_tag_t),
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG |
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_SHORT
@@ -122,7 +123,8 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_bcopy),
         .super.hdr_size      = sizeof(ucp_tag_t),
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG |
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_BCOPY
@@ -217,9 +219,10 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.tag.eager.max_zcopy),
         .super.hdr_size      = sizeof(ucp_tag_t),
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .lane_type           = UCP_LANE_TYPE_TAG,
         .tl_cap_flags        = UCT_IFACE_FLAG_TAG_EAGER_ZCOPY
     };

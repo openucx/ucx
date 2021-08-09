@@ -118,9 +118,10 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .lane_type           = UCP_LANE_TYPE_AMO,
         .tl_cap_flags        = 0
     };

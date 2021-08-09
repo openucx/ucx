@@ -80,8 +80,10 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
-        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.get.max_bcopy),
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
+                                            cap.get.max_bcopy),
         .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
                                UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
@@ -150,9 +152,12 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 30,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
-        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.get.min_zcopy),
-        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.get.max_zcopy),
+        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
+                                            cap.get.min_zcopy),
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
+                                            cap.get.max_zcopy),
         .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |

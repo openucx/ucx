@@ -1780,6 +1780,8 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
         return status;
     }
 
+    ++worker->ep_config_count;
+
     if (context->config.ext.proto_enable) {
         if (context->config.features & UCP_FEATURE_TAG) {
             /* Set threshold for short send */
@@ -1811,7 +1813,6 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                                                  tl_info, sizeof(tl_info)));
     }
 
-    ++worker->ep_config_count;
 
 out:
     *cfg_index_p = ep_cfg_index;
@@ -1862,11 +1863,26 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
                                         sizeof(buf)));
     }
 
+    /* Save key-to-index lookup */
+    khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
+                    &khret);
+    if (khret == UCS_KH_PUT_FAILED) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    /* We should not get into this function if key already exists */
+    ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
+    kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
+
     /* Initialize protocol selection */
     status = ucp_proto_select_init(&rkey_config->proto_select);
     if (status != UCS_OK) {
-        goto err;
+        goto err_kh_del;
     }
+
+    ++worker->rkey_config_count;
+    *cfg_index_p = rkey_cfg_index;
 
     /* Set threshold for short put */
     if (worker->context->config.features & UCP_FEATURE_RMA) {
@@ -1879,24 +1895,10 @@ ucp_worker_add_rkey_config(ucp_worker_h worker,
         ucp_proto_select_short_disable(&rkey_config->put_short);
     }
 
-    /* Save key-to-index lookup */
-    khiter = kh_put(ucp_worker_rkey_config, &worker->rkey_config_hash, *key,
-                    &khret);
-    if (khret == UCS_KH_PUT_FAILED) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err_proto_cleanup;
-    }
-
-    /* We should not get into this function if key already exists */
-    ucs_assert_always(khret != UCS_KH_PUT_KEY_PRESENT);
-    kh_value(&worker->rkey_config_hash, khiter) = rkey_cfg_index;
-
-    ++worker->rkey_config_count;
-    *cfg_index_p = rkey_cfg_index;
     return UCS_OK;
 
-err_proto_cleanup:
-    ucp_proto_select_cleanup(&rkey_config->proto_select);
+err_kh_del:
+    kh_del(ucp_worker_rkey_config, &worker->rkey_config_hash, khiter);
 err:
     return status;
 }

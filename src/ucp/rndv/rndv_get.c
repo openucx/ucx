@@ -25,6 +25,7 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
         .super.cfg_priority  = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
