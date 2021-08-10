@@ -7,10 +7,19 @@
 ##
 #
 
-## 1.11.1 (TBD)
+## 1.11.1-rc1 (August 10, 2021)
 ### Features:
 #### UCS
-* Added API to Read boot ID value or use machine_guid
+* Added API to read boot ID value or use machine_guid
+
+### Bugfixes:
+* Fixes in Cuda memory hooks
+* Fixes in setting traffic class for DCT RoCE transport
+* Fixes in TCP endpoint flush
+* Fixes in TCP pending operations progress
+* Fixes in release pipelines
+* Fixes in error handling flow
+
 
 ## 1.11.0 (July 26, 2021)
 ### Features:
