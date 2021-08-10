@@ -104,7 +104,8 @@ void UcxContext::UcxAcceptCallback::operator()(ucs_status_t status)
 {
     if (status == UCS_OK) {
         _context.dispatch_connection_accepted(&_connection);
-    } else {
+    } else if ((status != UCS_ERR_CANCELED) ||
+               !_connection.is_disconnecting()) {
         _connection.disconnect(new UcxDisconnectCallback());
     }
 
@@ -130,8 +131,12 @@ UcxContext::UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
 
 UcxContext::~UcxContext()
 {
-    destroy_connections();
-    destroy_listener();
+    assert(_conns.empty());
+    assert(_conns_in_progress.empty());
+    assert(_conn_requests.empty());
+    assert(_disconnecting_conns.empty());
+    assert(_failed_conns.empty());
+
     destroy_worker();
     if (_context) {
         ucp_cleanup(_context);
@@ -403,7 +408,6 @@ void UcxContext::progress_timed_out_conns()
     while (!_conns_in_progress.empty() &&
            (get_time() > _conns_in_progress.begin()->first)) {
         UcxConnection *conn = _conns_in_progress.begin()->second;
-        _conns_in_progress.erase(_conns_in_progress.begin());
         conn->handle_connection_error(UCS_ERR_TIMED_OUT);
     }
 }
@@ -543,24 +547,36 @@ void UcxContext::remove_connection(UcxConnection *conn)
     }
 }
 
-void UcxContext::remove_connection_inprogress(UcxConnection *conn)
+UcxContext::timeout_conn_t::iterator
+UcxContext::find_connection_inprogress(UcxConnection *conn)
 {
     // we expect to remove connections from the list close to the same order
     // as created, so this linear search should be pretty fast
-    timeout_conn_t::iterator i;
+    UcxContext::timeout_conn_t::iterator i;
+
     for (i = _conns_in_progress.begin(); i != _conns_in_progress.end(); ++i) {
         if (i->second == conn) {
-            _conns_in_progress.erase(i);
-            return;
+            return i;
         }
+    }
+
+    return _conns_in_progress.end();
+}
+
+void UcxContext::remove_connection_inprogress(UcxConnection *conn)
+{
+    timeout_conn_t::iterator i = find_connection_inprogress(conn);
+
+    if (i != _conns_in_progress.end()) {
+        _conns_in_progress.erase(i);
     }
 }
 
 void UcxContext::move_connection_to_disconnecting(UcxConnection *conn)
 {
-    remove_connection(conn);
-    assert(std::find(_disconnecting_conns.begin(), _disconnecting_conns.end(),
-                     conn) == _disconnecting_conns.end());
+    assert(_conns.find(conn->id()) == _conns.end());
+    assert(find_connection_inprogress(conn) == _conns_in_progress.end());
+    assert(!is_in_disconnecting_list(conn));
     _disconnecting_conns.push_back(conn);
 }
 
@@ -575,32 +591,41 @@ void UcxContext::handle_connection_error(UcxConnection *conn)
     _failed_conns.push_back(conn);
 }
 
+void UcxContext::wait_disconnected_connections()
+{
+    while (!_disconnecting_conns.empty()) {
+        ucp_worker_progress(_worker);
+        progress_disconnected_connections();
+    }
+}
+
 void UcxContext::destroy_connections()
 {
-    while (!_conn_requests.empty()) {
-        ucp_conn_request_h conn_req = _conn_requests.front().conn_request;
-        UCX_LOG << "reject connection request " << conn_req;
-        ucp_listener_reject(_listener, conn_req);
-        _conn_requests.pop_front();
+    // wait for all failed connections being disconnected, call progress to
+    // discover new failed connections if any
+    while (!_failed_conns.empty()) {
+        progress_failed_connections();
+        ucp_worker_progress(_worker);
     }
 
+    // remove all connections which are in-progress, this is optimization to
+    // avoid checking existence of a connection in _conns_in_progress vector
+    // for each connection passed to disconnect() method
     while (!_conns_in_progress.empty()) {
         UcxConnection &conn = *_conns_in_progress.begin()->second;
         _conns_in_progress.erase(_conns_in_progress.begin());
         conn.disconnect(new UcxDisconnectCallback());
     }
 
-    UCX_LOG << "destroy_connections";
+    // disconnect all connections which are not in-progress
+    UCX_LOG << "destroy connections";
     while (!_conns.empty()) {
         UcxConnection &conn = *_conns.begin()->second;
-        _conns.erase(_conns.begin());
         conn.disconnect(new UcxDisconnectCallback());
     }
 
-    while (!_disconnecting_conns.empty()) {
-        ucp_worker_progress(_worker);
-        progress_disconnected_connections();
-    }
+    // wait for all connections being completely disconnected
+    wait_disconnected_connections();
 }
 
 double UcxContext::get_time() {
@@ -611,9 +636,19 @@ double UcxContext::get_time() {
 
 void UcxContext::destroy_listener()
 {
-    if (_listener) {
-        ucp_listener_destroy(_listener);
+    if (_listener == NULL) {
+        return;
     }
+
+    // reject all connection requests saved _conn_requests deque
+    while (!_conn_requests.empty()) {
+        ucp_conn_request_h conn_req = _conn_requests.front().conn_request;
+        UCX_LOG << "reject connection request " << conn_req;
+        ucp_listener_reject(_listener, conn_req);
+        _conn_requests.pop_front();
+    }
+
+    ucp_listener_destroy(_listener);
 }
 
 void UcxContext::destroy_worker()
@@ -779,26 +814,34 @@ void UcxConnection::accept(ucp_conn_request_h conn_req, UcxCallback *callback)
 
 void UcxConnection::disconnect(UcxCallback *callback)
 {
-    /* establish cb must be destroyed earlier since it accesses
-     * the connection */
-    assert(_establish_cb == NULL);
+    UCX_CONN_LOG << "disconnect, ep is " << _ep;
+
     assert(_disconnect_cb == NULL);
-
-    UCX_CONN_LOG << "destroying, ep is " << _ep;
-    ep_close(UCP_EP_CLOSE_MODE_FORCE);
-
     _disconnect_cb = callback;
-    if (ucs_list_is_empty(&_all_requests)) {
-        _context.move_connection_to_disconnecting(this);
-    } else {
-        cancel_all();
+
+    _context.remove_connection(this);
+
+    if (!is_established()) {
+        assert(_ucx_status == UCS_INPROGRESS);
+        established(UCS_ERR_CANCELED);
     }
+
+    _context.move_connection_to_disconnecting(this);
+
+    cancel_all();
+
+    // close the EP after cancelling all outstanding operations to purge all
+    // requests scheduled on the EP which could wait for the acknowledgments
+    ep_close(UCP_EP_CLOSE_MODE_FORCE);
 }
 
 bool UcxConnection::disconnect_progress()
 {
-    assert(_ep == NULL);
     assert(_disconnect_cb != NULL);
+
+    if (!ucs_list_is_empty(&_all_requests)) {
+        return false;
+    }
 
     if (UCS_PTR_IS_PTR(_close_request)) {
         if (ucp_request_check_status(_close_request) == UCS_INPROGRESS) {
@@ -811,7 +854,6 @@ bool UcxConnection::disconnect_progress()
 
     UCX_CONN_LOG << "disconnection completed";
 
-    assert(ucs_list_is_empty(&_all_requests));
     invoke_callback(_disconnect_cb, UCS_OK);
     return true;
 }
@@ -928,7 +970,12 @@ void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
 
     if (!conn->is_established()) {
         assert(conn->_establish_cb == r->callback);
-        conn->established(status);
+
+        if (status == UCS_OK) {
+            conn->established(status);
+        } else {
+            conn->handle_connection_error(status);
+        }
     } else {
         assert(UCS_STATUS_IS_ERR(conn->ucx_status()));
     }
@@ -1008,7 +1055,10 @@ void UcxConnection::connect_tag(UcxCallback *callback)
         _context._conns_in_progress.push_back(std::make_pair(
                 UcxContext::get_time() + _context._connect_timeout, this));
     } else {
-        established(UCS_PTR_STATUS(rreq));
+        ucs_status_t status = UCS_PTR_STATUS(rreq);
+
+        assert(status != UCS_ERR_CANCELED);
+        established(status);
         if (rreq != NULL) {
             // failed to receive
             return;
@@ -1129,16 +1179,13 @@ void UcxConnection::request_completed(ucx_request *r)
         UCX_CONN_LOG << "completing " << r->what << " request " << r
                      << " with status \"" << ucs_status_string(r->status)
                      << "\" (" << r->status << ")" << " during disconnect";
-
-        if (ucs_list_is_empty(&_all_requests)) {
-            _context.move_connection_to_disconnecting(this);
-        }
+        assert(_context.is_in_disconnecting_list(this));
     }
 }
 
 void UcxConnection::handle_connection_error(ucs_status_t status)
 {
-    if (UCS_STATUS_IS_ERR(_ucx_status)) {
+    if (UCS_STATUS_IS_ERR(_ucx_status) || is_disconnecting()) {
         return;
     }
 
@@ -1162,7 +1209,7 @@ void UcxConnection::ep_close(enum ucp_ep_close_mode mode)
         return;
     }
 
-    assert(!_close_request);
+    assert(_close_request == NULL);
 
     UCX_CONN_LOG << "closing ep " << _ep << " mode " << mode_str[mode];
     _close_request = ucp_ep_close_nb(_ep, mode);

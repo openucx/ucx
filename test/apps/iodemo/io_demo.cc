@@ -940,6 +940,11 @@ public:
         P2pDemoCommon(test_opts), _callback_pool(0, "callbacks") {
     }
 
+    ~DemoServer()
+    {
+        destroy_connections();
+    }
+
     void run() {
         struct sockaddr_in listen_addr;
         memset(&listen_addr, 0, sizeof(listen_addr));
@@ -991,6 +996,8 @@ public:
                 std::cerr << e.what();
             }
         }
+
+        destroy_listener();
     }
 
     void handle_io_read_request(UcxConnection* conn, const iomsg_t *msg) {
@@ -1641,7 +1648,9 @@ public:
 
     void disconnect_server(size_t server_index, const char *reason) {
         server_info_t& server_info = _server_info[server_index];
-        bool disconnecting         = server_info.conn->is_disconnecting();
+        assert(server_info.conn != NULL);
+
+        bool disconnecting = server_info.conn->is_disconnecting();
 
         {
             UcxLog log(LOG_PREFIX);
@@ -1782,7 +1791,7 @@ public:
 
     void connect_all(bool force) {
         if (_server_index_lookup.size() == _server_info.size()) {
-            assert(_status == OK);
+            assert((_status == OK) || (_status == TERMINATE_SIGNALED));
             // All servers are connected
             return;
         }
@@ -1804,7 +1813,7 @@ public:
 
             // If retry count exceeded for at least one server, we should have
             // exited already
-            assert(_status == OK);
+            assert((_status == OK) || (_status == TERMINATE_SIGNALED));
             assert(server_info.retry_count < opts().retries);
 
             if (curr_time < (server_info.prev_connect_time +
@@ -1816,7 +1825,7 @@ public:
             connect(server_index);
             server_info.prev_connect_time = curr_time;
             assert(server_info.conn != NULL);
-            assert(_status == OK);
+            assert((_status == OK) || (_status == TERMINATE_SIGNALED));
         }
     }
 
@@ -1835,6 +1844,29 @@ public:
 
     static inline bool is_control_iter(long iter) {
         return (iter % 10) == 0;
+    }
+
+    void destroy_servers()
+    {
+        for (size_t server_index = 0; server_index < _server_info.size();
+             ++server_index) {
+            server_info_t& server_info = _server_info[server_index];
+            if (server_info.conn == NULL) {
+                continue;
+            }
+
+            disconnect_server(server_index, "End of the Client run");
+        }
+
+        if (!_server_index_lookup.empty()) {
+            LOG << "waiting for " << _server_index_lookup.size()
+                << " disconnects to complete";
+            do {
+                progress();
+            } while (!_server_index_lookup.empty());
+        }
+
+        wait_disconnected_connections();
     }
 
     status_t run() {
@@ -1941,20 +1973,7 @@ public:
                                curr_time - prev_time);
         }
 
-        for (size_t server_index = 0; server_index < _server_info.size();
-             ++server_index) {
-            disconnect_server(server_index, "End of the Client run");
-        }
-
-        if (!_server_index_lookup.empty()) {
-            LOG << "waiting for " << _server_index_lookup.size()
-                << " disconnects to complete";
-            do {
-                progress();
-            } while (!_server_index_lookup.empty());
-        }
-
-        assert(_server_index_lookup.empty());
+        destroy_servers();
 
         return _status;
     }
