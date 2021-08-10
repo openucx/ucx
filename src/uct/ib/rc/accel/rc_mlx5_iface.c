@@ -661,6 +661,12 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     uct_ib_device_t *dev;
     ucs_status_t status;
 
+    if (rc_config->super.seg_size > UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK) {
+        ucs_error("IB segment size is too big %ld, it must not exceed %d",
+                  rc_config->super.seg_size, UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK);
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     status = uct_rc_mlx5_iface_preinit(self, tl_md, rc_config, mlx5_config,
                                        params, init_attr);
     if (status != UCS_OK) {
