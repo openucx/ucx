@@ -370,19 +370,22 @@ uct_tcp_ep_zcopy_completed(uct_tcp_ep_t *ep, uct_completion_t *comp,
     }
 }
 
-static void uct_tcp_ep_purge(uct_tcp_ep_t *ep)
+static void uct_tcp_ep_purge(uct_tcp_ep_t *ep, ucs_status_t status)
 {
     uct_tcp_ep_put_completion_t *put_comp;
     uct_tcp_ep_zcopy_tx_t *ctx;
 
+    ucs_debug("tcp_ep %p: purge outstanding operations with status %s", ep,
+              ucs_status_string(status));
+
     if (ep->flags & UCT_TCP_EP_FLAG_ZCOPY_TX) {
         ctx = (uct_tcp_ep_zcopy_tx_t*)ep->tx.buf;
-        uct_tcp_ep_zcopy_completed(ep, ctx->comp, UCS_ERR_CANCELED);
+        uct_tcp_ep_zcopy_completed(ep, ctx->comp, status);
         uct_tcp_ep_tx_completed(ep, ep->tx.length - ep->tx.offset);
     }
 
     ucs_queue_for_each_extract(put_comp, &ep->put_comp_q, elem, 1) {
-        uct_invoke_completion(put_comp->comp, UCS_ERR_CANCELED);
+        uct_invoke_completion(put_comp->comp, status);
         ucs_mpool_put_inline(put_comp);
     }
 }
@@ -403,7 +406,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     }
 
     uct_tcp_ep_remove_ctx_cap(self, UCT_TCP_EP_CTX_CAPS);
-    uct_tcp_ep_purge(self);
+    uct_tcp_ep_purge(self, UCS_ERR_CANCELED);
 
     if (self->flags & UCT_TCP_EP_FLAG_FAILED) {
         /* a failed EP callback can be still scheduled on the UCT worker,
@@ -447,7 +450,7 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
         /* remove TX capability, but still will be able to receive data */
         uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_TX);
         /* purge all outstanding operations (GET/PUT Zcopy, flush operations) */
-        uct_tcp_ep_purge(ep);
+        uct_tcp_ep_purge(ep, UCS_ERR_CANCELED);
         uct_tcp_cm_insert_ep(iface, ep);
     } else {
         uct_tcp_ep_destroy_internal(tl_ep);
@@ -947,7 +950,6 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep, ucs_status_t status
 {
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
-    uct_tcp_ep_zcopy_tx_t *ctx;
 
     ucs_debug("tcp_ep %p: remote disconnected", ep);
 
@@ -957,12 +959,7 @@ static void uct_tcp_ep_handle_disconnected(uct_tcp_ep_t *ep, ucs_status_t status
             ep->flags &= ~UCT_TCP_EP_FLAG_PUT_RX_SENDING_ACK;
         }
 
-        if (ep->flags & UCT_TCP_EP_FLAG_ZCOPY_TX) {
-            /* There is ongoing AM/PUT Zcopy operation, need to notify
-             * the user about the error */
-            ctx = (uct_tcp_ep_zcopy_tx_t*)ep->tx.buf;
-            uct_tcp_ep_zcopy_completed(ep, ctx->comp, status);
-        }
+        uct_tcp_ep_purge(ep, status);
 
         if (ep->flags & UCT_TCP_EP_FLAG_PUT_TX_WAITING_ACK) {
             /* if the EP is waiting for the acknowledgment of the started

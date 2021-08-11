@@ -1075,13 +1075,14 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_stream_ep_cleanup(ucp_ep);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
-        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-            /* Promote close operation to CANCEL in case of transport error,
+        if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+            if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+                /* Promote close operation to CANCEL in case of transport error,
              * since the disconnect event may never arrive. */
-            close_req                        = ep_ext_control->close_req.req;
-            close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
-            ucp_ep_local_disconnect_progress(close_req);
+                close_req = ep_ext_control->close_req.req;
+                close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
+                ucp_ep_local_disconnect_progress(close_req);
+            }
         } else if (ep_ext_control->err_cb == NULL) {
             /* Do not print error if connection reset by remote peer since it
              * can be part of user level close protocol */
@@ -1386,7 +1387,8 @@ void ucp_ep_destroy(ucp_ep_h ep)
             ucp_worker_progress(worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
-
+        ucs_debug("ep_close request %p completed with status %s", request,
+                  ucs_status_string(status));
         ucp_request_release(request);
     }
 
