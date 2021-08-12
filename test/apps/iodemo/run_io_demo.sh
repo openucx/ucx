@@ -484,6 +484,12 @@ make_scripts()
 			    if [ "\$1" == "all" ]
 			    then
 			        pattern=".*"
+			    elif [ "\$1" == "all_clients" ]
+			    then
+			    	pattern="client.*"
+			    elif [ "\$1" == "all_servers" ]
+			    then
+			    	pattern="server.*"
 			    else
 			        pattern="\$1"
 			    fi
@@ -516,6 +522,8 @@ make_scripts()
 			    echo "  -stop <tag>        Stop iodemo for given tag"
 			    echo "  -kill <tag>        Kill iodemo for given tag"
 			    echo "  -status <tag>      Show status of iodemo for given tag"
+			    echo
+			    echo "<tag> can be particular client/server or all_servers / all_clients"
 			    echo
 			    echo "If no options are given, run all commands and wait for completion"
 			    echo
@@ -634,9 +642,7 @@ make_scripts()
 
 		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF
-			start_all() {
-			    set_env_vars
-
+			start_all_servers() {
 			    echo "Starting servers"
 				EOF
 
@@ -646,10 +652,9 @@ make_scripts()
 		done
 
 		cat >>${command_file} <<-EOF
+			}
 
-			    # Wait for servers to start
-			    sleep ${client_wait_time}
-
+			start_all_clients() {
 			    echo "Starting clients"
 				EOF
 
@@ -659,6 +664,16 @@ make_scripts()
 		done
 
 		cat >>${command_file} <<-EOF
+			}
+
+			start_all() {
+			    set_env_vars
+			    start_all_servers
+
+			    # Wait for servers to start
+			    sleep ${client_wait_time}
+
+			    start_all_clients
 			}
 
 			run_all() {
