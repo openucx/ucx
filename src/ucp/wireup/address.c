@@ -15,13 +15,14 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
+#include <ucs/type/serialize.h>
 #include <inttypes.h>
 
 
 /*
  * Packed address layout:
  *
- * [ header(8bit) | uuid(64bit) | worker_name(string) ]
+ * [ header(8bit) | uuid(64bit) | client_id | worker_name(string) ]
  * [ device1_md_index | device1_address(var) ]
  *    [ tl1_name_csum(string) | tl1_info | tl1_address(var) ]
  *    [ tl2_name_csum(string) | tl2_info | tl2_address(var) ]
@@ -127,7 +128,9 @@ typedef struct {
                                          UCP_ADDRESS_FLAG_MD_REG))
 
 #define UCP_ADDRESS_HEADER_VERSION_MASK     UCS_MASK(4) /* Version - 4 bits */
-#define UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO  UCS_BIT(4)  /* Address has debug info */
+
+#define UCP_ADDRESS_DEFAULT_WORKER_UUID     0
+#define UCP_ADDRESS_DEFAULT_CLIENT_ID       0
 
 /* Enumeration of UCP address versions.
  * Every release which changes the address binary format must bump this number.
@@ -138,6 +141,12 @@ enum {
     UCP_ADDRESS_VERSION_CURRENT = UCP_ADDRESS_VERSION_LAST - 1
 };
 
+enum {
+    UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO  = UCS_BIT(4),  /* Address has debug info */
+    UCP_ADDRESS_HEADER_FLAG_WORKER_UUID = UCS_BIT(5),  /* Worker unique id */
+    UCP_ADDRESS_HEADER_FLAG_CLIENT_ID   = UCS_BIT(6),  /* Worker client id */
+    UCP_ADDRESS_HEADER_FLAG_AM_ONLY     = UCS_BIT(7)   /* Only AM lane info */
+};
 
 static size_t ucp_address_iface_attr_size(ucp_worker_t *worker,
                                           uint64_t flags)
@@ -299,6 +308,10 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
     size += 1;
 
     if (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
+        size += sizeof(uint64_t);
+    }
+
+    if (pack_flags & UCP_ADDRESS_PACK_FLAG_CLIENT_ID) {
         size += sizeof(uint64_t);
     }
 
@@ -638,7 +651,35 @@ ucp_address_unpack_iface_length(ucp_worker_h worker, const void *flags_ptr,
 
 uint64_t ucp_address_get_uuid(const void *address)
 {
-    return *(uint64_t*)UCS_PTR_TYPE_OFFSET(address, uint8_t);
+    const uint8_t address_header = *(const uint8_t *)address;
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID) {
+        return *(uint64_t*)UCS_PTR_TYPE_OFFSET(address, uint8_t);
+    } else {
+        return UCP_ADDRESS_DEFAULT_WORKER_UUID;
+    }
+}
+
+uint64_t ucp_address_get_client_id(const void *address)
+{
+    const uint8_t address_header = *(const uint8_t *)address;
+    const void *offset;
+
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_CLIENT_ID) {
+        offset = UCS_PTR_TYPE_OFFSET(address, uint8_t);
+        if (address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID) {
+            offset = UCS_PTR_TYPE_OFFSET(offset, uint64_t);
+        }
+        return *ucs_serialize_next(&offset, uint64_t);
+    } else {
+        return UCP_ADDRESS_DEFAULT_CLIENT_ID;
+    }
+}
+
+uint8_t ucp_address_is_am_only(const void *address)
+{
+    const uint8_t address_header = *(const uint8_t *)address;
+
+    return address_header & UCP_ADDRESS_HEADER_FLAG_AM_ONLY;
 }
 
 static ucs_status_t
@@ -675,9 +716,20 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
     *address_header_p = UCP_ADDRESS_VERSION_CURRENT;
     ptr               = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
+    if (pack_flags & UCP_ADDRESS_PACK_FLAG_AM_ONLY) {
+        *address_header_p |= UCP_ADDRESS_HEADER_FLAG_AM_ONLY;
+    }
+
     if (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
-        *(uint64_t*)ptr = worker->uuid;
-        ptr             = UCS_PTR_TYPE_OFFSET(ptr, worker->uuid);
+        *(uint64_t*)ptr    = worker->uuid;
+        ptr                = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+        *address_header_p |= UCP_ADDRESS_HEADER_FLAG_WORKER_UUID;
+    }
+
+    if (pack_flags & UCP_ADDRESS_PACK_FLAG_CLIENT_ID) {
+        *(uint64_t*)ptr    = worker->client_id;
+        ptr                = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+        *address_header_p |= UCP_ADDRESS_HEADER_FLAG_CLIENT_ID;
     }
 
     if (worker->context->config.ext.address_debug_info) {
@@ -1008,11 +1060,19 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     }
 
     if (unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
+        ucs_assert(address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID);
+    }
+
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID) {
         unpacked_address->uuid = ucp_address_get_uuid(buffer);
         ptr                    = UCS_PTR_TYPE_OFFSET(ptr,
                                                      unpacked_address->uuid);
     } else {
         unpacked_address->uuid = 0ul;
+    }
+
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_CLIENT_ID) {
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
     }
 
     if ((address_header & UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO) &&

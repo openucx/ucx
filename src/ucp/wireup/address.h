@@ -60,6 +60,12 @@ enum {
     /* Pack system device id */
     UCP_ADDRESS_PACK_FLAG_SYS_DEVICE  = UCS_BIT(6),
 
+    /* Pack client id */
+    UCP_ADDRESS_PACK_FLAG_CLIENT_ID   = UCS_BIT(7),
+
+     /* Address has only AM lane information */
+    UCP_ADDRESS_PACK_FLAG_AM_ONLY     = UCS_BIT(8),
+
     UCP_ADDRESS_PACK_FLAG_LAST,
 
     /* A bitmap of all flags: UCP_ADDRESS_PACK_FLAG_LAST is the last bit plus 1,
@@ -205,5 +211,22 @@ ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
   */
 uint64_t ucp_address_get_uuid(const void *address);
 
+/**
+ * Unpack client id from the given address.
+ *
+ * @param [in] address Worker address.
+ *
+ * @return Client id.
+  */
+uint64_t ucp_address_get_client_id(const void *address);
+
+/**
+ * Whether address has only AM lane information.
+ *
+ * @param [in] address Worker address.
+ * @return 1 if address has only AM lane information.
+ *         0 if address has all lanes information.
+ */
+uint8_t ucp_address_is_am_only(const void *address);
 
 #endif

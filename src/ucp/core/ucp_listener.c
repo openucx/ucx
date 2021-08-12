@@ -18,6 +18,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sock.h>
+#include <ucs/type/serialize.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
 
@@ -75,6 +76,12 @@ ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (attr->field_mask & UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID) {
+         /* coverity[overrun-local] */
+        attr->client_id = ucp_address_get_client_id(
+            UCS_PTR_TYPE_OFFSET(&conn_request->sa_data, ucp_wireup_sockaddr_data_t));
     }
 
     return UCS_OK;
