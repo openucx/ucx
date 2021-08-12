@@ -12,7 +12,7 @@ jobs:
         - harbor_registry -equals yes
 
     # we need to use lowest version for compatible
-    container: centos7_cuda10_1
+    container: centos7_cuda11
 
     steps:
       - checkout: self
