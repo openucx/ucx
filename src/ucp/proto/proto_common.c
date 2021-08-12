@@ -623,7 +623,9 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
             } else {
                 recv_mem_type = params->super.rkey_config_key->mem_type;
             }
+
             /* Receiver has to copy data */
+            recv_ovrh = ucs_linear_func_make(0, 0); /* silence cppcheck */
             ucp_proto_common_buffer_copy_time(params->super.worker, "recv-copy",
                                               UCS_MEMORY_TYPE_HOST,
                                               recv_mem_type,

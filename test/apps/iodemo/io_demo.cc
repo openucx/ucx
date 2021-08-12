@@ -2003,10 +2003,9 @@ private:
         }
 
         double latency_usec = (elapsed / num_iters) * 1e6;
-        std::vector<io_op_perf_info_t> io_op_perf_info;
+        std::vector<io_op_perf_info_t> io_op_perf_info(IO_OP_MAX + 1);
         UcxLog log(LOG_PREFIX);
 
-        io_op_perf_info.resize(IO_OP_MAX + 1);
         for (int op = 0; op <= IO_OP_MAX; ++op) {
             io_op_perf_info[op].min         = std::numeric_limits<long>::max();
             io_op_perf_info[op].max         = 0;

@@ -205,6 +205,7 @@ do_distributed_task() {
 # Take a list of tasks, and return only the ones this worker should do
 #
 get_my_tasks() {
+	set +x
 	task_list=$@
 	ntasks=$(echo $task_list|wc -w)
 	task=0
@@ -215,6 +216,7 @@ get_my_tasks() {
 		task=$((task + 1))
 	done
 	echo $my_task_list
+	set -x
 }
 
 #
@@ -385,6 +387,7 @@ expand_cpulist() {
 # Get the N'th CPU that the current process can run on
 #
 slice_affinity() {
+	set +x
 	n=$1
 
 	# get affinity mask of the current process
@@ -392,6 +395,7 @@ slice_affinity() {
 	cpulist=$(expand_cpulist ${compact_cpulist})
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
+	set -x
 }
 
 #

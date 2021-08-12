@@ -84,7 +84,8 @@ static size_t ucp_proto_rndv_put_common_pack_atp(void *dest, void *arg)
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_put_common_atp_send(ucp_request_t *req, ucp_lane_index_t lane)
 {
-    const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+    const ucp_proto_rndv_put_priv_t UCS_V_UNUSED *rpriv =
+            req->send.proto_config->priv;
 
     ucp_trace_req(req, "send ATP lane %d count %d", lane, rpriv->atp_num_lanes);
     return ucp_proto_am_bcopy_single_send(req, UCP_AM_ID_RNDV_ATP, lane,

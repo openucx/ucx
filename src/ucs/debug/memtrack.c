@@ -451,6 +451,7 @@ int ucs_posix_memalign_realloc(void **ptr, size_t boundary, size_t size,
 
     ret = ucs_posix_memalign(ptr, boundary, size, name);
     if (ret == 0) {
+        ucs_assert(*ptr != NULL);
         memcpy(*ptr, tmp, ucs_min(size, old_size));
         ucs_free(tmp);
     }
