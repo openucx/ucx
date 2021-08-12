@@ -54,7 +54,8 @@ declare -A initial_hw_cis
 
 traverse() {
     DC_TXWQ_GLOB_PATH="${VFS_UCX_PATH}/*/uct/worker/*/iface/*/dci_pool/*/*"
-    for file in ${DC_TXWQ_GLOB_PATH}/${QP_NUM_FILE}
+    RC_EP_GLOB_PATH="${VFS_UCX_PATH}/*/uct/worker/*/iface/*/ep/*"
+    for file in ${DC_TXWQ_GLOB_PATH}/${QP_NUM_FILE} ${RC_EP_GLOB_PATH}/${QP_NUM_FILE}
     do
         filename=$(basename ${file})
         dir=$(dirname ${file})
