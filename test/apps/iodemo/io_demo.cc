@@ -75,6 +75,7 @@ typedef struct {
     bool                     verbose;
     bool                     validate;
     bool                     use_am;
+    bool                     debug_timeout;
     bool                     use_epoll;
     ucs_memory_type_t        memory_type;
 } options_t;
@@ -1692,7 +1693,10 @@ public:
             elapsed_time = curr_time - start_time;
             if (elapsed_time > _test_opts.client_timeout) {
                 dump_timeout_waiting_for_replies_info();
-                disconnect_uncompleted_servers("timeout for replies");
+                if (!_test_opts.debug_timeout) {
+                    // don't destroy connections, they will be debugged
+                    disconnect_uncompleted_servers("timeout for replies");
+                }
                 timer_finished = true;
             }
             check_time_limit(curr_time);
@@ -2285,11 +2289,12 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->verbose               = false;
     test_opts->validate              = false;
     test_opts->use_am                = false;
+    test_opts->debug_timeout         = false;
     test_opts->use_epoll             = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeAHP:m:")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2404,6 +2409,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'A':
             test_opts->use_am = true;
             break;
+        case 'D':
+            test_opts->debug_timeout = true;
+            break;
         case 'e':
             test_opts->use_epoll = true;
             break;
@@ -2458,6 +2466,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -v                          Set verbose mode" << std::endl;
             std::cout << "  -q                          Enable data integrity and transaction check" << std::endl;
             std::cout << "  -A                          Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
+            std::cout << "  -D                          Enable debugging mode for IO operation timeouts" << std::endl;
             std::cout << "  -H                          Use human-readable timestamps" << std::endl;
             std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
             std::cout << "" << std::endl;
