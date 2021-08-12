@@ -166,4 +166,9 @@ To see the available transports use `ucx_info -d`.
 
 * To use the shared memory between several containers, add this instead: `--cap-add CAP_SYS_PTRACE --ipc host`.
 
-* To enable RDMA, the corresponding devices must be allowed: `--device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbsX` (replace `X` with the device number).
+* To enable RDMA:
+  * One of: `rdma-core`, `libibverbs` or `MLNX_OFED` pacakges has to be installed.
+
+  * The corresponding devices must be allowed: `--device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbsX` (replace `X` with the device number).
+
+  * `ulimit -l` should be set to a value large enough to accommodate for transport resources and send/receive buffers. At least 128MB is recommended, a higher value may be needed if the application working set is large.
