@@ -531,7 +531,6 @@ UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
                                                         UCP_OP_ATTR_FIELD_REQUEST  |
                                                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL |
                                                         UCP_OP_ATTR_FIELD_USER_DATA;
-    send_param.user_data   = recv_param.user_data     = &m_completed;
     send_param.request     = request_alloc();
     recv_param.request     = request_alloc();
     send_param.cb.send     = (ucp_send_nbx_callback_t)send_callback;
