@@ -40,9 +40,6 @@
 
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
 
-#define UCP_WORKER_HEADROOM_SIZE \
-    (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
-
 typedef enum ucp_worker_event_fd_op {
     UCP_WORKER_EPFD_OP_ADD,
     UCP_WORKER_EPFD_OP_DEL
@@ -1655,16 +1652,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     uct_iface_attr_t *if_attr;
     ucp_rsc_index_t  iface_id;
     ucs_status_t     status;
-
-    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
-        if_attr           = &worker->ifaces[iface_id]->attr;
-        max_mp_entry_size = ucs_max(max_mp_entry_size,
-                                    if_attr->cap.am.max_short);
-        max_mp_entry_size = ucs_max(max_mp_entry_size,
-                                    if_attr->cap.am.max_bcopy);
-        max_mp_entry_size = ucs_max(max_mp_entry_size,
-                                    if_attr->cap.am.max_zcopy);
-    }
+    unsigned mp_index, size, i;
 
     /* Create memory pool for requests */
     status = ucs_mpool_init(&worker->req_mp, 0,
@@ -1685,23 +1673,13 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_req_mp_cleanup;
     }
 
-    /* Create memory pool for incoming UCT messages without a UCT descriptor */
-    status = ucs_mpool_init(&worker->am_mp, 0,
-                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE +
-                            worker->am.alignment,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_am_mpool_ops, "ucp_am_bufs");
-    if (status != UCS_OK) {
-        goto err_rkey_mp_cleanup;
-    }
-
     /* Create memory pool of bounce buffers */
     status = ucs_mpool_init(&worker->reg_mp, 0,
                             context->config.ext.seg_size + sizeof(ucp_mem_desc_t),
                             sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
                             128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
     if (status != UCS_OK) {
-        goto err_am_mp_cleanup;
+        goto err_rkey_mp_cleanup;
     }
 
     /* Create memory pool for pipelined rndv fragments */
@@ -1713,12 +1691,66 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_reg_mp_cleanup;
     }
 
+    for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
+        if_attr           = &worker->ifaces[iface_id]->attr;
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_short);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_bcopy);
+        max_mp_entry_size = ucs_max(max_mp_entry_size,
+                                    if_attr->cap.am.max_zcopy);
+    }
+
+    /* Create memory pools for incoming UCT messages without a UCT descriptor.
+     * Ignore sizes which are larger than maximal transport segment. */
+    worker->am_mps_map = (max_mp_entry_size == 0) ? 0 :
+                         (ucs_roundup_pow2(max_mp_entry_size) - 1) &
+                         context->config.mpools_map;
+    worker->am_mps     = ucs_malloc((ucs_popcount(worker->am_mps_map) + 1) *
+                                        sizeof(ucs_mpool_t),
+                                    "am_mpools");
+    if (worker->am_mps == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_rndv_frag_mp_cleanup;
+    }
+
+    mp_index = 0;
+    ucs_for_each_bit(size, worker->am_mps_map) {
+        status = ucs_mpool_init(&worker->am_mps[mp_index++], 0,
+                                UCS_BIT(size) + UCP_WORKER_HEADROOM_SIZE +
+                                worker->am.alignment,
+                                0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                                &ucp_am_mpool_ops, "ucp_am_bufs");
+        if (status != UCS_OK) {
+            goto err_am_mps_cleanup;
+        }
+    }
+
+    /* The last AM mpool is created with maximal possible transport
+     * element size */
+    status = ucs_mpool_init(&worker->am_mps[mp_index], 0,
+                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE +
+                            worker->am.alignment,
+                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                            &ucp_am_mpool_ops, "ucp_am_bufs");
+    if (status != UCS_OK) {
+        goto err_am_mps_cleanup;
+    }
+
+    ucs_debug("Created %u AM mpools, sizes map 0x%x, largest size is %zu",
+              mp_index + 1, worker->am_mps_map, max_mp_entry_size);
+
     return UCS_OK;
 
+err_am_mps_cleanup:
+    for (i = 0; i < mp_index; ++i) {
+        ucs_mpool_cleanup(&worker->am_mps[i], 0);
+    }
+    ucs_free(worker->am_mps);
+err_rndv_frag_mp_cleanup:
+    ucs_mpool_cleanup(&worker->rndv_frag_mp, 0);
 err_reg_mp_cleanup:
     ucs_mpool_cleanup(&worker->reg_mp, 0);
-err_am_mp_cleanup:
-    ucs_mpool_cleanup(&worker->am_mp, 0);
 err_rkey_mp_cleanup:
     ucs_mpool_cleanup(&worker->rkey_mp, 0);
 err_req_mp_cleanup:
@@ -1729,9 +1761,14 @@ err:
 
 static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 {
+    int i;
+
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
-    ucs_mpool_cleanup(&worker->am_mp, 1);
+    for (i = 0; i <= ucs_popcount(worker->am_mps_map); ++i) {
+        ucs_mpool_cleanup(&worker->am_mps[i], 1);
+    }
+    ucs_free(worker->am_mps);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
     ucs_mpool_cleanup(&worker->req_mp,
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));

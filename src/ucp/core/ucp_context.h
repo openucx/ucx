@@ -135,6 +135,8 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
     /** Array of transports for client-server transports and port selection */
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
+    /** Array of worker memory pool sizes */
+    UCS_CONFIG_ARRAY_FIELD(unsigned, ints) mpool_sizes;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
     /** This config environment prefix */
@@ -258,6 +260,9 @@ typedef struct ucp_context {
 
         /* MD to compare for transport selection scores */
         char                      *selection_cmp;
+
+        /* Map of receive memory pool sizes used by the workers */
+        uint32_t                  mpools_map;
     } config;
 
     /* Configuration of multi-threading support */

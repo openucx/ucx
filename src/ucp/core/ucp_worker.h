@@ -29,6 +29,10 @@
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 32
 
 
+#define UCP_WORKER_HEADROOM_SIZE \
+    (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
+
+
 #define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker) \
     ucs_assert(ucs_async_is_blocked(&(_worker)->async))
 
@@ -271,7 +275,8 @@ typedef struct ucp_worker {
     unsigned                         num_active_ifaces;   /* Number of activated ifaces  */
     ucp_tl_bitmap_t                  scalable_tl_bitmap;  /* Map of scalable tl resources */
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
-    ucs_mpool_t                      am_mp;               /* Memory pool for AM receives */
+    uint32_t                         am_mps_map;          /* Map of AM receive mpool sizes */
+    ucs_mpool_t                      *am_mps;             /* Memory pools for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
     ucs_mpool_t                      rndv_frag_mp;        /* Memory pool for RNDV fragments */
     ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that

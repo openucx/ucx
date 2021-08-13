@@ -662,6 +662,18 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     }
 }
 
+static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
+ucp_recv_desc_get(ucp_worker_h worker, size_t length)
+{
+    /* TODO: Optimize */
+    uint32_t rp  = ucs_roundup_pow2(length + 1); /* make sure length is not 0 */
+    unsigned idx = ucs_popcount(worker->am_mps_map & (rp - 1));
+
+    ucs_assertv(length < UINT_MAX, "length %zu", length);
+
+    return (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mps[idx]);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    int data_offset, unsigned am_flags, uint16_t hdr_len,
@@ -682,7 +694,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
         status                     = UCS_INPROGRESS;
     } else {
-        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
+        rdesc = ucp_recv_desc_get(worker, length);
         if (rdesc == NULL) {
             ucs_error("ucp recv descriptor is not allocated");
             return UCS_ERR_NO_MEMORY;

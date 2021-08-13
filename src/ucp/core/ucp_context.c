@@ -66,6 +66,9 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_LAST]          = NULL
 };
 
+static UCS_CONFIG_DEFINE_ARRAY(uint_sizes, sizeof(unsigned),
+                               UCS_CONFIG_TYPE_UINT);
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -346,6 +349,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "messages and put operations, the protocol will do {put,fence,ATP} on the same\n"
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_config_t, ctx.rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
+
+  {"RX_MPOOL_SIZES", "64,1024",
+   "List of worker mpool sizes separated by comma. The values must be power of"
+   " 2. Values larger than the maximum UCT transport segment size will be ignored.",
+   ucs_offsetof(ucp_config_t, mpool_sizes), UCS_CONFIG_TYPE_ARRAY(uint_sizes)},
 
    {NULL}
 };
@@ -1466,6 +1474,16 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         ucs_error("UCX_KEEPALIVE_NUM_EPS value must be greater than 0");
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
+    }
+
+    for (i = 0; i < config->mpool_sizes.count; ++i) {
+        if (!ucs_is_pow2(config->mpool_sizes.ints[i])) {
+            ucs_error("Wrong receive mpool size %d, it must be power of 2",
+                      config->mpool_sizes.ints[i]);
+            status = UCS_ERR_INVALID_PARAM;
+            goto err_free_alloc_methods;
+        }
+        context->config.mpools_map |= config->mpool_sizes.ints[i];
     }
 
     return UCS_OK;
