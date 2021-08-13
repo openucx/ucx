@@ -15,6 +15,8 @@
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/exp/ib_exp.h>
+#include <ucs/vfs/base/vfs_cb.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
 #include <arpa/inet.h> /* For htonl */
@@ -546,6 +548,17 @@ void uct_rc_mlx5_ep_post_check(uct_ep_h tl_ep)
                                  0, 0,
                                  NULL, NULL, 0, 0,
                                  INT_MAX);
+}
+
+void uct_rc_mlx5_ep_vfs_populate(uct_rc_ep_t *rc_ep)
+{
+    uct_rc_iface_t *rc_iface = ucs_derived_of(rc_ep->super.super.iface,
+                                              uct_rc_iface_t);
+    uct_rc_mlx5_ep_t *ep     = ucs_derived_of(rc_ep, uct_rc_mlx5_ep_t);
+
+    ucs_vfs_obj_add_dir(rc_iface, ep, "ep/%p", ep);
+    uct_ib_mlx5_txwq_vfs_populate(&ep->tx.wq, ep);
+    uct_rc_txqp_vfs_populate(&ep->super.txqp, ep);
 }
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,

@@ -948,3 +948,19 @@ void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface)
                             &iface->tx.reads_completed, UCS_VFS_TYPE_SSIZET,
                             "reads_completed");
 }
+
+void uct_rc_iface_vfs_refresh(uct_iface_h iface)
+{
+    uct_rc_iface_t *rc_iface         = ucs_derived_of(iface, uct_rc_iface_t);
+    uct_rc_iface_ops_t *rc_iface_ops = ucs_derived_of(rc_iface->super.ops,
+                                                      uct_rc_iface_ops_t);
+    uct_rc_ep_t *ep;
+
+    /* Add iface resources */
+    uct_rc_iface_vfs_populate(rc_iface);
+
+    /* Add objects for EPs */
+    ucs_list_for_each(ep, &rc_iface->ep_list, list) {
+        rc_iface_ops->ep_vfs_populate(ep);
+    }
+}
