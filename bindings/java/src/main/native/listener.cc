@@ -4,13 +4,14 @@
  */
 
 #include "jucx_common_def.h"
+#include "org_openucx_jucx_ucp_UcpConnectionRequest.h"
 #include "org_openucx_jucx_ucp_UcpListener.h"
 
 #include <string.h>    /* memset */
 
 
 JNIEXPORT jlong JNICALL
-Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
+Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jobject listener_obj,
                                                         jobject ucp_listener_params,
                                                         jlong worker_ptr)
 {
@@ -41,10 +42,7 @@ Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jclass cls,
     params.sockaddr.addrlen = addrlen;
 
     if (params.field_mask & UCP_LISTENER_PARAM_FIELD_CONN_HANDLER) {
-        field = env->GetFieldID(jucx_listener_param_class,
-                                "connectionHandler", "Lorg/openucx/jucx/ucp/UcpListenerConnectionHandler;");
-        jobject jucx_conn_handler = env->GetObjectField(ucp_listener_params, field);
-        params.conn_handler.arg = env->NewWeakGlobalRef(jucx_conn_handler);
+        params.conn_handler.arg = env->NewWeakGlobalRef(listener_obj);
         params.conn_handler.cb = jucx_connection_handler;
     }
 
@@ -62,4 +60,17 @@ Java_org_openucx_jucx_ucp_UcpListener_destroyUcpListenerNative(JNIEnv *env,
                                                                jlong listener_ptr)
 {
     ucp_listener_destroy((ucp_listener_h)listener_ptr);
+}
+
+
+JNIEXPORT void JNICALL
+Java_org_openucx_jucx_ucp_UcpConnectionRequest_rejectConnRequestNative(JNIEnv *env, jclass cls,
+                                                                       jlong listener_ptr,
+                                                                       jlong conn_request_ptr)
+{
+    ucs_status_t status = ucp_listener_reject((ucp_listener_h)listener_ptr,
+                                              (ucp_conn_request_h)conn_request_ptr);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
 }
