@@ -12,6 +12,8 @@
 #include "rc_verbs.h"
 #include "rc_verbs_impl.h"
 
+#include <ucs/vfs/base/vfs_cb.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
 
@@ -476,6 +478,18 @@ void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep)
     uct_rc_verbs_ep_t *ep = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
 
     uct_rc_verbs_ep_post_flush(ep, 0);
+}
+
+void uct_rc_verbs_ep_vfs_populate(uct_rc_ep_t *rc_ep)
+{
+    uct_rc_iface_t *rc_iface = ucs_derived_of(rc_ep->super.super.iface,
+                                              uct_rc_iface_t);
+    uct_rc_verbs_ep_t *ep    = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
+
+    ucs_vfs_obj_add_dir(rc_iface, ep, "ep/%p", ep);
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->qp->qp_num,
+                            UCS_VFS_TYPE_U32_HEX, "qp_num");
+    uct_rc_txqp_vfs_populate(&ep->super.txqp, ep);
 }
 
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,

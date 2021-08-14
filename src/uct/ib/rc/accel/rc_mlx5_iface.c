@@ -872,19 +872,20 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
     .super = {
         .super = {
             .iface_estimate_perf = uct_base_iface_estimate_perf,
-            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .iface_vfs_refresh   = uct_rc_iface_vfs_refresh
         },
         .create_cq      = uct_ib_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = uct_rc_mlx5_iface_handle_failure,
     },
-    .init_rx       = uct_rc_mlx5_iface_init_rx,
-    .cleanup_rx    = uct_rc_mlx5_iface_cleanup_rx,
-    .fc_ctrl       = uct_rc_mlx5_ep_fc_ctrl,
-    .fc_handler    = uct_rc_iface_fc_handler,
-    .cleanup_qp    = uct_rc_mlx5_iface_qp_cleanup,
-    .ep_post_check = uct_rc_mlx5_ep_post_check,
+    .init_rx         = uct_rc_mlx5_iface_init_rx,
+    .cleanup_rx      = uct_rc_mlx5_iface_cleanup_rx,
+    .fc_ctrl         = uct_rc_mlx5_ep_fc_ctrl,
+    .fc_handler      = uct_rc_iface_fc_handler,
+    .cleanup_qp      = uct_rc_mlx5_iface_qp_cleanup,
+    .ep_post_check   = uct_rc_mlx5_ep_post_check,
+    .ep_vfs_populate = uct_rc_mlx5_ep_vfs_populate
 };
 
 static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops = {

@@ -160,6 +160,8 @@ ucs_status_t uct_rc_verbs_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
 void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep);
 
+void uct_rc_verbs_ep_vfs_populate(uct_rc_ep_t *rc_ep);
+
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_pending_req_t *req);
 
