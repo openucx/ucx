@@ -511,14 +511,9 @@ ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
     return UCS_OK;
 }
 
-/*
- * Calculate the performance pipelining an operation with performance 'perf1'
- * with an operation with performance 'perf2' by using fragments with size
- * 'frag_size' bytes.
-*/
-static ucs_linear_func_t ucp_proto_common_ppln_perf(ucs_linear_func_t perf1,
-                                                    ucs_linear_func_t perf2,
-                                                    double frag_size)
+ucs_linear_func_t ucp_proto_common_ppln_perf(ucs_linear_func_t perf1,
+                                             ucs_linear_func_t perf2,
+                                             double frag_size)
 {
     double adjusted_frag_size = ucs_max(frag_size, 1.0);
     double max_m              = ucs_max(perf1.m, perf2.m);
@@ -562,7 +557,6 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     ucs_linear_func_t send_ovrh, xfer, recv_ovrh;
     ucp_proto_perf_range_t *range0, *range1;
     ucs_memory_type_t recv_mem_type;
-    ucs_linear_func_t perf_multi;
     uint32_t op_attr_mask;
     ucs_status_t status;
     size_t frag_size;
@@ -658,9 +652,13 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     frag_size = ucs_min(params->max_length, perf->max_frag - params->hdr_size);
 
     /* First range represents sending the first fragment */
-    range0             = &caps->ranges[0];
-    range0->max_length = frag_size;
-    range0->perf       = ucs_linear_func_add3(send_ovrh, xfer, recv_ovrh);
+    range0                                   = &caps->ranges[0];
+    range0->max_length                       = frag_size;
+    range0->perf[UCP_PROTO_PERF_TYPE_SINGLE] = ucs_linear_func_add3(send_ovrh,
+                                                                    xfer,
+                                                                    recv_ovrh);
+    range0->perf[UCP_PROTO_PERF_TYPE_MULTI]  =
+            ucp_proto_common_ppln3_perf(send_ovrh, xfer, recv_ovrh, frag_size);
 
     /* Second range represents sending rest of the fragments, if applicable */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG) {
@@ -673,16 +671,21 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
         range1             = &caps->ranges[1];
         range1->max_length = params->max_length;
 
-        perf_multi = ucp_proto_common_ppln3_perf(send_ovrh, xfer, recv_ovrh,
-                                                 frag_size);
-
         /* Overhead of sending one fragment before starting the pipeline */
-        frag_ovrh = ucs_linear_func_apply(range0->perf, frag_size) -
-                    ucs_linear_func_apply(perf_multi, frag_size);
+        frag_ovrh =
+                ucs_linear_func_apply(range0->perf[UCP_PROTO_PERF_TYPE_SINGLE],
+                                      frag_size) -
+                ucs_linear_func_apply(range0->perf[UCP_PROTO_PERF_TYPE_MULTI],
+                                      frag_size);
 
         /* Apply the pipelining effect when sending multiple fragments */
-        range1->perf = ucs_linear_func_add(perf_multi,
-                                           ucs_linear_func_make(frag_ovrh, 0));
+        range1->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
+                ucs_linear_func_add(range0->perf[UCP_PROTO_PERF_TYPE_MULTI],
+                                    ucs_linear_func_make(frag_ovrh, 0));
+
+        /* Multiple send performance is the same */
+        range1->perf[UCP_PROTO_PERF_TYPE_MULTI] =
+                range0->perf[UCP_PROTO_PERF_TYPE_MULTI];
     }
 
     return UCS_OK;

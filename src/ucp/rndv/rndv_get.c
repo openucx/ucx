@@ -151,7 +151,8 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_ack_init(params, params->priv);
+    status = ucp_proto_rndv_ack_init(params, params->priv,
+                                     params->caps->ranges[0].perf);
     if (status != UCS_OK) {
         return status;
     }
@@ -163,7 +164,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     params->caps->min_length           = 0;
     params->caps->num_ranges           = 1;
     params->caps->ranges[0].max_length = 0;
-    params->caps->ranges[0].perf       = ucp_proto_rndv_ack_time(params);
+
     return UCS_OK;
 }
 
