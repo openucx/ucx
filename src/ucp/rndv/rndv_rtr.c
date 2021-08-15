@@ -20,19 +20,23 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
 {
     ucp_context_h context                    = init_params->worker->context;
     ucp_proto_rndv_ctrl_init_params_t params = {
-        .super.super        = *init_params,
-        .super.latency      = 0,
-        .super.overhead     = 40e-9,
-        .super.cfg_thresh   = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
-        .super.cfg_priority = 0,
-        .super.hdr_size     = 0,
-        .super.memtype_op   = UCT_EP_OP_LAST,
-        .super.flags        = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
-        .remote_op_id       = UCP_OP_ID_RNDV_SEND,
-        .perf_bias          = 0.0,
-        .mem_info.type      = mem_type,
-        .mem_info.sys_dev   = sys_dev,
-        .min_length         = 1
+        .super.super         = *init_params,
+        .super.latency       = 0,
+        .super.overhead      = 40e-9,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_priority  = 0,
+        .super.min_length    = 1,
+        .super.max_length    = SIZE_MAX,
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.hdr_size      = sizeof(ucp_rndv_rtr_hdr_t),
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .remote_op_id        = UCP_OP_ID_RNDV_SEND,
+        .perf_bias           = 0.0,
+        .mem_info.type       = mem_type,
+        .mem_info.sys_dev    = sys_dev,
     };
 
     return ucp_proto_rndv_ctrl_init(&params);
@@ -60,7 +64,8 @@ static void ucp_proto_rndv_rtr_data_received(ucp_request_t *req)
 {
     ucp_send_request_id_release(req);
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter);
+                                &req->send.state.dt_iter,
+                                UCS_BIT(UCP_DATATYPE_CONTIG));
     if (req->send.rndv.rkey != NULL) {
         ucp_proto_rndv_rkey_destroy(req);
     }
@@ -99,7 +104,8 @@ static ucs_status_t ucp_proto_rndv_rtr_progress(uct_pending_req_t *self)
         status = ucp_datatype_iter_mem_reg(req->send.ep->worker->context,
                                            &req->send.state.dt_iter,
                                            rpriv->md_map,
-                                           UCT_MD_MEM_ACCESS_REMOTE_PUT);
+                                           UCT_MD_MEM_ACCESS_REMOTE_PUT,
+                                           UCS_BIT(UCP_DATATYPE_CONTIG));
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK;

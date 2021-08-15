@@ -118,7 +118,8 @@ ucp_datatype_iter_cleanup(ucp_datatype_iter_t *dt_iter, unsigned dt_mask)
 static UCS_F_ALWAYS_INLINE void
 ucp_datatype_iter_iov_check(const ucp_datatype_iter_t *dt_iter)
 {
-    ucs_assertv(dt_iter->type.iov.iov_index < dt_iter->type.iov.iov_count,
+    ucs_assertv((dt_iter->type.iov.iov_count == 0) ||
+                (dt_iter->type.iov.iov_index < dt_iter->type.iov.iov_count),
                 "index=%zu count=%zu", dt_iter->type.iov.iov_index,
                 dt_iter->type.iov.iov_count);
 }
@@ -280,6 +281,18 @@ ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
     return length;
 }
 
+static UCS_F_ALWAYS_INLINE uct_mem_h
+ucp_datatype_iter_uct_memh(const ucp_dt_reg_t *dt_reg, ucp_rsc_index_t memh_index)
+{
+    if (memh_index == UCP_NULL_RESOURCE) {
+        return UCT_MEM_HANDLE_NULL;
+    }
+
+    ucs_assertv(memh_index < ucs_popcount(dt_reg->md_map),
+                "memh_index=%d md_map=0x%" PRIx64, memh_index, dt_reg->md_map);
+    return dt_reg->memh[memh_index];
+}
+
 /*
  * Returns a pointer to next chunk of data as IOV entry of registered memory
  * (could be done only on some datatype classes)
@@ -287,40 +300,57 @@ ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
  * @param memh_index  Index of UCT memory handle (within the memory domain map
  *                    which was passed to @ref ucp_datatype_iter_mem_reg, or
  *                    UCP_NULL_RESOURCE to pass UCT_MEM_HANDLE_NULL.
+ *
+ * @return Number of iov elements.
  */
-static UCS_F_ALWAYS_INLINE void
+static UCS_F_ALWAYS_INLINE size_t
 ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
-                           ucp_rsc_index_t memh_index, size_t max_length,
-                           ucp_datatype_iter_t *next_iter, uct_iov_t *iov)
+                           size_t max_length, ucp_rsc_index_t memh_index,
+                           unsigned dt_mask, ucp_datatype_iter_t *next_iter,
+                           uct_iov_t *iov, size_t max_iov)
 {
-    /* TODO support IOV datatype */
-    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
-
-    if (memh_index == UCP_NULL_RESOURCE) {
-        iov[0].memh = UCT_MEM_HANDLE_NULL;
+    ucs_assert(max_iov >= 1);
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
+#ifdef __clang_analyzer__
+        /* clang analyzer falsely warns about next_iter being used uninitialized
+           in ucp_datatype_iter_copy_position() IOV case */
+        next_iter->type.iov.iov_index  = 0;
+        next_iter->type.iov.iov_offset = 0;
+#endif
+        iov[0].length = ucp_datatype_iter_next_ptr(dt_iter, max_length,
+                                                   next_iter, &iov[0].buffer);
+        iov[0].memh   = ucp_datatype_iter_uct_memh(&dt_iter->type.contig.reg,
+                                                   memh_index);
+        iov[0].stride = 0;
+        iov[0].count  = 1;
+        return 1;
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
+        return ucp_datatype_iter_iov_next_iov(dt_iter, max_length, memh_index,
+                                              next_iter, iov, max_iov);
     } else {
-        ucs_assert(memh_index < ucs_popcount(dt_iter->type.contig.reg.md_map));
-        iov[0].memh = dt_iter->type.contig.reg.memh[memh_index];
+        next_iter->offset = dt_iter->offset; /* Silence compiler warning */
+        ucs_bug("unsupported datatype %s",
+                ucp_datatype_class_names[dt_iter->dt_class]);
+        return 0;
     }
-
-    iov[0].length   = ucp_datatype_iter_next_ptr(dt_iter, max_length, next_iter,
-                                                 &iov[0].buffer);
-    iov[0].stride   = 0;
-    iov[0].count    = 1;
 }
 
 /*
- * Copy iterator position
+ * Copy iterator position only.
+ * 'src_dt_iter' must be initialized from the same datatype object as 'dt_iter',
+ * or returned as 'next_iter' from @ref ucp_datatype_iter_next_pack
+ * @ref ucp_datatype_iter_next_unpack or @ref ucp_datatype_iter_next_iov that
+ * were used on 'dt_iter'.
  */
-static UCS_F_ALWAYS_INLINE
-void ucp_datatype_iter_copy_from_next(ucp_datatype_iter_t *dt_iter,
-                                      const ucp_datatype_iter_t *next_iter,
-                                      unsigned dt_mask)
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
+                                const ucp_datatype_iter_t *src_dt_iter,
+                                unsigned dt_mask)
 {
-    dt_iter->offset = next_iter->offset;
+    dt_iter->offset = src_dt_iter->offset;
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
-        dt_iter->type.iov.iov_index  = next_iter->type.iov.iov_index;
-        dt_iter->type.iov.iov_offset = next_iter->type.iov.iov_offset;
+        dt_iter->type.iov.iov_index  = src_dt_iter->type.iov.iov_index;
+        dt_iter->type.iov.iov_offset = src_dt_iter->type.iov.iov_offset;
     }
 }
 
@@ -334,33 +364,73 @@ ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
     return dt_iter->offset == dt_iter->length;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_datatype_iter_mem_reg_internal(ucp_context_h context,
+                                   ucp_datatype_iter_t *dt_iter,
+                                   ucp_md_map_t md_map, void *buffer,
+                                   size_t length, unsigned uct_flags,
+                                   ucp_dt_reg_t *dt_reg)
+{
+    ucs_status_t status;
+
+    status = ucp_mem_rereg_mds(context, md_map, buffer, length, uct_flags, NULL,
+                               (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
+                               dt_reg->memh, &dt_reg->md_map);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* We expect the registration to happen on all desired memory domains,
+     * since subsequent access to the iterator will use 'memh_index' which
+     * assumes the md_map is as expected.
+     */
+    ucs_assertv((length == 0) || (dt_reg->md_map == md_map),
+                "reg.md_map=0x%" PRIx64 " md_map=0x%" PRIx64, dt_reg->md_map,
+                md_map);
+    return UCS_OK;
+}
+
 /*
  * Register memory and update iterator state
  */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
-                          ucp_md_map_t md_map, unsigned uct_flags)
+                          ucp_md_map_t md_map, unsigned uct_flags,
+                          unsigned dt_mask)
 {
-    /* TODO support IOV datatype */
-    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
+        if (md_map == dt_iter->type.contig.reg.md_map) {
+            return UCS_OK;
+        }
 
-    return ucp_mem_rereg_mds(context, md_map, dt_iter->type.contig.buffer,
-                             dt_iter->length, uct_flags, NULL,
-                             (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
-                             dt_iter->type.contig.reg.memh,
-                             &dt_iter->type.contig.reg.md_map);
+        return ucp_datatype_iter_mem_reg_internal(context, dt_iter, md_map,
+                                                  dt_iter->type.contig.buffer,
+                                                  dt_iter->length, uct_flags,
+                                                  &dt_iter->type.contig.reg);
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
+        return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map, uct_flags);
+    } else {
+        ucs_error("datatype %s does not support registration",
+                  ucp_datatype_class_names[dt_iter->dt_class]);
+        return UCS_ERR_INVALID_PARAM;
+    }
 }
 
 /*
  * De-register memory and update iterator state
  */
 static UCS_F_ALWAYS_INLINE void
-ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter)
+ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
+                            unsigned dt_mask)
 {
-    ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL,
-                      (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
-                      dt_iter->type.contig.reg.memh,
-                      &dt_iter->type.contig.reg.md_map);
+    if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
+        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL,
+                          (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
+                          dt_iter->type.contig.reg.memh,
+                          &dt_iter->type.contig.reg.md_map);
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
+        ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
+    }
 }
 
 #endif

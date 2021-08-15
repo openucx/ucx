@@ -84,6 +84,7 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_get_req_hdr_t),
         .super.memtype_op    = UCT_EP_OP_PUT_SHORT,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,

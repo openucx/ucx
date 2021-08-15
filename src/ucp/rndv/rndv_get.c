@@ -25,23 +25,24 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
         .super.cfg_priority  = 0,
-        .super.memtype_op    = UCT_EP_OP_LAST,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .super.overhead      = 0,
         .super.latency       = 0,
-        .max_lanes           = context->config.ext.max_rndv_lanes,
-        .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.max_zcopy),
-        .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .max_lanes           = context->config.ext.max_rndv_lanes,
+        .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
+        .first.lane_type     = UCP_LANE_TYPE_RMA_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW
     };
@@ -62,7 +63,8 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
                                           send.state.uct_comp);
 
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter);
+                                &req->send.state.dt_iter,
+                                UCS_BIT(UCP_DATATYPE_CONTIG));
     ucp_proto_rndv_rkey_destroy(req);
     ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
     ucp_request_send(req);
@@ -77,9 +79,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_zcopy_send_func(
     uct_iov_t iov;
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                               lpriv->super.memh_index,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
-                               next_iter, &iov);
+                               lpriv->super.memh_index,
+                               UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
+                               1);
     return uct_ep_get_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
                             req->send.rndv.remote_address +
                                     req->send.state.dt_iter.offset,
@@ -101,7 +104,8 @@ ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
 
     return ucp_proto_multi_zcopy_progress(
             req, &rpriv->mpriv, ucp_proto_rndv_get_zcopy_request_init,
-            UCT_MD_MEM_ACCESS_LOCAL_WRITE, ucp_proto_rndv_get_zcopy_send_func,
+            UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCS_BIT(UCP_DATATYPE_CONTIG),
+            ucp_proto_rndv_get_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_rndv_get_zcopy_fetch_completion);
 }

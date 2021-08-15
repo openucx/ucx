@@ -145,8 +145,8 @@ ucp_proto_multi_progress(ucp_request_t *req,
     }
 
     /* advance position in send buffer */
-    ucp_datatype_iter_copy_from_next(&req->send.state.dt_iter, &next_iter,
-                                     dt_mask);
+    ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
+                                    dt_mask);
     if (ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
         return complete_func(req);
     }
@@ -182,7 +182,7 @@ ucp_proto_multi_bcopy_progress(ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
         ucp_request_t *req, const ucp_proto_multi_priv_t *mpriv,
-        ucp_proto_init_cb_t init_func, unsigned uct_mem_flags,
+        ucp_proto_init_cb_t init_func, unsigned uct_mem_flags, unsigned dt_mask,
         ucp_proto_send_multi_cb_t send_func,
         ucp_proto_complete_cb_t complete_func,
         uct_completion_callback_t uct_comp_cb)
@@ -191,7 +191,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         status = ucp_proto_request_zcopy_init(req, mpriv->reg_md_map,
-                                              uct_comp_cb, uct_mem_flags);
+                                              uct_comp_cb, uct_mem_flags,
+                                              dt_mask);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */
@@ -206,7 +207,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
     }
 
     return ucp_proto_multi_progress(req, mpriv, send_func, complete_func,
-                                    UCS_BIT(UCP_DATATYPE_CONTIG));
+                                    dt_mask);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
