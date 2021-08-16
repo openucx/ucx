@@ -349,6 +349,7 @@ uct_tcp_ep_t *uct_tcp_cm_get_ep(uct_tcp_iface_t *iface,
 void uct_tcp_cm_insert_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
 {
     uint8_t ctx_caps = ep->flags & UCT_TCP_EP_CTX_CAPS;
+    int ret;
 
     ucs_assert(ep->cm_id.conn_sn < UCT_TCP_CM_CONN_SN_MAX);
     ucs_assert((ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ||
@@ -356,11 +357,12 @@ void uct_tcp_cm_insert_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
     ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
     ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP));
 
-    ucs_conn_match_insert(&iface->conn_match_ctx, &ep->peer_addr,
-                          ep->cm_id.conn_sn, &ep->elem,
-                          (ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
-                          UCS_CONN_MATCH_QUEUE_EXP :
-                          UCS_CONN_MATCH_QUEUE_UNEXP);
+    ret = ucs_conn_match_insert(&iface->conn_match_ctx, &ep->peer_addr,
+                                ep->cm_id.conn_sn, &ep->elem,
+                                (ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
+                                UCS_CONN_MATCH_QUEUE_EXP :
+                                UCS_CONN_MATCH_QUEUE_UNEXP);
+    ucs_assert_always(ret == 1);
 
     ep->flags |= UCT_TCP_EP_FLAG_ON_MATCH_CTX;
 }

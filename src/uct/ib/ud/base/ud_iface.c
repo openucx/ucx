@@ -21,6 +21,9 @@
 #include <sys/poll.h>
 
 
+#define UCT_UD_IFACE_CEP_CONN_SN_MAX ((uct_ud_ep_conn_sn_t)-1)
+
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ud_iface_stats_class = {
     .name          = "ud_iface",
@@ -68,11 +71,11 @@ uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
                              int path_index)
 {
     void *peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
-    return (uct_ud_ep_conn_sn_t)
-           ucs_conn_match_get_next_sn(&iface->conn_match_ctx,
-                                      uct_ud_iface_cep_get_peer_address(
-                                          iface, ib_addr, if_addr, path_index,
-                                          peer_address));
+
+    uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr, path_index,
+                                      peer_address);
+
+    return ucs_conn_match_get_next_sn(&iface->conn_match_ctx, peer_address);
 }
 
 void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
@@ -83,6 +86,7 @@ void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
 {
     ucs_conn_match_queue_type_t queue_type;
     void *peer_address;
+    int ret;
 
     queue_type   = uct_ud_iface_cep_ep_queue_type(ep);
     peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
@@ -90,8 +94,10 @@ void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
                                       peer_address);
 
     ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
-    ucs_conn_match_insert(&iface->conn_match_ctx, peer_address,
-                          conn_sn, &ep->conn_match, queue_type);
+    ret = ucs_conn_match_insert(&iface->conn_match_ctx, peer_address,
+                                conn_sn, &ep->conn_match, queue_type);
+    ucs_assert_always(ret == 1);
+
     ep->flags |= UCT_UD_EP_FLAG_ON_CEP;
 }
 
@@ -313,7 +319,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
                         uct_iface_invoke_ops_func(&iface->super,
                                                   uct_ud_iface_ops_t,
                                                   get_peer_address_length),
-                        &conn_match_ops);
+                        UCT_UD_IFACE_CEP_CONN_SN_MAX, &conn_match_ops);
 
     status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
                              uct_ud_iface_get_time(iface));

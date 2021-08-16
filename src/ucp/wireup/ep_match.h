@@ -39,9 +39,9 @@ ucp_ep_match_conn_sn_t ucp_ep_match_get_sn(ucp_worker_h worker,
                                            uint64_t dest_uuid);
 
 
-void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
-                         ucp_ep_match_conn_sn_t conn_sn,
-                         ucs_conn_match_queue_type_t conn_queue_type);
+int ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
+                        ucp_ep_match_conn_sn_t conn_sn,
+                        ucs_conn_match_queue_type_t conn_queue_type);
 
 
 ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,

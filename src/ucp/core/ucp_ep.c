@@ -874,9 +874,9 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
         ucp_ep_flush_state_reset(ep);
-    } else {
-        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
-                            UCS_CONN_MATCH_QUEUE_EXP);
+    } else if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
+                                    UCS_CONN_MATCH_QUEUE_EXP)) {
+        ucp_ep_flush_state_reset(ep);
     }
 
     /* if needed, send initial wireup message */
