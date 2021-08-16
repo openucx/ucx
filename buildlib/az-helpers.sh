@@ -127,7 +127,14 @@ try_load_cuda_env() {
 		have_gdrcopy=yes
 		az_module_load dev/cuda11.1.1 || have_cuda=no
 		az_module_load dev/gdrcopy2.1_cuda11.1.1 || have_gdrcopy=no
+		nvidia-smi -a
+		ls -l /dev/nvidia*
 		num_gpus=$(nvidia-smi -L | wc -l)
+        if [ "$num_gpus" -gt 0 ] && ! [ -f /sys/kernel/mm/memory_peers/nv_mem/version ]
+        then
+            lsmod
+            azure_log_error "GPU direct driver not loaded"
+        fi
 	fi
 }
 
