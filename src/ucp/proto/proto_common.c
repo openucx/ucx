@@ -204,13 +204,17 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     ucp_lane_map_t lane_map;
     char lane_desc[64];
 
-    num_lanes = 0;
+    if (max_lanes == 0) {
+        return 0;
+    }
 
     ucp_proto_select_param_str(select_param, &sel_param_strb);
     if (rkey_config_key != NULL) {
         ucs_string_buffer_appendf(&sel_param_strb, "->");
         ucp_rkey_config_dump_brief(rkey_config_key, &sel_param_strb);
     }
+
+    num_lanes = 0;
     ucs_trace("selecting up to %d/%d lanes for %s %s", max_lanes,
               ep_config_key->num_lanes, params->proto_name,
               ucs_string_buffer_cstr(&sel_param_strb));
@@ -315,6 +319,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
             }
         }
 
+        ucs_trace("%s: added as lane %d", lane_desc, lane);
         lanes[num_lanes++] = lane;
     }
 
@@ -557,6 +562,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     ucs_linear_func_t send_ovrh, xfer, recv_ovrh;
     ucp_proto_perf_range_t *range0, *range1;
     ucs_memory_type_t recv_mem_type;
+    char frag_size_str[32];
     uint32_t op_attr_mask;
     ucs_status_t status;
     size_t frag_size;
@@ -650,6 +656,19 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
 
     ucs_assert(perf->max_frag >= params->hdr_size);
     frag_size = ucs_min(params->max_length, perf->max_frag - params->hdr_size);
+
+    ucs_trace("%s-frag %s"
+              " send-overhead:" UCP_PROTO_PERF_FUNC_FMT
+              " transfer-time:" UCP_PROTO_PERF_FUNC_FMT
+              " receive-overhead:" UCP_PROTO_PERF_FUNC_FMT,
+              (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG) ?
+                      "single" :
+                      "multi",
+              ucs_memunits_to_str(frag_size, frag_size_str,
+                                  sizeof(frag_size_str)),
+              UCP_PROTO_PERF_FUNC_ARG(&send_ovrh),
+              UCP_PROTO_PERF_FUNC_ARG(&xfer),
+              UCP_PROTO_PERF_FUNC_ARG(&recv_ovrh));
 
     /* First range represents sending the first fragment */
     range0                                   = &caps->ranges[0];

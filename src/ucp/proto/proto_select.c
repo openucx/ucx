@@ -371,6 +371,48 @@ static ucs_status_t ucp_proto_thresholds_select_next(
     return status;
 }
 
+static void
+ucp_proto_select_init_trace_caps(ucp_proto_id_t proto_id,
+                                 const ucp_proto_init_params_t *init_params)
+{
+    ucp_proto_caps_t *proto_caps = init_params->caps;
+    const UCS_V_UNUSED ucs_linear_func_t *perf;
+    size_t UCS_V_UNUSED range_start, range_end;
+    ucs_string_buffer_t config_strb;
+    int UCS_V_UNUSED range_index;
+    char min_length_str[64];
+    char thresh_str[64];
+
+    ucs_string_buffer_init(&config_strb);
+    ucp_proto_id_call(proto_id, config_str, proto_caps->min_length, SIZE_MAX,
+                      init_params->priv, &config_strb);
+    ucs_trace("initialized protocol %s min_length %s cfg_thresh %s %s",
+              init_params->proto_name,
+              ucs_memunits_to_str(proto_caps->min_length, min_length_str,
+                                  sizeof(min_length_str)),
+              ucs_memunits_to_str(proto_caps->cfg_thresh, thresh_str,
+                                  sizeof(thresh_str)),
+              ucs_string_buffer_cstr(&config_strb));
+    ucs_string_buffer_cleanup(&config_strb);
+
+    ucs_log_indent(1);
+    range_start = 0;
+    for (range_index = 0; range_index < proto_caps->num_ranges; ++range_index) {
+        range_end = proto_caps->ranges[range_index].max_length;
+        perf      = proto_caps->ranges[range_index].perf;
+        ucs_trace("range[%d] %s single:" UCP_PROTO_PERF_FUNC_FMT
+                  " multi:" UCP_PROTO_PERF_FUNC_FMT,
+                  range_index,
+                  ucs_memunits_range_str(range_start, range_end, thresh_str,
+                                         sizeof(thresh_str)),
+                  UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_SINGLE]),
+                  UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_MULTI]));
+        range_start = range_end + 1;
+    }
+    ucs_log_indent(-1);
+}
+
+
 static ucs_status_t
 ucp_proto_select_init_protocols(ucp_worker_h worker,
                                 ucp_worker_cfg_index_t ep_cfg_index,
@@ -383,8 +425,6 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     ucs_string_buffer_t strb;
     size_t priv_size, offset;
     ucp_proto_id_t proto_id;
-    char min_length_str[64];
-    char thresh_str[64];
     ucs_status_t status;
     void *tmp;
 
@@ -442,18 +482,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
             continue;
         }
 
-        ucs_string_buffer_init(&strb);
-        ucp_proto_id_call(proto_id, config_str, proto_caps->min_length,
-                          SIZE_MAX, init_params.priv, &strb);
-        ucs_trace("protocol %s has %u ranges, min_length %s, cfg_thresh %s %s",
-                  ucp_proto_id_field(proto_id, name), proto_caps->num_ranges,
-                  ucs_memunits_to_str(proto_caps->min_length, min_length_str,
-                                      sizeof(min_length_str)),
-                  ucs_memunits_to_str(proto_caps->cfg_thresh, thresh_str,
-                                      sizeof(thresh_str)),
-                  ucs_string_buffer_cstr(&strb));
-        ucs_string_buffer_cleanup(&strb);
-
+        ucp_proto_select_init_trace_caps(proto_id, &init_params);
         ucs_log_indent(-1);
 
         /* A successful protocol initialization must return non-empty
