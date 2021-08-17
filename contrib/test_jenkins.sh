@@ -508,19 +508,26 @@ run_ucp_hello() {
 
 	export UCX_KEEPALIVE_INTERVAL=1s
 	export UCX_KEEPALIVE_NUM_EPS=10
+	export UCX_LOG_LEVEL=info
 
-	for test_mode in -w -f -b -erecv -esend -ekeepalive
+	for tls in all tcp,cuda
 	do
-		for mem_type in $mem_types_list
+		export UCX_TLS=${tls}
+		for test_mode in -w -f -b -erecv -esend -ekeepalive
 		do
-			echo "==== Running UCP hello world with mode ${test_mode} and \"${mem_type}\" memory type ===="
-			run_hello ucp ${test_mode} -m ${mem_type}
+			for mem_type in $mem_types_list
+			do
+				echo "==== Running UCP hello world with mode ${test_mode} and \"${mem_type}\" memory type ===="
+				run_hello ucp ${test_mode} -m ${mem_type}
+			done
 		done
 	done
 	rm -f ./ucp_hello_world
 
 	unset UCX_KEEPALIVE_INTERVAL
 	unset UCX_KEEPALIVE_NUM_EPS
+	unset UCX_LOG_LEVEL
+	unset UCX_TLS
 }
 
 #
