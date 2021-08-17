@@ -17,7 +17,8 @@ MVNCMD = $(MVN) -B -T 1C -f \
          -Dmaven.repo.local=$(maven_repo) \
          -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
-JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConstants.h             \
+JUCX_GENERATED_H_FILES = org_openucx_jucx_ucp_UcpConnectionRequest.h     \
+                         org_openucx_jucx_ucp_UcpConstants.h             \
                          org_openucx_jucx_ucp_UcpContext.h               \
                          org_openucx_jucx_ucp_UcpEndpoint.h              \
                          org_openucx_jucx_ucp_UcpListener.h              \
