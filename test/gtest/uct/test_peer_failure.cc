@@ -473,65 +473,69 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
 
-class test_uct_keepalive : public ucs::test {
+class test_uct_keepalive : public uct_test {
 public:
-    test_uct_keepalive()
+    test_uct_keepalive() :
+        m_ka(NULL), m_pid(getpid()), m_entity(NULL), m_err_handler_count(0)
     {
-        m_ka  = NULL;
-        m_pid = getpid();
     }
 
     void init()
     {
-        m_err_handler_count = 0;
-
         ASSERT_UCS_OK(uct_ep_keepalive_create(m_pid, &m_ka));
+
+        m_entity = create_entity(0, err_handler_cb);
+        m_entity->connect(0, *m_entity, 0);
+        m_entities.push_back(m_entity);
     }
 
     void cleanup()
     {
+        m_entities.clear();
         ucs_free(m_ka);
     }
 
     static ucs_status_t
     err_handler_cb(void *arg, uct_ep_h ep, ucs_status_t status)
     {
-        m_err_handler_count++;
-        return status;
+        test_uct_keepalive *self = reinterpret_cast<test_uct_keepalive*>(arg);
+        self->m_err_handler_count++;
+        return UCS_OK;
     }
 
 protected:
-    uct_keepalive_info_t *m_ka;
-    pid_t                m_pid;
-    static unsigned      m_err_handler_count;
-};
-
-
-unsigned test_uct_keepalive::m_err_handler_count = 0;
-
-
-UCS_TEST_F(test_uct_keepalive, ep_check)
-{
-    uct_base_iface_t iface = {};
-    uct_ep_t ep            = {};
-
-    iface.err_handler     = err_handler_cb;
-    iface.err_handler_arg = &m_err_handler_count;
-    ep.iface              = &iface.super;
-
-    for (unsigned i = 0; i < 10; ++i) {
-        ucs_status_t status = uct_ep_keepalive_check(&ep, &m_ka, m_pid, 0,
-                                                     NULL);
+    void do_keepalive()
+    {
+        ucs_status_t status = uct_ep_keepalive_check(m_entity->ep(0), &m_ka,
+                                                     m_pid, 0, NULL);
         EXPECT_UCS_OK(status);
     }
+
+    uct_keepalive_info_t *m_ka;
+    pid_t                m_pid;
+    entity               *m_entity;
+    unsigned             m_err_handler_count;
+};
+
+UCS_TEST_P(test_uct_keepalive, ep_check)
+{
+    for (unsigned i = 0; i < 10; ++i) {
+        do_keepalive();
+    }
+    EXPECT_EQ(0u, m_err_handler_count);
 
     /* change start time saved in KA to force an error from EP check */
     m_ka->start_time--;
 
-    ucs_status_t status = uct_ep_keepalive_check(&ep, &m_ka, m_pid, 0, NULL);
-    EXPECT_EQ(UCS_ERR_ENDPOINT_TIMEOUT, status);
+    do_keepalive();
+    EXPECT_EQ(0u, m_err_handler_count);
+
+    progress();
     EXPECT_EQ(1u, m_err_handler_count);
 }
+
+// Need to instantiate only on one transport
+_UCT_INSTANTIATE_TEST_CASE(test_uct_keepalive, posix)
 
 
 class test_uct_peer_failure_keepalive : public test_uct_peer_failure

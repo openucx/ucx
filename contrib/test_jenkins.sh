@@ -503,8 +503,9 @@ run_ucp_hello() {
 	export UCX_KEEPALIVE_INTERVAL=1s
 	export UCX_KEEPALIVE_NUM_EPS=10
 	export UCX_LOG_LEVEL=info
+	export UCX_MM_ERROR_HANDLING=y
 
-	for tls in all tcp,cuda
+	for tls in all tcp,cuda shm,cuda
 	do
 		export UCX_TLS=${tls}
 		for test_mode in -w -f -b -erecv -esend -ekeepalive
@@ -522,6 +523,7 @@ run_ucp_hello() {
 	unset UCX_KEEPALIVE_NUM_EPS
 	unset UCX_LOG_LEVEL
 	unset UCX_TLS
+	unset UCX_MM_ERROR_HANDLING
 }
 
 #
