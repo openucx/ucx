@@ -417,6 +417,18 @@ static unsigned ucs_callbackq_slow_proxy(void *arg)
     return count;
 }
 
+static void ucs_callbackq_array_show(const ucs_callbackq_elem_t *elems,
+                                     unsigned count, const char *title)
+{
+    unsigned i;
+
+    for (i = 0; i < count; ++i) {
+        ucs_diag("%s[%u]: cb %s (%p) arg %p id %d flags 0x%x", title, i,
+                 ucs_debug_get_symbol_name(elems[i].cb), elems[i].cb,
+                 elems[i].arg, elems[i].id, elems[i].flags);
+    }
+}
+
 ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
 {
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
@@ -450,6 +462,12 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
     if ((priv->num_fast_elems) > 0 || (priv->num_slow_elems > 0)) {
         ucs_warn("%d fast-path and %d slow-path callbacks remain in the queue",
                  priv->num_fast_elems, priv->num_slow_elems);
+
+        ucs_log_indent(1);
+        ucs_callbackq_array_show(cbq->fast_elems, priv->num_fast_elems, "fast");
+        ucs_callbackq_array_show(priv->slow_elems, priv->num_slow_elems,
+                                 "slow");
+        ucs_log_indent(-1);
     }
 
     ucs_callbackq_array_free(priv->slow_elems, sizeof(*priv->slow_elems),
