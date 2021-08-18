@@ -9,6 +9,7 @@
 
 #include <ucs/memory/memory_type.h>
 
+#include <sys/poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -265,8 +266,10 @@ err:
     return -1;
 }
 
-static inline int barrier(int oob_sock)
+static inline int
+barrier(int oob_sock, void (*progress_cb)(void *arg), void *arg)
 {
+    struct pollfd pfd;
     int dummy = 0;
     ssize_t res;
 
@@ -274,6 +277,14 @@ static inline int barrier(int oob_sock)
     if (res < 0) {
         return res;
     }
+
+    pfd.fd      = oob_sock;
+    pfd.events  = POLLIN;
+    pfd.revents = 0;
+    do {
+        res = poll(&pfd, 1, 1);
+        progress_cb(arg);
+    } while (res != 1);
 
     res = recv(oob_sock, &dummy, sizeof(dummy), MSG_WAITALL);
 
