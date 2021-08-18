@@ -1109,6 +1109,8 @@ bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag
         return false;
     }
 
+    assert(_ucx_status == UCS_OK);
+
     ucs_status_ptr_t ptr_status = ucp_tag_send_nb(_ep, buffer, length,
                                                   ucp_dt_make_contig(1), tag,
                                                   common_request_callback);
