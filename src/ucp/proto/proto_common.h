@@ -13,6 +13,13 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+/* Format string to display a protocol performance function */
+#define UCP_PROTO_PERF_FUNC_FMT " %.0f+%.3f*N ns, %.2f MB/s"
+#define UCP_PROTO_PERF_FUNC_ARG(_perf_func) \
+    ((_perf_func)->c * 1e9), ((_perf_func)->m * 1e9), \
+            (1.0 / ((_perf_func)->m * UCS_MBYTE))
+
+
 /* Constant for "undefined"/"not-applicable" structure offset */
 #define UCP_PROTO_COMMON_OFFSET_INVALID          PTRDIFF_MAX
 
