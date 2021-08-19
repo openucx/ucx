@@ -553,8 +553,15 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
 
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
+    ucs_status_t status;
+
     if (params->field_mask & UCT_EP_PARAM_FIELD_IFACE) {
-        return params->iface->ops.ep_create(params, ep_p);
+        status = params->iface->ops.ep_create(params, ep_p);
+        if (status == UCS_OK) {
+            ucs_vfs_obj_set_dirty(params->iface, uct_iface_vfs_refresh);
+        }
+
+        return status;
     } else if (params->field_mask & UCT_EP_PARAM_FIELD_CM) {
         return params->cm->ops->ep_create(params, ep_p);
     }
@@ -574,6 +581,7 @@ ucs_status_t uct_ep_disconnect(uct_ep_h ep, unsigned flags)
 
 void uct_ep_destroy(uct_ep_h ep)
 {
+    ucs_vfs_obj_remove(ep);
     ep->iface->ops.ep_destroy(ep);
 }
 
