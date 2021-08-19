@@ -129,7 +129,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "MD whose distance is queried when evaluating transport selection score",
    ucs_offsetof(ucp_config_t, selection_cmp), UCS_CONFIG_TYPE_STRING},
 
-  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "",
+  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
    "Memory types which have whole allocations registered.\n"
    "Allowed memory types: cuda, rocm, rocm-managed",
    ucs_offsetof(ucp_config_t, ctx.reg_whole_alloc_bitmap),

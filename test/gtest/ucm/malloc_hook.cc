@@ -1224,7 +1224,8 @@ protected:
 
             if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
                 (m_events[i].second.mem_type.address == address) &&
-                (m_events[i].second.mem_type.mem_type == mem_type()) &&
+                ((m_events[i].second.mem_type.mem_type == mem_type()) ||
+                 (m_events[i].second.mem_type.mem_type == UCS_MEMORY_TYPE_UNKNOWN)) &&
                 (m_events[i].second.mem_type.size == size)) {
                 return true;
             }

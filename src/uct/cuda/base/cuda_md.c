@@ -12,11 +12,17 @@
 #include "cuda_iface.h"
 
 #include <ucs/sys/module.h>
+#include <ucs/type/spinlock.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
+#include <uct/cuda/cuda_copy/cuda_copy_md.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 
+#define UCT_CUDA_DEV_NAME_MAX_LEN 64
+#define UCT_CUDA_MAX_DEVICES      32
+
+ucs_spinlock_t uct_cuda_base_lock;
 
 ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                        ucs_sys_device_t *sys_dev_p)
@@ -55,6 +61,80 @@ ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
     return ucs_topo_find_device_by_bus_id(&bus_id, sys_dev_p);
 }
 
+static size_t
+uct_cuda_base_get_total_device_mem(CUdevice cuda_device)
+{
+    static size_t total_bytes[UCT_CUDA_MAX_DEVICES];
+    char dev_name[UCT_CUDA_DEV_NAME_MAX_LEN];
+    CUresult cu_err;
+    const char *cu_err_str;
+
+    ucs_assert(cuda_device < UCT_CUDA_MAX_DEVICES);
+
+    ucs_spin_lock(&uct_cuda_base_lock);
+
+    if (!total_bytes[cuda_device]) {
+        cu_err = cuDeviceTotalMem(&total_bytes[cuda_device], cuda_device);
+        if (cu_err != CUDA_SUCCESS) {
+            cuGetErrorString(cu_err, &cu_err_str);
+            ucs_error("cuDeviceTotalMem error: %s", cu_err_str);
+            goto err;
+        }
+
+        cu_err = cuDeviceGetName(dev_name, sizeof(dev_name), cuda_device);
+        if (cu_err != CUDA_SUCCESS) {
+            cuGetErrorString(cu_err, &cu_err_str);
+            ucs_error("cuDeviceGetName error: %s", cu_err_str);
+            goto err;
+        }
+
+        if (!strncmp(dev_name, "T4", 2)) {
+            total_bytes[cuda_device] = 1; /* should ensure that whole alloc
+                                             registration is not used for t4 */
+        }
+    }
+
+    ucs_spin_unlock(&uct_cuda_base_lock);
+    return total_bytes[cuda_device];
+
+err:
+    ucs_spin_unlock(&uct_cuda_base_lock);
+    return 1; /* return 1 byte to avoid division by zero */
+}
+
+static ucs_status_t
+uct_cuda_base_get_base_addr_alloc_length(uct_cuda_copy_md_t *md,
+                                         CUdevice cuda_device,
+                                         const void *address,
+                                         size_t length,
+                                         void **base_address,
+                                         size_t *alloc_length)
+{
+    size_t total_bytes = uct_cuda_base_get_total_device_mem(cuda_device);
+    CUresult cu_err;
+    const char *cu_err_str;
+    CUdeviceptr base_addr;
+    size_t alloc_len;
+    double ratio;
+
+    cu_err = cuMemGetAddressRange(&base_addr, &alloc_len, (CUdeviceptr)address);
+    if (cu_err != CUDA_SUCCESS) {
+        cuGetErrorString(cu_err, &cu_err_str);
+        ucs_error("cuMemGetAddressRange(%p) error: %s", address, cu_err_str);
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    ratio = ((double)alloc_len / total_bytes);
+
+    if ((md->config.alloc_whole_reg == UCS_CONFIG_ON) ||
+        ((md->config.alloc_whole_reg == UCS_CONFIG_AUTO) &&
+         (ratio < md->config.max_reg_ratio))) {
+        *base_address = (void*)base_addr;
+        *alloc_length = alloc_len;
+    }
+
+    return UCS_OK;
+}
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
                  (md, address, length, mem_type_p),
@@ -76,8 +156,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
-                 (md, address, length, mem_attr),
-                 uct_md_h md, const void *address, size_t length,
+                 (tl_md, address, length, mem_attr),
+                 uct_md_h tl_md, const void *address, size_t length,
                  uct_md_mem_attr_t *mem_attr)
 {
 #define UCT_CUDA_MEM_QUERY_NUM_ATTRS 3
@@ -87,7 +167,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
     CUdevice cuda_device       = -1;
     void *base_address         = (void*)address;
     size_t alloc_length        = length;
-    ucs_sys_device_t sys_dev   =  UCS_SYS_DEVICE_ID_UNKNOWN;
+    ucs_sys_device_t sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    uct_cuda_copy_md_t *md     = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
     CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
     ucs_memory_type_t mem_type;
@@ -145,13 +226,14 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
 
         if (mem_attr->field_mask & (UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
                                     UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS)) {
-            cu_err = cuMemGetAddressRange((CUdeviceptr*)&base_address,
-                                          &alloc_length, (CUdeviceptr)address);
-            if (cu_err != CUDA_SUCCESS) {
-                cuGetErrorString(cu_err, &cu_err_str);
-                ucs_error("ccuMemGetAddressRange(%p) error: %s", address,
-                          cu_err_str);
-                return UCS_ERR_INVALID_ADDR;
+
+            status =
+                uct_cuda_base_get_base_addr_alloc_length(md, cuda_device,
+                                                         address, length,
+                                                         &base_address,
+                                                         &alloc_length);
+            if (status != UCS_OK) {
+                return status;
             }
         }
     }
@@ -190,6 +272,14 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
     return uct_md_query_single_md_resource(component, resources_p,
                                            num_resources_p);
+}
+
+UCS_STATIC_INIT {
+    ucs_spinlock_init(&uct_cuda_base_lock, 0);
+}
+
+UCS_STATIC_CLEANUP {
+    ucs_spinlock_destroy(&uct_cuda_base_lock);
 }
 
 UCS_MODULE_INIT() {
