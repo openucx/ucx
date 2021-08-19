@@ -17,7 +17,9 @@
  * selection decision.
  */
 #define UCP_PROTO_SELECT_OP_ATTR_BASE   UCP_OP_ATTR_FLAG_NO_IMM_CMPL
-#define UCP_PROTO_SELECT_OP_ATTR_MASK   UCP_OP_ATTR_FLAG_FAST_CMPL
+#define UCP_PROTO_SELECT_OP_ATTR_MASK   (UCP_OP_ATTR_FLAG_FAST_CMPL | \
+                                         UCP_OP_ATTR_FLAG_MULTI_SEND)
+#define UCP_PROTO_SELECT_OP_FLAGS_BASE  UCS_BIT(5)
 
 
 /** Maximal length of ucp_proto_select_param_str() */
