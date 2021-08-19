@@ -47,7 +47,7 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
         .middle.lane_type    = UCP_LANE_TYPE_RMA_BW
     };
 
-    if ((init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) ||
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -141,7 +141,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
 {
     ucs_status_t status;
 
-    if (params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
+    if (!ucp_proto_rndv_op_check(params, UCP_OP_ID_RNDV_RECV, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

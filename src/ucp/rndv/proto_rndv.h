@@ -139,4 +139,9 @@ ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
 ucs_status_t ucp_proto_rndv_handle_data(void *arg, void *data, size_t length,
                                         unsigned flags);
 
+
+/* Initialize req->send.multi_lane_idx according to req->rndv.offset */
+void ucp_proto_rndv_bulk_request_init_lane_idx(
+        ucp_request_t *req, const ucp_proto_rndv_bulk_priv_t *rpriv);
+
 #endif

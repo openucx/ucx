@@ -450,7 +450,7 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
     ucs_assert_always(req->send.lane != UCP_NULL_LANE);
     ucs_assert_always(req->send.rndv.lanes_count > 0);
 
-    if (req->send.mdesc == NULL) {
+    if (req->send.rndv.mdesc == NULL) {
         status = ucp_send_request_add_reg_lane(req, lane);
         ucs_assert_always(status == UCS_OK);
     }
@@ -498,7 +498,7 @@ ucp_rndv_progress_rma_zcopy_common(ucp_request_t *req, ucp_lane_index_t lane,
      * but it will work on single lane */
     ucp_dt_iov_copy_uct(ep->worker->context, iov, &iovcnt, max_iovcnt, &state,
                         req->send.buffer, ucp_dt_make_contig(1), length,
-                        ucp_ep_md_index(ep, lane), req->send.mdesc);
+                        ucp_ep_md_index(ep, lane), req->send.rndv.mdesc);
 
     for (;;) {
         if (proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) {
@@ -813,7 +813,7 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_recv_frag_put_completion, (self),
     ucp_request_t *rndv_req;
 
     /* release memory descriptor */
-    ucs_mpool_put_inline((void*)freq->send.mdesc);
+    ucs_mpool_put_inline((void*)freq->send.rndv.mdesc);
 
     /* rndv_req is NULL in case of put protocol */
     if (!is_put_proto) {
@@ -867,7 +867,7 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
     freq->send.length       = length;
     freq->send.datatype     = ucp_dt_make_contig(1);
     freq->send.mem_type     = mem_type;
-    freq->send.mdesc        = mdesc;
+    freq->send.rndv.mdesc   = mdesc;
     freq->send.uct.func     = uct_func;
     freq->send.pending_lane = UCP_NULL_LANE;
 
@@ -1342,11 +1342,11 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
         goto err;
     }
 
-    rndv_req->flags      = 0;
-    rndv_req->send.ep    = ep;
-    rndv_req->send.mdesc = NULL;
-    is_get_zcopy_failed  = 0;
-    src_mem_type         = UCS_MEMORY_TYPE_HOST;
+    rndv_req->flags           = 0;
+    rndv_req->send.ep         = ep;
+    rndv_req->send.rndv.mdesc = NULL;
+    is_get_zcopy_failed       = 0;
+    src_mem_type              = UCS_MEMORY_TYPE_HOST;
 
     ucp_trace_req(rreq,
                   "rndv matched remote {address 0x%"PRIx64" size %zu sreq_id "
@@ -1637,8 +1637,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_send_frag_put_completion, (self),
     }
 
     /* release memory descriptor */
-    if (freq->send.mdesc != NULL) {
-        ucs_mpool_put_inline((void*)freq->send.mdesc);
+    if (freq->send.rndv.mdesc != NULL) {
+        ucs_mpool_put_inline((void*)freq->send.rndv.mdesc);
     }
 
     fsreq                        = ucp_request_get_super(freq);
@@ -1786,7 +1786,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
             freq->send.datatype     = ucp_dt_make_contig(1);
             freq->send.mem_type     = UCS_MEMORY_TYPE_HOST;
             freq->send.uct.func     = ucp_rndv_progress_rma_put_zcopy;
-            freq->send.mdesc        = NULL;
+            freq->send.rndv.mdesc   = NULL;
             freq->send.pending_lane = UCP_NULL_LANE;
 
             ucp_request_send(freq);
@@ -1926,7 +1926,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
             sreq->send.uct.func            = ucp_rndv_progress_rma_put_zcopy;
             sreq->send.rndv.remote_req_id  = rndv_rtr_hdr->rreq_id;
             sreq->send.rndv.remote_address = rndv_rtr_hdr->address;
-            sreq->send.mdesc               = NULL;
+            sreq->send.rndv.mdesc          = NULL;
             sreq->send.pending_lane        = UCP_NULL_LANE;
 
             ucp_rndv_req_init_zcopy_lane_map(sreq, sreq->send.mem_type,

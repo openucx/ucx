@@ -218,8 +218,11 @@ struct ucp_request {
                     /* Key for remote buffer get/put operation */
                     ucp_rkey_h        rkey;
 
+                    /* Descriptor for staging rendezvous data */
+                    ucp_mem_desc_t    *mdesc;
+
                     union {
-                        /* Used by version 1 rendezvous protocols */
+                        /* Used by "old" rendezvous protocols, in rndv.c */
                         struct {
                             /* Actual lanes map */
                             ucp_lane_map_t lanes_map_all;
@@ -231,14 +234,25 @@ struct ucp_request {
                             uint8_t        rkey_index[UCP_MAX_LANES];
                         };
 
-                        /* Used by rndv/put */
+                        /* Used by "new" rendezvous protocols, in proto_rndv.c */
                         struct {
-                            /* which lanes need to flush (0 in fence mode) */
-                            ucp_lane_map_t flush_map;
+                            /* Data start offset of this request */
+                            size_t offset;
 
-                            /* which lanes need to send atp */
-                            ucp_lane_map_t atp_map;
-                        } put;
+                            /* Used by rndv/put and rndv/put/frag */
+                            struct {
+                                /* Which lanes need to flush (0 in fence mode) */
+                                ucp_lane_map_t flush_map;
+
+                                /* Which lanes need to send atp */
+                                ucp_lane_map_t atp_map;
+                            } put;
+
+                            /* Used by rndv/send/ppln and rndv/recv/ppln */
+                            struct {
+                                uint8_t send_ack;
+                            } ppln;
+                        };
                     };
                 } rndv;
 
@@ -324,7 +338,6 @@ struct ucp_request {
             ucp_lane_index_t      lane;            /* Lane on which this request is being sent */
             uint8_t               proto_stage;     /* Protocol current stage */
             uct_pending_req_t     uct;             /* UCT pending request */
-            ucp_mem_desc_t        *mdesc;
         } send;
 
         /* "receive" part - used for tag_recv, am_recv and stream_recv operations */

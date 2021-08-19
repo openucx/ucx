@@ -133,12 +133,75 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 #endif
 }
 
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_request_total_length(ucp_request_t *req)
+{
+    ucp_request_t *super_req;
+
+    if (ucs_unlikely(req->flags & UCP_REQUEST_FLAG_RNDV_FRAG)) {
+        super_req = ucp_request_get_super(req);
+        return super_req->send.state.dt_iter.length;
+    }
+
+    return req->send.state.dt_iter.length;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_bulk_request_init(ucp_request_t *req,
                                  const ucp_proto_rndv_bulk_priv_t *rpriv)
 {
-    req->send.multi_lane_idx = 0;
+    if (req->send.rndv.offset == 0) {
+        req->send.multi_lane_idx = 0;
+    } else {
+        ucp_proto_rndv_bulk_request_init_lane_idx(req, rpriv);
+    }
     ucp_proto_multi_set_send_lane(req);
+}
+
+/**
+ * Calculate how much data to send on the next lane in a rendezvous protocol,
+ * including when the request is a fragment and starts from nonzero offset.
+ */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
+                                const ucp_proto_rndv_bulk_priv_t *rpriv,
+                                const ucp_proto_multi_lane_priv_t *lpriv)
+{
+    size_t total_length = ucp_proto_rndv_request_total_length(req);
+    size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
+    size_t offset;
+
+    offset = req->send.rndv.offset + req->send.state.dt_iter.offset;
+    if (ucs_likely(total_length < max_frag_sum)) {
+        /* Each lane sends less than its maximal fragment size */
+        return ucp_proto_multi_scaled_length(lpriv->weight_sum, total_length) -
+               offset;
+    } else {
+        /* Send in round-robin fashion, each lanes sends its maximal size */
+        return lpriv->max_frag_sum - (offset % max_frag_sum);
+    }
+}
+
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_request_is_ppln_frag(ucp_request_t *req)
+{
+    return req->send.proto_config->select_param.op_flags &
+           UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_init_params_is_ppln_frag(const ucp_proto_init_params_t *params)
+{
+    return params->select_param->op_flags & UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG;
+}
+
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_rndv_op_check(const ucp_proto_init_params_t *params,
+                        ucp_operation_id_t op_id, int support_ppln)
+{
+    return (params->select_param->op_id == op_id) &&
+           (support_ppln || !ucp_proto_rndv_init_params_is_ppln_frag(params));
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -150,6 +213,8 @@ ucp_proto_rndv_recv_complete(ucp_request_t *req)
 
     /* Remote key should already be released */
     ucs_assert(req->send.rndv.rkey == NULL);
+
+    ucs_assert(!ucp_proto_rndv_request_is_ppln_frag(req));
 
     ucp_request_complete_tag_recv(rreq, rreq->status);
     ucp_request_put(req);

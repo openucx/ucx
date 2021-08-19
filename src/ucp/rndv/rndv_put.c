@@ -169,6 +169,8 @@ ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.latency       = 0,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
         .super.cfg_priority  = 0,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
@@ -191,7 +193,7 @@ ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
     ucs_status_t status;
     int use_fence;
 
-    if ((init_params->select_param->op_id != UCP_OP_ID_RNDV_SEND) ||
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_SEND, 0) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }

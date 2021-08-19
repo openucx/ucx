@@ -22,6 +22,10 @@
 #define UCP_PROTO_SELECT_OP_FLAGS_BASE  UCS_BIT(5)
 
 
+/* Select a protocol for sending one fragment of a rendezvous pipeline */
+#define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
+
+
 /** Maximal length of ucp_proto_select_param_str() */
 #define UCP_PROTO_SELECT_PARAM_STR_MAX 128
 

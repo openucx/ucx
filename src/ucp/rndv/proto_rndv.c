@@ -297,19 +297,23 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
     ucp_proto_rndv_ctrl_init_params_t params = {
-        .super.super        = *init_params,
-        .super.latency      = 0,
-        .super.overhead     = 40e-9,
-        .super.cfg_thresh   = context->config.ext.rndv_thresh,
-        .super.cfg_priority = 60,
-        .super.hdr_size     = 0,
-        .super.memtype_op   = UCT_EP_OP_LAST,
-        .super.flags        = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
-        .remote_op_id       = UCP_OP_ID_RNDV_RECV,
-        .perf_bias          = context->config.ext.rndv_perf_diff / 100.0,
-        .mem_info.type      = init_params->select_param->mem_type,
-        .mem_info.sys_dev   = init_params->select_param->sys_dev,
-        .min_length         = 0
+        .super.super         = *init_params,
+        .super.latency       = 0,
+        .super.overhead      = 40e-9,
+        .super.cfg_thresh    = context->config.ext.rndv_thresh,
+        .super.cfg_priority  = 60,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+        .remote_op_id        = UCP_OP_ID_RNDV_RECV,
+        .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
+        .mem_info.type       = init_params->select_param->mem_type,
+        .mem_info.sys_dev    = init_params->select_param->sys_dev
     };
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_TAG_SEND);
@@ -510,8 +514,9 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     /* Initialize send request */
     req->flags                    = 0;
     req->send.ep                  = ep;
-    req->send.rndv.remote_address = rts->address;
     req->send.rndv.remote_req_id  = rts->sreq.req_id;
+    req->send.rndv.remote_address = rts->address;
+    req->send.rndv.offset         = 0;
     ucp_request_set_super(req, recv_req);
 
     if (ucs_likely(rts->size <= recv_req->recv.length)) {
@@ -556,6 +561,7 @@ ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
     ucp_proto_rndv_check_rkey_length(rtr->address, rkey_length, "rtr");
     req->send.rndv.remote_address = rtr->address;
     req->send.rndv.remote_req_id  = rtr->rreq_id;
+    req->send.rndv.offset         = rtr->offset;
 
     ucs_assert(rtr->size == req->send.state.dt_iter.length);
     status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND,
@@ -598,4 +604,33 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
 err_request_fail:
     ucp_proto_request_abort(req, status);
     return UCS_OK;
+}
+
+void ucp_proto_rndv_bulk_request_init_lane_idx(
+        ucp_request_t *req, const ucp_proto_rndv_bulk_priv_t *rpriv)
+{
+    size_t total_length = ucp_proto_rndv_request_total_length(req);
+    size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
+    const ucp_proto_multi_lane_priv_t *lpriv;
+    size_t end_offset, rel_offset;
+    ucp_lane_index_t lane_idx;
+
+    lane_idx = 0;
+    if (ucs_likely(total_length < max_frag_sum)) {
+        /* Size is smaller than frag sum - scale the total length by the weight
+           of each lane */
+        do {
+            lpriv      = &rpriv->mpriv.lanes[lane_idx++];
+            end_offset = ucp_proto_multi_scaled_length(lpriv->weight_sum,
+                                                       total_length);
+        } while (req->send.rndv.offset >= end_offset);
+    } else {
+        /* Find the lane which needs to send the current fragment */
+        rel_offset = req->send.rndv.offset % rpriv->mpriv.max_frag_sum;
+        do {
+            lpriv = &rpriv->mpriv.lanes[lane_idx++];
+        } while (rel_offset >= lpriv->max_frag_sum);
+    }
+
+    req->send.multi_lane_idx = lane_idx - 1;
 }
