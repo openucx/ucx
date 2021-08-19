@@ -223,7 +223,8 @@ static ucs_mpool_ops_t ucs_rcache_mp_ops = {
     .chunk_alloc   = ucs_rcache_mp_chunk_alloc,
     .chunk_release = ucs_rcache_mp_chunk_release,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static unsigned ucs_rcache_region_page_count(ucs_rcache_region_t *region)

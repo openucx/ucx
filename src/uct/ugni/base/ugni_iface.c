@@ -51,7 +51,8 @@ static ucs_mpool_ops_t uct_ugni_flush_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 void uct_ugni_cleanup_base_iface(uct_ugni_iface_t *iface)

@@ -121,6 +121,14 @@ void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb);
 
 
 /**
+ * Reset a string buffer to initial empty state.
+ *
+ * @param [out] strb   String buffer reset.
+ */
+void ucs_string_buffer_reset(ucs_string_buffer_t *strb);
+
+
+/**
  * Get the number of characters in a string buffer
  *
  * @param [out] strb   Return the length of this string buffer.

@@ -30,7 +30,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"TX_SEG_SIZE", "8kb",
    "Size of send copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
-  
+
   {"RX_SEG_SIZE", "64kb",
    "Size of receive copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
@@ -553,6 +553,7 @@ out:
 static ucs_mpool_ops_t uct_tcp_mpool_ops = {
     ucs_mpool_chunk_malloc,
     ucs_mpool_chunk_free,
+    NULL,
     NULL,
     NULL
 };

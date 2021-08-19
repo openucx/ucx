@@ -124,6 +124,12 @@ UCS_TEST_F(test_string_buffer, appendf) {
     EXPECT_EQ("We, Created, The-Monster",
               std::string(ucs_string_buffer_cstr(&strb)));
 
+    ucs_string_buffer_reset(&strb);
+    EXPECT_EQ("", std::string(ucs_string_buffer_cstr(&strb)));
+
+    ucs_string_buffer_appendf(&strb, "%s", "Clean slate");
+    EXPECT_EQ("Clean slate", std::string(ucs_string_buffer_cstr(&strb)));
+
     ucs_string_buffer_cleanup(&strb);
 }
 
