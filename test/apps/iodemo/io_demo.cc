@@ -948,7 +948,7 @@ public:
         listen_addr.sin_addr.s_addr = INADDR_ANY;
         listen_addr.sin_port        = htons(opts().port_num);
 
-        for (long retry = 1;; ++retry) {
+        for (long retry = 1; _status == OK; ++retry) {
             if (listen((const struct sockaddr*)&listen_addr,
                        sizeof(listen_addr))) {
                 break;
