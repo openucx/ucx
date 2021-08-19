@@ -46,7 +46,7 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
  * @code{.c}
  * char * build_my_string(char *buffer, size_t max_length)
  * {
- *    UCS_STRING_BUFFER_FIXED(strb, buffer, max_legth);
+ *    UCS_STRING_BUFFER_FIXED(strb, buffer, max_length);
  *    ucs_string_buffer_appendf(&strb, "%x%x", 57005, 48879);
  *    return buffer;
  * }
