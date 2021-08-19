@@ -185,7 +185,7 @@ static void uct_tcp_ep_ptr_map_add(uct_tcp_ep_t *ep)
 
     uct_tcp_ep_ptr_map_verify(ep, 0);
 
-    status = ucs_ptr_map_put(&iface->ep_ptr_map, ep, 1,
+    status = UCS_PTR_MAP_PUT(tcp_ep, &iface->ep_ptr_map, ep, 1,
                              &ep->cm_id.ptr_map_key);
     ucs_assert_always(status == UCS_OK);
 
@@ -204,7 +204,7 @@ static void uct_tcp_ep_ptr_map_del(uct_tcp_ep_t *ep)
                                             uct_tcp_iface_t);
     ucs_status_t status;
 
-    status = ucs_ptr_map_del(&iface->ep_ptr_map, ep->cm_id.ptr_map_key);
+    status = UCS_PTR_MAP_DEL(tcp_ep, &iface->ep_ptr_map, ep->cm_id.ptr_map_key);
     ucs_assert_always(status == UCS_OK);
     uct_tcp_ep_ptr_map_removed(ep);
 }
@@ -216,7 +216,7 @@ uct_tcp_ep_ptr_map_get(uct_tcp_iface_t *iface, ucs_ptr_map_key_t ptr_map_key)
     uct_tcp_ep_t *ep;
     void *ptr;
 
-    status = ucs_ptr_map_get(&iface->ep_ptr_map, ptr_map_key, 0, &ptr);
+    status = UCS_PTR_MAP_GET(tcp_ep, &iface->ep_ptr_map, ptr_map_key, 0, &ptr);
     if (ucs_likely(status == UCS_OK)) {
         ep = ptr;
         uct_tcp_ep_ptr_map_verify(ep, 1);
@@ -233,7 +233,7 @@ uct_tcp_ep_t *uct_tcp_ep_ptr_map_retrieve(uct_tcp_iface_t *iface,
     uct_tcp_ep_t *ep;
     void *ptr;
 
-    status = ucs_ptr_map_get(&iface->ep_ptr_map, ptr_map_key, 1, &ptr);
+    status = UCS_PTR_MAP_GET(tcp_ep, &iface->ep_ptr_map, ptr_map_key, 1, &ptr);
     if (ucs_likely(status == UCS_OK)) {
         ep = ptr;
         uct_tcp_ep_ptr_map_removed(ep);

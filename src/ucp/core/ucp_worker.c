@@ -2070,12 +2070,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_snprintf_zero(worker->address_name, name_length, "%s:%d",
                       ucs_get_host_name(), getpid());
 
-    status = ucs_ptr_map_init(&worker->ep_map);
+    status = UCS_PTR_MAP_INIT(ep, &worker->ep_map);
     if (status != UCS_OK) {
         goto err_free;
     }
 
-    status = ucs_ptr_map_init(&worker->request_map);
+    status = UCS_PTR_MAP_INIT(request, &worker->request_map);
     if (status != UCS_OK) {
         goto err_destroy_ep_map;
     }
@@ -2195,9 +2195,9 @@ err_free_tm_offload_stats:
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
 err_destroy_request_map:
-    ucs_ptr_map_destroy(&worker->request_map);
+    UCS_PTR_MAP_DESTROY(request, &worker->request_map);
 err_destroy_ep_map:
-    ucs_ptr_map_destroy(&worker->ep_map);
+    UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
@@ -2426,8 +2426,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
-    ucs_ptr_map_destroy(&worker->request_map);
-    ucs_ptr_map_destroy(&worker->ep_map);
+    UCS_PTR_MAP_DESTROY(request, &worker->request_map);
+    UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);

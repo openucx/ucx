@@ -11,8 +11,6 @@
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
 
-
-#include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
@@ -20,6 +18,9 @@
 #include <ucs/debug/debug_int.h>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
+
+
+UCS_PTR_MAP_IMPL(request, 0);
 
 
 #define UCP_REQUEST_FLAGS_FMT \
@@ -864,7 +865,7 @@ ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
 {
     ucs_status_t status;
 
-    status = ucs_ptr_map_put(&ep->worker->request_map, ptr,
+    status = UCS_PTR_MAP_PUT(request, &ep->worker->request_map, ptr,
                              ucp_ep_use_indirect_id(ep), ptr_id_p);
     ucp_ep_ptr_map_check_status(ep, ptr, "allocate", status);
 
@@ -903,7 +904,7 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
                  (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));
     ep = req->send.ep;
 
-    status = ucs_ptr_map_del(&ep->worker->request_map, req->id);
+    status = UCS_PTR_MAP_DEL(request, &ep->worker->request_map, req->id);
     if (status == UCS_OK) {
         ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
     }
@@ -921,7 +922,7 @@ ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 
     ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
 
-    status = ucs_ptr_map_get(&worker->request_map, id, extract, &ptr);
+    status = UCS_PTR_MAP_GET(request, &worker->request_map, id, extract, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }

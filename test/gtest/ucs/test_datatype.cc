@@ -16,6 +16,7 @@ extern "C" {
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/time/time.h>
+#include <ucs/type/init_once.h>
 #include <ucs/arch/cpu.h>
 }
 
@@ -23,6 +24,8 @@ extern "C" {
 #include <map>
 
 class test_datatype : public ucs::test {
+public:
+    typedef std::map<ucs_ptr_map_key_t, char*> std_map_t;
 };
 
 typedef struct {
@@ -1150,22 +1153,23 @@ UCS_TEST_F(test_array, fixed_onstack) {
     test_fixed(&test_array, num_elems);
 }
 
+UCS_PTR_MAP_DEFINE(test_st, 0);
+
 UCS_TEST_F(test_datatype, ptr_map) {
-    typedef std::map<ucs_ptr_map_key_t, char*> std_map_t;
+    UCS_PTR_MAP_T(test_st) ptr_map;
 
     const size_t N = 10 * UCS_KBYTE;
     ucs_ptr_map_key_t ptr_key;
-    ucs_ptr_map_t     ptr_map;
     std_map_t         std_map;
     ucs_status_t      status;
 
-    status = ucs_ptr_map_init(&ptr_map);
-    ASSERT_EQ(UCS_OK, status);
+    ASSERT_UCS_OK(UCS_PTR_MAP_INIT(test_st, &ptr_map));
 
     for (size_t i = 0; i < N; ++i) {
         char *ptr     = new char;
         bool indirect = ucs::rand() % 2;
-        status = ucs_ptr_map_put(&ptr_map, ptr, indirect, &ptr_key);
+        status = UCS_PTR_MAP_PUT(test_st, &ptr_map, ptr, indirect, &ptr_key);
+
         if (indirect) {
             ASSERT_UCS_OK(status);
             EXPECT_TRUE(ucs_ptr_map_key_indirect(ptr_key));
@@ -1181,7 +1185,7 @@ UCS_TEST_F(test_datatype, ptr_map) {
         bool indirect = ucs_ptr_map_key_indirect(i->first);
         bool extract  = ucs::rand() % 2;
         void *value;
-        status = ucs_ptr_map_get(&ptr_map, i->first, extract, &value);
+        status = UCS_PTR_MAP_GET(test_st, &ptr_map, i->first, extract, &value);
         if (indirect) {
             ASSERT_EQ(UCS_OK, status);
         } else {
@@ -1190,7 +1194,7 @@ UCS_TEST_F(test_datatype, ptr_map) {
 
         ASSERT_EQ(i->second, value);
         if (!extract) {
-            status = ucs_ptr_map_del(&ptr_map, i->first);
+            status = UCS_PTR_MAP_DEL(test_st, &ptr_map, i->first);
             if (indirect) {
                 ASSERT_EQ(UCS_OK, status);
             } else {
@@ -1200,5 +1204,76 @@ UCS_TEST_F(test_datatype, ptr_map) {
         delete i->second;
     }
 
-    ucs_ptr_map_destroy(&ptr_map);
+    UCS_PTR_MAP_DESTROY(test_st, &ptr_map);
+}
+
+UCS_PTR_MAP_DEFINE(test_mt, 1);
+
+UCS_MT_TEST_F(test_datatype, ptr_map_mt, 4)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static pthread_mutex_t mutex     = PTHREAD_MUTEX_INITIALIZER;
+    static UCS_PTR_MAP_T(test_mt) ptr_map;
+    std_map_t std_map;
+    ucs_status_t status;
+
+    UCS_INIT_ONCE(&init_once) {
+        ASSERT_UCS_OK(UCS_PTR_MAP_INIT(test_mt, &ptr_map));
+    }
+
+    barrier();
+
+    const size_t N = 10 * UCS_KBYTE;
+
+    for (size_t i = 0; i < N; ++i) {
+        char *ptr     = new char;
+        bool indirect = ucs::rand() % 2;
+        ucs_ptr_map_key_t ptr_key;
+
+        status = UCS_PTR_MAP_PUT(test_mt, &ptr_map, ptr, indirect, &ptr_key);
+
+        if (indirect) {
+            ASSERT_UCS_OK(status);
+            EXPECT_TRUE(ucs_ptr_map_key_indirect(ptr_key));
+        } else {
+            ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+            EXPECT_FALSE(ucs_ptr_map_key_indirect(ptr_key));
+        }
+
+        std_map[ptr_key] = ptr;
+    }
+
+    {
+        ucs::scoped_mutex_lock lock(mutex);
+        for (std_map_t::iterator i = std_map.begin(); i != std_map.end(); ++i) {
+            bool indirect = ucs_ptr_map_key_indirect(i->first);
+            bool extract  = ucs::rand() % 2;
+            void *value;
+            status = UCS_PTR_MAP_GET(test_mt, &ptr_map, i->first, extract,
+                                     &value);
+            if (indirect) {
+                ASSERT_EQ(UCS_OK, status);
+            } else {
+                ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+            }
+
+            ASSERT_EQ(i->second, value);
+            if (!extract) {
+                status = UCS_PTR_MAP_DEL(test_mt, &ptr_map, i->first);
+                if (indirect) {
+                    ASSERT_EQ(UCS_OK, status);
+                } else {
+                    ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+                }
+            }
+            delete i->second;
+        }
+    }
+
+    barrier();
+
+    UCS_CLEANUP_ONCE(&init_once)
+    {
+        UCS_PTR_MAP_DESTROY(test_mt, &ptr_map);
+    }
 }
