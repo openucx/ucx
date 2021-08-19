@@ -151,6 +151,7 @@ libucs_la_SOURCES = \
 	datastruct/mpool.c \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
+	datastruct/ptr_map.c \
 	datastruct/strided_alloc.c \
 	datastruct/string_buffer.c \
 	datastruct/string_set.c \

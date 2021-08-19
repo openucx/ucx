@@ -353,6 +353,9 @@ struct uct_tcp_ep {
 };
 
 
+UCS_PTR_MAP_DEFINE(tcp_ep, 0);
+
+
 /**
  * TCP interface
  */
@@ -361,8 +364,9 @@ typedef struct uct_tcp_iface {
     int                           listen_fd;         /* Server socket */
     ucs_conn_match_ctx_t          conn_match_ctx;    /* Connection matching context that contains EPs
                                                       * created with CONNECT_TO_IFACE method */
-    ucs_ptr_map_t                 ep_ptr_map;        /* EP PTR map that contains EPs created
-                                                      * with CONNECT_TO_EP method */
+    UCS_PTR_MAP_T(tcp_ep)         ep_ptr_map;        /* EP PTR map that contains
+                                                      * EPs created with
+                                                      * CONNECT_TO_EP method */
     ucs_list_link_t               ep_list;           /* List of endpoints */
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     ucs_sys_event_set_t           *event_set;        /* Event set identifier */

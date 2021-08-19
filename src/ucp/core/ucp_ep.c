@@ -356,7 +356,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_INDIRECT_ID, 0);
     }
 
-    status = ucs_ptr_map_put(&worker->ep_map, ep,
+    status = UCS_PTR_MAP_PUT(ep, &worker->ep_map, ep,
                              !!(ep->flags & UCP_EP_FLAG_INDIRECT_ID),
                              &ucp_ep_ext_control(ep)->local_ep_id);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
@@ -405,7 +405,7 @@ void ucp_ep_release_id(ucp_ep_h ep)
 
     /* Don't use ucp_ep_local_id() function here to avoid assertion failure,
      * because local_ep_id can be set to @ref UCS_PTR_MAP_KEY_INVALID */
-    status = ucs_ptr_map_del(&ep->worker->ep_map,
+    status = UCS_PTR_MAP_DEL(ep, &ep->worker->ep_map,
                              ucp_ep_ext_control(ep)->local_ep_id);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         ucs_warn("ep %p local id 0x%" PRIxPTR ": ucs_ptr_map_del failed: %s",
