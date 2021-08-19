@@ -119,16 +119,23 @@ function az_module_unload() {
 # try load cuda modules if nvidia driver is installed
 #
 try_load_cuda_env() {
-	num_gpus=0
-	have_cuda=no
-	have_gdrcopy=no
-	if [ -f "/proc/driver/nvidia/version" ]; then
-		have_cuda=yes
-		have_gdrcopy=yes
-		az_module_load dev/cuda11.1.1 || have_cuda=no
-		az_module_load dev/gdrcopy2.1_cuda11.1.1 || have_gdrcopy=no
-		num_gpus=$(nvidia-smi -L | wc -l)
-	fi
+    num_gpus=0
+    have_cuda=no
+    have_gdrcopy=no
+    if [ -f "/proc/driver/nvidia/version" ]; then
+        have_cuda=yes
+        have_gdrcopy=yes
+        az_module_load dev/cuda11.1.1 || have_cuda=no
+        az_module_load dev/gdrcopy2.1_cuda11.1.1 || have_gdrcopy=no
+        nvidia-smi -a
+        ls -l /dev/nvidia*
+        num_gpus=$(nvidia-smi -L | wc -l)
+        if [ "$num_gpus" -gt 0 ] && ! [ -f /sys/kernel/mm/memory_peers/nv_mem/version ]
+        then
+            lsmod
+            azure_log_error "GPU direct driver not loaded"
+        fi
+    fi
 }
 
 
