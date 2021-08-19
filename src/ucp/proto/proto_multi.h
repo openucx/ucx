@@ -68,11 +68,19 @@ typedef struct {
  */
 typedef struct {
     ucp_proto_common_init_params_t super;
-    ucp_lane_index_t               max_lanes;  /* Max lanes to select */
 
+    /* Maximal number of lanes to select */
+    ucp_lane_index_t               max_lanes;
+
+    /* MDs on which the buffer is expected to be already registered, so no need
+       to account for the overhead of registering on them */
+    ucp_md_map_t                   initial_reg_md_map;
     struct {
-        uint64_t                   tl_cap_flags; /* Required iface capabilities */
-        ucp_lane_type_t            lane_type;    /* Required lane type */
+        /* Required iface capabilities */
+        uint64_t        tl_cap_flags;
+
+        /* Required lane type */
+        ucp_lane_type_t lane_type;
     } first, middle;
 } ucp_proto_multi_init_params_t;
 

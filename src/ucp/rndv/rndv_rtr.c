@@ -29,7 +29,7 @@ typedef struct {
 static ucs_status_t
 ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
                                uint64_t rndv_modes, ucs_memory_type_t mem_type,
-                               ucs_sys_device_t sys_dev)
+                               ucs_sys_device_t sys_dev, int support_ppln)
 {
     ucp_context_h context                    = init_params->worker->context;
     ucp_proto_rndv_ctrl_init_params_t params = {
@@ -53,7 +53,8 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
     };
     ucs_status_t status;
 
-    if (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
+                                 support_ppln)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -192,7 +193,8 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes,
                                             init_params->select_param->mem_type,
-                                            init_params->select_param->sys_dev);
+                                            init_params->select_param->sys_dev,
+                                            0);
     if (status != UCS_OK) {
         return status;
     }

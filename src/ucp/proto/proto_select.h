@@ -163,9 +163,13 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
                             ucp_proto_select_short_t *proto_short);
 
 
-void ucp_proto_select_get_valid_range(
+int ucp_proto_select_get_valid_range(
         const ucp_proto_threshold_elem_t *thresholds, size_t *min_length_p,
         size_t *max_length_p);
 
+
+void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
+                                  size_t min_length, size_t max_length,
+                                  ucs_string_buffer_t *strb);
 
 #endif
