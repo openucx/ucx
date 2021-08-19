@@ -66,7 +66,7 @@ protected:
         m_ucph.reset();
     }
 
-    void init_dt_iter(size_t size)
+    void init_dt_iter(size_t size, bool is_pack)
     {
         m_dt_buffer.resize(size, 0);
         ucs::fill_random(m_dt_buffer);
@@ -84,8 +84,8 @@ protected:
 
         uint8_t sg_count;
         ucp_datatype_iter_init(m_ucph.get(), m_dt_desc.buf(), m_dt_desc.count(),
-                               m_dt_desc.dt(), m_dt_buffer.size(), &m_dt_iter,
-                               &sg_count);
+                               m_dt_desc.dt(), m_dt_buffer.size(), is_pack,
+                               &m_dt_iter, &sg_count);
         if (!UCP_DT_IS_GENERIC(GetParam())) {
             EXPECT_EQ(iovcnt, sg_count);
         }
@@ -108,7 +108,7 @@ protected:
 
     void test_pack(size_t size)
     {
-        init_dt_iter(size);
+        init_dt_iter(size, true);
 
         ucp_datatype_iter_t next_iter;
         do {
@@ -127,7 +127,7 @@ protected:
 
     void test_unpack(size_t size)
     {
-        init_dt_iter(size);
+        init_dt_iter(size, false);
 
         typedef std::vector< std::pair<size_t, size_t> > segment_vector_t;
         segment_vector_t segments;

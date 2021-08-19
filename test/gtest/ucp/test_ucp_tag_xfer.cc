@@ -26,8 +26,8 @@ public:
         VARIANT_ERR_HANDLING,
         VARIANT_RNDV_PUT_ZCOPY,
         VARIANT_RNDV_GET_ZCOPY,
-        VARIANT_RNDV_AUTO,
         VARIANT_SEND_NBR,
+        VARIANT_PROTO
     };
 
     test_ucp_tag_xfer() {
@@ -49,13 +49,19 @@ public:
             modify_config("RNDV_SCHEME", "put_zcopy");
         } else if (get_variant_value() == VARIANT_RNDV_GET_ZCOPY) {
             modify_config("RNDV_SCHEME", "get_zcopy");
-        } else if (get_variant_value() == VARIANT_RNDV_AUTO) {
-            modify_config("RNDV_SCHEME", "auto");
+        } else if (get_variant_value() == VARIANT_PROTO) {
+            modify_config("PROTO_ENABLE", "y");
         }
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES", "2");
 
         test_ucp_tag::init();
+    }
+
+    virtual void cleanup()
+    {
+        EXPECT_EQ(ucp::dt_gen_start_count, ucp::dt_gen_finish_count);
+        test_ucp_tag::cleanup();
     }
 
     bool skip_on_ib_dc() {
@@ -77,9 +83,9 @@ public:
         add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_RNDV_GET_ZCOPY, "rndv_get_zcopy");
         add_variant_with_value(variants, get_ctx_params(),
-                               VARIANT_RNDV_AUTO, "rndv_auto");
-        add_variant_with_value(variants, get_ctx_params(),
                                VARIANT_SEND_NBR, "send_nbr");
+        add_variant_with_value(variants, get_ctx_params(), VARIANT_PROTO,
+                               "proto");
     }
 
     virtual ucp_ep_params_t get_ep_params() {

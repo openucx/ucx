@@ -73,7 +73,9 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_am_bcopy_complete(ucp_request_t *req)
 {
-    ucp_proto_rndv_rkey_destroy(req);
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));

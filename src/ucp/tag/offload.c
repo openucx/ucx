@@ -690,14 +690,13 @@ const ucp_request_send_proto_t ucp_tag_offload_proto = {
 /* Eager sync */
 static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
 {
-    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_worker_t *worker = req->send.ep->worker;
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
 
     status = ucp_do_tag_offload_bcopy(self,
                                       ucp_send_request_get_ep_remote_id(req));
     if (status == UCS_OK) {
-        ucp_tag_offload_sync_posted(worker, req);
+        ucp_tag_offload_sync_posted(req);
     }
 
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 1, status);
@@ -705,15 +704,14 @@ static ucs_status_t ucp_tag_offload_eager_sync_bcopy(uct_pending_req_t *self)
 
 static ucs_status_t ucp_tag_offload_eager_sync_zcopy(uct_pending_req_t *self)
 {
-    ucp_request_t *req   = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_worker_t *worker = req->send.ep->worker;
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t status;
 
     status = ucp_do_tag_offload_zcopy(self,
                                       ucp_send_request_get_ep_remote_id(req),
                                       ucp_tag_eager_sync_zcopy_req_complete);
     if (status == UCS_OK) {
-        ucp_tag_offload_sync_posted(worker, req);
+        ucp_tag_offload_sync_posted(req);
     }
     return status;
 }

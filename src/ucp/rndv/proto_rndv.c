@@ -24,6 +24,10 @@ ucp_proto_rndv_ctrl_reg_md_map(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucp_md_map_t reg_md_map;
     ucp_lane_index_t lane;
 
+    if (params->super.super.select_param->dt_class != UCP_DATATYPE_CONTIG) {
+        return 0;
+    }
+
     /* md_map is all lanes which support get_zcopy on the given mem_type and
      * require remote key
      */
@@ -385,9 +389,9 @@ void ucp_proto_rndv_bulk_config_str(size_t min_length, size_t max_length,
 
 static ucs_status_t
 ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
-                          ucp_operation_id_t op_id, uint8_t sg_count,
-                          size_t length, const void *rkey_buffer,
-                          size_t rkey_length)
+                          ucp_operation_id_t op_id, size_t length,
+                          const void *rkey_buffer, size_t rkey_length,
+                          uint8_t sg_count)
 {
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
@@ -397,7 +401,6 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
 
     ucs_assert((op_id == UCP_OP_ID_RNDV_RECV) ||
                (op_id == UCP_OP_ID_RNDV_SEND));
-    ucs_assert(sg_count == 1);
 
     if (rkey_length > 0) {
         ucs_assert(rkey_buffer != NULL);
@@ -470,10 +473,6 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, return,
                                   "RTS on non-existing endpoint");
 
-    if (!UCP_DT_IS_CONTIG(recv_req->recv.datatype)) {
-        ucs_fatal("non-contiguous types are not supported with rndv protocol");
-    }
-
     req = ucp_request_get(worker);
     if (req == NULL) {
         ucs_error("failed to allocate rendezvous reply");
@@ -491,22 +490,25 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
         ucp_proto_rndv_check_rkey_length(rts->address, rkey_length, "rts");
         length           = rts->size;
         recv_req->status = UCS_OK;
+        ucp_datatype_iter_init_from_dt_state(worker->context,
+                                             recv_req->recv.buffer, length,
+                                             recv_req->recv.datatype,
+                                             &recv_req->recv.state,
+                                             &req->send.state.dt_iter,
+                                             &sg_count);
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
         length           = 0;
         recv_req->status = UCS_ERR_MESSAGE_TRUNCATED;
+        ucp_request_recv_generic_dt_finish(recv_req);
+        ucp_datatype_iter_init_empty(&req->send.state.dt_iter, &sg_count);
     }
 
-    ucp_datatype_iter_init(worker->context, recv_req->recv.buffer, length,
-                           recv_req->recv.datatype, length,
-                           &req->send.state.dt_iter, &sg_count);
-
-    status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_RECV,
-                                       sg_count, length, rkey_buffer,
-                                       rkey_length);
+    status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_RECV, length,
+                                       rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
-        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
+        ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
         ucs_mpool_put(req);
         return;
     }
@@ -514,7 +516,8 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 
 static ucs_status_t
 ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
-                          const ucp_rndv_rtr_hdr_t *rtr, size_t header_length)
+                          const ucp_rndv_rtr_hdr_t *rtr, size_t header_length,
+                          uint8_t sg_count)
 {
     ucs_status_t status;
     size_t rkey_length;
@@ -526,8 +529,10 @@ ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
     req->send.rndv.remote_address = rtr->address;
     req->send.rndv.remote_req_id  = rtr->rreq_id;
 
-    status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND, 1,
-                                       rtr->size, rtr + 1, rkey_length);
+    ucs_assert(rtr->size == req->send.state.dt_iter.length);
+    status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND,
+                                       rtr->size, rtr + 1, rkey_length,
+                                       sg_count);
     if (status != UCS_OK) {
         return status;
     }
@@ -542,13 +547,10 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     const ucp_rndv_rtr_hdr_t *rtr = data;
     ucs_status_t status;
     ucp_request_t *req;
+    uint8_t sg_count;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 1, return UCS_OK,
                                "RTR %p", rtr);
-
-    if (rtr->address == 0) {
-        ucs_fatal("RTR without remote address is currently unsupported");
-    }
 
     /* RTR covers the whole send request - use the send request directly */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);
@@ -556,7 +558,9 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     ucs_assert(rtr->offset == 0);
 
     req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-    status      = ucp_proto_rndv_send_start(worker, req, rtr, length);
+    sg_count    = req->send.proto_config->select_param.sg_count;
+
+    status = ucp_proto_rndv_send_start(worker, req, rtr, length, sg_count);
     if (status != UCS_OK) {
         goto err_request_fail;
     }
