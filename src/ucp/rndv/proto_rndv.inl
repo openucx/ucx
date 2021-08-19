@@ -98,14 +98,11 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     return hdr_len + rkey_size;
 }
 
-static ucs_status_t UCS_F_ALWAYS_INLINE
-ucp_proto_rndv_ack_progress(ucp_request_t *req, ucp_am_id_t am_id,
-                            ucp_proto_complete_cb_t complete_func)
+static ucs_status_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
+        ucp_request_t *req, const ucp_proto_rndv_ack_priv_t *apriv,
+        ucp_am_id_t am_id, ucp_proto_complete_cb_t complete_func)
 {
-    const ucp_proto_rndv_ack_priv_t *apriv = req->send.proto_config->priv;
-
     ucs_assert(ucp_datatype_iter_is_end(&req->send.state.dt_iter));
-
     return ucp_proto_am_bcopy_single_progress(req, am_id, apriv->lane,
                                               ucp_proto_rndv_pack_ack, req,
                                               sizeof(ucp_reply_hdr_t),
@@ -131,6 +128,44 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 #if UCS_ENABLE_ASSERT
     req->send.rndv.rkey = NULL;
 #endif
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(
+        ucp_worker_h worker, ucp_request_t *req, ucp_request_t **freq_p)
+{
+    ucp_request_t *freq;
+
+    freq = ucp_request_get(worker);
+    if (freq == NULL) {
+        ucs_error("failed to allocated rendezvous send fragment");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    ucp_trace_req(req, "allocated rndv fragment %p", freq);
+    ucp_request_set_super(freq, req);
+    freq->flags   = UCP_REQUEST_FLAG_RNDV_FRAG;
+    freq->send.ep = req->send.ep;
+    *freq_p       = freq;
+    return UCS_OK;
+}
+
+/* @return Nonzero if the top-level rendezvous request 'req' is completed */
+static UCS_F_ALWAYS_INLINE int ucp_proto_rndv_frag_complete(ucp_request_t *req,
+                                                            ucp_request_t *freq,
+                                                            const char *title)
+{
+    ucs_assert(freq->flags & UCP_REQUEST_FLAG_RNDV_FRAG);
+
+    req->send.state.completed_size += freq->send.state.dt_iter.length;
+    ucp_trace_req(req, "completed %s %zu/%zu by frag %p length %zu", title,
+                  req->send.state.completed_size,
+                  req->send.state.dt_iter.length, freq,
+                  freq->send.state.dt_iter.length);
+    ucp_request_put(freq);
+
+    ucs_assert(req->send.state.completed_size <=
+               req->send.state.dt_iter.length);
+    return req->send.state.completed_size == req->send.state.dt_iter.length;
 }
 
 static UCS_F_ALWAYS_INLINE size_t

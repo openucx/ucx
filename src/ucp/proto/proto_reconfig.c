@@ -8,6 +8,7 @@
 #  include "config.h"
 #endif
 
+#include "proto_select.h"
 #include "proto_common.inl"
 
 #include <ucp/core/ucp_worker.inl>
@@ -19,39 +20,22 @@ static ucs_status_t ucp_proto_reconfig_select_progress(uct_pending_req_t *self)
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_h ep         = req->send.ep;
     ucp_worker_h worker = ep->worker;
-    ucp_worker_cfg_index_t prev_rkey_cfg_index;
-    ucp_rkey_config_key_t rkey_config_key;
     ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_t *proto_select;
     ucs_status_t status;
 
-    /*
-     * Find the protocol selection hash: could be either on the endpoint or on
-     * the remote key
-     */
-    prev_rkey_cfg_index = req->send.proto_config->rkey_cfg_index;
-    if (prev_rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
-        proto_select   = &worker->ep_config[ep->cfg_index].proto_select;
-        rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
-    } else {
-        rkey_config_key = worker->rkey_config[prev_rkey_cfg_index].key;
-        rkey_config_key.ep_cfg_index = ep->cfg_index;
-
-        status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
-                                            &rkey_cfg_index);
-        if (status != UCS_OK) {
-            ucs_error("failed to switch to new rkey");
-            return UCS_OK;
-        }
-
-        proto_select = &worker->rkey_config[rkey_cfg_index].proto_select;
+    proto_select = ucp_proto_select_get(worker, ep->cfg_index,
+                                        req->send.proto_config->rkey_cfg_index,
+                                        &rkey_cfg_index);
+    if (proto_select == NULL) {
+        return UCS_OK;
     }
 
     /* Select from protocol hash according to saved request parameters */
-    status = ucp_proto_request_set_proto(worker, ep, req, proto_select,
-                                         rkey_cfg_index,
-                                         &req->send.proto_config->select_param,
-                                         req->send.state.dt_iter.length);
+    status = ucp_proto_request_lookup_proto(
+            worker, ep, req, proto_select, rkey_cfg_index,
+            &req->send.proto_config->select_param,
+            req->send.state.dt_iter.length);
     if (status != UCS_OK) {
         /* will try again later */
         return UCS_ERR_NO_RESOURCE;
