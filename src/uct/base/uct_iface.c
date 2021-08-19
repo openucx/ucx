@@ -23,6 +23,12 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
+typedef struct uct_base_ep_error_handle_info {
+    uct_ep_h     ep;
+    ucs_status_t status;
+} uct_base_ep_error_handle_info_t;
+
+
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
     [UCT_EP_OP_AM_BCOPY]     = "am_bcopy",
@@ -625,6 +631,33 @@ UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 
 UCS_CLASS_DEFINE(uct_ep_t, void);
 
+static unsigned uct_iface_ep_error_handle_progress(void *arg)
+{
+    uct_base_ep_error_handle_info_t *err_info = arg;
+    uct_base_iface_t *iface;
+
+    iface = ucs_derived_of(err_info->ep->iface, uct_base_iface_t);
+    iface->err_handler(iface->err_handler_arg, err_info->ep, err_info->status);
+    ucs_free(err_info);
+    return 1;
+}
+
+static int
+uct_iface_ep_error_handle_progress_remove(const ucs_callbackq_elem_t *elem,
+                                          void *arg)
+{
+    uct_base_ep_error_handle_info_t *err_info = elem->arg;
+    uct_base_ep_t *ep                         = arg;
+
+    if ((elem->cb == uct_iface_ep_error_handle_progress) &&
+        (err_info->ep == &ep->super)) {
+        ucs_free(err_info);
+        return 1;
+    }
+
+    return 0;
+}
+
 UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &iface->super);
@@ -635,6 +668,11 @@ UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
 {
+    uct_base_iface_t *iface = ucs_derived_of(self->super.iface,
+                                             uct_base_iface_t);
+
+    ucs_callbackq_remove_if(&iface->worker->super.progress_q,
+                            uct_iface_ep_error_handle_progress_remove, self);
     UCS_STATS_NODE_FREE(self->stats);
 }
 
@@ -781,28 +819,50 @@ err:
     return status;
 }
 
-ucs_status_t
-uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t **ka, pid_t pid,
-                       unsigned flags, uct_completion_t *comp)
+static ucs_status_t uct_iface_schedule_ep_err(uct_ep_h ep, ucs_status_t status)
+{
+    uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+    uct_base_ep_error_handle_info_t *err_info;
+
+    if (iface->err_handler == NULL) {
+        ucs_diag("ep %p: unhandled error %s", ep, ucs_status_string(status));
+        return UCS_OK;
+    }
+
+    err_info = ucs_malloc(sizeof(*err_info), "uct_base_ep_err");
+    if (err_info == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    err_info->ep     = ep;
+    err_info->status = status;
+    ucs_callbackq_add_safe(&iface->worker->super.progress_q,
+                           uct_iface_ep_error_handle_progress, err_info,
+                           UCS_CALLBACKQ_FLAG_ONESHOT);
+    return UCS_OK;
+}
+
+ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t **ka,
+                                    pid_t pid, unsigned flags,
+                                    uct_completion_t *comp)
 {
     ucs_status_t status;
     ucs_time_t create_time;
 
     UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
-    if (ucs_unlikely(*ka == NULL)) {
+    if (*ka == NULL) {
         status = uct_ep_keepalive_create(pid, ka);
-        if (status != UCS_OK) {
-            return uct_iface_handle_ep_err(tl_ep->iface, tl_ep, status);
-        }
     } else {
         status = ucs_sys_get_file_time((*ka)->proc, UCS_SYS_FILE_TIME_CTIME,
                                        &create_time);
-        if (ucs_unlikely((status != UCS_OK) ||
-                         ((*ka)->start_time != create_time))) {
-            return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
-                                           UCS_ERR_ENDPOINT_TIMEOUT);
+        if ((status != UCS_OK) || ((*ka)->start_time != create_time)) {
+            status = UCS_ERR_ENDPOINT_TIMEOUT;
         }
+    }
+
+    if (status != UCS_OK) {
+        return uct_iface_schedule_ep_err(ep, status);
     }
 
     return UCS_OK;

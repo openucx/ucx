@@ -2922,6 +2922,9 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
         ucs_assert((rsc_index != UCP_NULL_RESOURCE) ||
                    (lane == ucp_ep_get_cm_lane(ep)));
 
+        ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep, lane,
+                  ep->uct_eps[lane], ep->flags);
+
         status = ucp_ep_do_uct_ep_keepalive(ep, ep->uct_eps[lane], rsc_index, 0,
                                             NULL);
         if (status == UCS_ERR_NO_RESOURCE) {
