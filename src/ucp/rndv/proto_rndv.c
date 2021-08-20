@@ -117,6 +117,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
     ucp_proto_caps_t *caps            = params->super.super.caps;
     ucs_linear_func_t send_overheads, rndv_bias, perf;
+    const ucp_proto_select_param_t *select_param;
     const ucp_proto_select_range_t *remote_range;
     ucp_proto_select_param_t remote_select_param;
     ucp_proto_perf_range_t *perf_range;
@@ -130,6 +131,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucs_assert(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
     ucs_assert(!(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG));
 
+    select_param                   = params->super.super.select_param;
     *params->super.super.priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
 
     /* Find lane to send the initial message */
@@ -141,7 +143,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     /* Construct select parameter for the remote protocol */
     if (params->super.super.rkey_config_key == NULL) {
         /* Remote buffer is unknown, assume same params as local */
-        remote_select_param          = *params->super.super.select_param;
+        remote_select_param          = *select_param;
         remote_select_param.op_id    = params->remote_op_id;
         remote_select_param.op_flags = 0;
     } else {
@@ -157,7 +159,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     /* Initialize estimated memory registration map */
     rpriv->md_map           = ucp_proto_rndv_ctrl_reg_md_map(params);
     rpriv->packed_rkey_size = ucp_rkey_packed_size(context, rpriv->md_map,
-                                                   UCS_SYS_DEVICE_ID_UNKNOWN,
+                                                   select_param->sys_dev,
                                                    0);
 
     /* Guess the protocol the remote side will select */
