@@ -23,6 +23,12 @@ typedef struct {
     /* Memory domains to send remote keys */
     ucp_md_map_t            md_map;
 
+    /* System devices used for communication, used to pack distance in rkey */
+    ucp_sys_dev_map_t       sys_dev_map;
+
+    /* Cached system distance from each system device */
+    ucs_sys_dev_distance_t  sys_dev_distance[UCP_MAX_LANES];
+
     /* Total size of packed rkeys */
     size_t                  packed_rkey_size;
 

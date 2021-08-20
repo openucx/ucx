@@ -146,8 +146,12 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
 
     ucp_proto_rndv_rtr_hdr_pack(req, rtr, dt_iter->type.contig.buffer);
 
-    rkey_size = ucp_proto_request_pack_rkey(req, rtr + 1);
-    ucs_assert(rkey_size == rpriv->super.packed_rkey_size);
+    rkey_size = ucp_proto_request_pack_rkey(req, rpriv->super.sys_dev_map,
+                                            rpriv->super.sys_dev_distance,
+                                            rtr + 1);
+    ucs_assertv(rkey_size == rpriv->super.packed_rkey_size,
+                "rkey_size=%zu exp=%zu", rkey_size,
+                rpriv->super.packed_rkey_size);
 
     return sizeof(*rtr) + rkey_size;
 }

@@ -152,7 +152,8 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
 
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
-                            ucs_sys_device_t sys_dev, uint64_t sys_dev_map);
+                            ucs_sys_device_t sys_dev,
+                            ucp_sys_dev_map_t sys_dev_map);
 
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
@@ -163,7 +164,7 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 ssize_t
 ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                   const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
-                  uint64_t sys_dev_map,
+                  ucp_sys_dev_map_t sys_dev_map,
                   const ucs_sys_dev_distance_t *sys_distance, void *buffer);
 
 

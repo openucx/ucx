@@ -35,7 +35,8 @@ static struct {
 
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
-                            ucs_sys_device_t sys_dev, uint64_t sys_dev_map)
+                            ucs_sys_device_t sys_dev,
+                            ucp_sys_dev_map_t sys_dev_map)
 {
     size_t size, tl_rkey_size;
     unsigned md_index;
@@ -117,7 +118,7 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
                   buffer),
                  ucp_context_h context, ucp_md_map_t md_map,
                  const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
-                 uint64_t sys_dev_map,
+                 ucp_sys_dev_map_t sys_dev_map,
                  const ucs_sys_dev_distance_t *sys_distance, void *buffer)
 {
     void *p = buffer;
@@ -250,8 +251,8 @@ ucp_rkey_unpack_lanes_distance(const ucp_ep_config_key_t *ep_config_key,
                                ucs_sys_dev_distance_t *lanes_distance,
                                const void *buffer, const void *buffer_end)
 {
-    const void *p        = buffer;
-    uint64_t sys_dev_map = 0;
+    const void *p                 = buffer;
+    ucp_sys_dev_map_t sys_dev_map = 0;
     ucs_sys_dev_distance_t distance, distance_by_dev[UCS_SYS_DEVICE_ID_MAX];
     ucs_sys_device_t sys_dev;
     ucp_lane_index_t lane;

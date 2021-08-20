@@ -656,6 +656,13 @@ static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *m
 
     if (ucp_is_resource_enabled(resource, config, &rsc_flags, dev_cfg_masks,
                                 tl_cfg_mask)) {
+        if (resource->sys_device >= UCP_MAX_SYS_DEVICES) {
+            ucs_diag(UCT_TL_RESOURCE_DESC_FMT
+                     " system device is %d, which exceeds the maximal "
+                     "supported (%d), system locality may be ignored",
+                     UCT_TL_RESOURCE_DESC_ARG(resource), resource->sys_device,
+                     UCP_MAX_SYS_DEVICES);
+        }
         context->tl_rscs[context->num_tls].tl_rsc       = *resource;
         context->tl_rscs[context->num_tls].md_index     = md_index;
         context->tl_rscs[context->num_tls].tl_name_csum =

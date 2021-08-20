@@ -87,11 +87,18 @@ ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
     return params->worker->context->tl_rscs[rsc_index].md_index;
 }
 
-static void
-ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
-                                   ucp_lane_index_t lane,
-                                   ucs_sys_device_t sys_dev,
-                                   ucs_sys_dev_distance_t *distance)
+ucs_sys_device_t
+ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
+                             ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return params->worker->context->tl_rscs[rsc_index].tl_rsc.sys_device;
+}
+
+void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
+                                        ucp_lane_index_t lane,
+                                        ucs_sys_device_t sys_dev,
+                                        ucs_sys_dev_distance_t *distance)
 {
     ucp_context_h context       = params->worker->context;
     ucp_rsc_index_t rsc_index   = ucp_proto_common_get_rsc_index(params, lane);
