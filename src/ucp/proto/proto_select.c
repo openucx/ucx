@@ -540,8 +540,8 @@ static ucs_status_t ucp_proto_select_elem_init_thresh(
     ucp_proto_select_range_t *perf_ranges, *tmp_range_elem;
     ucp_proto_threshold_tmp_elem_t *tmp_thresh_elem;
     ucp_proto_threshold_elem_t *thresholds;
-    size_t msg_length, max_length;
     ucp_proto_config_t *proto_config;
+    size_t msg_length, max_length;
     ucp_proto_id_t proto_id;
     ucs_status_t status;
     size_t priv_offset;
@@ -638,8 +638,12 @@ err:
 static ucp_proto_perf_type_t
 ucp_proto_select_param_perf_type(const ucp_proto_select_param_t *select_param)
 {
-    /* TODO select according to operation flags */
-    return UCP_PROTO_PERF_TYPE_SINGLE;
+    if (ucp_proto_select_op_attr_from_flags(select_param->op_flags) &
+        UCP_OP_ATTR_FLAG_MULTI_SEND) {
+        return UCP_PROTO_PERF_TYPE_MULTI;
+    } else {
+        return UCP_PROTO_PERF_TYPE_SINGLE;
+    }
 }
 
 static ucs_status_t
@@ -1055,6 +1059,11 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
         ucs_string_buffer_appendf(strb, ", fast-completion");
     }
 
+    if (op_attr_mask & UCP_OP_ATTR_FLAG_MULTI_SEND) {
+        ucs_string_buffer_appendf(strb, "multi,");
+    }
+
+    ucs_string_buffer_rtrim(strb, ",");
     ucs_string_buffer_appendf(strb, ")");
 }
 
