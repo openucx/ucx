@@ -217,7 +217,7 @@ if __name__ == '__main__':
                         help='Log filename')
     parser.add_argument('-d', '--directory', type=str,
                         help='Directory name with Logs')
-    parser.add_argument('-t', '--no_traffic_in_sec', type=int, default=1,
+    parser.add_argument('-t', '--no_traffic_in_sec', type=int, default=3,
                         help='No traffic Threshold in min')
     parser.add_argument('-s', '--seek', type=str, default="",
                         help='path to seek file')
