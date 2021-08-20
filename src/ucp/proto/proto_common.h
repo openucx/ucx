@@ -113,8 +113,8 @@ typedef struct {
     /* Latency of device to memory access */
     double sys_latency;
 
-    /* Minimal single message length */
-    size_t min_frag;
+    /* Minimal total message length */
+    size_t min_length;
 
     /* Maximum single message length */
     size_t max_frag;

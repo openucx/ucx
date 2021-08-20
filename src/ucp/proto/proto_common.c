@@ -163,7 +163,7 @@ void ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params
                       params->latency;
 
     perf->sys_latency = 0;
-    perf->min_frag    = ucp_proto_common_get_iface_attr_field(
+    perf->min_length  = ucp_proto_common_get_iface_attr_field(
             iface_attr, params->min_frag_offs, 0);
     perf->max_frag    = ucp_proto_common_get_iface_attr_field(
             iface_attr, params->max_frag_offs, SIZE_MAX);
@@ -659,7 +659,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     /* Initialize capabilities */
     caps->cfg_thresh   = params->cfg_thresh;
     caps->cfg_priority = params->cfg_priority;
-    caps->min_length   = ucs_max(params->min_length, perf->min_frag);
+    caps->min_length   = ucs_max(params->min_length, perf->min_length);
 
     ucs_assert(perf->max_frag >= params->hdr_size);
     frag_size = ucs_min(params->max_length, perf->max_frag - params->hdr_size);
