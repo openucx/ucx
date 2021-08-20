@@ -599,14 +599,14 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
 /**
  * Get file time
  *
- * @param [in]  name       File name
- * @param [in]  type       Type of file time information
- * @param [out] ctime      File creation time
+ * @param [in]  name  File name
+ * @param [in]  type  Type of file time information
+ * @param [out] ts    File time information
  *
  * @return UCS_OK if file is found and got information.
  */
 ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
-                                   ucs_time_t *time);
+                                   struct timespec *ts);
 
 END_C_DECLS
 
