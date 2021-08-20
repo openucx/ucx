@@ -511,7 +511,7 @@ UCS_TEST_P(test_uct_keepalive, ep_check)
     EXPECT_EQ(0u, m_err_handler_count);
 
     /* change start time saved in KA to force an error from EP check */
-    m_ka->start_time--;
+    m_ka->start_time.tv_sec--;
 
     do_keepalive();
     EXPECT_EQ(0u, m_err_handler_count);
@@ -558,7 +558,7 @@ public:
         }
 
         if (ka_info != NULL) {
-            ka_info->start_time--;
+            ka_info->start_time.tv_sec--;
         }
 
         test_uct_peer_failure::kill_receiver();
