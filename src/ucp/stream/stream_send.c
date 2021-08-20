@@ -152,7 +152,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_send_nbx,
         goto out;
     }
 
-    if (ucp_memory_type_cache_is_empty(ep->worker->context)) {
+    if (ucs_memtype_cache_is_empty()) {
         attr_mask = param->op_attr_mask &
                     (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
         if (ucs_likely(attr_mask == 0)) {

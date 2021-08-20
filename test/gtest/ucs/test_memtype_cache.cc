@@ -17,19 +17,14 @@ extern "C" {
 
 class test_memtype_cache : public ucs::test_with_param<ucs_memory_type_t> {
 protected:
-    test_memtype_cache() : m_memtype_cache(NULL) {
+    test_memtype_cache() {
     }
 
     virtual void init() {
         ucs::test_with_param<ucs_memory_type_t>::init();
-        ucs_status_t status = ucs_memtype_cache_create(&m_memtype_cache);
-        ASSERT_UCS_OK(status);
     }
 
     virtual void cleanup() {
-        if (m_memtype_cache != NULL) {
-            ucs_memtype_cache_destroy(m_memtype_cache);
-        }
 
         ucs::test_with_param<ucs_memory_type_t>::cleanup();
     }
@@ -43,8 +38,7 @@ protected:
         }
 
         ucs_memory_info_t mem_info;
-        ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
-                                                       size, &mem_info);
+        ucs_status_t status = ucs_memtype_cache_lookup(ptr, size, &mem_info);
 
         if (!expect_found || (expected_type == UCS_MEMORY_TYPE_HOST)) {
             /* memory type should be not found or unknown */
@@ -290,7 +284,7 @@ protected:
         ucs_memory_info_t mem_info;
         mem_info.type    = mem_type;
         mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_memtype_cache_update(m_memtype_cache, ptr, size, &mem_info);
+        ucs_memtype_cache_update(ptr, size, &mem_info);
     }
 
     void memtype_cache_update(const mem_buffer &b) {
@@ -298,11 +292,8 @@ protected:
     }
 
     void memtype_cache_remove(const void *ptr, size_t size) {
-        ucs_memtype_cache_remove(m_memtype_cache, ptr, size);
+        ucs_memtype_cache_remove(ptr, size);
     }
-
-private:
-    ucs_memtype_cache_t *m_memtype_cache;
 };
 
 UCS_TEST_P(test_memtype_cache, basic) {

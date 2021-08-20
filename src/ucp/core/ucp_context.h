@@ -96,8 +96,6 @@ typedef struct ucp_context_config {
     size_t                                 estimated_num_eps;
     /** Estimated number of processes per node */
     size_t                                 estimated_num_ppn;
-    /** Memtype cache */
-    int                                    enable_memtype_cache;
     /** Enable flushing endpoints while flushing a worker */
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
@@ -212,7 +210,6 @@ typedef struct ucp_context {
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
     uint64_t                      mem_type_mask;            /* Supported mem type mask */
-    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
@@ -462,12 +459,6 @@ ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwid
            (bandwidth->shared / context->config.est_num_ppn);
 }
 
-static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
-{
-    return (context->memtype_cache &&
-            !context->memtype_cache->pgtable.num_regions);
-}
-
 static UCS_F_ALWAYS_INLINE void
 ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
@@ -485,13 +476,8 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
         goto out_host_mem;
     }
 
-    if (ucs_likely(context->memtype_cache != NULL)) {
-        if (!context->memtype_cache->pgtable.num_regions) {
-            goto out_host_mem;
-        }
-
-        status = ucs_memtype_cache_lookup(context->memtype_cache, address,
-                                          length, mem_info);
+    status = ucs_memtype_cache_lookup(address, length, mem_info);
+    if (status != UCS_ERR_NO_ELEM) {
         if (ucs_likely(status != UCS_OK)) {
             ucs_assert(status == UCS_ERR_NO_ELEM);
             goto out_host_mem;

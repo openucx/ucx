@@ -303,10 +303,6 @@ static ucs_config_field_t ucp_config_table[] = {
    "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_config_t, ctx.rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"MEMTYPE_CACHE", "y",
-   "Enable memory type (cuda/rocm) cache",
-   ucs_offsetof(ucp_config_t, ctx.enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
-
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"
@@ -865,10 +861,6 @@ static void ucp_free_resources(ucp_context_t *context)
 {
     ucp_rsc_index_t i;
 
-    if (context->memtype_cache != NULL) {
-        ucs_memtype_cache_destroy(context->memtype_cache);
-    }
-
     ucs_free(context->tl_rscs);
     for (i = 0; i < context->num_mds; ++i) {
         uct_md_close(context->tl_mds[i].md);
@@ -1173,7 +1165,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->alloc_md_map             = 0;
     context->tl_rscs                  = NULL;
     context->num_tls                  = 0;
-    context->memtype_cache            = NULL;
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
 
@@ -1249,17 +1240,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
                                              &avail_tls, dev_cfg_masks,
                                              &tl_cfg_mask, config);
         if (status != UCS_OK) {
-            goto err_free_resources;
-        }
-    }
-
-    /* Create memtype cache if we have memory type MDs, and it's enabled by
-     * configuration
-     */
-    if (context->num_mem_type_detect_mds && context->config.ext.enable_memtype_cache) {
-        status = ucs_memtype_cache_create(&context->memtype_cache);
-        if (status != UCS_OK) {
-            ucs_debug("could not create memtype cache for mem_type allocations");
             goto err_free_resources;
         }
     }
@@ -1769,11 +1749,6 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
             mem_info->sys_dev      = mem_attr.sys_dev;
             mem_info->base_address = mem_attr.base_address;
             mem_info->alloc_length = mem_attr.alloc_length;
-            if (context->memtype_cache != NULL) {
-                ucs_memtype_cache_update(context->memtype_cache,
-                                         mem_attr.base_address,
-                                         mem_attr.alloc_length, mem_info);
-            }
             return;
         }
     }

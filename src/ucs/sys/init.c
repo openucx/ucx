@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/stats/stats.h>
 #include <ucs/async/async.h>
 #include <ucs/sys/lib.h>
