@@ -3149,8 +3149,20 @@ static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
     return UCS_OK;
 }
 
+static ucs_status_t ucp_ep_query_debug_str(ucp_ep_h ep, ucp_ep_attr_t *attr)
+{
+    if (attr->debug_str_max == 0ul) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    attr->debug_str[0] = '\0';
+    return UCS_OK;
+}
+
 ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
+    ucs_status_t status;
+
     if (attr->field_mask & UCP_EP_ATTR_FIELD_NAME) {
 #if ENABLE_DEBUG_DATA
         ucs_strncpy_safe(attr->name, ep->name, UCP_ENTITY_NAME_MAX);
@@ -3161,7 +3173,14 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 
     if (attr->field_mask &
         (UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR | UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
-        return ucp_ep_query_sockaddr(ep, attr);
+        status = ucp_ep_query_sockaddr(ep, attr);
+        UCS_IF_STATUS_IS_NOT_OK(status, return status);
+    }
+
+    if (ucs_test_all_flags(attr->field_mask, UCP_EP_ATTR_FIELD_DEBUG_STR |
+                                             UCP_EP_ATTR_FIELD_DEBUG_STR_MAX)) {
+        status = ucp_ep_query_debug_str(ep, attr);
+        UCS_IF_STATUS_IS_NOT_OK(status, return status);
     }
 
     return UCS_OK;
