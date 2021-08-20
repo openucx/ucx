@@ -113,6 +113,12 @@ typedef void *ucs_status_ptr_t;
 #define UCS_STATUS_IS_ERR(_status) ((_status) < 0)
 
 
+#define UCS_IF_STATUS_IS_NOT_OK(_status, _action) \
+    if ((_status) != UCS_OK) { \
+        _action; \
+    }
+
+
 /**
  * @param  status UCS status code.
  *
