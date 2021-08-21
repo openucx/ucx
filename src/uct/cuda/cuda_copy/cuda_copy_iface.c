@@ -331,6 +331,7 @@ static ucs_mpool_ops_t uct_cuda_copy_event_desc_mpool_ops = {
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_cuda_copy_event_desc_init,
     .obj_cleanup   = uct_cuda_copy_event_desc_cleanup,
+    .obj_str       = NULL
 };
 
 static uct_iface_internal_ops_t uct_cuda_copy_iface_internal_ops = {

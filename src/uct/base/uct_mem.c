@@ -473,7 +473,8 @@ static ucs_mpool_ops_t uct_iface_mpool_ops = {
     .chunk_alloc   = uct_iface_mp_chunk_alloc,
     .chunk_release = uct_iface_mp_chunk_release,
     .obj_init      = uct_iface_mp_obj_init,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,

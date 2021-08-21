@@ -74,7 +74,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "                  treats it as a linked list. Doesn`t require DEVX.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
-   
+
   {"LOG_ACK_REQ_FREQ", "8",
    "Log of the ack frequency for requests, when using DevX. Valid values are: 0-"
     UCS_PP_MAKE_STRING(UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ) ".",
@@ -696,7 +696,8 @@ static ucs_mpool_ops_t uct_dm_iface_mpool_ops = {
     .chunk_alloc   = uct_rc_mlx5_iface_common_dm_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_rc_mlx5_iface_common_dm_mp_obj_init,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 
