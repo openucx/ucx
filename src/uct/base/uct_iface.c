@@ -781,7 +781,6 @@ int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
 ucs_status_t uct_ep_keepalive_create(pid_t pid, uct_keepalive_info_t **ka_p)
 {
     uct_keepalive_info_t *ka;
-    ucs_time_t start_time;
     ucs_status_t status;
     int proc_len;
 
@@ -802,15 +801,13 @@ ucs_status_t uct_ep_keepalive_create(pid_t pid, uct_keepalive_info_t **ka_p)
     uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
 
     status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
-                                   &start_time);
+                                   &ka->start_time);
     if (status != UCS_OK) {
         ucs_error("failed to get process start time");
         goto err_free_ka;
     }
 
-    ka->start_time = start_time;
-    *ka_p          = ka;
-
+    *ka_p = ka;
     return UCS_OK;
 
 err_free_ka:
@@ -842,21 +839,25 @@ static ucs_status_t uct_iface_schedule_ep_err(uct_ep_h ep, ucs_status_t status)
     return UCS_OK;
 }
 
-ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t **ka,
+ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t **ka_p,
                                     pid_t pid, unsigned flags,
                                     uct_completion_t *comp)
 {
+    struct timespec create_time;
+    uct_keepalive_info_t *ka;
     ucs_status_t status;
-    ucs_time_t create_time;
 
     UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
-    if (*ka == NULL) {
-        status = uct_ep_keepalive_create(pid, ka);
+    if (*ka_p == NULL) {
+        status = uct_ep_keepalive_create(pid, ka_p);
     } else {
-        status = ucs_sys_get_file_time((*ka)->proc, UCS_SYS_FILE_TIME_CTIME,
+        ka     = *ka_p;
+        status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
                                        &create_time);
-        if ((status != UCS_OK) || ((*ka)->start_time != create_time)) {
+        if ((status != UCS_OK) ||
+            (ka->start_time.tv_sec != create_time.tv_sec) ||
+            (ka->start_time.tv_nsec != create_time.tv_nsec)) {
             status = UCS_ERR_ENDPOINT_TIMEOUT;
         }
     }
