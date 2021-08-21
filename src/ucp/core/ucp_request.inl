@@ -852,24 +852,12 @@ ucp_request_get_memory_type(ucp_context_h context, const void *address,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_ep_ptr_map_check_status(ucp_ep_h ep, void *ptr, const char *action_str,
-                            ucs_status_t status)
+ucp_request_ptr_map_status_check(ucs_status_t status, const char *action_str,
+                                 ucp_ep_h ep, void *ptr)
 {
     ucs_assertv((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS),
                 "ep %p: failed to %s id for %p: %s", ep, action_str, ptr,
                 ucs_status_string(status));
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
-{
-    ucs_status_t status;
-
-    status = UCS_PTR_MAP_PUT(request, &ep->worker->request_map, ptr,
-                             ucp_ep_use_indirect_id(ep), ptr_id_p);
-    ucp_ep_ptr_map_check_status(ep, ptr, "allocate", status);
-
-    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
@@ -878,7 +866,10 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
     ucs_status_t status;
 
     ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
-    status = ucp_ep_ptr_id_alloc(ep, req, &req->id);
+    status = UCS_PTR_MAP_PUT(request, &ep->worker->request_map, req,
+                             ucp_ep_use_indirect_id(ep), &req->id);
+    ucp_request_ptr_map_status_check(status, "put", ep, req);
+
     if (status == UCS_OK) {
         ucs_hlist_add_tail(&ucp_ep_ext_gen(ep)->proto_reqs,
                            &req->send.list);
@@ -905,11 +896,12 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
     ep = req->send.ep;
 
     status = UCS_PTR_MAP_DEL(request, &ep->worker->request_map, req->id);
+    ucp_request_ptr_map_status_check(status, "delete", ep, req);
+
     if (status == UCS_OK) {
         ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
     }
 
-    ucp_ep_ptr_map_check_status(ep, req, "release", status);
     ucp_request_id_reset(req);
 }
 
