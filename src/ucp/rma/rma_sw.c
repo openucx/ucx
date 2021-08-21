@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -83,6 +84,7 @@ static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
         if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
             /* completed with error */
             ucp_request_complete_send(req, status);
+            return UCS_OK;
         }
     }
 
