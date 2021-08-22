@@ -480,7 +480,7 @@ void ucp_stream_ep_init(ucp_ep_h ep)
     }
 }
 
-void ucp_stream_ep_cleanup(ucp_ep_h ep)
+void ucp_stream_ep_cleanup(ucp_ep_h ep, ucs_status_t status)
 {
     ucp_ep_ext_proto_t* ep_ext;
     ucp_request_t *req;
@@ -508,7 +508,7 @@ void ucp_stream_ep_cleanup(ucp_ep_h ep)
     while (!ucs_queue_is_empty(&ep_ext->stream.match_q)) {
         req = ucs_queue_head_elem_non_empty(&ep_ext->stream.match_q,
                                             ucp_request_t, recv.queue);
-        ucp_request_complete_stream_recv(req, ep_ext, UCS_ERR_CANCELED);
+        ucp_request_complete_stream_recv(req, ep_ext, status);
     }
 }
 
