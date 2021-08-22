@@ -462,6 +462,7 @@ ucs_status_t ucp_am_data_cb(void *arg, const void *header, size_t header_length,
 
     if ((header != NULL) || (header_length != 0)) {
         fprintf(stderr, "received unexpected header, length %ld", header_length);
+        abort();
     }
 
     am_data_desc.complete = 1;
