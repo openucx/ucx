@@ -686,6 +686,17 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     }
 }
 
+static void ucp_ep_removed_flush_completion(ucp_request_t *req)
+{
+    ucs_log_level_t level = UCS_STATUS_IS_ERR(req->status) ?
+                                    UCS_LOG_LEVEL_DIAG :
+                                    UCS_LOG_LEVEL_DEBUG;
+
+    ucs_log(level, "flushing ep_removed (req %p) completed with status %s", req,
+            ucs_status_string(req->status));
+    ucp_ep_register_disconnect_progress(req);
+}
+
 static UCS_F_NOINLINE void
 ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
@@ -728,7 +739,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     req = ucp_ep_flush_internal(reply_ep, UCP_REQUEST_FLAG_RELEASED,
                                 &ucp_request_null_param, NULL,
-                                ucp_ep_register_disconnect_progress, "close");
+                                ucp_ep_removed_flush_completion, "close");
     if (UCS_PTR_IS_PTR(req)) {
         return;
     }

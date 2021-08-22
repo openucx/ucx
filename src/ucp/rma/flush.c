@@ -256,7 +256,7 @@ void ucp_ep_flush_completion(uct_completion_t *self)
                                           send.state.uct_comp);
     ucs_status_t status = self->status;
 
-    ucs_trace_req("flush completion req=%p status=%d", req, status);
+    ucp_trace_req(req, "flush completion status=%d", status);
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
@@ -271,7 +271,8 @@ void ucp_ep_flush_completion(uct_completion_t *self)
     }
 
 
-    ucs_trace_req("flush completion req=%p comp_count=%d", req, req->send.state.uct_comp.count);
+    ucp_trace_req(req, "flush completion comp_count %d status %s",
+                  req->send.state.uct_comp.count, ucs_status_string(status));
     ucp_flush_check_completion(req);
 }
 
