@@ -1317,18 +1317,18 @@ const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
     return ibv_wc_status_str(wc_status);
 }
 
-static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
-                                            struct ibv_ah_attr *ah_attr,
-                                            struct ibv_pd *pd,
-                                            struct ibv_ah **ah_p)
+static ucs_status_t
+uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                        struct ibv_pd *pd, const char *usage,
+                        struct ibv_ah **ah_p)
 {
     struct ibv_ah *ah;
     char buf[128];
 
     ah = ibv_create_ah(pd, ah_attr);
     if (ah == NULL) {
-        ucs_error("ibv_create_ah(%s) on %s failed: %m",
-                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr),
+        ucs_error("ibv_create_ah(%s) for %s on %s failed: %m",
+                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr), usage,
                   uct_ib_device_name(dev));
         return UCS_ERR_INVALID_ADDR;
     }
@@ -1337,10 +1337,10 @@ static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
-                                            struct ibv_ah_attr *ah_attr,
-                                            struct ibv_pd *pd,
-                                            struct ibv_ah **ah_p)
+ucs_status_t
+uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
+                               struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
+                               const char *usage, struct ibv_ah **ah_p)
 {
     ucs_status_t status = UCS_OK;
     khiter_t iter;
@@ -1352,7 +1352,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
     if (iter == kh_end(&dev->ah_hash)) {
         /* new AH */
-        status = uct_ib_device_create_ah(dev, ah_attr, pd, ah_p);
+        status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, ah_p);
         if (status != UCS_OK) {
             goto unlock;
         }

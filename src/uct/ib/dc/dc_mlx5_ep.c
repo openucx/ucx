@@ -923,7 +923,8 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                 ucs_unaligned_ptr(&fc_req->sender.payload.gid),
                 iface->super.super.super.gid_info.gid_index, 0, &ah_attr);
 
-        status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
+        status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "DC pure grant",
+                                        &ah);
         if (status != UCS_OK) {
             goto err_dci_put;
         }
