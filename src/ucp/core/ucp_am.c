@@ -1199,7 +1199,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
     void *data               = am_hdr + 1;
     size_t data_length       = total_length -
                                (sizeof(*am_hdr) + am_hdr->header_length);
-    void *user_hdr           = UCS_PTR_BYTE_OFFSET(data, data_length);
+    void *user_hdr           = (user_hdr_size > 0) ? UCS_PTR_BYTE_OFFSET(data, data_length) :
+                               NULL;
     ucs_status_t desc_status = UCS_OK;
     ucs_status_t status;
 
