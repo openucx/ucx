@@ -479,6 +479,10 @@ make_scripts()
 			    done
 			}
 
+			print() {
+				echo "[\$(date +%s)] \$@"
+			}
+
 			list_pids_with_role() {
 			    # list all process ids with role \$1
 			    if [ "\$1" == "all" ]
@@ -506,7 +510,7 @@ make_scripts()
 			}
 
 			signal_handler() {
-			    echo "Got signal, killing all iodemo processes"
+			    print "Got signal, killing all iodemo processes"
 			    kill_iodemo
 			}
 
@@ -643,7 +647,7 @@ make_scripts()
 		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF
 			start_all_servers() {
-			    echo "Starting servers"
+			    print "Starting servers"
 				EOF
 
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
@@ -655,7 +659,7 @@ make_scripts()
 			}
 
 			start_all_clients() {
-			    echo "Starting clients"
+			    print "Starting clients"
 				EOF
 
 		for ((i=0;i<${num_clients_per_host[${host}]};++i))
@@ -687,7 +691,7 @@ make_scripts()
 
 			    # Wait for background processes
 			    wait ${wait_redirect}
-			    echo "Test finished"
+			    print "Test finished"
 			}
 
 			EOF
@@ -706,7 +710,7 @@ make_scripts()
 			        echo "No method defined to start '\${tag}'"
 			        exit 1
 			    fi
-			    echo "Starting '\${tag}'"
+			    print "Starting '\${tag}'"
 			    ${set_verbose}
 			    set_env_vars
 			    eval "\${func}"
@@ -714,14 +718,14 @@ make_scripts()
 			stop)
 			    for pid in \$(list_pids_with_role \${tag})
 			    do
-			        echo "Stopping process \${pid}"
+			        print "Stopping process \${pid}"
 			        kill -INT \${pid}
 			    done
 			    ;;
 			kill)
 			    for pid in \$(list_pids_with_role \${tag})
 			    do
-			        echo "Killing process \${pid}"
+			        print "Killing process \${pid}"
 			        kill -KILL \${pid}
 			    done
 			    ;;
@@ -731,7 +735,7 @@ make_scripts()
 			    then
 			        ps -fp \${pids}
 			    else
-			        echo "No processes found with tag \${tag}"
+			        print "No processes found with tag \${tag}"
 			    fi
 			    ;;
 			esac
