@@ -560,12 +560,12 @@ public:
 
         std::vector<char> debug_info(UCS_KBYTE);
         memset(&attr, 0, sizeof(attr));
-        attr.field_mask    = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  |
-                             UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR |
-                             UCP_EP_ATTR_FIELD_DEBUG_STR       |
-                             UCP_EP_ATTR_FIELD_DEBUG_STR_MAX;
-        attr.debug_str     = &debug_info[0];
-        attr.debug_str_max = debug_info.size();
+        attr.field_mask        = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  |
+                                 UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR |
+                                 UCP_EP_ATTR_FIELD_DEBUG_STRING    |
+                                 UCP_EP_ATTR_FIELD_DEBUG_STRING_SIZE;
+        attr.debug_string      = &debug_info[0];
+        attr.debug_string_size = debug_info.size();
         status = ucp_ep_query(sender().ep(), &attr);
         ASSERT_UCS_OK(status);
 
@@ -576,8 +576,8 @@ public:
                               m_test_addr.get_port());
         EXPECT_EQ(m_test_addr, attr.local_sockaddr);
 
-        std::string debug_str(attr.debug_str);
-        EXPECT_LT(debug_str.length(), attr.debug_str_max);
+        std::string debug_str(attr.debug_string);
+        EXPECT_LT(debug_str.length(), attr.debug_string_size);
         UCS_TEST_MESSAGE << "EP debug string: \"" << debug_str << "\"";
     }
 
