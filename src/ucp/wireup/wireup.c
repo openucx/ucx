@@ -534,8 +534,10 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
-            ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
-                                UCS_CONN_MATCH_QUEUE_UNEXP);
+            if (!ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
+                                     UCS_CONN_MATCH_QUEUE_UNEXP)) {
+                ucp_ep_flush_state_reset(ep);
+            }
         } else {
             ucp_ep_flush_state_reset(ep);
         }

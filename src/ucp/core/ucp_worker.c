@@ -2128,7 +2128,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Initialize connection matching structure */
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
-                        &ucp_ep_match_ops);
+                        UCP_EP_MATCH_CONN_SN_MAX, &ucp_ep_match_ops);
 
     /* Open all resources as interfaces on this worker */
     status = ucp_worker_add_resource_ifaces(worker);

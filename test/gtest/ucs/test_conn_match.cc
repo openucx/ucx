@@ -36,7 +36,7 @@ private:
         conn_match_ops.purge_cb    = purge_cb;
 
         ucs_conn_match_init(&m_conn_match_ctx, address_length,
-                            &conn_match_ops);
+                            UCS_CONN_MATCH_SN_MAX, &conn_match_ops);
         m_address_length = address_length;
     }
 

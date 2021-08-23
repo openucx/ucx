@@ -56,20 +56,12 @@ const ucs_conn_match_ops_t ucp_ep_match_ops = {
 ucp_ep_match_conn_sn_t ucp_ep_match_get_sn(ucp_worker_h worker,
                                            uint64_t dest_uuid)
 {
-    ucs_conn_sn_t conn_sn;
-
-    conn_sn = ucs_conn_match_get_next_sn(&worker->conn_match_ctx, &dest_uuid);
-    if (conn_sn >= UCP_EP_MATCH_CONN_SN_MAX) {
-        ucs_fatal("connection ID reached the maximal possible value - %u",
-                  UCP_EP_MATCH_CONN_SN_MAX);
-    }
-
-    return conn_sn;
+    return ucs_conn_match_get_next_sn(&worker->conn_match_ctx, &dest_uuid);
 }
 
-void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
-                         ucp_ep_match_conn_sn_t conn_sn,
-                         ucs_conn_match_queue_type_t conn_queue_type)
+int ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
+                        ucp_ep_match_conn_sn_t conn_sn,
+                        ucs_conn_match_queue_type_t conn_queue_type)
 {
     ucs_assert((conn_queue_type == UCS_CONN_MATCH_QUEUE_UNEXP) ||
                !(ep->flags & UCP_EP_FLAG_REMOTE_ID));
@@ -78,13 +70,18 @@ void ucp_ep_match_insert(ucp_worker_h worker, ucp_ep_h ep, uint64_t dest_uuid,
                               UCP_EP_FLAG_FLUSH_STATE_VALID)));
     /* EP matching is not used in CM flow */
     ucs_assert(!ucp_ep_has_cm_lane(ep));
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_ON_MATCH_CTX, 0);
+
     ucp_ep_ext_gen(ep)->ep_match.dest_uuid = dest_uuid;
 
-    ucs_conn_match_insert(&worker->conn_match_ctx, &dest_uuid,
-                          (ucs_conn_sn_t)conn_sn,
-                          &ucp_ep_ext_gen(ep)->ep_match.conn_match,
-                          conn_queue_type);
+    if (ucs_conn_match_insert(&worker->conn_match_ctx, &dest_uuid,
+                              (ucs_conn_sn_t)conn_sn,
+                              &ucp_ep_ext_gen(ep)->ep_match.conn_match,
+                              conn_queue_type)) {
+        ucp_ep_update_flags(ep, UCP_EP_FLAG_ON_MATCH_CTX, 0);
+        return 1;
+    }
+
+    return 0;
 }
 
 ucp_ep_h ucp_ep_match_retrieve(ucp_worker_h worker, uint64_t dest_uuid,
@@ -124,6 +121,8 @@ void ucp_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
     if (!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
         return;
     }
+
+    ucs_assert(ep->conn_sn != UCP_EP_MATCH_CONN_SN_MAX);
 
     ucs_conn_match_remove_elem(&worker->conn_match_ctx,
                                &ucp_ep_ext_gen(ep)->ep_match.conn_match,
