@@ -333,7 +333,7 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 
     uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, 0, &ah_attr, &path_mtu);
     ah_attr.is_global = iface->config.force_global_addr;
-    status = uct_ib_iface_create_ah(iface, &ah_attr, &ah);
+    status = uct_ib_iface_create_ah(iface, &ah_attr, "compact AV check", &ah);
     if (status != UCS_OK) {
         return status;
     }

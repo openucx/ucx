@@ -622,8 +622,9 @@ uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
     memset(peer_address, 0, sizeof(*peer_address));
 
     status = uct_ud_mlx5_iface_get_av(&ud_iface->super, &iface->ud_mlx5_common,
-                                      ib_addr, path_index, &peer_address->av,
-                                      &peer_address->grh_av, &is_global);
+                                      ib_addr, path_index, "UD mlx5 connect",
+                                      &peer_address->av, &peer_address->grh_av,
+                                      &is_global);
     if (status != UCS_OK) {
         return status;
     }

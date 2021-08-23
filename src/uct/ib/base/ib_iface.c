@@ -700,10 +700,11 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
-                                    struct ibv_ah **ah_p)
+                                    const char *usage, struct ibv_ah **ah_p)
 {
     return uct_ib_device_create_ah_cached(uct_ib_iface_device(iface), ah_attr,
-                                          uct_ib_iface_md(iface)->pd, ah_p);
+                                          uct_ib_iface_md(iface)->pd, usage,
+                                          ah_p);
 }
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,

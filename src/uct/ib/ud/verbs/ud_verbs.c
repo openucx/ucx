@@ -501,7 +501,8 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
 
     uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
                                         &ah_attr, &path_mtu);
-    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &peer_address->ah);
+    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
+                                    &peer_address->ah);
     if (status != UCS_OK) {
         return status;
     }
