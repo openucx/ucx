@@ -440,8 +440,8 @@ static ucs_status_t uct_rc_mlx5_iface_preinit(uct_rc_mlx5_iface_common_t *iface,
                                    UCT_IFACE_PARAM_FIELD_HW_TM_RNDV_CB);
 
     /* NOTE: always disable for wire compatibility */
-    iface->tm.enabled = 0 && mlx5_config->tm.enable && tm_params &&
-                        (init_attr->flags & UCT_IB_TM_SUPPORTED);
+    iface->tm.enabled = mlx5_config->tm.enable && tm_params &&
+                        (init_attr->flags & UCT_IB_TM_SUPPORTED) && 0;
     if (!iface->tm.enabled) {
         goto out_tm_disabled;
     }
