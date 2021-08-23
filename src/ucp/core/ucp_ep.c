@@ -857,8 +857,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     status = ucp_ep_adjust_params(ep, params);
     if (status != UCS_OK) {
-        ucp_ep_destroy_internal(ep);
-        goto out_free_address;
+        goto err_destroy_ep;
     }
 
     ep->conn_sn = conn_sn;
@@ -876,6 +875,12 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucp_ep_flush_state_reset(ep);
     } else if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
                                     UCS_CONN_MATCH_QUEUE_EXP)) {
+        if (worker->context->config.features & UCP_FEATURE_STREAM) {
+            status = UCS_ERR_EXCEEDS_LIMIT;
+            ucs_error("worker %p: failed to create the endpoint without"
+                      "connection matching and Stream API support", worker);
+            goto err_destroy_ep;
+        }
         ucp_ep_flush_state_reset(ep);
     }
 
@@ -897,6 +902,10 @@ out:
         *ep_p = ep;
     }
     return status;
+
+err_destroy_ep:
+    ucp_ep_destroy_internal(ep);
+    goto out_free_address;
 }
 
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,

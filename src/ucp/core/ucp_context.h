@@ -20,6 +20,7 @@
 #include <ucs/datastruct/mpool.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/bitmap.h>
+#include <ucs/datastruct/conn_match.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
