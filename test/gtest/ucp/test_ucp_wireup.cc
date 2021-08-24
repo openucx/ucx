@@ -1428,6 +1428,11 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv path_mtu_env("UCX_RC_PATH_MTU", "1024");
 
+    /* Assume only interfaces with the same subnet as reachable in case of RoCE
+     * to not select devices which could be unreachable */
+    /* coverity[tainted_string_argument] */
+    ucs::scoped_setenv roce_local_subnet_env("UCX_IB_ROCE_LOCAL_SUBNET", "y");
+
     {
         std::string config_str = pci_bw_config(20, 20);
         UCS_TEST_MESSAGE << "creating sender: " << config_str;
