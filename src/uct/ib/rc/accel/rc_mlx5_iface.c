@@ -24,7 +24,7 @@
 enum {
     UCT_RC_MLX5_IFACE_ADDR_TYPE_BASIC,
 
-    /* Tag Matching address. It additionaly contains QP number which
+    /* Tag Matching address. It additionally contains QP number which
      * is used for hardware offloads. */
     UCT_RC_MLX5_IFACE_ADDR_TYPE_TM
 };
