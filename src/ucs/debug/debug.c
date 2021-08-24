@@ -192,6 +192,8 @@ extern char *cplus_demangle(const char *, int);
 #endif
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
+static int orig_sigaction(int signum, const struct sigaction *act,
+                          struct sigaction *oact);
 
 
 static char *ucs_debug_strdup(const char *str)
@@ -890,9 +892,17 @@ static void ucs_debug_send_mail(const char *message)
 
 static void ucs_error_freeze(const char *message)
 {
+    struct sigaction sigact = {
+        .sa_handler = SIG_DFL,
+        .sa_flags   = 0
+    };
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     char response;
     int ret;
+
+    /* restore original SIGINT handler to allow termitate process via Ctrl+C */
+    sigemptyset(&sigact.sa_mask);
+    orig_sigaction(SIGINT, &sigact, NULL);
 
     ucs_debug_stop_other_threads();
 
