@@ -67,7 +67,7 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
     return ucp_proto_multi_progress(req, mpriv,
                                     ucp_proto_put_am_bcopy_send_func,
                                     ucp_proto_request_bcopy_complete_success,
-                                    UCS_BIT(UCP_DATATYPE_CONTIG));
+                                    UCP_DT_MASK_CONTIG_IOV);
 }
 
 static ucs_status_t

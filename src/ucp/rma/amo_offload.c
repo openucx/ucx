@@ -172,6 +172,10 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, op_id);
 
+    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (op_id != UCP_OP_ID_AMO_POST) {
         params.super.flags |= UCP_PROTO_COMMON_INIT_FLAG_RESPONSE;
     }

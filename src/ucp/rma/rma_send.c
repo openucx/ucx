@@ -54,14 +54,6 @@
     } while (0)
 
 
-#define UCP_RMA_CHECK_CONTIG1(_param) \
-    if (ucs_unlikely(ENABLE_PARAMS_CHECK && \
-                     ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) && \
-                     ((_param)->datatype != ucp_dt_make_contig(1)))) { \
-        return UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED); \
-    }
-
-
 /* request can be released if
  *  - all fragments were sent (length == 0) (bcopy & zcopy mix)
  *  - all zcopy fragments are done (uct_comp.count == 0)
@@ -237,13 +229,15 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param)
 {
-    ucp_worker_h worker = ep->worker;
+    ucp_worker_h worker     = ep->worker;
+    size_t contig_length    = 0;
+    ucp_datatype_t datatype = ucp_dt_make_contig(1);
     ucp_ep_rma_config_t *rma_config;
     ucs_status_ptr_t ret;
     ucs_status_t status;
     ucp_request_t *req;
+    uint32_t attr_mask;
 
-    UCP_RMA_CHECK_CONTIG1(param);
     UCP_RMA_CHECK_PTR(worker->context, buffer, count);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -251,6 +245,9 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
                    buffer, count, remote_addr, rkey, ucp_ep_peer_name(ep),
                    (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
                    param->cb.send : NULL);
+
+    attr_mask = param->op_attr_mask &
+                (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
 
     if (worker->context->config.ext.proto_enable) {
         status = ucp_put_send_short(ep, buffer, count, remote_addr, rkey, param);
@@ -265,11 +262,19 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         req->send.rma.rkey        = rkey;
         req->send.rma.remote_addr = remote_addr;
 
-        ret = ucp_proto_request_send_op(ep,
-                                        &ucp_rkey_config(worker, rkey)->proto_select,
-                                        rkey->cfg_index, req, UCP_OP_ID_PUT,
-                                        buffer, count, ucp_dt_make_contig(1),
-                                        count, param);
+        if (ucs_likely(attr_mask == 0)) {
+            contig_length = count;
+        } else if (attr_mask & UCP_OP_ATTR_FIELD_DATATYPE) {
+            datatype = param->datatype;
+            if (UCP_DT_IS_CONTIG(datatype)) {
+                contig_length = ucp_contig_dt_length(datatype, count);
+            }
+        }
+
+        ret = ucp_proto_request_send_op(
+                ep, &ucp_rkey_config(worker, rkey)->proto_select,
+                rkey->cfg_index, req, UCP_OP_ID_PUT, buffer, count, datatype,
+                contig_length, param);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {
@@ -278,8 +283,8 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         }
 
         /* Fast path for a single short message */
-        if (ucs_likely(!(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) &&
-                        ((ssize_t)count <= rkey->cache.max_put_short))) {
+        if (ucs_likely(!(attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL) &&
+                       ((ssize_t)count <= rkey->cache.max_put_short))) {
             status = UCS_PROFILE_CALL(uct_ep_put_short,
                                       ep->uct_eps[rkey->cache.rma_lane], buffer,
                                       count, remote_addr, rkey->cache.rma_rkey);
@@ -337,13 +342,13 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                              uint64_t remote_addr, ucp_rkey_h rkey,
                              const ucp_request_param_t *param)
 {
-    ucp_worker_h worker = ep->worker;
+    ucp_worker_h worker  = ep->worker;
+    size_t contig_length = 0;
     ucp_ep_rma_config_t *rma_config;
     ucs_status_ptr_t ret;
     ucs_status_t status;
     ucp_request_t *req;
-
-    UCP_RMA_CHECK_CONTIG1(param);
+    uintptr_t datatype;
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
         return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
@@ -358,18 +363,22 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
                    param->cb.send : NULL);
 
     if (worker->context->config.ext.proto_enable) {
+        datatype = ucp_request_param_datatype(param);
         req = ucp_request_get_param(worker, param,
                                     {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                     goto out_unlock;});
 
-        req->send.rma.rkey        = rkey;
-        req->send.rma.remote_addr = remote_addr;
+        req->send.rma.rkey             = rkey;
+        req->send.rma.remote_addr      = remote_addr;
+        req->send.state.completed_size = 0;
+        if (UCP_DT_IS_CONTIG(datatype)) {
+            contig_length = ucp_contig_dt_length(datatype, count);
+        }
 
-        ret = ucp_proto_request_send_op(ep,
-                                        &ucp_rkey_config(worker, rkey)->proto_select,
-                                        rkey->cfg_index, req, UCP_OP_ID_GET,
-                                        buffer, count, ucp_dt_make_contig(1),
-                                        count, param);
+        ret = ucp_proto_request_send_op(
+                ep, &ucp_rkey_config(worker, rkey)->proto_select,
+                rkey->cfg_index, req, UCP_OP_ID_GET, buffer, count, datatype,
+                contig_length, param);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {

@@ -27,7 +27,7 @@ ucp_proto_rdnv_am_init_common(ucp_proto_multi_init_params_t *params)
     params->super.latency    = 0;
     params->first.lane_type  = UCP_LANE_TYPE_AM;
     params->middle.lane_type = UCP_LANE_TYPE_AM_BW;
-    params->super.hdr_size   = sizeof(ucp_rndv_data_hdr_t);
+    params->super.hdr_size   = sizeof(ucp_request_data_hdr_t);
     params->max_lanes        = context->config.ext.max_rndv_lanes;
 
     return ucp_proto_multi_init(params, params->super.super.priv,
@@ -36,11 +36,11 @@ ucp_proto_rdnv_am_init_common(ucp_proto_multi_init_params_t *params)
 
 static size_t ucp_proto_rndv_am_bcopy_pack(void *dest, void *arg)
 {
-    ucp_rndv_data_hdr_t *hdr             = dest;
+    ucp_request_data_hdr_t *hdr          = dest;
     ucp_proto_multi_pack_ctx_t *pack_ctx = arg;
     ucp_request_t *req                   = pack_ctx->req;
 
-    hdr->rreq_id = req->send.rndv.remote_req_id;
+    hdr->req_id  = req->send.rndv.remote_req_id;
     hdr->offset  = req->send.state.dt_iter.offset;
 
     return sizeof(*hdr) + ucp_proto_multi_data_pack(pack_ctx, hdr + 1);
@@ -50,7 +50,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter)
 {
-    static const size_t hdr_size        = sizeof(ucp_rndv_data_hdr_t);
+    static const size_t hdr_size        = sizeof(ucp_request_data_hdr_t);
     ucp_ep_t *ep                        = req->send.ep;
     ucp_proto_multi_pack_ctx_t pack_ctx = {
         .req       = req,

@@ -98,8 +98,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
  * Check RMA protocol requirements
  */
 #define UCP_RMA_PROTO_INIT_CHECK(_init_params, _op_id) \
-    if (((_init_params)->select_param->op_id    != (_op_id)) || \
-        ((_init_params)->select_param->dt_class != UCP_DATATYPE_CONTIG)) { \
+    if ((_init_params)->select_param->op_id != (_op_id)) { \
         return UCS_ERR_UNSUPPORTED; \
     }
 

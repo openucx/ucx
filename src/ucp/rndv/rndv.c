@@ -1513,12 +1513,12 @@ ucs_status_t ucp_rndv_send_handle_status_from_pending(ucp_request_t *sreq,
 
 static size_t ucp_rndv_pack_data(void *dest, void *arg)
 {
-    ucp_rndv_data_hdr_t *hdr = dest;
-    ucp_request_t *sreq = arg;
+    ucp_request_data_hdr_t *hdr = dest;
+    ucp_request_t *sreq         = arg;
     size_t length, offset;
 
     offset       = sreq->send.state.dt.offset;
-    hdr->rreq_id = sreq->send.rndv_data.remote_req_id;
+    hdr->req_id  = sreq->send.rndv_data.remote_req_id;
     hdr->offset  = offset;
     length       = ucs_min(sreq->send.length - offset,
                            ucp_ep_get_max_bcopy(sreq->send.ep, sreq->send.lane) - sizeof(*hdr));
@@ -1533,7 +1533,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_progress_am_bcopy, (self),
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_ep_t *ep        = sreq->send.ep;
-    int single          = (sreq->send.length + sizeof(ucp_rndv_data_hdr_t)) <=
+    int single          = (sreq->send.length + sizeof(ucp_request_data_hdr_t)) <=
                           ucp_ep_config(ep)->am.max_bcopy;
     ucs_status_t status;
 
@@ -1606,9 +1606,9 @@ static void ucp_rndv_am_zcopy_completion(uct_completion_t *self)
 static ucs_status_t ucp_rndv_progress_am_zcopy_single(uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_rndv_data_hdr_t hdr;
+    ucp_request_data_hdr_t hdr;
 
-    hdr.rreq_id = sreq->send.rndv_data.remote_req_id;
+    hdr.req_id  = sreq->send.rndv_data.remote_req_id;
     hdr.offset  = 0;
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_RNDV_DATA, &hdr, sizeof(hdr),
                                   NULL, 0ul,
@@ -1618,9 +1618,9 @@ static ucs_status_t ucp_rndv_progress_am_zcopy_single(uct_pending_req_t *self)
 static ucs_status_t ucp_rndv_progress_am_zcopy_multi(uct_pending_req_t *self)
 {
     ucp_request_t *sreq = ucs_container_of(self, ucp_request_t, send.uct);
-    ucp_rndv_data_hdr_t hdr;
+    ucp_request_data_hdr_t hdr;
 
-    hdr.rreq_id = sreq->send.rndv_data.remote_req_id;
+    hdr.req_id  = sreq->send.rndv_data.remote_req_id;
     hdr.offset  = sreq->send.state.dt.offset;
     return ucp_do_am_zcopy_multi(self, UCP_AM_ID_RNDV_DATA, UCP_AM_ID_RNDV_DATA,
                                  &hdr, sizeof(hdr), &hdr, sizeof(hdr), NULL,
@@ -1960,7 +1960,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         ucp_request_send_state_reset(sreq, ucp_rndv_am_zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_ZCOPY_AM);
 
-        if ((sreq->send.length + sizeof(ucp_rndv_data_hdr_t)) <=
+        if ((sreq->send.length + sizeof(ucp_request_data_hdr_t)) <=
             ep_config->am.max_zcopy) {
             sreq->send.uct.func    = ucp_rndv_progress_am_zcopy_single;
         } else {
@@ -1986,8 +1986,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
                  (arg, data, length, flags),
                  void *arg, void *data, size_t length, unsigned flags)
 {
-    ucp_worker_h worker                = arg;
-    ucp_rndv_data_hdr_t *rndv_data_hdr = data;
+    ucp_worker_h worker                   = arg;
+    ucp_request_data_hdr_t *rndv_data_hdr = data;
     ucp_request_t *rreq, *rndv_req;
     size_t recv_len;
     ucs_status_t status;
@@ -1996,7 +1996,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_data_handler,
         return ucp_proto_rndv_handle_data(arg, data, length, flags);
     }
 
-    UCP_SEND_REQUEST_GET_BY_ID(&rndv_req, worker, rndv_data_hdr->rreq_id, 0,
+    UCP_SEND_REQUEST_GET_BY_ID(&rndv_req, worker, rndv_data_hdr->req_id, 0,
                                return UCS_OK, "RNDV data %p", rndv_data_hdr);
 
     rreq = ucp_request_get_super(rndv_req);
@@ -2032,12 +2032,12 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                           char *buffer, size_t max)
 {
     UCS_STRING_BUFFER_FIXED(strb, buffer, max);
-    const ucp_rndv_rts_hdr_t *rndv_rts_hdr = data;
-    const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr = data;
-    const ucp_rndv_data_hdr_t *rndv_data   = data;
-    const ucp_rndv_ack_hdr_t *ack_hdr      = data;
-    const ucp_reply_hdr_t *rep_hdr         = data;
-    const void *data_end                   = UCS_PTR_BYTE_OFFSET(data, length);
+    const ucp_rndv_rts_hdr_t *rndv_rts_hdr    = data;
+    const ucp_rndv_rtr_hdr_t *rndv_rtr_hdr    = data;
+    const ucp_request_data_hdr_t *rndv_data   = data;
+    const ucp_rndv_ack_hdr_t *ack_hdr         = data;
+    const ucp_reply_hdr_t *rep_hdr            = data;
+    const void *data_end                      = UCS_PTR_BYTE_OFFSET(data, length);
     const void *rkey_buf;
 
     switch (id) {
@@ -2088,7 +2088,7 @@ static void ucp_rndv_dump(ucp_worker_h worker, uct_am_trace_type_t type,
     case UCP_AM_ID_RNDV_DATA:
         ucs_string_buffer_appendf(&strb,
                                   "RNDV_DATA rreq_id 0x%" PRIx64 " offset %zu",
-                                  rndv_data->rreq_id, rndv_data->offset);
+                                  rndv_data->req_id, rndv_data->offset);
         break;
     case UCP_AM_ID_RNDV_ATP:
         ucs_string_buffer_appendf(&strb,
