@@ -4601,6 +4601,10 @@ typedef struct ucp_ep_attr {
      /**
       * Available debug info in string format which fits into
       * @ref ucp_ep_attr_t::debug_string_size.
+      * @note Available debug info and its format depends on compile time flags
+      *       and configuration, available hardware in run time and more, also
+      *       it can be changed in future releases for optimization or debugging
+      *       purposes.
       */
     char                    *debug_string;
 
