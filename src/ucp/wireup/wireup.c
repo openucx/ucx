@@ -411,10 +411,19 @@ out:
     return status;
 }
 
-void ucp_wireup_remote_connected(ucp_ep_h ep)
+void ucp_wireup_remote_connect_lanes(ucp_ep_h ep, int ready)
 {
     ucp_lane_index_t lane;
 
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ucp_wireup_ep_test(ep->uct_eps[lane])) {
+            ucp_wireup_ep_remote_connected(ep->uct_eps[lane], ready);
+        }
+    }
+}
+
+void ucp_wireup_remote_connected(ucp_ep_h ep)
+{
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
         return;
     }
@@ -430,11 +439,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
     }
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_wireup_ep_test(ep->uct_eps[lane])) {
-            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
-        }
-    }
+    ucp_wireup_remote_connect_lanes(ep, 1);
 
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
 }

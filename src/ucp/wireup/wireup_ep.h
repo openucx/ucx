@@ -19,8 +19,14 @@
  * Stub endpoint flags
  */
 enum {
-    UCP_WIREUP_EP_FLAG_READY           = UCS_BIT(0), /**< next_ep is fully connected */
-    UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED = UCS_BIT(1), /**< Debug: next_ep connected to remote */
+    /* next_ep should replace wireup_ep */
+    UCP_WIREUP_EP_FLAG_READY            = UCS_BIT(0),
+
+    /* Debug: next_ep connected to remote address */
+    UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED  = UCS_BIT(1),
+
+    /* Remote peer has conencted to next_ep */
+    UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(2)
 };
 
 
@@ -102,9 +108,7 @@ uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 
 void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep);
 
-void ucp_wireup_ep_mark_ready(uct_ep_h uct_ep);
-
-void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep);
+void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep, int ready);
 
 int ucp_wireup_ep_test(uct_ep_h uct_ep);
 

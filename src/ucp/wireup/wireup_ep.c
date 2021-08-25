@@ -394,7 +394,7 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
     ucp_ep_h ucp_ep            = wireup_ep->super.ucp_ep;
 
-    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
+    if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED) {
         return uct_ep_check(wireup_ep->super.uct_ep, flags, comp);
     }
 
@@ -404,6 +404,8 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
                                       flags, comp);
     }
 
+    ucs_trace("ep %p: wireup_ep %p skipping keepalive, flags 0x%x", ucp_ep,
+              wireup_ep, wireup_ep->flags);
     return UCS_OK;
 }
 
@@ -601,32 +603,27 @@ void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep)
     ucs_assert(wireup_ep->flags == 0);
 }
 
-void ucp_wireup_ep_mark_ready(uct_ep_h uct_ep)
+void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep, int ready)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
+    ucp_ep_h ucp_ep;
 
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->super.uct_ep != NULL);
     ucs_assert(wireup_ep->flags & UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED);
 
-    ucs_trace("ep %p: wireup ep %p is ready", wireup_ep->super.ucp_ep,
-              wireup_ep);
-    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY;
-}
+    ucp_ep            = wireup_ep->super.ucp_ep;
+    wireup_ep->flags |= UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED;
+    ucs_trace("ep %p: wireup ep %p is %s", ucp_ep, wireup_ep,
+              ready ? "ready" : "remote-connected");
 
-void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep)
-{
-    ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
-    ucp_ep_h ucp_ep;
-
-    ucp_wireup_ep_mark_ready(uct_ep);
-
-    ucp_ep = wireup_ep->super.ucp_ep;
-    ucs_trace("ep %p: wireup ep %p is remote-connected", ucp_ep, wireup_ep);
-    uct_worker_progress_register_safe(ucp_ep->worker->uct,
-                                      ucp_wireup_ep_progress, wireup_ep, 0,
-                                      &wireup_ep->progress_id);
-    ucp_worker_signal_internal(ucp_ep->worker);
+    if (ready) {
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_READY;
+        uct_worker_progress_register_safe(ucp_ep->worker->uct,
+                                          ucp_wireup_ep_progress, wireup_ep, 0,
+                                          &wireup_ep->progress_id);
+        ucp_worker_signal_internal(ucp_ep->worker);
+    }
 }
 
 int ucp_wireup_ep_test(uct_ep_h uct_ep)

@@ -138,6 +138,11 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
                                         ucs_queue_head_t *tmp_pending_queue);
 
+/* Set lanes which are wireup_ep as remote connected.
+   If 'ready' is true - also mark them as ready and switch them to the real
+   transport uct_ep in the next progress call */
+void ucp_wireup_remote_connect_lanes(ucp_ep_h ep, int ready);
+
 void ucp_wireup_remote_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,
