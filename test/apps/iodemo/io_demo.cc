@@ -52,6 +52,14 @@ static const char *io_op_names[] = {
     "write completion"
 };
 
+
+#ifndef NDEBUG
+const bool do_assert = true;
+#else
+const bool do_assert = false;
+#endif
+
+
 /* test options */
 typedef struct {
     std::vector<const char*> servers;
@@ -83,6 +91,13 @@ typedef struct {
 #define LOG_PREFIX  "[DEMO]"
 #define LOG         UcxLog(LOG_PREFIX)
 #define VERBOSE_LOG UcxLog(LOG_PREFIX, _test_opts.verbose)
+
+#define ASSERTV_STR(_expression_str) \
+        "Assertion \"" << _expression_str << "\" failed "
+#define ASSERTV(_expression) \
+        UcxLog(LOG_PREFIX, !(_expression), &std::cerr, do_assert) \
+                << ASSERTV_STR(#_expression)
+
 
 template<class BufferType, bool use_offcache = false> class ObjectPool {
 public:
@@ -1368,32 +1383,52 @@ public:
                i->second;
     }
 
+    void check_counters(const server_info_t& server_info, io_op_t op,
+                        const std::string &type_str)
+    {
+        ASSERTV(server_info.num_completed[op] < server_info.num_sent[op])
+                << type_str << ": op=" << io_op_names[op] << " num_completed="
+                << server_info.num_completed[op] << " num_sent="
+                << server_info.num_sent[op];
+        ASSERTV(_num_completed < _num_sent) << type_str << ": num_completed="
+                << _num_completed << " num_sent=" << _num_sent;
+    }
+
     void commit_operation(size_t server_index, io_op_t op, size_t data_size) {
         server_info_t& server_info = _server_info[server_index];
 
-        assert(get_num_uncompleted(server_info) < opts().conn_window_size);
+        ASSERTV(get_num_uncompleted(server_info) < opts().conn_window_size)
+                << "num_ucompleted=" << get_num_uncompleted(server_info)
+                << " conn_window_size=" << opts().conn_window_size;
 
         ++server_info.num_sent[op];
         ++_num_sent;
+
+        ASSERTV(server_info.bytes_completed[op] <= server_info.bytes_sent[op])
+                << "op=" << io_op_names[op] << " bytes_completed="
+                << server_info.bytes_completed[op] << " bytes_sent="
+                << server_info.bytes_sent[op];
         server_info.bytes_sent[op] += data_size;
+
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_remove(server_index);
         }
 
-        assert(server_info.num_completed[op] < server_info.num_sent[op]);
-        assert(_num_completed < _num_sent);
+        check_counters(server_info, op, "commit");
     }
 
     void handle_operation_completion(size_t server_index, io_op_t op,
                                      size_t data_size) {
-        assert(server_index < _server_info.size());
+        ASSERTV(server_index < _server_info.size()) << "server_index="
+                << server_index << " server_info_size=" << _server_info.size();
         server_info_t& server_info = _server_info[server_index];
 
-        assert(get_num_uncompleted(server_info) <= opts().conn_window_size);
+        ASSERTV(get_num_uncompleted(server_info) <= opts().conn_window_size)
+                << "num_uncompleted=" << get_num_uncompleted(server_info)
+                << " conn_window_size" << opts().conn_window_size;
         assert(_server_index_lookup.find(server_info.conn) !=
                _server_index_lookup.end());
-        assert(_num_completed < _num_sent);
-        assert(server_info.num_completed[op] < server_info.num_sent[op]);
+        check_counters(server_info, op, "completion");
 
         if ((get_num_uncompleted(server_info) == opts().conn_window_size) &&
             !server_info.conn->is_disconnecting()) {
@@ -1404,7 +1439,19 @@ public:
         ++_num_completed;
         ++server_info.num_completed[op];
 
-        assert(server_info.bytes_completed[op] <= server_info.bytes_sent[op]);
+        if (get_num_uncompleted(server_info, op) == 0) {
+            ASSERTV(server_info.bytes_completed[op] ==
+                    server_info.bytes_sent[op])
+                    << "op=" << io_op_names[op] << " bytes_completed="
+                    << server_info.bytes_completed[op] << " bytes_sent="
+                    << server_info.bytes_sent[op];
+        } else {
+            ASSERTV(server_info.bytes_completed[op] <=
+                    server_info.bytes_sent[op])
+                    << "op=" << io_op_names[op] << " bytes_completed="
+                    << server_info.bytes_completed[op] << " bytes_sent="
+                    << server_info.bytes_sent[op];
+        }
     }
 
     size_t do_io_read(size_t server_index, uint32_t sn) {
