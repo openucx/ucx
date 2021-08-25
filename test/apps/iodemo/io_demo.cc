@@ -682,6 +682,8 @@ protected:
 
     static void signal_terminate_handler(int signo)
     {
+        LOG << "Run-time signal handling: " << signo;
+
         _status = TERMINATE_SIGNALED;
     }
 
@@ -697,7 +699,7 @@ protected:
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
                           test_opts.memory_type, test_opts.num_offcache_buffers)
     {
-        _status                 = OK;
+        _status                  = OK;
 
         struct sigaction new_sigaction;
         new_sigaction.sa_handler = signal_terminate_handler;
