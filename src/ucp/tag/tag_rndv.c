@@ -61,7 +61,8 @@ ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
         ucs_assert(ucp_rdesc_get_tag(rdesc) ==
                    ucp_tag_hdr_from_rts(rts_hdr)->tag);
         ucp_tag_unexp_recv(&worker->tm, rdesc,
-                           ucp_tag_hdr_from_rts(rts_hdr)->tag);
+                           ucp_tag_hdr_from_rts(rts_hdr)->tag,
+                           rts_hdr->sreq.ep_id);
     }
 
     return status;

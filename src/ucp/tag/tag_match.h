@@ -114,7 +114,7 @@ ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
                        ucp_tag_t tag);
 
 void ucp_tag_frag_list_process_queue(ucp_tag_match_t *tm, ucp_request_t *req,
-                                     uint64_t msg_id
+                                     uint64_t msg_id, uint64_t ep_id
                                      UCS_STATS_ARG(int counter_idx));
 
 #endif
