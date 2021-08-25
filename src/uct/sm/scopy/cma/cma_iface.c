@@ -61,7 +61,8 @@ static ucs_status_t uct_cma_iface_query(uct_iface_h tl_iface,
                                       sizeof(ucs_cma_iface_ext_device_addr_t);
     iface_attr->bandwidth.dedicated = iface->super.super.config.bandwidth;
     iface_attr->bandwidth.shared    = 0;
-    iface_attr->overhead            = 0.4e-6; /* 0.4 us */
+    iface_attr->overhead            = uct_scopy_iface_overhead();
+
     iface_attr->cap.flags          |= UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE |
                                       UCT_IFACE_FLAG_EP_CHECK;
 

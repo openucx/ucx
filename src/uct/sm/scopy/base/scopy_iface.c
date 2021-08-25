@@ -172,3 +172,12 @@ ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
     UCT_TL_IFACE_STAT_FLUSH(&iface->super.super);
     return UCS_OK;
 }
+
+double uct_scopy_iface_overhead()
+{
+    if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
+        return 6e-6;
+    }
+
+    return 2e-6;
+}

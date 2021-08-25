@@ -72,4 +72,6 @@ ucs_status_t uct_scopy_iface_event_arm(uct_iface_h tl_iface, unsigned events);
 ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                    uct_completion_t *comp);
 
+double uct_scopy_iface_overhead();
+
 #endif
