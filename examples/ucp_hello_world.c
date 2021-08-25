@@ -154,7 +154,7 @@ static ucs_status_t ucx_wait(ucp_worker_h ucp_worker, struct ucx_context *reques
 
         request->completed = 0;
         status             = ucp_request_check_status(request);
-        ucp_request_release(request);
+        ucp_request_free(request);
     } else {
         status = UCS_OK;
     }
@@ -330,7 +330,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 err_msg:
     mem_type_free(msg);
 err_ep:
-    ucp_ep_destroy(server_ep);
+    ucp_ep_close_nb(server_ep, UCP_EP_CLOSE_MODE_FORCE);
 err:
     return ret;
 }
@@ -357,7 +357,7 @@ static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
             ucp_worker_progress(worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
-        ucp_request_release(request);
+        ucp_request_free(request);
         return status;
     }
 }
@@ -492,7 +492,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
 err_free_mem_type_msg:
     mem_type_free(msg);
 err_ep:
-    ucp_ep_destroy(client_ep);
+    ucp_ep_close_nb(client_ep, UCP_EP_CLOSE_MODE_FORCE);
 err:
     return ret;
 }
