@@ -231,6 +231,8 @@ stages:
        # Perform test builds on relevant distributions.
       - job: Distros
         displayName: Build for
+        workspace:
+          clean: all
         pool:
           name: MLNX
           demands:
@@ -278,6 +280,7 @@ stages:
               CONTAINER: ubuntu2004
         steps:
           - checkout: none
+            clean: true
           - task: DownloadBuildArtifacts@0
             displayName: 'Download Build Artifacts'
             inputs:
