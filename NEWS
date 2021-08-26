@@ -7,6 +7,12 @@
 ##
 #
 
+## 1.11.1-rc3 (August 26, 2021)
+### Bugfixes:
+* Fixes in RPM post-install script
+* Fixes in UCT common keepalive
+
+
 ## 1.11.1-rc2 (August 19, 2021)
 ### Bugfixes:
 * Fixes in multi-threaded tag probe
