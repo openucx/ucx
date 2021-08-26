@@ -3,10 +3,14 @@
  * See file LICENSE for terms.
  */
 
-package ucp
+package ucx
 
 // #include <ucp/api/ucp.h>
+// #include "goucx.h"
 import "C"
+import (
+	"unsafe"
+)
 
 // UCP worker is an opaque object representing the communication context. The
 // worker represents an instance of a local communication resource and the
@@ -29,22 +33,63 @@ type UcpWorker struct {
 	worker C.ucp_worker_h
 }
 
-func (m *UcpWorker) Close() {
-	C.ucp_worker_destroy(m.worker)
+type UcpAddress struct {
+	worker  C.ucp_worker_h
+	Address *C.ucp_address_t
+	Length  uint64
 }
 
-func (m *UcpWorker) Query(attrs ...UcpWorkerAttribute) (*C.ucp_worker_attr_t, error) {
+type UcpTagRecvInfo struct {
+	SenderTag uint64
+	Length    uint64
+}
+
+type UcpWorkerAttributes struct {
+	ThreadMode     UcsThreadMode
+	Address        *UcpAddress
+	MaxAmHeader    uint64
+	MaxDebugString uint64
+}
+
+func (w *UcpWorker) Close() {
+	C.ucp_worker_destroy(w.worker)
+}
+
+func (a *UcpAddress) Close() {
+	C.ucp_worker_release_address(a.worker, a.Address)
+}
+
+func (w *UcpWorker) Query(attrs ...UcpWorkerAttribute) (*UcpWorkerAttributes, error) {
 	var workerAttr C.ucp_worker_attr_t
 
-	for attr, _ := range attrs {
+	for _, attr := range attrs {
 		workerAttr.field_mask |= C.ulong(attr)
 	}
 
-	if status := C.ucp_worker_query(m.worker, &workerAttr); status != C.UCS_OK {
+	if status := C.ucp_worker_query(w.worker, &workerAttr); status != C.UCS_OK {
 		return nil, NewUcxError(status)
 	}
 
-	return &workerAttr, nil
+	result := &UcpWorkerAttributes{}
+
+	for _, attr := range attrs {
+		switch attr {
+		case UCP_WORKER_ATTR_FIELD_THREAD_MODE:
+			result.ThreadMode = UcsThreadMode(workerAttr.thread_mode)
+		case UCP_WORKER_ATTR_FIELD_ADDRESS:
+			result.Address = &UcpAddress{
+				worker:  w.worker,
+				Address: workerAttr.address,
+				Length:  uint64(workerAttr.address_length),
+			}
+		case UCP_WORKER_ATTR_FIELD_MAX_AM_HEADER:
+			result.MaxAmHeader = uint64(workerAttr.max_am_header)
+		case UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING:
+			result.MaxDebugString = uint64(workerAttr.max_debug_string)
+		}
+	}
+
+	return result, nil
 }
 
 // This routine needs to be called before waiting on each notification on this
@@ -63,8 +108,8 @@ func (m *UcpWorker) Query(attrs ...UcpWorkerAttribute) (*C.ucp_worker_attr_t, er
 // events occur on the worker. Therefore one must drain all existing events
 // before waiting on the file descriptor. This can be achieved by calling
 // UcpWorker.Progress() repeatedly until it returns 0.
-func (m *UcpWorker) Arm() UcsStatus {
-	return UcsStatus(C.ucp_worker_arm(m.worker))
+func (w *UcpWorker) Arm() UcsStatus {
+	return UcsStatus(C.ucp_worker_arm(w.worker))
 }
 
 // This routine explicitly progresses all communication operations on a worker.
@@ -75,8 +120,8 @@ func (m *UcpWorker) Arm() UcsStatus {
 // The state of communication can be advanced (progressed) by blocking
 // routines. Nevertheless, the non-blocking routines can not be used for
 // communication progress.
-func (m *UcpWorker) Progress() uint {
-	return uint(C.ucp_worker_progress(m.worker))
+func (w *UcpWorker) Progress() uint {
+	return uint(C.ucp_worker_progress(w.worker))
 }
 
 // This routine waits (blocking) until an event has happened, as part of the
@@ -95,8 +140,8 @@ func (m *UcpWorker) Progress() uint {
 // @note During the blocking call the wake-up mechanism relies on other means of
 // notification and may not progress some of the requests as it would when
 // calling UcpWorker.Progress() (which is not invoked in that duration).
-func (m *UcpWorker) Wait() error {
-	if status := C.ucp_worker_wait(m.worker); status != C.UCS_OK {
+func (w *UcpWorker) Wait() error {
+	if status := C.ucp_worker_wait(w.worker); status != C.UCS_OK {
 		return NewUcxError(status)
 	}
 	return nil
@@ -119,9 +164,9 @@ func (m *UcpWorker) Wait() error {
 // There are two alternative ways to use the wakeup mechanism: the first is the
 // file descriptor obtained per worker (this function) and the second is the
 // UcpWorker.Wait() function for waiting on the next event internally.
-func (m *UcpWorker) GetEfd() (int, error) {
+func (w *UcpWorker) GetEfd() (int, error) {
 	var efd C.int
-	if status := C.ucp_worker_get_efd(m.worker, &efd); status != C.UCS_OK {
+	if status := C.ucp_worker_get_efd(w.worker, &efd); status != C.UCS_OK {
 		return 0, NewUcxError(status)
 	}
 	return int(efd), nil
@@ -131,9 +176,85 @@ func (m *UcpWorker) GetEfd() (int, error) {
 // mechanism. This function causes a blocking call to UcpWorker.Wait() or
 // waiting on a file descriptor from UcpWorker.GetEfd() to return, even
 // if no event from the underlying interfaces has taken place.
-func (m *UcpWorker) Signal() error {
-	if status := C.ucp_worker_signal(m.worker); status != C.UCS_OK {
+func (w *UcpWorker) Signal() error {
+	if status := C.ucp_worker_signal(w.worker); status != C.UCS_OK {
 		return NewUcxError(status)
 	}
 	return nil
+}
+
+// This routine returns the address of the worker object. This address can be
+// passed to remote instances of the UCP library in order to connect to this
+// worker. Ucp worker address - is an opaque object that is used as an
+// identifier for a UcpWorker instance.
+func (w *UcpWorker) GetAddress() (*UcpAddress, error) {
+	result, err := w.Query(UCP_WORKER_ATTR_FIELD_ADDRESS)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Address, nil
+}
+
+// This routine creates new UcpEndpoint.
+func (w *UcpWorker) NewEndpoint(epParams *UcpEpParams) (*UcpEp, error) {
+	var ep C.ucp_ep_h
+
+	if status := C.ucp_ep_create(w.worker, &epParams.params, &ep); status != C.UCS_OK {
+		return nil, NewUcxError(status)
+	}
+
+	if epParams.errorHandler != nil {
+		errorHandles[ep] = epParams.errorHandler
+	}
+
+	return &UcpEp{
+		ep: ep,
+	}, nil
+}
+
+// This routine receives a message that is described by the local address and size on the worker.
+// The tag value of the receive message has to match thetag and tagMask values,
+// where the tagMask indicates what bits of the tag have to be matched. The
+// routine is a non-blocking and therefore returns immediately. The receive
+// operation is considered completed when the message is delivered to the buffer.
+// In order to notify the application about completion of the receive
+// operation the UCP library will invoke the call-back when the received
+// message is in the receive buffer and ready for application access.  If the
+// receive operation cannot be stated the routine returns an error.
+func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
+	tag uint64, tagMask uint64, params *UcpRequestParams) (*UcpRequest, error) {
+	var requestParams C.ucp_request_param_t
+	var recvInfo C.ucp_tag_recv_info_t
+	var cbId uint64
+
+	requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_RECV_INFO
+
+	if params != nil {
+		if params.MemType != nil {
+			requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
+			requestParams.memory_type = C.ucs_memory_type_t(*params.MemType)
+		}
+
+		if params.Cb != nil {
+			cbId = register(params.Cb)
+			requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
+			cbAddr := (*C.ucp_tag_recv_nbx_callback_t)(unsafe.Pointer(&requestParams.cb[0]))
+			*cbAddr = (C.ucp_tag_recv_nbx_callback_t)(C.ucxgo_completeGoTagRecvRequest)
+
+			recvInfoPtr := (*C.ucp_tag_recv_info_t)(unsafe.Pointer(&requestParams.recv_info[0]))
+			*recvInfoPtr = recvInfo
+
+			requestParams.user_data = unsafe.Pointer(uintptr(cbId))
+		}
+	}
+
+	request := C.ucp_tag_recv_nbx(w.worker, address, C.size_t(size), C.ucp_tag_t(tag),
+		C.ucp_tag_t(tagMask), &requestParams)
+
+	return NewRequest(request, cbId, &UcpTagRecvInfo{
+		SenderTag: uint64(recvInfo.sender_tag),
+		Length:    uint64(recvInfo.length),
+	})
 }

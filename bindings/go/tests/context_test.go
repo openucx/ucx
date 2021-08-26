@@ -3,10 +3,11 @@
  * See file LICENSE for terms.
  */
 
-package ucp
+package goucxtests
 
 import (
 	"testing"
+	. "ucx"
 )
 
 func TestUcpContext(t *testing.T) {
@@ -20,8 +21,4 @@ func TestUcpContext(t *testing.T) {
 	}
 
 	context.Close()
-
-	if context.context != nil {
-		t.Fatalf("Context not nil")
-	}
 }
