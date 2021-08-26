@@ -551,11 +551,11 @@ out:
 }
 
 static ucs_mpool_ops_t uct_tcp_mpool_ops = {
-    ucs_mpool_chunk_malloc,
-    ucs_mpool_chunk_free,
-    NULL,
-    NULL,
-    NULL
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
