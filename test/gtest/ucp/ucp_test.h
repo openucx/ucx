@@ -24,12 +24,6 @@
 #include "omp.h"
 #endif
 
-#if _OPENMP && ENABLE_MT
-#define MT_TEST_NUM_THREADS omp_get_max_threads()
-#else
-#define MT_TEST_NUM_THREADS 4
-#endif
-
 
 namespace ucp {
 extern const uint32_t MAGIC;
@@ -300,6 +294,10 @@ protected:
 
     // Return context parameters of the current test variant
     const ucp_params_t& get_variant_ctx_params() const;
+
+    // Return maximal UCP threads in current environment, assuming each thread
+    // can create 2 workers
+    static unsigned mt_num_threads();
 
     static void err_handler_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
         entity *e = reinterpret_cast<entity*>(arg);

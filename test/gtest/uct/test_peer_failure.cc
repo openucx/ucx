@@ -363,14 +363,16 @@ void test_uct_peer_failure_multiple::init()
 
     if (ucs_get_page_size() > 4096) {
         /* NOTE: Too much receivers may cause failure of ibv_open_device */
-        test_uct_peer_failure::m_nreceivers = 10;
+        m_nreceivers = 10;
     } else {
-        test_uct_peer_failure::m_nreceivers = tx_queue_len;
+        m_nreceivers = tx_queue_len;
     }
 
-    test_uct_peer_failure::m_nreceivers =
-        std::min(test_uct_peer_failure::m_nreceivers,
-                 static_cast<size_t>(max_connections()));
+    /* Do not create more receivers than the number allowed connections or
+       number of workers (assuming each worker can open up to 16 files) */
+    int max_workers = ucs_sys_max_open_files() / 16;
+    m_nreceivers    = std::min(m_nreceivers,
+                               std::min<size_t>(max_connections(), max_workers));
 
     test_uct_peer_failure::m_tx_window  = tx_queue_len / 3;
 
