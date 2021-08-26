@@ -53,7 +53,8 @@ public:
     enum {
         SEND_DIRECTION_C2S  = UCS_BIT(0), /* send data from client to server */
         SEND_DIRECTION_S2C  = UCS_BIT(1), /* send data from server to client */
-        SEND_DIRECTION_BIDI = SEND_DIRECTION_C2S | SEND_DIRECTION_S2C /* bidirectional send */
+        SEND_DIRECTION_BIDI = SEND_DIRECTION_C2S | SEND_DIRECTION_S2C, /* bidirectional send */
+        SEND_NO_RECV        = UCS_BIT(2)  /* do not recv data to test unexp Q cleanup */
     };
 
     typedef enum {
@@ -346,7 +347,8 @@ public:
     }
 
     void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
-                   bool wakeup, ucp_test_base::entity::listen_cb_type_t cb_type)
+                   bool wakeup, ucp_test_base::entity::listen_cb_type_t cb_type,
+                   bool no_recv = false)
     {
         const uint64_t send_data = ucs_generate_uuid(0);
         void *send_req = NULL;
@@ -390,6 +392,11 @@ public:
             return;
         } else {
             ASSERT_UCS_OK(send_status);
+        }
+
+        if (no_recv) {
+            UCS_TEST_MESSAGE << "Do not recv";
+            return;
         }
 
         uint64_t recv_data = 0;
@@ -502,12 +509,12 @@ public:
 
         if (flags & SEND_DIRECTION_C2S) {
             send_recv(sender(), receiver(), send_recv_type(), wakeup,
-                      cb_type());
+                      cb_type(), flags & SEND_NO_RECV);
         }
 
         if (flags & SEND_DIRECTION_S2C) {
             send_recv(receiver(), sender(), send_recv_type(), wakeup,
-                      cb_type());
+                      cb_type(), flags & SEND_NO_RECV);
         }
     }
 
@@ -745,6 +752,10 @@ UCS_TEST_P(test_ucp_sockaddr, listen_s2c) {
 
 UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCS_TEST_P(test_ucp_sockaddr, listen_bidi_no_recv) {
+    listen_and_communicate(false, SEND_DIRECTION_BIDI | SEND_NO_RECV);
 }
 
 UCS_TEST_P(test_ucp_sockaddr, ep_query) {
