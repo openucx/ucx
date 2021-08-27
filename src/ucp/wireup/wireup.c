@@ -541,6 +541,12 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
             ep->conn_sn = msg->conn_sn;
             if (!ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
                                      UCS_CONN_MATCH_QUEUE_UNEXP)) {
+                if (worker->context->config.features & UCP_FEATURE_STREAM) {
+                    ucs_diag("worker %p: created the endpoint %p without"
+                             " connection matching, but Stream API support was"
+                             " requested on the context %p",
+                             worker, ep, worker->context);
+                }
                 ucp_ep_flush_state_reset(ep);
             }
         } else {

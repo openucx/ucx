@@ -52,12 +52,6 @@ const uct_tcp_cm_state_t uct_tcp_ep_cm_state[] = {
     }
 };
 
-static inline int uct_tcp_ep_ctx_buf_empty(uct_tcp_ep_ctx_t *ctx)
-{
-    ucs_assert((ctx->length == 0) || (ctx->buf != NULL));
-
-    return ctx->length == 0;
-}
 
 static inline int uct_tcp_ep_ctx_buf_need_progress(uct_tcp_ep_ctx_t *ctx)
 {
@@ -395,6 +389,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_ep_t)
     uct_tcp_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                             uct_tcp_iface_t);
 
+    uct_ep_pending_purge(&self->super.super, ucs_empty_function_do_assert_void,
+                         NULL);
+
     if (self->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX) {
         uct_tcp_cm_remove_ep(iface, self);
     } else {
@@ -703,7 +700,7 @@ static ucs_status_t uct_tcp_ep_connect(uct_tcp_ep_t *ep)
         uct_tcp_ep_move_ctx_cap(peer_ep, ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
         uct_tcp_ep_replace_ep(ep, peer_ep);
 
-        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
+        uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_WAITING_ACK);
 
         /* Send the connection request to the peer */
         status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_REQ, 0);
@@ -2051,13 +2048,31 @@ ucs_status_t uct_tcp_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *req,
     return UCS_OK;
 }
 
+static void uct_tcp_ep_pending_purge_cb(uct_pending_req_t *self, void *arg)
+{
+    uct_tcp_ep_pending_purge_arg_t *purge_arg = arg;
+    uct_tcp_ep_pending_req_t *tcp_pending_req;
+
+    if (self->func == uct_tcp_cm_send_event_pending_cb) {
+        tcp_pending_req = ucs_derived_of(self, uct_tcp_ep_pending_req_t);
+        ucs_free(tcp_pending_req);
+    } else {
+        purge_arg->cb(self, purge_arg->arg);
+    }
+}
+
 void uct_tcp_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                               void *arg)
 {
     uct_tcp_ep_t *ep = ucs_derived_of(tl_ep, uct_tcp_ep_t);
     uct_pending_req_priv_queue_t UCS_V_UNUSED *priv;
+    uct_tcp_ep_pending_purge_arg_t purge_arg;
 
-    uct_pending_queue_purge(priv, &ep->pending_q, 1, cb, arg);
+    purge_arg.cb  = cb;
+    purge_arg.arg = arg;
+
+    uct_pending_queue_purge(priv, &ep->pending_q, 1,
+                            uct_tcp_ep_pending_purge_cb, &purge_arg);
 }
 
 ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
