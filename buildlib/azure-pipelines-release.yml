@@ -35,7 +35,7 @@ stages:
               set -eE
               source ./buildlib/az-helpers.sh
               set -x
-              check_release_build $(Build.Reason) $(Build.SourceVersion)
+              check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/RELEASE: "
             name: Result
             displayName: Check build condition
 

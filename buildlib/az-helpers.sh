@@ -142,6 +142,7 @@ try_load_cuda_env() {
 check_release_build() {
     build_reason=$1
     build_sourceversion=$2
+    title_mask=$3
 
 
     if [ "${build_reason}" == "IndividualCI" ] || \
@@ -156,7 +157,7 @@ check_release_build() {
         for sha1 in `git log $range --format="%h"`
         do
             title=`git log -1 --format="%s" $sha1`
-            [[ "$title" == "AZP/RELEASE: "* ]] && launch=True
+            [[ "$title" == "${title_mask}"* ]] && launch=True;
         done
     fi
 
