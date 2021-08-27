@@ -43,8 +43,11 @@ static void
 ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
 {
     const char *progress_func_name;
+    const char *comp_func_name;
     ucp_ep_config_t *config;
     ucp_ep_h ep;
+
+    ucs_string_buffer_appendf(strb, "flags:%x ", req->flags);
 
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_string_buffer_appendf(strb, "send length %zu ", req->send.length);
@@ -56,6 +59,11 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
         } else {
             progress_func_name = ucs_debug_get_symbol_name(req->send.uct.func);
             ucs_string_buffer_appendf(strb, "%s() ", progress_func_name);
+        }
+
+        if (req->flags & UCP_REQUEST_FLAG_CALLBACK) {
+            comp_func_name = ucs_debug_get_symbol_name(req->send.cb);
+            ucs_string_buffer_appendf(strb, "comp:%s()", comp_func_name);
         }
 
         if (recurse) {
