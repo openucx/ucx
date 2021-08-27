@@ -27,9 +27,9 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     double max_bandwidth, max_frag_ratio;
     ucp_lane_index_t i, lane, num_lanes;
     ucp_proto_multi_lane_priv_t *lpriv;
+    size_t max_frag, min_length;
     ucp_lane_map_t lane_map;
     ucp_md_map_t reg_md_map;
-    size_t max_frag;
 
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
@@ -67,7 +67,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     perf.overhead    = 0;
     perf.latency     = 0;
     perf.sys_latency = 0;
-    perf.min_frag    = 0;
     lane_map         = 0;
     max_frag_ratio   = 0;
     for (i = 0; i < num_lanes; ++i) {
@@ -90,7 +89,6 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         perf.overhead   += lane_perf->overhead;
         perf.latency     = ucs_max(perf.latency, lane_perf->latency);
         perf.sys_latency = ucs_max(perf.sys_latency, lane_perf->sys_latency);
-        perf.min_frag    = ucs_max(perf.min_frag, lane_perf->min_frag);
         lane_map        |= UCS_BIT(lane);
     }
 
@@ -100,25 +98,71 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->lane_map   = lane_map;
     mpriv->num_lanes  = 0;
     perf.max_frag     = SIZE_MAX;
+    perf.min_length   = 0;
     ucs_for_each_bit(lane, lane_map) {
         ucs_assert(lane < UCP_MAX_LANES);
 
         lpriv     = &mpriv->lanes[mpriv->num_lanes++];
         lane_perf = &lanes_perf[lane];
-        max_frag  = ucs_double_to_sizet(lane_perf->bandwidth / max_frag_ratio,
-                                        lane_perf->max_frag);
 
         ucp_proto_common_lane_priv_init(&params->super, mpriv->reg_md_map, lane,
                                         &lpriv->super);
 
-        /* Due to floating-point accuracy, max_frag may be too large */
+        /* Calculate maximal fragment size according to lane relative bandwidth.
+           Due to floating-point accuracy, max_frag may be too large. */
+        max_frag = ucs_double_to_sizet(lane_perf->bandwidth / max_frag_ratio,
+                                       lane_perf->max_frag);
+
+        /* Make sure fragment is not zero */
+        ucs_assert(max_frag > 0);
+
         lpriv->max_frag = max_frag;
-        lpriv->weight   = ucs_proto_multi_calc_weight(lane_perf->bandwidth,
-                                                      perf.bandwidth);
         perf.max_frag   = ucs_min(perf.max_frag, lpriv->max_frag);
 
-        ucs_assert(lpriv->max_frag > 0);
+
+        /* Calculate lane weight as a fixed-point fraction */
+        lpriv->weight = ucs_proto_multi_calc_weight(lane_perf->bandwidth,
+                                                    perf.bandwidth);
         ucs_assert(lpriv->weight > 0);
+        ucs_assert(lpriv->weight <= UCS_BIT(UCP_PROTO_MULTI_WEIGHT_SHIFT));
+
+        /* Calculate minimal message length according to lane's relative weight:
+           When the message length is scaled by this lane's weight, it must not
+           be lower than 'lane_perf->min_length'. Proof of the below formula:
+
+            Since we calculated min_length by our formula:
+                length >= (lane_perf->min_length << SHIFT) / weight
+
+            Let's mark "(lane_perf->min_length << SHIFT)" as "M" for simplicity:
+                length >= M / weight
+
+            Since weight <= mask + 1, then weight - (mask + 1) <= 0, so we get:
+                length >= (M + weight - (mask + 1)) / weight)
+
+            Changing order:
+                length >= ((M - mask) + (weight - 1)) / weight)
+
+            The righthand expression is actually rounding up the result of
+            "M - mask" divided by weight. So if we multiplied the righthand
+            expression by weight, it would be >= "M - mask".
+            We can multiply both sides by weight and get:
+                length * weight >= "righthand expression" * weight >= M - mask
+            So:
+                length * weight >= M - mask
+
+            Changing order:
+                length * weight + mask >= M = lane_perf->min_length << SHIFT
+
+            Shifting right, we get the needed inequality, which means the result
+            of ucp_proto_multi_scaled_length() will be always greater or equal
+            to min_length:
+                (length * weight + mask) >> SHIFT >= lane_perf->min_length
+        */
+        min_length = (lane_perf->min_length << UCP_PROTO_MULTI_WEIGHT_SHIFT) /
+                     lpriv->weight;
+        ucs_assert(ucp_proto_multi_scaled_length(lpriv, min_length) >=
+                   lane_perf->min_length);
+        perf.min_length = ucs_max(perf.min_length, min_length);
     }
 
     /* Fill the size of private data according to number of used lanes */

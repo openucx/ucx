@@ -269,7 +269,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     EXPECT_EQ(memh->mem_type, mem_info.type);
 
     /* Collect distances from all devices in the system */
-    uint64_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
+    ucp_sys_dev_map_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
     std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
     for (unsigned i = 0; i < sys_distance.size(); ++i) {
         status = ucs_topo_get_distance(mem_info.sys_dev, i, &sys_distance[i]);

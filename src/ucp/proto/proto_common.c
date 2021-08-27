@@ -87,11 +87,18 @@ ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
     return params->worker->context->tl_rscs[rsc_index].md_index;
 }
 
-static void
-ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
-                                   ucp_lane_index_t lane,
-                                   ucs_sys_device_t sys_dev,
-                                   ucs_sys_dev_distance_t *distance)
+ucs_sys_device_t
+ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
+                             ucp_lane_index_t lane)
+{
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    return params->worker->context->tl_rscs[rsc_index].tl_rsc.sys_device;
+}
+
+void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
+                                        ucp_lane_index_t lane,
+                                        ucs_sys_device_t sys_dev,
+                                        ucs_sys_dev_distance_t *distance)
 {
     ucp_context_h context       = params->worker->context;
     ucp_rsc_index_t rsc_index   = ucp_proto_common_get_rsc_index(params, lane);
@@ -156,7 +163,7 @@ void ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params
                       params->latency;
 
     perf->sys_latency = 0;
-    perf->min_frag    = ucp_proto_common_get_iface_attr_field(
+    perf->min_length  = ucp_proto_common_get_iface_attr_field(
             iface_attr, params->min_frag_offs, 0);
     perf->max_frag    = ucp_proto_common_get_iface_attr_field(
             iface_attr, params->max_frag_offs, SIZE_MAX);
@@ -652,7 +659,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     /* Initialize capabilities */
     caps->cfg_thresh   = params->cfg_thresh;
     caps->cfg_priority = params->cfg_priority;
-    caps->min_length   = ucs_max(params->min_length, perf->min_frag);
+    caps->min_length   = ucs_max(params->min_length, perf->min_length);
 
     ucs_assert(perf->max_frag >= params->hdr_size);
     frag_size = ucs_min(params->max_length, perf->max_frag - params->hdr_size);

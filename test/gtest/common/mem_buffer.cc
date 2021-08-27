@@ -202,17 +202,45 @@ void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed)
     memcpy(ptr, &seed, end - (char*)ptr);
 }
 
-void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed)
+void mem_buffer::pattern_check(uint64_t expected, uint64_t actual,
+                               size_t length, size_t offset, const void *buffer,
+                               const void *orig_ptr)
 {
-    const char* end = (const char*)buffer + length;
+    const uint64_t mask = UCS_MASK_SAFE(length * 8 * sizeof(char));
+
+    if (actual == (expected & mask)) {
+        return; // Data is correct
+    }
+
+    std::stringstream ss;
+    ss << "Pattern check failed at " << UCS_PTR_BYTE_OFFSET(orig_ptr, offset)
+       << " offset " << offset;
+
+    ucs_assert(length <= sizeof(actual));
+    if (length != sizeof(actual)) {
+        // If mask is partial, print it as well
+        ss << " (length " << length << " mask: 0x" << std::hex << mask << ")";
+    }
+
+    ss << ": Expected: 0x" << std::hex << (expected & mask) << " Actual: 0x"
+       << std::hex << actual << std::dec;
+
+    UCS_TEST_ABORT(ss.str());
+}
+
+void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed,
+                               const void *orig_ptr)
+{
+    const char *end     = (const char*)buffer + length;
     const uint64_t *ptr = (const uint64_t*)buffer;
 
+    if (orig_ptr == NULL) {
+        orig_ptr = buffer;
+    }
+
     while ((const char*)(ptr + 1) <= end) {
-       if (*ptr != seed) {
-            UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) << ": " <<
-                           "Expected: 0x" << std::hex << seed << " " <<
-                           "Got: 0x" << std::hex << (*ptr) << std::dec);
-        }
+        pattern_check(seed, *ptr, sizeof(*ptr), UCS_PTR_BYTE_DIFF(buffer, ptr),
+                      buffer, orig_ptr);
         seed = pat(seed);
         ++ptr;
     }
@@ -220,23 +248,18 @@ void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed)
     size_t remainder = (end - (const char*)ptr);
     if (remainder > 0) {
         ucs_assert(remainder < sizeof(*ptr));
-        uint64_t mask = UCS_MASK_SAFE(remainder * 8 * sizeof(char));
         uint64_t value = 0;
         memcpy(&value, ptr, remainder);
-        if (value != (seed & mask)) {
-             UCS_TEST_ABORT("At offset " << ((const char*)ptr - (const char*)buffer) <<
-                            " (remainder " << remainder << ") : " <<
-                            "Expected: 0x" << std::hex << (seed & mask) << " " <<
-                            "Mask: 0x" << std::hex << mask << " " <<
-                            "Got: 0x" << std::hex << value << std::dec);
-         }
+        pattern_check(seed, value, remainder, UCS_PTR_BYTE_DIFF(buffer, ptr),
+                      buffer, orig_ptr);
     }
 }
 
-void mem_buffer::pattern_check(const void *buffer, size_t length)
+void mem_buffer::pattern_check(const void *buffer, size_t length,
+                               const void *orig_ptr)
 {
     if (length > sizeof(uint64_t)) {
-        pattern_check(buffer, length, *(const uint64_t*)buffer);
+        pattern_check(buffer, length, *(const uint64_t*)buffer, orig_ptr);
     }
 }
 
@@ -256,11 +279,11 @@ void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed,
                                ucs_memory_type_t mem_type)
 {
     if (UCP_MEM_IS_HOST(mem_type)) {
-        pattern_check(buffer, length, seed);
+        pattern_check(buffer, length, seed, buffer);
     } else {
         ucs::auto_buffer temp(length);
         copy_from(*temp, buffer, length, mem_type);
-        pattern_check(*temp, length, seed);
+        pattern_check(*temp, length, seed, buffer);
     }
 }
 
@@ -379,6 +402,11 @@ mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
     m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
 }
 
+mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type, uint64_t seed) :
+    m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
+    pattern_fill(seed);
+}
+
 mem_buffer::~mem_buffer() {
     release(ptr(), mem_type());
 }
@@ -393,4 +421,12 @@ void *mem_buffer::ptr() const {
 
 size_t mem_buffer::size() const {
     return m_size;
+}
+
+void mem_buffer::pattern_fill(uint64_t seed) {
+    pattern_fill(ptr(), size(), seed, mem_type());
+}
+
+void mem_buffer::pattern_check(uint64_t seed) const {
+    pattern_check(ptr(), size(), seed, mem_type());
 }

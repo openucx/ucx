@@ -113,8 +113,8 @@ typedef struct {
     /* Latency of device to memory access */
     double sys_latency;
 
-    /* Minimal single message length */
-    size_t min_frag;
+    /* Minimal total message length */
+    size_t min_length;
 
     /* Maximum single message length */
     size_t max_frag;
@@ -163,6 +163,15 @@ ucp_rsc_index_t
 ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
                               ucp_lane_index_t lane);
 
+ucs_sys_device_t
+ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
+                             ucp_lane_index_t lane);
+
+
+void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
+                                        ucp_lane_index_t lane,
+                                        ucs_sys_device_t sys_dev,
+                                        ucs_sys_dev_distance_t *distance);
 
 const uct_iface_attr_t *
 ucp_proto_common_get_iface_attr(const ucp_proto_init_params_t *params,

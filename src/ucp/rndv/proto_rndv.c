@@ -13,25 +13,31 @@
 #include <ucp/proto/proto_common.inl>
 
 
-static ucp_md_map_t
-ucp_proto_rndv_ctrl_reg_md_map(const ucp_proto_rndv_ctrl_init_params_t *params)
+static void
+ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
+                               ucp_md_map_t *md_map,
+                               ucp_sys_dev_map_t *sys_dev_map,
+                               ucs_sys_dev_distance_t *sys_distance)
 {
     ucp_worker_h worker                      = params->super.super.worker;
     const ucp_ep_config_key_t *ep_config_key = params->super.super.ep_config_key;
+    ucp_rsc_index_t mem_sys_dev, ep_sys_dev;
     const uct_iface_attr_t *iface_attr;
     const uct_md_attr_t *md_attr;
     ucp_md_index_t md_index;
-    ucp_md_map_t reg_md_map;
     ucp_lane_index_t lane;
-
-    if (params->super.super.select_param->dt_class != UCP_DATATYPE_CONTIG) {
-        return 0;
-    }
+    ucs_status_t status;
 
     /* md_map is all lanes which support get_zcopy on the given mem_type and
      * require remote key
      */
-    reg_md_map = 0;
+    *md_map      = 0;
+    *sys_dev_map = 0;
+
+    if (params->super.super.select_param->dt_class != UCP_DATATYPE_CONTIG) {
+        return;
+    }
+
     for (lane = 0; lane < ep_config_key->num_lanes; ++lane) {
         if (ep_config_key->lanes[lane].rsc_index == UCP_NULL_RESOURCE) {
             continue;
@@ -48,17 +54,28 @@ ucp_proto_rndv_ctrl_reg_md_map(const ucp_proto_rndv_ctrl_init_params_t *params)
         /* Check the memory domain requires remote key, and capable of
          * registering the memory type
          */
-        md_index = ucp_proto_common_get_md_index(&params->super.super, lane);
-        md_attr  = &worker->context->tl_mds[md_index].attr;
+        ep_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
+        md_index   = ucp_proto_common_get_md_index(&params->super.super, lane);
+        md_attr    = &worker->context->tl_mds[md_index].attr;
         if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
             !(md_attr->cap.reg_mem_types & UCS_BIT(params->mem_info.type))) {
             continue;
         }
 
-        reg_md_map |= UCS_BIT(md_index);
-    }
+        *md_map |= UCS_BIT(md_index);
 
-    return reg_md_map;
+        if (ep_sys_dev >= UCP_MAX_SYS_DEVICES) {
+            continue;
+        }
+
+        mem_sys_dev   = params->super.super.select_param->sys_dev;
+        *sys_dev_map |= UCS_BIT(ep_sys_dev);
+
+        status = ucs_topo_get_distance(mem_sys_dev, ep_sys_dev, sys_distance);
+        ucs_assertv_always(status == UCS_OK, "mem_info->sys_dev=%d sys_dev=%d",
+                           mem_sys_dev, ep_sys_dev);
+        ++sys_distance;
+    }
 }
 
 /*
@@ -73,11 +90,14 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
 {
     ucp_worker_h worker                 = params->super.super.worker;
     ucp_worker_cfg_index_t ep_cfg_index = params->super.super.ep_cfg_index;
+    const ucp_ep_config_t *ep_config    = &worker->ep_config[ep_cfg_index];
+    ucs_sys_dev_distance_t lanes_distance[UCP_MAX_LANES];
+    const ucp_proto_select_elem_t *select_elem;
     ucp_rkey_config_key_t rkey_config_key;
     ucp_worker_cfg_index_t rkey_cfg_index;
-    ucp_proto_select_elem_t *select_elem;
     ucp_rkey_config_t *rkey_config;
     ucs_status_t status;
+    ucp_lane_index_t lane;
 
     /* Construct remote key for remote protocol lookup according to the local
      * buffer properties (since remote side is expected to access the local
@@ -85,11 +105,16 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
      */
     rkey_config_key.md_map       = rpriv->md_map;
     rkey_config_key.ep_cfg_index = ep_cfg_index;
+    rkey_config_key.sys_dev      = params->mem_info.sys_dev;
     rkey_config_key.mem_type     = params->mem_info.type;
-    rkey_config_key.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+    for (lane = 0; lane < ep_config->key.num_lanes; ++lane) {
+        ucp_proto_common_get_lane_distance(&params->super.super, lane,
+                                           params->mem_info.sys_dev,
+                                           &lanes_distance[lane]);
+    }
 
-    status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
-                                        &rkey_cfg_index);
+    status = ucp_worker_rkey_config_get(worker, &rkey_config_key,
+                                        lanes_distance, &rkey_cfg_index);
     if (status != UCS_OK) {
         return status;
     }
@@ -117,6 +142,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
     ucp_proto_caps_t *caps            = params->super.super.caps;
     ucs_linear_func_t send_overheads, rndv_bias, perf;
+    const ucp_proto_select_param_t *select_param;
     const ucp_proto_select_range_t *remote_range;
     ucp_proto_select_param_t remote_select_param;
     ucp_proto_perf_range_t *perf_range;
@@ -130,6 +156,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucs_assert(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
     ucs_assert(!(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG));
 
+    select_param                   = params->super.super.select_param;
     *params->super.super.priv_size = sizeof(ucp_proto_rndv_ctrl_priv_t);
 
     /* Find lane to send the initial message */
@@ -141,24 +168,25 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     /* Construct select parameter for the remote protocol */
     if (params->super.super.rkey_config_key == NULL) {
         /* Remote buffer is unknown, assume same params as local */
-        remote_select_param          = *params->super.super.select_param;
+        remote_select_param          = *select_param;
         remote_select_param.op_id    = params->remote_op_id;
         remote_select_param.op_flags = 0;
     } else {
         /* If we know the remote buffer parameters, these are actually the local
          * parameters for the remote protocol
          */
+        mem_info.sys_dev = params->super.super.rkey_config_key->sys_dev;
         mem_info.type    = params->super.super.rkey_config_key->mem_type;
-        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
                                     0, UCP_DATATYPE_CONTIG, &mem_info, 1);
     }
 
     /* Initialize estimated memory registration map */
-    rpriv->md_map           = ucp_proto_rndv_ctrl_reg_md_map(params);
+    ucp_proto_rndv_ctrl_get_md_map(params, &rpriv->md_map, &rpriv->sys_dev_map,
+                                   rpriv->sys_dev_distance);
     rpriv->packed_rkey_size = ucp_rkey_packed_size(context, rpriv->md_map,
-                                                   UCS_SYS_DEVICE_ID_UNKNOWN,
-                                                   0);
+                                                   select_param->sys_dev,
+                                                   rpriv->sys_dev_map);
 
     /* Guess the protocol the remote side will select */
     status = ucp_proto_rndv_ctrl_select_remote_proto(params,
