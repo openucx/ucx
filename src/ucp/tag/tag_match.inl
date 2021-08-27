@@ -80,12 +80,6 @@ ucp_tag_exp_push(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_tag_exp_add(ucp_tag_match_t *tm, ucp_request_t *req)
-{
-    ucp_tag_exp_push(tm, ucp_tag_exp_get_req_queue(tm, req), req);
-}
-
-static UCS_F_ALWAYS_INLINE void
 ucp_tag_exp_delete(ucp_request_t *req, ucp_tag_match_t *tm,
                    ucp_request_queue_t *req_queue, ucs_queue_iter_t iter)
 {
