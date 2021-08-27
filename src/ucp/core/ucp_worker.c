@@ -2837,7 +2837,7 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
+ucp_worker_keepalive_complete(ucp_worker_h worker)
 {
     ucs_trace("worker %p: sent keepalive on %u endpoints",
               worker, worker->keepalive.ep_count);
@@ -2845,7 +2845,6 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
     ucs_assert(worker->keepalive.lane_map == 0);
 
     worker->keepalive.iter_end   = worker->keepalive.iter;
-    worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
     worker->keepalive.round_count++;
 }
@@ -2873,7 +2872,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
      * initialized and new EP configuration set from an asynchronous thread
      * when processing WIREUP_MSGs */
     UCS_ASYNC_BLOCK(&worker->async);
-    ucs_trace_func("worker %p: keepalive round", worker);
+    ucs_trace("worker %p: keepalive round", worker);
 
     if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
@@ -2908,7 +2907,11 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
     } while ((worker->keepalive.ep_count < max_ep_count) &&
              (worker->keepalive.iter != worker->keepalive.iter_end));
 
-    ucp_worker_keepalive_complete(worker, now);
+    ucp_worker_keepalive_complete(worker);
+    worker->keepalive.last_round = now;
+
+    ucs_debug("worker %p: keepalive round completed, processed %u endpoints",
+              worker, progress_count);
 
 out_unblock:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -2983,7 +2986,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
          * for the same endpoint twice in the round
          */
         worker->keepalive.lane_map = 0;
-        ucp_worker_keepalive_complete(worker, ucs_get_time());
+        ucp_worker_keepalive_complete(worker);
     }
 }
 

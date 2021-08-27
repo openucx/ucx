@@ -1517,25 +1517,28 @@ public:
 
     void dump_timeout_waiting_for_replies_info()
     {
-        size_t total_uncompleted = 0;
-        UcxLog log(LOG_PREFIX);
-
-        log << "timeout waiting for " << (_num_sent - _num_completed)
-            << " replies on the following connections:";
+        unsigned num_conns = 0;
+        for (server_map_t::const_iterator iter = _server_index_lookup.begin();
+             iter != _server_index_lookup.end(); ++iter) {
+            if (get_num_uncompleted(iter->second) > 0) {
+                ++num_conns;
+            }
+        }
+        LOG << "timeout waiting for " << (_num_sent - _num_completed)
+            << " replies on " << num_conns << " connections";
 
         for (server_map_t::const_iterator iter = _server_index_lookup.begin();
              iter != _server_index_lookup.end(); ++iter) {
             size_t server_index = iter->second;
-            if (get_num_uncompleted(server_index) == 0) {
+            long num_uncompleted = get_num_uncompleted(server_index);
+            if (num_uncompleted == 0) {
                 continue;
             }
 
-            log << "\n";
+            UcxLog log(LOG_PREFIX);
+            log << "timeout waiting for " << num_uncompleted << " replies on ";
             dump_server_info(_server_info[server_index], log);
-            total_uncompleted++;
         }
-
-        log << "\ntotal: " << total_uncompleted;
     }
 
     void disconnect_uncompleted_servers(const char *reason) {

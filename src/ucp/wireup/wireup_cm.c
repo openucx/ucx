@@ -619,7 +619,9 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_free_addr;
     }
 
-    if (!context->config.ext.cm_use_all_devices) {
+    if (context->config.ext.cm_use_all_devices) {
+        ucp_wireup_remote_connect_lanes(ucp_ep, 0);
+    } else {
         ucp_wireup_remote_connected(ucp_ep);
     }
 
@@ -1222,10 +1224,11 @@ static unsigned ucp_cm_server_conn_notify_progress(void *arg)
 
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
-    if (!ucp_ep->worker->context->config.ext.cm_use_all_devices) {
-        ucp_wireup_remote_connected(ucp_ep);
-    } else {
+    if (ucp_ep->worker->context->config.ext.cm_use_all_devices) {
+        ucp_wireup_remote_connect_lanes(ucp_ep, 0);
         ucp_wireup_send_pre_request(ucp_ep);
+    } else {
+        ucp_wireup_remote_connected(ucp_ep);
     }
 
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
