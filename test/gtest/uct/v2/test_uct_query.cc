@@ -4,12 +4,15 @@
  * See file LICENSE for terms.
  */
 
+#include <common/test.h>
+#include <gtest/uct/uct_p2p_test.h>
+
 extern "C" {
+#include <ucs/sys/topo.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 }
 
-#include <gtest/uct/uct_p2p_test.h>
 
 class test_uct_query : public uct_p2p_test {
 public:
@@ -26,11 +29,15 @@ UCS_TEST_P(test_uct_query, query_perf)
     perf_attr.field_mask         = UCT_PERF_ATTR_FIELD_OPERATION |
                                    UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
+                                   UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
+                                   UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE |
                                    UCT_PERF_ATTR_FIELD_OVERHEAD |
                                    UCT_PERF_ATTR_FIELD_BANDWIDTH;
     perf_attr.operation          = UCT_EP_OP_AM_SHORT;
     perf_attr.local_memory_type  = UCS_MEMORY_TYPE_HOST;
     perf_attr.remote_memory_type = UCS_MEMORY_TYPE_HOST;
+    perf_attr.local_sys_device   = UCS_SYS_DEVICE_ID_UNKNOWN;
+    perf_attr.remote_sys_device  = UCS_SYS_DEVICE_ID_UNKNOWN;
     status                       = uct_iface_estimate_perf(sender().iface(),
                                                            &perf_attr);
     EXPECT_EQ(status, UCS_OK);
