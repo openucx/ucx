@@ -296,7 +296,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
 
         rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
         ret = ucp_rma_nonblocking(ep, buffer, count, remote_addr, rkey,
-                                  rkey->cache.rma_proto->progress_put,
+                                  UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index)->progress_put,
                                   rma_config->put_zcopy_thresh, param);
     }
 
@@ -379,7 +379,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
 
         rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
         ret        = ucp_rma_nonblocking(ep, buffer, count, remote_addr, rkey,
-                                         rkey->cache.rma_proto->progress_get,
+                                         UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index)->progress_get,
                                          rma_config->get_zcopy_thresh, param);
     }
 

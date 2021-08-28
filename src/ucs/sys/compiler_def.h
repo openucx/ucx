@@ -192,4 +192,10 @@
 #define UCS_STATIC_CLEANUP \
     static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_dtor)()
 
+/*
+ * Check if the two types are the same
+ */
+#define ucs_same_type(_type1, _type2) \
+    __builtin_types_compatible_p(_type1, _type2)
+
 #endif /* UCS_COMPILER_DEF_H */
