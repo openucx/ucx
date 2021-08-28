@@ -1282,10 +1282,17 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
     UCS_STATIC_ASSERT((sizeof(iface->tx.dci_pool_release_bitmap) * 8) <=
                        UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
 
-    ucs_for_each_bit(pool_index, iface->tx.dci_pool_release_bitmap) {
-        ucs_assert(pool_index < iface->tx.num_dci_pools);
+    while (iface->tx.dci_pool_release_bitmap != 0) {
+        /* Take one DCI pool, and process all its released DCIs.
+         * It's possible that more DCIs to release will be added by the call to
+         * uct_dc_mlx5_iface_progress_pending() below, so we check the pool
+         * bitmap every time.
+         */
+        pool_index = ucs_ffs32(iface->tx.dci_pool_release_bitmap);
+        iface->tx.dci_pool_release_bitmap &= ~UCS_BIT(pool_index);
 
         /* coverity[overrun-local] */
+        ucs_assert(pool_index < iface->tx.num_dci_pools);
         dci_pool = &iface->tx.dci_pool[pool_index];
         while (dci_pool->release_stack_top >= 0) {
             dci = dci_pool->stack[dci_pool->release_stack_top--];
@@ -1301,9 +1308,9 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
          * loop above */
     }
 
+    ucs_assert(iface->tx.dci_pool_release_bitmap == 0);
     uct_dc_mlx5_iface_check_tx(iface);
-    iface->tx.dci_release_prog_id     = UCS_CALLBACKQ_ID_NULL;
-    iface->tx.dci_pool_release_bitmap = 0;
+    iface->tx.dci_release_prog_id = UCS_CALLBACKQ_ID_NULL;
     return 1;
 }
 
