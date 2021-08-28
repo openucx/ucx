@@ -958,10 +958,6 @@ ucp_tag_t UcxConnection::make_iomsg_tag(uint32_t conn_id, uint32_t sn)
     return UcxContext::IOMSG_TAG | make_data_tag(conn_id, sn);
 }
 
-void UcxConnection::stream_send_callback(void *request, ucs_status_t status)
-{
-}
-
 void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
                                          size_t recv_len)
 {
@@ -1067,12 +1063,10 @@ void UcxConnection::connect_tag(UcxCallback *callback)
 
     // send local connection id
     void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
-                                    stream_send_callback, 0);
+                                    common_request_callback, 0);
     // we do not have to check the status here, in case if the endpoint is
     // failed we should handle it in ep_params.err_handler.cb set above
-    if (UCS_PTR_IS_PTR(sreq)) {
-        ucp_request_free(sreq);
-    }
+    process_request("conn_id send", sreq, EmptyCallback::get());
 }
 
 void UcxConnection::connect_am(UcxCallback *callback)
