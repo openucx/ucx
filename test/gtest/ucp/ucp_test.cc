@@ -513,6 +513,17 @@ bool ucp_test::check_tls(const std::string& tls)
     return cache[tls] = (status == UCS_OK);
 }
 
+unsigned ucp_test::mt_num_threads()
+{
+#if _OPENMP && ENABLE_MT
+    /* Assume each thread can create two workers (sender and receiver entity),
+       and each worker can open up to 64 files */
+    return std::min(omp_get_max_threads(), ucs_sys_max_open_files() / (64 * 2));
+#else
+    return 1;
+#endif
+}
+
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params,
@@ -528,7 +539,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     if (thread_type == MULTI_THREAD_CONTEXT) {
         /* Test multi-threading on context level, so create multiple workers
            which share the context */
-        num_workers                        = MT_TEST_NUM_THREADS;
+        num_workers                        = ucp_test::mt_num_threads();
         local_ctx_params.field_mask       |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
         local_ctx_params.mt_workers_shared = 1;
     } else {
