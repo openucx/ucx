@@ -61,7 +61,8 @@ EmptyCallback* EmptyCallback::get() {
 
 bool UcxLog::use_human_time = false;
 
-UcxLog::UcxLog(const char* prefix, bool enable)
+UcxLog::UcxLog(const char* prefix, bool enable, std::ostream *os, bool abort) :
+        _os(os), _abort(abort)
 {
     if (!enable) {
         _ss = NULL;
@@ -86,9 +87,12 @@ UcxLog::UcxLog(const char* prefix, bool enable)
 UcxLog::~UcxLog()
 {
     if (_ss != NULL) {
-        (*_ss) << std::endl;
-        std::cout << (*_ss).str();
+        (*_os) << (*_ss).str() << std::endl;
         delete _ss;
+
+        if (_abort) {
+            abort();
+        }
     }
 }
 

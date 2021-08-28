@@ -59,7 +59,8 @@ class UcxLog {
 public:
     static bool use_human_time;
 
-    UcxLog(const char* prefix, bool enable = true);
+    UcxLog(const char* prefix, bool enable = true,
+           std::ostream *os = &std::cout, bool abort = false);
     ~UcxLog();
 
     template<typename T>
@@ -72,6 +73,8 @@ public:
 
 private:
     std::stringstream        *_ss;
+    std::ostream             *_os;
+    bool                     _abort;
 };
 
 
