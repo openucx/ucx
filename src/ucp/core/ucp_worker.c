@@ -2837,15 +2837,18 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_worker_keepalive_complete(ucp_worker_h worker)
+ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
 {
-    ucs_trace("worker %p: sent keepalive on %u endpoints",
-              worker, worker->keepalive.ep_count);
-
     ucs_assert(worker->keepalive.lane_map == 0);
+
+    ucs_trace("worker %p: keepalive round %zu completed on %u endpoints, "
+              "now: <%lf sec>",
+              worker, worker->keepalive.round_count, worker->keepalive.ep_count,
+              ucs_time_to_sec(now));
 
     worker->keepalive.iter_end   = worker->keepalive.iter;
     worker->keepalive.ep_count   = 0;
+    worker->keepalive.last_round = now;
     worker->keepalive.round_count++;
 }
 
@@ -2907,11 +2910,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
     } while ((worker->keepalive.ep_count < max_ep_count) &&
              (worker->keepalive.iter != worker->keepalive.iter_end));
 
-    ucp_worker_keepalive_complete(worker);
-    worker->keepalive.last_round = now;
-
-    ucs_debug("worker %p: keepalive round completed, processed %u endpoints",
-              worker, progress_count);
+    ucp_worker_keepalive_complete(worker, now);
 
 out_unblock:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -2958,6 +2957,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
+    int round_inprogress;
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
@@ -2966,27 +2966,37 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         return;
     }
 
+    round_inprogress = worker->keepalive.iter != worker->keepalive.iter_end;
+
     if (worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) {
         /* Set lane_map=0 to make sure the endpoint won't be selected again */
+        ucs_debug("worker %p: removed keepalive current ep %p, moving to next",
+                  worker, ep);
         worker->keepalive.lane_map = 0;
-
         ucp_worker_keepalive_next_ep(worker);
         ucs_assert(worker->keepalive.iter != &ucp_ep_ext_gen(ep)->ep_list);
     }
 
     if (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list) {
+        ucs_debug("worker %p: removed keepalive end ep %p, moving end to prev",
+                  worker, ep);
         worker->keepalive.iter_end = worker->keepalive.iter_end->prev;
         ucs_assert(worker->keepalive.iter_end != &ucp_ep_ext_gen(ep)->ep_list);
     }
 
-    if (worker->keepalive.iter == worker->keepalive.iter_end) {
+    if (round_inprogress &&
+        (worker->keepalive.iter == worker->keepalive.iter_end)) {
         /* If the keepalive iterator points to the stop element after moving the
          * keepalive iterator or the stop element as a result of removing the
          * endpoint, need to finish the current round to avoid doing keepalive
          * for the same endpoint twice in the round
+         * NOTE: We should not do anything if there is no keepalive round in
+         * progress, since we would just be postponing the next keepalive round.
          */
+        ucs_debug("worker %p: removing ep %p finished current keepalive round",
+                  worker, ep);
         worker->keepalive.lane_map = 0;
-        ucp_worker_keepalive_complete(worker);
+        ucp_worker_keepalive_complete(worker, ucs_get_time());
     }
 }
 

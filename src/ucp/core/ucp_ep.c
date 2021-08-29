@@ -2953,6 +2953,9 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
         return 0;
     }
 
+    ucs_trace("worker %p: keepalive done on ep %p, now: <%lf sec>", worker, ep,
+              ucs_time_to_sec(now));
+
 #if UCS_ENABLE_ASSERT
     ucs_assertv((now - ucp_ep_ext_control(ep)->ka_last_round) >=
                         worker->context->config.ext.keepalive_interval,
