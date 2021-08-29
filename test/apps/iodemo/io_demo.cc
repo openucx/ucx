@@ -1386,7 +1386,7 @@ public:
     }
 
     void check_counters(const server_info_t& server_info, io_op_t op,
-                        const std::string &type_str)
+                        const char *type_str)
     {
         ASSERTV(server_info.num_completed[op] < server_info.num_sent[op])
                 << type_str << ": op=" << io_op_names[op] << " num_completed="
