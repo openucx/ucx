@@ -383,6 +383,11 @@ protected:
     void check_header(const void *header, size_t header_length)
     {
         std::string check_pattern((char*)header, header_length);
+        
+        if (header_length == 0) {
+            ASSERT_TRUE(header == NULL);
+        }
+        
         EXPECT_EQ(check_pattern, m_hdr);
     }
 
@@ -634,6 +639,11 @@ UCS_TEST_P(test_ucp_am_nbx, max_am_header)
 UCS_TEST_P(test_ucp_am_nbx, zero_send)
 {
     test_am_send_recv(0, max_am_hdr());
+}
+
+UCS_TEST_P(test_ucp_am_nbx, zero_header)
+{
+    test_am_send_recv(0, 0);
 }
 
 UCS_TEST_P(test_ucp_am_nbx, rx_persistent_data)

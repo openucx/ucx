@@ -1369,7 +1369,8 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
     am_id           = hdr->am_id;
     user_hdr_length = hdr->header_length;
     total_size      = first_ftr->total_size;
-    user_hdr        = UCS_PTR_BYTE_OFFSET(payload, total_size);
+    user_hdr        = (user_hdr_length > 0) ? UCS_PTR_BYTE_OFFSET(payload, total_size) :
+                      NULL;
 
     /* Need to reinit descriptor, because we have two headers between rdesc and
      * the data. In ucp_am_data_release() and ucp_am_recv_data_nbx() functions,
