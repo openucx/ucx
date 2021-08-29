@@ -42,6 +42,7 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jobject 
     jfieldID field;
     ucp_worker_h ucp_worker = (ucp_worker_h)worker_ptr;
     ucp_ep_h endpoint;
+    jstring name = NULL;
 
     // Get field mask
     jclass ucp_ep_params_class = env->GetObjectClass(ucp_ep_params);
@@ -91,7 +92,16 @@ Java_org_openucx_jucx_ucp_UcpEndpoint_createEndpointNative(JNIEnv *env, jobject 
         ep_params.err_handler.cb = error_handler;
     }
 
+    if (ep_params.field_mask & UCP_EP_PARAM_FIELD_NAME) {
+        field = env->GetFieldID(ucp_ep_params_class, "name", "Ljava/lang/String;");
+        name = (jstring)env->GetObjectField(ucp_ep_params, field);
+        ep_params.name = env->GetStringUTFChars(name, 0);;
+    }
+
     ucs_status_t status = ucp_ep_create(ucp_worker, &ep_params, &endpoint);
+    if (name != NULL) {
+        env->ReleaseStringChars(name, (const jchar*)ep_params.name);
+    }
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
     }

@@ -46,7 +46,8 @@ public class UcpEndpointTest extends UcxTest {
         UcpContext context = new UcpContext(new UcpParams().requestStreamFeature());
         UcpWorker worker = context.newWorker(new UcpWorkerParams());
         UcpEndpointParams epParams = new UcpEndpointParams().setUcpAddress(worker.getAddress())
-            .setPeerErrorHandlingMode().setNoLoopbackMode();
+            .setPeerErrorHandlingMode().setNoLoopbackMode()
+            .setName("testConnectToListenerByWorkerAddr");
         UcpEndpoint endpoint = worker.newEndpoint(epParams);
         assertNotNull(endpoint.getNativeId());
 
@@ -67,7 +68,7 @@ public class UcpEndpointTest extends UcxTest {
 
         // Create endpoint worker1 -> worker2
         UcpEndpointParams epParams = new UcpEndpointParams().setPeerErrorHandlingMode()
-            .setUcpAddress(worker2.getAddress());
+            .setName("testGetNB").setUcpAddress(worker2.getAddress());
         UcpEndpoint endpoint = worker1.newEndpoint(epParams);
 
         // Allocate 2 source and 2 destination buffers, to perform 2 RDMA Read operations
@@ -184,7 +185,7 @@ public class UcpEndpointTest extends UcxTest {
                 }
             });
 
-        UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
+        UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams().setName("testSendRecv")
             .setUcpAddress(worker2.getAddress()));
 
         ep.sendTaggedNonBlocking(src1.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE, 0, null);
@@ -217,7 +218,7 @@ public class UcpEndpointTest extends UcxTest {
         UcpWorker worker2 = context2.newWorker(rdmaWorkerParams);
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams()
-            .setPeerErrorHandlingMode()
+            .setPeerErrorHandlingMode().setName("testRecvAfterSend")
             .setErrorHandler((errEp, status, errorMsg) -> { })
             .setUcpAddress(worker2.getAddress()));
 
