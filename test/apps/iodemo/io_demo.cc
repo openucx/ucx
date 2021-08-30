@@ -1121,6 +1121,8 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        assert(conn->ucx_status() == UCS_OK);
+
         if (opts().validate) {
             assert(length == opts().iomsg_size);
             validate(msg, length);
@@ -1143,6 +1145,8 @@ public:
         VERBOSE_LOG << "got io (AM) message " << io_op_names[msg->op] << " sn "
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
+
+        assert(conn->ucx_status() == UCS_OK);
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
@@ -1612,18 +1616,16 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        assert(conn->ucx_status() == UCS_OK);
+
         if (msg->op >= IO_COMP_MIN) {
             assert(msg->op == IO_WRITE_COMP);
 
             size_t server_index = get_active_server_index(conn);
-            if (server_index < _server_info.size()) {
-                handle_operation_completion(server_index, IO_WRITE,
-                                            msg->data_size);
-            } else {
-                /* do not increment _num_completed here since we decremented
-                 * _num_sent on connection termination */
-                LOG << "got WRITE completion on failed connection";
-            }
+            assert(server_index < _server_info.size());
+
+            handle_operation_completion(server_index, IO_WRITE,
+                                        msg->data_size);
         }
     }
 
@@ -1636,7 +1638,11 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        assert(conn->ucx_status() == UCS_OK);
         assert(msg->op >= IO_COMP_MIN);
+
+        size_t server_index = get_active_server_index(conn);
+        assert(server_index < _server_info.size());
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
@@ -1644,7 +1650,6 @@ public:
         }
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
-        size_t server_index = get_active_server_index(conn);
         if (msg->op == IO_WRITE_COMP) {
             assert(msg->op == IO_WRITE_COMP);
             handle_operation_completion(server_index, IO_WRITE,
