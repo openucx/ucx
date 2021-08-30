@@ -211,7 +211,7 @@ int ucs_rand();
  * @param [in]  range_max       End of the range
  * @param [out] rand_val        The generated random number
  *
- * @retrun UCS_OK on success or an error status on failure.
+ * @return UCS_OK on success or an error status on failure.
  */
 ucs_status_t ucs_rand_range(int range_min, int range_max, int *rand_val);
 
