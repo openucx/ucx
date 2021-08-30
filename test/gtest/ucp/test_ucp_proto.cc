@@ -24,6 +24,7 @@ public:
 
 protected:
     virtual void init() {
+        UCS_TEST_SKIP_R("PROTO_ENABLE is not supported");
         modify_config("PROTO_ENABLE", "y");
         ucp_test::init();
         sender().connect(&receiver(), get_ep_params());
