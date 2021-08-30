@@ -327,6 +327,7 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
     priv                  = ucp_tag_eager_offload_priv(tl_flags, data, length,
                                                        ucp_eager_first_hdr_t);
     priv->super.super.tag = stag;
+    priv->super.ep_id     = UCS_PTR_MAP_KEY_INVALID;
     priv->total_len       = SIZE_MAX; /* length is not known at this point */
     priv->msg_id          = msg_ctx;
     return ucp_eager_tagged_handler(worker, priv, length + priv_len,
@@ -432,6 +433,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
     priv->req.req_id      = UCS_PTR_MAP_KEY_INVALID;
     priv->req.ep_id       = imm;
     priv->super.super.tag = stag;
+    priv->super.ep_id     = UCS_PTR_MAP_KEY_INVALID;
     return ucp_eager_tagged_handler(worker, priv, length + priv_len,
                                     tl_flags, flags, priv_len, priv_len);
 }
