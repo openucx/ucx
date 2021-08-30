@@ -305,61 +305,64 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
         break;
 #endif
     default:
-        abort_wrong_mem_type(mem_type);
+        UCS_TEST_ABORT("Wrong buffer memory type " + mem_type_name(mem_type));
     }
 }
 
 void mem_buffer::copy_to(void *dst, const void *src, size_t length,
                          ucs_memory_type_t dst_mem_type)
 {
-    switch (dst_mem_type) {
-    case UCS_MEMORY_TYPE_HOST:
-    case UCS_MEMORY_TYPE_ROCM_MANAGED:
-        memcpy(dst, src, length);
-        break;
-#if HAVE_CUDA
-    case UCS_MEMORY_TYPE_CUDA:
-    case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyHostToDevice),
-                  ": dst=" << dst << " src=" << src << "length=" << length);
-        CUDA_CALL(cudaDeviceSynchronize(), "");
-        break;
-#endif
-#if HAVE_ROCM
-    case UCS_MEMORY_TYPE_ROCM:
-        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyHostToDevice));
-        ROCM_CALL(hipDeviceSynchronize());
-        break;
-#endif
-    default:
-        abort_wrong_mem_type(dst_mem_type);
-    }
+    copy_between(dst, src, length, dst_mem_type, UCS_MEMORY_TYPE_HOST);
 }
 
 void mem_buffer::copy_from(void *dst, const void *src, size_t length,
                            ucs_memory_type_t src_mem_type)
 {
-    switch (src_mem_type) {
-    case UCS_MEMORY_TYPE_HOST:
-    case UCS_MEMORY_TYPE_ROCM_MANAGED:
-        memcpy(dst, src, length);
-        break;
+    copy_between(dst, src, length, UCS_MEMORY_TYPE_HOST, src_mem_type);
+}
+
+/* check both mem types are in the given set */
+bool mem_buffer::check_mem_types(ucs_memory_type_t dst_mem_type,
+                                 ucs_memory_type_t src_mem_type,
+                                 const uint64_t mem_types)
+{
+    return (UCS_BIT(dst_mem_type) & mem_types) &&
+           (UCS_BIT(src_mem_type) & mem_types);
+}
+
+void mem_buffer::copy_between(void *dst, const void *src, size_t length,
+                              ucs_memory_type_t dst_mem_type,
+                              ucs_memory_type_t src_mem_type)
+{
+    const uint64_t host_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
 #if HAVE_CUDA
-    case UCS_MEMORY_TYPE_CUDA:
-    case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDeviceToHost),
-                  ": dst=" << dst << " src=" << src << "length=" << length);
-        CUDA_CALL(cudaDeviceSynchronize(), "");
-        break;
+    const uint64_t cuda_mem_types = host_mem_types |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
 #endif
 #if HAVE_ROCM
-    case UCS_MEMORY_TYPE_ROCM:
-        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyDeviceToHost));
-        ROCM_CALL(hipDeviceSynchronize());
-        break;
+    const uint64_t rocm_mem_types = host_mem_types |
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED);
 #endif
-    default:
-        abort_wrong_mem_type(src_mem_type);
+
+    if (check_mem_types(dst_mem_type, src_mem_type, host_mem_types)) {
+        memcpy(dst, src, length);
+#if HAVE_CUDA
+    } else if (check_mem_types(dst_mem_type, src_mem_type, cuda_mem_types)) {
+        CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDefault),
+                  ": dst=" << dst << " src=" << src << "length=" << length);
+        CUDA_CALL(cudaDeviceSynchronize(), "");
+#endif
+#if HAVE_ROCM
+    } else if (check_mem_types(dst_mem_type, src_mem_type, rocm_mem_types)) {
+        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyDefault));
+        ROCM_CALL(hipDeviceSynchronize());
+#endif
+    } else {
+        UCS_TEST_ABORT("Wrong buffer memory type pair " +
+                       mem_type_name(src_mem_type) + "/" +
+                       mem_type_name(dst_mem_type));
     }
 }
 
@@ -408,10 +411,6 @@ bool mem_buffer::compare(const void *expected, const void *buffer,
 std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
 {
     return ucs_memory_type_names[mem_type];
-}
-
-void mem_buffer::abort_wrong_mem_type(ucs_memory_type_t mem_type) {
-    UCS_TEST_ABORT("Wrong buffer memory type " + mem_type_name(mem_type));
 }
 
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :

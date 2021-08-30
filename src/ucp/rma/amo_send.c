@@ -92,6 +92,15 @@ static void ucp_amo_completed_single(uct_completion_t *self)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_amo_init_proto(ucp_request_t *req, uct_atomic_op_t op,
+                   uint64_t remote_addr, ucp_rkey_h rkey)
+{
+    req->send.amo.uct_op      = op;
+    req->send.amo.remote_addr = remote_addr;
+    req->send.amo.rkey        = rkey;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_amo_init_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
                     uint64_t remote_addr, ucp_rkey_h rkey, uint64_t value,
                     size_t size)
@@ -99,13 +108,11 @@ ucp_amo_init_common(ucp_request_t *req, ucp_ep_h ep, uct_atomic_op_t op,
     req->flags                = 0;
     req->send.ep              = ep;
     req->send.length          = size;
-    req->send.amo.uct_op      = op;
-    req->send.amo.remote_addr = remote_addr;
-    req->send.amo.rkey        = rkey;
     req->send.amo.value       = value;
 #if UCS_ENABLE_ASSERT
     req->send.lane            = UCP_NULL_LANE;
 #endif
+    ucp_amo_init_proto(req, op, remote_addr, rkey);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -161,7 +168,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     void *reply_buffer;
     uint64_t value;
     size_t op_size;
-    int op;
+    int op_id;
 
     if (ucs_unlikely(!(param->op_attr_mask & UCP_OP_ATTR_FIELD_DATATYPE))) {
         ucs_error("missing atomic operation datatype");
@@ -169,10 +176,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     }
 
     if (param->datatype == ucp_dt_make_contig(8)) {
-        value   = *(uint64_t*)buffer;
         op_size = sizeof(uint64_t);
     } else if (param->datatype == ucp_dt_make_contig(4)) {
-        value   = *(uint32_t*)buffer;
         op_size = sizeof(uint32_t);
     } else {
         ucs_error("invalid atomic operation datatype: 0x%"PRIx64,
@@ -182,11 +187,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
 
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_BUFFER) {
         reply_buffer = param->reply_buffer;
-        op           = (opcode == UCP_ATOMIC_OP_CSWAP) ? UCP_OP_ID_AMO_CSWAP
+        op_id        = (opcode == UCP_ATOMIC_OP_CSWAP) ? UCP_OP_ID_AMO_CSWAP
                                                        : UCP_OP_ID_AMO_FETCH;
     } else {
         reply_buffer = NULL;
-        op           = UCP_OP_ID_AMO_POST;
+        op_id        = UCP_OP_ID_AMO_POST;
     }
 
     UCP_AMO_CHECK_PARAM_NBX(ep->worker->context, remote_addr, op_size,
@@ -206,14 +211,14 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
                                     {status_p = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                     goto out;});
 
-        ucp_amo_init_common(req, ep, ucp_uct_atomic_op_table[opcode],
-                            remote_addr, rkey, value, op_size);
+        ucp_amo_init_proto(req, ucp_uct_atomic_op_table[opcode], remote_addr,
+                           rkey);
         req->send.buffer = reply_buffer;
 
         status_p = ucp_proto_request_send_op(ep,
                 &ucp_rkey_config(ep->worker, rkey)->proto_select,
-                rkey->cfg_index, req, op, reply_buffer, op_size,
-                param->datatype, op_size, param);
+                rkey->cfg_index, req, op_id, buffer, 1, param->datatype,
+                op_size, param);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, amo);
         if (status != UCS_OK) {
@@ -224,6 +229,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         req = ucp_request_get_param(ep->worker, param,
                                     {status_p = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                      goto out;});
+
+        req->send.buffer = reply_buffer;
+        if (param->datatype == ucp_dt_make_contig(8)) {
+            value = *(uint64_t*)buffer;
+        } else {
+            value = *(uint32_t*)buffer;
+        }
 
         if (param->op_attr_mask & UCP_OP_ATTR_FIELD_REPLY_BUFFER) {
             ucp_amo_init_fetch(req, ep, param->reply_buffer,
@@ -240,7 +252,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     }
 
     /* TODO remove once atomic post returning request supported by users */
-    if (op == UCP_OP_ID_AMO_POST) {
+    if (op_id == UCP_OP_ID_AMO_POST) {
         if (UCS_PTR_IS_PTR(status_p)) {
             ucp_request_free(status_p);
         }

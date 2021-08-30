@@ -59,6 +59,11 @@ public:
     static void copy_from(void *dst, const void *src, size_t length,
                           ucs_memory_type_t src_mem_type);
 
+    /* copy between memtype buffers */
+    static void copy_between(void *dst, const void *src, size_t length,
+                             ucs_memory_type_t dst_mem_type,
+                             ucs_memory_type_t src_mem_type);
+
     /* compare memtype buffer with host memory, return true if equal */
     static bool compare(const void *expected, const void *buffer,
                         size_t length, ucs_memory_type_t mem_type);
@@ -97,8 +102,6 @@ public:
     void memset(int c);
 
 private:
-    static void abort_wrong_mem_type(ucs_memory_type_t mem_type);
-
     static bool is_cuda_supported();
 
     static bool is_rocm_supported();
@@ -125,6 +128,9 @@ private:
     static void pattern_check_failed(uint64_t expected, uint64_t actual,
                                      size_t length, uint64_t mask,
                                      size_t offset, const void *orig_ptr);
+    static bool check_mem_types(ucs_memory_type_t dst_mem_type,
+                                ucs_memory_type_t src_mem_type,
+                                const uint64_t mem_types);
 
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;
