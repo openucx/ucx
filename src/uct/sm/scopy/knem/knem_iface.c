@@ -34,7 +34,7 @@ static ucs_status_t uct_knem_iface_query(uct_iface_h tl_iface,
     iface_attr->iface_addr_len      = 0;
     iface_attr->bandwidth.shared    = iface->super.super.config.bandwidth;
     iface_attr->bandwidth.dedicated = 0;
-    iface_attr->overhead            = 0.25e-6; /* 0.25 us */
+    iface_attr->overhead            = uct_scopy_iface_overhead();
 
     return UCS_OK;
 }
