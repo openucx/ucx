@@ -448,7 +448,7 @@ ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
     return reg_cost;
 }
 
-static ucs_status_t
+ucs_status_t
 ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
                                   ucs_memory_type_t local_mem_type,
                                   ucs_memory_type_t remote_mem_type,

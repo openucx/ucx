@@ -55,7 +55,8 @@ ucp_proto_rndv_rts_request_init(ucp_request_t *req)
     }
 
     ucp_send_request_id_alloc(req);
-    req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    req->flags                    |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
+    req->send.state.completed_size = 0;
 
     return UCS_OK;
 }
