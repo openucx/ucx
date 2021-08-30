@@ -1808,6 +1808,10 @@ protected:
         bool err_handling_test = send_stop || recv_stop;
         unsigned num_iters     = err_handling_test ? 1 : m_num_iters;
 
+        if (!is_exp && err_handling_test) {
+            UCS_TEST_SKIP_R("ucp_tag_probe_nb + err handling is not supported");
+        }
+
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < num_iters; i++) {
