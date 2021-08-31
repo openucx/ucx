@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 #define UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(_params) \
@@ -398,6 +399,15 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
+static void uct_knem_md_vfs_init(uct_md_h md)
+{
+    uct_knem_md_t *knem_md = (uct_knem_md_t*)md;
+
+    if (knem_md->rcache != NULL) {
+        ucs_vfs_obj_add_sym_link(md, knem_md->rcache, "rcache");
+    }
+}
+
 uct_component_t uct_knem_component = {
     .query_md_resources = uct_knem_query_md_resources,
     .md_open            = uct_knem_md_open,
@@ -414,6 +424,7 @@ uct_component_t uct_knem_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_knem_component),
-    .flags              = 0
+    .flags              = 0,
+    .md_vfs_init        = uct_knem_md_vfs_init
 };
 UCT_COMPONENT_REGISTER(&uct_knem_component);

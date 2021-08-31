@@ -21,6 +21,7 @@
 #include <ucs/time/time.h>
 #include <ucm/api/ucm.h>
 #include <ucs/datastruct/string_buffer.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
@@ -1851,6 +1852,15 @@ err:
     return status;
 }
 
+static void uct_ib_md_vfs_init(uct_md_h md)
+{
+    uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
+
+    if (ib_md->rcache != NULL) {
+        ucs_vfs_obj_add_sym_link(md, ib_md->rcache, "rcache");
+    }
+}
+
 static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .open                = uct_ib_verbs_md_open,
     .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
@@ -1882,6 +1892,7 @@ uct_component_t uct_ib_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ib_component),
-    .flags              = 0
+    .flags              = 0,
+    .md_vfs_init        = uct_ib_md_vfs_init
 };
 UCT_COMPONENT_REGISTER(&uct_ib_component);

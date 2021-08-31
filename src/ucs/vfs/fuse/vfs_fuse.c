@@ -354,9 +354,8 @@ static void ucs_vfs_fuse_thread_reset_affinity()
     ucs_sys_cpuset_t cpuset;
     long i, num_cpus;
 
-    num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    num_cpus = ucs_sys_get_num_cpus();
     if (num_cpus == -1) {
-        ucs_diag("failed to get number of CPUs: %m");
         return;
     }
 

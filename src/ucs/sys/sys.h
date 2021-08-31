@@ -632,6 +632,13 @@ ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
                                 void *(*start_routine)(void*), void *arg,
                                 const char *fmt, ...) UCS_F_PRINTF(4, 5);
 
+/*
+ * Get number of CPUs.
+ *
+ * @return number of CPUs, or -1 in case of error.
+ */
+long ucs_sys_get_num_cpus();
+
 END_C_DECLS
 
 #endif
