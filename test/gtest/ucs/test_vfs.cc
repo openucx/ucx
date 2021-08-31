@@ -189,18 +189,16 @@ UCS_MT_TEST_F(test_vfs_obj, path_get_info, 4) {
     void *obj = create_simple_tree();
 
     ucs_vfs_path_info_t path_info;
-    ucs_status_t status = ucs_vfs_path_get_info("/obj", &path_info);
-    EXPECT_EQ(status, UCS_OK);
-    EXPECT_EQ(path_info.size, 1);
+    EXPECT_UCS_OK(ucs_vfs_path_get_info("/obj", &path_info));
+    EXPECT_EQ(1, path_info.size);
     EXPECT_TRUE(path_info.mode & S_IFDIR);
 
-    status = ucs_vfs_path_get_info("/obj/info", &path_info);
-    EXPECT_EQ(status, UCS_OK);
-    EXPECT_EQ(path_info.size, file_content().size());
+    EXPECT_UCS_OK(ucs_vfs_path_get_info("/obj/info", &path_info));
+    EXPECT_EQ(file_content().size(), path_info.size);
     EXPECT_TRUE(path_info.mode & S_IFREG);
 
-    status = ucs_vfs_path_get_info("invalid_path", &path_info);
-    EXPECT_EQ(status, UCS_ERR_NO_ELEM);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_vfs_path_get_info("invalid_path", &path_info));
 
     barrier();
     ucs_vfs_obj_remove(obj);
@@ -211,15 +209,12 @@ UCS_MT_TEST_F(test_vfs_obj, path_read_file, 4) {
 
     ucs_string_buffer_t strb;
     ucs_string_buffer_init(&strb);
-    ucs_status_t status = ucs_vfs_path_read_file("/obj", &strb);
-    EXPECT_EQ(status, UCS_ERR_NO_ELEM);
+    EXPECT_EQ(UCS_ERR_NO_ELEM, ucs_vfs_path_read_file("/obj", &strb));
 
-    status = ucs_vfs_path_read_file("/obj/info", &strb);
-    EXPECT_EQ(status, UCS_OK);
+    EXPECT_UCS_OK(ucs_vfs_path_read_file("/obj/info", &strb));
     EXPECT_EQ(file_content(), ucs_string_buffer_cstr(&strb));
 
-    status = ucs_vfs_path_read_file("invalid_path", &strb);
-    EXPECT_EQ(status, UCS_ERR_NO_ELEM);
+    EXPECT_EQ(UCS_ERR_NO_ELEM, ucs_vfs_path_read_file("invalid_path", &strb));
     ucs_string_buffer_cleanup(&strb);
 
     barrier();
@@ -230,19 +225,18 @@ UCS_MT_TEST_F(test_vfs_obj, path_list_dir, 4) {
     void *obj = create_simple_tree();
 
     char buffer[32];
-    ucs_status_t status = ucs_vfs_path_list_dir("/obj",
-                                                test_vfs_obj::list_dir_cb,
-                                                buffer);
-    EXPECT_EQ(status, UCS_OK);
-    EXPECT_STREQ(buffer, "info");
+    EXPECT_UCS_OK(
+            ucs_vfs_path_list_dir("/obj", test_vfs_obj::list_dir_cb, buffer));
 
-    status = ucs_vfs_path_list_dir("/obj/info", test_vfs_obj::list_dir_cb,
-                                   buffer);
-    EXPECT_EQ(status, UCS_ERR_NO_ELEM);
+    EXPECT_STREQ("info", buffer);
 
-    status = ucs_vfs_path_list_dir("invalid_path", test_vfs_obj::list_dir_cb,
-                                   buffer);
-    EXPECT_EQ(status, UCS_ERR_NO_ELEM);
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_vfs_path_list_dir("/obj/info", test_vfs_obj::list_dir_cb,
+                                    buffer));
+
+    EXPECT_EQ(UCS_ERR_NO_ELEM,
+              ucs_vfs_path_list_dir("invalid_path", test_vfs_obj::list_dir_cb,
+                                    buffer));
 
     barrier();
     ucs_vfs_obj_remove(obj);
@@ -253,16 +247,14 @@ UCS_MT_TEST_F(test_vfs_obj, set_dirty_and_refresh, 4) {
     ucs_vfs_obj_add_dir(NULL, &obj, "obj");
 
     ucs_vfs_path_info_t path_info;
-    ucs_status_t status = ucs_vfs_path_get_info("/obj", &path_info);
-    EXPECT_EQ(status, UCS_OK);
-    EXPECT_EQ(path_info.size, 0);
+    EXPECT_UCS_OK(ucs_vfs_path_get_info("/obj", &path_info));
+    EXPECT_EQ(0, path_info.size);
 
     barrier();
     ucs_vfs_obj_set_dirty(&obj, test_vfs_obj::refresh_cb);
 
-    status = ucs_vfs_path_get_info("/obj", &path_info);
-    EXPECT_EQ(status, UCS_OK);
-    EXPECT_EQ(path_info.size, 1);
+    EXPECT_UCS_OK(ucs_vfs_path_get_info("/obj", &path_info));
+    EXPECT_EQ(1, path_info.size);
 
     barrier();
     ucs_vfs_obj_remove(&obj);
