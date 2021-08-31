@@ -7,19 +7,7 @@
 ##
 #
 
-## 1.11.1-rc3 (August 26, 2021)
-### Bugfixes:
-* Fixes in RPM post-install script
-* Fixes in UCT common keepalive
-
-
-## 1.11.1-rc2 (August 19, 2021)
-### Bugfixes:
-* Fixes in multi-threaded tag probe
-* Fixes in TCP disconnect flow
-
-
-## 1.11.1-rc1 (August 10, 2021)
+## 1.11.1 (August 31, 2021)
 ### Features:
 #### UCS
 * Added API to read boot ID value or use machine_guid
@@ -31,7 +19,10 @@
 * Fixes in TCP pending operations progress
 * Fixes in release pipelines
 * Fixes in error handling flow
-
+* Fixes in multi-threaded tag probe
+* Fixes in TCP disconnect flow
+* Fixes in RPM post-install script
+* Fixes in UCT common keepalive
 
 ## 1.11.0 (July 26, 2021)
 ### Features:
