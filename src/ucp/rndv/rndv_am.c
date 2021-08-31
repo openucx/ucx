@@ -16,7 +16,8 @@ ucp_proto_rdnv_am_init_common(ucp_proto_multi_init_params_t *params)
 {
     ucp_context_h context = params->super.super.worker->context;
 
-    if (params->super.super.select_param->op_id != UCP_OP_ID_RNDV_SEND) {
+    if (!ucp_proto_rndv_op_check(&params->super.super, UCP_OP_ID_RNDV_SEND,
+                                 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

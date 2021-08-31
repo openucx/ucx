@@ -27,19 +27,17 @@ ucp_proto_multi_request_init(ucp_request_t *req)
     ucp_proto_multi_set_send_lane(req);
 }
 
-static UCS_F_ALWAYS_INLINE size_t
+static UCS_F_ALWAYS_INLINE uint32_t
 ucs_proto_multi_calc_weight(double lane_weight, double total_weight)
 {
-    return (size_t)(
-            lane_weight * UCS_BIT(UCP_PROTO_MULTI_WEIGHT_SHIFT) / total_weight +
-            0.5);
+    return (uint32_t)(
+            ((lane_weight * UCP_PROTO_MULTI_WEIGHT_MAX) / total_weight) + 0.5);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_multi_scaled_length(const ucp_proto_multi_lane_priv_t *lpriv,
-                              size_t length)
+ucp_proto_multi_scaled_length(uint32_t weight, size_t length)
 {
-    return (lpriv->weight * length + UCS_MASK(UCP_PROTO_MULTI_WEIGHT_SHIFT)) >>
+    return ((weight * length) + UCP_PROTO_MULTI_WEIGHT_MAX - 1) >>
            UCP_PROTO_MULTI_WEIGHT_SHIFT;
 }
 
@@ -58,13 +56,13 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
         return max_frag;
     }
 
-    max_payload = ucs_min(ucp_proto_multi_scaled_length(lpriv, length),
+    max_payload = ucs_min(ucp_proto_multi_scaled_length(lpriv->weight, length),
                           max_frag);
     ucs_assertv(max_payload > 0,
                 "length=%zu weight=%zu%% lpriv->max_frag=%zu hdr_size=%zu",
                 req->send.state.dt_iter.length,
-                ucp_proto_multi_scaled_length(lpriv, 100), lpriv->max_frag,
-                hdr_size);
+                ucp_proto_multi_scaled_length(lpriv->weight, 100),
+                lpriv->max_frag, hdr_size);
     return max_payload;
 }
 
