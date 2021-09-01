@@ -111,7 +111,7 @@ static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
 {
     if (!(md_map & UCS_BIT(md_idx))) {
-        return NULL;
+        return UCT_MEM_HANDLE_NULL;
     }
 
     return uct[ucs_bitmap2idx(md_map, md_idx)];

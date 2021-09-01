@@ -60,6 +60,17 @@ typedef struct {
 } ucp_datatype_iter_t;
 
 
+ucs_status_t
+ucp_datatype_iter_mem_reg_internal(ucp_context_h context, void *address,
+                                   size_t length, unsigned uct_flags,
+                                   ucs_memory_type_t mem_type,
+                                   ucp_md_map_t md_map, ucp_dt_reg_t *dt_reg);
+
+
+void ucp_datatype_iter_mem_dereg_internal(ucp_context_h context,
+                                          ucp_dt_reg_t *dt_reg);
+
+
 ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
                                            ucp_datatype_iter_t *dt_iter,
                                            ucp_md_map_t md_map,
