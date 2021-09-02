@@ -24,6 +24,8 @@
 #  - COV_OPT  : command line options for Coverity static checker
 #
 
+# source ${PWD}/../buildlib/az-helpers.sh
+
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
 CUDA_MODULE="dev/cuda11.1.1"
@@ -1329,6 +1331,7 @@ run_tests() {
 	do_distributed_task 1 4 run_gtest_release
 }
 
+# az_init_modules
 prepare
 try_load_cuda_env
 if [ -n "$JENKINS_RUN_TESTS" ] || [ -n "$RUN_TESTS" ]
