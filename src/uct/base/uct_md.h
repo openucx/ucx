@@ -241,4 +241,8 @@ static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
             UCS_LOG_LEVEL_ERROR;
 }
 
+
+void uct_md_vfs_init(uct_component_h component, uct_md_h md,
+                     const char *md_name);
+
 #endif

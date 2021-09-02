@@ -9,7 +9,7 @@
 #endif
 
 #include "uct_iface.h"
-
+#include "uct_vfs_attr.h"
 #include <uct/api/uct.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/sys/compiler_def.h>
@@ -17,12 +17,7 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
-typedef struct {
-    uint64_t   flag;
-    const char *name;
-} uct_iface_vfs_cap_info_t;
-
-static const uct_iface_vfs_cap_info_t uct_iface_vfs_cap_infos[] = {
+static const uct_vfs_flag_info_t uct_iface_vfs_cap_infos[] = {
     {UCT_IFACE_FLAG_AM_SHORT, "am_short"},
     {UCT_IFACE_FLAG_AM_BCOPY, "am_bcopy"},
     {UCT_IFACE_FLAG_AM_ZCOPY, "am_zcopy"},
@@ -105,12 +100,6 @@ static const uct_iface_vfs_cap_limit_info_t uct_iface_vfs_cap_limit_infos[] = {
 };
 
 
-static void uct_iface_vfs_show_cap(void *obj, ucs_string_buffer_t *strb,
-                                   void *arg_ptr, uint64_t arg_u64)
-{
-    ucs_string_buffer_appendf(strb, "1\n");
-}
-
 static void uct_iface_vfs_show_cap_limit(void *obj, ucs_string_buffer_t *strb,
                                          void *arg_ptr, uint64_t arg_u64)
 {
@@ -129,19 +118,6 @@ static void uct_iface_vfs_show_cap_limit(void *obj, ucs_string_buffer_t *strb,
                               ucs_memunits_to_str(attr, buf, sizeof(buf)));
 }
 
-static void uct_iface_vfs_init_caps(uct_iface_h iface, uint64_t iface_cap_flags)
-{
-    size_t i;
-
-    for (i = 0; i < ucs_static_array_size(uct_iface_vfs_cap_infos); ++i) {
-        if (iface_cap_flags & uct_iface_vfs_cap_infos[i].flag) {
-            ucs_vfs_obj_add_ro_file(iface, uct_iface_vfs_show_cap, NULL, 0,
-                                    "attribute/capability/%s",
-                                    uct_iface_vfs_cap_infos[i].name);
-        }
-    }
-}
-
 static void
 uct_iface_vfs_init_cap_limits(uct_iface_h iface, uint64_t iface_cap_flags)
 {
@@ -151,7 +127,7 @@ uct_iface_vfs_init_cap_limits(uct_iface_h iface, uint64_t iface_cap_flags)
         if (iface_cap_flags & uct_iface_vfs_cap_limit_infos[i].flag) {
             ucs_vfs_obj_add_ro_file(iface, uct_iface_vfs_show_cap_limit, NULL,
                                     uct_iface_vfs_cap_limit_infos[i].offset,
-                                    "attribute/%s/%s",
+                                    "capability/%s/%s",
                                     uct_iface_vfs_cap_limit_infos[i].op_name,
                                     uct_iface_vfs_cap_limit_infos[i].limit_name);
         }
@@ -164,7 +140,9 @@ void uct_iface_vfs_refresh(void *obj)
     uct_iface_attr_t iface_attr;
 
     if (uct_iface_query(&iface->super, &iface_attr) == UCS_OK) {
-        uct_iface_vfs_init_caps(&iface->super, iface_attr.cap.flags);
+        uct_vfs_init_flags(&iface->super, iface_attr.cap.flags,
+                           uct_iface_vfs_cap_infos,
+                           ucs_static_array_size(uct_iface_vfs_cap_infos));
         uct_iface_vfs_init_cap_limits(&iface->super, iface_attr.cap.flags);
     } else {
         ucs_debug("failed to query iface attributes");

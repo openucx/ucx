@@ -181,6 +181,8 @@ typedef struct uct_mm_component {
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
                                       &(_var).super), \
             .flags              = 0, \
+            .md_vfs_init        = \
+                    (uct_component_md_vfs_init_func_t)ucs_empty_function \
        }, \
        .md_ops                  = (_md_ops) \
     }; \

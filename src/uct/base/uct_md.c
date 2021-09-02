@@ -71,13 +71,16 @@ ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
         return status;
     }
 
+    uct_md_vfs_init(component, md, md_name);
     *md_p = md;
+
     ucs_assert_always(md->component == component);
     return UCS_OK;
 }
 
 void uct_md_close(uct_md_h md)
 {
+    ucs_vfs_obj_remove(md);
     md->ops->close(md);
 }
 
@@ -276,6 +279,7 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
     }
 
     ucs_vfs_obj_add_dir(worker, *iface_p, "iface/%p", *iface_p);
+    ucs_vfs_obj_add_sym_link(*iface_p, md, "memory_domain");
     ucs_vfs_obj_set_dirty(*iface_p, uct_iface_vfs_refresh);
 
     return UCS_OK;

@@ -143,9 +143,8 @@ std::vector<int> test_perf::get_affinity() {
         throw ucs::test_abort_exception();
     }
 
-    nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
+    nr_cpus = ucs_sys_get_num_cpus();
     if (nr_cpus < 0) {
-        ucs_error("Failed to get CPU count: %m");
         throw ucs::test_abort_exception();
     }
 

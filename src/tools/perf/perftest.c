@@ -760,9 +760,8 @@ static ucs_status_t check_system(struct perftest_context *ctx)
 
     ucs_trace_func("");
 
-    ret = sysconf(_SC_NPROCESSORS_CONF);
+    ret = ucs_sys_get_num_cpus();
     if (ret < 0) {
-        ucs_error("failed to get local cpu count: %m");
         return UCS_ERR_INVALID_PARAM;
     }
     nr_cpus = ret;

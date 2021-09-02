@@ -264,9 +264,8 @@ int ucs_get_first_cpu()
     int first_cpu, total_cpus, ret;
     ucs_sys_cpuset_t mask;
 
-    ret = ucs_sysconf(_SC_NPROCESSORS_CONF);
+    ret = ucs_sys_get_num_cpus();
     if (ret < 0) {
-        ucs_error("failed to get local cpu count: %m");
         return ret;
     }
     total_cpus = ret;
@@ -1526,4 +1525,18 @@ ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
     pthread_setname_np(thread_id, thread_name);
     *thread_id_p = thread_id;
     return UCS_OK;
+}
+
+long ucs_sys_get_num_cpus()
+{
+    static long num_cpus = 0;
+
+    if (num_cpus == 0) {
+        num_cpus = ucs_sysconf(_SC_NPROCESSORS_CONF);
+        if (num_cpus == -1) {
+            ucs_error("failed to get local cpu count: %m");
+        }
+    }
+
+    return num_cpus;
 }
