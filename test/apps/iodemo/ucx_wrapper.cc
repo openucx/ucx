@@ -456,8 +456,10 @@ void UcxContext::progress_io_message()
             return;
         }
 
-        dispatch_io_message(conn, &_iomsg_buffer[0],
-                            _iomsg_recv_request->recv_length);
+        if (conn->ucx_status() == UCS_OK) {
+            dispatch_io_message(conn, &_iomsg_buffer[0],
+                                _iomsg_recv_request->recv_length);
+        }
     }
     request_release(_iomsg_recv_request);
     recv_io_message();
@@ -695,9 +697,10 @@ ucs_status_t UcxContext::am_recv_callback(void *arg, const void *header,
 
     UcxConnection *conn = iter->second;
 
-    UcxAmDesc data_desc(data, param);
-
-    self->dispatch_am_message(conn, header, header_length, data_desc);
+    if (conn->ucx_status() == UCS_OK) {
+        UcxAmDesc data_desc(data, param);
+        self->dispatch_am_message(conn, header, header_length, data_desc);
+    }
 
     return UCS_OK;
 }
