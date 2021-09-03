@@ -201,7 +201,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
 
 /* DCI pool
- * same array is used to store DCI's to allocate and DCI's to release:
+ * same array is used to store DCIs to allocate and DCIs to release:
  * 
  * +--------------+-----+-------------+
  * | to release   |     | to allocate |
@@ -211,7 +211,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
  * 0        release     stack      ndci
  *              top     top
  * 
- * Overall count of DCI's to relase and allocated DCI's could not be more than
+ * Overall count of DCIs to release and allocated DCIs could not be more than
  * ndci and these stacks are not intersected
  */
 typedef struct {
@@ -231,7 +231,8 @@ struct uct_dc_mlx5_iface {
         /* Array of dcis */
         uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
 
-        uint8_t                   ndci;                        /* Number of DCIs */
+        /* Number of DCIs in one pool */
+        uint8_t                   ndci;
 
         /* LIFO is only relevant for dcs allocation policy */
         uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];
