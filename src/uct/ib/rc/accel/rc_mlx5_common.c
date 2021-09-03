@@ -1224,7 +1224,8 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
         }
     }
 
-    mlx5_cq->cq_ci             += nfreed;
+    mlx5_cq->cq_ci += nfreed;
+    uct_ib_mlx5_update_db_cq_ci(mlx5_cq);
 
     return nfreed;
 }

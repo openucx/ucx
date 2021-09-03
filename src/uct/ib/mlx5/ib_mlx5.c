@@ -80,13 +80,9 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     struct mlx5dv_cq_init_attr dv_attr = {};
     struct ibv_cq *cq;
 
-    cq_attr.cqe         = uct_ib_cq_size(iface, init_attr, dir);
-    cq_attr.channel     = iface->comp_channel;
-    cq_attr.comp_vector = preferred_cpu;
-    if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {
-        cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
-        cq_attr.flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
-    }
+    uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu,
+                        uct_ib_cq_size(iface, init_attr, dir));
+
     dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
     dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
