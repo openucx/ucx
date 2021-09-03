@@ -1848,6 +1848,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     }
 
     md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
+    uct_ib_device_ece_check(dev, dev->ibv_context, md->pd);
     *p_md = md;
     return UCS_OK;
 
