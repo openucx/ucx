@@ -854,6 +854,10 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         dscp[0x6];
 
     uint8_t         reserved_at_1c0[0x40];
+
+    uint8_t         ece[0x20];
+
+    uint8_t         reserved_at_220[0x160];
 };
 
 struct uct_ib_mlx5_create_dct_out_bits {
@@ -865,7 +869,7 @@ struct uct_ib_mlx5_create_dct_out_bits {
     uint8_t         reserved_at_40[0x8];
     uint8_t         dctn[0x18];
 
-    uint8_t         reserved_at_60[0x20];
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_create_dct_in_bits {
