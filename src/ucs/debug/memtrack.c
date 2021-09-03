@@ -200,7 +200,14 @@ ucs_memtrack_do_allocated(void *ptr, size_t size, const char *name)
     /* Add pointer to hash */
     iter = kh_put(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs,
                   (uintptr_t)ptr, &ret);
-    ucs_assertv(ret == 1 || ret == 2, "ret=%d", ret);
+    /* do NOT use assert here because it may cause hang due to memtrack malloc
+       deadlock */
+    if ((ret != UCS_KH_PUT_BUCKET_EMPTY) && (ret != UCS_KH_PUT_BUCKET_CLEAR)) {
+        pthread_mutex_unlock(&ucs_memtrack_context.lock);
+        ucs_fatal("ret == %d, prev allocation: %s, new allocation: %s", ret,
+                  kh_value(&ucs_memtrack_context.ptrs, iter).entry->name, name);
+    }
+
     kh_value(&ucs_memtrack_context.ptrs, iter).entry = entry;
     kh_value(&ucs_memtrack_context.ptrs, iter).size  = size;
 
