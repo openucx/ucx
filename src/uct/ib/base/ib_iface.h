@@ -9,6 +9,7 @@
 #define UCT_IB_IFACE_H
 
 #include "ib_md.h"
+#include "ece.h"
 
 #include <uct/api/uct.h>
 #include <uct/base/uct_iface.h>

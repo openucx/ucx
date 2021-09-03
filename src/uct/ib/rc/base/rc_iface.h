@@ -150,6 +150,7 @@ typedef struct uct_rc_iface_common_config {
     unsigned                 max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
+    mlx5_ece_cfg_t           conn_ece;
 
     struct {
         double               timeout;

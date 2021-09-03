@@ -98,6 +98,23 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "Otherwise poll TX completions only if no RX completions found.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always), UCS_CONFIG_TYPE_BOOL},
 
+   {"ECE_ENABLE", "auto",
+    "Enable Enhanced Connection Establishment\n"
+    " auto - Let runtime decide whether ECE should be used.\n"
+    " on   - Force using ECE. Note: Device may not support ECE and abort.\n"
+    " off  - Do not use ECE.",
+    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.ece_enable),
+    UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+   {"ECE_SR", "auto",
+    "Enable ECE select repeative\n"
+    " auto - Let runtime decide whether ECE/SR should be used.\n"
+    " on   - Force using ECE/SR. Note: Only effective when ECE_ENABLE is on. "
+    "Device may not support ECE/SR and abort.\n"
+    " off  - Do not use ECE/SR. Note: Only effecitve when ECE_ENABLE is on",
+    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.ece_sr),
+    UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
   {NULL}
 };
 

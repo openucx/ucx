@@ -20,6 +20,7 @@ noinst_HEADERS = \
 	base/ib_iface.h \
 	base/ib_log.h \
 	base/ib_md.h \
+	base/ece.h \
 	base/ib_verbs.h
 
 libuct_ib_la_SOURCES = \
