@@ -88,6 +88,7 @@ enum {
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
     UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9),
+    UCT_IB_DEVICE_FLAG_ECE      = UCS_BIT(10),       /* Device supports ECE */
 };
 
 
