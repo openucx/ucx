@@ -106,7 +106,10 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    reserved_at_90[0xb];
     uint8_t    log_max_qp[0x5];
 
-    uint8_t    reserved_at_a0[0xb];
+    uint8_t    reserved_at_a0[0x3];
+    uint8_t    ece[0x1];
+
+    uint8_t    reserved_at_a4[0x7];
     uint8_t    log_max_srq[0x5];
     uint8_t    reserved_at_b0[0x10];
 
