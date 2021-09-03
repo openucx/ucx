@@ -2286,16 +2286,17 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
     ucs_status_t status;
 
+    ++req->send.state.uct_comp.count;
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
-    if (status == UCS_OK) {
-        ucs_assert(req->send.state.uct_comp.count == 0);
-        ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp);
+    if (status == UCS_INPROGRESS) {
         return UCS_OK;
-    } else if (status == UCS_INPROGRESS) {
-        req->send.state.uct_comp.count++;
-        return UCS_OK;
-    } else if (status == UCS_ERR_NO_RESOURCE) {
+    }
+
+    --req->send.state.uct_comp.count;
+    ucs_assert(req->send.state.uct_comp.count == 0);
+
+    if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
 
