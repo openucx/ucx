@@ -262,6 +262,12 @@ extern const double uct_ib_qp_rnr_time_ms[];
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags);
 
+/**
+ * Check if device has ECE capibility
+ */
+void uct_ib_device_ece_check(uct_ib_device_t *dev,
+                             struct ibv_context *ctx, struct ibv_pd *pd);
+
 
 /*
  * Helper function to list IB transport resources.
