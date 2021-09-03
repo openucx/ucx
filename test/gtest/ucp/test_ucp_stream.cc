@@ -963,9 +963,9 @@ void test_ucp_stream_many2one::check_recv_data(size_t n_iter, ucp_datatype_t dt)
             test = std::string(test_gen.data());
         }
 
-        size_t            next = 0;
+        std::string::size_type next = 0;
         for (size_t j = 0; j < n_iter; ++j) {
-            size_t match = str.find(test, next);
+            std::string::size_type match = str.find(test, next);
             EXPECT_NE(std::string::npos, match) << "failed on sender " << i
                                                 << " iteration " << j;
             if (match == std::string::npos) {
