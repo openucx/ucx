@@ -711,6 +711,12 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         dev->flags |= UCT_IB_DEVICE_FLAG_AV;
     }
 
+#if HAVE_RDMACM_ECE
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ece)) {
+        dev->flags |= UCT_IB_DEVICE_FLAG_ECE;
+    }
+#endif
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
