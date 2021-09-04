@@ -315,8 +315,8 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
             continue;
         }
 
-        /* Transfer the pending queues content from the previosly configured
-         * UCP EP to a temporary queue for futher replaying */
+        /* Transfer the pending queues content from the previously configured
+         * UCP EP to a temporary queue for further replaying */
         uct_ep_pending_purge(ucp_ep->uct_eps[lane_idx],
                              ucp_request_purge_enqueue_cb, &queue);
 
