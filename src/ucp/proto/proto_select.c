@@ -13,10 +13,10 @@
 #include "proto_single.h"
 
 #include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
 #include <float.h>
 
+#include <ucp/core/ucp_worker.inl>
 #include <ucs/datastruct/array.inl>
 
 
@@ -1150,13 +1150,15 @@ out_disable:
     ucp_proto_select_short_disable(proto_short);
 }
 
-void ucp_proto_select_get_valid_range(
+int ucp_proto_select_get_valid_range(
         const ucp_proto_threshold_elem_t *thresholds, size_t *min_length_p,
         size_t *max_length_p)
 {
     const ucp_proto_threshold_elem_t *elem;
     size_t max_msg_length;
+    int found;
 
+    found         = 0;
     *min_length_p = 0;
     *max_length_p = 0;
     elem          = thresholds;
@@ -1170,8 +1172,46 @@ void ucp_proto_select_get_valid_range(
         } else {
             /* Protocol is valid, so extend range end */
             *max_length_p = max_msg_length;
+            found         = 1;
         }
 
         ++elem;
     } while (max_msg_length < SIZE_MAX);
+
+    return found;
+}
+
+void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
+                                  size_t min_length, size_t max_length,
+                                  ucs_string_buffer_t *strb)
+{
+    size_t range_start, range_end;
+    const ucp_proto_t *proto;
+    char str[64];
+
+    range_start = 0;
+    do {
+        range_end = thresh_elem->max_msg_length;
+
+        /* Print only protocols within the range provided by {min,max}_length */
+        if ((range_end >= min_length) && (range_start <= max_length)) {
+            proto = thresh_elem->proto_config.proto;
+            ucs_string_buffer_appendf(strb, "%s(", proto->name);
+            proto->config_str(ucs_max(range_start, min_length),
+                              ucs_min(range_end, max_length),
+                              thresh_elem->proto_config.priv, strb);
+            ucs_string_buffer_appendf(strb, ")");
+
+            if (range_end < max_length) {
+                ucs_memunits_to_str(thresh_elem->max_msg_length, str,
+                                    sizeof(str));
+                ucs_string_buffer_appendf(strb, "<=%s<", str);
+            }
+        }
+
+        ++thresh_elem;
+        range_start = range_end + 1;
+    } while (range_end < max_length);
+
+    ucs_string_buffer_rtrim(strb, "<");
 }

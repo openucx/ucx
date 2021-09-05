@@ -95,7 +95,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
 
     /* Initialize multi-lane private data and relative weights */
     reg_md_map          = ucp_proto_common_reg_md_map(&params->super, lane_map);
-    mpriv->reg_md_map   = reg_md_map;
+    mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
     mpriv->lane_map     = lane_map;
     mpriv->num_lanes    = 0;
     mpriv->max_frag_sum = 0;

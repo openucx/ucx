@@ -82,8 +82,6 @@ typedef struct {
     /* Memory type of the transfer */
     ucp_memory_info_t              mem_info;
 
-    /* Minimal data length */
-    size_t                         min_length;
 } ucp_proto_rndv_ctrl_init_params_t;
 
 
