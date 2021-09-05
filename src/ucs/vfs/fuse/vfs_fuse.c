@@ -324,7 +324,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
                 continue;
             }
 
-            ucs_debug("file '%s' created", event->name);
+            ucs_trace("file '%s' created", event->name);
             if (strcmp(event->name, watch_filename)) {
                 ucs_trace("ignoring inotify create event of '%s'", event->name);
                 continue;
