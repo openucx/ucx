@@ -54,7 +54,7 @@ jobs:
           contents: |
             buildlib/az-helpers.sh
             buildlib/az-network-corrupter.sh
-            buildlib/io_demo/iodemo_analyzer.py
+            buildlib/pr/io_demo/iodemo_analyzer.py
             install/**
             test/apps/iodemo/run_io_demo.sh
           targetFolder: '$(Build.ArtifactStagingDirectory)'

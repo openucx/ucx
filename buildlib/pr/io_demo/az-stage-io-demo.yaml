@@ -59,7 +59,7 @@ steps:
   timeoutInMinutes: 10
 
 - bash: |
-    python $(workspace)/buildlib/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }}
+    python $(workspace)/buildlib/pr/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }}
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 1
 
