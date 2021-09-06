@@ -424,9 +424,9 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 
-    status = ucp_proto_request_set_proto(worker, req->send.ep, req,
-                                         proto_select, rkey_cfg_index,
-                                         &sel_param, length);
+    status = ucp_proto_request_lookup_proto(worker, req->send.ep, req,
+                                            proto_select, rkey_cfg_index,
+                                            &sel_param, length);
     if (status != UCS_OK) {
         goto err_destroy_rkey;
     }

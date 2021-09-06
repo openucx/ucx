@@ -119,7 +119,8 @@ ucp_proto_rndv_get_common_ats_progress(uct_pending_req_t *uct_req)
     if (req->send.state.dt_iter.length > 0) {
         ucs_assert(req->send.state.uct_comp.count == 0);
     }
-    return ucp_proto_rndv_ack_progress(req, UCP_AM_ID_RNDV_ATS,
+    return ucp_proto_rndv_ack_progress(req, req->send.proto_config->priv,
+                                       UCP_AM_ID_RNDV_ATS,
                                        ucp_proto_rndv_recv_complete);
 }
 

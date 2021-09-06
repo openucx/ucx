@@ -398,15 +398,18 @@ ucp_proto_select_init_trace_caps(ucp_proto_id_t proto_id,
     ucs_log_indent(1);
     range_start = 0;
     for (range_index = 0; range_index < proto_caps->num_ranges; ++range_index) {
-        range_end = proto_caps->ranges[range_index].max_length;
-        perf      = proto_caps->ranges[range_index].perf;
-        ucs_trace("range[%d] %s single:" UCP_PROTO_PERF_FUNC_FMT
-                  " multi:" UCP_PROTO_PERF_FUNC_FMT,
-                  range_index,
-                  ucs_memunits_range_str(range_start, range_end, thresh_str,
-                                         sizeof(thresh_str)),
-                  UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_SINGLE]),
-                  UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_MULTI]));
+        range_start = ucs_max(range_start, proto_caps->min_length);
+        range_end   = proto_caps->ranges[range_index].max_length;
+        if (range_end > range_start) {
+            perf = proto_caps->ranges[range_index].perf;
+            ucs_trace("range[%d] %s single:" UCP_PROTO_PERF_FUNC_FMT
+                      " multi:" UCP_PROTO_PERF_FUNC_FMT,
+                      range_index,
+                      ucs_memunits_range_str(range_start, range_end, thresh_str,
+                                             sizeof(thresh_str)),
+                      UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_SINGLE]),
+                      UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_MULTI]));
+        }
         range_start = range_end + 1;
     }
     ucs_log_indent(-1);
@@ -461,9 +464,9 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
 
     offset = 0;
     for (proto_id = 0; proto_id < ucp_protocols_count; ++proto_id) {
-        proto_caps            = &proto_init->caps[proto_id];
-        init_params.priv      = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
-                                                          offset);
+        proto_caps             = &proto_init->caps[proto_id];
+        init_params.priv       = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
+                                                     offset);
         init_params.priv_size  = &priv_size;
         init_params.caps       = proto_caps;
         init_params.proto_name = ucp_proto_id_field(proto_id, name);
@@ -1214,4 +1217,30 @@ void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
     } while (range_end < max_length);
 
     ucs_string_buffer_rtrim(strb, "<");
+}
+
+ucp_proto_select_t *
+ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
+                     ucp_worker_cfg_index_t rkey_cfg_index,
+                     ucp_worker_cfg_index_t *new_rkey_cfg_index)
+{
+    ucp_rkey_config_key_t rkey_config_key;
+    ucs_status_t status;
+
+    if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+        return &worker->ep_config[ep_cfg_index].proto_select;
+    } else {
+        rkey_config_key = worker->rkey_config[rkey_cfg_index].key;
+
+        rkey_config_key.ep_cfg_index = ep_cfg_index;
+        status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
+                                            new_rkey_cfg_index);
+        if (status != UCS_OK) {
+            ucs_error("failed to switch to new rkey");
+            return NULL;
+        }
+
+        return &worker->rkey_config[*new_rkey_cfg_index].proto_select;
+    }
 }
