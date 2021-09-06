@@ -268,6 +268,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_ib_iface_config_t *ib_config    = &config->super.super.super;
     uct_ib_iface_init_attr_t init_attr  = {};
     uct_ib_qp_attr_t attr               = {};
+    uct_ibv_ece_t UCS_V_UNUSED ece      = {};
+    mlx5_ece_cfg_t *conn_ece = &config->super.super.conn_ece;
     const char *dev_name;
     ucs_status_t status;
     struct ibv_qp *qp;
@@ -354,6 +356,65 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
+
+#if HAVE_RDMACM_ECE
+    if (uct_ib_iface_device(&self->super.super)->flags &
+        UCT_IB_DEVICE_FLAG_ECE) {
+        if (conn_ece->ece_enable == UCS_CONFIG_OFF) {
+            self->super.super.config.ece_cfg.ece_enable = 0;
+            self->super.super.config.ece_cfg.ece.val    = 0;
+        } else {
+            ucs_assert(ibv_query_ece(qp, &ece) == 0);
+            self->super.super.config.ece_cfg.ece.val =
+                    ece_int(ece.options, 0x20000001);
+
+            if ((self->super.super.config.ece_cfg.ece.val & 0x1) == 0) {
+                self->super.super.config.ece_cfg.ece_enable = 0;
+                self->super.super.config.ece_cfg.ece.val    = 0;
+            } else {
+                self->super.super.config.ece_cfg.ece_enable = 1;
+            }
+        }
+
+        if (conn_ece->ece_enable == UCS_CONFIG_ON) {
+            if (self->super.super.config.ece_cfg.ece_enable == 0) {
+                ucs_error("device %s not support ECE",
+                           uct_ib_device_name(
+                               uct_ib_iface_device(&self->super.super)));
+                status = UCS_ERR_UNSUPPORTED;
+                goto err_common_cleanup;
+            }
+            if (conn_ece->ece_sr == UCS_CONFIG_OFF) {
+                self->super.super.config.ece_cfg.ece.field.sr = 0;
+            } else if (conn_ece->ece_sr == UCS_CONFIG_ON &&
+                       self->super.super.config.ece_cfg.ece.field.sr == 0) {
+                ucs_error("device %s not support ECE/SR",
+                           uct_ib_device_name(
+                               uct_ib_iface_device(&self->super.super)));
+                status = UCS_ERR_UNSUPPORTED;
+                goto err_common_cleanup;
+            }
+        }
+    } else {
+#endif
+        self->super.super.config.ece_cfg.ece_enable = 0;
+        self->super.super.config.ece_cfg.ece.val    = 0;
+
+        if (conn_ece->ece_enable == UCS_CONFIG_ON) {
+#if HAVE_RDMACM_ECE
+            ucs_error("device %s not support ECE",
+                       uct_ib_device_name(
+                           uct_ib_iface_device(&self->super.super)));
+#else
+            ucs_error("ECE API not supported at build time");
+#endif
+            status = UCS_ERR_UNSUPPORTED;
+            goto err_common_cleanup;
+        }
+#if HAVE_RDMACM_ECE
+    }
+#endif
+
     uct_ib_destroy_qp(qp);
 
     self->config.max_inline   = attr.cap.max_inline_data;
