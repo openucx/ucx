@@ -397,13 +397,6 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     ucp_address_packed_iface_attr_t  *packed;
     ucp_address_unified_iface_attr_t *unified;
 
-    /* check if at least one of bandwidth values is 0 */
-    if ((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) != 0) {
-        ucs_error("Incorrect bandwidth value: one of bandwidth dedicated/shared must be zero");
-        return -1;
-    }
-
-
     if (ucp_worker_is_unified_mode(worker)) {
         /* In unified mode all workers have the same transports and tl bitmap.
          * Just send rsc index, so the remote peer could fetch iface attributes
@@ -420,7 +413,8 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     packed                 = ptr;
     packed->prio_cap_flags = (uint8_t)iface_attr->priority;
     packed->overhead       = iface_attr->overhead;
-    packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
+    packed->bandwidth      = ucp_tl_iface_bandwidth(worker->context,
+                                                    &iface_attr->bandwidth);
     packed->lat_ovh        = iface_attr->latency.c;
 
     ucs_assert((ucs_popcount(UCP_ADDRESS_IFACE_FLAGS) +
@@ -492,8 +486,11 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->event_flags   = wiface->attr.cap.event_flags;
         iface_attr->priority      = wiface->attr.priority;
         iface_attr->overhead      = wiface->attr.overhead;
-        iface_attr->bandwidth     = wiface->attr.bandwidth;
+        iface_attr->bandwidth     =
+                ucp_tl_iface_bandwidth(worker->context,
+                                       &wiface->attr.bandwidth);
         iface_attr->dst_rsc_index = rsc_idx;
+
         if (signbit(unified->lat_ovh)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
             iface_attr->atomic.atomic32.fop_flags = wiface->attr.cap.atomic32.fop_flags;
@@ -505,12 +502,11 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         return UCS_OK;
     }
 
-    packed                          = ptr;
-    iface_attr->priority            = packed->prio_cap_flags & UCS_MASK(8);
-    iface_attr->overhead            = packed->overhead;
-    iface_attr->bandwidth.dedicated = ucs_max(0.0, packed->bandwidth);
-    iface_attr->bandwidth.shared    = ucs_max(0.0, -packed->bandwidth);
-    iface_attr->lat_ovh             = packed->lat_ovh;
+    packed                = ptr;
+    iface_attr->priority  = packed->prio_cap_flags & UCS_MASK(8);
+    iface_attr->overhead  = packed->overhead;
+    iface_attr->bandwidth = packed->bandwidth;
+    iface_attr->lat_ovh   = packed->lat_ovh;
 
     /* Unpack iface flags */
     iface_attr->cap_flags =
@@ -1126,7 +1122,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                 ucs_trace("unpack addr[%d] : sysdev %d paths %d eps %u"
                           " md_flags 0x%" PRIx64 " tl_iface_flags 0x%" PRIx64
-                          " tl_event_flags 0x%" PRIx64 " bw %.2f+%.2f/nMBs"
+                          " tl_event_flags 0x%" PRIx64 " bw %.2f/nMBs"
                           " ovh %.0fns lat_ovh %.0fns dev_priority %d"
                           " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
                           "/0x%" PRIx64,
@@ -1134,8 +1130,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                           address->dev_num_paths, address->num_ep_addrs,
                           address->md_flags, address->iface_attr.cap_flags,
                           address->iface_attr.event_flags,
-                          address->iface_attr.bandwidth.dedicated / UCS_MBYTE,
-                          address->iface_attr.bandwidth.shared / UCS_MBYTE,
+                          address->iface_attr.bandwidth / UCS_MBYTE,
                           address->iface_attr.overhead * 1e9,
                           address->iface_attr.lat_ovh * 1e9,
                           address->iface_attr.priority,
