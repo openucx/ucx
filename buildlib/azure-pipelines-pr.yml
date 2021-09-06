@@ -1,12 +1,15 @@
 # See https://aka.ms/yaml
 # This pipeline to be run on PRs
 
-trigger: none
+trigger:
+  batch: true
+  branches:
+    include:
+    - integration4
 pr:
   branches:
     include:
-    - master
-    - v*.*.x
+    - integration4
   paths:
     exclude:
     - .gitignore
