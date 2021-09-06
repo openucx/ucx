@@ -278,6 +278,7 @@ struct uct_ib_iface {
         uint8_t               qp_type;
         uint8_t               force_global_addr;
         enum ibv_mtu          path_mtu;
+        mlx5_ece_t            ece_cfg;
     } config;
 
     uct_ib_iface_ops_t        *ops;
