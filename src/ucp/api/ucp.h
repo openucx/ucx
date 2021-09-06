@@ -686,6 +686,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
     UCP_OP_ATTR_FIELD_MEMORY_TYPE   = UCS_BIT(6),  /**< memory type field */
     UCP_OP_ATTR_FIELD_RECV_INFO     = UCS_BIT(7),  /**< recv_info field */
+    UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(8),  /**< Memory handle */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -1676,6 +1677,11 @@ typedef struct {
      * which means the memory type will be detected internally.
      */
     ucs_memory_type_t memory_type;
+
+    /**
+     * Memory handle for pre-registered buffer.
+     */
+    ucp_mem_h memh;
 
     /**
      * Pointer to the information where received data details are stored

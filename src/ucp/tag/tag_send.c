@@ -134,6 +134,7 @@ ucp_tag_send_req_init(ucp_request_t *req, ucp_ep_h ep, const void *buffer,
     req->send.datatype      = datatype;
     req->send.msg_proto.tag = tag;
     ucp_request_send_state_init(req, datatype, count);
+    ucp_request_send_memh_init(req, param);
     req->send.length       = ucp_dt_length(req->send.datatype, count,
                                            req->send.buffer,
                                            &req->send.state.dt);

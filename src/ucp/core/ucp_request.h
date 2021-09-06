@@ -54,12 +54,13 @@ enum {
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(19),
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(20),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(21)
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(21),
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
-    UCP_REQUEST_FLAG_SUPER_VALID           = 0
+    UCP_REQUEST_FLAG_SUPER_VALID           = 0,
 #endif
+    UCP_REQUEST_FLAG_USER_MEMH             = UCS_BIT(22)
 };
 
 
@@ -350,8 +351,12 @@ struct ucp_request {
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
-            ssize_t               remaining;  /* How much more data
+            union {
+                ssize_t               remaining;  /* How much more data
                                                * to be received */
+                ucp_mem_h             memh; /* Memory handle for pre-registered
+                                               * buffer */
+            };
 
             /* Remote request ID received from a peer */
             ucs_ptr_map_key_t     remote_req_id;

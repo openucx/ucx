@@ -811,6 +811,7 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.pending_lane               = UCP_NULL_LANE;
 
     ucp_request_send_state_init(req, datatype, count);
+    ucp_request_send_memh_init(req, param);
     req->send.length   = ucp_dt_length(req->send.datatype, count,
                                        req->send.buffer, &req->send.state.dt);
     req->send.mem_type = ucp_request_get_memory_type(ep->worker->context,
@@ -1102,6 +1103,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
         req->recv.am.desc  = desc;
         rts                = data_desc;
 
+        ucp_request_recv_memh_init(req, param);
         ucp_request_set_callback_param(param, recv_am, req, recv.am);
 
         ucs_assert(rts->opcode == UCP_RNDV_RTS_AM);

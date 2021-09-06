@@ -85,6 +85,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->flags              = UCP_REQUEST_FLAG_RECV_TAG | req_flags;
 
     ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
+    ucp_request_recv_memh_init(req, param);
 
     if (!UCP_DT_IS_CONTIG(datatype)) {
         req->flags         |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;

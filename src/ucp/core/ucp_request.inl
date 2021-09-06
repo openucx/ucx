@@ -364,6 +364,56 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_request_memh_init(ucp_request_t *req, ucp_ep_h ep, ucp_mem_h memh)
+{
+    ucp_md_map_t *md_map_p = &req->send.state.dt.dt.contig.md_map;
+    uct_mem_h *uct_memh = req->send.state.dt.dt.contig.memh;
+    ucp_ep_config_t *ep_conf = ucp_ep_config(ep);
+    int i;
+    ucp_md_index_t md_idx;
+
+    assert(memh != NULL);
+
+    *md_map_p = 0;
+    for (i = 0; i < ep_conf->key.num_lanes; i++) {
+        md_idx = ep_conf->md_index[i];
+        if (md_idx != UCP_NULL_RESOURCE) {
+            *md_map_p |= UCS_BIT(md_idx);
+        }
+    }
+
+    i = 0;
+    ucs_for_each_bit(md_idx, *md_map_p) {
+        assert(memh->md_map & UCS_BIT(md_idx));
+        uct_memh[i++] = ucp_memh2uct(memh, md_idx);
+    }
+
+    req->flags |= UCP_REQUEST_FLAG_USER_MEMH; 
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_send_memh_init(ucp_request_t *req,
+                           const ucp_request_param_t *param)
+{
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+        return;
+    }
+
+    ucp_request_memh_init(req, req->send.ep, param->memh);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_recv_memh_init(ucp_request_t *req, const ucp_request_param_t *param)
+{
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+        return;
+    }
+
+    req->flags |= UCP_REQUEST_FLAG_USER_MEMH; 
+    req->recv.memh = param->memh;
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
                             size_t dt_count)
 {

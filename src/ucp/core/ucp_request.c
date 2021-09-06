@@ -372,6 +372,10 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
     req->status                     = status;
     invalidate_map                  = ucp_request_get_invalidation_map(req);
 
+    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        goto skip_dereg;
+    }
+
     ucp_trace_req(req, "mem dereg buffer md_map 0x%"PRIx64, invalidate_map);
     /* dereg all lanes except for 'invalidate_map' */
     ucp_mem_rereg_mds(context, invalidate_map, NULL, 0, 0, NULL,
@@ -400,6 +404,7 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
     }
 
     ucs_log_indent(-1);
+skip_dereg:
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }
 
@@ -438,6 +443,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     flags  = UCT_MD_MEM_ACCESS_RMA | uct_flags;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
+        if (req_dbg->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+            break;
+        }
         ucs_assert(ucs_popcount(md_map) <= UCP_MAX_OP_MDS);
         status = ucp_mem_rereg_mds(context, md_map, buffer, length, flags,
                                    NULL, mem_type, NULL, state->dt.contig.memh,
@@ -500,6 +508,9 @@ UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_d
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
+        if (req_dbg->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+            break;
+        }
         ucp_request_dt_dereg(context, &state->dt.contig, 1, req_dbg);
         break;
     case UCP_DATATYPE_IOV:

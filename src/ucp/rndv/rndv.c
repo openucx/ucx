@@ -774,6 +774,9 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     }
 
     ucp_request_send_state_init(rndv_req, ucp_dt_make_contig(1), 0);
+    if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        ucp_request_memh_init(rndv_req, ep, rreq->recv.memh);
+    }
     ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
                                  UCP_REQUEST_SEND_PROTO_RNDV_GET);
 

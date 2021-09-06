@@ -214,16 +214,16 @@ template<typename BufferType>
 class BufferMemoryPool : public ObjectPool<BufferType, true> {
 public:
     BufferMemoryPool(size_t buffer_size, const std::string &name,
-                     ucs_memory_type_t memory_type, size_t offcache = 0) :
+                     ucs_memory_type_t memory_type, UcxContext* context) :
         ObjectPool<BufferType, true>(buffer_size, name),
-        _memory_type(memory_type)
+        _memory_type(memory_type),
+        _context(context)
     {
-        this->init(offcache);
     }
 
     virtual BufferType *construct()
     {
-        return BufferType::allocate(this->buffer_size(), *this, _memory_type);
+        return BufferType::allocate(this->buffer_size(), *this, _memory_type, _context);
     }
 
     virtual ucs_memory_type_t memory_type() const
@@ -233,6 +233,7 @@ public:
 
 private:
     ucs_memory_type_t _memory_type;
+    UcxContext* _context;
 };
 
 /**
@@ -404,22 +405,25 @@ protected:
     class Buffer {
     public:
         Buffer(void *buffer, size_t size, BufferMemoryPool<Buffer> &pool,
-               ucs_memory_type_t memory_type = UCS_MEMORY_TYPE_HOST) :
+               ucs_memory_type_t memory_type = UCS_MEMORY_TYPE_HOST, ucp_mem_h memh = NULL, UcxContext *context = NULL) :
             _capacity(size),
             _buffer(buffer),
             _size(0),
             _pool(pool),
-            _memory_type(memory_type)
+            _memory_type(memory_type),
+            _memh(memh),
+            _context(context)
         {
         }
 
         static Buffer *allocate(size_t size, BufferMemoryPool<Buffer> &pool,
-                                ucs_memory_type_t memory_type)
+                                ucs_memory_type_t memory_type, UcxContext *context = NULL)
         {
 #ifdef HAVE_CUDA
             cudaError_t cerr;
 #endif
             void *buffer;
+            ucp_mem_h memh = NULL;
 
             switch (memory_type) {
 #ifdef HAVE_CUDA
@@ -437,8 +441,13 @@ protected:
                 break;
 #endif
             case UCS_MEMORY_TYPE_HOST:
-                buffer = UcxContext::memalign(ALIGNMENT, size,
-                                              pool.name().c_str());
+                if (context != NULL) {
+                    buffer = NULL;
+                    assert(context->alloc_mapped_buffer(size, &buffer, &memh, 0) == UCS_OK);
+                } else {
+                    buffer = UcxContext::memalign(ALIGNMENT, size,
+                                                  pool.name().c_str());
+                }
                 break;
             default:
                 LOG << "ERROR: Unsupported memory type requested: "
@@ -449,7 +458,7 @@ protected:
                 throw std::bad_alloc();
             }
 
-            return new Buffer(buffer, size, pool, memory_type);
+            return new Buffer(buffer, size, pool, memory_type, memh, context);
         }
 
         ~Buffer()
@@ -462,7 +471,11 @@ protected:
                 break;
 #endif
             case UCS_MEMORY_TYPE_HOST:
-                free(_buffer);
+                if (_memh && _context) {
+                    assert(_context->free_mapped_buffer(_memh) == UCS_OK);
+                } else {
+                    free(_buffer);
+                }
                 break;
             default:
                 /* Unreachable - would fail in ctor */
@@ -485,6 +498,10 @@ protected:
             return (uint8_t*)_buffer + offset;
         }
 
+        inline ucp_mem_h memh() {
+            return _memh;
+        }
+
         inline void resize(size_t size)
         {
             assert(size <= _capacity);
@@ -504,6 +521,8 @@ protected:
         size_t                   _size;
         BufferMemoryPool<Buffer> &_pool;
         ucs_memory_type_t        _memory_type;
+        ucp_mem_h                _memh;
+        UcxContext               *_context;
     };
 
     class BufferIov {
@@ -712,7 +731,7 @@ protected:
                                          test_opts.chunk_size),
                            "data iovs"),
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
-                          test_opts.memory_type, test_opts.num_offcache_buffers)
+                          test_opts.memory_type, this)
     {
         _status                  = OK;
 
@@ -749,9 +768,9 @@ protected:
                         UcxCallback* callback = EmptyCallback::get()) {
         for (size_t i = 0; i < iov.size(); ++i) {
             if (send_recv_data == XFER_TYPE_SEND) {
-                conn->send_data(iov[i].buffer(), iov[i].size(), sn, callback);
+                conn->send_data(iov[i].buffer(), iov[i].memh(), iov[i].size(), sn, callback);
             } else {
-                conn->recv_data(iov[i].buffer(), iov[i].size(), sn, callback);
+                conn->recv_data(iov[i].buffer(), iov[i].memh(), iov[i].size(), sn, callback);
             }
         }
     }
@@ -774,7 +793,7 @@ protected:
         if (opts().use_am) {
             IoMessage *m = _io_msg_pool.get();
             m->init(IO_WRITE_COMP, sn, data_size, opts().validate);
-            conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0ul, m);
+            conn->send_am(m->buffer(), opts().iomsg_size, NULL, NULL, 0ul, m);
         } else {
             send_io_message(conn, IO_WRITE_COMP, sn, data_size,
                             opts().validate);
@@ -817,6 +836,17 @@ protected:
         validate(msg, iomsg_size);
     }
 
+public:
+    bool init()
+    {
+        if (UcxContext::init()) {
+            _data_chunks_pool.init(opts().num_offcache_buffers);
+            return true;
+        }
+
+        return false;
+    }
+
 private:
     bool send_io_message(UcxConnection *conn, IoMessage *msg) {
         VERBOSE_LOG << "sending IO " << io_op_names[msg->msg()->op] << ", sn "
@@ -825,7 +855,7 @@ private:
         /* send IO_READ_COMP as a data since the transaction must be matched
          * by sn on receiver side */
         if (msg->msg()->op == IO_READ_COMP) {
-            return conn->send_data(msg->buffer(), opts().iomsg_size,
+            return conn->send_data(msg->buffer(), NULL, opts().iomsg_size,
                                    msg->msg()->sn, msg);
         } else {
             return conn->send_io_message(msg->buffer(), opts().iomsg_size, msg);
@@ -1063,7 +1093,7 @@ public:
         conn_stat.bytes<IO_READ>() += msg->data_size;
         // Send IO_READ_COMP as AM header and first iov element as payload
         // (note that multi-iov send is not supported for IODEMO with AM yet)
-        conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(),
+        conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(), (*iov)[0].memh(),
                       (*iov)[0].size(), cb);
     }
 
@@ -1096,7 +1126,7 @@ public:
         assert(iov->size() == 1);
 
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
-        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(), data_desc, w);
+        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(), (*iov)[0].size(), data_desc, w);
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
@@ -1479,7 +1509,7 @@ public:
         r->init(this, server_index, sn, validate, iov);
 
         recv_data(server_info.conn, *iov, sn, r);
-        server_info.conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
+        server_info.conn->recv_data(r->buffer(), NULL, opts().iomsg_size, sn, r);
 
         return data_size;
     }
@@ -1493,7 +1523,7 @@ public:
         IoMessage *m = _io_msg_pool.get();
         m->init(IO_READ, sn, data_size, opts().validate);
 
-        server_info.conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0, m);
+        server_info.conn->send_am(m->buffer(), opts().iomsg_size, NULL, NULL, 0, m);
 
         return data_size;
     }
@@ -1547,7 +1577,7 @@ public:
         // Send IO_WRITE as AM header and first iov element as payload
         // (note that multi-iov send is not supported for IODEMO with AM yet)
         server_info.conn->send_am(m->buffer(), opts().iomsg_size,
-                                  (*iov)[0].buffer(), (*iov)[0].size(), cb);
+                                  (*iov)[0].buffer(), (*iov)[0].memh(), (*iov)[0].size(), cb);
 
         return data_size;
     }
@@ -1663,7 +1693,7 @@ public:
 
             assert(iov->size() == 1);
 
-            conn->recv_am_data((*iov)[0].buffer(), msg->data_size, data_desc, r);
+            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(), msg->data_size, data_desc, r);
         }
     }
 
