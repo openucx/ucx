@@ -205,7 +205,7 @@ enum {
     UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(9),  /* CREQ message is NOT sent, because
                                                        connection establishment process
                                                        is driven by remote side. */
-    UCT_UD_EP_FLAG_TX_NACKED         = UCS_BIT(10), /* Last psn was acked with NAK */
+    UCT_UD_EP_FLAG_TX_NACKED         = UCS_BIT(10), /* Last psn was acked with NACK */
 
     /* Endpoint is currently executing the pending queue */
 #if UCS_ENABLE_ASSERT
