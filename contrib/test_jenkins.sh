@@ -727,19 +727,11 @@ run_ucx_perftest() {
 	# client/server mode, to reduce testing time
 	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
 	then
-		tls_list="all "
 		gdr_options="n "
 		if (lsmod | grep -q "nv_peer_mem")
 		then
 			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
-			tls_list+="rc,cuda_copy "
 			gdr_options+="y "
-		fi
-
-		if  [ "X$have_gdrcopy" == "Xyes" ] && (lsmod | grep -q "gdrdrv")
-		then
-			echo "GDRCopy module (gdrdrv) is present..."
-			tls_list+="rc,cuda_copy,gdr_copy "
 		fi
 
 		if [ $num_gpus -gt 1 ]; then
@@ -751,29 +743,21 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory===="
 
-		for tls in $tls_list
+		for memtype_cache in y n
 		do
-			for memtype_cache in y n
+			for gdr in $gdr_options
 			do
-				for gdr in $gdr_options
-				do
-					export UCX_TLS=$tls
-					export UCX_MEMTYPE_CACHE=$memtype_cache
-					export UCX_IB_GPU_DIRECT_RDMA=$gdr
-					run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-					unset UCX_TLS
-					unset UCX_MEMTYPE_CACHE
-					unset UCX_IB_GPU_DIRECT_RDMA
-				done
+				export UCX_MEMTYPE_CACHE=$memtype_cache
+				export UCX_IB_GPU_DIRECT_RDMA=$gdr
+				run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+				unset UCX_MEMTYPE_CACHE
+				unset UCX_IB_GPU_DIRECT_RDMA
 			done
 		done
 
 		export UCX_TLS=self,shm,cma,cuda_copy
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 		unset UCX_TLS
-
-		# Run without special UCX_TLS
-		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 
 		# Specifically test cuda_ipc for large message sizes
 		cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
@@ -784,8 +768,8 @@ run_ucx_perftest() {
 			export UCX_TLS=self,sm,cuda_copy,cuda_ipc
 			export UCX_CUDA_IPC_CACHE=$ipc_cache
 			run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
-			unset UCX_TLS
 			unset UCX_CUDA_IPC_CACHE
+			unset UCX_TLS
 		done
 
 		unset CUDA_VISIBLE_DEVICES
