@@ -881,7 +881,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     }
 
     if (ucs_unlikely(!is_am)) {
-        if (neth->packet_type & UCT_UD_PACKET_FLAG_NAK) {
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_NACK) {
             uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_TX_NACKED);
             goto out;
         }
@@ -1321,7 +1321,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
 
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_NACK)) {
-        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_NAK;
+        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_NACK;
     }
 
     if (ctl_flags & UCT_UD_IFACE_SEND_CTL_FLAG_INLINE) {
