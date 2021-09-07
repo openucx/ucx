@@ -103,7 +103,7 @@ BEGIN_C_DECLS
 #define ucs_ilog2_or0(_n) \
     ( ((_n) == 0) ? 0 : ucs_ilog2(_n) )
 
-/* Returns the number of 1-bits in x */
+/* Returns the number of 1-bits in _n */
 #define ucs_popcount(_n) \
     ((sizeof(_n) <= 4) ? __builtin_popcount((uint32_t)(_n)) : \
                          __builtin_popcountl(_n))
@@ -111,11 +111,17 @@ BEGIN_C_DECLS
 /* On some arch ffs64(0) returns 0, on other -1, let's unify this */
 #define ucs_ffs64_safe(_val) ((_val) ? ucs_ffs64(_val) : 64)
 
-/* Returns the number of trailing 0-bits in x, starting at the least
- * significant bit position.  If x is 0, the result is undefined.
+/* Returns the number of trailing 0-bits in _n, starting at the least
+ * significant bit position.  If _n is 0, the result is undefined.
  */
 #define ucs_count_trailing_zero_bits(_n) \
     ((sizeof(_n) <= 4) ? __builtin_ctz((uint32_t)(_n)) : __builtin_ctzl(_n))
+
+/* Returns the number of leading 0-bits in _n.
+ * If _n is 0, the result is undefined
+ */
+#define ucs_count_leading_zero_bits(_n) \
+    ((sizeof(_n) <= 4) ? __builtin_clz((uint32_t)(_n)) : __builtin_clzl(_n))
 
 /* Returns the number of 1-bits by _idx mask */
 #define ucs_bitmap2idx(_map, _idx) \

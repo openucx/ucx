@@ -1647,12 +1647,12 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
 
 static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 {
-    size_t           max_mp_entry_size = 0;
-    ucp_context_t    *context          = worker->context;
+    size_t max_mp_entry_size = 0;
+    ucp_context_t *context   = worker->context;
     uct_iface_attr_t *if_attr;
-    ucp_rsc_index_t  iface_id;
-    ucs_status_t     status;
-    unsigned mp_index, size, i;
+    ucp_rsc_index_t iface_id;
+    ucs_status_t status;
+    uint32_t num_am_mpools, size, i, bit, prev_idx, mp_index;
 
     /* Create memory pool for requests */
     status = ucs_mpool_init(&worker->req_mp, 0,
@@ -1703,42 +1703,42 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 
     /* Create memory pools for incoming UCT messages without a UCT descriptor.
      * Ignore sizes which are larger than maximal transport segment. */
-    worker->am_mps_map = (max_mp_entry_size == 0) ? 0 :
-                         (ucs_roundup_pow2(max_mp_entry_size) - 1) &
-                         context->config.mpools_map;
-    worker->am_mps     = ucs_malloc((ucs_popcount(worker->am_mps_map) + 1) *
-                                        sizeof(ucs_mpool_t),
-                                    "am_mpools");
+    worker->am_mps_bitmap  = (max_mp_entry_size == 0) ? 0 :
+                             (ucs_roundup_pow2(max_mp_entry_size) - 1) &
+                              context->config.mpool_sizes_map;
+    worker->am_mps_bitmap |= UCS_BIT(UCP_WORKER_AM_MPS_MAP_SIZE - 1);
+    num_am_mpools          = ucs_popcount(worker->am_mps_bitmap);
+    worker->am_mps         = ucs_malloc(num_am_mpools * sizeof(ucs_mpool_t),
+                                        "am_mpools");
     if (worker->am_mps == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_rndv_frag_mp_cleanup;
     }
 
     mp_index = 0;
-    ucs_for_each_bit(size, worker->am_mps_map) {
-        status = ucs_mpool_init(&worker->am_mps[mp_index++], 0,
-                                UCS_BIT(size) + UCP_WORKER_HEADROOM_SIZE +
+    prev_idx = 0;
+    ucs_for_each_bit(bit, worker->am_mps_bitmap) {
+        size   = (bit == (UCP_WORKER_AM_MPS_MAP_SIZE - 1)) ?
+                 max_mp_entry_size : UCS_BIT(bit);
+        status = ucs_mpool_init(&worker->am_mps[mp_index], 0,
+                                size + UCP_WORKER_HEADROOM_SIZE +
                                 worker->am.alignment,
                                 0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
                                 &ucp_am_mpool_ops, "ucp_am_bufs");
         if (status != UCS_OK) {
             goto err_am_mps_cleanup;
         }
-    }
 
-    /* The last AM mpool is created with maximal possible transport
-     * element size */
-    status = ucs_mpool_init(&worker->am_mps[mp_index], 0,
-                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE +
-                            worker->am.alignment,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_am_mpool_ops, "ucp_am_bufs");
-    if (status != UCS_OK) {
-        goto err_am_mps_cleanup;
+        ucs_assertv(bit < UCP_WORKER_AM_MPS_MAP_SIZE, "bit 0x%x", bit);
+        for (i = prev_idx; i <= bit; ++i) {
+            worker->am_mps_map[i] = &worker->am_mps[mp_index];
+        }
+        prev_idx = bit + 1;
+        ++mp_index;
     }
 
     ucs_debug("Created %u AM mpools, sizes map 0x%x, largest size is %zu",
-              mp_index + 1, worker->am_mps_map, max_mp_entry_size);
+              num_am_mpools, worker->am_mps_bitmap, max_mp_entry_size);
 
     return UCS_OK;
 
@@ -1765,7 +1765,7 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 
     ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
-    for (i = 0; i <= ucs_popcount(worker->am_mps_map); ++i) {
+    for (i = 0; i < ucs_popcount(worker->am_mps_bitmap); ++i) {
         ucs_mpool_cleanup(&worker->am_mps[i], 1);
     }
     ucs_free(worker->am_mps);

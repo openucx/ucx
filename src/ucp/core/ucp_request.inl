@@ -663,15 +663,26 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
-ucp_recv_desc_get(ucp_worker_h worker, size_t length)
+ucp_recv_desc_alloc(ucp_worker_h worker, size_t length)
 {
-    /* TODO: Optimize */
-    uint32_t rp  = ucs_roundup_pow2(length + 1); /* make sure length is not 0 */
-    unsigned idx = ucs_popcount(worker->am_mps_map & (rp - 1));
+    size_t size = length + 1;
+    unsigned idx;
 
-    ucs_assertv(length < UINT_MAX, "length %zu", length);
+    /* - use size equal to length + 1 to avoid passing 0 to
+     *   ucs_count_leading_zero_bits()
+     * - do not roundup the size if it is pow of 2 already, to not use bigger
+     *   mpool than needed
+     */
+    idx = (sizeof(size_t) * 8) -
+           (ucs_count_leading_zero_bits(size) + !!ucs_is_pow2_or_zero(size));
 
-    return (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mps[idx]);
+    ucs_assertv((length < UINT_MAX) && (idx < UCP_WORKER_AM_MPS_MAP_SIZE),
+                "idx %u, length %zu", idx, length);
+
+    ucs_trace_data("take AM desc, mpool idx %u, data length %zu", idx, length);
+
+    return (ucp_recv_desc_t*)ucs_mpool_get_inline(worker->am_mps_map[idx]);
+
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -694,7 +705,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
         status                     = UCS_INPROGRESS;
     } else {
-        rdesc = ucp_recv_desc_get(worker, length);
+        rdesc = ucp_recv_desc_alloc(worker, length);
         if (rdesc == NULL) {
             ucs_error("ucp recv descriptor is not allocated");
             return UCS_ERR_NO_MEMORY;

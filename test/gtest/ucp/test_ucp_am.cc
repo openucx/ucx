@@ -702,6 +702,9 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
     static const std::string ib_tls[] = { "dc_x", "rc_v", "rc_x", "ud_v",
                                           "ud_x", "ib" };
 
+    // UCP takes desc from mpool only for data arrived as inlined from UCT.
+    // Typically, with IB data is inlined up to 32 bytes, so use smaller range
+    // of values for IB transports.
     bool has_ib = has_any_transport(
             std::vector<std::string>(ib_tls,
                                      ib_tls + ucs_static_array_size(ib_tls)));
@@ -710,7 +713,7 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
 
     ucp_request_param_t param;
     param.op_attr_mask = 0ul;
-    
+
     ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
                                             0ul, sbuf.data(), sbuf.size(),
                                             &param);
@@ -728,7 +731,7 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
 
     ucp_worker_h worker = receiver().worker();
 
-    for (int i = 0; i <= ucs_popcount(worker->am_mps_map); ++i) {
+    for (int i = 0; i <= ucs_popcount(worker->am_mps_bitmap); ++i) {
         ucs_mpool_t *mpool = &worker->am_mps[i];
         ssize_t elem_size  = mpool->data->elem_size - (sizeof(ucs_mpool_elem_t) +
                                UCP_WORKER_HEADROOM_SIZE + worker->am.alignment);
@@ -737,9 +740,9 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
         if (elem_size >= (length + 1)) {
             EXPECT_EQ(ucs_mpool_obj_owner(rdesc), mpool);
             break;
-        } else {
-            EXPECT_NE(ucs_mpool_obj_owner(rdesc), mpool);
         }
+
+        EXPECT_NE(ucs_mpool_obj_owner(rdesc), mpool);
     }
 
     ucp_am_data_release(receiver().worker(), rx_data);
