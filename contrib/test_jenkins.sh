@@ -702,14 +702,8 @@ run_ucx_perftest() {
 		echo "==== Running ucx_perf kit on $ucx_dev ===="
 		if [ $with_mpi -eq 1 ]
 		then
-			# Run UCT performance test
-			$MPIRUN -np 2 $AFFINITY $ucx_perftest $uct_test_args -d $ucx_dev $opt_transports
-
 			# Run UCP performance test
 			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
-
-			# Run UCP performance test with 2 threads
-			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args -T 2
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
