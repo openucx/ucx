@@ -81,11 +81,11 @@ void uct_p2p_rma_test::test_xfer(send_func_t send, size_t length,
 
     blocking_send(send, sender_ep(), sendbuf, recvbuf, true);
     if (flags & TEST_UCT_FLAG_SEND_ZCOPY) {
-        sendbuf.pattern_fill(SEED3);
+        sendbuf.memset(0);
         wait_for_remote();
         recvbuf.pattern_check(SEED1);
     } else if (flags & TEST_UCT_FLAG_RECV_ZCOPY) {
-        recvbuf.pattern_fill(SEED3);
+        recvbuf.memset(0);
         sendbuf.pattern_check(SEED2);
         wait_for_remote();
     }

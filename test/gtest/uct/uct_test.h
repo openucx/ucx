@@ -251,6 +251,7 @@ protected:
 
         void pattern_fill(uint64_t seed);
         void pattern_check(uint64_t seed);
+        void memset(int c);
 
         static size_t pack(void *dest, void *arg);
 

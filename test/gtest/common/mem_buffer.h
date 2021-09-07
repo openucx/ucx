@@ -8,6 +8,7 @@
 #define GTEST_MEM_BUFFER_H_
 
 #include <ucs/memory/memory_type.h>
+#include <ucs/sys/math.h>
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -45,6 +46,10 @@ public:
     /* check pattern in a memtype buffer */
     static void pattern_check(const void *buffer, size_t length, uint64_t seed,
                               ucs_memory_type_t mem_type);
+
+    /* set all buffer to a constant value */
+    static void
+    memset(void *buffer, size_t length, int c, ucs_memory_type_t mem_type);
 
     /* copy from host memory to memtype buffer */
     static void copy_to(void *dst, const void *src, size_t length,
@@ -89,6 +94,8 @@ public:
 
     void pattern_check(uint64_t seed) const;
 
+    void memset(int c);
+
 private:
     static void abort_wrong_mem_type(ucs_memory_type_t mem_type);
 
@@ -96,11 +103,28 @@ private:
 
     static bool is_rocm_supported();
 
-    static uint64_t pat(uint64_t prev);
+    static inline uint64_t pat(uint64_t prev)
+    {
+        /* LFSR pattern */
+        static const uint64_t polynom = 1337;
+        return (prev << 1) | (__builtin_parityl(prev & polynom));
+    }
 
-    static void pattern_check(uint64_t expected, uint64_t actual, size_t length,
-                              size_t offset, const void *buffer,
-                              const void *orig_ptr);
+    static inline void pattern_check(uint64_t expected, uint64_t actual,
+                                     size_t length, size_t offset,
+                                     const void *buffer, const void *orig_ptr)
+    {
+        const uint64_t mask = UCS_MASK_SAFE(length * 8 * sizeof(char));
+
+        if (ucs_unlikely(actual != (expected & mask))) {
+            pattern_check_failed(expected, actual, length, mask, offset,
+                                 orig_ptr);
+        }
+    }
+
+    static void pattern_check_failed(uint64_t expected, uint64_t actual,
+                                     size_t length, uint64_t mask,
+                                     size_t offset, const void *orig_ptr);
 
     const ucs_memory_type_t m_mem_type;
     void * const            m_ptr;

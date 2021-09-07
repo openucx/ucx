@@ -191,26 +191,21 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
 
 void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed)
 {
-    uint64_t *ptr = (uint64_t*)buffer;
-    char *end = (char *)buffer + length;
+    size_t word_length = ucs_align_down_pow2(length, sizeof(uint64_t));
+    uint64_t *end      = (uint64_t*)UCS_PTR_BYTE_OFFSET(buffer, word_length);
 
-    while ((char*)(ptr + 1) <= end) {
+    for (uint64_t *ptr = (uint64_t*)buffer; ptr < end; ++ptr) {
         *ptr = seed;
         seed = pat(seed);
-        ++ptr;
     }
-    memcpy(ptr, &seed, end - (char*)ptr);
+
+    memcpy(end, &seed, length - UCS_PTR_BYTE_DIFF(buffer, end));
 }
 
-void mem_buffer::pattern_check(uint64_t expected, uint64_t actual,
-                               size_t length, size_t offset, const void *buffer,
-                               const void *orig_ptr)
+void mem_buffer::pattern_check_failed(uint64_t expected, uint64_t actual,
+                                      size_t length, uint64_t mask,
+                                      size_t offset, const void *orig_ptr)
 {
-    const uint64_t mask = UCS_MASK_SAFE(length * 8 * sizeof(char));
-
-    if (actual == (expected & mask)) {
-        return; // Data is correct
-    }
 
     std::stringstream ss;
     ss << "Pattern check failed at " << UCS_PTR_BYTE_OFFSET(orig_ptr, offset)
@@ -284,6 +279,33 @@ void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed,
         ucs::auto_buffer temp(length);
         copy_from(*temp, buffer, length, mem_type);
         pattern_check(*temp, length, seed, buffer);
+    }
+}
+
+void mem_buffer::memset(void *buffer, size_t length, int c,
+                        ucs_memory_type_t mem_type)
+{
+    switch (mem_type) {
+    case UCS_MEMORY_TYPE_HOST:
+    case UCS_MEMORY_TYPE_ROCM_MANAGED:
+        ::memset(buffer, c, length);
+        break;
+#if HAVE_CUDA
+    case UCS_MEMORY_TYPE_CUDA:
+    case UCS_MEMORY_TYPE_CUDA_MANAGED:
+        CUDA_CALL(cudaMemset(buffer, c, length),
+                  ": ptr=" << buffer << " value=" << c << "count=" << length);
+        CUDA_CALL(cudaDeviceSynchronize(), "");
+        break;
+#endif
+#if HAVE_ROCM
+    case UCS_MEMORY_TYPE_ROCM:
+        ROCM_CALL(hipMemset(buffer, c, length);
+        ROCM_CALL(hipDeviceSynchronize());
+        break;
+#endif
+    default:
+        abort_wrong_mem_type(mem_type);
     }
 }
 
@@ -392,12 +414,6 @@ void mem_buffer::abort_wrong_mem_type(ucs_memory_type_t mem_type) {
     UCS_TEST_ABORT("Wrong buffer memory type " + mem_type_name(mem_type));
 }
 
-uint64_t mem_buffer::pat(uint64_t prev) {
-    /* LFSR pattern */
-    static const uint64_t polynom = 1337;
-    return (prev << 1) | (__builtin_parityl(prev & polynom) & 1);
-}
-
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
     m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
 }
@@ -429,4 +445,8 @@ void mem_buffer::pattern_fill(uint64_t seed) {
 
 void mem_buffer::pattern_check(uint64_t seed) const {
     pattern_check(ptr(), size(), seed, mem_type());
+}
+
+void mem_buffer::memset(int c) {
+    memset(ptr(), size(), c, mem_type());
 }
