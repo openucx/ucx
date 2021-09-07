@@ -67,6 +67,10 @@ stages:
       # Check that commit title matches code style guidelines
       - job: commit_title
         displayName: commit title
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         steps:
           - checkout: self
             clean: true
@@ -300,8 +304,8 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
-        name: sputnik
-        demands: ucx_sputnik -equals yes
+        name: roce
+        demands: ucx_roce -equals yes
         test_perf: 0
 
   - stage: io_demo

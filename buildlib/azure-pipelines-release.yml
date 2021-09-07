@@ -44,6 +44,10 @@ stages:
   - stage: Prepare
     jobs:
       - job: CheckRelease
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         steps:
           - checkout: self
             fetchDepth: 100
