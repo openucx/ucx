@@ -92,7 +92,7 @@ struct ucp_address_iface_attr {
     uint64_t                    cap_flags;    /* Interface capability flags */
     uint64_t                    event_flags;  /* Interface event capability flags */
     double                      overhead;     /* Interface performance - overhead */
-    uct_ppn_bandwidth_t         bandwidth;    /* Interface performance - bandwidth */
+    double                      bandwidth;    /* Interface performance - bandwidth */
     int                         priority;     /* Priority of device */
     double                      lat_ovh;      /* Latency overhead */
     ucp_rsc_index_t             dst_rsc_index;/* Destination resource index */
