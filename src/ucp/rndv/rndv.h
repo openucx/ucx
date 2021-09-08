@@ -16,9 +16,6 @@ typedef enum {
     /* RNDV TAG operation with status UCS_OK (kept for wire compatibility with
      * the previous UCP versions) */
     UCP_RNDV_RTS_TAG_OK       = UCS_OK,
-    /* RNDV TAG operation with status UCS_ERR_CANCELED (kept for wire
-     * compatibility with the previous UCP versions) */
-    UCP_RNDV_RTS_TAG_CANCELED = (uint8_t)UCS_ERR_CANCELED,
     /* RNDV AM operation */
     UCP_RNDV_RTS_AM           = 1
 } UCS_S_PACKED ucp_rndv_rts_opcode_t;
@@ -121,8 +118,7 @@ ucp_rndv_rts_is_am(const ucp_rndv_rts_hdr_t *rts_hdr)
 static UCS_F_ALWAYS_INLINE int
 ucp_rndv_rts_is_tag(const ucp_rndv_rts_hdr_t *rts_hdr)
 {
-    return (rts_hdr->opcode == UCP_RNDV_RTS_TAG_OK) ||
-           (rts_hdr->opcode == UCP_RNDV_RTS_TAG_CANCELED);
+    return rts_hdr->opcode == UCP_RNDV_RTS_TAG_OK;
 }
 
 #endif
