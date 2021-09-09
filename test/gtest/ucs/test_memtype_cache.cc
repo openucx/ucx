@@ -448,7 +448,7 @@ UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs_keep_mem) {
     test_memtype_cache_alloc_diff_mem_types(true, false);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
 class test_memtype_cache_deferred_create : public test_memtype_cache {
@@ -512,5 +512,5 @@ UCS_TEST_P(test_memtype_cache_deferred_create, lookup_overlapped_regions) {
     test_alloc_before_init(1000000, false, 1);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache_deferred_create,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));

@@ -160,7 +160,7 @@ Good
 
     #define UCS_MACRO_LONG(_obj, _field1, _field2, _val1, _val2) \
         { \
-            typeof((_obj)->_field1) sum = (_val1) + (_val2); \
+            ucs_typeof((_obj)->_field1) sum = (_val1) + (_val2); \
             \
             (_obj)->_field1 = sum; \
             (_obj)->_field2 = sum; \

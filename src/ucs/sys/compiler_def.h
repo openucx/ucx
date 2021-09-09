@@ -66,7 +66,7 @@
  * which can't optimize properly.
  */
 #if (((__GNUC__ == 4) && (__GNUC_MINOR__ == 1)) || !defined(__OPTIMIZE__))
-#  define UCS_V_INITIALIZED(_v)  (_v = (typeof(_v))0)
+#  define UCS_V_INITIALIZED(_v)  (_v = (ucs_typeof(_v))0)
 #else
 #  define UCS_V_INITIALIZED(_v)  ((void)0)
 #endif
@@ -100,7 +100,7 @@
 
 /* Helper macro to calculate an address with offset equal to size of _type */
 #define UCS_PTR_TYPE_OFFSET(_ptr, _type) \
-    ((void *)((typeof(_type) *)(_ptr) + 1))
+    ((void *)((ucs_typeof(_type) *)(_ptr) + 1))
 
 /* Helper macro to calculate ptr difference (_end - _start) */
 #define UCS_PTR_BYTE_DIFF(_start, _end) \
@@ -135,6 +135,17 @@
 
 
 /**
+ * Get the type of a structure or variable.
+ * 
+ * @param _type  Return the type of this argument.
+ * 
+ * @return The type of the given argument.
+ */
+#define ucs_typeof(_type) \
+    __typeof__(_type)
+
+
+/**
  * @return Address of a derived structure. It must have a "super" member at offset 0.
  * NOTE: we use the built-in offsetof here because we can't use ucs_offsetof() in
  *       a constant expression.
@@ -161,7 +172,7 @@
  * @return Type of _field in _type.
  */
 #define ucs_field_type(_type, _field) \
-    typeof(((_type*)0)->_field)
+    ucs_typeof(((_type*)0)->_field)
 
 /**
  * Prevent compiler from reordering instructions

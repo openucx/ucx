@@ -320,9 +320,9 @@ UCS_MT_TEST_P(test_callbackq, remove, 10) {
     }
 }
 
-INSTANTIATE_TEST_CASE_P(fast_path, test_callbackq, ::
+INSTANTIATE_TEST_SUITE_P(fast_path, test_callbackq, ::
                         testing::Values(static_cast<int>(UCS_CALLBACKQ_FLAG_FAST)));
-INSTANTIATE_TEST_CASE_P(slow_path, test_callbackq, ::testing::Values(0));
+INSTANTIATE_TEST_SUITE_P(slow_path, test_callbackq, ::testing::Values(0));
 
 
 class test_callbackq_noflags : public test_callbackq {

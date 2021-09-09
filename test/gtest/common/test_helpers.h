@@ -8,7 +8,7 @@
 #ifndef UCS_TEST_HELPERS_H
 #define UCS_TEST_HELPERS_H
 
-#include "gtest.h"
+#include "googletest/gtest.h"
 
 #include <common/mem_buffer.h>
 

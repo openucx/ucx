@@ -374,7 +374,7 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
  * @param _tls         Transport names.
  */
 #define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, _tls) \
-    INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
+    INSTANTIATE_TEST_SUITE_P(_name,  _test_case, \
                             testing::ValuesIn(enum_test_params<_test_case>(_tls)));
 
 

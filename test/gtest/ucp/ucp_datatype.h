@@ -6,7 +6,7 @@
 #ifndef TEST_UCP_DATATYPE_H_
 #define TEST_UCP_DATATYPE_H_
 
-#include <common/gtest.h>
+#include <common/googletest/gtest.h>
 
 #include <ucp/api/ucp.h>
 extern "C" {

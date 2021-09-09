@@ -76,6 +76,6 @@ private:
 
 
 #define _UCT_MD_INSTANTIATE_TEST_CASE(_test_case, _cmpt_name) \
-    INSTANTIATE_TEST_CASE_P(_cmpt_name, _test_case, \
+    INSTANTIATE_TEST_SUITE_P(_cmpt_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_mds(#_cmpt_name)));
 #endif

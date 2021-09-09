@@ -197,13 +197,13 @@ UCS_TEST_P(test_ucp_dt_iter, unpack_1MB) {
     test_unpack(UCS_MBYTE + (ucs::rand() % UCS_KBYTE));
 }
 
-INSTANTIATE_TEST_CASE_P(contig, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(contig, test_ucp_dt_iter,
                         testing::Values(ucp_dt_make_contig(1),
                                         ucp_dt_make_contig(8),
                                         ucp_dt_make_contig(39)));
 
-INSTANTIATE_TEST_CASE_P(iov, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(iov, test_ucp_dt_iter,
                         testing::Values(ucp_dt_make_iov()));
 
-INSTANTIATE_TEST_CASE_P(generic, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(generic, test_ucp_dt_iter,
                         testing::ValuesIn(test_ucp_dt_iter::enum_dt_generic_params()));
