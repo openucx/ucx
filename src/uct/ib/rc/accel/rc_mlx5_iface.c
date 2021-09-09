@@ -340,7 +340,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
         goto err_destory_qp;
     }
 
-    if (attr->super.cap.max_send_wr) {
+    if (attr->super.cap.max_send_wr && (txwq != NULL)) {
         status = uct_ib_mlx5_txwq_init(iface->super.super.super.worker,
                                        iface->tx.mmio_mode, txwq,
                                        qp->verbs.qp);
