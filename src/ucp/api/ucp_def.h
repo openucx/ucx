@@ -624,7 +624,7 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * communication progress.
  *
  * @param [in]  arg           User-defined argument.
- * @param [in]  header        User defined active message header. Can be NULL.
+ * @param [in]  header        User defined active message header.
  *                            If @a header_length is 0, this value is undefined
  *                            and must not be accessed.
  * @param [in]  header_length Active message header length in bytes. 
