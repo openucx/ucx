@@ -154,9 +154,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem.mem->umem_id);
     }
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->config.ece_cfg.ece_enable) {
         UCT_IB_MLX5DV_SET(create_qp_in, in, ece,
-                          UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
+                          iface->config.ece_cfg.ece.val);
+    } else if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        UCT_IB_MLX5DV_SET(create_qp_in, in, ece, 0);
     }
 
     qp->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
@@ -169,6 +172,11 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     }
 
     qp->qp_num = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        qp->local_ece.val = UCT_IB_MLX5DV_GET(create_qp_out, out, ece);
+    } else {
+        qp->local_ece.val = 0;
+    }
 
     if (attr->super.qp_type == IBV_QPT_RC) {
         qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
