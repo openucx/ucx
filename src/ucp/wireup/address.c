@@ -465,6 +465,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     const ucp_address_unified_iface_attr_t *unified;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_idx;
+    uct_ppn_bandwidth_t bandwidth;
 
     if (ucp_worker_is_unified_mode(worker)) {
         /* Address contains resources index and iface latency overhead
@@ -502,11 +503,28 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         return UCS_OK;
     }
 
-    packed                = ptr;
-    iface_attr->priority  = packed->prio_cap_flags & UCS_MASK(8);
-    iface_attr->overhead  = packed->overhead;
-    iface_attr->bandwidth = packed->bandwidth;
-    iface_attr->lat_ovh   = packed->lat_ovh;
+    packed               = ptr;
+    iface_attr->priority = packed->prio_cap_flags & UCS_MASK(8);
+    iface_attr->overhead = packed->overhead;
+    iface_attr->lat_ovh  = packed->lat_ovh;
+
+    if (packed->bandwidth < 0.0) {
+        /* The received value of the bandwidth is "dedicated - shared" which
+         * doesn't consider ppn and could be sent only by the peer which uses
+         * UCX version <= 1.11. Calculate the bandwidth value considering our
+         * ppn value to be the same value as on the peer */
+        bandwidth.shared      = fabs(packed->bandwidth);
+        bandwidth.dedicated   = 0.0;
+        iface_attr->bandwidth = ucp_tl_iface_bandwidth(worker->context,
+                                                       &bandwidth);
+    } else {
+        /* The received value is either a dedicated bandwidth value (when the
+         * peer is using an older version) or the total bandwidth considering
+         * remote ppn value (when the peer is using a newer version) */
+        iface_attr->bandwidth = packed->bandwidth;
+    }
+
+    ucs_assert(iface_attr->bandwidth > 0.0);
 
     /* Unpack iface flags */
     iface_attr->cap_flags =
