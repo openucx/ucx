@@ -363,6 +363,8 @@ typedef struct uct_ib_mlx5_qp_attr {
 typedef struct uct_ib_mlx5_qp {
     uct_ib_mlx5_obj_type_t             type;
     uint32_t                           qp_num;
+    union ece_t                        local_ece;
+    union ece_t                        remote_ece;
     union {
         struct {
             union {
