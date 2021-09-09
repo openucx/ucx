@@ -285,12 +285,12 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_txwq_t *txwq,
                                          uct_ib_mlx5_qp_attr_t *attr)
 {
-    uct_ib_iface_t *ib_iface           = &iface->super.super;
+    uct_ib_iface_t *ib_iface          = &iface->super.super;
+    uct_ib_mlx5_md_t *md              = ucs_derived_of(ib_iface->super.md,
+                                                       uct_ib_mlx5_md_t);
+    uct_ib_device_t UCS_V_UNUSED *dev = &md->super.dev;
     ucs_status_t status;
-    uct_ib_mlx5_md_t *md               = ucs_derived_of(ib_iface->super.md,
-                                                        uct_ib_mlx5_md_t);
 #if HAVE_DECL_MLX5DV_CREATE_QP
-    uct_ib_device_t *dev               = &md->super.dev;
     struct mlx5dv_qp_init_attr dv_attr = {};
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
