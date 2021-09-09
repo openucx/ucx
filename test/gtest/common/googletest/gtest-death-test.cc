@@ -30,12 +30,12 @@
 //
 // This file implements death tests.
 
-#include "gtest/gtest-death-test.h"
+#include "gtest-death-test.h"
 
 #include <utility>
 
-#include "gtest/internal/gtest-port.h"
-#include "gtest/internal/custom/gtest.h"
+#include "internal/gtest-port.h"
+#include "internal/custom/gtest.h"
 
 #if GTEST_HAS_DEATH_TEST
 
@@ -80,9 +80,9 @@
 
 #endif  // GTEST_HAS_DEATH_TEST
 
-#include "gtest/gtest-message.h"
-#include "gtest/internal/gtest-string.h"
-#include "src/gtest-internal-inl.h"
+#include "gtest-message.h"
+#include "internal/gtest-string.h"
+#include "gtest-internal-inl.h"
 
 namespace testing {
 
@@ -1296,7 +1296,7 @@ static void StackLowerThanAddress(const void* ptr, bool* result) {
 GTEST_ATTRIBUTE_NO_SANITIZE_ADDRESS_
 GTEST_ATTRIBUTE_NO_SANITIZE_HWADDRESS_
 static bool StackGrowsDown() {
-  int dummy;
+  int dummy = 0;
   bool result;
   StackLowerThanAddress(&dummy, &result);
   return result;

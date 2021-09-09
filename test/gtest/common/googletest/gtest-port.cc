@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-#include "gtest/internal/gtest-port.h"
+#include "internal/gtest-port.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -79,11 +79,11 @@
 # include <zircon/syscalls.h>
 #endif  // GTEST_OS_FUCHSIA
 
-#include "gtest/gtest-spi.h"
-#include "gtest/gtest-message.h"
-#include "gtest/internal/gtest-internal.h"
-#include "gtest/internal/gtest-string.h"
-#include "src/gtest-internal-inl.h"
+#include "gtest-spi.h"
+#include "gtest-message.h"
+#include "internal/gtest-internal.h"
+#include "internal/gtest-string.h"
+#include "gtest-internal-inl.h"
 
 namespace testing {
 namespace internal {
@@ -1072,6 +1072,7 @@ GTEST_DISABLE_MSC_DEPRECATED_PUSH_()
 class CapturedStream {
  public:
   // The ctor redirects the stream to a temporary file.
+  /* coverity[ctor_dtor_leak] */
   explicit CapturedStream(int fd) : fd_(fd), uncaptured_fd_(dup(fd)) {
 # if GTEST_OS_WINDOWS
     char temp_dir_path[MAX_PATH + 1] = { '\0' };  // NOLINT
@@ -1109,6 +1110,7 @@ class CapturedStream {
 #  else
     char name_template[] = "/tmp/captured_stream.XXXXXX";
 #  endif  // GTEST_OS_LINUX_ANDROID
+    /* coverity[secure_temp] */
     const int captured_fd = mkstemp(name_template);
     if (captured_fd == -1) {
       GTEST_LOG_(WARNING)
@@ -1118,11 +1120,13 @@ class CapturedStream {
     filename_ = name_template;
 # endif  // GTEST_OS_WINDOWS
     fflush(nullptr);
+    /* coverity[negative_returns] */  
     dup2(captured_fd, fd_);
     close(captured_fd);
   }
 
   ~CapturedStream() {
+    /* coverity[check_return] */
     remove(filename_.c_str());
   }
 
@@ -1212,6 +1216,7 @@ size_t GetFileSize(FILE* file) {
 
 std::string ReadEntireFile(FILE* file) {
   const size_t file_size = GetFileSize(file);
+  /* coverity[negative_returns] */
   char* const buffer = new char[file_size];
 
   size_t bytes_last_read = 0;  // # of bytes read in the last fread()

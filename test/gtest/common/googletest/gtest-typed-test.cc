@@ -28,9 +28,9 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-#include "gtest/gtest-typed-test.h"
+#include "gtest-typed-test.h"
 
-#include "gtest/gtest.h"
+#include "gtest.h"
 
 namespace testing {
 namespace internal {

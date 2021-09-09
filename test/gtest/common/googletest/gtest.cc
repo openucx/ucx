@@ -30,9 +30,9 @@
 //
 // The Google C++ Testing and Mocking Framework (Google Test)
 
-#include "gtest/gtest.h"
-#include "gtest/internal/custom/gtest.h"
-#include "gtest/gtest-spi.h"
+#include "gtest.h"
+#include "internal/custom/gtest.h"
+#include "gtest-spi.h"
 
 #include <ctype.h>
 #include <math.h>
@@ -119,7 +119,7 @@
 # include <sys/types.h>  // NOLINT
 #endif
 
-#include "src/gtest-internal-inl.h"
+#include "gtest-internal-inl.h"
 
 #if GTEST_OS_WINDOWS
 # define vsnprintf _vsnprintf
@@ -2553,6 +2553,7 @@ TestInfo::TestInfo(const std::string& a_test_suite_name,
       is_disabled_(false),
       matches_filter_(false),
       factory_(factory),
+      /* coverity[uninit_member] */
       result_() {}
 
 // Destructs a TestInfo object.
@@ -2628,9 +2629,11 @@ class TestNameIs {
       : name_(name) {}
 
   // Returns true if and only if the test name of test_info matches name_.
+#if !defined(__INTEL_COMPILER) && !defined(__PGI)
   bool operator()(const TestInfo * test_info) const {
     return test_info && test_info->name() == name_;
   }
+#endif
 
  private:
   std::string name_;
@@ -4494,6 +4497,7 @@ void OsStackTraceGetter::UponLeavingGTest() GTEST_LOCK_EXCLUDED_(mutex_) {
 class ScopedPrematureExitFile {
  public:
   explicit ScopedPrematureExitFile(const char* premature_exit_filepath)
+      /* coverity[deref_parm_in_call] */
       : premature_exit_filepath_(premature_exit_filepath ?
                                  premature_exit_filepath : "") {
     // If a path to the premature-exit file is specified...
@@ -4501,7 +4505,9 @@ class ScopedPrematureExitFile {
       // create the file with a single "0" character in it.  I/O
       // errors are ignored as there's nothing better we can do and we
       // don't want to fail the test because of this.
+      /* coverity[var_deref_model] */
       FILE* pfile = posix::FOpen(premature_exit_filepath, "w");
+      /* coverity[dereference] */
       fwrite("0", 1, 1, pfile);
       fclose(pfile);
     }

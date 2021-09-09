@@ -108,8 +108,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include "gtest/internal/gtest-internal.h"
-#include "gtest/internal/gtest-port.h"
+#include "internal/gtest-internal.h"
+#include "internal/gtest-port.h"
 
 #if GTEST_HAS_ABSL
 #include "absl/strings/string_view.h"
@@ -923,6 +923,6 @@ template <typename T>
 // Include any custom printer added by the local installation.
 // We must include this header at the end to make sure it can use the
 // declarations from this file.
-#include "gtest/internal/custom/gtest-printers.h"
+#include "internal/custom/gtest-printers.h"
 
 #endif  // GTEST_INCLUDE_GTEST_GTEST_PRINTERS_H_

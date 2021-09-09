@@ -45,9 +45,7 @@
 #include <utility>
 #include <vector>
 
-#include "gtest/internal/gtest-internal.h"
-#include "gtest/internal/gtest-port.h"
-#include "gtest/gtest-printers.h"
+#include <gtest/common/googletest/gtest-printers.h>
 
 namespace testing {
 // Input to a parameterized test name generator, describing a test parameter.
@@ -392,6 +390,7 @@ template <class TestClass>
 class ParameterizedTestFactory : public TestFactoryBase {
  public:
   typedef typename TestClass::ParamType ParamType;
+  /* coverity[pass_by_value] */
   explicit ParameterizedTestFactory(ParamType parameter) :
       parameter_(parameter) {}
   Test* CreateTest() override {
@@ -433,6 +432,7 @@ class TestMetaFactory
 
   TestMetaFactory() {}
 
+  /* coverity[pass_by_value] */
   TestFactoryBase* CreateTestFactory(ParamType parameter) override {
     return new ParameterizedTestFactory<TestSuite>(parameter);
   }
