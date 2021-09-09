@@ -130,6 +130,8 @@ struct ucp_config {
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
+    /** Array of protocol names to use */
+    ucs_config_allow_list_t                protos;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
@@ -214,6 +216,8 @@ typedef struct ucp_context {
 
     /* Mask of memory type communication resources */
     ucp_tl_bitmap_t               mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
+
+    ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
 
     struct {
 
