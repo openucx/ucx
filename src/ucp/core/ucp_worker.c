@@ -1183,14 +1183,16 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto err_close_iface;
     }
 
-    status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
-                                                &distance);
-    if (status == UCS_OK) {
-        wiface->attr.latency.c          += distance.latency;
-        wiface->attr.bandwidth.shared    =
-            ucs_min(wiface->attr.bandwidth.shared, distance.bandwidth);
-        wiface->attr.bandwidth.dedicated =
-            ucs_min(wiface->attr.bandwidth.dedicated, distance.bandwidth);
+    if (!context->config.ext.proto_enable) {
+        status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
+                                                    &distance);
+        if (status == UCS_OK) {
+            wiface->attr.latency.c          += distance.latency;
+            wiface->attr.bandwidth.shared    =
+                    ucs_min(wiface->attr.bandwidth.shared, distance.bandwidth);
+            wiface->attr.bandwidth.dedicated = ucs_min(
+                    wiface->attr.bandwidth.dedicated, distance.bandwidth);
+        }
     }
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
