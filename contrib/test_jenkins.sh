@@ -1262,6 +1262,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
 	export UCX_TCP_CM_REUSEADDR=y
+	export UCX_IB_ROCE_LOCAL_SUBNET=y
 
 	# load cuda env only if GPU available for remaining tests
 	try_load_cuda_env

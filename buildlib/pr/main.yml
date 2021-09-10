@@ -135,8 +135,8 @@ stages:
         test_perf: 0
     - template: tests.yml
       parameters:
-        name: sputnik
-        demands: ucx_sputnik -equals yes
+        name: roce
+        demands: ucx_roce -equals yes
         test_perf: 0
     - template: tests.yml
       parameters:
