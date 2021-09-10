@@ -349,17 +349,14 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
         }
 
         /* print memory type and dev name */
-        char sys_dev_name[128];
         mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
-
         status = uct_md_mem_query(md(), address, buffer_size, &mem_attr);
         ASSERT_UCS_OK(status);
 
-        ucs_topo_sys_device_bdf_name(mem_attr.sys_dev, sys_dev_name,
-                                     sizeof(sys_dev_name));
+        const char *dev_name = ucs_topo_sys_device_get_name(mem_attr.sys_dev);
         UCS_TEST_MESSAGE << ucs_memory_type_names[alloc_mem_type] << ": "
                          << "sys_dev[" << static_cast<int>(mem_attr.sys_dev)
-                         << "] (" << sys_dev_name << ")";
+                         << "] (" << dev_name << ")";
     }
 }
 
@@ -383,10 +380,8 @@ UCS_TEST_P(test_md, mem_query) {
             EXPECT_NE(UCS_SYS_DEVICE_ID_UNKNOWN, mem_attr.sys_dev);
         }
 
-        char bdf_buf[32];
         UCS_TEST_MESSAGE << ucs_memory_type_names[mem_type] << ": "
-                         << ucs_topo_sys_device_bdf_name(mem_attr.sys_dev, bdf_buf,
-                                                         sizeof(bdf_buf));
+                         << ucs_topo_sys_device_get_name(mem_attr.sys_dev);
     }
 }
 
@@ -399,12 +394,10 @@ UCS_TEST_P(test_md, sys_device) {
     ASSERT_UCS_OK(status);
 
     for (unsigned i = 0; i < num_tl_resources; ++i) {
-        char bdf_buf[32];
-        const char *bdf_name =
-                ucs_topo_sys_device_bdf_name(tl_resources[i].sys_device, bdf_buf,
-                                             sizeof(bdf_buf));
-        ASSERT_TRUE(bdf_name != NULL);
-        UCS_TEST_MESSAGE << tl_resources[i].dev_name << ": " << bdf_name;
+        const char *sysdev_name = ucs_topo_sys_device_get_name(
+                tl_resources[i].sys_device);
+        ASSERT_TRUE(sysdev_name != NULL);
+        UCS_TEST_MESSAGE << tl_resources[i].dev_name << ": " << sysdev_name;
 
         /* Expect 0 latency and infinite bandwidth within same device */
         ucs_sys_dev_distance_t distance;

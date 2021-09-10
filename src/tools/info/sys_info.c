@@ -11,6 +11,7 @@
 
 #include "ucx_info.h"
 
+#include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/time/time.h>
@@ -85,17 +86,120 @@ out:
     return result;
 }
 
-void print_sys_info()
+static void print_repeat_char(int ch, int count)
+{
+    int i;
+
+    for (i = 0; i < count; ++i) {
+        putchar(ch);
+    }
+}
+
+static void print_row_separator(int column_width, int first_column_width,
+                                int num_columns, int fill_char,
+                                int separator_char)
+{
+    int i;
+
+    printf("# %c", separator_char);
+    print_repeat_char(fill_char, first_column_width);
+    for (i = 0; i < num_columns; ++i) {
+        putchar(separator_char);
+        print_repeat_char(fill_char, column_width);
+    }
+    printf("%c\n", separator_char);
+}
+
+static void print_sys_topo()
+{
+    unsigned num_devices            = ucs_topo_num_devices();
+    static const int distance_width = 10;
+    const char *distance_unit       = "MB/s";
+    ucs_sys_device_t sys_dev1, sys_dev2;
+    ucs_sys_dev_distance_t distance;
+    char distance_str[20];
+    ucs_status_t status;
+    int name_width;
+
+    /* Get maximal width of device name */
+    name_width = 2 + strlen(distance_unit);
+    for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
+        name_width = ucs_max(
+                name_width, 2 + strlen(ucs_topo_sys_device_get_name(sys_dev1)));
+    }
+
+    printf("#\n");
+    printf("# System topology:\n");
+    printf("#\n");
+
+    /* Print table header */
+    print_row_separator(distance_width, name_width, num_devices, '-', '+');
+    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
+    printf("# |%*s ", name_width - 1, distance_unit);
+    for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
+        printf("|%*s ", distance_width - 1,
+               ucs_topo_sys_device_get_name(sys_dev2));
+    }
+    printf("|\n");
+
+    print_row_separator(distance_width, name_width, num_devices, ' ', '|');
+    print_row_separator(distance_width, name_width, num_devices, '-', '+');
+
+    /* Print table content */
+    for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
+        print_row_separator(distance_width, name_width, num_devices, ' ', '|');
+
+        printf("# |%*s ", name_width - 1,
+               ucs_topo_sys_device_get_name(sys_dev1));
+        for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
+            if (sys_dev1 == sys_dev2) {
+                /* Do not print distance of device to itself */
+                strncpy(distance_str, "-", sizeof(distance_str));
+            } else {
+                status = ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
+                if (status != UCS_OK) {
+                    ucs_snprintf_safe(distance_str, sizeof(distance_str),
+                                      "<error %d>", status);
+                } else if (distance.bandwidth > UCS_PBYTE) {
+                    ucs_snprintf_safe(distance_str, sizeof(distance_str),
+                                      "inf");
+                } else {
+                    ucs_snprintf_safe(distance_str, sizeof(distance_str),
+                                      "%.1f", distance.bandwidth / UCS_MBYTE);
+                }
+            }
+            printf("|%*s ", distance_width - 1, distance_str);
+        }
+        printf("|\n");
+
+        print_row_separator(distance_width, name_width, num_devices, ' ', '|');
+        print_row_separator(distance_width, name_width, num_devices, '-', '+');
+    }
+    printf("#\n");
+}
+
+void print_sys_info(int print_opts)
 {
     size_t size;
 
-    printf("# Timer frequency: %.3f MHz\n", ucs_get_cpu_clocks_per_sec() / 1e6);
-    printf("# CPU vendor: %s\n", cpu_vendor_names[ucs_arch_get_cpu_vendor()]);
-    printf("# CPU model: %s\n", cpu_model_names[ucs_arch_get_cpu_model()]);
-    ucs_arch_print_memcpy_limits(&ucs_global_opts.arch);
-    printf("# Memcpy bandwidth:\n");
-    for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
-        printf("#     %10zu bytes: %.3f MB/s\n", size,
-               measure_memcpy_bandwidth(size) / UCS_MBYTE);
+    if (print_opts & PRINT_SYS_INFO) {
+        printf("# Timer frequency: %.3f MHz\n",
+               ucs_get_cpu_clocks_per_sec() / 1e6);
+        printf("# CPU vendor: %s\n",
+               cpu_vendor_names[ucs_arch_get_cpu_vendor()]);
+        printf("# CPU model: %s\n", cpu_model_names[ucs_arch_get_cpu_model()]);
+    }
+
+    if (print_opts & PRINT_SYS_TOPO) {
+        print_sys_topo();
+    }
+
+    if (print_opts & PRINT_MEMCPY_BW) {
+        ucs_arch_print_memcpy_limits(&ucs_global_opts.arch);
+        printf("# Memcpy bandwidth:\n");
+        for (size = 4096; size <= 256 * UCS_MBYTE; size *= 2) {
+            printf("#     %10zu bytes: %.3f MB/s\n", size,
+                   measure_memcpy_bandwidth(size) / UCS_MBYTE);
+        }
     }
 }

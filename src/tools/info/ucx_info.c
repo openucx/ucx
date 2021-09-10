@@ -60,6 +60,8 @@ static void usage() {
     /* TODO: add IPv6 support */
     printf("  -A <ipv4>       Local IPv4 device address to use for creating\n"
            "                  endpoint in client/server mode\n");
+    printf("  -T              Print system topology\n");
+    printf("  -M              Print memory copy bandwidth\n");
     printf("  -h              Show this help message\n");
     printf("\n");
 }
@@ -93,7 +95,7 @@ int main(int argc, char **argv)
     proc_placement           = PROCESS_PLACEMENT_SELF;
     ucp_ep_params.field_mask = 0;
 
-    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:P:m:N:A:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:P:m:N:A:TM")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -202,6 +204,12 @@ int main(int argc, char **argv)
         case 'A':
             ip_addr = optarg;
             break;
+        case 'T':
+            print_opts |= PRINT_SYS_TOPO;
+            break;
+        case 'M':
+            print_opts |= PRINT_MEMCPY_BW;
+            break;
         case 'h':
             usage();
             return 0;
@@ -220,10 +228,6 @@ int main(int argc, char **argv)
         print_version();
     }
 
-    if (print_opts & PRINT_SYS_INFO) {
-        print_sys_info();
-    }
-
     if (print_opts & PRINT_BUILD_CONFIG) {
         print_build_config();
     }
@@ -232,11 +236,16 @@ int main(int argc, char **argv)
         print_type_info(tl_name);
     }
 
-    if ((print_opts & PRINT_DEVICES) || (print_flags & UCS_CONFIG_PRINT_CONFIG)) {
+    if ((print_opts & (PRINT_DEVICES | PRINT_SYS_TOPO)) ||
+        (print_flags & UCS_CONFIG_PRINT_CONFIG)) {
         /* if UCS_CONFIG_PRINT_CONFIG is ON, trigger loading UCT modules by
          * calling print_uct_info()->uct_component_query()
          */
         print_uct_info(print_opts, print_flags, tl_name);
+    }
+
+    if (print_opts & (PRINT_SYS_INFO | PRINT_MEMCPY_BW | PRINT_SYS_TOPO)) {
+        print_sys_info(print_opts);
     }
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
