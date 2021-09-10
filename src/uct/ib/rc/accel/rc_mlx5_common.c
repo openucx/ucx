@@ -613,15 +613,13 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
                                    unsigned byte_len, int poll_flags)
 {
     uct_rc_mlx5_tmh_priv_data_t *priv = (uct_rc_mlx5_tmh_priv_data_t*)tmh->reserved;
-    uct_ib_md_t *ib_md                = uct_ib_iface_md(&iface->super.super);
     struct ibv_rvh *rvh;
     unsigned tm_hdrs_len;
     unsigned rndv_usr_hdr_len;
     size_t rndv_data_len;
     void *rndv_usr_hdr;
-    void *rb;
     ucs_status_t status;
-    char packed_rkey[UCT_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
+    char packed_rkey[UCT_IB_MD_PACKED_RKEY_SIZE];
 
     rvh = (struct ibv_rvh*)(tmh + 1);
 
@@ -645,8 +643,7 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
     memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
 
     /* Create "packed" rkey to pass it in the callback */
-    rb = uct_md_fill_md_name(&ib_md->super, packed_rkey);
-    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
+    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, packed_rkey);
 
     /* Do not pass flags to cb, because rkey is allocated on stack */
     status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0, tag,
