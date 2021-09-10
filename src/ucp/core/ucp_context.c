@@ -108,6 +108,16 @@ static ucs_config_field_t ucp_config_table[] = {
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
+  {"PROTOS", UCP_RSC_CONFIG_ALL,
+   "Comma-separated list of glob patterns specifying protocols to use.\n"
+   "The order is not meaningful.\n"
+   "Each expression in the list may contain any of the following wildcard:\n"
+   "  *     - matches any number of any characters including none.\n"
+   "  ?     - matches any single character.\n"
+   "  [abc] - matches one character given in the bracket.\n"
+   "  [a-z] - matches one character from the range given in the bracket.",
+   ucs_offsetof(ucp_config_t, protos), UCS_CONFIG_TYPE_ALLOW_LIST},
+
   {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
@@ -1348,7 +1358,9 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 {
     unsigned i, num_alloc_methods, method;
     const char *method_name;
+    ucp_proto_id_t proto_id;
     ucs_status_t status;
+    int match;
 
     ucp_apply_params(context, params,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
@@ -1376,6 +1388,21 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     ucs_debug("estimated bcopy bandwidth is %f",
               context->config.ext.bcopy_bw);
+
+    if (config->protos.mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        context->proto_bitmap = UCS_MASK(ucp_protocols_count);
+    } else {
+        for (proto_id = 0; proto_id < ucp_protocols_count; ++proto_id) {
+            match = ucs_config_names_search(config->protos.array,
+                                            ucp_proto_id_field(proto_id, name));
+            if (((config->protos.mode == UCS_CONFIG_ALLOW_LIST_ALLOW) &&
+                 (match >= 0)) ||
+                ((config->protos.mode == UCS_CONFIG_ALLOW_LIST_NEGATE) &&
+                 (match == -1))) {
+                context->proto_bitmap |= UCS_BIT(proto_id);
+            }
+        }
+    }
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_

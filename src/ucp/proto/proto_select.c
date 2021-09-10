@@ -463,7 +463,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     }
 
     offset = 0;
-    for (proto_id = 0; proto_id < ucp_protocols_count; ++proto_id) {
+    ucs_for_each_bit(proto_id, worker->context->proto_bitmap) {
         proto_caps             = &proto_init->caps[proto_id];
         init_params.priv       = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
                                                      offset);
