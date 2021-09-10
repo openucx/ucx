@@ -89,7 +89,7 @@ static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 
 mem_err:
-    free(mem_hndl);
+    ucs_free(mem_hndl);
     return status;
 }
 

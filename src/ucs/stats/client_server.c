@@ -27,6 +27,7 @@
 #include <ucs/datastruct/sglib_wrapper.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/debug/log.h>
+#include <ucs/debug/memtrack_int.h>
 
 #define UCS_STATS_MAGIC            "UCSSTAT1"
 #define UCS_STATS_MSG_FRAG_SIZE    1400
@@ -98,7 +99,7 @@ ucs_status_t ucs_stats_client_init(const char *server_addr, int port, ucs_stats_
     ucs_status_t status;
     int ret;
 
-    client = malloc(sizeof *client);
+    client = ucs_malloc(sizeof(*client), "stats_client");
     if (client == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
@@ -137,7 +138,7 @@ ucs_status_t ucs_stats_client_init(const char *server_addr, int port, ucs_stats_
 err_close:
     close(client->sockfd);
 err_free:
-    free(client);
+    ucs_free(client);
 err:
     return status;
 }
@@ -145,7 +146,7 @@ err:
 void ucs_stats_client_cleanup(ucs_stats_client_h client)
 {
     close(client->sockfd);
-    free(client);
+    ucs_free(client);
 }
 
 static ucs_status_t
@@ -235,10 +236,12 @@ static void ucs_stats_server_entity_reset_buffer(stats_entity_t * entity,
     if (new_size != entity->buffer_size) {
         pthread_mutex_lock(&entity->lock);
         entity->buffer_size = new_size;
-        entity->inprogress_buffer = realloc(entity->inprogress_buffer,
-                                            new_size + sizeof(frag_hole_t));
-        entity->completed_buffer  = realloc(entity->completed_buffer,
-                                            new_size + sizeof(frag_hole_t));
+        entity->inprogress_buffer = ucs_realloc(entity->inprogress_buffer,
+                                                new_size + sizeof(frag_hole_t),
+                                                "stats_inprogress_buffer");
+        entity->completed_buffer  = ucs_realloc(entity->completed_buffer,
+                                                new_size + sizeof(frag_hole_t),
+                                                "stats_completed_buffer");
         pthread_mutex_unlock(&entity->lock);
     }
 
@@ -252,13 +255,14 @@ static stats_entity_t *ucs_stats_server_entity_alloc(struct sockaddr_in *addr)
 {
     stats_entity_t *entity;
 
-    entity = malloc(sizeof *entity);
+    entity = ucs_malloc(sizeof(*entity), "stats_server_entity");
     if (entity == NULL) {
         return NULL;
     }
 
     entity->in_addr           = *addr;
     entity->timestamp         = 0;
+    /* coverity[missing_lock] */
     entity->buffer_size       = SIZE_MAX;
     entity->inprogress_buffer = NULL;
     entity->completed_buffer  = NULL;
@@ -272,9 +276,9 @@ static stats_entity_t *ucs_stats_server_entity_alloc(struct sockaddr_in *addr)
 
 static void ucs_stats_server_entity_free(stats_entity_t * entity)
 {
-    free(entity->inprogress_buffer);
-    free(entity->completed_buffer);
-    free(entity);
+    ucs_free(entity->inprogress_buffer);
+    ucs_free(entity->completed_buffer);
+    ucs_free(entity);
 }
 
 static stats_entity_t*
@@ -560,7 +564,7 @@ ucs_status_t ucs_stats_server_start(int port, ucs_stats_server_h *p_server)
     ucs_stats_server_h server;
     ucs_status_t status;
 
-    server = malloc(sizeof *server);
+    server = ucs_malloc(sizeof *server, "stats_server");
     if (server == NULL) {
         ucs_error("Failed to allocate stats context");
         return UCS_ERR_NO_MEMORY;
@@ -572,7 +576,7 @@ ucs_status_t ucs_stats_server_start(int port, ucs_stats_server_h *p_server)
 
     status = ucs_stats_server_create_socket(port, &server->sockfd, &server->udp_port);
     if (status != UCS_OK) {
-        free(server);
+        ucs_free(server);
         return status;
     }
 
@@ -603,7 +607,7 @@ void ucs_stats_server_destroy(ucs_stats_server_h server)
         ucs_stats_server_entity_put(entity);
         entity = sglib_hashed_stats_entity_t_it_next(&it);
     }
-    free(server);
+    ucs_free(server);
 }
 
 int ucs_stats_server_get_port(ucs_stats_server_h server)

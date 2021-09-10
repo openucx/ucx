@@ -217,7 +217,7 @@ ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
         goto err_destroy_rwlock;
     }
 
-    cache_desc->name = strdup(name);
+    cache_desc->name = ucs_strdup(name, "rocm_ipc_cache_name");
     if (cache_desc->name == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err_destroy_rwlock;
@@ -229,7 +229,7 @@ ucs_status_t uct_rocm_ipc_create_cache(uct_rocm_ipc_cache_t **cache,
 err_destroy_rwlock:
     pthread_rwlock_destroy(&cache_desc->lock);
 err:
-    free(cache_desc);
+    ucs_free(cache_desc);
     return status;
 }
 
@@ -238,6 +238,6 @@ void uct_rocm_ipc_destroy_cache(uct_rocm_ipc_cache_t *cache)
     uct_rocm_ipc_cache_purge(cache);
     ucs_pgtable_cleanup(&cache->pgtable);
     pthread_rwlock_destroy(&cache->lock);
-    free(cache->name);
+    ucs_free(cache->name);
     ucs_free(cache);
 }

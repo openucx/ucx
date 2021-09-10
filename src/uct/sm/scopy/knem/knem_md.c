@@ -363,7 +363,7 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
     knem_md->knem_fd = open("/dev/knem", O_RDWR);
     if (knem_md->knem_fd < 0) {
         ucs_error("Could not open the KNEM device file at /dev/knem: %m.");
-        free(knem_md);
+        ucs_free(knem_md);
         return UCS_ERR_IO_ERROR;
     }
 
