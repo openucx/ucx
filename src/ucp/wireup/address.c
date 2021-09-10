@@ -955,7 +955,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                 ucp_unpacked_address_t *unpacked_address)
 {
     ucp_address_entry_t *address_list, *address;
-    uint8_t address_header, address_version;
+    uint8_t address_header;
     ucp_address_entry_ep_addr_t *ep_addr;
     int last_dev, last_tl, last_ep_addr;
     const uct_device_addr_t *dev_addr;
@@ -982,12 +982,9 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     address_header                  = *(const uint8_t *)ptr;
     ptr                             = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
-    /* Check address version */
-    address_version = address_header & UCP_ADDRESS_HEADER_VERSION_MASK;
-    if (address_version != UCP_ADDRESS_VERSION_CURRENT) {
-        ucs_error("address version mismatch: expected %u, actual %u",
-                  UCP_ADDRESS_VERSION_CURRENT, address_version);
-        return UCS_ERR_UNREACHABLE;
+    if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
+        ucs_trace("unpacking address version %u",
+                  (uint8_t)(address_header & UCP_ADDRESS_HEADER_VERSION_MASK));
     }
 
     if (unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
