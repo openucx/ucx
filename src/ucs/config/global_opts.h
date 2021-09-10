@@ -130,6 +130,9 @@ typedef struct {
     /* log level for module loader code */
     ucs_log_level_t            module_log_level;
 
+    /* which modules to load */
+    ucs_config_allow_list_t    modules;
+
     /* arch-specific global options */
     ucs_arch_global_opts_t     arch;
 

@@ -53,6 +53,7 @@ ucs_global_opts_t ucs_global_opts = {
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
+    .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
     .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER
 };
 
@@ -262,6 +263,13 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   {"MODULE_LOG_LEVEL", "trace",
    "Logging level for module loader\n",
    ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+  {"MODULES", "all",
+   "Comma-separated list of glob patterns specifying which module load.\n"
+   "The order is not meaningful. For example:\n"
+   " *     - load all modules\n"
+   " ^cu*  - do not load modules that begin with 'cu'\n",
+   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"", "", NULL,
    ucs_offsetof(ucs_global_opts_t, arch),

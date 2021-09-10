@@ -910,7 +910,7 @@ int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
         snprintf(buf, max, UCS_CONFIG_PARSER_ALL);
         return 1;
     }
-    
+
     if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_NEGATE) {
         buf[offset++] = ucs_config_parser_negate;
         max--;
@@ -1974,14 +1974,14 @@ size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
     }
 }
 
-int ucs_config_names_search(ucs_config_names_array_t config_names,
+int ucs_config_names_search(const ucs_config_names_array_t *config_names,
                             const char *str)
 {
     unsigned i;
 
-    for (i = 0; i < config_names.count; ++i) {
-        if (!fnmatch(config_names.names[i], str, 0)) {
-           return i;
+    for (i = 0; i < config_names->count; ++i) {
+        if (!fnmatch(config_names->names[i], str, 0)) {
+            return i;
         }
     }
 
