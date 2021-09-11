@@ -226,9 +226,10 @@ static void sock_rte_barrier(void *rte_group, void (*progress)(void *arg),
     safe_send(group->connfd, &snc, sizeof(unsigned), progress, arg);
 
     snc = 0;
-    safe_recv(group->connfd, &snc, sizeof(unsigned), progress, arg);
-
-    ucs_assert(snc == magic);
+    
+    if (safe_recv(group->connfd, &snc, sizeof(unsigned), progress, arg) == 0) {
+        ucs_assert(snc == magic);
+    }
   }
 #pragma omp barrier
 }
