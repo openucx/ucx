@@ -54,6 +54,10 @@ ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk
 
 void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
 
+ucs_status_t
+ucp_mm_get_alloc_md_map(ucp_context_h context, ucp_md_map_t *md_map_p);
+
+
 /**
  * Update memory registration to a specified set of memory domains.
  *

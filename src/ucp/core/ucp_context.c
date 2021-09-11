@@ -46,11 +46,12 @@ static const char * ucp_device_type_names[] = {
 };
 
 static const char *ucp_rndv_modes[] = {
-    [UCP_RNDV_MODE_AUTO]      = "auto",
-    [UCP_RNDV_MODE_GET_ZCOPY] = "get_zcopy",
-    [UCP_RNDV_MODE_PUT_ZCOPY] = "put_zcopy",
-    [UCP_RNDV_MODE_AM]        = "am",
-    [UCP_RNDV_MODE_LAST]      = NULL,
+    [UCP_RNDV_MODE_AUTO]         = "auto",
+    [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
+    [UCP_RNDV_MODE_PUT_ZCOPY]    = "put_zcopy",
+    [UCP_RNDV_MODE_GET_PIPELINE] = "get_ppln",
+    [UCP_RNDV_MODE_AM]           = "am",
+    [UCP_RNDV_MODE_LAST]         = NULL,
 };
 
 const char *ucp_operation_names[] = {
@@ -1162,15 +1163,17 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucs_status_t status;
     unsigned max_mds;
 
-    context->tl_cmpts         = NULL;
-    context->num_cmpts        = 0;
-    context->tl_mds           = NULL;
-    context->num_mds          = 0;
-    context->tl_rscs          = NULL;
-    context->num_tls          = 0;
-    context->memtype_cache    = NULL;
-    context->mem_type_mask    = 0;
-    context->num_mem_type_detect_mds = 0;
+    context->tl_cmpts                 = NULL;
+    context->num_cmpts                = 0;
+    context->tl_mds                   = NULL;
+    context->num_mds                  = 0;
+    context->alloc_md_map_initialized = 0;
+    context->alloc_md_map             = 0;
+    context->tl_rscs                  = NULL;
+    context->num_tls                  = 0;
+    context->memtype_cache            = NULL;
+    context->mem_type_mask            = 0;
+    context->num_mem_type_detect_mds  = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
         UCS_BITMAP_CLEAR(&context->mem_type_access_tls[i]);

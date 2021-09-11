@@ -179,7 +179,8 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     req->send.state.completed_size = 0;
     req->send.rndv.ppln.send_ack   = 0;
     rpriv                          = req->send.proto_config->priv;
-    for (;;) {
+
+    while (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
         status = ucp_proto_rndv_frag_request_alloc(worker, req, &freq);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
@@ -204,14 +205,11 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         ucp_trace_req(req, "send fragment request %p", freq);
         ucp_request_send(freq);
 
-        if (ucp_datatype_iter_is_end_position(&req->send.state.dt_iter,
-                                              &next_iter)) {
-            return UCS_OK;
-        }
-
         ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
                                         UCS_BIT(UCP_DATATYPE_CONTIG));
     }
+
+    return UCS_OK;
 }
 
 static void ucp_proto_rndv_ppln_config_str(size_t min_length, size_t max_length,
