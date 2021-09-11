@@ -914,6 +914,14 @@ test_ucp_dlopen() {
 	else
 		echo "==== Not running UCP library loading test ===="
 	fi
+
+	# Test module allow-list
+	UCX_MODULES=^ib,rdmacm ./src/tools/info/ucx_info -d |& tee ucx_info_noib.log
+	if grep -in "component:\s*ib$" ucx_info_noib.log
+	then
+		echo "IB module was loaded even though it was disabled"
+		exit 1
+	fi
 }
 
 test_init_mt() {

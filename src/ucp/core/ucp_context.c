@@ -1396,7 +1396,7 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         context->proto_bitmap = UCS_MASK(ucp_protocols_count);
     } else {
         for (proto_id = 0; proto_id < ucp_protocols_count; ++proto_id) {
-            match = ucs_config_names_search(config->protos.array,
+            match = ucs_config_names_search(&config->protos.array,
                                             ucp_proto_id_field(proto_id, name));
             if (((config->protos.mode == UCS_CONFIG_ALLOW_LIST_ALLOW) &&
                  (match >= 0)) ||
