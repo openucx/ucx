@@ -1025,8 +1025,10 @@ protected:
 };
 
 UCS_TEST_F(test_rcache_pfn, enum_pfn) {
-    const int MAX_PAGE_NUM = 1024 * 100; /* 400Mb max buffer */
-    size_t page_size       = ucs_get_page_size();
+    const size_t page_size = ucs_get_page_size();
+    const int MAX_PAGE_NUM = RUNNING_ON_VALGRIND ? 16 :
+                             /* 400Mb max buffer */
+                             (400 * UCS_MBYTE / page_size);
     void *region;
     unsigned i;
     size_t len;
@@ -1045,7 +1047,7 @@ UCS_TEST_F(test_rcache_pfn, enum_pfn) {
     /* initialize stream here to avoid incorrect debug output */
     ucs::detail::message_stream ms("PAGES");
 
-    for (i = 1; i < MAX_PAGE_NUM; i *= 2) {
+    for (i = 1; i <= MAX_PAGE_NUM; i *= 2) {
         len = page_size * i;
         ms << i << " ";
         region = mmap(NULL, len, PROT_READ | PROT_WRITE,
