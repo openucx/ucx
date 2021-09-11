@@ -84,7 +84,8 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     rts->sreq.ep_id  = ucp_send_request_get_ep_remote_id(req);
     rts->size        = req->send.state.dt_iter.length;
 
-    if (req->send.state.dt_iter.type.contig.reg.md_map == 0) {
+    if ((rts->size == 0) ||
+        (req->send.state.dt_iter.type.contig.reg.md_map == 0)) {
         rts->address = 0;
         rkey_size    = 0;
     } else {
