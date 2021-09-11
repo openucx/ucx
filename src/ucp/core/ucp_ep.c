@@ -1064,6 +1064,7 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_request_t *close_req;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
+    ucs_assert(UCS_STATUS_IS_ERR(status));
     ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
 
     ucs_debug("ep %p: set_ep_failed status %s on lane[%d]=%p", ucp_ep,

@@ -971,6 +971,9 @@ void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
     ucx_request *r      = reinterpret_cast<ucx_request*>(request);
     UcxConnection *conn = r->conn;
 
+    assert(!r->completed);
+    r->status = status;
+
     if (!conn->is_established()) {
         assert(conn->_establish_cb == r->callback);
 

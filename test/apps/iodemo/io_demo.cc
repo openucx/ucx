@@ -876,10 +876,10 @@ public:
             }
 
             if (_status == UCS_OK) {
-                if (_conn->ucx_status() == UCS_OK) {
-                    _server->send_io_write_response(_conn, *_iov, _sn);
-                }
+                ASSERTV(_conn->ucx_status() == UCS_OK) << "conn_status="
+                        << _conn->ucx_status();
 
+                _server->send_io_write_response(_conn, *_iov, _sn);
                 if (_server->opts().validate) {
                     validate(*_iov, _sn);
                 }
@@ -1336,17 +1336,24 @@ public:
             _client->handle_operation_completion(_server_index, IO_READ,
                                                  _iov->data_size());
 
-            if (_validate && (_status == UCS_OK)) {
-                validate(*_iov, _sn);
+            if (_status == UCS_OK) {
+                const server_info_t& server_info =
+                        _client->_server_info[_server_index];
 
-                if (_meta_comp_counter != 0) {
-                    // With tag API, we also wait for READ_COMP arrival, so need
-                    // to validate it. With AM API, READ_COMP arrives as AM
-                    // header together with data descriptor, we validate it in
-                    // place to avoid unneeded memory copy to this
-                    // IoReadResponseCallback _buffer.
-                    iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                    validate(msg, _sn, _buffer_size);
+                ASSERTV(server_info.conn->ucx_status() == UCS_OK)
+                        << "conn_status=" << server_info.conn->ucx_status();
+
+                if (_validate) {
+                    validate(*_iov, _sn);
+                    if (_meta_comp_counter != 0) {
+                        // With tag API, we also wait for READ_COMP arrival, so need
+                        // to validate it. With AM API, READ_COMP arrives as AM
+                        // header together with data descriptor, we validate it in
+                        // place to avoid unneeded memory copy to this
+                        // IoReadResponseCallback _buffer.
+                        iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
+                        validate(msg, _sn, _buffer_size);
+                    }
                 }
             }
 
