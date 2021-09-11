@@ -605,7 +605,8 @@ UCS_TEST_P(test_ucp_stream, send_recv_data_recv_iov) {
 
 UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
     const size_t min_size         = UCS_KBYTE;
-    const size_t max_size         = min_size * 64;
+    const size_t max_size         = min_size * 64 / ucs::test_time_multiplier();
+    const size_t step_size        = RUNNING_ON_VALGRIND ? 111 : 1;
     const size_t iov_num          = 8; /* must be divisible by 4 without a
                                         * remainder, caught on mlx5 based TLs
                                         * where max_iov = 3 for zcopy multi
@@ -621,7 +622,7 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
     param.datatype     = DATATYPE_IOV;
 
-    for (size_t size = min_size; size < max_size; ++size) {
+    for (size_t size = min_size; size < max_size; size += step_size) {
         size_t slen = 0;
         for (size_t j = 0; j < iov_num; ++j) {
             if ((j % 2) == 0) {
