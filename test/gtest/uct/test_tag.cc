@@ -566,9 +566,8 @@ UCS_TEST_SKIP_COND_P(test_tag, tag_hold_uct_desc,
                             msg_size, true);
     }
 
-    for (ucs::ptr_vector<void>::const_iterator iter = m_uct_descs.begin();
-         iter != m_uct_descs.end(); ++iter)
-    {
+    for (std::vector<void*>::const_iterator iter = m_uct_descs.begin();
+         iter != m_uct_descs.end(); ++iter) {
         uct_iface_release_desc(*iter);
     }
 }

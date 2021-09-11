@@ -47,11 +47,13 @@ void* test_md::alloc_thread(void *arg)
 
     while (!*stop_flag) {
         int count = ucs::rand() % 100;
-        std::vector<void*> buffers;
+        ucs::ptr_vector<void> buffers;
         for (int i = 0; i < count; ++i) {
+            // allocate via malloc(), because ptr_vector<void>::release()
+            // method specialization uses free() to release a memory obtained
+            // for an element
             buffers.push_back(malloc(ucs::rand() % (256 * UCS_KBYTE)));
         }
-        std::for_each(buffers.begin(), buffers.end(), free);
     }
     return NULL;
 }
