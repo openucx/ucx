@@ -330,28 +330,12 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
-    void *rbuf = uct_md_fill_md_name(md, rkey_buffer);
-    return md->ops->mkey_pack(md, memh, rbuf);
+    return md->ops->mkey_pack(md, memh, rkey_buffer);
 }
 
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
                              uct_rkey_bundle_t *rkey_ob)
 {
-    char component_name[UCT_COMPONENT_NAME_MAX + 1];
-
-    if (ENABLE_DEBUG_DATA) {
-        if (ENABLE_PARAMS_CHECK &&
-            strncmp(rkey_buffer, component->name, UCT_COMPONENT_NAME_MAX)) {
-            ucs_snprintf_zero(component_name, sizeof(component_name), "%s",
-                              (const char*)rkey_buffer);
-            ucs_error("invalid component for rkey unpack; "
-                      "expected: %s, actual: %s", component_name, component->name);
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        rkey_buffer = UCS_PTR_BYTE_OFFSET(rkey_buffer, UCT_COMPONENT_NAME_MAX);
-    }
-
     return component->rkey_unpack(component, rkey_buffer, &rkey_ob->rkey,
                                   &rkey_ob->handle);
 }
@@ -380,11 +364,6 @@ ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 
     /* Component name + data */
     memcpy(md_attr->component_name, md->component->name, UCT_COMPONENT_NAME_MAX);
-
-#if ENABLE_DEBUG_DATA
-    /* MD name is packed into rkey in DEBUG mode only */
-    md_attr->rkey_packed_size += UCT_COMPONENT_NAME_MAX;
-#endif
 
     return UCS_OK;
 }

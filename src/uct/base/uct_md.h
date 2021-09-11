@@ -153,17 +153,6 @@ struct uct_md {
     }
 
 
-static UCS_F_ALWAYS_INLINE void*
-uct_md_fill_md_name(uct_md_h md, void *buffer)
-{
-#if ENABLE_DEBUG_DATA
-    memcpy(buffer, md->component->name, UCT_COMPONENT_NAME_MAX);
-    return (char*)buffer + UCT_COMPONENT_NAME_MAX;
-#else
-    return buffer;
-#endif
-}
-
 /*
  * Base implementation of query_md_resources(), which returns a single md
  * resource whose name is identical to component name.
