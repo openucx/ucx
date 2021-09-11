@@ -258,3 +258,16 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 		Length:    uint64(recvInfo.length),
 	})
 }
+
+// This routine creates new UcpListener.
+func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener, error) {
+	var listener C.ucp_listener_h
+
+	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener); status != C.UCS_OK {
+		return nil, NewUcxError(status)
+	}
+
+	connHandles2Listener[listenerParams.connHandlerId] = listener
+
+	return &UcpListener{listener, listenerParams.connHandlerId}, nil
+}
