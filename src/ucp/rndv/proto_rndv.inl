@@ -104,7 +104,6 @@ static ucs_status_t UCS_F_ALWAYS_INLINE ucp_proto_rndv_ack_progress(
         ucp_request_t *req, const ucp_proto_rndv_ack_priv_t *apriv,
         ucp_am_id_t am_id, ucp_proto_complete_cb_t complete_func)
 {
-    ucs_assert(ucp_datatype_iter_is_end(&req->send.state.dt_iter));
     return ucp_proto_am_bcopy_single_progress(req, am_id, apriv->lane,
                                               ucp_proto_rndv_pack_ack, req,
                                               sizeof(ucp_reply_hdr_t),
@@ -130,6 +129,14 @@ ucp_proto_rndv_rkey_destroy(ucp_request_t *req)
 #if UCS_ENABLE_ASSERT
     req->send.rndv.rkey = NULL;
 #endif
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_common_complete(ucp_request_t *req, uint8_t ats_stage)
+{
+    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_request_set_stage(req, ats_stage);
+    ucp_request_send(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_frag_request_alloc(

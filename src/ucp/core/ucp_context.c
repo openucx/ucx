@@ -52,6 +52,7 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_GET_PIPELINE] = "get_ppln",
     [UCP_RNDV_MODE_PUT_PIPELINE] = "put_ppln",
     [UCP_RNDV_MODE_AM]           = "am",
+    [UCP_RNDV_MODE_RKEY_PTR]     = "rkey_ptr",
     [UCP_RNDV_MODE_LAST]         = NULL,
 };
 
@@ -197,6 +198,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
    " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
+   " rkey_ptr  - use rket_ptr in RNDV protocol.\n"
    " auto      - runtime automatically chooses optimal scheme to use.",
    ucs_offsetof(ucp_config_t, ctx.rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 

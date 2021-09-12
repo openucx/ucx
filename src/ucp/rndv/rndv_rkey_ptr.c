@@ -1,0 +1,130 @@
+/**
+ * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ *
+ * See file LICENSE for terms.
+ */
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "proto_rndv.inl"
+
+
+enum {
+    UCP_PROTO_RNDV_RKEY_PTR_STAGE_FETCH = UCP_PROTO_STAGE_START,
+    UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS
+};
+
+static ucs_status_t
+ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
+{
+    ucp_context_t *context                = init_params->worker->context;
+    uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_RKEY_PTR);
+    ucp_proto_single_init_params_t params = {
+        .super.super         = *init_params,
+        .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
+        .super.cfg_priority  = 0,
+        .super.overhead      = 0,
+        .super.latency       = 0,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
+        .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.hdr_size      = 0,
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR |
+                               UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
+                               UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
+        .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
+        .tl_cap_flags        = 0,
+    };
+
+    if (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return ucp_proto_single_init(&params);
+}
+
+static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
+{
+    ucp_worker_h worker = (ucp_worker_h)arg;
+    ucp_request_t *req  = ucs_queue_head_elem_non_empty(&worker->rkey_ptr_reqs,
+                                                        ucp_request_t,
+                                                        send.rndv.rkey_ptr.queue_elem);
+    size_t max_seg_size = worker->context->config.ext.rkey_ptr_seg_size;
+    size_t length       = req->send.state.dt_iter.length;
+    size_t offset       = req->send.state.completed_size;
+    size_t new_offset, seg_size;
+    ucs_status_t status;
+    void *src;
+    int last;
+
+    seg_size   = ucs_min(max_seg_size, length - offset);
+    new_offset = offset + seg_size;
+    last       = new_offset == length;
+    src        = UCS_PTR_BYTE_OFFSET(req->send.rndv.rkey_ptr_addr, offset);
+    status     = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
+                                          seg_size, offset, src);
+    ucs_trace_data("rkey_ptr req: %p length: %zd seg: %zd off: %zd last: %d",
+                   req, length, seg_size, offset, last);
+    req->send.state.completed_size = new_offset;
+    if (ucs_unlikely(status != UCS_OK) || last) {
+        ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
+        ucp_proto_rndv_common_complete(req, UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS);
+        if (ucs_queue_is_empty(&worker->rkey_ptr_reqs)) {
+            uct_worker_progress_unregister_safe(worker->uct,
+                                                &worker->rkey_ptr_cb_id);
+        }
+    }
+
+    return 1;
+}
+
+static ucs_status_t
+ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req                   = ucs_container_of(uct_req,
+                                                            ucp_request_t,
+                                                            send.uct);
+    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+    ucp_worker_h worker                  = req->send.ep->worker;
+    unsigned rkey_index                  = spriv->super.rkey_index;
+    ucp_rkey_h rkey                      = req->send.rndv.rkey;
+    ucs_status_t status;
+
+    ucs_assert(rkey_index != UCP_NULL_RESOURCE);
+    status = uct_rkey_ptr(rkey->tl_rkey[rkey_index].cmpt,
+                          &rkey->tl_rkey[rkey_index].rkey,
+                          req->send.rndv.remote_address,
+                          &req->send.rndv.rkey_ptr_addr);
+    if (status != UCS_OK) {
+        ucp_proto_request_abort(req, status);
+        return UCS_OK;
+    }
+
+    req->send.state.completed_size = 0;
+    UCP_WORKER_STAT_RNDV(worker, RKEY_PTR, 1);
+    ucs_queue_push(&worker->rkey_ptr_reqs, &req->send.rndv.rkey_ptr.queue_elem);
+    uct_worker_progress_register_safe(worker->uct,
+            ucp_proto_rndv_progress_rkey_ptr, worker,
+            UCS_CALLBACKQ_FLAG_FAST, &worker->rkey_ptr_cb_id);
+
+    return UCS_OK;
+}
+
+static ucp_proto_t ucp_rndv_rkey_ptr_proto = {
+    .name       = "rndv/rkey_ptr",
+    .flags      = 0,
+    .init       = ucp_proto_rndv_rkey_ptr_init,
+    .config_str = ucp_proto_single_config_str,
+    .progress   = {
+         [UCP_PROTO_RNDV_RKEY_PTR_STAGE_FETCH] = ucp_proto_rndv_rkey_ptr_fetch_progress,
+         [UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS]   = ucp_proto_rndv_ats_progress
+    }
+};
+UCP_PROTO_REGISTER(&ucp_rndv_rkey_ptr_proto);
+
