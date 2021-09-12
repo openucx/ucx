@@ -77,7 +77,7 @@ const size_t ucs_cpu_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_AMD]         = 5008 * UCS_MBYTE,
     [UCS_CPU_VENDOR_GENERIC_ARM] = 5800 * UCS_MBYTE,
     [UCS_CPU_VENDOR_GENERIC_PPC] = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_FUJITSU_ARM] = 5800 * UCS_MBYTE
+    [UCS_CPU_VENDOR_FUJITSU_ARM] = 26000 * UCS_MBYTE
 };
 
 static void ucs_sysfs_get_cache_size()

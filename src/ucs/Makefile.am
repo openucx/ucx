@@ -193,6 +193,11 @@ libucs_la_SOURCES += \
         arch/aarch64/memcpy_thunderx2.S
 endif
 
+if HAVE_AARCH64_A64FX
+libucs_la_SOURCES += \
+        arch/aarch64/memcpy_a64fx.S
+endif
+
 if HAVE_STATS
 libucs_la_SOURCES += \
 	stats/client_server.c \
