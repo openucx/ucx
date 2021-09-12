@@ -175,11 +175,14 @@ ucs_conn_match_ctx_t test_conn_match::m_conn_match_ctx = {};
 
 
 UCS_TEST_F(test_conn_match, random_insert_retrieve) {
-    const size_t        max_addresses      = 128;
-    const ucs_conn_sn_t max_conns          = 128;
-    const size_t        max_address_length = 2048 / ucs::test_time_multiplier();
-    const size_t        min_address_length = ucs::to_string(max_addresses).size();
-    const size_t        max_iters          = 4;
+    const size_t max_conn_iters     =
+            ucs_max(1, ucs_min(5, 128 / ucs::test_time_multiplier()));;       
+    const size_t max_addresses      = max_conn_iters;
+    const ucs_conn_sn_t max_conns   = max_conn_iters;
+    const size_t min_address_length = ucs::to_string(max_addresses).size();
+    const size_t max_address_length =
+            ucs_max(min_address_length, 2048 / ucs::test_time_multiplier());
+    const size_t max_iters          = 4;
 
     for (size_t it = 0; it < max_iters; it++) {
         size_t address_length = ucs::rand() %
