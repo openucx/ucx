@@ -1033,7 +1033,7 @@ void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 ucs_string_buffer_t *strb)
 {
-    char sys_dev_name[32];
+    const char *sysdev_name;
     uint32_t op_attr_mask;
 
     op_attr_mask = ucp_proto_select_op_attr_from_flags(select_param->op_flags);
@@ -1053,9 +1053,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     }
 
     if (select_param->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_topo_sys_device_bdf_name(select_param->sys_dev, sys_dev_name,
-                                     sizeof(sys_dev_name));
-        ucs_string_buffer_appendf(strb, ", %s", sys_dev_name);
+        sysdev_name = ucs_topo_sys_device_get_name(select_param->sys_dev);
+        ucs_string_buffer_appendf(strb, ", %s", sysdev_name);
     }
 
     if (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {

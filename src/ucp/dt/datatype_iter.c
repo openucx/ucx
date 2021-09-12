@@ -298,7 +298,6 @@ void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
     size_t iov_index, offset;
     const ucp_dt_iov_t *iov;
     const char *sysdev_name;
-    char buffer[32];
 
     if (dt_iter->mem_info.type != UCS_MEMORY_TYPE_HOST) {
         ucs_string_buffer_appendf(
@@ -306,8 +305,7 @@ void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
     }
 
     if (dt_iter->mem_info.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        sysdev_name = ucs_topo_sys_device_bdf_name(dt_iter->mem_info.sys_dev,
-                                                   buffer, sizeof(buffer));
+        sysdev_name = ucs_topo_sys_device_get_name(dt_iter->mem_info.sys_dev);
         ucs_string_buffer_appendf(strb, "%s ", sysdev_name);
     }
 

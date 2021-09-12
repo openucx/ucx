@@ -12,6 +12,7 @@
 #include "cuda_iface.h"
 
 #include <ucs/sys/module.h>
+#include <ucs/sys/string.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
@@ -262,12 +263,25 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                  uct_md_resource_desc_t **resources_p,
                                  unsigned *num_resources_p)
 {
+    ucs_sys_device_t sys_dev;
+    CUdevice cuda_device;
     cudaError_t cudaErr;
+    ucs_status_t status;
+    char device_name[10];
     int num_gpus;
 
     cudaErr = cudaGetDeviceCount(&num_gpus);
     if ((cudaErr != cudaSuccess) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
+    }
+
+    for (cuda_device = 0; cuda_device < num_gpus; ++cuda_device) {
+        status = uct_cuda_base_get_sys_dev(cuda_device, &sys_dev);
+        if (status == UCS_OK) {
+            ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
+                              cuda_device);
+            ucs_topo_sys_device_set_name(sys_dev, device_name);
+        }
     }
 
     return uct_md_query_single_md_resource(component, resources_p,

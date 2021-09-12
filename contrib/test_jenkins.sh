@@ -1240,6 +1240,12 @@ run_gtest_release() {
 	unset GTEST_REPORT_DIR
 }
 
+run_ucx_info() {
+	echo "==== Running ucx_info ===="
+
+	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M -T -M
+}
+
 run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
@@ -1286,6 +1292,7 @@ run_tests() {
 	$MAKEP
 	$MAKEP install
 
+	do_distributed_task 1 4 run_ucx_info
 	do_distributed_task 2 4 run_ucx_tl_check
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello

@@ -23,7 +23,9 @@ enum {
     PRINT_UCP_CONTEXT    = UCS_BIT(5),
     PRINT_UCP_WORKER     = UCS_BIT(6),
     PRINT_UCP_EP         = UCS_BIT(7),
-    PRINT_MEM_MAP        = UCS_BIT(8)
+    PRINT_MEM_MAP        = UCS_BIT(8),
+    PRINT_SYS_TOPO       = UCS_BIT(9),
+    PRINT_MEMCPY_BW      = UCS_BIT(10)
 };
 
 
@@ -36,7 +38,7 @@ typedef enum {
 
 void print_version();
 
-void print_sys_info();
+void print_sys_info(int print_opts);
 
 void print_build_config();
 
