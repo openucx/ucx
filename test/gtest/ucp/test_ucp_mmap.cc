@@ -275,6 +275,11 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ucp_sys_dev_map_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
     std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
     for (unsigned i = 0; i < sys_distance.size(); ++i) {
+        if (std::string(ucs_topo_sys_device_get_name(i)).find("test") == 0) {
+            /* Dummy device created by test */
+            continue;
+        }
+
         status = ucs_topo_get_distance(mem_info.sys_dev, i, &sys_distance[i]);
         ASSERT_UCS_OK(status);
     }
