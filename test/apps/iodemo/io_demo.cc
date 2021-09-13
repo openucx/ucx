@@ -26,6 +26,7 @@
 #include <malloc.h>
 #include <dlfcn.h>
 #include <set>
+#include <stdexcept>
 
 #ifdef HAVE_CUDA
 #include <cuda.h>
@@ -790,8 +791,9 @@ protected:
 
         size_t err_pos = iov.validate(seed);
         if (err_pos != iov.npos()) {
-            LOG << "ERROR: iov data corruption at " << err_pos << " position";
-            abort();
+            std::stringstream ss;
+            ss << "ERROR: iov data corruption at " << err_pos << " position";
+            throw std::range_error(ss.str());
         }
     }
 
@@ -803,15 +805,17 @@ protected:
         size_t err_pos = IoDemoRandom::validate(seed, buf, buf_size,
                                                 UCS_MEMORY_TYPE_HOST);
         if (err_pos < buf_size) {
-            LOG << "ERROR: io msg data corruption at " << err_pos << " position";
-            abort();
+            std::stringstream ss;
+            ss << "ERROR: io msg data corruption at " << err_pos << " position";
+            throw std::range_error(ss.str());
         }
     }
 
     static void validate(const iomsg_t *msg, uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            LOG << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
-            abort();
+            std::stringstream ss;
+            ss << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
+            throw std::range_error(ss.str());
         }
 
         validate(msg, iomsg_size);
@@ -877,7 +881,14 @@ public:
 
             if (_status == UCS_OK) {
                 if (_server->opts().validate) {
-                    validate(*_iov, _sn);
+                    try {
+                        validate(*_iov, _sn);
+                    } catch (const std::range_error &e) {
+                        LOG << "\"" << e.what() << "\" detected on "
+                            << _conn->get_log_prefix() << " (status="
+                            << ucs_status_string(_conn->ucx_status()) << ")";
+                        abort();
+                    }
                 }
                 
                 if (_conn->ucx_status() == UCS_OK) {
@@ -1125,7 +1136,14 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            try {
+                validate(msg, length);
+            } catch (const std::range_error &e) {
+                LOG << "\"" << e.what() << "\" detected on "
+                    << conn->get_log_prefix() << " (status="
+                    << ucs_status_string(conn->ucx_status()) << ")";
+                abort();
+            }
         }
 
         if (msg->op == IO_READ) {
@@ -1150,7 +1168,14 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            try {
+                validate(msg, length);
+            } catch (const std::range_error &e) {
+                LOG << "\"" << e.what() << "\" detected on "
+                    << conn->get_log_prefix() << " (status="
+                    << ucs_status_string(conn->ucx_status()) << ")";
+                abort();
+            }
         }
 
         if (msg->op == IO_READ) {
@@ -1337,15 +1362,25 @@ public:
                                                  _iov->data_size());
 
             if ((_status == UCS_OK) && _validate) {
-                validate(*_iov, _sn);
-                if (_meta_comp_counter != 0) {
-                    // With tag API, we also wait for READ_COMP arrival, so
-                    // need to validate it. With AM API, READ_COMP arrives as
-                    // AM header together with data descriptor, we validate it
-                    // in place to avoid unneeded memory copy to this
-                    // IoReadResponseCallback _buffer.
-                    iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                    validate(msg, _sn, _buffer_size);
+                try {
+                    validate(*_iov, _sn);
+                    if (_meta_comp_counter != 0) {
+                        // With tag API, we also wait for READ_COMP arrival, so
+                        // need to validate it. With AM API, READ_COMP arrives
+                        // as AM header together with data descriptor, we
+                        // validate it in place to avoid unneeded memory copy
+                        // to this IoReadResponseCallback _buffer.
+                        iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
+                        validate(msg, _sn, _buffer_size);
+                    }
+                } catch (const std::range_error &e) {
+                    const server_info_t &server_info =
+                            _client->_server_info[_server_index];
+                    LOG << "\"" << e.what() << "\" detected on "
+                        << server_info.conn->get_log_prefix() << " (status="
+                        << ucs_status_string(server_info.conn->ucx_status())
+                        << ")";
+                    abort();
                 }
             }
 
@@ -1645,7 +1680,14 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, opts().iomsg_size);
+            try {
+                validate(msg, opts().iomsg_size);
+            } catch (const std::range_error &e) {
+                LOG << "\"" << e.what() << "\" detected on "
+                    << conn->get_log_prefix() << " (status="
+                    << ucs_status_string(conn->ucx_status()) << ")";
+                abort();
+            }
         }
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
