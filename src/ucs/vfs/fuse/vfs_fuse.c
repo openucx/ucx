@@ -309,7 +309,10 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             break;
         }
 
-        if (nread < 0) {
+        if ((nread < 0) && (errno == EINTR)) {
+            ucs_trace("inotify read() failed: %m");
+            continue;
+        } else if (nread < 0) {
             ucs_error("inotify read() failed: %m");
             status = UCS_ERR_IO_ERROR;
             break;
