@@ -939,13 +939,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
 
-    if (self->tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
-        status = uct_rc_iface_qp_init(&iface->super, self->tx.wq.super.verbs.qp);
-        if (status != UCS_OK) {
-            goto err;
-        }
-    }
-
     status = uct_ib_device_async_event_register(&md->super.dev,
                                                 IBV_EVENT_QP_LAST_WQE_REACHED,
                                                 self->tx.wq.super.qp_num);
