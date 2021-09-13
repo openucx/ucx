@@ -797,6 +797,33 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
     struct ibv_qp_attr qp_attr;
     int ret;
 
+#if HAVE_RDMACM_ECE
+    uct_ibv_ece_t ece;
+    uct_ib_md_t *md;
+
+    md = uct_ib_iface_md(&iface->super);
+
+    memset(&ece, 0, sizeof(ece));
+    ece.vendor_id = md->dev.pci_id.vendor;
+
+    if ((md->dev.flags & UCT_IB_DEVICE_FLAG_ECE) &&
+        iface->super.config.ece_cfg.ece_enable) {
+        ece.options = iface->super.config.ece_cfg.ece.val;
+
+        if (ibv_set_ece(qp, &ece)) {
+            ucs_error("error set ece with 0x%x", ece.options);
+            return UCS_ERR_IO_ERROR;
+        }
+    } else if (md->dev.flags & UCT_IB_DEVICE_FLAG_ECE) {
+        ece.options = 0;
+
+        if (ibv_set_ece(qp, &ece)) {
+            ucs_error("error set ece with 0x%x", ece.options);
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+#endif
+
     memset(&qp_attr, 0, sizeof(qp_attr));
 
     qp_attr.qp_state              = IBV_QPS_INIT;
