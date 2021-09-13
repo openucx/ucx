@@ -30,7 +30,8 @@ jobs:
 
     pool:
       name: MLNX
-      demands: ${{ parameters.demands }}
+      demands: ucx_docker -equals yes
+    container: centos7
 
     steps:
       # address permissions issue when some files created as read-only
@@ -54,7 +55,6 @@ jobs:
           contents: |
             buildlib/az-helpers.sh
             buildlib/az-network-corrupter.sh
-            buildlib/pr/io_demo/iodemo_analyzer.py
             install/**
             test/apps/iodemo/run_io_demo.sh
           targetFolder: '$(Build.ArtifactStagingDirectory)'
@@ -65,6 +65,8 @@ jobs:
 
   - job: test
     dependsOn: io_build
+    workspace:
+      clean: all
 
     pool:
       name: MLNX
@@ -87,10 +89,10 @@ jobs:
       downtime: ${{ parameters.downtime }}
       uptime: ${{ parameters.uptime }}
 
-
     displayName: "io_demo: "
     steps:
       - checkout: none
+        clean: true
       - task: DownloadBuildArtifacts@0
         displayName: 'Download Build Artifacts'
         inputs:
