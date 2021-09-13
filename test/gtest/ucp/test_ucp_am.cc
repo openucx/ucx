@@ -734,7 +734,7 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
     for (int i = 0; i <= ucs_popcount(worker->am_mps_bitmap); ++i) {
         ucs_mpool_t *mpool = &worker->am_mps[i];
         ssize_t elem_size  = mpool->data->elem_size - (sizeof(ucs_mpool_elem_t) +
-                               UCP_WORKER_HEADROOM_SIZE + worker->am.alignment);
+                             UCP_WORKER_HEADROOM_SIZE + worker->am.alignment);
         ASSERT_TRUE(elem_size >= 0);
 
         if (elem_size >= (length + 1)) {

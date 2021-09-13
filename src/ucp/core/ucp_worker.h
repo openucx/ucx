@@ -37,6 +37,10 @@
     ucs_assert(ucs_async_is_blocked(&(_worker)->async))
 
 
+/* Number of elements in worker->am_mps_map array (which contains pointers to
+ * mpools). Indexes are log2 of element size supported by a given mpool.
+ * Indexation of worker->am_mps_map array is done in the reverse order for
+ * performance reasons (faster ucp_recv_desc_alloc). */
 #define UCP_WORKER_AM_MPS_MAP_SIZE (sizeof(uint32_t) * 8)
 
 

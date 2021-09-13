@@ -1652,7 +1652,7 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     uct_iface_attr_t *if_attr;
     ucp_rsc_index_t iface_id;
     ucs_status_t status;
-    uint32_t num_am_mpools, size, i, bit, prev_idx, mp_index;
+    int i, num_am_mpools, size, size_log2, prev_idx, mp_index, max_idx;
 
     /* Create memory pool for requests */
     status = ucs_mpool_init(&worker->req_mp, 0,
@@ -1703,10 +1703,11 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 
     /* Create memory pools for incoming UCT messages without a UCT descriptor.
      * Ignore sizes which are larger than maximal transport segment. */
+    max_idx                = UCP_WORKER_AM_MPS_MAP_SIZE - 1;
     worker->am_mps_bitmap  = (max_mp_entry_size == 0) ? 0 :
                              (ucs_roundup_pow2(max_mp_entry_size) - 1) &
                               context->config.mpool_sizes_map;
-    worker->am_mps_bitmap |= UCS_BIT(UCP_WORKER_AM_MPS_MAP_SIZE - 1);
+    worker->am_mps_bitmap |= UCS_BIT(max_idx);
     num_am_mpools          = ucs_popcount(worker->am_mps_bitmap);
     worker->am_mps         = ucs_malloc(num_am_mpools * sizeof(ucs_mpool_t),
                                         "am_mpools");
@@ -1716,10 +1717,10 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
     }
 
     mp_index = 0;
-    prev_idx = 0;
-    ucs_for_each_bit(bit, worker->am_mps_bitmap) {
-        size   = (bit == (UCP_WORKER_AM_MPS_MAP_SIZE - 1)) ?
-                 max_mp_entry_size : UCS_BIT(bit);
+    prev_idx = max_idx;
+    ucs_for_each_bit(size_log2, worker->am_mps_bitmap) {
+        size   = (size_log2 == max_idx) ? max_mp_entry_size :
+                                          UCS_BIT(size_log2);
         status = ucs_mpool_init(&worker->am_mps[mp_index], 0,
                                 size + UCP_WORKER_HEADROOM_SIZE +
                                 worker->am.alignment,
@@ -1729,11 +1730,22 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
             goto err_am_mps_cleanup;
         }
 
-        ucs_assertv(bit < UCP_WORKER_AM_MPS_MAP_SIZE, "bit 0x%x", bit);
-        for (i = prev_idx; i <= bit; ++i) {
+        ucs_assertv(size_log2 < UCP_WORKER_AM_MPS_MAP_SIZE, "size_log2 %d",
+                    size_log2);
+
+        /* am_mps_map is an array of pointers to memory pools. Array index is
+         * log2 of the corresponding memory pool element size. Indexation is
+         * done in the reverse order to speedup array index calculation in
+         * ucp_recv_desc_alloc(). Since there is no separate memory pool for
+         * every pow of 2 value, initialize all array elements in the range of
+         * [current_index, last_initalized_index).
+         * So, eventually every am_mps_map array element will point to a certain
+         * mpool with minimal element size capable of storing elements up to
+         * 2^(max_idx - index). */
+        for (i = prev_idx; i >= max_idx - size_log2; --i) {
             worker->am_mps_map[i] = &worker->am_mps[mp_index];
         }
-        prev_idx = bit + 1;
+        prev_idx = max_idx - size_log2 - 1;
         ++mp_index;
     }
 

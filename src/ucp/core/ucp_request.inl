@@ -665,7 +665,7 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t*
 ucp_recv_desc_alloc(ucp_worker_h worker, size_t length)
 {
-    size_t size = length + 1;
+    uint32_t size = (uint32_t)(length + 1);
     unsigned idx;
 
     /* - use size equal to length + 1 to avoid passing 0 to
@@ -673,10 +673,9 @@ ucp_recv_desc_alloc(ucp_worker_h worker, size_t length)
      * - do not roundup the size if it is pow of 2 already, to not use bigger
      *   mpool than needed
      */
-    idx = (sizeof(size_t) * 8) -
-           (ucs_count_leading_zero_bits(size) + !!ucs_is_pow2_or_zero(size));
+    idx = ucs_count_leading_zero_bits(size) - !ucs_is_pow2_or_zero(size);
 
-    ucs_assertv((length < UINT_MAX) && (idx < UCP_WORKER_AM_MPS_MAP_SIZE),
+    ucs_assertv((length < UINT32_MAX) && (idx < UCP_WORKER_AM_MPS_MAP_SIZE),
                 "idx %u, length %zu", idx, length);
 
     ucs_trace_data("take AM desc, mpool idx %u, data length %zu", idx, length);
