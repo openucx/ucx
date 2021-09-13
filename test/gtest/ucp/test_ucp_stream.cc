@@ -253,15 +253,16 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 template <typename T, unsigned recv_flags>
 void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 {
-    const size_t      dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
-                                     ucp_contig_dt_elem_size(datatype) : 1;
-    size_t            ssize        = 0; /* total send size */
-    std::vector<char> sbuf(16 * UCS_MBYTE, 's');
+    const size_t      dt_elem_size    = UCP_DT_IS_CONTIG(datatype) ?
+                                        ucp_contig_dt_elem_size(datatype) : 1;
+    size_t            ssize           = 0; /* total send size */
+    size_t            iter_multiplier = RUNNING_ON_VALGRIND ? 10 : 2;
+    std::vector<char> sbuf(16 * UCS_MBYTE / ucs::test_time_multiplier(), 's');
     ucs_status_ptr_t  sstatus;
     std::vector<char> check_pattern;
 
     /* send all msg sizes in bytes*/
-    for (size_t i = 3; i < sbuf.size(); i *= 2) {
+    for (size_t i = 3; i < sbuf.size(); i *= iter_multiplier) {
         ucp_datatype_t dt;
         if (UCP_DT_IS_GENERIC(datatype)) {
             dt = datatype;
