@@ -939,14 +939,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_ep_t, &iface->super,
                               self->tx.wq.super.qp_num, params);
 
-    status = uct_ib_device_async_event_register(&md->super.dev,
-                                                IBV_EVENT_QP_LAST_WQE_REACHED,
-                                                self->tx.wq.super.qp_num);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    uct_rc_iface_add_qp(&iface->super, &self->super, self->tx.wq.super.qp_num);
+    self->super.local_ece.val  = self->tx.wq.super.local_ece.val;
+    self->super.remote_ece.val = 0;
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         /* Send queue of this QP will be used by FW for HW RNDV. Driver requires
@@ -956,9 +950,21 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
         status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {
-            goto err_unreg;
+            goto err_destroy_txqp;
         }
+        self->super.local_ece.val = ece_int(self->super.local_ece.val,
+                                            self->tm_qp.local_ece.val);
+    }
 
+    status = uct_ib_device_async_event_register(&md->super.dev,
+                                                IBV_EVENT_QP_LAST_WQE_REACHED,
+                                                self->tx.wq.super.qp_num);
+    if (status != UCS_OK) {
+        goto err_destroy_tmqp;
+    }
+    uct_rc_iface_add_qp(&iface->super, &self->super, self->tx.wq.super.qp_num);
+
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_rc_iface_add_qp(&iface->super, &self->super, self->tm_qp.qp_num);
     }
 
@@ -967,13 +973,11 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     uct_rc_txqp_available_set(&self->super.txqp, self->tx.wq.bb_max);
     return UCS_OK;
 
-err_unreg:
-    uct_ib_device_async_event_unregister(&md->super.dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         self->tx.wq.super.qp_num);
-    uct_rc_iface_remove_qp(&iface->super, self->tx.wq.super.qp_num);
-
-err:
+err_destroy_tmqp:
+    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
+    }
+err_destroy_txqp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;
 }
