@@ -1403,7 +1403,7 @@ public:
         server_info_t& server_info = _server_info[server_index];
 
         ASSERTV(get_num_uncompleted(server_info) < opts().conn_window_size)
-                << "num_ucompleted=" << get_num_uncompleted(server_info)
+                << "num_uncompleted=" << get_num_uncompleted(server_info)
                 << " conn_window_size=" << opts().conn_window_size;
 
         ++server_info.num_sent[op];
