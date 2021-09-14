@@ -63,10 +63,11 @@ jobs:
       - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId) -R
       - bash: |
           set -Eex
-          ./bin/ucx_perftest -t tag_bw &
+          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          ./bin/ucx_perftest -t tag_bw -p $port &
           server_pid=$!
           sleep 1;
-          ./bin/ucx_perftest -t tag_bw localhost 2>&1 | tee perf.txt
+          ./bin/ucx_perftest -t tag_bw -p $port localhost 2>&1 | tee perf.txt
           wait $server_pid
           grep "Final:" perf.txt
         displayName: Test ucx_perftest
@@ -90,10 +91,11 @@ jobs:
         displayName: Test ucx-1.11 version
       - bash: |
           set -Eex
-          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag &
+          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -a `hostname -I`
+          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a `hostname -I`
           kill -9 $server_pid
         displayName: Test wire compatibility server v1.11 client master
         env:
@@ -101,10 +103,11 @@ jobs:
           UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
       - bash: |
           set -Eex
-          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag &
+          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -a `hostname -I`
+          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a `hostname -I`
           kill -9 $server_pid
         env:
           UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
