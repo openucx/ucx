@@ -135,6 +135,7 @@ typedef struct uct_ib_address {
      * - uint16_t subnet16
      * - uint64_t subnet64
      * For RoCE:
+     * - uint16_t udp_sport
      * - uint8_t gid[16]
      */
 } UCS_S_PACKED uct_ib_address_t;

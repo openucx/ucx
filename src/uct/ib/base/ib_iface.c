@@ -297,7 +297,8 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
     size_t size = sizeof(uct_ib_address_t);
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
-        /* Ethernet: address contains only raw GID */
+        /* Ethernet: address contains only udp sport and raw GID */
+        size += sizeof(uint16_t);
         size += sizeof(union ibv_gid);
     } else {
         /* InfiniBand: address always contains LID */
@@ -355,6 +356,10 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         if (params->roce_info.addr_family == AF_INET6) {
             ib_addr->flags |= UCT_IB_ADDRESS_FLAG_ROCE_IPV6;
         }
+
+        /* udp sport */
+        *(uint16_t*)ptr = params->lid;
+        ptr             = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
 
         /* uint8_t raw[16]; */
         gid = ucs_serialize_next(&ptr, union ibv_gid);
@@ -471,6 +476,9 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
     params.pkey      = UCT_IB_ADDRESS_DEFAULT_PKEY;
 
     if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
+        /* udp sport */
+        params.lid = *(uint16_t*)ptr;
+        ptr        = UCS_PTR_BYTE_OFFSET(ptr, sizeof(uint16_t));
         /* uint8_t raw[16]; */
         gid = ucs_serialize_next(&ptr, const union ibv_gid);
         memcpy(params.gid.raw, gid->raw, sizeof(params.gid.raw));
@@ -724,10 +732,8 @@ void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
     ah_attr->grh.traffic_class = iface->config.traffic_class;
 
     if (uct_ib_iface_is_roce(iface)) {
-        ah_attr->dlid          = UCT_IB_ROCE_UDP_SRC_PORT_BASE |
-                                 (iface->config.roce_path_factor * path_index);
-        /* Workaround rdma-core flow label to udp sport conversion */
-        ah_attr->grh.flow_label = ~(iface->config.roce_path_factor * path_index);
+        ah_attr->dlid           = lid;
+        ah_attr->grh.flow_label = 0;
     } else {
         /* TODO iface->path_bits should be removed and replaced by path_index */
         path_bits              = iface->path_bits[path_index %
