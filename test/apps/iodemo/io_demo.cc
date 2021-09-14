@@ -786,14 +786,60 @@ protected:
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
+    static void handle_validate_error(const std::exception &e,
+                                      const UcxConnection *conn) {
+        LOG << "\"" << e.what() << "\" detected on " << conn->get_log_prefix()
+            << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
+        abort();
+    }
+
+    class DataCorruptionError : public std::exception {
+    public:
+        DataCorruptionError(const char *type, size_t err_pos) throw() {
+            _ss << "ERROR: iov " << type << " corruption at " << err_pos
+                << " position";
+        }
+
+        DataCorruptionError(const DataCorruptionError& other) throw() {
+        }
+
+        ~DataCorruptionError() throw() {
+        }
+
+        virtual const char *what() const throw() {
+            return _ss.str().c_str();
+        }
+
+    private:
+        std::stringstream _ss;
+    };
+
+    class SnMismatchError : public std::exception {
+    public:
+        SnMismatchError(size_t sn, size_t exp_sn) throw() {
+            _ss << "ERROR: io msg sn mismatch " << sn << " != " << exp_sn;
+        }
+
+        SnMismatchError(const SnMismatchError& other) throw() {
+        }
+
+        ~SnMismatchError() throw() {
+        }
+
+        virtual const char *what() const throw() {
+            return _ss.str().c_str();
+        }
+
+    private:
+        std::stringstream _ss;
+    };
+
     static void validate(const BufferIov& iov, unsigned seed) {
         assert(iov.size() != 0);
 
         size_t err_pos = iov.validate(seed);
         if (err_pos != iov.npos()) {
-            std::stringstream ss;
-            ss << "ERROR: iov data corruption at " << err_pos << " position";
-            throw std::range_error(ss.str());
+            throw DataCorruptionError("data", err_pos);
         }
     }
 
@@ -805,17 +851,13 @@ protected:
         size_t err_pos = IoDemoRandom::validate(seed, buf, buf_size,
                                                 UCS_MEMORY_TYPE_HOST);
         if (err_pos < buf_size) {
-            std::stringstream ss;
-            ss << "ERROR: io msg data corruption at " << err_pos << " position";
-            throw std::range_error(ss.str());
+            throw DataCorruptionError("msg", err_pos);
         }
     }
 
     static void validate(const iomsg_t *msg, uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            std::stringstream ss;
-            ss << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
-            throw std::range_error(ss.str());
+            throw SnMismatchError(sn, msg->sn);
         }
 
         validate(msg, iomsg_size);
@@ -883,11 +925,8 @@ public:
                 if (_server->opts().validate) {
                     try {
                         validate(*_iov, _sn);
-                    } catch (const std::range_error &e) {
-                        LOG << "\"" << e.what() << "\" detected on "
-                            << _conn->get_log_prefix() << " (status="
-                            << ucs_status_string(_conn->ucx_status()) << ")";
-                        abort();
+                    } catch (const std::exception &e) {
+                        handle_validate_error(e, _conn);
                     }
                 }
                 
@@ -1138,11 +1177,8 @@ public:
             assert(length == opts().iomsg_size);
             try {
                 validate(msg, length);
-            } catch (const std::range_error &e) {
-                LOG << "\"" << e.what() << "\" detected on "
-                    << conn->get_log_prefix() << " (status="
-                    << ucs_status_string(conn->ucx_status()) << ")";
-                abort();
+            } catch (const std::exception &e) {
+                handle_validate_error(e, conn);
             }
         }
 
@@ -1170,11 +1206,8 @@ public:
             assert(length == opts().iomsg_size);
             try {
                 validate(msg, length);
-            } catch (const std::range_error &e) {
-                LOG << "\"" << e.what() << "\" detected on "
-                    << conn->get_log_prefix() << " (status="
-                    << ucs_status_string(conn->ucx_status()) << ")";
-                abort();
+            } catch (const std::exception &e) {
+                handle_validate_error(e, conn);
             }
         }
 
@@ -1373,14 +1406,10 @@ public:
                         iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
                         validate(msg, _sn, _buffer_size);
                     }
-                } catch (const std::range_error &e) {
+                } catch (const std::exception &e) {
                     const server_info_t &server_info =
                             _client->_server_info[_server_index];
-                    LOG << "\"" << e.what() << "\" detected on "
-                        << server_info.conn->get_log_prefix() << " (status="
-                        << ucs_status_string(server_info.conn->ucx_status())
-                        << ")";
-                    abort();
+                    handle_validate_error(e, server_info.conn);
                 }
             }
 
@@ -1682,11 +1711,8 @@ public:
             assert(length == opts().iomsg_size);
             try {
                 validate(msg, opts().iomsg_size);
-            } catch (const std::range_error &e) {
-                LOG << "\"" << e.what() << "\" detected on "
-                    << conn->get_log_prefix() << " (status="
-                    << ucs_status_string(conn->ucx_status()) << ")";
-                abort();
+            } catch (const std::exception &e) {
+                handle_validate_error(e, conn);
             }
         }
 
