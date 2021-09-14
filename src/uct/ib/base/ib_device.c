@@ -1332,7 +1332,8 @@ uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
         ucs_error("ibv_create_ah(%s) for %s on %s failed: %m",
                   uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr), usage,
                   uct_ib_device_name(dev));
-        return UCS_ERR_INVALID_ADDR;
+        return (errno == ETIMEDOUT) ?
+                UCS_ERR_ENDPOINT_TIMEOUT : UCS_ERR_INVALID_ADDR;
     }
 
     *ah_p = ah;
