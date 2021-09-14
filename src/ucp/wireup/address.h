@@ -78,6 +78,14 @@ enum {
 
 
 /**
+ * UCP TL address bitmap
+ *
+ * Bitmap type for representing which TL addresses are in use.
+ */
+typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_addr_bitmap_t;
+
+
+/**
  * Remote interface attributes.
  */
 struct ucp_address_iface_attr {

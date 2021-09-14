@@ -292,7 +292,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_wireup_select_info_t sinfo        = {0};
     int found                             = 0;
     uint64_t local_iface_flags            = criteria->local_iface_flags;
-    uint64_t addr_index_map, rsc_addr_index_map;
+    ucp_tl_addr_bitmap_t addr_index_map, rsc_addr_index_map;
     const ucp_wireup_lane_desc_t *lane_desc;
     unsigned addr_index;
     uct_tl_resource_desc_t *resource;
@@ -315,7 +315,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     show_error   = (select_params->show_error && show_error);
 
     /* Check which remote addresses satisfy the criteria */
-    addr_index_map = 0;
+    UCS_BITMAP_CLEAR(&addr_index_map);
     ucp_unpacked_address_for_each(ae, address) {
         addr_index = ucp_unpacked_address_index(address, ae);
         if (!(remote_dev_bitmap & UCS_BIT(ae->dev_index))) {
@@ -367,10 +367,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, fop, 32);
         UCP_WIREUP_CHECK_AMO_FLAGS(ae, criteria, context, addr_index, fop, 64);
 
-        addr_index_map |= UCS_BIT(addr_index);
+        UCS_BITMAP_SET(addr_index_map, addr_index);
     }
 
-    if (!addr_index_map) {
+    if (UCS_BITMAP_IS_ZERO_INPLACE(&addr_index_map)) {
          snprintf(p, endp - p, "%s  ", ucs_status_string(UCS_ERR_UNSUPPORTED));
          p += strlen(p);
          goto out;
@@ -455,18 +455,18 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
              * be the same when connecting to worker address and when connecting
              * to a remote ep by wireup protocol.
              */
-            rsc_addr_index_map = 0;
+            UCS_BITMAP_CLEAR(&rsc_addr_index_map);
             for (lane = 0; lane < select_ctx->num_lanes; ++lane) {
                 lane_desc = &select_ctx->lane_descs[lane];
                 if (lane_desc->rsc_index == rsc_index) {
-                    rsc_addr_index_map |= UCS_BIT(lane_desc->addr_index);
+                    UCS_BITMAP_SET(rsc_addr_index_map, lane_desc->addr_index);
                 }
             }
-            rsc_addr_index_map &= addr_index_map;
+            UCS_BITMAP_AND_INPLACE(&rsc_addr_index_map, addr_index_map);
         }
 
         is_reachable = 0;
-        ucs_for_each_bit(addr_index, rsc_addr_index_map) {
+        UCS_BITMAP_FOR_EACH_BIT(rsc_addr_index_map, addr_index) {
             ae = &address->address_list[addr_index];
             if (!ucp_wireup_is_reachable(ep, select_params->ep_init_flags,
                                          rsc_index, ae)) {
