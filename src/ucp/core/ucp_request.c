@@ -47,7 +47,7 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
     ucp_ep_config_t *config;
     ucp_ep_h ep;
 
-    ucs_string_buffer_appendf(strb, "flags:%x ", req->flags);
+    ucs_string_buffer_appendf(strb, "flags:0x%x ", req->flags);
 
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_string_buffer_appendf(strb, "send length %zu ", req->send.length);
