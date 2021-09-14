@@ -192,7 +192,7 @@ ucp_tag_unexp_search(ucp_tag_match_t *tm, ucp_tag_t tag, uint64_t tag_mask,
                       tag, tag_mask, UCP_RECV_DESC_ARG(rdesc),
                       ucp_rdesc_get_tag(rdesc));
         if (ucp_tag_is_match(ucp_rdesc_get_tag(rdesc), tag, tag_mask)) {
-            ucs_trace_req("matched unexp rdesc " UCP_RECV_DESC_FMT " to "
+            ucs_trace_req("matched unexp " UCP_RECV_DESC_FMT " to "
                           "%s tag %"PRIx64"/%"PRIx64, UCP_RECV_DESC_ARG(rdesc),
                           title, tag, tag_mask);
             if (rem) {
