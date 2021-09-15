@@ -23,41 +23,24 @@
 
 #define AM_MSG_ID 0
 
-ucs_status_t UcxContext::alloc_mapped_buffer(size_t length,
-                         void **address_p, ucp_mem_h *memh_p, int non_blk_flag)
+ucs_status_t UcxContext::map_buffer(size_t length, void *address,
+                                    ucp_mem_h *memh_p, int non_blk_flag)
 {
     ucp_mem_map_params_t mem_map_params;
-    ucp_mem_attr_t mem_attr;
-    ucs_status_t status;
 
     mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_map_params.address    = *address_p;
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH; 
+    mem_map_params.address    = address;
     mem_map_params.length     = length;
-    mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
-    mem_map_params.flags     |= non_blk_flag;
-
-    status = ucp_mem_map(_context, &mem_map_params, memh_p);
-    if (status != UCS_OK) {
-        goto err;
+    if (non_blk_flag) {
+        mem_map_params.field_mask |= UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        mem_map_params.flags       = non_blk_flag;
     }
 
-    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
-    status = ucp_mem_query(*memh_p, &mem_attr);
-    if (status != UCS_OK) {
-        ucp_mem_unmap(_context, *memh_p);
-        goto err;
-    }
-
-    *address_p = mem_attr.address;
-    return UCS_OK;
-
-err:
-    return status;
+    return ucp_mem_map(_context, &mem_map_params, memh_p);
 }
 
-ucs_status_t UcxContext::free_mapped_buffer(ucp_mem_h memh)
+ucs_status_t UcxContext::unmap_buffer(ucp_mem_h memh)
 {
     return ucp_mem_unmap(_context, memh);
 }
@@ -938,9 +921,9 @@ bool UcxConnection::recv_data(void *buffer, ucp_mem_h memh, size_t length, uint3
         param.memh          = memh;
     }
 
-    ucs_status_ptr_t ptr_status = ucp_tag_recv_nbx(_context.worker(), buffer,
+    ucs_status_ptr_t status_ptr = ucp_tag_recv_nbx(_context.worker(), buffer,
                                                   length, tag, tag_mask, &param);
-    return process_request("ucp_tag_recv_nbx", ptr_status, callback);
+    return process_request("ucp_tag_recv_nbx", status_ptr, callback);
 }
 
 bool UcxConnection::send_am(const void *meta, size_t meta_length,
@@ -1226,9 +1209,9 @@ bool UcxConnection::send_common(const void *buffer, ucp_mem_h memh, size_t lengt
         params.memh          = memh;
     }
 
-    ucs_status_ptr_t ptr_status = ucp_tag_send_nbx(_ep, buffer, length,
+    ucs_status_ptr_t status_ptr = ucp_tag_send_nbx(_ep, buffer, length,
                                                    tag, &params);
-    return process_request("ucp_tag_send_nbx", ptr_status, callback);
+    return process_request("ucp_tag_send_nbx", status_ptr, callback);
 }
 
 void UcxConnection::request_started(ucx_request *r)
@@ -1283,23 +1266,23 @@ void UcxConnection::ep_close(enum ucp_ep_close_mode mode)
 }
 
 bool UcxConnection::process_request(const char *what,
-                                    ucs_status_ptr_t ptr_status,
+                                    ucs_status_ptr_t status_ptr,
                                     UcxCallback* callback)
 {
     ucs_status_t status;
 
-    if (ptr_status == NULL) {
+    if (status_ptr == NULL) {
         (*callback)(UCS_OK);
         return true;
-    } else if (UCS_PTR_IS_ERR(ptr_status)) {
-        status = UCS_PTR_STATUS(ptr_status);
+    } else if (UCS_PTR_IS_ERR(status_ptr)) {
+        status = UCS_PTR_STATUS(status_ptr);
         UCX_CONN_LOG << what << " failed with status: "
                      << ucs_status_string(status);
         (*callback)(status);
         return false;
     } else {
         // pointer to request
-        ucx_request *r = reinterpret_cast<ucx_request*>(ptr_status);
+        ucx_request *r = reinterpret_cast<ucx_request*>(status_ptr);
         if (r->completed) {
             // already completed by callback
             assert(ucp_request_is_completed(r));

@@ -122,9 +122,9 @@ public:
 
     static void free(void *ptr);
 
-    ucs_status_t alloc_mapped_buffer(size_t length, void **address_p, ucp_mem_h *memh, int non_blk_flag);
+    ucs_status_t map_buffer(size_t length, void *address, ucp_mem_h *memh, int non_blk_flag);
 
-    ucs_status_t free_mapped_buffer(ucp_mem_h memh);
+    ucs_status_t unmap_buffer(ucp_mem_h memh);
 
 protected:
 
@@ -363,7 +363,7 @@ private:
 
     void ep_close(enum ucp_ep_close_mode mode);
 
-    bool process_request(const char *what, ucs_status_ptr_t ptr_status,
+    bool process_request(const char *what, ucs_status_ptr_t status_ptr,
                          UcxCallback* callback);
 
     static void invoke_callback(UcxCallback *&cb, ucs_status_t status);

@@ -442,12 +442,10 @@ protected:
                 break;
 #endif
             case UCS_MEMORY_TYPE_HOST:
-                if (context != NULL) {
-                    buffer = NULL;
-                    assert(context->alloc_mapped_buffer(size, &buffer, &memh, 0) == UCS_OK);
-                } else {
-                    buffer = UcxContext::memalign(ALIGNMENT, size,
-                                                  pool.name().c_str());
+                buffer = UcxContext::memalign(ALIGNMENT, size,
+                                              pool.name().c_str());
+                if (context != NULL && buffer != NULL) {
+                    assert(context->map_buffer(size, buffer, &memh, 0) == UCS_OK);
                 }
                 break;
             default:
@@ -473,10 +471,9 @@ protected:
 #endif
             case UCS_MEMORY_TYPE_HOST:
                 if (_memh && _context) {
-                    assert(_context->free_mapped_buffer(_memh) == UCS_OK);
-                } else {
-                    free(_buffer);
+                    assert(_context->unmap_buffer(_memh) == UCS_OK);
                 }
+                free(_buffer);
                 break;
             default:
                 /* Unreachable - would fail in ctor */
