@@ -353,9 +353,9 @@ struct ucp_request {
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
             union {
                 ssize_t               remaining;  /* How much more data
-                                               * to be received */
-                ucp_mem_h             memh; /* Memory handle for pre-registered
-                                               * buffer */
+                                                   * to be received */
+                ucp_mem_h             memh;       /* Memory handle for pre-registered
+                                                   * buffer */
             };
 
             /* Remote request ID received from a peer */

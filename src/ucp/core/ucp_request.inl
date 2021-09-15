@@ -388,7 +388,7 @@ ucp_request_memh_init(ucp_request_t *req, ucp_ep_h ep, ucp_mem_h memh)
         uct_memh[i++] = ucp_memh2uct(memh, md_idx);
     }
 
-    req->flags |= UCP_REQUEST_FLAG_USER_MEMH; 
+    req->flags |= UCP_REQUEST_FLAG_USER_MEMH;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -409,7 +409,7 @@ ucp_request_recv_memh_init(ucp_request_t *req, const ucp_request_param_t *param)
         return;
     }
 
-    req->flags |= UCP_REQUEST_FLAG_USER_MEMH; 
+    req->flags    |= UCP_REQUEST_FLAG_USER_MEMH;
     req->recv.memh = param->memh;
 }
 

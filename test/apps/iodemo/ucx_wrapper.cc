@@ -24,7 +24,7 @@
 #define AM_MSG_ID 0
 
 ucs_status_t UcxContext::alloc_mapped_buffer(size_t length,
-                         void **address_p, ucp_mem_h *memh, int non_blk_flag)
+                         void **address_p, ucp_mem_h *memh_p, int non_blk_flag)
 {
     ucp_mem_map_params_t mem_map_params;
     ucp_mem_attr_t mem_attr;
@@ -36,16 +36,17 @@ ucs_status_t UcxContext::alloc_mapped_buffer(size_t length,
     mem_map_params.address    = *address_p;
     mem_map_params.length     = length;
     mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
-    mem_map_params.flags |= non_blk_flag;
+    mem_map_params.flags     |= non_blk_flag;
 
-    status = ucp_mem_map(_context, &mem_map_params, memh);
+    status = ucp_mem_map(_context, &mem_map_params, memh_p);
     if (status != UCS_OK) {
         goto err;
     }
 
     mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
-    status = ucp_mem_query(*memh, &mem_attr);
+    status = ucp_mem_query(*memh_p, &mem_attr);
     if (status != UCS_OK) {
+        ucp_mem_unmap(_context, *memh_p);
         goto err;
     }
 
@@ -934,7 +935,7 @@ bool UcxConnection::recv_data(void *buffer, ucp_mem_h memh, size_t length, uint3
     param.cb.recv      = (ucp_tag_recv_nbx_callback_t)data_recv_callback;
     if (memh) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-        param.memh = memh;
+        param.memh          = memh;
     }
 
     ucs_status_ptr_t ptr_status = ucp_tag_recv_nbx(_context.worker(), buffer,
@@ -959,7 +960,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
     param.datatype     = 0; // make coverity happy
     if (memh) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-        param.memh = memh;
+        param.memh          = memh;
     }
 
     ucs_status_ptr_t sptr = ucp_am_send_nbx(_ep, AM_MSG_ID, meta, meta_length,
@@ -985,7 +986,7 @@ bool UcxConnection::recv_am_data(void *buffer, ucp_mem_h memh, size_t length,
     params.cb.recv_am   = am_data_recv_callback;
     if (memh) {
         params.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-        params.memh = memh;
+        params.memh          = memh;
     }
     ucs_status_ptr_t sp = ucp_am_recv_data_nbx(_context.worker(),
                                                data_desc._data,
@@ -1222,7 +1223,7 @@ bool UcxConnection::send_common(const void *buffer, ucp_mem_h memh, size_t lengt
     params.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
     if (memh) {
         params.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
-        params.memh = memh;
+        params.memh          = memh;
     }
 
     ucs_status_ptr_t ptr_status = ucp_tag_send_nbx(_ep, buffer, length,

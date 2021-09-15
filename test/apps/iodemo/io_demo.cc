@@ -405,7 +405,8 @@ protected:
     class Buffer {
     public:
         Buffer(void *buffer, size_t size, BufferMemoryPool<Buffer> &pool,
-               ucs_memory_type_t memory_type = UCS_MEMORY_TYPE_HOST, ucp_mem_h memh = NULL, UcxContext *context = NULL) :
+               ucs_memory_type_t memory_type = UCS_MEMORY_TYPE_HOST,
+               ucp_mem_h memh = NULL, UcxContext *context = NULL) :
             _capacity(size),
             _buffer(buffer),
             _size(0),

@@ -404,6 +404,7 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
     }
 
     ucs_log_indent(-1);
+
 skip_dereg:
     ucp_invoke_uct_completion(&req->send.state.uct_comp, status);
 }

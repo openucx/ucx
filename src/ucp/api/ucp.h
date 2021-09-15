@@ -1679,11 +1679,6 @@ typedef struct {
     ucs_memory_type_t memory_type;
 
     /**
-     * Memory handle for pre-registered buffer.
-     */
-    ucp_mem_h memh;
-
-    /**
      * Pointer to the information where received data details are stored
      * in case of an immediate completion of receive operation. The user has to
      * provide a pointer to valid memory/variable which will be updated on function
@@ -1697,6 +1692,11 @@ typedef struct {
                                           Relevant for @a ucp_tag_recv_nbx
                                           function. */
     } recv_info;
+
+    /**
+     * Memory handle for pre-registered buffer.
+     */
+    ucp_mem_h memh;
 } ucp_request_param_t;
 
 
