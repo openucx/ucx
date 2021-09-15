@@ -793,7 +793,22 @@ protected:
         abort();
     }
 
-    class DataCorruptionError : public std::exception {
+    class ValidateError : public std::exception {
+    public:
+        ValidateError() throw() {
+        }
+
+        ValidateError(const ValidateError& other) throw() {
+        }
+
+        ~ValidateError() throw() {
+        }
+
+    protected:
+        std::stringstream _ss;
+    };
+
+    class DataCorruptionError : public ValidateError {
     public:
         DataCorruptionError(const char *type, size_t err_pos) throw() {
             _ss << "ERROR: iov " << type << " corruption at " << err_pos
@@ -810,11 +825,10 @@ protected:
             return _ss.str().c_str();
         }
 
-    private:
-        std::stringstream _ss;
+    
     };
 
-    class SnMismatchError : public std::exception {
+    class SnMismatchError : public ValidateError {
     public:
         SnMismatchError(size_t sn, size_t exp_sn) throw() {
             _ss << "ERROR: io msg sn mismatch " << sn << " != " << exp_sn;
@@ -829,9 +843,6 @@ protected:
         virtual const char *what() const throw() {
             return _ss.str().c_str();
         }
-
-    private:
-        std::stringstream _ss;
     };
 
     static void validate(const BufferIov& iov, unsigned seed) {
