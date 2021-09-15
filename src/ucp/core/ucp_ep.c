@@ -196,6 +196,8 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ep->worker                            = worker;
     ep->am_lane                           = UCP_NULL_LANE;
     ep->flags                             = 0;
+    ep->local_ece                         = 0;
+    ep->remote_ece                        = 0;
     ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
 #if UCS_ENABLE_ASSERT
     ep->flush_iter_refcount               = 0;

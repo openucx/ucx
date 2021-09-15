@@ -445,6 +445,9 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 
     ucs_queue_head_init(&tmp_pending_queue);
 
+    ep->local_ece  = 0;
+    ep->remote_ece = 0;
+
 initial_config_retry:
     /* Cleanup the previously created UCP EP. The one that was created on the
      * previous call to this client's resolve_cb */
@@ -468,11 +471,16 @@ initial_config_retry:
         goto err;
     }
 
+    if (ep->local_ece == 0) {
+        ep->flags &= ~UCP_EP_FLAG_OOB_ECE;
+    }
+
     /* Replay pending requests from the tmp_pending_queue */
     ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
 
     can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
                    (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
+    ep->flags   |= UCP_EP_FLAG_OOB_ECE;
     status       = ucp_cm_ep_priv_data_pack(
                       ep, &tl_bitmap, can_fallback,
                       context->config.ext.sa_client_min_hdr_version,
@@ -513,6 +521,8 @@ try_fallback:
     }
 
 err:
+    ep->flags    &= ~UCP_EP_FLAG_OOB_ECE;
+    ep->local_ece = 0;
     ucp_ep_set_failed(ep, ucp_ep_get_cm_lane(ep), status);
 out:
     ucs_free(ucp_addr);

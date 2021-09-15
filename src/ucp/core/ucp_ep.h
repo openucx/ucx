@@ -81,6 +81,8 @@ enum {
     UCP_EP_FLAG_INDIRECT_ID            = UCS_BIT(14),/* protocols on this endpoint will send
                                                         indirect endpoint id instead of pointer,
                                                         can be replaced with looking at local ID */
+    UCP_EP_FLAG_OOB_ECE                = UCS_BIT(15),/* protocols on this endpoint will send
+                                                        ECE info through CM none-private data*/
 
     /* DEBUG bits */
     UCP_EP_FLAG_CONNECT_REQ_SENT       = UCS_BIT(16),/* DEBUG: Connection request was sent */
@@ -388,6 +390,9 @@ typedef struct ucp_ep {
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
     ucp_ep_flags_t                flags;         /* Endpoint flags */
+
+    uint32_t                      local_ece;     /* Local Lanes' ECE intersection */
+    uint32_t                      remote_ece;    /* remote ucp_ep's ECE */
 
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
