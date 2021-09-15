@@ -1374,7 +1374,7 @@ ucp_am_handle_unfinished(ucp_worker_h worker, ucp_recv_desc_t *first_rdesc,
      * the data. In ucp_am_data_release() and ucp_am_recv_data_nbx() functions,
      * we calculate desc as "data_pointer - sizeof(desc)", which would not
      * point to the beginning of the original desc. The content of the first and
-     * base headers are not needed anymore, can safelly overwrite them.
+     * base headers are not needed anymore, can safely overwrite them.
      *
      * original desc layout: |desc|first_ftr|base_hdr|padding|data|user_hdr|
      *
