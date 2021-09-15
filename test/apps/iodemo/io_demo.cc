@@ -785,17 +785,21 @@ protected:
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
-    static void validate(const BufferIov& iov, unsigned seed) {
+    static void validate(const UcxConnection *conn, const BufferIov& iov,
+                         unsigned seed) {
         assert(iov.size() != 0);
 
         size_t err_pos = iov.validate(seed);
         if (err_pos != iov.npos()) {
-            LOG << "ERROR: iov data corruption at " << err_pos << " position";
+            LOG << "ERROR: iov data corruption at " << err_pos
+                << " position detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
     }
 
-    static void validate(const iomsg_t *msg, size_t iomsg_size) {
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+                         size_t iomsg_size) {
         unsigned seed   = msg->sn;
         const void *buf = msg + 1;
         size_t buf_size = iomsg_size - sizeof(*msg);
@@ -803,18 +807,23 @@ protected:
         size_t err_pos = IoDemoRandom::validate(seed, buf, buf_size,
                                                 UCS_MEMORY_TYPE_HOST);
         if (err_pos < buf_size) {
-            LOG << "ERROR: io msg data corruption at " << err_pos << " position";
+            LOG << "ERROR: io msg data corruption at " << err_pos
+                << " position detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
     }
 
-    static void validate(const iomsg_t *msg, uint32_t sn, size_t iomsg_size) {
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+                         uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            LOG << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
+            LOG << "ERROR: io msg sn mismatch (" << sn << " != " << msg->sn
+                << ") detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
 
-        validate(msg, iomsg_size);
+        validate(conn, msg, iomsg_size);
     }
 
 private:
@@ -877,7 +886,7 @@ public:
 
             if (_status == UCS_OK) {
                 if (_server->opts().validate) {
-                    validate(*_iov, _sn);
+                    validate(_conn, *_iov, _sn);
                 }
                 
                 if (_conn->ucx_status() == UCS_OK) {
@@ -1125,7 +1134,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            validate(conn, msg, length);
         }
 
         if (msg->op == IO_READ) {
@@ -1150,7 +1159,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            validate(conn, msg, length);
         }
 
         if (msg->op == IO_READ) {
@@ -1337,7 +1346,9 @@ public:
                                                  _iov->data_size());
 
             if ((_status == UCS_OK) && _validate) {
-                validate(*_iov, _sn);
+                const server_info_t &server_info =
+                        _client->_server_info[_server_index];
+                validate(server_info.conn, *_iov, _sn);
                 if (_meta_comp_counter != 0) {
                     // With tag API, we also wait for READ_COMP arrival, so
                     // need to validate it. With AM API, READ_COMP arrives as
@@ -1345,7 +1356,7 @@ public:
                     // in place to avoid unneeded memory copy to this
                     // IoReadResponseCallback _buffer.
                     iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                    validate(msg, _sn, _buffer_size);
+                    validate(server_info.conn, msg, _sn, _buffer_size);
                 }
             }
 
@@ -1645,7 +1656,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, opts().iomsg_size);
+            validate(conn, msg, opts().iomsg_size);
         }
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
