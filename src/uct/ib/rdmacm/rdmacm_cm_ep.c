@@ -778,12 +778,17 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_base_ep_t, params);
 
-    self->qp     = NULL;
-    self->qpn    = 0;
-    self->blk    = NULL;
-    self->flags  = 0;
-    self->status = UCS_OK;
-    self->id     = NULL;
+    self->qp            = NULL;
+    self->qpn           = 0;
+    self->blk           = NULL;
+    self->flags         = 0;
+    self->status        = UCS_OK;
+    self->id            = NULL;
+#if HAVE_RDMACM_ECE
+    self->ece.vendor_id = 0xffffffff;
+    self->ece.options   = 0;
+    self->ece.comp_mask = 0;
+#endif
 
     if (params->field_mask & UCT_EP_PARAM_FIELD_SOCKADDR) {
         status = uct_rdamcm_cm_ep_client_init(self, params);
