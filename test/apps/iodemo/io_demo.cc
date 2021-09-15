@@ -804,15 +804,21 @@ protected:
         ~ValidateError() throw() {
         }
 
+        virtual const char *what() const throw() {
+            return _str.c_str();
+        }
+
     protected:
-        std::stringstream _ss;
+        std::string _str;
     };
 
     class DataCorruptionError : public ValidateError {
     public:
         DataCorruptionError(const char *type, size_t err_pos) throw() {
-            _ss << "ERROR: iov " << type << " corruption at " << err_pos
-                << " position";
+            std::stringstream ss;
+            ss << "ERROR: iov " << type << " corruption at " << err_pos
+               << " position";
+            _str = ss.str();
         }
 
         DataCorruptionError(const DataCorruptionError& other) throw() {
@@ -820,28 +826,20 @@ protected:
 
         ~DataCorruptionError() throw() {
         }
-
-        virtual const char *what() const throw() {
-            return _ss.str().c_str();
-        }
-
-    
     };
 
     class SnMismatchError : public ValidateError {
     public:
         SnMismatchError(size_t sn, size_t exp_sn) throw() {
-            _ss << "ERROR: io msg sn mismatch " << sn << " != " << exp_sn;
+            std::stringstream ss;
+            ss << "ERROR: io msg sn mismatch " << sn << " != " << exp_sn;
+            _str = ss.str();
         }
 
         SnMismatchError(const SnMismatchError& other) throw() {
         }
 
         ~SnMismatchError() throw() {
-        }
-
-        virtual const char *what() const throw() {
-            return _ss.str().c_str();
         }
     };
 
