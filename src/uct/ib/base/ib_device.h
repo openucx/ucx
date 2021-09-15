@@ -22,6 +22,7 @@
 #include <endian.h>
 #include <linux/ip.h>
 
+#define UCT_IB_VENDOR_ID_MLNX             0x15b3
 
 #define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */
 #define UCT_IB_UIDX_SHIFT                 8   /* BE uidx shift */
