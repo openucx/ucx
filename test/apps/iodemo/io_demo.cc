@@ -820,12 +820,6 @@ protected:
                << " position";
             _str = ss.str();
         }
-
-        DataCorruptionError(const DataCorruptionError& other) throw() {
-        }
-
-        ~DataCorruptionError() throw() {
-        }
     };
 
     class SnMismatchError : public ValidateError {
@@ -834,12 +828,6 @@ protected:
             std::stringstream ss;
             ss << "ERROR: io msg sn mismatch " << sn << " != " << exp_sn;
             _str = ss.str();
-        }
-
-        SnMismatchError(const SnMismatchError& other) throw() {
-        }
-
-        ~SnMismatchError() throw() {
         }
     };
 
