@@ -182,8 +182,6 @@ static void ucs_module_init(const char *module_path, void *dl)
     init_func = (init_func_t)ucs_module_dlsym_shallow(module_path, dl,
                                                       module_init_name);
     if (init_func == NULL) {
-        ucs_module_trace("not calling constructor '%s' in %s", module_init_name,
-                         module_path);
         return;
     }
 
