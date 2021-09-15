@@ -8,6 +8,9 @@ resources:
     - container: fedora34
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: conda
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/conda:2
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
@@ -173,3 +176,17 @@ stages:
         parameters:
             name: gpu
             demands: ucx_gpu -equals yes
+
+  - stage: python
+    dependsOn: [Static_check]
+    jobs:
+      - template: python/python-test.yml
+        parameters:
+          name: new
+          demands: ucx_new -equals yes
+          container: conda
+      - template: python/python-test.yml
+        parameters:
+          name: gpu
+          demands: ucx_gpu -equals yes
+          container: conda

@@ -1,0 +1,93 @@
+parameters:
+  name: python test
+  demands: []
+
+jobs:
+  - job: ${{ parameters.name }}
+
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    steps:
+      - checkout: self
+        fetchDepth: 100
+        clean: true
+        displayName: Checkout
+      - bash: |
+          set -x
+          source buildlib/az-helpers.sh
+          az_init_modules
+          try_load_cuda_env
+          set -eE
+          ./autogen.sh
+          ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
+            --enable-gtest=no --with-cuda=$have_cuda
+          make -j`nproc`
+          make install
+        displayName: Build UCX
+      - bash: |
+          set -x
+          source buildlib/az-helpers.sh
+          az_init_modules
+          try_load_cuda_env
+          set -eE
+
+          # Set path and build parallel level
+          export PATH=/opt/conda/bin:$PATH
+
+          ################################################################################
+          # SETUP - Install conda packages and check environment
+          ################################################################################
+          gpuci_logger "Check environment"
+          env
+
+          gpuci_logger "Activate conda env"
+          . /opt/conda/etc/profile.d/conda.sh
+          conda activate ucx-py
+          gpuci_conda_retry install \
+              "pytest" "pytest-asyncio" \
+              "dask" "distributed" \
+              "cupy=9" "numba" \
+              "cython" "libhwloc"
+
+          gpuci_logger "Clone and Build UCX-Py"
+          git clone https://github.com/rapidsai/ucx-py
+          cd ucx-py
+          python setup.py build_ext --inplace
+          python -m pip install -e .
+
+          gpuci_logger "Check versions"
+          python --version
+          conda info
+          conda config --show-sources
+          conda list --show-channel-urls
+          ucx_info -v
+
+          ################################################################################
+          # TEST - Run UCX-Py tests and benchmarks
+          ################################################################################
+          gpuci_logger "Check GPU usage"
+          nvidia-smi
+
+          test_tls="all"                       # All transports
+          test_tls+=" tcp,cuda_copy"           # Cuda without IPC
+          test_tls+=" tcp,cuda_copy,cuda_ipc"  # Cuda with IPC
+          if [ -z `get_rdma_interfaces` ]; then
+              test_tls+=" rc,cuda_copy"
+          fi
+
+          for tls in ${test_tls}; do
+              export UCX_TLS=$tls
+
+              # Test with TCP/Sockets
+              gpuci_logger "Tests (UCX_TLS=$UCX_TLS)"
+              pytest --cache-clear -vs ucp/_libs/tests
+              pytest --cache-clear -vs tests/
+
+              gpuci_logger "Benchmarks (UCX_TLS=$UCX_TLS)"
+              python benchmarks/send-recv.py -o cupy --server-dev 0 --client-dev 0 --reuse-alloc
+              python benchmarks/send-recv-core.py -o cupy --server-dev 0 --client-dev 0 --reuse-alloc
+          done
+
+        displayName: Run Python tests
