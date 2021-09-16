@@ -451,6 +451,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
         rdesc->payload_offset      = sizeof(*rdesc) + sizeof(*am_data);
         rdesc->flags               = 0;
         rdesc->release_desc_offset = 0;
+        ucp_recv_desc_set_name(rdesc, "stream_am_data_process");
         memcpy(ucp_stream_rdesc_payload(rdesc),
                UCS_PTR_BYTE_OFFSET(am_data, rdesc_tmp.payload_offset),
                rdesc_tmp.length);

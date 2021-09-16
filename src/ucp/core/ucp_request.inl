@@ -663,11 +663,19 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_recv_desc_set_name(ucp_recv_desc_t *rdesc, const char *name)
+{
+#if ENABLE_DEBUG_DATA
+    rdesc->name = name;
+#endif
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    int data_offset, unsigned am_flags, uint16_t hdr_len,
                    uint16_t rdesc_flags, int priv_length, size_t alignment,
-                   ucp_recv_desc_t **rdesc_p)
+                   const char *name, ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;
     void *data_hdr;
@@ -689,6 +697,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
+        ucp_recv_desc_set_name(rdesc, name);
         padding = ucs_padding((uintptr_t)(rdesc + 1), worker->am.alignment);
         rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
         rdesc->release_desc_offset = padding;

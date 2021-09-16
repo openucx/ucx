@@ -1190,7 +1190,8 @@ ucp_am_invoke_cb(ucp_worker_h worker, uint16_t am_id, void *user_hdr,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
         ucp_worker_h worker, ucp_am_hdr_t *am_hdr, size_t total_length,
-        ucp_ep_h reply_ep, unsigned am_flags, uint64_t recv_flags)
+        ucp_ep_h reply_ep, unsigned am_flags, uint64_t recv_flags,
+        const char *name)
 {
     ucp_recv_desc_t *desc    = NULL;
     uint16_t am_id           = am_hdr->am_id;
@@ -1229,7 +1230,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
         desc_status = ucp_recv_desc_init(worker, data, data_length, 0, am_flags,
                                          0, UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS,
                                          -(int)sizeof(*am_hdr),
-                                         worker->am.alignment, &desc);
+                                         worker->am.alignment, name, &desc);
         if (ucs_unlikely(UCS_STATUS_IS_ERR(desc_status))) {
             ucs_error("worker %p could not allocate descriptor for active"
                       " message on callback : %u",
@@ -1279,7 +1280,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler_reply,
                                   "AM (reply proto)");
 
     return ucp_am_handler_common(worker, hdr, am_length - sizeof(ftr), reply_ep,
-                                 am_flags, UCP_AM_RECV_ATTR_FIELD_REPLY_EP);
+                                 am_flags, UCP_AM_RECV_ATTR_FIELD_REPLY_EP,
+                                 "am_handler_reply");
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler,
@@ -1290,7 +1292,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler,
     ucp_worker_h worker = am_arg;
     ucp_am_hdr_t *hdr   = am_data;
 
-    return ucp_am_handler_common(worker, hdr, am_length, NULL, am_flags, 0ul);
+    return ucp_am_handler_common(worker, hdr, am_length, NULL, am_flags, 0ul,
+                                 "am_handler");
 }
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
@@ -1433,7 +1436,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
 
         return ucp_am_handler_common(worker, hdr,
                                      am_length - sizeof(*first_ftr), ep,
-                                     am_flags, recv_flags);
+                                     am_flags, recv_flags,
+                                     "am_long_first_handler");
     }
 
     ep_ext = ucp_ep_ext_proto(ep);
@@ -1553,7 +1557,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
      * buffer is not allocated yet. When first fragment arrives (carrying total
      * data size), all middle fragments will be copied to the data buffer. */
     status = ucp_recv_desc_init(worker, am_data, am_length, 0, am_flags,
-                                sizeof(*mid_hdr), 0, 0, 1, &mid_rdesc);
+                                sizeof(*mid_hdr), 0, 0, 1,
+                                "am_long_middle_handler", &mid_rdesc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucs_error("worker %p could not allocate desc for assembling AM",
                   worker);
@@ -1608,7 +1613,7 @@ ucs_status_t ucp_am_rndv_process_rts(void *arg, void *data, size_t length,
     desc_status = ucp_recv_desc_init(worker, data, length, 0, tl_flags, 0,
                                      UCP_RECV_DESC_FLAG_RNDV |
                                      UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS, 0, 1,
-                                     &desc);
+                                     "am_rndv_process_rts", &desc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(desc_status))) {
         ucs_error("worker %p could not allocate descriptor for active"
                   " message RTS on callback %u", worker, am_id);
