@@ -122,7 +122,8 @@ public:
 
     static void free(void *ptr);
 
-    ucs_status_t map_buffer(size_t length, void *address, ucp_mem_h *memh, int non_blk_flag);
+    ucs_status_t map_buffer(size_t length, void *address, ucp_mem_h *memh,
+                            int non_blk_flag);
 
     ucs_status_t unmap_buffer(ucp_mem_h memh);
 
@@ -284,7 +285,8 @@ public:
                  const void *buffer, ucp_mem_h memh, size_t length,
                  UcxCallback* callback = EmptyCallback::get());
 
-    bool recv_am_data(void *buffer, ucp_mem_h memh, size_t length, const UcxAmDesc &data_desc,
+    bool recv_am_data(void *buffer, ucp_mem_h memh, size_t length,
+                      const UcxAmDesc &data_desc,
                       UcxCallback* callback = EmptyCallback::get());
 
     void cancel_all();
@@ -354,8 +356,8 @@ private:
 
     void established(ucs_status_t status);
 
-    bool send_common(const void *buffer, ucp_mem_h memh, size_t length, ucp_tag_t tag,
-                     UcxCallback* callback);
+    bool send_common(const void *buffer, ucp_mem_h memh, size_t length,
+                     ucp_tag_t tag, UcxCallback* callback);
 
     void request_started(ucx_request *r);
 

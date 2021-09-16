@@ -223,7 +223,8 @@ public:
 
     virtual BufferType *construct()
     {
-        return BufferType::allocate(this->buffer_size(), *this, _memory_type, _context);
+        return BufferType::allocate(this->buffer_size(), *this, _memory_type,
+                                    _context);
     }
 
     virtual ucs_memory_type_t memory_type() const
@@ -418,7 +419,8 @@ protected:
         }
 
         static Buffer *allocate(size_t size, BufferMemoryPool<Buffer> &pool,
-                                ucs_memory_type_t memory_type, UcxContext *context = NULL)
+                                ucs_memory_type_t memory_type,
+                                UcxContext *context = NULL)
         {
 #ifdef HAVE_CUDA
             cudaError_t cerr;
@@ -445,7 +447,10 @@ protected:
                 buffer = UcxContext::memalign(ALIGNMENT, size,
                                               pool.name().c_str());
                 if (context != NULL && buffer != NULL) {
-                    assert(context->map_buffer(size, buffer, &memh, 0) == UCS_OK);
+                    if (context->map_buffer(size, buffer, &memh, 0) != UCS_OK) {
+                        free(buffer);
+                        buffer = NULL;
+                    }
                 }
                 break;
             default:
@@ -471,7 +476,8 @@ protected:
 #endif
             case UCS_MEMORY_TYPE_HOST:
                 if (_memh && _context) {
-                    assert(_context->unmap_buffer(_memh) == UCS_OK);
+                    ucs_status_t status = _context->unmap_buffer(_memh);
+                    assert(status == UCS_OK);
                 }
                 free(_buffer);
                 break;
@@ -766,9 +772,11 @@ protected:
                         UcxCallback* callback = EmptyCallback::get()) {
         for (size_t i = 0; i < iov.size(); ++i) {
             if (send_recv_data == XFER_TYPE_SEND) {
-                conn->send_data(iov[i].buffer(), iov[i].memh(), iov[i].size(), sn, callback);
+                conn->send_data(iov[i].buffer(), iov[i].memh(), iov[i].size(),
+                                sn, callback);
             } else {
-                conn->recv_data(iov[i].buffer(), iov[i].memh(), iov[i].size(), sn, callback);
+                conn->recv_data(iov[i].buffer(), iov[i].memh(), iov[i].size(),
+                                sn, callback);
             }
         }
     }
@@ -1091,8 +1099,8 @@ public:
         conn_stat.bytes<IO_READ>() += msg->data_size;
         // Send IO_READ_COMP as AM header and first iov element as payload
         // (note that multi-iov send is not supported for IODEMO with AM yet)
-        conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(), (*iov)[0].memh(),
-                      (*iov)[0].size(), cb);
+        conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(),
+                      (*iov)[0].memh(), (*iov)[0].size(), cb);
     }
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
@@ -1124,7 +1132,8 @@ public:
         assert(iov->size() == 1);
 
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
-        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(), (*iov)[0].size(), data_desc, w);
+        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(),
+                           (*iov)[0].size(), data_desc, w);
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
@@ -1575,7 +1584,8 @@ public:
         // Send IO_WRITE as AM header and first iov element as payload
         // (note that multi-iov send is not supported for IODEMO with AM yet)
         server_info.conn->send_am(m->buffer(), opts().iomsg_size,
-                                  (*iov)[0].buffer(), (*iov)[0].memh(), (*iov)[0].size(), cb);
+                                  (*iov)[0].buffer(), (*iov)[0].memh(),
+                                  (*iov)[0].size(), cb);
 
         return data_size;
     }
@@ -1691,7 +1701,8 @@ public:
 
             assert(iov->size() == 1);
 
-            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(), msg->data_size, data_desc, r);
+            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(),
+                               msg->data_size, data_desc, r);
         }
     }
 

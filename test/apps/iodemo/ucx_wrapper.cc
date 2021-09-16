@@ -893,15 +893,15 @@ bool UcxConnection::send_io_message(const void *buffer, size_t length,
     return send_common(buffer, NULL, length, tag, callback);
 }
 
-bool UcxConnection::send_data(const void *buffer, ucp_mem_h memh, size_t length, uint32_t sn,
-                              UcxCallback* callback)
+bool UcxConnection::send_data(const void *buffer, ucp_mem_h memh, size_t length,
+                              uint32_t sn, UcxCallback* callback)
 {
     ucp_tag_t tag = make_data_tag(_remote_conn_id, sn);
     return send_common(buffer, memh, length, tag, callback);
 }
 
-bool UcxConnection::recv_data(void *buffer, ucp_mem_h memh, size_t length, uint32_t sn,
-                              UcxCallback* callback)
+bool UcxConnection::recv_data(void *buffer, ucp_mem_h memh, size_t length,
+                              uint32_t sn, UcxCallback* callback)
 {
     if (_ep == NULL) {
         (*callback)(UCS_ERR_CANCELED);
@@ -922,7 +922,8 @@ bool UcxConnection::recv_data(void *buffer, ucp_mem_h memh, size_t length, uint3
     }
 
     ucs_status_ptr_t status_ptr = ucp_tag_recv_nbx(_context.worker(), buffer,
-                                                  length, tag, tag_mask, &param);
+                                                   length, tag, tag_mask,
+                                                   &param);
     return process_request("ucp_tag_recv_nbx", status_ptr, callback);
 }
 
@@ -971,6 +972,7 @@ bool UcxConnection::recv_am_data(void *buffer, ucp_mem_h memh, size_t length,
         params.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
         params.memh          = memh;
     }
+
     ucs_status_ptr_t sp = ucp_am_recv_data_nbx(_context.worker(),
                                                data_desc._data,
                                                buffer, length, &params);
@@ -1190,7 +1192,8 @@ void UcxConnection::established(ucs_status_t status)
     invoke_callback(_establish_cb, status);
 }
 
-bool UcxConnection::send_common(const void *buffer, ucp_mem_h memh, size_t length, ucp_tag_t tag,
+bool UcxConnection::send_common(const void *buffer, ucp_mem_h memh,
+                                size_t length, ucp_tag_t tag,
                                 UcxCallback* callback)
 {
     ucp_request_param_t params = {};
