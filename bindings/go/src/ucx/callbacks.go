@@ -18,6 +18,10 @@ type UcpSendCallback = func(request *UcpRequest, status UcsStatus)
 
 type UcpTagRecvCallback = func(request *UcpRequest, status UcsStatus, tagInfo *UcpTagRecvInfo)
 
+// This callback routine is invoked on the server side to handle incoming
+// connections from remote clients.
+type UcpListenerConnectionHandler = func(connRequest *UcpConnectionRequest)
+
 // Map from the callback id that is passed to C to the actual go callback.
 var callback_map = make(map[uint64]UcpCallback)
 
@@ -44,9 +48,16 @@ func deregister(id uint64) (UcpCallback, bool) {
 	return val, ret
 }
 
+func getCallback(id uint64) (UcpCallback, bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	val, ret := callback_map[id]
+	return val, ret
+}
+
 //export ucxgo_completeGoSendRequest
 func ucxgo_completeGoSendRequest(request unsafe.Pointer, status C.ucs_status_t, callbackId unsafe.Pointer) {
-	if callback, found := deregister(*(*uint64)(callbackId)); found {
+	if callback, found := deregister(uint64(uintptr(callbackId))); found {
 		callback.(UcpSendCallback)(&UcpRequest{
 			request: request,
 			Status:  UcsStatus(status),
