@@ -659,15 +659,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
     recv_b(sender().worker(), sender().ep(), 8, 1);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, send_disconnect_reply2,
-                     /* skip the test for TCP, because it fails from time to
-                      * time: the sender re-uses a socket fd from the already
-                      * accepted connection from the receiver, but then the
-                      * socket fd is closed, since the receiver closed the
-                      * connection and the underlying TCP EP isn't able to
-                      * receive the data on the failed socket.
-                      * TODO: fix the bug on TCP level */
-                     has_transport("tcp")) {
+UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     sender().connect(&receiver(), get_ep_params());
 
     send_b(sender().ep(), 8, 1);
