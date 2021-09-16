@@ -64,7 +64,7 @@ struct ucs_stats_class {
  * relationship between them.
  * ucs_stats_filter_node is a data structure used to filter the counters
  * on the report.
- * Therre are 3 types of filtering: Full, Aggregate, and summary
+ * There are 3 types of filtering: Full, Aggregate, and summary
  * Following is an example of the data structures in aggregate mode:
  *
  *      ucs_stats_node                        ucs_stats_filter_node
