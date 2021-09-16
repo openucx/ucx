@@ -81,7 +81,7 @@ jobs:
           LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/lib:$LD_LIBRARY_PATH
       - bash: |
           set -Eex
-          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          port=$((10000 + $(Build.BuildId)))
           ./bin/ucx_perftest -t tag_bw -p $port &
           server_pid=$!
           sleep 1;
