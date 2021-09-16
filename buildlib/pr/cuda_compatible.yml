@@ -77,6 +77,8 @@ jobs:
           set -eEx
           ./bin/ucx_info -u t -epw
         displayName: Test ucx_info
+        env:
+          LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/lib:$LD_LIBRARY_PATH
       - bash: |
           set -Eex
           port=$((10000 + (1000 * ${AZP_AGENT_ID})))
@@ -88,5 +90,5 @@ jobs:
           grep "Final:" perf.txt
         displayName: Test ucx_perftest
         env:
-          LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/install/lib:$LD_LIBRARY_PATH
+          LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/lib:$LD_LIBRARY_PATH
 
