@@ -24,7 +24,7 @@ jobs:
           cd pkg-build
           make -s -j 4
           make install
-          tar czf $(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz $(Build.Repository.LocalPath)/install/*
+          tar czf $(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz -C $(Build.Repository.LocalPath)/install
         displayName: Build package
       - task: PublishBuildArtifacts@1
         inputs:
@@ -33,6 +33,8 @@ jobs:
 
   - job: test_cuda11_2_4
     dependsOn: ucx_build
+    workspace:
+      clean: all
     displayName: Test with perftest and ucx_info
     pool:
       name: MLNX
@@ -68,7 +70,8 @@ jobs:
           downloadPath: $(System.DefaultWorkingDirectory)
       - bash: |
           set -eEx
-          tar xzf ucx/ucx_bin_$(Build.BuildId).tar.gz
+          ls -la
+          tar xzf ucx/ucx_bin_$(Build.BuildId).tar.gz -C $PWD
           ls -la
       - bash: |
           set -eEx
