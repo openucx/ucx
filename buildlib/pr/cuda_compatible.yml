@@ -29,7 +29,7 @@ jobs:
       - task: PublishBuildArtifacts@1
         inputs:
           pathToPublish: '$(Build.ArtifactStagingDirectory)'
-
+          artifactName: ucx
 
   - job: test_cuda11_2_4
     dependsOn: ucx_build
@@ -64,11 +64,11 @@ jobs:
       - task: DownloadBuildArtifacts@0
         displayName: 'Download Build Artifacts'
         inputs:
-          artifactName: ucx_bin_$(Build.BuildId).tar.gz
+          artifactName: ucx
           downloadPath: $(System.DefaultWorkingDirectory)
       - bash: |
           set -eEx
-          tar xzf ucx_bin_$(Build.BuildId).tar.gz .
+          tar xzf ucx/ucx_bin_$(Build.BuildId).tar.gz .
           ls -la
       - bash: |
           set -eEx
