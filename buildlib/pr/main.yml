@@ -40,19 +40,19 @@ resources:
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
-      options: --gpus all --net=nost
+      options: --gpus all
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
-      options: --gpus all --net=nost
+      options: --gpus all
     - container: ubuntu16_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
-      options: --gpus all --net=nost
+      options: --gpus all
     - container: ubuntu18_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:1
-      options: --gpus all --net=nost
+      options: --gpus all
     - container: ubuntu20_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
-      options: --gpus all --net=nost
+      options: --gpus all
 
 stages:
   - stage: Cuda_compatible
