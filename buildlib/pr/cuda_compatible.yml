@@ -28,7 +28,7 @@ jobs:
         displayName: Build package
       - task: PublishBuildArtifacts@1
         inputs:
-          pathToPublish: '$(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz'
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
           artifactName: ucx_bin_$(Build.BuildId).tar.gz
 
   - job: test_cuda11_2_4
