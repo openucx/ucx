@@ -68,7 +68,7 @@ jobs:
           downloadPath: $(System.DefaultWorkingDirectory)
       - bash: |
           set -eEx
-          tar xzf ucx/ucx_bin_$(Build.BuildId).tar.gz .
+          tar xzf ucx/ucx_bin_$(Build.BuildId).tar.gz
           ls -la
       - bash: |
           set -eEx
