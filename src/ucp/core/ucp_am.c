@@ -1225,7 +1225,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
          * memory copy of the user header if the message is short/inlined
          * (i.e. received without UCT_CB_PARAM_FLAG_DESC flag).
          */
-        recv_flags |= UCP_AM_RECV_ATTR_FLAG_DATA;
         desc_status = ucp_recv_desc_init(worker, data, data_length, 0, am_flags,
                                          0, UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS,
                                          -(int)sizeof(*am_hdr),
