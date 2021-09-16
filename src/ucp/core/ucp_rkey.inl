@@ -37,4 +37,15 @@ ucp_rkey_config(ucp_worker_h worker, ucp_rkey_h rkey)
     return &worker->rkey_config[rkey->cfg_index];
 }
 
+static UCS_F_ALWAYS_INLINE uct_rkey_t
+ucp_rkey_get_tl_rkey(ucp_rkey_h rkey, ucp_md_index_t rkey_index)
+{
+    if (rkey_index == UCP_NULL_RESOURCE) {
+        return UCT_INVALID_RKEY;
+    }
+
+    ucs_assert(rkey_index < ucs_popcount(rkey->md_map));
+    return rkey->tl_rkey[rkey_index].rkey.rkey;
+}
+
 #endif

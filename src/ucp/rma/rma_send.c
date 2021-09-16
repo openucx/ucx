@@ -227,7 +227,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    tl_rkey = rkey->tl_rkey[rkey_config->put_short.rkey_index].rkey.rkey;
+    tl_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_config->put_short.rkey_index);
     return UCS_PROFILE_CALL(uct_ep_put_short,
                             ep->uct_eps[rkey_config->put_short.lane],
                             buffer, length, remote_addr, tl_rkey);
