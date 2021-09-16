@@ -1454,7 +1454,9 @@ struct uct_ib_mlx5_rtr2rts_qp_out_bits {
 
     uint8_t         syndrome[0x20];
 
-    uint8_t         reserved_at_40[0x40];
+    uint8_t         reserved_at_40[0x20];
+
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_rtr2rts_qp_in_bits {
