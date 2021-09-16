@@ -1441,7 +1441,7 @@ struct uct_ib_mlx5_init2rtr_qp_in_bits {
 
     uint8_t         opt_param_mask[0x20];
 
-    uint8_t         reserved_at_a0[0x20];
+    uint8_t         ece[0x20];
 
     struct uct_ib_mlx5_qpc_bits qpc;
 
