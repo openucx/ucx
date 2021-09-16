@@ -849,7 +849,7 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
                                      struct ibv_ah_attr *ah_attr,
-                                     enum ibv_mtu path_mtu)
+                                     enum ibv_mtu path_mtu, uint32_t ece)
 {
     uct_ib_device_t UCS_V_UNUSED *dev;
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
@@ -858,11 +858,22 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     struct ibv_qp_attr qp_attr;
 #endif
     long qp_attr_mask;
+    uct_ibv_ece_t UCS_V_UNUSED ibv_ece;
     int ret;
 
     ucs_assert(path_mtu != 0);
 
     dev = uct_ib_iface_device(&iface->super);
+#if HAVE_RDMACM_ECE
+    if ((dev->flags & UCT_IB_DEVICE_FLAG_ECE) &&
+        (iface->super.config.ece_cfg.ece_enable)) {
+        ibv_ece.vendor_id = UCT_IB_VENDOR_ID_MLNX;
+        ibv_ece.options = ece;
+        ibv_ece.comp_mask = 0;
+        /* Make coverity happy */
+        (void)ibv_set_ece(qp, &ibv_ece);
+    }
+#endif
 
     memset(&qp_attr, 0, sizeof(qp_attr));
 
@@ -918,6 +929,14 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
+
+#if HAVE_RDMACM_ECE
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        /* Make coverity happy */
+        (void)ibv_query_ece(qp, &ibv_ece);
+        ucs_debug("rc verbs under rst with ece 0x%x", ibv_ece.options);
+    }
+#endif
 
     ucs_debug("connected rc qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
               "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d",

@@ -598,7 +598,8 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     }
 
     qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
-    status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu);
+    status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu,
+                                     ep->super.remote_ece.val);
     if (status != UCS_OK) {
         return status;
     }

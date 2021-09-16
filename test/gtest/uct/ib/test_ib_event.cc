@@ -400,7 +400,7 @@ private:
 
             struct ibv_ah_attr ah = ah_attr();
             status = uct_rc_iface_qp_connect(&m_iface->super, m_ibqp,
-                                             qp_num(), &ah, path_mtu());
+                                             qp_num(), &ah, path_mtu(), 0);
             ASSERT_UCS_OK(status);
         }
 

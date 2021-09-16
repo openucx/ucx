@@ -704,7 +704,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                                         path_index);
     } else {
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
-                                       ah_attr, path_mtu);
+                                       ah_attr, path_mtu, 0);
     }
 }
 
