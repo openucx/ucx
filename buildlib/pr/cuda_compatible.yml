@@ -32,6 +32,7 @@ jobs:
           artifactName: ucx_bin_$(Build.BuildId).tar.gz
 
   - job: test_cuda11_2_4
+    dependsOn: ucx_build
     displayName: Test with perftest and ucx_info
 
     strategy:
