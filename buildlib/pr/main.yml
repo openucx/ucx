@@ -50,7 +50,12 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
 
 stages:
+  - stage: Cuda_compatible
+    jobs:
+    - template: cuda_compatible.yml
+
   - stage: Codestyle
+    dependsOn: [Cuda_compatible]
     jobs:
     - template: codestyle.yml
 
