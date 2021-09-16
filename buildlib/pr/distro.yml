@@ -67,7 +67,7 @@ jobs:
           ./bin/ucx_perftest -t tag_bw -p $port &
           server_pid=$!
           sleep 1;
-          ./bin/ucx_perftest -t tag_bw -p $port localhost 2>&1 | tee perf.txt
+          ./bin/ucx_perftest -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
           wait $server_pid
           grep "Final:" perf.txt
         displayName: Test ucx_perftest
@@ -95,7 +95,7 @@ jobs:
           LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a `hostname -I`
+          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a 127.0.0.1
           kill -9 $server_pid
         displayName: Test wire compatibility server v1.11 client master
         env:
@@ -107,7 +107,7 @@ jobs:
           LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
           server_pid=$!
           sleep 5
-          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a `hostname -I`
+          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a 127.0.0.1
           kill -9 $server_pid
         env:
           UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
