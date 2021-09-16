@@ -1,0 +1,85 @@
+jobs:
+  - job: ucx_build
+    displayName: Build with cuda
+    pool:
+      name: MLNX
+      demands:
+        - ucx_docker -equals yes
+    container: centos7_cuda11
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          set -eEx
+          ./autogen.sh
+          mkdir pkg-build
+          cd pkg-build
+          ../contrib/configure-release --with-cuda --with-java=no --prefix=$(Build.Repository.LocalPath)/install
+        displayName: Configure
+
+      - bash: |
+          set -eEx
+          cd pkg-build
+          make -s -j 4
+          make install
+          tar czf $(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz $(Build.Repository.LocalPath)/install/*
+        displayName: Build package
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz'
+          artifactName: ucx_bin_$(Build.BuildId).tar.gz
+
+  - job: test_cuda11_2_4
+    displayName: Test with perftest and ucx_info
+
+    strategy:
+      matrix:
+        centos7_cuda11:
+          build_container: centos7_cuda11
+          artifact_name: centos7-mofed5-cuda11.tar.gz
+        centos8_cuda11:
+          build_container: centos8_cuda11
+          artifact_name: centos8-mofed5-cuda11.tar.gz
+        ubuntu16_cuda11:
+          build_container: ubuntu16_cuda11
+          artifact_name: ubuntu16.04-mofed5-cuda11.tar.gz
+        ubuntu18_cuda11:
+          build_container: ubuntu18_cuda11
+          artifact_name: ubuntu18.04-mofed5-cuda11.tar.gz
+        ubuntu20_cuda11:
+          build_container: ubuntu20_cuda11
+          artifact_name: ubuntu20.04-mofed5-cuda11.tar.gz
+
+    container: $[ variables['build_container'] ]
+
+    steps:
+      - checkout: none
+        clean: true
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: ucx_bin_$(Build.BuildId).tar.gz
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: |
+          set -eEx
+          tar xzf ucx_bin_$(Build.BuildId).tar.gz .
+          ls -la
+      - bash: |
+          set -eEx
+          ./bin/ucx_info -u t -epw
+        displayName: Test ucx_info
+      - bash: |
+          set -Eex
+          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          ./bin/ucx_perftest -t tag_bw -p $port &
+          server_pid=$!
+          sleep 1;
+          ./bin/ucx_perftest -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
+          wait $server_pid
+          grep "Final:" perf.txt
+        displayName: Test ucx_perftest
+        env:
+          LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/install/lib:$LD_LIBRARY_PATH
+

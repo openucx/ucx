@@ -38,6 +38,16 @@ resources:
     - container: sles12sp5
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: centos7_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
+    - container: centos8_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
+    - container: ubuntu16_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
+    - container: ubuntu18_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:1
+    - container: ubuntu20_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
 
 stages:
   - stage: Codestyle
