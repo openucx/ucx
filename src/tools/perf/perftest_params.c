@@ -73,6 +73,9 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -O <count>     maximal number of uncompleted outstanding sends\n");
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
                                 ctx->params.super.iov_stride);
+    printf("     -l             use loopback connection\n");
+    printf("                    in this case, the process will communicate with itself,\n");
+    printf("                    so passing server hostname is not allowed\n");
     printf("     -o             do not progress the responder in one-sided tests\n");
     printf("     -B             register memory with NONBLOCK flag\n");
     printf("     -b <file>      read and execute tests from a batch file: every line in the\n");
@@ -303,6 +306,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
         return UCS_OK;
     case 'i':
         params->super.iov_stride = atol(opt_arg);
+        return UCS_OK;
+    case 'l':
+        params->super.flags |= UCX_PERF_TEST_FLAG_LOOPBACK;
         return UCS_OK;
     case 'n':
         params->super.max_iter = atol(opt_arg);
@@ -573,6 +579,12 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
 
     if (optind < argc) {
         ctx->server_addr = argv[optind];
+
+        if (ctx->params.super.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
+            ucs_error("conflicting arguments: server hostname argument is not "
+                      "allowed in loopback (-l) mode");
+            return UCS_ERR_INVALID_PARAM;
+        }
     }
 
     return UCS_OK;

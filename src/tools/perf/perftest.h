@@ -20,7 +20,7 @@
 #define MAX_BATCH_FILES         32
 #define MAX_CPUS                1024
 #define TL_RESOURCE_NAME_NONE   "<none>"
-#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:"
+#define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:l"
 #define TEST_ID_UNDEFINED       -1
 
 enum {
@@ -33,8 +33,11 @@ enum {
 };
 
 typedef struct sock_rte_group {
+    int                          sendfd;
+    int                          recvfd;
     int                          is_server;
-    int                          connfd;
+    int                          size;
+    int                          peer;
 } sock_rte_group_t;
 
 typedef struct test_type {
