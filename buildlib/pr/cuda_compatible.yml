@@ -34,6 +34,9 @@ jobs:
   - job: test_cuda11_2_4
     dependsOn: ucx_build
     displayName: Test with perftest and ucx_info
+    pool:
+      name: MLNX
+      demands: ucx_gpu_test -equals yes
 
     strategy:
       matrix:
