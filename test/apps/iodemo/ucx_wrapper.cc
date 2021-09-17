@@ -912,8 +912,8 @@ bool UcxConnection::recv_data(void *buffer, ucp_mem_h memh, size_t length,
     ucp_tag_t tag_mask = std::numeric_limits<ucp_tag_t>::max();
     ucp_request_param_t param;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
-                        UCP_OP_ATTR_FIELD_CALLBACK |
-                        UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+                         UCP_OP_ATTR_FIELD_CALLBACK |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
     param.datatype     = ucp_dt_make_contig(1);
     param.cb.recv      = (ucp_tag_recv_nbx_callback_t)data_recv_callback;
     if (memh) {
