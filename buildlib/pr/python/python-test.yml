@@ -8,6 +8,7 @@ jobs:
     pool:
       name: MLNX
       demands: ${{ parameters.demands }}
+    container: conda
 
     steps:
       - checkout: self
