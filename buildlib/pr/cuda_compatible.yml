@@ -70,9 +70,8 @@ jobs:
           downloadPath: $(System.DefaultWorkingDirectory)
       - bash: |
           set -eEx
-          ls -la
           tar xzf ucx/ucx_bin_$(Build.BuildId).tar.gz -C $PWD
-          ls -la
+          nvidia-smi
       - bash: |
           set -eEx
           ./bin/ucx_info -u t -epw
