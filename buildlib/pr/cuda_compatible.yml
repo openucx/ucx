@@ -42,21 +42,36 @@ jobs:
 
     strategy:
       matrix:
-        centos7_cuda11:
+        centos7_cuda11_2:
           build_container: centos7_cuda11
-          artifact_name: centos7-mofed5-cuda11.tar.gz
-        centos8_cuda11:
+          cuda_version: dev/cuda11.2
+        centos8_cuda11_2:
           build_container: centos8_cuda11
-          artifact_name: centos8-mofed5-cuda11.tar.gz
-        ubuntu16_cuda11:
+          cuda_version: dev/cuda11.2
+        ubuntu16_cuda11_2:
           build_container: ubuntu16_cuda11
-          artifact_name: ubuntu16.04-mofed5-cuda11.tar.gz
-        ubuntu18_cuda11:
+          cuda_version: dev/cuda11.2
+        ubuntu18_cuda11_2:
           build_container: ubuntu18_cuda11
-          artifact_name: ubuntu18.04-mofed5-cuda11.tar.gz
-        ubuntu20_cuda11:
+          cuda_version: dev/cuda11.2
+        ubuntu20_cuda11_2:
           build_container: ubuntu20_cuda11
-          artifact_name: ubuntu20.04-mofed5-cuda11.tar.gz
+          cuda_version: dev/cuda11.2
+        centos7_cuda11_4:
+          build_container: centos7_cuda11
+          cuda_version: dev/cuda11.4
+        centos8_cuda11_4:
+          build_container: centos8_cuda11
+          cuda_version: dev/cuda11.4
+        ubuntu16_cuda11_4:
+          build_container: ubuntu16_cuda11
+          cuda_version: dev/cuda11.4
+        ubuntu18_cuda11_4:
+          build_container: ubuntu18_cuda11
+          cuda_version: dev/cuda11.4
+        ubuntu20_cuda11_4:
+          build_container: ubuntu20_cuda11
+          cuda_version: dev/cuda11.4
 
     container: $[ variables['build_container'] ]
 
@@ -74,12 +89,17 @@ jobs:
           nvidia-smi
       - bash: |
           set -eEx
+          . /etc/profile.d/modules.sh
+          module load $(cuda_version)
           ./bin/ucx_info -u t -epw
         displayName: Test ucx_info
         env:
           LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/lib:$LD_LIBRARY_PATH
+          MODULEPATH: /hpc/local/etc/modulefiles:$MODULEPATH
       - bash: |
           set -Eex
+          . /etc/profile.d/modules.sh
+          module load $(cuda_version)
           port=$((10000 + $(Build.BuildId)))
           ./bin/ucx_perftest -t tag_bw -p $port &
           server_pid=$!
@@ -90,4 +110,5 @@ jobs:
         displayName: Test ucx_perftest
         env:
           LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/lib:$LD_LIBRARY_PATH
+          MODULEPATH: /hpc/local/etc/modulefiles:$MODULEPATH
 
