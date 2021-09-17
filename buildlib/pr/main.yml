@@ -9,7 +9,7 @@ resources:
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: conda
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/conda:2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/conda
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: coverity_rh7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
