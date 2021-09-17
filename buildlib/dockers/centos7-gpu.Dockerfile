@@ -1,16 +1,15 @@
 ARG CUDA_VERSION
-FROM nvidia/cuda:${CUDA_VERSION}-devel-centos7
+ARG OS_VERSION
+FROM nvidia/cuda:${CUDA_VERSION}-devel-centos${OS_VERSION}
 
 RUN yum install -y \
     autoconf \
     automake \
-    doxygen \
     file \
     gcc-c++ \
     git \
     glibc-devel \
     libtool \
-    librdmacm \
     make \
     maven \
     numactl-devel \
@@ -22,6 +21,11 @@ RUN yum install -y \
     wget \
     libusbx \
     fuse-libs \
+    python36 \
+    lsof \
+    ethtool \
+    environment-modules \
+    valgrind-devel \
     && yum clean all
 
 # MOFED
@@ -40,9 +44,15 @@ RUN wget --no-verbose http://content.mellanox.com/ofed/${MOFED_SITE_PLACE}/${MOF
         --without-hcoll \
         --without-openmpi \
         --without-sharp \
+        --skip-distro-check \
+        --distro ${MOFED_OS} \
     && rm -rf ${MOFED_DIR} && rm -rf *.tgz
 
 ENV CPATH /usr/local/cuda/include:${CPATH}
 ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LD_LIBRARY_PATH}
 ENV LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LIBRARY_PATH}
 ENV PATH /usr/local/cuda/compat:${PATH}
+
+RUN cd /usr/lib64 && \
+    ln -s libudev.so.1 libudev.so && \
+    ln -s libz.so.1 libz.so

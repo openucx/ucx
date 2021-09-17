@@ -24,7 +24,6 @@ RUN yum install -y \
     python36 \
     lsof \
     ethtool \
-    environment-modules \
     && yum clean all
 
 # MOFED

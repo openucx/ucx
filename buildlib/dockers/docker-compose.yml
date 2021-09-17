@@ -12,6 +12,17 @@ services:
         MOFED_OS: rhel7.6
         CUDA_VERSION: 11.2.0
         OS_VERSION: 7
+  centos7-gpu-mofed5-cuda11:
+    image: centos7-gpu-mofed5-cuda11
+    build:
+      context: .
+      network: host
+      dockerfile: centos7-gpu.Dockerfile
+      args:
+        MOFED_VERSION: 5.0-1.0.0.0
+        MOFED_OS: rhel7.6
+        CUDA_VERSION: 11.2.0
+        OS_VERSION: 7
   centos8-mofed5-cuda11:
     image: centos8-mofed5-cuda11
     build:
