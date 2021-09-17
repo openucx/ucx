@@ -41,6 +41,7 @@ BEGIN_C_DECLS
 
 /* revert to glibc syscall */
 #define ucs_syscall_raw               syscall
+#define ucs_syscall_raw4              syscall
 
 
 static inline uint64_t ucs_arch_read_hres_clock()

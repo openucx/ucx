@@ -807,19 +807,34 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
     return UCS_OK;
 }
 
+/* Based on include/linux/signal.h from kernel source */
+struct uct_ib_sigaction {
+    void     *uapi_sa_handler;
+    uint64_t uapi_sa_flags;
+    void     *uapi_sa_restorer;
+    uint64_t uapi_sa_mask;
+    uint64_t pad;   /* glibc compatibility */
+};
+
 static int uct_ib_device_cleanup_proc(void* arg)
 {
     uct_ib_device_nb_close_ctx *ctx = arg;
     static const char *process_name = "ucx_cleanup";
+    struct uct_ib_sigaction dfl     = { SIG_DFL };
     char dummy;
-    int fd;
+    int i;
+
+    for (i = 1; i <= SIGUSR2; i++) {
+        ucs_syscall_raw4(SYS_rt_sigaction, i, (long)&dfl, 0,
+                         sizeof(dfl.uapi_sa_mask));
+    }
 
     /* Since TLS of this thread is uninitialized avoid using glibc */
     ucs_syscall_raw(SYS_prctl, PR_SET_NAME, (long)process_name, 0);
 
-    for (fd = 0; fd < ctx->max_fds; fd++) {
-        if ((fd != ctx->cmd_fd) && (fd != ctx->pipefds[0])) {
-            ucs_syscall_raw(SYS_close, fd, 0, 0);
+    for (i = 0; i < ctx->max_fds; i++) {
+        if ((i != ctx->cmd_fd) && (i != ctx->pipefds[0])) {
+            ucs_syscall_raw(SYS_close, i, 0, 0);
         }
     }
 

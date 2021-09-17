@@ -72,6 +72,7 @@ BEGIN_C_DECLS
 
 /* revert to glibc syscall */
 #define ucs_syscall_raw               syscall
+#define ucs_syscall_raw4              syscall
 
 
 /*

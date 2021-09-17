@@ -772,4 +772,22 @@ int ucs_syscall_raw(unsigned long num, unsigned long arg1, unsigned long arg2,
     return ret;
 }
 
+int ucs_syscall_raw4(unsigned long num, unsigned long arg1, unsigned long arg2,
+                     unsigned long arg3, unsigned long arg4)
+{
+    int ret;
+
+    asm volatile (
+        "movq %1, %%rax\n\t"
+        "movq %2, %%rdi\n\t"
+        "movq %3, %%rsi\n\t"
+        "movq %4, %%rdx\n\t"
+        "movq %5, %%r10\n\t"
+        "syscall\n\t"
+        :"=a"(ret)
+        :"r"(num), "r"(arg1), "r"(arg2), "r"(arg3), "r"(arg4));
+
+    return ret;
+}
+
 #endif
