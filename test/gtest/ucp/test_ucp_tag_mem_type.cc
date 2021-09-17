@@ -94,6 +94,16 @@ public:
         mem_buffer::pattern_check(rbuf, length, 2, r_mem_type);
     }
 
+    size_t max_test_length(unsigned exp) const
+    {
+        return static_cast<size_t>(pow(10.0, exp));
+    }
+
+    size_t test_length(unsigned exp) const
+    {
+        return (ucs::rand() % max_test_length(exp)) + 1;
+    }
+
     static std::vector<std::vector<ucs_memory_type_t> > mem_type_pairs;
 
 protected:
@@ -165,12 +175,12 @@ size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
 
 UCS_TEST_P(test_ucp_tag_mem_type, basic)
 {
-    ucp_datatype_t type = ucp_dt_make_contig(1);
-    size_t max_length;
+    const size_t max_iter1       = RUNNING_ON_VALGRIND ? 3 : 7; 
+    const size_t iter_multiplier = RUNNING_ON_VALGRIND ? 2 : 1; 
+    const ucp_datatype_t type    = ucp_dt_make_contig(1);
 
-    for (unsigned i = 1; i <= 7; ++i) {
-        max_length = (size_t)pow(10.0, i);
-        size_t length = ucs::rand() % max_length + 1;
+    for (unsigned i = 1; i <= max_iter1; ++i) {
+        size_t length = test_length(i * iter_multiplier);
 
         mem_buffer m_recv_mem_buf(length, m_recv_mem_type);
         mem_buffer m_send_mem_buf(length, m_send_mem_type);
@@ -180,12 +190,13 @@ UCS_TEST_P(test_ucp_tag_mem_type, basic)
     }
 
     /*  test with re-using the buffers */
-    max_length = (size_t)pow(10.0, 7);
+    size_t max_length = max_test_length(7);
     mem_buffer m_recv_mem_buf(max_length, m_recv_mem_type);
     mem_buffer m_send_mem_buf(max_length, m_send_mem_type);
 
-    for (unsigned i = 0; i < 2; ++i) {
-        size_t length = ucs::rand() % max_length + 1;
+    const size_t max_iter2 = RUNNING_ON_VALGRIND ? 1 : 2;
+    for (unsigned i = 0; i < max_iter2; ++i) {
+        size_t length = test_length(7);
 
         do_basic_send(m_send_mem_buf.ptr(),m_recv_mem_buf.ptr(), length, type,
                       m_send_mem_buf.mem_type(), m_recv_mem_buf.mem_type());
@@ -211,7 +222,7 @@ UCS_TEST_P(test_ucp_tag_mem_type, rndv_4mb, "RNDV_THRESH=0")
 UCS_TEST_P(test_ucp_tag_mem_type, xfer_mismatch_length)
 {
     ucp_datatype_t type = ucp_dt_make_contig(1);
-    size_t length = ucs::rand() % ((ssize_t)pow(10.0, 7));
+    size_t length       = test_length(7);
 
     UCS_TEST_MESSAGE << "TEST: "
                      << ucs_memory_type_names[m_send_mem_type] << " <-> "
