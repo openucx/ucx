@@ -36,7 +36,8 @@
 enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
-    /* UCS_BIT(2) and UCS_BIT(3) are vacant flags */
+    UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
+    /* UCS_BIT(3) is a vacant flag */
     UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED  = UCS_BIT(4),
     UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK              = UCS_BIT(6),
@@ -355,6 +356,12 @@ struct ucp_request {
 
             /* Remote request ID received from a peer */
             ucs_ptr_map_key_t     remote_req_id;
+
+#if ENABLE_DEBUG_DATA
+            /* For rendezvous receive with new protocols: selected protocol for
+               fetching remote data */
+            const ucp_proto_config_t *proto_rndv_config;
+#endif
 
             union {
                 struct {
