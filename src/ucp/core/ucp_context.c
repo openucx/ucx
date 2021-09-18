@@ -50,6 +50,7 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
     [UCP_RNDV_MODE_PUT_ZCOPY]    = "put_zcopy",
     [UCP_RNDV_MODE_GET_PIPELINE] = "get_ppln",
+    [UCP_RNDV_MODE_PUT_PIPELINE] = "put_ppln",
     [UCP_RNDV_MODE_AM]           = "am",
     [UCP_RNDV_MODE_LAST]         = NULL,
 };

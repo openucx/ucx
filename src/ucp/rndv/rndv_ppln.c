@@ -42,16 +42,16 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     const ucp_proto_select_range_t *frag_range;
     const ucp_proto_select_elem_t *select_elem;
     size_t frag_min_length, frag_max_length;
+    ucp_worker_cfg_index_t rkey_cfg_index;
     ucp_proto_select_param_t sel_param;
+    ucp_proto_select_t *proto_select;
     ucs_linear_func_t ppln_overhead;
     ucp_proto_perf_type_t perf_type;
-    ucp_rkey_config_t *rkey_config;
     ucs_linear_func_t *ppln_perf;
     char frag_size_str[32];
     ucs_status_t status;
 
-    if ((init_params->rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
-        (select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+    if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         ((select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
          (select_param->op_id != UCP_OP_ID_RNDV_RECV)) ||
         (init_params->select_param->op_flags &
@@ -69,10 +69,15 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     sel_param.op_flags = UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG |
                          ucp_proto_select_op_attr_to_flags(
                                  UCP_OP_ATTR_FLAG_MULTI_SEND);
-    rkey_config        = &worker->rkey_config[init_params->rkey_cfg_index];
 
-    select_elem = ucp_proto_select_lookup_slow(worker,
-                                               &rkey_config->proto_select,
+    proto_select = ucp_proto_select_get(worker, init_params->ep_cfg_index,
+                                        init_params->rkey_cfg_index,
+                                        &rkey_cfg_index);
+    if (proto_select == NULL) {
+        return UCS_OK;
+    }
+
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select,
                                                init_params->ep_cfg_index,
                                                init_params->rkey_cfg_index,
                                                &sel_param);
