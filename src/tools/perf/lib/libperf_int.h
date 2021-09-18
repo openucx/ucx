@@ -142,6 +142,7 @@ typedef struct {
 
 extern ucx_perf_funcs_t ucx_perf_funcs[];
 
+unsigned rte_peer_index(unsigned group_size, unsigned group_index);
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf);
 void uct_perf_ep_flush_b(ucx_perf_context_t *perf, int peer_index);
 void uct_perf_iface_flush_b(ucx_perf_context_t *perf);

@@ -83,13 +83,20 @@ UCS_PTR_MAP_IMPL(request, 0);
         } \
     }
 
-#define ucp_request_set_callback(_req, _cb, _cb_value, _user_data) \
+
+#define ucp_request_set_callback(_req, _cb, _cb_value) \
     { \
         (_req)->_cb       = _cb_value; \
-        (_req)->user_data = _user_data; \
         (_req)->flags    |= UCP_REQUEST_FLAG_CALLBACK; \
+    }
+
+
+#define ucp_request_set_user_callback(_req, _cb, _cb_value, _user_data) \
+    { \
+        ucp_request_set_callback(_req, _cb, _cb_value); \
+        (_req)->user_data = _user_data; \
         ucs_trace_data("request %p %s set to %p, user data: %p", \
-                      _req, #_cb, _cb_value, _user_data); \
+                       _req, #_cb, _cb_value, _user_data); \
     }
 
 
@@ -146,10 +153,12 @@ UCS_PTR_MAP_IMPL(request, 0);
 
 #define ucp_request_set_callback_param(_param, _param_cb, _req, _req_cb) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        ucp_request_set_callback(_req, _req_cb.cb, (_param)->cb._param_cb, \
-                                 ((_param)->op_attr_mask & \
-                                  UCP_OP_ATTR_FIELD_USER_DATA) ? \
-                                 (_param)->user_data : NULL); \
+        ucp_request_set_user_callback(_req, _req_cb.cb, \
+                                      (_param)->cb._param_cb, \
+                                      ((_param)->op_attr_mask & \
+                                       UCP_OP_ATTR_FIELD_USER_DATA) ? \
+                                              (_param)->user_data : \
+                                              NULL); \
     }
 
 
@@ -461,7 +470,7 @@ ucp_request_send_state_advance(ucp_request_t *req,
          */
         return;
     }
-    
+
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucp_request_send_state_ff(req, status);
         return;
@@ -966,6 +975,16 @@ ucp_request_get_super(ucp_request_t *req)
     ucs_assertv(req->flags & UCP_REQUEST_FLAG_SUPER_VALID,
                 "req=%p req->super_req=%p", req, req->super_req);
     return req->super_req;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_request_t *
+ucp_request_user_data_get_super(void *request, void *user_data)
+{
+    ucp_request_t UCS_V_UNUSED *req = (ucp_request_t*)request - 1;
+    ucp_request_t *super_req        = (ucp_request_t*)user_data;
+
+    ucs_assert(ucp_request_get_super(req) == super_req);
+    return super_req;
 }
 
 static UCS_F_ALWAYS_INLINE void

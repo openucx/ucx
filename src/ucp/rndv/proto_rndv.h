@@ -75,11 +75,15 @@ typedef struct {
     /* Which operation the remote peer is expected to perform */
     ucp_operation_id_t             remote_op_id;
 
+    /* Time to unpack the received data */
+    ucs_linear_func_t              unpack_time;
+
     /* Reduce estimated time by this value (for example, 0.03 means to report
        a 3% better time) */
     double                         perf_bias;
 
-    /* Memory type of the transfer */
+    /* Memory type of the transfer. Used as rkey memory information when
+       selecting the remote protocol. */
     ucp_memory_info_t              mem_info;
 
 } ucp_proto_rndv_ctrl_init_params_t;

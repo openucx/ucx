@@ -969,6 +969,7 @@ static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
 
     rte_call(perf, post_vec, &vec, 1, &req);
     rte_call(perf, exchange_vec, req);
+
     for (i = 0; i < group_size; ++i) {
         rte_call(perf, recv, i, &status, sizeof(status), req);
         if (status != UCS_OK) {
@@ -985,27 +986,69 @@ static void ucp_perf_test_err_handler(void *arg, ucp_ep_h ep,
               ucs_status_string(status));
 }
 
-static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_test_rkey_pack(ucx_perf_context_t *perf,
+                                            uint64_t features,
+                                            void **rkey_buffer,
+                                            size_t *rkey_size)
+{
+    ucs_status_t status;
+
+    if (features & (UCP_FEATURE_RMA | UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64)) {
+        status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
+                               rkey_buffer, rkey_size);
+        if (status != UCS_OK) {
+            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("ucp_rkey_pack() failed: %s",
+                           ucs_status_string(status));
+            }
+
+            return status;
+        }
+    } else {
+        *rkey_size = 0;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_perf_test_rkey_unpack(ucx_perf_thread_context_t *thread,
+                          ucx_perf_params_t *params, void *rkey_buffer,
+                          size_t rkey_size)
+{
+    ucs_status_t status;
+
+    if (rkey_size > 0) {
+        status = ucp_ep_rkey_unpack(thread->perf.ucp.ep, rkey_buffer,
+                                    &thread->perf.ucp.rkey);
+        if (status != UCS_OK) {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_fatal("ucp_rkey_unpack() failed: %s",
+                           ucs_status_string(status));
+            }
+
+            return status;
+        }
+    } else {
+        thread->perf.ucp.rkey = NULL;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
+                                                      unsigned peer_index)
 {
     unsigned thread_count = perf->params.thread_count;
     void *rkey_buffer     = NULL;
     void *req             = NULL;
-    unsigned group_size, group_index, i;
     ucx_perf_ep_info_t *remote_info;
     ucp_ep_params_t ep_params;
     ucp_address_t *address;
     ucs_status_t status;
     size_t buffer_size;
     void *buffer;
-
-    group_size  = rte_call(perf, group_size);
-    group_index = rte_call(perf, group_index);
-
-    if (group_size != 2) {
-        ucs_error("perftest requires group size to be exactly 2 "
-                  "(actual group size: %u)", group_size);
-        return UCS_ERR_UNSUPPORTED;
-    }
+    unsigned i;
 
     buffer_size = ADDR_BUF_SIZE * thread_count;
 
@@ -1024,7 +1067,7 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
 
     /* receive the data from the remote peer, extract the address from it
      * (along with additional wireup info) and create an endpoint to the peer */
-    rte_call(perf, recv, 1 - group_index, buffer, buffer_size, req);
+    rte_call(perf, recv, peer_index, buffer, buffer_size, req);
 
     remote_info = buffer;
     for (i = 0; i < thread_count; i++) {
@@ -1053,17 +1096,10 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
             goto err_free_eps_buffer;
         }
 
-        if (remote_info->rkey_size > 0) {
-            status = ucp_ep_rkey_unpack(perf->ucp.tctx[i].perf.ucp.ep, rkey_buffer,
-                                        &perf->ucp.tctx[i].perf.ucp.rkey);
-            if (status != UCS_OK) {
-                if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                    ucs_fatal("ucp_rkey_unpack() failed: %s", ucs_status_string(status));
-                }
-                goto err_free_eps_buffer;
-            }
-        } else {
-            perf->ucp.tctx[i].perf.ucp.rkey = NULL;
+        status = ucp_perf_test_rkey_unpack(&perf->ucp.tctx[i], &perf->params,
+                                           rkey_buffer, remote_info->rkey_size);
+        if (status != UCS_OK) {
+            goto err_free_eps_buffer;
         }
 
         remote_info = UCS_PTR_BYTE_OFFSET(remote_info,
@@ -1093,17 +1129,9 @@ static ucs_status_t ucp_perf_test_send_local_data(ucx_perf_context_t *perf,
     struct iovec *vec;
     size_t rkey_size;
 
-    if (features & (UCP_FEATURE_RMA|UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
-        status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
-                               &rkey_buffer, &rkey_size);
-        if (status != UCS_OK) {
-            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("ucp_rkey_pack() failed: %s", ucs_status_string(status));
-            }
-            goto err;
-        }
-    } else {
-        rkey_size = 0;
+    status = ucp_perf_test_rkey_pack(perf, features, &rkey_buffer, &rkey_size);
+    if (status != UCS_OK) {
+        goto err;
     }
 
     /* each thread has an iovec with 3 entries to send to the remote peer:
@@ -1186,7 +1214,24 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
                                                   uint64_t features)
 {
     ucs_status_t status;
+    unsigned group_size  = rte_call(perf, group_size);
+    unsigned group_index = rte_call(perf, group_index);
+    unsigned peer_index  = rte_peer_index(group_size, group_index);
     unsigned i;
+
+    if ((perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (group_size != 1)) {
+        ucs_error("perftest loopback requires group size to be 1 "
+                  "(actual group size: %u)", group_size);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!(perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (group_size != 2)) {
+        ucs_error("perftest p2p requires group size to be exactly 2 "
+                  "(actual group size: %u)", group_size);
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     /* pack the local endpoints data and send to the remote peer */
     status = ucp_perf_test_send_local_data(perf, features);
@@ -1195,7 +1240,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     }
 
     /* receive remote peer's endpoints' data and connect to them */
-    status = ucp_perf_test_receive_remote_data(perf);
+    status = ucp_perf_test_receive_remote_data(perf, peer_index);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1412,7 +1457,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
 
     status = uct_perf_test_check_capabilities(params, perf->uct.iface,
                                               perf->uct.md);
-    /* sync status across all processes */
+
     status = ucp_perf_test_exchange_status(perf, status);
     if (status != UCS_OK) {
         goto out_iface_close;
@@ -1702,4 +1747,12 @@ size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
     }
 
     return length;
+}
+
+unsigned rte_peer_index(unsigned group_size, unsigned group_index)
+{
+    unsigned peer_index = group_size - 1 - group_index;
+
+    ucs_assert(group_index < group_size);
+    return peer_index;
 }

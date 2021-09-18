@@ -120,13 +120,13 @@ static void print_header(struct perftest_context *ctx)
             return;
         }
 
-        printf("+------------------------------------------------------------------------------------------+\n");
-        printf("| API:          %-60s               |\n", test_api_str);
-        printf("| Test:         %-60s               |\n", test->desc);
-        printf("| Data layout:  %-60s               |\n", test_data_str);
-        printf("| Send memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.super.send_mem_type]);
-        printf("| Recv memory:  %-60s               |\n", ucs_memory_type_names[ctx->params.super.recv_mem_type]);
-        printf("| Message size: %-60zu               |\n", ucx_perf_get_message_size(&ctx->params.super));
+        printf("+----------------------------------------------------------------------------------------------------------+\n");
+        printf("| API:          %-60s                               |\n", test_api_str);
+        printf("| Test:         %-60s                               |\n", test->desc);
+        printf("| Data layout:  %-60s                               |\n", test_data_str);
+        printf("| Send memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.send_mem_type]);
+        printf("| Recv memory:  %-60s                               |\n", ucs_memory_type_names[ctx->params.super.recv_mem_type]);
+        printf("| Message size: %-60zu                               |\n", ucx_perf_get_message_size(&ctx->params.super));
         if ((test->api == UCX_PERF_API_UCP) &&
             (test->command == UCX_PERF_CMD_AM)) {
             printf("| AM header size: %-60zu             |\n",
@@ -151,7 +151,7 @@ static void print_header(struct perftest_context *ctx)
             printf("|    Stage     | # iterations | %4.1f%%ile | average | overall |  average |  overall |  average  |  overall  |\n", ctx->params.super.percentile_rank);
             printf("+--------------+--------------+----------+---------+---------+----------+----------+-----------+-----------+\n");
         } else if (ctx->flags & TEST_FLAG_PRINT_TEST) {
-            printf("+------------------------------------------------------------------------------------------+\n");
+            printf("+----------------------------------------------------------------------------------------------------------+\n");
         }
     }
 }

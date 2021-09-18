@@ -414,6 +414,19 @@ rename_files() {
 	rename "s/\\${expr}\$/${replacement}/" "${files}"
 }
 
+run_loopback_app() {
+	test_exe=$1
+	test_args="-l $2"
+
+	affinity=$(slice_affinity 0)
+
+	taskset -c $affinity ${test_exe} ${test_args} &
+	pid=$!
+
+	wait ${pid} || true
+}
+
+
 run_client_server_app() {
 	test_exe=$1
 	test_args=$2
@@ -704,6 +717,9 @@ run_ucx_perftest() {
 		then
 			# Run UCP performance test
 			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
+
+			# Run UCP loopback performance test
+			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -717,6 +733,9 @@ run_ucx_perftest() {
 
 			# Run UCP performance test with 2 threads
 			run_client_server_app "$ucx_perftest" "$ucp_test_args -T 2" "$(hostname)" 0 0
+
+			# Run UCP loopback performance test
+			run_loopback_app "$ucx_perftest" "$ucp_test_args"
 
 			unset UCX_NET_DEVICES
 			unset UCX_TLS

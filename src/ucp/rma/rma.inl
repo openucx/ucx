@@ -32,7 +32,7 @@ ucp_rma_send_request_cb(ucp_request_t *req, ucp_send_callback_t cb)
 
     ucs_trace_req("returning request %p, status %s", req,
                   ucs_status_string(status));
-    ucp_request_set_callback(req, send.cb, (ucp_send_nbx_callback_t)cb, NULL);
+    ucp_request_set_user_callback(req, send.cb, (ucp_send_nbx_callback_t)cb, NULL);
     return req + 1;
 }
 
@@ -118,7 +118,7 @@ ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id, ucp_lane_index_t lane,
         ucp_ep_rma_remote_request_sent(ep);
         return UCS_OK;
     }
-    
+
     /* unroll incrementing the flush_ops_count, since uct_ep_am_bcopy()
      * completed with error */
     ucp_worker_flush_ops_count_dec(ep->worker);

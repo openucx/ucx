@@ -1,7 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) The University of Tennessee and The University 
+* Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
@@ -51,21 +51,28 @@ void test_perf::rte_comm::pop(void *data, size_t size,
 }
 
 
-test_perf::rte::rte(unsigned index, rte_comm& send, rte_comm& recv) :
-    m_index(index), m_send(send), m_recv(recv) {
+test_perf::rte::rte(unsigned index, unsigned group_size, unsigned peer,
+                    rte_comm& send, rte_comm& recv) :
+    m_index(index), m_gsize(group_size), m_peer(peer), m_send(send),
+    m_recv(recv) {
 }
 
 unsigned test_perf::rte::index() const {
     return m_index;
 }
 
-unsigned test_perf::rte::group_size(void *rte_group) {
-    return 2;
-}
-
 unsigned test_perf::rte::group_index(void *rte_group) {
     rte *self = reinterpret_cast<rte*>(rte_group);
     return self->index();
+}
+
+unsigned test_perf::rte::gsize() const {
+    return m_gsize;
+}
+
+unsigned test_perf::rte::group_size(void *rte_group) {
+    rte *self = reinterpret_cast<rte*>(rte_group);
+    return self->gsize();
 }
 
 void test_perf::rte::barrier(void *rte_group, void (*progress)(void *arg),
@@ -103,7 +110,7 @@ void test_perf::rte::recv(void *rte_group, unsigned src, void *buffer,
     rte *self = reinterpret_cast<rte*>(rte_group);
     size_t size;
 
-    if (src != 1 - self->m_index) {
+    if (src != self->m_peer) {
         return;
     }
 
@@ -165,7 +172,7 @@ void test_perf::set_affinity(int cpu)
     sched_setaffinity(ucs_get_tid(), sizeof(affinity), &affinity);
 }
 
-void* test_perf::thread_func(void *arg)
+void* test_perf::test_func(void *arg)
 {
     thread_arg *a = (thread_arg*)arg;
     rte *r        = reinterpret_cast<rte*>(a->params.rte_group);
@@ -178,15 +185,12 @@ void* test_perf::thread_func(void *arg)
     return result;
 }
 
-test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,
-                                                     const std::string &tl_name,
-                                                     const std::string &dev_name,
-                                                     const std::vector<int> &cpus)
+void test_perf::test_params_init(const test_spec &test,
+                                 ucx_perf_params_t &params,
+                                 unsigned flags,
+                                 const std::string &tl_name,
+                                 const std::string &dev_name)
 {
-    rte_comm c0to1, c1to0;
-
-    ucx_perf_params_t params;
-    memset(&params, 0, sizeof(params));
     params.api             = test.api;
     params.command         = test.command;
     params.test_type       = test.test_type;
@@ -198,43 +202,66 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     params.uct.am_hdr_size = 8;
     params.alignment       = ucs_get_page_size();
     params.max_outstanding = test.max_outstanding;
+    params.send_mem_type   = UCS_MEMORY_TYPE_HOST;
+    params.recv_mem_type   = UCS_MEMORY_TYPE_HOST;
+    params.percentile_rank = 50.0;
+
+    memset(params.uct.md_name, 0, sizeof(params.uct.md_name));
+
     if (ucs::test_time_multiplier() == 1) {
         params.warmup_iter = ucs_max(1, test.iters / 100);
         params.max_iter    = test.iters;
     } else {
         params.warmup_iter = 0;
         params.max_iter    = ucs_min(20u, test.iters /
-                                                  ucs::test_time_multiplier() /
-                                                  ucs::test_time_multiplier());
+                                          ucs::test_time_multiplier() /
+                                          ucs::test_time_multiplier());
     }
+
     params.max_time        = 0.0;
     params.report_interval = 1.0;
     params.rte_group       = NULL;
     params.rte             = &rte::test_rte;
     params.report_arg      = NULL;
+
     ucs_strncpy_zero(params.uct.dev_name, dev_name.c_str(), sizeof(params.uct.dev_name));
     ucs_strncpy_zero(params.uct.tl_name , tl_name.c_str(), sizeof(params.uct.tl_name));
-    params.uct.data_layout = (uct_perf_data_layout_t)test.data_layout;
-    params.uct.fc_window   = UCT_PERF_TEST_MAX_FC_WINDOW;
-    params.msg_size_cnt    = test.msglencnt;
-    params.msg_size_list   = (size_t *)test.msglen;
-    params.iov_stride      = test.msg_stride;
-    params.ucp.send_datatype = (ucp_perf_datatype_t)test.data_layout;
-    params.ucp.recv_datatype = (ucp_perf_datatype_t)test.data_layout;
 
-    rte rte0(0, c0to1, c1to0);
-    rte rte1(1, c1to0, c0to1);
+    params.uct.data_layout      = (uct_perf_data_layout_t)test.data_layout;
+    params.uct.fc_window        = UCT_PERF_TEST_MAX_FC_WINDOW;
+    params.msg_size_cnt         = test.msglencnt;
+    params.msg_size_list        = (size_t *)test.msglen;
+    params.iov_stride           = test.msg_stride;
+    params.ucp.send_datatype    = (ucp_perf_datatype_t)test.data_layout;
+    params.ucp.recv_datatype    = (ucp_perf_datatype_t)test.data_layout;
+    params.ucp.nonblocking_mode = 0;
+    params.ucp.am_hdr_size      = 0;
+}
+
+test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsigned flags,
+                                                     const std::string &tl_name,
+                                                     const std::string &dev_name,
+                                                     const std::vector<int> &cpus)
+{
+    rte_comm c0to1, c1to0;
+    ucx_perf_params_t params;
+
+    test_params_init(test, params, flags, tl_name, dev_name);
+
+    rte rte0(0, 2, 1, c0to1, c1to0);
+    rte rte1(1, 2, 0, c1to0, c0to1);
     rte *rtes[2] = {&rte0, &rte1};
 
     /* Run 2 test threads */
     thread_arg args[2];
     pthread_t threads[2];
+
     for (unsigned i = 0; i < 2; ++i) {
         args[i].params           = params;
         args[i].cpu              = cpus[i];
         args[i].params.rte_group = rtes[i];
 
-        ucs_status_t status = ucs_pthread_create(&threads[i], thread_func,
+        ucs_status_t status = ucs_pthread_create(&threads[i], test_func,
                                                  &args[i], "perf%d", i);
         if (status != UCS_OK) {
             throw ucs::test_abort_exception();
@@ -245,13 +272,44 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     test_result *results[2], result;
     for (unsigned i = 0; i < 2; ++i) {
         void *ptr;
+
         pthread_join(threads[i], &ptr);
         results[i] = reinterpret_cast<test_result*>(ptr);
         if (i == 1) {
             result = *results[i];
         }
+
         delete results[i];
     }
+
+    return result;
+}
+
+test_perf::test_result test_perf::run_single_threaded(const test_spec &test,
+                                                      unsigned flags,
+                                                      const std::string &tl_name,
+                                                      const std::string &dev_name,
+                                                      const std::vector<int> &cpus)
+{
+    rte_comm c0to0;
+    ucx_perf_params_t params;
+
+    test_params_init(test, params, flags, tl_name, dev_name);
+
+    rte rte0(0, 1, 0, c0to0, c0to0);
+    rte *rte = &rte0;
+
+    thread_arg args;
+
+    args.params           = params;
+    args.cpu              = cpus[0];
+    args.params.rte_group = rte;
+
+    test_result result;
+    void *ptr = test_func(&args);
+
+    result = *(reinterpret_cast<test_result*>(ptr));
+    delete reinterpret_cast<test_result*>(ptr);
 
     return result;
 }
@@ -260,7 +318,7 @@ double test_perf::run_test(const test_spec& test, unsigned flags, bool check_per
                            const std::string &tl_name, const std::string &dev_name)
 {
     std::vector<int> cpus = get_affinity();
-    if (cpus.size() < 2) {
+    if ((cpus.size() < 2) && !(flags & UCX_PERF_TEST_FLAG_LOOPBACK)) {
         UCS_TEST_MESSAGE << "Need at least 2 CPUs (got: " << cpus.size() << " )";
         throw ucs::test_abort_exception();
     }
@@ -270,8 +328,14 @@ double test_perf::run_test(const test_spec& test, unsigned flags, bool check_per
                  (ucs::test_time_multiplier() == 1) &&
                  (ucs::perf_retry_count > 0);
     for (int i = 0; i < (ucs::perf_retry_count + 1); ++i) {
-        test_result result = run_multi_threaded(test, flags, tl_name, dev_name,
-                                                cpus);
+        test_result result;
+
+        if (flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
+            result = run_single_threaded(test, flags, tl_name, dev_name, cpus);
+        } else {
+            result = run_multi_threaded(test, flags, tl_name, dev_name, cpus);
+        }
+
         if ((result.status == UCS_ERR_UNSUPPORTED) ||
             (result.status == UCS_ERR_UNREACHABLE))
         {
