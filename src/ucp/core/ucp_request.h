@@ -440,6 +440,9 @@ struct ucp_recv_desc {
                                                     AM memory pool or freeing it
                                                     in case of assembled
                                                     multi-fragment active message */
+#if ENABLE_DEBUG_DATA
+    const char              *name;           /* Object name, debug only */
+#endif
 };
 
 

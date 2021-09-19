@@ -88,12 +88,15 @@ static ucs_stats_class_t ucp_worker_stats_class = {
 };
 #endif
 
+static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                 ucs_string_buffer_t *strb);
+
 ucs_mpool_ops_t ucp_am_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
     .obj_init      = ucs_empty_function,
     .obj_cleanup   = ucs_empty_function,
-    .obj_str       = NULL
+    .obj_str       = ucp_am_mpool_obj_str
 };
 
 ucs_mpool_ops_t ucp_reg_mpool_ops = {
@@ -3123,4 +3126,18 @@ void ucp_worker_vfs_refresh(void *obj)
         ucp_ep_vfs_init(ucp_ep_from_ext_gen(ep_ext));
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                      ucs_string_buffer_t *strb)
+{
+    ucp_recv_desc_t *rdesc = obj;
+
+    ucs_string_buffer_appendf(strb, "flags:0x%x length:%d payload_offset:%d "
+                              "release_offset:%d", rdesc->flags, rdesc->length,
+                              rdesc->payload_offset,
+                              rdesc->release_desc_offset);
+#if ENABLE_DEBUG_DATA
+    ucs_string_buffer_appendf(strb, " name:%s", rdesc->name);
+#endif
 }
