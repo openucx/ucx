@@ -375,8 +375,9 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = ((*mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
-                                  (is_tl_rdma() || is_tl_shm()));
+            expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(*mem_type) &&
+                                 (is_tl_rdma() || is_tl_shm()) &&
+                                 check_reg_mem_types(sender(), *mem_type);
             test_rkey_management(memh, is_dummy, expect_rma_offload);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
@@ -422,6 +423,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
     std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
+    bool expect_rma_offload;
     ucs_memory_type_t alloc_mem_type;
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
@@ -450,10 +452,12 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
         if (!is_dummy) {
             EXPECT_EQ(alloc_mem_type, memh->mem_type);
         }
-        test_rkey_management(memh, is_dummy,
+
+        expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
+                             !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
                              is_tl_rdma() &&
-                                     !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
-                                     !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type));
+                             check_reg_mem_types(sender(), alloc_mem_type);
+        test_rkey_management(memh, is_dummy, expect_rma_offload);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);
