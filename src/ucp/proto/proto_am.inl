@@ -306,6 +306,7 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
+    ucp_send_request_add_reg_lane(req, req->send.lane);
 
     status = ucp_am_zcopy_common(req, hdr, hdr_size, user_hdr_desc,
                                  user_hdr_size, 0ul, iov, iovcnt, max_iov,
