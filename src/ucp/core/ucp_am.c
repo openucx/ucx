@@ -1102,6 +1102,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
         req->recv.am.desc  = desc;
         rts                = data_desc;
 
+#if ENABLE_DEBUG_DATA
+        req->recv.proto_rndv_config = NULL;
+#endif
+
         ucp_request_set_callback_param(param, recv_am, req, recv.am);
 
         ucs_assert(rts->opcode == UCP_RNDV_RTS_AM);

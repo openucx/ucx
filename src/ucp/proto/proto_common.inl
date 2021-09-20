@@ -176,25 +176,25 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     ucs_status_t status;
     uint8_t sg_count;
 
-    req->flags   = 0;
+    req->flags   = UCP_REQUEST_FLAG_PROTO_SEND;
     req->send.ep = ep;
 
-    ucp_datatype_iter_init(worker->context, (void*)buffer, count, datatype,
-                           contig_length, 1, &req->send.state.dt_iter,
-                           &sg_count);
+    UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init, worker->context,
+                          (void*)buffer, count, datatype, contig_length, 1,
+                          &req->send.state.dt_iter, &sg_count);
 
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 
-    status = ucp_proto_request_lookup_proto(worker, ep, req, proto_select,
-                                            rkey_cfg_index, &sel_param,
-                                            req->send.state.dt_iter.length);
+    status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
+                              proto_select, rkey_cfg_index, &sel_param,
+                              req->send.state.dt_iter.length);
     if (status != UCS_OK) {
         goto out_put_request;
     }
 
-    ucp_request_send(req);
+    UCS_PROFILE_CALL_VOID(ucp_request_send, req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         goto out_put_request;
     }

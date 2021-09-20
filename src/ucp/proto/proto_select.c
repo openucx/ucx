@@ -1243,3 +1243,53 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
         return &worker->rkey_config[*new_rkey_cfg_index].proto_select;
     }
 }
+
+void ucp_proto_select_config_str(ucp_worker_h worker,
+                                 const ucp_proto_config_t *proto_config,
+                                 size_t msg_length, ucs_string_buffer_t *strb)
+{
+    const ucp_proto_select_elem_t *select_elem;
+    ucp_worker_cfg_index_t new_key_cfg_index;
+    const ucp_proto_select_range_t *range;
+    ucp_proto_select_t *proto_select;
+    ucp_proto_perf_type_t perf_type;
+    double send_time;
+
+    ucs_assert(worker->context->config.ext.proto_enable);
+
+    /* Print selection parameters */
+    ucp_proto_select_param_str(&proto_config->select_param, strb);
+    ucs_string_buffer_appendf(strb, ": %s ", proto_config->proto->name);
+    proto_config->proto->config_str(msg_length, msg_length, proto_config->priv,
+                                    strb);
+
+    /* Find protocol selection root */
+    proto_select = ucp_proto_select_get(worker, proto_config->ep_cfg_index,
+                                        proto_config->rkey_cfg_index,
+                                        &new_key_cfg_index);
+    if (proto_select == NULL) {
+        return;
+    }
+
+    /* Emulate protocol selection process */
+    ucs_assert(new_key_cfg_index == proto_config->rkey_cfg_index);
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select,
+                                               proto_config->ep_cfg_index,
+                                               proto_config->rkey_cfg_index,
+                                               &proto_config->select_param);
+    if (select_elem == NULL) {
+        return;
+    }
+
+    /* Find the relevant performance range */
+    range = select_elem->perf_ranges;
+    while (range->super.max_length < msg_length) {
+        ++range;
+    }
+
+    perf_type = ucp_proto_select_param_perf_type(&proto_config->select_param);
+    send_time = ucs_linear_func_apply(range->super.perf[perf_type], msg_length);
+    ucs_string_buffer_appendf(strb, "  %.2f MBs / %.2f us",
+                              (msg_length / send_time) / UCS_MBYTE,
+                              send_time * UCS_USEC_PER_SEC);
+}

@@ -426,8 +426,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 
-    status = ucp_proto_request_lookup_proto(worker, ep, req, proto_select,
-                                            rkey_cfg_index, &sel_param, length);
+    status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
+                              proto_select, rkey_cfg_index, &sel_param, length);
     if (status != UCS_OK) {
         goto err_destroy_rkey;
     }
@@ -439,8 +439,6 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                   ucp_operation_names[op_id], req->send.rndv.remote_address,
                   req->send.rndv.remote_req_id,
                   req->send.proto_config->proto->name);
-
-    ucp_request_send(req);
     return UCS_OK;
 
 err_destroy_rkey:
@@ -493,12 +491,10 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
         ucp_proto_rndv_check_rkey_length(rts->address, rkey_length, "rts");
         length           = rts->size;
         recv_req->status = UCS_OK;
-        ucp_datatype_iter_init_from_dt_state(worker->context,
-                                             recv_req->recv.buffer, length,
-                                             recv_req->recv.datatype,
-                                             &recv_req->recv.state,
-                                             &req->send.state.dt_iter,
-                                             &sg_count);
+        UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init_from_dt_state,
+                              worker->context, recv_req->recv.buffer, length,
+                              recv_req->recv.datatype, &recv_req->recv.state,
+                              &req->send.state.dt_iter, &sg_count);
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
@@ -516,6 +512,12 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
         ucs_mpool_put(req);
         return;
     }
+
+#if ENABLE_DEBUG_DATA
+    recv_req->recv.proto_rndv_config = req->send.proto_config;
+#endif
+
+    UCS_PROFILE_CALL_VOID(ucp_request_send, req);
 }
 
 static ucs_status_t
@@ -542,6 +544,7 @@ ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
         return status;
     }
 
+    UCS_PROFILE_CALL_VOID(ucp_request_send, req);
     return UCS_OK;
 }
 
