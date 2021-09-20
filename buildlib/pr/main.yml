@@ -183,10 +183,5 @@ stages:
       - template: python/python-test.yml
         parameters:
           name: new
-          demands: ucx_new -equals yes
-          container: conda
-      - template: python/python-test.yml
-        parameters:
-          name: gpu
-          demands: ucx_gpu -equals yes
+          demands: ucx_docker -equals yes
           container: conda
