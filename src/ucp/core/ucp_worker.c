@@ -438,14 +438,14 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
-static void
+static ucs_status_t
 ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                        uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_wireup_ep_t *wireup_ep;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        return;
+        return UCS_OK;
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
@@ -454,14 +454,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        ucp_ep_set_failed(ucp_ep, lane, status);
-        return;
+        return ucp_ep_set_failed(ucp_ep, lane, status);
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
          * pending requests have to be handled there */
-        return;
+        return UCS_OK;
     }
 
     /**
@@ -473,6 +472,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                  ucp_destroyed_ep_pending_purge, ucp_ep);
     ucp_wireup_remote_connected(ucp_ep);
+    return UCS_OK;
 }
 
 static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
@@ -548,8 +548,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     }
 
-    ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep, status);
-    status = UCS_OK;
+    status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep,
+                                                    status);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
