@@ -104,7 +104,7 @@ func TestUcpListener(t *testing.T) {
 	}
 
 	sendData := "listener test"
-	sendMem := CBytes(sendData)
+	sendMem := CBytes([]byte(sendData))
 	defer FreeNativeMemory(sendMem)
 	receiveMem := AllocateNativeMemory(4096)
 	defer FreeNativeMemory(receiveMem)

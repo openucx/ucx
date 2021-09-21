@@ -26,8 +26,8 @@ func FreeNativeMemory(pointer unsafe.Pointer) {
 	C.free(pointer)
 }
 
-func CBytes(data string) unsafe.Pointer {
-	return C.CBytes([]byte(data))
+func CBytes(data []byte) unsafe.Pointer {
+	return C.CBytes(data)
 }
 
 func GoBytes(p unsafe.Pointer, n uint64) []byte {

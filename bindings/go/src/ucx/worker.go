@@ -232,9 +232,9 @@ func (w *UcpWorker) RecvTagNonBlocking(address unsafe.Pointer, size uint64,
 	requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_RECV_INFO
 
 	if params != nil {
-		if params.MemType != nil {
+		if params.MemTypeSet {
 			requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
-			requestParams.memory_type = C.ucs_memory_type_t(*params.MemType)
+			requestParams.memory_type = C.ucs_memory_type_t(params.MemType)
 		}
 
 		if params.Cb != nil {
