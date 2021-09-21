@@ -16,13 +16,13 @@ jobs:
           ./autogen.sh
           mkdir pkg-build
           cd pkg-build
-          ../contrib/configure-release --with-cuda --with-java=no --prefix=$(Build.Repository.LocalPath)/install
+          ../contrib/configure-release --with-cuda --prefix=$(Build.Repository.LocalPath)/install
         displayName: Configure
 
       - bash: |
           set -eEx
           cd pkg-build
-          make -s -j 4
+          make -s -j `nproc`
           make install
           tar czf $(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz -C $(Build.Repository.LocalPath)/install .
         displayName: Build package
@@ -103,7 +103,7 @@ jobs:
           port=$((10000 + $(Build.BuildId)))
           ./bin/ucx_perftest -t tag_bw -p $port &
           server_pid=$!
-          sleep 1;
+          sleep 5
           ./bin/ucx_perftest -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
           wait $server_pid
           grep "Final:" perf.txt

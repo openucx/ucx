@@ -40,25 +40,21 @@ resources:
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/uverbs1
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/uverbs1
     - container: ubuntu16_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/uverbs1
     - container: ubuntu18_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:1
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/uverbs1
     - container: ubuntu20_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
-      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/uverbs1
 
 stages:
-  - stage: Cuda_compatible
-    jobs:
-    - template: cuda_compatible.yml
-
   - stage: Codestyle
     dependsOn: [Cuda_compatible]
     jobs:
@@ -193,3 +189,7 @@ stages:
         parameters:
             name: gpu
             demands: ucx_gpu -equals yes
+
+  - stage: Cuda_compatible
+    jobs:
+    - template: cuda_compatible.yml

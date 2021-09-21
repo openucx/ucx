@@ -17,7 +17,7 @@ services:
     build:
       context: .
       network: host
-      dockerfile: centos7-gpu.Dockerfile
+      dockerfile: centos7-cuda.Dockerfile
       args:
         MOFED_VERSION: 5.0-1.0.0.0
         MOFED_OS: rhel7.6
