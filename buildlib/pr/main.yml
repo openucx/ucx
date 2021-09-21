@@ -56,7 +56,6 @@ resources:
 
 stages:
   - stage: Codestyle
-    dependsOn: [Cuda_compatible]
     jobs:
     - template: codestyle.yml
 
