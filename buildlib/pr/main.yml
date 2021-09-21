@@ -191,5 +191,6 @@ stages:
             demands: ucx_gpu -equals yes
 
   - stage: Cuda_compatible
+    dependsOn: [Static_check]
     jobs:
     - template: cuda_compatible.yml
