@@ -81,6 +81,7 @@ test_md::test_md()
                            (void (*)(uct_md_config_t*))uct_config_release,
                            uct_md_config_read, GetParam().component, NULL, NULL);
     memset(&m_md_attr, 0, sizeof(m_md_attr));
+    /* coverity[uninit_member] */
 }
 
 void test_md::init()

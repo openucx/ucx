@@ -355,7 +355,7 @@ do_task() {
 	amount=$1
 	shift
 	# cleanup build dir before the task
-	[ -n "${ucx_build_dir}" ] && rm -rf "${ucx_build_dir}/*"
+	[ -n "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
 
 	$@
 

@@ -482,7 +482,7 @@ protected:
 #define UCT_INSTANTIATE_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
-    INSTANTIATE_TEST_CASE_P(_tl_name, _test_case, \
+    INSTANTIATE_TEST_SUITE_P(_tl_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_resources(UCS_PP_QUOTE(_tl_name))));
 
 
@@ -513,7 +513,7 @@ protected:
 
 
 #define _UCT_INSTANTIATE_CM_TEST_CASE(_test_case, _cm_name) \
-    INSTANTIATE_TEST_CASE_P(_cm_name, _test_case, \
+    INSTANTIATE_TEST_SUITE_P(_cm_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_cm_resources( \
                                     UCS_PP_QUOTE(_cm_name))));
 

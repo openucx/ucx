@@ -102,14 +102,17 @@ int main(int argc, char **argv) {
 
     ret = ucs::watchdog_start();
     if (ret != 0) {
+        /* coverity[fun_call_w_exception] */
         ADD_FAILURE() << "Unable to start watchdog - abort";
         return ret;
     }
 
+    /* coverity[fun_call_w_exception] */
     ret = RUN_ALL_TESTS();
 
     ucs::watchdog_stop();
 
+    /* coverity[fun_call_w_exception] */
     ucs::analyze_test_results();
 
     return ret;

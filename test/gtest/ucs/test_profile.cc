@@ -365,8 +365,8 @@ UCS_TEST_P(test_profile, log_accum) {
             "log,accum");
 }
 
-INSTANTIATE_TEST_CASE_P(st, test_profile, ::testing::Values(1));
-INSTANTIATE_TEST_CASE_P(mt, test_profile, ::testing::Values(2, 4, 8));
+INSTANTIATE_TEST_SUITE_P(st, test_profile, ::testing::Values(1));
+INSTANTIATE_TEST_SUITE_P(mt, test_profile, ::testing::Values(2, 4, 8));
 
 class test_profile_perf : public test_profile {
 };
@@ -428,6 +428,6 @@ UCS_TEST_SKIP_COND_P(test_profile_perf, overhead, RUNNING_ON_VALGRIND) {
     EXPECT_LT(overhead_nsec, EXP_OVERHEAD_NSEC) << "Profiling overhead is too high";
 }
 
-INSTANTIATE_TEST_CASE_P(st, test_profile_perf, ::testing::Values(1));
+INSTANTIATE_TEST_SUITE_P(st, test_profile_perf, ::testing::Values(1));
 
 #endif
