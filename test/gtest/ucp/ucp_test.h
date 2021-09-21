@@ -254,7 +254,7 @@ protected:
     // Add value to test variant
     static void
     add_variant_value(std::vector<ucp_test_variant_value>& values,
-                      int value, std::string name);
+                      int value, const std::string& name);
 
     // Add test variant with context params and single value
     static void

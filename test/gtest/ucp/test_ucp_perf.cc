@@ -46,8 +46,7 @@ public:
                 add_variant_value(variant->values, i, test->title);
                 add_variant_value(variant->values, ATOMIC_DEVICE, "device");
             } else {
-                variant = &add_variant(variants, 0);
-                add_variant_value(variant->values, i, test->title);
+                add_variant_with_value(variants, 0, i, test->title);
             }
         }
     }

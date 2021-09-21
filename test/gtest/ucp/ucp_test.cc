@@ -359,7 +359,7 @@ int ucp_test::get_variant_thread_type() const {
 }
 
 void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,
-                                 int value, std::string name)
+                                 int value, const std::string& name)
 {
     ucp_test_variant_value entry = {value, name};
     values.push_back(entry);
