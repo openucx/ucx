@@ -3215,6 +3215,12 @@ void PrettyUnitTestResultPrinter::OnTestSuiteStart(
 void PrettyUnitTestResultPrinter::OnTestStart(const TestInfo& test_info) {
   ColoredPrintf(COLOR_GREEN,  "[ RUN      ] ");
   PrintTestName(test_info.test_suite_name(), test_info.name());
+  if (test_info.type_param() != NULL) {
+    printf(" <%s>", test_info.type_param());
+  }
+  if (test_info.value_param() != NULL) {
+    printf(" <%s>", test_info.value_param());
+  }
   printf("\n");
   fflush(stdout);
 }
