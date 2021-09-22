@@ -352,7 +352,9 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"RX_MPOOL_SIZES", "64,1kb",
    "List of worker mpool sizes separated by comma. The values must be power of 2\n"
-   "Values larger than the maximum UCT transport segment size will be ignored.",
+   "Values larger than the maximum UCT transport segment size will be ignored.\n "
+   "These pools are used for UCP AM and unexpected TAG messages. When assigning\n"
+   "pool sizes, note that the data may be stored with some header.",
    ucs_offsetof(ucp_config_t, mpool_sizes), UCS_CONFIG_TYPE_ARRAY(memunit_sizes)},
 
    {NULL}
