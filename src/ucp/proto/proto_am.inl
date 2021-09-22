@@ -301,13 +301,16 @@ ucs_status_t ucp_do_am_zcopy_single(uct_pending_req_t *self, uint8_t am_id,
     ucp_ep_t *ep         = req->send.ep;
     size_t max_iov       = ucp_ep_config(ep)->am.max_iov;
     uct_iov_t *iov       = ucs_alloca(max_iov * sizeof(uct_iov_t));
-    ucp_dt_state_t state = req->send.state.dt;
     size_t iovcnt        = 0;
+    ucp_dt_state_t state;
     ucs_status_t status;
 
     req->send.lane = ucp_ep_get_am_lane(ep);
     ucp_send_request_add_reg_lane(req, req->send.lane);
 
+    /* Cache datatype state only after registering the lane, since registering
+       the lane can change the state */
+    state  = req->send.state.dt;
     status = ucp_am_zcopy_common(req, hdr, hdr_size, user_hdr_desc,
                                  user_hdr_size, 0ul, iov, iovcnt, max_iov,
                                  req->send.length, am_id, &state, 0);
