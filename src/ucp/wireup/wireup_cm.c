@@ -805,6 +805,11 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     memcpy(progress_arg->sa_data, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
 
+    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_OOB_ECE) {
+        ucp_ep->remote_ece = remote_data->ece;
+    } else {
+        ucp_ep->remote_ece = 0;
+    }
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_client_connect_progress,
                                       progress_arg, UCS_CALLBACKQ_FLAG_ONESHOT,
