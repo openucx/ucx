@@ -1044,11 +1044,12 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
     }
 }
 
-void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                       ucs_status_t status)
+ucs_status_t
+ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
     ucp_ep_ext_control_t *ep_ext_control = ucp_ep_ext_control(ucp_ep);
+    ucp_err_handling_mode_t err_mode;
     ucs_log_level_t log_level;
     ucp_request_t *close_req;
 
@@ -1066,7 +1067,7 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
 
     /* set endpoint to failed to prevent wireup_ep switch */
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        return;
+        return UCS_OK;
     }
 
     /* The EP can be closed from last completion callback */
@@ -1083,19 +1084,25 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                 close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
                 ucp_ep_local_disconnect_progress(close_req);
             }
+            return UCS_OK;
         } else if (ep_ext_control->err_cb == NULL) {
-            /* Do not print error if connection reset by remote peer since it
-             * can be part of user level close protocol */
-            log_level = (status == UCS_ERR_CONNECTION_RESET) ?
-                        UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
+            /* Print error if user requested error handling support but did not
+               install a valid error handling callback */
+            err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
+            log_level = (err_mode == UCP_ERR_HANDLING_MODE_NONE) ?
+                                UCS_LOG_LEVEL_DIAG :
+                                UCS_LOG_LEVEL_ERROR;
 
             ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
-            ucs_log(log_level, "ep %p: error '%s' on %s will not be handled"
+            ucs_log(log_level,
+                    "ep %p: error '%s' on %s will not be handled"
                     " since no error callback is installed",
                     ucp_ep, ucs_status_string(status),
                     ucs_string_buffer_cstr(&lane_info_strb));
+            return UCS_ERR_UNSUPPORTED;
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);
+            return UCS_OK;
         }
     } else if (ucp_ep->flags & (UCP_EP_FLAG_INTERNAL | UCP_EP_FLAG_CLOSED)) {
         /* No additional actions are required, this is already closed EP or
@@ -1103,10 +1110,12 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
          * So, close operation was already scheduled, this EP will be deleted
          * after all lanes will be discarded successfully */
         ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);
+        return UCS_OK;
     } else {
         ucs_debug("ep %p: destroy endpoint which is not exposed to a user due"
                   " to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
+        return UCS_OK;
     }
 }
 
