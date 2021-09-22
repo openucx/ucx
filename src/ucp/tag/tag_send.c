@@ -24,8 +24,18 @@
 static UCS_F_ALWAYS_INLINE size_t
 ucp_tag_get_rndv_threshold(const ucp_request_t *req, size_t count,
                            size_t max_iov, size_t rndv_rma_thresh,
-                           size_t rndv_am_thresh)
+                           size_t rndv_am_thresh, uint32_t flags)
 {
+    /* Eager protocol requested - set rndv threshold to max */
+    if (flags & UCP_EP_TAG_SEND_FLAG_EAGER) {
+        return SIZE_MAX;
+    }
+
+    /* RNDV protocol requested - set rndv threshold to 0 */
+    if (flags & UCP_EP_TAG_SEND_FLAG_RNDV) {
+        return 0;
+    }
+
     switch (req->send.datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_IOV:
         if ((count > max_iov) &&
@@ -54,6 +64,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
 {
     ssize_t max_short          = ucp_proto_get_short_max(req, msg_config);
     ucp_ep_config_t *ep_config = ucp_ep_config(req->send.ep);
+    uint32_t flags             = ucp_request_param_flags(param);
     ucs_status_t status;
     size_t zcopy_thresh;
     size_t rndv_thresh;
@@ -65,7 +76,8 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                                   &rndv_rma_thresh, &rndv_am_thresh);
 
     rndv_thresh = ucp_tag_get_rndv_threshold(req, dt_count, msg_config->max_iov,
-                                             rndv_rma_thresh, rndv_am_thresh);
+                                             rndv_rma_thresh, rndv_am_thresh,
+                                             flags);
 
     if (!(param->op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) ||
         ucs_unlikely(!UCP_MEM_IS_HOST(req->send.mem_type))) {
@@ -228,7 +240,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
-    size_t contig_length = 0;
+    size_t contig_length        = 0;
+    uint32_t UCS_V_UNUSED flags = ucp_request_param_flags(param);
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
@@ -239,6 +252,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_REQUEST_CHECK_PARAM(param);
+
+    if (ENABLE_PARAMS_CHECK &&
+        ucs_test_all_flags(flags, UCP_EP_TAG_SEND_FLAG_EAGER |
+                                  UCP_EP_TAG_SEND_FLAG_RNDV)) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
 
@@ -305,9 +324,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
-    ucp_worker_h worker  = ep->worker;
-    size_t contig_length = 0;
-    uintptr_t datatype   = ucp_request_param_datatype(param);
+    ucp_worker_h worker         = ep->worker;
+    size_t contig_length        = 0;
+    uintptr_t datatype          = ucp_request_param_datatype(param);
+    uint32_t UCS_V_UNUSED flags = ucp_request_param_flags(param);
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
@@ -316,6 +336,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                                     return UCS_STATUS_PTR(
                                             UCS_ERR_INVALID_PARAM));
     UCP_REQUEST_CHECK_PARAM(param);
+
+    if (ENABLE_PARAMS_CHECK &&
+        ucs_test_all_flags(flags, UCP_EP_TAG_SEND_FLAG_EAGER |
+                                  UCP_EP_TAG_SEND_FLAG_RNDV)) {
+        return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM);
+    }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 

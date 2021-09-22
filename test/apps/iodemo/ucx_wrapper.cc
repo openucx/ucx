@@ -111,7 +111,7 @@ void UcxContext::UcxDisconnectCallback::operator()(ucs_status_t status)
 }
 
 UcxContext::UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
-                       bool use_epoll) :
+                       size_t rndv_thresh, bool use_epoll) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
     _iomsg_buffer(iomsg_size), _connect_timeout(connect_timeout),
     _use_am(use_am), _worker_fd(-1), _epoll_fd(-1)
@@ -1227,6 +1227,13 @@ bool UcxConnection::send_common(const void *buffer, size_t length,
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
     param.datatype     = 0; // make coverity happy
     param.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
+
+    if (_context.rndv_thresh() != UcxContext::rndv_thresh_auto) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_FLAGS;
+        param.flags         = (length >= _context.rndv_thresh()) ?
+                              UCP_EP_TAG_SEND_FLAG_RNDV :
+                              UCP_EP_TAG_SEND_FLAG_EAGER;
+    }
 
     if (memh) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;

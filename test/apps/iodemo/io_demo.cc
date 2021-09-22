@@ -70,6 +70,7 @@ typedef struct {
     double                   retry_interval;
     double                   client_runtime_limit;
     double                   print_interval;
+    size_t                   rndv_thresh;
     size_t                   iomsg_size;
     size_t                   min_data_size;
     size_t                   max_data_size;
@@ -875,7 +876,8 @@ protected:
 
     P2pDemoCommon(const options_t &test_opts, uint32_t iov_buf_filler) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
-                   test_opts.use_am, test_opts.use_epoll),
+                   test_opts.use_am, test_opts.rndv_thresh,
+                   test_opts.use_epoll),
         _test_opts(test_opts),
         _io_msg_pool(test_opts.iomsg_size, "io messages"),
         _send_callback_pool(0, "send callbacks"),
@@ -2659,6 +2661,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->retry_interval        = 5.0;
     test_opts->client_runtime_limit  = std::numeric_limits<double>::max();
     test_opts->print_interval        = 1.0;
+    test_opts->rndv_thresh           = UcxContext::rndv_thresh_auto;
     test_opts->min_data_size         = 4096;
     test_opts->max_data_size         = 4096;
     test_opts->chunk_size            = std::numeric_limits<unsigned>::max();
@@ -2679,7 +2682,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->per_conn_info         = false;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:zV")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:R:m:L:I:zV")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2809,6 +2812,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'P':
             test_opts->print_interval = atof(optarg);
             break;
+        case 'R':
+            test_opts->rndv_thresh = strtol(optarg, NULL, 0);
+            break;
         case 'm':
             if (!strcmp(optarg, "host")) {
                 test_opts->memory_type = UCS_MEMORY_TYPE_HOST;
@@ -2866,6 +2872,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -D                          Enable debugging mode for IO operation timeouts" << std::endl;
             std::cout << "  -H                          Use human-readable timestamps" << std::endl;
             std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
+            std::cout << "  -R <threshold>              Always use rendezvous protocol for messages starting" << std::endl;
+            std::cout << "                              from this size, and eager protocol for" << std::endl;
+            std::cout << "                              messages lower than this size. If not set," << std::endl;
+            std::cout << "                              the threshold is selected automatically by UCX" << std::endl;
             std::cout << "" << std::endl;
             std::cout << "  -m <memory_type>            Memory type to use. Possible values: host"
 #ifdef HAVE_CUDA
