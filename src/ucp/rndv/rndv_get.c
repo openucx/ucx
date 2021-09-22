@@ -72,8 +72,8 @@ ucp_proto_rndv_get_common_send(ucp_request_t *req,
                                const ucp_proto_multi_lane_priv_t *lpriv,
                                const uct_iov_t *iov, uct_completion_t *comp)
 {
-    ucp_rkey_h rkey         = req->send.rndv.rkey;
-    uct_rkey_t tl_rkey      = rkey->tl_rkey[lpriv->super.rkey_index].rkey.rkey;
+    uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
+                                                   lpriv->super.rkey_index);
     uint64_t remote_address = req->send.rndv.remote_address +
                               req->send.state.dt_iter.offset;
 

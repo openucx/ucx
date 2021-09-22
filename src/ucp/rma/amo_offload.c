@@ -60,7 +60,8 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
     uct_rkey_t tl_rkey;
 
     req->send.lane = spriv->super.lane;
-    tl_rkey        = ucp_rma_request_get_tl_rkey(req, spriv->super.rkey_index);
+    tl_rkey        = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+                                          spriv->super.rkey_index);
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         pack_arg(req, op_size);
@@ -111,20 +112,19 @@ ucp_proto_amo_progress(uct_pending_req_t *self, ucp_operation_id_t op_id,
         }
     }
 
-    if (status == UCS_INPROGRESS) {
-        ucs_assert(op_id != UCP_OP_ID_AMO_POST);
-        return UCS_OK;
-    }
-
-    /* Complete for UCS_OK and unexpected errors */
     if (status == UCS_OK) {
+        /* fast path is OK */
         ucp_request_complete_send(req, status);
-    } else if (status != UCS_ERR_NO_RESOURCE) {
+    } else if (status == UCS_INPROGRESS) {
+        ucs_assert(op_id != UCP_OP_ID_AMO_POST);
+    } else if (status == UCS_ERR_NO_RESOURCE) {
+        /* keep on pending queue */
+        return UCS_ERR_NO_RESOURCE;
+    } else {
         ucp_proto_request_abort(req, status);
-        status = UCS_OK;
     }
 
-    return status;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
