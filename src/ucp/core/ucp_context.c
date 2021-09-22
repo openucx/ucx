@@ -107,7 +107,7 @@ static ucs_config_field_t ucp_config_table[] = {
    " - cuda    : CUDA (NVIDIA GPU) memory support.\n"
    " - rocm    : ROCm (AMD GPU) memory support.\n"
    " Using a \\ prefix before a transport name treats it as an explicit transport name\n"
-   " and disables aliasing.\n",
+   " and disables aliasing.",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"PROTOS", UCP_RSC_CONFIG_ALL,
@@ -197,7 +197,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Communication scheme in RNDV protocol.\n"
    " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
    " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
-   " auto      - runtime automatically chooses optimal scheme to use.\n",
+   " auto      - runtime automatically chooses optimal scheme to use.",
    ucs_offsetof(ucp_config_t, ctx.rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
 
   {"RKEY_PTR_SEG_SIZE", "512k",
@@ -244,7 +244,7 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
    "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
-   "y      - Use mutex for multithreading support in UCP.\n",
+   "y      - Use mutex for multithreading support in UCP.",
    ucs_offsetof(ucp_config_t, ctx.use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
 
   {"ADAPTIVE_PROGRESS", "y",
@@ -292,19 +292,19 @@ static ucs_config_field_t ucp_config_table[] = {
   {"NUM_PPN", "auto",
    "An optimization hint for the number of processes expected to be launched\n"
    "on a single node. Does not affect semantics, only transport selection criteria\n"
-   "and the resulting performance.\n",
+   "and the resulting performance.",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
   {"RNDV_FRAG_SIZE", "512k",
-   "RNDV fragment size \n",
+   "RNDV fragment size",
    ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
-   "RNDV size threshold to enable sender side pipeline for mem type\n",
+   "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_config_t, ctx.rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"MEMTYPE_CACHE", "y",
-   "Enable memory type (cuda/rocm) cache \n",
+   "Enable memory type (cuda/rocm) cache",
    ucs_offsetof(ucp_config_t, ctx.enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
   {"FLUSH_WORKER_EPS", "y",
@@ -322,7 +322,7 @@ static ucs_config_field_t ucp_config_table[] = {
   {"CM_USE_ALL_DEVICES", "y",
    "When creating client/server endpoints, use all available devices.\n"
    "If disabled, use only the one device on which the connection\n"
-   "establishment is done\n",
+   "establishment is done",
    ucs_offsetof(ucp_config_t, ctx.cm_use_all_devices), UCS_CONFIG_TYPE_BOOL},
 
   {"LISTENER_BACKLOG", "auto",
