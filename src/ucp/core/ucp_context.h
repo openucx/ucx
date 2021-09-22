@@ -122,10 +122,12 @@ typedef struct ucp_context_config {
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
     /** UCP sockaddr private data format version */
-    int                                    sa_client_min_hdr_version;
+    ucp_object_version_t                   sa_client_min_hdr_version;
     /** Remote keys with that many remote MDs or less would be allocated from a
       * memory pool.*/
     int                                    rkey_mpool_max_md;
+    /** Worker address format version */
+    ucp_object_version_t                   worker_addr_version;
 } ucp_context_config_t;
 
 

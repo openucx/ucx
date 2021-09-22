@@ -50,6 +50,7 @@ typedef struct {
     ucp_md_index_t       dst_md_index;
     ucs_sys_device_t     dst_sys_dev;
     ucp_lane_type_mask_t lane_types;
+    size_t               seg_size;
     double               score[UCP_LANE_TYPE_LAST];
 } ucp_wireup_lane_desc_t;
 
@@ -134,7 +135,8 @@ static const char *ucp_wireup_peer_flags[] = {
     [ucs_ilog2(UCP_ADDR_IFACE_FLAG_PUT)]              = "put",
     [ucs_ilog2(UCP_ADDR_IFACE_FLAG_GET)]              = "get",
     [ucs_ilog2(UCP_ADDR_IFACE_FLAG_TAG_EAGER)]        = "tag_eager",
-    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_TAG_RNDV)]         = "tag_rndv"
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_TAG_RNDV)]         = "tag_rndv",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_EVENT_RECV)]       = "tag_am_recv_event"
 };
 
 static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
@@ -349,21 +351,21 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_EVENT_FLAGS,
                                       criteria->remote_event_flags));
 
-        if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
+        if (!ucs_test_all_flags(ae->iface_attr.flags, criteria->remote_iface_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
-                      ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
+                      ucp_wireup_get_missing_flag_desc(ae->iface_attr.flags,
                                                        criteria->remote_iface_flags,
                                                        ucp_wireup_peer_flags));
             continue;
         }
 
-        if (!ucs_test_all_flags(ae->iface_attr.event_flags, criteria->remote_event_flags)) {
+        if (!ucs_test_all_flags(ae->iface_attr.flags, criteria->remote_event_flags)) {
             ucs_trace("addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
-                      ucp_wireup_get_missing_flag_desc(ae->iface_attr.event_flags,
+                      ucp_wireup_get_missing_flag_desc(ae->iface_attr.flags,
                                                        criteria->remote_event_flags,
-                                                       ucp_wireup_event_flags));
+                                                       ucp_wireup_peer_flags));
             continue;
         }
 
@@ -545,14 +547,21 @@ static inline double ucp_wireup_tl_iface_latency(ucp_context_h context,
                                                  const uct_iface_attr_t *iface_attr,
                                                  const ucp_address_iface_attr_t *remote_iface_attr)
 {
-    return ucs_max(iface_attr->latency.c, remote_iface_attr->lat_ovh) +
-           (iface_attr->latency.m * context->config.est_num_eps);
+    if (remote_iface_attr->addr_version == UCP_OBJECT_VERSION_V1) {
+        /* Address v1 contains just latency overhead */
+        return ucs_max(iface_attr->latency.c, remote_iface_attr->lat_ovh) +
+               (iface_attr->latency.m * context->config.est_num_eps);
+    } else {
+        return ucs_max(remote_iface_attr->lat_ovh,
+                       ucp_tl_iface_latency(context, &iface_attr->latency));
+    }
 }
 
 static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         const ucp_wireup_select_info_t *select_info,
         ucp_md_index_t dst_md_index, ucs_sys_device_t dst_sys_dev,
-        ucp_lane_type_t lane_type, ucp_wireup_select_context_t *select_ctx)
+        ucp_lane_type_t lane_type, unsigned seg_size,
+        ucp_wireup_select_context_t *select_ctx)
 {
     ucp_wireup_lane_desc_t *lane_desc;
     ucp_lane_type_t lane_type_iter;
@@ -597,6 +606,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
     lane_desc->dst_md_index = dst_md_index;
     lane_desc->dst_sys_dev  = dst_sys_dev;
     lane_desc->lane_types   = UCS_BIT(lane_type);
+    lane_desc->seg_size     = seg_size;
     for (lane_type_iter = UCP_LANE_TYPE_FIRST;
          lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
@@ -620,6 +630,7 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
 
     return ucp_wireup_add_lane_desc(select_info, addr_list[addr_index].md_index,
                                     addr_list[addr_index].sys_dev, lane_type,
+                                    addr_list[addr_index].iface_attr.seg_size,
                                     select_ctx);
 }
 
@@ -853,7 +864,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
     /* server is not a proxy because it can create all lanes connected */
     return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
                                     UCS_SYS_DEVICE_ID_UNKNOWN, UCP_LANE_TYPE_CM,
-                                    select_ctx);
+                                    UINT_MAX, select_ctx);
 }
 
 static ucs_status_t
@@ -1502,13 +1513,13 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
                                    criteria.local_event_flags, criteria.title,
                                    ucp_wireup_event_flags, NULL, 0) &&
             ucp_wireup_check_flags(resource,
-                                   address_list[addr_index].iface_attr.cap_flags,
+                                   address_list[addr_index].iface_attr.flags,
                                    criteria.remote_iface_flags, criteria.title,
                                    ucp_wireup_peer_flags, NULL, 0) &&
             ucp_wireup_check_flags(resource,
-                                   address_list[addr_index].iface_attr.event_flags,
+                                   address_list[addr_index].iface_attr.flags,
                                    criteria.remote_event_flags, criteria.title,
-                                   ucp_wireup_event_flags, NULL, 0))
+                                   ucp_wireup_peer_flags, NULL, 0))
         {
             return lane;
         } else if (ucp_worker_is_tl_p2p(worker, rsc_index)) {
@@ -1691,6 +1702,7 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
         key->lanes[lane].dst_sys_dev  = select_ctx->lane_descs[lane].dst_sys_dev;
         key->lanes[lane].path_index   = select_ctx->lane_descs[lane].path_index;
         key->lanes[lane].lane_types   = select_ctx->lane_descs[lane].lane_types;
+        key->lanes[lane].seg_size     = select_ctx->lane_descs[lane].seg_size;
         addr_indices[lane]            = select_ctx->lane_descs[lane].addr_index;
 
         if (select_ctx->lane_descs[lane].lane_types & UCS_BIT(UCP_LANE_TYPE_CM)) {
