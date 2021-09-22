@@ -629,12 +629,22 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
     uct_rc_mlx5_ep_address_t *rc_addr = (uct_rc_mlx5_ep_address_t*)addr;
     uct_ib_md_t *md                   = uct_ib_iface_md(ucs_derived_of(
                                         tl_ep->iface, uct_ib_iface_t));
+    uct_ib_device_t *dev              = &md->dev;
 
     uct_ib_pack_uint24(rc_addr->qp_num, ep->tx.wq.super.qp_num);
     uct_ib_mlx5_md_get_atomic_mr_id(md, &rc_addr->atomic_mr_id);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
+    }
+
+    if (ibv_ece != NULL) {
+        if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
+            (iface->super.super.config.ece_cfg.ece_enable == 0)) {
+            *ibv_ece = 0;
+        } else {
+            *ibv_ece = ece_int(*ibv_ece, ep->super.local_ece.val);
+        }
     }
 
     return UCS_OK;
