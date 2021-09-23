@@ -716,10 +716,18 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
     const uct_rc_mlx5_ep_address_t *rc_addr = (const uct_rc_mlx5_ep_address_t*)ep_addr;
+    uct_ib_device_t *dev  = &uct_ib_iface_md(&iface->super.super)->dev;
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
     ucs_status_t status;
+
+    if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
+        (iface->super.super.config.ece_cfg.ece_enable == 0)) {
+        ep->super.remote_ece.val = 0;
+    } else {
+        ep->super.remote_ece.val = *ibv_ece;
+    }
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                         ep->super.path_index, &ah_attr,
