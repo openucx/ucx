@@ -762,7 +762,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 
     for (i = 0; i < remote_addr.address_count; ++i) {
         remote_addr.address_list[i].dev_addr  = conn_request->remote_dev_addr;
-        remote_addr.address_list[i].dev_index = conn_request->sa_data.dev_index;
+        remote_addr.address_list[i].dev_index = 0; /* CM addr contains only 1 device */
     }
 
     status = ucp_ep_cm_server_create_connected(worker, ep_init_flags,

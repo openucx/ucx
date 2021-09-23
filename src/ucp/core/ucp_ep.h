@@ -494,10 +494,6 @@ struct ucp_wireup_sockaddr_data {
     uint8_t                   addr_mode;     /**< The attached address format
                                                   defined by
                                                   UCP_WIREUP_SA_DATA_xx */
-    uint8_t                   dev_index;     /**< Device address index used to
-                                                  build remote address in
-                                                  UCP_WIREUP_SA_DATA_CM_ADDR
-                                                  mode */
     /* packed worker address follows */
 } UCS_S_PACKED;
 

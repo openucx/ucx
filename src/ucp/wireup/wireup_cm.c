@@ -243,8 +243,8 @@ static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
 
 static ucs_status_t
 ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
-                         ucp_rsc_index_t dev_index, int can_fallback,
-                         void **data_buf_p, size_t *data_buf_length_p)
+                         int can_fallback, void **data_buf_p,
+                         size_t *data_buf_length_p)
 {
     ucp_worker_h worker = ep->worker;
     void *ucp_addr      = NULL;
@@ -255,7 +255,6 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     ucs_log_level_t log_level;
 
     ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
-    ucs_assert(dev_index != UCP_NULL_RESOURCE);
 
     /* Don't pack the device address to reduce address size, it will be
      * delivered by uct_cm_listener_conn_request_callback_t in
@@ -292,7 +291,6 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     sa_data->ep_id     = ucp_ep_local_id(ep);
     sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
     sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
-    sa_data->dev_index = dev_index;
     memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
 
     *data_buf_p        = sa_data;
@@ -333,8 +331,7 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
 }
 
 static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
-                                         ucp_tl_bitmap_t *tl_bitmap,
-                                         ucp_rsc_index_t *dev_index)
+                                         ucp_tl_bitmap_t *tl_bitmap)
 {
     ucp_worker_h worker = ep->worker;
     ucs_status_t status = UCS_ERR_NO_RESOURCE;
@@ -357,10 +354,6 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
         if (status != UCS_OK) {
             goto out;
         }
-
-        ucs_assert((*dev_index == UCP_NULL_RESOURCE) ||
-                   (*dev_index == worker->context->tl_rscs[rsc_idx].dev_index));
-        *dev_index = worker->context->tl_rscs[rsc_idx].dev_index;
 
         UCS_BITMAP_SET(*tl_bitmap, rsc_idx);
         if (ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane_idx)) {
@@ -386,7 +379,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_ep_h ep                   = arg;
     ucp_worker_h worker           = ep->worker;
     ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    ucp_rsc_index_t dev_index     = UCP_NULL_RESOURCE;
     void *ucp_addr                = NULL; /* Set to NULL to call ucs_free
                                              safely */
     unsigned ep_init_flags        = 0;
@@ -421,7 +413,7 @@ initial_config_retry:
 
     ep->am_lane = key.am_lane;
 
-    status = ucp_cm_ep_init_lanes(ep, &tl_bitmap, &dev_index);
+    status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
     if (status != UCS_OK) {
         goto err;
     }
@@ -431,8 +423,7 @@ initial_config_retry:
 
     can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
                    (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
-    status       = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index,
-                                            can_fallback,
+    status       = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, can_fallback,
                                             &priv_data, &priv_data_length);
     if (status == UCS_ERR_BUFFER_TOO_SMALL) {
         if (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
@@ -585,7 +576,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
         addr.address_list[addr_idx].dev_addr  = progress_arg->dev_addr;
-        addr.address_list[addr_idx].dev_index = progress_arg->sa_data->dev_index;
+        addr.address_list[addr_idx].dev_index = 0; /* CM addr contains only 1 device */
     }
 
     ucs_assert(addr.address_count <= UCP_MAX_RESOURCES);
@@ -1188,7 +1179,6 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
     ucp_worker_h worker = ep->worker;
     ucp_tl_bitmap_t tl_bitmap;
     ucp_tl_bitmap_t ctx_tl_bitmap;
-    ucp_rsc_index_t dev_index;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -1204,9 +1194,8 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
     ucp_context_dev_tl_bitmap(worker->context, dev_name, &ctx_tl_bitmap);
     ucp_tl_bitmap_validate(&tl_bitmap, &ctx_tl_bitmap);
 
-    dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, &tl_bitmap);
-    status    = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index, 0,
-                                         (void **)data_buf_p, data_buf_size_p);
+    status = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, 0, (void **)data_buf_p,
+                                      data_buf_size_p);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
