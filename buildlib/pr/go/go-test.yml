@@ -32,16 +32,10 @@ jobs:
 
         exit 1
     - bash: |
-        set -x
+        set -xeE
         source buildlib/az-helpers.sh
-        az_init_modules
         az_module_load dev/go-latest
-        res=$?
-        if [ $res -ne 0 ]; then
-          exit 0;
-        fi
         try_load_cuda_env
-        set -eE
         ./autogen.sh
         mkdir build
         cd build
@@ -51,16 +45,10 @@ jobs:
         make install
       displayName: Build UCX
     - bash: |
-        set -x
+        set -xeE
         source buildlib/az-helpers.sh
         az_init_modules
         try_load_cuda_env
-        res=0
         az_module_load dev/go-latest
-        res=$?
-        if [ $res -ne 0 ]; then
-          exit 0;
-        fi
-        set -Eex
         make -C build/bindings/go test
       displayName: Run go tests

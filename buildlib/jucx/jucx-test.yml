@@ -22,19 +22,12 @@ jobs:
         clean: true
         displayName: Checkout
       - bash: |
-          set -x
+          set -xeE
           source buildlib/az-helpers.sh
           az_init_modules
-          res=0
           az_module_load dev/mvn
-          res=$(($res+$?))
           az_module_load dev/jdk-${JAVA_VERSION}
-          res=$(($res+$?))
-          if [ $res -ne 0 ]; then
-            exit 0;
-          fi
           try_load_cuda_env
-          set -eE
           ./autogen.sh
           ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
             --with-java --enable-gtest=no --with-cuda=$have_cuda
@@ -42,19 +35,13 @@ jobs:
           make install
         displayName: Build UCX
       - bash: |
-          set -x
+          set -xeE
           source buildlib/az-helpers.sh
           az_init_modules
           try_load_cuda_env
-          res=0
           az_module_load dev/mvn
-          res=$(($res+$?))
           az_module_load dev/jdk-${JAVA_VERSION}
-          res=$(($res+$?))
-          if [ $res -ne 0 ]; then
-            exit 0;
-          fi
-          set -eE
+
           ifaces=`get_rdma_interfaces`
           if [ -z "$ifaces" ]; then
               azure_log_warning "No active RDMA interfaces on machine"
