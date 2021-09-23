@@ -102,7 +102,7 @@ jobs:
           . /etc/profile.d/modules.sh
           module load $(cuda_version)
           port=$((10000 + $(Build.BuildId)))
-          ./bin/ucx_perftest -b perftest_msg_pow2 -m cuda -t tag_bw -p $port -b buildlib/pr/perftest_msg_pow2 &
+          ./bin/ucx_perftest -b perftest_msg_pow2 -m cuda -t tag_bw -p $port &
           server_pid=$!
           sleep 5
           ./bin/ucx_perftest -b perftest_msg_pow2 -m cuda -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
