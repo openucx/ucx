@@ -575,6 +575,8 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                                               uct_rc_verbs_ep_t);
     uct_rc_iface_t *iface                    = ucs_derived_of(tl_ep->iface,
                                                               uct_rc_iface_t);
+    uct_ib_device_t *dev                     =
+                                    &uct_ib_iface_md(&iface->super)->dev;
     const uct_ib_address_t *ib_addr          = (const uct_ib_address_t *)dev_addr;
     const uct_rc_verbs_ep_address_t *rc_addr =
                                     (const uct_rc_verbs_ep_address_t*)ep_addr;
@@ -587,6 +589,13 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                         ep->super.path_index, &ah_attr,
                                         &path_mtu);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
+
+    if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
+        (iface->super.config.ece_cfg.ece_enable == 0)) {
+        ep->super.remote_ece.val = 0;
+    } else {
+        ep->super.remote_ece.val = *ibv_ece;
+    }
 
     qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu);
