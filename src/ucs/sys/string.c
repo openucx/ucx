@@ -359,27 +359,40 @@ size_t ucs_string_common_prefix_len(const char *str1, const char *str2)
     return (p1 - str1);
 }
 
-ssize_t ucs_path_calc_distance(const char *path1, const char *path2)
+static size_t
+ucs_path_common_parent_length(const char *path1, const char *path2)
 {
-    unsigned distance = 0;
-    size_t common_length;
-    char rpath1[PATH_MAX], rpath2[PATH_MAX];
+    size_t offset, parent_length;
 
-    if ((NULL == realpath(path1, rpath1)) ||
-        (NULL == realpath(path2, rpath2))) {
-        return UCS_ERR_INVALID_PARAM;
-    }
+    offset        = 0;
+    parent_length = 0;
+    do {
+        /* A path component ends by either a '/' or a '\0' */
+        if (((path1[offset] == '/') || (path1[offset] == '\0')) &&
+            ((path2[offset] == '/') || (path2[offset] == '\0'))) {
+            parent_length = offset;
+        }
+    } while ((path1[offset] == path2[offset]) && (path1[offset++] != '\0'));
 
-    common_length = ucs_string_common_prefix_len(rpath1, rpath2);
+    return parent_length;
+}
 
-    if (rpath1[common_length] != rpath2[common_length]) {
-        ++distance; /* count the differentiating path component */
-    }
+void ucs_path_get_common_parent(const char *path1, const char *path2,
+                                char *common_path)
+{
+    size_t parent_length;
 
-    distance += ucs_max(ucs_string_count_char(rpath1 + common_length, '/'),
-                        ucs_string_count_char(rpath2 + common_length, '/'));
+    parent_length = ucs_path_common_parent_length(path1, path2);
+    memcpy(common_path, path1, parent_length);
+    common_path[parent_length] = '\0';
+}
 
-    return distance;
+size_t ucs_path_calc_distance(const char *path1, const char *path2)
+{
+    size_t common_length = ucs_path_common_parent_length(path1, path2);
+
+    return ucs_string_count_char(path1 + common_length, '/') +
+           ucs_string_count_char(path2 + common_length, '/');
 }
 
 const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb)

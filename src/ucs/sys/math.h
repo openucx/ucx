@@ -29,15 +29,15 @@ BEGIN_C_DECLS
 
 #define ucs_min(_a, _b) \
 ({ \
-    typeof(_a) _min_a = (_a); \
-    typeof(_b) _min_b = (_b); \
+    ucs_typeof(_a) _min_a = (_a); \
+    ucs_typeof(_b) _min_b = (_b); \
     (_min_a < _min_b) ? _min_a : _min_b; \
 })
 
 #define ucs_max(_a, _b) \
 ({ \
-    typeof(_a) _max_a = (_a); \
-    typeof(_b) _max_b = (_b); \
+    ucs_typeof(_a) _max_a = (_a); \
+    ucs_typeof(_b) _max_b = (_b); \
     (_max_a > _max_b) ? _max_a : _max_b; \
 })
 
@@ -63,14 +63,14 @@ BEGIN_C_DECLS
     ucs_align_down_pow2((_n) + (_alignment) - 1, _alignment)
 
 #define ucs_align_down_pow2_ptr(_ptr, _alignment) \
-    ((typeof(_ptr))ucs_align_down_pow2((uintptr_t)(_ptr), (_alignment)))
+    ((ucs_typeof(_ptr))ucs_align_down_pow2((uintptr_t)(_ptr), (_alignment)))
 
 #define ucs_align_up_pow2_ptr(_ptr, _alignment) \
-    ((typeof(_ptr))ucs_align_up_pow2((uintptr_t)(_ptr), (_alignment)))
+    ((ucs_typeof(_ptr))ucs_align_up_pow2((uintptr_t)(_ptr), (_alignment)))
 
 #define ucs_roundup_pow2(_n) \
     ({ \
-        typeof(_n) pow2; \
+        ucs_typeof(_n) pow2; \
         ucs_assert((_n) >= 1); \
         for (pow2 = 1; pow2 < (_n); pow2 <<= 1); \
         pow2; \
@@ -79,7 +79,7 @@ BEGIN_C_DECLS
 #define ucs_rounddown_pow2(_n) (ucs_roundup_pow2(_n + 1) / 2)
 
 #define ucs_signum(_n) \
-    (((_n) > (typeof(_n))0) - ((_n) < (typeof(_n))0))
+    (((_n) > (ucs_typeof(_n))0) - ((_n) < (ucs_typeof(_n))0))
 
 #define ucs_roundup_pow2_or0(_n) \
     ( ((_n) == 0) ? 0 : ucs_roundup_pow2(_n) )
@@ -211,7 +211,7 @@ int ucs_rand();
  * @param [in]  range_max       End of the range
  * @param [out] rand_val        The generated random number
  *
- * @retrun UCS_OK on success or an error status on failure.
+ * @return UCS_OK on success or an error status on failure.
  */
 ucs_status_t ucs_rand_range(int range_min, int range_max, int *rand_val);
 

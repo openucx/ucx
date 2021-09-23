@@ -74,7 +74,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    "                  treats it as a linked list. Doesn`t require DEVX.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, srq_topo),
    UCS_CONFIG_TYPE_STRING_ARRAY},
-   
+
   {"LOG_ACK_REQ_FREQ", "8",
    "Log of the ack frequency for requests, when using DevX. Valid values are: 0-"
     UCS_PP_MAKE_STRING(UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ) ".",
@@ -613,15 +613,13 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
                                    unsigned byte_len, int poll_flags)
 {
     uct_rc_mlx5_tmh_priv_data_t *priv = (uct_rc_mlx5_tmh_priv_data_t*)tmh->reserved;
-    uct_ib_md_t *ib_md                = uct_ib_iface_md(&iface->super.super);
     struct ibv_rvh *rvh;
     unsigned tm_hdrs_len;
     unsigned rndv_usr_hdr_len;
     size_t rndv_data_len;
     void *rndv_usr_hdr;
-    void *rb;
     ucs_status_t status;
-    char packed_rkey[UCT_COMPONENT_NAME_MAX + UCT_IB_MD_PACKED_RKEY_SIZE];
+    char packed_rkey[UCT_IB_MD_PACKED_RKEY_SIZE];
 
     rvh = (struct ibv_rvh*)(tmh + 1);
 
@@ -645,8 +643,7 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
     memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
 
     /* Create "packed" rkey to pass it in the callback */
-    rb = uct_md_fill_md_name(&ib_md->super, packed_rkey);
-    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, rb);
+    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, packed_rkey);
 
     /* Do not pass flags to cb, because rkey is allocated on stack */
     status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0, tag,
@@ -696,7 +693,8 @@ static ucs_mpool_ops_t uct_dm_iface_mpool_ops = {
     .chunk_alloc   = uct_rc_mlx5_iface_common_dm_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_rc_mlx5_iface_common_dm_mp_obj_init,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 
@@ -1223,7 +1221,8 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
         }
     }
 
-    mlx5_cq->cq_ci             += nfreed;
+    mlx5_cq->cq_ci += nfreed;
+    uct_ib_mlx5_update_db_cq_ci(mlx5_cq);
 
     return nfreed;
 }

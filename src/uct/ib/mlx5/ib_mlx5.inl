@@ -62,6 +62,16 @@ uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
     return UCS_PTR_BYTE_OFFSET(cqe, -UCT_IB_GRH_LEN);
 }
 
+
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_update_db_cq_ci(uct_ib_mlx5_cq_t *cq)
+{
+#if UCS_ENABLE_ASSERT
+    cq->dbrec[UCT_IB_MLX5_CQ_SET_CI] = htobe32(cq->cq_ci & 0xffffff);
+#endif
+}
+
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
@@ -79,6 +89,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((op_own >> 4) != MLX5_CQE_INVALID);
         uct_ib_mlx5_check_completion(iface, cq, cqe);
+        uct_ib_mlx5_update_db_cq_ci(cq);
         return NULL; /* No CQE */
     }
 

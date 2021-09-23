@@ -599,14 +599,14 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
 /**
  * Get file time
  *
- * @param [in]  name       File name
- * @param [in]  type       Type of file time information
- * @param [out] ctime      File creation time
+ * @param [in]  name  File name
+ * @param [in]  type  Type of file time information
+ * @param [out] ts    File time information
  *
  * @return UCS_OK if file is found and got information.
  */
 ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
-                                   ucs_time_t *time);
+                                   struct timespec *ts);
 
 
 /**
@@ -631,6 +631,13 @@ ucs_status_t ucs_sys_check_fd_limit_per_process();
 ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
                                 void *(*start_routine)(void*), void *arg,
                                 const char *fmt, ...) UCS_F_PRINTF(4, 5);
+
+/*
+ * Get number of CPUs.
+ *
+ * @return number of CPUs, or -1 in case of error.
+ */
+long ucs_sys_get_num_cpus();
 
 END_C_DECLS
 

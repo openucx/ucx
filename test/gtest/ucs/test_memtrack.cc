@@ -45,6 +45,21 @@ protected:
         EXPECT_EQ(peak_count, total.peak_count);
         EXPECT_EQ(peak_size,  total.peak_size);
     }
+
+    void test_total_memalign_realloc(size_t peak_count, size_t peak_size) {
+        /* ucs_posix_memalign_realloc() call may hold two buffers
+           for a short time if malloc() returned an unaligned pointer */
+        ucs_memtrack_entry_t total;
+
+        ucs_memtrack_total(&total);
+        EXPECT_EQ(0lu, total.count);
+        EXPECT_EQ(total.peak_count % peak_count, 0);
+        EXPECT_EQ(total.peak_size  % peak_size,  0);
+        EXPECT_GT(total.peak_count / peak_count, 0);
+        EXPECT_GT(total.peak_size  / peak_size,  0);
+        EXPECT_LT(total.peak_count / peak_count, 3);
+        EXPECT_LT(total.peak_size  / peak_size,  3);
+    }
 };
 
 const char test_memtrack::ALLOC_NAME[] = "memtrack_test";
@@ -181,7 +196,7 @@ UCS_TEST_F(test_memtrack, memalign_realloc) {
     /* Silence coverity warning. */
     ptr = NULL;
 
-    test_total(1, 2 * ALLOC_SIZE);
+    test_total_memalign_realloc(1, 2 * ALLOC_SIZE);
 
     ret = ucs_posix_memalign(&ptr, UCS_KBYTE, ALLOC_SIZE, ALLOC_NAME);
     ASSERT_EQ(0, ret);

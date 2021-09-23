@@ -8,7 +8,7 @@
 #ifndef UCS_TEST_HELPERS_H
 #define UCS_TEST_HELPERS_H
 
-#include "gtest.h"
+#include "googletest/gtest.h"
 
 #include <common/mem_buffer.h>
 
@@ -58,11 +58,12 @@
 /* Abort test */
 #define UCS_TEST_ABORT(_message) \
     do { \
-        std::stringstream ss; \
-        ss << _message; \
-        GTEST_MESSAGE_(ss.str().c_str(), ::testing::TestPartResult::kFatalFailure); \
+        std::stringstream _ss; \
+        _ss << _message; \
+        GTEST_MESSAGE_(_ss.str().c_str(), \
+                       ::testing::TestPartResult::kFatalFailure); \
         throw ucs::test_abort_exception(); \
-    } while(0)
+    } while (0)
 
 
 /* UCS error check */

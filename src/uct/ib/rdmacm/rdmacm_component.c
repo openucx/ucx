@@ -61,7 +61,8 @@ uct_component_t uct_rdmacm_component = {
         .size           = sizeof(uct_rdmacm_cm_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rdmacm_component),
-    .flags              = UCT_COMPONENT_FLAG_CM
+    .flags              = UCT_COMPONENT_FLAG_CM,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
 UCT_COMPONENT_REGISTER(&uct_rdmacm_component)

@@ -269,7 +269,6 @@ ucm_dl_populate_symbols(ucm_dl_info_t *dl_info, uintptr_t dlpi_addr, void *table
         khiter = kh_put(ucm_dl_symbol_hash, &dl_info->symbols, elf_sym, &ret);
         if ((ret == UCS_KH_PUT_BUCKET_EMPTY) ||
             (ret == UCS_KH_PUT_BUCKET_CLEAR)) {
-            /* do not override previous values */
             kh_val(&dl_info->symbols, khiter) = (void*)(dlpi_addr +
                                                         reloc->r_offset);
             ++count;

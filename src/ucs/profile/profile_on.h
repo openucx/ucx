@@ -199,7 +199,7 @@ BEGIN_C_DECLS
  */
 #define _UCS_PROFILE_CTX_NAMED_CALL(_ctx, _name, _func, ...) \
     ({ \
-        typeof(_func(__VA_ARGS__)) retval; \
+        ucs_typeof(_func(__VA_ARGS__)) retval; \
         UCS_PROFILE_CTX_SCOPE_BEGIN((_ctx)); \
         retval = _func(__VA_ARGS__); \
         UCS_PROFILE_CTX_SCOPE_END((_ctx), _name); \

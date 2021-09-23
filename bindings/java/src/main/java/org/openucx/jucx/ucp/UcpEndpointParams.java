@@ -18,6 +18,10 @@ public class UcpEndpointParams extends UcxParams {
     @Override
     public String toString() {
         String result = "UcpEndpointParams{";
+        if (name != null) {
+            result += "name=" + name + ",";
+        }
+
         if (ucpAddress != null) {
             result += "ucpAddress,";
         }
@@ -46,6 +50,7 @@ public class UcpEndpointParams extends UcxParams {
         connectionRequest = 0;
         clientAddress = null;
         errorHandler = null;
+        name = null;
         return this;
     }
 
@@ -62,6 +67,8 @@ public class UcpEndpointParams extends UcxParams {
     private long connectionRequest;
 
     UcpEndpointErrorHandler errorHandler;
+
+    private String name;
 
     /**
      * Destination address in form of workerAddress.
@@ -123,6 +130,17 @@ public class UcpEndpointParams extends UcxParams {
     public UcpEndpointParams setErrorHandler(UcpEndpointErrorHandler errorHandler) {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_ERR_HANDLER;
         this.errorHandler = errorHandler;
+        return this;
+    }
+
+    /**
+     * Endpoint name. Tracing and analysis tools can identify the endpoint using
+     * this name. Name you supply may be changed by UCX under some circumstances, e.g. a
+     * name conflict.
+     */
+    public UcpEndpointParams setName(String name) {
+        this.name = name;
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_NAME;
         return this;
     }
 }

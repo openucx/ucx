@@ -176,7 +176,6 @@ typedef union ucm_event {
      *
      * This is a "read-only" event which is called whenever memory is mapped
      * or unmapped from process address space, in addition to the other events.
-     * It can return only UCM_EVENT_STATUS_NEXT.
      *
      * For UCM_EVENT_VM_MAPPED, callbacks are post
      * For UCM_EVENT_VM_UNMAPPED, callbacks are pre

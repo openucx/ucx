@@ -145,14 +145,21 @@ static ucs_mpool_ops_t uct_rc_pending_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
+
+
+static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                      ucs_string_buffer_t *strb);
+
 
 static ucs_mpool_ops_t uct_rc_send_op_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = ucp_send_op_mpool_obj_str
 };
 
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
@@ -948,3 +955,44 @@ void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface)
                             &iface->tx.reads_completed, UCS_VFS_TYPE_SSIZET,
                             "reads_completed");
 }
+
+void uct_rc_iface_vfs_refresh(uct_iface_h iface)
+{
+    uct_rc_iface_t *rc_iface         = ucs_derived_of(iface, uct_rc_iface_t);
+    uct_rc_iface_ops_t *rc_iface_ops = ucs_derived_of(rc_iface->super.ops,
+                                                      uct_rc_iface_ops_t);
+    uct_rc_ep_t *ep;
+
+    /* Add iface resources */
+    uct_rc_iface_vfs_populate(rc_iface);
+
+    /* Add objects for EPs */
+    ucs_list_for_each(ep, &rc_iface->ep_list, list) {
+        rc_iface_ops->ep_vfs_populate(ep);
+    }
+}
+
+static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                      ucs_string_buffer_t *strb)
+{
+    uct_rc_iface_send_op_t *op    = obj;
+    const char *handler_func_name = ucs_debug_get_symbol_name(op->handler);
+    const char *comp_func_name;
+
+    ucs_string_buffer_appendf(strb, "flags:0x%x handler:%s()", op->flags,
+                              handler_func_name);
+
+    if (op->flags & UCT_RC_IFACE_SEND_OP_STATUS) {
+        ucs_string_buffer_appendf(strb, " status:%d", op->status);
+    }
+
+    if (op->user_comp != NULL) {
+        comp_func_name = ucs_debug_get_symbol_name(op->user_comp->func);
+        ucs_string_buffer_appendf(strb, " comp:%s()", comp_func_name);
+    }
+
+#if ENABLE_DEBUG_DATA
+    ucs_string_buffer_appendf(strb, " name:%s", op->name);
+#endif
+}
+

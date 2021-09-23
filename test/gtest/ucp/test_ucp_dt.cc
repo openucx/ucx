@@ -66,7 +66,7 @@ protected:
         m_ucph.reset();
     }
 
-    void init_dt_iter(size_t size)
+    void init_dt_iter(size_t size, bool is_pack)
     {
         m_dt_buffer.resize(size, 0);
         ucs::fill_random(m_dt_buffer);
@@ -84,8 +84,8 @@ protected:
 
         uint8_t sg_count;
         ucp_datatype_iter_init(m_ucph.get(), m_dt_desc.buf(), m_dt_desc.count(),
-                               m_dt_desc.dt(), m_dt_buffer.size(), &m_dt_iter,
-                               &sg_count);
+                               m_dt_desc.dt(), m_dt_buffer.size(), is_pack,
+                               &m_dt_iter, &sg_count);
         if (!UCP_DT_IS_GENERIC(GetParam())) {
             EXPECT_EQ(iovcnt, sg_count);
         }
@@ -108,7 +108,7 @@ protected:
 
     void test_pack(size_t size)
     {
-        init_dt_iter(size);
+        init_dt_iter(size, true);
 
         ucp_datatype_iter_t next_iter;
         do {
@@ -119,7 +119,7 @@ protected:
             /* TODO create non-NULL worker when using memtype */
             ucp_datatype_iter_next_pack(&m_dt_iter, NULL, seg_size, &next_iter,
                                         packed_ptr);
-            ucp_datatype_iter_copy_from_next(&m_dt_iter, &next_iter, UINT_MAX);
+            ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
         } while (!ucp_datatype_iter_is_end(&m_dt_iter));
 
         finalize_dt_iter();
@@ -127,7 +127,7 @@ protected:
 
     void test_unpack(size_t size)
     {
-        init_dt_iter(size);
+        init_dt_iter(size, false);
 
         typedef std::vector< std::pair<size_t, size_t> > segment_vector_t;
         segment_vector_t segments;
@@ -197,13 +197,13 @@ UCS_TEST_P(test_ucp_dt_iter, unpack_1MB) {
     test_unpack(UCS_MBYTE + (ucs::rand() % UCS_KBYTE));
 }
 
-INSTANTIATE_TEST_CASE_P(contig, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(contig, test_ucp_dt_iter,
                         testing::Values(ucp_dt_make_contig(1),
                                         ucp_dt_make_contig(8),
                                         ucp_dt_make_contig(39)));
 
-INSTANTIATE_TEST_CASE_P(iov, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(iov, test_ucp_dt_iter,
                         testing::Values(ucp_dt_make_iov()));
 
-INSTANTIATE_TEST_CASE_P(generic, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(generic, test_ucp_dt_iter,
                         testing::ValuesIn(test_ucp_dt_iter::enum_dt_generic_params()));

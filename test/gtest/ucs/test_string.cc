@@ -57,6 +57,19 @@ UCS_TEST_F(test_string, common_prefix_len) {
     EXPECT_EQ(0, common_length);
 }
 
+UCS_TEST_F(test_string, path) {
+    char path[PATH_MAX];
+    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", path);
+    EXPECT_STREQ("/sys/dev", path);
+
+    EXPECT_EQ(4, ucs_path_calc_distance("/root/foo/bar", "/root/charlie/fox"));
+    EXPECT_EQ(2, ucs_path_calc_distance("/a/b/c/d", "/a/b/c/e"));
+    EXPECT_EQ(0, ucs_path_calc_distance("/a/b/c", "/a/b/c"));
+    EXPECT_EQ(1, ucs_path_calc_distance("/a/b/c", "/a/b"));
+    EXPECT_EQ(2, ucs_path_calc_distance("/a/b/cd", "/a/b/ce"));
+    EXPECT_EQ(3, ucs_path_calc_distance("/a/b/c", "/a/b_c"));
+}
+
 UCS_TEST_F(test_string, trim) {
     char str1[] = " foo ";
     EXPECT_EQ("foo", std::string(ucs_strtrim(str1)));
@@ -123,6 +136,12 @@ UCS_TEST_F(test_string_buffer, appendf) {
 
     EXPECT_EQ("We, Created, The-Monster",
               std::string(ucs_string_buffer_cstr(&strb)));
+
+    ucs_string_buffer_reset(&strb);
+    EXPECT_EQ("", std::string(ucs_string_buffer_cstr(&strb)));
+
+    ucs_string_buffer_appendf(&strb, "%s", "Clean slate");
+    EXPECT_EQ("Clean slate", std::string(ucs_string_buffer_cstr(&strb)));
 
     ucs_string_buffer_cleanup(&strb);
 }

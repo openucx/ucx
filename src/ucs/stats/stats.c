@@ -370,7 +370,7 @@ static void ucs_stats_add_to_filter(ucs_stats_node_t *node,
     node->filter_node = filter_node;
 
     for (i = 0; (i < node->cls->num_counters) && (i < 64); ++i) {
-        filter_index = ucs_config_names_search(ucs_global_opts.stats_filter,
+        filter_index = ucs_config_names_search(&ucs_global_opts.stats_filter,
                                                node->cls->counter_names[i]);
         if (filter_index >= 0) {
             filter_node->counters_bitmask |= UCS_BIT(i);

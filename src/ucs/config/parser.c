@@ -90,7 +90,7 @@ static int __find_string_in_list(const char *str, const char **list)
 
 int ucs_config_sscanf_string(const char *buf, void *dest, const void *arg)
 {
-    *((char**)dest) = strdup(buf);
+    *((char**)dest) = ucs_strdup(buf, "config_sscanf_string");
     return 1;
 }
 
@@ -103,7 +103,7 @@ int ucs_config_sprintf_string(char *buf, size_t max,
 
 ucs_status_t ucs_config_clone_string(const void *src, void *dest, const void *arg)
 {
-    char *new_str = strdup(*(char**)src);
+    char *new_str = ucs_strdup(*(char**)src, "config_clone_string");
     if (new_str == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -114,7 +114,7 @@ ucs_status_t ucs_config_clone_string(const void *src, void *dest, const void *ar
 
 void ucs_config_release_string(void *ptr, const void *arg)
 {
-    free(*(char**)ptr);
+    ucs_free(*(char**)ptr);
 }
 
 int ucs_config_sscanf_int(const char *buf, void *dest, const void *arg)
@@ -366,7 +366,7 @@ ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *a
 
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 {
-    char *str = strdup(buf);
+    char *str = ucs_strdup(buf, "config_sscanf_bitmap_str");
     char *p, *saveptr;
     int ret, i;
 
@@ -387,7 +387,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
         p = strtok_r(NULL, ",", &saveptr);
     }
 
-    free(str);
+    ucs_free(str);
     return ret;
 }
 
@@ -693,7 +693,7 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
     char *p, *str;
     int ret = 1;
 
-    str = strdup(buf);
+    str = ucs_strdup(buf, "config_range_spec_str");
     if (str == NULL) {
         return 0;
     }
@@ -722,7 +722,7 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
     range_spec->last = last;
 
 out:
-    free (str);
+    ucs_free(str);
     return ret;
 }
 
@@ -760,7 +760,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     int ret;
     unsigned i;
 
-    str_dup = strdup(buf);
+    str_dup = ucs_strdup(buf, "config_scanf_array");
     if (str_dup == NULL) {
         return 0;
     }
@@ -774,7 +774,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
                                  array->parser.arg);
         if (!ret) {
             ucs_free(temp_field);
-            free(str_dup);
+            ucs_free(str_dup);
             return 0;
         }
 
@@ -787,7 +787,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 
     field->data = temp_field;
     field->count = i;
-    free(str_dup);
+    ucs_free(str_dup);
     return 1;
 }
 
@@ -910,7 +910,7 @@ int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
         snprintf(buf, max, UCS_CONFIG_PARSER_ALL);
         return 1;
     }
-    
+
     if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_NEGATE) {
         buf[offset++] = ucs_config_parser_negate;
         max--;
@@ -957,7 +957,7 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
     char *name, *value, *saveptr2;
     ucs_status_t status;
 
-    tokens = strdup(buf);
+    tokens = ucs_strdup(buf, "config_sscanf_table");
     if (tokens == NULL) {
         return 0;
     }
@@ -969,7 +969,7 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
         name  = strtok_r(token, "=", &saveptr2);
         value = strtok_r(NULL,  "=", &saveptr2);
         if (name == NULL || value == NULL) {
-            free(tokens);
+            ucs_free(tokens);
             ucs_error("Could not parse list of values in '%s' (token: '%s')", buf, token);
             return 0;
         }
@@ -983,14 +983,14 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
                 ucs_debug("Failed to set %s to '%s': %s", name, value,
                           ucs_status_string(status));
             }
-            free(tokens);
+            ucs_free(tokens);
             return 0;
         }
 
         token = strtok_r(NULL, ";", &saveptr1);
     }
 
-    free(tokens);
+    ucs_free(tokens);
     return 1;
 }
 
@@ -1040,7 +1040,7 @@ static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
     char *doc, *line, *p;
     int num;
 
-    line = doc = strdup(field->doc);
+    line = doc = ucs_strdup(field->doc, "config_doc");
     p = strchr(line, '\n');
     num = 0;
     while (p != NULL) {
@@ -1051,7 +1051,7 @@ static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
         ++num;
     }
     cb(num, line, arg);
-    free(doc);
+    ucs_free(doc);
 }
 
 static ucs_status_t
@@ -1974,14 +1974,14 @@ size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
     }
 }
 
-int ucs_config_names_search(ucs_config_names_array_t config_names,
+int ucs_config_names_search(const ucs_config_names_array_t *config_names,
                             const char *str)
 {
     unsigned i;
 
-    for (i = 0; i < config_names.count; ++i) {
-        if (!fnmatch(config_names.names[i], str, 0)) {
-           return i;
+    for (i = 0; i < config_names->count; ++i) {
+        if (!fnmatch(config_names->names[i], str, 0)) {
+            return i;
         }
     }
 

@@ -105,7 +105,10 @@ void ucs_log_flush()
 {
     if (ucs_log_file != NULL) {
         fflush(ucs_log_file);
-        fsync(fileno(ucs_log_file));
+
+        if (ucs_log_file_close) { /* non-stdout/stderr */
+            fsync(fileno(ucs_log_file));
+        }
     }
 }
 

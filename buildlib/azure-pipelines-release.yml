@@ -11,34 +11,16 @@ pr:
 
 resources:
   containers:
-    - container: centos7_cuda10_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
-    - container: centos7_cuda10_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.2:1
-    - container: centos7_cuda11_0
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.0:2
-    - container: centos7_cuda11_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda11.2:2
-    - container: centos8_cuda11_0
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5.0-cuda11.0:2
-    - container: centos8_cuda11_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5.1-cuda11.2:2
-    - container: ubuntu16_cuda10_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.1:1
-    - container: ubuntu16_cuda10_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5.0-cuda10.2:1
-    - container: ubuntu18_cuda10_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.1:1
-    - container: ubuntu18_cuda10_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda10.2:1
-    - container: ubuntu18_cuda11_0
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.0:2
-    - container: ubuntu18_cuda11_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5.0-cuda11.2:2
-    - container: ubuntu20_cuda11_0
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.0:2
-    - container: ubuntu20_cuda11_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.2:2
+    - container: centos7_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
+    - container: centos8_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
+    - container: ubuntu16_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
+    - container: ubuntu18_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:1
+    - container: ubuntu20_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
 
 stages:
   - stage: Prepare
@@ -53,7 +35,7 @@ stages:
               set -eE
               source ./buildlib/az-helpers.sh
               set -x
-              check_release_build $(Build.Reason) $(Build.SourceVersion)
+              check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/RELEASE: "
             name: Result
             displayName: Check build condition
 
@@ -64,7 +46,7 @@ stages:
     jobs:
       - job: DraftRelease
         displayName: Create draft release
-        container: centos7_cuda11_2
+        container: centos7_cuda11
         pool:
           name: MLNX
           demands:

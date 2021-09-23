@@ -151,7 +151,7 @@ struct ucs_class {
         if (obj != NULL) { \
             _status = UCS_CLASS_INIT(_type, obj, ## __VA_ARGS__); \
             if (_status == UCS_OK) { \
-                *(_obj) = (typeof(*(_obj)))obj; /* Success - assign pointer */ \
+                *(_obj) = (ucs_typeof(*(_obj)))obj; /* Success - assign pointer */ \
             } else { \
                 ucs_class_free(obj); /* Initialization failure */ \
             } \

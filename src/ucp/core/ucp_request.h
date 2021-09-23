@@ -36,7 +36,8 @@
 enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
-    /* UCS_BIT(2) and UCS_BIT(3) are vacant flags */
+    UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
+    /* UCS_BIT(3) is a vacant flag */
     UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED  = UCS_BIT(4),
     UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK              = UCS_BIT(6),
@@ -218,8 +219,11 @@ struct ucp_request {
                     /* Key for remote buffer get/put operation */
                     ucp_rkey_h        rkey;
 
+                    /* Descriptor for staging rendezvous data */
+                    ucp_mem_desc_t    *mdesc;
+
                     union {
-                        /* Used by version 1 rendezvous protocols */
+                        /* Used by "old" rendezvous protocols, in rndv.c */
                         struct {
                             /* Actual lanes map */
                             ucp_lane_map_t lanes_map_all;
@@ -231,14 +235,25 @@ struct ucp_request {
                             uint8_t        rkey_index[UCP_MAX_LANES];
                         };
 
-                        /* Used by rndv/put */
+                        /* Used by "new" rendezvous protocols, in proto_rndv.c */
                         struct {
-                            /* which lanes need to flush (0 in fence mode) */
-                            ucp_lane_map_t flush_map;
+                            /* Data start offset of this request */
+                            size_t offset;
 
-                            /* which lanes need to send atp */
-                            ucp_lane_map_t atp_map;
-                        } put;
+                            /* Used by rndv/put and rndv/put/frag */
+                            struct {
+                                /* Which lanes need to flush (0 in fence mode) */
+                                ucp_lane_map_t flush_map;
+
+                                /* Which lanes need to send atp */
+                                ucp_lane_map_t atp_map;
+                            } put;
+
+                            /* Used by rndv/send/ppln and rndv/recv/ppln */
+                            struct {
+                                uint8_t send_ack;
+                            } ppln;
+                        };
                     };
                 } rndv;
 
@@ -324,7 +339,6 @@ struct ucp_request {
             ucp_lane_index_t      lane;            /* Lane on which this request is being sent */
             uint8_t               proto_stage;     /* Protocol current stage */
             uct_pending_req_t     uct;             /* UCT pending request */
-            ucp_mem_desc_t        *mdesc;
         } send;
 
         /* "receive" part - used for tag_recv, am_recv and stream_recv operations */
@@ -342,6 +356,12 @@ struct ucp_request {
 
             /* Remote request ID received from a peer */
             ucs_ptr_map_key_t     remote_req_id;
+
+#if ENABLE_DEBUG_DATA
+            /* For rendezvous receive with new protocols: selected protocol for
+               fetching remote data */
+            const ucp_proto_config_t *proto_rndv_config;
+#endif
 
             union {
                 struct {
@@ -427,7 +447,9 @@ struct ucp_recv_desc {
                                                     AM memory pool or freeing it
                                                     in case of assembled
                                                     multi-fragment active message */
-
+#if ENABLE_DEBUG_DATA
+    const char              *name;           /* Object name, debug only */
+#endif
 };
 
 

@@ -1408,6 +1408,11 @@ void uct_test::mapped_buffer::pattern_check(uint64_t seed) {
     mem_buffer::pattern_check(ptr(), length(), seed, m_mem.mem_type);
 }
 
+void uct_test::mapped_buffer::memset(int c)
+{
+    mem_buffer::memset(ptr(), length(), c, m_mem.mem_type);
+}
+
 void *uct_test::mapped_buffer::ptr() const {
     return m_buf;
 }

@@ -37,6 +37,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     ucp_trace_req(req, "%s buffer %p dt 0x%lx count %zu tag %"PRIx64"/%"PRIx64,
                   debug_name, buffer, datatype, count, tag, tag_mask);
 
+#if ENABLE_DEBUG_DATA
+    req->recv.proto_rndv_config = NULL;
+#endif
+
     /* First, check the fast path case - single fragment
      * in this case avoid initializing most of request fields
      * */
@@ -150,9 +154,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     /* process first fragment */
     UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
     msg_id = eagerf_hdr->msg_id;
-    status = ucp_tag_recv_request_process_rdesc(req, rdesc, 0);
-    ucs_assert((status == UCS_OK) || (status == UCS_INPROGRESS) ||
-               (status == UCS_ERR_MESSAGE_TRUNCATED));
+    ucp_tag_recv_request_process_rdesc(req, rdesc, 0);
 
     /* process additional fragments */
     ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id

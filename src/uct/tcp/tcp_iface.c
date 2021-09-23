@@ -30,7 +30,7 @@ static ucs_config_field_t uct_tcp_iface_config_table[] = {
   {"TX_SEG_SIZE", "8kb",
    "Size of send copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, tx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
-  
+
   {"RX_SEG_SIZE", "64kb",
    "Size of receive copy-out buffer",
    ucs_offsetof(uct_tcp_iface_config_t, rx_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
@@ -551,10 +551,11 @@ out:
 }
 
 static ucs_mpool_ops_t uct_tcp_mpool_ops = {
-    ucs_mpool_chunk_malloc,
-    ucs_mpool_chunk_free,
-    NULL,
-    NULL
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
@@ -659,8 +660,8 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
     ucs_list_head_init(&self->ep_list);
     ucs_conn_match_init(&self->conn_match_ctx,
                         ucs_field_sizeof(uct_tcp_ep_t, peer_addr),
-                        &uct_tcp_cm_conn_match_ops);
-    status = ucs_ptr_map_init(&self->ep_ptr_map);
+                        UCT_TCP_CM_CONN_SN_MAX,  &uct_tcp_cm_conn_match_ops);
+    status = UCS_PTR_MAP_INIT(tcp_ep, &self->ep_ptr_map);
     ucs_assert_always(status == UCS_OK);
 
     if (self->config.tx_seg_size > self->config.rx_seg_size) {
@@ -781,7 +782,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_tcp_iface_t)
 
     uct_tcp_iface_ep_list_cleanup(self);
     ucs_conn_match_cleanup(&self->conn_match_ctx);
-    ucs_ptr_map_destroy(&self->ep_ptr_map);
+    UCS_PTR_MAP_DESTROY(tcp_ep, &self->ep_ptr_map);
 
     ucs_mpool_cleanup(&self->rx_mpool, 1);
     ucs_mpool_cleanup(&self->tx_mpool, 1);

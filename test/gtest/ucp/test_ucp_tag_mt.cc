@@ -38,18 +38,19 @@ public:
 };
 
 UCS_TEST_P(test_ucp_tag_mt, send_recv) {
-    uint64_t            send_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
-    uint64_t            recv_data[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
-    ucp_tag_recv_info_t info[MT_TEST_NUM_THREADS] GTEST_ATTRIBUTE_UNUSED_;
+    const unsigned num_threads = mt_num_threads();
+    uint64_t send_data[num_threads] GTEST_ATTRIBUTE_UNUSED_;
+    uint64_t recv_data[num_threads] GTEST_ATTRIBUTE_UNUSED_;
+    ucp_tag_recv_info_t info[num_threads] GTEST_ATTRIBUTE_UNUSED_;
 
-    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < num_threads; i++) {
         send_data[i] = 0xdeadbeefdeadbeef + 10 * i;
         recv_data[i] = 0;
     }
 
 #if _OPENMP && ENABLE_MT
 #pragma omp parallel for
-    for (int i = 0; i < MT_TEST_NUM_THREADS; i++) {
+    for (int i = 0; i < num_threads; i++) {
         ucs_status_t status;
         int worker_index = 0;
 

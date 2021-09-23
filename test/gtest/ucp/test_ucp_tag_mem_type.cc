@@ -23,7 +23,8 @@ public:
     enum {
         VARIANT_GDR_OFF     = UCS_BIT(0),
         VARIANT_TAG_OFFLOAD = UCS_BIT(1),
-        VARIANT_MAX         = UCS_BIT(2)
+        VARIANT_PROTO       = UCS_BIT(2),
+        VARIANT_MAX         = UCS_BIT(3)
     };
 
     void init() {
@@ -41,6 +42,10 @@ public:
                 m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE",  "8k"));
                 m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
             }
+        }
+
+        if (varient_index & VARIANT_PROTO) {
+            modify_config("PROTO_ENABLE", "y");
         }
 
         m_send_mem_type  = mem_type_pairs[mem_type_pair_index][0];
@@ -70,6 +75,9 @@ public:
                 if (i & VARIANT_TAG_OFFLOAD) {
                     name += ",offload";
                 }
+                if (i & VARIANT_PROTO) {
+                    name += ",proto";
+                }
                 add_variant_with_value(variants, get_ctx_params(), count, name);
                 ++count;
             }
@@ -84,6 +92,16 @@ public:
         size_t recvd = do_xfer(sbuf, rbuf, length, type, type, true, false, false);
         ASSERT_EQ(length, recvd);
         mem_buffer::pattern_check(rbuf, length, 2, r_mem_type);
+    }
+
+    size_t max_test_length(unsigned exp) const
+    {
+        return static_cast<size_t>(pow(10.0, exp));
+    }
+
+    size_t test_length(unsigned exp) const
+    {
+        return (ucs::rand() % max_test_length(exp)) + 1;
     }
 
     static std::vector<std::vector<ucs_memory_type_t> > mem_type_pairs;
@@ -157,16 +175,12 @@ size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
 
 UCS_TEST_P(test_ucp_tag_mem_type, basic)
 {
-    ucp_datatype_t type = ucp_dt_make_contig(1);
-    size_t max_length;
+    const size_t max_iter1       = RUNNING_ON_VALGRIND ? 3 : 7; 
+    const size_t iter_multiplier = RUNNING_ON_VALGRIND ? 2 : 1; 
+    const ucp_datatype_t type    = ucp_dt_make_contig(1);
 
-    UCS_TEST_MESSAGE << "TEST: "
-                     << ucs_memory_type_names[m_send_mem_type] << " <-> "
-                     << ucs_memory_type_names[m_recv_mem_type];
-
-    for (unsigned i = 1; i <= 7; ++i) {
-        max_length = (size_t)pow(10.0, i);
-        size_t length = ucs::rand() % max_length + 1;
+    for (unsigned i = 1; i <= max_iter1; ++i) {
+        size_t length = test_length(i * iter_multiplier);
 
         mem_buffer m_recv_mem_buf(length, m_recv_mem_type);
         mem_buffer m_send_mem_buf(length, m_send_mem_type);
@@ -176,12 +190,13 @@ UCS_TEST_P(test_ucp_tag_mem_type, basic)
     }
 
     /*  test with re-using the buffers */
-    max_length = (size_t)pow(10.0, 7);
+    size_t max_length = max_test_length(7);
     mem_buffer m_recv_mem_buf(max_length, m_recv_mem_type);
     mem_buffer m_send_mem_buf(max_length, m_send_mem_type);
 
-    for (unsigned i = 0; i < 2; ++i) {
-        size_t length = ucs::rand() % max_length + 1;
+    const size_t max_iter2 = RUNNING_ON_VALGRIND ? 1 : 2;
+    for (unsigned i = 0; i < max_iter2; ++i) {
+        size_t length = test_length(7);
 
         do_basic_send(m_send_mem_buf.ptr(),m_recv_mem_buf.ptr(), length, type,
                       m_send_mem_buf.mem_type(), m_recv_mem_buf.mem_type());
@@ -189,10 +204,25 @@ UCS_TEST_P(test_ucp_tag_mem_type, basic)
 
 }
 
+UCS_TEST_P(test_ucp_tag_mem_type, rndv_4mb, "RNDV_THRESH=0")
+{
+    ucp_datatype_t type = ucp_dt_make_contig(1);
+    const size_t length = 4 * UCS_MBYTE;
+
+    mem_buffer recv_mem_buf(length, m_recv_mem_type, 1);
+    mem_buffer send_mem_buf(length, m_send_mem_type, 2);
+
+    size_t recvd = do_xfer(send_mem_buf.ptr(), recv_mem_buf.ptr(), length, type,
+                           type, true, false, false);
+    ASSERT_EQ(length, recvd);
+
+    recv_mem_buf.pattern_check(2);
+}
+
 UCS_TEST_P(test_ucp_tag_mem_type, xfer_mismatch_length)
 {
     ucp_datatype_t type = ucp_dt_make_contig(1);
-    size_t length = ucs::rand() % ((ssize_t)pow(10.0, 7));
+    size_t length       = test_length(7);
 
     UCS_TEST_MESSAGE << "TEST: "
                      << ucs_memory_type_names[m_send_mem_type] << " <-> "

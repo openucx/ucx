@@ -146,7 +146,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super,
                                       &iface->ud_common, ib_addr, path_index,
-                                      &av, &grh_av, &is_global);
+                                      "DC ep create", &av, &grh_av, &is_global);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
@@ -255,6 +255,7 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     uct_dc_mlx5_iface_progress_pending(iface,
                                        iface->tx.dcis[dci_index].pool_index);
     uct_dc_mlx5_iface_check_tx(iface);
+    uct_ib_mlx5_update_db_cq_ci(&iface->super.cq[UCT_IB_DIR_TX]);
 
     return 1;
 }
@@ -1070,6 +1071,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
 
     uct_rc_ep_init_send_op(send_op, 0, NULL,
                            uct_dc_mlx5_ep_fc_pure_grant_send_completion);
+    uct_rc_iface_send_op_set_name(send_op, "dc_mlx5_iface_fc_grant");
 
     send_op->buffer = fc_req;
     status          = uct_dc_mlx5_ep_fc_pure_grant_send(ep, send_op);

@@ -561,6 +561,11 @@ int sendrecv(int sock, const void *sbuf, size_t slen, void **rbuf)
     return 0;
 }
 
+static void progress_worker(void *arg)
+{
+    uct_worker_progress((uct_worker_h)arg);
+}
+
 int main(int argc, char **argv)
 {
     uct_device_addr_t   *peer_dev   = NULL;
@@ -599,6 +604,11 @@ int main(int argc, char **argv)
     status = dev_tl_lookup(&cmd_args, &if_info);
     CHKERR_JUMP(UCS_OK != status, "find supported device and transport",
                 out_destroy_worker);
+
+    /* Set active message handler */
+    status = uct_iface_set_am_handler(if_info.iface, id, hello_world,
+                                      &cmd_args.func_am_type, 0);
+    CHKERR_JUMP(UCS_OK != status, "set callback", out_destroy_iface);
 
     own_dev = (uct_device_addr_t*)calloc(1, if_info.iface_attr.device_addr_len);
     CHKERR_JUMP(NULL == own_dev, "allocate memory for dev addr",
@@ -660,7 +670,7 @@ int main(int argc, char **argv)
 
         /* Connect endpoint to a remote endpoint */
         status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep);
-        if (barrier(oob_sock)) {
+        if (barrier(oob_sock, progress_worker, if_info.worker)) {
             status = UCS_ERR_IO_ERROR;
             goto out_free_ep;
         }
@@ -684,11 +694,6 @@ int main(int argc, char **argv)
                 func_am_max_size(cmd_args.func_am_type, &if_info.iface_attr));
         goto out_free_ep;
     }
-
-    /* Set active message handler */
-    status = uct_iface_set_am_handler(if_info.iface, id, hello_world,
-                                      &cmd_args.func_am_type, 0);
-    CHKERR_JUMP(UCS_OK != status, "set callback", out_free_ep);
 
     if (cmd_args.server_name) {
         char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
@@ -729,7 +734,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (barrier(oob_sock)) {
+    if (barrier(oob_sock, progress_worker, if_info.worker)) {
         status = UCS_ERR_IO_ERROR;
     }
 

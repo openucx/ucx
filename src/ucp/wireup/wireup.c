@@ -411,10 +411,19 @@ out:
     return status;
 }
 
-void ucp_wireup_remote_connected(ucp_ep_h ep)
+void ucp_wireup_remote_connect_lanes(ucp_ep_h ep, int ready)
 {
     ucp_lane_index_t lane;
 
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (ucp_wireup_ep_test(ep->uct_eps[lane])) {
+            ucp_wireup_ep_remote_connected(ep->uct_eps[lane], ready);
+        }
+    }
+}
+
+void ucp_wireup_remote_connected(ucp_ep_h ep)
+{
     if (ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED) {
         return;
     }
@@ -430,11 +439,7 @@ void ucp_wireup_remote_connected(ucp_ep_h ep)
         ucp_ep_update_flags(ep, UCP_EP_FLAG_REMOTE_CONNECTED, 0);
     }
 
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        if (ucp_wireup_ep_test(ep->uct_eps[lane])) {
-            ucp_wireup_ep_remote_connected(ep->uct_eps[lane]);
-        }
-    }
+    ucp_wireup_remote_connect_lanes(ep, 1);
 
     ucs_assert(ep->flags & UCP_EP_FLAG_REMOTE_ID);
 }
@@ -534,8 +539,16 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 
             /* add internal endpoint to hash */
             ep->conn_sn = msg->conn_sn;
-            ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
-                                UCS_CONN_MATCH_QUEUE_UNEXP);
+            if (!ucp_ep_match_insert(worker, ep, remote_uuid, ep->conn_sn,
+                                     UCS_CONN_MATCH_QUEUE_UNEXP)) {
+                if (worker->context->config.features & UCP_FEATURE_STREAM) {
+                    ucs_diag("worker %p: created the endpoint %p without"
+                             " connection matching, but Stream API support was"
+                             " requested on the context %p",
+                             worker, ep, worker->context);
+                }
+                ucp_ep_flush_state_reset(ep);
+            }
         } else {
             ucp_ep_flush_state_reset(ep);
         }
@@ -686,6 +699,17 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
     }
 }
 
+static void ucp_ep_removed_flush_completion(ucp_request_t *req)
+{
+    ucs_log_level_t level = UCS_STATUS_IS_ERR(req->status) ?
+                                    UCS_LOG_LEVEL_DIAG :
+                                    UCS_LOG_LEVEL_DEBUG;
+
+    ucs_log(level, "flushing ep_removed (req %p) completed with status %s", req,
+            ucs_status_string(req->status));
+    ucp_ep_register_disconnect_progress(req);
+}
+
 static UCS_F_NOINLINE void
 ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
@@ -728,7 +752,7 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     req = ucp_ep_flush_internal(reply_ep, UCP_REQUEST_FLAG_RELEASED,
                                 &ucp_request_null_param, NULL,
-                                ucp_ep_register_disconnect_progress, "close");
+                                ucp_ep_removed_flush_completion, "close");
     if (UCS_PTR_IS_PTR(req)) {
         return;
     }
@@ -871,11 +895,11 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
     ucs_status_t status;
 
     ucs_assert(wiface->attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
-
-    if ((ep->uct_eps[lane] != NULL) && !ucp_wireup_ep_test(ep->uct_eps[lane])) {
-        /* Lane already exists */
-        return UCS_ERR_UNREACHABLE;
-    }
+    ucs_assertv_always((ep->uct_eps[lane] == NULL) ||
+                       ucp_wireup_ep_test(ep->uct_eps[lane]),
+                       "ep %p: lane %u (uct_ep=%p is_wireup=%d) exists",
+                       ep, lane, ep->uct_eps[lane],
+                       ucp_wireup_ep_test(ep->uct_eps[lane]));
 
     /* create an endpoint connected to the remote interface */
     ucs_trace("ep %p: connect uct_ep[%d] to addr %p", ep, lane,
@@ -1214,8 +1238,6 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         /* previous wireup lane is not part of new configuration, so add it as
          * auxiliary endpoint inside cm lane, to be able to continue wireup
          * messages exchange */
-        ucs_assert(cm_wireup_ep != NULL);
-
         new_key->wireup_msg_lane = new_key->cm_lane;
         reuse_lane               = old_key->wireup_msg_lane;
         ucp_wireup_ep_set_aux(cm_wireup_ep,

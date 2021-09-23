@@ -357,8 +357,30 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_perf)
 
+class test_ucp_loopback : public test_ucp_perf {};
 
-class test_ucp_wait_mem : public test_ucp_perf {};
+UCS_TEST_P(test_ucp_loopback, envelope)
+{
+    test_spec test = tests[get_variant_value(VARIANT_TEST_TYPE)];
+
+    run_test(test, UCX_PERF_TEST_FLAG_LOOPBACK, true, "", "");
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_loopback)
+
+
+class test_ucp_wait_mem : public test_ucp_perf {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        // Add test instance only if wait_mem is non-trivial for this arch
+#ifdef __aarch64__
+        add_variant(variants, 0);
+#else
+        ucs_assert(ucs_arch_wait_mem == ucs_arch_generic_wait_mem);
+#endif
+    }
+};
 
 UCS_TEST_P(test_ucp_wait_mem, envelope) {
     double perf_avg    = 0;

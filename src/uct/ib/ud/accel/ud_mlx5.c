@@ -502,15 +502,19 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
                                 uct_ib_mlx5_cqe_is_grh_present(cqe),
                                 cqe->flags_rqpn & 0xFF)) {
         ucs_mpool_put_inline(desc);
-        goto out;
+        goto out_polled;
     }
 
     uct_ib_mlx5_log_rx(&iface->super.super, cqe, packet, uct_ud_dump_packet);
     /* coverity[tainted_data] */
-    uct_ud_ep_process_rx(&iface->super,
-                         (uct_ud_neth_t *)UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
-                         len - UCT_IB_GRH_LEN,
-                         (uct_ud_recv_skb_t *)ucs_unaligned_ptr(desc), is_async);
+    uct_ud_ep_process_rx(
+            &iface->super,
+            (uct_ud_neth_t*)UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
+            len - UCT_IB_GRH_LEN,
+            (uct_ud_recv_skb_t*)ucs_unaligned_ptr(desc), is_async);
+
+out_polled:
+    uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_RX]);
 out:
     if (iface->super.rx.available >= iface->super.super.config.rx_max_batch) {
         /* we need to try to post buffers always. Otherwise it is possible
@@ -540,6 +544,7 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface, int is_async)
     iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, hw_ci);
 
     uct_ud_iface_send_completion(&iface->super, hw_ci, is_async);
+    uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
 
     return 1;
 }
@@ -622,8 +627,9 @@ uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
     memset(peer_address, 0, sizeof(*peer_address));
 
     status = uct_ud_mlx5_iface_get_av(&ud_iface->super, &iface->ud_mlx5_common,
-                                      ib_addr, path_index, &peer_address->av,
-                                      &peer_address->grh_av, &is_global);
+                                      ib_addr, path_index, "UD mlx5 connect",
+                                      &peer_address->av, &peer_address->grh_av,
+                                      &is_global);
     if (status != UCS_OK) {
         return status;
     }

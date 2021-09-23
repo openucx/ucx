@@ -11,8 +11,6 @@
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
 
-
-#include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
@@ -20,6 +18,9 @@
 #include <ucs/debug/debug_int.h>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
+
+
+UCS_PTR_MAP_IMPL(request, 0);
 
 
 #define UCP_REQUEST_FLAGS_FMT \
@@ -82,13 +83,20 @@
         } \
     }
 
-#define ucp_request_set_callback(_req, _cb, _cb_value, _user_data) \
+
+#define ucp_request_set_callback(_req, _cb, _cb_value) \
     { \
         (_req)->_cb       = _cb_value; \
-        (_req)->user_data = _user_data; \
         (_req)->flags    |= UCP_REQUEST_FLAG_CALLBACK; \
+    }
+
+
+#define ucp_request_set_user_callback(_req, _cb, _cb_value, _user_data) \
+    { \
+        ucp_request_set_callback(_req, _cb, _cb_value); \
+        (_req)->user_data = _user_data; \
         ucs_trace_data("request %p %s set to %p, user data: %p", \
-                      _req, #_cb, _cb_value, _user_data); \
+                       _req, #_cb, _cb_value, _user_data); \
     }
 
 
@@ -145,10 +153,12 @@
 
 #define ucp_request_set_callback_param(_param, _param_cb, _req, _req_cb) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        ucp_request_set_callback(_req, _req_cb.cb, (_param)->cb._param_cb, \
-                                 ((_param)->op_attr_mask & \
-                                  UCP_OP_ATTR_FIELD_USER_DATA) ? \
-                                 (_param)->user_data : NULL); \
+        ucp_request_set_user_callback(_req, _req_cb.cb, \
+                                      (_param)->cb._param_cb, \
+                                      ((_param)->op_attr_mask & \
+                                       UCP_OP_ATTR_FIELD_USER_DATA) ? \
+                                              (_param)->user_data : \
+                                              NULL); \
     }
 
 
@@ -460,7 +470,7 @@ ucp_request_send_state_advance(ucp_request_t *req,
          */
         return;
     }
-    
+
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         ucp_request_send_state_ff(req, status);
         return;
@@ -681,14 +691,21 @@ ucp_recv_desc_alloc(ucp_worker_h worker, size_t length)
     ucs_trace_data("take AM desc, mpool idx %u, data length %zu", idx, length);
 
     return (ucp_recv_desc_t*)ucs_mpool_get_inline(worker->am_mps_map[idx]);
+}
 
+static UCS_F_ALWAYS_INLINE void
+ucp_recv_desc_set_name(ucp_recv_desc_t *rdesc, const char *name)
+{
+#if ENABLE_DEBUG_DATA
+    rdesc->name = name;
+#endif
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    int data_offset, unsigned am_flags, uint16_t hdr_len,
                    uint16_t rdesc_flags, int priv_length, size_t alignment,
-                   ucp_recv_desc_t **rdesc_p)
+                   const char *name, ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;
     void *data_hdr;
@@ -710,6 +727,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
+        ucp_recv_desc_set_name(rdesc, name);
         padding = ucs_padding((uintptr_t)(rdesc + 1), worker->am.alignment);
         rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
         rdesc->release_desc_offset = padding;
@@ -873,24 +891,12 @@ ucp_request_get_memory_type(ucp_context_h context, const void *address,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_ep_ptr_map_check_status(ucp_ep_h ep, void *ptr, const char *action_str,
-                            ucs_status_t status)
+ucp_request_ptr_map_status_check(ucs_status_t status, const char *action_str,
+                                 ucp_ep_h ep, void *ptr)
 {
     ucs_assertv((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS),
                 "ep %p: failed to %s id for %p: %s", ep, action_str, ptr,
                 ucs_status_string(status));
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
-{
-    ucs_status_t status;
-
-    status = ucs_ptr_map_put(&ep->worker->request_map, ptr,
-                             ucp_ep_use_indirect_id(ep), ptr_id_p);
-    ucp_ep_ptr_map_check_status(ep, ptr, "allocate", status);
-
-    return status;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
@@ -899,7 +905,10 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
     ucs_status_t status;
 
     ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
-    status = ucp_ep_ptr_id_alloc(ep, req, &req->id);
+    status = UCS_PTR_MAP_PUT(request, &ep->worker->request_map, req,
+                             ucp_ep_use_indirect_id(ep), &req->id);
+    ucp_request_ptr_map_status_check(status, "put", ep, req);
+
     if (status == UCS_OK) {
         ucs_hlist_add_tail(&ucp_ep_ext_gen(ep)->proto_reqs,
                            &req->send.list);
@@ -925,12 +934,13 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
                  (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));
     ep = req->send.ep;
 
-    status = ucs_ptr_map_del(&ep->worker->request_map, req->id);
+    status = UCS_PTR_MAP_DEL(request, &ep->worker->request_map, req->id);
+    ucp_request_ptr_map_status_check(status, "delete", ep, req);
+
     if (status == UCS_OK) {
         ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
     }
 
-    ucp_ep_ptr_map_check_status(ep, req, "release", status);
     ucp_request_id_reset(req);
 }
 
@@ -943,7 +953,7 @@ ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 
     ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
 
-    status = ucs_ptr_map_get(&worker->request_map, id, extract, &ptr);
+    status = UCS_PTR_MAP_GET(request, &worker->request_map, id, extract, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }
@@ -986,6 +996,16 @@ ucp_request_get_super(ucp_request_t *req)
     ucs_assertv(req->flags & UCP_REQUEST_FLAG_SUPER_VALID,
                 "req=%p req->super_req=%p", req, req->super_req);
     return req->super_req;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_request_t *
+ucp_request_user_data_get_super(void *request, void *user_data)
+{
+    ucp_request_t UCS_V_UNUSED *req = (ucp_request_t*)request - 1;
+    ucp_request_t *super_req        = (ucp_request_t*)user_data;
+
+    ucs_assert(ucp_request_get_super(req) == super_req);
+    return super_req;
 }
 
 static UCS_F_ALWAYS_INLINE void

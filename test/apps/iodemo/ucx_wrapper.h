@@ -17,6 +17,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -27,7 +28,16 @@
 /* Forward declarations */
 class UcxConnection;
 struct ucx_request;
-struct UcxAmDesc;
+
+// Holds details of arrived AM message
+struct UcxAmDesc {
+    UcxAmDesc(void *data, const ucp_am_recv_param_t *param) :
+        _data(data), _param(param) {
+    }
+
+    void                         *_data;
+    const ucp_am_recv_param_t    *_param;
+};
 
 /*
  * UCX callback for send/receive completion
@@ -58,7 +68,8 @@ class UcxLog {
 public:
     static bool use_human_time;
 
-    UcxLog(const char* prefix, bool enable = true);
+    UcxLog(const char* prefix, bool enable = true,
+           std::ostream *os = &std::cout, bool abort = false);
     ~UcxLog();
 
     template<typename T>
@@ -71,6 +82,8 @@ public:
 
 private:
     std::stringstream        *_ss;
+    std::ostream             *_os;
+    bool                     _abort;
 };
 
 
@@ -110,8 +123,6 @@ public:
     static const std::string sockaddr_str(const struct sockaddr* saddr,
                                           size_t addrlen);
 
-    void destroy_connections();
-
     static double get_time();
 
     static void *malloc(size_t size, const char *name);
@@ -138,6 +149,22 @@ protected:
     // Called when new server connection is accepted
     virtual void dispatch_connection_accepted(UcxConnection* conn);
 
+    void destroy_connections();
+
+    void wait_disconnected_connections();
+
+    void destroy_listener();
+
+    static inline void *ucx_am_get_data(const UcxAmDesc &desc)
+    {
+        return desc._data;
+    }
+
+    static inline bool ucx_am_is_rndv(const UcxAmDesc &desc)
+    {
+        return desc._param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV;
+    }
+
 private:
     typedef enum {
         WAIT_STATUS_OK,
@@ -149,6 +176,10 @@ private:
         ucp_conn_request_h conn_request;
         struct timeval     arrival_time;
     } conn_req_t;
+
+    typedef std::map<uint64_t, UcxConnection*> conn_map_t;
+
+    typedef std::vector<std::pair<double, UcxConnection*> > timeout_conn_t;
 
     friend class UcxConnection;
 
@@ -201,20 +232,24 @@ private:
 
     void remove_connection(UcxConnection *conn);
 
+    timeout_conn_t::iterator find_connection_inprogress(UcxConnection *conn);
+
     void remove_connection_inprogress(UcxConnection *conn);
 
     void move_connection_to_disconnecting(UcxConnection *conn);
 
-    void handle_connection_error(UcxConnection *conn);
+    bool is_in_disconnecting_list(UcxConnection *conn)
+    {
+        return std::find(_disconnecting_conns.begin(),
+                         _disconnecting_conns.end(), conn) !=
+                _disconnecting_conns.end();
+    }
 
-    void destroy_listener();
+    void handle_connection_error(UcxConnection *conn);
 
     void destroy_worker();
 
     void set_am_handler(ucp_am_recv_callback_t cb, void *arg);
-
-    typedef std::map<uint64_t, UcxConnection*>              conn_map_t;
-    typedef std::vector<std::pair<double, UcxConnection*> > timeout_conn_t;
 
     ucp_context_h               _context;
     ucp_worker_h                _worker;

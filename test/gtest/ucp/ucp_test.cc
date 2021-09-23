@@ -114,6 +114,11 @@ bool ucp_test::has_any_transport(const std::vector<std::string>& tl_names) const
            all_tl_names.end();
 }
 
+bool ucp_test::has_any_transport(const std::string *tls, size_t tl_size) const {
+    const std::vector<std::string> tl_names(tls, tls + tl_size);
+    return has_any_transport(tl_names);
+}
+
 bool ucp_test::is_self() const {
     return "self" == GetParam().transports.front();
 }
@@ -513,6 +518,17 @@ bool ucp_test::check_tls(const std::string& tls)
     return cache[tls] = (status == UCS_OK);
 }
 
+unsigned ucp_test::mt_num_threads()
+{
+#if _OPENMP && ENABLE_MT
+    /* Assume each thread can create two workers (sender and receiver entity),
+       and each worker can open up to 64 files */
+    return std::min(omp_get_max_threads(), ucs_sys_max_open_files() / (64 * 2));
+#else
+    return 1;
+#endif
+}
+
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params,
@@ -528,7 +544,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     if (thread_type == MULTI_THREAD_CONTEXT) {
         /* Test multi-threading on context level, so create multiple workers
            which share the context */
-        num_workers                        = MT_TEST_NUM_THREADS;
+        num_workers                        = ucp_test::mt_num_threads();
         local_ctx_params.field_mask       |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
         local_ctx_params.mt_workers_shared = 1;
     } else {
@@ -1083,4 +1099,15 @@ void test_ucp_context::get_test_variants(std::vector<ucp_test_variant> &variants
 void ucp_test::disable_keepalive()
 {
     modify_config("KEEPALIVE_INTERVAL", "inf");
+}
+
+bool ucp_test::check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type) {
+    for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(e.ep()); lane++) {
+        const uct_md_attr_t* attr = ucp_ep_md_attr(e.ep(), lane);
+        if (attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+            return true;
+        }
+    }
+
+    return false;
 }

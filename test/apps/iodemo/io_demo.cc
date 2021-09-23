@@ -52,6 +52,14 @@ static const char *io_op_names[] = {
     "write completion"
 };
 
+
+#ifndef NDEBUG
+const bool do_assert = true;
+#else
+const bool do_assert = false;
+#endif
+
+
 /* test options */
 typedef struct {
     std::vector<const char*> servers;
@@ -75,6 +83,7 @@ typedef struct {
     bool                     verbose;
     bool                     validate;
     bool                     use_am;
+    bool                     debug_timeout;
     bool                     use_epoll;
     ucs_memory_type_t        memory_type;
 } options_t;
@@ -82,6 +91,13 @@ typedef struct {
 #define LOG_PREFIX  "[DEMO]"
 #define LOG         UcxLog(LOG_PREFIX)
 #define VERBOSE_LOG UcxLog(LOG_PREFIX, _test_opts.verbose)
+
+#define ASSERTV_STR(_expression_str) \
+        "Assertion \"" << _expression_str << "\" failed "
+#define ASSERTV(_expression) \
+        UcxLog(LOG_PREFIX, !(_expression), &std::cerr, do_assert) \
+                << ASSERTV_STR(#_expression)
+
 
 template<class BufferType, bool use_offcache = false> class ObjectPool {
 public:
@@ -496,10 +512,11 @@ protected:
             _data_size(0lu), _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool)
         {
             _iov.reserve(size);
+            _extra_buf = NULL;
         }
 
         size_t size() const {
-            return _iov.size();
+            return _iov.size() + !!_extra_buf;
         }
 
         size_t data_size() const {
@@ -528,6 +545,14 @@ protected:
             }
         }
 
+        void init(size_t data_size, void *ext_buf)
+        {
+            assert(ext_buf != NULL);
+
+            _data_size = data_size;
+            _extra_buf = ext_buf;
+        }
+
         inline Buffer &operator[](size_t i) const
         {
             return *_iov[i];
@@ -539,11 +564,12 @@ protected:
                 _iov.pop_back();
             }
 
+            _extra_buf = NULL;
             _pool.put(this);
         }
 
         inline size_t validate(unsigned seed) const {
-            assert(!_iov.empty());
+            assert(!_iov.empty() || _extra_buf);
 
             for (size_t iov_err_pos = 0, i = 0; i < _iov.size(); ++i) {
                 size_t buf_err_pos = IoDemoRandom::validate(seed,
@@ -554,6 +580,15 @@ protected:
                 if (buf_err_pos < _iov[i]->size()) {
                     return iov_err_pos;
                 }
+            }
+
+            if (_extra_buf) {
+                size_t buf_err_pos = IoDemoRandom::validate(seed,
+                                                            _extra_buf,
+                                                            _data_size,
+                                                            _memory_type);
+                if (buf_err_pos < _data_size)
+                    return buf_err_pos;
             }
 
             return _npos;
@@ -583,6 +618,7 @@ protected:
         ucs_memory_type_t      _memory_type;
         std::vector<Buffer*>   _iov;
         MemoryPool<BufferIov>& _pool;
+        void                   *_extra_buf;
     };
 
     /* Asynchronous IO message */
@@ -681,6 +717,8 @@ protected:
 
     static void signal_terminate_handler(int signo)
     {
+        LOG << "Run-time signal handling: " << signo;
+
         _status = TERMINATE_SIGNALED;
     }
 
@@ -696,7 +734,7 @@ protected:
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
                           test_opts.memory_type, test_opts.num_offcache_buffers)
     {
-        _status                 = OK;
+        _status                  = OK;
 
         struct sigaction new_sigaction;
         new_sigaction.sa_handler = signal_terminate_handler;
@@ -748,21 +786,40 @@ protected:
         send_recv_data(conn, iov, sn, XFER_TYPE_RECV, callback);
     }
 
+    void send_io_write_response(UcxConnection* conn, const BufferIov& iov,
+                                uint32_t sn)
+    {
+        // send IO write response packet only if the connection status is OK
+        size_t data_size = iov.data_size();
+        if (opts().use_am) {
+            IoMessage *m = _io_msg_pool.get();
+            m->init(IO_WRITE_COMP, sn, data_size, opts().validate);
+            conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0ul, m);
+        } else {
+            send_io_message(conn, IO_WRITE_COMP, sn, data_size,
+                            opts().validate);
+        }
+    }
+
     static uint32_t get_chunk_cnt(size_t data_size, size_t chunk_size) {
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
-    static void validate(const BufferIov& iov, unsigned seed) {
+    static void validate(const UcxConnection *conn, const BufferIov& iov,
+                         unsigned seed) {
         assert(iov.size() != 0);
 
         size_t err_pos = iov.validate(seed);
         if (err_pos != iov.npos()) {
-            LOG << "ERROR: iov data corruption at " << err_pos << " position";
+            LOG << "ERROR: iov data corruption at " << err_pos
+                << " position detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
     }
 
-    static void validate(const iomsg_t *msg, size_t iomsg_size) {
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+                         size_t iomsg_size) {
         unsigned seed   = msg->sn;
         const void *buf = msg + 1;
         size_t buf_size = iomsg_size - sizeof(*msg);
@@ -770,18 +827,23 @@ protected:
         size_t err_pos = IoDemoRandom::validate(seed, buf, buf_size,
                                                 UCS_MEMORY_TYPE_HOST);
         if (err_pos < buf_size) {
-            LOG << "ERROR: io msg data corruption at " << err_pos << " position";
+            LOG << "ERROR: io msg data corruption at " << err_pos
+                << " position detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
     }
 
-    static void validate(const iomsg_t *msg, uint32_t sn, size_t iomsg_size) {
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+                         uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            LOG << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
+            LOG << "ERROR: io msg sn mismatch (" << sn << " != " << msg->sn
+                << ") detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
 
-        validate(msg, iomsg_size);
+        validate(conn, msg, iomsg_size);
     }
 
 private:
@@ -843,20 +905,12 @@ public:
             }
 
             if (_status == UCS_OK) {
-                size_t data_size = _iov->data_size();
-                if (_server->opts().use_am) {
-                    IoMessage *m = _server->_io_msg_pool.get();
-                    m->init(IO_WRITE_COMP, _sn, data_size,
-                            _server->opts().validate);
-                    _conn->send_am(m->buffer(), _server->opts().iomsg_size,
-                                   NULL, 0ul, m);
-                } else {
-                    _server->send_io_message(_conn, IO_WRITE_COMP, _sn,
-                                             data_size,
-                                             _server->opts().validate);
-                }
                 if (_server->opts().validate) {
-                    validate(*_iov, _sn);
+                    validate(_conn, *_iov, _sn);
+                }
+                
+                if (_conn->ucx_status() == UCS_OK) {
+                    _server->send_io_write_response(_conn, *_iov, _sn);
                 }
             }
 
@@ -940,6 +994,11 @@ public:
         P2pDemoCommon(test_opts), _callback_pool(0, "callbacks") {
     }
 
+    ~DemoServer()
+    {
+        destroy_connections();
+    }
+
     void run() {
         struct sockaddr_in listen_addr;
         memset(&listen_addr, 0, sizeof(listen_addr));
@@ -947,7 +1006,7 @@ public:
         listen_addr.sin_addr.s_addr = INADDR_ANY;
         listen_addr.sin_port        = htons(opts().port_num);
 
-        for (long retry = 1;; ++retry) {
+        for (long retry = 1; _status == OK; ++retry) {
             if (listen((const struct sockaddr*)&listen_addr,
                        sizeof(listen_addr))) {
                 break;
@@ -991,6 +1050,8 @@ public:
                 std::cerr << e.what();
             }
         }
+
+        destroy_listener();
     }
 
     void handle_io_read_request(UcxConnection* conn, const iomsg_t *msg) {
@@ -1059,12 +1120,20 @@ public:
         IoWriteResponseCallback *w = _callback_pool.get();
         ConnectionStat &conn_stat  = _conn_stat_map.find(conn)->second;
 
-        iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+        if (!ucx_am_is_rndv(data_desc)) {
+            iov->init(msg->data_size, ucx_am_get_data(data_desc));
+        } else {
+            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+        }
         w->init(this, conn, msg->sn, iov, &conn_stat.completions<IO_WRITE>());
         assert(iov->size() == 1);
 
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
-        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(), data_desc, w);
+        if (!ucx_am_is_rndv(data_desc)) {
+            conn->recv_am_data(NULL, 0, data_desc, w);
+        } else {
+            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(), data_desc, w);
+        }
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
@@ -1089,9 +1158,11 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        assert(conn->ucx_status() == UCS_OK);
+
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            validate(conn, msg, length);
         }
 
         if (msg->op == IO_READ) {
@@ -1112,9 +1183,11 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        assert(conn->ucx_status() == UCS_OK);
+
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            validate(conn, msg, length);
         }
 
         if (msg->op == IO_READ) {
@@ -1212,16 +1285,13 @@ private:
 
         virtual void operator()(ucs_status_t status) {
             server_info_t &_server_info = _client._server_info[_server_index];
-            _client._num_sent -= get_num_uncompleted(_server_info);
 
+            assert(_server_info.active_index ==
+                   std::numeric_limits<size_t>::max());
+
+            _client._num_sent -= get_num_uncompleted(_server_info);
             // Remove connection pointer
             _client._server_index_lookup.erase(_server_info.conn);
-
-            // Remove active servers entry
-            if (_server_info.active_index !=
-                std::numeric_limits<size_t>::max()) {
-                _client.active_servers_remove(_server_index);
-            }
 
             reset_server_info(_server_info);
             delete this;
@@ -1303,17 +1373,18 @@ public:
             _client->handle_operation_completion(_server_index, IO_READ,
                                                  _iov->data_size());
 
-            if (_validate && (_status == UCS_OK)) {
-                validate(*_iov, _sn);
-
+            if ((_status == UCS_OK) && _validate) {
+                const server_info_t &server_info =
+                        _client->_server_info[_server_index];
+                validate(server_info.conn, *_iov, _sn);
                 if (_meta_comp_counter != 0) {
-                    // With tag API, we also wait for READ_COMP arrival, so need
-                    // to validate it. With AM API, READ_COMP arrives as AM
-                    // header together with data descriptor, we validate it in
-                    // place to avoid unneeded memory copy to this
+                    // With tag API, we also wait for READ_COMP arrival, so
+                    // need to validate it. With AM API, READ_COMP arrives as
+                    // AM header together with data descriptor, we validate it
+                    // in place to avoid unneeded memory copy to this
                     // IoReadResponseCallback _buffer.
                     iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                    validate(msg, _sn, _buffer_size);
+                    validate(server_info.conn, msg, _sn, _buffer_size);
                 }
             }
 
@@ -1356,34 +1427,55 @@ public:
                i->second;
     }
 
+    void check_counters(const server_info_t& server_info, io_op_t op,
+                        const char *type_str)
+    {
+        ASSERTV(server_info.num_completed[op] < server_info.num_sent[op])
+                << type_str << ": op=" << io_op_names[op] << " num_completed="
+                << server_info.num_completed[op] << " num_sent="
+                << server_info.num_sent[op];
+        ASSERTV(_num_completed < _num_sent) << type_str << ": num_completed="
+                << _num_completed << " num_sent=" << _num_sent;
+    }
+
     void commit_operation(size_t server_index, io_op_t op, size_t data_size) {
         server_info_t& server_info = _server_info[server_index];
 
-        assert(get_num_uncompleted(server_info) < opts().conn_window_size);
+        ASSERTV(get_num_uncompleted(server_info) < opts().conn_window_size)
+                << "num_uncompleted=" << get_num_uncompleted(server_info)
+                << " conn_window_size=" << opts().conn_window_size;
 
         ++server_info.num_sent[op];
         ++_num_sent;
+
+        ASSERTV(server_info.bytes_completed[op] <= server_info.bytes_sent[op])
+                << "op=" << io_op_names[op] << " bytes_completed="
+                << server_info.bytes_completed[op] << " bytes_sent="
+                << server_info.bytes_sent[op];
         server_info.bytes_sent[op] += data_size;
+
         if (get_num_uncompleted(server_info) == opts().conn_window_size) {
             active_servers_remove(server_index);
         }
 
-        assert(server_info.num_completed[op] < server_info.num_sent[op]);
-        assert(_num_completed < _num_sent);
+        check_counters(server_info, op, "commit");
     }
 
     void handle_operation_completion(size_t server_index, io_op_t op,
                                      size_t data_size) {
-        assert(server_index < _server_info.size());
+        ASSERTV(server_index < _server_info.size()) << "server_index="
+                << server_index << " server_info_size=" << _server_info.size();
         server_info_t& server_info = _server_info[server_index];
 
-        assert(get_num_uncompleted(server_info) <= opts().conn_window_size);
+        ASSERTV(get_num_uncompleted(server_info) <= opts().conn_window_size)
+                << "num_uncompleted=" << get_num_uncompleted(server_info)
+                << " conn_window_size" << opts().conn_window_size;
         assert(_server_index_lookup.find(server_info.conn) !=
                _server_index_lookup.end());
-        assert(_num_completed < _num_sent);
-        assert(server_info.num_completed[op] < server_info.num_sent[op]);
+        check_counters(server_info, op, "completion");
 
-        if (get_num_uncompleted(server_info) == opts().conn_window_size) {
+        if ((get_num_uncompleted(server_info) == opts().conn_window_size) &&
+            !server_info.conn->is_disconnecting()) {
             active_servers_add(server_index);
         }
 
@@ -1391,7 +1483,19 @@ public:
         ++_num_completed;
         ++server_info.num_completed[op];
 
-        assert(server_info.bytes_completed[op] <= server_info.bytes_sent[op]);
+        if (get_num_uncompleted(server_info, op) == 0) {
+            ASSERTV(server_info.bytes_completed[op] ==
+                    server_info.bytes_sent[op])
+                    << "op=" << io_op_names[op] << " bytes_completed="
+                    << server_info.bytes_completed[op] << " bytes_sent="
+                    << server_info.bytes_sent[op];
+        } else {
+            ASSERTV(server_info.bytes_completed[op] <=
+                    server_info.bytes_sent[op])
+                    << "op=" << io_op_names[op] << " bytes_completed="
+                    << server_info.bytes_completed[op] << " bytes_sent="
+                    << server_info.bytes_sent[op];
+        }
     }
 
     size_t do_io_read(size_t server_index, uint32_t sn) {
@@ -1502,25 +1606,28 @@ public:
 
     void dump_timeout_waiting_for_replies_info()
     {
-        size_t total_uncompleted = 0;
-        UcxLog log(LOG_PREFIX);
-
-        log << "timeout waiting for " << (_num_sent - _num_completed)
-            << " replies on the following connections:";
+        unsigned num_conns = 0;
+        for (server_map_t::const_iterator iter = _server_index_lookup.begin();
+             iter != _server_index_lookup.end(); ++iter) {
+            if (get_num_uncompleted(iter->second) > 0) {
+                ++num_conns;
+            }
+        }
+        LOG << "timeout waiting for " << (_num_sent - _num_completed)
+            << " replies on " << num_conns << " connections";
 
         for (server_map_t::const_iterator iter = _server_index_lookup.begin();
              iter != _server_index_lookup.end(); ++iter) {
             size_t server_index = iter->second;
-            if (get_num_uncompleted(server_index) == 0) {
+            long num_uncompleted = get_num_uncompleted(server_index);
+            if (num_uncompleted == 0) {
                 continue;
             }
 
-            log << "\n";
+            UcxLog log(LOG_PREFIX);
+            log << "timeout waiting for " << num_uncompleted << " replies on ";
             dump_server_info(_server_info[server_index], log);
-            total_uncompleted++;
         }
-
-        log << "\ntotal: " << total_uncompleted;
     }
 
     void disconnect_uncompleted_servers(const char *reason) {
@@ -1547,18 +1654,16 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        assert(conn->ucx_status() == UCS_OK);
+
         if (msg->op >= IO_COMP_MIN) {
             assert(msg->op == IO_WRITE_COMP);
 
             size_t server_index = get_active_server_index(conn);
-            if (server_index < _server_info.size()) {
-                handle_operation_completion(server_index, IO_WRITE,
-                                            msg->data_size);
-            } else {
-                /* do not increment _num_completed here since we decremented
-                 * _num_sent on connection termination */
-                LOG << "got WRITE completion on failed connection";
-            }
+            assert(server_index < _server_info.size());
+
+            handle_operation_completion(server_index, IO_WRITE,
+                                        msg->data_size);
         }
     }
 
@@ -1571,29 +1676,40 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;
 
+        assert(conn->ucx_status() == UCS_OK);
         assert(msg->op >= IO_COMP_MIN);
+
+        size_t server_index = get_active_server_index(conn);
+        assert(server_index < _server_info.size());
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, opts().iomsg_size);
+            validate(conn, msg, opts().iomsg_size);
         }
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
-        size_t server_index = get_active_server_index(conn);
         if (msg->op == IO_WRITE_COMP) {
             assert(msg->op == IO_WRITE_COMP);
             handle_operation_completion(server_index, IO_WRITE,
                                         msg->data_size);
         } else if (msg->op == IO_READ_COMP) {
             BufferIov *iov = _data_buffers_pool.get();
-            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
 
+            if (!ucx_am_is_rndv(data_desc)) {
+                iov->init(msg->data_size, ucx_am_get_data(data_desc));
+            } else {
+                iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+            }
             IoReadResponseCallback *r = _read_callback_pool.get();
             r->init(this, server_index, msg->sn, opts().validate, iov, 0);
 
             assert(iov->size() == 1);
 
-            conn->recv_am_data((*iov)[0].buffer(), msg->data_size, data_desc, r);
+            if (!ucx_am_is_rndv(data_desc)) {
+                conn->recv_am_data(NULL, 0, data_desc, r);
+            } else {
+                conn->recv_am_data((*iov)[0].buffer(), msg->data_size, data_desc, r);
+            }
         }
     }
 
@@ -1641,7 +1757,9 @@ public:
 
     void disconnect_server(size_t server_index, const char *reason) {
         server_info_t& server_info = _server_info[server_index];
-        bool disconnecting         = server_info.conn->is_disconnecting();
+        assert(server_info.conn != NULL);
+
+        bool disconnecting = server_info.conn->is_disconnecting();
 
         {
             UcxLog log(LOG_PREFIX);
@@ -1659,11 +1777,20 @@ public:
         }
 
         if (!disconnecting) {
+            // remove active servers entry
+            if (server_info.active_index !=
+                std::numeric_limits<size_t>::max()) {
+                active_servers_remove(server_index);
+            }
+
             /* Destroying the connection will complete its outstanding
              * operations */
             server_info.conn->disconnect(new DisconnectCallback(*this,
                                                                 server_index));
         }
+
+        // server must be removed from the list of active servers
+        assert(server_info.active_index == std::numeric_limits<size_t>::max());
     }
 
     void wait_for_responses(long max_outstanding) {
@@ -1692,7 +1819,10 @@ public:
             elapsed_time = curr_time - start_time;
             if (elapsed_time > _test_opts.client_timeout) {
                 dump_timeout_waiting_for_replies_info();
-                disconnect_uncompleted_servers("timeout for replies");
+                if (!_test_opts.debug_timeout) {
+                    // don't destroy connections, they will be debugged
+                    disconnect_uncompleted_servers("timeout for replies");
+                }
                 timer_finished = true;
             }
             check_time_limit(curr_time);
@@ -1782,7 +1912,7 @@ public:
 
     void connect_all(bool force) {
         if (_server_index_lookup.size() == _server_info.size()) {
-            assert(_status == OK);
+            assert((_status == OK) || (_status == TERMINATE_SIGNALED));
             // All servers are connected
             return;
         }
@@ -1804,7 +1934,7 @@ public:
 
             // If retry count exceeded for at least one server, we should have
             // exited already
-            assert(_status == OK);
+            assert((_status == OK) || (_status == TERMINATE_SIGNALED));
             assert(server_info.retry_count < opts().retries);
 
             if (curr_time < (server_info.prev_connect_time +
@@ -1816,7 +1946,7 @@ public:
             connect(server_index);
             server_info.prev_connect_time = curr_time;
             assert(server_info.conn != NULL);
-            assert(_status == OK);
+            assert((_status == OK) || (_status == TERMINATE_SIGNALED));
         }
     }
 
@@ -1825,6 +1955,7 @@ public:
         size_t server_index = _active_servers[_next_active_index];
         assert(get_num_uncompleted(server_index) < opts().conn_window_size);
         assert(_server_info[server_index].conn != NULL);
+        assert(_server_info[server_index].conn->ucx_status() == UCS_OK);
 
         if (++_next_active_index == _active_servers.size()) {
             _next_active_index = 0;
@@ -1835,6 +1966,29 @@ public:
 
     static inline bool is_control_iter(long iter) {
         return (iter % 10) == 0;
+    }
+
+    void destroy_servers()
+    {
+        for (size_t server_index = 0; server_index < _server_info.size();
+             ++server_index) {
+            server_info_t& server_info = _server_info[server_index];
+            if (server_info.conn == NULL) {
+                continue;
+            }
+
+            disconnect_server(server_index, "End of the Client run");
+        }
+
+        if (!_server_index_lookup.empty()) {
+            LOG << "waiting for " << _server_index_lookup.size()
+                << " disconnects to complete";
+            do {
+                progress();
+            } while (!_server_index_lookup.empty());
+        }
+
+        wait_disconnected_connections();
     }
 
     status_t run() {
@@ -1876,6 +2030,8 @@ public:
                                      _server_index_lookup.size();
             long max_outstanding   = std::min(opts().window_size,
                                               conns_window_size) - 1;
+
+            progress();
             wait_for_responses(max_outstanding);
             if (_status != OK) {
                 break;
@@ -1941,20 +2097,7 @@ public:
                                curr_time - prev_time);
         }
 
-        for (size_t server_index = 0; server_index < _server_info.size();
-             ++server_index) {
-            disconnect_server(server_index, "End of the Client run");
-        }
-
-        if (!_server_index_lookup.empty()) {
-            LOG << "waiting for " << _server_index_lookup.size()
-                << " disconnects to complete";
-            do {
-                progress();
-            } while (!_server_index_lookup.empty());
-        }
-
-        assert(_server_index_lookup.empty());
+        destroy_servers();
 
         return _status;
     }
@@ -2003,10 +2146,9 @@ private:
         }
 
         double latency_usec = (elapsed / num_iters) * 1e6;
-        std::vector<io_op_perf_info_t> io_op_perf_info;
+        std::vector<io_op_perf_info_t> io_op_perf_info(IO_OP_MAX + 1);
         UcxLog log(LOG_PREFIX);
 
-        io_op_perf_info.resize(IO_OP_MAX + 1);
         for (int op = 0; op <= IO_OP_MAX; ++op) {
             io_op_perf_info[op].min         = std::numeric_limits<long>::max();
             io_op_perf_info[op].max         = 0;
@@ -2285,11 +2427,12 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->verbose               = false;
     test_opts->validate              = false;
     test_opts->use_am                = false;
+    test_opts->debug_timeout         = false;
     test_opts->use_epoll             = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeAHP:m:")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2404,6 +2547,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'A':
             test_opts->use_am = true;
             break;
+        case 'D':
+            test_opts->debug_timeout = true;
+            break;
         case 'e':
             test_opts->use_epoll = true;
             break;
@@ -2458,6 +2604,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -v                          Set verbose mode" << std::endl;
             std::cout << "  -q                          Enable data integrity and transaction check" << std::endl;
             std::cout << "  -A                          Use UCP Active Messages API (use TAG API otherwise)" << std::endl;
+            std::cout << "  -D                          Enable debugging mode for IO operation timeouts" << std::endl;
             std::cout << "  -H                          Use human-readable timestamps" << std::endl;
             std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
             std::cout << "" << std::endl;

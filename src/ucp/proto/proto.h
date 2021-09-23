@@ -19,7 +19,7 @@
 
 
 /* Maximal number of protocol performance ranges */
-#define UCP_PROTO_MAX_PERF_RANGES   32
+#define UCP_PROTO_MAX_PERF_RANGES 24
 
 
 /* Maximal size of protocol private data */
@@ -84,30 +84,43 @@ typedef struct {
 } UCS_S_PACKED ucp_proto_select_param_t;
 
 
-/**
- * Protocol and its private configuration
+/*
+ * Some protocols can be pipelined, so the time they consume when multiple
+ * such operations are issued is less than their cumulative time. Therefore we
+ * define two metrics: "single" operation time and "multi" operation time.
+ *
+ * -------time---------->
+ *
+ *        +-------------------------+
+ * op1:   |   "single" time         |
+ *        +---------------+---------+---------------+
+ *                op2:    | overlap | "multi" time  |
+ *                        +---------+-----+---------+---------------+
+ *                                op3:    | overlap | "multi" time  |
+ *                                        +---------+---------------+
  */
-typedef struct {
-    const ucp_proto_t        *proto;       /* Protocol definition */
-    const void               *priv;        /* Protocol private configuration space */
-    ucp_worker_cfg_index_t   ep_cfg_index; /* Endpoint configuration index this
-                                              protocol was selected on */
-    ucp_worker_cfg_index_t   rkey_cfg_index; /* Remote key configuration index
-                                                this protocol was elected on
-                                                (can be UCP_WORKER_CFG_INDEX_NULL) */
-    ucp_proto_select_param_t select_param; /* Copy of protocol selection parameters,
-                                              used to re-select protocol for existing
-                                              in-progress request */
-} ucp_proto_config_t;
+typedef enum {
+    /* Time to complete this operation assuming it's the only one. */
+    UCP_PROTO_PERF_TYPE_SINGLE,
+
+    /* Time to complete this operation after all previous ones complete. */
+    UCP_PROTO_PERF_TYPE_MULTI,
+
+    UCP_PROTO_PERF_TYPE_LAST
+} ucp_proto_perf_type_t;
 
 
 /*
- * Performance estimation for a range of message sizes
+ * Performance estimation for a range of message sizes.
  */
 typedef struct {
-    size_t                  max_length; /* Maximal message size */
-    ucs_linear_func_t       perf;       /* Estimated time in seconds, as a
-                                           function of message size in bytes */
+    /* Maximal payload size for this range */
+    size_t            max_length;
+
+    /* Estimated time in seconds, as a function of message size in bytes, to
+     * complete the operation. See @ref ucp_proto_perf_type_t for details
+     */
+    ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST];
 } ucp_proto_perf_range_t;
 
 

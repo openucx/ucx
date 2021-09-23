@@ -923,7 +923,8 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                 ucs_unaligned_ptr(&fc_req->sender.payload.gid),
                 iface->super.super.super.gid_info.gid_index, 0, &ah_attr);
 
-        status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &ah);
+        status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "DC pure grant",
+                                        &ah);
         if (status != UCS_OK) {
             goto err_dci_put;
         }
@@ -991,22 +992,21 @@ uct_dc_mlx5_ep_fc_pure_grant_send_completion(uct_rc_iface_send_op_t *send_op,
 
     if (ucs_likely(!(send_op->flags & UCT_RC_IFACE_SEND_OP_STATUS) ||
                    (send_op->status != UCS_ERR_CANCELED))) {
+        /* Pure grant sent - release it */
         ucs_mpool_put(fc_req);
-        ucs_mpool_put(send_op);
-        return;
+    } else {
+        ucs_trace("fc_ep %p: re-sending FC_PURE_GRANT (seq:%" PRIu64 ")"
+                  " to dct_num:0x%x, lid:%d, gid:%s",
+                  fc_ep,  fc_req->sender.payload.seq, fc_req->dct_num,
+                  fc_req->lid,
+                  uct_ib_gid_str(ucs_unaligned_ptr(&fc_req->sender.payload.gid),
+                                 gid_str, sizeof(gid_str)));
+
+        /* Always add re-sending of FC_PURE_GRANT packet to the pending queue to
+         * resend it when DCI will be restored after the failure */
+        uct_dc_mlx5_ep_do_pending_fc(fc_ep, fc_req);
     }
-
-    ucs_trace("fc_ep %p: re-sending FC_PURE_GRANT (seq:%" PRIu64 ")"
-              " to dct_num:0x%x, lid:%d, gid:%s",
-              fc_ep,  fc_req->sender.payload.seq, fc_req->dct_num, fc_req->lid,
-              uct_ib_gid_str(ucs_unaligned_ptr(&fc_req->sender.payload.gid),
-                             gid_str, sizeof(gid_str)));
-
-    send_op->flags &= ~UCT_RC_IFACE_SEND_OP_STATUS;
-
-    /* Always add re-sending of FC_PURE_GRANT packet to the pending queue to
-     * resend it when DCI will be restored after the failure */
-    uct_dc_mlx5_ep_do_pending_fc(fc_ep, fc_req);
+    ucs_mpool_put(send_op);
 }
 
 static ucs_status_t
@@ -1281,10 +1281,17 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
     UCS_STATIC_ASSERT((sizeof(iface->tx.dci_pool_release_bitmap) * 8) <=
                        UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
 
-    ucs_for_each_bit(pool_index, iface->tx.dci_pool_release_bitmap) {
-        ucs_assert(pool_index < iface->tx.num_dci_pools);
+    while (iface->tx.dci_pool_release_bitmap != 0) {
+        /* Take one DCI pool, and process all its released DCIs.
+         * It's possible that more DCIs to release will be added by the call to
+         * uct_dc_mlx5_iface_progress_pending() below, so we check the pool
+         * bitmap every time.
+         */
+        pool_index = ucs_ffs32(iface->tx.dci_pool_release_bitmap);
+        iface->tx.dci_pool_release_bitmap &= ~UCS_BIT(pool_index);
 
         /* coverity[overrun-local] */
+        ucs_assert(pool_index < iface->tx.num_dci_pools);
         dci_pool = &iface->tx.dci_pool[pool_index];
         while (dci_pool->release_stack_top >= 0) {
             dci = dci_pool->stack[dci_pool->release_stack_top--];
@@ -1300,9 +1307,9 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
          * loop above */
     }
 
+    ucs_assert(iface->tx.dci_pool_release_bitmap == 0);
     uct_dc_mlx5_iface_check_tx(iface);
-    iface->tx.dci_release_prog_id     = UCS_CALLBACKQ_ID_NULL;
-    iface->tx.dci_pool_release_bitmap = 0;
+    iface->tx.dci_release_prog_id = UCS_CALLBACKQ_ID_NULL;
     return 1;
 }
 
@@ -1590,6 +1597,7 @@ uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     }
 
     uct_rc_ep_init_send_op(op, 0, NULL, uct_dc_mlx5_ep_check_send_completion);
+    uct_rc_iface_send_op_set_name(op, "dc_mlx5_ep_check");
     op->ep = tl_ep;
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, iface->keepalive_dci, txqp, txwq);
     uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,

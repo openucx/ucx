@@ -27,19 +27,17 @@ ucp_proto_multi_request_init(ucp_request_t *req)
     ucp_proto_multi_set_send_lane(req);
 }
 
-static UCS_F_ALWAYS_INLINE size_t
+static UCS_F_ALWAYS_INLINE uint32_t
 ucs_proto_multi_calc_weight(double lane_weight, double total_weight)
 {
-    return (size_t)(
-            lane_weight * UCS_BIT(UCP_PROTO_MULTI_WEIGHT_SHIFT) / total_weight +
-            0.5);
+    return (uint32_t)(
+            ((lane_weight * UCP_PROTO_MULTI_WEIGHT_MAX) / total_weight) + 0.5);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_multi_scaled_length(const ucp_proto_multi_lane_priv_t *lpriv,
-                              size_t length)
+ucp_proto_multi_scaled_length(uint32_t weight, size_t length)
 {
-    return (lpriv->weight * length + UCS_MASK(UCP_PROTO_MULTI_WEIGHT_SHIFT)) >>
+    return ((weight * length) + UCP_PROTO_MULTI_WEIGHT_MAX - 1) >>
            UCP_PROTO_MULTI_WEIGHT_SHIFT;
 }
 
@@ -48,16 +46,23 @@ ucp_proto_multi_max_payload(ucp_request_t *req,
                             const ucp_proto_multi_lane_priv_t *lpriv,
                             size_t hdr_size)
 {
-    size_t scaled_length =
-            ucp_proto_multi_scaled_length(lpriv, req->send.state.dt_iter.length);
-    size_t max_payload   = ucs_min(scaled_length, lpriv->max_frag - hdr_size);
+    size_t length   = req->send.state.dt_iter.length;
+    size_t max_frag = lpriv->max_frag - hdr_size;
+    size_t max_payload;
 
+    /* Do not split very small sends to chunks, it's not worth it, and
+       generic datatype may not be able to pack to a smaller buffer */
+    if (length < UCP_MIN_BCOPY) {
+        return max_frag;
+    }
+
+    max_payload = ucs_min(ucp_proto_multi_scaled_length(lpriv->weight, length),
+                          max_frag);
     ucs_assertv(max_payload > 0,
-                "length=%zu weight=%.2f scaled_length=%zu max_frag=%zu "
-                "hdr_size=%zu",
+                "length=%zu weight=%zu%% lpriv->max_frag=%zu hdr_size=%zu",
                 req->send.state.dt_iter.length,
-                lpriv->weight / (double)UCS_BIT(UCP_PROTO_MULTI_WEIGHT_SHIFT),
-                scaled_length, lpriv->max_frag, hdr_size);
+                ucp_proto_multi_scaled_length(lpriv->weight, 100),
+                lpriv->max_frag, hdr_size);
     return max_payload;
 }
 
@@ -127,7 +132,6 @@ ucp_proto_multi_progress(ucp_request_t *req,
     ucs_assertv(req->send.multi_lane_idx < mpriv->num_lanes,
                 "lane_idx=%d num_lanes=%d", req->send.multi_lane_idx,
                 mpriv->num_lanes);
-    ucs_assert(!ucp_datatype_iter_is_end(&req->send.state.dt_iter));
 
     lane_idx = req->send.multi_lane_idx;
     lpriv    = &mpriv->lanes[lane_idx];
@@ -145,8 +149,8 @@ ucp_proto_multi_progress(ucp_request_t *req,
     }
 
     /* advance position in send buffer */
-    ucp_datatype_iter_copy_from_next(&req->send.state.dt_iter, &next_iter,
-                                     dt_mask);
+    ucp_datatype_iter_copy_position(&req->send.state.dt_iter, &next_iter,
+                                    dt_mask);
     if (ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
         return complete_func(req);
     }
@@ -182,7 +186,7 @@ ucp_proto_multi_bcopy_progress(ucp_request_t *req,
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
         ucp_request_t *req, const ucp_proto_multi_priv_t *mpriv,
-        ucp_proto_init_cb_t init_func, unsigned uct_mem_flags,
+        ucp_proto_init_cb_t init_func, unsigned uct_mem_flags, unsigned dt_mask,
         ucp_proto_send_multi_cb_t send_func,
         ucp_proto_complete_cb_t complete_func,
         uct_completion_callback_t uct_comp_cb)
@@ -191,7 +195,8 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         status = ucp_proto_request_zcopy_init(req, mpriv->reg_md_map,
-                                              uct_comp_cb, uct_mem_flags);
+                                              uct_comp_cb, uct_mem_flags,
+                                              dt_mask);
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */
@@ -206,7 +211,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_multi_zcopy_progress(
     }
 
     return ucp_proto_multi_progress(req, mpriv, send_func, complete_func,
-                                    UCS_BIT(UCP_DATATYPE_CONTIG));
+                                    dt_mask);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t

@@ -280,7 +280,7 @@ void __ucm_log(const char *file, unsigned line, const char *function,
     va_end(ap);
     strncat(buf, "\n", UCM_LOG_BUG_SIZE - 1);
 
-    /* Use writev to avoid potential calls to malloc() in buffered IO functions */
+    /* Use write to avoid potential calls to malloc() in buffered IO functions */
     nwrite = write(ucm_log_fileno, buf, strlen(buf));
     (void)nwrite;
 

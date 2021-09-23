@@ -89,7 +89,7 @@ static ucs_status_t uct_ugni_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 
 mem_err:
-    free(mem_hndl);
+    ucs_free(mem_hndl);
     return status;
 }
 
@@ -240,6 +240,7 @@ uct_component_t uct_ugni_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_ugni_component),
-    .flags              = 0
+    .flags              = 0,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_ugni_component);

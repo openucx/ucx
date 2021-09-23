@@ -566,11 +566,9 @@ UCS_TEST_SKIP_COND_P(test_tag, tag_hold_uct_desc,
                             msg_size, true);
     }
 
-    for (ucs::ptr_vector<void>::const_iterator iter = m_uct_descs.begin();
-         iter != m_uct_descs.end(); ++iter)
-    {
-        uct_iface_release_desc(*iter);
-    }
+    std::for_each(m_uct_descs.begin(), m_uct_descs.end(),
+                  uct_iface_release_desc);
+
 }
 
 
@@ -1238,11 +1236,8 @@ UCS_TEST_P(test_tag_mp_xrq, desc_release)
         test_common(sfuncs[i].first, 3, 3, sfuncs[i].second);
     }
 
-    for (ucs::ptr_vector<void>::const_iterator iter = m_uct_descs.begin();
-         iter != m_uct_descs.end(); ++iter)
-    {
-        uct_iface_release_desc(*iter);
-    }
+    std::for_each(m_uct_descs.begin(), m_uct_descs.end(),
+                  uct_iface_release_desc);
 }
 
 UCS_TEST_P(test_tag_mp_xrq, am)

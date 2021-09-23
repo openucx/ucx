@@ -32,7 +32,8 @@ public:
 
     ucp_perf_test_runner(ucx_perf_context_t &perf)
         : m_perf(perf),
-          m_outstanding(0),
+          m_recvs_outstanding(0),
+          m_sends_outstanding(0),
           m_max_outstanding(m_perf.params.max_outstanding),
           m_am_rx_buffer(NULL),
           m_am_rx_length(0ul)
@@ -250,7 +251,7 @@ public:
                                           request);
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)r->context;
 
-        test->op_completed();
+        test->send_completed();
         r->context = NULL;
         ucp_request_free(request);
     }
@@ -273,7 +274,7 @@ public:
         }
 
         test = (ucp_perf_test_runner*)r->context;
-        test->op_completed();
+        test->recv_completed();
         r->context = NULL;
         ucp_request_free(request);
     }
@@ -282,7 +283,7 @@ public:
                                 size_t length, void *user_data)
     {
         ucp_perf_test_runner *test = (ucp_perf_test_runner*)user_data;
-        test->op_completed();
+        test->recv_completed();
     }
 
     static ucs_status_t
@@ -296,18 +297,21 @@ public:
         }
 
         /* TODO: Add option to do memcopy here */
-        test->op_completed();
+        test->recv_completed();
         return UCS_OK;
     }
 
-    void UCS_F_ALWAYS_INLINE wait_window(unsigned n, bool is_requestor)
+    void UCS_F_ALWAYS_INLINE wait_send_window(unsigned n)
     {
-        while (m_outstanding >= (m_max_outstanding - n + 1)) {
-            if (is_requestor) {
-                progress_requestor();
-            } else {
-                progress_responder();
-            }
+        while (m_sends_outstanding >= (m_max_outstanding - n + 1)) {
+            progress_requestor();
+        }
+    }
+
+    void UCS_F_ALWAYS_INLINE wait_recv_window(unsigned n)
+    {
+        while (m_recvs_outstanding >= (m_max_outstanding - n + 1)) {
+            progress_responder();
         }
     }
 
@@ -324,7 +328,7 @@ public:
         case UCX_PERF_CMD_TAG_SYNC:
         case UCX_PERF_CMD_STREAM:
         case UCX_PERF_CMD_AM:
-            wait_window(1, true);
+            wait_send_window(1);
             /* coverity[switch_selector_expr_is_constant] */
             switch (CMD) {
             case UCX_PERF_CMD_TAG:
@@ -352,7 +356,7 @@ public:
                 return UCS_PTR_STATUS(request);
             }
             reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
-            op_started();
+            send_started();
             return UCS_OK;
         case UCX_PERF_CMD_PUT:
             /* coverity[switch_selector_expr_is_constant] */
@@ -374,14 +378,14 @@ public:
         case UCX_PERF_CMD_FADD:
         case UCX_PERF_CMD_SWAP:
         case UCX_PERF_CMD_CSWAP:
-            wait_window(1, true);
+            wait_send_window(1);
             request = ucp_atomic_op_nbx(ep, m_atomic_op, &value, 1,
                                         remote_addr, rkey, &m_send_params);
             if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
                 return UCS_PTR_STATUS(request);
             }
             reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
-            op_started();
+            send_started();
             return UCS_OK;
         default:
             return UCS_ERR_INVALID_PARAM;
@@ -399,7 +403,7 @@ public:
         switch (CMD) {
         case UCX_PERF_CMD_TAG:
         case UCX_PERF_CMD_TAG_SYNC:
-            wait_window(1, false);
+            wait_recv_window(1);
             if (FLAGS & UCX_PERF_TEST_FLAG_TAG_UNEXP_PROBE) {
                 ucp_tag_recv_info_t tag_info;
                 while (ucp_tag_probe_nb(worker, TAG, TAG_MASK, 0, &tag_info) == NULL) {
@@ -417,10 +421,10 @@ public:
                 return UCS_OK;
             }
             reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
-            op_started();
+            recv_started();
             return UCS_OK;
         case UCX_PERF_CMD_AM:
-            op_started();
+            recv_started();
             return UCS_OK;
         case UCX_PERF_CMD_PUT:
             /* coverity[switch_selector_expr_is_constant] */
@@ -615,7 +619,8 @@ public:
             }
         }
 
-        wait_window(m_max_outstanding, true);
+        wait_recv_window(m_max_outstanding);
+        wait_send_window(m_max_outstanding);
         flush();
 
         ucx_perf_omp_barrier(&m_perf);
@@ -659,7 +664,18 @@ public:
 
         ucx_perf_omp_barrier(&m_perf);
 
-        if (my_index == 0) {
+        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
+            UCX_PERF_TEST_FOREACH(&m_perf) {
+                send(ep, send_buffer, send_length, send_datatype,
+                     sn, remote_addr, rkey);
+                recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
+                ucx_perf_update(&m_perf, 1, length);
+                ++sn;
+            }
+
+            wait_send_window(m_max_outstanding);
+            wait_recv_window(m_max_outstanding);
+        } else if (my_index == 0) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
                 ucx_perf_update(&m_perf, 1, length);
@@ -667,6 +683,7 @@ public:
             }
 
             wait_last_iter(recv_buffer);
+            wait_recv_window(m_max_outstanding);
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn,
@@ -676,9 +693,9 @@ public:
             }
 
             send_last_iter(ep, send_buffer, send_length, remote_addr, rkey);
+            wait_send_window(m_max_outstanding);
         }
 
-        wait_window(m_max_outstanding, true);
         flush();
 
         ucx_perf_omp_barrier(&m_perf);
@@ -753,18 +770,29 @@ private:
         return UCS_OK;
     }
 
-    void UCS_F_ALWAYS_INLINE op_started()
+    void UCS_F_ALWAYS_INLINE send_started()
     {
-        ++m_outstanding;
+        ++m_sends_outstanding;
     }
 
-    void UCS_F_ALWAYS_INLINE op_completed()
+    void UCS_F_ALWAYS_INLINE recv_started()
     {
-        --m_outstanding;
+        ++m_recvs_outstanding;
+    }
+
+    void UCS_F_ALWAYS_INLINE send_completed()
+    {
+        --m_sends_outstanding;
+    }
+
+    void UCS_F_ALWAYS_INLINE recv_completed()
+    {
+        --m_recvs_outstanding;
     }
 
     ucx_perf_context_t  &m_perf;
-    unsigned            m_outstanding;
+    unsigned            m_recvs_outstanding;
+    unsigned            m_sends_outstanding;
     const unsigned      m_max_outstanding;
     /*
      * These fields are used by UCP AM flow only, because receive operation is

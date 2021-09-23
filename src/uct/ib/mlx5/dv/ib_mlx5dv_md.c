@@ -473,7 +473,8 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .chunk_alloc   = uct_ib_mlx5_add_page,
     .chunk_release = uct_ib_mlx5_free_page,
     .obj_init      = uct_ib_mlx5_init_dbrec,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static ucs_status_t

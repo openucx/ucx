@@ -264,9 +264,8 @@ int ucs_get_first_cpu()
     int first_cpu, total_cpus, ret;
     ucs_sys_cpuset_t mask;
 
-    ret = ucs_sysconf(_SC_NPROCESSORS_CONF);
+    ret = ucs_sys_get_num_cpus();
     if (ret < 0) {
-        ucs_error("failed to get local cpu count: %m");
         return ret;
     }
     total_cpus = ret;
@@ -1463,7 +1462,7 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)
 }
 
 ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
-                                   ucs_time_t *filetime)
+                                   struct timespec *ts)
 {
     struct stat stat_buf;
     int res;
@@ -1475,13 +1474,13 @@ ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
 
     switch (type) {
     case UCS_SYS_FILE_TIME_CTIME:
-        *filetime = ucs_time_from_timespec(&stat_buf.st_ctim);
+        *ts = stat_buf.st_ctim;
         return UCS_OK;
     case UCS_SYS_FILE_TIME_ATIME:
-        *filetime = ucs_time_from_timespec(&stat_buf.st_atim);
+        *ts = stat_buf.st_atim;
         return UCS_OK;
     case UCS_SYS_FILE_TIME_MTIME:
-        *filetime = ucs_time_from_timespec(&stat_buf.st_mtim);
+        *ts = stat_buf.st_mtim;
         return UCS_OK;
     default:
         return UCS_ERR_INVALID_PARAM;
@@ -1526,4 +1525,18 @@ ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
     pthread_setname_np(thread_id, thread_name);
     *thread_id_p = thread_id;
     return UCS_OK;
+}
+
+long ucs_sys_get_num_cpus()
+{
+    static long num_cpus = 0;
+
+    if (num_cpus == 0) {
+        num_cpus = ucs_sysconf(_SC_NPROCESSORS_CONF);
+        if (num_cpus == -1) {
+            ucs_error("failed to get local cpu count: %m");
+        }
+    }
+
+    return num_cpus;
 }

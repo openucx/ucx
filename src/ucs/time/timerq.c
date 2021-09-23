@@ -108,7 +108,7 @@ ucs_status_t ucs_timerq_remove(ucs_timer_queue_t *timerq, int timer_id)
     /* TODO realloc - shrink */
     if (timerq->num_timers == 0) {
         ucs_assert(timerq->min_interval == UCS_TIME_INFINITY);
-        free(timerq->timers);
+        ucs_free(timerq->timers);
         timerq->timers = NULL;
     } else {
         ucs_assert(timerq->min_interval != UCS_TIME_INFINITY);

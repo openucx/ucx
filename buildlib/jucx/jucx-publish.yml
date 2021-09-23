@@ -12,7 +12,7 @@ jobs:
         - harbor_registry -equals yes
 
     # we need to use lowest version for compatible
-    container: centos7_cuda10_1
+    container: centos7_cuda11
 
     steps:
       - checkout: self
@@ -66,7 +66,7 @@ jobs:
           # Maven requires version to be of form MAJOR_VERSION.MINOR_VERSIOn,...
           # ucx tags are of form v1.x.x - need to remove 'v' from the beginning of string
           MAVEN_VERSION=${TAG:1}
-          make -C bindings/java/src/main/native/ ${{ variables.target }} \
+          make -C bindings/java/src/main/native/ ${{ parameters.target }} \
               ARGS="--settings ${{ parameters.temp_cfg }}" JUCX_VERSION=${MAVEN_VERSION}
         displayName: Publish JUCX jar to maven central
         env:

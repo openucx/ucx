@@ -210,10 +210,10 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
 #define ucs_queue_for_each(elem, queue, member) \
     /* we set `ptail` field to queue address to not subtract NULL pointer */ \
     for (*(queue)->ptail = (ucs_queue_elem_t*)(void*)(queue), \
-             elem = ucs_container_of((queue)->head, typeof(*elem), member); \
-         (UCS_PTR_BYTE_OFFSET(elem, ucs_offsetof(typeof(*elem), member)) != \
+             elem = ucs_container_of((queue)->head, ucs_typeof(*elem), member); \
+         (UCS_PTR_BYTE_OFFSET(elem, ucs_offsetof(ucs_typeof(*elem), member)) != \
              (void*)(queue)); \
-         elem = ucs_container_of(elem->member.next, typeof(*elem), member))
+         elem = ucs_container_of(elem->member.next, ucs_typeof(*elem), member))
 
 /**
  * Iterate over queue elements. The current element may be safely removed from
@@ -226,10 +226,10 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  */
 #define ucs_queue_for_each_safe(elem, iter, queue, member) \
     for (iter = &(queue)->head, \
-         elem = ucs_container_of(*iter, typeof(*elem), member); \
+         elem = ucs_container_of(*iter, ucs_typeof(*elem), member); \
           iter != (queue)->ptail; \
           iter = (*iter == &elem->member) ? &(*iter)->next : iter, \
-            elem = ucs_container_of(*iter, typeof(*elem), member))
+            elem = ucs_container_of(*iter, ucs_typeof(*elem), member))
 
 /**
  * Iterate and extract elements from the queue while a condition is true.
@@ -242,11 +242,11 @@ static inline void ucs_queue_splice(ucs_queue_head_t *queue,
  * TODO optimize
  */
 #define ucs_queue_for_each_extract(elem, queue, member, cond) \
-    for (elem = ucs_container_of((queue)->head, typeof(*elem), member); \
+    for (elem = ucs_container_of((queue)->head, ucs_typeof(*elem), member); \
          \
          !ucs_queue_is_empty(queue) && (cond) && ucs_queue_pull_non_empty(queue); \
          \
-         elem = ucs_container_of((queue)->head, typeof(*elem), member))
+         elem = ucs_container_of((queue)->head, ucs_typeof(*elem), member))
 
 
 /*

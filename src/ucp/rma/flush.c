@@ -47,39 +47,28 @@ static void ucp_ep_flush_progress(ucp_request_t *req)
 
     /* If the number of lanes changed since flush operation was submitted, adjust
      * the number of expected completions */
-    if (ucs_unlikely(req->send.flush.num_lanes != num_lanes)) {
-        ucp_trace_req(req, "ep %p: number of lanes changed from %d to %d",
-                      ep, req->send.flush.num_lanes, num_lanes);
-        diff                      = num_lanes - req->send.flush.num_lanes;
-        req->send.flush.num_lanes = num_lanes;
-        if (diff >= 0) {
-            ucp_trace_req(req,
-                          "ep %p: adjusting expected flush completion count by %d",
-                          ep, diff);
+    diff = num_lanes - req->send.flush.num_lanes;
+    if (ucs_unlikely(diff != 0)) {
+        if (diff > 0) {
+            ucs_debug("ep %p: flush req %p lanes changed from %d to %d, "
+                      "adding %d to completion count",
+                      ep, req, req->send.flush.num_lanes, num_lanes, diff);
             req->send.state.uct_comp.count += diff;
         } else {
-            /* If we have less lanes, it means we are in error flow:
-             * - if count == 0, we have completed the flush on all lanes
-             * - otherwise, flush progress was re-scheduled from flush progress
-             *   pending right after ucp_worker_iface_err_handle_progress(),
-             *   so remove destroyed/failed lanes from started_lanes and count
-             *   them completed.
-             */
-            ucs_assert(ep->flags & UCP_EP_FLAG_FAILED);
-            if (req->send.state.uct_comp.count > 0) {
-                destroyed_lanes = req->send.flush.started_lanes & ~all_lanes;
-
-                ucs_debug("req %p: lanes 0x%x were destroyed so reducing comp "
-                          "count by %d", req, destroyed_lanes,
-                          ucs_popcount(destroyed_lanes));
-                req->send.flush.started_lanes  &= ~destroyed_lanes;
-                req->send.state.uct_comp.count -= ucs_popcount(destroyed_lanes);
-            }
-
-            ucs_assertv(req->send.state.uct_comp.count == 0,
-                        "uct_comp.count=%d num_lanes=%d",
-                        req->send.state.uct_comp.count, num_lanes);
+            /* Some lanes that we wanted to flush were destroyed. If we already
+               started to flush them, they would be completed by discard flow,
+               so reduce completion count only by the lanes we have not started
+               to flush yet. */
+            destroyed_lanes = UCS_MASK(req->send.flush.num_lanes) & ~all_lanes &
+                              ~req->send.flush.started_lanes;
+            ucs_debug("ep %p: flush req %p lanes changed from %d to %d, "
+                      "destroyed_lanes 0x%x, reducing completion count by %d",
+                      ep, req, req->send.flush.num_lanes, num_lanes,
+                      destroyed_lanes, ucs_popcount(destroyed_lanes));
+            ucs_assert(!(req->send.flush.started_lanes & destroyed_lanes));
+            req->send.state.uct_comp.count -= ucs_popcount(destroyed_lanes);
         }
+        req->send.flush.num_lanes = num_lanes;
     }
 
     ucs_trace("ep %p flags 0x%x: progress flush req %p, started_lanes 0x%x "
@@ -256,7 +245,7 @@ void ucp_ep_flush_completion(uct_completion_t *self)
                                           send.state.uct_comp);
     ucs_status_t status = self->status;
 
-    ucs_trace_req("flush completion req=%p status=%d", req, status);
+    ucp_trace_req(req, "flush completion status=%d", status);
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
 
@@ -271,7 +260,8 @@ void ucp_ep_flush_completion(uct_completion_t *self)
     }
 
 
-    ucs_trace_req("flush completion req=%p comp_count=%d", req, req->send.state.uct_comp.count);
+    ucp_trace_req(req, "flush completion comp_count %d status %s",
+                  req->send.state.uct_comp.count, ucs_status_string(status));
     ucp_flush_check_completion(req);
 }
 

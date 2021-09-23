@@ -13,8 +13,15 @@
 #include <uct/api/v2/uct_v2.h>
 
 
+/* Format string to display a protocol performance function */
+#define UCP_PROTO_PERF_FUNC_FMT " %.0f+%.3f*N ns, %.2f MB/s"
+#define UCP_PROTO_PERF_FUNC_ARG(_perf_func) \
+    ((_perf_func)->c * 1e9), ((_perf_func)->m * 1e9), \
+            (1.0 / ((_perf_func)->m * UCS_MBYTE))
+
+
 /* Constant for "undefined"/"not-applicable" structure offset */
-#define UCP_PROTO_COMMON_OFFSET_INVALID          PTRDIFF_MAX
+#define UCP_PROTO_COMMON_OFFSET_INVALID PTRDIFF_MAX
 
 
 typedef enum {
@@ -41,22 +48,52 @@ typedef enum {
 
 
 /* Protocol common initialization parameters which are used to calculate
- * thresholds, performance, etc. */
+ * thresholds, performance, etc. for a specific selection criteria.
+ */
 typedef struct {
     ucp_proto_init_params_t super;
-    double                  latency;       /* protocol added latency */
-    double                  overhead;      /* protocol overhead */
-    size_t                  cfg_thresh;    /* user-configured threshold */
-    unsigned                cfg_priority;  /* user configuration priority */
-    size_t                  min_length;    /* Minimal payload size */
-    size_t                  max_length;    /* Maximal payload size */
-    ptrdiff_t               min_frag_offs; /* offset in uct_iface_attr_t of the
-                                              minimal size of a single fragment */
-    ptrdiff_t               max_frag_offs; /* offset in uct_iface_attr_t of the
-                                              maximal size of a single fragment */
-    size_t                  hdr_size;      /* header size on first lane */
-    uct_ep_operation_t      memtype_op;    /* operation used for memtype copy */
-    unsigned                flags;         /* see ucp_proto_common_init_flags_t */
+
+    /* Protocol added latency */
+    double                  latency;
+
+    /* Protocol overhead */
+    double                  overhead;
+
+    /* User-configured threshold */
+    size_t                  cfg_thresh;
+
+    /* User configuration priority */
+    unsigned                cfg_priority;
+
+    /* Minimal payload size */
+    size_t                  min_length;
+
+    /* Maximal payload size */
+    size_t                  max_length;
+
+    /* Offset in uct_iface_attr_t structure of the field which specifies the
+     * minimal fragment size for the UCT operation used by this protocol */
+    ptrdiff_t               min_frag_offs;
+
+    /* Offset in uct_iface_attr_t structure of the field which specifies the
+     * maximal fragment size for the UCT operation used by this protocol */
+    ptrdiff_t               max_frag_offs;
+
+    /* Offset in uct_iface_attr_t structure of the field which specifies the
+     * maximal number of iov elements for the UCT operation used by this
+    * protocol */
+    ptrdiff_t               max_iov_offs;
+
+    /* Header size on the first lane */
+    size_t                  hdr_size;
+
+    /* UCT operation used for copying from memory from request buffer to a
+     * bounce buffer used by the transport. If set to LAST, the protocol supports
+     * only host memory copy using memcpy(). */
+    uct_ep_operation_t      memtype_op;
+
+    /* Protocol instance flags, see @ref ucp_proto_common_init_flags_t */
+    unsigned                flags;
 } ucp_proto_common_init_params_t;
 
 
@@ -76,8 +113,8 @@ typedef struct {
     /* Latency of device to memory access */
     double sys_latency;
 
-    /* Minimal single message length */
-    size_t min_frag;
+    /* Minimal total message length */
+    size_t min_length;
 
     /* Maximum single message length */
     size_t max_frag;
@@ -89,6 +126,7 @@ typedef struct {
     ucp_lane_index_t        lane;       /* Lane index in the endpoint */
     ucp_rsc_index_t         memh_index; /* Index of UCT memory handle (for zero copy) */
     ucp_md_index_t          rkey_index; /* Remote key index (for remote access) */
+    uint8_t                 max_iov;    /* Maximal number of IOVs on this lane */
 } ucp_proto_common_lane_priv_t;
 
 
@@ -125,6 +163,15 @@ ucp_rsc_index_t
 ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
                               ucp_lane_index_t lane);
 
+ucs_sys_device_t
+ucp_proto_common_get_sys_dev(const ucp_proto_init_params_t *params,
+                             ucp_lane_index_t lane);
+
+
+void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
+                                        ucp_lane_index_t lane,
+                                        ucs_sys_device_t sys_dev,
+                                        ucs_sys_dev_distance_t *distance);
 
 const uct_iface_attr_t *
 ucp_proto_common_get_iface_attr(const ucp_proto_init_params_t *params,
@@ -164,6 +211,36 @@ ucp_lane_index_t
 ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
+/*
+ * Calculate the performance pipelining an operation with performance 'perf1'
+ * with an operation with performance 'perf2' by using fragments with size
+ * 'frag_size' bytes.
+*/
+ucs_linear_func_t ucp_proto_common_ppln_perf(ucs_linear_func_t perf1,
+                                             ucs_linear_func_t perf2,
+                                             double frag_size);
+
+
+/**
+ * Add a "pipelined performance" range, which represents the send time of
+ * multiples fragments of 'frag_size' bytes.
+ * 'frag_range' is the time to send a single fragment.
+ */
+void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
+                                     const ucp_proto_perf_range_t *frag_range,
+                                     size_t max_length);
+
+
+void ucp_proto_common_init_base_caps(
+        const ucp_proto_common_init_params_t *params, size_t min_length);
+
+
+void ucp_proto_common_add_perf_range(
+        const ucp_proto_common_init_params_t *params, size_t max_length,
+        ucs_linear_func_t send_overhead, ucs_linear_func_t recv_overhead,
+        const ucs_linear_func_t *xfer_time, ucs_linear_func_t bias);
+
+
 ucs_status_t
 ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *perf,
@@ -183,5 +260,18 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     size_t msg_length);
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
+
+
+ucs_linear_func_t
+ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
+                             ucp_md_map_t reg_md_map);
+
+
+ucs_status_t
+ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
+                                  ucs_memory_type_t local_mem_type,
+                                  ucs_memory_type_t remote_mem_type,
+                                  uct_ep_operation_t memtype_op,
+                                  ucs_linear_func_t *copy_time);
 
 #endif

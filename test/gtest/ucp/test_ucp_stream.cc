@@ -253,15 +253,16 @@ void test_ucp_stream::do_send_recv_data_test(ucp_datatype_t datatype)
 template <typename T, unsigned recv_flags>
 void test_ucp_stream::do_send_recv_test(ucp_datatype_t datatype)
 {
-    const size_t      dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
-                                     ucp_contig_dt_elem_size(datatype) : 1;
-    size_t            ssize        = 0; /* total send size */
-    std::vector<char> sbuf(16 * UCS_MBYTE, 's');
+    const size_t      dt_elem_size    = UCP_DT_IS_CONTIG(datatype) ?
+                                        ucp_contig_dt_elem_size(datatype) : 1;
+    size_t            ssize           = 0; /* total send size */
+    size_t            iter_multiplier = RUNNING_ON_VALGRIND ? 10 : 2;
+    std::vector<char> sbuf(16 * UCS_MBYTE / ucs::test_time_multiplier(), 's');
     ucs_status_ptr_t  sstatus;
     std::vector<char> check_pattern;
 
     /* send all msg sizes in bytes*/
-    for (size_t i = 3; i < sbuf.size(); i *= 2) {
+    for (size_t i = 3; i < sbuf.size(); i *= iter_multiplier) {
         ucp_datatype_t dt;
         if (UCP_DT_IS_GENERIC(datatype)) {
             dt = datatype;
@@ -605,7 +606,8 @@ UCS_TEST_P(test_ucp_stream, send_recv_data_recv_iov) {
 
 UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
     const size_t min_size         = UCS_KBYTE;
-    const size_t max_size         = min_size * 64;
+    const size_t max_size         = min_size * 64 / ucs::test_time_multiplier();
+    const size_t step_size        = RUNNING_ON_VALGRIND ? 111 : 1;
     const size_t iov_num          = 8; /* must be divisible by 4 without a
                                         * remainder, caught on mlx5 based TLs
                                         * where max_iov = 3 for zcopy multi
@@ -621,7 +623,7 @@ UCS_TEST_P(test_ucp_stream, send_zero_ending_iov_recv_data) {
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE;
     param.datatype     = DATATYPE_IOV;
 
-    for (size_t size = min_size; size < max_size; ++size) {
+    for (size_t size = min_size; size < max_size; size += step_size) {
         size_t slen = 0;
         for (size_t j = 0; j < iov_num; ++j) {
             if ((j % 2) == 0) {
@@ -963,9 +965,9 @@ void test_ucp_stream_many2one::check_recv_data(size_t n_iter, ucp_datatype_t dt)
             test = std::string(test_gen.data());
         }
 
-        size_t            next = 0;
+        std::string::size_type next = 0;
         for (size_t j = 0; j < n_iter; ++j) {
-            size_t match = str.find(test, next);
+            std::string::size_type match = str.find(test, next);
             EXPECT_NE(std::string::npos, match) << "failed on sender " << i
                                                 << " iteration " << j;
             if (match == std::string::npos) {

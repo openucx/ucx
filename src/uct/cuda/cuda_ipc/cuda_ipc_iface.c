@@ -406,6 +406,7 @@ static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_cuda_ipc_event_desc_init,
     .obj_cleanup   = uct_cuda_ipc_event_desc_cleanup,
+    .obj_str       = NULL
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,

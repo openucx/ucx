@@ -145,7 +145,8 @@ static inline void ucs_cpu_init()
 
 static inline void ucs_arch_wait_mem(void *address)
 {
-    unsigned long tmp;
+    /* Suppress potential warning that variable was set but never used */
+    unsigned long UCS_V_UNUSED tmp;
     asm volatile ("ldaxrb %w0, [%1] \n"
                   "wfe           \n"
                   : "=&r"(tmp)

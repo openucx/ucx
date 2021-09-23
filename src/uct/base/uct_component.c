@@ -14,6 +14,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <limits.h>
 #include <string.h>
 
@@ -42,6 +43,8 @@ ucs_status_t uct_query_components(uct_component_h **components_p,
 
     ucs_list_for_each(component, &uct_components_list, list) {
         *(components++) = component;
+        ucs_vfs_obj_add_dir(NULL, component, "uct/component/%s",
+                            component->name);
     }
 
     return UCS_OK;

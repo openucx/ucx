@@ -59,8 +59,10 @@ noinst_HEADERS = \
 	rma/rma.inl \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \
+	rndv/rndv_mtype.inl \
 	rndv/rndv.h \
 	tag/eager.h \
+	tag/proto_eager.inl \
 	tag/tag_rndv.h \
 	tag/tag_match.h \
 	tag/tag_match.inl \
@@ -126,6 +128,7 @@ libucp_la_SOURCES = \
 	rndv/proto_rndv.c \
 	rndv/rndv_am.c \
 	rndv/rndv_get.c \
+	rndv/rndv_ppln.c \
 	rndv/rndv_put.c \
 	rndv/rndv_rtr.c \
 	rndv/rndv.c \

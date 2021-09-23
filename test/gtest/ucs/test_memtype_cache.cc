@@ -57,7 +57,8 @@ protected:
                                (ucs_memory_type_t)mem_info.type);
         } else {
             EXPECT_UCS_OK(status);
-            EXPECT_EQ(expected_type, mem_info.type)
+            EXPECT_TRUE((UCS_MEMORY_TYPE_UNKNOWN == mem_info.type) ||
+                        (expected_type == mem_info.type))
                     << "ptr=" << ptr << " size=" << size;
         }
     }
@@ -448,7 +449,7 @@ UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs_keep_mem) {
     test_memtype_cache_alloc_diff_mem_types(true, false);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
 class test_memtype_cache_deferred_create : public test_memtype_cache {
@@ -512,5 +513,5 @@ UCS_TEST_P(test_memtype_cache_deferred_create, lookup_overlapped_regions) {
     test_alloc_before_init(1000000, false, 1);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache_deferred_create,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));

@@ -353,6 +353,9 @@ struct uct_tcp_ep {
 };
 
 
+UCS_PTR_MAP_DEFINE(tcp_ep, 0);
+
+
 /**
  * TCP interface
  */
@@ -361,8 +364,9 @@ typedef struct uct_tcp_iface {
     int                           listen_fd;         /* Server socket */
     ucs_conn_match_ctx_t          conn_match_ctx;    /* Connection matching context that contains EPs
                                                       * created with CONNECT_TO_IFACE method */
-    ucs_ptr_map_t                 ep_ptr_map;        /* EP PTR map that contains EPs created
-                                                      * with CONNECT_TO_EP method */
+    UCS_PTR_MAP_T(tcp_ep)         ep_ptr_map;        /* EP PTR map that contains
+                                                      * EPs created with
+                                                      * CONNECT_TO_EP method */
     ucs_list_link_t               ep_list;           /* List of endpoints */
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     ucs_sys_event_set_t           *event_set;        /* Event set identifier */
@@ -446,6 +450,22 @@ typedef struct uct_tcp_iface_config {
         ucs_time_t                 intvl;
     } keepalive;
 } uct_tcp_iface_config_t;
+
+
+typedef struct uct_tcp_ep_pending_req {
+    uct_pending_req_t           super;
+    uct_tcp_ep_t                *ep;
+    struct {
+        uct_tcp_cm_conn_event_t event;
+        uint8_t                 log_error;
+    } cm;
+} uct_tcp_ep_pending_req_t;
+
+
+typedef struct uct_tcp_ep_pending_purge_arg {
+    uct_pending_purge_callback_t cb;
+    void                         *arg;
+} uct_tcp_ep_pending_purge_arg_t;
 
 
 extern uct_component_t uct_tcp_component;
@@ -564,6 +584,8 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t
 uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
+ucs_status_t uct_tcp_cm_send_event_pending_cb(uct_pending_req_t *self);
+
 ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                    uct_tcp_cm_conn_event_t event,
                                    int log_error);
@@ -602,6 +624,13 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
 
 int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface);
+
+static UCS_F_ALWAYS_INLINE int uct_tcp_ep_ctx_buf_empty(uct_tcp_ep_ctx_t *ctx)
+{
+    ucs_assert((ctx->length == 0) || (ctx->buf != NULL));
+
+    return ctx->length == 0;
+}
 
 static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
 {

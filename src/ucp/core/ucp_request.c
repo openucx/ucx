@@ -14,6 +14,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/proto/proto_am.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/tag/tag_rndv.h>
 
 #include <ucs/datastruct/mpool.inl>
@@ -39,10 +40,22 @@ static ucs_memory_type_t ucp_request_get_mem_type(ucp_request_t *req)
     }
 }
 
-static void ucp_request_print(ucs_string_buffer_t *strb, ucp_request_t *req)
+static void
+ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
 {
-    ucp_ep_h ep;
+    const char *progress_func_name;
+    const char *comp_func_name;
     ucp_ep_config_t *config;
+    ucp_ep_h ep;
+
+    ucs_string_buffer_appendf(strb, "flags:0x%x ", req->flags);
+
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
+        ucp_proto_select_config_str(req->send.ep->worker,
+                                    req->send.proto_config,
+                                    req->send.state.dt_iter.length, strb);
+        return;
+    }
 
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_string_buffer_appendf(strb, "send length %zu ", req->send.length);
@@ -50,21 +63,43 @@ static void ucp_request_print(ucs_string_buffer_t *strb, ucp_request_t *req)
         if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
             ucp_proto_select_param_str(&req->send.proto_config->select_param,
                                        strb);
+            ucs_string_buffer_appendf(strb, " ");
+        } else {
+            progress_func_name = ucs_debug_get_symbol_name(req->send.uct.func);
+            ucs_string_buffer_appendf(strb, "%s() ", progress_func_name);
         }
 
-        ep     = req->send.ep;
-        config = ucp_ep_config(ep);
-        ucp_ep_config_lane_info_str(ep->worker, &config->key, NULL,
-                                    req->send.lane, UCP_NULL_RESOURCE, strb);
+        if (req->flags & UCP_REQUEST_FLAG_CALLBACK) {
+            comp_func_name = ucs_debug_get_symbol_name(req->send.cb);
+            ucs_string_buffer_appendf(strb, "comp:%s()", comp_func_name);
+        }
+
+        if (recurse) {
+            ep     = req->send.ep;
+            config = ucp_ep_config(ep);
+            ucp_ep_config_lane_info_str(ep->worker, &config->key, NULL,
+                                        req->send.lane, UCP_NULL_RESOURCE,
+                                        strb);
+        }
     } else if (req->flags &
                (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)) {
+#if ENABLE_DEBUG_DATA
+        if (req->recv.proto_rndv_config != NULL) {
+            /* Print the send protocol of the rendezvous request */
+            ucp_proto_select_config_str(req->recv.worker,
+                                        req->recv.proto_rndv_config,
+                                        req->recv.length, strb);
+            return;
+        }
+#endif
         ucs_string_buffer_appendf(strb, "recv length %zu ", req->recv.length);
     } else {
-        ucs_string_buffer_appendf(strb, "no debug info ");
+        ucs_string_buffer_appendf(strb, "<no debug info>");
+        return;
     }
 
     ucs_string_buffer_appendf(
-            strb, " %s memory",
+            strb, "%s memory",
             ucs_memory_type_names[ucp_request_get_mem_type(req)]);
 }
 
@@ -84,7 +119,7 @@ ucs_status_t ucp_request_query(void *request, ucp_request_attr_t *attr)
 
         ucs_string_buffer_init_fixed(&strb, attr->debug_string,
                                      attr->debug_string_size);
-        ucp_request_print(&strb, req);
+        ucp_request_str(req, &strb, 1);
     }
 
     if (attr->field_mask & UCP_REQUEST_ATTR_FIELD_STATUS) {
@@ -236,18 +271,28 @@ static void ucp_worker_request_fini_proxy(ucs_mpool_t *mp, void *obj)
     }
 }
 
+static void
+ucp_request_mpool_obj_str(ucs_mpool_t *mp, void *obj, ucs_string_buffer_t *strb)
+{
+    ucp_request_t *req = obj;
+
+    ucp_request_str(req, strb, 0);
+}
+
 ucs_mpool_ops_t ucp_request_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
     .obj_init      = ucp_worker_request_init_proxy,
-    .obj_cleanup   = ucp_worker_request_fini_proxy
+    .obj_cleanup   = ucp_worker_request_fini_proxy,
+    .obj_str       = ucp_request_mpool_obj_str
 };
 
 ucs_mpool_ops_t ucp_rndv_get_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 int ucp_request_pending_add(ucp_request_t *req)

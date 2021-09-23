@@ -139,7 +139,6 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 
 %post
 /sbin/ldconfig
-mkdir -p %{_sysconfdir}/ucx
 
 %postun -p /sbin/ldconfig
 

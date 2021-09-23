@@ -44,7 +44,7 @@ public class UcpListener extends UcxNativeStruct implements Closeable {
         setNativeId(null);
     }
 
-    private static native long createUcpListener(UcpListenerParams params, long workerId);
+    private native long createUcpListener(UcpListenerParams params, long workerId);
 
     private static native void destroyUcpListenerNative(long listenerId);
 }

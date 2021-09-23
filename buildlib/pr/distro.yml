@@ -1,0 +1,115 @@
+jobs:
+    # Perform test builds on relevant distributions.
+  - job: Distros
+    displayName: Build for distros
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    strategy:
+      matrix:
+        centos7:
+          CONTAINER: centos7
+          CONFIGURE_OPTS:
+    container: $[ variables['CONTAINER'] ]
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          set -eE
+          . buildlib/tools/common.sh
+          prepare_build
+          ${WORKSPACE}/configure $(CONFIGURE_OPTS) --prefix=$(Build.Repository.LocalPath)/install
+          gcc -v
+          make -s -j `nproc`
+          make install
+        displayName: Build ucx artifact
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: '$(Build.Repository.LocalPath)'
+          contents: |
+            install/**
+          targetFolder: '$(Build.ArtifactStagingDirectory)'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: ucx_bin_$(Build.BuildId)
+
+  - job: Test_wire_compatibility
+    dependsOn: Distros
+    displayName: Test wire compatibility
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    strategy:
+      matrix:
+        ubuntu20:
+          CONTAINER: ubuntu2004
+    steps:
+      - checkout: none
+        clean: true
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: ucx_bin_$(Build.BuildId)
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: chmod u+rwx $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId) -R
+      - bash: |
+          set -Eex
+          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          ./bin/ucx_perftest -t tag_bw -p $port &
+          server_pid=$!
+          sleep 1;
+          ./bin/ucx_perftest -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
+          wait $server_pid
+          grep "Final:" perf.txt
+        displayName: Test ucx_perftest
+        workingDirectory: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install
+        env:
+          LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib:$LD_LIBRARY_PATH
+      - bash: |
+          set -Eex
+          git clone --depth 1 -b v1.11.x https://github.com/openucx/ucx.git $(System.DefaultWorkingDirectory)/ucx-1.11
+          cd $(System.DefaultWorkingDirectory)/ucx-1.11
+          ./autogen.sh
+          ./contrib/configure-release --prefix=$(System.DefaultWorkingDirectory)/ucx-1.11/install --enable-examples
+          make -s -j `nproc`
+          make install -s -j `nproc`
+        displayName: Build ucx-1.11 version
+      - bash: |
+          set -Eex
+          $(System.DefaultWorkingDirectory)/ucx-1.11/install/bin/ucx_info -v
+        env:
+          LD_LIBRARY_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
+        displayName: Test ucx-1.11 version
+      - bash: |
+          set -Eex
+          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
+          server_pid=$!
+          sleep 5
+          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a 127.0.0.1
+          kill -9 $server_pid
+        displayName: Test wire compatibility server v1.11 client master
+        env:
+          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
+      - bash: |
+          set -Eex
+          port=$((10000 + (1000 * ${AZP_AGENT_ID})))
+          LD_LIBRARY_PATH=$UCX_PR_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port &
+          server_pid=$!
+          sleep 5
+          LD_LIBRARY_PATH=$UCX_V11_LIB_PATH $(System.DefaultWorkingDirectory)/ucx-1.11/examples/ucp_client_server -c tag -p $port -a 127.0.0.1
+          kill -9 $server_pid
+        env:
+          UCX_V11_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx-1.11/install/lib
+          UCX_PR_LIB_PATH: $(System.DefaultWorkingDirectory)/ucx_bin_$(Build.BuildId)/install/lib
+        displayName: Test wire compatibility server on master client v1.11

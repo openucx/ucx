@@ -309,7 +309,10 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             break;
         }
 
-        if (nread < 0) {
+        if ((nread < 0) && (errno == EINTR)) {
+            ucs_trace("inotify read() failed: %m");
+            continue;
+        } else if (nread < 0) {
             ucs_error("inotify read() failed: %m");
             status = UCS_ERR_IO_ERROR;
             break;
@@ -324,7 +327,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
                 continue;
             }
 
-            ucs_debug("file '%s' created", event->name);
+            ucs_trace("file '%s' created", event->name);
             if (strcmp(event->name, watch_filename)) {
                 ucs_trace("ignoring inotify create event of '%s'", event->name);
                 continue;
@@ -354,9 +357,8 @@ static void ucs_vfs_fuse_thread_reset_affinity()
     ucs_sys_cpuset_t cpuset;
     long i, num_cpus;
 
-    num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    num_cpus = ucs_sys_get_num_cpus();
     if (num_cpus == -1) {
-        ucs_diag("failed to get number of CPUs: %m");
         return;
     }
 

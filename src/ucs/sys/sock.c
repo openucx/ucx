@@ -127,7 +127,7 @@ unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
                                   UCS_NETIF_BOND_AD_NUM_PORTS_FMT, bond_name);
     if ((status != UCS_OK) || (ad_num_ports <= 0) ||
         (ad_num_ports > UINT_MAX)) {
-        ucs_diag("failed to read from " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
+        ucs_trace("failed to read from " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
                  "assuming 802.3ad bonding is disabled", bond_name);
         return 1;
     }

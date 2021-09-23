@@ -438,6 +438,8 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
         break;
     case IBV_EVENT_PORT_ACTIVE:
     case IBV_EVENT_PORT_ERR:
+    case IBV_EVENT_SM_CHANGE:
+    case IBV_EVENT_CLIENT_REREGISTER:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_DIAG;
@@ -447,8 +449,6 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
 #endif
     case IBV_EVENT_LID_CHANGE:
     case IBV_EVENT_PKEY_CHANGE:
-    case IBV_EVENT_SM_CHANGE:
-    case IBV_EVENT_CLIENT_REREGISTER:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_WARN;
@@ -1132,6 +1132,8 @@ static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
+    ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
+
     ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
               uct_ib_device_name(dev), bus_id.domain, bus_id.bus, bus_id.slot,
               bus_id.function, sys_dev );
@@ -1317,18 +1319,18 @@ const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)
     return ibv_wc_status_str(wc_status);
 }
 
-static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
-                                            struct ibv_ah_attr *ah_attr,
-                                            struct ibv_pd *pd,
-                                            struct ibv_ah **ah_p)
+static ucs_status_t
+uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
+                        struct ibv_pd *pd, const char *usage,
+                        struct ibv_ah **ah_p)
 {
     struct ibv_ah *ah;
     char buf[128];
 
     ah = ibv_create_ah(pd, ah_attr);
     if (ah == NULL) {
-        ucs_error("ibv_create_ah(%s) on %s failed: %m",
-                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr),
+        ucs_error("ibv_create_ah(%s) for %s on %s failed: %m",
+                  uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr), usage,
                   uct_ib_device_name(dev));
         return UCS_ERR_INVALID_ADDR;
     }
@@ -1337,10 +1339,10 @@ static ucs_status_t uct_ib_device_create_ah(uct_ib_device_t *dev,
     return UCS_OK;
 }
 
-ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
-                                            struct ibv_ah_attr *ah_attr,
-                                            struct ibv_pd *pd,
-                                            struct ibv_ah **ah_p)
+ucs_status_t
+uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
+                               struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
+                               const char *usage, struct ibv_ah **ah_p)
 {
     ucs_status_t status = UCS_OK;
     khiter_t iter;
@@ -1352,7 +1354,7 @@ ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
     iter = kh_get(uct_ib_ah, &dev->ah_hash, *ah_attr);
     if (iter == kh_end(&dev->ah_hash)) {
         /* new AH */
-        status = uct_ib_device_create_ah(dev, ah_attr, pd, ah_p);
+        status = uct_ib_device_create_ah(dev, ah_attr, pd, usage, ah_p);
         if (status != UCS_OK) {
             goto unlock;
         }

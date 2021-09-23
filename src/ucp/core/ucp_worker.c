@@ -85,32 +85,39 @@ static ucs_stats_class_t ucp_worker_stats_class = {
 };
 #endif
 
+static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                 ucs_string_buffer_t *strb);
+
 ucs_mpool_ops_t ucp_am_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
     .obj_init      = ucs_empty_function,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = ucs_empty_function,
+    .obj_str       = ucp_am_mpool_obj_str
 };
 
 ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .chunk_alloc   = ucp_reg_mpool_malloc,
     .chunk_release = ucp_reg_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = ucs_empty_function,
+    .obj_str       = NULL
 };
 
 ucs_mpool_ops_t ucp_frag_mpool_ops = {
     .chunk_alloc   = ucp_frag_mpool_malloc,
     .chunk_release = ucp_frag_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function
+    .obj_cleanup   = ucs_empty_function,
+    .obj_str       = NULL
 };
 
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 #define ucp_worker_discard_uct_ep_hash_key(_uct_ep) \
@@ -428,14 +435,14 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
-static void
+static ucs_status_t
 ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                        uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_wireup_ep_t *wireup_ep;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        return;
+        return UCS_OK;
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
@@ -444,14 +451,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        ucp_ep_set_failed(ucp_ep, lane, status);
-        return;
+        return ucp_ep_set_failed(ucp_ep, lane, status);
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
          * pending requests have to be handled there */
-        return;
+        return UCS_OK;
     }
 
     /**
@@ -463,6 +469,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                  ucp_destroyed_ep_pending_purge, ucp_ep);
     ucp_wireup_remote_connected(ucp_ep);
+    return UCS_OK;
 }
 
 static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
@@ -538,8 +545,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     }
 
-    ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep, status);
-    status = UCS_OK;
+    status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep,
+                                                    status);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1176,14 +1183,16 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto err_close_iface;
     }
 
-    status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
-                                                &distance);
-    if (status == UCS_OK) {
-        wiface->attr.latency.c          += distance.latency;
-        wiface->attr.bandwidth.shared    =
-            ucs_min(wiface->attr.bandwidth.shared, distance.bandwidth);
-        wiface->attr.bandwidth.dedicated =
-            ucs_min(wiface->attr.bandwidth.dedicated, distance.bandwidth);
+    if (!context->config.ext.proto_enable) {
+        status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
+                                                    &distance);
+        if (status == UCS_OK) {
+            wiface->attr.latency.c          += distance.latency;
+            wiface->attr.bandwidth.shared    =
+                    ucs_min(wiface->attr.bandwidth.shared, distance.bandwidth);
+            wiface->attr.bandwidth.dedicated = ucs_min(
+                    wiface->attr.bandwidth.dedicated, distance.bandwidth);
+        }
     }
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
@@ -1419,18 +1428,17 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     ucp_context_uct_atomic_iface_flags(context, &atomic);
 
-    iface_cap_flags                      = UCT_IFACE_FLAG_ATOMIC_DEVICE;
+    iface_cap_flags = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-    dummy_iface_attr.bandwidth.dedicated = 1e12;
-    dummy_iface_attr.bandwidth.shared    = 0;
-    dummy_iface_attr.cap_flags           = UINT64_MAX;
-    dummy_iface_attr.overhead            = 0;
-    dummy_iface_attr.priority            = 0;
-    dummy_iface_attr.lat_ovh             = 0;
+    dummy_iface_attr.bandwidth = 1e12;
+    dummy_iface_attr.cap_flags = UINT64_MAX;
+    dummy_iface_attr.overhead  = 0;
+    dummy_iface_attr.priority  = 0;
+    dummy_iface_attr.lat_ovh   = 0;
 
-    best_score                           = -1;
-    best_rsc                             = NULL;
-    best_priority                        = 0;
+    best_score    = -1;
+    best_rsc      = NULL;
+    best_priority = 0;
 
     /* Select best interface for atomics device */
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
@@ -2121,12 +2129,12 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_snprintf_zero(worker->address_name, name_length, "%s:%d",
                       ucs_get_host_name(), getpid());
 
-    status = ucs_ptr_map_init(&worker->ep_map);
+    status = UCS_PTR_MAP_INIT(ep, &worker->ep_map);
     if (status != UCS_OK) {
         goto err_free;
     }
 
-    status = ucs_ptr_map_init(&worker->request_map);
+    status = UCS_PTR_MAP_INIT(request, &worker->request_map);
     if (status != UCS_OK) {
         goto err_destroy_ep_map;
     }
@@ -2173,7 +2181,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     /* Initialize connection matching structure */
     ucs_conn_match_init(&worker->conn_match_ctx, sizeof(uint64_t),
-                        &ucp_ep_match_ops);
+                        UCP_EP_MATCH_CONN_SN_MAX, &ucp_ep_match_ops);
 
     /* Open all resources as interfaces on this worker */
     status = ucp_worker_add_resource_ifaces(worker);
@@ -2246,9 +2254,9 @@ err_free_tm_offload_stats:
 err_free_stats:
     UCS_STATS_NODE_FREE(worker->stats);
 err_destroy_request_map:
-    ucs_ptr_map_destroy(&worker->request_map);
+    UCS_PTR_MAP_DESTROY(request, &worker->request_map);
 err_destroy_ep_map:
-    ucs_ptr_map_destroy(&worker->ep_map);
+    UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
 err_free:
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
@@ -2331,16 +2339,17 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
     ucs_status_t status;
 
+    ++req->send.state.uct_comp.count;
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
-    if (status == UCS_OK) {
-        ucs_assert(req->send.state.uct_comp.count == 0);
-        ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp);
+    if (status == UCS_INPROGRESS) {
         return UCS_OK;
-    } else if (status == UCS_INPROGRESS) {
-        req->send.state.uct_comp.count++;
-        return UCS_OK;
-    } else if (status == UCS_ERR_NO_RESOURCE) {
+    }
+
+    --req->send.state.uct_comp.count;
+    ucs_assert(req->send.state.uct_comp.count == 0);
+
+    if (status == UCS_ERR_NO_RESOURCE) {
         return UCS_ERR_NO_RESOURCE;
     }
 
@@ -2477,8 +2486,8 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucs_async_context_cleanup(&worker->async);
     UCS_STATS_NODE_FREE(worker->tm_offload_stats);
     UCS_STATS_NODE_FREE(worker->stats);
-    ucs_ptr_map_destroy(&worker->request_map);
-    ucs_ptr_map_destroy(&worker->ep_map);
+    UCS_PTR_MAP_DESTROY(request, &worker->request_map);
+    UCS_PTR_MAP_DESTROY(ep, &worker->ep_map);
     ucs_strided_alloc_cleanup(&worker->ep_alloc);
     kh_destroy_inplace(ucp_worker_discard_uct_ep_hash,
                        &worker->discard_uct_ep_hash);
@@ -2884,14 +2893,16 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
 {
-    ucs_trace("worker %p: sent keepalive on %u endpoints",
-              worker, worker->keepalive.ep_count);
-
     ucs_assert(worker->keepalive.lane_map == 0);
 
+    ucs_trace("worker %p: keepalive round %zu completed on %u endpoints, "
+              "now: <%lf sec>",
+              worker, worker->keepalive.round_count, worker->keepalive.ep_count,
+              ucs_time_to_sec(now));
+
     worker->keepalive.iter_end   = worker->keepalive.iter;
-    worker->keepalive.last_round = now;
     worker->keepalive.ep_count   = 0;
+    worker->keepalive.last_round = now;
     worker->keepalive.round_count++;
 }
 
@@ -2918,7 +2929,7 @@ ucp_worker_do_keepalive_progress(ucp_worker_h worker)
      * initialized and new EP configuration set from an asynchronous thread
      * when processing WIREUP_MSGs */
     UCS_ASYNC_BLOCK(&worker->async);
-    ucs_trace_func("worker %p: keepalive round", worker);
+    ucs_trace("worker %p: keepalive round", worker);
 
     if (ucs_unlikely(ucs_list_is_empty(&worker->all_eps))) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
@@ -3000,6 +3011,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
+    int round_inprogress;
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
@@ -3008,25 +3020,35 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         return;
     }
 
+    round_inprogress = worker->keepalive.iter != worker->keepalive.iter_end;
+
     if (worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) {
         /* Set lane_map=0 to make sure the endpoint won't be selected again */
+        ucs_debug("worker %p: removed keepalive current ep %p, moving to next",
+                  worker, ep);
         worker->keepalive.lane_map = 0;
-
         ucp_worker_keepalive_next_ep(worker);
         ucs_assert(worker->keepalive.iter != &ucp_ep_ext_gen(ep)->ep_list);
     }
 
     if (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list) {
+        ucs_debug("worker %p: removed keepalive end ep %p, moving end to prev",
+                  worker, ep);
         worker->keepalive.iter_end = worker->keepalive.iter_end->prev;
         ucs_assert(worker->keepalive.iter_end != &ucp_ep_ext_gen(ep)->ep_list);
     }
 
-    if (worker->keepalive.iter == worker->keepalive.iter_end) {
+    if (round_inprogress &&
+        (worker->keepalive.iter == worker->keepalive.iter_end)) {
         /* If the keepalive iterator points to the stop element after moving the
          * keepalive iterator or the stop element as a result of removing the
          * endpoint, need to finish the current round to avoid doing keepalive
          * for the same endpoint twice in the round
+         * NOTE: We should not do anything if there is no keepalive round in
+         * progress, since we would just be postponing the next keepalive round.
          */
+        ucs_debug("worker %p: removing ep %p finished current keepalive round",
+                  worker, ep);
         worker->keepalive.lane_map = 0;
         ucp_worker_keepalive_complete(worker, ucs_get_time());
     }
@@ -3079,7 +3101,7 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
     req->send.discard_uct_ep.cb_id          = UCS_CALLBACKQ_ID_NULL;
-    ucp_request_set_callback(req, send.cb, discarded_cb, discarded_cb_arg);
+    ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     ucp_worker_discard_uct_ep_progress(req);
 }
@@ -3153,4 +3175,18 @@ void ucp_worker_vfs_refresh(void *obj)
         ucp_ep_vfs_init(ucp_ep_from_ext_gen(ep_ext));
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                      ucs_string_buffer_t *strb)
+{
+    ucp_recv_desc_t *rdesc = obj;
+
+    ucs_string_buffer_appendf(strb, "flags:0x%x length:%d payload_offset:%d "
+                              "release_offset:%d", rdesc->flags, rdesc->length,
+                              rdesc->payload_offset,
+                              rdesc->release_desc_offset);
+#if ENABLE_DEBUG_DATA
+    ucs_string_buffer_appendf(strb, " name:%s", rdesc->name);
+#endif
 }

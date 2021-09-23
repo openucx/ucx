@@ -46,11 +46,13 @@ static const char * ucp_device_type_names[] = {
 };
 
 static const char *ucp_rndv_modes[] = {
-    [UCP_RNDV_MODE_AUTO]      = "auto",
-    [UCP_RNDV_MODE_GET_ZCOPY] = "get_zcopy",
-    [UCP_RNDV_MODE_PUT_ZCOPY] = "put_zcopy",
-    [UCP_RNDV_MODE_AM]        = "am",
-    [UCP_RNDV_MODE_LAST]      = NULL,
+    [UCP_RNDV_MODE_AUTO]         = "auto",
+    [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
+    [UCP_RNDV_MODE_PUT_ZCOPY]    = "put_zcopy",
+    [UCP_RNDV_MODE_GET_PIPELINE] = "get_ppln",
+    [UCP_RNDV_MODE_PUT_PIPELINE] = "put_ppln",
+    [UCP_RNDV_MODE_AM]           = "am",
+    [UCP_RNDV_MODE_LAST]         = NULL,
 };
 
 const char *ucp_operation_names[] = {
@@ -111,6 +113,16 @@ static ucs_config_field_t ucp_config_table[] = {
    " and disables aliasing.\n",
    ucs_offsetof(ucp_config_t, tls), UCS_CONFIG_TYPE_ALLOW_LIST},
 
+  {"PROTOS", UCP_RSC_CONFIG_ALL,
+   "Comma-separated list of glob patterns specifying protocols to use.\n"
+   "The order is not meaningful.\n"
+   "Each expression in the list may contain any of the following wildcard:\n"
+   "  *     - matches any number of any characters including none.\n"
+   "  ?     - matches any single character.\n"
+   "  [abc] - matches one character given in the bracket.\n"
+   "  [a-z] - matches one character from the range given in the bracket.",
+   ucs_offsetof(ucp_config_t, protos), UCS_CONFIG_TYPE_ALLOW_LIST},
+
   {"ALLOC_PRIO", "md:sysv,md:posix,huge,thp,md:*,mmap,heap",
    "Priority of memory allocation methods. Each item in the list can be either\n"
    "an allocation method (huge, thp, mmap, libc) or md:<NAME> which means to use the\n"
@@ -132,7 +144,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "MD whose distance is queried when evaluating transport selection score",
    ucs_offsetof(ucp_config_t, selection_cmp), UCS_CONFIG_TYPE_STRING},
 
-  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "",
+  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
    "Memory types which have whole allocations registered.\n"
    "Allowed memory types: cuda, rocm, rocm-managed",
    ucs_offsetof(ucp_config_t, ctx.reg_whole_alloc_bitmap),
@@ -666,6 +678,14 @@ static void ucp_add_tl_resource_if_enabled(ucp_context_h context, ucp_tl_md_t *m
 
     if (ucp_is_resource_enabled(resource, config, &rsc_flags, dev_cfg_masks,
                                 tl_cfg_mask)) {
+        if ((resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) &&
+            (resource->sys_device >= UCP_MAX_SYS_DEVICES)) {
+            ucs_diag(UCT_TL_RESOURCE_DESC_FMT
+                     " system device is %d, which exceeds the maximal "
+                     "supported (%d), system locality may be ignored",
+                     UCT_TL_RESOURCE_DESC_ARG(resource), resource->sys_device,
+                     UCP_MAX_SYS_DEVICES);
+        }
         context->tl_rscs[context->num_tls].tl_rsc       = *resource;
         context->tl_rscs[context->num_tls].md_index     = md_index;
         context->tl_rscs[context->num_tls].tl_name_csum =
@@ -1155,15 +1175,17 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     ucs_status_t status;
     unsigned max_mds;
 
-    context->tl_cmpts         = NULL;
-    context->num_cmpts        = 0;
-    context->tl_mds           = NULL;
-    context->num_mds          = 0;
-    context->tl_rscs          = NULL;
-    context->num_tls          = 0;
-    context->memtype_cache    = NULL;
-    context->mem_type_mask    = 0;
-    context->num_mem_type_detect_mds = 0;
+    context->tl_cmpts                 = NULL;
+    context->num_cmpts                = 0;
+    context->tl_mds                   = NULL;
+    context->num_mds                  = 0;
+    context->alloc_md_map_initialized = 0;
+    context->alloc_md_map             = 0;
+    context->tl_rscs                  = NULL;
+    context->num_tls                  = 0;
+    context->memtype_cache            = NULL;
+    context->mem_type_mask            = 0;
+    context->num_mem_type_detect_mds  = 0;
 
     for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
         UCS_BITMAP_CLEAR(&context->mem_type_access_tls[i]);
@@ -1351,7 +1373,9 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 {
     unsigned i, num_alloc_methods, method;
     const char *method_name;
+    ucp_proto_id_t proto_id;
     ucs_status_t status;
+    int match;
 
     ucp_apply_params(context, params,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
@@ -1379,6 +1403,21 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
     }
     ucs_debug("estimated bcopy bandwidth is %f",
               context->config.ext.bcopy_bw);
+
+    if (config->protos.mode == UCS_CONFIG_ALLOW_LIST_ALLOW_ALL) {
+        context->proto_bitmap = UCS_MASK(ucp_protocols_count);
+    } else {
+        for (proto_id = 0; proto_id < ucp_protocols_count; ++proto_id) {
+            match = ucs_config_names_search(&config->protos.array,
+                                            ucp_proto_id_field(proto_id, name));
+            if (((config->protos.mode == UCS_CONFIG_ALLOW_LIST_ALLOW) &&
+                 (match >= 0)) ||
+                ((config->protos.mode == UCS_CONFIG_ALLOW_LIST_NEGATE) &&
+                 (match == -1))) {
+                context->proto_bitmap |= UCS_BIT(proto_id);
+            }
+        }
+    }
 
     /* always init MT lock in context even though it is disabled by user,
      * because we need to use context lock to protect ucp_mm_ and ucp_rkey_
@@ -1523,17 +1562,18 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     ucp_config_t *dfl_config = NULL;
     ucp_context_t *context;
     ucs_status_t status;
-    ucs_debug_address_info_t addr_info;
 
     ucp_get_version(&major_version, &minor_version, &release_number);
 
     if ((api_major_version != major_version) ||
-        ((api_major_version == major_version) && (api_minor_version > minor_version))) {
-        status = ucs_debug_lookup_address(ucp_init_version, &addr_info);
-        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d (release %d %s)",
-                  api_major_version, api_minor_version,
-                  major_version, minor_version, release_number,
-                  status == UCS_OK ? addr_info.file.path : "");
+        ((api_major_version == major_version) &&
+         (api_minor_version > minor_version))) {
+        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d"
+                 " (release %d)", api_major_version, api_minor_version,
+                  major_version, minor_version, release_number);
+    } else {
+        ucs_info("UCP version is %d.%d (release %d)",
+                 major_version, minor_version, release_number);
     }
 
     if (config == NULL) {

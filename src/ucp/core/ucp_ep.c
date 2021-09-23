@@ -356,7 +356,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         ucp_ep_update_flags(ep, UCP_EP_FLAG_INDIRECT_ID, 0);
     }
 
-    status = ucs_ptr_map_put(&worker->ep_map, ep,
+    status = UCS_PTR_MAP_PUT(ep, &worker->ep_map, ep,
                              !!(ep->flags & UCP_EP_FLAG_INDIRECT_ID),
                              &ucp_ep_ext_control(ep)->local_ep_id);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
@@ -405,7 +405,7 @@ void ucp_ep_release_id(ucp_ep_h ep)
 
     /* Don't use ucp_ep_local_id() function here to avoid assertion failure,
      * because local_ep_id can be set to @ref UCS_PTR_MAP_KEY_INVALID */
-    status = ucs_ptr_map_del(&ep->worker->ep_map,
+    status = UCS_PTR_MAP_DEL(ep, &ep->worker->ep_map,
                              ucp_ep_ext_control(ep)->local_ep_id);
     if ((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS)) {
         ucs_warn("ep %p local id 0x%" PRIxPTR ": ucs_ptr_map_del failed: %s",
@@ -857,8 +857,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     status = ucp_ep_adjust_params(ep, params);
     if (status != UCS_OK) {
-        ucp_ep_destroy_internal(ep);
-        goto out_free_address;
+        goto err_destroy_ep;
     }
 
     ep->conn_sn = conn_sn;
@@ -874,9 +873,15 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
         ucp_ep_flush_state_reset(ep);
-    } else {
-        ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
-                            UCS_CONN_MATCH_QUEUE_EXP);
+    } else if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
+                                    UCS_CONN_MATCH_QUEUE_EXP)) {
+        if (worker->context->config.features & UCP_FEATURE_STREAM) {
+            status = UCS_ERR_EXCEEDS_LIMIT;
+            ucs_error("worker %p: failed to create the endpoint without"
+                      "connection matching and Stream API support", worker);
+            goto err_destroy_ep;
+        }
+        ucp_ep_flush_state_reset(ep);
     }
 
     /* if needed, send initial wireup message */
@@ -897,6 +902,10 @@ out:
         *ep_p = ep;
     }
     return status;
+
+err_destroy_ep:
+    ucp_ep_destroy_internal(ep);
+    goto out_free_address;
 }
 
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
@@ -1046,15 +1055,17 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
     }
 }
 
-void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                       ucs_status_t status)
+ucs_status_t
+ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
     ucp_ep_ext_control_t *ep_ext_control = ucp_ep_ext_control(ucp_ep);
+    ucp_err_handling_mode_t err_mode;
     ucs_log_level_t log_level;
     ucp_request_t *close_req;
 
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
+    ucs_assert(UCS_STATUS_IS_ERR(status));
     ucs_assert(!ucs_async_is_from_async(&ucp_ep->worker->async));
 
     ucs_debug("ep %p: set_ep_failed status %s on lane[%d]=%p", ucp_ep,
@@ -1068,35 +1079,42 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
 
     /* set endpoint to failed to prevent wireup_ep switch */
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        return;
+        return UCS_OK;
     }
 
     /* The EP can be closed from last completion callback */
     ucp_ep_discard_lanes(ucp_ep, status);
     ucp_ep_reqs_purge(ucp_ep, status);
-    ucp_stream_ep_cleanup(ucp_ep);
+    ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
-        if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
-            ucs_assert(ucp_ep->flags & UCP_EP_FLAG_CLOSED);
-            /* Promote close operation to CANCEL in case of transport error,
+        if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
+            if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+                /* Promote close operation to CANCEL in case of transport error,
              * since the disconnect event may never arrive. */
-            close_req                        = ep_ext_control->close_req.req;
-            close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
-            ucp_ep_local_disconnect_progress(close_req);
+                close_req = ep_ext_control->close_req.req;
+                close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
+                ucp_ep_local_disconnect_progress(close_req);
+            }
+            return UCS_OK;
         } else if (ep_ext_control->err_cb == NULL) {
-            /* Do not print error if connection reset by remote peer since it
-             * can be part of user level close protocol */
-            log_level = (status == UCS_ERR_CONNECTION_RESET) ?
-                        UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
+            /* Print error if user requested error handling support but did not
+               install a valid error handling callback */
+            err_mode  = ucp_ep_config(ucp_ep)->key.err_mode;
+            log_level = (err_mode == UCP_ERR_HANDLING_MODE_NONE) ?
+                                UCS_LOG_LEVEL_DIAG :
+                                UCS_LOG_LEVEL_ERROR;
 
             ucp_ep_get_lane_info_str(ucp_ep, lane, &lane_info_strb);
-            ucs_log(log_level, "ep %p: error '%s' on %s will not be handled"
+            ucs_log(log_level,
+                    "ep %p: error '%s' on %s will not be handled"
                     " since no error callback is installed",
                     ucp_ep, ucs_status_string(status),
                     ucs_string_buffer_cstr(&lane_info_strb));
+            return UCS_ERR_UNSUPPORTED;
         } else {
             ucp_ep_invoke_err_cb(ucp_ep, status);
+            return UCS_OK;
         }
     } else if (ucp_ep->flags & (UCP_EP_FLAG_INTERNAL | UCP_EP_FLAG_CLOSED)) {
         /* No additional actions are required, this is already closed EP or
@@ -1104,10 +1122,12 @@ void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
          * So, close operation was already scheduled, this EP will be deleted
          * after all lanes will be discarded successfully */
         ucs_debug("ep %p: detected peer failure on internal endpoint", ucp_ep);
+        return UCS_OK;
     } else {
         ucs_debug("ep %p: destroy endpoint which is not exposed to a user due"
                   " to peer failure", ucp_ep);
         ucp_ep_disconnected(ucp_ep, 1);
+        return UCS_OK;
     }
 }
 
@@ -1173,7 +1193,7 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_ep_cm_slow_cbq_cleanup(ep);
 
-    ucp_stream_ep_cleanup(ep);
+    ucp_stream_ep_cleanup(ep, UCS_ERR_CANCELED);
     ucp_am_ep_cleanup(ep);
     ucp_ep_reqs_purge(ep, UCS_ERR_CANCELED);
 
@@ -1388,7 +1408,8 @@ void ucp_ep_destroy(ucp_ep_h ep)
             ucp_worker_progress(worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
-
+        ucs_debug("ep_close request %p completed with status %s", request,
+                  ucs_status_string(status));
         ucp_request_release(request);
     }
 
@@ -2819,7 +2840,6 @@ void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
 {
     ucs_assert(ucp_ep_ext_control(ep)->err_cb != NULL);
-    ucs_assert(ucp_ep_config(ep)->key.err_mode != UCP_ERR_HANDLING_MODE_NONE);
 
     /* Do not invoke error handler if the EP has been closed by user, or error
      * callback already called */
@@ -2920,6 +2940,9 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
         ucs_assert((rsc_index != UCP_NULL_RESOURCE) ||
                    (lane == ucp_ep_get_cm_lane(ep)));
 
+        ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep, lane,
+                  ep->uct_eps[lane], ep->flags);
+
         status = ucp_ep_do_uct_ep_keepalive(ep, ep->uct_eps[lane], rsc_index, 0,
                                             NULL);
         if (status == UCS_ERR_NO_RESOURCE) {
@@ -2938,6 +2961,9 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
     if (worker->keepalive.lane_map != 0) {
         return 0;
     }
+
+    ucs_trace("worker %p: keepalive done on ep %p, now: <%lf sec>", worker, ep,
+              ucs_time_to_sec(now));
 
 #if UCS_ENABLE_ASSERT
     ucs_assertv((now - ucp_ep_ext_control(ep)->ka_last_round) >=
@@ -3132,7 +3158,7 @@ static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
             return status;
         }
     }
-    
+
     if (uct_cm_ep_attr.field_mask & UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
         status = ucs_sockaddr_copy((struct sockaddr*)&attr->remote_sockaddr,
                                    (struct sockaddr*)&uct_cm_ep_attr.remote_address);

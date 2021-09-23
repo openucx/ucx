@@ -148,6 +148,46 @@ static void uct_tcp_cm_trace_conn_pkt(const uct_tcp_ep_t *ep,
             uct_tcp_ep_get_cm_id(ep));
 }
 
+ucs_status_t uct_tcp_cm_send_event_pending_cb(uct_pending_req_t *self)
+{
+    uct_tcp_ep_pending_req_t *req =
+            ucs_derived_of(self, uct_tcp_ep_pending_req_t);
+    ucs_status_t status;
+
+    status = uct_tcp_cm_send_event(req->ep, req->cm.event, req->cm.log_error);
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return status;
+    }
+
+    ucs_assert(status != UCS_INPROGRESS);
+    ucs_free(req);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_tcp_cm_event_pending_add(uct_tcp_ep_t *ep,
+                                                 uct_tcp_cm_conn_event_t event,
+                                                 int log_error)
+{
+    uct_tcp_ep_pending_req_t *req;
+    ucs_status_t UCS_V_UNUSED status;
+
+    req = ucs_malloc(sizeof(*req), "tcp_cm_event_pending_req");
+    if (ucs_unlikely(req == NULL)) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    req->ep           = ep;
+    req->cm.event     = event;
+    req->cm.log_error = log_error;
+    req->super.func   = uct_tcp_cm_send_event_pending_cb;
+
+    status = uct_tcp_ep_pending_add(&ep->super.super, &req->super, 0);
+    ucs_assertv(status == UCS_OK, "ep %p: pending_add status: %d", ep,
+                status);
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                    uct_tcp_cm_conn_event_t event,
                                    int log_error)
@@ -165,9 +205,10 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
     ucs_assertv(!(event & ~(UCT_TCP_CM_CONN_REQ |
                             UCT_TCP_CM_CONN_ACK)),
                 "ep=%p", ep);
-    ucs_assertv(!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ||
-                (ep->conn_state != UCT_TCP_EP_CONN_STATE_CONNECTED),
-                "ep=%p", ep);
+
+    if (!uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
+        return uct_tcp_cm_event_pending_add(ep, event, log_error);
+    }
 
     pkt_length                  = sizeof(*pkt_hdr);
     if (event == UCT_TCP_CM_CONN_REQ) {
@@ -199,9 +240,6 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP : 0;
         conn_pkt->iface_addr = iface->config.ifaddr;
         conn_pkt->cm_id      = ep->cm_id;
-        ucs_assert((conn_pkt->flags &
-                    UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP) ||
-                   (ep->cm_id.conn_sn < UCT_TCP_CM_CONN_SN_MAX));
     } else {
         /* CM events (except CONN_REQ) are not sent for EPs connected with
          * CONNECT_TO_EP connection method */
@@ -222,6 +260,7 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                   UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR,
                                   "unable to send %s to", event);
     }
+
     return status;
 }
 
@@ -349,6 +388,7 @@ uct_tcp_ep_t *uct_tcp_cm_get_ep(uct_tcp_iface_t *iface,
 void uct_tcp_cm_insert_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
 {
     uint8_t ctx_caps = ep->flags & UCT_TCP_EP_CTX_CAPS;
+    int ret;
 
     ucs_assert(ep->cm_id.conn_sn < UCT_TCP_CM_CONN_SN_MAX);
     ucs_assert((ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ||
@@ -356,11 +396,12 @@ void uct_tcp_cm_insert_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep)
     ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_ON_MATCH_CTX));
     ucs_assert(!(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP));
 
-    ucs_conn_match_insert(&iface->conn_match_ctx, &ep->peer_addr,
-                          ep->cm_id.conn_sn, &ep->elem,
-                          (ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
-                          UCS_CONN_MATCH_QUEUE_EXP :
-                          UCS_CONN_MATCH_QUEUE_UNEXP);
+    ret = ucs_conn_match_insert(&iface->conn_match_ctx, &ep->peer_addr,
+                                ep->cm_id.conn_sn, &ep->elem,
+                                (ctx_caps & UCT_TCP_EP_FLAG_CTX_TYPE_TX) ?
+                                UCS_CONN_MATCH_QUEUE_EXP :
+                                UCS_CONN_MATCH_QUEUE_UNEXP);
+    ucs_assert_always(ret == 1);
 
     ep->flags |= UCT_TCP_EP_FLAG_ON_MATCH_CTX;
 }
@@ -545,7 +586,7 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
     uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
 
     if (ep->conn_state == UCT_TCP_EP_CONN_STATE_CONNECTED) {
-        return 0;
+        goto send_ack;
     }
 
     ucs_assertv(!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX),
@@ -588,6 +629,14 @@ accept_conn:
     ucs_assert(!(cm_req_pkt->flags &
                  UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP) || connect_to_self);
 
+    if (!connect_to_self) {
+        uct_tcp_iface_remove_ep(ep);
+        uct_tcp_cm_insert_ep(iface, ep);
+    }
+
+    uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
+
+send_ack:
     /* Just accept this connection and make it operational for RX events */
     if (!(cm_req_pkt->flags & UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP)) {
         status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_ACK, 1);
@@ -596,12 +645,6 @@ accept_conn:
         }
     }
 
-    if (!connect_to_self) {
-        uct_tcp_iface_remove_ep(ep);
-        uct_tcp_cm_insert_ep(iface, ep);
-    }
-
-    uct_tcp_cm_change_conn_state(ep, UCT_TCP_EP_CONN_STATE_CONNECTED);
     return 1;
 
 out_destroy_ep:

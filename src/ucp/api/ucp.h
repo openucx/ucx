@@ -698,10 +698,14 @@ typedef enum {
                                                         synchronization with the
                                                         remote peer before releasing
                                                         the local send buffer */
-    UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL = UCS_BIT(18)  /**< force immediate complete
+    UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL = UCS_BIT(18), /**< force immediate complete
                                                         operation, fail if the
                                                         operation cannot be
                                                         completed immediately */
+    UCP_OP_ATTR_FLAG_MULTI_SEND     = UCS_BIT(19)  /**< optimize for bandwidth of
+                                                        multiple in-flight operations,
+                                                        rather than for the latency
+                                                        of a single operation */
 } ucp_op_attr_t;
 
 
@@ -4581,7 +4585,7 @@ typedef struct ucp_ep_attr {
     char     name[UCP_ENTITY_NAME_MAX];
 
     /**
-     * Local socket address for this endpoint. Valid only for endpoints created 
+     * Local socket address for this endpoint. Valid only for endpoints created
      * by connecting to a socket address.
      * If this field is specified for an endpoint not connected to a socket address,
      * UCS_ERR_NOT_CONNECTED will be returned.

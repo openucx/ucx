@@ -215,14 +215,18 @@ typedef void (*uct_rc_iface_qp_cleanup_func_t)(
 typedef void (*uct_rc_iface_ep_post_check_func_t)(uct_ep_h tl_ep);
 
 
+typedef void (*uct_rc_iface_ep_vfs_populate_func_t)(uct_rc_ep_t *rc_ep);
+
+
 typedef struct uct_rc_iface_ops {
-    uct_ib_iface_ops_t                super;
-    uct_rc_iface_init_rx_func_t       init_rx;
-    uct_rc_iface_cleanup_rx_func_t    cleanup_rx;
-    uct_rc_iface_fc_ctrl_func_t       fc_ctrl;
-    uct_rc_iface_fc_handler_func_t    fc_handler;
-    uct_rc_iface_qp_cleanup_func_t    cleanup_qp;
-    uct_rc_iface_ep_post_check_func_t ep_post_check;
+    uct_ib_iface_ops_t                  super;
+    uct_rc_iface_init_rx_func_t         init_rx;
+    uct_rc_iface_cleanup_rx_func_t      cleanup_rx;
+    uct_rc_iface_fc_ctrl_func_t         fc_ctrl;
+    uct_rc_iface_fc_handler_func_t      fc_handler;
+    uct_rc_iface_qp_cleanup_func_t      cleanup_qp;
+    uct_rc_iface_ep_post_check_func_t   ep_post_check;
+    uct_rc_iface_ep_vfs_populate_func_t ep_vfs_populate;
 } uct_rc_iface_ops_t;
 
 
@@ -338,6 +342,10 @@ struct uct_rc_iface_send_op {
 #ifndef NVALGRIND
     struct iovec                  *iov;        /* get_zcopy with valgrind */
 #endif
+
+#if ENABLE_DEBUG_DATA
+    const char                    *name;       /* object ID, debug only */
+#endif
 };
 
 
@@ -423,6 +431,8 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
 ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
 void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface);
+
+void uct_rc_iface_vfs_refresh(uct_iface_h iface);
 
 ucs_arbiter_cb_result_t
 uct_rc_ep_process_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
@@ -594,6 +604,14 @@ static UCS_F_ALWAYS_INLINE int
 uct_rc_iface_poll_tx(uct_rc_iface_t *iface, unsigned count)
 {
     return (count == 0) || iface->config.tx_poll_always;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
+{
+#if ENABLE_DEBUG_DATA
+    op->name = name;
+#endif
 }
 
 #endif

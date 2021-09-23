@@ -34,15 +34,25 @@ ucs_mpool_chunk_elem(ucs_mpool_data_t *data, ucs_mpool_chunk_t *chunk,
 
 static void ucs_mpool_chunk_leak_check(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
 {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_mpool_data_t *data = mp->data;
     ucs_mpool_elem_t *elem;
     unsigned i;
+    void *obj;
 
     for (i = 0; i < chunk->num_elems; ++i) {
         elem = ucs_mpool_chunk_elem(mp->data, chunk, i);
         VALGRIND_MAKE_MEM_DEFINED(elem, sizeof *elem);
         if (elem->mpool != NULL) {
-            ucs_warn("object %p was not returned to mpool %s", elem + 1,
-                     ucs_mpool_name(mp));
+            obj = elem + 1;
+            ucs_string_buffer_reset(&strb);
+            if (data->ops->obj_str != NULL) {
+                ucs_string_buffer_appendf(&strb, " {");
+                data->ops->obj_str(mp, obj, &strb);
+                ucs_string_buffer_appendf(&strb, "}");
+            }
+            ucs_warn("object %p%s was not returned to mpool %s", obj,
+                     ucs_string_buffer_cstr(&strb), ucs_mpool_name(mp));
         }
     }
 }
@@ -122,23 +132,23 @@ void ucs_mpool_cleanup(ucs_mpool_t *mp, int leak_check)
         elem->mpool = NULL;
     }
 
+    /* Check and log leaks before valgrind-destroying the memory pool */
+    if (leak_check) {
+        for (chunk = data->chunks; chunk != NULL; chunk = chunk->next) {
+            ucs_mpool_chunk_leak_check(mp, chunk);
+        }
+    }
+
     /* Must be done before chunks are released and other threads could allocated
      * the same memory address
      */
     VALGRIND_DESTROY_MEMPOOL(mp);
 
-    /*
-     * Go over all elements in the chunks and make sure they were on the freelist.
-     * Then, release the chunk.
-     */
+    /* Release the chunks */
     next_chunk = data->chunks;
     while (next_chunk != NULL) {
         chunk      = next_chunk;
         next_chunk = chunk->next;
-
-        if (leak_check) {
-            ucs_mpool_chunk_leak_check(mp, chunk);
-        }
         data->ops->chunk_release(mp, chunk);
     }
 

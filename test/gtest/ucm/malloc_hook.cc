@@ -1224,7 +1224,8 @@ protected:
 
             if ((event_type == UCM_EVENT_MEM_TYPE_ALLOC) &&
                 (m_events[i].second.mem_type.address == address) &&
-                (m_events[i].second.mem_type.mem_type == mem_type()) &&
+                ((m_events[i].second.mem_type.mem_type == mem_type()) ||
+                 (m_events[i].second.mem_type.mem_type == UCS_MEMORY_TYPE_UNKNOWN)) &&
                 (m_events[i].second.mem_type.size == size)) {
                 return true;
             }
@@ -1276,7 +1277,7 @@ UCS_TEST_SKIP_COND_P(memtype_hooks, alloc_free,
     EXPECT_TRUE(is_event_fired(UCM_EVENT_MEM_TYPE_FREE, ptr, size));
 }
 
-INSTANTIATE_TEST_CASE_P(mem_types, memtype_hooks,
+INSTANTIATE_TEST_SUITE_P(mem_types, memtype_hooks,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
 class malloc_hook_dlopen : public malloc_hook {
@@ -1320,7 +1321,7 @@ protected:
             }
         }
 
-        operator bool()
+        operator bool() const
         {
             return m_lib != NULL;
         }

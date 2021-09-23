@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -13,15 +14,15 @@
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
+#include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto_single.h>
 
 
-static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
+static size_t ucp_amo_sw_pack(void *dest, ucp_request_t *req, int fetch,
+                              size_t size)
 {
-    ucp_request_t *req            = arg;
     ucp_atomic_req_hdr_t *atomich = dest;
     ucp_ep_t *ep                  = req->send.ep;
-    size_t size                   = req->send.length;
     size_t length;
 
     atomich->address    = req->send.amo.remote_addr;
@@ -45,12 +46,16 @@ static size_t ucp_amo_sw_pack(void *dest, void *arg, uint8_t fetch)
 
 static size_t ucp_amo_sw_post_pack_cb(void *dest, void *arg)
 {
-    return ucp_amo_sw_pack(dest, arg, 0);
+    ucp_request_t *req = arg;
+
+    return ucp_amo_sw_pack(dest, req, 0, req->send.length);
 }
 
 static size_t ucp_amo_sw_fetch_pack_cb(void *dest, void *arg)
 {
-    return ucp_amo_sw_pack(dest, arg, 1);
+    ucp_request_t *req = arg;
+
+    return ucp_amo_sw_pack(dest, req, 1, req->send.length);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -77,6 +82,7 @@ ucp_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
              * - with error if a fetch/post operation
              * - either with error or with success if a post operation */
             ucp_request_complete_send(req, status);
+            return UCS_OK;
         }
     }
 
@@ -327,6 +333,20 @@ UCP_DEFINE_AM(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REP, ucp_atomic_rep_handler,
 
 UCP_DEFINE_AM_PROXY(UCP_AM_ID_ATOMIC_REQ);
 
+static size_t ucp_proto_amo_sw_post_pack_cb(void *dest, void *arg)
+{
+    ucp_request_t *req = arg;
+
+    return ucp_amo_sw_pack(dest, req, 0, req->send.state.dt_iter.length);
+}
+
+static size_t ucp_proto_amo_sw_fetch_pack_cb(void *dest, void *arg)
+{
+    ucp_request_t *req = arg;
+
+    return ucp_amo_sw_pack(dest, req, 1, req->send.state.dt_iter.length);
+}
+
 static ucs_status_t
 ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
                           int fetch)
@@ -334,6 +354,7 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
     ucp_request_t *req                   = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
+    ucp_datatype_iter_t next_iter;
     ucs_status_t status;
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
@@ -341,6 +362,10 @@ ucp_proto_amo_sw_progress(uct_pending_req_t *self, uct_pack_callback_t pack_cb,
         if (status != UCS_OK) {
             return status;
         }
+
+        ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
+                                    req->send.ep->worker, SIZE_MAX,
+                                    &next_iter, &req->send.amo.value);
 
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
@@ -361,6 +386,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = flags,
@@ -373,7 +399,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
 
 static ucs_status_t ucp_proto_amo_sw_progress_post(uct_pending_req_t *self)
 {
-    return ucp_proto_amo_sw_progress(self, ucp_amo_sw_post_pack_cb, 0);
+    return ucp_proto_amo_sw_progress(self, ucp_proto_amo_sw_post_pack_cb, 0);
 }
 
 static ucs_status_t
@@ -395,7 +421,7 @@ UCP_PROTO_REGISTER(&ucp_get_amo_post_proto);
 
 static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
 {
-    return ucp_proto_amo_sw_progress(self, ucp_amo_sw_fetch_pack_cb, 1);
+    return ucp_proto_amo_sw_progress(self, ucp_proto_amo_sw_fetch_pack_cb, 1);
 }
 
 static ucs_status_t
