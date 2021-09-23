@@ -24,6 +24,7 @@ jobs:
           cd pkg-build
           make -s -j `nproc`
           make install
+          cp ../buildlib/pr/perftest_msg_pow2 $(Build.Repository.LocalPath)/install
           tar czf $(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz -C $(Build.Repository.LocalPath)/install .
         displayName: Build package
       - task: PublishBuildArtifacts@1
@@ -101,10 +102,10 @@ jobs:
           . /etc/profile.d/modules.sh
           module load $(cuda_version)
           port=$((10000 + $(Build.BuildId)))
-          ./bin/ucx_perftest -t tag_bw -p $port &
+          ./bin/ucx_perftest -b perftest_msg_pow2 -m cuda -t tag_bw -p $port -b buildlib/pr/perftest_msg_pow2 &
           server_pid=$!
           sleep 5
-          ./bin/ucx_perftest -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
+          ./bin/ucx_perftest -b perftest_msg_pow2 -m cuda -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
           wait $server_pid
           grep "Final:" perf.txt
         displayName: Test ucx_perftest
