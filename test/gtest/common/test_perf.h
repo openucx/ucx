@@ -118,8 +118,7 @@ private:
 
     test_result run_single_threaded(const test_spec &test, unsigned flags,
                                     const std::string &tl_name,
-                                    const std::string &dev_name,
-                                    const std::vector<int> &cpus);
+                                    const std::string &dev_name);
 };
 
 #endif

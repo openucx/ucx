@@ -285,11 +285,10 @@ test_perf::test_result test_perf::run_multi_threaded(const test_spec &test, unsi
     return result;
 }
 
-test_perf::test_result test_perf::run_single_threaded(const test_spec &test,
-                                                      unsigned flags,
-                                                      const std::string &tl_name,
-                                                      const std::string &dev_name,
-                                                      const std::vector<int> &cpus)
+test_perf::test_result
+test_perf::run_single_threaded(const test_spec &test, unsigned flags,
+                               const std::string &tl_name,
+                               const std::string &dev_name)
 {
     rte_comm c0to0;
     ucx_perf_params_t params;
@@ -297,32 +296,27 @@ test_perf::test_result test_perf::run_single_threaded(const test_spec &test,
     test_params_init(test, params, flags, tl_name, dev_name);
 
     rte rte0(0, 1, 0, c0to0, c0to0);
-    rte *rte = &rte0;
-
-    thread_arg args;
-
-    args.params           = params;
-    args.cpu              = cpus[0];
-    args.params.rte_group = rte;
+    params.rte_group = &rte0;
 
     test_result result;
-    void *ptr = test_func(&args);
-
-    result = *(reinterpret_cast<test_result*>(ptr));
-    delete reinterpret_cast<test_result*>(ptr);
-
+    result.status = ucx_perf_run(&params, &result.result);
     return result;
 }
 
 double test_perf::run_test(const test_spec& test, unsigned flags, bool check_perf,
                            const std::string &tl_name, const std::string &dev_name)
 {
-    std::vector<int> cpus = get_affinity();
-    if ((cpus.size() < 2) && !(flags & UCX_PERF_TEST_FLAG_LOOPBACK)) {
-        UCS_TEST_MESSAGE << "Need at least 2 CPUs (got: " << cpus.size() << " )";
-        throw ucs::test_abort_exception();
+    std::vector<int> cpus;
+
+    if (!(flags & UCX_PERF_TEST_FLAG_LOOPBACK)) {
+        cpus = get_affinity();
+        if (cpus.size() < 2) {
+            UCS_TEST_MESSAGE << "Need at least 2 CPUs (got: " << cpus.size()
+                             << " )";
+            throw ucs::test_abort_exception();
+        }
+        cpus.resize(2);
     }
-    cpus.resize(2);
 
     check_perf = check_perf &&
                  (ucs::test_time_multiplier() == 1) &&
@@ -331,7 +325,7 @@ double test_perf::run_test(const test_spec& test, unsigned flags, bool check_per
         test_result result;
 
         if (flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
-            result = run_single_threaded(test, flags, tl_name, dev_name, cpus);
+            result = run_single_threaded(test, flags, tl_name, dev_name);
         } else {
             result = run_multi_threaded(test, flags, tl_name, dev_name, cpus);
         }
