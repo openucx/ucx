@@ -24,6 +24,8 @@ RUN yum install -y \
     python36 \
     lsof \
     ethtool \
+    environment-modules \
+    valgrind-devel \
     && yum clean all
 
 # MOFED
@@ -51,3 +53,6 @@ ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LD_LIBRARY_PA
 ENV LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LIBRARY_PATH}
 ENV PATH /usr/local/cuda/compat:${PATH}
 
+RUN cd /usr/lib64 && \
+    ln -s libudev.so.1 libudev.so && \
+    ln -s libz.so.1 libz.so
