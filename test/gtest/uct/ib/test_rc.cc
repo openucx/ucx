@@ -160,7 +160,11 @@ public:
         modify_config("RC_MAX_GET_ZCOPY",
                       ucs::to_string(m_max_get_zcopy).c_str());
 
-        modify_config("RC_TX_QUEUE_LEN", "32");
+        if (!RUNNING_ON_VALGRIND) {
+            /* Valgrind already has special small value for this */
+            modify_config("RC_TX_QUEUE_LEN", "32");
+        }
+
         modify_config("RC_TM_ENABLE", "y", SETENV_IF_NOT_EXIST);
 
         m_comp.func   = NULL;
