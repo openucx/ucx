@@ -1071,6 +1071,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
 
     uct_rc_ep_init_send_op(send_op, 0, NULL,
                            uct_dc_mlx5_ep_fc_pure_grant_send_completion);
+    uct_rc_iface_send_op_set_name(send_op, "dc_mlx5_iface_fc_grant");
 
     send_op->buffer = fc_req;
     status          = uct_dc_mlx5_ep_fc_pure_grant_send(ep, send_op);

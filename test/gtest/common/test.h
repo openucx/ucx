@@ -48,7 +48,7 @@ public:
 
     void get_config(const std::string& name, std::string& value,
                             size_t max);
-    virtual void set_config(const std::string& config_str);
+    virtual void set_config(const std::string& config_str = "");
     virtual void modify_config(const std::string& name, const std::string& value,
                                modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
     virtual void push_config();
@@ -265,6 +265,7 @@ class GTEST_TEST_CLASS_NAME_(test_case_name, test_name) : public test_case_name 
         #test_case_name, \
         (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
         "", "", \
+        ::testing::internal::CodeLocation(__FILE__, __LINE__), \
         (parent_id), \
 		test_case_name::SetUpTestCase, \
 		test_case_name::TearDownTestCase, \
@@ -326,7 +327,7 @@ void GTEST_TEST_CLASS_NAME_(test_case_name, test_name)::test_body()
     static int AddToRegistry() { \
         ::testing::UnitTest::GetInstance()->parameterized_test_registry(). \
             GetTestCasePatternHolder<test_case_name>( \
-                #test_case_name, __FILE__, __LINE__)->AddTestPattern( \
+                #test_case_name, ::testing::internal::CodeLocation(__FILE__, __LINE__))->AddTestPattern( \
                     #test_case_name, \
                     (num_threads == 1) ? #test_name : #test_name "/mt_" #num_threads, \
                     new ::testing::internal::TestMetaFactory< \

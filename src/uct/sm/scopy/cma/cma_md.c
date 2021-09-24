@@ -106,8 +106,8 @@ static int uct_cma_test_writev()
     delivered = process_vm_writev(getpid(), &local_iov, 1, &remote_iov, 1, 0);
     if (delivered != sizeof(test_dst)) {
         ucs_debug("CMA is disabled:"
-                  "process_vm_writev delivered %zu instead of %zu",
-                   delivered, sizeof(test_dst));
+                  "process_vm_writev delivered %zd instead of %zu: %m",
+                  delivered, sizeof(test_dst));
         return 0;
     }
 

@@ -172,4 +172,17 @@ void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
                                   size_t min_length, size_t max_length,
                                   ucs_string_buffer_t *strb);
 
+
+/* Get the protocol selection hash for the endpoint or remote key config */
+ucp_proto_select_t *
+ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
+                     ucp_worker_cfg_index_t rkey_cfg_index,
+                     ucp_worker_cfg_index_t *new_rkey_cfg_index);
+
+
+/* Print protocol configuration info to a string buffer */
+void ucp_proto_select_config_str(ucp_worker_h worker,
+                                 const ucp_proto_config_t *proto_config,
+                                 size_t msg_length, ucs_string_buffer_t *strb);
+
 #endif

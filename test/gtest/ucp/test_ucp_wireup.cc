@@ -659,15 +659,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
     recv_b(sender().worker(), sender().ep(), 8, 1);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, send_disconnect_reply2,
-                     /* skip the test for TCP, because it fails from time to
-                      * time: the sender re-uses a socket fd from the already
-                      * accepted connection from the receiver, but then the
-                      * socket fd is closed, since the receiver closed the
-                      * connection and the underlying TCP EP isn't able to
-                      * receive the data on the failed socket.
-                      * TODO: fix the bug on TCP level */
-                     has_transport("tcp")) {
+UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     sender().connect(&receiver(), get_ep_params());
 
     send_b(sender().ep(), 8, 1);
@@ -1367,10 +1359,68 @@ UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback_amo,
                               shm_rc, "shm,rc_x,rc_v")
 
+
 /* NOTE: this fixture is NOT inherited from test_ucp_wireup, because we want to
  * create our own entities.
  */
 class test_ucp_wireup_asymmetric : public ucp_test {
+protected:
+    void tag_sendrecv(size_t size) {
+        std::string send_data(size, 's');
+        std::string recv_data(size, 'x');
+
+        ucs_status_ptr_t sreq = ucp_tag_send_nb(
+                        sender().ep(0), &send_data[0], size,
+                        ucp_dt_make_contig(1), 1,
+                        (ucp_send_callback_t)ucs_empty_function);
+        ucs_status_ptr_t rreq = ucp_tag_recv_nb(
+                        receiver().worker(), &recv_data[0], size,
+                        ucp_dt_make_contig(1), 1, 1,
+                        (ucp_tag_recv_callback_t)ucs_empty_function);
+        request_wait(sreq);
+        request_wait(rreq);
+
+        EXPECT_EQ(send_data, recv_data);
+    }
+
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
+
+/*
+ * Force asymmetric configuration by different PPN settings
+ */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, different_ppn_connect,
+                     is_self())
+{
+    {
+        modify_config("NUM_PPN", ucs::to_string(1).c_str());
+        create_entity();
+    }
+
+    {
+        modify_config("NUM_PPN", ucs::to_string(128).c_str());
+        create_entity();
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+    receiver().connect(&sender(), get_ep_params());
+
+    ucp_ep_print_info(sender().ep(), stdout);
+    ucp_ep_print_info(receiver().ep(), stdout);
+
+    tag_sendrecv(1);
+    tag_sendrecv(100000);
+    tag_sendrecv(1000000);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_asymmetric)
+
+
+class test_ucp_wireup_asymmetric_ib : public test_ucp_wireup_asymmetric {
 protected:
     virtual void init() {
         static const char *ibdev_sysfs_dir = "/sys/class/infiniband";
@@ -1396,24 +1446,6 @@ protected:
         closedir(dir);
     }
 
-    void tag_sendrecv(size_t size) {
-        std::string send_data(size, 's');
-        std::string recv_data(size, 'x');
-
-        ucs_status_ptr_t sreq = ucp_tag_send_nb(
-                        sender().ep(0), &send_data[0], size,
-                        ucp_dt_make_contig(1), 1,
-                        (ucp_send_callback_t)ucs_empty_function);
-        ucs_status_ptr_t rreq = ucp_tag_recv_nb(
-                        receiver().worker(), &recv_data[0], size,
-                        ucp_dt_make_contig(1), 1, 1,
-                        (ucp_tag_recv_callback_t)ucs_empty_function);
-        request_wait(sreq);
-        request_wait(rreq);
-
-        EXPECT_EQ(send_data, recv_data);
-    }
-
     /* Generate a pci_bw configuration string for IB devices, which assigns
      * the speed ai+b for device i.
      */
@@ -1430,18 +1462,14 @@ protected:
     }
 
     std::vector<std::string> m_ib_devices;
-
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
-    }
 };
 
 /*
  * Force asymmetric configuration by different PCI_BW settings
  */
-UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
-
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric_ib, different_pci_bw_connect,
+                     is_self())
+{
     /* Enable cross-dev connection */
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv path_mtu_env("UCX_RC_PATH_MTU", "1024");
@@ -1473,9 +1501,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
     tag_sendrecv(1000000);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcv, "rc_v")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcx, "rc_x")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, rcv, "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, ib, "ib")
 
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:

@@ -357,6 +357,17 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_perf)
 
+class test_ucp_loopback : public test_ucp_perf {};
+
+UCS_TEST_P(test_ucp_loopback, envelope)
+{
+    test_spec test = tests[get_variant_value(VARIANT_TEST_TYPE)];
+
+    run_test(test, UCX_PERF_TEST_FLAG_LOOPBACK, true, "", "");
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_loopback)
+
 
 class test_ucp_wait_mem : public test_ucp_perf {
 public:

@@ -221,6 +221,7 @@ protected:
     virtual void cleanup();
     virtual bool has_transport(const std::string& tl_name) const;
     bool has_any_transport(const std::vector<std::string>& tl_names) const;
+    bool has_any_transport(const std::string *tls, size_t tl_size) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
     unsigned progress(int worker_index = 0) const;
@@ -237,6 +238,8 @@ protected:
     void request_release(void *req);
     int max_connections();
     void set_tl_small_timeouts();
+
+    static bool check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type);
 
     // Add test variant without values, with given context params
     static ucp_test_variant&
@@ -373,7 +376,7 @@ std::vector<ucp_test_param> enum_test_params(const std::string& tls)
  * @param _tls         Transport names.
  */
 #define UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, _name, _tls) \
-    INSTANTIATE_TEST_CASE_P(_name,  _test_case, \
+    INSTANTIATE_TEST_SUITE_P(_name,  _test_case, \
                             testing::ValuesIn(enum_test_params<_test_case>(_tls)));
 
 

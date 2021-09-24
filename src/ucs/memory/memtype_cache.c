@@ -72,7 +72,6 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
 {
     ucs_memtype_cache_region_t *region;
     ucs_status_t status;
-    char dev_name[64];
     int ret;
 
     /* Allocate structure for new region */
@@ -105,8 +104,7 @@ static void ucs_memtype_cache_insert(ucs_memtype_cache_t *memtype_cache,
               " base_addr %p alloc_length %ld",
               UCS_PGT_REGION_ARG(&region->super),
               ucs_memory_type_names[mem_info->type],
-              ucs_topo_sys_device_bdf_name(mem_info->sys_dev, dev_name,
-                                           sizeof(dev_name)),
+              ucs_topo_sys_device_get_name(mem_info->sys_dev),
               mem_info->base_address, mem_info->alloc_length);
 }
 
@@ -130,7 +128,6 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
     UCS_LIST_HEAD(region_list);
     ucs_pgt_addr_t start, end, search_start, search_end;
     ucs_status_t status;
-    char dev_name[64];
 
     if (!size) {
         return;
@@ -144,8 +141,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
               (action == UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE) ? "update" :
                                                                  "remove",
               start, end, ucs_memory_type_names[mem_info->type],
-              ucs_topo_sys_device_bdf_name(mem_info->sys_dev, dev_name,
-                                           sizeof(dev_name)),
+              ucs_topo_sys_device_get_name(mem_info->sys_dev),
               mem_info->base_address, mem_info->alloc_length);
 
     search_start = start;
@@ -186,8 +182,7 @@ UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                   " base_addr %p alloc_length %ld",
                   UCS_PGT_REGION_ARG(&region->super),
                   ucs_memory_type_names[region->mem_info.type],
-                  ucs_topo_sys_device_bdf_name(region->mem_info.sys_dev,
-                                               dev_name, sizeof(dev_name)),
+                  ucs_topo_sys_device_get_name(region->mem_info.sys_dev),
                   mem_info->base_address, mem_info->alloc_length);
     }
 

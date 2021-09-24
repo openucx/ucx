@@ -895,11 +895,11 @@ ucp_wireup_connect_lane_to_iface(ucp_ep_h ep, ucp_lane_index_t lane,
     ucs_status_t status;
 
     ucs_assert(wiface->attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
-
-    if ((ep->uct_eps[lane] != NULL) && !ucp_wireup_ep_test(ep->uct_eps[lane])) {
-        /* Lane already exists */
-        return UCS_ERR_UNREACHABLE;
-    }
+    ucs_assertv_always((ep->uct_eps[lane] == NULL) ||
+                       ucp_wireup_ep_test(ep->uct_eps[lane]),
+                       "ep %p: lane %u (uct_ep=%p is_wireup=%d) exists",
+                       ep, lane, ep->uct_eps[lane],
+                       ucp_wireup_ep_test(ep->uct_eps[lane]));
 
     /* create an endpoint connected to the remote interface */
     ucs_trace("ep %p: connect uct_ep[%d] to addr %p", ep, lane,
@@ -1238,8 +1238,6 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
         /* previous wireup lane is not part of new configuration, so add it as
          * auxiliary endpoint inside cm lane, to be able to continue wireup
          * messages exchange */
-        ucs_assert(cm_wireup_ep != NULL);
-
         new_key->wireup_msg_lane = new_key->cm_lane;
         reuse_lane               = old_key->wireup_msg_lane;
         ucp_wireup_ep_set_aux(cm_wireup_ep,

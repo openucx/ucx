@@ -88,12 +88,15 @@ static ucs_stats_class_t ucp_worker_stats_class = {
 };
 #endif
 
+static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                 ucs_string_buffer_t *strb);
+
 ucs_mpool_ops_t ucp_am_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
     .obj_init      = ucs_empty_function,
     .obj_cleanup   = ucs_empty_function,
-    .obj_str       = NULL
+    .obj_str       = ucp_am_mpool_obj_str
 };
 
 ucs_mpool_ops_t ucp_reg_mpool_ops = {
@@ -435,14 +438,14 @@ void ucp_worker_signal_internal(ucp_worker_h worker)
     }
 }
 
-static void
+static ucs_status_t
 ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                        uct_ep_h uct_ep, ucs_status_t status)
 {
     ucp_wireup_ep_t *wireup_ep;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
-        return;
+        return UCS_OK;
     }
 
     wireup_ep = ucp_wireup_ep(ucp_ep->uct_eps[lane]);
@@ -451,14 +454,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
         !ucp_ep_is_local_connected(ucp_ep)) {
         /* Failure on NON-AUX EP or failure on AUX EP before it sent its address
          * means failure on the UCP EP */
-        ucp_ep_set_failed(ucp_ep, lane, status);
-        return;
+        return ucp_ep_set_failed(ucp_ep, lane, status);
     }
 
     if (wireup_ep->flags & UCP_WIREUP_EP_FLAG_READY) {
         /* @ref ucp_wireup_ep_progress was scheduled, wireup ep and its
          * pending requests have to be handled there */
-        return;
+        return UCS_OK;
     }
 
     /**
@@ -470,6 +472,7 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_discard_aux_ep(wireup_ep, UCT_FLUSH_FLAG_CANCEL,
                                  ucp_destroyed_ep_pending_purge, ucp_ep);
     ucp_wireup_remote_connected(ucp_ep);
+    return UCS_OK;
 }
 
 static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
@@ -545,8 +548,8 @@ ucp_worker_iface_error_handler(void *arg, uct_ep_h uct_ep, ucs_status_t status)
         }
     }
 
-    ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep, status);
-    status = UCS_OK;
+    status = ucp_worker_iface_handle_uct_ep_failure(ucp_ep, lane, uct_ep,
+                                                    status);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1183,14 +1186,16 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto err_close_iface;
     }
 
-    status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
-                                                &distance);
-    if (status == UCS_OK) {
-        wiface->attr.latency.c          += distance.latency;
-        wiface->attr.bandwidth.shared    =
-            ucs_min(wiface->attr.bandwidth.shared, distance.bandwidth);
-        wiface->attr.bandwidth.dedicated =
-            ucs_min(wiface->attr.bandwidth.dedicated, distance.bandwidth);
+    if (!context->config.ext.proto_enable) {
+        status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,
+                                                    &distance);
+        if (status == UCS_OK) {
+            wiface->attr.latency.c          += distance.latency;
+            wiface->attr.bandwidth.shared    =
+                    ucs_min(wiface->attr.bandwidth.shared, distance.bandwidth);
+            wiface->attr.bandwidth.dedicated = ucs_min(
+                    wiface->attr.bandwidth.dedicated, distance.bandwidth);
+        }
     }
 
     ucs_debug("created interface[%d]=%p using "UCT_TL_RESOURCE_DESC_FMT" on worker %p",
@@ -1426,18 +1431,17 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     ucp_context_uct_atomic_iface_flags(context, &atomic);
 
-    iface_cap_flags                      = UCT_IFACE_FLAG_ATOMIC_DEVICE;
+    iface_cap_flags = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-    dummy_iface_attr.bandwidth.dedicated = 1e12;
-    dummy_iface_attr.bandwidth.shared    = 0;
-    dummy_iface_attr.cap_flags           = UINT64_MAX;
-    dummy_iface_attr.overhead            = 0;
-    dummy_iface_attr.priority            = 0;
-    dummy_iface_attr.lat_ovh             = 0;
+    dummy_iface_attr.bandwidth = 1e12;
+    dummy_iface_attr.cap_flags = UINT64_MAX;
+    dummy_iface_attr.overhead  = 0;
+    dummy_iface_attr.priority  = 0;
+    dummy_iface_attr.lat_ovh   = 0;
 
-    best_score                           = -1;
-    best_rsc                             = NULL;
-    best_priority                        = 0;
+    best_score    = -1;
+    best_rsc      = NULL;
+    best_priority = 0;
 
     /* Select best interface for atomics device */
     for (iface_id = 0; iface_id < worker->num_ifaces; ++iface_id) {
@@ -3048,7 +3052,7 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
     req->send.discard_uct_ep.cb_id          = UCS_CALLBACKQ_ID_NULL;
-    ucp_request_set_callback(req, send.cb, discarded_cb, discarded_cb_arg);
+    ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     ucp_worker_discard_uct_ep_progress(req);
 }
@@ -3122,4 +3126,18 @@ void ucp_worker_vfs_refresh(void *obj)
         ucp_ep_vfs_init(ucp_ep_from_ext_gen(ep_ext));
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
+}
+
+static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                      ucs_string_buffer_t *strb)
+{
+    ucp_recv_desc_t *rdesc = obj;
+
+    ucs_string_buffer_appendf(strb, "flags:0x%x length:%d payload_offset:%d "
+                              "release_offset:%d", rdesc->flags, rdesc->length,
+                              rdesc->payload_offset,
+                              rdesc->release_desc_offset);
+#if ENABLE_DEBUG_DATA
+    ucs_string_buffer_appendf(strb, " name:%s", rdesc->name);
+#endif
 }

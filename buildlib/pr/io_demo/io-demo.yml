@@ -17,12 +17,42 @@ parameters:
   - name: tests
     type: object
     default:
-      tag:
+      "tag match on CX4":
         args: ""
         duration: 480
-      active:
-        args: "-q -A"
+        interface: $(roce_iface_cx4)
+        tls: "rc_x"
+        test_name: tag_cx4_rc
+      "active messages on CX4":
+        args: "-A"
         duration: 480
+        interface: $(roce_iface_cx4)
+        tls: "rc_x"
+        test_name: am_cx4_rc
+      "tag match on CX6/RC":
+        args: ""
+        duration: 480
+        interface: $(roce_iface_cx6)
+        tls: "rc_x"
+        test_name: tag_cx6_rc
+      "active messages on CX6/RC":
+        args: "-A"
+        duration: 480
+        interface: $(roce_iface_cx6)
+        tls: "rc_x"
+        test_name: am_cx6_rc
+      #"tag match on CX6/DC":
+      #  args: ""
+      #  duration: 480
+      #  interface: $(roce_iface_cx6)
+      #  tls: "dc_x"
+      #  test_name: tag_cx6_dc
+      #"active messages on CX6/DC":
+      #  args: "-A"
+      #  duration: 480
+      #  interface: $(roce_iface_cx6)
+      #  tls: "dc_x"
+      #  test_name: am_cx6_dc
 
 jobs:
   - job: io_build
@@ -30,7 +60,8 @@ jobs:
 
     pool:
       name: MLNX
-      demands: ${{ parameters.demands }}
+      demands: ucx_docker -equals yes
+    container: centos7
 
     steps:
       # address permissions issue when some files created as read-only
@@ -54,7 +85,6 @@ jobs:
           contents: |
             buildlib/az-helpers.sh
             buildlib/az-network-corrupter.sh
-            buildlib/pr/io_demo/iodemo_analyzer.py
             install/**
             test/apps/iodemo/run_io_demo.sh
           targetFolder: '$(Build.ArtifactStagingDirectory)'
@@ -65,6 +95,8 @@ jobs:
 
   - job: test
     dependsOn: io_build
+    workspace:
+      clean: all
 
     pool:
       name: MLNX
@@ -74,9 +106,11 @@ jobs:
       matrix:
         ${{ each test in parameters.tests }}:
           ${{ test.Key }}:
-            test_name: ${{ test.Key }}
+            test_name: ${{ test.Value.test_name }}
             test_args: ${{ test.Value.args }}
             test_time: ${{ test.Value.duration }}
+            test_intefrafe: ${{ test.Value.interface }}
+            test_ucx_tls: ${{ test.Value.tls }}
       maxParallel: 1
 
     variables:
@@ -87,10 +121,10 @@ jobs:
       downtime: ${{ parameters.downtime }}
       uptime: ${{ parameters.uptime }}
 
-
-    displayName: "io_demo: "
+    displayName: "Test: "
     steps:
       - checkout: none
+        clean: true
       - task: DownloadBuildArtifacts@0
         displayName: 'Download Build Artifacts'
         inputs:
@@ -102,3 +136,5 @@ jobs:
           name: $(test_name)
           iodemo_args: $(test_args)
           duration: $(test_time)
+          roce_iface: $(test_intefrafe)
+          iodemo_tls: $(test_ucx_tls)

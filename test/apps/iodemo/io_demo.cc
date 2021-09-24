@@ -535,10 +535,11 @@ protected:
             _data_size(0lu), _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool)
         {
             _iov.reserve(size);
+            _extra_buf = NULL;
         }
 
         size_t size() const {
-            return _iov.size();
+            return _iov.size() + !!_extra_buf;
         }
 
         size_t data_size() const {
@@ -567,6 +568,14 @@ protected:
             }
         }
 
+        void init(size_t data_size, void *ext_buf)
+        {
+            assert(ext_buf != NULL);
+
+            _data_size = data_size;
+            _extra_buf = ext_buf;
+        }
+
         inline Buffer &operator[](size_t i) const
         {
             return *_iov[i];
@@ -578,11 +587,12 @@ protected:
                 _iov.pop_back();
             }
 
+            _extra_buf = NULL;
             _pool.put(this);
         }
 
         inline size_t validate(unsigned seed) const {
-            assert(!_iov.empty());
+            assert(!_iov.empty() || _extra_buf);
 
             for (size_t iov_err_pos = 0, i = 0; i < _iov.size(); ++i) {
                 size_t buf_err_pos = IoDemoRandom::validate(seed,
@@ -593,6 +603,15 @@ protected:
                 if (buf_err_pos < _iov[i]->size()) {
                     return iov_err_pos;
                 }
+            }
+
+            if (_extra_buf) {
+                size_t buf_err_pos = IoDemoRandom::validate(seed,
+                                                            _extra_buf,
+                                                            _data_size,
+                                                            _memory_type);
+                if (buf_err_pos < _data_size)
+                    return buf_err_pos;
             }
 
             return _npos;
@@ -622,6 +641,7 @@ protected:
         ucs_memory_type_t      _memory_type;
         std::vector<Buffer*>   _iov;
         MemoryPool<BufferIov>& _pool;
+        void                   *_extra_buf;
     };
 
     /* Asynchronous IO message */
@@ -810,17 +830,21 @@ protected:
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
-    static void validate(const BufferIov& iov, unsigned seed) {
+    static void validate(const UcxConnection *conn, const BufferIov& iov,
+                         unsigned seed) {
         assert(iov.size() != 0);
 
         size_t err_pos = iov.validate(seed);
         if (err_pos != iov.npos()) {
-            LOG << "ERROR: iov data corruption at " << err_pos << " position";
+            LOG << "ERROR: iov data corruption at " << err_pos
+                << " position detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
     }
 
-    static void validate(const iomsg_t *msg, size_t iomsg_size) {
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+                         size_t iomsg_size) {
         unsigned seed   = msg->sn;
         const void *buf = msg + 1;
         size_t buf_size = iomsg_size - sizeof(*msg);
@@ -828,18 +852,23 @@ protected:
         size_t err_pos = IoDemoRandom::validate(seed, buf, buf_size,
                                                 UCS_MEMORY_TYPE_HOST);
         if (err_pos < buf_size) {
-            LOG << "ERROR: io msg data corruption at " << err_pos << " position";
+            LOG << "ERROR: io msg data corruption at " << err_pos
+                << " position detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
     }
 
-    static void validate(const iomsg_t *msg, uint32_t sn, size_t iomsg_size) {
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+                         uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            LOG << "ERROR: io msg sn mismatch " << sn << " != " << msg->sn;
+            LOG << "ERROR: io msg sn mismatch (" << sn << " != " << msg->sn
+                << ") detected on " << conn->get_log_prefix()
+                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
             abort();
         }
 
-        validate(msg, iomsg_size);
+        validate(conn, msg, iomsg_size);
     }
 
 public:
@@ -912,12 +941,12 @@ public:
             }
 
             if (_status == UCS_OK) {
+                if (_server->opts().validate) {
+                    validate(_conn, *_iov, _sn);
+                }
+                
                 if (_conn->ucx_status() == UCS_OK) {
                     _server->send_io_write_response(_conn, *_iov, _sn);
-                }
-
-                if (_server->opts().validate) {
-                    validate(*_iov, _sn);
                 }
             }
 
@@ -1127,13 +1156,21 @@ public:
         IoWriteResponseCallback *w = _callback_pool.get();
         ConnectionStat &conn_stat  = _conn_stat_map.find(conn)->second;
 
-        iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+        if (!ucx_am_is_rndv(data_desc)) {
+            iov->init(msg->data_size, ucx_am_get_data(data_desc));
+        } else {
+            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+        }
         w->init(this, conn, msg->sn, iov, &conn_stat.completions<IO_WRITE>());
         assert(iov->size() == 1);
 
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
-        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(),
-                           (*iov)[0].size(), data_desc, w);
+        if (!ucx_am_is_rndv(data_desc)) {
+            conn->recv_am_data(NULL, NULL, 0, data_desc, w);
+        } else {
+            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(),
+                               (*iov)[0].size(), data_desc, w);
+        }
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
@@ -1162,7 +1199,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            validate(conn, msg, length);
         }
 
         if (msg->op == IO_READ) {
@@ -1187,7 +1224,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, length);
+            validate(conn, msg, length);
         }
 
         if (msg->op == IO_READ) {
@@ -1373,17 +1410,18 @@ public:
             _client->handle_operation_completion(_server_index, IO_READ,
                                                  _iov->data_size());
 
-            if (_validate && (_status == UCS_OK)) {
-                validate(*_iov, _sn);
-
+            if ((_status == UCS_OK) && _validate) {
+                const server_info_t &server_info =
+                        _client->_server_info[_server_index];
+                validate(server_info.conn, *_iov, _sn);
                 if (_meta_comp_counter != 0) {
-                    // With tag API, we also wait for READ_COMP arrival, so need
-                    // to validate it. With AM API, READ_COMP arrives as AM
-                    // header together with data descriptor, we validate it in
-                    // place to avoid unneeded memory copy to this
+                    // With tag API, we also wait for READ_COMP arrival, so
+                    // need to validate it. With AM API, READ_COMP arrives as
+                    // AM header together with data descriptor, we validate it
+                    // in place to avoid unneeded memory copy to this
                     // IoReadResponseCallback _buffer.
                     iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                    validate(msg, _sn, _buffer_size);
+                    validate(server_info.conn, msg, _sn, _buffer_size);
                 }
             }
 
@@ -1441,7 +1479,7 @@ public:
         server_info_t& server_info = _server_info[server_index];
 
         ASSERTV(get_num_uncompleted(server_info) < opts().conn_window_size)
-                << "num_ucompleted=" << get_num_uncompleted(server_info)
+                << "num_uncompleted=" << get_num_uncompleted(server_info)
                 << " conn_window_size=" << opts().conn_window_size;
 
         ++server_info.num_sent[op];
@@ -1684,7 +1722,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            validate(msg, opts().iomsg_size);
+            validate(conn, msg, opts().iomsg_size);
         }
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
@@ -1694,15 +1732,23 @@ public:
                                         msg->data_size);
         } else if (msg->op == IO_READ_COMP) {
             BufferIov *iov = _data_buffers_pool.get();
-            iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
 
+            if (!ucx_am_is_rndv(data_desc)) {
+                iov->init(msg->data_size, ucx_am_get_data(data_desc));
+            } else {
+                iov->init(msg->data_size, _data_chunks_pool, msg->sn, opts().validate);
+            }
             IoReadResponseCallback *r = _read_callback_pool.get();
             r->init(this, server_index, msg->sn, opts().validate, iov, 0);
 
             assert(iov->size() == 1);
 
-            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(),
-                               msg->data_size, data_desc, r);
+            if (!ucx_am_is_rndv(data_desc)) {
+                conn->recv_am_data(NULL, NULL, 0, data_desc, r);
+            } else {
+                conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].memh(),
+                                   msg->data_size, data_desc, r);
+            }
         }
     }
 

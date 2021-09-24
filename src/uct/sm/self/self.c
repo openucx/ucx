@@ -392,7 +392,7 @@ static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.max_alloc        = 0;
     attr->cap.max_reg          = ULONG_MAX;
-    attr->rkey_packed_size     = 0; /* uct_md_query adds UCT_COMPONENT_NAME_MAX to this */
+    attr->rkey_packed_size     = 0;
     attr->reg_cost             = ucs_linear_func_make(0, 0);
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;

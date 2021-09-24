@@ -56,16 +56,6 @@ struct ucx_request {
     const char                   *what;
 };
 
-// Holds details of arrived AM message
-struct UcxAmDesc {
-    UcxAmDesc(void *data, const ucp_am_recv_param_t *param) :
-        _data(data), _param(param) {
-    }
-
-    void                         *_data;
-    const ucp_am_recv_param_t    *_param;
-};
-
 UcxCallback::~UcxCallback()
 {
 }
@@ -723,6 +713,11 @@ ucs_status_t UcxContext::am_recv_callback(void *arg, const void *header,
         self->dispatch_am_message(conn, header, header_length, data_desc);
     }
 
+    /* In the current example, dispatch_am_message is always processing
+     * the received data internally and never needs it later.
+     * If data is going to be used outside this callback, UCS_INPROGRESS
+     * should be returned. Call ucp_am_data_release() when data is not needed.
+     */
     return UCS_OK;
 }
 
@@ -959,7 +954,6 @@ bool UcxConnection::recv_am_data(void *buffer, ucp_mem_h memh, size_t length,
     assert(_ep != NULL);
 
     if (!(data_desc._param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)) {
-        memcpy(buffer, data_desc._data, length);
         (*callback)(UCS_OK);
         return true;
     }
@@ -1010,6 +1004,9 @@ void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
 {
     ucx_request *r      = reinterpret_cast<ucx_request*>(request);
     UcxConnection *conn = r->conn;
+
+    assert(!r->completed);
+    r->status = status;
 
     if (!conn->is_established()) {
         assert(conn->_establish_cb == r->callback);

@@ -26,7 +26,7 @@ static ucs_status_t ucp_proto_put_offload_short_progress(uct_pending_req_t *self
     ucs_status_t status;
     uct_rkey_t tl_rkey;
 
-    tl_rkey = ucp_rma_request_get_tl_rkey(req, spriv->super.rkey_index);
+    tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey, spriv->super.rkey_index);
     status  = uct_ep_put_short(ep->uct_eps[spriv->super.lane],
                                req->send.state.dt_iter.type.contig.buffer,
                                req->send.state.dt_iter.length,
@@ -104,7 +104,8 @@ ucp_proto_put_offload_bcopy_send_func(ucp_request_t *req,
     ssize_t packed_size;
     uct_rkey_t tl_rkey;
 
-    tl_rkey     = ucp_rma_request_get_tl_rkey(req, lpriv->super.rkey_index);
+    tl_rkey     = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+                                       lpriv->super.rkey_index);
     packed_size = uct_ep_put_bcopy(ep->uct_eps[lpriv->super.lane],
                                    ucp_proto_put_offload_bcopy_pack, &pack_ctx,
                                    req->send.rma.remote_addr +
@@ -179,7 +180,8 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
                                       const ucp_proto_multi_lane_priv_t *lpriv,
                                       ucp_datatype_iter_t *next_iter)
 {
-    uct_rkey_t tl_rkey = ucp_rma_request_get_tl_rkey(req, lpriv->super.rkey_index);
+    uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
+                                              lpriv->super.rkey_index);
     uct_iov_t iov;
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,

@@ -414,6 +414,19 @@ rename_files() {
 	rename "s/\\${expr}\$/${replacement}/" "${files}"
 }
 
+run_loopback_app() {
+	test_exe=$1
+	test_args="-l $2"
+
+	affinity=$(slice_affinity 0)
+
+	taskset -c $affinity ${test_exe} ${test_args} &
+	pid=$!
+
+	wait ${pid} || true
+}
+
+
 run_client_server_app() {
 	test_exe=$1
 	test_args=$2
@@ -605,7 +618,6 @@ run_ucp_client_server() {
 run_io_demo() {
 	server_rdma_addr=$(get_rdma_device_ip_addr)
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
-	server_loopback_addr="127.0.0.1"
 	mem_types_list="host "
 	config_args=""
 
@@ -628,22 +640,18 @@ run_io_demo() {
 	do
 		echo "==== Running UCP IO demo with \"${mem_type}\" memory type ===="
 
-		test_args="$@ -o write,read -d 128:4194304 -P 2 -i 10000 -w 10 -m ${mem_type}"
+		test_args="$@ -o write,read -d 128:4194304 -P 2 -i 10000 -w 10 -m ${mem_type} -q"
 		test_name=io_demo
 
-		if [ ! -x ${test_name} ]
-		then
-			$MAKEP -C test/apps/iodemo ${test_name}
-		fi
-
-		for server_ip in $server_rdma_addr $server_nonrdma_addr $server_loopback_addr
+		for server_ip in $server_rdma_addr $server_nonrdma_addr
 		do
 			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
-			for server_ip in $server_rdma_addr $server_nonrdma_addr
-			do
-				run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
-			done
 		done
+
+		if [ "${mem_type}" == "host" ]
+		then
+			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "127.0.0.1" 1 0
+		fi
 	done
 
 	make_clean
@@ -707,14 +715,11 @@ run_ucx_perftest() {
 		echo "==== Running ucx_perf kit on $ucx_dev ===="
 		if [ $with_mpi -eq 1 ]
 		then
-			# Run UCT performance test
-			$MPIRUN -np 2 $AFFINITY $ucx_perftest $uct_test_args -d $ucx_dev $opt_transports
-
 			# Run UCP performance test
 			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args
 
-			# Run UCP performance test with 2 threads
-			$MPIRUN -np 2 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args -T 2
+			# Run UCP loopback performance test
+			$MPIRUN -np 1 -x UCX_NET_DEVICES=$dev -x UCX_TLS=$tls $AFFINITY $ucx_perftest $ucp_test_args "-l"
 		else
 			export UCX_NET_DEVICES=$dev
 			export UCX_TLS=$tls
@@ -729,6 +734,9 @@ run_ucx_perftest() {
 			# Run UCP performance test with 2 threads
 			run_client_server_app "$ucx_perftest" "$ucp_test_args -T 2" "$(hostname)" 0 0
 
+			# Run UCP loopback performance test
+			run_loopback_app "$ucx_perftest" "$ucp_test_args"
+
 			unset UCX_NET_DEVICES
 			unset UCX_TLS
 		fi
@@ -738,19 +746,11 @@ run_ucx_perftest() {
 	# client/server mode, to reduce testing time
 	if [ "X$have_cuda" == "Xyes" ] && [ $with_mpi -ne 1 ]
 	then
-		tls_list="all "
 		gdr_options="n "
 		if (lsmod | grep -q "nv_peer_mem")
 		then
 			echo "GPUDirectRDMA module (nv_peer_mem) is present.."
-			tls_list+="rc,cuda_copy "
 			gdr_options+="y "
-		fi
-
-		if  [ "X$have_gdrcopy" == "Xyes" ] && (lsmod | grep -q "gdrdrv")
-		then
-			echo "GDRCopy module (gdrdrv) is present..."
-			tls_list+="rc,cuda_copy,gdr_copy "
 		fi
 
 		if [ $num_gpus -gt 1 ]; then
@@ -762,29 +762,21 @@ run_ucx_perftest() {
 
 		echo "==== Running ucx_perf with cuda memory===="
 
-		for tls in $tls_list
+		for memtype_cache in y n
 		do
-			for memtype_cache in y n
+			for gdr in $gdr_options
 			do
-				for gdr in $gdr_options
-				do
-					export UCX_TLS=$tls
-					export UCX_MEMTYPE_CACHE=$memtype_cache
-					export UCX_IB_GPU_DIRECT_RDMA=$gdr
-					run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
-					unset UCX_TLS
-					unset UCX_MEMTYPE_CACHE
-					unset UCX_IB_GPU_DIRECT_RDMA
-				done
+				export UCX_MEMTYPE_CACHE=$memtype_cache
+				export UCX_IB_GPU_DIRECT_RDMA=$gdr
+				run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+				unset UCX_MEMTYPE_CACHE
+				unset UCX_IB_GPU_DIRECT_RDMA
 			done
 		done
 
 		export UCX_TLS=self,shm,cma,cuda_copy
 		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 		unset UCX_TLS
-
-		# Run without special UCX_TLS
-		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 
 		# Specifically test cuda_ipc for large message sizes
 		cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_cuda_ucp
@@ -795,8 +787,8 @@ run_ucx_perftest() {
 			export UCX_TLS=self,sm,cuda_copy,cuda_ipc
 			export UCX_CUDA_IPC_CACHE=$ipc_cache
 			run_client_server_app "$ucx_perftest" "$ucp_test_args_large" "$(hostname)" 0 0
-			unset UCX_TLS
 			unset UCX_CUDA_IPC_CACHE
+			unset UCX_TLS
 		done
 
 		unset CUDA_VISIBLE_DEVICES
@@ -941,6 +933,14 @@ test_ucp_dlopen() {
 	else
 		echo "==== Not running UCP library loading test ===="
 	fi
+
+	# Test module allow-list
+	UCX_MODULES=^ib,rdmacm ./src/tools/info/ucx_info -d |& tee ucx_info_noib.log
+	if grep -in "component:\s*ib$" ucx_info_noib.log
+	then
+		echo "IB module was loaded even though it was disabled"
+		exit 1
+	fi
 }
 
 test_init_mt() {
@@ -949,7 +949,7 @@ test_init_mt() {
 	max_threads=$(df /dev/shm | awk '/shm/ {printf "%d", $4 / 5000}')
 	num_threads=$(($max_threads < $(nproc) ? $max_threads : $(nproc)))
 	$MAKEP
-	for ((i=0;i<50;++i))
+	for ((i=0;i<10;++i))
 	do
 		OMP_NUM_THREADS=$num_threads $AFFINITY timeout 5m ./test/apps/test_init_mt
 	done
@@ -1259,6 +1259,12 @@ run_gtest_release() {
 	unset GTEST_REPORT_DIR
 }
 
+run_ucx_info() {
+	echo "==== Running ucx_info ===="
+
+	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M -T -M
+}
+
 run_ucx_tl_check() {
 
 	echo "1..1" > ucx_tl_check.tap
@@ -1289,6 +1295,7 @@ run_tests() {
 	export UCX_ERROR_MAIL_FOOTER=$JOB_URL/$BUILD_NUMBER/console
 	export UCX_TCP_PORT_RANGE="$((33000 + EXECUTOR_NUMBER * 100))"-"$((34000 + EXECUTOR_NUMBER * 100))"
 	export UCX_TCP_CM_REUSEADDR=y
+	export UCX_IB_ROCE_LOCAL_SUBNET=y
 
 	# load cuda env only if GPU available for remaining tests
 	try_load_cuda_env
@@ -1305,12 +1312,13 @@ run_tests() {
 	$MAKEP
 	$MAKEP install
 
+	do_distributed_task 1 4 run_ucx_info
 	do_distributed_task 2 4 run_ucx_tl_check
 	do_distributed_task 1 4 run_ucp_hello
 	do_distributed_task 2 4 run_uct_hello
 	do_distributed_task 1 4 run_ucp_client_server
 	do_distributed_task 2 4 run_ucx_perftest
-	do_distributed_task 1 4 run_io_demo
+	do_distributed_task 2 4 run_io_demo
 	do_distributed_task 3 4 test_profiling
 	do_distributed_task 1 4 test_ucs_dlopen
 	do_distributed_task 3 4 test_ucs_load

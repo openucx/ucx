@@ -15,11 +15,17 @@
 
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_request_complete_success(ucp_request_t *req)
+{
+    ucp_request_complete_send(req, UCS_OK);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_request_bcopy_complete_success(ucp_request_t *req)
 {
     ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
-    ucp_request_complete_send(req, UCS_OK);
-    return UCS_OK;
+    return ucp_proto_request_complete_success(req);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -106,12 +112,33 @@ ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
 }
 
 /* Select protocol for the request and initialize protocol-related fields */
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_request_set_proto(ucp_worker_h worker, ucp_ep_h ep,
-                            ucp_request_t *req, ucp_proto_select_t *proto_select,
-                            ucp_worker_cfg_index_t rkey_cfg_index,
-                            const ucp_proto_select_param_t *sel_param,
-                            size_t msg_length)
+static void ucp_proto_request_set_proto(ucp_request_t *req,
+                                        const ucp_proto_config_t *proto_config,
+                                        size_t msg_length)
+{
+    req->send.proto_config = proto_config;
+    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_REQ)) {
+        ucp_proto_trace_selected(req, msg_length);
+    }
+
+    ucp_proto_request_set_stage(req, UCP_PROTO_STAGE_START);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_request_select_proto(ucp_request_t *req,
+                               const ucp_proto_select_elem_t *select_elem,
+                               size_t msg_length)
+{
+    const ucp_proto_threshold_elem_t *thresh_elem =
+            ucp_proto_thresholds_search(select_elem->thresholds, msg_length);
+    ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
+}
+
+/* Select protocol for the request and initialize protocol-related fields */
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_request_lookup_proto(
+        ucp_worker_h worker, ucp_ep_h ep, ucp_request_t *req,
+        ucp_proto_select_t *proto_select, ucp_worker_cfg_index_t rkey_cfg_index,
+        const ucp_proto_select_param_t *sel_param, size_t msg_length)
 {
     const ucp_proto_threshold_elem_t *thresh_elem;
 
@@ -149,25 +176,25 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     ucs_status_t status;
     uint8_t sg_count;
 
-    req->flags   = 0;
+    req->flags   = UCP_REQUEST_FLAG_PROTO_SEND;
     req->send.ep = ep;
 
-    ucp_datatype_iter_init(worker->context, (void*)buffer, count, datatype,
-                           contig_length, 1, &req->send.state.dt_iter,
-                           &sg_count);
+    UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init, worker->context,
+                          (void*)buffer, count, datatype, contig_length, 1,
+                          &req->send.state.dt_iter, &sg_count);
 
     ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 
-    status = ucp_proto_request_set_proto(worker, ep, req, proto_select,
-                                         rkey_cfg_index, &sel_param,
-                                         req->send.state.dt_iter.length);
+    status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
+                              proto_select, rkey_cfg_index, &sel_param,
+                              req->send.state.dt_iter.length);
     if (status != UCS_OK) {
         goto out_put_request;
     }
 
-    ucp_request_send(req);
+    UCS_PROFILE_CALL_VOID(ucp_request_send, req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         goto out_put_request;
     }

@@ -130,6 +130,8 @@ struct ucp_config {
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
+    /** Array of protocol names to use */
+    ucs_config_allow_list_t                protos;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
     /** Array of transports for partial worker address to pack */
@@ -200,6 +202,12 @@ typedef struct ucp_context {
     ucp_tl_md_t                   *tl_mds;    /* Memory domain resources */
     ucp_md_index_t                num_mds;    /* Number of memory domains */
 
+    /* Map of memory domains that have valid memory keys for host memory
+       allocated with ucp_mem_mmap_common().
+       It's initialized on first access. */
+    int                           alloc_md_map_initialized;
+    ucp_md_map_t                  alloc_md_map;
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
@@ -214,6 +222,8 @@ typedef struct ucp_context {
 
     /* Mask of memory type communication resources */
     ucp_tl_bitmap_t               mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
+
+    ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
 
     struct {
 

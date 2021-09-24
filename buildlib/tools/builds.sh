@@ -86,7 +86,7 @@ build_release_pkg() {
 	else
 		echo "==== Build RPM ===="
 		echo "$PWD"
-		${WORKSPACE}/contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"	
+		${WORKSPACE}/contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
 		if rpm -qp ${PWD}/ls ucx-[0-9]*.rpm --requires | grep cuda; then
 			azure_log_error "Release build depends on CUDA while it should not"
 			exit 1
@@ -158,7 +158,7 @@ build_debug() {
 	$MAKEP
 
 	# Show UCX info
-	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M
+	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart
 }
 
 #
@@ -355,7 +355,7 @@ do_task() {
 	amount=$1
 	shift
 	# cleanup build dir before the task
-	[ -n "${ucx_build_dir}" ] && rm -rf "${ucx_build_dir}/*"
+	[ -n "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
 
 	$@
 

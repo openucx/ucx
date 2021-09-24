@@ -62,6 +62,10 @@ void test_base::set_config(const std::string& config_str)
     modify_config_mode_t mode;
     std::string name, value;
 
+    if (config_str == "") {
+        return;
+    }
+
     if (pos == std::string::npos) {
         name  = config_str;
         value = "";

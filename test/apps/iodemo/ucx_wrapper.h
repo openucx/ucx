@@ -28,7 +28,16 @@
 /* Forward declarations */
 class UcxConnection;
 struct ucx_request;
-struct UcxAmDesc;
+
+// Holds details of arrived AM message
+struct UcxAmDesc {
+    UcxAmDesc(void *data, const ucp_am_recv_param_t *param) :
+        _data(data), _param(param) {
+    }
+
+    void                         *_data;
+    const ucp_am_recv_param_t    *_param;
+};
 
 /*
  * UCX callback for send/receive completion
@@ -150,6 +159,16 @@ protected:
     void wait_disconnected_connections();
 
     void destroy_listener();
+
+    static inline void *ucx_am_get_data(const UcxAmDesc &desc)
+    {
+        return desc._data;
+    }
+
+    static inline bool ucx_am_is_rndv(const UcxAmDesc &desc)
+    {
+        return desc._param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV;
+    }
 
 private:
     typedef enum {

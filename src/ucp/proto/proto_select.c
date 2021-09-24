@@ -398,15 +398,18 @@ ucp_proto_select_init_trace_caps(ucp_proto_id_t proto_id,
     ucs_log_indent(1);
     range_start = 0;
     for (range_index = 0; range_index < proto_caps->num_ranges; ++range_index) {
-        range_end = proto_caps->ranges[range_index].max_length;
-        perf      = proto_caps->ranges[range_index].perf;
-        ucs_trace("range[%d] %s single:" UCP_PROTO_PERF_FUNC_FMT
-                  " multi:" UCP_PROTO_PERF_FUNC_FMT,
-                  range_index,
-                  ucs_memunits_range_str(range_start, range_end, thresh_str,
-                                         sizeof(thresh_str)),
-                  UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_SINGLE]),
-                  UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_MULTI]));
+        range_start = ucs_max(range_start, proto_caps->min_length);
+        range_end   = proto_caps->ranges[range_index].max_length;
+        if (range_end > range_start) {
+            perf = proto_caps->ranges[range_index].perf;
+            ucs_trace("range[%d] %s single:" UCP_PROTO_PERF_FUNC_FMT
+                      " multi:" UCP_PROTO_PERF_FUNC_FMT,
+                      range_index,
+                      ucs_memunits_range_str(range_start, range_end, thresh_str,
+                                             sizeof(thresh_str)),
+                      UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_SINGLE]),
+                      UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_MULTI]));
+        }
         range_start = range_end + 1;
     }
     ucs_log_indent(-1);
@@ -460,10 +463,10 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     }
 
     offset = 0;
-    for (proto_id = 0; proto_id < ucp_protocols_count; ++proto_id) {
-        proto_caps            = &proto_init->caps[proto_id];
-        init_params.priv      = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
-                                                          offset);
+    ucs_for_each_bit(proto_id, worker->context->proto_bitmap) {
+        proto_caps             = &proto_init->caps[proto_id];
+        init_params.priv       = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
+                                                     offset);
         init_params.priv_size  = &priv_size;
         init_params.caps       = proto_caps;
         init_params.proto_name = ucp_proto_id_field(proto_id, name);
@@ -1030,7 +1033,7 @@ void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 ucs_string_buffer_t *strb)
 {
-    char sys_dev_name[32];
+    const char *sysdev_name;
     uint32_t op_attr_mask;
 
     op_attr_mask = ucp_proto_select_op_attr_from_flags(select_param->op_flags);
@@ -1050,9 +1053,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     }
 
     if (select_param->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        ucs_topo_sys_device_bdf_name(select_param->sys_dev, sys_dev_name,
-                                     sizeof(sys_dev_name));
-        ucs_string_buffer_appendf(strb, ", %s", sys_dev_name);
+        sysdev_name = ucs_topo_sys_device_get_name(select_param->sys_dev);
+        ucs_string_buffer_appendf(strb, ", %s", sysdev_name);
     }
 
     if (op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) {
@@ -1214,4 +1216,80 @@ void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
     } while (range_end < max_length);
 
     ucs_string_buffer_rtrim(strb, "<");
+}
+
+ucp_proto_select_t *
+ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
+                     ucp_worker_cfg_index_t rkey_cfg_index,
+                     ucp_worker_cfg_index_t *new_rkey_cfg_index)
+{
+    ucp_rkey_config_key_t rkey_config_key;
+    ucs_status_t status;
+
+    if (rkey_cfg_index == UCP_WORKER_CFG_INDEX_NULL) {
+        *new_rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
+        return &worker->ep_config[ep_cfg_index].proto_select;
+    } else {
+        rkey_config_key = worker->rkey_config[rkey_cfg_index].key;
+
+        rkey_config_key.ep_cfg_index = ep_cfg_index;
+        status = ucp_worker_rkey_config_get(worker, &rkey_config_key, NULL,
+                                            new_rkey_cfg_index);
+        if (status != UCS_OK) {
+            ucs_error("failed to switch to new rkey");
+            return NULL;
+        }
+
+        return &worker->rkey_config[*new_rkey_cfg_index].proto_select;
+    }
+}
+
+void ucp_proto_select_config_str(ucp_worker_h worker,
+                                 const ucp_proto_config_t *proto_config,
+                                 size_t msg_length, ucs_string_buffer_t *strb)
+{
+    const ucp_proto_select_elem_t *select_elem;
+    ucp_worker_cfg_index_t new_key_cfg_index;
+    const ucp_proto_select_range_t *range;
+    ucp_proto_select_t *proto_select;
+    ucp_proto_perf_type_t perf_type;
+    double send_time;
+
+    ucs_assert(worker->context->config.ext.proto_enable);
+
+    /* Print selection parameters */
+    ucp_proto_select_param_str(&proto_config->select_param, strb);
+    ucs_string_buffer_appendf(strb, ": %s ", proto_config->proto->name);
+    proto_config->proto->config_str(msg_length, msg_length, proto_config->priv,
+                                    strb);
+
+    /* Find protocol selection root */
+    proto_select = ucp_proto_select_get(worker, proto_config->ep_cfg_index,
+                                        proto_config->rkey_cfg_index,
+                                        &new_key_cfg_index);
+    if (proto_select == NULL) {
+        return;
+    }
+
+    /* Emulate protocol selection process */
+    ucs_assert(new_key_cfg_index == proto_config->rkey_cfg_index);
+    select_elem = ucp_proto_select_lookup_slow(worker, proto_select,
+                                               proto_config->ep_cfg_index,
+                                               proto_config->rkey_cfg_index,
+                                               &proto_config->select_param);
+    if (select_elem == NULL) {
+        return;
+    }
+
+    /* Find the relevant performance range */
+    range = select_elem->perf_ranges;
+    while (range->super.max_length < msg_length) {
+        ++range;
+    }
+
+    perf_type = ucp_proto_select_param_perf_type(&proto_config->select_param);
+    send_time = ucs_linear_func_apply(range->super.perf[perf_type], msg_length);
+    ucs_string_buffer_appendf(strb, "  %.2f MBs / %.2f us",
+                              (msg_length / send_time) / UCS_MBYTE,
+                              send_time * UCS_USEC_PER_SEC);
 }

@@ -8,6 +8,11 @@ package ucx
 // #include <ucp/api/ucp.h>
 // #include "goucx.h"
 import "C"
+import (
+	"net"
+	"runtime"
+	"unsafe"
+)
 
 // Tuning parameters for the UCP endpoint.
 type UcpEpParams struct {
@@ -23,11 +28,13 @@ type UcpEpParams struct {
 type UcpEpErrHandler func(ep *UcpEp, status UcsStatus)
 
 //export ucxgo_completeGoErrorHandler
-func ucxgo_completeGoErrorHandler(ep C.ucp_ep_h, status C.ucs_status_t) {
-	errHandleGoCallback := errorHandles[ep]
-	errHandleGoCallback(&UcpEp{
-		ep: ep,
-	}, UcsStatus(status))
+func ucxgo_completeGoErrorHandler(user_data unsafe.Pointer, ep C.ucp_ep_h, status C.ucs_status_t) {
+	errHandleGoCallback, found := errorHandles[ep]
+	if found {
+		errHandleGoCallback(&UcpEp{
+			ep: ep,
+		}, UcsStatus(status))
+	}
 }
 
 // Destination address
@@ -60,5 +67,30 @@ func (p *UcpEpParams) SetErrorHandler(errHandler UcpEpErrHandler) *UcpEpParams {
 func (p *UcpEpParams) SetName(name string) *UcpEpParams {
 	p.params.name = C.CString(name)
 	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_NAME
+	return p
+}
+
+// Destination address in the form of a sockaddr; means
+// that this type of the endpoint creation is possible only on client side
+// in client-server connection establishment flow.
+func (p *UcpEpParams) SetSocketAddress(a *net.TCPAddr) (*UcpEpParams, error) {
+	sockAddr, error := toSockAddr(a)
+	if error != nil {
+		return nil, error
+	}
+
+	p.params.sockaddr = *sockAddr
+	runtime.SetFinalizer(p, func(f *UcpEpParams) { FreeNativeMemory(unsafe.Pointer(f.params.sockaddr.addr)) })
+	p.params.flags |= C.UCP_EP_PARAMS_FLAGS_CLIENT_SERVER
+	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_SOCK_ADDR | C.UCP_EP_PARAM_FIELD_FLAGS
+	return p, nil
+}
+
+// Connection request from client; means that this type of the endpoint
+// creation is possible only on server side in client-server connection
+// establishment flow.
+func (p *UcpEpParams) SetConnRequest(c *UcpConnectionRequest) *UcpEpParams {
+	p.params.conn_request = c.connRequest
+	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_CONN_REQUEST
 	return p
 }

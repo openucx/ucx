@@ -191,26 +191,21 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
 
 void mem_buffer::pattern_fill(void *buffer, size_t length, uint64_t seed)
 {
-    uint64_t *ptr = (uint64_t*)buffer;
-    char *end = (char *)buffer + length;
+    size_t word_length = ucs_align_down_pow2(length, sizeof(uint64_t));
+    uint64_t *end      = (uint64_t*)UCS_PTR_BYTE_OFFSET(buffer, word_length);
 
-    while ((char*)(ptr + 1) <= end) {
+    for (uint64_t *ptr = (uint64_t*)buffer; ptr < end; ++ptr) {
         *ptr = seed;
         seed = pat(seed);
-        ++ptr;
     }
-    memcpy(ptr, &seed, end - (char*)ptr);
+
+    memcpy(end, &seed, length - UCS_PTR_BYTE_DIFF(buffer, end));
 }
 
-void mem_buffer::pattern_check(uint64_t expected, uint64_t actual,
-                               size_t length, size_t offset, const void *buffer,
-                               const void *orig_ptr)
+void mem_buffer::pattern_check_failed(uint64_t expected, uint64_t actual,
+                                      size_t length, uint64_t mask,
+                                      size_t offset, const void *orig_ptr)
 {
-    const uint64_t mask = UCS_MASK_SAFE(length * 8 * sizeof(char));
-
-    if (actual == (expected & mask)) {
-        return; // Data is correct
-    }
 
     std::stringstream ss;
     ss << "Pattern check failed at " << UCS_PTR_BYTE_OFFSET(orig_ptr, offset)
@@ -287,57 +282,87 @@ void mem_buffer::pattern_check(const void *buffer, size_t length, uint64_t seed,
     }
 }
 
-void mem_buffer::copy_to(void *dst, const void *src, size_t length,
-                         ucs_memory_type_t dst_mem_type)
+void mem_buffer::memset(void *buffer, size_t length, int c,
+                        ucs_memory_type_t mem_type)
 {
-    switch (dst_mem_type) {
+    switch (mem_type) {
     case UCS_MEMORY_TYPE_HOST:
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
-        memcpy(dst, src, length);
+        ::memset(buffer, c, length);
         break;
 #if HAVE_CUDA
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyHostToDevice),
-                  ": dst=" << dst << " src=" << src << "length=" << length);
+        CUDA_CALL(cudaMemset(buffer, c, length),
+                  ": ptr=" << buffer << " value=" << c << "count=" << length);
         CUDA_CALL(cudaDeviceSynchronize(), "");
         break;
 #endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
-        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyHostToDevice));
+        ROCM_CALL(hipMemset(buffer, c, length);
         ROCM_CALL(hipDeviceSynchronize());
         break;
 #endif
     default:
-        abort_wrong_mem_type(dst_mem_type);
+        UCS_TEST_ABORT("Wrong buffer memory type " + mem_type_name(mem_type));
     }
+}
+
+void mem_buffer::copy_to(void *dst, const void *src, size_t length,
+                         ucs_memory_type_t dst_mem_type)
+{
+    copy_between(dst, src, length, dst_mem_type, UCS_MEMORY_TYPE_HOST);
 }
 
 void mem_buffer::copy_from(void *dst, const void *src, size_t length,
                            ucs_memory_type_t src_mem_type)
 {
-    switch (src_mem_type) {
-    case UCS_MEMORY_TYPE_HOST:
-    case UCS_MEMORY_TYPE_ROCM_MANAGED:
-        memcpy(dst, src, length);
-        break;
+    copy_between(dst, src, length, UCS_MEMORY_TYPE_HOST, src_mem_type);
+}
+
+/* check both mem types are in the given set */
+bool mem_buffer::check_mem_types(ucs_memory_type_t dst_mem_type,
+                                 ucs_memory_type_t src_mem_type,
+                                 const uint64_t mem_types)
+{
+    return (UCS_BIT(dst_mem_type) & mem_types) &&
+           (UCS_BIT(src_mem_type) & mem_types);
+}
+
+void mem_buffer::copy_between(void *dst, const void *src, size_t length,
+                              ucs_memory_type_t dst_mem_type,
+                              ucs_memory_type_t src_mem_type)
+{
+    const uint64_t host_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
 #if HAVE_CUDA
-    case UCS_MEMORY_TYPE_CUDA:
-    case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDeviceToHost),
-                  ": dst=" << dst << " src=" << src << "length=" << length);
-        CUDA_CALL(cudaDeviceSynchronize(), "");
-        break;
+    const uint64_t cuda_mem_types = host_mem_types |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
 #endif
 #if HAVE_ROCM
-    case UCS_MEMORY_TYPE_ROCM:
-        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyDeviceToHost));
-        ROCM_CALL(hipDeviceSynchronize());
-        break;
+    const uint64_t rocm_mem_types = host_mem_types |
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM) |
+                                    UCS_BIT(UCS_MEMORY_TYPE_ROCM_MANAGED);
 #endif
-    default:
-        abort_wrong_mem_type(src_mem_type);
+
+    if (check_mem_types(dst_mem_type, src_mem_type, host_mem_types)) {
+        memcpy(dst, src, length);
+#if HAVE_CUDA
+    } else if (check_mem_types(dst_mem_type, src_mem_type, cuda_mem_types)) {
+        CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDefault),
+                  ": dst=" << dst << " src=" << src << "length=" << length);
+        CUDA_CALL(cudaDeviceSynchronize(), "");
+#endif
+#if HAVE_ROCM
+    } else if (check_mem_types(dst_mem_type, src_mem_type, rocm_mem_types)) {
+        ROCM_CALL(hipMemcpy(dst, src, length, hipMemcpyDefault));
+        ROCM_CALL(hipDeviceSynchronize());
+#endif
+    } else {
+        UCS_TEST_ABORT("Wrong buffer memory type pair " +
+                       mem_type_name(src_mem_type) + "/" +
+                       mem_type_name(dst_mem_type));
     }
 }
 
@@ -388,16 +413,6 @@ std::string mem_buffer::mem_type_name(ucs_memory_type_t mem_type)
     return ucs_memory_type_names[mem_type];
 }
 
-void mem_buffer::abort_wrong_mem_type(ucs_memory_type_t mem_type) {
-    UCS_TEST_ABORT("Wrong buffer memory type " + mem_type_name(mem_type));
-}
-
-uint64_t mem_buffer::pat(uint64_t prev) {
-    /* LFSR pattern */
-    static const uint64_t polynom = 1337;
-    return (prev << 1) | (__builtin_parityl(prev & polynom) & 1);
-}
-
 mem_buffer::mem_buffer(size_t size, ucs_memory_type_t mem_type) :
     m_mem_type(mem_type), m_ptr(allocate(size, mem_type)), m_size(size) {
 }
@@ -429,4 +444,8 @@ void mem_buffer::pattern_fill(uint64_t seed) {
 
 void mem_buffer::pattern_check(uint64_t seed) const {
     pattern_check(ptr(), size(), seed, mem_type());
+}
+
+void mem_buffer::memset(int c) {
+    memset(ptr(), size(), c, mem_type());
 }

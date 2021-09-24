@@ -571,7 +571,7 @@ public:
                               m_test_addr.get_port());
         EXPECT_EQ(m_test_addr, attr.local_sockaddr);
     }
-    
+
     void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
         void *req           = e.disconnect_nb(0, 0, mode);
         ucs_time_t deadline = ucs::get_deadline();
@@ -1351,6 +1351,41 @@ UCS_TEST_P(test_ucp_sockaddr_different_tl_rsc, unset_devices_and_communicate)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_different_tl_rsc, all, "all")
 
+class test_ucp_sockaddr_cm_switch : public test_ucp_sockaddr {
+protected:
+    ucp_rsc_index_t get_num_cms()
+    {
+        const ucp_worker_h worker    = sender().worker();
+        ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
+        ucp_rsc_index_t num_cms      = 0;
+
+        for (ucp_rsc_index_t cm_idx = 0; cm_idx < num_cm_cmpts; ++cm_idx) {
+            if (worker->cms[cm_idx].cm != NULL) {
+                num_cms++;
+            }
+        }
+
+        return num_cms;
+    }
+
+    void check_cm_fallback()
+    {
+        if (get_num_cms() < 2) {
+            UCS_TEST_SKIP_R("No CM for fallback to");
+        }
+    }
+};
+
+UCS_TEST_P(test_ucp_sockaddr_cm_switch,
+           rereg_memory_on_cm_switch,
+           "ZCOPY_THRESH=0", "TLS=rc",
+           "SOCKADDR_TLS_PRIORITY=rdmacm,tcp")
+{
+    check_cm_fallback();
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_sockaddr_cm_switch, all, "all")
 
 class test_ucp_sockaddr_cm_private_data : public test_ucp_sockaddr {
 protected:

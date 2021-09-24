@@ -14,6 +14,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/proto/proto_am.h>
+#include <ucp/proto/proto_select.h>
 #include <ucp/tag/tag_rndv.h>
 
 #include <ucs/datastruct/mpool.inl>
@@ -47,7 +48,14 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
     ucp_ep_config_t *config;
     ucp_ep_h ep;
 
-    ucs_string_buffer_appendf(strb, "flags:%x ", req->flags);
+    ucs_string_buffer_appendf(strb, "flags:0x%x ", req->flags);
+
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
+        ucp_proto_select_config_str(req->send.ep->worker,
+                                    req->send.proto_config,
+                                    req->send.state.dt_iter.length, strb);
+        return;
+    }
 
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_string_buffer_appendf(strb, "send length %zu ", req->send.length);
@@ -75,9 +83,19 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
         }
     } else if (req->flags &
                (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)) {
+#if ENABLE_DEBUG_DATA
+        if (req->recv.proto_rndv_config != NULL) {
+            /* Print the send protocol of the rendezvous request */
+            ucp_proto_select_config_str(req->recv.worker,
+                                        req->recv.proto_rndv_config,
+                                        req->recv.length, strb);
+            return;
+        }
+#endif
         ucs_string_buffer_appendf(strb, "recv length %zu ", req->recv.length);
     } else {
-        ucs_string_buffer_appendf(strb, "no debug info ");
+        ucs_string_buffer_appendf(strb, "<no debug info>");
+        return;
     }
 
     ucs_string_buffer_appendf(

@@ -992,22 +992,21 @@ uct_dc_mlx5_ep_fc_pure_grant_send_completion(uct_rc_iface_send_op_t *send_op,
 
     if (ucs_likely(!(send_op->flags & UCT_RC_IFACE_SEND_OP_STATUS) ||
                    (send_op->status != UCS_ERR_CANCELED))) {
+        /* Pure grant sent - release it */
         ucs_mpool_put(fc_req);
-        ucs_mpool_put(send_op);
-        return;
+    } else {
+        ucs_trace("fc_ep %p: re-sending FC_PURE_GRANT (seq:%" PRIu64 ")"
+                  " to dct_num:0x%x, lid:%d, gid:%s",
+                  fc_ep,  fc_req->sender.payload.seq, fc_req->dct_num,
+                  fc_req->lid,
+                  uct_ib_gid_str(ucs_unaligned_ptr(&fc_req->sender.payload.gid),
+                                 gid_str, sizeof(gid_str)));
+
+        /* Always add re-sending of FC_PURE_GRANT packet to the pending queue to
+         * resend it when DCI will be restored after the failure */
+        uct_dc_mlx5_ep_do_pending_fc(fc_ep, fc_req);
     }
-
-    ucs_trace("fc_ep %p: re-sending FC_PURE_GRANT (seq:%" PRIu64 ")"
-              " to dct_num:0x%x, lid:%d, gid:%s",
-              fc_ep,  fc_req->sender.payload.seq, fc_req->dct_num, fc_req->lid,
-              uct_ib_gid_str(ucs_unaligned_ptr(&fc_req->sender.payload.gid),
-                             gid_str, sizeof(gid_str)));
-
-    send_op->flags &= ~UCT_RC_IFACE_SEND_OP_STATUS;
-
-    /* Always add re-sending of FC_PURE_GRANT packet to the pending queue to
-     * resend it when DCI will be restored after the failure */
-    uct_dc_mlx5_ep_do_pending_fc(fc_ep, fc_req);
+    ucs_mpool_put(send_op);
 }
 
 static ucs_status_t
@@ -1598,6 +1597,7 @@ uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     }
 
     uct_rc_ep_init_send_op(op, 0, NULL, uct_dc_mlx5_ep_check_send_completion);
+    uct_rc_iface_send_op_set_name(op, "dc_mlx5_ep_check");
     op->ep = tl_ep;
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, iface->keepalive_dci, txqp, txwq);
     uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,

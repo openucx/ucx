@@ -156,6 +156,25 @@ ucp_datatype_iter_init_from_dt_state(ucp_context_h context, void *buffer,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_slice(const ucp_datatype_iter_t *dt_iter, size_t offset,
+                        size_t length, ucp_datatype_iter_t *sliced_dt_iter,
+                        uint8_t *sg_count)
+{
+    ucs_assertv(dt_iter->dt_class == UCP_DATATYPE_CONTIG, "dt=%d (%s)",
+                dt_iter->dt_class, ucp_datatype_class_names[dt_iter->dt_class]);
+
+    sliced_dt_iter->dt_class               = dt_iter->dt_class;
+    sliced_dt_iter->mem_info               = dt_iter->mem_info;
+    sliced_dt_iter->length                 = length;
+    sliced_dt_iter->offset                 = 0;
+    sliced_dt_iter->type.contig.buffer     = UCS_PTR_BYTE_OFFSET(
+                                                    dt_iter->type.contig.buffer,
+                                                    offset);
+    sliced_dt_iter->type.contig.reg.md_map = 0;
+    *sg_count                              = 1;
+}
+
 /*
  * Cleanup datatype iterator. dt_mask is a bitmap of possible datatypes, which
  * could help the compiler eliminate some branches.
@@ -313,6 +332,31 @@ ucp_datatype_iter_unpack(ucp_datatype_iter_t *dt_iter, ucp_worker_h worker,
     return status;
 }
 
+/* Advances dt iterator, returns length */
+static UCS_F_ALWAYS_INLINE size_t
+ucp_datatype_iter_next(const ucp_datatype_iter_t *dt_iter,
+                       size_t max_length, ucp_datatype_iter_t *next_iter)
+{
+    size_t offset, length;
+
+    offset            = dt_iter->offset;
+    length            = ucs_min(max_length, dt_iter->length - offset);
+    next_iter->offset = offset + length;
+
+    return length;
+}
+
+static UCS_F_ALWAYS_INLINE size_t
+ucp_datatype_iter_get_ptr(const ucp_datatype_iter_t *dt_iter, size_t max_length,
+                          void **ptr)
+{
+    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
+
+    *ptr = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, dt_iter->offset);
+
+    return ucs_min(max_length, dt_iter->length - dt_iter->offset);
+}
+
 /*
  * Returns a pointer to next chunk of data (could be done only on some datatype
  * classes)
@@ -322,16 +366,23 @@ ucp_datatype_iter_next_ptr(const ucp_datatype_iter_t *dt_iter,
                            size_t max_length, ucp_datatype_iter_t *next_iter,
                            void **ptr)
 {
-    size_t offset, length;
-
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
+    *ptr = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, dt_iter->offset);
 
-    offset            = dt_iter->offset;
-    length            = ucs_min(max_length, dt_iter->length - offset);
-    *ptr              = UCS_PTR_BYTE_OFFSET(dt_iter->type.contig.buffer, offset);
-    next_iter->offset = offset + length;
+    return ucp_datatype_iter_next(dt_iter, max_length, next_iter);
+}
 
-    return length;
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_next_slice(const ucp_datatype_iter_t *dt_iter,
+                             size_t max_length,
+                             ucp_datatype_iter_t *sliced_dt_iter,
+                             ucp_datatype_iter_t *next_iter, uint8_t *sg_count)
+{
+    size_t length;
+
+    length = ucp_datatype_iter_next(dt_iter, max_length, next_iter);
+    ucp_datatype_iter_slice(dt_iter, dt_iter->offset, length, sliced_dt_iter,
+                            sg_count);
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
@@ -408,39 +459,23 @@ ucp_datatype_iter_copy_position(ucp_datatype_iter_t *dt_iter,
 }
 
 /*
+ * Check if the next iterator has reached the end
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_datatype_iter_is_end_position(const ucp_datatype_iter_t *dt_iter,
+                                  const ucp_datatype_iter_t *pos_iter)
+{
+    ucs_assert(dt_iter->offset <= dt_iter->length);
+    return pos_iter->offset == dt_iter->length;
+}
+
+/*
  * Check if the iterator has reached the end
  */
 static UCS_F_ALWAYS_INLINE int
 ucp_datatype_iter_is_end(const ucp_datatype_iter_t *dt_iter)
 {
-    ucs_assert(dt_iter->offset <= dt_iter->length);
-    return dt_iter->offset == dt_iter->length;
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_datatype_iter_mem_reg_internal(ucp_context_h context,
-                                   ucp_datatype_iter_t *dt_iter,
-                                   ucp_md_map_t md_map, void *buffer,
-                                   size_t length, unsigned uct_flags,
-                                   ucp_dt_reg_t *dt_reg)
-{
-    ucs_status_t status;
-
-    status = ucp_mem_rereg_mds(context, md_map, buffer, length, uct_flags, NULL,
-                               (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
-                               dt_reg->memh, &dt_reg->md_map);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* We expect the registration to happen on all desired memory domains,
-     * since subsequent access to the iterator will use 'memh_index' which
-     * assumes the md_map is as expected.
-     */
-    ucs_assertv((length == 0) || (dt_reg->md_map == md_map),
-                "reg.md_map=0x%" PRIx64 " md_map=0x%" PRIx64, dt_reg->md_map,
-                md_map);
-    return UCS_OK;
+    return ucp_datatype_iter_is_end_position(dt_iter, dt_iter);
 }
 
 /*
@@ -456,10 +491,10 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
             return UCS_OK;
         }
 
-        return ucp_datatype_iter_mem_reg_internal(context, dt_iter, md_map,
-                                                  dt_iter->type.contig.buffer,
-                                                  dt_iter->length, uct_flags,
-                                                  &dt_iter->type.contig.reg);
+        return ucp_datatype_iter_mem_reg_internal(
+                context, dt_iter->type.contig.buffer, dt_iter->length,
+                uct_flags, (ucs_memory_type_t)dt_iter->mem_info.type, md_map,
+                &dt_iter->type.contig.reg);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map, uct_flags);
     } else {
@@ -477,10 +512,8 @@ ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
                             unsigned dt_mask)
 {
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
-        ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL,
-                          (ucs_memory_type_t)dt_iter->mem_info.type, NULL,
-                          dt_iter->type.contig.reg.memh,
-                          &dt_iter->type.contig.reg.md_map);
+        ucp_datatype_iter_mem_dereg_internal(context,
+                                             &dt_iter->type.contig.reg);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
     }

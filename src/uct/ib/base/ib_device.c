@@ -438,6 +438,8 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
         break;
     case IBV_EVENT_PORT_ACTIVE:
     case IBV_EVENT_PORT_ERR:
+    case IBV_EVENT_SM_CHANGE:
+    case IBV_EVENT_CLIENT_REREGISTER:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_DIAG;
@@ -447,8 +449,6 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
 #endif
     case IBV_EVENT_LID_CHANGE:
     case IBV_EVENT_PKEY_CHANGE:
-    case IBV_EVENT_SM_CHANGE:
-    case IBV_EVENT_CLIENT_REREGISTER:
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_WARN;
@@ -1131,6 +1131,8 @@ static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
     if (status != UCS_OK) {
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
+
+    ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
 
     ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
               uct_ib_device_name(dev), bus_id.domain, bus_id.bus, bus_id.slot,

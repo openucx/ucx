@@ -342,6 +342,10 @@ struct uct_rc_iface_send_op {
 #ifndef NVALGRIND
     struct iovec                  *iov;        /* get_zcopy with valgrind */
 #endif
+
+#if ENABLE_DEBUG_DATA
+    const char                    *name;       /* object ID, debug only */
+#endif
 };
 
 
@@ -600,6 +604,14 @@ static UCS_F_ALWAYS_INLINE int
 uct_rc_iface_poll_tx(uct_rc_iface_t *iface, unsigned count)
 {
     return (count == 0) || iface->config.tx_poll_always;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
+{
+#if ENABLE_DEBUG_DATA
+    op->name = name;
+#endif
 }
 
 #endif

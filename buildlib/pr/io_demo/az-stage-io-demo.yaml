@@ -7,6 +7,8 @@ parameters:
   default: 'rc_x'
 - name: duration
   default: 60
+- name: roce_iface
+  default: $(roce_iface)
 
 steps:
 - bash: |
@@ -17,6 +19,7 @@ steps:
       cycles=$(cycles) \
       downtime=$(downtime) \
       uptime=$(uptime) \
+      interface=${{ parameters.roce_iface }} \
       |& add_timestamp &>corrupter.log &
     while ! pgrep -u "$USER" -f 'network-corrupter'
     do
@@ -34,8 +37,9 @@ steps:
     sudo /hpc/local/bin/lshca
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
-    export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${roce_iface}' .*/\1:\2/p')
+    export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${{parameters.roce_iface}}' .*/\1:\2/p')
     export UCX_TLS=${{ parameters.iodemo_tls }}
+    export UCX_RNDV_THRESH=4k
     export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH
     $(workspace)/test/apps/iodemo/run_io_demo.sh \
         -H $(agent_hosts) \
@@ -46,20 +50,20 @@ steps:
         --num-servers 1 \
         --map-by slot \
         --log-dir $(workspace)/${{ parameters.name }} \
-        -i $(roce_iface) \
+        -i ${{ parameters.roce_iface }} \
         $(io_demo_exe) \
             -d 512:524288 \
             -P 2 \
             -o read,write \
             -i 0 \
             -w 16 \
-            -t 10 \
+            -t 60 \
             ${{ parameters.iodemo_args }}
   displayName: Launch with run_io_demo.sh ( ${{ parameters.name }} )
   timeoutInMinutes: 10
 
 - bash: |
-    python $(workspace)/buildlib/pr/io_demo/iodemo_analyzer.py -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }}
+    python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list CI,$(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 1
 

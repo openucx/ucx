@@ -412,8 +412,7 @@ static ucp_lane_index_t ucp_rndv_zcopy_get_lane(ucp_request_t *rndv_req,
     ucs_assert(lane_idx < UCP_MAX_LANES);
     rkey       = rndv_req->send.rndv.rkey;
     rkey_index = rndv_req->send.rndv.rkey_index[lane_idx];
-    *uct_rkey  = (rkey_index != UCP_NULL_RESOURCE) ?
-                 rkey->tl_rkey[rkey_index].rkey.rkey : UCT_INVALID_RKEY;
+    *uct_rkey  = ucp_rkey_get_tl_rkey(rkey, rkey_index);
     ep_config  = ucp_ep_config(rndv_req->send.ep);
     return (proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ?
            ep_config->rndv.get_zcopy.lanes[lane_idx] :

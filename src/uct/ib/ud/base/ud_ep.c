@@ -684,6 +684,21 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     return ep;
 }
 
+static void uct_ud_ep_rx_ctl_drop_packet(uct_ud_ep_t *ep, uct_ud_neth_t *neth,
+                                         uint16_t exp_flags,
+                                         const char *packet_type_str)
+{
+    ucs_trace_data("ep %p: drop %s with psn %u, head_sn %u",
+                   ep, packet_type_str, neth->psn, ep->rx.ooo_pkts.head_sn);\
+    ucs_assertv_always(ep->flags & exp_flags, /* At lease one must be set */
+                       "conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u"
+                       " neth_psn=%u ep_flags=0x%x exp_ep_flags=0x%x"
+                       " ctl_ops=0x%x rx_creq_count=%d",
+                       ep->conn_sn, ep->ep_id, ep->dest_ep_id,
+                       ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags,
+                       exp_flags, ep->tx.pending.ops, ep->rx_creq_count);
+}
+
 static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
 {
     uct_ud_ctl_hdr_t *ctl = (uct_ud_ctl_hdr_t *)(neth + 1);
@@ -701,24 +716,22 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
-    } else {
-        if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
-            /* simultaneuous CREQ */
-            uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
-            ep->rx.ooo_pkts.head_sn = neth->psn;
-            uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-            ucs_debug("simultaneuous CREQ ep=%p"
-                      "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
-                      ep, iface, ep->conn_sn, ep->ep_id,
-                      ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
-            if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
-                /* our own creq was sent, treat incoming creq as ack and remove our own
-                 * from tx window
-                 */
-                uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
-            }
-            uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
+    } else if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
+        /* simultaneuous CREQ */
+        uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
+        ep->rx.ooo_pkts.head_sn = neth->psn;
+        uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
+        ucs_debug("simultaneuous CREQ ep=%p"
+                  "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
+                  ep, iface, ep->conn_sn, ep->ep_id,
+                  ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
+        if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
+            /* our own creq was sent, treat incoming creq as ack and remove our
+             * own from tx window
+             */
+            uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
         }
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     }
 
     ++ep->rx_creq_count;
@@ -737,14 +750,25 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
                        uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id),
                        ep->dest_ep_id);
 
-    /* creq must always have same psn */
+    /* Discard duplicate CREQ or CREQ after CREP */
+    if (UCT_UD_PSN_COMPARE(neth->psn, <, ep->rx.ooo_pkts.head_sn)) {
+        uct_ud_ep_rx_ctl_drop_packet(ep, neth,
+                                     UCT_UD_EP_FLAG_CREQ_RCVD |
+                                     UCT_UD_EP_FLAG_CREP_RCVD,
+                                     "CREQ");
+        return;
+    }
+
+    /* CREQ must have same psn */
     ucs_assertv_always(ep->rx.ooo_pkts.head_sn == neth->psn,
-                       "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
-                       "neth_psn=%u ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
+                       "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d"
+                       " rx_psn=%u neth_psn=%u ep_flags=0x%x ctl_ops=0x%x"
+                       " rx_creq_count=%d",
                        iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
                        ep->rx.ooo_pkts.head_sn, neth->psn, ep->flags,
                        ep->tx.pending.ops, ep->rx_creq_count);
-    /* scedule connection reply op */
+
+    /* Schedule connection reply op */
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, sizeof(*neth) + sizeof(*ctl));
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
@@ -771,6 +795,8 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     /* Discard duplicate CREP */
     if (UCT_UD_PSN_COMPARE(neth->psn, <, ep->rx.ooo_pkts.head_sn)) {
+        uct_ud_ep_rx_ctl_drop_packet(ep, neth, UCT_UD_EP_FLAG_CREP_RCVD,
+                                     "CREP");
         return;
     }
 
@@ -881,7 +907,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     }
 
     if (ucs_unlikely(!is_am)) {
-        if (neth->packet_type & UCT_UD_PACKET_FLAG_NAK) {
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_NACK) {
             uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_TX_NACKED);
             goto out;
         }
@@ -1321,7 +1347,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
 
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_NACK)) {
-        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_NAK;
+        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_NACK;
     }
 
     if (ctl_flags & UCT_UD_IFACE_SEND_CTL_FLAG_INLINE) {

@@ -266,4 +266,12 @@ ucs_linear_func_t
 ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
                              ucp_md_map_t reg_md_map);
 
+
+ucs_status_t
+ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
+                                  ucs_memory_type_t local_mem_type,
+                                  ucs_memory_type_t remote_mem_type,
+                                  uct_ep_operation_t memtype_op,
+                                  ucs_linear_func_t *copy_time);
+
 #endif

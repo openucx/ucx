@@ -16,6 +16,134 @@
          _length += ucp_datatype_iter_iov_at(_dt_iter, _iov_index++)->length)
 
 
+static UCS_F_ALWAYS_INLINE void
+ucp_datatype_iter_mem_dereg_some(ucp_context_h context,
+                                 ucp_md_map_t keep_md_map,
+                                 const ucp_dt_reg_t *dt_reg,
+                                 uct_mem_h *prev_memh)
+{
+    ucp_md_index_t md_index, memh_index, memh_index_old;
+    ucs_status_t status;
+    uct_mem_h uct_memh;
+
+    memh_index_old = 0;
+    memh_index     = 0;
+    ucs_for_each_bit(md_index, dt_reg->md_map) {
+        uct_memh = dt_reg->memh[memh_index++];
+        if (keep_md_map & UCS_BIT(md_index)) {
+            prev_memh[memh_index_old++] = uct_memh;
+        } else if (ucs_likely(uct_memh != UCT_MEM_HANDLE_NULL)) {
+            /* memh not needed and registered - deregister it */
+            ucs_trace("de-registering memh=%p from md[%d]=%s", uct_memh,
+                      md_index, context->tl_mds[md_index].rsc.md_name);
+            status = uct_md_mem_dereg(context->tl_mds[md_index].md, uct_memh);
+            if (ucs_unlikely(status != UCS_OK)) {
+                ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
+                         context->tl_mds[md_index].rsc.md_name,
+                         ucs_status_string(status));
+            }
+        }
+    }
+}
+
+static void UCS_F_NOINLINE ucp_datatype_iter_mem_dereg_some_noninline(
+        ucp_context_h context, ucp_md_map_t keep_md_map,
+        const ucp_dt_reg_t *dt_reg, uct_mem_h *prev_memh)
+{
+    ucp_datatype_iter_mem_dereg_some(context, keep_md_map, dt_reg, prev_memh);
+}
+
+UCS_PROFILE_FUNC(ucs_status_t, ucp_datatype_iter_mem_reg_internal,
+                 (context, address, length, uct_flags, mem_type, md_map,
+                  dt_reg),
+                 ucp_context_h context, void *address, size_t length,
+                 unsigned uct_flags, ucs_memory_type_t mem_type,
+                 ucp_md_map_t md_map, ucp_dt_reg_t *dt_reg)
+{
+    uct_mem_h tmp_reg[UCP_MAX_OP_MDS] = {UCT_MEM_HANDLE_NULL}; /* cppcheck */
+    ucp_md_index_t md_index, memh_index, memh_index_old;
+    ucs_memory_info_t mem_info;
+    ucs_log_level_t log_level;
+    ucs_status_t status;
+    void *reg_address;
+    size_t reg_length;
+
+    if (ucs_unlikely(dt_reg->md_map != 0)) {
+        ucp_datatype_iter_mem_dereg_some_noninline(context, md_map, dt_reg,
+                                                   tmp_reg);
+    }
+
+    if (ucs_unlikely(length == 0)) {
+        for (memh_index = 0; UCS_BIT(memh_index) <= md_map; ++memh_index) {
+            dt_reg->memh[memh_index] = UCT_MEM_HANDLE_NULL;
+        }
+        goto out;
+    }
+
+    ucs_assert(address != NULL);
+    if (ucs_unlikely(context->config.ext.reg_whole_alloc_bitmap &
+                     UCS_BIT(mem_type))) {
+        ucp_memory_detect_internal(context, address, length, &mem_info);
+        reg_address = mem_info.base_address;
+        reg_length  = mem_info.alloc_length;
+    } else {
+        reg_address = address;
+        reg_length  = length;
+    }
+
+    memh_index_old = 0;
+    memh_index     = 0;
+    ucs_for_each_bit(md_index, md_map) {
+        if (UCS_BIT(md_index) & dt_reg->md_map) {
+            /* memh already registered */
+            ucs_assert(memh_index_old < UCP_MAX_OP_MDS);
+            dt_reg->memh[memh_index++] = tmp_reg[memh_index_old++];
+            continue;
+        }
+
+        /* MD supports registration, register new memh on it */
+        status = uct_md_mem_reg(context->tl_mds[md_index].md, reg_address,
+                                reg_length, uct_flags,
+                                &dt_reg->memh[memh_index]);
+        if (ucs_unlikely(status != UCS_OK)) {
+            log_level = (uct_flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ?
+                                UCS_LOG_LEVEL_DIAG :
+                                UCS_LOG_LEVEL_ERROR;
+            ucs_log(log_level,
+                    "failed to register %s %p length %zu on md[%d]=%s: %s",
+                    ucs_memory_type_names[mem_type], reg_address, reg_length,
+                    md_index, context->tl_mds[md_index].rsc.md_name,
+                    ucs_status_string(status));
+            dt_reg->md_map |= md_map & UCS_MASK(md_index);
+            ucp_datatype_iter_mem_dereg_internal(context, dt_reg);
+            return status;
+        }
+
+        ucs_trace("registered address %p length %zu on md[%d]=%s memh[%d]=%p",
+                  reg_address, reg_length, md_index,
+                  context->tl_mds[md_index].rsc.md_name, memh_index,
+                  dt_reg->memh[memh_index]);
+        ++memh_index;
+    }
+
+    ucs_assert(memh_index == ucs_popcount(md_map));
+
+out:
+    /* We expect the registration to happen on all desired memory domains,
+     * since subsequent access to the iterator will use 'memh_index' which
+     * assumes the md_map is as expected.
+     */
+    dt_reg->md_map = md_map;
+    return UCS_OK;
+}
+
+UCS_PROFILE_FUNC_VOID(ucp_datatype_iter_mem_dereg_internal, (context, dt_reg),
+                      ucp_context_h context, ucp_dt_reg_t *dt_reg)
+{
+    ucp_datatype_iter_mem_dereg_some(context, 0, dt_reg, NULL);
+    dt_reg->md_map = 0;
+}
+
 static UCS_F_ALWAYS_INLINE const ucp_dt_iov_t *
 ucp_datatype_iter_iov_at(const ucp_datatype_iter_t *dt_iter, size_t index)
 {
@@ -52,10 +180,10 @@ ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
 
     for (iov_index = 0; iov_index < iov_count; ++iov_index) {
         iov    = ucp_datatype_iter_iov_at(dt_iter, iov_index);
-        status = ucp_datatype_iter_mem_reg_internal(context, dt_iter, md_map,
-                                                    iov->buffer, iov->length,
-                                                    uct_flags,
-                                                    &dt_reg[iov_index]);
+        status = ucp_datatype_iter_mem_reg_internal(context, iov->buffer,
+                                                    iov->length, uct_flags,
+                                                    dt_iter->mem_info.type,
+                                                    md_map, &dt_reg[iov_index]);
         if (status != UCS_OK) {
             ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
             return status;
@@ -71,13 +199,9 @@ void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
 {
     ucp_dt_reg_t *dt_reg = dt_iter->type.iov.reg;
     size_t iov_index, length;
-    const ucp_dt_iov_t *iov;
 
     ucp_datatype_iter_iov_for_each(iov_index, length, dt_iter) {
-        iov = ucp_datatype_iter_iov_at(dt_iter, iov_index);
-        ucp_mem_rereg_mds(context, 0, iov->buffer, iov->length, 0, NULL,
-                          dt_iter->mem_info.type, NULL, dt_reg[iov_index].memh,
-                          &dt_reg[iov_index].md_map);
+        ucp_datatype_iter_mem_dereg_internal(context, &dt_reg[iov_index]);
     }
 
     ucs_free(dt_reg);
@@ -174,7 +298,6 @@ void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
     size_t iov_index, offset;
     const ucp_dt_iov_t *iov;
     const char *sysdev_name;
-    char buffer[32];
 
     if (dt_iter->mem_info.type != UCS_MEMORY_TYPE_HOST) {
         ucs_string_buffer_appendf(
@@ -182,8 +305,7 @@ void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
     }
 
     if (dt_iter->mem_info.sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        sysdev_name = ucs_topo_sys_device_bdf_name(dt_iter->mem_info.sys_dev,
-                                                   buffer, sizeof(buffer));
+        sysdev_name = ucs_topo_sys_device_get_name(dt_iter->mem_info.sys_dev);
         ucs_string_buffer_appendf(strb, "%s ", sysdev_name);
     }
 

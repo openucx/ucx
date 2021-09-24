@@ -377,8 +377,8 @@ uct_rc_txqp_add_send_comp(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
 static inline void
 uct_rc_ep_init_send_op(uct_rc_iface_send_op_t *op, unsigned flags,
-                            uct_completion_t *comp,
-                            uct_rc_send_handler_t handler)
+                       uct_completion_t *comp,
+                       uct_rc_send_handler_t handler)
 {
     op->flags     = flags;
     op->user_comp = comp;
@@ -400,6 +400,7 @@ uct_rc_txqp_add_flush_comp(uct_rc_iface_t *iface, uct_base_ep_t *ep,
         }
 
         uct_rc_ep_init_send_op(op, 0, comp, uct_rc_ep_flush_op_completion_handler);
+        uct_rc_iface_send_op_set_name(op, "rc_txqp_add_flush_comp");
         op->iface = iface;
         uct_rc_txqp_add_send_op_sn(txqp, op, sn);
     }

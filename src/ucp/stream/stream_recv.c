@@ -313,7 +313,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
                 (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
     if (ucs_likely(attr_mask == 0)) {
         datatype  = ucp_dt_make_contig(1);
-        dt_length = count; /* use dt_lendth to suppress coverity false positive */
+        dt_length = count; /* use dt_length to suppress coverity false positive */
         if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_ext, count))) {
             rdesc   = ucp_stream_rdesc_get(ep_ext);
             status  = ucp_stream_process_rdesc_inplace(rdesc, datatype, buffer,
@@ -451,6 +451,7 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
         rdesc->payload_offset      = sizeof(*rdesc) + sizeof(*am_data);
         rdesc->flags               = 0;
         rdesc->release_desc_offset = 0;
+        ucp_recv_desc_set_name(rdesc, "stream_am_data_process");
         memcpy(ucp_stream_rdesc_payload(rdesc),
                UCS_PTR_BYTE_OFFSET(am_data, rdesc_tmp.payload_offset),
                rdesc_tmp.length);

@@ -114,6 +114,11 @@ bool ucp_test::has_any_transport(const std::vector<std::string>& tl_names) const
            all_tl_names.end();
 }
 
+bool ucp_test::has_any_transport(const std::string *tls, size_t tl_size) const {
+    const std::vector<std::string> tl_names(tls, tls + tl_size);
+    return has_any_transport(tl_names);
+}
+
 bool ucp_test::is_self() const {
     return "self" == GetParam().transports.front();
 }
@@ -1094,4 +1099,15 @@ void test_ucp_context::get_test_variants(std::vector<ucp_test_variant> &variants
 void ucp_test::disable_keepalive()
 {
     modify_config("KEEPALIVE_INTERVAL", "inf");
+}
+
+bool ucp_test::check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type) {
+    for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(e.ep()); lane++) {
+        const uct_md_attr_t* attr = ucp_ep_md_attr(e.ep(), lane);
+        if (attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+            return true;
+        }
+    }
+
+    return false;
 }

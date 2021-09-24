@@ -193,7 +193,7 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     if (max_length > UCS_MBYTE) {
         max_length = max_length / ucs::test_time_multiplier();
         if (RUNNING_ON_VALGRIND) {
-            max_length = ucs_min(max_length, 20u * UCS_MBYTE);
+            max_length = ucs_min(max_length, UCS_MBYTE);
         }
     }
 

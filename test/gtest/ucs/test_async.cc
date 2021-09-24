@@ -883,10 +883,10 @@ std::ostream& operator<<(std::ostream& os, ucs_async_mode_t mode)
 }
 
 #define INSTANTIATE_ASYNC_TEST_CASES(_test_fixture) \
-    INSTANTIATE_TEST_CASE_P(signal,          _test_fixture, ::testing::Values(UCS_ASYNC_MODE_SIGNAL)); \
-    INSTANTIATE_TEST_CASE_P(thread_spinlock, _test_fixture, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK)); \
-    INSTANTIATE_TEST_CASE_P(thread_mutex,    _test_fixture, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX)); \
-    INSTANTIATE_TEST_CASE_P(poll,            _test_fixture, ::testing::Values(UCS_ASYNC_MODE_POLL));
+    INSTANTIATE_TEST_SUITE_P(signal,          _test_fixture, ::testing::Values(UCS_ASYNC_MODE_SIGNAL)); \
+    INSTANTIATE_TEST_SUITE_P(thread_spinlock, _test_fixture, ::testing::Values(UCS_ASYNC_MODE_THREAD_SPINLOCK)); \
+    INSTANTIATE_TEST_SUITE_P(thread_mutex,    _test_fixture, ::testing::Values(UCS_ASYNC_MODE_THREAD_MUTEX)); \
+    INSTANTIATE_TEST_SUITE_P(poll,            _test_fixture, ::testing::Values(UCS_ASYNC_MODE_POLL));
 
 INSTANTIATE_ASYNC_TEST_CASES(test_async);
 INSTANTIATE_ASYNC_TEST_CASES(test_async_event_unset_from_handler);
