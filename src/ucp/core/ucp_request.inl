@@ -375,8 +375,8 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void
 ucp_request_memh_init(ucp_request_t *req, ucp_ep_h ep, ucp_mem_h memh)
 {
-    ucp_md_map_t *md_map_p = &req->send.state.dt.dt.contig.md_map;
-    uct_mem_h *uct_memh = req->send.state.dt.dt.contig.memh;
+    ucp_md_map_t *md_map_p   = &req->send.state.dt.dt.contig.md_map;
+    uct_mem_h *uct_memh      = req->send.state.dt.dt.contig.memh;
     ucp_ep_config_t *ep_conf = ucp_ep_config(ep);
     int i;
     ucp_md_index_t md_idx;

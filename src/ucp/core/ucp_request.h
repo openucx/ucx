@@ -483,10 +483,10 @@ int ucp_request_pending_add(ucp_request_t *req);
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,
                                     ucp_dt_state_t *state, ucs_memory_type_t mem_type,
-                                    ucp_request_t *req_dbg, unsigned uct_flags);
+                                    ucp_request_t *req, unsigned uct_flags);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
-                              ucp_dt_state_t *state, ucp_request_t *req_dbg);
+                              ucp_dt_state_t *state, ucp_request_t *req);
 
 void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status);
 

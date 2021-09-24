@@ -686,7 +686,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
     UCP_OP_ATTR_FIELD_MEMORY_TYPE   = UCS_BIT(6),  /**< memory type field */
     UCP_OP_ATTR_FIELD_RECV_INFO     = UCS_BIT(7),  /**< recv_info field */
-    UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(8),  /**< Memory handle */
+    UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(8),  /**< memory handle */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -1695,6 +1695,7 @@ typedef struct {
 
     /**
      * Memory handle for pre-registered buffer.
+     * The memory handle should be obtained by calling ucp_mem_map().
      */
     ucp_mem_h memh;
 } ucp_request_param_t;
