@@ -86,7 +86,7 @@ enum {
     UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
-    UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9),
+    UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9)
 };
 
 
@@ -203,13 +203,16 @@ KHASH_TYPE(uct_ib_async_event, uct_ib_async_event_t, uct_ib_async_event_val_t);
  * IB device (corresponds to HCA)
  */
 typedef struct uct_ib_device {
-    struct ibv_context          *ibv_context;    /* Verbs context */
-    uct_ib_device_attr          dev_attr;        /* Cached device attributes */
-    uint8_t                     first_port;      /* Number of first port (usually 1) */
-    uint8_t                     num_ports;       /* Amount of physical ports */
-    ucs_sys_cpuset_t            local_cpus;      /* CPUs local to device */
-    int                         numa_node;       /* NUMA node of the device */
-    int                         async_events;    /* Whether async events are handled */
+    struct ibv_context          *ibv_context;      /* Verbs context */
+    uct_ib_device_attr          dev_attr;          /* Cached device attributes */
+    uint8_t                     first_port;        /* Number of first port (usually 1) */
+    uint8_t                     num_ports;         /* Amount of physical ports */
+    uint8_t                     has_cq_notify;     /* Whether CQ events are supported */
+    uint8_t                     has_inorder_scomp; /* Whether send completions are always returned
+                                                      in the order submitted to a given work queue */
+    ucs_sys_cpuset_t            local_cpus;        /* CPUs local to device */
+    int                         numa_node;         /* NUMA node of the device */
+    int                         async_events;      /* Whether async events are handled */
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats)
     struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
@@ -223,6 +226,7 @@ typedef struct uct_ib_device {
     uint8_t                     pci_cswap_arg_sizes;
     uint8_t                     atomic_align;
     uint8_t                     lag_level;
+    uint64_t                    mr_access_flags;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;

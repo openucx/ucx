@@ -271,11 +271,6 @@ static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
 
 UCS_LIST_HEAD(uct_ib_md_ops_list);
 
-typedef struct uct_ib_verbs_mem {
-    uct_ib_mem_t        super;
-    uct_ib_mr_t         mrs[];
-} uct_ib_verbs_mem_t;
-
 typedef struct {
     pthread_t     thread;
     void          *addr;
@@ -304,6 +299,7 @@ static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_att
 static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
+    char gdr_file[PATH_MAX];
 
     md_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
     md_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
@@ -317,10 +313,12 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
 
+    ucs_snprintf_safe(gdr_file, PATH_MAX, UCT_IB_DEVICE_SYSFS_FMT,
+                      uct_ib_device_name(&md->dev), "gdr");
+
     if (md->config.enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
-        uct_ib_check_gpudirect_driver(md, md_attr,
-                                      "/sys/kernel/mm/memory_peers/nv_mem/version",
+        uct_ib_check_gpudirect_driver(md, md_attr, gdr_file,
                                       UCS_MEMORY_TYPE_CUDA);
 
         /* check if ROCM KFD driver is loaded */
@@ -662,7 +660,7 @@ static uct_ib_mem_t *uct_ib_memh_alloc(uct_ib_md_t *md)
 static uint64_t uct_ib_md_access_flags(uct_ib_md_t *md, unsigned flags,
                                        size_t length)
 {
-    uint64_t access_flags = UCT_IB_MEM_ACCESS_FLAGS;
+    uint64_t access_flags = md->dev.mr_access_flags;
 
     if ((flags & UCT_MD_MEM_FLAG_NONBLOCK) && (length > 0) &&
         (length <= md->config.odp.max_size)) {
@@ -876,10 +874,10 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
     return status;
 }
 
-static ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
-                                         size_t length, uint64_t access_flags,
-                                         uct_ib_mem_t *ib_memh,
-                                         uct_ib_mr_type_t mr_type, int silent)
+ucs_status_t uct_ib_verbs_reg_key(uct_ib_md_t *md, void *address,
+                                  size_t length, uint64_t access_flags,
+                                  uct_ib_mem_t *ib_memh,
+                                  uct_ib_mr_type_t mr_type, int silent)
 {
     uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
 
@@ -907,9 +905,9 @@ ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_verbs_dereg_key(uct_ib_md_t *md,
-                                           uct_ib_mem_t *ib_memh,
-                                           uct_ib_mr_type_t mr_type)
+ucs_status_t uct_ib_verbs_dereg_key(uct_ib_md_t *md,
+                                    uct_ib_mem_t *ib_memh,
+                                    uct_ib_mr_type_t mr_type)
 {
     uct_ib_verbs_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_verbs_mem_t);
 
@@ -1777,6 +1775,52 @@ void uct_ib_md_close(uct_md_h uct_md)
     ucs_free(md);
 }
 
+ucs_status_t uct_ib_verbs_md_open_common(struct ibv_device *ibv_device,
+                                         const uct_ib_md_config_t *md_config,
+                                         uct_ib_md_t *md)
+{
+    uct_ib_device_t *dev;
+    ucs_status_t status;
+    int num_mrs;
+
+    /* Open verbs context */
+    dev              = &md->dev;
+    dev->ibv_context = ibv_open_device(ibv_device);
+    if (dev->ibv_context == NULL) {
+        ucs_diag("ibv_open_device(%s) failed: %m",
+                 ibv_get_device_name(ibv_device));
+        return UCS_ERR_IO_ERROR;
+    }
+
+    status = uct_ib_device_query(&md->dev, ibv_device);
+    if (status != UCS_OK) {
+        goto err_free_context;
+    }
+
+    md->config = md_config->ext;
+
+    uct_ib_md_parse_relaxed_order(md, md_config);
+    num_mrs = 1;    /* UCT_IB_MR_DEFAULT */
+
+    if (md->relaxed_order) {
+        ++num_mrs;  /* UCT_IB_MR_STRICT_ORDER */
+    }
+
+    md->memh_struct_size = sizeof(uct_ib_verbs_mem_t) +
+                           (sizeof(uct_ib_mr_t) * num_mrs);
+
+    status = uct_ib_md_open_common(md, ibv_device, md_config);
+    if (status != UCS_OK) {
+        goto err_free_context;
+    }
+
+    return status;
+
+err_free_context:
+    ibv_close_device(dev->ibv_context);
+    return status;
+}
+
 static uct_ib_md_ops_t uct_ib_verbs_md_ops;
 
 static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
@@ -1786,67 +1830,40 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     uct_ib_device_t *dev;
     ucs_status_t status;
     uct_ib_md_t *md;
-    int num_mrs;
 
     md = ucs_calloc(1, sizeof(*md), "ib_md");
     if (md == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
 
-    /* Open verbs context */
-    dev              = &md->dev;
-    dev->ibv_context = ibv_open_device(ibv_device);
-    if (dev->ibv_context == NULL) {
-        ucs_diag("ibv_open_device(%s) failed: %m",
-                 ibv_get_device_name(ibv_device));
-        status = UCS_ERR_IO_ERROR;
+    status = uct_ib_md_parse_device_config(md, md_config);
+    if (status != UCS_OK) {
         goto err;
     }
 
-    md->config = md_config->ext;
-
-    status = uct_ib_device_query(dev, ibv_device);
+    status = uct_ib_verbs_md_open_common(ibv_device, md_config, md);
     if (status != UCS_OK) {
-        goto err_free_context;
+        goto err_dev_cfg;
     }
 
+    dev = &md->dev;
+
     if (UCT_IB_HAVE_ODP_IMPLICIT(&dev->dev_attr)) {
-        md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
+        dev->flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
     if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
     }
 
-    md->ops = &uct_ib_verbs_md_ops;
-    status = uct_ib_md_parse_device_config(md, md_config);
-    if (status != UCS_OK) {
-        goto err_free_context;
-    }
+    md->ops    = &uct_ib_verbs_md_ops;
+    dev->flags = uct_ib_device_spec(dev)->flags;
 
-    uct_ib_md_parse_relaxed_order(md, md_config);
-    num_mrs = 1;      /* UCT_IB_MR_DEFAULT */
-
-    if (md->relaxed_order) {
-        ++num_mrs;    /* UCT_IB_MR_STRICT_ORDER */
-    }
-
-    md->memh_struct_size = sizeof(uct_ib_verbs_mem_t) +
-                          (sizeof(uct_ib_mr_t) * num_mrs);
-
-    status = uct_ib_md_open_common(md, ibv_device, md_config);
-    if (status != UCS_OK) {
-        goto err_dev_cfg;
-    }
-
-    md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
     *p_md = md;
     return UCS_OK;
 
 err_dev_cfg:
     uct_ib_md_release_device_config(md);
-err_free_context:
-    ibv_close_device(dev->ibv_context);
 err:
     ucs_free(md);
     return status;

@@ -419,6 +419,7 @@ AS_IF([test "x$with_ib" = "xyes"],
        AS_IF([test -d "$mlnx_valg_libdir"],
                [AC_MSG_NOTICE([Added $mlnx_valg_libdir to valgrind LD_LIBRARY_PATH])
                valgrind_libpath="$mlnx_valg_libdir:$valgrind_libpath"])
+
        LDFLAGS="$save_LDFLAGS"
        CFLAGS="$save_CFLAGS"
        CPPFLAGS="$save_CPPFLAGS"
@@ -450,5 +451,6 @@ AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av
 
 uct_ib_modules=""
 m4_include([src/uct/ib/rdmacm/configure.m4])
+m4_include([src/uct/ib/efa/configure.m4])
 AC_DEFINE_UNQUOTED([uct_ib_MODULES], ["${uct_ib_modules}"], [IB loadable modules])
 AC_CONFIG_FILES([src/uct/ib/Makefile])
