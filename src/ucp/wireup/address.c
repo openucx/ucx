@@ -524,7 +524,9 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         iface_attr->bandwidth = packed->bandwidth;
     }
 
-    ucs_assert(iface_attr->bandwidth > 0.0);
+    if (iface_attr->bandwidth <= 0) {
+        return UCS_ERR_INVALID_ADDR;
+    }
 
     /* Unpack iface flags */
     iface_attr->cap_flags =
