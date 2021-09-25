@@ -13,6 +13,7 @@
 
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
@@ -137,6 +138,66 @@ uct_cuda_base_get_base_addr_alloc_length(uct_cuda_copy_md_t *md,
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
+                               size_t length, ucs_memory_info_t *mem_info)
+{
+#define UCT_CUDA_MEM_QUERY_NUM_ATTRS 3
+    CUmemorytype cuda_mem_mype = (CUmemorytype)0;
+    uint32_t is_managed        = 0;
+    unsigned value             = 1;
+    CUdevice cuda_device       = -1;
+    CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
+    void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
+    const char *cu_err_str;
+    CUresult cu_err;
+    ucs_status_t status;
+
+    attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
+    attr_data[0] = &cuda_mem_mype;
+    attr_type[1] = CU_POINTER_ATTRIBUTE_IS_MANAGED;
+    attr_data[1] = &is_managed;
+    attr_type[2] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
+    attr_data[2] = &cuda_device;
+
+    cu_err = cuPointerGetAttributes(ucs_static_array_size(attr_data), attr_type,
+                                    attr_data, (CUdeviceptr)address);
+    if ((cu_err != CUDA_SUCCESS) || (cuda_mem_mype != CU_MEMORYTYPE_DEVICE)) {
+        /* pointer not recognized */
+        return UCS_ERR_INVALID_ADDR;
+    }
+
+    if (is_managed) {
+        mem_info->type = UCS_MEMORY_TYPE_CUDA_MANAGED;
+    } else {
+        mem_info->type = UCS_MEMORY_TYPE_CUDA;
+
+        /* Synchronize for DMA */
+        cu_err = cuPointerSetAttribute(&value, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+                                       (CUdeviceptr)address);
+        if (cu_err != CUDA_SUCCESS) {
+            cuGetErrorString(cu_err, &cu_err_str);
+            ucs_warn("cuPointerSetAttribute(%p) error: %s", address,
+                    cu_err_str);
+        }
+    }
+
+    status = uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = uct_cuda_base_get_base_addr_alloc_length(md, cuda_device, address,
+                                                      length,
+                                                      &mem_info->base_address,
+                                                      &mem_info->alloc_length);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return status;
+}
+
 UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
                  (md, address, length, mem_type_p),
                  uct_md_h md, const void *address, size_t length,
@@ -156,26 +217,18 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_detect_memory_type,
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
-                 (tl_md, address, length, mem_attr),
-                 uct_md_h tl_md, const void *address, size_t length,
-                 uct_md_mem_attr_t *mem_attr)
+ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
+                                     size_t length, uct_md_mem_attr_t *mem_attr)
 {
-#define UCT_CUDA_MEM_QUERY_NUM_ATTRS 3
-    CUmemorytype cuda_mem_mype = (CUmemorytype)0;
-    uint32_t is_managed        = 0;
-    unsigned value             = 1;
-    CUdevice cuda_device       = -1;
-    void *base_address         = (void*)address;
-    size_t alloc_length        = length;
-    ucs_sys_device_t sys_dev   = UCS_SYS_DEVICE_ID_UNKNOWN;
-    uct_cuda_copy_md_t *md     = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
-    CUpointer_attribute attr_type[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
-    void *attr_data[UCT_CUDA_MEM_QUERY_NUM_ATTRS];
-    ucs_memory_type_t mem_type;
-    const char *cu_err_str;
+    ucs_memory_info_t default_mem_info = {
+        .type              = UCS_MEMORY_TYPE_HOST,
+        .sys_dev           = UCS_SYS_DEVICE_ID_UNKNOWN,
+        .base_address      = (void*)address,
+        .alloc_length      = length
+    };
+    uct_cuda_copy_md_t *md = ucs_derived_of(tl_md, uct_cuda_copy_md_t);
+    ucs_memory_info_t addr_mem_info;
     ucs_status_t status;
-    CUresult cu_err;
 
     if (!(mem_attr->field_mask & (UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     |
                                   UCT_MD_MEM_ATTR_FIELD_SYS_DEV      |
@@ -184,75 +237,34 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_base_mem_query,
         return UCS_OK;
     }
 
-    if (address == NULL) {
-        mem_type              = UCS_MEMORY_TYPE_HOST;
+    if (address != NULL) {
+        status = uct_cuda_base_query_attributes(md, address, length,
+                                                &addr_mem_info);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucs_memtype_cache_update(addr_mem_info.base_address,
+                                 addr_mem_info.alloc_length,
+                                 &addr_mem_info);
     } else {
-        attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
-        attr_data[0] = &cuda_mem_mype;
-        attr_type[1] = CU_POINTER_ATTRIBUTE_IS_MANAGED;
-        attr_data[1] = &is_managed;
-        attr_type[2] = CU_POINTER_ATTRIBUTE_DEVICE_ORDINAL;
-        attr_data[2] = &cuda_device;
-
-        cu_err = cuPointerGetAttributes(ucs_static_array_size(attr_data),
-                                        attr_type, attr_data,
-                                        (CUdeviceptr)address);
-        if ((cu_err != CUDA_SUCCESS) || (cuda_mem_mype != CU_MEMORYTYPE_DEVICE)) {
-            /* pointer not recognized */
-            return UCS_ERR_INVALID_ADDR;
-        }
-
-        if (is_managed) {
-            mem_type = UCS_MEMORY_TYPE_CUDA_MANAGED;
-        } else {
-            mem_type = UCS_MEMORY_TYPE_CUDA;
-
-            /* Synchronize for DMA */
-            cu_err = cuPointerSetAttribute(&value,
-                                           CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
-                                           (CUdeviceptr)address);
-            if (cu_err != CUDA_SUCCESS) {
-                cuGetErrorString(cu_err, &cu_err_str);
-                ucs_warn("cuPointerSetAttribute(%p) error: %s", address,
-                         cu_err_str);
-            }
-        }
-
-        if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
-            status = uct_cuda_base_get_sys_dev(cuda_device, &sys_dev);
-            if (status != UCS_OK) {
-                return status;
-            }
-        }
-
-        if (mem_attr->field_mask & (UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-                                    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS)) {
-
-            status =
-                uct_cuda_base_get_base_addr_alloc_length(md, cuda_device,
-                                                         address, length,
-                                                         &base_address,
-                                                         &alloc_length);
-            if (status != UCS_OK) {
-                return status;
-            }
-        }
+        addr_mem_info = default_mem_info;
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_MEM_TYPE) {
-        mem_attr->mem_type = mem_type;
+        mem_attr->mem_type = addr_mem_info.type;
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_SYS_DEV) {
-        mem_attr->sys_dev = sys_dev;
+        mem_attr->sys_dev = addr_mem_info.sys_dev;
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS) {
-        mem_attr->base_address = base_address;
+        mem_attr->base_address = addr_mem_info.base_address;
     }
 
     if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH) {
-        mem_attr->alloc_length = alloc_length;
+        mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
     return UCS_OK;

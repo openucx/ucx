@@ -37,6 +37,7 @@ ucs_global_opts_t ucs_global_opts = {
     .debug_signo           = SIGHUP,
     .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
     .warn_unused_env_vars  = 1,
+    .enable_memtype_cache  = 1,
     .async_max_events      = 64,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
@@ -164,6 +165,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Issue warning about UCX_ environment variables which were not used by the\n"
   "configuration parser.",
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
+
+  {"MEMTYPE_CACHE", "y",
+   "Enable memory type (cuda/rocm) cache \n",
+   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
  {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
   "Maximal number of events which can be handled from one context",

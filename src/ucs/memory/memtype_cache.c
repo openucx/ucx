@@ -16,10 +16,15 @@
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
 #include <ucs/debug/memtrack_int.h>
+#include <ucs/type/spinlock.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucm/api/ucm.h>
+
+
+ucs_spinlock_t ucs_memtype_cache_global_instance_lock;
+ucs_memtype_cache_t *ucs_memtype_cache_global_instance = NULL;
 
 
 typedef enum {
@@ -27,6 +32,34 @@ typedef enum {
     UCS_MEMTYPE_CACHE_ACTION_REMOVE
 } ucs_memtype_cache_action_t;
 
+static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t);
+static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t);
+
+UCS_CLASS_DEFINE(ucs_memtype_cache_t, void);
+
+static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
+{
+    ucs_memtype_cache_t *memtype_cache = NULL;
+    ucs_status_t status;
+
+    if (!ucs_global_opts.enable_memtype_cache) {
+        return NULL;
+    }
+
+    if (ucs_memtype_cache_global_instance == NULL) {
+        ucs_spin_lock(&ucs_memtype_cache_global_instance_lock);
+        status = UCS_CLASS_NEW(ucs_memtype_cache_t, &memtype_cache);
+        if (status != UCS_OK) {
+            ucs_spin_unlock(&ucs_memtype_cache_global_instance_lock);
+            return NULL;
+        }
+
+        ucs_memtype_cache_global_instance = memtype_cache;
+        ucs_spin_unlock(&ucs_memtype_cache_global_instance_lock);
+    }
+
+    return ucs_memtype_cache_global_instance;
+}
 
 static UCS_F_ALWAYS_INLINE void
 ucs_memory_info_set_unknown(ucs_memory_info_t *mem_info)
@@ -120,8 +153,9 @@ static void ucs_memtype_cache_region_collect_callback(const ucs_pgtable_t *pgtab
 
 UCS_PROFILE_FUNC_VOID(ucs_memtype_cache_update_internal,
                       (memtype_cache, address, size, mem_info, action),
-                      ucs_memtype_cache_t *memtype_cache, const void *address,
-                      size_t size, const ucs_memory_info_t *mem_info,
+                      ucs_memtype_cache_t *memtype_cache,
+                      const void *address, size_t size,
+                      const ucs_memory_info_t *mem_info,
                       ucs_memtype_cache_action_t action)
 {
     ucs_memtype_cache_region_t *region, *tmp;
@@ -212,28 +246,31 @@ out_unlock:
     pthread_rwlock_unlock(&memtype_cache->lock);
 }
 
-void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache,
-                              const void *address, size_t size,
+void ucs_memtype_cache_update(const void *address, size_t size,
                               const ucs_memory_info_t *mem_info)
 {
-    ucs_memtype_cache_update_internal(memtype_cache, address, size, mem_info,
+    if (ucs_memtype_cache_global_instance == NULL) {
+        return;
+    }
+
+    ucs_memtype_cache_update_internal(ucs_memtype_cache_global_instance,
+                                      address, size, mem_info,
                                       UCS_MEMTYPE_CACHE_ACTION_SET_MEMTYPE);
 }
 
-void ucs_memtype_cache_remove(ucs_memtype_cache_t *memtype_cache,
-                              const void *address, size_t size)
+void ucs_memtype_cache_remove(const void *address, size_t size)
 {
     ucs_memory_info_t mem_info;
 
     ucs_memory_info_set_unknown(&mem_info);
-    ucs_memtype_cache_update_internal(memtype_cache, address, size, &mem_info,
+    ucs_memtype_cache_update_internal(ucs_memtype_cache_global_instance,
+                                      address, size, &mem_info,
                                       UCS_MEMTYPE_CACHE_ACTION_REMOVE);
 }
 
 static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
                                               ucm_event_t *event, void *arg)
 {
-    ucs_memtype_cache_t *memtype_cache = arg;
     ucs_memory_info_t mem_info         = {
         .type         = event->mem_type.mem_type,
         .sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN,
@@ -250,7 +287,7 @@ static void ucs_memtype_cache_event_callback(ucm_event_type_t event_type,
         return;
     }
 
-    ucs_memtype_cache_update_internal(memtype_cache, event->mem_type.address,
+    ucs_memtype_cache_update_internal(arg, event->mem_type.address,
                                       event->mem_type.size, &mem_info, action);
 }
 
@@ -269,14 +306,18 @@ static void ucs_memtype_cache_purge(ucs_memtype_cache_t *memtype_cache)
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
-                 (memtype_cache, address, size, mem_info),
-                 ucs_memtype_cache_t *memtype_cache, const void *address,
-                 size_t size, ucs_memory_info_t *mem_info)
+                 (address, size, mem_info),
+                 const void *address, size_t size, ucs_memory_info_t *mem_info)
 {
-    const ucs_pgt_addr_t start = (uintptr_t)address;
+    ucs_memtype_cache_t *memtype_cache = ucs_memtype_cache_get_global();
+    const ucs_pgt_addr_t start         = (uintptr_t)address;
     ucs_memtype_cache_region_t *region;
     ucs_pgt_region_t *pgt_region;
     ucs_status_t status;
+
+    if (memtype_cache == NULL) {
+        return UCS_ERR_NO_ELEM;
+    }
 
     pthread_rwlock_rdlock(&memtype_cache->lock);
 
@@ -319,7 +360,7 @@ static UCS_CLASS_INIT_FUNC(ucs_memtype_cache_t)
     }
 
     status = ucm_set_event_handler(UCM_EVENT_MEM_TYPE_ALLOC |
-                                   UCM_EVENT_MEM_TYPE_FREE |
+                                   UCM_EVENT_MEM_TYPE_FREE  |
                                    UCM_EVENT_FLAG_EXISTING_ALLOC,
                                    1000, ucs_memtype_cache_event_callback,
                                    self);
@@ -348,8 +389,14 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
     pthread_rwlock_destroy(&self->lock);
 }
 
-UCS_CLASS_DEFINE(ucs_memtype_cache_t, void);
-UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucs_memtype_cache_create, ucs_memtype_cache_t,
-                                ucs_memtype_cache_t)
-UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(ucs_memtype_cache_destroy, ucs_memtype_cache_t,
-                                   ucs_memtype_cache_t)
+UCS_STATIC_INIT {
+    ucs_spinlock_init(&ucs_memtype_cache_global_instance_lock, 0);
+}
+
+UCS_STATIC_CLEANUP {
+    ucs_spinlock_destroy(&ucs_memtype_cache_global_instance_lock);
+
+    if (ucs_memtype_cache_global_instance) {
+        UCS_CLASS_DELETE(ucs_memtype_cache_t, ucs_memtype_cache_global_instance);
+    }
+}

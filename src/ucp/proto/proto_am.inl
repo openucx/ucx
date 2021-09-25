@@ -541,7 +541,7 @@ ucp_proto_is_inline(ucp_ep_h ep, const ucp_memtype_thresh_t *max_eager_short,
 {
     return (ucs_likely(length <= max_eager_short->memtype_off) ||
             (length <= max_eager_short->memtype_on &&
-             ucp_memory_type_cache_is_empty(ep->worker->context)));
+             ucs_memtype_cache_is_empty()));
 }
 
 static UCS_F_ALWAYS_INLINE ucp_request_t*
