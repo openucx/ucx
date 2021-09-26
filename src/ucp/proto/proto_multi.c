@@ -79,6 +79,11 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
             continue;
         }
 
+        ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(overhead)
+                  UCP_PROTO_TIME_FMT(latency),
+                  lane, UCP_PROTO_TIME_ARG(lane_perf->overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->latency));
+
         /* Calculate maximal bandwidth-to-fragment-size ratio, which is used to
            adjust fragment sizes so they are proportional to bandwidth ratio and
            also do not exceed maximal supported size */

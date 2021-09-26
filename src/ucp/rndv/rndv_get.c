@@ -51,7 +51,7 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_GET_ZCOPY,
     };
 
-    if (!(init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
+    if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV,
                                  support_ppln)) {
         return UCS_ERR_UNSUPPORTED;

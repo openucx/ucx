@@ -137,12 +137,15 @@ static void ucp_proto_select_perf_str(const ucs_linear_func_t *perf,
                                       char *time_str, size_t time_str_max,
                                       char *bw_str, size_t bw_str_max)
 {
-    /* Estimated time */
-    snprintf(time_str, time_str_max, "%.0f + %.3f * N", perf->c * 1e9,
-             perf->m * 1e9);
+    /* Estimated time per 1024 bytes */
+    ucs_snprintf_safe(time_str, time_str_max,
+                      UCP_PROTO_PERF_FUNC_TIME_FMT,
+                      UCP_PROTO_PERF_FUNC_TIME_ARG(perf));
 
     /* Estimated bandwidth (MiB/s) */
-    snprintf(bw_str, bw_str_max, "%.2f", 1.0 / (perf->m * UCS_MBYTE));
+    ucs_snprintf_safe(bw_str, bw_str_max,
+                      UCP_PROTO_PERF_FUNC_BW_FMT,
+                      UCP_PROTO_PERF_FUNC_BW_ARG(perf));
 }
 
 
@@ -164,12 +167,12 @@ static ucs_status_t ucp_proto_thresholds_select_best(
     double x_intersect;
     size_t midpoint;
 
-    ucs_trace("  %-20s %-20s %-18s", "PROTOCOL", "TIME (nsec)", "BANDWIDTH (MB/s)");
+    ucs_trace("  %-20s %-20s %-18s", "PROTOCOL", "TIME (ns/KB)", "BANDWIDTH (MB/s)");
     ucs_for_each_bit(curr.proto_id, proto_mask) {
         ucp_proto_select_perf_str(&proto_perf[curr.proto_id].perf[perf_type],
                                   time_str, sizeof(time_str), bw_str,
                                   sizeof(bw_str));
-        ucs_trace("  %-16s %-20s %-18s",
+        ucs_trace("  %-20s %-20s %-18s",
                   ucp_proto_id_field(curr.proto_id, name), time_str, bw_str);
     }
 
@@ -402,13 +405,10 @@ ucp_proto_select_init_trace_caps(ucp_proto_id_t proto_id,
         range_end   = proto_caps->ranges[range_index].max_length;
         if (range_end > range_start) {
             perf = proto_caps->ranges[range_index].perf;
-            ucs_trace("range[%d] %s single:" UCP_PROTO_PERF_FUNC_FMT
-                      " multi:" UCP_PROTO_PERF_FUNC_FMT,
-                      range_index,
+            ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_TYPES_FMT, range_index,
                       ucs_memunits_range_str(range_start, range_end, thresh_str,
                                              sizeof(thresh_str)),
-                      UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_SINGLE]),
-                      UCP_PROTO_PERF_FUNC_ARG(&perf[UCP_PROTO_PERF_TYPE_MULTI]));
+                      UCP_PROTO_PERF_FUNC_TYPES_ARG(perf));
         }
         range_start = range_end + 1;
     }
@@ -1062,7 +1062,7 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     }
 
     if (op_attr_mask & UCP_OP_ATTR_FLAG_MULTI_SEND) {
-        ucs_string_buffer_appendf(strb, "multi,");
+        ucs_string_buffer_appendf(strb, ", multi");
     }
 
     ucs_string_buffer_rtrim(strb, ",");

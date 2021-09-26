@@ -205,6 +205,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
                                                     rpriv->lane);
     ctrl_latency  = (iface_attr->overhead * 2) + params->super.overhead +
                     ucp_tl_iface_latency(context, &iface_attr->latency);
+    ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
+              UCP_PROTO_TIME_ARG(ctrl_latency));
     send_overhead = ucs_linear_func_add3(
             ucp_proto_common_memreg_time(&params->super, rpriv->md_map),
             ucs_linear_func_make(ctrl_latency, 0.0), params->unpack_time);
@@ -357,6 +359,9 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
         for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
             ucs_linear_func_add_inplace(&caps->ranges[i].perf[perf_type],
                                         ack_perf[perf_type]);
+            ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_FMT(ack),
+                      i, ucp_proto_perf_types[perf_type],
+                      UCP_PROTO_PERF_FUNC_ARG(&caps->ranges[i].perf[perf_type]));
         }
     }
 
