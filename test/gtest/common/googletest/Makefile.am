@@ -51,6 +51,10 @@ noinst_HEADERS = \
 	internal/gtest-param-util.h \
 	internal/gtest-port.h \
 	internal/gtest-string.h \
-	internal/gtest-type-util.h
+	internal/gtest-type-util.h \
+	internal/gtest-port-arch.h \
+	internal/custom/gtest-port.h \
+	internal/custom/gtest-printers.h \
+	internal/custom/gtest.h
 
 endif
