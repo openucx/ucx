@@ -158,7 +158,8 @@ struct ucp_request {
                     /* UCT completion, used by flush and zero-copy operations */
                     uct_completion_t uct_comp;
 
-                    /* Used by rndv/rtr protocol to count ATP or RNDV_DATA */
+                    /* Used by rndv/rtr protocol to count ATP or RNDV_DATA
+                     * Used by rkey_ptr */
                     size_t           completed_size;
                 };
             } state;
@@ -216,11 +217,16 @@ struct ucp_request {
                     /* Remote buffer address for get/put operation */
                     uint64_t          remote_address;
 
-                    /* Key for remote buffer get/put operation */
+                    /* Key for remote buffer operation */
                     ucp_rkey_h        rkey;
 
-                    /* Descriptor for staging rendezvous data */
-                    ucp_mem_desc_t    *mdesc;
+                    union {
+                        /* Descriptor for staging rendezvous data */
+                        ucp_mem_desc_t *mdesc;
+
+                        /* Pointer for access to remote memory */
+                        void           *rkey_ptr_addr;
+                    };
 
                     union {
                         /* Used by "old" rendezvous protocols, in rndv.c */
@@ -240,19 +246,27 @@ struct ucp_request {
                             /* Data start offset of this request */
                             size_t offset;
 
-                            /* Used by rndv/put and rndv/put/frag */
-                            struct {
-                                /* Which lanes need to flush (0 in fence mode) */
-                                ucp_lane_map_t flush_map;
+                            union {
+                                /* Used by rndv/put and rndv/put/frag */
+                                struct {
+                                    /* Which lanes need to flush (0 in fence mode) */
+                                    ucp_lane_map_t flush_map;
 
-                                /* Which lanes need to send atp */
-                                ucp_lane_map_t atp_map;
-                            } put;
+                                    /* Which lanes need to send atp */
+                                    ucp_lane_map_t atp_map;
+                                } put;
 
-                            /* Used by rndv/send/ppln and rndv/recv/ppln */
-                            struct {
-                                uint8_t send_ack;
-                            } ppln;
+                                /* Used by rndv/send/ppln and rndv/recv/ppln */
+                                struct {
+                                    uint8_t send_ack;
+                                } ppln;
+
+                                /* Used by rndv/rkey_ptr */
+                                struct {
+                                    /* Element in queue for segmented RKEY ptr */
+                                    ucs_queue_elem_t  queue_elem;
+                                } rkey_ptr;
+                            };
                         };
                     };
                 } rndv;

@@ -195,6 +195,7 @@ typedef enum {
     UCP_RNDV_MODE_GET_PIPELINE, /* Use pipelined get_zcopy scheme in RNDV protocol */
     UCP_RNDV_MODE_PUT_PIPELINE, /* Use pipelined put_zcopy scheme in RNDV protocol */
     UCP_RNDV_MODE_AM, /* Use active-messages based RNDV protocol */
+    UCP_RNDV_MODE_RKEY_PTR, /* Use rkey_ptr in RNDV protocol */
     UCP_RNDV_MODE_LAST
 } ucp_rndv_mode_t;
 

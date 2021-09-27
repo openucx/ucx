@@ -68,7 +68,10 @@ typedef enum {
     UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG   = UCS_BIT(4),
 
     /* The message does not contain payload from the send buffer  */
-    UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY      = UCS_BIT(5)
+    UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY      = UCS_BIT(5),
+
+    /* Requires rkey_ptr capable MD */
+    UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR      = UCS_BIT(6),
 } ucp_proto_common_init_flags_t;
 
 

@@ -311,15 +311,22 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
                 goto out;
             }
 
-            if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
-                if (!(rkey_config_key->md_map &
-                    UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
-                    ucs_trace("%s: no support of dst md map 0x%" PRIx64,
-                              lane_desc, rkey_config_key->md_map);
-                    continue;
-                }
-            } else if (!(md_attr->cap.access_mem_types &
-                         UCS_BIT(rkey_config_key->mem_type))) {
+            if (((md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
+                 (flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) &&
+                !(rkey_config_key->md_map &
+                  UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
+                /* If remote key required remote memory domain should be
+                 * available */
+                ucs_trace("%s: no support of dst md map 0x%" PRIx64,
+                          lane_desc, rkey_config_key->md_map);
+                continue;
+            }
+
+            if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
+                !(md_attr->cap.access_mem_types &
+                  UCS_BIT(rkey_config_key->mem_type))) {
+                /* Remote memory domain without remote key must be able to
+                 * access relevant memory type */
                 ucs_trace("%s: no access to remote mem type %s", lane_desc,
                           ucs_memory_type_names[rkey_config_key->mem_type]);
                 continue;
@@ -681,6 +688,8 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     /* Calculate sender overhead */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
         send_overhead = ucp_proto_common_memreg_time(params, reg_md_map);
+    } else if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) {
+        send_overhead = ucs_linear_func_make(0, 0);
     } else {
         ucs_assert(reg_md_map == 0);
         status = ucp_proto_common_buffer_copy_time(
