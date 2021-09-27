@@ -403,7 +403,7 @@ UCS_TEST_P(test_dc, rand_dci_many_eps) {
 UCS_TEST_P(test_dc, rand_dci_pending_purge) {
     entity *rand_e             = create_rand_entity();
     uct_dc_mlx5_iface_t *iface = dc_iface(rand_e);
-    int num_eps                = 5;
+    int num_eps                = RUNNING_ON_VALGRIND ? 3 : 5;
     int ndci                   = iface->tx.ndci;
     int num_reqs               = 10;
     int idx                    = 0;

@@ -187,14 +187,12 @@ ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
     return UCS_OK;
 }
 
-static uct_tl_t *uct_find_tl(uct_component_h component, uint64_t md_flags,
-                             const char *tl_name)
+static uct_tl_t *uct_find_tl(uct_component_h component, const char *tl_name)
 {
     uct_tl_t *tl;
 
     ucs_list_for_each(tl, &component->tl_list, list) {
-        if (((tl_name != NULL) && !strcmp(tl_name, tl->name)) ||
-            ((tl_name == NULL) && (md_flags & UCT_MD_FLAG_SOCKADDR))) {
+        if ((tl_name != NULL) && !strcmp(tl_name, tl->name)) {
             return tl;
         }
     }
@@ -206,17 +204,10 @@ ucs_status_t uct_md_iface_config_read(uct_md_h md, const char *tl_name,
                                       uct_iface_config_t **config_p)
 {
     uct_config_bundle_t *bundle = NULL;
-    uct_md_attr_t md_attr;
     ucs_status_t status;
     uct_tl_t *tl;
 
-    status = uct_md_query(md, &md_attr);
-    if (status != UCS_OK) {
-        ucs_error("Failed to query MD");
-        return status;
-    }
-
-    tl = uct_find_tl(md->component, md_attr.cap.flags, tl_name);
+    tl = uct_find_tl(md->component, tl_name);
     if (tl == NULL) {
         if (tl_name == NULL) {
             ucs_error("There is no sockaddr transport registered on the md");
@@ -244,28 +235,20 @@ ucs_status_t uct_iface_open(uct_md_h md, uct_worker_h worker,
                             const uct_iface_config_t *config,
                             uct_iface_h *iface_p)
 {
-    uct_md_attr_t md_attr;
     ucs_status_t status;
     uct_tl_t *tl;
-
-    status = uct_md_query(md, &md_attr);
-    if (status != UCS_OK) {
-        ucs_error("Failed to query MD");
-        return status;
-    }
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
 
     if (params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE) {
-        tl = uct_find_tl(md->component, md_attr.cap.flags,
-                         params->mode.device.tl_name);
+        tl = uct_find_tl(md->component, params->mode.device.tl_name);
     } else if ((params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_CLIENT) ||
                (params->open_mode & UCT_IFACE_OPEN_MODE_SOCKADDR_SERVER)) {
-        tl = uct_find_tl(md->component, md_attr.cap.flags, NULL);
+        tl = uct_find_tl(md->component, NULL);
     } else {
         ucs_error("Invalid open mode %"PRIu64, params->open_mode);
-        return status;
+        return UCS_ERR_INVALID_PARAM;
     }
 
     if (tl == NULL) {
