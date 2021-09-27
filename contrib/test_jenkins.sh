@@ -673,9 +673,10 @@ run_ucx_perftest() {
 
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
-	sed -s 's,-n [0-9]*,-n 100,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types_uct |                sort -R > $ucx_inst_ptest/test_types_short_uct
-	cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
+	sed -s 's,-n [0-9]*,-n 100,g' $ucx_inst_ptest/msg_pow2 | sort -R >  $ucx_inst_ptest/msg_pow2_short
+	cat $ucx_inst_ptest/test_types_uct                     | sort -R >  $ucx_inst_ptest/test_types_short_uct
+	cat $ucx_inst_ptest/test_types_ucp     | grep -v cuda  | sort -R >  $ucx_inst_ptest/test_types_short_ucp
+	cat $ucx_inst_ptest/test_types_ucp_rma | grep -v cuda  | sort -R >> $ucx_inst_ptest/test_types_short_ucp
 
 	ucx_perftest="$ucx_inst/bin/ucx_perftest"
 	uct_test_args="-b $ucx_inst_ptest/test_types_short_uct \
@@ -760,7 +761,7 @@ run_ucx_perftest() {
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 		sed -s 's,-n [0-9]*,-n 10 -w 1,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
 
-		echo "==== Running ucx_perf with cuda memory===="
+		echo "==== Running ucx_perf with cuda memory ===="
 
 		for memtype_cache in y n
 		do
@@ -790,6 +791,15 @@ run_ucx_perftest() {
 			unset UCX_CUDA_IPC_CACHE
 			unset UCX_TLS
 		done
+
+		echo "==== Running ucx_perf with cuda memory and new protocols ===="
+
+		# Add RMA tests to the list of tests
+		cat $ucx_inst_ptest/test_types_ucp_rma | grep cuda | sort -R >> $ucx_inst_ptest/test_types_short_ucp
+
+		export UCX_PROTO_ENABLE=y
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		unset UCX_PROTO_ENABLE
 
 		unset CUDA_VISIBLE_DEVICES
 	fi

@@ -45,10 +45,6 @@ typedef struct ucx_perf_thread_context ucx_perf_thread_context_t;
 struct ucx_perf_allocator {
     ucs_memory_type_t mem_type;
     ucs_status_t (*init)(ucx_perf_context_t *perf);
-    ucs_status_t (*ucp_alloc)(const ucx_perf_context_t *perf, size_t length,
-                              void **address_p, ucp_mem_h *memh, int non_blk_flag);
-    void         (*ucp_free)(const ucx_perf_context_t *perf, void *address,
-                             ucp_mem_h memh);
     ucs_status_t (*uct_alloc)(const ucx_perf_context_t *perf, size_t length,
                               unsigned flags, uct_allocated_memory_t *alloc_mem);
     void         (*uct_free)(const ucx_perf_context_t *perf,
