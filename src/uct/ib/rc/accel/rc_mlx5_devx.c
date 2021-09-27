@@ -424,6 +424,10 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     if (status != UCS_OK) {
         return status;
     }
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        ucs_debug("rc devx under rtr with ece 0x%x",
+                  UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece));
+    }
 
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode,
                       UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
