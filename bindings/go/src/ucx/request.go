@@ -38,11 +38,11 @@ func NewRequest(request C.ucs_status_ptr_t, callbackId uint64, immidiateInfo int
 	} else {
 		requestStatus := UcsStatus(int64(uintptr(request)))
 		if callback, found := deregister(callbackId); found {
-			switch callback.(type) {
+			switch callback := callback.(type) {
 			case UcpSendCallback:
-				callback.(UcpSendCallback)(ucpRequest, requestStatus)
+				callback(ucpRequest, requestStatus)
 			case UcpTagRecvCallback:
-				callback.(UcpTagRecvCallback)(ucpRequest, requestStatus, immidiateInfo.(*UcpTagRecvInfo))
+				callback(ucpRequest, requestStatus, immidiateInfo.(*UcpTagRecvInfo))
 			}
 			if requestStatus != C.UCS_OK {
 				return ucpRequest, NewUcxError(C.ucs_status_t(requestStatus))

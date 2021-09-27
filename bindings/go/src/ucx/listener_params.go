@@ -39,6 +39,7 @@ func (p *UcpListenerParams) SetSocketAddress(a *net.TCPAddr) (*UcpListenerParams
 		return nil, error
 	}
 
+	freeParamsAddress(p)
 	p.params.field_mask |= C.UCP_LISTENER_PARAM_FIELD_SOCK_ADDR
 	p.params.sockaddr = *sockAddr
 	runtime.SetFinalizer(p, func(f *UcpListenerParams) { FreeNativeMemory(unsafe.Pointer(f.params.sockaddr.addr)) })

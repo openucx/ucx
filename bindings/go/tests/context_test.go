@@ -20,5 +20,7 @@ func TestUcpContext(t *testing.T) {
 		t.Fatalf("Failed to create a context %v", err)
 	}
 
+	ucpParams.SetName("Go test2")
+
 	context.Close()
 }

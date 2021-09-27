@@ -65,7 +65,9 @@ func (p *UcpEpParams) SetErrorHandler(errHandler UcpEpErrHandler) *UcpEpParams {
 
 // Tracing and analysis tools can identify the endpoint using this name.
 func (p *UcpEpParams) SetName(name string) *UcpEpParams {
+	freeParamsName(p)
 	p.params.name = C.CString(name)
+	runtime.SetFinalizer(p, func(f *UcpEpParams) { FreeNativeMemory(unsafe.Pointer(f.params.name)) })
 	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_NAME
 	return p
 }
@@ -78,6 +80,8 @@ func (p *UcpEpParams) SetSocketAddress(a *net.TCPAddr) (*UcpEpParams, error) {
 	if error != nil {
 		return nil, error
 	}
+
+	freeParamsAddress(p)
 
 	p.params.sockaddr = *sockAddr
 	runtime.SetFinalizer(p, func(f *UcpEpParams) { FreeNativeMemory(unsafe.Pointer(f.params.sockaddr.addr)) })

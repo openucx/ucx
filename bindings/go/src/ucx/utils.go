@@ -14,6 +14,7 @@ package ucx
 import "C"
 import (
 	"net"
+	"runtime"
 	"syscall"
 	"unsafe"
 )
@@ -24,6 +25,42 @@ func AllocateNativeMemory(size uint64) unsafe.Pointer {
 
 func FreeNativeMemory(pointer unsafe.Pointer) {
 	C.free(pointer)
+}
+
+// Helper method to check whether name of an ucp object is set.
+// if so, free previously set memory and finalizer
+func freeParamsName(p interface{}) {
+	var cstr *C.char
+	switch p := p.(type) {
+	case *UcpParams:
+		cstr = p.params.name
+	case *UcpWorkerParams:
+		cstr = p.params.name
+	case *UcpEpParams:
+		cstr = p.params.name
+	}
+
+	if cstr != nil {
+		runtime.SetFinalizer(p, nil)
+		FreeNativeMemory(unsafe.Pointer(cstr))
+	}
+}
+
+// Helper method to check whether sockaddr is set
+// if so, free previously set memory and finalizer
+func freeParamsAddress(p interface{}) {
+	var caddr *C.struct_sockaddr
+	switch p := p.(type) {
+	case *UcpListenerParams:
+		caddr = p.params.sockaddr.addr
+	case *UcpEpParams:
+		caddr = p.params.sockaddr.addr
+	}
+
+	if caddr != nil {
+		runtime.SetFinalizer(p, nil)
+		FreeNativeMemory(unsafe.Pointer(caddr))
+	}
 }
 
 func CBytes(data []byte) unsafe.Pointer {
