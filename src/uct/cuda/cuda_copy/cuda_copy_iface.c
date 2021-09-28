@@ -107,7 +107,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = ucs_linear_func_make(8e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+    iface_attr->bandwidth.shared        = UCT_CUDA_BASE_IFACE_DEFAULT_BANDWIDTH;
     iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
@@ -285,140 +285,6 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     }
 }
 
-static void uct_cuda_copy_get_nvml_device(ucs_sys_device_t sys_device,
-                                          nvmlDevice_t *device)
-{
-    char bus_id_str[] = "00000000:00:00.0";
-    ucs_sys_bus_id_t bus_id;
-    nvmlReturn_t nvml_err;
-    ucs_status_t status;
-
-    if (sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {
-        status = ucs_topo_get_device_bus_id(sys_device, &bus_id);
-        if (status != UCS_OK) {
-            return;
-        }
-
-        sprintf(bus_id_str, "00000000:%02x:00.0", bus_id.bus);
-        ucs_trace("nvml device = %s", bus_id_str);
-
-        nvml_err = nvmlDeviceGetHandleByPciBusId(bus_id_str, device);
-        if (nvml_err != NVML_SUCCESS) {
-            *device = 0;
-            return;
-        }
-    }
-}
-
-static double uct_cuda_copy_get_device_bw(ucs_sys_device_t sys_device)
-{
-    double bw                 = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
-    CUdevice_attribute attrib;
-    ucs_sys_bus_id_t bus_id;
-    int num_devices;
-    int bus;
-    int clock_rate;
-    int bus_width;
-    int i;
-    ucs_status_t status;
-
-    UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetCount(&num_devices));
-    status = ucs_topo_get_device_bus_id(sys_device, &bus_id);
-    if (status != UCS_OK) {
-        goto exit;
-    }
-
-    for (i = 0; i < num_devices; i++) {
-        attrib = CU_DEVICE_ATTRIBUTE_PCI_BUS_ID;
-        UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetAttribute(&bus, attrib, i));
-
-        if (bus_id.bus == bus) {
-            attrib = CU_DEVICE_ATTRIBUTE_CLOCK_RATE;
-            UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetAttribute(&clock_rate, attrib,
-                                                          i));
-
-            attrib = CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH;
-            UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetAttribute(&bus_width, attrib,
-                                                          i));
-
-            ucs_trace("cu device clock rate = %d, bus width = %d", clock_rate,
-                                                                   bus_width);
-            bw = ((clock_rate * (bus_width/8)) / 1000.0) * UCS_MBYTE;
-            goto exit;
-        }
-    }
-
-exit:
-    return bw;
-}
-
-static double uct_cuda_copy_get_pci_bw(nvmlDevice_t *device)
-{
-    double bw = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
-    unsigned link_gen;
-    unsigned link_width;
-    nvmlReturn_t nvml_err;
-
-
-    nvml_err = nvmlDeviceGetCurrPcieLinkGeneration(*device, &link_gen);
-    if (nvml_err != NVML_SUCCESS) {
-        goto exit;
-    }
-
-    nvml_err = nvmlDeviceGetCurrPcieLinkWidth(*device, &link_width);
-    if (nvml_err != NVML_SUCCESS) {
-        goto exit;
-    }
-
-    ucs_trace("nvml device link gen = %d, link width = %d", link_gen, link_width);
-
-    switch(link_gen) {
-        case 1:
-            bw = link_width * 250 * UCS_MBYTE;
-            break;
-        case 2:
-            bw = link_width * 500 * UCS_MBYTE;
-            break;
-        case 3:
-            bw = link_width * 985 * UCS_MBYTE;
-            break;
-        case 4:
-            bw = link_width * 1970 * UCS_MBYTE;
-            break;
-        case 5:
-            bw = link_width * 3940 * UCS_MBYTE;
-            break;
-        default:
-            bw = UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
-            break;
-    }
-
-exit:
-    return bw;
-}
-
-static double uct_cuda_copy_get_bw(ucs_sys_device_t local_sys_device,
-                                   ucs_sys_device_t remote_sys_device)
-{
-    nvmlDevice_t local_device  = 0;
-    nvmlDevice_t remote_device = 0;
-    double bw;
-
-    uct_cuda_copy_get_nvml_device(local_sys_device, &local_device);
-    uct_cuda_copy_get_nvml_device(remote_sys_device, &remote_device);
-
-    if ((local_device != 0) && (remote_device != 0)) {
-        ucs_assert(local_sys_device == remote_sys_device);
-        //TODO: handle different devices
-        bw = uct_cuda_copy_get_device_bw(local_sys_device);
-    } else {
-        bw = (local_device == 0) ? uct_cuda_copy_get_pci_bw(&remote_device) :
-                                   uct_cuda_copy_get_pci_bw(&local_device);
-    }
-
-    return bw;
-}
-
 static ucs_status_t
 uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
@@ -436,13 +302,13 @@ uct_cuda_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
             if ((perf_attr->local_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN) &&
                 (perf_attr->remote_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
                 perf_attr->bandwidth.shared =
-                    UCT_CUDA_COPY_IFACE_DEFAULT_BANDWIDTH;
+                    UCT_CUDA_BASE_IFACE_DEFAULT_BANDWIDTH;
                 return UCS_OK;
             }
 
             perf_attr->bandwidth.shared =
-                uct_cuda_copy_get_bw(perf_attr->local_sys_device,
-                        perf_attr->remote_sys_device);
+                uct_cuda_base_get_bw(perf_attr->local_sys_device,
+                                     perf_attr->remote_sys_device);
 
             ucs_trace("bw for local sys %u remote sys %u = %lf",
                       (unsigned)perf_attr->local_sys_device,

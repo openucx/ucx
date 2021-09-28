@@ -53,6 +53,7 @@ typedef struct uct_cuda_ipc_key {
     size_t         b_len;   /* Allocation size */
     int            dev_num; /* GPU Device number */
     CUuuid         uuid;    /* GPU Device UUID */
+    int            bus_id;  /* GPU Bus ID */
 } uct_cuda_ipc_key_t;
 
 

@@ -401,11 +401,77 @@ ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface)
     return UCS_OK;
 }
 
+static ucs_status_t
+uct_cuda_ipc_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    ucs_status_t status;
+    ucs_sys_bus_id_t remote_bus_id;
+    uct_cuda_ipc_key_t *key;
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = UCT_CUDA_IPC_IFACE_OVERHEAD;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth.dedicated = 0;
+        if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_KEY)) {
+
+            key = (uct_cuda_ipc_key_t *)perf_attr->rkey;
+            status = ucs_topo_get_device_bus_id(perf_attr->local_sys_device,
+                                                &remote_bus_id);
+            if (status != UCS_OK) {
+                goto err;
+            }
+
+            remote_bus_id.bus = (uint8_t)key->bus_id;
+            status =
+                ucs_topo_find_device_by_bus_id((const ucs_sys_bus_id_t*)
+                                               &remote_bus_id,
+                                               &perf_attr->remote_sys_device);
+            if (status != UCS_OK) {
+                goto err;
+            }
+
+            if ((perf_attr->local_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN) ||
+                 (perf_attr->remote_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
+                goto err;
+            }
+
+            if ((perf_attr->local_memory_type != UCS_MEMORY_TYPE_CUDA) ||
+                (perf_attr->remote_memory_type != UCS_MEMORY_TYPE_CUDA)) {
+            }
+
+            perf_attr->bandwidth.shared =
+                uct_cuda_base_get_bw(perf_attr->local_sys_device,
+                                     perf_attr->remote_sys_device);
+
+            ucs_trace("bw for local sys %u remote sys %u = %lf",
+                      (unsigned)perf_attr->local_sys_device,
+                      (unsigned)perf_attr->remote_sys_device,
+                      perf_attr->bandwidth.shared);
+        }
+
+    }
+
+    return UCS_OK;
+
+err:
+    return UCS_ERR_UNSUPPORTED;
+}
+
 static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_cuda_ipc_event_desc_init,
     .obj_cleanup   = uct_cuda_ipc_event_desc_cleanup,
+};
+
+static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
+    .iface_estimate_perf = uct_cuda_ipc_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
@@ -416,7 +482,8 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     ucs_status_t status;
 
     config = ucs_derived_of(tl_config, uct_cuda_ipc_iface_config_t);
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops, NULL,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_cuda_ipc_iface_ops,
+                              &uct_cuda_ipc_iface_internal_ops,
                               md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG("cuda_ipc"));

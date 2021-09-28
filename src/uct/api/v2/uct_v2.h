@@ -75,11 +75,14 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::remote_sys_device */
     UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE  = UCS_BIT(4),
 
+    /** Enables @ref uct_perf_attr_t::remote_sys_device */
+    UCT_PERF_ATTR_FIELD_REMOTE_KEY         = UCS_BIT(5),
+
     /** Enables @ref uct_perf_attr_t::overhead */
-    UCT_PERF_ATTR_FIELD_OVERHEAD           = UCS_BIT(5),
+    UCT_PERF_ATTR_FIELD_OVERHEAD           = UCS_BIT(6),
 
     /** Enables @ref uct_perf_attr_t::bandwidth */
-    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(6)
+    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(7)
 };
 
 
@@ -129,6 +132,12 @@ typedef struct {
      * This field must be initialized by the caller.
      */
     ucs_sys_device_t    remote_sys_device;
+
+    /**
+     * Remote details embedded in the remote key to help estimate performance.
+     * This field may be initialized by the caller.
+     */
+    uct_rkey_t          rkey;
 
     /**
      * Message overhead time, in seconds. This field is set by the UCT layer.
