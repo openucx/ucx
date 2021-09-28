@@ -1631,6 +1631,9 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         return UCS_ERR_INVALID_PARAM;
     }
 
+    self->super.super.super.config.ece_cfg.ece_enable = 0;
+    self->super.super.super.config.ece_cfg.ece.val = 0;
+
     init_attr.qp_type     = UCT_IB_QPT_DCI;
     init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN |
                             UCT_IB_TX_OPS_PER_PATH;
@@ -1643,6 +1646,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len *
                                       UCT_IB_MLX5_MAX_BB *
                                       (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
+
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
