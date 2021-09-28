@@ -1,0 +1,140 @@
+parameters:
+  - name: demands
+    type: string
+    default: "ucx_iodemo -equals yes"
+  - name: initial_delay
+    type: number
+    default: 20
+  - name: cycles
+    type: number
+    default: 100
+  - name: downtime
+    type: number
+    default: 5
+  - name: uptime
+    type: number
+    default: 40
+  - name: tests
+    type: object
+    default:
+      "tag match on CX4":
+        args: ""
+        duration: 480
+        interface: $(roce_iface_cx4)
+        tls: "rc_x"
+        test_name: tag_cx4_rc
+      "active messages on CX4":
+        args: "-A"
+        duration: 480
+        interface: $(roce_iface_cx4)
+        tls: "rc_x"
+        test_name: am_cx4_rc
+      "tag match on CX6/RC":
+        args: ""
+        duration: 480
+        interface: $(roce_iface_cx6)
+        tls: "rc_x"
+        test_name: tag_cx6_rc
+      "active messages on CX6/RC":
+        args: "-A"
+        duration: 480
+        interface: $(roce_iface_cx6)
+        tls: "rc_x"
+        test_name: am_cx6_rc
+      #"tag match on CX6/DC":
+      #  args: ""
+      #  duration: 480
+      #  interface: $(roce_iface_cx6)
+      #  tls: "dc_x"
+      #  test_name: tag_cx6_dc
+      #"active messages on CX6/DC":
+      #  args: "-A"
+      #  duration: 480
+      #  interface: $(roce_iface_cx6)
+      #  tls: "dc_x"
+      #  test_name: am_cx6_dc
+
+jobs:
+  - job: io_build
+    displayName: Build io_demo
+
+    pool:
+      name: MLNX
+      demands: ucx_docker -equals yes
+    container: centos7
+
+    steps:
+      # address permissions issue when some files created as read-only
+      - bash: chmod u+rwx ./ -R
+
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+        displayName: Checkout
+      - bash: |
+          set -eEx
+          ./autogen.sh
+          ./contrib/configure-release --prefix=$(Build.Repository.LocalPath)/install
+          make -j`nproc`
+          make install
+        displayName: Build
+        name: build
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: '$(Build.Repository.LocalPath)'
+          contents: |
+            buildlib/az-helpers.sh
+            buildlib/az-network-corrupter.sh
+            install/**
+            test/apps/iodemo/run_io_demo.sh
+          targetFolder: '$(Build.ArtifactStagingDirectory)'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: drop_$(Build.BuildId)
+
+  - job: test
+    dependsOn: io_build
+    workspace:
+      clean: all
+
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    strategy:
+      matrix:
+        ${{ each test in parameters.tests }}:
+          ${{ test.Key }}:
+            test_name: ${{ test.Value.test_name }}
+            test_args: ${{ test.Value.args }}
+            test_time: ${{ test.Value.duration }}
+            test_intefrafe: ${{ test.Value.interface }}
+            test_ucx_tls: ${{ test.Value.tls }}
+      maxParallel: 1
+
+    variables:
+      workspace: drop_$(Build.BuildId)
+      io_demo_exe: drop_$(Build.BuildId)/install/bin/io_demo
+      initial_delay: ${{ parameters.initial_delay }}
+      cycles: ${{ parameters.cycles }}
+      downtime: ${{ parameters.downtime }}
+      uptime: ${{ parameters.uptime }}
+
+    displayName: "Test: "
+    steps:
+      - checkout: none
+        clean: true
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: drop_$(Build.BuildId)
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: chmod u+rwx $(workspace) -R
+      - template: az-stage-io-demo.yaml
+        parameters:
+          name: $(test_name)
+          iodemo_args: $(test_args)
+          duration: $(test_time)
+          roce_iface: $(test_intefrafe)
+          iodemo_tls: $(test_ucx_tls)

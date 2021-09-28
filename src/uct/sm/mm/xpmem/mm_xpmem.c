@@ -14,7 +14,7 @@
 #include <uct/sm/mm/base/mm_md.h>
 #include <uct/sm/mm/base/mm_iface.h>
 #include <ucs/datastruct/khash.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/memory/rcache.h>
@@ -82,14 +82,22 @@ UCS_STATIC_INIT {
 }
 
 UCS_STATIC_CLEANUP {
+    unsigned long num_leaked_segments;
     uct_xpmem_remote_mem_t *rmem;
 
+    num_leaked_segments = 0;
     kh_foreach_value(&uct_xpmem_remote_mem_hash, rmem, {
-        ucs_warn("remote segment id %lx apid %lx is not released, refcount %d",
-                 (unsigned long)rmem->xsegid, (unsigned long)rmem->apid,
-                 rmem->refcount);
+        ucs_debug("remote segment id %lx apid %lx is not released, refcount %d",
+                  (unsigned long)rmem->xsegid, (unsigned long)rmem->apid,
+                  rmem->refcount);
+        ++num_leaked_segments;
     })
     kh_destroy_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
+
+    if (num_leaked_segments > 0) {
+        ucs_diag("%lu xpmem remote segments were not released at exit",
+                 num_leaked_segments);
+    }
 
     ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
 }

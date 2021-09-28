@@ -62,7 +62,7 @@ int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
  * The main thread progress part of attempting connecting the client to the server
  * through the next available cm.
  */
-static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
+unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 {
     ucp_ep_h ucp_ep       = arg;
     ucp_worker_h worker   = ucp_ep->worker;
@@ -72,6 +72,8 @@ static unsigned ucp_cm_client_try_next_cm_progress(void *arg)
     ucp_rsc_index_t cm_idx;
 
     UCS_ASYNC_BLOCK(&worker->async);
+
+    ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
 
     cm_idx = ucp_ep_ext_control(ucp_ep)->cm_idx;
     ucs_assert(cm_idx != UCP_NULL_RESOURCE);
@@ -313,10 +315,10 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
             continue;
         }
 
-        /* Transfer the pending queues content from the previosly configured
-         * UCP EP to a temporary queue for futher replaying */
+        /* Transfer the pending queues content from the previously configured
+         * UCP EP to a temporary queue for further replaying */
         uct_ep_pending_purge(ucp_ep->uct_eps[lane_idx],
-                             ucp_wireup_pending_purge_cb, &queue);
+                             ucp_request_purge_enqueue_cb, &queue);
 
         if (ucp_ep_config(ucp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
             uct_ep = ucp_wireup_extract_lane(ucp_ep, lane_idx);
@@ -485,7 +487,6 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
     ucp_wireup_ep_t *cm_wireup_ep;
     char addr_str[UCS_SOCKADDR_STRING_LEN];
 
-    UCS_ASYNC_BLOCK(&worker->async);
     ucs_assert_always(args->field_mask & UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME);
 
     UCP_EP_CM_CALLBACK_ENTER(ep, ucp_ep_get_cm_uct_ep(ep),
@@ -529,7 +530,6 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
     ucp_worker_signal_internal(worker);
 
 out:
-    UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
 }
 
@@ -619,7 +619,9 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
         goto out_free_addr;
     }
 
-    if (!context->config.ext.cm_use_all_devices) {
+    if (context->config.ext.cm_use_all_devices) {
+        ucp_wireup_remote_connect_lanes(ucp_ep, 0);
+    } else {
         ucp_wireup_remote_connected(ucp_ep);
     }
 
@@ -743,9 +745,7 @@ err_free_sa_data:
 err_free_arg:
     ucs_free(progress_arg);
 err_out:
-    UCS_ASYNC_BLOCK(&worker->async);
     ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
-    UCS_ASYNC_UNBLOCK(&worker->async);
 }
 
 static void ucp_ep_cm_remote_disconnect_progress(ucp_ep_h ucp_ep)
@@ -1224,10 +1224,11 @@ static unsigned ucp_cm_server_conn_notify_progress(void *arg)
 
     ucs_assert(ucp_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED);
 
-    if (!ucp_ep->worker->context->config.ext.cm_use_all_devices) {
-        ucp_wireup_remote_connected(ucp_ep);
-    } else {
+    if (ucp_ep->worker->context->config.ext.cm_use_all_devices) {
+        ucp_wireup_remote_connect_lanes(ucp_ep, 0);
         ucp_wireup_send_pre_request(ucp_ep);
+    } else {
+        ucp_wireup_remote_connected(ucp_ep);
     }
 
     UCS_ASYNC_UNBLOCK(&ucp_ep->worker->async);
@@ -1348,7 +1349,8 @@ ucp_cm_connect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
             return 1;
         }
     } else if (((elem->cb == ucp_cm_server_conn_notify_progress) ||
-                (elem->cb == ucp_cm_client_uct_connect_progress)) &&
+                (elem->cb == ucp_cm_client_uct_connect_progress) ||
+                (elem->cb == ucp_cm_client_try_next_cm_progress)) &&
                (elem->arg == arg)) {
         return 1;
     }

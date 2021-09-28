@@ -18,6 +18,7 @@ RUN apt-get update && \
         maven \
         udev \
         wget \
+        environment-modules \
     && apt-get remove -y openjdk-11-* || apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 

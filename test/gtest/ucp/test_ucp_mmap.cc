@@ -36,7 +36,7 @@ public:
 
     virtual void init() {
         ucs::skip_on_address_sanitizer();
-        if (get_variant_value() == VARIANT_PROTO_ENABLE) {
+        if (enable_proto()) {
             modify_config("PROTO_ENABLE", "y");
         }
         ucp_test::init();
@@ -75,6 +75,7 @@ protected:
     void test_length0(unsigned flags);
     void test_rkey_management(ucp_mem_h memh, bool is_dummy,
                               bool expect_rma_offload);
+    bool enable_proto() const;
 
 private:
     void expect_same_distance(const ucs_sys_dev_distance_t &dist1,
@@ -189,36 +190,47 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
     /* rkey->md_map is a subset of all possible keys */
     EXPECT_TRUE(ucs_test_all_flags(memh->md_map, rkey->md_map));
 
-    bool have_rma              = resolve_rma(&receiver(), rkey);
-    bool have_amo              = resolve_amo(&receiver(), rkey);
-    bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(&receiver(), rkey);
-    bool have_rma_bw_put_zcopy = resolve_rma_bw_put_zcopy(&receiver(), rkey);
+    /* Test remote key protocols selection */
+    if (enable_proto()) {
+        test_rkey_proto(memh);
+    } else {
+        bool have_rma              = resolve_rma(&receiver(), rkey);
+        bool have_amo              = resolve_amo(&receiver(), rkey);
+        bool have_rma_bw_get_zcopy = resolve_rma_bw_get_zcopy(&receiver(),
+                                                              rkey);
+        bool have_rma_bw_put_zcopy = resolve_rma_bw_put_zcopy(&receiver(),
+                                                              rkey);
 
-    /* Test that lane resolution on the remote key returns consistent results */
-    for (int i = 0; i < 10; ++i) {
-        switch (ucs::rand() % 4) {
-        case 0:
-            EXPECT_EQ(have_rma, resolve_rma(&receiver(), rkey));
-            break;
-        case 1:
-            EXPECT_EQ(have_amo, resolve_amo(&receiver(), rkey));
-            break;
-        case 2:
-            EXPECT_EQ(have_rma_bw_get_zcopy,
-                      resolve_rma_bw_get_zcopy(&receiver(), rkey));
-            break;
-        case 3:
-            EXPECT_EQ(have_rma_bw_put_zcopy,
-                      resolve_rma_bw_put_zcopy(&receiver(), rkey));
-            break;
+        /* Test that lane resolution on the remote key returns consistent results */
+        for (int i = 0; i < 10; ++i) {
+            switch (ucs::rand() % 4) {
+            case 0:
+                EXPECT_EQ(have_rma, resolve_rma(&receiver(), rkey));
+                break;
+            case 1:
+                EXPECT_EQ(have_amo, resolve_amo(&receiver(), rkey));
+                break;
+            case 2:
+                EXPECT_EQ(have_rma_bw_get_zcopy,
+                          resolve_rma_bw_get_zcopy(&receiver(), rkey));
+                break;
+            case 3:
+                EXPECT_EQ(have_rma_bw_put_zcopy,
+                          resolve_rma_bw_put_zcopy(&receiver(), rkey));
+                break;
+            }
         }
-    }
 
-    if (expect_rma_offload) {
-        if (is_dummy) {
-            EXPECT_EQ(&ucp_rma_sw_proto, rkey->cache.rma_proto);
-        } else {
-            EXPECT_EQ(&ucp_rma_basic_proto, rkey->cache.rma_proto);
+        if (expect_rma_offload) {
+            if (is_dummy) {
+                EXPECT_EQ(&ucp_rma_sw_proto,
+                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
+            } else {
+                ucs_assert(&ucp_rma_basic_proto ==
+                           UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
+                EXPECT_EQ(&ucp_rma_basic_proto,
+                          UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index));
+            }
         }
     }
 
@@ -233,9 +245,11 @@ void test_ucp_mmap::test_rkey_management(ucp_mem_h memh, bool is_dummy,
 
     ucp_rkey_destroy(rkey);
     ucp_rkey_buffer_release(rkey_buffer);
+}
 
-    /* Test remote key protocols selection */
-    test_rkey_proto(memh);
+bool test_ucp_mmap::enable_proto() const
+{
+    return get_variant_value() == VARIANT_PROTO_ENABLE;
 }
 
 void test_ucp_mmap::expect_same_distance(const ucs_sys_dev_distance_t &dist1,
@@ -258,9 +272,14 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     EXPECT_EQ(memh->mem_type, mem_info.type);
 
     /* Collect distances from all devices in the system */
-    uint64_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
+    ucp_sys_dev_map_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
     std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
     for (unsigned i = 0; i < sys_distance.size(); ++i) {
+        if (std::string(ucs_topo_sys_device_get_name(i)).find("test") == 0) {
+            /* Dummy device created by test */
+            continue;
+        }
+
         status = ucs_topo_get_distance(mem_info.sys_dev, i, &sys_distance[i]);
         ASSERT_UCS_OK(status);
     }
@@ -283,7 +302,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ASSERT_UCS_OK(status);
 
     /* Check rkey configuration */
-    if (receiver().ucph()->config.ext.proto_enable) {
+    if (enable_proto()) {
         ucp_rkey_config_t *rkey_config = ucp_rkey_config(receiver().worker(),
                                                          rkey);
         ucp_ep_config_t *ep_config     = ucp_ep_config(receiver().ep());
@@ -361,8 +380,9 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = ((*mem_type != UCS_MEMORY_TYPE_CUDA_MANAGED) &&
-                                  (is_tl_rdma() || is_tl_shm()));
+            expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(*mem_type) &&
+                                 (is_tl_rdma() || is_tl_shm()) &&
+                                 check_reg_mem_types(sender(), *mem_type);
             test_rkey_management(memh, is_dummy, expect_rma_offload);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
@@ -408,6 +428,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
     std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
+    bool expect_rma_offload;
     ucs_memory_type_t alloc_mem_type;
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
@@ -436,10 +457,12 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
         if (!is_dummy) {
             EXPECT_EQ(alloc_mem_type, memh->mem_type);
         }
-        test_rkey_management(memh, is_dummy,
+
+        expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
+                             !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type) &&
                              is_tl_rdma() &&
-                                     !UCP_MEM_IS_CUDA_MANAGED(alloc_mem_type) &&
-                                     !UCP_MEM_IS_ROCM_MANAGED(alloc_mem_type));
+                             check_reg_mem_types(sender(), alloc_mem_type);
+        test_rkey_management(memh, is_dummy, expect_rma_offload);
 
         status = ucp_mem_unmap(sender().ucph(), memh);
         ASSERT_UCS_OK(status);

@@ -16,7 +16,8 @@ ucp_proto_rdnv_am_init_common(ucp_proto_multi_init_params_t *params)
 {
     ucp_context_h context = params->super.super.worker->context;
 
-    if (params->super.super.select_param->op_id != UCP_OP_ID_RNDV_SEND) {
+    if (!ucp_proto_rndv_op_check(&params->super.super, UCP_OP_ID_RNDV_SEND,
+                                 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -29,7 +30,8 @@ ucp_proto_rdnv_am_init_common(ucp_proto_multi_init_params_t *params)
     params->super.hdr_size   = sizeof(ucp_rndv_data_hdr_t);
     params->max_lanes        = context->config.ext.max_rndv_lanes;
 
-    return ucp_proto_multi_init(params);
+    return ucp_proto_multi_init(params, params->super.super.priv,
+                                params->super.super.priv_size);
 }
 
 static size_t ucp_proto_rndv_am_bcopy_pack(void *dest, void *arg)
@@ -69,26 +71,26 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_am_bcopy_send_func(
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucp_proto_rndv_am_request_init(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_rndv_am_bcopy_complete(ucp_request_t *req)
 {
     if (req->send.rndv.rkey != NULL) {
-        ucp_rkey_destroy(req->send.rndv.rkey);
+        ucp_proto_rndv_rkey_destroy(req);
     }
-    ucp_proto_msg_multi_request_init(req);
-    /* Memory could be registered when we sent the RTS */
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter);
+                                &req->send.state.dt_iter,
+                                UCS_BIT(UCP_DATATYPE_CONTIG));
+    return ucp_proto_request_bcopy_complete_success(req);
 }
 
 static ucs_status_t ucp_proto_rndv_am_bcopy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
-    return ucp_proto_multi_bcopy_progress(
-            req, req->send.proto_config->priv, ucp_proto_rndv_am_request_init,
-            ucp_proto_rndv_am_bcopy_send_func,
-            ucp_proto_request_bcopy_complete_success);
+    return ucp_proto_multi_bcopy_progress(req, req->send.proto_config->priv,
+                                          NULL,
+                                          ucp_proto_rndv_am_bcopy_send_func,
+                                          ucp_proto_rndv_am_bcopy_complete);
 }
 
 static ucs_status_t
@@ -98,9 +100,13 @@ ucp_proto_rdnv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE,
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
+        .super.flags         = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
     };
@@ -113,6 +119,6 @@ static ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .flags      = 0,
     .init       = ucp_proto_rdnv_am_bcopy_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_rndv_am_bcopy_progress,
+    .progress   = {ucp_proto_rndv_am_bcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_rndv_am_bcopy_proto);

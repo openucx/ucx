@@ -15,8 +15,9 @@
 #include <ucp/wireup/ep_match.h>
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/datastruct/ptr_map.inl>
+#include <ucs/datastruct/ptr_map.h>
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/debug/assert.h>
 #include <ucs/stats/stats.h>
@@ -583,8 +584,8 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
-void ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
-                       ucs_status_t status);
+ucs_status_t
+ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
 
 void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                 ucs_status_t status);

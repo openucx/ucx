@@ -13,7 +13,7 @@
 #include "ucp_worker.h"
 
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sys.h>
@@ -51,6 +51,10 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     if (reg_md_map == *md_map_p) {
         return UCS_OK; /* shortcut - no changes required */
     }
+
+    ucs_assertv(reg_md_map <= UCS_MASK(context->num_mds),
+                "reg_md_map=0x%" PRIx64 " num_mds=%u", reg_md_map,
+                context->num_mds);
 
     prev_num_memh = ucs_popcount(*md_map_p & reg_md_map);
     prev_uct_memh = ucs_alloca(prev_num_memh * sizeof(*prev_uct_memh));
@@ -715,6 +719,36 @@ void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk)
     ucp_worker_h worker = ucs_container_of(mp, ucp_worker_t, rndv_frag_mp);
 
     ucp_mpool_free(worker, mp, chunk);
+}
+
+ucs_status_t
+ucp_mm_get_alloc_md_map(ucp_context_h context, ucp_md_map_t *md_map_p)
+{
+    ucs_status_t status;
+    ucp_mem_h memh;
+
+    UCP_THREAD_CS_ENTER(&context->mt_lock);
+
+    if (!context->alloc_md_map_initialized) {
+        /* Allocate dummy 1-byte buffer to get the expected md_map */
+        status = ucp_mem_map_common(context, NULL, 1, UCS_MEMORY_TYPE_HOST,
+                                    UCT_MD_MEM_ACCESS_ALL, 1,
+                                    "get_alloc_md_map", &memh);
+        if (status != UCS_OK) {
+            goto out;
+        }
+
+        context->alloc_md_map_initialized = 1;
+        context->alloc_md_map             = memh->md_map;
+        ucp_mem_unmap_common(context, memh);
+    }
+
+    *md_map_p = context->alloc_md_map;
+    status    = UCS_OK;
+
+out:
+    UCP_THREAD_CS_EXIT(&context->mt_lock);
+    return status;
 }
 
 void ucp_mem_print_info(const char *mem_size, ucp_context_h context, FILE *stream)

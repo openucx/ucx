@@ -192,6 +192,8 @@ extern char *cplus_demangle(const char *, int);
 #endif
 
 static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol);
+static int orig_sigaction(int signum, const struct sigaction *act,
+                          struct sigaction *oact);
 
 
 static char *ucs_debug_strdup(const char *str)
@@ -382,8 +384,7 @@ ucs_status_t ucs_debug_backtrace_create(backtrace_h *bckt, int strip)
     ucs_status_t status;
 
     *bckt  = NULL;
-    status = ucs_mmap_alloc(&size, (void**)bckt, 0
-                            UCS_MEMTRACK_NAME("debug backtrace object"));
+    status = ucs_mmap_alloc(&size, (void**)bckt, 0, "debug backtrace object");
     if (status != UCS_OK) {
         return status;
     }
@@ -589,8 +590,7 @@ ucs_status_t ucs_debug_backtrace_create(backtrace_h *bckt, int strip)
     ucs_status_t status;
 
     *bckt  = NULL;
-    status = ucs_mmap_alloc(&size, (void**)bckt, 0
-                            UCS_MEMTRACK_NAME("debug backtrace object"));
+    status = ucs_mmap_alloc(&size, (void**)bckt, 0, "debug backtrace object");
     if (status != UCS_OK) {
         return status;
     }
@@ -892,9 +892,17 @@ static void ucs_debug_send_mail(const char *message)
 
 static void ucs_error_freeze(const char *message)
 {
+    struct sigaction sigact = {
+        .sa_handler = SIG_DFL,
+        .sa_flags   = 0
+    };
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
     char response;
     int ret;
+
+    /* restore original SIGINT handler to allow termitate process via Ctrl+C */
+    sigemptyset(&sigact.sa_mask);
+    orig_sigaction(SIGINT, &sigact, NULL);
 
     ucs_debug_stop_other_threads();
 
@@ -1275,45 +1283,6 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
            !strcmp(symbol, "__ucs_log") ||
            !strcmp(symbol, "ucs_debug_send_mail") ||
            (strstr(symbol, "_L_unlock_") == symbol);
-}
-
-static ucs_status_t ucs_debug_get_lib_info(Dl_info *dl_info)
-{
-    int ret;
-
-    (void)dlerror();
-    ret = dladdr(ucs_debug_get_lib_info, dl_info);
-    if (ret == 0) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    return UCS_OK;
-}
-
-const char *ucs_debug_get_lib_path()
-{
-    ucs_status_t status;
-    Dl_info dl_info;
-
-    status = ucs_debug_get_lib_info(&dl_info);
-    if (status != UCS_OK) {
-        return "<failed to resolve libucs path>";
-    }
-
-    return dl_info.dli_fname;
-}
-
-unsigned long ucs_debug_get_lib_base_addr()
-{
-    ucs_status_t status;
-    Dl_info dl_info;
-
-    status = ucs_debug_get_lib_info(&dl_info);
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return (uintptr_t)dl_info.dli_fbase;
 }
 
 void ucs_debug_init()

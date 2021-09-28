@@ -173,7 +173,7 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     ucs_assert_always(status == UCS_OK);
     if (attach_shm_file) {
         /*
-         * Only MM tranports with attaching to SHM file can support error
+         * Only MM transports with attaching to SHM file can support error
          * handling mechanisms (e.g. EP checking) to check if a peer was down,
          * there is no safe way to check a process existence (touching a shared
          * memory block of a peer leads to "bus" error in case of a peer is
@@ -610,7 +610,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     uct_mm_iface_config_t *mm_config =
                     ucs_derived_of(tl_config, uct_mm_iface_config_t);
     uct_mm_fifo_element_t* fifo_elem_p;
-    size_t alignment, align_offset;
+    size_t alignment, align_offset, payload_offset;
     ucs_status_t status;
     unsigned i;
 
@@ -689,6 +689,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     self->read_index_elem     = UCT_MM_IFACE_GET_FIFO_ELEM(self,
                                                            self->recv_fifo_elems,
                                                            self->read_index);
+    payload_offset            = sizeof(uct_mm_recv_desc_t) + self->rx_headroom;
 
     /* create a unix file descriptor to receive event notifications */
     status = uct_mm_iface_create_signal_fd(self);
@@ -697,8 +698,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
     status = uct_iface_param_am_alignment(params, self->config.seg_size,
-                                          sizeof(uct_mm_recv_desc_t),
-                                          sizeof(uct_mm_recv_desc_t),
+                                          payload_offset, payload_offset,
                                           &alignment, &align_offset);
     if (status != UCS_OK) {
         goto err_close_signal_fd;
@@ -706,9 +706,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
 
     /* create a memory pool for receive descriptors */
     status = uct_iface_mpool_init(&self->super.super, &self->recv_desc_mp,
-                                  sizeof(uct_mm_recv_desc_t) +
-                                          self->rx_headroom +
-                                          self->config.seg_size,
+                                  payload_offset + self->config.seg_size,
                                   align_offset, alignment, &mm_config->mp,
                                   mm_config->mp.bufs_grow,
                                   uct_mm_iface_recv_desc_init, "mm_recv_desc");

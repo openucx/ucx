@@ -82,6 +82,10 @@ extern ucp_amo_proto_t ucp_amo_basic_proto;
 extern ucp_amo_proto_t ucp_amo_sw_proto;
 
 
+extern const ucp_rma_proto_t *ucp_rma_proto_list[];
+extern const ucp_amo_proto_t *ucp_amo_proto_list[];
+
+
 ucs_status_t ucp_rma_request_advance(ucp_request_t *req, ssize_t frag_length,
                                      ucs_status_t status,
                                      ucs_ptr_map_key_t req_id);
@@ -98,6 +102,5 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep);
         ((_init_params)->select_param->dt_class != UCP_DATATYPE_CONTIG)) { \
         return UCS_ERR_UNSUPPORTED; \
     }
-
 
 #endif

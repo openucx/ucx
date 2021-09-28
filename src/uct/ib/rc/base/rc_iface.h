@@ -181,6 +181,16 @@ struct uct_rc_iface_config {
 };
 
 
+/* QP TX cleanup context */
+typedef struct {
+    uct_ib_async_event_wait_t super;      /* LAST_WQE event callback */
+    uct_rc_iface_t            *iface;     /* interface */
+    ucs_list_link_t           list;       /* entry in interface ep_gc_list */
+    uint32_t                  qp_num;     /* QP number to clean up */
+    uint16_t                  cq_credits; /* how many CQ credits to release */
+} uct_rc_iface_qp_cleanup_ctx_t;
+
+
 typedef ucs_status_t
 (*uct_rc_iface_init_rx_func_t)(uct_rc_iface_t *iface,
                                const uct_rc_iface_common_config_t *config);
@@ -198,19 +208,25 @@ typedef ucs_status_t (*uct_rc_iface_fc_handler_func_t)(uct_rc_iface_t *iface,
                                                        uint16_t lid,
                                                        unsigned flags);
 
-typedef unsigned (*uct_rc_iface_cleanup_qp_func_t)(void *arg);
+typedef void (*uct_rc_iface_qp_cleanup_func_t)(
+        uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx);
+
 
 typedef void (*uct_rc_iface_ep_post_check_func_t)(uct_ep_h tl_ep);
 
 
+typedef void (*uct_rc_iface_ep_vfs_populate_func_t)(uct_rc_ep_t *rc_ep);
+
+
 typedef struct uct_rc_iface_ops {
-    uct_ib_iface_ops_t                super;
-    uct_rc_iface_init_rx_func_t       init_rx;
-    uct_rc_iface_cleanup_rx_func_t    cleanup_rx;
-    uct_rc_iface_fc_ctrl_func_t       fc_ctrl;
-    uct_rc_iface_fc_handler_func_t    fc_handler;
-    uct_rc_iface_cleanup_qp_func_t    cleanup_qp;
-    uct_rc_iface_ep_post_check_func_t ep_post_check;
+    uct_ib_iface_ops_t                  super;
+    uct_rc_iface_init_rx_func_t         init_rx;
+    uct_rc_iface_cleanup_rx_func_t      cleanup_rx;
+    uct_rc_iface_fc_ctrl_func_t         fc_ctrl;
+    uct_rc_iface_fc_handler_func_t      fc_handler;
+    uct_rc_iface_qp_cleanup_func_t      cleanup_qp;
+    uct_rc_iface_ep_post_check_func_t   ep_post_check;
+    uct_rc_iface_ep_vfs_populate_func_t ep_vfs_populate;
 } uct_rc_iface_ops_t;
 
 
@@ -293,7 +309,7 @@ struct uct_rc_iface {
 
     uct_rc_ep_t              **eps[UCT_RC_QP_TABLE_SIZE];
     ucs_list_link_t          ep_list;
-    ucs_list_link_t          ep_gc_list;
+    ucs_list_link_t          qp_gc_list;
 
     /* Progress function (either regular or TM aware) */
     ucs_callback_t           progress;
@@ -325,6 +341,10 @@ struct uct_rc_iface_send_op {
     uct_completion_t              *user_comp;
 #ifndef NVALGRIND
     struct iovec                  *iov;        /* get_zcopy with valgrind */
+#endif
+
+#if ENABLE_DEBUG_DATA
+    const char                    *name;       /* object ID, debug only */
 #endif
 };
 
@@ -368,7 +388,10 @@ void uct_rc_iface_send_desc_init(uct_iface_h tl_iface, void *obj, uct_mem_h memh
 
 void uct_rc_ep_am_zcopy_handler(uct_rc_iface_send_op_t *op, const void *resp);
 
-void uct_rc_iface_cleanup_eps(uct_rc_iface_t *iface);
+void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface);
+
+unsigned uct_rc_iface_qp_cleanup_progress(void *arg);
+
 
 /**
  * Creates an RC or DCI QP
@@ -409,6 +432,12 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
 void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface);
 
+void uct_rc_iface_vfs_refresh(uct_iface_h iface);
+
+ucs_arbiter_cb_result_t
+uct_rc_ep_process_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
+                          ucs_arbiter_elem_t *elem, void *arg);
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_pending_req_t *req)
 {
@@ -447,6 +476,17 @@ uct_rc_iface_update_reads(uct_rc_iface_t *iface)
 
     iface->tx.reads_available += iface->tx.reads_completed;
     iface->tx.reads_completed  = 0;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_add_cq_credits_dispatch(uct_rc_iface_t *iface, uint16_t cq_credits)
+{
+    iface->tx.cq_available += cq_credits;
+    ucs_assertv(iface->tx.cq_available <= iface->config.tx_cq_len,
+                "cq_available=%d tx_cq_len=%d cq_credits=%d",
+                iface->tx.cq_available, iface->config.tx_cq_len, cq_credits);
+    ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending,
+                         NULL);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_iface_send_op_t*
@@ -564,6 +604,14 @@ static UCS_F_ALWAYS_INLINE int
 uct_rc_iface_poll_tx(uct_rc_iface_t *iface, unsigned count)
 {
     return (count == 0) || iface->config.tx_poll_always;
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_send_op_set_name(uct_rc_iface_send_op_t *op, const char *name)
+{
+#if ENABLE_DEBUG_DATA
+    op->name = name;
+#endif
 }
 
 #endif

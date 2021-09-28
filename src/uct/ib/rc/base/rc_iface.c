@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -12,9 +13,10 @@
 #include "rc_ep.h"
 
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
 
@@ -125,8 +127,9 @@ ucs_config_field_t uct_rc_iface_config_table[] = {
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_iface_stats_class = {
-    .name = "rc_iface",
-    .num_counters = UCT_RC_IFACE_STAT_LAST,
+    .name          = "rc_iface",
+    .num_counters  = UCT_RC_IFACE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_IFACE_STAT_RX_COMPLETION] = "rx_completion",
         [UCT_RC_IFACE_STAT_TX_COMPLETION] = "tx_completion",
@@ -142,14 +145,21 @@ static ucs_mpool_ops_t uct_rc_pending_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
+
+
+static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                      ucs_string_buffer_t *strb);
+
 
 static ucs_mpool_ops_t uct_rc_send_op_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = ucp_send_op_mpool_obj_str
 };
 
 ucs_status_t uct_rc_iface_query(uct_rc_iface_t *iface,
@@ -579,7 +589,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     memset(self->eps, 0, sizeof(self->eps));
     ucs_arbiter_init(&self->tx.arbiter);
     ucs_list_head_init(&self->ep_list);
-    ucs_list_head_init(&self->ep_gc_list);
+    ucs_list_head_init(&self->qp_gc_list);
 
     /* Check FC parameters correctness */
     if ((config->fc.hard_thresh <= 0) || (config->fc.hard_thresh >= 1)) {
@@ -679,16 +689,38 @@ err:
     return status;
 }
 
-void uct_rc_iface_cleanup_eps(uct_rc_iface_t *iface)
+unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
 {
-    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
-    uct_rc_ep_cleanup_ctx_t *cleanup_ctx, *tmp;
+    uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx = arg;
+    uct_rc_iface_t *iface                      = cleanup_ctx->iface;
+    uct_rc_iface_ops_t *ops;
 
-    ucs_list_for_each_safe(cleanup_ctx, tmp, &iface->ep_gc_list, list) {
-        ops->cleanup_qp(&cleanup_ctx->super);
+    uct_ib_device_async_event_unregister(uct_ib_iface_device(&iface->super),
+                                         IBV_EVENT_QP_LAST_WQE_REACHED,
+                                         cleanup_ctx->qp_num);
+
+    ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
+    ops->cleanup_qp(cleanup_ctx);
+
+    if (cleanup_ctx->cq_credits > 0) {
+        uct_rc_iface_add_cq_credits_dispatch(iface, cleanup_ctx->cq_credits);
     }
 
-    ucs_assert(ucs_list_is_empty(&iface->ep_gc_list));
+    ucs_list_del(&cleanup_ctx->list);
+    ucs_free(cleanup_ctx);
+    return 1;
+}
+
+void uct_rc_iface_cleanup_qps(uct_rc_iface_t *iface)
+{
+    uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx, *tmp;
+
+    ucs_list_for_each_safe(cleanup_ctx, tmp, &iface->qp_gc_list, list) {
+        cleanup_ctx->cq_credits = 0; /* prevent arbiter dispatch */
+        uct_rc_iface_qp_cleanup_progress(cleanup_ctx);
+    }
+
+    ucs_assert(ucs_list_is_empty(&iface->qp_gc_list));
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
@@ -923,3 +955,44 @@ void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface)
                             &iface->tx.reads_completed, UCS_VFS_TYPE_SSIZET,
                             "reads_completed");
 }
+
+void uct_rc_iface_vfs_refresh(uct_iface_h iface)
+{
+    uct_rc_iface_t *rc_iface         = ucs_derived_of(iface, uct_rc_iface_t);
+    uct_rc_iface_ops_t *rc_iface_ops = ucs_derived_of(rc_iface->super.ops,
+                                                      uct_rc_iface_ops_t);
+    uct_rc_ep_t *ep;
+
+    /* Add iface resources */
+    uct_rc_iface_vfs_populate(rc_iface);
+
+    /* Add objects for EPs */
+    ucs_list_for_each(ep, &rc_iface->ep_list, list) {
+        rc_iface_ops->ep_vfs_populate(ep);
+    }
+}
+
+static void ucp_send_op_mpool_obj_str(ucs_mpool_t *mp, void *obj,
+                                      ucs_string_buffer_t *strb)
+{
+    uct_rc_iface_send_op_t *op    = obj;
+    const char *handler_func_name = ucs_debug_get_symbol_name(op->handler);
+    const char *comp_func_name;
+
+    ucs_string_buffer_appendf(strb, "flags:0x%x handler:%s()", op->flags,
+                              handler_func_name);
+
+    if (op->flags & UCT_RC_IFACE_SEND_OP_STATUS) {
+        ucs_string_buffer_appendf(strb, " status:%d", op->status);
+    }
+
+    if (op->user_comp != NULL) {
+        comp_func_name = ucs_debug_get_symbol_name(op->user_comp->func);
+        ucs_string_buffer_appendf(strb, " comp:%s()", comp_func_name);
+    }
+
+#if ENABLE_DEBUG_DATA
+    ucs_string_buffer_appendf(strb, " name:%s", op->name);
+#endif
+}
+

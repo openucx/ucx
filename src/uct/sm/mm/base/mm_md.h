@@ -10,7 +10,7 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/config/types.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
 
 
@@ -181,6 +181,8 @@ typedef struct uct_mm_component {
             .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER( \
                                       &(_var).super), \
             .flags              = 0, \
+            .md_vfs_init        = \
+                    (uct_component_md_vfs_init_func_t)ucs_empty_function \
        }, \
        .md_ops                  = (_md_ops) \
     }; \
@@ -196,7 +198,7 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
 
 ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p);
 
-void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, int support_alloc);
+void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, uint64_t max_alloc);
 
 ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p);

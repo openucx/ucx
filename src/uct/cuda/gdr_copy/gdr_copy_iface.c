@@ -102,11 +102,11 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->bandwidth.dedicated = 0;
         if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION) {
             switch (perf_attr->operation) {
-            case UCT_OP_GET_SHORT:
-            case UCT_OP_GET_ZCOPY:
+            case UCT_EP_OP_GET_SHORT:
+            case UCT_EP_OP_GET_ZCOPY:
                 perf_attr->bandwidth.shared = 440.0 * UCS_MBYTE;
                 break;
-            case UCT_OP_PUT_SHORT:
+            case UCT_EP_OP_PUT_SHORT:
                 perf_attr->bandwidth.shared = 10200.0 * UCS_MBYTE;
                 break;
             default:
@@ -149,6 +149,7 @@ static uct_iface_ops_t uct_gdr_copy_iface_ops = {
 static uct_iface_internal_ops_t uct_gdr_copy_iface_internal_ops = {
     .iface_estimate_perf = uct_gdr_copy_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function,
 };
 
 static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worker,

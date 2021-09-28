@@ -825,6 +825,12 @@ static uct_iface_ops_t uct_rdmacm_cm_iface_ops = {
     .iface_is_reachable       = (uct_iface_is_reachable_func_t)ucs_empty_function_return_zero
 };
 
+static uct_iface_internal_ops_t uct_rdmacm_cm_iface_internal_ops = {
+    .iface_estimate_perf = (uct_iface_estimate_perf_func_t)ucs_empty_function,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = uct_rdmacm_ep_query,
+};
+
 static ucs_status_t
 uct_rdmacm_cm_ipstr_to_sockaddr(const char *ip_str, struct sockaddr **saddr_p,
                                 const char *debug_name)
@@ -870,8 +876,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
     ucs_log_level_t log_lvl;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_cm_t, &uct_rdmacm_cm_ops,
-                              &uct_rdmacm_cm_iface_ops, worker, component,
-                              config);
+                              &uct_rdmacm_cm_iface_ops, &uct_rdmacm_cm_iface_internal_ops,
+                              worker, component, config);
 
     kh_init_inplace(uct_rdmacm_cm_device_contexts, &self->ctxs);
 

@@ -70,10 +70,8 @@ uct_rc_verbs_update_tx_res(uct_rc_iface_t *iface, uct_rc_verbs_ep_t *ep,
 {
     ep->txcnt.ci += count;
     uct_rc_txqp_available_add(&ep->super.txqp, count);
-    iface->tx.cq_available += count;
     uct_rc_iface_update_reads(iface);
-    ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending,
-                         NULL);
+    uct_rc_iface_add_cq_credits_dispatch(iface, count);
 }
 
 static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
@@ -126,14 +124,18 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
             wc->wr_id, wc->vendor_err, peer_info);
 }
 
-ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
+static ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
 {
     switch (status)
     {
     case IBV_WC_SUCCESS:
         return UCS_OK;
+    case IBV_WC_REM_ACCESS_ERR:
+    case IBV_WC_REM_OP_ERR:
+        return UCS_ERR_CONNECTION_RESET;
     case IBV_WC_RETRY_EXC_ERR:
     case IBV_WC_RNR_RETRY_EXC_ERR:
+    case IBV_WC_REM_ABORT_ERR:
         return UCS_ERR_ENDPOINT_TIMEOUT;
     case IBV_WC_WR_FLUSH_ERR:
         return UCS_ERR_CANCELED;
@@ -247,6 +249,14 @@ void uct_rc_iface_verbs_cleanup_rx(uct_rc_iface_t *rc_iface)
 
     /* TODO flush RX buffers */
     uct_ib_destroy_srq(iface->srq);
+}
+
+static void
+uct_rc_verbs_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
+{
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx =
+            ucs_derived_of(rc_cleanup_ctx, uct_rc_verbs_iface_qp_cleanup_ctx_t);
+    uct_ib_destroy_qp(cleanup_ctx->qp);
 }
 
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
@@ -431,7 +441,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_iface_t)
     uct_base_iface_progress_disable(&self->super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
 
-    uct_rc_iface_cleanup_eps(&self->super);
+    uct_rc_iface_cleanup_qps(&self->super);
 
     if (self->fc_desc != NULL) {
         ucs_mpool_put(self->fc_desc);
@@ -488,19 +498,20 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
         .super = {
             .iface_estimate_perf = uct_base_iface_estimate_perf,
-            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .iface_vfs_refresh   = uct_rc_iface_vfs_refresh
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .arm_cq         = uct_ib_iface_arm_cq,
         .event_cq       = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
         .handle_failure = uct_rc_verbs_handle_failure,
     },
-    .init_rx       = uct_rc_iface_verbs_init_rx,
-    .cleanup_rx    = uct_rc_iface_verbs_cleanup_rx,
-    .fc_ctrl       = uct_rc_verbs_ep_fc_ctrl,
-    .fc_handler    = uct_rc_iface_fc_handler,
-    .cleanup_qp    = uct_rc_verbs_ep_cleanup_qp,
-    .ep_post_check = uct_rc_verbs_ep_post_check,
+    .init_rx         = uct_rc_iface_verbs_init_rx,
+    .cleanup_rx      = uct_rc_iface_verbs_cleanup_rx,
+    .fc_ctrl         = uct_rc_verbs_ep_fc_ctrl,
+    .fc_handler      = uct_rc_iface_fc_handler,
+    .cleanup_qp      = uct_rc_verbs_iface_qp_cleanup,
+    .ep_post_check   = uct_rc_verbs_ep_post_check,
+    .ep_vfs_populate = uct_rc_verbs_ep_vfs_populate
 };
 
 static ucs_status_t

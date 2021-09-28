@@ -57,14 +57,16 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
 
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak, iface->super.super.config.min_rnr_timer);
 
+    /* Infiniband and RoCE v1 set traffic class.
+     * Also set it for RoCE v2, because some old FW versions rely on tclass
+     * even for RoCE v2. */
+    UCT_IB_MLX5DV_SET(dctc, dctc, tclass,
+                      iface->super.super.super.config.traffic_class);
+
     if (uct_ib_iface_is_roce_v2(&iface->super.super.super, dev)) {
         /* RoCE V2 sets DSCP */
         UCT_IB_MLX5DV_SET(dctc, dctc, dscp,
                           uct_ib_iface_roce_dscp(&iface->super.super.super));
-    } else if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
-        /* Infiniband sets traffic class */
-        UCT_IB_MLX5DV_SET(dctc, dctc, tclass,
-                          iface->super.super.super.config.traffic_class);
     }
 
     UCT_IB_MLX5DV_SET(dctc, dctc, mtu, iface->super.super.super.config.path_mtu);

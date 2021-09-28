@@ -24,6 +24,11 @@ protected:
         free(chunk);
     }
 
+    static void obj_str(ucs_mpool_t *mp, void *obj, ucs_string_buffer_t *strb)
+    {
+        ucs_string_buffer_appendf(strb, "test-obj-%p", obj);
+    }
+
     static ucs_log_func_rc_t
     mpool_log_handler(const char *file, unsigned line, const char *function,
                       ucs_log_level_t level,
@@ -44,6 +49,12 @@ protected:
         return UCS_LOG_FUNC_RC_CONTINUE;
     }
 
+    static bool is_leak_str(const std::string &str)
+    {
+        return (str.find("not returned to mpool test") != std::string::npos) &&
+               (str.find("{test-obj-") != std::string::npos);
+    }
+
     static ucs_log_func_rc_t
     mpool_log_leak_handler(const char *file, unsigned line,
                            const char *function, ucs_log_level_t level,
@@ -51,10 +62,10 @@ protected:
                            const char *message, va_list ap)
     {
         if (level == UCS_LOG_LEVEL_WARN) {
-            std::string err_str = format_message(message, ap);
-
-            if (err_str.find("was not returned to mpool test") !=
-                std::string::npos) {
+            std::string msg = format_message(message, ap);
+            if (is_leak_str(msg)) {
+                UCS_TEST_MESSAGE << "< " << msg << " >";
+                ++leak_count;
                 return UCS_LOG_FUNC_RC_STOP;
             }
         }
@@ -65,7 +76,10 @@ protected:
     static const size_t header_size = 30;
     static const size_t data_size = 152;
     static const size_t align = 128;
+    static size_t leak_count;
 };
+
+size_t test_mpool::leak_count;
 
 UCS_TEST_F(test_mpool, no_allocs) {
     ucs_mpool_t mp;
@@ -74,6 +88,7 @@ UCS_TEST_F(test_mpool, no_allocs) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
        NULL,
        NULL
     };
@@ -102,6 +117,7 @@ UCS_TEST_F(test_mpool, basic) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
        NULL,
        NULL
     };
@@ -151,6 +167,7 @@ UCS_TEST_F(test_mpool, custom_alloc) {
        test_alloc,
        test_free,
        NULL,
+       NULL,
        NULL
     };
 
@@ -173,6 +190,7 @@ UCS_TEST_F(test_mpool, grow) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
        NULL,
        NULL
     };
@@ -199,6 +217,7 @@ UCS_TEST_F(test_mpool, infinite) {
     ucs_mpool_ops_t ops = {
        ucs_mpool_chunk_malloc,
        ucs_mpool_chunk_free,
+       NULL,
        NULL,
        NULL
     };
@@ -230,17 +249,56 @@ UCS_TEST_F(test_mpool, leak_check) {
         ucs_mpool_chunk_malloc,
         ucs_mpool_chunk_free,
         NULL,
-        NULL
+        NULL,
+        obj_str
     };
 
     status = ucs_mpool_init(&mp, 0, header_size + data_size, header_size, align,
                             6, 18, &ops, "test");
     ASSERT_UCS_OK(status);
 
-    void *obj = ucs_mpool_get(&mp);
-    EXPECT_TRUE(obj != NULL);
-    // Do not release allocated object
+    for (int i = 0; i < 5; ++i) {
+        void *obj = ucs_mpool_get(&mp);
+        EXPECT_TRUE(obj != NULL);
+    }
+    // Do not release allocated objects
 
+    leak_count = 0;
     scoped_log_handler log_handler(mpool_log_leak_handler);
+    ucs_mpool_cleanup(&mp, 1);
+
+    EXPECT_EQ(5u, leak_count);
+}
+
+UCS_TEST_SKIP_COND_F(test_mpool, alloc_4g, RUNNING_ON_VALGRIND) {
+    const unsigned elems_per_chunk = 128;
+    const size_t elem_size         = 32 * UCS_MBYTE;
+    ucs_mpool_ops_t mpool_ops = {ucs_mpool_chunk_malloc, ucs_mpool_chunk_free,
+                                 NULL, NULL, NULL};
+    ucs_mpool_t mp;
+
+    ucs_status_t status = ucs_mpool_init(&mp, 0, header_size + elem_size,
+                                         header_size, align, elems_per_chunk,
+                                         elems_per_chunk, &mpool_ops, "test");
+    ASSERT_UCS_OK(status);
+
+    // Allocate objects per one chunk size
+    std::vector<void*> objs;
+    for (unsigned i = 0; i < elems_per_chunk; ++i) {
+        void *obj = ucs_mpool_get(&mp);
+        if (obj == NULL) {
+            ADD_FAILURE() << "Could not allocate object [" << i
+                          << "] from mpool";
+            break;
+        }
+        objs.push_back(obj);
+    }
+
+    // Release allocated objects
+    while (!objs.empty()) {
+        ucs_mpool_put(objs.back());
+        objs.pop_back();
+    }
+
     ucs_mpool_cleanup(&mp, 1);
 }

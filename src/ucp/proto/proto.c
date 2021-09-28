@@ -14,3 +14,8 @@
 const ucp_proto_t *ucp_protocols[UCP_PROTO_MAX_COUNT] = {};
 unsigned ucp_protocols_count                          = 0;
 
+const char *ucp_proto_perf_types[] = {
+    [UCP_PROTO_PERF_TYPE_SINGLE] = "single",
+    [UCP_PROTO_PERF_TYPE_MULTI]  = "multi"
+};
+

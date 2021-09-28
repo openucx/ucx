@@ -11,6 +11,13 @@ extern "C" {
 class test_bitops : public ucs::test {
 };
 
+UCS_TEST_F(test_bitops, ffs32) {
+    EXPECT_EQ(0u, ucs_ffs32(0xfffff));
+    EXPECT_EQ(16u, ucs_ffs32(0xf0000));
+    EXPECT_EQ(1u, ucs_ffs32(0x4002));
+    EXPECT_EQ(21u, ucs_ffs32(1ull << 21));
+}
+
 UCS_TEST_F(test_bitops, ffs64) {
     EXPECT_EQ(0u, ucs_ffs64(0xfffff));
     EXPECT_EQ(16u, ucs_ffs64(0xf0000));

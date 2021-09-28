@@ -12,7 +12,7 @@ lib_LTLIBRARIES     = libucs.la
 bin_PROGRAMS        =
 
 libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\" \
-                     -DUCX_CONF_DIR=\"$(ucx_conf_dir)\"
+                     -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
 libucs_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
@@ -45,6 +45,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/string_set.h \
 	debug/log_def.h \
 	debug/debug.h \
+	debug/memtrack.h \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
@@ -61,6 +62,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/sock.h \
 	sys/topo.h \
 	sys/stubs.h \
+	sys/uid.h \
 	time/time_def.h \
 	type/class.h \
 	type/param.h \
@@ -70,6 +72,7 @@ nobase_dist_libucs_la_HEADERS = \
 	type/thread_mode.h \
 	type/cpu_set.h \
 	vfs/base/vfs_obj.h \
+	vfs/base/vfs_cb.h \
 	arch/atomic.h \
 	arch/x86_64/global_opts.h \
 	arch/x86_64/atomic.h \
@@ -99,13 +102,14 @@ noinst_HEADERS = \
 	debug/assert.h \
 	debug/debug_int.h \
 	debug/log.h \
-	debug/memtrack.h \
+	debug/memtrack_int.h \
 	memory/numa.h \
 	memory/rcache_int.h \
 	profile/profile.h \
 	stats/stats.h \
 	sys/checker.h \
 	sys/compiler.h \
+	sys/lib.h \
 	sys/module.h \
 	sys/sys.h \
 	sys/iovec.h \
@@ -147,6 +151,7 @@ libucs_la_SOURCES = \
 	datastruct/mpool.c \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
+	datastruct/ptr_map.c \
 	datastruct/strided_alloc.c \
 	datastruct/string_buffer.c \
 	datastruct/string_set.c \
@@ -168,9 +173,11 @@ libucs_la_SOURCES = \
 	sys/string.c \
 	sys/sys.c \
 	sys/iovec.c \
+	sys/lib.c \
 	sys/sock.c \
 	sys/topo.c \
 	sys/stubs.c \
+	sys/uid.c \
 	time/time.c \
 	time/timer_wheel.c \
 	time/timerq.c \
@@ -178,7 +185,8 @@ libucs_la_SOURCES = \
 	type/status.c \
 	type/spinlock.c \
 	type/thread_mode.c \
-	vfs/base/vfs_obj.c
+	vfs/base/vfs_obj.c \
+	vfs/base/vfs_cb.c
 
 if HAVE_AARCH64_THUNDERX2
 libucs_la_SOURCES += \

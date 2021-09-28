@@ -6,7 +6,9 @@
 */
 
 #include <common/test.h>
+
 extern "C" {
+#include <ucs/debug/memtrack.h>
 #include <ucs/datastruct/array.inl>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>
@@ -14,6 +16,7 @@ extern "C" {
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
 #include <ucs/time/time.h>
+#include <ucs/type/init_once.h>
 #include <ucs/arch/cpu.h>
 }
 
@@ -542,6 +545,14 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
 
     ucs_ptr_array_set(&pa, 100, &g);
 
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 7);
+
+    index = ucs_ptr_array_bulk_alloc(&pa, 200);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 207);
+
+    EXPECT_EQ(301u, pa.size);
+    EXPECT_EQ(101u, index);
+
     void *vc;
     int present = ucs_ptr_array_lookup(&pa, 2, vc);
     ASSERT_TRUE(present);
@@ -563,12 +574,16 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     present = ucs_ptr_array_lookup(&pa, 100, vc);
     EXPECT_EQ(&g, vc);
 
+    present = ucs_ptr_array_lookup(&pa, 101, vc);
+    EXPECT_EQ(NULL, vc);
+
+    present = ucs_ptr_array_lookup(&pa, 301, vc);
+    EXPECT_EQ(NULL, vc);
+
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 99, vc));
-    EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 101, vc));
+    EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 302, vc));
     EXPECT_FALSE(ucs_ptr_array_lookup(&pa, 5005, vc));
-
-    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 7);
 
     ucs_ptr_array_remove(&pa, 0);
     ucs_ptr_array_remove(&pa, 1);
@@ -577,15 +592,64 @@ UCS_TEST_F(test_datatype, ptr_array_basic) {
     ucs_ptr_array_remove(&pa, 4);
     ucs_ptr_array_remove(&pa, 6);
 
-    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 1);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 201);
     EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 0);
 
-    ucs_ptr_array_remove(&pa, 100);
+    for (index = 100; index <= 300; index++) {
+        ucs_ptr_array_remove(&pa, index);
+    }
 
     EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 0);
     EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 1);
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
+}
+
+UCS_TEST_F(test_datatype, ptr_array_bulk_alloc) {
+    ucs_ptr_array_t pa;
+    unsigned idx, alloc1, alloc2;
+
+    ucs_ptr_array_init(&pa, "ptr_array alloc test");
+
+    alloc1 = ucs_ptr_array_bulk_alloc(&pa, 10);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 10);
+
+    EXPECT_GE(pa.size, 10u);
+    EXPECT_EQ(alloc1, 0u);
+
+    alloc2 = ucs_ptr_array_bulk_alloc(&pa, 100);
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
+
+    EXPECT_GE(pa.size, 110u);
+    EXPECT_EQ(alloc2, alloc1 + 10u);
+
+    for (idx = 0; idx < alloc2; idx++) {
+        ucs_ptr_array_remove(&pa, idx);
+    }
+
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 100);
+    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10));
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
+
+    for (idx = alloc1 + 10; idx > alloc1; idx--) {
+        ucs_ptr_array_remove(&pa, idx - 1);
+    }
+
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 100);
+    EXPECT_EQ(alloc1, ucs_ptr_array_bulk_alloc(&pa, 10));
+    EXPECT_EQ(ucs_ptr_array_get_elem_count(&pa), 110);
+
+    for (idx = alloc1; idx < alloc1 + 10; idx++) {
+        ucs_ptr_array_remove(&pa, idx);
+    }
+
+    for (idx = alloc2; idx < alloc2 + 100; idx++) {
+        ucs_ptr_array_remove(&pa, idx);
+    }
+
+    EXPECT_EQ(ucs_ptr_array_is_empty(&pa), 1);
+
+    ucs_ptr_array_cleanup(&pa, 1);
 }
 
 UCS_TEST_F(test_datatype, ptr_array_set_first) {
@@ -602,7 +666,7 @@ UCS_TEST_F(test_datatype, ptr_array_set_first) {
 
     ucs_ptr_array_remove(&pa, 0);
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
 }
 
 UCS_TEST_F(test_datatype, ptr_array_random) {
@@ -668,7 +732,7 @@ UCS_TEST_F(test_datatype, ptr_array_random) {
 
     EXPECT_EQ(count_elements, expeced_count);
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
 }
 
 UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
@@ -711,7 +775,7 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_perf,
 
     ucs_time_t end_time = ucs_get_time();
 
-    ucs_ptr_array_cleanup(&pa);
+    ucs_ptr_array_cleanup(&pa, 1);
 
     double insert_ns = ucs_time_to_nsec(lookup_start_time  - insert_start_time) / count;
     double lookup_ns = ucs_time_to_nsec(foreach_start_time - lookup_start_time) / count;
@@ -769,6 +833,10 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
 
     ucs_ptr_array_locked_set(&pa, 100, &g);
 
+    index = ucs_ptr_array_locked_bulk_alloc(&pa, 200);
+    EXPECT_EQ(301u, pa.super.size);
+    EXPECT_EQ(101u, index);
+
     void *vc;
     int present = ucs_ptr_array_locked_lookup(&pa, 2, &vc);
     ASSERT_TRUE(present);
@@ -790,9 +858,15 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
     present = ucs_ptr_array_locked_lookup(&pa, 100, &vc);
     EXPECT_EQ(&g, vc);
 
+    present = ucs_ptr_array_locked_lookup(&pa, 101, &vc);
+    EXPECT_EQ(NULL, vc);
+
+    present = ucs_ptr_array_locked_lookup(&pa, 301, &vc);
+    EXPECT_EQ(NULL, vc);
+
     EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 5, &vc));
     EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 99, &vc));
-    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 101, &vc));
+    EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 302, &vc));
     EXPECT_FALSE(ucs_ptr_array_locked_lookup(&pa, 5005, &vc));
 
     ucs_ptr_array_locked_remove(&pa, 0);
@@ -803,7 +877,7 @@ UCS_TEST_F(test_datatype, ptr_array_locked_basic) {
     ucs_ptr_array_locked_remove(&pa, 6);
     ucs_ptr_array_locked_remove(&pa, 100);
 
-    ucs_ptr_array_locked_cleanup(&pa);
+    ucs_ptr_array_locked_cleanup(&pa, 0);
 }
 
 UCS_TEST_F(test_datatype, ptr_array_locked_random) {
@@ -863,7 +937,7 @@ UCS_TEST_F(test_datatype, ptr_array_locked_random) {
         free(ptr);
     }
 
-    ucs_ptr_array_locked_cleanup(&pa);
+    ucs_ptr_array_locked_cleanup(&pa, 1);
 }
 
 UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
@@ -901,7 +975,7 @@ UCS_TEST_SKIP_COND_F(test_datatype, ptr_array_locked_perf,
 
     ucs_time_t end_time = ucs_get_time();
 
-    ucs_ptr_array_locked_cleanup(&pa);
+    ucs_ptr_array_locked_cleanup(&pa, 1);
 
     double insert_ns = ucs_time_to_nsec(lookup_start_time  - insert_start_time) / count;
     double lookup_ns = ucs_time_to_nsec(foreach_start_time - lookup_start_time) / count;
@@ -1077,22 +1151,34 @@ UCS_TEST_F(test_array, fixed_onstack) {
     test_fixed(&test_array, num_elems);
 }
 
-UCS_TEST_F(test_datatype, ptr_map) {
-    typedef std::map<ucs_ptr_map_key_t, char*> std_map_t;
+class test_datatype_ptr_map : public test_datatype {
+public:
+    UCS_PTR_MAP_DEFINE(unsafe_put, 0);
+    UCS_PTR_MAP_DEFINE(safe_put, 1);
 
-    const size_t N = 10 * UCS_KBYTE;
-    ucs_ptr_map_key_t ptr_key;
-    ucs_ptr_map_t     ptr_map;
-    std_map_t         std_map;
-    ucs_status_t      status;
+    typedef std::map<ucs_ptr_map_key_t, int*> std_map_t;
+    typedef std_map_t::const_iterator std_map_it_t;
+    typedef std::vector<int> std_vec_t;
+    typedef std_vec_t::iterator std_vec_it_t;
 
-    status = ucs_ptr_map_init(&ptr_map);
-    ASSERT_EQ(UCS_OK, status);
+    static const size_t vec_size      = 10 * (1 << 10);
+    static const unsigned num_threads = 4;
+};
 
-    for (size_t i = 0; i < N; ++i) {
-        char *ptr     = new char;
+UCS_TEST_F(test_datatype_ptr_map, unsafe_put) {
+    UCS_PTR_MAP_T(unsafe_put) ptr_map;
+
+    std_map_t std_map;
+    std_vec_t std_vec(vec_size, 0);
+
+    ASSERT_UCS_OK(UCS_PTR_MAP_INIT(unsafe_put, &ptr_map));
+
+    for (std_vec_it_t it = std_vec.begin(); it != std_vec.end(); ++it) {
         bool indirect = ucs::rand() % 2;
-        status = ucs_ptr_map_put(&ptr_map, ptr, indirect, &ptr_key);
+        ucs_ptr_map_key_t ptr_key;
+        ucs_status_t status = UCS_PTR_MAP_PUT(unsafe_put, &ptr_map, &(*it),
+                                              indirect, &ptr_key);
+
         if (indirect) {
             ASSERT_UCS_OK(status);
             EXPECT_TRUE(ucs_ptr_map_key_indirect(ptr_key));
@@ -1101,14 +1187,15 @@ UCS_TEST_F(test_datatype, ptr_map) {
             EXPECT_FALSE(ucs_ptr_map_key_indirect(ptr_key));
         }
 
-        std_map[ptr_key] = ptr;
+        std_map[ptr_key] = &(*it);
     }
 
-    for (std_map_t::iterator i = std_map.begin(); i != std_map.end(); ++i) {
+    for (std_map_it_t i = std_map.begin(); i != std_map.end(); ++i) {
         bool indirect = ucs_ptr_map_key_indirect(i->first);
         bool extract  = ucs::rand() % 2;
         void *value;
-        status = ucs_ptr_map_get(&ptr_map, i->first, extract, &value);
+        ucs_status_t status = UCS_PTR_MAP_GET(unsafe_put, &ptr_map, i->first,
+                                              extract, &value);
         if (indirect) {
             ASSERT_EQ(UCS_OK, status);
         } else {
@@ -1117,15 +1204,80 @@ UCS_TEST_F(test_datatype, ptr_map) {
 
         ASSERT_EQ(i->second, value);
         if (!extract) {
-            status = ucs_ptr_map_del(&ptr_map, i->first);
+            status = UCS_PTR_MAP_DEL(unsafe_put, &ptr_map, i->first);
             if (indirect) {
                 ASSERT_EQ(UCS_OK, status);
             } else {
                 ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
             }
         }
-        delete i->second;
     }
 
-    ucs_ptr_map_destroy(&ptr_map);
+    UCS_PTR_MAP_DESTROY(unsafe_put, &ptr_map);
+}
+
+UCS_MT_TEST_F(test_datatype_ptr_map, safe_put, num_threads)
+{
+    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
+    static pthread_mutex_t mutex     = PTHREAD_MUTEX_INITIALIZER;
+    static UCS_PTR_MAP_T(safe_put) ptr_map;
+
+    std_map_t std_map;
+    std_vec_t std_vec(vec_size / num_threads, 0);
+
+    UCS_INIT_ONCE(&init_once) {
+        ASSERT_UCS_OK(UCS_PTR_MAP_INIT(safe_put, &ptr_map));
+    }
+
+    barrier();
+
+    for (std_vec_it_t it = std_vec.begin(); it != std_vec.end(); ++it) {
+        bool indirect = ucs::rand() % 2;
+        ucs_ptr_map_key_t ptr_key;
+        ucs_status_t status = UCS_PTR_MAP_PUT(safe_put, &ptr_map, &(*it),
+                                              indirect, &ptr_key);
+
+        if (indirect) {
+            ASSERT_UCS_OK(status);
+            EXPECT_TRUE(ucs_ptr_map_key_indirect(ptr_key));
+        } else {
+            ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+            EXPECT_FALSE(ucs_ptr_map_key_indirect(ptr_key));
+        }
+
+        std_map[ptr_key] = &(*it);
+    }
+
+    {
+        ucs::scoped_mutex_lock lock(mutex);
+        for (std_map_it_t i = std_map.begin(); i != std_map.end(); ++i) {
+            bool indirect = ucs_ptr_map_key_indirect(i->first);
+            bool extract  = ucs::rand() % 2;
+            void *value;
+            ucs_status_t status = UCS_PTR_MAP_GET(safe_put, &ptr_map, i->first,
+                                                  extract, &value);
+            if (indirect) {
+                ASSERT_EQ(UCS_OK, status);
+            } else {
+                ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+            }
+
+            ASSERT_EQ(i->second, value);
+            if (!extract) {
+                status = UCS_PTR_MAP_DEL(safe_put, &ptr_map, i->first);
+                if (indirect) {
+                    ASSERT_EQ(UCS_OK, status);
+                } else {
+                    ASSERT_EQ(UCS_ERR_NO_PROGRESS, status);
+                }
+            }
+        }
+    }
+
+    barrier();
+
+    UCS_CLEANUP_ONCE(&init_once)
+    {
+        UCS_PTR_MAP_DESTROY(safe_put, &ptr_map);
+    }
 }

@@ -153,17 +153,6 @@ struct uct_md {
     }
 
 
-static UCS_F_ALWAYS_INLINE void*
-uct_md_fill_md_name(uct_md_h md, void *buffer)
-{
-#if ENABLE_DEBUG_DATA
-    memcpy(buffer, md->component->name, UCT_COMPONENT_NAME_MAX);
-    return (char*)buffer + UCT_COMPONENT_NAME_MAX;
-#else
-    return buffer;
-#endif
-}
-
 /*
  * Base implementation of query_md_resources(), which returns a single md
  * resource whose name is identical to component name.
@@ -240,5 +229,9 @@ static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
     return (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
             UCS_LOG_LEVEL_ERROR;
 }
+
+
+void uct_md_vfs_init(uct_component_h component, uct_md_h md,
+                     const char *md_name);
 
 #endif

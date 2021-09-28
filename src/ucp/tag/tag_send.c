@@ -113,7 +113,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
      * release the request and return the status.
      * Otherwise, return the request.
      */
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);
     }
@@ -262,7 +262,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
             ucp_request_send_check_status(status, ret, goto out);
         }
     } else {
-        datatype = ucp_dt_make_contig(1);
+        datatype      = ucp_dt_make_contig(1);
+        contig_length = count;
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -298,7 +299,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
-    ucp_worker_h worker = ep->worker;
+    ucp_worker_h worker  = ep->worker;
+    size_t contig_length = 0;
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
@@ -332,12 +334,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 
     if (worker->context->config.ext.proto_enable) {
         req->send.msg_proto.tag = tag;
+        if (UCP_DT_IS_CONTIG(datatype)) {
+            contig_length = ucp_contig_dt_length(datatype, count);
+        }
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_TAG_SEND_SYNC, buffer, count,
-                                        datatype,
-                                        ucp_contig_dt_length(datatype, count),
-                                        param);
+                                        datatype, contig_length, param);
     } else {
         ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
                               UCP_REQUEST_FLAG_SYNC, param);

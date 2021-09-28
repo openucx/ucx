@@ -56,9 +56,12 @@ private:
     class rte {
     public:
         /* RTE functions */
-        rte(unsigned index, rte_comm& send, rte_comm& recv);
+        rte(unsigned index, unsigned group_size, unsigned peer,
+            rte_comm& send, rte_comm& recv);
 
         unsigned index() const;
+
+        unsigned gsize() const;
 
         static unsigned group_size(void *rte_group);
 
@@ -82,6 +85,8 @@ private:
 
     private:
         const unsigned m_index;
+        const unsigned m_gsize;
+        const unsigned m_peer;
         rte_comm       &m_send;
         rte_comm       &m_recv;
     };
@@ -98,12 +103,22 @@ private:
 
     static void set_affinity(int cpu);
 
-    static void* thread_func(void *arg);
+    static void* test_func(void *arg);
+
+    void test_params_init(const test_spec &test,
+                          ucx_perf_params_t &params,
+                          unsigned flags,
+                          const std::string &tl_name,
+                          const std::string &dev_name);
 
     test_result run_multi_threaded(const test_spec &test, unsigned flags,
                                    const std::string &tl_name,
                                    const std::string &dev_name,
                                    const std::vector<int> &cpus);
+
+    test_result run_single_threaded(const test_spec &test, unsigned flags,
+                                    const std::string &tl_name,
+                                    const std::string &dev_name);
 };
 
 #endif

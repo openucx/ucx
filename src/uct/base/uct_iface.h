@@ -19,7 +19,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/compiler.h>
-#include <ucs/sys/sys.h>
+#include <ucs/sys/uid.h>
 #include <ucs/type/class.h>
 #include <uct/api/v2/uct_v2.h>
 #include <ucs/type/param.h>
@@ -235,10 +235,15 @@ typedef ucs_status_t (*uct_iface_estimate_perf_func_t)(
 typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
 
 
+/* Query the attributes of the ep */
+typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_estimate_perf_func_t iface_estimate_perf;
     uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
+    uct_ep_query_func_t            ep_query;
 } uct_iface_internal_ops_t;
 
 
@@ -290,8 +295,8 @@ typedef struct uct_failed_iface {
  * Keepalive info used by EP
  */
 typedef struct uct_keepalive_info {
-    ucs_time_t start_time; /* Process start time */
-    char       proc[]; /* Process owner proc dir */
+    struct timespec start_time; /* Process start time */
+    char            proc[]; /* Process owner proc dir */
 } uct_keepalive_info_t;
 
 
@@ -554,8 +559,6 @@ typedef struct {
  * @param _priv   Variable which will hold a pointer to request private data.
  * @param _queue  The pending queue.
  * @param _cond   Condition which should be true in order to keep dispatching.
- *
- * TODO support a callback returning UCS_INPROGRESS.
  */
 #define uct_pending_queue_dispatch(_priv, _queue, _cond) \
     while (!ucs_queue_is_empty(_queue)) { \
@@ -563,10 +566,8 @@ typedef struct {
         uct_pending_req_t *_req; \
         ucs_status_t _status; \
         \
-        _base_priv = \
-            ucs_queue_head_elem_non_empty((_queue), \
-                                          uct_pending_req_priv_queue_t, \
-                                          queue_elem); \
+        _base_priv = ucs_queue_head_elem_non_empty( \
+                (_queue), uct_pending_req_priv_queue_t, queue_elem); \
         \
         UCS_STATIC_ASSERT(sizeof(*(_priv)) <= UCT_PENDING_REQ_PRIV_LEN); \
         _priv = (typeof(_priv))(_base_priv); \
@@ -578,8 +579,15 @@ typedef struct {
         _req = ucs_container_of(_priv, uct_pending_req_t, priv); \
         ucs_queue_pull_non_empty(_queue); \
         _status = _req->func(_req); \
-        if ((_status == UCS_ERR_NO_RESOURCE) || (_status == UCS_INPROGRESS)) { \
-            ucs_queue_push_head(_queue, &_base_priv->queue_elem); \
+        if ((_status) == UCS_OK) { \
+            /* pending element should be removed from queue */ \
+            continue; \
+        } \
+        \
+        /* pending element did not complete; return it to the queue */ \
+        ucs_queue_push_head(_queue, &_base_priv->queue_elem); \
+        if (UCS_STATUS_IS_ERR(_status)) { \
+            break; \
         } \
     }
 
@@ -764,8 +772,12 @@ uct_iface_invoke_am(uct_base_iface_t *iface, uint8_t id, void *data,
 
     handler = &iface->am[id];
     status = handler->cb(handler->arg, data, length, flags);
-    ucs_assert((status == UCS_OK) ||
-               ((status == UCS_INPROGRESS) && (flags & UCT_CB_PARAM_FLAG_DESC)));
+    ucs_assertv((status == UCS_OK) ||
+                ((status == UCS_INPROGRESS) && (flags &
+                                                UCT_CB_PARAM_FLAG_DESC)),
+                "%s(arg=%p data=%p length=%u flags=0x%x) returned %s",
+                ucs_debug_get_symbol_name((void*)handler->cb), handler->arg,
+                data, length, flags, ucs_status_string(status));
     return status;
 }
 
@@ -839,9 +851,9 @@ int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid);
 
 ucs_status_t uct_ep_keepalive_create(pid_t pid, uct_keepalive_info_t **ka_p);
 
-ucs_status_t
-uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t **ka, pid_t pid,
-                       unsigned flags, uct_completion_t *comp);
+ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t **ka_p,
+                                    pid_t pid, unsigned flags,
+                                    uct_completion_t *comp);
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 

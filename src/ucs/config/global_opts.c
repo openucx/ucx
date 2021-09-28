@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <sys/signal.h>
 
 
@@ -36,6 +37,7 @@ ucs_global_opts_t ucs_global_opts = {
     .debug_signo           = SIGHUP,
     .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
     .warn_unused_env_vars  = 1,
+    .enable_memtype_cache  = 1,
     .async_max_events      = 64,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
@@ -52,6 +54,7 @@ ucs_global_opts_t ucs_global_opts = {
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
+    .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
     .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER
 };
 
@@ -163,6 +166,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "configuration parser.",
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
 
+  {"MEMTYPE_CACHE", "y",
+   "Enable memory type (cuda/rocm) cache \n",
+   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
+
  {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
   "Maximal number of events which can be handled from one context",
   ucs_offsetof(ucs_global_opts_t, async_max_events), UCS_CONFIG_TYPE_UINT},
@@ -219,7 +226,6 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, vfs_thread_affinity),
   UCS_CONFIG_TYPE_BOOL},
 
-#ifdef ENABLE_MEMTRACK
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"
@@ -232,7 +238,6 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Memory limit allocated by memtrack. In case if limit is reached then\n"
   "memtrack report is generated and process is terminated.\n",
   ucs_offsetof(ucs_global_opts_t, memtrack_limit), UCS_CONFIG_TYPE_MEMUNITS},
-#endif
 
   {"PROFILE_MODE", "",
    "Profile collection modes. If none is specified, profiling is disabled.\n"
@@ -263,6 +268,13 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   {"MODULE_LOG_LEVEL", "trace",
    "Logging level for module loader\n",
    ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+  {"MODULES", "all",
+   "Comma-separated list of glob patterns specifying which module load.\n"
+   "The order is not meaningful. For example:\n"
+   " *     - load all modules\n"
+   " ^cu*  - do not load modules that begin with 'cu'\n",
+   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"", "", NULL,
    ucs_offsetof(ucs_global_opts_t, arch),
@@ -312,4 +324,42 @@ void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
     ucs_config_parser_print_opts(stream, "Global configuration", &ucs_global_opts,
                                  ucs_global_opts_table, NULL,
                                  UCS_DEFAULT_ENV_PREFIX, print_flags);
+}
+
+static void ucs_vfs_read_log_level(void *obj, ucs_string_buffer_t *strb,
+                                   void *arg_ptr, uint64_t arg_u64)
+{
+    ucs_log_level_t ucs_log_level = ucs_global_opts.log_component.log_level;
+    ucs_string_buffer_appendf(strb, "%s\n", ucs_log_level_names[ucs_log_level]);
+}
+
+static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
+                                            size_t size, void *arg_ptr,
+                                            uint64_t arg_u64)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, 32);
+    unsigned log_level;
+
+    ucs_string_buffer_appendf(&strb, "%s", buffer);
+    ucs_string_buffer_rtrim(&strb, "\n");
+    if (!ucs_config_sscanf_enum(ucs_string_buffer_cstr(&strb), &log_level,
+                                ucs_log_level_names)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_global_opts.log_component.log_level = log_level;
+    return UCS_OK;
+}
+
+/**
+ * VFS nodes representing global options are removed in UCS_STATIC_CLEANUP of
+ * vfs_obj.c file. Because removing elements using ucs_vfs_obj_remove in
+ * UCS_STATIC_CLEANUP in global_opts.c could happen after execution of
+ * UCS_STATIC_CLEANUP of vfs_obj.c file.
+ */
+UCS_STATIC_INIT
+{
+    ucs_vfs_obj_add_dir(NULL, &ucs_global_opts, "ucs/global_opts");
+    ucs_vfs_obj_add_rw_file(&ucs_global_opts, ucs_vfs_read_log_level,
+                            ucs_vfs_write_log_level, NULL, 0, "log_level");
 }

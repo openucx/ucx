@@ -145,7 +145,8 @@ static inline void ucs_cpu_init()
 
 static inline void ucs_arch_wait_mem(void *address)
 {
-    unsigned long tmp;
+    /* Suppress potential warning that variable was set but never used */
+    unsigned long UCS_V_UNUSED tmp;
     asm volatile ("ldaxrb %w0, [%1] \n"
                   "wfe           \n"
                   : "=&r"(tmp)
@@ -209,7 +210,7 @@ static inline void ucs_arch_clear_cache(void *start, void *end)
     dic = (ctr_el0 >> 29) & 0x1;
     idc = (ctr_el0 >> 28) & 0x1;
 
-    /* 
+    /*
      * Check if Data cache clean to the Point of Unification is required for instruction to
      * data coherence
      */

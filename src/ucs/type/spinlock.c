@@ -32,3 +32,18 @@ void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock)
 
     ucs_spinlock_destroy(&lock->super);
 }
+
+int ucs_spinlock_is_held(ucs_spinlock_t *lock)
+{
+    if (!ucs_spin_try_lock(lock)) {
+        return 1; /* If can't lock, it is already locked */
+    }
+
+    ucs_spin_unlock(lock);
+    return 0;
+}
+
+int ucs_recursive_spinlock_is_held(const ucs_recursive_spinlock_t *lock)
+{
+    return ucs_recursive_spin_is_owner(lock, pthread_self());
+}

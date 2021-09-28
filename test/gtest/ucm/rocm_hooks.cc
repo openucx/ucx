@@ -124,13 +124,15 @@ UCS_TEST_F(rocm_hooks, test_hipMallocManaged) {
     hipError_t ret;
     void * dptr;
 
-    ret = hipMallocManaged(&dptr, 64);
-    ASSERT_EQ(ret, hipSuccess);
-    check_mem_alloc_events((void *)dptr, 64);
+    if (mem_buffer::is_rocm_managed_supported()) {
+        ret = hipMallocManaged(&dptr, 64);
+        ASSERT_EQ(ret, hipSuccess);
+        check_mem_alloc_events((void *)dptr, 64);
 
-    ret = hipFree(dptr);
-    ASSERT_EQ(ret, hipSuccess);
-    check_mem_free_events((void *)dptr, 0, UCS_MEMORY_TYPE_ROCM_MANAGED);
+        ret = hipFree(dptr);
+        ASSERT_EQ(ret, hipSuccess);
+        check_mem_free_events((void *)dptr, 0, UCS_MEMORY_TYPE_ROCM_MANAGED);
+    }
 }
 
 UCS_TEST_F(rocm_hooks, test_hipMallocPitch) {
@@ -190,4 +192,3 @@ UCS_TEST_F(rocm_hooks, test_hip_Malloc_Free) {
     ret = hipFree(NULL);
     ASSERT_EQ(ret, hipSuccess);
 }
-

@@ -93,7 +93,7 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "enough, such as of atomic operations and small reads, will be received inline.",
    ucs_offsetof(uct_ib_iface_config_t, inl[UCT_IB_DIR_TX]), UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TX_MIN_SGE", "4",
+  {"TX_MIN_SGE", "5",
    "Number of SG entries to reserve in the send WQE.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
 
@@ -700,10 +700,11 @@ int uct_ib_iface_is_reachable(const uct_iface_h tl_iface,
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
-                                    struct ibv_ah **ah_p)
+                                    const char *usage, struct ibv_ah **ah_p)
 {
     return uct_ib_device_create_ah_cached(uct_ib_iface_device(iface), ah_attr,
-                                          uct_ib_iface_md(iface)->pd, ah_p);
+                                          uct_ib_iface_md(iface)->pd, usage,
+                                          ah_p);
 }
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
@@ -1010,16 +1011,10 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
-#if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
+#if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
 
-    cq_attr.cqe         = cq_size;
-    cq_attr.channel     = iface->comp_channel;
-    cq_attr.comp_vector = preferred_cpu;
-    if (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN) {
-        cq_attr.comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
-        cq_attr.flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
-    }
+    uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu, cq_size);
 
     cq = ibv_cq_ex_to_cq(ibv_create_cq_ex(dev->ibv_context, &cq_attr));
     if (!cq && ((errno == EOPNOTSUPP) || (errno == ENOSYS)))

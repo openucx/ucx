@@ -37,7 +37,7 @@ typedef void (*ucs_event_set_handler_t)(void *callback_data,
                                         void *arg);
 
 /**
- * Event types that could be requested to notify 
+ * Event types that could be requested to notify
  */
 typedef enum {
     UCS_EVENT_SET_EVREAD         = UCS_BIT(0),

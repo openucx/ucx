@@ -9,7 +9,7 @@
 #endif
 
 #include <ucp/api/ucp.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
 
 int main(int argc, char **argv)

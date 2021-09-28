@@ -19,9 +19,11 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/time/time.h>
 #include <ucs/config/ini.h>
+#include <ucs/sys/lib.h>
 #include <ucs/type/init_once.h>
 #include <fnmatch.h>
 #include <ctype.h>
+#include <libgen.h>
 
 
 /* width of titles in docstring */
@@ -88,7 +90,7 @@ static int __find_string_in_list(const char *str, const char **list)
 
 int ucs_config_sscanf_string(const char *buf, void *dest, const void *arg)
 {
-    *((char**)dest) = strdup(buf);
+    *((char**)dest) = ucs_strdup(buf, "config_sscanf_string");
     return 1;
 }
 
@@ -101,7 +103,7 @@ int ucs_config_sprintf_string(char *buf, size_t max,
 
 ucs_status_t ucs_config_clone_string(const void *src, void *dest, const void *arg)
 {
-    char *new_str = strdup(*(char**)src);
+    char *new_str = ucs_strdup(*(char**)src, "config_clone_string");
     if (new_str == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -112,7 +114,7 @@ ucs_status_t ucs_config_clone_string(const void *src, void *dest, const void *ar
 
 void ucs_config_release_string(void *ptr, const void *arg)
 {
-    free(*(char**)ptr);
+    ucs_free(*(char**)ptr);
 }
 
 int ucs_config_sscanf_int(const char *buf, void *dest, const void *arg)
@@ -364,7 +366,7 @@ ucs_status_t ucs_config_clone_log_comp(const void *src, void *dst, const void *a
 
 int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
 {
-    char *str = strdup(buf);
+    char *str = ucs_strdup(buf, "config_sscanf_bitmap_str");
     char *p, *saveptr;
     int ret, i;
 
@@ -385,7 +387,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
         p = strtok_r(NULL, ",", &saveptr);
     }
 
-    free(str);
+    ucs_free(str);
     return ret;
 }
 
@@ -691,7 +693,7 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
     char *p, *str;
     int ret = 1;
 
-    str = strdup(buf);
+    str = ucs_strdup(buf, "config_range_spec_str");
     if (str == NULL) {
         return 0;
     }
@@ -720,7 +722,7 @@ int ucs_config_sscanf_range_spec(const char *buf, void *dest, const void *arg)
     range_spec->last = last;
 
 out:
-    free (str);
+    ucs_free(str);
     return ret;
 }
 
@@ -758,7 +760,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
     int ret;
     unsigned i;
 
-    str_dup = strdup(buf);
+    str_dup = ucs_strdup(buf, "config_scanf_array");
     if (str_dup == NULL) {
         return 0;
     }
@@ -772,7 +774,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
                                  array->parser.arg);
         if (!ret) {
             ucs_free(temp_field);
-            free(str_dup);
+            ucs_free(str_dup);
             return 0;
         }
 
@@ -785,7 +787,7 @@ int ucs_config_sscanf_array(const char *buf, void *dest, const void *arg)
 
     field->data = temp_field;
     field->count = i;
-    free(str_dup);
+    ucs_free(str_dup);
     return 1;
 }
 
@@ -908,7 +910,7 @@ int ucs_config_sprintf_allow_list(char *buf, size_t max, const void *src,
         snprintf(buf, max, UCS_CONFIG_PARSER_ALL);
         return 1;
     }
-    
+
     if (allow_list->mode == UCS_CONFIG_ALLOW_LIST_NEGATE) {
         buf[offset++] = ucs_config_parser_negate;
         max--;
@@ -955,7 +957,7 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
     char *name, *value, *saveptr2;
     ucs_status_t status;
 
-    tokens = strdup(buf);
+    tokens = ucs_strdup(buf, "config_sscanf_table");
     if (tokens == NULL) {
         return 0;
     }
@@ -967,7 +969,7 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
         name  = strtok_r(token, "=", &saveptr2);
         value = strtok_r(NULL,  "=", &saveptr2);
         if (name == NULL || value == NULL) {
-            free(tokens);
+            ucs_free(tokens);
             ucs_error("Could not parse list of values in '%s' (token: '%s')", buf, token);
             return 0;
         }
@@ -981,14 +983,14 @@ int ucs_config_sscanf_table(const char *buf, void *dest, const void *arg)
                 ucs_debug("Failed to set %s to '%s': %s", name, value,
                           ucs_status_string(status));
             }
-            free(tokens);
+            ucs_free(tokens);
             return 0;
         }
 
         token = strtok_r(NULL, ";", &saveptr1);
     }
 
-    free(tokens);
+    ucs_free(tokens);
     return 1;
 }
 
@@ -1038,7 +1040,7 @@ static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
     char *doc, *line, *p;
     int num;
 
-    line = doc = strdup(field->doc);
+    line = doc = ucs_strdup(field->doc, "config_doc");
     p = strchr(line, '\n');
     num = 0;
     while (p != NULL) {
@@ -1049,7 +1051,7 @@ static void ucs_config_print_doc_line_by_line(const ucs_config_field_t *field,
         ++num;
     }
     cb(num, line, arg);
-    free(doc);
+    ucs_free(doc);
 }
 
 static ucs_status_t
@@ -1285,26 +1287,28 @@ static int ucs_config_parse_config_file_line(void *arg, const char *section,
     return 1;
 }
 
-ucs_status_t ucs_config_parse_config_file(const char *path, int override)
+void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
+                                  int override)
 {
-    ucs_status_t result = UCS_OK;
+    char file_path[MAXPATHLEN];
     int parse_result;
     FILE* file;
 
-    file = fopen(path, "r");
+    ucs_snprintf_safe(file_path, MAXPATHLEN, "%s/%s", dir_path, file_name);
+    file = fopen(file_path, "r");
     if (file == NULL) {
-        ucs_debug("Could not open config file: %s, skipping parsing", path);
-        return UCS_OK;
+        ucs_debug("failed to open config file %s: %m", file_path);
+        return;
     }
 
     parse_result = ini_parse_file(file, ucs_config_parse_config_file_line,
                                   &override);
     if (parse_result != 0) {
-        result = UCS_ERR_INVALID_PARAM;
+        ucs_warn("failed to parse config file %s: %d", file_path, parse_result);
     }
 
+    ucs_debug("parsed config file %s", file_path);
     fclose(file);
-    return result;
 }
 
 static ucs_status_t
@@ -1397,7 +1401,7 @@ ucs_config_apply_config_vars(void *opts, ucs_config_field_t *fields,
 
 /* Find if env_prefix consists of multiple prefixes and returns pointer
  * to rightmost in this case, otherwise returns NULL
- */ 
+ */
 static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
                                                      const char **sub_prefix_p)
 {
@@ -1418,6 +1422,35 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
     *sub_prefix_p = (len > 0) ? (env_prefix + len): NULL;
 
     return UCS_OK;
+}
+
+void ucs_config_parse_config_files()
+{
+    const char *dir_path;
+
+    /* System-wide configuration file */
+    ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
+
+    /* Library dir */
+    dir_path = ucs_sys_get_lib_path();
+    if (dir_path != NULL) {
+        ucs_config_parse_config_file(dir_path, "../etc/" UCX_CONFIG_FILE_NAME, 1);
+    }
+
+    /* User home dir */
+    dir_path = getenv("HOME");
+    if (dir_path != NULL) {
+        ucs_config_parse_config_file(dir_path, UCX_CONFIG_FILE_NAME, 1);
+    }
+
+    /* Custom directory for UCX configuration */
+    dir_path = getenv("UCX_CONFIG_DIR");
+    if (dir_path != NULL) {
+        ucs_config_parse_config_file(dir_path, UCX_CONFIG_FILE_NAME, 1);
+    }
+
+    /* Current working dir */
+    ucs_config_parse_config_file(".", UCX_CONFIG_FILE_NAME, 1);
 }
 
 ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
@@ -1442,9 +1475,7 @@ ucs_status_t ucs_config_parser_fill_opts(void *opts, ucs_config_field_t *fields,
     }
 
     UCS_INIT_ONCE(&config_file_parse) {
-        if (ucs_config_parse_config_file(UCX_CONF_FILE, 0) != UCS_OK) {
-            ucs_warn("could not parse config file: %s", UCX_CONF_FILE);
-        }
+        ucs_config_parse_config_files();
     }
 
     /* Apply environment variables */
@@ -1943,14 +1974,14 @@ size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
     }
 }
 
-int ucs_config_names_search(ucs_config_names_array_t config_names,
+int ucs_config_names_search(const ucs_config_names_array_t *config_names,
                             const char *str)
 {
     unsigned i;
 
-    for (i = 0; i < config_names.count; ++i) {
-        if (!fnmatch(config_names.names[i], str, 0)) {
-           return i;
+    for (i = 0; i < config_names->count; ++i) {
+        if (!fnmatch(config_names->names[i], str, 0)) {
+            return i;
         }
     }
 

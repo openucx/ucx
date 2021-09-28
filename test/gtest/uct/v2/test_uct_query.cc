@@ -4,7 +4,11 @@
  * See file LICENSE for terms.
  */
 
+#include <common/test.h>
+#include <gtest/uct/uct_p2p_test.h>
+
 extern "C" {
+#include <ucs/sys/topo.h>
 #include <uct/api/uct.h>
 #include <ucs/sys/topo.h>
 #include <uct/api/v2/uct_v2.h>
@@ -35,7 +39,7 @@ UCS_TEST_P(test_uct_query, query_perf)
                                    UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE |
                                    UCT_PERF_ATTR_FIELD_OVERHEAD |
                                    UCT_PERF_ATTR_FIELD_BANDWIDTH;
-    perf_attr.operation          = UCT_OP_AM_SHORT;
+    perf_attr.operation          = UCT_EP_OP_AM_SHORT;
     perf_attr.local_memory_type  = UCS_MEMORY_TYPE_HOST;
     perf_attr.remote_memory_type = UCS_MEMORY_TYPE_HOST;
     perf_attr.local_sys_device   = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -45,7 +49,7 @@ UCS_TEST_P(test_uct_query, query_perf)
     EXPECT_EQ(status, UCS_OK);
 
     perf_attr.remote_memory_type = UCS_MEMORY_TYPE_CUDA;
-    perf_attr.operation          = UCT_OP_PUT_SHORT;
+    perf_attr.operation          = UCT_EP_OP_PUT_SHORT;
     status                       = uct_iface_estimate_perf(sender().iface(),
                                                            &perf_attr);
 
@@ -58,7 +62,7 @@ UCS_TEST_P(test_uct_query, query_perf)
         uct_perf_attr_t perf_attr_get;
         perf_attr_get.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
                                    UCT_PERF_ATTR_FIELD_BANDWIDTH;
-        perf_attr_get.operation  = UCT_OP_GET_SHORT;
+        perf_attr_get.operation  = UCT_EP_OP_GET_SHORT;
         status = uct_iface_estimate_perf(sender().iface(), &perf_attr_get);
         EXPECT_EQ(status, UCS_OK);
 

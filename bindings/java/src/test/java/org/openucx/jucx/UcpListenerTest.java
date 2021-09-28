@@ -78,11 +78,18 @@ public class UcpListenerTest  extends UcxTest {
         UcpWorker serverWorker2 = context1.newWorker(new UcpWorkerParams());
         UcpWorker clientWorker = context2.newWorker(new UcpWorkerParams());
 
-        AtomicReference<UcpConnectionRequest> conRequest = new AtomicReference<>(null);
+        AtomicReference<UcpConnectionRequest> connRequest = new AtomicReference<>(null);
+        AtomicReference<UcpConnectionRequest> connReject = new AtomicReference<>(null);
 
         // Create listener and set connection handler
         UcpListenerParams listenerParams = new UcpListenerParams()
-            .setConnectionHandler(conRequest::set);
+            .setConnectionHandler((UcpConnectionRequest connectionRequest) -> {
+                if (connRequest.get() == null) {
+                    connRequest.set(connectionRequest);
+                } else {
+                    connReject.set(connectionRequest);
+                }
+            });
         UcpListener serverListener = tryBindListener(serverWorker1, listenerParams);
         UcpListener clientListener = tryBindListener(clientWorker, listenerParams);
 
@@ -91,14 +98,14 @@ public class UcpListenerTest  extends UcxTest {
                 System.err.println("clientToServer error: " + errorMsg))
             .setPeerErrorHandlingMode().setSocketAddress(serverListener.getAddress()));
 
-        while (conRequest.get() == null) {
+        while (connRequest.get() == null) {
             serverWorker1.progress();
             clientWorker.progress();
         }
 
-        assertNotNull(conRequest.get().getClientAddress());
+        assertNotNull(connRequest.get().getClientAddress());
         UcpEndpoint serverToClientListener = serverWorker2.newEndpoint(
-            new UcpEndpointParams().setSocketAddress(conRequest.get().getClientAddress())
+            new UcpEndpointParams().setSocketAddress(connRequest.get().getClientAddress())
                                    .setPeerErrorHandlingMode()
                                    .setErrorHandler((errEp, status, errorMsg) ->
                                        System.err.println("serverToClientListener error: " +
@@ -107,34 +114,26 @@ public class UcpListenerTest  extends UcxTest {
 
         // Create endpoint from another worker from pool.
         UcpEndpoint serverToClient = serverWorker2.newEndpoint(
-            new UcpEndpointParams().setConnectionRequest(conRequest.get()));
+            new UcpEndpointParams().setConnectionRequest(connRequest.get()));
 
         // Test connection handler persists
         for (int i = 0; i < 10; i++) {
-            conRequest.set(null);
-            UcpEndpoint tmpEp = clientWorker.newEndpoint(new UcpEndpointParams()
+            clientWorker.newEndpoint(new UcpEndpointParams()
                 .setSocketAddress(serverListener.getAddress()).setPeerErrorHandlingMode()
-                .setErrorHandler((ep, status, errorMsg) ->
-                    System.err.println("tmpEp error: " + errorMsg)));
+                .setErrorHandler((ep, status, errorMsg) -> {
+                    ep.close();
+                    assertEquals(UcsConstants.STATUS.UCS_ERR_REJECTED, status);
+                }));
 
-            while (conRequest.get() == null) {
+            while (connReject.get() == null) {
                 serverWorker1.progress();
                 serverWorker2.progress();
                 clientWorker.progress();
             }
 
-            UcpEndpoint tmpEp2 = serverWorker2.newEndpoint(
-                new UcpEndpointParams().setPeerErrorHandlingMode()
-                    .setConnectionRequest(conRequest.get()));
+            connReject.get().reject();
+            connReject.set(null);
 
-            UcpRequest close1 = tmpEp.closeNonBlockingFlush();
-            UcpRequest close2 = tmpEp2.closeNonBlockingFlush();
-
-            while (!close1.isCompleted() || !close2.isCompleted()) {
-                serverWorker1.progress();
-                serverWorker2.progress();
-                clientWorker.progress();
-            }
         }
 
         UcpRequest sent = serverToClient.sendStreamNonBlocking(

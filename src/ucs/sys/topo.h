@@ -32,6 +32,9 @@ typedef enum ucs_sys_common_ancestor {
  * e.g. virtual devices like CMA/knem */
 #define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
 
+/* Maximal size of BDF string */
+#define UCS_SYS_BDF_NAME_MAX 16
+
 
 typedef struct ucs_sys_bus_id {
     uint16_t domain;   /* range: 0 to ffff */
@@ -138,6 +141,32 @@ ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
  */
 ucs_status_t
 ucs_topo_find_device_by_bdf_name(const char *name, ucs_sys_device_t *sys_dev);
+
+
+/**
+ * Set a name for a given system device. If the name was set previously, the new
+ * name will replace the old one.
+ *
+ * @param [in]  sys_dev  System device to set the name for.
+ * @param [in]  name     Name to set for this system device. Note: the name can
+ *                       be released after this call.
+ *
+ * @return UCS_OK if the name was set, error otherwise.
+ */
+ucs_status_t
+ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev, const char *name);
+
+
+/**
+ * Get the name of a given system device. If the name was never set, it defaults
+ * to the BDF representation of the system device bus id.
+ *
+ * @param [in]  sys_dev  System device to set the name for.
+ *
+ * @return The name of the system device, or NULL if the system device is
+ *         invalid.
+ */
+const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev);
 
 
 /**

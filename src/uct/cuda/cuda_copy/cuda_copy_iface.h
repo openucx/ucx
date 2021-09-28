@@ -11,7 +11,7 @@
 #include <pthread.h>
 
 
-#define UCT_CUDA_COPY_IFACE_OVERHEAD (0)
+#define UCT_CUDA_COPY_IFACE_OVERHEAD          (0)
 
 
 typedef uint64_t uct_cuda_copy_iface_addr_t;
@@ -33,6 +33,7 @@ typedef struct uct_cuda_copy_iface {
     struct {
         unsigned                max_poll;
         unsigned                max_cuda_events;
+        double                  bandwidth;
     } config;
     struct {
         void                    *event_arg;
@@ -45,6 +46,7 @@ typedef struct uct_cuda_copy_iface_config {
     uct_iface_config_t      super;
     unsigned                max_poll;
     unsigned                max_cuda_events;
+    double                  bandwidth;
 } uct_cuda_copy_iface_config_t;
 
 

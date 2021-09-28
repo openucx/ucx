@@ -14,7 +14,8 @@
 #include <ucs/datastruct/list.h>
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log_def.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
+#include <ucs/type/init_once.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
 #include <stdarg.h>
@@ -25,6 +26,7 @@
 typedef enum {
     UCS_VFS_NODE_TYPE_DIR,
     UCS_VFS_NODE_TYPE_RO_FILE,
+    UCS_VFS_NODE_TYPE_RW_FILE,
     UCS_VFS_NODE_TYPE_SUBDIR,
     UCS_VFS_NODE_TYPE_SYM_LINK,
     UCS_VFS_NODE_TYPE_LAST
@@ -52,27 +54,31 @@ struct ucs_vfs_node {
     /* List item to represent the node in parent's list of children. */
     ucs_list_link_t     list;
     union {
-        /* Callback method to show content of the file. */
-        ucs_vfs_file_show_cb_t text_cb;
+        /* Callback method to read content of the file. */
+        ucs_vfs_file_read_cb_t read_cb;
         /* Callback method to update content of the directory. */
         ucs_vfs_refresh_cb_t   refresh_cb;
         /* Pointer to the target node of symbolic link. */
         ucs_vfs_node_t         *target;
     };
+    /* Callback method to write data to the file. */
+    ucs_vfs_file_write_cb_t write_cb;
     /* Pointer to an optional argument passed to the text_cb. */
-    void                *arg_ptr;
+    void                    *arg_ptr;
     /* Type of value passed to ucs_vfs_show_primitive referenced by arg_ptr. */
-    uint64_t            arg_u64;
+    uint64_t                arg_u64;
     /* List of symbolic links targeting to the node. */
-    ucs_list_link_t     links;
+    ucs_list_link_t         links;
     /* List item to represent the node in target node's list of links. */
-    ucs_list_link_t     link_list;
+    ucs_list_link_t         link_list;
     /* Path to the node in VFS. */
-    char                path[0];
+    char                    path[0];
 };
 
 KHASH_MAP_INIT_STR(vfs_path, ucs_vfs_node_t*);
 KHASH_MAP_INIT_INT64(vfs_obj, ucs_vfs_node_t*);
+
+static ucs_init_once_t ucs_vfs_init_once = UCS_INIT_ONCE_INITIALIZER;
 
 struct {
     ucs_spinlock_t    lock;
@@ -104,79 +110,6 @@ struct {
     }
 
 
-void ucs_vfs_show_memory_address(void *obj, ucs_string_buffer_t *strb,
-                                 void *arg_ptr, uint64_t arg_u64)
-{
-    ucs_string_buffer_appendf(strb, "%p\n", obj);
-}
-
-void ucs_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
-                            uint64_t arg_u64)
-{
-    ucs_vfs_primitive_type_t type = arg_u64;
-    unsigned long ulvalue;
-    long lvalue;
-
-    UCS_STATIC_ASSERT(UCS_VFS_TYPE_FLAG_UNSIGNED >= UCS_VFS_TYPE_LAST);
-    UCS_STATIC_ASSERT(UCS_VFS_TYPE_FLAG_HEX >= UCS_VFS_TYPE_LAST);
-
-    if (type == UCS_VFS_TYPE_POINTER) {
-        ucs_string_buffer_appendf(strb, "%p\n", *(void**)arg_ptr);
-    } else if (type == UCS_VFS_TYPE_STRING) {
-        ucs_string_buffer_appendf(strb, "%s\n", (char*)arg_ptr);
-    } else {
-        switch (type & ~(UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_FLAG_HEX)) {
-        case UCS_VFS_TYPE_CHAR:
-            lvalue  = *(char*)arg_ptr;
-            ulvalue = *(unsigned char*)arg_ptr;
-            break;
-        case UCS_VFS_TYPE_SHORT:
-            lvalue  = *(short*)arg_ptr;
-            ulvalue = *(unsigned short*)arg_ptr;
-            break;
-        case UCS_VFS_TYPE_INT:
-            lvalue  = *(int*)arg_ptr;
-            ulvalue = *(unsigned int*)arg_ptr;
-            break;
-        case UCS_VFS_TYPE_LONG:
-            lvalue  = *(long*)arg_ptr;
-            ulvalue = *(unsigned long*)arg_ptr;
-            break;
-        default:
-            ucs_warn("vfs object %p attribute %p: incorrect type 0x%lx", obj,
-                     arg_ptr, arg_u64);
-            ucs_string_buffer_appendf(strb, "<unable to get the value>\n");
-            return;
-        }
-
-        if (type & UCS_VFS_TYPE_FLAG_HEX) {
-            ucs_string_buffer_appendf(strb, "%lx\n", ulvalue);
-        } else if (type & UCS_VFS_TYPE_FLAG_UNSIGNED) {
-            ucs_string_buffer_appendf(strb, "%lu\n", ulvalue);
-        } else {
-            ucs_string_buffer_appendf(strb, "%ld\n", lvalue);
-        }
-    }
-}
-
-void ucs_vfs_show_ulunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
-                          uint64_t arg_u64)
-{
-    char buf[64];
-
-    ucs_config_sprintf_ulunits(buf, sizeof(buf), arg_ptr, NULL);
-    ucs_string_buffer_appendf(strb, "%s\n", buf);
-}
-
-void ucs_vfs_show_memunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
-                           uint64_t arg_u64)
-{
-    char buf[64];
-
-    ucs_memunits_to_str(*(size_t*)arg_ptr, buf, sizeof(buf));
-    ucs_string_buffer_appendf(strb, "%s\n", buf);
-}
-
 /* must be called with lock held */
 static ucs_vfs_node_t *ucs_vfs_node_find_by_path(const char *path)
 {
@@ -206,16 +139,29 @@ static void ucs_vfs_node_init(ucs_vfs_node_t *node, ucs_vfs_node_type_t type,
 {
     node->type       = type;
     node->refcount   = 1;
+    /* coverity[missing_lock] */
     node->flags      = 0;
     node->obj        = obj;
     node->parent     = parent_node;
-    node->text_cb    = NULL;
+    node->read_cb    = NULL;
+    node->write_cb   = NULL;
     node->refresh_cb = NULL;
     node->arg_ptr    = NULL;
     node->arg_u64    = 0;
     node->target     = NULL;
     ucs_list_head_init(&node->children);
     ucs_list_head_init(&node->links);
+}
+
+static void ucs_vfs_global_init()
+{
+    UCS_INIT_ONCE(&ucs_vfs_init_once) {
+        ucs_spinlock_init(&ucs_vfs_obj_context.lock, 0);
+        ucs_vfs_node_init(&ucs_vfs_obj_context.root, UCS_VFS_NODE_TYPE_DIR,
+                          NULL, NULL);
+        kh_init_inplace(vfs_obj, &ucs_vfs_obj_context.obj_hash);
+        kh_init_inplace(vfs_path, &ucs_vfs_obj_context.path_hash);
+    }
 }
 
 /* must be called with lock held */
@@ -323,7 +269,7 @@ static ucs_status_t ucs_vfs_node_add(void *parent_obj, ucs_vfs_node_type_t type,
     }
 
     /* generate the relative path */
-    vsnprintf(rel_path_buf, sizeof(rel_path_buf), rel_path, ap);
+    ucs_vsnprintf_safe(rel_path_buf, sizeof(rel_path_buf), rel_path, ap);
 
     /* Build parent nodes along the rel_path, without associated object */
     next_token = rel_path_buf;
@@ -371,10 +317,23 @@ static void ucs_vfs_node_increase_refcount(ucs_vfs_node_t *node)
 }
 
 /* must be called with lock held */
+static void ucs_vfs_node_decrease_refcount(ucs_vfs_node_t *node);
+
+/* must be called with lock held */
+static void ucs_vfs_node_remove_children(ucs_vfs_node_t *node)
+{
+    ucs_vfs_node_t *child_node, *tmp_node;
+
+    ucs_list_for_each_safe(child_node, tmp_node, &node->children, list) {
+        child_node->parent = NULL; /* prevent children from destroying me */
+        ucs_vfs_node_decrease_refcount(child_node);
+    }
+}
+
 static void ucs_vfs_node_decrease_refcount(ucs_vfs_node_t *node)
 {
     ucs_vfs_node_t *parent_node = node->parent;
-    ucs_vfs_node_t *child_node, *tmp_node, *link_node;
+    ucs_vfs_node_t *tmp_node, *link_node;
 
     if (--node->refcount > 0) {
         return;
@@ -383,10 +342,7 @@ static void ucs_vfs_node_decrease_refcount(ucs_vfs_node_t *node)
     /* If reference count is 0, then remove node. */
 
     /* recursively remove children */
-    ucs_list_for_each_safe(child_node, tmp_node, &node->children, list) {
-        child_node->parent = NULL; /* prevent children from destroying me */
-        ucs_vfs_node_decrease_refcount(child_node);
-    }
+    ucs_vfs_node_remove_children(node);
 
     /* Remove symbolic link nodes targeting to the node.
        This is a workaround for the following scenario:
@@ -425,9 +381,19 @@ static void ucs_vfs_node_decrease_refcount(ucs_vfs_node_t *node)
     }
 }
 
+/* must be called with lock held */
+int ucs_vfs_check_node_dir(ucs_vfs_node_t *node)
+{
+    return ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_DIR) ||
+           ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_SUBDIR);
+}
+
 /* must be called with lock held and incremented refcount */
 static void ucs_vfs_refresh_dir(ucs_vfs_node_t *node)
 {
+    ucs_vfs_refresh_cb_t refresh_cb;
+    void *obj;
+
     ucs_assert(ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_DIR) ||
                ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_SUBDIR));
 
@@ -437,32 +403,70 @@ static void ucs_vfs_refresh_dir(ucs_vfs_node_t *node)
 
     ucs_assert(node->refcount >= 2);
 
+    refresh_cb = node->refresh_cb;
+    obj        = node->obj;
+
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
-
-    node->refresh_cb(node->obj);
-
+    refresh_cb(obj);
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     node->flags &= ~UCS_VFS_FLAGS_DIRTY;
 }
 
 /* must be called with lock held */
-static void
-ucs_vfs_read_ro_file(ucs_vfs_node_t *node, ucs_string_buffer_t *strb)
+static ucs_vfs_node_t *ucs_vfs_get_parent_dir(ucs_vfs_node_t *node)
 {
     ucs_vfs_node_t *parent_node = node->parent;
-
-    ucs_assert(ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_RO_FILE) == 1);
 
     while (ucs_vfs_check_node(parent_node, UCS_VFS_NODE_TYPE_SUBDIR)) {
         parent_node = parent_node->parent;
     }
 
+    return parent_node;
+}
+
+/* must be called with lock held */
+int ucs_vfs_check_node_file(ucs_vfs_node_t *node)
+{
+    return ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_RO_FILE) ||
+           ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_RW_FILE);
+}
+
+/* must be called with lock held */
+static void ucs_vfs_read_file(ucs_vfs_node_t *node, ucs_string_buffer_t *strb)
+{
+    ucs_vfs_node_t *parent_node;
+
+    ucs_assert(ucs_vfs_check_node_file(node));
+
+    parent_node = ucs_vfs_get_parent_dir(node);
+
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
 
-    node->text_cb(parent_node->obj, strb, node->arg_ptr, node->arg_u64);
+    node->read_cb(parent_node->obj, strb, node->arg_ptr, node->arg_u64);
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
+}
+
+/* must be called with lock held */
+static ucs_status_t
+ucs_vfs_write_file(ucs_vfs_node_t *node, const char *buffer, size_t size)
+{
+    ucs_vfs_node_t *parent_node;
+    ucs_status_t status;
+
+    ucs_assert(ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_RW_FILE));
+
+    parent_node = ucs_vfs_get_parent_dir(node);
+
+    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
+
+    status = node->write_cb(parent_node->obj, buffer, size, node->arg_ptr,
+                            node->arg_u64);
+
+    ucs_spin_lock(&ucs_vfs_obj_context.lock);
+
+    return status;
 }
 
 /* must be called with lock held */
@@ -501,6 +505,8 @@ ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
     va_list ap;
     ucs_status_t status;
 
+    ucs_vfs_global_init();
+
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     va_start(ap, rel_path);
@@ -513,13 +519,15 @@ ucs_vfs_obj_add_dir(void *parent_obj, void *obj, const char *rel_path, ...)
     return status;
 }
 
-ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
+ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_read_cb_t read_cb,
                                      void *arg_ptr, uint64_t arg_u64,
                                      const char *rel_path, ...)
 {
     ucs_vfs_node_t *node;
     va_list ap;
     ucs_status_t status;
+
+    ucs_vfs_global_init();
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
@@ -529,9 +537,39 @@ ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
     va_end(ap);
 
     if (status == UCS_OK) {
-        node->text_cb = text_cb;
+        node->read_cb = read_cb;
         node->arg_ptr = arg_ptr;
         node->arg_u64 = arg_u64;
+    }
+
+    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
+
+    return status;
+}
+
+ucs_status_t ucs_vfs_obj_add_rw_file(void *obj, ucs_vfs_file_read_cb_t read_cb,
+                                     ucs_vfs_file_write_cb_t write_cb,
+                                     void *arg_ptr, uint64_t arg_u64,
+                                     const char *rel_path, ...)
+{
+    ucs_vfs_node_t *node;
+    va_list ap;
+    ucs_status_t status;
+
+    ucs_vfs_global_init();
+
+    ucs_spin_lock(&ucs_vfs_obj_context.lock);
+
+    va_start(ap, rel_path);
+    status = ucs_vfs_node_add(obj, UCS_VFS_NODE_TYPE_RW_FILE, NULL, rel_path,
+                              ap, &node);
+    va_end(ap);
+
+    if (status == UCS_OK) {
+        node->read_cb  = read_cb;
+        node->write_cb = write_cb;
+        node->arg_ptr  = arg_ptr;
+        node->arg_u64  = arg_u64;
     }
 
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
@@ -546,6 +584,8 @@ ucs_vfs_obj_add_sym_link(void *obj, void *target_obj, const char *rel_path, ...)
     ucs_vfs_node_t *target_node;
     va_list ap;
     ucs_status_t status;
+
+    ucs_vfs_global_init();
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
@@ -575,6 +615,8 @@ void ucs_vfs_obj_remove(void *obj)
 {
     ucs_vfs_node_t *node;
 
+    ucs_vfs_global_init();
+
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     node = ucs_vfs_node_find_by_obj(obj);
@@ -588,6 +630,8 @@ void ucs_vfs_obj_remove(void *obj)
 void ucs_vfs_obj_set_dirty(void *obj, ucs_vfs_refresh_cb_t refresh_cb)
 {
     ucs_vfs_node_t *node;
+
+    ucs_vfs_global_init();
 
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
@@ -606,6 +650,8 @@ ucs_status_t ucs_vfs_path_get_info(const char *path, ucs_vfs_path_info_t *info)
     ucs_vfs_node_t *node;
     ucs_status_t status;
 
+    ucs_vfs_global_init();
+
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     node = ucs_vfs_node_find_by_path(path);
@@ -618,11 +664,16 @@ ucs_status_t ucs_vfs_path_get_info(const char *path, ucs_vfs_path_info_t *info)
 
     switch (node->type) {
     case UCS_VFS_NODE_TYPE_RO_FILE:
+    case UCS_VFS_NODE_TYPE_RW_FILE:
         ucs_string_buffer_init(&strb);
-        ucs_vfs_read_ro_file(node, &strb);
-        info->mode = S_IFREG | S_IRUSR;
+        ucs_vfs_read_file(node, &strb);
         info->size = ucs_string_buffer_length(&strb);
         ucs_string_buffer_cleanup(&strb);
+
+        info->mode = S_IFREG | S_IRUSR;
+        if (node->type == UCS_VFS_NODE_TYPE_RW_FILE) {
+            info->mode |= S_IWUSR;
+        }
         status = UCS_OK;
         break;
     case UCS_VFS_NODE_TYPE_DIR:
@@ -658,20 +709,46 @@ ucs_status_t ucs_vfs_path_read_file(const char *path, ucs_string_buffer_t *strb)
     ucs_vfs_node_t *node;
     ucs_status_t status;
 
+    ucs_vfs_global_init();
+
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     node = ucs_vfs_node_find_by_path(path);
-    if (!ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_RO_FILE)) {
+    if (!ucs_vfs_check_node_file(node)) {
         status = UCS_ERR_NO_ELEM;
         goto out_unlock;
     }
 
     ucs_vfs_node_increase_refcount(node);
 
-    ucs_vfs_read_ro_file(node, strb);
+    ucs_vfs_read_file(node, strb);
     status = UCS_OK;
 
     ucs_vfs_node_decrease_refcount(node);
+
+out_unlock:
+    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
+
+    return status;
+}
+
+ucs_status_t
+ucs_vfs_path_write_file(const char *path, const char *buffer, size_t size)
+{
+    ucs_vfs_node_t *node;
+    ucs_status_t status;
+
+    ucs_vfs_global_init();
+
+    ucs_spin_lock(&ucs_vfs_obj_context.lock);
+
+    node = ucs_vfs_node_find_by_path(path);
+    if (!ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_RW_FILE)) {
+        status = UCS_ERR_NO_ELEM;
+        goto out_unlock;
+    }
+
+    status = ucs_vfs_write_file(node, buffer, size);
 
 out_unlock:
     ucs_spin_unlock(&ucs_vfs_obj_context.lock);
@@ -685,6 +762,8 @@ ucs_vfs_path_list_dir(const char *path, ucs_vfs_list_dir_cb_t dir_cb, void *arg)
     ucs_vfs_node_t *node;
     ucs_status_t status;
 
+    ucs_vfs_global_init();
+
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     if (!strcmp(path, "/")) {
@@ -694,9 +773,7 @@ ucs_vfs_path_list_dir(const char *path, ucs_vfs_list_dir_cb_t dir_cb, void *arg)
     }
 
     node = ucs_vfs_node_find_by_path(path);
-
-    if (!ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_DIR) &&
-        !ucs_vfs_check_node(node, UCS_VFS_NODE_TYPE_SUBDIR)) {
+    if (!ucs_vfs_check_node_dir(node)) {
         status = UCS_ERR_NO_ELEM;
         goto out_unlock;
     }
@@ -720,6 +797,8 @@ ucs_status_t ucs_vfs_path_get_link(const char *path, ucs_string_buffer_t *strb)
     ucs_vfs_node_t *node;
     ucs_status_t status;
 
+    ucs_vfs_global_init();
+
     ucs_spin_lock(&ucs_vfs_obj_context.lock);
 
     node = ucs_vfs_node_find_by_path(path);
@@ -737,20 +816,13 @@ out_unlock:
     return status;
 }
 
-UCS_STATIC_INIT
-{
-    ucs_spinlock_init(&ucs_vfs_obj_context.lock, 0);
-    ucs_spin_lock(&ucs_vfs_obj_context.lock);
-    ucs_vfs_node_init(&ucs_vfs_obj_context.root, UCS_VFS_NODE_TYPE_DIR, NULL,
-                      NULL);
-    ucs_spin_unlock(&ucs_vfs_obj_context.lock);
-    kh_init_inplace(vfs_obj, &ucs_vfs_obj_context.obj_hash);
-    kh_init_inplace(vfs_path, &ucs_vfs_obj_context.path_hash);
-}
-
 UCS_STATIC_CLEANUP
 {
-    kh_destroy_inplace(vfs_path, &ucs_vfs_obj_context.path_hash);
-    kh_destroy_inplace(vfs_obj, &ucs_vfs_obj_context.obj_hash);
-    ucs_spinlock_destroy(&ucs_vfs_obj_context.lock);
+    UCS_CLEANUP_ONCE(&ucs_vfs_init_once) {
+        ucs_vfs_node_remove_children(&ucs_vfs_obj_context.root);
+
+        kh_destroy_inplace(vfs_path, &ucs_vfs_obj_context.path_hash);
+        kh_destroy_inplace(vfs_obj, &ucs_vfs_obj_context.obj_hash);
+        ucs_spinlock_destroy(&ucs_vfs_obj_context.lock);
+    }
 }

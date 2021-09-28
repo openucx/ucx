@@ -1,12 +1,13 @@
 jobs:
   - job: distro_release
-    condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
     displayName: distro
     variables:
       ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
+        POSTFIX: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/heads/', '') }}
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
         POSTFIX: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}
       ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-        POSTFIX: ucx-test
+        POSTFIX: ucx-pr$(System.PullRequest.PullRequestNumber)
 
     pool:
       name: MLNX
@@ -15,48 +16,21 @@ jobs:
 
     strategy:
       matrix:
-        centos7_cuda10_1:
-          build_container: centos7_cuda10_1
-          artifact_name: $(POSTFIX)-centos7-mofed5.x-cuda10.1.tar.bz2
-        centos7_cuda10_2:
-          build_container: centos7_cuda10_2
-          artifact_name: $(POSTFIX)-centos7-mofed5.x-cuda10.2.tar.bz2
-        centos7_cuda11_0:
-          build_container: centos7_cuda11_0
-          artifact_name: $(POSTFIX)-centos7-mofed5.x-cuda11.0.tar.bz2
-        centos7_cuda11_2:
-          build_container: centos7_cuda11_2
-          artifact_name: $(POSTFIX)-centos7-mofed5.x-cuda11.2.tar.bz2
-        centos8_cuda11_0:
-          build_container: centos8_cuda11_0
-          artifact_name: $(POSTFIX)-centos8-mofed5.x-cuda11.0.tar.bz2
-        centos8_cuda11_2:
-          build_container: centos8_cuda11_2
-          artifact_name: $(POSTFIX)-centos8-mofed5.x-cuda11.2.tar.bz2
-        ubuntu16_cuda10_1:
-          build_container: ubuntu16_cuda10_1
-          artifact_name: $(POSTFIX)-ubuntu16.04-mofed5.x-cuda10.1.deb
-        ubuntu16_cuda10_2:
-          build_container: ubuntu16_cuda10_2
-          artifact_name: $(POSTFIX)-ubuntu16.04-mofed5.x-cuda10.2.deb
-        ubuntu18_cuda10_1:
-          build_container: ubuntu18_cuda10_1
-          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5.x-cuda10.1.deb
-        ubuntu18_cuda10_2:
-          build_container: ubuntu18_cuda10_2
-          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5.x-cuda10.2.deb
-        ubuntu18_cuda11_0:
-          build_container: ubuntu18_cuda11_0
-          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5.x-cuda11.0.deb
-        ubuntu18_cuda11_2:
-          build_container: ubuntu18_cuda11_2
-          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5.x-cuda11.2.deb
-        ubuntu20_cuda11_0:
-          build_container: ubuntu20_cuda11_0
-          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5.x-cuda11.0.deb
-        ubuntu20_cuda11_2:
-          build_container: ubuntu20_cuda11_2
-          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5.x-cuda11.2.deb
+        centos7_cuda11:
+          build_container: centos7_cuda11
+          artifact_name: $(POSTFIX)-centos7-mofed5-cuda11.tar.bz2
+        centos8_cuda11:
+          build_container: centos8_cuda11
+          artifact_name: $(POSTFIX)-centos8-mofed5-cuda11.tar.bz2
+        ubuntu16_cuda11:
+          build_container: ubuntu16_cuda11
+          artifact_name: $(POSTFIX)-ubuntu16.04-mofed5-cuda11.deb
+        ubuntu18_cuda11:
+          build_container: ubuntu18_cuda11
+          artifact_name: $(POSTFIX)-ubuntu18.04-mofed5-cuda11.deb
+        ubuntu20_cuda11:
+          build_container: ubuntu20_cuda11
+          artifact_name: $(POSTFIX)-ubuntu20.04-mofed5-cuda11.deb
 
     container: $[ variables['build_container'] ]
 
@@ -68,7 +42,7 @@ jobs:
         # ^ Avoid rpmbuild error: Dest dir longer than base dir is not supported
 
       - bash: |
-          set -eE
+          set -eEx
           ./autogen.sh
           mkdir pkg-build
           cd pkg-build
@@ -76,9 +50,9 @@ jobs:
         displayName: Configure
 
       - bash: |
-          set -eE
+          set -eEx
           cd pkg-build
-          ../contrib/buildrpm.sh -s -t -b
+          ../contrib/buildrpm.sh -s -t -b --noclean
           cd rpm-dist/`uname -m`
           tar -cjf "../../../${AZ_ARTIFACT_NAME}" *.rpm
           cd ../../..
@@ -89,7 +63,7 @@ jobs:
           AZ_ARTIFACT_NAME: $(artifact_name)
 
       - bash: |
-          set -eE
+          set -eEx
           cd pkg-build
           dpkg-buildpackage -us -uc
           find .. -name '*.deb'
@@ -101,8 +75,8 @@ jobs:
           AZ_ARTIFACT_NAME: $(artifact_name)
 
       - task: GithubRelease@0
-        condition: eq(variables['Build.Reason'], 'ResourceTrigger')
-        displayName: Upload artifacts to draft release
+        condition: eq(variables['Build.Reason'], 'IndividualCI')
+        displayName: Upload artifacts
         inputs:
           githubConnection: release
           repositoryName: openucx/ucx

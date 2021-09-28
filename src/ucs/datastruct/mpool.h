@@ -10,6 +10,8 @@
 #include <stddef.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/compiler_def.h>
+#include <ucs/datastruct/string_buffer.h>
+
 
 BEGIN_C_DECLS
 
@@ -71,9 +73,9 @@ struct ucs_mpool {
  * Memory pool slow-path data.
  */
 struct ucs_mpool_data {
-    unsigned               elem_size;       /* Size of element in the chunk */
-    unsigned               alignment;       /* Element alignment */
-    unsigned               align_offset;    /* Offset to alignment point */
+    size_t                 elem_size;       /* Size of element in the chunk */
+    size_t                 alignment;       /* Element alignment */
+    size_t                 align_offset;    /* Offset to alignment point */
     unsigned               elems_per_chunk; /* Number of elements per chunk */
     unsigned               quota;           /* How many more elements can be allocated */
     ucs_mpool_elem_t       *tail;           /* Free list tail */
@@ -127,6 +129,16 @@ struct ucs_mpool_ops {
      * @param obj          Object to initialize.
      */
     void         (*obj_cleanup)(ucs_mpool_t *mp, void *obj);
+
+    /**
+     * Return a string representing the object, used for debug.
+     * May be NULL.
+     *
+     * @param mp           Memory pool structure.
+     * @param obj          Object to show.
+     * @param strb         String buffer to fill with object information.
+     */
+    void         (*obj_str)(ucs_mpool_t *mp, void *obj, ucs_string_buffer_t *strb);
 };
 
 

@@ -231,7 +231,7 @@ void uct_tcp_sockcm_ep_handle_event_status(uct_tcp_sockcm_ep_t *ep,
               ep, ep->fd, ep->state, events, reason, ucs_status_string(status));
 
     /* if the ep is on the server side but uct_ep_create wasn't called yet and
-     * connection request wasn't prvodied to a user, destroy the ep here since
+     * connection request wasn't provided to a user, destroy the ep here since
      * uct_ep_destroy won't be called either */
     if ((ep->state & (UCT_TCP_SOCKCM_EP_ON_SERVER |
                       UCT_TCP_SOCKCM_EP_SERVER_CREATED |
@@ -426,7 +426,7 @@ ucs_status_t uct_tcp_sockcm_cm_ep_conn_notify(uct_ep_h ep)
     ucs_assert(!(cep->state & UCT_TCP_SOCKCM_EP_CLIENT_NOTIFY_CALLED));
 
     /* sending only the header in the notify message */
-    hdr->length          = 0; 
+    hdr->length          = 0;
     hdr->status          = (uint8_t)UCS_OK;
     cep->comm_ctx.length = sizeof(*hdr);
 

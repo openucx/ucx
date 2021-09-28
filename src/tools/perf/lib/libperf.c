@@ -16,12 +16,13 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
-#include <string.h>
 #include <tools/perf/lib/libperf_int.h>
+
+#include <string.h>
 #include <unistd.h>
 
 #if _OPENMP
-#include <omp.h>
+#   include <omp.h>
 #endif /* _OPENMP */
 
 #define ATOMIC_OP_CONFIG(_size, _op32, _op64, _op, _msg, _params, _status) \
@@ -166,111 +167,6 @@ static ucs_time_t __find_percentile_quick_select(ucs_time_t arr[], int n, double
     }
 }
 
-static ucs_status_t
-uct_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
-                         unsigned flags, uct_allocated_memory_t *alloc_mem)
-{
-    ucs_status_t status;
-
-    status = uct_iface_mem_alloc(perf->uct.iface, length,
-                                 flags, "perftest", alloc_mem);
-    if (status != UCS_OK) {
-        ucs_error("failed to allocate memory: %s", ucs_status_string(status));
-        return status;
-    }
-
-    ucs_assert(alloc_mem->md == perf->uct.md);
-
-    return UCS_OK;
-}
-
-static void uct_perf_test_free_host(const ucx_perf_context_t *perf,
-                                    uct_allocated_memory_t *alloc_mem)
-{
-    uct_iface_mem_free(alloc_mem);
-}
-
-static void ucx_perf_test_memcpy_host(void *dst, ucs_memory_type_t dst_mem_type,
-                                      const void *src, ucs_memory_type_t src_mem_type,
-                                      size_t count)
-{
-    if ((dst_mem_type != UCS_MEMORY_TYPE_HOST) ||
-        (src_mem_type != UCS_MEMORY_TYPE_HOST)) {
-        ucs_error("wrong memory type passed src - %d, dst - %d",
-                  src_mem_type, dst_mem_type);
-    } else {
-        memcpy(dst, src, count);
-    }
-}
-
-static ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
-{
-    ucx_perf_params_t *params = &perf->params;
-    ucs_status_t status;
-    unsigned flags;
-    size_t buffer_size;
-
-    if ((UCT_PERF_DATA_LAYOUT_ZCOPY == params->uct.data_layout) && params->iov_stride) {
-        buffer_size = params->msg_size_cnt * params->iov_stride;
-    } else {
-        buffer_size = ucx_perf_get_message_size(params);
-    }
-
-    /* TODO use params->alignment  */
-
-    flags = (params->flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) ?
-             UCT_MD_MEM_FLAG_NONBLOCK : 0;
-    flags |= UCT_MD_MEM_ACCESS_ALL;
-
-    /* Allocate send buffer memory */
-    status = perf->allocator->uct_alloc(perf, buffer_size * params->thread_count,
-                                        flags, &perf->uct.send_mem);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    perf->send_buffer = perf->uct.send_mem.address;
-
-    /* Allocate receive buffer memory */
-    status = perf->allocator->uct_alloc(perf, buffer_size * params->thread_count,
-                                        flags, &perf->uct.recv_mem);
-    if (status != UCS_OK) {
-        goto err_free_send;
-    }
-
-    perf->recv_buffer = perf->uct.recv_mem.address;
-
-    /* Allocate IOV datatype memory */
-    perf->params.msg_size_cnt = params->msg_size_cnt;
-    perf->uct.iov             = malloc(sizeof(*perf->uct.iov) *
-                                       perf->params.msg_size_cnt *
-                                       params->thread_count);
-    if (NULL == perf->uct.iov) {
-        status = UCS_ERR_NO_MEMORY;
-        ucs_error("Failed allocate send IOV(%lu) buffer: %s",
-                  perf->params.msg_size_cnt, ucs_status_string(status));
-        goto err_free_recv;
-    }
-
-    ucs_debug("allocated memory. Send buffer %p, Recv buffer %p",
-              perf->send_buffer, perf->recv_buffer);
-    return UCS_OK;
-
-err_free_recv:
-    perf->allocator->uct_free(perf, &perf->uct.recv_mem);
-err_free_send:
-    perf->allocator->uct_free(perf, &perf->uct.send_mem);
-err:
-    return status;
-}
-
-static void uct_perf_test_free_mem(ucx_perf_context_t *perf)
-{
-    perf->allocator->uct_free(perf, &perf->uct.send_mem);
-    perf->allocator->uct_free(perf, &perf->uct.recv_mem);
-    free(perf->uct.iov);
-}
-
 void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
 {
     ucs_time_t start_time = ucs_get_time();
@@ -285,8 +181,8 @@ void ucx_perf_test_start_clock(ucx_perf_context_t *perf)
 }
 
 /* Initialize/reset all parameters that could be modified by the warm-up run */
-static void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
-                                          const ucx_perf_params_t *params)
+void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
+                                   const ucx_perf_params_t *params)
 {
     unsigned i;
 
@@ -952,6 +848,16 @@ static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     free(perf->uct.peers);
 }
 
+static void ucp_perf_worker_progress(void *arg)
+{
+    ucx_perf_context_t *perf = arg;
+    int i;
+
+    for (i = 0; i < perf->params.thread_count; ++i) {
+        ucp_worker_progress(perf->ucp.tctx[i].perf.ucp.worker);
+    }
+}
+
 static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
                                               ucp_params_t *ucp_params)
 {
@@ -1010,158 +916,13 @@ static ucs_status_t ucp_perf_test_fill_params(ucx_perf_params_t *params,
     return UCS_OK;
 }
 
-static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
-                                                size_t iovcnt, unsigned thread_count,
-                                                ucp_dt_iov_t **iov_p)
-{
-    ucp_dt_iov_t *iov;
-
-    if (UCP_PERF_DATATYPE_IOV == datatype) {
-        iov = malloc(sizeof(*iov) * iovcnt * thread_count);
-        if (NULL == iov) {
-            ucs_error("Failed allocate IOV buffer with iovcnt=%lu", iovcnt);
-            return UCS_ERR_NO_MEMORY;
-        }
-        *iov_p = iov;
-    }
-
-    return UCS_OK;
-}
-
-static ucs_status_t
-ucp_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
-                         void **address_p, ucp_mem_h *memh, int non_blk_flag)
-{
-    ucp_mem_map_params_t mem_map_params;
-    ucp_mem_attr_t mem_attr;
-    ucs_status_t status;
-
-    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_map_params.address    = *address_p;
-    mem_map_params.length     = length;
-    mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
-    if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
-        mem_map_params.flags |= non_blk_flag;
-    }
-
-    status = ucp_mem_map(perf->ucp.context, &mem_map_params, memh);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
-    status = ucp_mem_query(*memh, &mem_attr);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    *address_p = mem_attr.address;
-    return UCS_OK;
-
-err:
-    return status;
-}
-
-static void ucp_perf_test_free_host(const ucx_perf_context_t *perf,
-                                    void *address, ucp_mem_h memh)
-{
-    ucs_status_t status;
-
-    status = ucp_mem_unmap(perf->ucp.context, memh);
-    if (status != UCS_OK) {
-        ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
-    }
-}
-
-static ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
-{
-    ucx_perf_params_t *params = &perf->params;
-    ucs_status_t status;
-    size_t buffer_size;
-
-    if (params->iov_stride) {
-        buffer_size = params->msg_size_cnt * params->iov_stride;
-    } else {
-        buffer_size = ucx_perf_get_message_size(params);
-    }
-
-    /* Allocate send buffer memory */
-    perf->send_buffer = NULL;
-    status = perf->allocator->ucp_alloc(perf, buffer_size * params->thread_count,
-                                        &perf->send_buffer, &perf->ucp.send_memh,
-                                        UCP_MEM_MAP_NONBLOCK);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    /* Allocate receive buffer memory */
-    perf->recv_buffer = NULL;
-    status = perf->allocator->ucp_alloc(perf, buffer_size * params->thread_count,
-                                        &perf->recv_buffer, &perf->ucp.recv_memh,
-                                        0);
-    if (status != UCS_OK) {
-        goto err_free_send_buffer;
-    }
-
-    /* Allocate AM header */
-    if (params->ucp.am_hdr_size != 0) {
-        perf->ucp.am_hdr = malloc(params->ucp.am_hdr_size);
-        if (perf->ucp.am_hdr == NULL) {
-            goto err_free_buffers;
-        }
-    } else {
-        perf->ucp.am_hdr = NULL;
-    }
-
-    /* Allocate IOV datatype memory */
-    perf->ucp.send_iov = NULL;
-    status = ucp_perf_test_alloc_iov_mem(params->ucp.send_datatype,
-                                         perf->params.msg_size_cnt,
-                                         params->thread_count,
-                                         &perf->ucp.send_iov);
-    if (UCS_OK != status) {
-        goto err_free_am_hdr;
-    }
-
-    perf->ucp.recv_iov = NULL;
-    status = ucp_perf_test_alloc_iov_mem(params->ucp.recv_datatype,
-                                         perf->params.msg_size_cnt,
-                                         params->thread_count,
-                                         &perf->ucp.recv_iov);
-    if (UCS_OK != status) {
-        goto err_free_send_iov_buffers;
-    }
-
-    return UCS_OK;
-
-err_free_send_iov_buffers:
-    free(perf->ucp.send_iov);
-err_free_am_hdr:
-    free(perf->ucp.am_hdr);
-err_free_buffers:
-    perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
-err_free_send_buffer:
-    perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
-err:
-    return UCS_ERR_NO_MEMORY;
-}
-
-static void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
-{
-    free(perf->ucp.recv_iov);
-    free(perf->ucp.send_iov);
-    free(perf->ucp.am_hdr);
-    perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
-    perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
-}
-
 static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf)
 {
     unsigned i, thread_count = perf->params.thread_count;
-    ucs_status_ptr_t    *req;
-    ucs_status_t        status;
+    unsigned num_in_prog     = 0;
+    ucs_status_ptr_t **reqs  = ucs_alloca(thread_count * sizeof(*reqs));
+    ucs_status_ptr_t *req;
+    ucs_status_t status;
 
     for (i = 0; i < thread_count; ++i) {
         if (perf->ucp.tctx[i].perf.ucp.rkey != NULL) {
@@ -1173,16 +934,22 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf)
                                   UCP_EP_CLOSE_MODE_FLUSH);
 
             if (UCS_PTR_IS_PTR(req)) {
-                do {
-                    ucp_worker_progress(perf->ucp.tctx[i].perf.ucp.worker);
-                    status = ucp_request_check_status(req);
-                } while (status == UCS_INPROGRESS);
-
-                ucp_request_release(req);
+                reqs[num_in_prog++] = req;
             } else if (UCS_PTR_STATUS(req) != UCS_OK) {
                 ucs_warn("failed to close ep %p on thread %d: %s\n",
                          perf->ucp.tctx[i].perf.ucp.ep, i,
                          ucs_status_string(UCS_PTR_STATUS(req)));
+            }
+        }
+    }
+
+    while (num_in_prog != 0) {
+        ucp_perf_worker_progress(perf);
+        for (i = 0; i < num_in_prog; ++i) {
+            status = ucp_request_check_status(reqs[i]);
+            if (status != UCS_INPROGRESS) {
+                ucp_request_release(reqs[i]);
+                reqs[i] = reqs[--num_in_prog];
             }
         }
     }
@@ -1202,6 +969,7 @@ static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
 
     rte_call(perf, post_vec, &vec, 1, &req);
     rte_call(perf, exchange_vec, req);
+
     for (i = 0; i < group_size; ++i) {
         rte_call(perf, recv, i, &status, sizeof(status), req);
         if (status != UCS_OK) {
@@ -1218,27 +986,69 @@ static void ucp_perf_test_err_handler(void *arg, ucp_ep_h ep,
               ucs_status_string(status));
 }
 
-static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
+static ucs_status_t ucp_perf_test_rkey_pack(ucx_perf_context_t *perf,
+                                            uint64_t features,
+                                            void **rkey_buffer,
+                                            size_t *rkey_size)
+{
+    ucs_status_t status;
+
+    if (features & (UCP_FEATURE_RMA | UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64)) {
+        status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
+                               rkey_buffer, rkey_size);
+        if (status != UCS_OK) {
+            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_error("ucp_rkey_pack() failed: %s",
+                           ucs_status_string(status));
+            }
+
+            return status;
+        }
+    } else {
+        *rkey_size = 0;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_perf_test_rkey_unpack(ucx_perf_thread_context_t *thread,
+                          ucx_perf_params_t *params, void *rkey_buffer,
+                          size_t rkey_size)
+{
+    ucs_status_t status;
+
+    if (rkey_size > 0) {
+        status = ucp_ep_rkey_unpack(thread->perf.ucp.ep, rkey_buffer,
+                                    &thread->perf.ucp.rkey);
+        if (status != UCS_OK) {
+            if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
+                ucs_fatal("ucp_rkey_unpack() failed: %s",
+                           ucs_status_string(status));
+            }
+
+            return status;
+        }
+    } else {
+        thread->perf.ucp.rkey = NULL;
+    }
+
+    return UCS_OK;
+}
+
+static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf,
+                                                      unsigned peer_index)
 {
     unsigned thread_count = perf->params.thread_count;
     void *rkey_buffer     = NULL;
     void *req             = NULL;
-    unsigned group_size, group_index, i;
     ucx_perf_ep_info_t *remote_info;
     ucp_ep_params_t ep_params;
     ucp_address_t *address;
     ucs_status_t status;
     size_t buffer_size;
     void *buffer;
-
-    group_size  = rte_call(perf, group_size);
-    group_index = rte_call(perf, group_index);
-
-    if (group_size != 2) {
-        ucs_error("perftest requires group size to be exactly 2 "
-                  "(actual group size: %u)", group_size);
-        return UCS_ERR_UNSUPPORTED;
-    }
+    unsigned i;
 
     buffer_size = ADDR_BUF_SIZE * thread_count;
 
@@ -1257,7 +1067,7 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
 
     /* receive the data from the remote peer, extract the address from it
      * (along with additional wireup info) and create an endpoint to the peer */
-    rte_call(perf, recv, 1 - group_index, buffer, buffer_size, req);
+    rte_call(perf, recv, peer_index, buffer, buffer_size, req);
 
     remote_info = buffer;
     for (i = 0; i < thread_count; i++) {
@@ -1286,17 +1096,10 @@ static ucs_status_t ucp_perf_test_receive_remote_data(ucx_perf_context_t *perf)
             goto err_free_eps_buffer;
         }
 
-        if (remote_info->rkey_size > 0) {
-            status = ucp_ep_rkey_unpack(perf->ucp.tctx[i].perf.ucp.ep, rkey_buffer,
-                                        &perf->ucp.tctx[i].perf.ucp.rkey);
-            if (status != UCS_OK) {
-                if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                    ucs_fatal("ucp_rkey_unpack() failed: %s", ucs_status_string(status));
-                }
-                goto err_free_eps_buffer;
-            }
-        } else {
-            perf->ucp.tctx[i].perf.ucp.rkey = NULL;
+        status = ucp_perf_test_rkey_unpack(&perf->ucp.tctx[i], &perf->params,
+                                           rkey_buffer, remote_info->rkey_size);
+        if (status != UCS_OK) {
+            goto err_free_eps_buffer;
         }
 
         remote_info = UCS_PTR_BYTE_OFFSET(remote_info,
@@ -1326,17 +1129,9 @@ static ucs_status_t ucp_perf_test_send_local_data(ucx_perf_context_t *perf,
     struct iovec *vec;
     size_t rkey_size;
 
-    if (features & (UCP_FEATURE_RMA|UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)) {
-        status = ucp_rkey_pack(perf->ucp.context, perf->ucp.recv_memh,
-                               &rkey_buffer, &rkey_size);
-        if (status != UCS_OK) {
-            if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-                ucs_error("ucp_rkey_pack() failed: %s", ucs_status_string(status));
-            }
-            goto err;
-        }
-    } else {
-        rkey_size = 0;
+    status = ucp_perf_test_rkey_pack(perf, features, &rkey_buffer, &rkey_size);
+    if (status != UCS_OK) {
+        goto err;
     }
 
     /* each thread has an iovec with 3 entries to send to the remote peer:
@@ -1404,7 +1199,7 @@ static ucs_status_t ucp_perf_test_send_local_data(ucx_perf_context_t *perf,
 
 err_free_workers_vec:
     for (j = 0; j < i; j++) {
-        ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
+        ucp_worker_destroy(perf->ucp.tctx[j].perf.ucp.worker);
     }
     free(vec);
 err_rkey_release:
@@ -1419,7 +1214,24 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
                                                   uint64_t features)
 {
     ucs_status_t status;
+    unsigned group_size  = rte_call(perf, group_size);
+    unsigned group_index = rte_call(perf, group_index);
+    unsigned peer_index  = rte_peer_index(group_size, group_index);
     unsigned i;
+
+    if ((perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (group_size != 1)) {
+        ucs_error("perftest loopback requires group size to be 1 "
+                  "(actual group size: %u)", group_size);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    if (!(perf->params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) &&
+        (group_size != 2)) {
+        ucs_error("perftest p2p requires group size to be exactly 2 "
+                  "(actual group size: %u)", group_size);
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     /* pack the local endpoints data and send to the remote peer */
     status = ucp_perf_test_send_local_data(perf, features);
@@ -1428,7 +1240,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     }
 
     /* receive remote peer's endpoints' data and connect to them */
-    status = ucp_perf_test_receive_remote_data(perf);
+    status = ucp_perf_test_receive_remote_data(perf, peer_index);
     if (status != UCS_OK) {
         goto err;
     }
@@ -1474,8 +1286,8 @@ static void ucp_perf_test_destroy_workers(ucx_perf_context_t *perf)
     }
 }
 
-static void ucx_perf_set_warmup(ucx_perf_context_t* perf,
-                                const ucx_perf_params_t* params)
+void ucx_perf_set_warmup(ucx_perf_context_t* perf,
+                         const ucx_perf_params_t* params)
 {
     perf->max_iter = ucs_min(params->warmup_iter,
                              ucs_div_round_up(params->max_iter, 10));
@@ -1574,7 +1386,7 @@ void uct_perf_barrier(ucx_perf_context_t *perf)
              (void*)perf->uct.worker);
 }
 
-void ucp_perf_barrier(ucx_perf_context_t *perf)
+void ucp_perf_thread_barrier(ucx_perf_context_t *perf)
 {
     rte_call(perf, barrier, (void(*)(void*))ucp_worker_progress,
 #if _OPENMP
@@ -1582,6 +1394,11 @@ void ucp_perf_barrier(ucx_perf_context_t *perf)
 #else
              (void*)perf->ucp.tctx[0].perf.ucp.worker);
 #endif
+}
+
+void ucp_perf_barrier(ucx_perf_context_t *perf)
+{
+    rte_call(perf, barrier, ucp_perf_worker_progress, perf);
 }
 
 static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
@@ -1601,6 +1418,12 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
         .rx_headroom          = 0
     };
     UCS_CPU_ZERO(&iface_params.cpu_mask);
+
+    if (params->thread_count > 1) {
+        ucs_error("UCT tests do not support multi-thread mode");
+        status = UCS_ERR_UNSUPPORTED;
+        goto out;
+    }
 
     status = ucs_async_context_init(&perf->uct.async, params->async_mode);
     if (status != UCS_OK) {
@@ -1634,7 +1457,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
 
     status = uct_perf_test_check_capabilities(params, perf->uct.iface,
                                               perf->uct.md);
-    /* sync status across all processes */
+
     status = ucp_perf_test_exchange_status(perf, status);
     if (status != UCS_OK) {
         goto out_iface_close;
@@ -1813,20 +1636,12 @@ static void ucp_perf_cleanup(ucx_perf_context_t *perf)
     ucp_cleanup(perf->ucp.context);
 }
 
-static struct {
-    ucs_status_t (*setup)(ucx_perf_context_t *perf);
-    void         (*cleanup)(ucx_perf_context_t *perf);
-    ucs_status_t (*run)(ucx_perf_context_t *perf);
-    void         (*barrier)(ucx_perf_context_t *perf);
-} ucx_perf_funcs[] = {
+ucx_perf_funcs_t ucx_perf_funcs[] = {
     [UCX_PERF_API_UCT] = {uct_perf_setup, uct_perf_cleanup,
                           uct_perf_test_dispatch, uct_perf_barrier},
     [UCX_PERF_API_UCP] = {ucp_perf_setup, ucp_perf_cleanup,
-                          ucp_perf_test_dispatch, ucp_perf_barrier}
+                          ucp_perf_test_dispatch, ucp_perf_thread_barrier}
 };
-
-static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
-                                          ucx_perf_result_t* result);
 
 ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
                           ucx_perf_result_t *result)
@@ -1920,152 +1735,24 @@ out:
     return status;
 }
 
-#if _OPENMP
-
-static ucs_status_t ucx_perf_thread_run_test(void* arg)
+size_t ucx_perf_get_message_size(const ucx_perf_params_t *params)
 {
-    ucx_perf_thread_context_t* tctx = (ucx_perf_thread_context_t*) arg; /* a single thread context */
-    ucx_perf_result_t* result       = &tctx->result;
-    ucx_perf_context_t* perf        = &tctx->perf;
-    ucx_perf_params_t* params       = &perf->params;
-    ucs_status_t status;
+    size_t length, it;
 
-    /* new threads need explicit device association */
-    status = perf->allocator->init(perf);
-    if (status != UCS_OK) {
-        goto out;
+    ucs_assert(params->msg_size_list != NULL);
+
+    length = 0;
+    for (it = 0; it < params->msg_size_cnt; ++it) {
+        length += params->msg_size_list[it];
     }
 
-    if (params->warmup_iter > 0) {
-        ucx_perf_set_warmup(perf, params);
-        status = ucx_perf_funcs[params->api].run(perf);
-        ucx_perf_funcs[params->api].barrier(perf);
-        if (UCS_OK != status) {
-            goto out;
-        }
-        ucx_perf_test_prepare_new_run(perf, params);
-    }
-
-    /* Run test */
-#pragma omp barrier
-    status = ucx_perf_funcs[params->api].run(perf);
-    ucx_perf_funcs[params->api].barrier(perf);
-    if (UCS_OK != status) {
-        goto out;
-    }
-
-    ucx_perf_calc_result(perf, result);
-
-out:
-    return status;
+    return length;
 }
 
-static void ucx_perf_thread_report_aggregated_results(ucx_perf_context_t *perf)
+unsigned rte_peer_index(unsigned group_size, unsigned group_index)
 {
-    ucx_perf_thread_context_t* tctx = perf->ucp.tctx;  /* all the thread contexts on perf */
-    unsigned i, thread_count        = perf->params.thread_count;
-    double lat_sum_total_avegare    = 0.0;
-    ucx_perf_result_t agg_result;
+    unsigned peer_index = group_size - 1 - group_index;
 
-    agg_result.iters        = tctx[0].result.iters;
-    agg_result.bytes        = tctx[0].result.bytes;
-    agg_result.elapsed_time = tctx[0].result.elapsed_time;
-
-    agg_result.bandwidth.total_average  = 0.0;
-    agg_result.bandwidth.percentile     = 0.0; /* Undefined since used only for latency calculations */
-    agg_result.latency.total_average    = 0.0;
-    agg_result.msgrate.total_average    = 0.0;
-    agg_result.msgrate.percentile       = 0.0; /* Undefined since used only for latency calculations */
-
-    /* when running with multiple threads, the moment average value is
-     * undefined since we don't capture the values of the last iteration */
-    agg_result.msgrate.moment_average   = 0.0;
-    agg_result.bandwidth.moment_average = 0.0;
-    agg_result.latency.moment_average   = 0.0;
-    agg_result.latency.percentile       = 0.0;
-
-    /* in case of multiple threads, we have to aggregate the results so that the
-     * final output of the result would show the performance numbers that were
-     * collected from all the threads.
-     * BW and message rate values will be the sum of their values from all
-     * the threads, while the latency value is the average latency from the
-     * threads. */
-
-    for (i = 0; i < thread_count; i++) {
-        agg_result.bandwidth.total_average  += tctx[i].result.bandwidth.total_average;
-        agg_result.msgrate.total_average    += tctx[i].result.msgrate.total_average;
-        lat_sum_total_avegare               += tctx[i].result.latency.total_average;
-    }
-
-    agg_result.latency.total_average = lat_sum_total_avegare / thread_count;
-
-    rte_call(perf, report, &agg_result, perf->params.report_arg, 1, 1);
-}
-
-static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
-                                          ucx_perf_result_t* result)
-{
-    ucx_perf_thread_context_t* tctx = perf->ucp.tctx;   /* all the thread contexts on perf */
-    int ti, thread_count            = perf->params.thread_count;
-    ucs_status_t* statuses;
-    ucs_status_t status;
-
-    omp_set_num_threads(thread_count);
-
-    statuses = calloc(thread_count, sizeof(ucs_status_t));
-    if (statuses == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto out;
-    }
-
-#pragma omp parallel private(ti)
-{
-    ti              = omp_get_thread_num();
-    tctx[ti].status = ucx_perf_thread_run_test((void*)&tctx[ti]);
-}
-
-    status = UCS_OK;
-    for (ti = 0; ti < thread_count; ti++) {
-        if (UCS_OK != tctx[ti].status) {
-            ucs_error("Thread %d failed to run test: %s", tctx[ti].tid,
-                      ucs_status_string(tctx[ti].status));
-            status = tctx[ti].status;
-        }
-    }
-
-    ucx_perf_thread_report_aggregated_results(perf);
-
-    free(statuses);
-out:
-    return status;
-}
-#else
-static ucs_status_t ucx_perf_thread_spawn(ucx_perf_context_t *perf,
-                                          ucx_perf_result_t* result) {
-    ucs_error("Invalid test parameter (thread mode requested without OpenMP capabilities)");
-    return UCS_ERR_INVALID_PARAM;
-}
-#endif /* _OPENMP */
-
-void ucx_perf_global_init()
-{
-    static ucx_perf_allocator_t host_allocator = {
-        .mem_type  = UCS_MEMORY_TYPE_HOST,
-        .init      = ucs_empty_function_return_success,
-        .ucp_alloc = ucp_perf_test_alloc_host,
-        .ucp_free  = ucp_perf_test_free_host,
-        .uct_alloc = uct_perf_test_alloc_host,
-        .uct_free  = uct_perf_test_free_host,
-        .memcpy    = ucx_perf_test_memcpy_host,
-        .memset    = memset
-    };
-    UCS_MODULE_FRAMEWORK_DECLARE(ucx_perftest);
-
-    ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_HOST] = &host_allocator;
-
-    /* FIXME Memtype allocator modules must be loaded to global scope, otherwise
-     * alloc hooks, which are using dlsym() to get pointer to original function,
-     * do not work. Need to use bistro for memtype hooks to fix it.
-     */
-    UCS_MODULE_FRAMEWORK_LOAD(ucx_perftest, UCS_MODULE_LOAD_FLAG_GLOBAL);
+    ucs_assert(group_index < group_size);
+    return peer_index;
 }

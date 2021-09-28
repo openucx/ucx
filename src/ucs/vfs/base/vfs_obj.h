@@ -16,35 +16,6 @@ BEGIN_C_DECLS
 /* This header file defines API for manipulating VFS object tree structure */
 
 
-/* Defines type of primitive variables */
-typedef enum {
-    /* Basic type definitions */
-    UCS_VFS_TYPE_POINTER,
-    UCS_VFS_TYPE_STRING,
-    UCS_VFS_TYPE_CHAR,
-    UCS_VFS_TYPE_SHORT,
-    UCS_VFS_TYPE_INT,
-    UCS_VFS_TYPE_LONG,
-    UCS_VFS_TYPE_LAST,
-
-    /* Type modifiers */
-    UCS_VFS_TYPE_FLAG_UNSIGNED = UCS_BIT(14),
-    UCS_VFS_TYPE_FLAG_HEX      = UCS_BIT(15),
-
-    /* Convenience flags */
-    UCS_VFS_TYPE_I8       = UCS_VFS_TYPE_CHAR,
-    UCS_VFS_TYPE_U8       = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_CHAR,
-    UCS_VFS_TYPE_I16      = UCS_VFS_TYPE_SHORT,
-    UCS_VFS_TYPE_U16      = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_SHORT,
-    UCS_VFS_TYPE_I32      = UCS_VFS_TYPE_INT,
-    UCS_VFS_TYPE_U32      = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_INT,
-    UCS_VFS_TYPE_U32_HEX  = UCS_VFS_TYPE_U32 | UCS_VFS_TYPE_FLAG_HEX,
-    UCS_VFS_TYPE_ULONG    = UCS_VFS_TYPE_FLAG_UNSIGNED | UCS_VFS_TYPE_LONG,
-    UCS_VFS_TYPE_SSIZET   = UCS_VFS_TYPE_LONG,
-    UCS_VFS_TYPE_SIZET    = UCS_VFS_TYPE_ULONG
-} ucs_vfs_primitive_type_t;
-
-
 /**
  * Structure to describe the vfs node.
  */
@@ -70,60 +41,24 @@ typedef struct {
  * @param [in]    arg_ptr  Optional pointer argument passed to the function.
  * @param [in]    arg_u64  Optional numeric argument passed to the function.
  */
-typedef void (*ucs_vfs_file_show_cb_t)(void *obj, ucs_string_buffer_t *strb,
+typedef void (*ucs_vfs_file_read_cb_t)(void *obj, ucs_string_buffer_t *strb,
                                        void *arg_ptr, uint64_t arg_u64);
 
 
 /**
- * Callback function to fill the memory address of an object to the string
- * buffer.
+ * Function type to update object property with data from the buffer.
  *
- * @param [in]    obj      Pointer to the object.
- * @param [inout] strb     String buffer filled with the object's information.
- * @param [in]    arg_ptr  Unused.
- * @param [in]    arg_u64  Unused.
- */
-void ucs_vfs_show_memory_address(void *obj, ucs_string_buffer_t *strb,
-                                 void *arg_ptr, uint64_t arg_u64);
-
-
-/**
- * Callback function to show a variable of a primitive C type.
+ * @param [in] obj     Pointer to the object.
+ * @param [in] buffer  String buffer filled with the object's information.
+ * @param [in] size    The size of buffer.
+ * @param [in] arg_ptr Optional pointer argument passed to the function.
+ * @param [in] arg_u64 Optional numeric argument passed to the function.
  *
- * @param [in]    obj      Pointer to the object.
- * @param [inout] strb     String buffer filled with the object's information.
- * @param [in]    arg_ptr  Points to the variable to show.
- * @param [in]    arg_u64  Specifies type flags for the variable, as defined in
- *                         @ref ucs_vfs_primitive_type_t.
+ * @return UCS_OK or an error if cannot update the object property.
  */
-void ucs_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
-                            uint64_t arg_u64);
-
-
-/**
- * Callback function to fill a value of an unsigned long type to the string
- * buffer. The function handles 'auto' and 'infinty' values.
- *
- * @param [in]    obj      Pointer to the object.
- * @param [inout] strb     String buffer filled with the object's information.
- * @param [in]    arg_ptr  Pointer to the value of an unsigned long type.
- * @param [in]    arg_u64  Unused.
- */
-void ucs_vfs_show_ulunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
-                          uint64_t arg_u64);
-
-
-/**
- * Callback function to fill memory units to the string buffer. The function
- * handles 'auto' and 'infinty' values.
- *
- * @param [in]    obj      Pointer to the object.
- * @param [inout] strb     String buffer filled with the object's information.
- * @param [in]    arg_ptr  Pointer to the memory unit value.
- * @param [in]    arg_u64  Unused.
- */
-void ucs_vfs_show_memunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
-                           uint64_t arg_u64);
+typedef ucs_status_t (*ucs_vfs_file_write_cb_t)(void *obj, const char *buffer,
+                                                size_t size, void *arg_ptr,
+                                                uint64_t arg_u64);
 
 
 /**
@@ -171,7 +106,7 @@ ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
  *
  * @param [in] obj      Pointer to the object. @a rel_path is relative to @a obj
  *                      directory.
- * @param [in] text_cb  Callback method that generates the content of the file.
+ * @param [in] read_cb  Callback method that reads the content of the file.
  * @param [in] arg_ptr  Optional pointer argument that is passed to the callback
  *                      method.
  * @param [in] arg_u64  Optional numeric argument that is passed to the callback
@@ -184,10 +119,37 @@ ucs_status_t ucs_vfs_obj_add_dir(void *parent_obj, void *obj,
  *                                file.
  *         UCS_OK                 otherwise.
  */
-ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_show_cb_t text_cb,
+ucs_status_t ucs_vfs_obj_add_ro_file(void *obj, ucs_vfs_file_read_cb_t read_cb,
                                      void *arg_ptr, uint64_t arg_u64,
                                      const char *rel_path, ...)
         UCS_F_PRINTF(5, 6);
+
+
+/**
+ * Add read-write file describing an object feature in VFS. If @a obj is NULL,
+ * the mount directory will be used as the base for @a rel_path.
+ *
+ * @param [in] obj      Pointer to the object. @a rel_path is relative to @a obj
+ *                      directory.
+ * @param [in] read_cb  Callback method that reads the content of the file.
+ * @param [in] write_cb Callback method that writes the content to the file.
+ * @param [in] arg_ptr  Optional pointer argument that is passed to the callback
+ *                      methods.
+ * @param [in] arg_u64  Optional numeric argument that is passed to the callback
+ *                      methods.
+ * @param [in] rel_path Format string which specifies relative path to the file.
+ *
+ * @return UCS_ERR_ALREADY_EXISTS if file with specified name already exists.
+ *         UCS_ERR_INVALID_PARAM  if node for @a obj does not exist.
+ *         UCS_ERR_NO_MEMORY      if cannot create a new node for read-only
+ *                                file.
+ *         UCS_OK                 otherwise.
+ */
+ucs_status_t
+ucs_vfs_obj_add_rw_file(void *obj, ucs_vfs_file_read_cb_t read_cb,
+                        ucs_vfs_file_write_cb_t write_cb, void *arg_ptr,
+                        uint64_t arg_u64, const char *rel_path, ...)
+        UCS_F_PRINTF(6, 7);
 
 
 /**
@@ -260,6 +222,23 @@ ucs_status_t ucs_vfs_path_get_info(const char *path, ucs_vfs_path_info_t *info);
  */
 ucs_status_t
 ucs_vfs_path_read_file(const char *path, ucs_string_buffer_t *strb);
+
+
+/**
+ * Write the content to VFS node corresponding to the specified path.
+ *
+ * @param [in] path String which specifies path to find the node in VFS.
+ * @param [in] buf  String buffer filled with the content of the file.
+ * @param [in] size The size of the buffer.
+ *
+ * @return UCS_ERR_NO_ELEM       if node with specified path does not exists or
+ *                               the node is not a RW file.
+ *         UCS_ERR_INVALID_PARAM if cannot write content of the buffer to the
+ *                               file.
+ *         UCS_OK                otherwise.
+ */
+ucs_status_t
+ucs_vfs_path_write_file(const char *path, const char *buffer, size_t size);
 
 
 /**

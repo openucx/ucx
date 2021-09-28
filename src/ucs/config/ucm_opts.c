@@ -69,8 +69,12 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "which would use the original implementation and not ours.",
    ucs_offsetof(ucm_global_config_t, enable_malloc_reloc), UCS_CONFIG_TYPE_BOOL},
 
-  {"CUDA_HOOK_MODE", UCM_DEFAULT_HOOK_MODE_STR,
-   "Cuda memory hook mode\n"
+  {"CUDA_HOOK_MODE",
+#if UCM_BISTRO_HOOKS
+    UCM_MMAP_HOOK_BISTRO_STR ","
+#endif
+   UCM_MMAP_HOOK_RELOC_STR,
+   "Cuda memory hook modes. A combination of:\n"
    " none   - Don't set Cuda hooks.\n"
    " reloc  - Use ELF relocation table to set hooks. In this mode, if any\n"
    "          part of the application is linked with Cuda runtime statically,\n"
@@ -81,8 +85,8 @@ static ucs_config_field_t ucm_global_config_table[] = {
    "          Cuda driver APIs, so memory events are reported properly even\n"
    "          for statically-linked applications."
 #endif
-   ,ucs_offsetof(ucm_global_config_t, cuda_hook_mode),
-                 UCS_CONFIG_TYPE_ENUM(ucm_mmap_hook_modes)},
+   ,ucs_offsetof(ucm_global_config_t, cuda_hook_modes),
+                 UCS_CONFIG_TYPE_BITMAP(ucm_mmap_hook_modes)},
 
   {"CUDA_RELOC", "yes",
    "The configuration parameter replaced by UCX_MEM_CUDA_HOOK_MODE",

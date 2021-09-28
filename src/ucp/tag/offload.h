@@ -160,4 +160,12 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
     }
 }
 
+static UCS_F_ALWAYS_INLINE void ucp_tag_offload_sync_posted(ucp_request_t *req)
+{
+    ucp_worker_t *worker = req->send.ep->worker;
+
+    req->send.tag_offload.ssend_tag = req->send.msg_proto.tag;
+    ucs_queue_push(&worker->tm.offload.sync_reqs, &req->send.tag_offload.queue);
+}
+
 #endif

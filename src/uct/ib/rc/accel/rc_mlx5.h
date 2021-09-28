@@ -37,6 +37,18 @@ typedef struct uct_rc_mlx5_ep {
     uct_rc_mlx5_mp_context_t mp;
 } uct_rc_mlx5_ep_t;
 
+
+/**
+ * RC MLX5 EP cleanup context
+ */
+typedef struct {
+    uct_rc_iface_qp_cleanup_ctx_t super; /* Base class */
+    uct_ib_mlx5_qp_t              qp; /* Main QP */
+    uct_ib_mlx5_qp_t              tm_qp; /* TM Rendezvous QP */
+    uct_ib_mlx5_mmio_reg_t        *reg; /* Doorbell register */
+} uct_rc_mlx5_iface_qp_cleanup_ctx_t;
+
+
 typedef struct uct_rc_mlx5_ep_address {
     uct_ib_uint24_t  qp_num;
     /* For RNDV TM enabling 2 QPs should be created, one is for sending WRs and
@@ -45,6 +57,7 @@ typedef struct uct_rc_mlx5_ep_address {
     uct_ib_uint24_t  tm_qp_num;
     uint8_t          atomic_mr_id;
 } UCS_S_PACKED uct_rc_mlx5_ep_address_t;
+
 
 UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
@@ -116,6 +129,8 @@ ucs_status_t uct_rc_mlx5_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
 ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
 void uct_rc_mlx5_ep_post_check(uct_ep_h tl_ep);
+
+void uct_rc_mlx5_ep_vfs_populate(uct_rc_ep_t *rc_ep);
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 

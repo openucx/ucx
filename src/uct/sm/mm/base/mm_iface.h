@@ -13,7 +13,7 @@
 #include <uct/base/uct_iface.h>
 #include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
@@ -177,7 +177,7 @@ typedef struct uct_mm_recv_desc {
 
 
 /**
- * MM trandport interface
+ * MM transport interface
  */
 typedef struct uct_mm_iface {
     uct_sm_iface_t          super;

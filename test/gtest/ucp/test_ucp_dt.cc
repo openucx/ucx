@@ -5,6 +5,7 @@
  */
 
 #include <common/test.h>
+#include <algorithm>
 
 #include "ucp_datatype.h"
 
@@ -65,48 +66,90 @@ protected:
         m_ucph.reset();
     }
 
-    void do_test(size_t size, bool is_pack) {
-        std::string dt_buffer(size, 0), packed_buffer(size, 0);
-        ucs::fill_random(dt_buffer);
+    void init_dt_iter(size_t size, bool is_pack)
+    {
+        m_dt_buffer.resize(size, 0);
+        ucs::fill_random(m_dt_buffer);
+
+        m_packed_buffer.resize(size, 0);
+        ucs::fill_random(m_packed_buffer);
 
         size_t iovcnt = 1;
         if (GetParam() == UCP_DATATYPE_IOV) {
             iovcnt = std::min(static_cast<size_t>((ucs::rand() % 20) + 1),
-                              dt_buffer.size());
+                              m_dt_buffer.size());
         }
 
-        ucp::data_type_desc_t dt_desc(GetParam(), &dt_buffer[0],
-                                      dt_buffer.size(), iovcnt);
+        m_dt_desc.make(GetParam(), &m_dt_buffer[0], m_dt_buffer.size(), iovcnt);
 
-        ucp_datatype_iter_t dt_iter = {};
         uint8_t sg_count;
-        ucp_datatype_iter_init(m_ucph.get(), dt_desc.buf(), dt_desc.count(),
-                               dt_desc.dt(), dt_buffer.size(), &dt_iter, &sg_count);
-        EXPECT_EQ(iovcnt, sg_count);
+        ucp_datatype_iter_init(m_ucph.get(), m_dt_desc.buf(), m_dt_desc.count(),
+                               m_dt_desc.dt(), m_dt_buffer.size(), is_pack,
+                               &m_dt_iter, &sg_count);
+        if (!UCP_DT_IS_GENERIC(GetParam())) {
+            EXPECT_EQ(iovcnt, sg_count);
+        }
 
-        size_t offset = 0;
-        ucs::fill_random(packed_buffer);
+        UCS_STRING_BUFFER_ONSTACK(strb, 64);
+        ucp_datatype_iter_str(&m_dt_iter, &strb);
+        UCS_TEST_MESSAGE << ucs_string_buffer_cstr(&strb);
+    }
 
-        while (!ucp_datatype_iter_is_end(&dt_iter)) {
-            void *packed_ptr = UCS_PTR_BYTE_OFFSET(&packed_buffer[0], offset);
-            size_t seg_size  = (ucs::rand() % (size / 2));
-            ucp_datatype_iter_t next_iter;
+    void finalize_dt_iter()
+    {
+        EXPECT_EQ(m_dt_buffer, m_packed_buffer);
+        ucp_datatype_iter_cleanup(&m_dt_iter, UINT_MAX);
+    }
+
+    size_t random_seg_size() const
+    {
+        return ucs::rand() % (m_dt_buffer.size() / 2);
+    }
+
+    void test_pack(size_t size)
+    {
+        init_dt_iter(size, true);
+
+        ucp_datatype_iter_t next_iter;
+        do {
+            EXPECT_FALSE(ucp_datatype_iter_is_end(&m_dt_iter));
+            size_t seg_size  = random_seg_size();
+            void *packed_ptr = UCS_PTR_BYTE_OFFSET(&m_packed_buffer[0],
+                                                   m_dt_iter.offset);
             /* TODO create non-NULL worker when using memtype */
-            if (is_pack) {
-                ucp_datatype_iter_next_pack(&dt_iter, NULL, seg_size,
-                                            &next_iter, packed_ptr);
-            } else {
-                size_t unpack_size = std::min(seg_size, size - offset);
-                ucp_datatype_iter_next_unpack(&dt_iter, NULL, unpack_size,
-                                              &next_iter, packed_ptr);
-            }
-            ucp_datatype_iter_copy_from_next(&dt_iter, &next_iter, UINT_MAX);
+            ucp_datatype_iter_next_pack(&m_dt_iter, NULL, seg_size, &next_iter,
+                                        packed_ptr);
+            ucp_datatype_iter_copy_position(&m_dt_iter, &next_iter, UINT_MAX);
+        } while (!ucp_datatype_iter_is_end(&m_dt_iter));
+
+        finalize_dt_iter();
+    }
+
+    void test_unpack(size_t size)
+    {
+        init_dt_iter(size, false);
+
+        typedef std::vector< std::pair<size_t, size_t> > segment_vector_t;
+        segment_vector_t segments;
+        size_t offset = 0;
+        while (offset < m_dt_buffer.size()) {
+            size_t seg_size = ucs_min(random_seg_size(),
+                                      m_dt_buffer.size() - offset);
+            segments.push_back(std::make_pair(offset, seg_size));
             offset += seg_size;
         }
+        std::random_shuffle(segments.begin(), segments.end(), ucs::rand_range);
 
-        EXPECT_EQ(dt_buffer, packed_buffer);
+        for (segment_vector_t::iterator it = segments.begin();
+             it != segments.end(); ++it) {
+            size_t offset    = it->first;
+            void *packed_ptr = UCS_PTR_BYTE_OFFSET(&m_packed_buffer[0], offset);
+            /* TODO create non-NULL worker when using memtype */
+            ucp_datatype_iter_unpack(&m_dt_iter, NULL, it->second, offset,
+                                     packed_ptr);
+        }
 
-        ucp_datatype_iter_cleanup(&dt_iter, UINT_MAX);
+        finalize_dt_iter();
     }
 
 public:
@@ -128,36 +171,39 @@ public:
     }
 
 private:
-    static ucp_dt_generic_t* dt_gen;
-
+    static ucp_dt_generic_t   *dt_gen;
     ucs::handle<ucp_context_h> m_ucph;
+    std::string                m_dt_buffer;
+    std::string                m_packed_buffer;
+    ucp::data_type_desc_t      m_dt_desc;
+    ucp_datatype_iter_t        m_dt_iter;
 };
 
 ucp_dt_generic_t* test_ucp_dt_iter::dt_gen = 0;
 
 UCS_TEST_P(test_ucp_dt_iter, pack_100b) {
-    do_test(100, true);
+    test_pack(100);
 }
 
 UCS_TEST_P(test_ucp_dt_iter, pack_1MB) {
-    do_test(UCS_MBYTE + (ucs::rand() % UCS_KBYTE), true);
+    test_pack(UCS_MBYTE + (ucs::rand() % UCS_KBYTE));
 }
 
 UCS_TEST_P(test_ucp_dt_iter, unpack_100b) {
-    do_test(100, false);
+    test_unpack(100);
 }
 
 UCS_TEST_P(test_ucp_dt_iter, unpack_1MB) {
-    do_test(UCS_MBYTE + (ucs::rand() % UCS_KBYTE), false);
+    test_unpack(UCS_MBYTE + (ucs::rand() % UCS_KBYTE));
 }
 
-INSTANTIATE_TEST_CASE_P(contig, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(contig, test_ucp_dt_iter,
                         testing::Values(ucp_dt_make_contig(1),
                                         ucp_dt_make_contig(8),
                                         ucp_dt_make_contig(39)));
 
-INSTANTIATE_TEST_CASE_P(iov, test_ucp_dt_iter,
-                        testing::Values((ucp_datatype_t)ucp_dt_make_iov()));
+INSTANTIATE_TEST_SUITE_P(iov, test_ucp_dt_iter,
+                        testing::Values(ucp_dt_make_iov()));
 
-INSTANTIATE_TEST_CASE_P(generic, test_ucp_dt_iter,
+INSTANTIATE_TEST_SUITE_P(generic, test_ucp_dt_iter,
                         testing::ValuesIn(test_ucp_dt_iter::enum_dt_generic_params()));

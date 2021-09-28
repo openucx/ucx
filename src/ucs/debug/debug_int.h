@@ -65,18 +65,6 @@ ucs_status_t ucs_debug_lookup_address(void *address, ucs_debug_address_info_t *i
 
 
 /**
- * @return Full path to current library.
- */
-const char *ucs_debug_get_lib_path();
-
-
-/**
- * @return UCS library loading address.
- */
-unsigned long ucs_debug_get_lib_base_addr();
-
-
-/**
  * Create a backtrace from the calling location.
  *
  * @param bckt          Backtrace object.

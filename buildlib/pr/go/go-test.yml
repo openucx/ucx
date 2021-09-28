@@ -1,0 +1,54 @@
+parameters:
+  name: go test
+  demands: []
+
+jobs:
+  - job: ${{ parameters.name }}
+
+    pool:
+      name: MLNX
+      demands: ${{ parameters.demands }}
+
+    steps:
+    - checkout: self
+      fetchDepth: 100
+      clean: true
+      displayName: Checkout
+    - bash: |
+        set -x
+        # Standard go pre-commit: https://github.com/golang/go/blob/release-branch.go1.1/misc/git/pre-commit
+        gofiles=$(git diff --cached --name-only --diff-filter=ACM | grep '.go$')
+        [ -z "$gofiles" ] && exit 0
+
+        unformatted=$(gofmt -l $gofiles)
+        [ -z "$unformatted" ] && exit 0
+
+        # Some files are not gofmt'd. Print message and fail.
+
+        echo >&2 "Go files must be formatted with gofmt. Please run:"
+        for fn in $unformatted; do
+        	echo >&2 "  gofmt -w $PWD/$fn"
+        done
+
+        exit 1
+    - bash: |
+        set -xeE
+        source buildlib/az-helpers.sh
+        az_module_load dev/go-latest
+        try_load_cuda_env
+        ./autogen.sh
+        mkdir build
+        cd build
+        ../contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
+          --with-go --enable-gtest=no --with-cuda=$have_cuda
+        make -j`nproc`
+        make install
+      displayName: Build UCX
+    - bash: |
+        set -xeE
+        source buildlib/az-helpers.sh
+        az_init_modules
+        try_load_cuda_env
+        az_module_load dev/go-latest
+        make -C build/bindings/go test
+      displayName: Run go tests

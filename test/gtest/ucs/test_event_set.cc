@@ -279,7 +279,7 @@ UCS_TEST_P(test_event_set, ucs_event_set_trig_modes) {
     event_set_cleanup();
 }
 
-INSTANTIATE_TEST_CASE_P(ext_fd, test_event_set,
+INSTANTIATE_TEST_SUITE_P(ext_fd, test_event_set,
                         ::testing::Values(static_cast<int>(
                                               UCS_EVENT_SET_EXTERNAL_FD)));
-INSTANTIATE_TEST_CASE_P(int_fd, test_event_set, ::testing::Values(0));
+INSTANTIATE_TEST_SUITE_P(int_fd, test_event_set, ::testing::Values(0));

@@ -734,7 +734,9 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
     ucs_status_t status;
 
     ib_device_list = ibv_get_device_list(&num_devices);
-    ASSERT_TRUE(ib_device_list != NULL);
+    if (ib_device_list == NULL) {
+        num_devices = 0;
+    }
 
     for (int i = 0; i < num_devices; ++i) {
         const char *dev_name = ibv_get_device_name(ib_device_list[i]);
@@ -742,6 +744,11 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
         uct_ib_mlx5_md_t *ib_mlx5_md;
         uct_ib_device_t *dev;
         uct_md_h md;
+
+        if (!uct_ib_device_is_accessible(ib_device_list[i])) {
+            /* Skip non-existing IB devices */
+            continue;
+        }
 
         status = uct_md_config_read(&uct_ib_component, NULL, NULL, &md_config);
         EXPECT_UCS_OK(status);
@@ -777,11 +784,14 @@ UCS_TEST_F(test_uct_ib_sl_utils, query_ooo_sl_mask) {
         }
 
         uct_ib_md_close(md);
+
 out_md_config_release:
         uct_config_release(md_config);
     }
 
-    ibv_free_device_list(ib_device_list);
+    if (ib_device_list != NULL) {
+        ibv_free_device_list(ib_device_list);
+    }
 }
 #endif
 

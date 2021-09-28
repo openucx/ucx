@@ -15,6 +15,9 @@
 #include <ucs/datastruct/ptr_map.inl>
 
 
+UCS_PTR_MAP_IMPL(ep, 1);
+
+
 KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
            ucp_worker_cfg_index_t, 1, ucp_rkey_config_hash_func,
            ucp_rkey_config_is_equal);
@@ -61,7 +64,7 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
     void *ptr;
 
     ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
-    status = ucs_ptr_map_get(&worker->ptr_map, id, 0, &ptr);
+    status = UCS_PTR_MAP_GET(ep, &worker->ep_map, id, 0, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }

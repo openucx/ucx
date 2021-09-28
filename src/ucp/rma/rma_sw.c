@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -83,6 +84,7 @@ static ucs_status_t ucp_rma_sw_progress_get(uct_pending_req_t *self)
         if (ucs_unlikely(status != UCS_ERR_NO_RESOURCE)) {
             /* completed with error */
             ucp_request_complete_send(req, status);
+            return UCS_OK;
         }
     }
 
@@ -139,7 +141,7 @@ void ucp_rma_sw_send_cmpl(ucp_ep_h ep)
     req->flags         = 0;
     req->send.ep       = ep;
     req->send.uct.func = ucp_progress_rma_cmpl;
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_put_handler, (arg, data, length, am_flags),
@@ -250,7 +252,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
         req->send.mem_type = UCS_MEMORY_TYPE_HOST;
     }
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     return UCS_OK;
 }
 

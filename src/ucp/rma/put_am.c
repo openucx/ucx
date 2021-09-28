@@ -80,10 +80,14 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.overhead      = 40e-9,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_put_hdr_t),
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
+        .super.flags         = 0,
         .max_lanes           = 1,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .first.lane_type     = UCP_LANE_TYPE_AM,
@@ -93,7 +97,8 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);
 
-    return ucp_proto_multi_init(&params);
+    return ucp_proto_multi_init(&params, init_params->priv,
+                                init_params->priv_size);
 }
 
 static ucp_proto_t ucp_put_am_bcopy_proto = {
@@ -101,7 +106,7 @@ static ucp_proto_t ucp_put_am_bcopy_proto = {
     .flags      = 0,
     .init       = ucp_proto_put_am_bcopy_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_put_am_bcopy_progress
+    .progress   = {ucp_proto_put_am_bcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_put_am_bcopy_proto);
 

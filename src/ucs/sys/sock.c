@@ -40,14 +40,16 @@ typedef ssize_t (*ucs_socket_iov_func_t)(int fd, const struct msghdr *msg,
                                          int flags);
 
 
-static void ucs_socket_print_error_info(int sys_errno)
+static void ucs_socket_print_error_info(const char *err_str, int sys_errno)
 {
     if (sys_errno == EMFILE) {
-        ucs_error("the maximal number of files that could be opened "
+        ucs_error("%s: the maximal number of files that could be opened "
                   "simultaneously was reached, try to increase the limit "
                   "by setting the max open files limit (ulimit -n) to "
                   "a greater value (current: %d)",
-                  ucs_sys_max_open_files());
+                  err_str, ucs_sys_max_open_files());
+    } else {
+        ucs_error("%s: %m", err_str);
     }
 }
 
@@ -125,7 +127,7 @@ unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
                                   UCS_NETIF_BOND_AD_NUM_PORTS_FMT, bond_name);
     if ((status != UCS_OK) || (ad_num_ports <= 0) ||
         (ad_num_ports > UINT_MAX)) {
-        ucs_diag("failed to read from " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
+        ucs_trace("failed to read from " UCS_NETIF_BOND_AD_NUM_PORTS_FMT ": %m, "
                  "assuming 802.3ad bonding is disabled", bond_name);
         return 1;
     }
@@ -137,8 +139,7 @@ ucs_status_t ucs_socket_create(int domain, int type, int *fd_p)
 {
     int fd = socket(domain, type, 0);
     if (fd < 0) {
-        ucs_error("socket create failed: %m");
-        ucs_socket_print_error_info(errno);
+        ucs_socket_print_error_info("socket create failed", errno);
         return UCS_ERR_IO_ERROR;
     }
 
@@ -181,17 +182,30 @@ ucs_status_t ucs_socket_getopt(int fd, int level, int optname,
     return UCS_OK;
 }
 
+ucs_status_t ucs_socket_getname(int fd, struct sockaddr_storage *sock_addr,
+                                socklen_t *addr_len)
+{
+    int ret;
+
+    *addr_len = sizeof(struct sockaddr_storage);
+    ret       = getsockname(fd, (struct sockaddr*)sock_addr,
+                            addr_len);
+    if (ret < 0) {
+        ucs_error("getsockname(fd=%d) failed: %m", fd);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    return UCS_OK;
+}
+
 const char *ucs_socket_getname_str(int fd, char *str, size_t max_size)
 {
     struct sockaddr_storage sock_addr = {0}; /* Suppress Clang false-positive */
     socklen_t addr_size;
-    int ret;
+    ucs_status_t status;
 
-    addr_size = sizeof(sock_addr);
-    ret       = getsockname(fd, (struct sockaddr*)&sock_addr,
-                            &addr_size);
-    if (ret < 0) {
-        ucs_debug("getsockname(fd=%d) failed: %m", fd);
+    status = ucs_socket_getname(fd, &sock_addr, &addr_size);
+    if (status != UCS_OK) {
         ucs_strncpy_safe(str, "-", max_size);
         return str;
     }
@@ -280,6 +294,7 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
 {
     ucs_status_t status;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
 
     *accept_fd = accept(fd, addr, length_ptr);
     if (*accept_fd < 0) {
@@ -288,10 +303,10 @@ ucs_status_t ucs_socket_accept(int fd, struct sockaddr *addr, socklen_t *length_
             return status;
         }
 
-        ucs_error("accept() failed (client addr %s): %m",
-                  ucs_sockaddr_str(addr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
-
-        ucs_socket_print_error_info(errno);
+        ucs_string_buffer_appendf(&strb, "accept() failed (client addr %s)",
+                                  ucs_sockaddr_str(addr, ip_port_str,
+                                                   UCS_SOCKADDR_STRING_LEN));
+        ucs_socket_print_error_info(ucs_string_buffer_cstr(&strb), errno);
 
         return status;
     }
@@ -875,7 +890,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
         return UCS_ERR_INVALID_PARAM;
     }
 
-    ucs_debug("check ifname for socket on %s", 
+    ucs_debug("check ifname for socket on %s",
               ucs_sockaddr_str(my_addr, str_local_addr, UCS_SOCKADDR_STRING_LEN));
 
     if (getifaddrs(&ifaddrs)) {
@@ -891,7 +906,7 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
             continue;
         }
 
-        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) && 
+        if (((sa->sa_family == AF_INET) ||(sa->sa_family == AF_INET6)) &&
             (!ucs_sockaddr_cmp(sa, my_addr, NULL))) {
             ucs_debug("matching ip found iface on %s", ifa->ifa_name);
             ucs_strncpy_safe(ifname_str, ifa->ifa_name, max_strlen);

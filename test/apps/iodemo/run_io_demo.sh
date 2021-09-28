@@ -479,11 +479,21 @@ make_scripts()
 			    done
 			}
 
+			print() {
+				echo "[\$(date +%s)] \$@"
+			}
+
 			list_pids_with_role() {
 			    # list all process ids with role \$1
 			    if [ "\$1" == "all" ]
 			    then
 			        pattern=".*"
+			    elif [ "\$1" == "all_clients" ]
+			    then
+			    	pattern="client.*"
+			    elif [ "\$1" == "all_servers" ]
+			    then
+			    	pattern="server.*"
 			    else
 			        pattern="\$1"
 			    fi
@@ -500,7 +510,7 @@ make_scripts()
 			}
 
 			signal_handler() {
-			    echo "Got signal, killing all iodemo processes"
+			    print "Got signal, killing all iodemo processes"
 			    kill_iodemo
 			}
 
@@ -514,7 +524,10 @@ make_scripts()
 			    echo "  -list-tags         List available tags and exit"
 			    echo "  -start <tag>       Start iodemo for given tag"
 			    echo "  -stop <tag>        Stop iodemo for given tag"
+			    echo "  -kill <tag>        Kill iodemo for given tag"
 			    echo "  -status <tag>      Show status of iodemo for given tag"
+			    echo
+			    echo "<tag> can be particular client/server or all_servers / all_clients"
 			    echo
 			    echo "If no options are given, run all commands and wait for completion"
 			    echo
@@ -534,6 +547,11 @@ make_scripts()
 			            ;;
 			        -stop)
 			            action="stop"
+			            tag="\$2"
+			            shift
+			            ;;
+			        -kill)
+			            action="kill"
 			            tag="\$2"
 			            shift
 			            ;;
@@ -595,7 +613,7 @@ make_scripts()
 		do
 			port_num=$((base_port_num + i))
 			log_file=${log_dir}/$(printf "iodemo_%s_server_%02d.log" ${host} $i)
-			echo ${log_file}
+			is_verbose && echo ${log_file}
 			cat >>${command_file} <<-EOF
 				function start_server_${i}() {
 				    mkdir -p ${log_dir}
@@ -613,7 +631,7 @@ make_scripts()
 		for ((i=0;i<num_clients_per_host[${host}];++i))
 		do
 			log_file=${log_dir}/$(printf "iodemo_%s_client_%02d.log" ${host} $i)
-			echo ${log_file}
+			is_verbose && echo ${log_file}
 			cat >>${command_file} <<-EOF
 				function start_client_${i}() {
 				    mkdir -p ${log_dir}
@@ -628,10 +646,8 @@ make_scripts()
 
 		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF
-			start_all() {
-			    set_env_vars
-
-			    echo "Starting servers"
+			start_all_servers() {
+			    print "Starting servers"
 				EOF
 
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
@@ -640,11 +656,10 @@ make_scripts()
 		done
 
 		cat >>${command_file} <<-EOF
+			}
 
-			    # Wait for servers to start
-			    sleep ${client_wait_time}
-
-			    echo "Starting clients"
+			start_all_clients() {
+			    print "Starting clients"
 				EOF
 
 		for ((i=0;i<${num_clients_per_host[${host}]};++i))
@@ -653,6 +668,16 @@ make_scripts()
 		done
 
 		cat >>${command_file} <<-EOF
+			}
+
+			start_all() {
+			    set_env_vars
+			    start_all_servers
+
+			    # Wait for servers to start
+			    sleep ${client_wait_time}
+
+			    start_all_clients
 			}
 
 			run_all() {
@@ -666,7 +691,7 @@ make_scripts()
 
 			    # Wait for background processes
 			    wait ${wait_redirect}
-			    echo "Test finished"
+			    print "Test finished"
 			}
 
 			EOF
@@ -685,7 +710,7 @@ make_scripts()
 			        echo "No method defined to start '\${tag}'"
 			        exit 1
 			    fi
-			    echo "Starting '\${tag}'"
+			    print "Starting '\${tag}'"
 			    ${set_verbose}
 			    set_env_vars
 			    eval "\${func}"
@@ -693,8 +718,15 @@ make_scripts()
 			stop)
 			    for pid in \$(list_pids_with_role \${tag})
 			    do
-			        echo "Stopping process \${pid}"
-			        kill -9 \${pid}
+			        print "Stopping process \${pid}"
+			        kill -INT \${pid}
+			    done
+			    ;;
+			kill)
+			    for pid in \$(list_pids_with_role \${tag})
+			    do
+			        print "Killing process \${pid}"
+			        kill -KILL \${pid}
 			    done
 			    ;;
 			status)
@@ -703,7 +735,7 @@ make_scripts()
 			    then
 			        ps -fp \${pids}
 			    else
-			        echo "No processes found with tag \${tag}"
+			        print "No processes found with tag \${tag}"
 			    fi
 			    ;;
 			esac

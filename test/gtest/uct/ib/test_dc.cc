@@ -111,7 +111,7 @@ protected:
         int is_done;
     } preq;
 
-    static ucs_status_t uct_pending_flush(uct_pending_req_t *uct_req) 
+    static ucs_status_t uct_pending_flush(uct_pending_req_t *uct_req)
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
         ucs_status_t status;
@@ -127,7 +127,7 @@ protected:
         return status;
     }
 
-    static ucs_status_t uct_pending_dummy(uct_pending_req_t *uct_req) 
+    static ucs_status_t uct_pending_dummy(uct_pending_req_t *uct_req)
     {
         struct dcs_pending *preq = (struct dcs_pending *)uct_req;
         uct_dc_mlx5_ep_t *ep;
@@ -136,7 +136,7 @@ protected:
 
         EXPECT_NE(UCT_DC_MLX5_EP_NO_DCI, ep->dci);
 
-        /* simulate arbiter stop because lack of global resorce
+        /* simulate arbiter stop because lack of global resource
          * operation still stands on pending
          */
         preq->is_done = 1;
@@ -223,10 +223,10 @@ UCS_TEST_P(test_dc, dcs_multi) {
     }
 }
 
-/** 
+/**
  * send message, destroy ep while it is still holding dci.
  * Do not crash.
- */ 
+ */
 UCS_TEST_P(test_dc, dcs_ep_destroy) {
 
     uct_dc_mlx5_ep_t *ep;
@@ -403,7 +403,7 @@ UCS_TEST_P(test_dc, rand_dci_many_eps) {
 UCS_TEST_P(test_dc, rand_dci_pending_purge) {
     entity *rand_e             = create_rand_entity();
     uct_dc_mlx5_iface_t *iface = dc_iface(rand_e);
-    int num_eps                = 5;
+    int num_eps                = RUNNING_ON_VALGRIND ? 3 : 5;
     int ndci                   = iface->tx.ndci;
     int num_reqs               = 10;
     int idx                    = 0;
@@ -500,6 +500,13 @@ public:
         }
         iface->tx.dci_pool[0].stack_top = 0;
     }
+
+    virtual void ignore_dci_waitq_reorder(uct_test::entity *e)
+    {
+        uct_dc_mlx5_iface_t *iface = test_dc::dc_iface(e);
+
+        iface->flags |= UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER;
+    }
 };
 
 UCS_TEST_P(test_dc_flow_control, general_enabled)
@@ -517,6 +524,10 @@ UCS_TEST_P(test_dc_flow_control, general_disabled)
 
 UCS_TEST_P(test_dc_flow_control, pending_grant)
 {
+    /* test uses manipulation with available TX resources which may break
+       DCI allocation ordering. allow out-of-order DCI waitq */
+    ignore_dci_waitq_reorder(m_e2);
+
     test_pending_grant(5);
     flush();
 }
@@ -582,6 +593,10 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
     int wnd = 5;
     ucs_status_t status;
 
+    /* test uses manipulation with available TX resources which may break
+       DCI allocation ordering. allow out-of-order DCI waitq */
+    ignore_dci_waitq_reorder(m_e2);
+
     disable_entity(m_e2);
 
     set_fc_attributes(m_e1, true, wnd,
@@ -618,6 +633,10 @@ UCS_TEST_P(test_dc_flow_control, flush_destroy)
  * is scheduled for dci allocation. */
 UCS_TEST_P(test_dc_flow_control, dci_leak)
 {
+    /* test uses manipulation with available TX resources which may break
+       DCI allocation ordering. allow out-of-order DCI waitq */
+    ignore_dci_waitq_reorder(m_e2);
+
     disable_entity(m_e2);
     int wnd = 5;
     set_fc_attributes(m_e1, true, wnd,
@@ -638,7 +657,7 @@ UCS_TEST_P(test_dc_flow_control, dci_leak)
     }
     EXPECT_EQ(0, iface->tx.dci_pool[0].stack_top);
 
-    /* Clean up FC and pending to avoid assetions during tear down */
+    /* Clean up FC and pending to avoid assertions during tear down */
     uct_ep_pending_purge(m_e1->ep(0),
            reinterpret_cast<void (*)(uct_pending_req*, void*)> (ucs_empty_function),
            NULL);

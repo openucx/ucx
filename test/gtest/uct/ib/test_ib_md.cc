@@ -27,7 +27,7 @@ protected:
 
 
 /*
- * Test that ib md does not create umr region if 
+ * Test that ib md does not create umr region if
  * UCT_MD_MEM_ACCESS_REMOTE_ATOMIC is not set
  */
 
@@ -48,8 +48,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 
     buffer     = NULL;
     alloc_size = size;
-    status     = ucs_mmap_alloc(&alloc_size, &buffer, 0
-                                UCS_MEMTRACK_NAME("test_umr"));
+    status     = ucs_mmap_alloc(&alloc_size, &buffer, 0, "test_umr");
     ASSERT_UCS_OK(status);
 
     uct_mem_h memh;
@@ -127,7 +126,7 @@ UCS_TEST_P(test_ib_md, ib_md_umr_rcache, "REG_METHODS=rcache") {
 
     /* The order is important here because
      * of registration cache. A cached region will
-     * be promoted to atomic access but it will never be demoted 
+     * be promoted to atomic access but it will never be demoted
      */
     ib_md_umr_check(&rkey_buffer[0], false);
     ib_md_umr_check(&rkey_buffer[0], true);

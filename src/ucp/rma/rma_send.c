@@ -227,7 +227,7 @@ ucp_put_send_short(ucp_ep_h ep, const void *buffer, size_t length,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    tl_rkey = rkey->tl_rkey[rkey_config->put_short.rkey_index].rkey.rkey;
+    tl_rkey = ucp_rkey_get_tl_rkey(rkey, rkey_config->put_short.rkey_index);
     return UCS_PROFILE_CALL(uct_ep_put_short,
                             ep->uct_eps[rkey_config->put_short.lane],
                             buffer, length, remote_addr, tl_rkey);
@@ -296,7 +296,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
 
         rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
         ret = ucp_rma_nonblocking(ep, buffer, count, remote_addr, rkey,
-                                  rkey->cache.rma_proto->progress_put,
+                                  UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index)->progress_put,
                                   rma_config->put_zcopy_thresh, param);
     }
 
@@ -379,7 +379,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
 
         rma_config = &ucp_ep_config(ep)->rma[rkey->cache.rma_lane];
         ret        = ucp_rma_nonblocking(ep, buffer, count, remote_addr, rkey,
-                                         rkey->cache.rma_proto->progress_get,
+                                         UCP_RKEY_RMA_PROTO(rkey->cache.rma_proto_index)->progress_get,
                                          rma_config->get_zcopy_thresh, param);
     }
 

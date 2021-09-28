@@ -83,7 +83,8 @@ protected:
                                 int expect_mem_type = UCS_MEMORY_TYPE_CUDA)  {
         ASSERT_EQ(ptr, alloc_event.mem_type.address);
         ASSERT_EQ(size, alloc_event.mem_type.size);
-        ASSERT_EQ(expect_mem_type, alloc_event.mem_type.mem_type);
+        EXPECT_TRUE((alloc_event.mem_type.mem_type == expect_mem_type) ||
+                    (alloc_event.mem_type.mem_type == UCS_MEMORY_TYPE_UNKNOWN));
     }
 
     void check_mem_free_events(void *ptr, size_t size,
@@ -142,11 +143,11 @@ UCS_TEST_F(cuda_hooks, test_cuMemAllocManaged) {
 
     ret = cuMemAllocManaged(&dptr, 64, CU_MEM_ATTACH_GLOBAL);
     ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_alloc_events((void *)dptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
+    check_mem_alloc_events((void*)dptr, 64, UCS_MEMORY_TYPE_CUDA_MANAGED);
 
     ret = cuMemFree(dptr);
     ASSERT_EQ(ret, CUDA_SUCCESS);
-    check_mem_free_events((void *)dptr, 0);
+    check_mem_free_events((void*)dptr, 0);
 }
 
 UCS_TEST_F(cuda_hooks, test_cuMemAllocPitch) {

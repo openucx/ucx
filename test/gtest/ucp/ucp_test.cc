@@ -23,8 +23,8 @@ namespace ucp {
 const uint32_t MAGIC = 0xd7d7d7d7U;
 }
 
-static std::ostream& operator<<(std::ostream& os,
-                                const std::vector<std::string>& str_vector)
+std::ostream& operator<<(std::ostream& os,
+                         const std::vector<std::string>& str_vector)
 {
     for (std::vector<std::string>::const_iterator iter = str_vector.begin();
          iter != str_vector.end(); ++iter) {
@@ -112,6 +112,11 @@ bool ucp_test::has_any_transport(const std::vector<std::string>& tl_names) const
     return std::find_first_of(all_tl_names.begin(), all_tl_names.end(),
                               tl_names.begin(),     tl_names.end()) !=
            all_tl_names.end();
+}
+
+bool ucp_test::has_any_transport(const std::string *tls, size_t tl_size) const {
+    const std::vector<std::string> tl_names(tls, tls + tl_size);
+    return has_any_transport(tl_names);
 }
 
 bool ucp_test::is_self() const {
@@ -339,7 +344,7 @@ ucp_test_variant& ucp_test::add_variant(std::vector<ucp_test_variant>& variants,
 }
 
 int ucp_test::get_variant_value(unsigned index) const {
-    if (GetParam().variant.values.empty()) {
+    if (GetParam().variant.values.size() <= index) {
         return DEFAULT_PARAM_VARIANT;
     }
     return GetParam().variant.values.at(index).value;
@@ -354,7 +359,7 @@ int ucp_test::get_variant_thread_type() const {
 }
 
 void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,
-                                 int value, std::string name)
+                                 int value, const std::string& name)
 {
     ucp_test_variant_value entry = {value, name};
     values.push_back(entry);
@@ -445,7 +450,7 @@ void ucp_test::modify_config(const std::string& name, const std::string& value,
 {
     ucs_status_t status;
 
-    status = ucp_config_modify(m_ucp_config, name.c_str(), value.c_str());
+    status = ucp_config_modify_internal(m_ucp_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
         test_base::modify_config(name, value, mode);
     } else if (status != UCS_OK) {
@@ -513,11 +518,23 @@ bool ucp_test::check_tls(const std::string& tls)
     return cache[tls] = (status == UCS_OK);
 }
 
+unsigned ucp_test::mt_num_threads()
+{
+#if _OPENMP && ENABLE_MT
+    /* Assume each thread can create two workers (sender and receiver entity),
+       and each worker can open up to 64 files */
+    return std::min(omp_get_max_threads(), ucs_sys_max_open_files() / (64 * 2));
+#else
+    return 1;
+#endif
+}
+
 ucp_test_base::entity::entity(const ucp_test_param& test_param,
                               ucp_config_t* ucp_config,
                               const ucp_worker_params_t& worker_params,
-                              const ucp_test_base *test_owner)
-    : m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0)
+                              const ucp_test_base *test_owner) :
+        m_err_cntr(0), m_rejected_cntr(0), m_accept_err_cntr(0),
+        m_test(test_owner)
 {
     const int thread_type                   = test_param.variant.thread_type;
     ucp_params_t local_ctx_params           = test_param.variant.ctx_params;
@@ -527,7 +544,7 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
     if (thread_type == MULTI_THREAD_CONTEXT) {
         /* Test multi-threading on context level, so create multiple workers
            which share the context */
-        num_workers                        = MT_TEST_NUM_THREADS;
+        num_workers                        = ucp_test::mt_num_threads();
         local_ctx_params.field_mask       |= UCP_PARAM_FIELD_MT_WORKERS_SHARED;
         local_ctx_params.mt_workers_shared = 1;
     } else {
@@ -987,7 +1004,10 @@ void ucp_test_base::entity::ep_destructor(ucp_ep_h ep, entity *e)
     ucs_status_t        status;
     ucp_tag_recv_info_t info;
     do {
-        e->progress();
+        const ucp_test *test = dynamic_cast<const ucp_test*>(e->m_test);
+        ASSERT_TRUE(test != NULL);
+
+        test->progress();
         status = ucp_request_test(req, &info);
     } while (status == UCS_INPROGRESS);
     EXPECT_EQ(UCS_OK, status);
@@ -1079,4 +1099,15 @@ void test_ucp_context::get_test_variants(std::vector<ucp_test_variant> &variants
 void ucp_test::disable_keepalive()
 {
     modify_config("KEEPALIVE_INTERVAL", "inf");
+}
+
+bool ucp_test::check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type) {
+    for (ucp_lane_index_t lane = 0; lane < ucp_ep_num_lanes(e.ep()); lane++) {
+        const uct_md_attr_t* attr = ucp_ep_md_attr(e.ep(), lane);
+        if (attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+            return true;
+        }
+    }
+
+    return false;
 }

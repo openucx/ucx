@@ -175,8 +175,7 @@ const test_perf::test_spec test_uct_perf::tests[] =
 
 
 UCS_TEST_P(test_uct_perf, envelope) {
-    if (has_transport("cm") ||
-        has_transport("ugni_udt")) {
+    if (has_transport("ugni_udt")) {
         UCS_TEST_SKIP;
     }
 

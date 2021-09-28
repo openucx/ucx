@@ -15,8 +15,41 @@
 
 /* Remote keys with that many remote MDs or less would be allocated from a
  * memory pool.
+ *
+ * The element size of rkey mpool has aligned by the cache line (64B), so the
+ * UCP_RKEY_MPOOL_MAX_MD is adjusted to 2 to minimize gaps between mpool items,
+ * in turn, reduce the memory consumption.
+ *
+ * See the byte-scheme of the rkey mpool element:
+ * +------+------------+------------+------------+------------+------------+------
+ * |elem  |            |            |            |            |            |
+ * |header| ucp_rkey_t | uct rkey 0 | uct rkey 1 | uct rkey 2 | uct rkey 3 | ...
+ * +------+------------+------------+------------+------------+------------+-----
+ * | 8B   |    32B     |    32B     |    32B     |    32B     |    32B     | ...
+ * +----------------------------+-------------------------+----------------------+
+ * |        64B Cache line      |     64B Cache line      |    64B Cache line    |
+ * +----------------------------+-------------------------+---+------------------+
+ * |                 UCP_RKEY_MPOOL_MAX_MD=3                  |     40B gap      |
+ * +---------------------------------------------+--------+---+------------------+
+ * |           UCP_RKEY_MPOOL_MAX_MD=2           | 16B gap|
+ * +---------------------------------------------+--------+
+ *
+ * Thus UCP_RKEY_MPOOL_MAX_MD=2 is the optimal value to keeping short rkeys in
+ * the rkey mpool.
  */
-#define UCP_RKEY_MPOOL_MAX_MD     3
+#define UCP_RKEY_MPOOL_MAX_MD     2
+
+
+/**
+ * Rkey proto index
+ */
+enum {
+    UCP_RKEY_BASIC_PROTO,
+    UCP_RKEY_SW_PROTO
+};
+
+
+typedef uint8_t ucp_rkey_proto_index_t;
 
 
 /**
@@ -84,26 +117,38 @@ typedef struct {
  * The array itself contains only the MDs specified in md_map, without gaps.
  */
 typedef struct ucp_rkey {
-    /* cached values for the most recent endpoint configuration */
-    struct {
-        ucp_worker_cfg_index_t    ep_cfg_index; /* EP configuration relevant for the cache */
-        ucp_lane_index_t          rma_lane;     /* Lane to use for RMAs */
-        ucp_lane_index_t          amo_lane;     /* Lane to use for AMOs */
-        ssize_t                   max_put_short;/* Cached value of max_put_short */
-        uct_rkey_t                rma_rkey;     /* Key to use for RMAs */
-        uct_rkey_t                amo_rkey;     /* Key to use for AMOs */
-        ucp_amo_proto_t           *amo_proto;   /* Protocol for AMOs */
-        ucp_rma_proto_t           *rma_proto;   /* Protocol for RMAs */
-    } cache;
-    ucp_md_map_t                  md_map;       /* Which *remote* MDs have valid memory handles */
-    ucs_memory_type_t             mem_type;     /* Memory type of remote key memory */
-    uint8_t                       flags;        /* Rkey flags */
-    ucp_worker_cfg_index_t        cfg_index;    /* Rkey configuration index */
+    union {
+        /* Cached values for the most recent endpoint configuration */
+        struct {
+            uint8_t                   flags;           /* Rkey flags */
+            uint8_t                   mem_type;        /* Memory type of remote key memory */
+            int8_t                    max_put_short;   /* Cached value of max_put_short */
+            ucp_worker_cfg_index_t    ep_cfg_index;    /* EP configuration relevant for the cache */
+            ucp_lane_index_t          rma_lane;        /* Lane to use for RMAs */
+            ucp_lane_index_t          amo_lane;        /* Lane to use for AMOs */
+            ucp_rkey_proto_index_t    amo_proto_index; /* Protocol for AMOs */
+            ucp_rkey_proto_index_t    rma_proto_index; /* Protocol for RMAs */
+            uct_rkey_t                rma_rkey;        /* Key to use for RMAs */
+            uct_rkey_t                amo_rkey;        /* Key to use for AMOs */
+        } cache;
+        struct {
+            uint8_t                   flags;           /* Rkey flags */
+            uint8_t                   mem_type;        /* Memory type of remote key memory */
+            ucp_worker_cfg_index_t    cfg_index;       /* Rkey configuration index */
+        };
+    };
 #if ENABLE_PARAMS_CHECK
-    ucp_ep_h                      ep;
+    ucp_ep_h                          ep;
 #endif
-    ucp_tl_rkey_t                 tl_rkey[0];   /* UCT rkey for every remote MD */
+    ucp_md_map_t                      md_map;          /* Which *remote* MDs have valid memory handles */
+    ucp_tl_rkey_t                     tl_rkey[0];      /* UCT rkey for every remote MD */
 } ucp_rkey_t;
+
+
+#define UCP_RKEY_AMO_PROTO(_amo_proto_index) ucp_amo_proto_list[_amo_proto_index]
+
+
+#define UCP_RKEY_RMA_PROTO(_rma_proto_index) ucp_rma_proto_list[_rma_proto_index]
 
 
 #define UCP_RKEY_RESOLVE_NOCHECK(_rkey, _ep, _op_type) \
@@ -152,7 +197,8 @@ ucp_lane_index_t ucp_rkey_find_rma_lane(ucp_context_h context,
 
 
 size_t ucp_rkey_packed_size(ucp_context_h context, ucp_md_map_t md_map,
-                            ucs_sys_device_t sys_dev, uint64_t sys_dev_map);
+                            ucs_sys_device_t sys_dev,
+                            ucp_sys_dev_map_t sys_dev_map);
 
 
 void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
@@ -163,7 +209,7 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 ssize_t
 ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                   const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
-                  uint64_t sys_dev_map,
+                  ucp_sys_dev_map_t sys_dev_map,
                   const ucs_sys_dev_distance_t *sys_distance, void *buffer);
 
 

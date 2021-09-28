@@ -14,22 +14,28 @@
 #include <stdint.h>
 
 
+/* Typedef by number of bits */
+#define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE3(uint, _bits, _t)
+
+
 #define UCP_WORKER_ADDRESS_NAME_MAX  32 /* Worker address name for debugging */
 #define UCP_MIN_BCOPY                64 /* Minimal size for bcopy */
 #define UCP_FEATURE_AMO              (UCP_FEATURE_AMO32|UCP_FEATURE_AMO64)
+
 
 /* Resources */
 #define UCP_MAX_RESOURCES            128
 #define UCP_NULL_RESOURCE            ((ucp_rsc_index_t)-1)
 typedef uint8_t                      ucp_rsc_index_t;
 
+
 /* MDs */
-#define UCP_UINT_TYPE(_bits)         typedef UCS_PP_TOKENPASTE3(uint, _bits, _t)
 #define UCP_MD_INDEX_BITS            64  /* How many bits are in MD index */
 typedef ucp_rsc_index_t              ucp_md_index_t;
 #define UCP_MAX_MDS                  ucs_min(UCP_MD_INDEX_BITS, UCP_MAX_RESOURCES)
 #define UCP_MAX_OP_MDS               4  /* maximal number of MDs per single op */
 UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
+
 
 /* Lanes */
 #define UCP_MAX_LANES                6
@@ -37,11 +43,18 @@ UCP_UINT_TYPE(UCP_MD_INDEX_BITS)     ucp_md_map_t;
 typedef uint8_t                      ucp_lane_index_t;
 typedef uint8_t                      ucp_lane_map_t;
 
+
+/* System devices */
+#define UCP_MAX_SYS_DEVICES          64
+UCP_UINT_TYPE(UCP_MAX_SYS_DEVICES)   ucp_sys_dev_map_t;
+
+
 /* Worker configuration index for endpoint and rkey */
 typedef uint8_t                      ucp_worker_cfg_index_t;
 #define UCP_WORKER_MAX_EP_CONFIG     64
 #define UCP_WORKER_MAX_RKEY_CONFIG   128
 #define UCP_WORKER_CFG_INDEX_NULL    UINT8_MAX
+
 
 /* Forward declarations */
 typedef struct ucp_request              ucp_request_t;
@@ -107,6 +120,9 @@ typedef enum {
     UCP_OP_ID_TAG_SEND_SYNC,
     UCP_OP_ID_PUT,
     UCP_OP_ID_GET,
+    UCP_OP_ID_AMO_POST,
+    UCP_OP_ID_AMO_FETCH,
+    UCP_OP_ID_AMO_CSWAP,
     UCP_OP_ID_API_LAST,
 
     UCP_OP_ID_RNDV_SEND = UCP_OP_ID_API_LAST,
@@ -176,7 +192,10 @@ typedef enum {
     UCP_RNDV_MODE_AUTO, /* Runtime automatically chooses optimal scheme to use */
     UCP_RNDV_MODE_GET_ZCOPY, /* Use get_zcopy scheme in RNDV protocol */
     UCP_RNDV_MODE_PUT_ZCOPY, /* Use put_zcopy scheme in RNDV protocol */
+    UCP_RNDV_MODE_GET_PIPELINE, /* Use pipelined get_zcopy scheme in RNDV protocol */
+    UCP_RNDV_MODE_PUT_PIPELINE, /* Use pipelined put_zcopy scheme in RNDV protocol */
     UCP_RNDV_MODE_AM, /* Use active-messages based RNDV protocol */
+    UCP_RNDV_MODE_RKEY_PTR, /* Use rkey_ptr in RNDV protocol */
     UCP_RNDV_MODE_LAST
 } ucp_rndv_mode_t;
 

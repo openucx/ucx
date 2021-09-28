@@ -50,7 +50,8 @@ static ucs_mpool_ops_t uct_scopy_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_attr)
@@ -81,6 +82,9 @@ void uct_scopy_iface_query(uct_scopy_iface_t *iface, uct_iface_attr_t *iface_att
                                           UCT_IFACE_FLAG_EVENT_RECV      |
                                           UCT_IFACE_FLAG_EVENT_ASYNC_CB;
     iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
+    iface_attr->overhead                = (ucs_arch_get_cpu_vendor() ==
+                                           UCS_CPU_VENDOR_FUJITSU_ARM) ?
+                                          6e-6 : 2e-6;
 }
 
 UCS_CLASS_INIT_FUNC(uct_scopy_iface_t, uct_iface_ops_t *ops,
@@ -160,7 +164,7 @@ ucs_status_t uct_scopy_iface_flush(uct_iface_h tl_iface, unsigned flags,
     uct_scopy_iface_t *iface = ucs_derived_of(tl_iface, uct_scopy_iface_t);
 
     if (ucs_unlikely(comp != NULL)) {
-        return UCS_ERR_UNSUPPORTED;        
+        return UCS_ERR_UNSUPPORTED;
     }
 
     if (!ucs_arbiter_is_empty(&iface->arbiter)) {

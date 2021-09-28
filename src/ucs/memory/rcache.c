@@ -1,5 +1,6 @@
 /**
  * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
  *
  * See file LICENSE for terms.
  */
@@ -14,11 +15,12 @@
 #include <ucs/datastruct/queue.h>
 #include <ucs/debug/log.h>
 #include <ucs/profile/profile.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/type/spinlock.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucm/api/ucm.h>
 
@@ -89,8 +91,9 @@ typedef struct {
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_rcache_stats_class = {
-    .name = "rcache",
-    .num_counters = UCS_RCACHE_STAT_LAST,
+    .name          = "rcache",
+    .num_counters  = UCS_RCACHE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCS_RCACHE_GETS]               = "gets",
         [UCS_RCACHE_HITS_FAST]          = "hits_fast",
@@ -220,7 +223,8 @@ static ucs_mpool_ops_t ucs_rcache_mp_ops = {
     .chunk_alloc   = ucs_rcache_mp_chunk_alloc,
     .chunk_release = ucs_rcache_mp_chunk_release,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static unsigned ucs_rcache_region_page_count(ucs_rcache_region_t *region)
@@ -370,7 +374,7 @@ static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
 
     ucs_rcache_region_trace(rcache, region, "destroy");
 
-    ucs_assertv(region->refcount == 0, "region 0x%lx..0x%lx of %s",
+    ucs_assertv(region->refcount == 0, "region %p 0x%lx..0x%lx of %s", region,
                 region->super.start, region->super.end, rcache->name);
     ucs_assert(!(region->flags & UCS_RCACHE_REGION_FLAG_PGTABLE));
 

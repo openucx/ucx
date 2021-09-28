@@ -191,7 +191,7 @@ typedef struct uct_ib_async_event_wait {
  * IB async event state.
  */
 typedef struct {
-    unsigned                  flag;             /* Event happened */
+    unsigned                  fired;            /* Event happened */
     uct_ib_async_event_wait_t *wait_ctx;        /* Waiting context */
 } uct_ib_async_event_val_t;
 
@@ -365,10 +365,10 @@ size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev);
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
-ucs_status_t uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
-                                            struct ibv_ah_attr *ah_attr,
-                                            struct ibv_pd *pd,
-                                            struct ibv_ah **ah_p);
+ucs_status_t
+uct_ib_device_create_ah_cached(uct_ib_device_t *dev,
+                               struct ibv_ah_attr *ah_attr, struct ibv_pd *pd,
+                               const char *usage, struct ibv_ah **ah_p);
 
 void uct_ib_device_cleanup_ah_cached(uct_ib_device_t *dev);
 
@@ -415,6 +415,12 @@ uct_ib_device_async_event_register(uct_ib_device_t *dev,
                                    enum ibv_event_type event_type,
                                    uint32_t resource_id);
 
+/* Invoke the callback defined by 'wait_ctx' from callback queue when the event
+ * fires. If it has already been fired, the callback is scheduled immediately to
+ * the callback queue.
+ *
+ * @return UCS_OK, or UCS_ERR_BUSY if someone already waiting for this event.
+ */
 ucs_status_t
 uct_ib_device_async_event_wait(uct_ib_device_t *dev,
                                enum ibv_event_type event_type,

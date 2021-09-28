@@ -313,7 +313,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_stream_recv_nbx,
                 (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
     if (ucs_likely(attr_mask == 0)) {
         datatype  = ucp_dt_make_contig(1);
-        dt_length = count; /* use dt_lendth to suppress coverity false positive */
+        dt_length = count; /* use dt_length to suppress coverity false positive */
         if (ucs_likely(ucp_stream_recv_nb_is_inplace(ep_ext, count))) {
             rdesc   = ucp_stream_rdesc_get(ep_ext);
             status  = ucp_stream_process_rdesc_inplace(rdesc, datatype, buffer,
@@ -446,20 +446,22 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         ucs_assertv_always(rdesc != NULL,
                            "ucp recv descriptor is not allocated");
-        rdesc->length         = rdesc_tmp.length;
+        rdesc->length              = rdesc_tmp.length;
         /* reset offset to improve locality */
-        rdesc->payload_offset = sizeof(*rdesc) + sizeof(*am_data);
-        rdesc->flags          = 0;
+        rdesc->payload_offset      = sizeof(*rdesc) + sizeof(*am_data);
+        rdesc->flags               = 0;
+        rdesc->release_desc_offset = 0;
+        ucp_recv_desc_set_name(rdesc, "stream_am_data_process");
         memcpy(ucp_stream_rdesc_payload(rdesc),
                UCS_PTR_BYTE_OFFSET(am_data, rdesc_tmp.payload_offset),
                rdesc_tmp.length);
     } else {
         /* slowpath */
-        rdesc                  = (ucp_recv_desc_t *)am_data - 1;
-        rdesc->length          = rdesc_tmp.length;
-        rdesc->payload_offset  = rdesc_tmp.payload_offset + sizeof(*rdesc);
-        rdesc->uct_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE;
-        rdesc->flags           = UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc                      = (ucp_recv_desc_t *)am_data - 1;
+        rdesc->length              = rdesc_tmp.length;
+        rdesc->payload_offset      = rdesc_tmp.payload_offset + sizeof(*rdesc);
+        rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE;
+        rdesc->flags               = UCP_RECV_DESC_FLAG_UCT_DESC;
     }
 
     ucp_ep_from_ext_proto(ep_ext)->flags |= UCP_EP_FLAG_STREAM_HAS_DATA;
@@ -479,7 +481,7 @@ void ucp_stream_ep_init(ucp_ep_h ep)
     }
 }
 
-void ucp_stream_ep_cleanup(ucp_ep_h ep)
+void ucp_stream_ep_cleanup(ucp_ep_h ep, ucs_status_t status)
 {
     ucp_ep_ext_proto_t* ep_ext;
     ucp_request_t *req;
@@ -507,7 +509,7 @@ void ucp_stream_ep_cleanup(ucp_ep_h ep)
     while (!ucs_queue_is_empty(&ep_ext->stream.match_q)) {
         req = ucs_queue_head_elem_non_empty(&ep_ext->stream.match_q,
                                             ucp_request_t, recv.queue);
-        ucp_request_complete_stream_recv(req, ep_ext, UCS_ERR_CANCELED);
+        ucp_request_complete_stream_recv(req, ep_ext, status);
     }
 }
 

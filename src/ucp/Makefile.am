@@ -59,8 +59,10 @@ noinst_HEADERS = \
 	rma/rma.inl \
 	rndv/proto_rndv.h \
 	rndv/proto_rndv.inl \
+	rndv/rndv_mtype.inl \
 	rndv/rndv.h \
 	tag/eager.h \
+	tag/proto_eager.inl \
 	tag/tag_rndv.h \
 	tag/tag_match.h \
 	tag/tag_match.inl \
@@ -98,6 +100,7 @@ libucp_la_SOURCES = \
 	core/ucp_rkey.c \
 	core/ucp_version.c \
 	core/ucp_worker.c \
+	dt/datatype_iter.c \
 	dt/dt_contig.c \
 	dt/dt_iov.c \
 	dt/dt_generic.c \
@@ -111,6 +114,7 @@ libucp_la_SOURCES = \
 	proto/proto_single.c \
 	proto/proto.c \
 	rma/amo_basic.c \
+	rma/amo_offload.c \
 	rma/amo_send.c \
 	rma/amo_sw.c \
 	rma/get_am.c \
@@ -124,7 +128,10 @@ libucp_la_SOURCES = \
 	rndv/proto_rndv.c \
 	rndv/rndv_am.c \
 	rndv/rndv_get.c \
+	rndv/rndv_ppln.c \
+	rndv/rndv_put.c \
 	rndv/rndv_rtr.c \
+	rndv/rndv_rkey_ptr.c \
 	rndv/rndv.c \
 	tag/eager_multi.c \
 	tag/eager_rcv.c \

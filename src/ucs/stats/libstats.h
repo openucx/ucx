@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -54,6 +55,7 @@ typedef enum ucs_stats_children_sel {
 struct ucs_stats_class {
     const char           *name;
     unsigned             num_counters;
+    unsigned             class_id;
     const char*          counter_names[];
 };
 
@@ -62,34 +64,34 @@ struct ucs_stats_class {
  * relationship between them.
  * ucs_stats_filter_node is a data structure used to filter the counters
  * on the report.
- * Therre are 3 types of filtering: Full, Aggregate, and summary
+ * There are 3 types of filtering: Full, Aggregate, and summary
  * Following is an example of the data structures in aggregate mode:
  *
  *      ucs_stats_node                        ucs_stats_filter_node
  *      --------------                        ---------------------
  *
  *             +-----+                              +-----+
- *             | A-1 |............................> | A-1 |      
- *             +-----+                              +-----+     
- *               A A A                                A 
- *               | | |                                | 
+ *             | A-1 |............................> | A-1 |
+ *             +-----+                              +-----+
+ *               A A A                                A
+ *               | | |                                |
  *               | | +----------+                     |
  *               | |            |                     |
  *            +--+ +--+      +--+--+................. |
  *            |       |      | B-1 |                : |
- *            |       |      +-----+                : | 
+ *            |       |      +-----+                : |
  *            |    +-----+....|..A................. : |
  *            |    | B-2 |    |  |                : : |
  *            |    +-----+ <--+  |                V V |
- *       +-----+......|..........|.............> +-----+        
+ *       +-----+......|..........|.............> +-----+
  *       | B-3 |      ||         +---------------| B*  |
  *       +-----+ <----+                          +-----+
  *       cntr1                                   cntr1*
  *       cntr2                                   cntr2*
- *       cntr3                                   cntr3*   
- *                               
+ *       cntr3                                   cntr3*
+ *
  * unfiltered statistics report:
- * 
+ *
  *  A-1:
  *     B-1:
  *        cntr1: 11111
@@ -105,7 +107,7 @@ struct ucs_stats_class {
  *        cntr3: 33333
  *
  * filtered statistics report:
- * 
+ *
  *  A-1:
  *     B*:
  *        cntr1: 33333

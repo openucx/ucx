@@ -54,4 +54,24 @@ unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock);
          !(_once)->initialized || pthread_mutex_unlock(&(_once)->lock); \
          (_once)->initialized = 1)
 
+
+/*
+ * Start a code block to perform a cleanup step only if initialization has
+ * already been performed.
+ *
+ * @param [in] _once Pointer to @ref ucs_init_once_t synchronization object.
+ *
+ * Usage:
+ *     UCS_CLEANUP_ONCE(&once) {
+ *         ... code ...
+ *     }
+ *
+ * @note Use the macro in conjunction with @ref UCS_INIT_ONCE macro.
+ * See @ref UCS_INIT_ONCE description for details.
+ */
+#define UCS_CLEANUP_ONCE(_once) \
+    for (pthread_mutex_lock(&(_once)->lock); \
+         (_once)->initialized || pthread_mutex_unlock(&(_once)->lock); \
+         (_once)->initialized = 0)
+
 #endif

@@ -20,5 +20,4 @@ $basedir/../configure \
 	--enable-profiling \
 	--enable-frame-pointer \
 	--enable-stats \
-	--enable-memtrack \
 	"$@"

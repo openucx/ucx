@@ -13,8 +13,11 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <ucp/api/ucp.h>
+#include <uct/api/uct.h>
+#include <uct/base/uct_component.h>
 
 #define _QUOTE(x) #x
 #define QUOTE(x) _QUOTE(x)
@@ -26,23 +29,34 @@ int test_ucp_init(void *handle)
                                                     const ucp_params_t *,
                                                     const ucp_config_t *,
                                                     ucp_context_h *);
-    typedef void (*ucp_context_print_info_func_t)(const ucp_context_h, FILE*);
     typedef void (*ucp_cleanup_func_t)(ucp_context_h);
+    typedef ucs_status_t (*uct_query_components_func_t)(uct_component_h **components_p,
+                                                        unsigned *num_components_p);
+    typedef void (*uct_release_component_list_func_t)(uct_component_h *
+                                                      components);
+
 
     ucp_init_version_func_t ucp_init_version_f;
-    ucp_context_print_info_func_t ucp_context_print_info_f;
     ucp_cleanup_func_t ucp_cleanup_f;
     ucp_params_t ucp_params;
     ucs_status_t status;
     ucp_context_h ucph;
+    uct_query_components_func_t uct_query_components_f;
+    uct_release_component_list_func_t uct_release_component_list_f;
+    uct_component_h *uct_components;
+    unsigned num_uct_components, i;
+
 
     ucp_init_version_f       = (ucp_init_version_func_t)dlsym(handle,
                                                               "ucp_init_version");
     ucp_cleanup_f            = (ucp_cleanup_func_t)dlsym(handle, "ucp_cleanup");
-    ucp_context_print_info_f = (ucp_context_print_info_func_t)dlsym(handle,
-                                                                    "ucp_context_print_info");
+    uct_query_components_f   = (uct_query_components_func_t)
+            dlsym(handle, "uct_query_components");
+    uct_release_component_list_f = (uct_release_component_list_func_t)
+            dlsym(handle, "uct_release_component_list");
 
-    if (!ucp_init_version_f || !ucp_cleanup_f || !ucp_context_print_info_f) {
+    if (!ucp_init_version_f || !ucp_cleanup_f || !uct_query_components_f ||
+        !uct_release_component_list_f) {
         fprintf(stderr, "failed to get UCP function pointers\n");
         return -1;
     }
@@ -56,7 +70,17 @@ int test_ucp_init(void *handle)
         return -1;
     }
 
-    ucp_context_print_info_f(ucph, stdout);
+    status = uct_query_components_f(&uct_components, &num_uct_components);
+    if (status != UCS_OK) {
+        fprintf(stderr, "Could not query UCT components\n");
+        return -1;
+    }
+
+    for (i = 0; i < num_uct_components; ++i) {
+        printf("Found component: %s\n", uct_components[i]->name);
+    }
+
+    uct_release_component_list_f(uct_components);
     ucp_cleanup_f(ucph);
 
     return 0;

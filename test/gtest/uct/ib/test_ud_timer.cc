@@ -26,7 +26,7 @@ public:
         if (packet_count++ < rx_limit) {
             return UCS_OK;
         }
-        else { 
+        else {
             return UCS_ERR_INVALID_PARAM;
         }
     }

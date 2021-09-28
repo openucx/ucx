@@ -28,6 +28,7 @@ AC_LANG_POP([C++])
 AC_SUBST([GTEST_CXXFLAGS], [$GTEST_CXXFLAGS])
 
 test_modules=""
+m4_include([test/gtest/common/googletest/configure.m4])
 m4_include([test/gtest/ucm/test_dlopen/configure.m4])
 m4_include([test/gtest/ucm/test_dlopen/rpath-subdir/configure.m4])
 m4_include([test/gtest/ucs/test_module/configure.m4])

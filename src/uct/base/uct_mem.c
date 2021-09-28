@@ -202,8 +202,8 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
                 break;
             }
 
-            ret = ucs_posix_memalign(&address, huge_page_size, alloc_length
-                                     UCS_MEMTRACK_VAL);
+            ret = ucs_posix_memalign(&address, huge_page_size, alloc_length,
+                                     alloc_name);
             if (ret != 0) {
                 ucs_trace("failed to allocate %zu bytes using THP: %m", alloc_length);
             } else {
@@ -233,7 +233,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
 
             address = uct_mem_alloc_params_get_address(params);
             ret = ucs_posix_memalign(&address, UCS_SYS_CACHE_LINE_SIZE,
-                                     length UCS_MEMTRACK_VAL);
+                                     length, alloc_name);
             if (ret == 0) {
                 goto allocated_without_md;
             }
@@ -251,8 +251,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
             alloc_length = length;
             address      = uct_mem_alloc_params_get_address(params);
             status = ucs_mmap_alloc(&alloc_length, &address,
-                                    uct_mem_get_mmap_flags(flags)
-                                    UCS_MEMTRACK_VAL);
+                                    uct_mem_get_mmap_flags(flags), alloc_name);
             if (status== UCS_OK) {
                 goto allocated_without_md;
             }
@@ -474,7 +473,8 @@ static ucs_mpool_ops_t uct_iface_mpool_ops = {
     .chunk_alloc   = uct_iface_mp_chunk_alloc,
     .chunk_release = uct_iface_mp_chunk_release,
     .obj_init      = uct_iface_mp_obj_init,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 ucs_status_t uct_iface_mpool_init(uct_base_iface_t *iface, ucs_mpool_t *mp,

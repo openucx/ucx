@@ -229,6 +229,10 @@ struct ucp_worker_cm {
 };
 
 
+UCS_PTR_MAP_TYPE(ep, 1);
+UCS_PTR_MAP_TYPE(request, 0);
+
+
 /**
  * UCP worker (thread context).
  */
@@ -278,7 +282,7 @@ typedef struct ucp_worker {
                                                            * are in-progress */
     uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */
     ucp_tag_match_t                  tm;                  /* Tag-matching queues and offload info */
-    ucs_array_t(ucp_am_cbs)          am;                  /* Array of AM callbacks and their data */
+    ucp_am_info_t                    am;                  /* Array of AM callbacks and their data */
     uint64_t                         am_message_id;       /* For matching long AMs */
     ucp_ep_h                         mem_type_ep[UCS_MEMORY_TYPE_LAST]; /* Memory type EPs */
 
@@ -290,7 +294,10 @@ typedef struct ucp_worker {
 
     ucp_worker_rkey_config_hash_t    rkey_config_hash;    /* RKEY config key -> index */
     ucp_worker_discard_uct_ep_hash_t discard_uct_ep_hash; /* Hash of discarded UCT EPs */
-    ucs_ptr_map_t                    ptr_map;             /* UCP objects key to ptr mapping */
+    UCS_PTR_MAP_T(ep)                ep_map;              /* UCP ep key to ptr
+                                                             mapping */
+    UCS_PTR_MAP_T(request)           request_map;         /* UCP requests key to
+                                                             ptr mapping */
 
     unsigned                         ep_config_count;     /* Current number of ep configurations */
     ucp_ep_config_t                  ep_config[UCP_WORKER_MAX_EP_CONFIG];
@@ -302,7 +309,7 @@ typedef struct ucp_worker {
         uct_worker_cb_id_t           cb_id;               /* Keepalive callback id */
         ucs_time_t                   last_round;          /* Last round timestamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
-        ucs_list_link_t              *iter_begin;         /* First EP processed keepalive in the
+        ucs_list_link_t              *iter_end;           /* Last EP processed keepalive in the
                                                            * current round */
         ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
         unsigned                     ep_count;            /* Number of EPs processed in current time slot */

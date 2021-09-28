@@ -11,7 +11,7 @@
 #include "rocm_gdr_iface.h"
 
 #include <uct/base/uct_log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 
 #include <gdrapi.h>

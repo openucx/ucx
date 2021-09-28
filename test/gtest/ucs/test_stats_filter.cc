@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2014. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -29,6 +30,7 @@ public:
         m_data_stats_class->counter_names[1] = "counter1";
         m_data_stats_class->counter_names[2] = "counter2";
         m_data_stats_class->counter_names[3] = "counter3";
+        m_data_stats_class->class_id         = UCS_STATS_CLASS_ID_INVALID;
 
         cat_node = NULL;
         data_nodes[0] = data_nodes[1] = data_nodes[2] = NULL;
@@ -87,7 +89,7 @@ public:
         UCS_STATS_NODE_FREE(cat_node);
     }
 
-protected:    
+protected:
     static const unsigned NUM_DATA_NODES = 3;
     static const unsigned NUM_COUNTERS   = 4;
 

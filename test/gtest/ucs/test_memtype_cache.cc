@@ -17,19 +17,14 @@ extern "C" {
 
 class test_memtype_cache : public ucs::test_with_param<ucs_memory_type_t> {
 protected:
-    test_memtype_cache() : m_memtype_cache(NULL) {
+    test_memtype_cache() {
     }
 
     virtual void init() {
         ucs::test_with_param<ucs_memory_type_t>::init();
-        ucs_status_t status = ucs_memtype_cache_create(&m_memtype_cache);
-        ASSERT_UCS_OK(status);
     }
 
     virtual void cleanup() {
-        if (m_memtype_cache != NULL) {
-            ucs_memtype_cache_destroy(m_memtype_cache);
-        }
 
         ucs::test_with_param<ucs_memory_type_t>::cleanup();
     }
@@ -43,8 +38,7 @@ protected:
         }
 
         ucs_memory_info_t mem_info;
-        ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
-                                                       size, &mem_info);
+        ucs_status_t status = ucs_memtype_cache_lookup(ptr, size, &mem_info);
 
         if (!expect_found || (expected_type == UCS_MEMORY_TYPE_HOST)) {
             /* memory type should be not found or unknown */
@@ -57,7 +51,8 @@ protected:
                                (ucs_memory_type_t)mem_info.type);
         } else {
             EXPECT_UCS_OK(status);
-            EXPECT_EQ(expected_type, mem_info.type)
+            EXPECT_TRUE((UCS_MEMORY_TYPE_UNKNOWN == mem_info.type) ||
+                        (expected_type == mem_info.type))
                     << "ptr=" << ptr << " size=" << size;
         }
     }
@@ -289,7 +284,7 @@ protected:
         ucs_memory_info_t mem_info;
         mem_info.type    = mem_type;
         mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_memtype_cache_update(m_memtype_cache, ptr, size, &mem_info);
+        ucs_memtype_cache_update(ptr, size, &mem_info);
     }
 
     void memtype_cache_update(const mem_buffer &b) {
@@ -297,11 +292,8 @@ protected:
     }
 
     void memtype_cache_remove(const void *ptr, size_t size) {
-        ucs_memtype_cache_remove(m_memtype_cache, ptr, size);
+        ucs_memtype_cache_remove(ptr, size);
     }
-
-private:
-    ucs_memtype_cache_t *m_memtype_cache;
 };
 
 UCS_TEST_P(test_memtype_cache, basic) {
@@ -448,7 +440,7 @@ UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs_keep_mem) {
     test_memtype_cache_alloc_diff_mem_types(true, false);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
 class test_memtype_cache_deferred_create : public test_memtype_cache {
@@ -512,5 +504,5 @@ UCS_TEST_P(test_memtype_cache_deferred_create, lookup_overlapped_regions) {
     test_alloc_before_init(1000000, false, 1);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache_deferred_create,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));

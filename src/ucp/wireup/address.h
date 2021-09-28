@@ -78,13 +78,21 @@ enum {
 
 
 /**
+ * UCP TL address bitmap
+ *
+ * Bitmap type for representing which TL addresses are in use.
+ */
+typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_addr_bitmap_t;
+
+
+/**
  * Remote interface attributes.
  */
 struct ucp_address_iface_attr {
     uint64_t                    cap_flags;    /* Interface capability flags */
     uint64_t                    event_flags;  /* Interface event capability flags */
     double                      overhead;     /* Interface performance - overhead */
-    uct_ppn_bandwidth_t         bandwidth;    /* Interface performance - bandwidth */
+    double                      bandwidth;    /* Interface performance - bandwidth */
     int                         priority;     /* Priority of device */
     double                      lat_ovh;      /* Latency overhead */
     ucp_rsc_index_t             dst_rsc_index;/* Destination resource index */
@@ -186,6 +194,16 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
 ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
                                 unsigned unpack_flags,
                                 ucp_unpacked_address_t *unpacked_address);
+
+
+/**
+ * Unpack worker unique id from the given address.
+ *
+ * @param [in] address Worker address.
+ *
+ * @return Worker unique id.
+  */
+uint64_t ucp_address_get_uuid(const void *address);
 
 
 #endif

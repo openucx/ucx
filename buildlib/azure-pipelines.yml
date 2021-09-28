@@ -1,30 +1,38 @@
 # See https://aka.ms/yaml
 # This pipeline to be run on direct pushes and merges
 
-pr: none
+pr:
+  - master
+  - v*.*.x
 trigger:
   - master
   - v*.*.x
 
 resources:
   containers:
-    - container: centos7_cuda10_1
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.0-cuda10.1:1
+    - container: centos7_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
 
 stages:
-  - stage: Check_Commit
+  - stage: Prepare
     jobs:
       - job: Check
         steps:
           - checkout: self
             clean: true
           - bash: |
-              echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
-            name: Commit
+              set -eE
+              source ./buildlib/az-helpers.sh
+              set -x
+              check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/SNAPSHOT: "
+            name: Result
   - stage: Build
-    dependsOn: Check_Commit
+    dependsOn: Prepare
+    condition: eq(dependencies.Prepare.outputs['Check.Result.Launch'], 'True')
     jobs:
       - template: jucx/jucx-publish.yml
         parameters:
-          target: publish-snapshot
-
+          ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+            target: publish-snapshot
+          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            target: package

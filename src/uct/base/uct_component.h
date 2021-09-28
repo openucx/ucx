@@ -135,6 +135,14 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 
 
 /**
+ * Component method to initialize VFS for memory domain.
+ *
+ * @param [in]  md                      Handle to the opened memory domain.
+ */
+typedef void (*uct_component_md_vfs_init_func_t)(uct_md_h md);
+
+
+/**
  * Defines a UCT component
  */
 struct uct_component {
@@ -149,8 +157,10 @@ struct uct_component {
     ucs_config_global_list_entry_t          cm_config;          /**< CM configuration entry */
     ucs_list_link_t                         tl_list;            /**< List of transports */
     ucs_list_link_t                         list;               /**< Entry in global list of components */
-    uint64_t                                flags;              /**< Flags as defined by 
+    uint64_t                                flags;              /**< Flags as defined by
                                                                      UCT_COMPONENT_FLAG_xx */
+    /**< Memory domain initialize VFS method */
+    uct_component_md_vfs_init_func_t        md_vfs_init;
 };
 
 

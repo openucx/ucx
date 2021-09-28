@@ -281,6 +281,7 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
         return NULL;
     } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
         uct_rc_mlx5_iface_check_rx_completion(iface, cqe, poll_flags);
+        uct_ib_mlx5_update_db_cq_ci(cq);
         return NULL;
     }
 
@@ -1433,9 +1434,14 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
 
     cqe = uct_rc_mlx5_iface_poll_rx_cq(iface, poll_flags);
     if (cqe == NULL) {
-        /* If no CQE - post receives */
+        /* If no CQE - post receives to prevent hang when:
+         * - RX buffers are limited and all are taken by the user.
+         * - All cqes are polled by the user, but new WQEs not posted due to
+         *   lack of RX buffers.
+         * Need to post new WQEs when some RX buffers are freed by the user.
+         */
         count = 0;
-        goto done;
+        goto out;
     }
 
     ucs_memory_cpu_load_fence();
@@ -1448,7 +1454,7 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
         rc_hdr = uct_rc_mlx5_iface_common_data(iface, cqe, byte_len, &flags);
         uct_rc_mlx5_iface_common_am_handler(iface, cqe, rc_hdr, flags,
                                             byte_len, poll_flags);
-        goto done;
+        goto out_update_db;
     }
 
 #if IBV_HW_TM
@@ -1459,14 +1465,14 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
          * could be done for specific CQE types only. */
         uct_rc_mlx5_iface_handle_filler_cqe(iface, cqe, poll_flags);
         count = 0;
-        goto done;
+        goto out_update_db;
     }
 
     /* Should be a fast path, because small (latency-critical) messages
      * are not supposed to be offloaded to the HW.  */
     if (ucs_likely(cqe->app_op == UCT_RC_MLX5_CQE_APP_OP_TM_UNEXPECTED)) {
         uct_rc_mlx5_iface_tag_handle_unexp(iface, cqe, byte_len, poll_flags);
-        goto done;
+        goto out_update_db;
     }
 
     switch (cqe->app_op) {
@@ -1534,7 +1540,9 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     }
 #endif
 
-done:
+out_update_db:
+    uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_RX]);
+out:
     max_batch = iface->super.super.config.rx_max_batch;
     if (ucs_unlikely(iface->super.rx.srq.available >= max_batch)) {
         if (poll_flags & UCT_RC_MLX5_POLL_FLAG_LINKED_LIST) {

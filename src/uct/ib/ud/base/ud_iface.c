@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,17 +14,21 @@
 #include "ud_inl.h"
 
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
 #include <sys/poll.h>
 
 
+#define UCT_UD_IFACE_CEP_CONN_SN_MAX ((uct_ud_ep_conn_sn_t)-1)
+
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ud_iface_stats_class = {
-    .name = "ud_iface",
-    .num_counters = UCT_UD_IFACE_STAT_LAST,
+    .name          = "ud_iface",
+    .num_counters  = UCT_UD_IFACE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_UD_IFACE_STAT_RX_DROP] = "rx_drop"
     }
@@ -66,11 +71,11 @@ uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
                              int path_index)
 {
     void *peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
-    return (uct_ud_ep_conn_sn_t)
-           ucs_conn_match_get_next_sn(&iface->conn_match_ctx,
-                                      uct_ud_iface_cep_get_peer_address(
-                                          iface, ib_addr, if_addr, path_index,
-                                          peer_address));
+
+    uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr, path_index,
+                                      peer_address);
+
+    return ucs_conn_match_get_next_sn(&iface->conn_match_ctx, peer_address);
 }
 
 void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
@@ -81,6 +86,7 @@ void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
 {
     ucs_conn_match_queue_type_t queue_type;
     void *peer_address;
+    int ret;
 
     queue_type   = uct_ud_iface_cep_ep_queue_type(ep);
     peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
@@ -88,8 +94,10 @@ void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
                                       peer_address);
 
     ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
-    ucs_conn_match_insert(&iface->conn_match_ctx, peer_address,
-                          conn_sn, &ep->conn_match, queue_type);
+    ret = ucs_conn_match_insert(&iface->conn_match_ctx, peer_address,
+                                conn_sn, &ep->conn_match, queue_type);
+    ucs_assert_always(ret == 1);
+
     ep->flags |= UCT_UD_EP_FLAG_ON_CEP;
 }
 
@@ -311,7 +319,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
                         uct_iface_invoke_ops_func(&iface->super,
                                                   uct_ud_iface_ops_t,
                                                   get_peer_address_length),
-                        &conn_match_ops);
+                        UCT_UD_IFACE_CEP_CONN_SN_MAX, &conn_match_ops);
 
     status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
                              uct_ud_iface_get_time(iface));
@@ -583,7 +591,7 @@ err_rx_mpool:
 err_qp:
     uct_ud_iface_destroy_qp(self);
 err_eps_array:
-    ucs_ptr_array_cleanup(&self->eps);
+    ucs_ptr_array_cleanup(&self->eps, 1);
     return status;
 }
 
@@ -618,7 +626,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_mpool_cleanup(&self->rx.mp, 0);
     uct_ud_iface_destroy_qp(self);
     ucs_debug("iface(%p): ptr_array cleanup", self);
-    ucs_ptr_array_cleanup(&self->eps);
+    ucs_ptr_array_cleanup(&self->eps, 1);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     UCS_STATS_NODE_FREE(self->stats);
     kh_destroy_inplace(uct_ud_iface_gid, &self->gid_table.hash);

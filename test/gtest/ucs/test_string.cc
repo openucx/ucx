@@ -6,7 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/sys/string.h>
@@ -55,6 +55,19 @@ UCS_TEST_F(test_string, common_prefix_len) {
 
     common_length = ucs_string_common_prefix_len(str1, str3);
     EXPECT_EQ(0, common_length);
+}
+
+UCS_TEST_F(test_string, path) {
+    char path[PATH_MAX];
+    ucs_path_get_common_parent("/sys/dev/one", "/sys/dev/two", path);
+    EXPECT_STREQ("/sys/dev", path);
+
+    EXPECT_EQ(4, ucs_path_calc_distance("/root/foo/bar", "/root/charlie/fox"));
+    EXPECT_EQ(2, ucs_path_calc_distance("/a/b/c/d", "/a/b/c/e"));
+    EXPECT_EQ(0, ucs_path_calc_distance("/a/b/c", "/a/b/c"));
+    EXPECT_EQ(1, ucs_path_calc_distance("/a/b/c", "/a/b"));
+    EXPECT_EQ(2, ucs_path_calc_distance("/a/b/cd", "/a/b/ce"));
+    EXPECT_EQ(3, ucs_path_calc_distance("/a/b/c", "/a/b_c"));
 }
 
 UCS_TEST_F(test_string, trim) {
@@ -123,6 +136,12 @@ UCS_TEST_F(test_string_buffer, appendf) {
 
     EXPECT_EQ("We, Created, The-Monster",
               std::string(ucs_string_buffer_cstr(&strb)));
+
+    ucs_string_buffer_reset(&strb);
+    EXPECT_EQ("", std::string(ucs_string_buffer_cstr(&strb)));
+
+    ucs_string_buffer_appendf(&strb, "%s", "Clean slate");
+    EXPECT_EQ("Clean slate", std::string(ucs_string_buffer_cstr(&strb)));
 
     ucs_string_buffer_cleanup(&strb);
 }
@@ -199,6 +218,24 @@ UCS_TEST_F(test_string_buffer, append_hex) {
     ucs_string_buffer_append_hex(&strb, hexbytes,
                                  ucs_static_array_size(hexbytes), SIZE_MAX);
     EXPECT_EQ(std::string("deadbeef:badc0fee"), ucs_string_buffer_cstr(&strb));
+}
+
+UCS_TEST_F(test_string_buffer, append_iovec) {
+    static const struct iovec iov[3] = {{NULL, 0},
+                                        {(void*)0x1234, 100},
+                                        {(void*)0x4567, 200}};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_append_iovec(&strb, iov, ucs_static_array_size(iov));
+    EXPECT_EQ(std::string("(nil),0|0x1234,100|0x4567,200"),
+              ucs_string_buffer_cstr(&strb));
+}
+
+UCS_TEST_F(test_string_buffer, flags) {
+    static const char *flag_names[] = {"zero", "one", "two", "three", "four"};
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    /* coverity[overrun-buffer-val] */
+    ucs_string_buffer_append_flags(&strb, UCS_BIT(1) | UCS_BIT(3), flag_names);
+    EXPECT_EQ(std::string("one|three"), ucs_string_buffer_cstr(&strb));
 }
 
 UCS_TEST_F(test_string_buffer, dump) {

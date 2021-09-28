@@ -1,0 +1,115 @@
+jobs:
+  - job: ucx_build
+    displayName: Build with cuda
+    pool:
+      name: MLNX
+      demands:
+        - ucx_gpu_test -equals yes
+    container: centos7_cuda11
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          set -eEx
+          ./autogen.sh
+          mkdir pkg-build
+          cd pkg-build
+          ../contrib/configure-release --with-cuda --prefix=$(Build.Repository.LocalPath)/install
+        displayName: Configure
+
+      - bash: |
+          set -eEx
+          cd pkg-build
+          make -s -j `nproc`
+          make install
+          cp ../buildlib/pr/perftest_msg_pow2 $(Build.Repository.LocalPath)/install
+          tar czf $(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz -C $(Build.Repository.LocalPath)/install .
+        displayName: Build package
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: ucx
+
+  - job: test_cuda11_2_4
+    dependsOn: ucx_build
+    workspace:
+      clean: all
+    displayName: Test with perftest and ucx_info
+    pool:
+      name: MLNX
+      demands: ucx_gpu_test -equals yes
+
+    strategy:
+      matrix:
+        centos7_cuda11_2:
+          build_container: centos7_cuda11
+          cuda_version: dev/cuda11.2
+        centos8_cuda11_2:
+          build_container: centos8_cuda11
+          cuda_version: dev/cuda11.2
+        ubuntu16_cuda11_2:
+          build_container: ubuntu16_cuda11
+          cuda_version: dev/cuda11.2
+        ubuntu18_cuda11_2:
+          build_container: ubuntu18_cuda11
+          cuda_version: dev/cuda11.2
+        ubuntu20_cuda11_2:
+          build_container: ubuntu20_cuda11
+          cuda_version: dev/cuda11.2
+        centos7_cuda11_4:
+          build_container: centos7_cuda11
+          cuda_version: dev/cuda11.4
+        centos8_cuda11_4:
+          build_container: centos8_cuda11
+          cuda_version: dev/cuda11.4
+        ubuntu16_cuda11_4:
+          build_container: ubuntu16_cuda11
+          cuda_version: dev/cuda11.4
+        ubuntu18_cuda11_4:
+          build_container: ubuntu18_cuda11
+          cuda_version: dev/cuda11.4
+        ubuntu20_cuda11_4:
+          build_container: ubuntu20_cuda11
+          cuda_version: dev/cuda11.4
+
+    container: $[ variables['build_container'] ]
+
+    steps:
+      - checkout: none
+        clean: true
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: ucx
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: |
+          set -eEx
+          tar xzf ucx/ucx_bin_$(Build.BuildId).tar.gz -C $PWD
+          nvidia-smi
+      - bash: |
+          set -eEx
+          . /etc/profile.d/modules.sh
+          module load $(cuda_version)
+          ./bin/ucx_info -u t -epw
+        displayName: Test ucx_info
+        env:
+          LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/lib:$LD_LIBRARY_PATH
+          MODULEPATH: /hpc/local/etc/modulefiles:$MODULEPATH
+      - bash: |
+          set -Eex
+          . /etc/profile.d/modules.sh
+          module load $(cuda_version)
+          port=$((10000 + $(Build.BuildId)))
+          ./bin/ucx_perftest -b perftest_msg_pow2 -m cuda -t tag_bw -p $port &
+          server_pid=$!
+          sleep 5
+          ./bin/ucx_perftest -b perftest_msg_pow2 -m cuda -t tag_bw -p $port 127.0.0.1 2>&1 | tee perf.txt
+          wait $server_pid
+          grep "Final:" perf.txt
+        displayName: Test ucx_perftest
+        env:
+          LD_LIBRARY_PATH: $(Build.Repository.LocalPath)/lib:$LD_LIBRARY_PATH
+          MODULEPATH: /hpc/local/etc/modulefiles:$MODULEPATH
+

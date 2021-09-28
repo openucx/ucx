@@ -12,6 +12,13 @@
 
 #include <ucp/api/ucp.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucs/datastruct/string_buffer.h>
+
+
+/*
+ * dt_mask argument which contains all possible datatypes
+ */
+#define UCP_DT_MASK_ALL UCS_MASK(UCP_DATATYPE_CLASS_MASK + 1)
 
 
 /*
@@ -35,8 +42,12 @@ typedef struct {
         } generic;
         struct {
             const ucp_dt_iov_t    *iov;       /* IOV list */
+#if UCS_ENABLE_ASSERT
+            size_t                iov_count;  /* Number of IOV items */
+#endif
             size_t                iov_index;  /* Index of current IOV item */
             size_t                iov_offset; /* Offset in the current IOV item */
+            ucp_dt_reg_t          *reg;
             /* TODO support memory registration with IOV */
             /* TODO duplicate the iov array, and save the "start offset" instead
              * of "iov_length" in each element, this way we don't need to keep
@@ -48,5 +59,36 @@ typedef struct {
     } type;
 } ucp_datatype_iter_t;
 
+
+ucs_status_t
+ucp_datatype_iter_mem_reg_internal(ucp_context_h context, void *address,
+                                   size_t length, unsigned uct_flags,
+                                   ucs_memory_type_t mem_type,
+                                   ucp_md_map_t md_map, ucp_dt_reg_t *dt_reg);
+
+
+void ucp_datatype_iter_mem_dereg_internal(ucp_context_h context,
+                                          ucp_dt_reg_t *dt_reg);
+
+
+ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,
+                                           ucp_datatype_iter_t *dt_iter,
+                                           ucp_md_map_t md_map,
+                                           unsigned uct_flags);
+
+
+void ucp_datatype_iter_iov_mem_dereg(ucp_context_h context,
+                                     ucp_datatype_iter_t *dt_iter);
+
+
+size_t ucp_datatype_iter_iov_next_iov(const ucp_datatype_iter_t *dt_iter,
+                                      size_t max_length,
+                                      ucp_rsc_index_t memh_index,
+                                      ucp_datatype_iter_t *next_iter,
+                                      uct_iov_t *iov, size_t max_iov);
+
+
+void ucp_datatype_iter_str(const ucp_datatype_iter_t *dt_iter,
+                           ucs_string_buffer_t *strb);
 
 #endif

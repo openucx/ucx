@@ -14,10 +14,12 @@
 #include <ucs/config/parser.h>
 #include <ucs/debug/debug_int.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/profile/profile.h>
+#include <ucs/memory/memtype_cache.h>
 #include <ucs/stats/stats.h>
 #include <ucs/async/async.h>
+#include <ucs/sys/lib.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/topo.h>
 #include <ucs/sys/math.h>
@@ -110,8 +112,8 @@ static void UCS_F_CTOR ucs_init()
     ucs_async_global_init();
     ucs_topo_init();
     ucs_rand_seed_init();
-    ucs_debug("%s loaded at 0x%lx", ucs_debug_get_lib_path(),
-              ucs_debug_get_lib_base_addr());
+    ucs_debug("%s loaded at 0x%lx", ucs_sys_get_lib_path(),
+              ucs_sys_get_lib_base_addr());
     ucs_debug("cmd line: %s", ucs_get_process_cmdline());
     ucs_modules_load();
 }
