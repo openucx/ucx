@@ -152,7 +152,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
 
-  {"BCOPY_THRESH", "0",
+  {"BCOPY_THRESH", "auto",
    "Threshold for switching from short to bcopy protocol",
    ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
