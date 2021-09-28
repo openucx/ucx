@@ -111,7 +111,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
 
     iface_attr->latency                 = ucs_linear_func_make(8e-6, 0);
     iface_attr->bandwidth.dedicated     = 0;
-    iface_attr->bandwidth.shared        = UCT_CUDA_BASE_IFACE_DEFAULT_BANDWIDTH;
+    iface_attr->bandwidth.shared        = iface->config.bandwidth;
     iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
@@ -292,6 +292,8 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 static ucs_status_t
 uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
+    uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
         perf_attr->overhead = UCT_CUDA_COPY_IFACE_OVERHEAD;
     }
@@ -305,8 +307,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
             if ((perf_attr->local_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN) &&
                 (perf_attr->remote_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
-                perf_attr->bandwidth.shared =
-                    UCT_CUDA_BASE_IFACE_DEFAULT_BANDWIDTH;
+                perf_attr->bandwidth.shared = iface->config.bandwidth;
                 return UCS_OK;
             }
 
