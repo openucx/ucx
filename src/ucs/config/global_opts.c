@@ -90,7 +90,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "If not empty, UCS will print log messages to the specified file instead of stdout.\n"
   "The following substitutions are performed on this string:\n"
   "  %p - Replaced with process ID\n"
-  "  %h - Replaced with host name\n",
+  "  %h - Replaced with host name",
   ucs_offsetof(ucs_global_opts_t, log_file),
   UCS_CONFIG_TYPE_STRING},
 
@@ -113,7 +113,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, log_data_size), UCS_CONFIG_TYPE_ULONG},
 
  {"LOG_PRINT_ENABLE", "n",
-  "Enable output of ucs_print(). This option is intended for use by the library developers.\n",
+  "Enable output of ucs_print(). This option is intended for use by the library developers.",
   ucs_offsetof(ucs_global_opts_t, log_print_enable), UCS_CONFIG_TYPE_BOOL},
 
 #if ENABLE_DEBUG_DATA
@@ -167,7 +167,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
 
   {"MEMTYPE_CACHE", "y",
-   "Enable memory type (cuda/rocm) cache \n",
+   "Enable memory type (cuda/rocm) cache",
    ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
  {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
@@ -231,24 +231,24 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "results are not reported. Possible values are:\n"
   "  file:<filename>   - save to a file (%h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe)\n"
   "  stdout            - print to standard output.\n"
-  "  stderr            - print to standard error.\n",
+  "  stderr            - print to standard error.",
   ucs_offsetof(ucs_global_opts_t, memtrack_dest), UCS_CONFIG_TYPE_STRING},
 
  {"MEMTRACK_LIMIT", "inf",
   "Memory limit allocated by memtrack. In case if limit is reached then\n"
-  "memtrack report is generated and process is terminated.\n",
+  "memtrack report is generated and process is terminated.",
   ucs_offsetof(ucs_global_opts_t, memtrack_limit), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"PROFILE_MODE", "",
    "Profile collection modes. If none is specified, profiling is disabled.\n"
    " - log   - Record all timestamps.\n"
-   " - accum - Accumulate measurements per location.\n",
+   " - accum - Accumulate measurements per location.",
    ucs_offsetof(ucs_global_opts_t, profile_mode),
    UCS_CONFIG_TYPE_BITMAP(ucs_profile_mode_names)},
 
   {"PROFILE_FILE", "ucx_%h_%p.prof",
    "File name to dump profiling data to.\n"
-   "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.\n",
+   "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.",
    ucs_offsetof(ucs_global_opts_t, profile_file), UCS_CONFIG_TYPE_STRING},
 
   {"PROFILE_LOG_SIZE", "4m",
@@ -266,14 +266,14 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
 
   {"MODULE_LOG_LEVEL", "trace",
-   "Logging level for module loader\n",
+   "Logging level for module loader",
    ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
 
   {"MODULES", "all",
    "Comma-separated list of glob patterns specifying which module load.\n"
    "The order is not meaningful. For example:\n"
    " *     - load all modules\n"
-   " ^cu*  - do not load modules that begin with 'cu'\n",
+   " ^cu*  - do not load modules that begin with 'cu'",
    ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"", "", NULL,
