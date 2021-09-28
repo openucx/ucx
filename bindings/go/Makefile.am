@@ -30,12 +30,12 @@ clean-local:
 test: $(GOTMPDIR)
 	cd $(abs_top_srcdir)/bindings/go/tests ;\
 	$(GO) env -w GO111MODULE=off ; \
-	LD_LIBRARY_PATH=$(UCX_SOPATH) $(GO) test -v
+	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} $(GO) test -v
 
 bench: $(GOTMPDIR)
 	cd $(abs_top_srcdir)/bindings/go/tests ;\
 	$(GO) env -w GO111MODULE=off ; \
-	LD_LIBRARY_PATH=$(UCX_SOPATH) $(GO) test -v -bench=.
+	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} $(GO) test -v -bench=.
 
 all: build
 

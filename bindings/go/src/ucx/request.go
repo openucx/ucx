@@ -18,11 +18,12 @@ type UcpRequest struct {
 }
 
 type UcpRequestParams struct {
-	MemType *UcsMemoryType
-	Cb      UcpCallback
+	MemTypeSet bool
+	MemType    UcsMemoryType
+	Cb         UcpCallback
 }
 
-// Checks wer
+// Checks wether request is a pointer
 func isRequestPtr(request C.ucs_status_ptr_t) bool {
 	errLast := UCS_ERR_LAST
 	return (uint64(uintptr(request)) - 1) < (uint64(errLast) - 1)

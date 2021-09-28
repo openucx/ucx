@@ -15,7 +15,7 @@ import (
 
 var maxSize = flag.Uint64("s", 10_000_000, "Max size of memory to mmap. Default: 10M")
 
-func MemoryMap(context *UcpContext, address unsafe.Pointer, size uint64,
+func memoryMap(context *UcpContext, address unsafe.Pointer, size uint64,
 	memoryType UcsMemoryType) (*UcpMemory, error) {
 	mmapParams := &UcpMmapParams{}
 	mmapParams.SetAddress(address).SetLength(size).SetMemoryType(memoryType)
@@ -23,7 +23,7 @@ func MemoryMap(context *UcpContext, address unsafe.Pointer, size uint64,
 	return context.MemMap(mmapParams)
 }
 
-func MemoryAllocate(context *UcpContext, size uint64, memoryType UcsMemoryType) (*UcpMemory, error) {
+func memAlloc(context *UcpContext, size uint64, memoryType UcsMemoryType) (*UcpMemory, error) {
 	mmapParams := &UcpMmapParams{}
 	mmapParams.Allocate().SetLength(size).SetMemoryType(memoryType)
 
@@ -46,7 +46,7 @@ func BenchmarkUcpMmap(b *testing.B) {
 		var size uint64 = 1024
 		for size < *maxSize {
 			b.Run(fmt.Sprintf("Allocate host memory %d", size), func(b *testing.B) {
-				allocatedMemory, err := MemoryAllocate(context, size, UCS_MEMORY_TYPE_HOST)
+				allocatedMemory, err := memAlloc(context, size, UCS_MEMORY_TYPE_HOST)
 
 				if err != nil {
 					b.Fatalf("Failed to allocate memory %v", err)
@@ -63,7 +63,7 @@ func BenchmarkUcpMmap(b *testing.B) {
 			var size uint64 = 1024
 			for size < *maxSize {
 				b.Run(fmt.Sprintf("Allocate GPU memory %d", size), func(b *testing.B) {
-					gpuMemory, err := MemoryAllocate(context, size, UCS_MEMORY_TYPE_CUDA)
+					gpuMemory, err := memAlloc(context, size, UCS_MEMORY_TYPE_CUDA)
 
 					if err != nil {
 						b.Fatalf("Failed to allocate GPU memory %v", err)
@@ -89,7 +89,7 @@ func TestUcpMmap(t *testing.T) {
 		t.Fatalf("Failed to create a context %v", err)
 	}
 
-	allocatedMemory, err := MemoryAllocate(context, testMemorySize, UCS_MEMORY_TYPE_HOST)
+	allocatedMemory, err := memAlloc(context, testMemorySize, UCS_MEMORY_TYPE_HOST)
 
 	if err != nil {
 		t.Fatalf("Failed to allocate memory %v", err)
@@ -103,7 +103,7 @@ func TestUcpMmap(t *testing.T) {
 
 	allocatedMemory.Close()
 	nativeMemory := AllocateNativeMemory(testMemorySize)
-	mapedMemory, err := MemoryMap(context, nativeMemory, testMemorySize, UCS_MEMORY_TYPE_HOST)
+	mapedMemory, err := memoryMap(context, nativeMemory, testMemorySize, UCS_MEMORY_TYPE_HOST)
 
 	if err != nil {
 		t.Fatalf("Failed to map memory %v", err)
@@ -114,7 +114,7 @@ func TestUcpMmap(t *testing.T) {
 	memTypeMask, _ := context.MemoryTypesMask()
 
 	if IsMemTypeSupported(UCS_MEMORY_TYPE_CUDA, memTypeMask) {
-		gpuMemory, err := MemoryAllocate(context, testMemorySize, UCS_MEMORY_TYPE_CUDA)
+		gpuMemory, err := memAlloc(context, testMemorySize, UCS_MEMORY_TYPE_CUDA)
 
 		if err != nil {
 			t.Fatalf("Failed to allocate GPU memory %v", gpuMemory)
