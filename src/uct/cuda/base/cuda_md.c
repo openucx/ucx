@@ -96,19 +96,33 @@ static double uct_cuda_base_get_nvlink_common_bw(nvmlDevice_t device)
 
 static unsigned uct_cuda_base_get_nvswitch_num_nvlinks(nvmlDevice_t device)
 {
-    unsigned num_links;
+    unsigned num_nvlinks = 0;
+    unsigned num_links, link;
     nvmlFieldValue_t value;
+    nvmlPciInfo_t pci;
+    nvmlDevice_t remote_device;
 
-    value.fieldId = NVML_FI_DEV_NVSWITCH_CONNECTED_LINK_COUNT;
+    value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
+
     UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetFieldValues(device, 1, &value));
 
     num_links = ((value.nvmlReturn == NVML_SUCCESS) &&
                  (value.valueType == NVML_VALUE_TYPE_UNSIGNED_INT)) ?
                 value.value.uiVal : 0;
 
-    return num_links;
-}
+    for (link = 0; link < num_links; ++link) {
+        UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetNvLinkRemotePciInfo(device, link,
+                                                               &pci));
+        if (NVML_ERROR_NOT_FOUND ==
+                nvmlDeviceGetHandleByPciBusId(pci.busId, &remote_device)) {
+            /* nvswitch has bus id but not device */
+            num_nvlinks++;
+            continue;
+        }
+    }
 
+    return num_nvlinks;
+}
 static int uct_cuda_base_get_num_nvlinks(nvmlDevice_t device1,
                                          nvmlDevice_t device2)
 {
