@@ -60,7 +60,7 @@ steps:
             -t 60 \
             ${{ parameters.iodemo_args }}
   displayName: Launch with run_io_demo.sh ( ${{ parameters.name }} )
-  timeoutInMinutes: 10
+  timeoutInMinutes: 15
 
 - bash: |
     python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list CI,$(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
@@ -80,7 +80,7 @@ steps:
     cat corrupter.log
   displayName: Kill corrupter
   condition: always()
-  timeoutInMinutes: 10
+  timeoutInMinutes: 2
 
 - bash: |
     set -eEx
