@@ -300,7 +300,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
 #endif
 #if HAVE_ROCM
     case UCS_MEMORY_TYPE_ROCM:
-        ROCM_CALL(hipMemset(buffer, c, length);
+        ROCM_CALL(hipMemset(buffer, c, length));
         ROCM_CALL(hipDeviceSynchronize());
         break;
 #endif
