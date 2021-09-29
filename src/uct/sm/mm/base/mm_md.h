@@ -69,7 +69,7 @@ typedef struct uct_mm_md {
  * @return UCS_OK - if MM transport is available on the machine, otherwise -
  *         error code.
  */
-typedef ucs_status_t (*uct_mm_mapper_query_func_t)(int *attach_shm_file_p);
+typedef ucs_status_t (*uct_mm_mapper_query_func_t)(uct_iface_attr_t *iface_attr);
 
 
 /* Return the size of memory-domain specific iface address (e.g mmap path) */

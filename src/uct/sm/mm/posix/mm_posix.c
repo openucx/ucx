@@ -89,9 +89,10 @@ static int uct_posix_use_shm_open(const uct_posix_md_config_t *posix_config)
     return !strcmp(posix_config->dir, UCT_POSIX_SHM_OPEN_DIR);
 }
 
-static ucs_status_t uct_posix_query(int *attach_shm_file_p)
+static ucs_status_t uct_posix_query(uct_iface_attr_t *iface_attr)
 {
-    *attach_shm_file_p = 1;
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
+    iface_attr->overhead   = 10e-9;
     return UCS_OK;
 }
 

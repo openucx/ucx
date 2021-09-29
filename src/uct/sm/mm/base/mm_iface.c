@@ -123,7 +123,6 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
 {
     uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
     uct_mm_md_t    *md    = ucs_derived_of(iface->super.super.md, uct_mm_md_t);
-    int attach_shm_file;
     ucs_status_t status;
 
     uct_base_iface_query(&iface->super.super, iface_attr);
@@ -169,17 +168,8 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE    |
                                           iface->config.extra_cap_flags;
 
-    status = uct_mm_md_mapper_ops(md)->query(&attach_shm_file);
+    status = uct_mm_md_mapper_ops(md)->query(iface_attr);
     ucs_assert_always(status == UCS_OK);
-    if (attach_shm_file) {
-        /*
-         * Only MM transports with attaching to SHM file can support error
-         * handling mechanisms (e.g. EP checking) to check if a peer was down,
-         * there is no safe way to check a process existence (touching a shared
-         * memory block of a peer leads to "bus" error in case of a peer is
-         * down) */
-        iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
-    }
 
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP     |
                                           UCT_IFACE_FLAG_EVENT_RECV          |
@@ -201,7 +191,6 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
     iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
     iface_attr->bandwidth.dedicated     = iface->super.config.bandwidth;
     iface_attr->bandwidth.shared        = 0;
-    iface_attr->overhead                = 10e-9; /* 10 ns */
     iface_attr->priority                = 0;
 
     return UCS_OK;

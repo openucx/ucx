@@ -87,6 +87,7 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_put_hdr_t),
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
+        .super.ppln_factor   = 1.38,
         .super.flags         = 0,
         .max_lanes           = 1,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,

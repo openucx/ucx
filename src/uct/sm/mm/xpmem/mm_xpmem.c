@@ -102,21 +102,18 @@ UCS_STATIC_CLEANUP {
     ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
 }
 
-static ucs_status_t uct_xpmem_query(int *attach_shm_file_p)
+static ucs_status_t uct_xpmem_query(uct_iface_attr_t *iface_attr)
 {
     int version;
 
     version = xpmem_version();
     if (version < 0) {
-        ucs_debug("xpmem_version() returned %d (%m), xpmem is unavailable",
-                  version);
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ucs_debug("xpmem version: %d", version);
-
-    *attach_shm_file_p = 0;
-
+    iface_attr->overhead = (ucs_arch_get_cpu_vendor() ==
+                            UCS_CPU_VENDOR_FUJITSU_ARM) ?
+                            3e-6 : 10e-9;
     return UCS_OK;
 }
 

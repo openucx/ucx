@@ -35,10 +35,10 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
                                        uct_md_resource_desc_t **resources_p,
                                        unsigned *num_resources_p)
 {
+    uct_iface_attr_t UCS_V_UNUSED iface_attr;
     ucs_status_t status;
-    int UCS_V_UNUSED attach_shm_file;
 
-    status = uct_mm_mdc_mapper_ops(component)->query(&attach_shm_file);
+    status = uct_mm_mdc_mapper_ops(component)->query(&iface_attr);
     switch (status) {
     case UCS_OK:
         return uct_md_query_single_md_resource(component, resources_p,

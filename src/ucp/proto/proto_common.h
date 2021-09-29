@@ -87,6 +87,9 @@ typedef struct {
     /* Protocol overhead */
     double                  overhead;
 
+    /* Multi-frag factor */
+    double                  ppln_factor;
+
     /* User-configured threshold */
     size_t                  cfg_thresh;
 
@@ -256,7 +259,7 @@ ucs_linear_func_t ucp_proto_common_ppln_perf(ucs_linear_func_t perf1,
  */
 void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
                                      const ucp_proto_perf_range_t *frag_range,
-                                     size_t max_length);
+                                     double factor, size_t max_length);
 
 
 void ucp_proto_common_init_base_caps(

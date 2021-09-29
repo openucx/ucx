@@ -145,9 +145,10 @@ uct_sysv_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
     return UCS_OK;
 }
 
-static ucs_status_t uct_sysv_query(int *attach_shm_file_p)
+static ucs_status_t uct_sysv_query(uct_iface_attr_t *iface_attr)
 {
-    *attach_shm_file_p = 1;
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
+    iface_attr->overhead   = 10e-9;
     return UCS_OK;
 }
 

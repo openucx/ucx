@@ -69,6 +69,7 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = hdr_size,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
+        .super.ppln_factor   = 1.38,
         .super.flags         = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,

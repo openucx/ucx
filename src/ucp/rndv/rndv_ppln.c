@@ -111,7 +111,7 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
               UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->super.perf));
 
     /* Add the single range of the pipeline protocol */
-    ucp_proto_common_add_ppln_range(init_params, &frag_range->super, SIZE_MAX);
+    ucp_proto_common_add_ppln_range(init_params, &frag_range->super, 0, SIZE_MAX);
 
     /* Add overheads: PPLN overhead and ack time */
     ppln_overhead = ucs_linear_func_make(ppln_frag_overhead,

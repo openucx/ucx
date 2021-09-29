@@ -571,35 +571,36 @@ ucp_proto_common_ppln3_perf(ucs_linear_func_t perf1, ucs_linear_func_t perf2,
 
 void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
                                      const ucp_proto_perf_range_t *frag_range,
-                                     size_t max_length)
+                                     double factor, size_t max_length)
 {
     ucp_proto_caps_t *caps = init_params->caps;
     ucp_proto_perf_range_t *ppln_range;
-    double frag_overhead;
+    ucs_linear_func_t frag_overhead;
 
     /* Add pipelined range */
     ppln_range = &caps->ranges[caps->num_ranges++];
 
     /* Overhead of sending one fragment before starting the pipeline */
-    frag_overhead =
+    frag_overhead.c =
             ucs_linear_func_apply(frag_range->perf[UCP_PROTO_PERF_TYPE_SINGLE],
                                   frag_range->max_length) -
             ucs_linear_func_apply(frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI],
                                   frag_range->max_length);
+    frag_overhead.m = frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI].m * factor;
 
     ppln_range->max_length = max_length;
 
     /* Apply the pipelining effect when sending multiple fragments */
     ppln_range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
             ucs_linear_func_add(frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI],
-                                ucs_linear_func_make(frag_overhead, 0));
+                                frag_overhead);
 
     /* Multiple send performance is the same */
     ppln_range->perf[UCP_PROTO_PERF_TYPE_MULTI] =
             frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI];
 
-    ucs_trace("frag-size: %zd" UCP_PROTO_TIME_FMT(frag_overhead),
-              frag_range->max_length, UCP_PROTO_TIME_ARG(frag_overhead));
+    ucs_trace("frag-size: %zd" UCP_PROTO_PERF_FUNC_FMT(frag_overhead),
+              frag_range->max_length, UCP_PROTO_PERF_FUNC_ARG(&frag_overhead));
 }
 
 void ucp_proto_common_init_base_caps(
@@ -783,6 +784,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
         ucp_proto_common_add_ppln_range(&params->super,
                                         &params->super.caps->ranges[0],
+                                        params->ppln_factor,
                                         params->max_length);
     }
 
