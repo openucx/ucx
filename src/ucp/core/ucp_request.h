@@ -37,7 +37,7 @@ enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
     UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
-    /* UCS_BIT(3) is a vacant flag */
+    UCP_REQUEST_FLAG_USER_MEMH             = UCS_BIT(3),
     UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED  = UCS_BIT(4),
     UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK              = UCS_BIT(6),
@@ -55,13 +55,12 @@ enum {
 #if UCS_ENABLE_ASSERT
     UCP_REQUEST_FLAG_STREAM_RECV           = UCS_BIT(19),
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = UCS_BIT(20),
-    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(21),
+    UCP_REQUEST_FLAG_SUPER_VALID           = UCS_BIT(21)
 #else
     UCP_REQUEST_FLAG_STREAM_RECV           = 0,
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
-    UCP_REQUEST_FLAG_SUPER_VALID           = 0,
+    UCP_REQUEST_FLAG_SUPER_VALID           = 0
 #endif
-    UCP_REQUEST_FLAG_USER_MEMH             = UCS_BIT(22)
 };
 
 
@@ -497,10 +496,10 @@ int ucp_request_pending_add(ucp_request_t *req);
 ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
                                     void *buffer, size_t length, ucp_datatype_t datatype,
                                     ucp_dt_state_t *state, ucs_memory_type_t mem_type,
-                                    ucp_request_t *req, unsigned uct_flags);
+                                    ucp_request_t *req_dbg, unsigned uct_flags);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
-                              ucp_dt_state_t *state, ucp_request_t *req);
+                              ucp_dt_state_t *state, ucp_request_t *req_dbg);
 
 void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status);
 

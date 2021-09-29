@@ -86,6 +86,7 @@ typedef struct {
     bool                     debug_timeout;
     bool                     use_epoll;
     ucs_memory_type_t        memory_type;
+    bool                     prereg;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -446,8 +447,8 @@ protected:
             case UCS_MEMORY_TYPE_HOST:
                 buffer = UcxContext::memalign(ALIGNMENT, size,
                                               pool.name().c_str());
-                if (context != NULL && buffer != NULL) {
-                    if (context->map_buffer(size, buffer, &memh, 0) != UCS_OK) {
+                if ((context != NULL) && (buffer != NULL)) {
+                    if (!context->map_buffer(size, buffer, &memh)) {
                         free(buffer);
                         buffer = NULL;
                     }
@@ -475,9 +476,9 @@ protected:
                 break;
 #endif
             case UCS_MEMORY_TYPE_HOST:
-                if (_memh && _context) {
-                    ucs_status_t status = _context->unmap_buffer(_memh);
-                    assert(status == UCS_OK);
+                if (_memh != NULL) {
+                    bool ret = _context->unmap_buffer(_memh);
+                    assert(ret);
                 }
                 free(_buffer);
                 break;
@@ -755,7 +756,7 @@ protected:
                                          test_opts.chunk_size),
                            "data iovs"),
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
-                          test_opts.memory_type, this)
+                          test_opts.memory_type, test_opts.prereg ? this : NULL)
     {
         _status                  = OK;
 
@@ -874,12 +875,15 @@ protected:
 public:
     bool init()
     {
-        if (UcxContext::init()) {
-            _data_chunks_pool.init(opts().num_offcache_buffers);
-            return true;
+        if (!UcxContext::init()) {
+            return false;
         }
 
-        return false;
+        /* Initialize data chunks pool after context initialized
+         * and is able to register memory.
+         */
+        _data_chunks_pool.init(opts().num_offcache_buffers);
+        return true;
     }
 
 private:
@@ -2469,9 +2473,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->debug_timeout         = false;
     test_opts->use_epoll             = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
+    test_opts->prereg                = false;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:M")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2613,6 +2618,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
                 return -1;
             }
             break;
+        case 'M':
+            test_opts->prereg = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -2652,6 +2660,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
                       << ", cuda, cuda-managed"
 #endif
                       << std::endl;
+            std::cout << "  -M                          Enable pre-register buffers" << std::endl;
             return -1;
         }
     }

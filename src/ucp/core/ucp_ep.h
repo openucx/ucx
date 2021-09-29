@@ -366,6 +366,9 @@ struct ucp_ep_config {
 
     /* Protocol selection data */
     ucp_proto_select_t            proto_select;
+
+    /* MD map for all lanes */
+    ucp_md_map_t                  md_map;
 };
 
 

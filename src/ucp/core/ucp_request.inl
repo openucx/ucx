@@ -383,17 +383,10 @@ ucp_request_memh_init(ucp_request_t *req, ucp_ep_h ep, ucp_mem_h memh)
 
     assert(memh != NULL);
 
-    *md_map_p = 0;
-    for (i = 0; i < ep_conf->key.num_lanes; i++) {
-        md_idx = ep_conf->md_index[i];
-        if (md_idx != UCP_NULL_RESOURCE) {
-            *md_map_p |= UCS_BIT(md_idx);
-        }
-    }
-
+    *md_map_p = ep_conf->md_map;
     i = 0;
     ucs_for_each_bit(md_idx, *md_map_p) {
-        assert(memh->md_map & UCS_BIT(md_idx));
+        ucs_assert(memh->md_map & UCS_BIT(md_idx));
         uct_memh[i++] = ucp_memh2uct(memh, md_idx);
     }
 
@@ -557,6 +550,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_send_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
                             unsigned uct_flags)
 {
+    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        return UCS_OK;
+    }
+
     return ucp_request_memory_reg(req->send.ep->worker->context, md_map,
                                   (void*)req->send.buffer, req->send.length,
                                   req->send.datatype, &req->send.state.dt,
@@ -625,6 +622,10 @@ ucp_request_recv_buffer_reg(ucp_request_t *req, ucp_md_map_t md_map,
 
 static UCS_F_ALWAYS_INLINE void ucp_request_send_buffer_dereg(ucp_request_t *req)
 {
+    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        return;
+    }
+
     ucp_request_memory_dereg(req->send.ep->worker->context, req->send.datatype,
                              &req->send.state.dt, req);
 }

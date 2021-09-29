@@ -23,8 +23,7 @@
 
 #define AM_MSG_ID 0
 
-ucs_status_t UcxContext::map_buffer(size_t length, void *address,
-                                    ucp_mem_h *memh_p, int non_blk_flag)
+bool UcxContext::map_buffer(size_t length, void *address, ucp_mem_h *memh_p)
 {
     ucp_mem_map_params_t mem_map_params;
 
@@ -32,17 +31,13 @@ ucs_status_t UcxContext::map_buffer(size_t length, void *address,
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH; 
     mem_map_params.address    = address;
     mem_map_params.length     = length;
-    if (non_blk_flag) {
-        mem_map_params.field_mask |= UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        mem_map_params.flags       = non_blk_flag;
-    }
 
-    return ucp_mem_map(_context, &mem_map_params, memh_p);
+    return (ucp_mem_map(_context, &mem_map_params, memh_p) == UCS_OK);
 }
 
-ucs_status_t UcxContext::unmap_buffer(ucp_mem_h memh)
+bool UcxContext::unmap_buffer(ucp_mem_h memh)
 {
-    return ucp_mem_unmap(_context, memh);
+    return (ucp_mem_unmap(_context, memh) == UCS_OK);
 }
 
 struct ucx_request {
@@ -906,6 +901,7 @@ bool UcxConnection::recv_data(void *buffer, ucp_mem_h memh, size_t length,
     ucp_tag_t tag      = make_data_tag(_conn_id, sn);
     ucp_tag_t tag_mask = std::numeric_limits<ucp_tag_t>::max();
     ucp_request_param_t param;
+
     param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
                          UCP_OP_ATTR_FIELD_CALLBACK |
                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
@@ -1193,7 +1189,7 @@ bool UcxConnection::send_common(const void *buffer, ucp_mem_h memh,
                                 size_t length, ucp_tag_t tag,
                                 UcxCallback* callback)
 {
-    ucp_request_param_t params = {};
+    ucp_request_param_t params;
 
     if (_ep == NULL) {
         (*callback)(UCS_ERR_CANCELED);
@@ -1202,8 +1198,10 @@ bool UcxConnection::send_common(const void *buffer, ucp_mem_h memh,
 
     assert(_ucx_status == UCS_OK);
 
-    params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
+    params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                          UCP_OP_ATTR_FIELD_DATATYPE;
     params.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
+    params.datatype     = ucp_dt_make_contig(1);
     if (memh) {
         params.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
         params.memh          = memh;

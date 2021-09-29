@@ -131,10 +131,9 @@ public:
 
     static void free(void *ptr);
 
-    ucs_status_t map_buffer(size_t length, void *address, ucp_mem_h *memh,
-                            int non_blk_flag);
+    bool map_buffer(size_t length, void *address, ucp_mem_h *memh);
 
-    ucs_status_t unmap_buffer(ucp_mem_h memh);
+    bool unmap_buffer(ucp_mem_h memh);
 
 protected:
 

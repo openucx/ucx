@@ -442,10 +442,10 @@ static void ucp_request_dt_dereg(ucp_context_t *context, ucp_dt_reg_t *dt_reg,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
-                 (context, md_map, buffer, length, datatype, state, mem_type, req, uct_flags),
+                 (context, md_map, buffer, length, datatype, state, mem_type, req_dbg, uct_flags),
                  ucp_context_t *context, ucp_md_map_t md_map, void *buffer,
                  size_t length, ucp_datatype_t datatype, ucp_dt_state_t *state,
-                 ucs_memory_type_t mem_type, ucp_request_t *req, unsigned uct_flags)
+                 ucs_memory_type_t mem_type, ucp_request_t *req_dbg, unsigned uct_flags)
 {
     size_t iov_it, iovcnt;
     const ucp_dt_iov_t *iov;
@@ -462,14 +462,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
     flags  = UCT_MD_MEM_ACCESS_RMA | uct_flags;
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-            break;
-        }
         ucs_assert(ucs_popcount(md_map) <= UCP_MAX_OP_MDS);
         status = ucp_mem_rereg_mds(context, md_map, buffer, length, flags,
                                    NULL, mem_type, NULL, state->dt.contig.memh,
                                    &state->dt.contig.md_map);
-        ucp_trace_req(req, "mem reg md_map 0x%"PRIx64"/0x%"PRIx64,
+        ucp_trace_req(req_dbg, "mem reg md_map 0x%"PRIx64"/0x%"PRIx64,
                       state->dt.contig.md_map, md_map);
         break;
     case UCP_DATATYPE_IOV:
@@ -490,11 +487,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_request_memory_reg,
                                            &dt_reg[iov_it].md_map);
                 if (status != UCS_OK) {
                     /* unregister previously registered memory */
-                    ucp_request_dt_dereg(context, dt_reg, iov_it, req);
+                    ucp_request_dt_dereg(context, dt_reg, iov_it, req_dbg);
                     ucs_free(dt_reg);
                     goto err;
                 }
-                ucp_trace_req(req,
+                ucp_trace_req(req_dbg,
                               "mem reg iov %ld/%ld md_map 0x%"PRIx64"/0x%"PRIx64,
                               iov_it, iovcnt, dt_reg[iov_it].md_map, md_map);
             }
@@ -518,24 +515,21 @@ err:
     return status;
 }
 
-UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req),
+UCS_PROFILE_FUNC_VOID(ucp_request_memory_dereg, (context, datatype, state, req_dbg),
                       ucp_context_t *context, ucp_datatype_t datatype,
-                      ucp_dt_state_t *state, ucp_request_t *req)
+                      ucp_dt_state_t *state, ucp_request_t *req_dbg)
 {
     ucs_trace_func("context=%p datatype=0x%"PRIx64" state=%p", context,
                    datatype, state);
 
     switch (datatype & UCP_DATATYPE_CLASS_MASK) {
     case UCP_DATATYPE_CONTIG:
-        if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-            break;
-        }
-        ucp_request_dt_dereg(context, &state->dt.contig, 1, req);
+        ucp_request_dt_dereg(context, &state->dt.contig, 1, req_dbg);
         break;
     case UCP_DATATYPE_IOV:
         if (state->dt.iov.dt_reg != NULL) {
             ucp_request_dt_dereg(context, state->dt.iov.dt_reg,
-                                 state->dt.iov.iovcnt, req);
+                                 state->dt.iov.iovcnt, req_dbg);
             ucs_free(state->dt.iov.dt_reg);
             state->dt.iov.dt_reg = NULL;
         }

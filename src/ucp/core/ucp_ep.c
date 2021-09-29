@@ -2081,6 +2081,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         rsc_index = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             config->md_index[lane] = context->tl_rscs[rsc_index].md_index;
+            config->md_map        |= UCS_BIT(config->md_index[lane]);
             if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
                 config->p2p_lanes |= UCS_BIT(lane);
             }
@@ -2088,6 +2089,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             config->md_index[lane] = UCP_NULL_RESOURCE;
         }
     }
+    ucs_assert(ucs_popcount(config->md_map) <= UCP_MAX_OP_MDS);
 
     /* configuration for rndv */
     get_zcopy_lane_count = put_zcopy_lane_count = 0;
