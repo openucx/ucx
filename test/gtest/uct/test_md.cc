@@ -340,8 +340,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
                                       slice_length, &mem_attr);
             ASSERT_UCS_OK(status);
             EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
-            if ((alloc_mem_type == UCS_MEMORY_TYPE_CUDA) ||
-                (alloc_mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            if (alloc_mem_type == UCS_MEMORY_TYPE_CUDA) {
                 EXPECT_EQ(buffer_size, mem_attr.alloc_length);
                 EXPECT_EQ(address, mem_attr.base_address);
             } else {
@@ -360,6 +359,8 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
         UCS_TEST_MESSAGE << ucs_memory_type_names[alloc_mem_type] << ": "
                          << "sys_dev[" << static_cast<int>(mem_attr.sys_dev)
                          << "] (" << dev_name << ")";
+
+        free_memory(address, static_cast<ucs_memory_type_t>(alloc_mem_type));
     }
 }
 
