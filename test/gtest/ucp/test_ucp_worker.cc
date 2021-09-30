@@ -770,3 +770,42 @@ UCS_TEST_P(test_ucp_worker_address_query, query)
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_worker_address_query)
+
+class test_ucp_modify_uct_cfg : public test_ucp_context {
+public:
+    test_ucp_modify_uct_cfg() : m_seg_size((ucs::rand() & 0x3ff) + 1024) {
+        ucp_config_modify(m_ucp_config, "IB_SEG_SIZE",
+                          ucs::to_string(m_seg_size).c_str());
+    }
+
+    void verify_seg_size(ucp_worker_h worker) const {
+        ucp_rsc_index_t tl_id;
+
+        UCS_BITMAP_FOR_EACH_BIT(worker->context->tl_bitmap, tl_id) {
+            ucp_worker_iface_t *wiface = ucp_worker_iface(worker, tl_id);
+
+            if (wiface->attr.cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
+                EXPECT_EQ(m_seg_size, wiface->attr.cap.put.max_bcopy)
+                << "tl : " << worker->context->tl_rscs[tl_id].tl_rsc.tl_name;
+            }
+        }
+    }
+
+private:
+    const size_t m_seg_size;
+};
+
+UCS_TEST_P(test_ucp_modify_uct_cfg, verify_seg_size)
+{
+    entity *e = create_entity();
+
+    verify_seg_size(e->worker());
+}
+
+/**
+ * Validate below transports in which SEG_SIZE parameter affects
+ * put.max_bcopy.
+ */
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, dcx, "dc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, rc,  "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_modify_uct_cfg, rcx, "rc_x")
