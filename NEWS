@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.11.2-rc1 (September 23, 2021)
+## 1.11.2 (September 30, 2021)
 ### Bugfixes
 * Fixes in Java release pipeline
 * Fixes in handling large number of devices
