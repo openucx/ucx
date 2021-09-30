@@ -117,6 +117,12 @@ BEGIN_C_DECLS
 #define ucs_count_trailing_zero_bits(_n) \
     ((sizeof(_n) <= 4) ? __builtin_ctz((uint32_t)(_n)) : __builtin_ctzl(_n))
 
+/* Returns the number of leading 0-bits in _n.
+ * If _n is 0, the result is undefined
+ */
+#define ucs_count_leading_zero_bits(_n) \
+    ((sizeof(_n) <= 4) ? __builtin_clz((uint32_t)(_n)) : __builtin_clzl(_n))
+
 /* Returns the number of 1-bits by _idx mask */
 #define ucs_bitmap2idx(_map, _idx) \
     ucs_popcount((_map) & (UCS_MASK(_idx)))
