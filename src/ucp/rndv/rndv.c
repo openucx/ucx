@@ -1184,7 +1184,9 @@ ucp_rndv_is_rkey_ptr(const ucp_rndv_rts_hdr_t *rndv_rts_hdr,
            (ucp_rkey_packed_md_map(rkey_buffer) &
             ep_config->rndv.rkey_ptr_dst_mds) &&
            /* rendezvous mode must not be forced to put/get */
-           (rndv_mode == UCP_RNDV_MODE_AUTO) &&
+           ((rndv_mode == UCP_RNDV_MODE_AUTO) ||
+           /*  or be forced to rkey_ptr */
+            (rndv_mode == UCP_RNDV_MODE_RKEY_PTR)) &&
            /* need local memory access for data unpack */
            UCP_MEM_IS_ACCESSIBLE_FROM_CPU(recv_mem_type);
 }

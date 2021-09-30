@@ -96,8 +96,6 @@ typedef struct ucp_context_config {
     size_t                                 estimated_num_eps;
     /** Estimated number of processes per node */
     size_t                                 estimated_num_ppn;
-    /** Memtype cache */
-    int                                    enable_memtype_cache;
     /** Enable flushing endpoints while flushing a worker */
     int                                    flush_worker_eps;
     /** Enable optimizations suitable for homogeneous systems */
@@ -125,8 +123,8 @@ typedef struct ucp_context_config {
 
 struct ucp_config {
     /** Array of device lists names to use.
-     *  This array holds three lists - network devices, shared memory devices
-     *  and acceleration devices */
+     *  This array holds four lists - network devices, shared memory devices,
+     *  acceleration devices and loop-back devices */
     ucs_config_names_array_t               devices[UCT_DEVICE_TYPE_LAST];
     /** Array of transport names to use */
     ucs_config_allow_list_t                tls;
@@ -146,6 +144,8 @@ struct ucp_config {
     char                                   *selection_cmp;
     /** Configuration saved directly in the context */
     ucp_context_config_t                   ctx;
+    /** Save ucx configurations not listed in ucp_config_table **/
+    ucs_list_link_t                        cached_key_list;
 };
 
 
@@ -195,7 +195,6 @@ typedef struct ucp_tl_md {
  * UCP context
  */
 typedef struct ucp_context {
-
     ucp_tl_cmpt_t                 *tl_cmpts;  /* UCT components */
     ucp_rsc_index_t               num_cmpts;  /* Number of UCT components */
 
@@ -212,7 +211,6 @@ typedef struct ucp_context {
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
     uint64_t                      mem_type_mask;            /* Supported mem type mask */
-    ucs_memtype_cache_t           *memtype_cache;           /* mem type allocation cache */
 
     ucp_tl_resource_desc_t        *tl_rscs;   /* Array of communication resources */
     ucp_tl_bitmap_t               tl_bitmap;  /* Cached map of tl resources used by workers.
@@ -276,6 +274,8 @@ typedef struct ucp_context {
 
     char                          name[UCP_ENTITY_NAME_MAX];
 
+    /* Save cached uct configurations */
+    ucs_list_link_t               cached_key_list;
 } ucp_context_t;
 
 
@@ -462,12 +462,6 @@ ucp_tl_iface_bandwidth(ucp_context_h context, const uct_ppn_bandwidth_t *bandwid
            (bandwidth->shared / context->config.est_num_ppn);
 }
 
-static UCS_F_ALWAYS_INLINE int ucp_memory_type_cache_is_empty(ucp_context_h context)
-{
-    return (context->memtype_cache &&
-            !context->memtype_cache->pgtable.num_regions);
-}
-
 static UCS_F_ALWAYS_INLINE void
 ucp_memory_info_set_host(ucp_memory_info_t *mem_info)
 {
@@ -485,13 +479,8 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
         goto out_host_mem;
     }
 
-    if (ucs_likely(context->memtype_cache != NULL)) {
-        if (!context->memtype_cache->pgtable.num_regions) {
-            goto out_host_mem;
-        }
-
-        status = ucs_memtype_cache_lookup(context->memtype_cache, address,
-                                          length, mem_info);
+    status = ucs_memtype_cache_lookup(address, length, mem_info);
+    if (status != UCS_ERR_NO_ELEM) {
         if (ucs_likely(status != UCS_OK)) {
             ucs_assert(status == UCS_ERR_NO_ELEM);
             goto out_host_mem;
@@ -545,5 +534,13 @@ void ucp_tl_bitmap_validate(const ucp_tl_bitmap_t *tl_bitmap,
 
 
 const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx);
+
+
+ucs_status_t
+ucp_config_modify_internal(ucp_config_t *config, const char *name,
+                           const char *value);
+
+
+void ucp_apply_uct_config_list(ucp_context_h context, void *config);
 
 #endif

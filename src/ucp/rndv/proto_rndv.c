@@ -43,10 +43,15 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
             continue;
         }
 
-        /* Check the lane supports get_zcopy */
         iface_attr = ucp_proto_common_get_iface_attr(&params->super.super,
                                                      lane);
-        if (!(iface_attr->cap.flags &
+        ep_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
+        md_index   = ucp_proto_common_get_md_index(&params->super.super, lane);
+        md_attr    = &worker->context->tl_mds[md_index].attr;
+
+        /* Check the lane supports get_zcopy or rkey_ptr */
+        if (!(md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR) &&
+            !(iface_attr->cap.flags &
               (UCT_IFACE_FLAG_GET_ZCOPY | UCT_IFACE_FLAG_PUT_ZCOPY))) {
             continue;
         }
@@ -54,14 +59,13 @@ ucp_proto_rndv_ctrl_get_md_map(const ucp_proto_rndv_ctrl_init_params_t *params,
         /* Check the memory domain requires remote key, and capable of
          * registering the memory type
          */
-        ep_sys_dev = ucp_proto_common_get_sys_dev(&params->super.super, lane);
-        md_index   = ucp_proto_common_get_md_index(&params->super.super, lane);
-        md_attr    = &worker->context->tl_mds[md_index].attr;
         if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
             !(md_attr->cap.reg_mem_types & UCS_BIT(params->mem_info.type))) {
             continue;
         }
 
+        ucs_trace_req("lane[%d]: selected md %s\n", lane,
+                      worker->context->tl_mds[md_index].rsc.md_name);
         *md_map |= UCS_BIT(md_index);
 
         if (ep_sys_dev >= UCP_MAX_SYS_DEVICES) {
@@ -205,6 +209,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
                                                     rpriv->lane);
     ctrl_latency  = (iface_attr->overhead * 2) + params->super.overhead +
                     ucp_tl_iface_latency(context, &iface_attr->latency);
+    ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
+              UCP_PROTO_TIME_ARG(ctrl_latency));
     send_overhead = ucs_linear_func_add3(
             ucp_proto_common_memreg_time(&params->super, rpriv->md_map),
             ucs_linear_func_make(ctrl_latency, 0.0), params->unpack_time);
@@ -357,6 +363,9 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
         for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
             ucs_linear_func_add_inplace(&caps->ranges[i].perf[perf_type],
                                         ack_perf[perf_type]);
+            ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_FMT(ack),
+                      i, ucp_proto_perf_types[perf_type],
+                      UCP_PROTO_PERF_FUNC_ARG(&caps->ranges[i].perf[perf_type]));
         }
     }
 
@@ -374,6 +383,15 @@ size_t ucp_proto_rndv_pack_ack(void *dest, void *arg)
     ack_hdr->status = UCS_OK;
 
     return sizeof(*ack_hdr);
+}
+
+ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+
+    return ucp_proto_rndv_ack_progress(req, req->send.proto_config->priv,
+                                       UCP_AM_ID_RNDV_ATS,
+                                       ucp_proto_rndv_recv_complete);
 }
 
 void ucp_proto_rndv_bulk_config_str(size_t min_length, size_t max_length,
@@ -435,9 +453,9 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
     req->send.rndv.rkey = rkey;
 
     ucp_trace_req(req,
-                  "%s rva 0x%" PRIx64 " rreq_id 0x%" PRIx64 " with protocol %s",
+                  "%s rva 0x%" PRIx64 " length %zd rreq_id 0x%" PRIx64 " with protocol %s",
                   ucp_operation_names[op_id], req->send.rndv.remote_address,
-                  req->send.rndv.remote_req_id,
+                  length, req->send.rndv.remote_req_id,
                   req->send.proto_config->proto->name);
     return UCS_OK;
 

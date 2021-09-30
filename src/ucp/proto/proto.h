@@ -238,5 +238,7 @@ extern const ucp_proto_t *ucp_protocols[UCP_PROTO_MAX_COUNT];
 /* Number of globally registered protocols */
 extern unsigned ucp_protocols_count;
 
+/* Performance types names */
+extern const char *ucp_proto_perf_types[];
 
 #endif

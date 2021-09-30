@@ -1938,7 +1938,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
  * This routine checks API version compatibility, then discovers the available
  * network interfaces, and initializes the network resources required for
  * discovering of the network and memory related devices.
- *  This routine is responsible for initialization all information required for
+ * This routine is responsible for initialization all information required for
  * a particular application scope, for example, MPI application, OpenSHMEM
  * application, etc.
  *

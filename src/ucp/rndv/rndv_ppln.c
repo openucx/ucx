@@ -105,15 +105,10 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     caps->min_length        = frag_max_length + 1;
     caps->num_ranges        = 0;
 
-    ucs_trace("rndv_ppln frag %s"
-              " single:" UCP_PROTO_PERF_FUNC_FMT
-              " multi:" UCP_PROTO_PERF_FUNC_FMT,
+    ucs_trace("rndv_ppln frag %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
               ucs_memunits_to_str(rpriv->frag_size, frag_size_str,
                                   sizeof(frag_size_str)),
-              UCP_PROTO_PERF_FUNC_ARG(
-                      &frag_range->super.perf[UCP_PROTO_PERF_TYPE_SINGLE]),
-              UCP_PROTO_PERF_FUNC_ARG(
-                      &frag_range->super.perf[UCP_PROTO_PERF_TYPE_MULTI]));
+              UCP_PROTO_PERF_FUNC_TYPES_ARG(frag_range->super.perf));
 
     /* Add the single range of the pipeline protocol */
     ucp_proto_common_add_ppln_range(init_params, &frag_range->super, SIZE_MAX);

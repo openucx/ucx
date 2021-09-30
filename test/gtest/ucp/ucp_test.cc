@@ -359,7 +359,7 @@ int ucp_test::get_variant_thread_type() const {
 }
 
 void ucp_test::add_variant_value(std::vector<ucp_test_variant_value>& values,
-                                 int value, std::string name)
+                                 int value, const std::string& name)
 {
     ucp_test_variant_value entry = {value, name};
     values.push_back(entry);
@@ -450,7 +450,7 @@ void ucp_test::modify_config(const std::string& name, const std::string& value,
 {
     ucs_status_t status;
 
-    status = ucp_config_modify(m_ucp_config, name.c_str(), value.c_str());
+    status = ucp_config_modify_internal(m_ucp_config, name.c_str(), value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
         test_base::modify_config(name, value, mode);
     } else if (status != UCS_OK) {

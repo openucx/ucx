@@ -23,6 +23,10 @@ typedef struct ucs_memtype_cache         ucs_memtype_cache_t;
 typedef struct ucs_memtype_cache_region  ucs_memtype_cache_region_t;
 
 
+/* The single global instance of memory type cache */
+extern ucs_memtype_cache_t *ucs_memtype_cache_global_instance;
+
+
 /* Memory information record */
 typedef struct ucs_memory_info {
     ucs_memory_type_t type;          /**< Memory type, use uint8 for compact size */
@@ -47,27 +51,8 @@ struct ucs_memtype_cache {
 
 
 /**
- * Create a memtype cache.
- *
- * @param [out] memtype_cache_p Filled with a pointer to the memtype cache.
- *
- * @return Error code.
- */
-ucs_status_t ucs_memtype_cache_create(ucs_memtype_cache_t **memtype_cache_p);
-
-
-/**
- * Destroy a memtype cache.
- *
- * @param [in]  memtype_cache       Memtype cache to destroy.
- */
-void ucs_memtype_cache_destroy(ucs_memtype_cache_t *memtype_cache);
-
-
-/**
  * Find if address range is in memtype cache.
  *
- * @param [in]  memtype_cache   Memtype cache to search.
  * @param [in]  address         Address to lookup.
  * @param [in]  size            Length of the memory.
  * @param [out] mem_info        Set to the memory info of the address range.
@@ -77,8 +62,7 @@ void ucs_memtype_cache_destroy(ucs_memtype_cache_t *memtype_cache);
  *
  * @return Error code.
  */
-ucs_status_t ucs_memtype_cache_lookup(ucs_memtype_cache_t *memtype_cache,
-                                      const void *address, size_t size,
+ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);
 
 
@@ -87,26 +71,22 @@ ucs_status_t ucs_memtype_cache_lookup(ucs_memtype_cache_t *memtype_cache,
  * Can be used after @ucs_memtype_cache_lookup returns UCM_MEM_TYPE_LAST, to
  * set the memory type after it was detected.
  *
- * @param [in]  memtype_cache   Memtype cache to update.
  * @param [in]  address         Start address to update.
  * @param [in]  size            Size of the memory to update.
  * @param [in]  mem_info        Set the memory info of the address range to this
  *                              value.
  */
-void ucs_memtype_cache_update(ucs_memtype_cache_t *memtype_cache,
-                              const void *address, size_t size,
+void ucs_memtype_cache_update(const void *address, size_t size,
                               const ucs_memory_info_t *mem_info);
 
 
 /**
  * Remove the address range from a memtype cache.
  *
- * @param [in]  memtype_cache   Memtype cache to remove.
  * @param [in]  address         Start address to remove.
  * @param [in]  size            Size of the memory to remove.
  */
-void ucs_memtype_cache_remove(ucs_memtype_cache_t *memtype_cache,
-                              const void *address, size_t size);
+void ucs_memtype_cache_remove(const void *address, size_t size);
 
 
 /**
@@ -115,6 +95,18 @@ void ucs_memtype_cache_remove(ucs_memtype_cache_t *memtype_cache,
  * @param [out] mem_info        Pointer to memory info structure.
  */
 void ucs_memory_info_set_host(ucs_memory_info_t *mem_info);
+
+
+/**
+ * Find if global memtype_cache is empty.
+ *
+ * @return 1 if empty 0 if otherwise.
+ */
+static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_is_empty()
+{
+    return (ucs_memtype_cache_global_instance != NULL) &&
+           (ucs_memtype_cache_global_instance->pgtable.num_regions == 0);
+}
 
 END_C_DECLS
 

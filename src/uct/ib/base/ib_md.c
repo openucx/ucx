@@ -151,7 +151,7 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
 
     {"GPU_DIRECT_RDMA", "try",
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
-     ucs_offsetof(uct_ib_md_config_t, ext.enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
+     ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
 #ifdef HAVE_EXP_UMR
     {"MAX_INLINE_KLM_LIST", "inf",
@@ -287,19 +287,6 @@ typedef struct {
     int           silent;
 } uct_ib_md_mem_reg_thread_t;
 
-static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, uct_md_attr_t *md_attr,
-                                          const char *file,
-                                          ucs_memory_type_t mem_type)
-{
-    if (!access(file, F_OK)) {
-        md_attr->cap.reg_mem_types |= UCS_BIT(mem_type);
-    }
-
-    ucs_debug("%s: %s GPUDirect RDMA is %s",
-              uct_ib_device_name(&md->dev), ucs_memory_type_names[mem_type],
-              md_attr->cap.reg_mem_types & UCS_BIT(mem_type) ?
-              "enabled" : "disabled");
-}
 
 static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
@@ -316,28 +303,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
-
-    if (md->config.enable_gpudirect_rdma != UCS_NO) {
-        /* check if GDR driver is loaded */
-        uct_ib_check_gpudirect_driver(md, md_attr,
-                                      "/sys/kernel/mm/memory_peers/nv_mem/version",
-                                      UCS_MEMORY_TYPE_CUDA);
-
-        /* check if ROCM KFD driver is loaded */
-        uct_ib_check_gpudirect_driver(md, md_attr, "/dev/kfd",
-                                      UCS_MEMORY_TYPE_ROCM);
-
-        if (!(md_attr->cap.reg_mem_types & ~UCS_MEMORY_TYPES_CPU_ACCESSIBLE) &&
-            (md->config.enable_gpudirect_rdma == UCS_YES)) {
-                ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure"
-                          " nv_peer_mem or amdgpu plugin installed correctly.",
-                          uct_ib_device_name(&md->dev));
-                return UCS_ERR_UNSUPPORTED;
-        }
-    }
-
-    md_attr->rkey_packed_size = UCT_IB_MD_PACKED_RKEY_SIZE;
-    md_attr->reg_cost         = md->reg_cost;
+    md_attr->cap.reg_mem_types    = md->reg_mem_types;
+    md_attr->rkey_packed_size     = UCT_IB_MD_PACKED_RKEY_SIZE;
+    md_attr->reg_cost             = md->reg_cost;
     ucs_sys_cpuset_copy(&md_attr->local_cpus, &md->dev.local_cpus);
 
     return UCS_OK;
@@ -1196,7 +1164,7 @@ int uct_ib_device_is_accessible(struct ibv_device *device)
     ucs_snprintf_safe(device_path, sizeof(device_path), "%s%s",
                       "/dev/infiniband/", device->dev_name);
 
-    /* Could not stat the path or 
+    /* Could not stat the path or
        the path is not a char device file or
        the device cannot be accessed for read & write
     */
@@ -1321,7 +1289,7 @@ err:
 }
 
 static ucs_status_t
-uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
+uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
                             const uct_ib_md_config_t *md_config)
 {
     ucs_rcache_params_t rcache_params;
@@ -1335,8 +1303,8 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md, uct_md_attr_t *md_attr,
                                                md->memh_struct_size;
             rcache_params.max_alignment      = ucs_get_page_size();
             rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
-            if (md_attr->cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
-                rcache_params.ucm_events     |= UCM_EVENT_MEM_TYPE_FREE;
+            if (md->reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+                rcache_params.ucm_events    |= UCM_EVENT_MEM_TYPE_FREE;
             }
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
@@ -1682,11 +1650,22 @@ void uct_ib_md_parse_relaxed_order(uct_ib_md_t *md,
     }
 }
 
+static void uct_ib_check_gpudirect_driver(uct_ib_md_t *md, const char *file,
+                                          ucs_memory_type_t mem_type)
+{
+    if (!access(file, F_OK)) {
+        md->reg_mem_types |= UCS_BIT(mem_type);
+    }
+
+    ucs_debug("%s: %s GPUDirect RDMA is %s", uct_ib_device_name(&md->dev),
+              ucs_memory_type_names[mem_type],
+              md->reg_mem_types & UCS_BIT(mem_type) ? "enabled" : "disabled");
+}
+
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,
                                    const uct_ib_md_config_t *md_config)
 {
-    uct_md_attr_t md_attr;
     ucs_status_t status;
 
     md->super.ops       = &uct_ib_md_ops;
@@ -1734,22 +1713,39 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         goto err_cleanup_device;
     }
 
-    status = uct_md_query(&md->super, &md_attr);
-    if (status != UCS_OK) {
-        goto err_dealloc_pd;
+    /* Check for GPU-direct support */
+    md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    if (md_config->enable_gpudirect_rdma != UCS_NO) {
+        /* check if GDR driver is loaded */
+        uct_ib_check_gpudirect_driver(
+                md, "/sys/kernel/mm/memory_peers/nv_mem/version",
+                UCS_MEMORY_TYPE_CUDA);
+
+        /* check if ROCM KFD driver is loaded */
+        uct_ib_check_gpudirect_driver(md, "/dev/kfd", UCS_MEMORY_TYPE_ROCM);
+
+        if (!(md->reg_mem_types & ~UCS_MEMORY_TYPES_CPU_ACCESSIBLE) &&
+            (md_config->enable_gpudirect_rdma == UCS_YES)) {
+            ucs_error("%s: Couldn't enable GPUDirect RDMA. Please make sure"
+                      " nv_peer_mem or amdgpu plugin installed correctly.",
+                      uct_ib_device_name(&md->dev));
+            status = UCS_ERR_UNSUPPORTED;
+            goto err_dealloc_pd;
+        }
     }
 
-    status = uct_ib_md_parse_reg_methods(md, &md_attr, md_config);
+    status = uct_ib_md_parse_reg_methods(md, md_config);
     if (status != UCS_OK) {
         goto err_dealloc_pd;
     }
 
     md->dev.max_zcopy_log_sge = INT_MAX;
-    if (md_attr.cap.reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+    if (md->reg_mem_types & ~UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
         md->dev.max_zcopy_log_sge = 1;
     }
 
     md->pci_bw = uct_ib_md_pci_bw(md_config, ib_device);
+
     return UCS_OK;
 
 err_dealloc_pd:

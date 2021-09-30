@@ -311,15 +311,22 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
                 goto out;
             }
 
-            if (md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) {
-                if (!(rkey_config_key->md_map &
-                    UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
-                    ucs_trace("%s: no support of dst md map 0x%" PRIx64,
-                              lane_desc, rkey_config_key->md_map);
-                    continue;
-                }
-            } else if (!(md_attr->cap.access_mem_types &
-                         UCS_BIT(rkey_config_key->mem_type))) {
+            if (((md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) ||
+                 (flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR)) &&
+                !(rkey_config_key->md_map &
+                  UCS_BIT(ep_config_key->lanes[lane].dst_md_index))) {
+                /* If remote key required remote memory domain should be
+                 * available */
+                ucs_trace("%s: no support of dst md map 0x%" PRIx64,
+                          lane_desc, rkey_config_key->md_map);
+                continue;
+            }
+
+            if (!(md_attr->cap.flags & UCT_MD_FLAG_NEED_RKEY) &&
+                !(md_attr->cap.access_mem_types &
+                  UCS_BIT(rkey_config_key->mem_type))) {
+                /* Remote memory domain without remote key must be able to
+                 * access relevant memory type */
                 ucs_trace("%s: no access to remote mem type %s", lane_desc,
                           ucs_memory_type_names[rkey_config_key->mem_type]);
                 continue;
@@ -442,6 +449,9 @@ ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
         ucs_for_each_bit(md_index, reg_md_map) {
             md_attr = &context->tl_mds[md_index].attr;
             ucs_linear_func_add_inplace(&reg_cost, md_attr->reg_cost);
+            ucs_trace("md %s" UCP_PROTO_PERF_FUNC_FMT(reg_cost),
+                      context->tl_mds[md_index].rsc.md_name,
+                      UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
         }
     }
 
@@ -587,6 +597,9 @@ void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
     /* Multiple send performance is the same */
     ppln_range->perf[UCP_PROTO_PERF_TYPE_MULTI] =
             frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI];
+
+    ucs_trace("frag-size: %zd" UCP_PROTO_TIME_FMT(frag_overhead),
+              frag_range->max_length, UCP_PROTO_TIME_ARG(frag_overhead));
 }
 
 void ucp_proto_common_init_base_caps(
@@ -612,16 +625,14 @@ void ucp_proto_common_add_perf_range(
     char max_length_str[32];
 
     ucs_trace("range[%d] max_length %s"
-              " send-overhead:" UCP_PROTO_PERF_FUNC_FMT
-              " xfer-single:" UCP_PROTO_PERF_FUNC_FMT
-              " xfer-multi:" UCP_PROTO_PERF_FUNC_FMT
-              " receive-overhead:" UCP_PROTO_PERF_FUNC_FMT,
+              UCP_PROTO_PERF_FUNC_FMT(send_overhead)
+              " xfer" UCP_PROTO_PERF_FUNC_TYPES_FMT
+              UCP_PROTO_PERF_FUNC_FMT(recv_overhead),
               caps->num_ranges,
               ucs_memunits_to_str(max_length, max_length_str,
                                   sizeof(max_length_str)),
               UCP_PROTO_PERF_FUNC_ARG(&send_overhead),
-              UCP_PROTO_PERF_FUNC_ARG(&xfer_perf[UCP_PROTO_PERF_TYPE_SINGLE]),
-              UCP_PROTO_PERF_FUNC_ARG(&xfer_perf[UCP_PROTO_PERF_TYPE_MULTI]),
+              UCP_PROTO_PERF_FUNC_TYPES_ARG(xfer_perf),
               UCP_PROTO_PERF_FUNC_ARG(&recv_overhead));
 
     /* Single-fragment is adding overheads and transfer time */
@@ -639,6 +650,12 @@ void ucp_proto_common_add_perf_range(
     range->max_length = max_length;
     for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
         range->perf[perf_type] = ucs_linear_func_compose(bias, perf[perf_type]);
+        ucs_trace("%s"
+                  UCP_PROTO_PERF_FUNC_FMT(total)
+                  UCP_PROTO_PERF_FUNC_FMT(bias),
+                  ucp_proto_perf_types[perf_type],
+                  UCP_PROTO_PERF_FUNC_ARG(&perf[perf_type]),
+                  UCP_PROTO_PERF_FUNC_ARG(&range->perf[perf_type]));
     }
 
     ++caps->num_ranges;
@@ -657,6 +674,10 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     ucs_status_t status;
     size_t frag_size;
 
+    ucs_trace("caps" UCP_PROTO_TIME_FMT(overhead) UCP_PROTO_TIME_FMT(latency),
+              UCP_PROTO_TIME_ARG(perf->overhead),
+              UCP_PROTO_TIME_ARG(perf->latency));
+
     /* Remote access implies zero copy on receiver */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS) {
         ucs_assert(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY);
@@ -667,6 +688,8 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     /* Calculate sender overhead */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
         send_overhead = ucp_proto_common_memreg_time(params, reg_md_map);
+    } else if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) {
+        send_overhead = ucs_linear_func_make(0, 0);
     } else {
         ucs_assert(reg_md_map == 0);
         status = ucp_proto_common_buffer_copy_time(

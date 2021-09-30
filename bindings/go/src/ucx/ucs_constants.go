@@ -5,7 +5,10 @@
 
 package ucx
 
-// #include <ucp/api/ucp.h>
+//#include <ucp/api/ucp.h>
+//static inline const char* ucxgo_get_ucs_mem_type_name(ucs_memory_type_t idx) {
+//    return ucs_memory_type_names[idx];
+//}
 import "C"
 
 type UcsThreadMode int
@@ -25,6 +28,10 @@ const (
 	UCS_MEMORY_TYPE_ROCM_MANAGED UcsMemoryType = C.UCS_MEMORY_TYPE_ROCM_MANAGED /**< AMD ROCM managed system memory */
 	UCS_MEMORY_TYPE_UNKNOWN      UcsMemoryType = C.UCS_MEMORY_TYPE_UNKNOWN
 )
+
+func (m UcsMemoryType) String() string {
+	return C.GoString(C.ucxgo_get_ucs_mem_type_name(C.ucs_memory_type_t(m)))
+}
 
 // Checks whether context's memory type mask
 // (received via UcpContext.MemoryTypesMask()) supports particular memory type.

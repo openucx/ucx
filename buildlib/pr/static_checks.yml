@@ -4,7 +4,7 @@ jobs:
     pool:
       name: MLNX
       demands:
-      - ucx_docker_fast -equals yes
+      - ucx_docker -equals yes
     container: fedora
     steps:
       - checkout: self

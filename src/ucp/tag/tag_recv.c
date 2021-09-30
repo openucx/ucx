@@ -155,11 +155,13 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     /* process first fragment */
     UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
     msg_id = eagerf_hdr->msg_id;
-    ucp_tag_recv_request_process_rdesc(req, rdesc, 0);
+    status = ucp_tag_recv_request_process_rdesc(req, rdesc, 0);
+    if (status == UCS_INPROGRESS) {
+        /* process additional fragments */
+        ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id
+                                        UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
+    }
 
-    /* process additional fragments */
-    ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id
-                                    UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
     return req + 1;
 }
 

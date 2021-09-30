@@ -1126,6 +1126,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         goto err_free_iface;
     }
 
+    ucp_apply_uct_config_list(context, iface_config);
+
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >= sizeof(ucp_eager_sync_hdr_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
@@ -1353,6 +1355,8 @@ static ucs_status_t ucp_worker_add_resource_cms(ucp_worker_h worker)
                       context->tl_cmpts[cmpt_index].attr.name);
             goto err_free_cms;
         }
+
+        ucp_apply_uct_config_list(context, cm_config);
 
         status = uct_cm_open(cmpt, worker->uct, cm_config, &worker->cms[i].cm);
         uct_config_release(cm_config);
@@ -1948,6 +1952,32 @@ ucs_thread_mode_t ucp_worker_get_thread_mode(uint64_t worker_flags)
     return UCS_THREAD_MODE_SINGLE;
 }
 
+static void ucp_warn_unused_uct_config(ucp_context_h context)
+{
+    unsigned num_unused_cached_kv = 0;
+    ucs_string_buffer_t unused_cached_uct_cfg;
+    ucs_config_cached_key_t *key_val;
+
+    ucs_string_buffer_init(&unused_cached_uct_cfg);
+
+    ucs_list_for_each(key_val, &context->cached_key_list, list) {
+        if (!key_val->used) {
+            ucs_string_buffer_appendf(&unused_cached_uct_cfg, "%s,",
+                                      key_val->key);
+            ++num_unused_cached_kv;
+        }
+    }
+
+    if (num_unused_cached_kv > 0) {
+        ucs_string_buffer_rtrim(&unused_cached_uct_cfg , ",");
+        ucs_warn("unused cached uct configuration%s: %s",
+                 (num_unused_cached_kv > 1) ? "s" : "",
+                 ucs_string_buffer_cstr(&unused_cached_uct_cfg));
+    }
+
+    ucs_string_buffer_cleanup(&unused_cached_uct_cfg);
+}
+
 static void
 ucp_worker_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb,
                               void *arg_ptr, uint64_t arg_u64)
@@ -2177,6 +2207,9 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
      * so print used environment variables and warn about unused ones.
      */
     ucs_config_parser_print_env_vars_once(context->config.env_prefix);
+
+    /* Warn unused cached uct configuration */
+    ucp_warn_unused_uct_config(context);
 
     ucp_worker_create_vfs(context, worker);
 

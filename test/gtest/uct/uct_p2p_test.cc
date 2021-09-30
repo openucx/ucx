@@ -219,6 +219,9 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     if (repeat_count > 1000) {
         repeat_count = 1000;
     }
+    if (mem_type != UCS_MEMORY_TYPE_HOST) {
+        repeat_count /= 8;
+    }
     repeat_count /= ucs::test_time_multiplier();
     if (repeat_count == 0) {
         repeat_count = 1;

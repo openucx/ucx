@@ -2470,7 +2470,6 @@ ucs_status_t uct_md_config_read(uct_component_h component,
                                 uct_md_config_t **config_p);
 
 
-
 /**
  * @ingroup UCT_MD
  * @brief Check if remote sock address is accessible from the memory domain.
