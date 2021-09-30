@@ -43,13 +43,13 @@ parameters:
         test_name: am_cx6_rc
       "tag match on CX6/DC":
         args: ""
-        duration: 480
+        duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: tag_cx6_dc
       "active messages on CX6/DC":
         args: "-A"
-        duration: 480
+        duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_cx6_dc
