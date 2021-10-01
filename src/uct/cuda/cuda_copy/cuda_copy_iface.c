@@ -18,6 +18,10 @@
 #include <ucs/arch/cpu.h>
 
 
+#define UCT_CUDA_COPY_IFACE_OVERHEAD 0
+#define UCT_CUDA_COPY_IFACE_LATENCY  ucs_linear_func_make(8e-6, 0)
+
+
 static ucs_config_field_t uct_cuda_copy_iface_config_table[] = {
 
     {"", "", NULL,
@@ -109,7 +113,7 @@ static ucs_status_t uct_cuda_copy_iface_query(uct_iface_h tl_iface,
     iface_attr->cap.am.max_hdr          = 0;
     iface_attr->cap.am.max_iov          = 1;
 
-    iface_attr->latency                 = ucs_linear_func_make(8e-6, 0);
+    iface_attr->latency                 = UCT_CUDA_COPY_IFACE_LATENCY;
     iface_attr->bandwidth.dedicated     = 0;
     iface_attr->bandwidth.shared        = iface->config.bandwidth;
     iface_attr->overhead                = UCT_CUDA_COPY_IFACE_OVERHEAD;
@@ -321,6 +325,10 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
         perf_attr->overhead = UCT_CUDA_COPY_IFACE_OVERHEAD;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = UCT_CUDA_COPY_IFACE_LATENCY;
     }
 
     return UCS_OK;

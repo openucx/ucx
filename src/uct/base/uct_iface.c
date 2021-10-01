@@ -425,8 +425,8 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 ucs_status_t
 uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 {
-    ucs_status_t status;
     uct_iface_attr_t iface_attr;
+    ucs_status_t status;
 
     status = uct_iface_query(iface, &iface_attr);
     if (status != UCS_OK) {
@@ -434,12 +434,17 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     }
 
     /* By default, the performance is assumed to be the same for all operations */
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = iface_attr.overhead;
+    }
+
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth = iface_attr.bandwidth;
     }
 
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
-        perf_attr->overhead = iface_attr.overhead;
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = iface_attr.latency;
     }
 
     return UCS_OK;
