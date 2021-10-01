@@ -84,7 +84,7 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_OVERHEAD           = UCS_BIT(6),
 
     /** Enables @ref uct_perf_attr_t::bandwidth */
-    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(7)
+    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(7),
 
     /** Enables @ref uct_perf_attr_t::latency */
     UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(8)
