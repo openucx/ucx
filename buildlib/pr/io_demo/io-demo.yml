@@ -13,43 +13,43 @@ parameters:
     default: 5
   - name: uptime
     type: number
-    default: 40
+    default: 180
   - name: tests
     type: object
     default:
       "tag match on CX4":
         args: ""
-        duration: 480
+        duration: 600
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_cx4_rc
       "active messages on CX4":
         args: "-A"
-        duration: 480
+        duration: 600
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: am_cx4_rc
       "tag match on CX6/RC":
         args: ""
-        duration: 480
+        duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: tag_cx6_rc
       "active messages on CX6/RC":
         args: "-A"
-        duration: 480
+        duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: am_cx6_rc
-      #"tag match on CX6/DC":
-      #  args: ""
-      #  duration: 480
-      #  interface: $(roce_iface_cx6)
-      #  tls: "dc_x"
-      #  test_name: tag_cx6_dc
+      "tag match on CX6/DC":
+        args: ""
+        duration: 600
+        interface: $(roce_iface_cx6)
+        tls: "dc_x"
+        test_name: tag_cx6_dc
       "active messages on CX6/DC":
         args: "-A"
-        duration: 480
+        duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_cx6_dc
