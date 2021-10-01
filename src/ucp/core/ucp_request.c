@@ -60,14 +60,8 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
     if (req->flags & (UCP_REQUEST_FLAG_SEND_AM | UCP_REQUEST_FLAG_SEND_TAG)) {
         ucs_string_buffer_appendf(strb, "send length %zu ", req->send.length);
 
-        if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-            ucp_proto_select_param_str(&req->send.proto_config->select_param,
-                                       strb);
-            ucs_string_buffer_appendf(strb, " ");
-        } else {
-            progress_func_name = ucs_debug_get_symbol_name(req->send.uct.func);
-            ucs_string_buffer_appendf(strb, "%s() ", progress_func_name);
-        }
+        progress_func_name = ucs_debug_get_symbol_name(req->send.uct.func);
+        ucs_string_buffer_appendf(strb, "%s() ", progress_func_name);
 
         if (req->flags & UCP_REQUEST_FLAG_CALLBACK) {
             comp_func_name = ucs_debug_get_symbol_name(req->send.cb);
