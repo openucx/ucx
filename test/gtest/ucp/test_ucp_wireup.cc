@@ -552,7 +552,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
 UCS_TEST_P(test_ucp_wireup_1sided, multi_wireup) {
     skip_loopback();
 
-    const size_t count = 10;
+    const size_t count = ucs_max(2, 10 / ucs::test_time_multiplier());
     while (entities().size() < count) {
         create_entity();
     }
