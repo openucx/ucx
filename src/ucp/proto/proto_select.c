@@ -1091,6 +1091,7 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
     ucp_proto_select_param_t select_param;
     const ucp_proto_single_priv_t *spriv;
     ucp_memory_info_t mem_info;
+    ssize_t max_short_signed;
     uint32_t op_attr;
 
     ucp_memory_info_set_host(&mem_info);
@@ -1101,6 +1102,7 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
      * use fast-path short protocol only if the message size fits short protocol
      * in both regular mode and UCP_OP_ATTR_FLAG_FAST_CMPL mode.
      */
+    ucs_log_indent(1);
     ucs_for_each_submask(op_attr, op_attr_mask) {
         ucp_proto_select_param_init(&select_param, op_id, op_attr,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
@@ -1117,12 +1119,19 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
             goto out_disable;
         }
 
+        /* If max_msg_length exceeds SSIZE_MAX, use SSIZE_MAX, since short
+           protocol thresholds are signed values */
+        max_short_signed = ucs_min(thresh->max_msg_length, SSIZE_MAX);
+
+        ucs_trace("found short protocol %s max_msg_length %zu",
+                  thresh->proto_config.proto->name, thresh->max_msg_length);
+
         /* Assume short protocol uses 'ucp_proto_single_priv_t' */
         spriv = thresh->proto_config.priv;
 
         if (proto == NULL) {
             proto                            = thresh->proto_config.proto;
-            proto_short->max_length_host_mem = thresh->max_msg_length;
+            proto_short->max_length_host_mem = max_short_signed;
             proto_short->lane                = spriv->super.lane;
             proto_short->rkey_index          = spriv->super.rkey_index;
         } else {
@@ -1134,8 +1143,8 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
             }
 
             /* Fast-path threshold is the minimal of all op_attr options */
-            proto_short->max_length_host_mem = ucs_min(
-                    proto_short->max_length_host_mem, thresh->max_msg_length);
+            proto_short->max_length_host_mem =
+                    ucs_min(proto_short->max_length_host_mem, max_short_signed);
         }
     }
 
@@ -1146,9 +1155,15 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
     ucs_assert(proto_short->max_length_host_mem >= 0);
     proto_short->max_length_unknown_mem = (context->num_mem_type_detect_mds > 0) ?
                                           -1 : proto_short->max_length_host_mem;
+    ucs_log_indent(-1);
+    ucs_trace("%s: short threshold host memory %zd unknown memory %zd",
+              ucp_operation_names[op_id], proto_short->max_length_host_mem,
+              proto_short->max_length_unknown_mem);
     return;
 
 out_disable:
+    ucs_log_indent(-1);
+    ucs_trace("%s: disabling short protocol", ucp_operation_names[op_id]);
     ucp_proto_select_short_disable(proto_short);
 }
 
