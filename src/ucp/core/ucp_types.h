@@ -125,9 +125,14 @@ typedef enum {
     UCP_OP_ID_AMO_CSWAP,
     UCP_OP_ID_API_LAST,
 
-    UCP_OP_ID_RNDV_SEND = UCP_OP_ID_API_LAST,
+    /* Internal rendezvous operations */
+    UCP_OP_ID_RNDV_FIRST = UCP_OP_ID_API_LAST,
+    UCP_OP_ID_RNDV_SEND  = UCP_OP_ID_RNDV_FIRST,
     UCP_OP_ID_RNDV_RECV,
-    UCP_OP_ID_LAST
+    UCP_OP_ID_RNDV_RECV_DROP,
+    UCP_OP_ID_RNDV_LAST,
+
+    UCP_OP_ID_LAST = UCP_OP_ID_RNDV_LAST
 } ucp_operation_id_t;
 
 

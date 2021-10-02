@@ -117,10 +117,11 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_datatype_iter_init_empty(ucp_datatype_iter_t *dt_iter, uint8_t *sg_count)
+ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
+                            uint8_t *sg_count)
 {
     dt_iter->dt_class               = UCP_DATATYPE_CONTIG;
-    dt_iter->length                 = 0;
+    dt_iter->length                 = length;
     dt_iter->offset                 = 0;
     dt_iter->type.contig.buffer     = NULL;
     dt_iter->type.contig.reg.md_map = 0;

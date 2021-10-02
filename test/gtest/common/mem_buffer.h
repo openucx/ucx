@@ -10,6 +10,7 @@
 #include <ucs/memory/memory_type.h>
 #include <ucs/sys/math.h>
 #include <stdint.h>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,8 @@
  */
 class mem_buffer {
 public:
+    static const size_t size_max = std::numeric_limits<size_t>::max();
+
     static const std::vector<ucs_memory_type_t>& supported_mem_types();
 
     /* allocate buffer of a given memory type */
@@ -95,9 +98,9 @@ public:
 
     size_t size() const;
 
-    void pattern_fill(uint64_t seed);
+    void pattern_fill(uint64_t seed, size_t length = size_max);
 
-    void pattern_check(uint64_t seed) const;
+    void pattern_check(uint64_t seed, size_t length = size_max) const;
 
     void memset(int c);
 

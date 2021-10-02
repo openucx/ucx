@@ -91,6 +91,28 @@ ucp_proto_request_zcopy_complete_success(ucp_request_t *req)
     return UCS_OK;
 }
 
+/**
+ * Add 'frag_size' to 'req->send.state.completed_size' and return nonzero if
+ * completed_size reached dt_iter.length
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_frag_complete(ucp_request_t *req, size_t frag_size,
+                               const char *title)
+{
+    req->send.state.completed_size += frag_size;
+
+    ucp_trace_req(req, "%s completed %zu, overall %zu/%zu", title, frag_size,
+                  req->send.state.completed_size,
+                  req->send.state.dt_iter.length);
+
+    ucs_assertv(req->send.state.completed_size <=
+                        req->send.state.dt_iter.length,
+                "completed_size=%zu dt_iter.length=%zu",
+                req->send.state.completed_size, req->send.state.dt_iter.length);
+
+    return req->send.state.completed_size == req->send.state.dt_iter.length;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
 {

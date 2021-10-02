@@ -57,16 +57,17 @@ static const char *ucp_rndv_modes[] = {
 };
 
 const char *ucp_operation_names[] = {
-    [UCP_OP_ID_TAG_SEND]      = "tag_send",
-    [UCP_OP_ID_TAG_SEND_SYNC] = "tag_send_sync",
-    [UCP_OP_ID_PUT]           = "put",
-    [UCP_OP_ID_GET]           = "get",
-    [UCP_OP_ID_AMO_POST]      = "amo_post",
-    [UCP_OP_ID_AMO_FETCH]     = "amo_fetch",
-    [UCP_OP_ID_AMO_CSWAP]     = "amo_cswap",
-    [UCP_OP_ID_RNDV_SEND]     = "rndv_send",
-    [UCP_OP_ID_RNDV_RECV]     = "rndv_recv",
-    [UCP_OP_ID_LAST]          = NULL
+    [UCP_OP_ID_TAG_SEND]       = "tag_send",
+    [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
+    [UCP_OP_ID_PUT]            = "put",
+    [UCP_OP_ID_GET]            = "get",
+    [UCP_OP_ID_AMO_POST]       = "amo_post",
+    [UCP_OP_ID_AMO_FETCH]      = "amo_fetch",
+    [UCP_OP_ID_AMO_CSWAP]      = "amo_cswap",
+    [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
+    [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
+    [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
+    [UCP_OP_ID_LAST]           = NULL
 };
 
 static ucs_config_field_t ucp_config_table[] = {

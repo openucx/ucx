@@ -375,15 +375,11 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     return UCS_OK;
 }
 
-size_t ucp_proto_rndv_pack_ack(void *dest, void *arg)
+static size_t ucp_proto_rndv_ats_pack_ack(void *dest, void *arg)
 {
-    ucp_request_t *req       = arg;
-    ucp_reply_hdr_t *ack_hdr = dest;
+    ucp_request_t *req = arg;
 
-    ack_hdr->req_id = req->send.rndv.remote_req_id;
-    ack_hdr->status = UCS_OK;
-
-    return sizeof(*ack_hdr);
+    return ucp_proto_rndv_pack_ack(req, dest, req->send.state.dt_iter.length);
 }
 
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req)
@@ -392,6 +388,7 @@ ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req)
 
     return ucp_proto_rndv_ack_progress(req, req->send.proto_config->priv,
                                        UCP_AM_ID_RNDV_ATS,
+                                       ucp_proto_rndv_ats_pack_ack,
                                        ucp_proto_rndv_recv_complete);
 }
 
@@ -421,8 +418,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
     ucs_status_t status;
     ucp_rkey_h rkey;
 
-    ucs_assert((op_id == UCP_OP_ID_RNDV_RECV) ||
-               (op_id == UCP_OP_ID_RNDV_SEND));
+    ucs_assert((op_id >= UCP_OP_ID_RNDV_FIRST) &&
+               (op_id < UCP_OP_ID_RNDV_LAST));
 
     if (rkey_length > 0) {
         ucs_assert(rkey_buffer != NULL);
@@ -483,10 +480,10 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                   const ucp_rndv_rts_hdr_t *rts,
                                   const void *rkey_buffer, size_t rkey_length)
 {
+    ucp_operation_id_t op_id;
     ucs_status_t status;
     ucp_request_t *req;
     uint8_t sg_count;
-    size_t length;
     ucp_ep_h ep;
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, rts->sreq.ep_id, return,
@@ -508,24 +505,24 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 
     if (ucs_likely(rts->size <= recv_req->recv.length)) {
         ucp_proto_rndv_check_rkey_length(rts->address, rkey_length, "rts");
-        length           = rts->size;
+        op_id            = UCP_OP_ID_RNDV_RECV;
         recv_req->status = UCS_OK;
         UCS_PROFILE_CALL_VOID(ucp_datatype_iter_init_from_dt_state,
-                              worker->context, recv_req->recv.buffer, length,
+                              worker->context, recv_req->recv.buffer, rts->size,
                               recv_req->recv.datatype, &recv_req->recv.state,
                               &req->send.state.dt_iter, &sg_count);
     } else {
         /* Short receive: complete with error, and send reply to sender */
         rkey_length      = 0; /* Override rkey length to disable data fetch */
-        length           = 0;
+        op_id            = UCP_OP_ID_RNDV_RECV_DROP;
         recv_req->status = UCS_ERR_MESSAGE_TRUNCATED;
         ucp_request_recv_generic_dt_finish(recv_req);
-        ucp_datatype_iter_init_empty(&req->send.state.dt_iter, &sg_count);
+        ucp_datatype_iter_init_null(&req->send.state.dt_iter, rts->size,
+                                    &sg_count);
     }
 
-    status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_RECV, 0,
-                                       length, rkey_buffer, rkey_length,
-                                       sg_count);
+    status = ucp_proto_rndv_send_reply(worker, req, op_id, 0, rts->size,
+                                       rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
         ucs_mpool_put(req);
@@ -592,6 +589,9 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
                                "RTR %p", rtr);
+
+    ucp_trace_req(req, "RTR offset %zu length %zu/%zu req %p", rtr->offset,
+                  rtr->size, req->send.state.dt_iter.length, req);
 
     /* RTR covers the whole send request - use the send request directly */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);
