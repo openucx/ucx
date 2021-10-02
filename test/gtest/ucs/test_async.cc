@@ -470,23 +470,23 @@ UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
 }
 
 UCS_TEST_P(test_async, many_timers) {
-    int max_iters = 4010 / ucs::test_time_multiplier();
-    for (int count = 0; count < max_iters; ++count) {
-        std::vector<int> timers;
-        ucs_status_t status;
-        int timer_id;
+    const int max_iters  = ucs_max(200, 4010 / ucs::test_time_multiplier());
+    const int max_timers = ucs_max(10, 250 / ucs::test_time_multiplier());
 
-        for (int count2 = 0; count2 < 250; ++count2) {
-            status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
-                                         (ucs_async_event_cb_t)ucs_empty_function,
-                                         NULL, NULL, &timer_id);
+    std::vector<int> timers;
+    timers.reserve(max_timers);
+
+    for (int count = 0; count < max_iters; ++count) {
+        for (int count2 = 0; count2 < max_timers; ++count2) {
+            ucs_status_t status = ucs_async_add_timer(
+                    GetParam(), ucs_time_from_sec(1.0),
+                    reinterpret_cast<ucs_async_event_cb_t>(ucs_empty_function),
+                    NULL, NULL, &timers[count2]);
             ASSERT_UCS_OK(status);
-            timers.push_back(timer_id);
         }
 
-        while (!timers.empty()) {
-            ucs_async_remove_handler(timers.back(), 0);
-            timers.pop_back();
+        for (int count2 = 0; count2 < max_timers; ++count2) {
+            ucs_async_remove_handler(timers[count2], 0);
         }
     }
 }
