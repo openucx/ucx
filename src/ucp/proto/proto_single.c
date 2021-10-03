@@ -23,6 +23,7 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
     ucp_lane_index_t num_lanes;
     ucp_md_map_t reg_md_map;
     ucp_lane_index_t lane;
+    ucs_status_t status;
 
     num_lanes = ucp_proto_common_find_lanes(&params->super, params->lane_type,
                                             params->tl_cap_flags, 1, 0, &lane);
@@ -44,7 +45,11 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
 
     ucp_proto_common_lane_priv_init(&params->super, reg_md_map, lane,
                                     &spriv->super);
-    ucp_proto_common_get_lane_perf(&params->super, lane, &perf);
+    status = ucp_proto_common_get_lane_perf(&params->super, lane, &perf);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     return ucp_proto_common_init_caps(&params->super, &perf, reg_md_map);
 }
 

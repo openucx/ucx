@@ -31,6 +31,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_lane_map_t lane_map;
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
+    ucs_status_t status;
 
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
@@ -57,7 +58,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     for (i = 0; i < num_lanes; ++i) {
         lane      = lanes[i];
         lane_perf = &lanes_perf[lane];
-        ucp_proto_common_get_lane_perf(&params->super, lane, lane_perf);
+
+        status = ucp_proto_common_get_lane_perf(&params->super, lane,
+                                                lane_perf);
+        if (status != UCS_OK) {
+            return status;
+        }
 
         /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
         max_bandwidth = ucs_max(max_bandwidth, lane_perf->bandwidth);

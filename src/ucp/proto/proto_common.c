@@ -146,27 +146,45 @@ static void ucp_proto_common_update_lane_perf_by_distance(
     perf->sys_latency += distance->latency;
 }
 
-void ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
-                                    ucp_lane_index_t lane,
-                                    ucp_proto_common_tl_perf_t *perf)
+ucs_status_t
+ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
+                               ucp_lane_index_t lane,
+                               ucp_proto_common_tl_perf_t *perf)
 {
-    const uct_iface_attr_t *iface_attr =
-            ucp_proto_common_get_iface_attr(&params->super, lane);
-    ucp_worker_h worker   = params->super.worker;
-    ucp_context_h context = worker->context;
+    ucp_worker_h worker        = params->super.worker;
+    ucp_context_h context      = worker->context;
+    ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(&params->super,
+                                                                lane);
+    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
     const ucp_rkey_config_t *rkey_config;
     ucs_sys_dev_distance_t distance;
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
 
-    perf->overhead  = iface_attr->overhead + params->overhead;
-    perf->bandwidth = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
-    perf->latency   = ucp_tl_iface_latency(context, &iface_attr->latency) +
+    /* Use the v2 API to query overhead and BW */
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                           UCT_PERF_ATTR_FIELD_OVERHEAD |
+                           UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                           UCT_PERF_ATTR_FIELD_LATENCY;
+    perf_attr.operation  = params->send_op;
+
+    status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    if (status != UCS_OK) {
+        ucs_error("failed to get iface %p performance: %s", wiface->iface,
+                  ucs_status_string(status));
+        return status;
+    }
+
+    perf->overhead  = perf_attr.overhead + params->overhead;
+    perf->bandwidth = ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
+    perf->latency   = ucp_tl_iface_latency(context, &perf_attr.latency) +
                       params->latency;
 
     perf->sys_latency = 0;
     perf->min_length  = ucp_proto_common_get_iface_attr_field(
-            iface_attr, params->min_frag_offs, 0);
+            &wiface->attr, params->min_frag_offs, 0);
     perf->max_frag    = ucp_proto_common_get_iface_attr_field(
-            iface_attr, params->max_frag_offs, SIZE_MAX);
+            &wiface->attr, params->max_frag_offs, SIZE_MAX);
 
     /* For zero copy send, consider local system topology distance */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
@@ -190,6 +208,8 @@ void ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params
     ucs_assert(perf->overhead >= 0);
     ucs_assert(perf->max_frag > 0);
     ucs_assert(perf->sys_latency >= 0);
+
+    return UCS_OK;
 }
 
 static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
@@ -444,15 +464,13 @@ ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
     const uct_md_attr_t *md_attr;
     ucp_md_index_t md_index;
 
-    if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
-        /* Go over all memory domains */
-        ucs_for_each_bit(md_index, reg_md_map) {
-            md_attr = &context->tl_mds[md_index].attr;
-            ucs_linear_func_add_inplace(&reg_cost, md_attr->reg_cost);
-            ucs_trace("md %s" UCP_PROTO_PERF_FUNC_FMT(reg_cost),
-                      context->tl_mds[md_index].rsc.md_name,
-                      UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
-        }
+    /* Go over all memory domains */
+    ucs_for_each_bit(md_index, reg_md_map) {
+        md_attr = &context->tl_mds[md_index].attr;
+        ucs_linear_func_add_inplace(&reg_cost, md_attr->reg_cost);
+        ucs_trace("md %s" UCP_PROTO_PERF_FUNC_FMT(reg_cost),
+                  context->tl_mds[md_index].rsc.md_name,
+                  UCP_PROTO_PERF_FUNC_ARG(&md_attr->reg_cost));
     }
 
     return reg_cost;

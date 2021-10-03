@@ -33,6 +33,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_LAST,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |

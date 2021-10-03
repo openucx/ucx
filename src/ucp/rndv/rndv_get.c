@@ -39,6 +39,7 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
                                             cap.get.max_zcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_GET_ZCOPY,
         .super.memtype_op    = memtype_op,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
