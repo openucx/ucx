@@ -32,6 +32,8 @@ protected:
         double                 min; /* TODO remove this field */
         double                 max; /* TODO remove this field */
         unsigned               test_flags;
+        ucs_memory_type_t      send_mem_type;
+        ucs_memory_type_t      recv_mem_type;
     };
 
     static std::vector<int> get_affinity();

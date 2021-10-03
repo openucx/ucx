@@ -132,6 +132,11 @@ static void ucx_perf_cuda_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
     if (cerr != cudaSuccess) {
         ucs_error("failed to copy memory: %s", cudaGetErrorString(cerr));
     }
+
+    cerr = cudaDeviceSynchronize();
+    if (cerr != cudaSuccess) {
+        ucs_error("failed to sync device: %s", cudaGetErrorString(cerr));
+    }
 }
 
 static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)

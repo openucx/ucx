@@ -351,6 +351,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_perf, envelope, has_transport("self"))
     }
     test.iters = ucs_min(test.iters, max_iter);
 
+    test.send_mem_type = UCS_MEMORY_TYPE_HOST;
+    test.recv_mem_type = UCS_MEMORY_TYPE_HOST;
+
     run_test(test, 0, check_perf, "", "");
 }
 
@@ -361,6 +364,9 @@ class test_ucp_loopback : public test_ucp_perf {};
 UCS_TEST_P(test_ucp_loopback, envelope)
 {
     test_spec test = tests[get_variant_value(VARIANT_TEST_TYPE)];
+
+    test.send_mem_type = UCS_MEMORY_TYPE_HOST;
+    test.recv_mem_type = UCS_MEMORY_TYPE_HOST;
 
     run_test(test, UCX_PERF_TEST_FLAG_LOOPBACK, true, "", "");
 }
@@ -397,7 +403,9 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
                               0, 1, { 8 }, 1, 1000lu,
                               ucs_offsetof(ucx_perf_result_t,
                                            latency.total_average),
-                              1e6, 0.001, 30.0, 0 };
+                              1e6, 0.001, 30.0, 0,
+                              UCS_MEMORY_TYPE_HOST,
+                              UCS_MEMORY_TYPE_HOST };
     for (i = 0; i < max_iter; i++) {
         perf_iter = run_test(test1, 0, false, "", "");
         perf_avg += perf_iter;
@@ -417,7 +425,9 @@ UCS_TEST_P(test_ucp_wait_mem, envelope) {
                               0, 1, { 8 }, 1, 1000lu,
                               ucs_offsetof(ucx_perf_result_t,
                                            latency.total_average),
-                              1e6, perf_min * 0.3, perf_avg * 3, 0 };
+                              1e6, perf_min * 0.3, perf_avg * 3, 0,
+                              UCS_MEMORY_TYPE_HOST,
+                              UCS_MEMORY_TYPE_HOST };
     run_test(test2, 0, true, "", "");
 }
 

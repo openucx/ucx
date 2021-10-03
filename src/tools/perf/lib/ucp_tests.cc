@@ -369,22 +369,24 @@ public:
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
             return *(const volatile psn_t*)ptr;
         } else {
-            m_perf.allocator->memcpy(&sn, UCS_MEMORY_TYPE_HOST, ptr, mem_type,
-                                     sizeof(sn));
+            m_perf.recv_allocator->memcpy(&sn, UCS_MEMORY_TYPE_HOST, ptr,
+                                          mem_type, sizeof(sn));
             return sn;
         }
     }
 
     UCS_F_ALWAYS_INLINE void
-    write_sn(void *buffer, ucs_memory_type_t mem_type, size_t length, psn_t sn)
+    write_sn(void *buffer, ucs_memory_type_t mem_type,
+             size_t length, psn_t sn,
+             const ucx_perf_allocator_t *allocator)
     {
         void *ptr = sn_ptr(buffer, length);
 
         if (mem_type == UCS_MEMORY_TYPE_HOST) {
             *(volatile psn_t*)ptr = sn;
         } else {
-            m_perf.allocator->memcpy(ptr, mem_type, &sn, UCS_MEMORY_TYPE_HOST,
-                                     sizeof(sn));
+            allocator->memcpy(ptr, mem_type, &sn, UCS_MEMORY_TYPE_HOST,
+                              sizeof(sn));
         }
     }
 
@@ -430,7 +432,8 @@ public:
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
             case UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM:
-                write_sn(buffer, m_perf.params.send_mem_type, length, sn);
+                write_sn(buffer, m_perf.params.send_mem_type, length, sn,
+                         m_perf.send_allocator);
                 break;
             case UCX_PERF_TEST_TYPE_STREAM_UNI:
                 break;
@@ -568,10 +571,12 @@ public:
         /* Make sure that doing the last opetarion will write 1 to the end of
            the remote buffer */
         if (CMD == UCX_PERF_CMD_PUT) {
-            write_sn(buffer, m_perf.params.send_mem_type, size, LAST_ITER_SN);
+            write_sn(buffer, m_perf.params.send_mem_type, size, LAST_ITER_SN,
+                     m_perf.send_allocator);
         } else if (is_atomic()) {
             atomic_value = 0;
-            write_sn(&atomic_value, UCS_MEMORY_TYPE_HOST, size, LAST_ITER_SN);
+            write_sn(&atomic_value, UCS_MEMORY_TYPE_HOST, size, LAST_ITER_SN,
+                     NULL);
             atomic_param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
                                         UCP_OP_ATTR_FIELD_CALLBACK |
                                         UCP_OP_ATTR_FIELD_USER_DATA;
@@ -648,8 +653,10 @@ public:
             return;
         }
 
-        write_sn(m_perf.send_buffer, m_perf.params.send_mem_type, length, sn);
-        write_sn(m_perf.recv_buffer, m_perf.params.recv_mem_type, length, sn);
+        write_sn(m_perf.send_buffer, m_perf.params.send_mem_type, length, sn,
+                 m_perf.send_allocator);
+        write_sn(m_perf.recv_buffer, m_perf.params.recv_mem_type, length, sn,
+                 m_perf.recv_allocator);
     }
 
     ucs_status_t run_pingpong()
