@@ -821,11 +821,12 @@ typedef test_async_mt<local_timer> test_async_timer_mt;
  */
 UCS_TEST_SKIP_COND_P(test_async_event_mt, multithread,
                      !(HAVE_DECL_F_SETOWN_EX)) {
-    const int exp_min_count = (int)(COUNT * 0.5);
-    int min_count = 0;
+    const int count         = ucs_max(4, COUNT / ucs::test_time_multiplier());
+    const int exp_min_count = (int)(count * 0.5);
+    int min_count           = 0;
     for (int retry = 0; retry < NUM_RETRIES; ++retry) {
         spawn();
-        for (int j = 0; j < COUNT; ++j) {
+        for (int j = 0; j < count; ++j) {
             for (unsigned i = 0; i < NUM_THREADS; ++i) {
                 event(i)->push_event();
                 suspend();
