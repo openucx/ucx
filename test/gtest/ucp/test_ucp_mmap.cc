@@ -325,34 +325,6 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ucp_rkey_destroy(rkey);
 }
 
-UCS_TEST_P(test_ucp_mmap, alloc) {
-    ucs_status_t status;
-    bool is_dummy;
-
-    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        size_t size = ucs::rand() % (UCS_MBYTE);
-
-        ucp_mem_h memh;
-        ucp_mem_map_params_t params;
-
-        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        params.address    = NULL;
-        params.length     = size;
-        params.flags      = mem_map_flags() | UCP_MEM_MAP_ALLOCATE;
-
-        status = ucp_mem_map(sender().ucph(), &params, &memh);
-        ASSERT_UCS_OK(status);
-
-        is_dummy = (size == 0);
-        test_rkey_management(memh, is_dummy, is_tl_rdma() || is_tl_shm());
-
-        status = ucp_mem_unmap(sender().ucph(), memh);
-        ASSERT_UCS_OK(status);
-    }
-}
-
 UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
     std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
     ucs_status_t status;
@@ -391,39 +363,6 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
     }
 }
 
-UCS_TEST_P(test_ucp_mmap, reg) {
-    ucs_status_t status;
-    bool is_dummy;
-
-    for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        size_t size = ucs::rand() % (UCS_MBYTE);
-
-        void *ptr = malloc(size);
-        ucs::fill_random(ptr, size);
-
-        ucp_mem_h memh;
-        ucp_mem_map_params_t params;
-
-        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                            UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                            UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-        params.address    = ptr;
-        params.length     = size;
-        params.flags      = mem_map_flags();
-
-        status = ucp_mem_map(sender().ucph(), &params, &memh);
-        ASSERT_UCS_OK(status);
-
-        is_dummy = (size == 0);
-        test_rkey_management(memh, is_dummy, is_tl_rdma());
-
-        status = ucp_mem_unmap(sender().ucph(), memh);
-        ASSERT_UCS_OK(status);
-
-        free(ptr);
-    }
-}
-
 UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
     std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
     ucs_status_t status;
@@ -432,8 +371,7 @@ UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
     ucs_memory_type_t alloc_mem_type;
 
     for (int i = 0; i < 1000 / ucs::test_time_multiplier(); ++i) {
-        size_t size = ucs::rand() % (UCS_MBYTE);
-
+        size_t size    = ucs::rand() % UCS_MBYTE;
         alloc_mem_type = mem_types.at(ucs::rand() % mem_types.size());
         mem_buffer buf(size, alloc_mem_type);
         mem_buffer::pattern_fill(buf.ptr(), size, 0, alloc_mem_type);
@@ -519,7 +457,8 @@ UCS_TEST_P(test_ucp_mmap, alloc_advise) {
     ucs_status_t status;
     bool is_dummy;
 
-    size_t size = 128 * UCS_MBYTE;
+    const size_t size = ucs_max(UCS_KBYTE,
+                                128 * UCS_MBYTE / ucs::test_time_multiplier());
 
     ucp_mem_h memh;
     ucp_mem_map_params_t params;
@@ -563,9 +502,9 @@ UCS_TEST_P(test_ucp_mmap, reg_advise) {
     ucs_status_t status;
     bool is_dummy;
 
-    size_t size = 128 * UCS_MBYTE;
-
-    void *ptr = malloc(size);
+    const size_t size = ucs_max(UCS_KBYTE,
+                                128 * UCS_MBYTE / ucs::test_time_multiplier());
+    void *ptr         = malloc(size);
     ucs::fill_random(ptr, size);
 
     ucp_mem_h               memh;
