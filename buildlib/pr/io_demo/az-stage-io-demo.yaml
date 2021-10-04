@@ -9,13 +9,15 @@ parameters:
   default: 60
 - name: roce_iface
   default: $(roce_iface)
+- name: initial_delay
+  default: 20
 
 steps:
 - bash: |
     set -eEx
     source $(workspace)/buildlib/az-helpers.sh
     $(workspace)/buildlib/az-network-corrupter.sh \
-      initial_delay=$(initial_delay) \
+      initial_delay=${{ parameters.initial_delay }} \
       cycles=$(cycles) \
       downtime=$(downtime) \
       uptime=$(uptime) \
