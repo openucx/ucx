@@ -64,7 +64,7 @@ protected:
 
     void test_mem_types(send_func_t send_func,
                         size_t max_size = default_max_size()) {
-        std::vector<std::vector<ucs_memory_type_t> > pairs =
+        const std::vector<std::vector<ucs_memory_type_t> >& pairs =
                 ucs::supported_mem_type_pairs();
 
         for (size_t i = 0; i < pairs.size(); ++i) {

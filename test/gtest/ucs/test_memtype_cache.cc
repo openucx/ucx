@@ -163,19 +163,14 @@ protected:
         std::vector<std::pair<void*, size_t> > released_ptrs;
         std::vector<mem_buffer*> allocated_buffers;
 
-        const std::vector<ucs_memory_type_t> supported_mem_types =
-            mem_buffer::supported_mem_types();
-
         /* The tests try to allocate two buffers with different memory types */
-        for (std::vector<ucs_memory_type_t>::const_iterator iter =
-                 supported_mem_types.begin();
-             iter != supported_mem_types.end(); ++iter) {
+        for (auto mem_type : mem_buffer::supported_mem_types()) {
             for (size_t i = 1; i <= ucs_get_page_size(); i += step) {
                 mem_buffer *buf1 = allocate_mem_buffer(i, GetParam(),
                                                        &allocated_buffers, 0);
 
                 for (size_t j = 1; j <= ucs_get_page_size(); j += inner_step) {
-                    mem_buffer *buf2 = allocate_mem_buffer(j, *iter,
+                    mem_buffer *buf2 = allocate_mem_buffer(j, mem_type,
                                                            &allocated_buffers,
                                                            0);
                     if (!keep_buffers) {
@@ -384,14 +379,9 @@ UCS_TEST_P(test_memtype_cache, update_adjacent_regions_and_remove_subintervals) 
 }
 
 UCS_TEST_P(test_memtype_cache, shared_page_regions) {
-    const std::vector<ucs_memory_type_t> supported_mem_types =
-        mem_buffer::supported_mem_types();
     const size_t size = 1000000;
 
-    for (std::vector<ucs_memory_type_t>::const_iterator iter =
-             supported_mem_types.begin();
-         iter != supported_mem_types.end(); ++iter) {
-
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
         std::vector<std::pair<void*, size_t> > released_ptrs;
 
         /* Create two buffers that possibly will share one page
@@ -406,7 +396,7 @@ UCS_TEST_P(test_memtype_cache, shared_page_regions) {
          *                               +----------------------+
          */
         mem_buffer *buf1 = allocate_mem_buffer(size, GetParam());
-        mem_buffer *buf2 = allocate_mem_buffer(size, *iter);
+        mem_buffer *buf2 = allocate_mem_buffer(size, mem_type);
 
         test_region_found(*buf1);
         test_region_found(*buf2);

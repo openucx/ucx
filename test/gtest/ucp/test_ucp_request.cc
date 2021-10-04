@@ -20,20 +20,17 @@ public:
         sender().connect(&receiver(), get_ep_params());
         int mem_type_pair_index = get_variant_value() %
                                   mem_buffer::supported_mem_types().size();
-        mem_type = mem_buffer::supported_mem_types()[mem_type_pair_index];
+        m_mem_type              =
+                mem_buffer::supported_mem_types()[mem_type_pair_index];
     }
 
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         int count = 0;
         add_variant(variants, UCP_FEATURE_TAG);
-        std::vector<ucs_memory_type_t>::const_iterator iter;
-        std::vector<ucs_memory_type_t> supported_mem_types =
-            mem_buffer::supported_mem_types();
 
-        for (iter = supported_mem_types.begin();
-             iter != supported_mem_types.end(); ++iter) {
-            std::string name = ucs_memory_type_names[*iter];
+        for (auto mem_type : mem_buffer::supported_mem_types()) {
+            std::string name = ucs_memory_type_names[mem_type];
             add_variant_with_value(variants, UCP_FEATURE_TAG, count, name);
             ++count;
         }
@@ -42,7 +39,7 @@ public:
     static const size_t msg_size = 4;
 
 protected:
-    ucs_memory_type_t mem_type;
+    ucs_memory_type_t m_mem_type;
 };
 
 
@@ -53,8 +50,8 @@ UCS_TEST_P(test_ucp_request, test_request_query)
     ucp_worker_attr_t worker_attr;
     void *reqs[2];
 
-    mem_buffer m_recv_mem_buf(msg_size, mem_type);
-    mem_buffer m_send_mem_buf(msg_size, mem_type);
+    mem_buffer m_recv_mem_buf(msg_size, m_mem_type);
+    mem_buffer m_send_mem_buf(msg_size, m_mem_type);
 
     param.op_attr_mask = UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
 
@@ -93,9 +90,10 @@ UCS_TEST_P(test_ucp_request, test_request_query)
         std::string str(attr.debug_string);
         EXPECT_GT(str.size(), 0);
         EXPECT_NE(str.find(req_type), std::string::npos);
-        EXPECT_NE(str.find(ucs_memory_type_names[mem_type]), std::string::npos);
+        EXPECT_NE(str.find(ucs_memory_type_names[m_mem_type]),
+                  std::string::npos);
         ASSERT_EQ(attr.status, UCS_OK);
-        ASSERT_EQ(attr.mem_type, mem_type);
+        ASSERT_EQ(attr.mem_type, m_mem_type);
 
         ucp_request_free(reqs[i]);
     }
