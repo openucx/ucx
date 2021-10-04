@@ -13,7 +13,11 @@ package ucx
 // 	 UCS_CPU_SET(cpuId, cpu_mask);
 // }
 import "C"
-import "math/big"
+import (
+	"math/big"
+	"runtime"
+	"unsafe"
+)
 
 // Tuning parameters for the UCP worker.
 type UcpWorkerParams struct {
@@ -124,7 +128,9 @@ func (p *UcpWorkerParams) SetEventFD(fd uintptr) *UcpWorkerParams {
 
 // Tracing and analysis tools can identify the worker using this name.
 func (p *UcpWorkerParams) SetName(name string) *UcpWorkerParams {
+	freeParamsName(p)
 	p.params.name = C.CString(name)
+	runtime.SetFinalizer(p, func(f *UcpWorkerParams) { FreeNativeMemory(unsafe.Pointer(f.params.name)) })
 	p.params.field_mask |= C.UCP_WORKER_PARAM_FIELD_NAME
 	return p
 }
