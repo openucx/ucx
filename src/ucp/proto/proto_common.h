@@ -133,7 +133,10 @@ typedef struct {
  */
 typedef struct {
     /* Operation send overhead */
-    double send_overhead;
+    double send_pre_overhead;
+
+    /* Operation send finalization overhead */
+    double send_post_overhead;
 
     /* Operation receive overhead */
     double recv_overhead;
@@ -253,16 +256,6 @@ ucp_lane_index_t
 ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
-/*
- * Calculate the performance pipelining an operation with performance 'perf1'
- * with an operation with performance 'perf2' by using fragments with size
- * 'frag_size' bytes.
-*/
-ucs_linear_func_t ucp_proto_common_ppln_perf(ucs_linear_func_t perf1,
-                                             ucs_linear_func_t perf2,
-                                             double frag_size);
-
-
 /**
  * Add a "pipelined performance" range, which represents the send time of
  * multiples fragments of 'frag_size' bytes.
@@ -279,7 +272,7 @@ void ucp_proto_common_init_base_caps(
 
 void ucp_proto_common_add_perf_range(
         const ucp_proto_common_init_params_t *params, size_t max_length,
-        ucs_linear_func_t send_overhead, ucs_linear_func_t recv_overhead,
+        const ucs_linear_func_t *send_time, ucs_linear_func_t recv_overhead,
         const ucs_linear_func_t *xfer_time, ucs_linear_func_t bias);
 
 

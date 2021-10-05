@@ -1320,7 +1320,8 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
             }
 
             md->super.ops = &uct_ib_md_rcache_ops;
-            md->reg_cost  = ucs_linear_func_make(md_config->rcache.overhead, 0);
+            md->reg_cost  = ucs_linear_func_make(
+                    uct_md_rcache_overhead(&md_config->rcache), 0);
             ucs_debug("%s: using registration cache",
                       uct_ib_device_name(&md->dev));
             return UCS_OK;
