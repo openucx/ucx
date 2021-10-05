@@ -19,6 +19,7 @@ enum {
 static ucs_status_t
 ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
 {
+    const ucp_proto_single_priv_t *spriv  = init_params->priv;
     ucp_context_t *context                = init_params->worker->context;
     uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_RKEY_PTR);
     ucp_proto_single_init_params_t params = {
@@ -33,7 +34,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
-        .super.send_op       = UCT_EP_OP_LAST,
+        .super.send_op       = UCT_EP_OP_RNDV_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
@@ -42,12 +43,33 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
+    ucs_linear_func_t ack_perf[UCP_PROTO_PERF_TYPE_LAST];
+    ucp_proto_perf_type_t perf_type;
+    ucp_proto_caps_t *caps;
+    ucs_status_t status;
 
     if (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_single_init(&params);
+    status = ucp_proto_single_init(&params);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    caps = init_params->caps;
+    ucs_assert(spriv->super.lane != UCP_NULL_LANE);
+    ucs_assert(caps->num_ranges == 1);
+    ucp_proto_rndv_ack_perf(init_params, spriv->super.lane, ack_perf);
+    for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
+        ucs_linear_func_add_inplace(&caps->ranges[0].perf[perf_type],
+                                    ack_perf[perf_type]);
+    }
+
+    ucs_trace("ack" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+              UCP_PROTO_PERF_FUNC_TYPES_ARG(caps->ranges[0].perf));
+
+    return UCS_OK;
 }
 
 static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)

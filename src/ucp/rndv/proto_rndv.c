@@ -286,9 +286,9 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rndv_ctrl_init(&params);
 }
 
-static void ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
-                                    ucp_lane_index_t lane,
-                                    ucs_linear_func_t *ack_perf)
+void ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
+                             ucp_lane_index_t lane,
+                             ucs_linear_func_t *ack_perf)
 {
     ucp_context_t *context = init_params->worker->context;
     const uct_iface_attr_t *iface_attr;

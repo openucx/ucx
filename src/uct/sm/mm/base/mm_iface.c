@@ -23,6 +23,8 @@
 /* Maximal number of events to clear from the signaling pipe in single call */
 #define UCT_MM_IFACE_MAX_SIG_EVENTS  32
 
+#define UCT_MM_IFACE_OVERHEAD 10e-9
+#define UCT_MM_IFACE_LATENCY  ucs_linear_func_make(80e-9, 0)
 
 ucs_config_field_t uct_mm_iface_config_table[] = {
     {"SM_", "ALLOC=md,mmap,heap", NULL,
@@ -198,10 +200,10 @@ static ucs_status_t uct_mm_iface_query(uct_iface_h tl_iface,
                                           UCS_BIT(UCT_ATOMIC_OP_SWAP)        |
                                           UCS_BIT(UCT_ATOMIC_OP_CSWAP);
 
-    iface_attr->latency                 = ucs_linear_func_make(80e-9, 0); /* 80 ns */
+    iface_attr->latency                 = UCT_MM_IFACE_LATENCY;
     iface_attr->bandwidth.dedicated     = iface->super.config.bandwidth;
     iface_attr->bandwidth.shared        = 0;
-    iface_attr->overhead                = 10e-9; /* 10 ns */
+    iface_attr->overhead                = UCT_MM_IFACE_OVERHEAD;
     iface_attr->priority                = 0;
 
     return UCS_OK;
@@ -477,6 +479,45 @@ static uct_iface_ops_t uct_mm_iface_ops = {
     .iface_is_reachable       = uct_mm_iface_is_reachable
 };
 
+static ucs_status_t
+uct_mm_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(tl_iface, uct_mm_iface_t);
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth.shared = 0;
+        if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION) &&
+            (perf_attr->operation == UCT_EP_OP_AM_BCOPY)) {
+            perf_attr->bandwidth.dedicated = 18600.0 * UCS_MBYTE;
+        } else {
+            perf_attr->bandwidth.dedicated = iface->super.config.bandwidth;
+        }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        if ((ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION) &&
+            (perf_attr->operation == UCT_EP_OP_RNDV_ZCOPY)) {
+            perf_attr->overhead = 1000e-9;
+        } else {
+            perf_attr->overhead = UCT_MM_IFACE_OVERHEAD;
+        }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = UCT_MM_IFACE_LATENCY;
+    }
+
+    return UCS_OK;
+}
+
+static uct_iface_internal_ops_t uct_mm_iface_internal_ops = {
+    .iface_estimate_perf = uct_mm_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function,
+};
+
 static void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj,
                                         uct_mem_h memh)
 {
@@ -615,7 +656,7 @@ static UCS_CLASS_INIT_FUNC(uct_mm_iface_t, uct_md_h md, uct_worker_h worker,
     unsigned i;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_sm_iface_t, &uct_mm_iface_ops,
-                              &uct_base_iface_internal_ops, md, worker, params,
+                              &uct_mm_iface_internal_ops, md, worker, params,
                               tl_config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
