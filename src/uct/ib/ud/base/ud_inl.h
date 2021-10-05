@@ -257,3 +257,13 @@ uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     uct_completion_update_status(cdesc->comp, status);
     ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
 }
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iov_to_skb(uct_ud_send_skb_t *skb, const uct_iov_t *iov, size_t iovcnt)
+{
+    ucs_iov_iter_t iov_iter;
+
+    ucs_iov_iter_init(&iov_iter);
+    skb->len += uct_iov_to_buffer(iov, iovcnt, &iov_iter, skb->neth + 1,
+                                  SIZE_MAX);
+}

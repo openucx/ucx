@@ -245,7 +245,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
     uct_ud_neth_t *neth;
-    ucs_iov_iter_t iov_iter;
 
     UCT_CHECK_AM_ID(am_id);
     UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_size + data_size,
@@ -263,10 +262,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     ctrl            = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &wqe_size,
                                                   &next_seg);
     inl             = next_seg;
-    inline_size     = sizeof(*neth) + header_size + data_size + inl_iov_size;
+    skb->len        = sizeof(*neth) + header_size + data_size;
+    inline_size     = skb->len + inl_iov_size;
     inl->byte_count = htonl(inline_size | MLX5_INLINE_SEG);
     wqe_size       += sizeof(*inl) + inline_size;
-    skb->len        = inline_size;
 
     /* set network header */
     neth              = (void*)(inl + 1);
@@ -312,9 +311,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     memcpy(UCS_PTR_BYTE_OFFSET(skb->neth + 1, header_size), data, data_size);
     if (inl_iovcnt > 0) {
         ucs_assert((data_size == 0) && (header_size == 0));
-        ucs_iov_iter_init(&iov_iter);
-        uct_iov_to_buffer(inl_iov, inl_iovcnt, &iov_iter, skb->neth + 1,
-                          SIZE_MAX);
+        uct_ud_iov_to_skb(skb, inl_iov, inl_iovcnt);
     }
     if (iovcnt > 0) {
         uct_ud_skb_set_zcopy_desc(skb, iov, iovcnt, comp);
