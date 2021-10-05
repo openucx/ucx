@@ -61,6 +61,7 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
                                             cap.put.max_short),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_PUT_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
@@ -150,6 +151,7 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
                                             cap.put.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_PUT_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS,
@@ -226,6 +228,7 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                             cap.put.max_zcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
