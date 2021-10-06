@@ -145,6 +145,7 @@ ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
     uct_rdmacm_cm_t UCS_V_UNUSED *rdmacm_cm = uct_rdmacm_cm_ep_get_cm(cep);
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
+    ucs_status_t status;
 
     ucs_trace("%s rdma_establish on client (cm_id %p, rdmacm %p, event_channel=%p)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
@@ -172,8 +173,9 @@ ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
     return UCS_OK;
 
 ep_failed:
+    status = cep->status;
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
-    return cep->status;
+    return status;
 }
 
 /**
@@ -307,6 +309,8 @@ uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
 {
     ucs_status_t status;
 
+    ucs_assert(ucs_async_is_blocked(uct_rdmacm_cm_ep_get_async(cep)));
+
     if (ctx->use_reserved_qpn) {
         status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);
     } else {
@@ -332,6 +336,8 @@ static void uct_rdamcm_cm_ep_destroy_qpn(uct_rdmacm_cm_ep_t *cep)
 {
     uct_rdmacm_cm_device_context_t *ctx;
     ucs_status_t status;
+
+    ucs_assert(ucs_async_is_blocked(uct_rdmacm_cm_ep_get_async(cep)));
 
     if (!(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED)) {
         return;
@@ -566,7 +572,6 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
 {
     struct rdma_conn_param conn_param = {0};
     uct_rdmacm_priv_data_hdr_t *hdr;
-    uct_cm_remote_data_t remote_data;
     char ep_str[UCT_RDMACM_EP_STRING_LEN];
     ucs_status_t status;
 
@@ -598,15 +603,6 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
             uct_cm_ep_peer_error(&cep->super,
                                  "rdma_connect(on id=%p) failed: %m", cep->id);
             status = UCS_ERR_IO_ERROR;
-
-            /* If priv_pack_cb was specified, it means that error was detected
-             * while sending CM prviate data during handling "route resolved"
-             * RDMACM event, otherwise - error was detected when creating UCT EP
-             * and error should be returned to a user from uct_ep_create()
-             * status */
-            if (cep->super.priv_pack_cb != NULL) {
-                uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
-            }
             goto err;
         }
     } else {
@@ -626,7 +622,6 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
 
 err:
     uct_rdamcm_cm_ep_destroy_qpn(cep);
-    remote_data.field_mask = 0;
     return status;
 }
 
@@ -636,9 +631,15 @@ uct_rdmacm_cm_ep_connect(uct_ep_h ep, const uct_ep_connect_params_t *params)
     uct_rdmacm_cm_ep_t *cep = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
     const void *priv_data;
     size_t priv_data_length;
+    ucs_status_t status;
+
+    ucs_assert(ucs_async_is_blocked(uct_rdmacm_cm_ep_get_async(cep)));
 
     uct_ep_connect_params_get(params, &priv_data, &priv_data_length);
-    return uct_rdmacm_cm_ep_send_priv_data(cep, priv_data, priv_data_length);
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    status = uct_rdmacm_cm_ep_send_priv_data(cep, priv_data, priv_data_length);
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    return status;
 }
 
 ucs_status_t uct_rdmacm_cm_ep_disconnect(uct_ep_h ep, unsigned flags)

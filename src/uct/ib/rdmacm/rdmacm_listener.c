@@ -36,8 +36,8 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
                     const struct sockaddr *saddr, socklen_t socklen,
                     const uct_listener_params_t *params)
 {
-    uct_rdmacm_cm_t *rdmacm_cm  = ucs_derived_of(cm, uct_rdmacm_cm_t);
-    int id_reuse_optval         = 1;
+    uct_rdmacm_cm_t *rdmacm_cm = ucs_derived_of(cm, uct_rdmacm_cm_t);
+    int id_reuse_optval        = 1;
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
     int backlog;
