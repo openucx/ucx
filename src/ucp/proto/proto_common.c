@@ -498,6 +498,7 @@ ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
                                    UCT_PERF_ATTR_FIELD_BANDWIDTH;
     perf_attr.local_memory_type  = local_mem_type;
     perf_attr.remote_memory_type = remote_mem_type;
+    perf_attr.rkey               = 0;
     perf_attr.operation          = memtype_op;
 
     switch (memtype_op) {
