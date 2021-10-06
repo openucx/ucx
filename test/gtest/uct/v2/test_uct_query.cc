@@ -44,6 +44,7 @@ UCS_TEST_P(test_uct_query, query_perf)
     perf_attr.remote_memory_type = UCS_MEMORY_TYPE_HOST;
     perf_attr.local_sys_device   = UCS_SYS_DEVICE_ID_UNKNOWN;
     perf_attr.remote_sys_device  = UCS_SYS_DEVICE_ID_UNKNOWN;
+    perf_attr.rkey               = 0;
     status                       = uct_iface_estimate_perf(sender().iface(),
                                                            &perf_attr);
     EXPECT_EQ(status, UCS_OK);
@@ -92,6 +93,7 @@ UCS_TEST_P(test_uct_query, query_perf)
             perf_attr_get.remote_memory_type = UCS_MEMORY_TYPE_HOST;
             perf_attr_get.local_sys_device   = mem_attr.sys_dev;
             perf_attr_get.remote_sys_device  = UCS_SYS_DEVICE_ID_UNKNOWN;
+            perf_attr_get.rkey               = 0;
 
             status = uct_iface_estimate_perf(sender().iface(), &perf_attr_get);
             EXPECT_EQ(status, UCS_OK);
@@ -100,6 +102,7 @@ UCS_TEST_P(test_uct_query, query_perf)
             perf_attr_get.remote_memory_type = UCS_MEMORY_TYPE_CUDA;
             perf_attr_get.local_sys_device   = UCS_SYS_DEVICE_ID_UNKNOWN;
             perf_attr_get.remote_sys_device  = mem_attr.sys_dev;
+            perf_attr_get.rkey               = 0;
 
             status = uct_iface_estimate_perf(sender().iface(), &perf_attr_get);
             EXPECT_EQ(status, UCS_OK);
@@ -108,6 +111,7 @@ UCS_TEST_P(test_uct_query, query_perf)
             perf_attr_get.remote_memory_type = UCS_MEMORY_TYPE_CUDA;
             perf_attr_get.local_sys_device   = mem_attr.sys_dev;
             perf_attr_get.remote_sys_device  = mem_attr.sys_dev;
+            perf_attr_get.rkey               = 0;
 
             status = uct_iface_estimate_perf(sender().iface(), &perf_attr_get);
             EXPECT_EQ(status, UCS_OK);
