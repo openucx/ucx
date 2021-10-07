@@ -327,7 +327,8 @@ public:
     }
 
     static inline size_t validate(unsigned &seed, const void *buffer,
-                                  size_t size, ucs_memory_type_t memory_type)
+                                  size_t size, ucs_memory_type_t memory_type,
+                                  std::stringstream &err_str)
     {
         size_t body_count    = size / sizeof(uint64_t);
         size_t tail_count    = size & (sizeof(uint64_t) - 1);
@@ -335,12 +336,12 @@ public:
                 get_host_validate_buffer(buffer, size, memory_type));
         const uint8_t *tail  = reinterpret_cast<const uint8_t*>(body + body_count);
 
-        size_t err_pos = validate(seed, body, body_count);
+        size_t err_pos = validate(seed, body, body_count, err_str);
         if (err_pos < body_count) {
             return err_pos * sizeof(body[0]);
         }
 
-        err_pos = validate(seed, tail, tail_count);
+        err_pos = validate(seed, tail, tail_count, err_str);
         if (err_pos < tail_count) {
             return (body_count * sizeof(body[0])) + (err_pos * sizeof(tail[0]));
         }
@@ -358,10 +359,14 @@ private:
     }
 
     template<typename T>
-    static inline size_t validate(unsigned &seed, const T *buffer, size_t count)
+    static inline size_t validate(unsigned &seed, const T *buffer,
+                                  size_t count, std::stringstream &err_str)
     {
         for (size_t i = 0; i < count; ++i) {
-            if (buffer[i] != rand<T>(seed)) {
+            T expected_val = rand<T>(seed);
+            if (buffer[i] != expected_val) {
+                err_str << std::hex << "expected: " << expected_val << " got: "
+                        << buffer[i] << std::dec;
                 return i;
             }
         }
@@ -523,6 +528,10 @@ protected:
             return _data_size;
         }
 
+        ucs_memory_type_t mem_type() const {
+            return _memory_type;
+        }
+
         void init(size_t data_size, BufferMemoryPool<Buffer> &chunk_pool,
                   uint32_t sn, bool validate)
         {
@@ -568,14 +577,16 @@ protected:
             _pool.put(this);
         }
 
-        inline size_t validate(unsigned seed) const {
+        inline size_t
+        validate(unsigned seed, std::stringstream &err_str) const {
             assert(!_iov.empty() || _extra_buf);
 
             for (size_t iov_err_pos = 0, i = 0; i < _iov.size(); ++i) {
                 size_t buf_err_pos = IoDemoRandom::validate(seed,
                                                             _iov[i]->buffer(),
                                                             _iov[i]->size(),
-                                                            _memory_type);
+                                                            _memory_type,
+                                                            err_str);
                 iov_err_pos       += buf_err_pos;
                 if (buf_err_pos < _iov[i]->size()) {
                     return iov_err_pos;
@@ -586,7 +597,8 @@ protected:
                 size_t buf_err_pos = IoDemoRandom::validate(seed,
                                                             _extra_buf,
                                                             _data_size,
-                                                            _memory_type);
+                                                            _memory_type,
+                                                            err_str);
                 if (buf_err_pos < _data_size)
                     return buf_err_pos;
             }
@@ -805,16 +817,31 @@ protected:
         return (data_size + chunk_size - 1) / chunk_size;
     }
 
+    static void validate_failure(const UcxConnection *conn,
+                                 const std::stringstream &err_str,
+                                 size_t length, ucs_memory_type_t mem_type,
+                                 uint8_t op) {
+        LOG << "ERROR: " << err_str.str() << " detected on "
+            << conn->get_log_prefix() << " (status="
+            << ucs_status_string(conn->ucx_status()) << ") for operation"
+            << " (length=" << length << " mem_type=" << mem_type << " op=\""
+            << io_op_names[op] << "\")";
+        abort();
+    }
+
     static void validate(const UcxConnection *conn, const BufferIov& iov,
-                         unsigned seed) {
+                         unsigned seed, io_op_t op) {
+        std::stringstream err_str;
+
         assert(iov.size() != 0);
 
-        size_t err_pos = iov.validate(seed);
+        size_t err_pos = iov.validate(seed, err_str);
         if (err_pos != iov.npos()) {
-            LOG << "ERROR: iov data corruption at " << err_pos
-                << " position detected on " << conn->get_log_prefix()
-                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
-            abort();
+            std::stringstream err_log_str;
+            err_log_str << "iov data corruption (" << err_str.str() << ") at "
+                        << err_pos << " position";
+            validate_failure(conn, err_log_str, iov.data_size(),
+                             iov.mem_type(), op);
         }
     }
 
@@ -823,24 +850,27 @@ protected:
         unsigned seed   = msg->sn;
         const void *buf = msg + 1;
         size_t buf_size = iomsg_size - sizeof(*msg);
+        std::stringstream err_str;
 
         size_t err_pos = IoDemoRandom::validate(seed, buf, buf_size,
-                                                UCS_MEMORY_TYPE_HOST);
+                                                UCS_MEMORY_TYPE_HOST, err_str);
         if (err_pos < buf_size) {
-            LOG << "ERROR: io msg data corruption at " << err_pos
-                << " position detected on " << conn->get_log_prefix()
-                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
-            abort();
+            std::stringstream err_log_str;
+            err_log_str << "io msg data corruption (" << err_str.str()
+                        << ") at " << err_pos << " position";
+            validate_failure(conn, err_log_str, msg->data_size,
+                             UCS_MEMORY_TYPE_HOST, msg->op);
         }
     }
 
     static void validate(const UcxConnection *conn, const iomsg_t *msg,
                          uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
-            LOG << "ERROR: io msg sn mismatch (" << sn << " != " << msg->sn
-                << ") detected on " << conn->get_log_prefix()
-                << " (status=" << ucs_status_string(conn->ucx_status()) << ")";
-            abort();
+            std::stringstream err_log_str;
+            err_log_str << "io msg sn mismatch (" << sn << " != " << msg->sn
+                        << ")";
+            validate_failure(conn, err_log_str, msg->data_size,
+                             UCS_MEMORY_TYPE_HOST, msg->op);
         }
 
         validate(conn, msg, iomsg_size);
@@ -906,7 +936,7 @@ public:
 
             if (_status == UCS_OK) {
                 if (_server->opts().validate) {
-                    validate(_conn, *_iov, _sn);
+                    validate(_conn, *_iov, _sn, IO_WRITE);
                 }
                 
                 if (_conn->ucx_status() == UCS_OK) {
@@ -1376,7 +1406,7 @@ public:
             if ((_status == UCS_OK) && _validate) {
                 const server_info_t &server_info =
                         _client->_server_info[_server_index];
-                validate(server_info.conn, *_iov, _sn);
+                validate(server_info.conn, *_iov, _sn, IO_READ);
                 if (_meta_comp_counter != 0) {
                     // With tag API, we also wait for READ_COMP arrival, so
                     // need to validate it. With AM API, READ_COMP arrives as
