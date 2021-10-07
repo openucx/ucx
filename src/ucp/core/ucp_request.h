@@ -365,8 +365,12 @@ struct ucp_request {
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
-            ssize_t               remaining;  /* How much more data
-                                               * to be received */
+            union {
+                ssize_t           remaining; /* How much more data
+                                              * to be received */
+                size_t            offset; /* offset in recv buffer for multi
+                                             fragment tag offload flow */
+            };
 
             /* Remote request ID received from a peer */
             ucs_ptr_map_key_t     remote_req_id;
