@@ -19,6 +19,7 @@
 
 #define UCT_CUDA_IPC_MAX_PEERS      16
 #define UCT_CUDA_IPC_IFACE_OVERHEAD 0
+#define UCT_CUDA_IPC_IFACE_LATENCY  ucs_linear_func_make(8e-6, 0)
 
 typedef struct uct_cuda_ipc_iface {
     uct_base_iface_t super;

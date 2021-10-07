@@ -456,6 +456,10 @@ uct_cuda_ipc_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = UCT_CUDA_IPC_IFACE_LATENCY;
+    }
+
     return UCS_OK;
 
 err:
