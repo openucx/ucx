@@ -718,7 +718,7 @@ static void ucs_sysv_shmget_error_check_ENOSPC(size_t alloc_size,
     endp = p + max;
 
     ret = shmctl(0, SHM_INFO, (struct shmid_ds *)&shm_info);
-    if (ret >= 0) {
+    if (ret < 0) {
         return;
     }
 
