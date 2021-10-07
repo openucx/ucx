@@ -146,14 +146,15 @@ UCS_TEST_SKIP_COND_P(test_p2p_rma_madvise, madvise,
 {
     mapped_buffer sendbuf(4096, 0, sender());
     mapped_buffer recvbuf(4096, 0, receiver());
-    char cmd_str[] = "/bin/true";
+    char cmd_str[] = "/bin/bash -c 'exit 42'";
 
     blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                   sender_ep(), sendbuf, recvbuf, true);
     flush();
 
     int exit_status = system(cmd_str);
-    EXPECT_EQ(0, exit_status) << ucs::exit_status_info(exit_status);
+    EXPECT_TRUE(WIFEXITED(exit_status));
+    EXPECT_EQ(42, WEXITSTATUS(exit_status)) << ucs::exit_status_info(exit_status);
 
     blocking_send(static_cast<send_func_t>(&uct_p2p_rma_test::get_zcopy),
                   sender_ep(), sendbuf, recvbuf, true);
