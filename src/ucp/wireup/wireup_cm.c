@@ -58,28 +58,41 @@ int ucp_ep_init_flags_has_cm(unsigned ep_init_flags)
                                UCP_EP_INIT_CM_WIREUP_SERVER));
 }
 
+static int ucp_cm_client_get_next_cm_idx(ucp_ep_h ep)
+{
+    ucp_worker_h worker          = ep->worker;
+    ucp_rsc_index_t next_cm_idx  = ucp_ep_ext_control(ep)->cm_idx + 1;
+    ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
+
+    for (; next_cm_idx < num_cm_cmpts; ++next_cm_idx) {
+        if (worker->cms[next_cm_idx].cm != NULL) {
+            return next_cm_idx;
+        }
+    }
+
+    return UCP_NULL_RESOURCE;
+}
+
 /*
  * The main thread progress part of attempting connecting the client to the server
  * through the next available cm.
  */
 unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 {
-    ucp_ep_h ucp_ep       = arg;
-    ucp_worker_h worker   = ucp_ep->worker;
-    ucp_context_h context = worker->context;
-    ucp_wireup_ep_t *cm_wireup_ep;
+    ucp_ep_h ucp_ep               = arg;
+    ucp_worker_h worker           = ucp_ep->worker;
+    ucp_context_h context         = worker->context;
+    ucp_rsc_index_t cm_idx        = ucp_cm_client_get_next_cm_idx(ucp_ep);
+    ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucs_status_t status;
-    ucp_rsc_index_t cm_idx;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
-
-    cm_idx = ucp_ep_ext_control(ucp_ep)->cm_idx;
     ucs_assert(cm_idx != UCP_NULL_RESOURCE);
-
-    cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucs_assert_always(cm_wireup_ep != NULL);
+
+    ucp_ep_ext_control(ucp_ep)->cm_idx = cm_idx;
     ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
 
     ucs_debug("client switching from %s to %s in attempt to connect to the"
@@ -97,21 +110,6 @@ unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 
     UCS_ASYNC_UNBLOCK(&worker->async);
     return 1;
-}
-
-static int ucp_cm_client_get_next_cm_idx(ucp_ep_h ep)
-{
-    ucp_worker_h worker          = ep->worker;
-    ucp_rsc_index_t next_cm_idx  = ucp_ep_ext_control(ep)->cm_idx + 1;
-    ucp_rsc_index_t num_cm_cmpts = ucp_worker_num_cm_cmpts(worker);
-
-    for (; next_cm_idx < num_cm_cmpts; ++next_cm_idx) {
-        if (worker->cms[next_cm_idx].cm != NULL) {
-            return next_cm_idx;
-        }
-    }
-
-    return UCP_NULL_RESOURCE;
 }
 
 static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
@@ -146,7 +144,12 @@ static int ucp_cm_client_try_fallback_cms(ucp_ep_h ep)
         return 0;
     }
 
-    ucp_ep_ext_control(ep)->cm_idx = next_cm_idx;
+    if (!UCS_BITMAP_GET(ucp_ep_get_cm_wireup_ep(ep)->cm_bitmap, next_cm_idx)) {
+        /* already scheduled */
+        return 1;
+    }
+
+    UCS_BITMAP_UNSET(ucp_ep_get_cm_wireup_ep(ep)->cm_bitmap, next_cm_idx);
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_client_try_next_cm_progress,
                                       ep, UCS_CALLBACKQ_FLAG_ONESHOT,
@@ -491,7 +494,6 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
 
     UCP_EP_CM_CALLBACK_ENTER(ep, ucp_ep_get_cm_uct_ep(ep),
                              {
-                                 ucs_assert(ep->flags & UCP_EP_FLAG_CLOSED);
                                  status = UCS_ERR_CANCELED;
                                  goto out;
                              });

@@ -441,7 +441,10 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
         .ep_atomic32_fetch   = (uct_ep_atomic32_fetch_func_t)ucs_empty_function_return_no_resource,
         .ep_atomic_cswap32   = (uct_ep_atomic_cswap32_func_t)ucs_empty_function_return_no_resource
     };
+
+    const ucp_rsc_index_t num_cms = ucp_worker_num_cm_cmpts(ucp_ep->worker);
     ucp_lane_index_t lane;
+    ucp_rsc_index_t bit_idx;
 
     UCS_CLASS_CALL_SUPER_INIT(ucp_proxy_ep_t, &ops, ucp_ep, NULL, 0);
 
@@ -451,6 +454,12 @@ UCS_CLASS_INIT_FUNC(ucp_wireup_ep_t, ucp_ep_h ucp_ep)
     self->flags         = 0;
     self->progress_id   = UCS_CALLBACKQ_ID_NULL;
     ucs_queue_head_init(&self->pending_q);
+
+    UCS_BITMAP_CLEAR(&self->cm_bitmap);
+    for (bit_idx = 0; bit_idx < num_cms; ++bit_idx) {
+        UCS_BITMAP_SET(self->cm_bitmap, bit_idx);
+    }
+
     UCS_BITMAP_CLEAR(&self->cm_resolve_tl_bitmap);
 
     for (lane = 0; lane < UCP_MAX_LANES; ++lane) {

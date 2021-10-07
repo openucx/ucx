@@ -47,6 +47,8 @@ struct ucp_wireup_ep {
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
     unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
+    /**< bitmap of CMs which are available for fallback */
+    ucp_tl_bitmap_t           cm_bitmap;
     /**< TLs which are awailable on client side resolved device */
     ucp_tl_bitmap_t           cm_resolve_tl_bitmap;
     /**< Destination resource indicies used for checking intersection between
