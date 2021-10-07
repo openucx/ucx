@@ -398,15 +398,15 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
     ucs_for_each_bit(md_index, req->send.state.dt.dt.contig.md_map) {
         ucs_trace_req("invalidating memh[%d]=%p from md[%d]", memh_index,
                       uct_memh[memh_index], md_index);
-        req->send.state.uct_comp.count++;
         params.memh = uct_memh[memh_index];
         status      = uct_md_mem_dereg_v2(context->tl_mds[md_index].md,
                                           &params);
-        if (status != UCS_OK) {
+        if (status == UCS_INPROGRESS) {
+            req->send.state.uct_comp.count++;
+        } else if (UCS_STATUS_IS_ERR(status)) {
             ucs_warn("failed to dereg from md[%d]=%s: %s", md_index,
                      context->tl_mds[md_index].rsc.md_name,
                      ucs_status_string(status));
-            req->send.state.uct_comp.count--;
         }
         memh_index++;
     }

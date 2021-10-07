@@ -350,6 +350,8 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
  * @param [in]  md          Memory domain that was used to register the memory.
  * @param [in]  params      Operation parameters, see @ref
  *                          uct_md_mem_dereg_params_t.
+ *
+ * @return Error code or UCS_INPROGRESS if the operation in progress.
  */
 ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
                                  const uct_md_mem_dereg_params_t *params);

@@ -834,12 +834,8 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
 
     ib_memh = params->memh;
     status  = uct_ib_memh_dereg(md, ib_memh);
+    ucs_assert(status != UCS_INPROGRESS);
     uct_ib_memh_free(ib_memh);
-    if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
-        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
-        ucs_assert(params->comp != NULL); /* suppress coverity false-positive */
-        uct_invoke_completion(params->comp, UCS_OK);
-    }
 
     return status;
 }
