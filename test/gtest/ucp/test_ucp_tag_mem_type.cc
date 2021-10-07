@@ -41,6 +41,8 @@ public:
             if (RUNNING_ON_VALGRIND) {
                 m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE",  "8k"));
                 m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
+                m_env.push_back(
+                        new ucs::scoped_setenv("UCX_RC_RX_QUEUE_LEN", "1024"));
             }
         }
 
@@ -175,8 +177,8 @@ size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
 
 UCS_TEST_P(test_ucp_tag_mem_type, basic)
 {
-    const size_t max_iter1       = RUNNING_ON_VALGRIND ? 3 : 7; 
-    const size_t iter_multiplier = RUNNING_ON_VALGRIND ? 2 : 1; 
+    const size_t max_iter1       = RUNNING_ON_VALGRIND ? 3 : 7;
+    const size_t iter_multiplier = RUNNING_ON_VALGRIND ? 2 : 1;
     const ucp_datatype_t type    = ucp_dt_make_contig(1);
 
     for (unsigned i = 1; i <= max_iter1; ++i) {
