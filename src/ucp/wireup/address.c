@@ -387,6 +387,46 @@ static uint64_t ucp_address_unpack_flags(uint32_t input_flags,
     return result_flags;
 }
 
+static uint64_t ucp_address_flags_from_iface_flags(uint64_t iface_flags)
+{
+    uint64_t iface_cap_flags = 0;
+
+    if (iface_flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE;
+    }
+
+    if (iface_flags & UCT_IFACE_FLAG_CB_ASYNC) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_CB_ASYNC;
+    }
+
+    if (ucs_test_all_flags(iface_flags,
+                           UCT_IFACE_FLAG_CB_SYNC | UCT_IFACE_FLAG_AM_BCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_AM_SYNC;
+    }
+
+    if (iface_flags & (UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_PUT_BCOPY |
+                       UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_PUT;
+    }
+
+    if (iface_flags & (UCT_IFACE_FLAG_GET_SHORT | UCT_IFACE_FLAG_GET_BCOPY |
+                       UCT_IFACE_FLAG_GET_ZCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_GET;
+    }
+
+    if (iface_flags & (UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                       UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                       UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_TAG_EAGER;
+    }
+
+    if (iface_flags & UCT_IFACE_FLAG_TAG_RNDV_ZCOPY) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_TAG_RNDV;
+    }
+
+    return iface_cap_flags;
+}
+
 static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
                                        ucp_rsc_index_t rsc_index,
                                        const uct_iface_attr_t *iface_attr,
@@ -466,6 +506,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_idx;
     uct_ppn_bandwidth_t bandwidth;
+    uint64_t iface_flags;
 
     if (ucp_worker_is_unified_mode(worker)) {
         /* Address contains resources index and iface latency overhead
@@ -483,7 +524,8 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
 
         /* Just take the rest of iface attrs from the local resource. */
         wiface                    = ucp_worker_iface(worker, rsc_idx);
-        iface_attr->cap_flags     = wiface->attr.cap.flags;
+        iface_attr->cap_flags     = ucp_address_flags_from_iface_flags(
+                                        wiface->attr.cap.flags);
         iface_attr->event_flags   = wiface->attr.cap.event_flags;
         iface_attr->priority      = wiface->attr.priority;
         iface_attr->overhead      = wiface->attr.overhead;
@@ -529,9 +571,9 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     }
 
     /* Unpack iface flags */
-    iface_attr->cap_flags =
-        ucp_address_unpack_flags(packed->prio_cap_flags,
-                                 UCP_ADDRESS_IFACE_FLAGS, 8);
+    iface_flags = ucp_address_unpack_flags(packed->prio_cap_flags,
+                                           UCP_ADDRESS_IFACE_FLAGS, 8);
+    iface_attr->cap_flags = ucp_address_flags_from_iface_flags(iface_flags);
 
     /* Unpack iface event flags */
     iface_attr->event_flags =
@@ -985,7 +1027,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     unsigned dev_num_paths;
     ucs_status_t status;
     int empty_dev;
-    uint64_t md_flags;
     size_t dev_addr_len;
     size_t iface_addr_len;
     size_t ep_addr_len;
@@ -1045,8 +1086,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         /* md_index */
         md_byte      = (*(uint8_t*)ptr);
         md_index     = md_byte & UCP_ADDRESS_FLAG_MD_MASK;
-        md_flags     = (md_byte & UCP_ADDRESS_FLAG_MD_ALLOC) ? UCT_MD_FLAG_ALLOC : 0;
-        md_flags    |= (md_byte & UCP_ADDRESS_FLAG_MD_REG)   ? UCT_MD_FLAG_REG   : 0;
         empty_dev    = md_byte & UCP_ADDRESS_FLAG_MD_EMPTY_DEV;
         ptr          = UCS_PTR_TYPE_OFFSET(ptr, md_byte);
 
@@ -1089,7 +1128,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             address->md_index      = md_index;
             address->sys_dev       = sys_dev;
             address->dev_index     = dev_index;
-            address->md_flags      = md_flags;
             address->dev_num_paths = dev_num_paths;
 
             status = ucp_address_unpack_iface_attr(worker, &address->iface_attr,
@@ -1138,14 +1176,14 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
             if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                 ucs_trace("unpack addr[%d] : sysdev %d paths %d eps %u"
-                          " md_flags 0x%" PRIx64 " tl_iface_flags 0x%" PRIx64
+                          " tl_iface_flags 0x%" PRIx64
                           " tl_event_flags 0x%" PRIx64 " bw %.2f/nMBs"
                           " ovh %.0fns lat_ovh %.0fns dev_priority %d"
                           " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
                           "/0x%" PRIx64,
                           (int)(address - address_list), address->sys_dev,
                           address->dev_num_paths, address->num_ep_addrs,
-                          address->md_flags, address->iface_attr.cap_flags,
+                          address->iface_attr.cap_flags,
                           address->iface_attr.event_flags,
                           address->iface_attr.bandwidth / UCS_MBYTE,
                           address->iface_attr.overhead * 1e9,

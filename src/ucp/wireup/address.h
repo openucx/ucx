@@ -32,6 +32,17 @@ enum {
 };
 
 
+enum {
+    UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(0),
+    UCP_ADDR_IFACE_FLAG_AM_SYNC          = UCS_BIT(1),
+    UCP_ADDR_IFACE_FLAG_CB_ASYNC         = UCS_BIT(2),
+    UCP_ADDR_IFACE_FLAG_PUT              = UCS_BIT(3),
+    UCP_ADDR_IFACE_FLAG_GET              = UCS_BIT(4),
+    UCP_ADDR_IFACE_FLAG_TAG_EAGER        = UCS_BIT(5),
+    UCP_ADDR_IFACE_FLAG_TAG_RNDV         = UCS_BIT(6)
+};
+
+
 /* Which iface event flags would be packed in the address */
 enum {
     UCP_ADDRESS_IFACE_EVENT_FLAGS = UCT_IFACE_FLAG_EVENT_RECV
@@ -113,7 +124,6 @@ struct ucp_address_entry {
     unsigned                    num_ep_addrs;   /* How many endpoint address are in ep_addrs */
     ucp_address_entry_ep_addr_t ep_addrs[UCP_MAX_LANES]; /* Endpoint addresses */
     ucp_address_iface_attr_t    iface_attr;     /* Interface attributes information */
-    uint64_t                    md_flags;       /* MD reg/alloc flags */
     unsigned                    dev_num_paths;  /* Number of paths on the device */
     uint16_t                    tl_name_csum;   /* Checksum of transport name */
     ucp_md_index_t              md_index;       /* Memory domain index */
