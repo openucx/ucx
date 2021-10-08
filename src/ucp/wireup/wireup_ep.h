@@ -25,8 +25,11 @@ enum {
     /* Debug: next_ep connected to remote address */
     UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED  = UCS_BIT(1),
 
-    /* Remote peer has conencted to next_ep */
-    UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(2)
+    /* Remote peer has connected to next_ep */
+    UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(2),
+
+    /* Send client id */
+    UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3)
 };
 
 

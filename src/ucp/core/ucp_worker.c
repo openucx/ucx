@@ -2102,7 +2102,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                            NULL);
     worker->am.alignment = UCP_PARAM_VALUE(WORKER, params, am_alignment,
                                            AM_ALIGNMENT, 1);
-
+    worker->client_id    = UCP_PARAM_VALUE(WORKER, params, client_id, CLIENT_ID, 0);
     if ((params->field_mask & UCP_WORKER_PARAM_FIELD_NAME) &&
         (params->name != NULL)) {
         ucs_snprintf_zero(worker->name, UCP_ENTITY_NAME_MAX, "%s",

@@ -214,13 +214,19 @@ public:
 
     void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type)
     {
+        start_listener(cb_type, NULL);
+    }
+
+    void start_listener(ucp_test_base::entity::listen_cb_type_t cb_type,
+                        ucp_listener_conn_handler_t *custom_cb)
+    {
         ucs_time_t deadline = ucs::get_deadline();
         ucs_status_t status;
 
         do {
             status = receiver().listen(cb_type, m_test_addr.get_sock_addr_ptr(),
                                        m_test_addr.get_addr_size(),
-                                       get_server_ep_params());
+                                       get_server_ep_params(), custom_cb, 0);
             if (m_test_addr.get_port() == 0) {
                 /* any port can't be busy */
                 break;
@@ -477,7 +483,7 @@ public:
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
                                      UCP_EP_PARAM_FIELD_SOCK_ADDR |
                                      UCP_EP_PARAM_FIELD_USER_DATA;
-        ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
+        ep_params.flags           |= UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
         ep_params.sockaddr.addr    = m_test_addr.get_sock_addr_ptr();
         ep_params.sockaddr.addrlen = m_test_addr.get_addr_size();
         ep_params.user_data        = &sender();
@@ -985,6 +991,54 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listener_invalid_params,
 
 UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr)
 
+class test_ucp_sockaddr_conn_request : public test_ucp_sockaddr {
+public:
+    virtual ucp_worker_params_t get_worker_params() {
+        ucp_worker_params_t params = test_ucp_sockaddr::get_worker_params();
+        params.field_mask         |= UCP_WORKER_PARAM_FIELD_CLIENT_ID;
+        params.client_id           = reinterpret_cast<uint64_t>(this);
+        return params;
+    }
+
+    ucp_ep_params_t get_client_ep_params() {
+        ucp_ep_params_t ep_params = test_ucp_sockaddr::get_ep_params();
+        ep_params.field_mask     |= UCP_EP_PARAM_FIELD_FLAGS;
+        ep_params.flags          |= UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID;
+        return ep_params;
+    }
+
+    static void conn_handler_cb(ucp_conn_request_h conn_request, void *arg)
+    {
+        ucp_conn_request_attr_t attr;
+        ucs_status_t status;
+
+        attr.field_mask = UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID;
+        status          = ucp_conn_request_query(conn_request, &attr);
+        EXPECT_EQ(UCS_OK, status);
+        EXPECT_EQ(reinterpret_cast<uint64_t>(arg), attr.client_id);
+
+        test_ucp_sockaddr_conn_request *self =
+            reinterpret_cast<test_ucp_sockaddr_conn_request*>(arg);
+        ucp_listener_reject(self->receiver().listenerh(), conn_request);
+    }
+};
+
+UCS_TEST_P(test_ucp_sockaddr_conn_request, conn_request_query_worker_id)
+{
+    ucp_listener_conn_handler_t conn_handler;
+
+    conn_handler.cb  = test_ucp_sockaddr_conn_request::conn_handler_cb;
+    conn_handler.arg = reinterpret_cast<void*>(this);
+    start_listener(ucp_test_base::entity::LISTEN_CB_CUSTOM, &conn_handler);
+    {
+        scoped_log_handler slh(detect_error_logger);
+        client_ep_connect_basic(get_client_ep_params());
+        send_recv(sender(), receiver(), SEND_RECV_TAG, false,
+                  ucp_test_base::entity::LISTEN_CB_REJECT);
+    }
+}
+
+UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_conn_request)
 
 class test_ucp_sockaddr_wireup : public test_ucp_sockaddr {
 public:
@@ -1477,7 +1531,8 @@ class test_ucp_sockaddr_check_lanes : public test_ucp_sockaddr {
 };
 
 
-UCS_TEST_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes)
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_check_lanes, check_rndv_lanes,
+                     !cm_use_all_devices())
 {
     listen_and_communicate(false, SEND_DIRECTION_BIDI);
 

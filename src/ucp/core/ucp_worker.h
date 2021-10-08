@@ -241,6 +241,7 @@ typedef struct ucp_worker {
     ucs_async_context_t              async;               /* Async context for this worker */
     ucp_context_h                    context;             /* Back-reference to UCP context */
     uint64_t                         uuid;                /* Unique ID for wireup */
+    uint64_t                         client_id;           /* Worker client id for wireup */
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */

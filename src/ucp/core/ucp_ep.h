@@ -479,12 +479,12 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
-                                           for CM based wireup: there is only
-                                           iface and ep address of transport
-                                           lanes, remote device address is
-                                           provided by CM and has to be added to
-                                           unpacked UCP address locally. */
+    UCP_WIREUP_SA_DATA_CM_ADDR   = UCS_BIT(1)  /* Sockaddr client data contains address
+                                                  for CM based wireup: there is only
+                                                  iface and ep address of transport
+                                                  lanes, remote device address is
+                                                  provided by CM and has to be added to
+                                                  unpacked UCP address locally. */
 };
 
 
