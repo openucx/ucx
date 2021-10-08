@@ -453,7 +453,7 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
@@ -499,6 +499,10 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     UCT_CB_FLAGS_CHECK((params->field_mask &
                         UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
                        params->err_handler_flags : 0);
+
+    ucs_assert(internal_ops->iface_estimate_perf != NULL);
+    ucs_assert(internal_ops->iface_vfs_refresh != NULL);
+    ucs_assert(internal_ops->ep_query != NULL);
 
     self->md                = md;
     self->internal_ops      = internal_ops;
