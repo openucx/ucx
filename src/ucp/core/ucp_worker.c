@@ -2132,7 +2132,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     status = UCS_STATS_NODE_ALLOC(&worker->tm_offload_stats,
                                   &ucp_worker_tm_offload_stats_class,
-                                  worker->stats);
+                                  worker->stats, "");
     if (status != UCS_OK) {
         goto err_free_stats;
     }
@@ -2260,6 +2260,9 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
 
     UCP_EP_ASSERT_COUNTER_DEC(&ucp_ep->discard_refcount);
     ucp_worker_flush_ops_count_dec(ucp_ep->worker);
+    /* Coverity wrongly resolves completion callback function to
+     * 'ucp_cm_server_conn_request_progress' */
+    /* coverity[offset_free] */
     ucp_request_complete(req, send.cb, UCS_OK, req->user_data);
     ucp_ep_remove_ref(ucp_ep);
 }

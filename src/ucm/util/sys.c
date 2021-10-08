@@ -160,7 +160,8 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
 
     maps_fd = open(UCM_PROC_SELF_MAPS, O_RDONLY);
     if (maps_fd < 0) {
-        ucm_fatal("cannot open %s for reading: %m", UCM_PROC_SELF_MAPS);
+        ucm_warn("cannot open %s for reading: %m", UCM_PROC_SELF_MAPS);
+        return;
     }
 
     /* read /proc/self/maps fully into the buffer */

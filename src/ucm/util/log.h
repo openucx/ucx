@@ -34,13 +34,22 @@
 
 #define ucm_assert_always(_expression) \
     do { \
-        if (!(_expression)) { \
+        if (!ucs_likely(_expression)) { \
             ucm_fatal("Assertion `%s' failed", #_expression); \
         } \
     } while (0)
 
 
-#if ENABLE_ASSERT
+#define ucm_assertv_always(_expression, _fmt, ...) \
+    do { \
+        if (!ucs_likely(_expression)) { \
+            ucm_fatal("Assertion `%s' failed: " _fmt, \
+                      #_expression, ## __VA_ARGS__); \
+        } \
+    } while (0)
+
+
+#if defined (ENABLE_ASSERT) || defined(__COVERITY__) || defined(__clang_analyzer__)
 #  define ucm_assert(...)    ucm_assert_always(__VA_ARGS__)
 #else
 #  define ucm_assert(...)    {}

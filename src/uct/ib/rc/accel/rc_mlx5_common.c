@@ -460,8 +460,9 @@ ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface
     iface->tm.head = &iface->tm.list[0];
     iface->tm.tail = &iface->tm.list[i];
 
-    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_mlx5_tag_stats_class,
-                                  iface->stats);
+    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats,
+                                  &uct_rc_mlx5_tag_stats_class,
+                                  iface->stats, "");
     if (status != UCS_OK) {
         ucs_error("Failed to allocate tag stats: %s", ucs_status_string(status));
         goto err_cmd_wq_free;

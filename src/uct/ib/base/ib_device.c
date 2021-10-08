@@ -632,8 +632,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     dev->async_events = async_events;
 
-    uct_ib_device_get_locality(ibv_get_device_name(ibv_device), &dev->local_cpus,
-                               &dev->numa_node);
+    uct_ib_device_get_locality(ibv_get_device_name(ibv_device),
+                               &dev->local_cpus, &dev->numa_node);
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");
@@ -1132,8 +1132,8 @@ static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
-    /* coverity[check_return] */
-    ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
+    status = ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
+    ucs_assert_always(status == UCS_OK);
 
     ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
               uct_ib_device_name(dev), bus_id.domain, bus_id.bus, bus_id.slot,

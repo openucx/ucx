@@ -50,6 +50,7 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
                                                            send.uct);
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     ucs_status_t status;
 

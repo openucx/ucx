@@ -711,7 +711,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
     }
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_mlx5_iface_stats_class,
-                                  self->super.stats);
+                                  self->super.stats, "");
     if (status != UCS_OK) {
         return status;
     }

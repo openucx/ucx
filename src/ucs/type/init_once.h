@@ -27,7 +27,11 @@ typedef struct ucs_init_once {
 
 /* Wrapper to unlock a mutex that always returns 0 to avoid endless loop
  * and make static analyzers happy - they report "double unlock" warning */
-unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock);
+static inline unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock)
+{
+    pthread_mutex_unlock(lock);
+    return 0;
+}
 
 
 /*
@@ -51,7 +55,7 @@ unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock);
  */
 #define UCS_INIT_ONCE(_once) \
     for (pthread_mutex_lock(&(_once)->lock); \
-         !(_once)->initialized || pthread_mutex_unlock(&(_once)->lock); \
+         !(_once)->initialized || ucs_init_once_mutex_unlock(&(_once)->lock); \
          (_once)->initialized = 1)
 
 
@@ -71,7 +75,7 @@ unsigned ucs_init_once_mutex_unlock(pthread_mutex_t *lock);
  */
 #define UCS_CLEANUP_ONCE(_once) \
     for (pthread_mutex_lock(&(_once)->lock); \
-         (_once)->initialized || pthread_mutex_unlock(&(_once)->lock); \
+         (_once)->initialized || ucs_init_once_mutex_unlock(&(_once)->lock); \
          (_once)->initialized = 0)
 
 #endif

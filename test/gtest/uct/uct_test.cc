@@ -982,7 +982,7 @@ void uct_test::entity::mem_type_dereg(uct_allocated_memory_t *mem) const {
     if ((mem->memh != UCT_MEM_HANDLE_NULL) &&
         (md_attr().cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
         ucs_status_t status = uct_md_mem_dereg(m_md, mem->memh);
-        ASSERT_UCS_OK(status);
+        ucs_assert_always(status == UCS_OK);
         mem->memh = UCT_MEM_HANDLE_NULL;
         mem->md   = NULL;
     }
@@ -1016,8 +1016,9 @@ void uct_test::entity::rkey_unpack(const uct_allocated_memory_t *mem,
 void uct_test::entity::rkey_release(const uct_rkey_bundle *rkey_bundle) const
 {
     if (rkey_bundle->rkey != UCT_INVALID_RKEY) {
-        ucs_status_t status = uct_rkey_release(m_resource.component, rkey_bundle);
-        ASSERT_UCS_OK(status);
+        ucs_status_t status = uct_rkey_release(m_resource.component,
+                                               rkey_bundle);
+        ucs_assert_always(status == UCS_OK);
     }
 }
 

@@ -66,7 +66,14 @@ ucp_test::~ucp_test() {
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          iter != entities().end(); ++iter)
     {
-        (*iter)->warn_existing_eps();
+        try {
+            // suppress Coverity warning about throwing an exception from the
+            // function which is marked as noexcept
+            (*iter)->warn_existing_eps();
+        } catch (const std::exception &e) {
+            UCS_TEST_MESSAGE << "got \"" << e.what() << "\" exception when"
+                    << " checking existing endpoints";
+        }
     }
     ucp_config_release(m_ucp_config);
 }
@@ -1116,7 +1123,10 @@ ucp_test::mapped_buffer::~mapped_buffer()
 {
     ucp_rkey_buffer_release(m_rkey_buffer);
     ucs_status_t status = ucp_mem_unmap(m_entity.ucph(), m_memh);
-    EXPECT_UCS_OK(status);
+    if (status != UCS_OK) {
+        ucs_warn("failed to unmap memh=%p: %s", m_memh,
+                 ucs_status_string(status));
+    }
 }
 
 ucs::handle<ucp_rkey_h> ucp_test::mapped_buffer::rkey(const entity& entity) const

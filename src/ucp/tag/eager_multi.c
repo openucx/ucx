@@ -155,6 +155,7 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
+    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_bcopy_progress(
             req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
             ucp_proto_eager_bcopy_multi_send_func,
@@ -228,6 +229,7 @@ ucp_proto_eager_sync_bcopy_multi_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
+    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_bcopy_progress(
             req, req->send.proto_config->priv,
             ucp_proto_eager_sync_bcopy_request_init,
@@ -307,6 +309,7 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
+    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
             req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
             UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,

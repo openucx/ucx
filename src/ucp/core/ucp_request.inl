@@ -225,6 +225,10 @@ ucp_request_complete_send(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   ucs_status_string(status));
     UCS_PROFILE_REQUEST_EVENT(req, "complete_send", status);
+    /* Coverity wrongly resolves completion callback function to
+     * 'ucp_cm_client_connect_progress'/'ucp_cm_server_conn_request_progress'
+     */
+    /* coverity[offset_free] */
     ucp_request_complete(req, send.cb, status, req->user_data);
 }
 
@@ -761,6 +765,9 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
         ucp_recv_desc_release(req->recv.am.desc);
     }
 
+    /* Coverity wrongly resolves completion callback function to
+     * 'ucp_cm_server_conn_request_progress' */
+    /* coverity[offset_free] */
     ucp_request_complete(req, recv.am.cb, status, req->recv.length,
                          req->user_data);
 }
@@ -990,6 +997,7 @@ ucp_request_user_data_get_super(void *request, void *user_data)
     ucp_request_t UCS_V_UNUSED *req = (ucp_request_t*)request - 1;
     ucp_request_t *super_req        = (ucp_request_t*)user_data;
 
+    ucs_assert(super_req != NULL);
     ucs_assert(ucp_request_get_super(req) == super_req);
     return super_req;
 }

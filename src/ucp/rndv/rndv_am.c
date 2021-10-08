@@ -87,6 +87,7 @@ static ucs_status_t ucp_proto_rndv_am_bcopy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
+    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_bcopy_progress(req, req->send.proto_config->priv,
                                           NULL,
                                           ucp_proto_rndv_am_bcopy_send_func,
