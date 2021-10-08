@@ -414,8 +414,9 @@ uct_dc_mlx5_force_full_handshake(uct_dc_mlx5_iface_t *iface, int full_handshake_
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                          uct_ib_mlx5_md_t);
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md,
+                                              uct_ib_mlx5_md_t);
     struct ibv_qp_attr attr;
     long attr_mask;
 
@@ -427,8 +428,8 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     ucs_assert(dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS);
     memset(&attr, 0, sizeof(attr));
     attr.qp_state        = IBV_QPS_INIT;
-    attr.pkey_index      = iface->super.super.super.pkey_index;
-    attr.port_num        = iface->super.super.super.config.port_num;
+    attr.pkey_index      = ib_iface->pkey_index;
+    attr.port_num        = ib_iface->config.port_num;
     attr_mask            = IBV_QP_STATE      |
                            IBV_QP_PKEY_INDEX |
                            IBV_QP_PORT;
@@ -441,11 +442,11 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     /* Move QP to the RTR state */
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
-    attr.path_mtu                   = iface->super.super.super.config.path_mtu;
-    attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
-    attr.ah_attr.sl                 = iface->super.super.super.config.sl;
+    attr.path_mtu                   = ib_iface->config.path_mtu;
+    attr.ah_attr.is_global          = ib_iface->config.force_global_addr;
+    attr.ah_attr.sl                 = ib_iface->config.sl;
     /* ib_core expects valid ah_attr::port_num when IBV_QP_AV is set */
-    attr.ah_attr.port_num           = iface->super.super.super.config.port_num;
+    attr.ah_attr.port_num           = ib_iface->config.port_num;
     attr_mask                       = IBV_QP_STATE     |
                                       IBV_QP_PATH_MTU  |
                                       IBV_QP_AV;
@@ -481,9 +482,10 @@ ucs_status_t
 uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
                              const uct_dc_mlx5_iface_config_t *config)
 {
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
-                                          uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md,
+                                              uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev     = uct_ib_iface_device(ib_iface);
     struct mlx5dv_qp_init_attr dv_init_attr = {};
     struct ibv_qp_init_attr_ex init_attr = {};
     struct ibv_qp_attr attr = {};
@@ -497,10 +499,10 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     }
 
     init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
-    init_attr.pd                    = uct_ib_iface_md(&iface->super.super.super)->pd;
-    init_attr.recv_cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
+    init_attr.pd                    = uct_ib_iface_md(ib_iface)->pd;
+    init_attr.recv_cq               = ib_iface->cq[UCT_IB_DIR_RX];
     /* DCT can't send, but send_cq have to point to valid CQ */
-    init_attr.send_cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
+    init_attr.send_cq               = ib_iface->cq[UCT_IB_DIR_RX];
     init_attr.srq                   = iface->super.rx.srq.verbs.srq;
     init_attr.qp_type               = IBV_QPT_DRIVER;
 
@@ -518,9 +520,9 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    attr.pkey_index      = iface->super.super.super.pkey_index;
+    attr.pkey_index      = ib_iface->pkey_index;
     attr.qp_state        = IBV_QPS_INIT;
-    attr.port_num        = iface->super.super.super.config.port_num;
+    attr.port_num        = ib_iface->config.port_num;
     attr.qp_access_flags = IBV_ACCESS_REMOTE_WRITE |
                            IBV_ACCESS_REMOTE_READ  |
                            IBV_ACCESS_REMOTE_ATOMIC;
@@ -536,13 +538,13 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     }
 
     attr.qp_state                  = IBV_QPS_RTR;
-    attr.path_mtu                  = iface->super.super.super.config.path_mtu;
+    attr.path_mtu                  = ib_iface->config.path_mtu;
     attr.min_rnr_timer             = iface->super.super.config.min_rnr_timer;
-    attr.ah_attr.is_global         = iface->super.super.super.config.force_global_addr;
-    attr.ah_attr.grh.hop_limit     = iface->super.super.super.config.hop_limit;
-    attr.ah_attr.grh.traffic_class = iface->super.super.super.config.traffic_class;
-    attr.ah_attr.grh.sgid_index    = iface->super.super.super.gid_info.gid_index;
-    attr.ah_attr.port_num          = iface->super.super.super.config.port_num;
+    attr.ah_attr.is_global         = ib_iface->config.force_global_addr;
+    attr.ah_attr.grh.hop_limit     = ib_iface->config.hop_limit;
+    attr.ah_attr.grh.traffic_class = ib_iface->config.traffic_class;
+    attr.ah_attr.grh.sgid_index    = ib_iface->gid_info.gid_index;
+    attr.ah_attr.port_num          = ib_iface->config.port_num;
 
     ret = ibv_modify_qp(iface->rx.dct.verbs.qp, &attr, IBV_QP_STATE |
                                                        IBV_QP_MIN_RNR_TIMER |
@@ -706,29 +708,30 @@ ucs_status_t
 uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
                              const uct_dc_mlx5_iface_config_t *config)
 {
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
     struct ibv_exp_dct_init_attr init_attr;
 
     memset(&init_attr, 0, sizeof(init_attr));
 
-    init_attr.pd               = uct_ib_iface_md(&iface->super.super.super)->pd;
-    init_attr.cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
+    init_attr.pd               = uct_ib_iface_md(ib_iface)->pd;
+    init_attr.cq               = ib_iface->cq[UCT_IB_DIR_RX];
     init_attr.srq              = iface->super.rx.srq.verbs.srq;
     init_attr.dc_key           = UCT_IB_KEY;
-    init_attr.port             = iface->super.super.super.config.port_num;
-    init_attr.mtu              = iface->super.super.super.config.path_mtu;
+    init_attr.port             = ib_iface->config.port_num;
+    init_attr.mtu              = ib_iface->config.path_mtu;
     init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE |
                                  IBV_EXP_ACCESS_REMOTE_READ |
                                  IBV_EXP_ACCESS_REMOTE_ATOMIC;
     init_attr.min_rnr_timer    = iface->super.super.config.min_rnr_timer;
-    init_attr.tclass           = iface->super.super.super.config.traffic_class;
-    init_attr.hop_limit        = iface->super.super.super.config.hop_limit;
-    init_attr.gid_index        = iface->super.super.super.gid_info.gid_index;
-    init_attr.inline_size      = iface->super.super.super.config.max_inl_cqe[UCT_IB_DIR_RX];
-    init_attr.pkey_index       = iface->super.super.super.pkey_index;
+    init_attr.tclass           = ib_iface->config.traffic_class;
+    init_attr.hop_limit        = ib_iface->config.hop_limit;
+    init_attr.gid_index        = ib_iface->gid_info.gid_index;
+    init_attr.inline_size      = ib_iface->config.max_inl_cqe[UCT_IB_DIR_RX];
+    init_attr.pkey_index       = ib_iface->pkey_index;
     init_attr.create_flags    |= uct_dc_mlx5_iface_ooo_flag(iface,
                                                             IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT,
                                                             "DCT", 0);
-    iface->rx.dct.verbs.dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super.super)->ibv_context,
+    iface->rx.dct.verbs.dct = ibv_exp_create_dct(uct_ib_iface_device(ib_iface)->ibv_context,
                                                  &init_attr);
     if (iface->rx.dct.verbs.dct == NULL) {
         ucs_error("failed to create DC target: %m");
@@ -743,14 +746,15 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci)
 {
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
     struct ibv_exp_qp_attr attr;
     long attr_mask;
     uint64_t ooo_qp_flag;
 
     memset(&attr, 0, sizeof(attr));
     attr.qp_state        = IBV_QPS_INIT;
-    attr.pkey_index      = iface->super.super.super.pkey_index;
-    attr.port_num        = iface->super.super.super.config.port_num;
+    attr.pkey_index      = ib_iface->pkey_index;
+    attr.port_num        = ib_iface->config.port_num;
     attr.dct_key         = UCT_IB_KEY;
     attr_mask            = IBV_EXP_QP_STATE      |
                            IBV_EXP_QP_PKEY_INDEX |
@@ -768,9 +772,9 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                              "DCI QP 0x", dci->txwq.super.qp_num);
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
-    attr.path_mtu                   = iface->super.super.super.config.path_mtu;
-    attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
-    attr.ah_attr.sl                 = iface->super.super.super.config.sl;
+    attr.path_mtu                   = ib_iface->config.path_mtu;
+    attr.ah_attr.is_global          = ib_iface->config.force_global_addr;
+    attr.ah_attr.sl                 = ib_iface->config.sl;
     attr_mask                       = IBV_EXP_QP_STATE     |
                                       IBV_EXP_QP_PATH_MTU  |
                                       IBV_EXP_QP_AV        |
