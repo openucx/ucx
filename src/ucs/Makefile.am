@@ -38,6 +38,7 @@ nobase_dist_libucs_la_HEADERS = \
 	datastruct/linear_func.h \
 	datastruct/list.h \
 	datastruct/mpool.h \
+	datastruct/mpool_set.h \
 	datastruct/pgtable.h \
 	datastruct/queue_types.h \
 	datastruct/strided_alloc.h \
@@ -92,6 +93,7 @@ noinst_HEADERS = \
 	datastruct/frag_list.h \
 	datastruct/mpmc.h \
 	datastruct/mpool.inl \
+	datastruct/mpool_set.inl \
 	datastruct/ptr_array.h \
 	datastruct/queue.h \
 	datastruct/sglib.h \
@@ -149,6 +151,7 @@ libucs_la_SOURCES = \
 	datastruct/frag_list.c \
 	datastruct/mpmc.c \
 	datastruct/mpool.c \
+	datastruct/mpool_set.c \
 	datastruct/pgtable.c \
 	datastruct/ptr_array.c \
 	datastruct/ptr_map.c \
