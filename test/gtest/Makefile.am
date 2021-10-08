@@ -43,6 +43,10 @@ VALGRIND_ARGS = \
 
 noinst_PROGRAMS = gtest
 
+EXTRA_DIST = \
+	ucs/ucx.conf \
+	ucs/ucx_test.conf
+
 gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
