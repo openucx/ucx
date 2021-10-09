@@ -554,3 +554,82 @@ UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_nbx)
+
+class test_ucp_tag_nbx_prereg : public test_ucp_tag {
+public:
+    void init() {
+        modify_config("ZCOPY_THRESH", "1k");
+        modify_config("RNDV_THRESH", "8k");
+
+        test_ucp_tag::init();
+    }
+
+protected:
+    void buf_reg(void *addr, size_t len, ucp_context_h ctx, ucp_mem_h *memh_p)
+    {
+        ucp_mem_map_params_t params;
+        ucs_status_t status;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = addr;
+        params.length     = len;
+
+        status = ucp_mem_map(ctx, &params, memh_p);
+        ASSERT_UCS_OK(status);
+    }
+
+    void buf_dereg(ucp_context_h ctx, ucp_mem_h memh)
+    {
+        ucs_status_t status;
+
+        status = ucp_mem_unmap(ctx, memh);
+        ASSERT_UCS_OK(status);
+    }
+
+    void test_recv_send(size_t size)
+    {
+        ucp_request_param_t param = {0};
+        ucp_mem_h send_memh, recv_memh;
+
+        std::vector<char> send_buffer(size);
+        std::vector<char> recv_buffer(size);
+
+        buf_reg(&recv_buffer[0], size, receiver().ucph(), &recv_memh);
+        param.op_attr_mask       |= UCP_OP_ATTR_FIELD_MEMH;
+        param.memh                = recv_memh;
+
+        ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
+                                                     &recv_buffer[0], size,
+                                                     0, 0, &param);
+        ASSERT_UCS_PTR_OK(recv_req);
+
+        buf_reg(&send_buffer[0], size, sender().ucph(), &send_memh);
+        param.op_attr_mask       |= UCP_OP_ATTR_FIELD_MEMH;
+        param.memh                = send_memh;
+
+        ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), &send_buffer[0],
+                                                     size, 0, &param);
+        ASSERT_UCS_PTR_OK(send_req);
+
+        request_wait(send_req);
+        request_wait(recv_req);
+
+        buf_dereg(sender().ucph(), send_memh);
+        buf_dereg(receiver().ucph(), recv_memh);
+    }
+};
+
+UCS_TEST_P(test_ucp_tag_nbx_prereg, zcopy_send)
+{
+    test_recv_send(4 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_tag_nbx_prereg, rndv_get, "RNDV_SCHEME=get_zcopy")
+{
+    test_recv_send(16 * UCS_KBYTE);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_nbx_prereg, dcx,    "dc_x") \
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_nbx_prereg, rc,     "rc_v") \
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_tag_nbx_prereg, rcx,    "rc_x");

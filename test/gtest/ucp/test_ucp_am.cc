@@ -314,6 +314,8 @@ public:
         m_rx_dt       = ucp_dt_make_contig(1);
         m_rx_memtype  = UCS_MEMORY_TYPE_HOST;
         m_rx_buf      = NULL;
+        m_prereg      = false;
+        m_rx_memh     = NULL;
     }
 
 protected:
@@ -388,7 +390,7 @@ protected:
 
     ucs_status_ptr_t send_am(const ucp::data_type_desc_t& dt_desc,
                              unsigned flags = 0, const void *hdr = NULL,
-                             unsigned hdr_length = 0)
+                             unsigned hdr_length = 0, const ucp_mem_h memh = NULL)
     {
         ucp_request_param_t param;
         param.op_attr_mask      = UCP_OP_ATTR_FIELD_DATATYPE;
@@ -399,10 +401,37 @@ protected:
             param.flags         = flags;
         }
 
+        if (memh != NULL) {
+            param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            param.memh          = memh;
+        }
+
         ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID,
                                                 hdr, hdr_length, dt_desc.buf(),
                                                 dt_desc.count(), &param);
         return sptr;
+    }
+
+    void buf_reg(void *addr, size_t len, ucp_context_h ctx, ucp_mem_h *memh_p)
+    {
+        ucp_mem_map_params_t params;
+        ucs_status_t status;
+
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = addr;
+        params.length     = len;
+
+        status = ucp_mem_map(ctx, &params, memh_p);
+        ASSERT_UCS_OK(status);
+    }
+
+    void buf_dereg(ucp_context_h ctx, ucp_mem_h memh)
+    {
+        ucs_status_t status;
+
+        status = ucp_mem_unmap(ctx, memh);
+        ASSERT_UCS_OK(status);
     }
 
     void test_am_send_recv(size_t size, size_t header_size = 0ul,
@@ -415,17 +444,27 @@ protected:
         m_hdr.resize(header_size);
         ucs::fill_random(m_hdr);
         m_am_received = false;
+        ucp_mem_h memh = NULL;
 
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_cb, this,
                             data_cb_flags);
 
         ucp::data_type_desc_t sdt_desc(m_dt, sbuf.ptr(), size);
 
+        if (m_prereg) {
+            buf_reg(sbuf.ptr(), size, sender().ucph(), &memh);
+        }
+
         ucs_status_ptr_t sptr = send_am(sdt_desc, get_send_flag() | flags,
-                                        m_hdr.data(), m_hdr.size());
+                                        m_hdr.data(), m_hdr.size(), memh);
 
         wait_for_flag(&m_am_received);
         request_wait(sptr);
+
+        if (memh) {
+            buf_dereg(sender().ucph(), memh);
+        }
+
         EXPECT_TRUE(m_am_received);
     }
 
@@ -493,6 +532,14 @@ protected:
         params.cb.recv_am   = am_data_recv_cb;
         params.user_data    = this;
         params.recv_info.length = &rx_length;
+
+        if (m_prereg) {
+            buf_reg(m_rx_buf, length, receiver().ucph(), &m_rx_memh);
+
+            params.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            params.memh          = m_rx_memh;
+        }
+
         ucs_status_ptr_t sp = ucp_am_recv_data_nbx(receiver().worker(),
                                                    data, m_rx_dt_desc.buf(),
                                                    m_rx_dt_desc.count(),
@@ -515,6 +562,11 @@ protected:
         ASSERT_FALSE(m_am_received);
         m_am_received = true;
         mem_buffer::pattern_check(m_rx_buf, length, SEED, m_rx_memtype);
+
+        if (m_rx_memh) {
+            buf_dereg(receiver().ucph(), m_rx_memh);
+        }
+
         mem_buffer::release(m_rx_buf, m_rx_memtype);
     }
 
@@ -570,6 +622,8 @@ protected:
     ucs_memory_type_t               m_rx_memtype;
     ucp::data_type_desc_t           m_rx_dt_desc;
     void                            *m_rx_buf;
+    bool                            m_prereg;
+    ucp_mem_h                       m_rx_memh;
 };
 
 UCS_TEST_P(test_ucp_am_nbx, set_invalid_handler)
@@ -1373,3 +1427,30 @@ UCS_TEST_P(test_ucp_am_nbx_rndv_memtype_disable_zcopy,
 }
 
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_rndv_memtype_disable_zcopy);
+
+class test_ucp_am_nbx_prereg : public test_ucp_am_nbx {
+public:
+    void init()
+    {
+        modify_config("ZCOPY_THRESH", "1k");
+        modify_config("RNDV_THRESH", "8k");
+
+        test_ucp_am_nbx::init();
+
+        m_prereg = true;
+    }
+};
+
+UCS_TEST_P(test_ucp_am_nbx_prereg, zcopy_send)
+{
+    test_am_send_recv(4 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_prereg, rndv_get, "RNDV_SCHEME=get_zcopy")
+{
+    test_am_send_recv(16 * UCS_KBYTE);
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, dcx,    "dc_x") \
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, rc,     "rc_v") \
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, rcx,    "rc_x");

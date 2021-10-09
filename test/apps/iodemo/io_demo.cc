@@ -449,6 +449,8 @@ protected:
                                               pool.name().c_str());
                 if ((context != NULL) && (buffer != NULL)) {
                     if (!context->map_buffer(size, buffer, &memh)) {
+                        LOG << "ERROR: Failed to register buffer %p."
+                            << buffer;
                         free(buffer);
                         buffer = NULL;
                     }
@@ -476,9 +478,9 @@ protected:
                 break;
 #endif
             case UCS_MEMORY_TYPE_HOST:
-                if (_memh != NULL) {
-                    bool ret = _context->unmap_buffer(_memh);
-                    assert(ret);
+                if (_memh != NULL && !_context->unmap_buffer(_memh)) {
+                    LOG << "ERROR: Failed to deregister buffer %p."
+                        << _buffer;
                 }
                 free(_buffer);
                 break;
