@@ -38,6 +38,7 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_EVENTS);
     JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_USER_DATA);
     JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_EVENT_FD);
+    JUCX_DEFINE_LONG_CONSTANT(UCP_WORKER_PARAM_FIELD_CLIENT_ID);
 
     // UCP worker wakeup events
     JUCX_DEFINE_LONG_CONSTANT(UCP_WAKEUP_RMA);
@@ -72,6 +73,7 @@ Java_org_openucx_jucx_ucp_UcpConstants_loadConstants(JNIEnv *env, jclass cls)
     // The enumeration list describes the endpoint's parameters flags
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAMS_FLAGS_CLIENT_SERVER);
     JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAMS_FLAGS_NO_LOOPBACK);
+    JUCX_DEFINE_LONG_CONSTANT(UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID);
 
     // UCP memory mapping parameters field mask
     JUCX_DEFINE_LONG_CONSTANT(UCP_MEM_MAP_PARAM_FIELD_ADDRESS);
