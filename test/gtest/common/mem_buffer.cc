@@ -438,12 +438,12 @@ size_t mem_buffer::size() const {
     return m_size;
 }
 
-void mem_buffer::pattern_fill(uint64_t seed) {
-    pattern_fill(ptr(), size(), seed, mem_type());
+void mem_buffer::pattern_fill(uint64_t seed, size_t length) {
+    pattern_fill(ptr(), std::min(length, size()), seed, mem_type());
 }
 
-void mem_buffer::pattern_check(uint64_t seed) const {
-    pattern_check(ptr(), size(), seed, mem_type());
+void mem_buffer::pattern_check(uint64_t seed, size_t length) const {
+    pattern_check(ptr(), std::min(length, size()), seed, mem_type());
 }
 
 void mem_buffer::memset(int c) {

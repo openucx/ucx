@@ -117,9 +117,6 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          size_t *priv_size_p);
 
 
-size_t ucp_proto_rndv_pack_ack(void *dest, void *arg);
-
-
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);
 
 

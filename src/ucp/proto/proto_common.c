@@ -153,13 +153,25 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 {
     ucp_worker_h worker        = params->super.worker;
     ucp_context_h context      = worker->context;
+    const size_t hdr_size      = params->hdr_size;
     ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(&params->super,
                                                                 lane);
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
     const ucp_rkey_config_t *rkey_config;
     ucs_sys_dev_distance_t distance;
+    size_t tl_min_frag, tl_max_frag;
     uct_perf_attr_t perf_attr;
     ucs_status_t status;
+
+    tl_min_frag = ucp_proto_common_get_iface_attr_field(&wiface->attr,
+                                                        params->min_frag_offs,
+                                                        0);
+    tl_max_frag = ucp_proto_common_get_iface_attr_field(&wiface->attr,
+                                                        params->max_frag_offs,
+                                                        SIZE_MAX);
+
+    ucs_assertv(tl_max_frag >= hdr_size, "tl_max_frag=%zu max_hdr_size=%zu",
+                tl_max_frag, hdr_size);
 
     /* Use the v2 API to query overhead and BW */
     perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
@@ -175,16 +187,14 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
         return status;
     }
 
-    perf->overhead  = perf_attr.overhead + params->overhead;
-    perf->bandwidth = ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
-    perf->latency   = ucp_tl_iface_latency(context, &perf_attr.latency) +
-                      params->latency;
-
+    perf->overhead    = perf_attr.overhead + params->overhead;
+    perf->bandwidth   = ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
+    perf->latency     = ucp_tl_iface_latency(context, &perf_attr.latency) +
+                        params->latency;
     perf->sys_latency = 0;
-    perf->min_length  = ucp_proto_common_get_iface_attr_field(
-            &wiface->attr, params->min_frag_offs, 0);
-    perf->max_frag    = ucp_proto_common_get_iface_attr_field(
-            &wiface->attr, params->max_frag_offs, SIZE_MAX);
+    perf->min_length  = ucs_max(params->min_length, tl_min_frag);
+    perf->max_frag    = ucs_min(tl_max_frag - hdr_size, params->max_length) +
+                        hdr_size; /* Avoid overflow if max_length ~ SIZE_MAX */
 
     /* For zero copy send, consider local system topology distance */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
@@ -207,6 +217,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     ucs_assert(perf->bandwidth > 1.0);
     ucs_assert(perf->overhead >= 0);
     ucs_assert(perf->max_frag > 0);
+    ucs_assert(perf->max_frag >= hdr_size);
     ucs_assert(perf->sys_latency >= 0);
 
     return UCS_OK;

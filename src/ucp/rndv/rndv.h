@@ -73,21 +73,20 @@ typedef struct {
 
 
 /*
- * RNDV_ATP
+ * RNDV_ATS/RNDV_ATP with size field
  */
 typedef struct {
     ucp_reply_hdr_t super;
 
-    /* The receive is considered complete when this number of ATP packets
-       has arrived */
-    uint16_t        count;
-} UCS_S_PACKED ucp_rndv_atp_hdr_t;
+    /* Size of the acknowledged data */
+    size_t          size;
+} UCS_S_PACKED ucp_rndv_ack_hdr_t;
 
 
 ucs_status_t ucp_rndv_send_rts(ucp_request_t *sreq, uct_pack_callback_t pack_cb,
                                size_t rts_body_size);
 
-void ucp_rndv_req_send_ack(ucp_request_t *ack_req, ucp_request_t *req,
+void ucp_rndv_req_send_ack(ucp_request_t *ack_req, size_t ack_size,
                            ucs_ptr_map_key_t remote_req_id, ucs_status_t status,
                            ucp_am_id_t am_id, const char *ack_str);
 

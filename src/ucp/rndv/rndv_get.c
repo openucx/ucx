@@ -91,7 +91,7 @@ ucp_proto_rndv_get_zcopy_fetch_completion(uct_completion_t *uct_comp)
     ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
                                 &req->send.state.dt_iter,
                                 UCS_BIT(UCP_DATATYPE_CONTIG));
-    ucp_proto_rndv_common_complete(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
+    ucp_proto_rndv_recv_complete_with_ats(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
 }
 
 static ucs_status_t
@@ -170,7 +170,8 @@ ucp_proto_rndv_get_mtype_unpack_completion(uct_completion_t *uct_comp)
     if (ucp_proto_rndv_request_is_ppln_frag(req)) {
         ucp_proto_rndv_ppln_recv_frag_complete(req, 1);
     } else {
-        ucp_proto_rndv_common_complete(req, UCP_PROTO_RNDV_GET_STAGE_ATS);
+        ucp_proto_rndv_recv_complete_with_ats(req,
+                                              UCP_PROTO_RNDV_GET_STAGE_ATS);
     }
 }
 
@@ -247,8 +248,21 @@ static ucs_status_t
 ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
 {
     ucs_status_t status;
+    size_t max_length;
 
-    if (!ucp_proto_rndv_op_check(params, UCP_OP_ID_RNDV_RECV, 0)) {
+    if (ucp_proto_rndv_init_params_is_ppln_frag(params)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    /* This protocols supports either a regular rendezvous receive but without
+     * data, or a rendezvous receive which should ignore the data.
+     * In either case, we just need to send an ATS.
+     */
+    if (params->select_param->op_id == UCP_OP_ID_RNDV_RECV) {
+        max_length = 0;
+    } else if (params->select_param->op_id == UCP_OP_ID_RNDV_RECV_DROP) {
+        max_length = SIZE_MAX;
+    } else {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -270,7 +284,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     params->caps->cfg_priority         = 1;
     params->caps->min_length           = 0;
     params->caps->num_ranges           = 1;
-    params->caps->ranges[0].max_length = 0;
+    params->caps->ranges[0].max_length = max_length;
 
     return UCS_OK;
 }
