@@ -957,7 +957,7 @@ uct_dc_mlx5_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *iface_addr
 
 static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *iface)
 {
-    int i;
+    int dci_index;
 
     if (kh_size(&iface->tx.fc_hash) != 0) {
         /* If some ep is waiting for grant it may have some pending
@@ -965,8 +965,9 @@ static inline ucs_status_t uct_dc_mlx5_iface_flush_dcis(uct_dc_mlx5_iface_t *ifa
         return UCS_INPROGRESS;
     }
 
-    for (i = 0; i < iface->tx.ndci * iface->tx.num_dci_pools; i++) {
-        if (uct_dc_mlx5_iface_flush_dci(iface, i) != UCS_OK) {
+    for (dci_index = 0; dci_index < iface->tx.ndci * iface->tx.num_dci_pools;
+         dci_index++) {
+        if (uct_dc_mlx5_iface_flush_dci(iface, dci_index) != UCS_OK) {
             return UCS_INPROGRESS;
         }
     }
