@@ -784,7 +784,8 @@ scoped_mutex_lock::~scoped_mutex_lock()
     pthread_mutex_unlock(&m_mutex);
 }
 
-std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
+const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs()
+{
     static std::vector<std::vector<ucs_memory_type_t> > result;
 
     if (result.empty()) {

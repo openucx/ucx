@@ -408,11 +408,10 @@ void ucp_test::add_variant_memtypes(std::vector<ucp_test_variant>& variants,
                                     get_variants_func_t generator,
                                     uint64_t mem_types_mask)
 {
-    std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
-    for (size_t i = 0; i < mem_types.size(); ++i) {
-        if (UCS_BIT(mem_types[i]) & mem_types_mask) {
-            add_variant_values(variants, generator, mem_types[i],
-                               ucs_memory_type_names[mem_types[i]]);
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        if (UCS_BIT(mem_type) & mem_types_mask) {
+            add_variant_values(variants, generator, mem_type,
+                               ucs_memory_type_names[mem_type]);
         }
     }
 }

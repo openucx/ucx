@@ -28,8 +28,10 @@ public:
     };
 
     void init() {
-        int mem_type_pair_index = get_variant_value() % mem_type_pairs.size();
-        int varient_index       = get_variant_value() / mem_type_pairs.size();
+        int mem_type_pair_index =
+                get_variant_value() % m_mem_type_pairs.size();
+        int varient_index       =
+                get_variant_value() / m_mem_type_pairs.size();
 
         if (varient_index & VARIANT_GDR_OFF) {
             m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
@@ -50,8 +52,8 @@ public:
             modify_config("PROTO_ENABLE", "y");
         }
 
-        m_send_mem_type  = mem_type_pairs[mem_type_pair_index][0];
-        m_recv_mem_type  = mem_type_pairs[mem_type_pair_index][1];
+        m_send_mem_type = m_mem_type_pairs[mem_type_pair_index][0];
+        m_recv_mem_type = m_mem_type_pairs[mem_type_pair_index][1];
 
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES",  "2");
@@ -66,11 +68,10 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         int count = 0;
         for (int i = 0; i < VARIANT_MAX; i++) {
-            for (std::vector<std::vector<ucs_memory_type_t> >::const_iterator iter =
-                 mem_type_pairs.begin(); iter != mem_type_pairs.end(); ++iter) {
+            for (const auto& mem_type_pair : m_mem_type_pairs) {
                 std::string name =
-                        std::string(ucs_memory_type_names[(*iter)[0]]) + ":" +
-                        std::string(ucs_memory_type_names[(*iter)[1]]);
+                        std::string(ucs_memory_type_names[mem_type_pair[0]]) + ":" +
+                        std::string(ucs_memory_type_names[mem_type_pair[1]]);
                 if (i & VARIANT_GDR_OFF) {
                     name += ",nogdr";
                 }
@@ -110,7 +111,8 @@ public:
         return (ucs::rand() % max_test_length(exp)) + 1;
     }
 
-    static std::vector<std::vector<ucs_memory_type_t> > mem_type_pairs;
+    static const
+    std::vector<std::vector<ucs_memory_type_t> >& m_mem_type_pairs;
 
 protected:
 
@@ -128,8 +130,8 @@ private:
     static const uint64_t RECV_TAG   = 0x1337;
 };
 
-std::vector<std::vector<ucs_memory_type_t> >
-test_ucp_tag_mem_type::mem_type_pairs = ucs::supported_mem_type_pairs();
+const std::vector<std::vector<ucs_memory_type_t> >&
+test_ucp_tag_mem_type::m_mem_type_pairs = ucs::supported_mem_type_pairs();
 
 size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
                                   size_t count, ucp_datatype_t send_dt,
