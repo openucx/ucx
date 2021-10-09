@@ -177,7 +177,8 @@ ucs_status_t uct_rc_mlx5_ep_tag_rndv_request(uct_ep_h tl_ep, uct_tag_t tag,
                                              unsigned header_length,
                                              unsigned flags);
 
-ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
+ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
+                                        uint32_t *ibv_ece);
 
 unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg);
 

@@ -305,7 +305,8 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
 ucs_status_t uct_ud_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
-ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
+ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
+                                   uint32_t *ibv_ece);
 
 ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *params,
                                                uct_ep_h *new_ep_p);

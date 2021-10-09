@@ -815,7 +815,8 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
     return UCS_OK;
 }
 
-ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr)
+ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr,
+                                    uint32_t *ibv_ece)
 {
     uct_tcp_ep_t *ep        = ucs_derived_of(tl_ep, uct_tcp_ep_t);
     uct_tcp_ep_addr_t *addr = (uct_tcp_ep_addr_t*)ep_addr;

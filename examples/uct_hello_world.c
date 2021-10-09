@@ -669,7 +669,7 @@ int main(int argc, char **argv)
         CHKERR_JUMP(UCS_OK != status, "create endpoint", out_free_ep_addrs);
 
         /* Get endpoint address */
-        status = uct_ep_get_address(ep, own_ep);
+        status = uct_ep_get_address(ep, own_ep, NULL);
         CHKERR_JUMP(UCS_OK != status, "get endpoint address", out_free_ep);
 
         status = (ucs_status_t)sendrecv(oob_sock, own_ep, if_info.iface_attr.ep_addr_len,

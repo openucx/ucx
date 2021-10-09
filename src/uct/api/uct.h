@@ -2228,8 +2228,10 @@ void uct_ep_destroy(uct_ep_h ep);
  * @param [in]  ep       Endpoint to query.
  * @param [out] addr     Filled with endpoint address. The size of the buffer
  *                       provided must be at least @ref uct_iface_attr_t::ep_addr_len.
+ * @param [out] ibv_ece  filled with reduced ECE
  */
-ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
+ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr,
+                                uint32_t *ibv_ece);
 
 
 /**

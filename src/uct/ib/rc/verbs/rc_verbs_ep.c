@@ -535,7 +535,8 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
+ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
+                                         uint32_t *ibv_ece)
 {
     uct_rc_verbs_iface_t *iface        = ucs_derived_of(tl_ep->iface,
                                                        uct_rc_verbs_iface_t);

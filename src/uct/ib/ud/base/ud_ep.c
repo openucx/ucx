@@ -466,7 +466,8 @@ void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
     memcpy(new_ep, old_ep, sizeof(uct_ud_ep_t));
 }
 
-ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
+ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
+                                   uint32_t *ibv_ece)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
@@ -883,7 +884,8 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     creq->conn_req.path_index = ep->path_index;
 
     status = uct_ud_ep_get_address(&ep->super.super,
-                                   (void*)&creq->conn_req.ep_addr);
+                                   (void*)&creq->conn_req.ep_addr,
+                                   NULL);
     if (status != UCS_OK) {
         return NULL;
     }

@@ -1147,7 +1147,7 @@ void uct_test::entity::connect_p2p_ep(uct_ep_h from, uct_ep_h to)
     status = uct_iface_get_device_address(to->iface, dev_addr);
     ASSERT_UCS_OK(status);
 
-    status = uct_ep_get_address(to, ep_addr);
+    status = uct_ep_get_address(to, ep_addr, NULL);
     ASSERT_UCS_OK(status);
 
     status = uct_ep_connect_to_ep(from, dev_addr, ep_addr);

@@ -719,7 +719,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
                 ucs_error("Failed to uct_ep_create: %s", ucs_status_string(status));
                 goto err_destroy_eps;
             }
-            status = uct_ep_get_address(perf->uct.peers[i].ep, ep_addr);
+            status = uct_ep_get_address(perf->uct.peers[i].ep, ep_addr, NULL);
             if (status != UCS_OK) {
                 ucs_error("Failed to uct_ep_get_address: %s", ucs_status_string(status));
                 goto err_destroy_eps;
