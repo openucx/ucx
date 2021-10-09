@@ -165,6 +165,7 @@ gtest_SOURCES = \
 	ucs/test_math.cc \
 	ucs/test_mpmc.cc \
 	ucs/test_mpool.cc \
+	ucs/test_mpool_set.cc \
 	ucs/test_pgtable.cc \
 	ucs/test_profile.cc \
 	ucs/test_rcache.cc \

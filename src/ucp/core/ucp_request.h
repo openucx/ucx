@@ -158,8 +158,10 @@ struct ucp_request {
                     /* UCT completion, used by flush and zero-copy operations */
                     uct_completion_t uct_comp;
 
-                    /* Used by rndv/rtr protocol to count ATP or RNDV_DATA
-                     * Used by rkey_ptr */
+                    /* Used by rndv/rtr to track received data size
+                     * Used by rndv/ppln to track completed fragments
+                     * Used by rkey_ptr to track copied data size
+                     */
                     size_t           completed_size;
                 };
             } state;
@@ -258,7 +260,8 @@ struct ucp_request {
 
                                 /* Used by rndv/send/ppln and rndv/recv/ppln */
                                 struct {
-                                    uint8_t send_ack;
+                                    /* Size to send in ack message */
+                                    size_t ack_data_size;
                                 } ppln;
 
                                 /* Used by rndv/rkey_ptr */
@@ -366,10 +369,12 @@ struct ucp_request {
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
             union {
-                ssize_t   remaining; /* How much more data
-                                      * to be received */
-                ucp_mem_h memh;      /* Memory handle for pre-registered
-                                      * buffer */
+                ssize_t           remaining; /* How much more data
+                                              * to be received */
+                size_t            offset; /* offset in recv buffer for multi
+                                             fragment tag offload flow */
+                ucp_mem_h         memh;      /* Memory handle for pre-registered
+                                              * buffer */
             };
 
             /* Remote request ID received from a peer */

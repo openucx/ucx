@@ -73,7 +73,8 @@ public:
         typedef enum {
             LISTEN_CB_EP,       /* User's callback accepts ucp_ep_h */
             LISTEN_CB_CONN,     /* User's callback accepts ucp_conn_request_h */
-            LISTEN_CB_REJECT    /* User's callback rejects ucp_conn_request_h */
+            LISTEN_CB_REJECT,   /* User's callback rejects ucp_conn_request_h */
+            LISTEN_CB_CUSTOM    /* User's callback with custom test logic */
         } listen_cb_type_t;
 
         entity(const ucp_test_param& test_param, ucp_config_t* ucp_config,
@@ -111,6 +112,7 @@ public:
         ucs_status_t listen(listen_cb_type_t cb_type,
                             const struct sockaddr *saddr, socklen_t addrlen,
                             const ucp_ep_params_t& ep_params,
+                            ucp_listener_conn_handler_t *custom_cb = NULL,
                             int worker_index = 0);
 
         ucp_ep_h ep(int worker_index = 0, int ep_index = 0) const;

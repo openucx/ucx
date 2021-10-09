@@ -51,6 +51,7 @@ ucp_proto_rndv_rtr_common_init(const ucp_proto_init_params_t *init_params,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_rndv_rtr_hdr_t),
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .remote_op_id        = UCP_OP_ID_RNDV_SEND,
@@ -376,23 +377,21 @@ ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
                                            unsigned flags)
 {
     ucp_worker_h worker     = arg;
-    ucp_rndv_atp_hdr_t *atp = data;
+    ucp_rndv_ack_hdr_t *atp = data;
     const ucp_proto_rndv_rtr_priv_t *rpriv;
     ucp_request_t *req;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, atp->super.req_id, 0,
                                return UCS_OK, "ATP %p", atp);
 
-    ++req->send.state.completed_size;
-    ucp_trace_req(req, "got atp, count %zu", req->send.state.completed_size);
-
-    if (req->send.state.completed_size == atp->count) {
-        VALGRIND_MAKE_MEM_DEFINED(req->send.state.dt_iter.type.contig.buffer,
-                                  req->send.state.dt_iter.length);
-        rpriv = req->send.proto_config->priv;
-        rpriv->data_received(req, 0);
+    if (!ucp_proto_common_frag_complete(req, atp->size, "rndv_atp")) {
+        return UCS_OK;
     }
 
+    VALGRIND_MAKE_MEM_DEFINED(req->send.state.dt_iter.type.contig.buffer,
+                              req->send.state.dt_iter.length);
+    rpriv = req->send.proto_config->priv;
+    rpriv->data_received(req, 0);
     return UCS_OK;
 }
 
@@ -405,7 +404,6 @@ ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
     const ucp_proto_rndv_rtr_priv_t *rpriv;
     ucs_status_t status;
     ucp_request_t *req;
-    size_t data_length;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rndv_data_hdr->rreq_id, 0,
                                return UCS_OK, "RNDV_DATA %p", rndv_data_hdr);
@@ -418,11 +416,7 @@ ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
         return UCS_OK;
     }
 
-    req->send.state.completed_size += recv_len;
-
-    data_length = req->send.state.dt_iter.length;
-    ucs_assert(req->send.state.completed_size <= data_length);
-    if (req->send.state.completed_size == data_length) {
+    if (ucp_proto_common_frag_complete(req, recv_len, "rndv_data")) {
         rpriv = req->send.proto_config->priv;
         rpriv->data_received(req, 1);
     }

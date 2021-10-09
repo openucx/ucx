@@ -471,6 +471,7 @@ static void ucs_fuse_replace_fd_devnull()
 static void ucs_fuse_thread_stop()
 {
     sighandler_t orig_handler;
+    int ret;
 
     orig_handler = signal(SIGUSR1, ucs_empty_function);
 
@@ -481,8 +482,13 @@ static void ucs_fuse_thread_stop()
     /* If the thread is waiting in inotify loop, wake it */
     if (ucs_vfs_fuse_context.inotify_fd >= 0) {
 #ifdef HAVE_INOTIFY
-        inotify_rm_watch(ucs_vfs_fuse_context.inotify_fd,
-                         ucs_vfs_fuse_context.watch_desc);
+        ret = inotify_rm_watch(ucs_vfs_fuse_context.inotify_fd,
+                               ucs_vfs_fuse_context.watch_desc);
+        if (ret != 0) {
+            ucs_warn("inotify_rm_watch(fd=%d, wd=%d) failed: %m",
+                     ucs_vfs_fuse_context.inotify_fd,
+                     ucs_vfs_fuse_context.watch_desc);
+        }
 #endif
     }
 
@@ -495,13 +501,30 @@ static void ucs_fuse_thread_stop()
 
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
 
-    pthread_join(ucs_vfs_fuse_context.thread_id, NULL);
+    ret = pthread_join(ucs_vfs_fuse_context.thread_id, NULL);
+    if (ret != 0) {
+        ucs_warn("pthread_join(0x%lx) failed: %m",
+                 ucs_vfs_fuse_context.thread_id);
+    }
+
     signal(SIGUSR1, orig_handler);
+}
+
+static void ucs_vfs_fuse_atfork_child()
+{
+    /* Reset thread context at fork, since doing inotify_rm_watch() from child
+       will prevent doing it later from the parent */
+    ucs_vfs_fuse_context.thread_id  = -1;
+    ucs_vfs_fuse_context.fuse       = NULL;
+    ucs_vfs_fuse_context.fuse_fd    = -1;
+    ucs_vfs_fuse_context.inotify_fd = -1;
+    ucs_vfs_fuse_context.watch_desc = -1;
 }
 
 UCS_STATIC_INIT
 {
     if (ucs_global_opts.vfs_enable) {
+        pthread_atfork(NULL, NULL, ucs_vfs_fuse_atfork_child);
         ucs_pthread_create(&ucs_vfs_fuse_context.thread_id,
                            ucs_vfs_fuse_thread_func, NULL, "fuse");
     }

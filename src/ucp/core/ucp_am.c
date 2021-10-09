@@ -156,7 +156,7 @@ static void ucp_am_rndv_send_ats(ucp_worker_h worker, ucp_rndv_rts_hdr_t *rts,
     req->send.ep = ep;
     req->flags   = 0;
 
-    ucp_rndv_req_send_ack(req, NULL, rts->sreq.req_id, status,
+    ucp_rndv_req_send_ack(req, rts->size, rts->sreq.req_id, status,
                           UCP_AM_ID_RNDV_ATS, "send_ats");
 }
 

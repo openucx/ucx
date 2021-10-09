@@ -33,6 +33,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_LAST,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
@@ -58,27 +59,34 @@ static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
     size_t max_seg_size = worker->context->config.ext.rkey_ptr_seg_size;
     size_t length       = req->send.state.dt_iter.length;
     size_t offset       = req->send.state.completed_size;
-    size_t new_offset, seg_size;
+    size_t seg_size     = ucs_min(max_seg_size, length - offset);
     ucs_status_t status;
-    void *src;
-    int last;
+    const void *src;
 
-    seg_size   = ucs_min(max_seg_size, length - offset);
-    new_offset = offset + seg_size;
-    last       = new_offset == length;
-    src        = UCS_PTR_BYTE_OFFSET(req->send.rndv.rkey_ptr_addr, offset);
-    status     = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
-                                          seg_size, offset, src);
-    ucs_trace_data("rkey_ptr req: %p length: %zd seg: %zd off: %zd last: %d",
-                   req, length, seg_size, offset, last);
-    req->send.state.completed_size = new_offset;
-    if (ucs_unlikely(status != UCS_OK) || last) {
-        ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
-        ucp_proto_rndv_common_complete(req, UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS);
-        if (ucs_queue_is_empty(&worker->rkey_ptr_reqs)) {
-            uct_worker_progress_unregister_safe(worker->uct,
-                                                &worker->rkey_ptr_cb_id);
-        }
+    src = UCS_PTR_BYTE_OFFSET(req->send.rndv.rkey_ptr_addr, offset);
+
+    ucp_trace_req(req, "rkey_ptr unpack %zd from %p at offset %zd/%zd",
+                  seg_size, src, offset, length);
+
+    status = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,
+                                      seg_size, offset, src);
+    if (ucs_unlikely(status != UCS_OK)) {
+        ucp_proto_request_abort(req, status);
+        return 0;
+    }
+
+    if (!ucp_proto_common_frag_complete(req, seg_size, "rkey_ptr")) {
+        return 1;
+    }
+
+    ucs_queue_pull_non_empty(&worker->rkey_ptr_reqs);
+    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
+
+    ucp_proto_rndv_recv_complete_with_ats(req,
+                                          UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS);
+    if (ucs_queue_is_empty(&worker->rkey_ptr_reqs)) {
+        uct_worker_progress_unregister_safe(worker->uct,
+                                            &worker->rkey_ptr_cb_id);
     }
 
     return 1;

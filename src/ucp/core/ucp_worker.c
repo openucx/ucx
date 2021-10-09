@@ -1128,7 +1128,13 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 
     ucp_apply_uct_config_list(context, iface_config);
 
-    UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >= sizeof(ucp_eager_sync_hdr_t));
+    /* Make sure that enough space is requested in rdesc headroom. With tag
+     * offload, receiver uses this space to add headers right before the data.
+     */
+    UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >=
+                      sizeof(ucp_eager_sync_hdr_t));
+    UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >=
+                      sizeof(ucp_offload_first_desct_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
     iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_STATS_ROOT        |
@@ -2096,7 +2102,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                            NULL);
     worker->am.alignment = UCP_PARAM_VALUE(WORKER, params, am_alignment,
                                            AM_ALIGNMENT, 1);
-
+    worker->client_id    = UCP_PARAM_VALUE(WORKER, params, client_id, CLIENT_ID, 0);
     if ((params->field_mask & UCP_WORKER_PARAM_FIELD_NAME) &&
         (params->name != NULL)) {
         ucs_snprintf_zero(worker->name, UCP_ENTITY_NAME_MAX, "%s",

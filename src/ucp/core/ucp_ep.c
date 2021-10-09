@@ -704,6 +704,11 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
+    if (UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0) &
+        UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID) {
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID;
+    }
+
     status = ucp_ep_adjust_params(ep, params);
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
@@ -736,6 +741,8 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 {
     const ucp_wireup_sockaddr_data_t *sa_data = &conn_request->sa_data;
     unsigned ep_init_flags                    = 0;
+    const void *ucp_address                   = UCS_PTR_TYPE_OFFSET(sa_data,
+                                                ucp_wireup_sockaddr_data_t);
     ucp_unpacked_address_t           remote_addr;
     uint64_t                         addr_flags;
     unsigned                         i;
@@ -745,7 +752,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
     }
 
-    if (sa_data->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
+    if (!(sa_data->addr_mode & UCP_WIREUP_SA_DATA_CM_ADDR)) {
         ucs_fatal("client sockaddr data contains invalid address mode %d",
                   sa_data->addr_mode);
     }
@@ -754,7 +761,12 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                  UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 
     /* coverity[overrun-local] */
-    status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
+    if (ucp_address_is_am_only(ucp_address)) {
+        ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE_ONLY;
+    }
+
+    /* coverity[overrun-local] */
+    status = ucp_address_unpack(worker, ucp_address, addr_flags, &remote_addr);
     if (status != UCS_OK) {
         ucp_listener_reject(conn_request->listener, conn_request);
         return status;
@@ -2044,7 +2056,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->tag.eager.zcopy_auto_thresh = 0;
     config->am.zcopy_auto_thresh        = 0;
     config->p2p_lanes                   = 0;
-    config->bcopy_thresh                = context->config.ext.bcopy_thresh;
+    if (context->config.ext.bcopy_thresh == UCS_MEMUNITS_AUTO) {
+        config->bcopy_thresh = 0;
+    } else {
+        config->bcopy_thresh = context->config.ext.bcopy_thresh;
+    }
     config->tag.lane                    = UCP_NULL_LANE;
     config->tag.proto                   = &ucp_tag_eager_proto;
     config->tag.sync_proto              = &ucp_tag_eager_sync_proto;
@@ -3189,4 +3205,3 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 
     return UCS_OK;
 }
-

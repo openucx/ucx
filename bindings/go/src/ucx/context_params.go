@@ -7,6 +7,10 @@ package ucx
 
 // #include <ucp/api/ucp.h>
 import "C"
+import (
+	"runtime"
+	"unsafe"
+)
 
 // Tuning parameters for UCP library.
 // The structure defines the parameters that are used for
@@ -55,7 +59,9 @@ func (p *UcpParams) SetEstimatedNumPPN(estimatedNumPPN uint64) *UcpParams {
 
 // Tracing and analysis tools can identify the context using this name.
 func (p *UcpParams) SetName(name string) *UcpParams {
+	freeParamsName(p)
 	p.params.name = C.CString(name)
+	runtime.SetFinalizer(p, func(f *UcpParams) { FreeNativeMemory(unsafe.Pointer(f.params.name)) })
 	p.params.field_mask |= C.UCP_PARAM_FIELD_NAME
 	return p
 }

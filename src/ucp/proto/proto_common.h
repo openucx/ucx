@@ -115,6 +115,9 @@ typedef struct {
     /* Header size on the first lane */
     size_t                  hdr_size;
 
+    /* UCT operation used to sending the data. Used for performance estimation */
+    uct_ep_operation_t      send_op;
+
     /* UCT operation used for copying from memory from request buffer to a
      * bounce buffer used by the transport. If set to LAST, the protocol supports
      * only host memory copy using memcpy(). */
@@ -216,9 +219,10 @@ size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
                                              size_t dfl_value);
 
 
-void ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
-                                    ucp_lane_index_t lane,
-                                    ucp_proto_common_tl_perf_t *perf);
+ucs_status_t
+ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
+                               ucp_lane_index_t lane,
+                               ucp_proto_common_tl_perf_t *perf);
 
 
 /* @return number of lanes found */

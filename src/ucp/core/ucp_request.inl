@@ -813,6 +813,10 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
                          req->user_data);
 }
 
+/*
+ * process data, complete receive if done
+ * @return UCS_OK/ERR - completed, UCS_INPROGRESS - not completed
+ */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_process_recv_data(ucp_request_t *req, const void *data,
                               size_t length, size_t offset, int is_zcopy,

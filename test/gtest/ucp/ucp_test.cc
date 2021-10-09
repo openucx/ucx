@@ -835,6 +835,7 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
                                            const struct sockaddr* saddr,
                                            socklen_t addrlen,
                                            const ucp_ep_params_t& ep_params,
+                                           ucp_listener_conn_handler_t* custom_cb,
                                            int worker_index)
 {
     ucp_listener_params_t params;
@@ -859,6 +860,11 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
         params.conn_handler.cb    = reject_conn_cb;
         params.conn_handler.arg   = reinterpret_cast<void*>(this);
+        break;
+    case LISTEN_CB_CUSTOM:
+        params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+        params.conn_handler.cb    = custom_cb->cb;
+        params.conn_handler.arg   = custom_cb->arg;
         break;
     default:
         UCS_TEST_ABORT("invalid test parameter");

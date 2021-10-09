@@ -91,6 +91,28 @@ ucp_proto_request_zcopy_complete_success(ucp_request_t *req)
     return UCS_OK;
 }
 
+/**
+ * Add 'frag_size' to 'req->send.state.completed_size' and return nonzero if
+ * completed_size reached dt_iter.length
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_frag_complete(ucp_request_t *req, size_t frag_size,
+                               const char *title)
+{
+    req->send.state.completed_size += frag_size;
+
+    ucp_trace_req(req, "%s completed %zu, overall %zu/%zu", title, frag_size,
+                  req->send.state.completed_size,
+                  req->send.state.dt_iter.length);
+
+    ucs_assertv(req->send.state.completed_size <=
+                        req->send.state.dt_iter.length,
+                "completed_size=%zu dt_iter.length=%zu",
+                req->send.state.completed_size, req->send.state.dt_iter.length);
+
+    return req->send.state.completed_size == req->send.state.dt_iter.length;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
 {
@@ -191,28 +213,18 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                               proto_select, rkey_cfg_index, &sel_param,
                               req->send.state.dt_iter.length);
     if (status != UCS_OK) {
-        goto out_put_request;
+        ucp_request_put_param(param, req);
+        return UCS_STATUS_PTR(status);
     }
 
     UCS_PROFILE_CALL_VOID(ucp_request_send, req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
-        goto out_put_request;
+        ucp_request_imm_cmpl_param(param, req, send);
     }
 
-    /* set callback flag to allow calling it. we didn't set it before to prevent
-     * it from being called if the send is completed immediately.
-     */
     ucp_request_set_send_callback_param(param, req, send);
-
     ucs_trace_req("returning send request %p", req);
     return req + 1;
-
-out_put_request:
-    ucs_trace_req("releasing send request %p, returning status %s", req,
-                  ucs_status_string(status));
-    status = req->status;
-    ucp_request_put_param(param, req);
-    return UCS_STATUS_PTR(status);
 }
 
 static UCS_F_ALWAYS_INLINE size_t
