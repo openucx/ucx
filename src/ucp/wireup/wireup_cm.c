@@ -1416,6 +1416,13 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         goto err;
     }
 
+    if (ep->flags & UCP_EP_FLAG_OOB_ECE) {
+        uct_ep_params.field_mask |= UCT_EP_PARAM_FIELD_ECE;
+        uct_ep_params.ece         = ep->local_ece;
+    } else {
+        uct_ep_params.ece         = 0;
+    }
+
     status = uct_ep_create(&uct_ep_params, &uct_ep);
     ucs_free((void*)uct_ep_params.private_data);
     if (status != UCS_OK) {

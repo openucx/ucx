@@ -850,7 +850,10 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA                  = UCS_BIT(14),
 
     /** Enables @ref uct_ep_params::private_data_length */
-    UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15)
+    UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
+
+    /** Enable @ref uct_ep_params::ece */
+    UCT_EP_PARAM_FIELD_ECE                        = UCS_BIT(16)
 };
 
 
@@ -1242,6 +1245,11 @@ struct uct_ep_params {
      *       @ref uct_ep_params::sockaddr_pack_cb.
      */
     uct_cm_ep_resolve_callback_t        cm_resolve_cb;
+
+    /**
+     * ECE to be passed from server to client
+     */
+    uint32_t                             ece;
 
     /**
      * Private data to be passed from server to client. Can be used only along
