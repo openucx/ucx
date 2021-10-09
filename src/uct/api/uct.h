@@ -866,7 +866,10 @@ enum uct_ep_connect_params_field {
     UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA         = UCS_BIT(0),
 
     /** Enables @ref uct_ep_connect_params::private_data_length */
-    UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH  = UCS_BIT(1)
+    UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH  = UCS_BIT(1),
+
+    /** Enables @ref uct_ep_connect_params::ece */
+    UCT_EP_CONNECT_PARAM_FIELD_ECE                  = UCS_BIT(2)
 };
 
 
@@ -1278,6 +1281,11 @@ struct uct_ep_connect_params {
      * value is indicated by the @ref uct_cm_attr::max_conn_priv.
      */
     size_t                              private_data_length;
+
+    /**
+     * ECE to be passed from client to server
+     */
+    uint32_t                             ece;
 };
 
 /**
