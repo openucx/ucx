@@ -78,26 +78,6 @@
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
-#define UCT_CUDADRV_CTX_ACTIVE(_state) \
-    { \
-        CUdevice _dev; \
-        CUcontext _ctx; \
-        int _flags; \
-        if (CUDA_SUCCESS == cuCtxGetDevice(&_dev)) { \
-            cuDevicePrimaryCtxGetState(_dev, &_flags, &_state); \
-            if (_state == 0) { \
-                /* need to retain for malloc purposes */ \
-                if (CUDA_SUCCESS != cuDevicePrimaryCtxRetain(&_ctx, _dev)) { \
-                    ucs_fatal("unable to retain ctx after detecting device"); \
-                } \
-            } \
-            _state = 1; \
-        } else { \
-            _state = 0; \
-        } \
-    }
-
-
 typedef enum uct_cuda_base_gen {
     UCT_CUDA_BASE_GEN_P100 = 6,
     UCT_CUDA_BASE_GEN_V100 = 7,
@@ -118,5 +98,7 @@ uct_cuda_base_query_devices(
 ucs_status_t
 uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                           ucs_sys_device_t *sys_dev_p);
+
+ucs_status_t uct_cuda_base_get_ctx(CUcontext *ctx);
 
 #endif

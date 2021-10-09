@@ -36,3 +36,28 @@ uct_cuda_base_query_devices(
     return uct_cuda_base_query_devices_common(md, UCT_DEVICE_TYPE_ACC,
                                               tl_devices_p, num_tl_devices_p);
 }
+
+ucs_status_t uct_cuda_base_get_ctx(CUcontext *ctx)
+{
+    CUdevice dev;
+    int flags;
+    int state;
+
+    if (CUDA_SUCCESS == cuCtxGetDevice(&dev)) {
+        cuDevicePrimaryCtxGetState(dev, &flags, &state);
+        if (state == 0) {
+            /* need to retain for malloc purposes */
+            if (cuDevicePrimaryCtxRetain(ctx, dev) != CUDA_SUCCESS) {
+                ucs_fatal("unable to retain ctx after detecting device");
+            }
+        }
+
+        if (cuCtxGetCurrent(ctx) != CUDA_SUCCESS) {
+            ucs_fatal("unable to get ctx after detecting device");
+        }
+
+        return UCS_OK;
+    }
+
+    return UCS_ERR_NO_RESOURCE;
+}

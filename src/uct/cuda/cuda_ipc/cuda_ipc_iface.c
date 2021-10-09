@@ -372,11 +372,9 @@ static void uct_cuda_ipc_event_desc_init(ucs_mpool_t *mp, void *obj, void *chunk
 static void uct_cuda_ipc_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
 {
     uct_cuda_ipc_event_desc_t *base = (uct_cuda_ipc_event_desc_t *) obj;
-    int active;
+    CUcontext ctx;
 
-    UCT_CUDADRV_CTX_ACTIVE(active);
-
-    if (active) {
+    if (UCS_OK == uct_cuda_base_get_ctx(&ctx)) {
         UCT_CUDADRV_FUNC_LOG_ERR(cuEventDestroy(base->event));
     }
 }
@@ -458,11 +456,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
 {
     ucs_status_t status;
     int i;
-    int active;
+    CUcontext ctx;
 
-    UCT_CUDADRV_CTX_ACTIVE(active);
-
-    if (self->streams_initialized && active) {
+    if (self->streams_initialized && (UCS_OK == uct_cuda_base_get_ctx(&ctx))) {
         for (i = 0; i < self->config.max_streams; i++) {
             status = UCT_CUDADRV_FUNC_LOG_ERR(cuStreamDestroy(self->stream_d2d[i]));
             if (UCS_OK != status) {
