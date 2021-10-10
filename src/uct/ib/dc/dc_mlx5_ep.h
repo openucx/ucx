@@ -331,7 +331,8 @@ uct_dc_mlx5_iface_check_tx(uct_dc_mlx5_iface_t *iface)
 #if UCS_ENABLE_ASSERT
     uint8_t pool_index;
 
-    for (pool_index = 0; pool_index < iface->tx.num_dci_pools; ++pool_index) {
+    for (pool_index = 0; pool_index < iface->tx.num_dci_pools * iface->gp;
+         ++pool_index) {
         if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
             ucs_assertv(ucs_arbiter_is_empty(
                                 uct_dc_mlx5_iface_dci_waitq(iface, pool_index)),
