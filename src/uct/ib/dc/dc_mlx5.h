@@ -390,7 +390,7 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
 {
-    return (iface->tx.ndci * iface->tx.num_dci_pools) +
+    return (iface->tx.ndci * iface->tx.num_dci_pools * iface->gp) +
         ((iface->flags & UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE) ?
          UCT_DC_MLX5_KEEPALIVE_NUM_DCIS : 0);
 }
