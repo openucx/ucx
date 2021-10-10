@@ -38,7 +38,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     ucp_proto_caps_t *caps                       = init_params->caps;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucs_linear_func_t ack_perf[UCP_PROTO_PERF_TYPE_LAST];
     const ucp_proto_select_range_t *frag_range;
     const ucp_proto_select_elem_t *select_elem;
     size_t frag_min_length, frag_max_length;
@@ -49,7 +48,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_perf_type_t perf_type;
     ucs_linear_func_t *ppln_perf;
     char frag_size_str[32];
-    ucs_status_t status;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         ((select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
@@ -57,11 +55,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
         (init_params->select_param->op_flags &
          UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)) {
         return UCS_ERR_UNSUPPORTED;
-    }
-
-    status = ucp_proto_rndv_ack_init(init_params, &rpriv->ack, ack_perf);
-    if (status != UCS_OK) {
-        return status;
     }
 
     /* Select a protocol for rndv recv */
@@ -113,16 +106,16 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     /* Add the single range of the pipeline protocol */
     ucp_proto_common_add_ppln_range(init_params, &frag_range->super, SIZE_MAX);
 
-    /* Add overheads: PPLN overhead and ack time */
+    /* Add overheads: PPLN overhead */
     ppln_overhead = ucs_linear_func_make(ppln_frag_overhead,
                                          ppln_frag_overhead / rpriv->frag_size);
     for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
         ppln_perf = &caps->ranges[0].perf[perf_type];
         ucs_linear_func_add_inplace(ppln_perf, ppln_overhead);
-        ucs_linear_func_add_inplace(ppln_perf, ack_perf[perf_type]);
     }
 
-    return UCS_OK;
+    /* Add overheads: ack time */
+    return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);
 }
 
 static void

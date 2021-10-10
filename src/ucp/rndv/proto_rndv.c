@@ -309,9 +309,13 @@ static void ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
 }
 
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
-                                     ucp_proto_rndv_ack_priv_t *apriv,
-                                     ucs_linear_func_t *ack_perf)
+                                     ucp_proto_rndv_ack_priv_t *apriv)
 {
+    ucp_proto_caps_t *caps = init_params->caps;
+    ucs_linear_func_t ack_perf[UCP_PROTO_PERF_TYPE_LAST];
+    ucp_proto_perf_type_t perf_type;
+    unsigned i;
+
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
         /* Not sending ACK */
         apriv->lane = UCP_NULL_LANE;
@@ -323,6 +327,17 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
     }
 
     ucp_proto_rndv_ack_perf(init_params, apriv->lane, ack_perf);
+
+    for (i = 0; i < caps->num_ranges; ++i) {
+        for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
+            ucs_linear_func_add_inplace(&caps->ranges[i].perf[perf_type],
+                                        ack_perf[perf_type]);
+            ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_FMT(ack),
+                      i, ucp_proto_perf_types[perf_type],
+                      UCP_PROTO_PERF_FUNC_ARG(&caps->ranges[i].perf[perf_type]));
+        }
+    }
+
     return UCS_OK;
 }
 
@@ -340,34 +355,18 @@ ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          ucp_proto_rndv_bulk_priv_t *rpriv, size_t *priv_size_p)
 {
-    ucs_linear_func_t ack_perf[UCP_PROTO_PERF_TYPE_LAST];
-    ucp_proto_perf_type_t perf_type;
-    ucp_proto_caps_t *caps;
     ucs_status_t status;
     size_t mpriv_size;
-    unsigned i;
 
     status = ucp_proto_multi_init(init_params, &rpriv->mpriv, &mpriv_size);
     if (status != UCS_OK) {
         return status;
     }
 
-    status = ucp_proto_rndv_ack_init(&init_params->super.super, &rpriv->super,
-                                     ack_perf);
+    /* Add ack latency */
+    status = ucp_proto_rndv_ack_init(&init_params->super.super, &rpriv->super);
     if (status != UCS_OK) {
         return status;
-    }
-
-    /* Add ack latency */
-    caps = init_params->super.super.caps;
-    for (i = 0; i < caps->num_ranges; ++i) {
-        for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
-            ucs_linear_func_add_inplace(&caps->ranges[i].perf[perf_type],
-                                        ack_perf[perf_type]);
-            ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_FMT(ack),
-                      i, ucp_proto_perf_types[perf_type],
-                      UCP_PROTO_PERF_FUNC_ARG(&caps->ranges[i].perf[perf_type]));
-        }
     }
 
     /* Update private data size based of ucp_proto_multi_priv_t variable size */
