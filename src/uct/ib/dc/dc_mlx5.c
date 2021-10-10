@@ -929,6 +929,15 @@ uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
         }
     }
 
+    for (; pool_index < iface->tx.num_dci_pools * iface->gp; pool_index++) {
+        status = uct_dc_mlx5_iface_create_dcis_per_pool(iface,
+                                                        pool_index, &dci_index,
+                                                        full_handshake);
+        if (status != UCS_OK) {
+            goto err;
+        }
+    }
+
     iface->tx.bb_max = iface->tx.dcis[0].txwq.bb_max;
     return UCS_OK;
 
