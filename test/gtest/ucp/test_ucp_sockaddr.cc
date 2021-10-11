@@ -1152,13 +1152,32 @@ protected:
         FAIL_WIREUP_SET_EP_FAILED
     } fail_wireup_t;
 
-    virtual bool wait(entity &e, uint32_t wait_ep_flags)
+    virtual bool test_all_ep_flags(entity &e, uint32_t flags) const
     {
         UCS_ASYNC_BLOCK(&e.worker()->async);
-        bool result = ucs_test_all_flags(e.ep()->flags, wait_ep_flags);
+        bool result = ucs_test_all_flags(e.ep()->flags, flags);
         UCS_ASYNC_UNBLOCK(&e.worker()->async);
 
         return result;
+    }
+
+    bool test_any_ep_flag(entity &e, uint32_t flags) const
+    {
+        UCS_ASYNC_BLOCK(&e.worker()->async);
+        bool result = e.ep()->flags & flags;
+        UCS_ASYNC_UNBLOCK(&e.worker()->async);
+
+        return result;
+    }
+
+    void check_p2p_lanes(entity &e, uint32_t wait_ep_flags)
+    {
+        if (!ucp_ep_config(e.ep())->p2p_lanes &&
+            (wait_ep_flags & UCP_EP_FLAG_SERVER_NOTIFY_CB)) {
+            /* Since no p2p transports selected on the endpoint, it sends
+             * WIREUP_MSG/REPLY with empty addresses from the server */
+            UCS_TEST_SKIP_R("don't have p2p lanes to do address pack for");
+        }
     }
 
     void connect_and_fail_wireup(entity &e, fail_wireup_t fail_wireup_type,
@@ -1173,46 +1192,70 @@ protected:
             UCS_TEST_SKIP_R("cannot connect to server");
         }
 
+        ucp_worker_h worker = e.worker();
         if (fail_wireup_type == FAIL_WIREUP_MSG_SEND) {
             /* Emulate failure of WIREUP MSG sending by setting the AM Bcopy
              * function which always return EP_TIMEOUT error */
-            UCS_ASYNC_BLOCK(&e.worker()->async);
-            for (ucp_lane_index_t lane_idx = 0;
-                 lane_idx < ucp_ep_num_lanes(e.ep()); ++lane_idx) {
-                uct_ep_h uct_ep = e.ep()->uct_eps[lane_idx];
-                uct_ep->iface->ops.ep_am_bcopy =
+            UCS_ASYNC_BLOCK(&worker->async);
+            for (ucp_rsc_index_t iface_id = 0; iface_id < worker->num_ifaces;
+                 ++iface_id) {
+                ucp_worker_iface_t *wiface = worker->ifaces[iface_id];
+
+                wiface->iface->ops.ep_am_bcopy =
                         reinterpret_cast<uct_ep_am_bcopy_func_t>(
                                 ucs_empty_function_return_bc_ep_timeout);
             }
-            UCS_ASYNC_UNBLOCK(&e.worker()->async);
+            UCS_ASYNC_UNBLOCK(&worker->async);
         }
 
-        while (!wait(e, wait_ep_flags) && (sender().get_err_num() == 0)) {
+        ucs_time_t deadline = ucs::get_deadline();
+        while (!test_all_ep_flags(e, wait_ep_flags) &&
+               (sender().get_err_num() == 0) && (ucs_get_time() < deadline)) {
             progress();
         }
+        EXPECT_TRUE(test_all_ep_flags(e, wait_ep_flags) ||
+                    (sender().get_err_num() > 0));
 
         if (fail_wireup_type == FAIL_WIREUP_MSG_ADDR_PACK) {
+            check_p2p_lanes(e, wait_ep_flags);
+
             /* Emulate failure of preparation of WIREUP MSG sending by setting
              * the device address getter to the function that always returns
              * error */
-            UCS_ASYNC_BLOCK(&e.worker()->async);
-            for (ucp_lane_index_t lane_idx = 0;
-                 lane_idx < ucp_ep_num_lanes(e.ep()); ++lane_idx) {
-                uct_ep_h uct_ep = e.ep()->uct_eps[lane_idx];
-                uct_ep->iface->ops.iface_get_device_address =
+            UCS_ASYNC_BLOCK(&worker->async);
+            for (ucp_rsc_index_t iface_id = 0; iface_id < worker->num_ifaces;
+                 ++iface_id) {
+                ucp_worker_iface_t *wiface = worker->ifaces[iface_id];
+
+                wiface->iface->ops.iface_get_device_address =
                         reinterpret_cast<uct_iface_get_device_address_func_t>(
                                 ucs_empty_function_return_ep_timeout);
             }
-            UCS_ASYNC_UNBLOCK(&e.worker()->async);
+            UCS_ASYNC_UNBLOCK(&worker->async);
+
+            deadline = ucs::get_deadline();
+            while (!test_any_ep_flag(e, UCP_EP_FLAG_CONNECT_ACK_SENT |
+                                        UCP_EP_FLAG_CONNECT_REP_SENT) &&
+                   (m_err_count == 0) && (ucs_get_time() < deadline)) {
+                progress();
+            }
+            EXPECT_TRUE(test_any_ep_flag(e, UCP_EP_FLAG_CONNECT_ACK_SENT |
+                                            UCP_EP_FLAG_CONNECT_REP_SENT) ||
+                        (m_err_count > 0));
+
+            /* Check p2p lanes existence again, because EP maybe reconfigured
+             * to not have p2p lanes prior sending WIREUP_MSG/REPLY */
+            check_p2p_lanes(e, wait_ep_flags);
         } else if (fail_wireup_type == FAIL_WIREUP_SET_EP_FAILED) {
             /* Emulate failure of the endpoint by invoking error handling
              * procedure */
-            UCS_ASYNC_BLOCK(&e.worker()->async);
+            UCS_ASYNC_BLOCK(&worker->async);
             ucp_ep_set_failed(e.ep(), UCP_NULL_LANE, UCS_ERR_ENDPOINT_TIMEOUT);
-            UCS_ASYNC_UNBLOCK(&e.worker()->async);
+            UCS_ASYNC_UNBLOCK(&worker->async);
         }
 
         wait_for_flag(&m_err_count);
+        EXPECT_TRUE(m_err_count > 0);
 
         if (wait_cm_failure) {
             one_sided_disconnect(e, UCP_EP_CLOSE_MODE_FORCE);
@@ -1228,7 +1271,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
                      !cm_use_all_devices())
 {
     connect_and_fail_wireup(sender(), FAIL_WIREUP_MSG_SEND,
-                            UCP_EP_FLAG_CONNECT_REQ_QUEUED);
+                            /* WIREUP_MSGs are sent after the client
+                             * is fully connected */
+                            UCP_EP_FLAG_CLIENT_CONNECT_CB);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
@@ -1236,7 +1281,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
                      !cm_use_all_devices())
 {
     connect_and_fail_wireup(receiver(), FAIL_WIREUP_MSG_SEND,
-                            UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED);
+                            /* WIREUP_MSGs are sent after the server
+                             * is fully connected */
+                            UCP_EP_FLAG_SERVER_NOTIFY_CB);
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
@@ -1244,6 +1291,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
                      !cm_use_all_devices())
 {
     connect_and_fail_wireup(sender(), FAIL_WIREUP_MSG_ADDR_PACK,
+                            /* WIREUP_MSGs are sent after the client
+                             * is fully connected and it packs
+                             * addresses when sending WIREUP_MSGs */
                             UCP_EP_FLAG_CLIENT_CONNECT_CB);
 }
 
@@ -1252,6 +1302,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_sockaddr_wireup_fail,
                      !cm_use_all_devices())
 {
     connect_and_fail_wireup(receiver(), FAIL_WIREUP_MSG_ADDR_PACK,
+                            /* WIREUP_MSGs are sent after the server
+                             * is fully connected and it packs
+                             * addresses when sending WIREUP_MSGs */
                             UCP_EP_FLAG_SERVER_NOTIFY_CB);
 }
 
@@ -1293,9 +1346,18 @@ private:
         return 0;
     }
 
-    virtual bool wait(entity &e, uint32_t wait_ep_flags)
+    virtual bool test_all_ep_flags(entity &e, uint32_t flags) const
     {
-        if (test_ucp_sockaddr_wireup_fail::wait(e, wait_ep_flags)) {
+        /* The test expects that only CLIENT_CONNECT_CB flag will be tested
+         * here. So, skip the test if CLIENT_CONNECT_CB flag set on the
+         * endpoint, since it means that trying next CM won't be done */
+        if (!ucs_test_all_flags(flags, UCP_EP_FLAG_CLIENT_CONNECT_CB)) {
+            UCS_TEST_ABORT("Error: expect that only " << std::hex <<
+                           UCP_EP_FLAG_CLIENT_CONNECT_CB << " flag is set,"
+                           " but " << flags << " flags are given");
+        }
+
+        if (test_ucp_sockaddr_wireup_fail::test_all_ep_flags(e, flags)) {
             UCS_TEST_SKIP_R("trying the next CM calback wasn't scheduled");
         }
 
