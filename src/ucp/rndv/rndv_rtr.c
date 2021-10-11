@@ -398,14 +398,14 @@ ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
 ucs_status_t
 ucp_proto_rndv_handle_data(void *arg, void *data, size_t length, unsigned flags)
 {
-    ucp_worker_h worker                = arg;
-    ucp_rndv_data_hdr_t *rndv_data_hdr = data;
-    size_t recv_len                    = length - sizeof(*rndv_data_hdr);
+    ucp_worker_h worker                   = arg;
+    ucp_request_data_hdr_t *rndv_data_hdr = data;
+    size_t recv_len                       = length - sizeof(*rndv_data_hdr);
     const ucp_proto_rndv_rtr_priv_t *rpriv;
     ucs_status_t status;
     ucp_request_t *req;
 
-    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rndv_data_hdr->rreq_id, 0,
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rndv_data_hdr->req_id, 0,
                                return UCS_OK, "RNDV_DATA %p", rndv_data_hdr);
 
     status = ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker,

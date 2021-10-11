@@ -649,10 +649,12 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
                             &req->recv.state.dt.iov.iovcnt_offset);
             req->recv.state.offset = offset;
         }
-        UCS_PROFILE_CALL(ucp_dt_iov_scatter, (ucp_dt_iov_t*)req->recv.buffer,
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, req->recv.worker,
+                         (ucp_dt_iov_t*)req->recv.buffer,
                          req->recv.state.dt.iov.iovcnt, data, length,
                          &req->recv.state.dt.iov.iov_offset,
-                         &req->recv.state.dt.iov.iovcnt_offset);
+                         &req->recv.state.dt.iov.iovcnt_offset,
+                         req->recv.mem_type);
         req->recv.state.offset += length;
         return UCS_OK;
 

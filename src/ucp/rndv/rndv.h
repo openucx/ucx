@@ -64,15 +64,6 @@ typedef struct {
 
 
 /*
- * Rendezvous data
- */
-typedef struct {
-    uint64_t                  rreq_id; /* request ID on the rndv receiver side */
-    size_t                    offset;
-} UCS_S_PACKED ucp_rndv_data_hdr_t;
-
-
-/*
  * RNDV_ATS/RNDV_ATP with size field
  */
 typedef struct {

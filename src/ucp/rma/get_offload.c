@@ -123,9 +123,8 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
-                               lpriv->super.memh_index,
-                               UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
-                               1);
+                               lpriv->super.memh_index, UCP_DT_MASK_CONTIG_IOV,
+                               next_iter, &iov, 1);
     return uct_ep_get_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
                             req->send.rma.remote_addr +
                             req->send.state.dt_iter.offset,
@@ -138,7 +137,7 @@ static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self
 
     return ucp_proto_multi_zcopy_progress(
             req, req->send.proto_config->priv, NULL,
-            UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCS_BIT(UCP_DATATYPE_CONTIG),
+            UCT_MD_MEM_ACCESS_LOCAL_WRITE, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_get_offload_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);

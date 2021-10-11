@@ -9,6 +9,7 @@
 #define UCP_DT_IOV_H_
 
 #include <ucp/api/ucp.h>
+#include <ucp/dt/dt.h>
 
 
 #define UCP_DT_IS_IOV(_datatype) \
@@ -52,8 +53,10 @@ static inline size_t ucp_dt_iov_length(const ucp_dt_iov_t *iov, size_t iovcnt)
  *                                copying from should be selected as
  *                                iov[iovcnt_offset].buffer + iov_offset
  */
-void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
-                       size_t *iov_offset, size_t *iovcnt_offset);
+void ucp_dt_iov_gather(ucp_worker_h worker, void *dest, const ucp_dt_iov_t *iov,
+                       size_t length, size_t *iov_offset, size_t *iovcnt_offset,
+                       ucs_memory_type_t mem_type);
+
 
 /**
  * Copy contiguous buffer @a src into @ref ucp_dt_iov_t data buffers in @a iov
@@ -75,8 +78,10 @@ void ucp_dt_iov_gather(void *dest, const ucp_dt_iov_t *iov, size_t length,
  * @return Size in bytes that was actually copied from @a src to @a iov. It must
  *         be less or equal to @a length.
  */
-size_t ucp_dt_iov_scatter(const ucp_dt_iov_t *iov, size_t iovcnt, const void *src,
-                          size_t length, size_t *iov_offset, size_t *iovcnt_offset);
+size_t ucp_dt_iov_scatter(ucp_worker_h worker, const ucp_dt_iov_t *iov,
+                          size_t iovcnt, const void *src, size_t length,
+                          size_t *iov_offset, size_t *iovcnt_offset,
+                          ucs_memory_type_t mem_type);
 
 
 /**
