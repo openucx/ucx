@@ -140,6 +140,34 @@ static ucs_status_t ucp_proto_rndv_ctrl_select_remote_proto(
 }
 
 ucs_status_t
+ucp_proto_rndv_ctrl_perf(const ucp_proto_init_params_t *params,
+                         ucp_lane_index_t lane, double *send_time,
+                         double *receive_time)
+{
+    ucp_context_t *context = params->worker->context;
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
+
+    if (lane == UCP_NULL_LANE) {
+        *send_time = *receive_time = 0;
+        return UCS_OK;
+    }
+
+    status = ucp_proto_common_lane_perf_attr(params, lane, UCT_EP_OP_AM_BCOPY,
+            UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD | UCT_PERF_ATTR_FIELD_LATENCY,
+            &perf_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *send_time    = perf_attr.send_pre_overhead;
+    *receive_time = perf_attr.recv_overhead +
+                    ucp_tl_iface_latency(context, &perf_attr.latency);
+    return UCS_OK;
+}
+
+ucs_status_t
 ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
 {
     ucp_context_h context             = params->super.super.worker->context;
@@ -149,7 +177,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     const ucp_proto_select_range_t *remote_range;
     ucp_proto_select_param_t remote_select_param;
     ucs_linear_func_t send_overhead, rndv_bias;
-    const uct_iface_attr_t *iface_attr;
+    double send_time, receive_time;
     ucp_memory_info_t mem_info;
     ucs_status_t status;
     double ctrl_latency;
@@ -204,11 +232,15 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
 
     max_length = ucs_min(params->super.max_length, max_length);
 
+    ucs_assert(params->super.send_op == UCT_EP_OP_AM_BCOPY);
     /* Set send_overheads to the time to send and receive RTS message */
-    iface_attr    = ucp_proto_common_get_iface_attr(&params->super.super,
-                                                    rpriv->lane);
-    ctrl_latency  = (iface_attr->overhead * 2) + params->super.overhead +
-                    ucp_tl_iface_latency(context, &iface_attr->latency);
+    status = ucp_proto_rndv_ctrl_perf(&params->super.super, rpriv->lane,
+                                      &send_time, &receive_time);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ctrl_latency = send_time + receive_time + params->super.overhead * 2;
     ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
               UCP_PROTO_TIME_ARG(ctrl_latency));
     send_overhead = ucs_linear_func_add3(
@@ -290,26 +322,24 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rndv_ctrl_init(&params);
 }
 
-static void ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
-                                    ucp_lane_index_t lane,
-                                    ucs_linear_func_t *ack_perf)
+static ucs_status_t
+ucp_proto_rndv_ack_perf(const ucp_proto_init_params_t *init_params,
+                        ucp_lane_index_t lane, ucs_linear_func_t *ack_perf)
 {
-    ucp_context_t *context = init_params->worker->context;
-    const uct_iface_attr_t *iface_attr;
     double send_time, receive_time;
+    ucs_status_t status;
 
-    if (lane == UCP_NULL_LANE) {
-        send_time = receive_time = 0;
-    } else {
-        iface_attr   = ucp_proto_common_get_iface_attr(init_params, lane);
-        send_time    = iface_attr->overhead;
-        receive_time = iface_attr->overhead +
-                       ucp_tl_iface_latency(context, &iface_attr->latency);
+    status = ucp_proto_rndv_ctrl_perf(init_params, lane, &send_time,
+                                      &receive_time);
+    if (status != UCS_OK) {
+        return status;
     }
 
     ack_perf[UCP_PROTO_PERF_TYPE_SINGLE] =
             ucs_linear_func_make(send_time + receive_time, 0);
     ack_perf[UCP_PROTO_PERF_TYPE_MULTI] = ucs_linear_func_make(send_time, 0);
+
+    return UCS_OK;
 }
 
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
@@ -318,6 +348,7 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
     ucp_proto_caps_t *caps = init_params->caps;
     ucs_linear_func_t ack_perf[UCP_PROTO_PERF_TYPE_LAST];
     ucp_proto_perf_type_t perf_type;
+    ucs_status_t status;
     unsigned i;
 
     if (ucp_proto_rndv_init_params_is_ppln_frag(init_params)) {
@@ -330,7 +361,10 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
         }
     }
 
-    ucp_proto_rndv_ack_perf(init_params, apriv->lane, ack_perf);
+    status = ucp_proto_rndv_ack_perf(init_params, apriv->lane, ack_perf);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     for (i = 0; i < caps->num_ranges; ++i) {
         for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
