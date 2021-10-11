@@ -28,6 +28,7 @@ BEGIN_C_DECLS
 #define TIMING_QUEUE_SIZE    2048
 #define UCT_PERF_TEST_AM_ID  5
 #define ADDR_BUF_SIZE        2048
+#define EXTRA_INFO_SIZE      256
 
 #define UCX_PERF_TEST_FOREACH(perf) \
     while (!ucx_perf_context_done(perf))
@@ -81,6 +82,7 @@ struct ucx_perf_context {
     ucs_time_t                   timing_queue[TIMING_QUEUE_SIZE];
     unsigned                     timing_queue_head;
     const ucx_perf_allocator_t   *allocator;
+    char                         extra_info[EXTRA_INFO_SIZE];
 
     union {
         struct {
@@ -164,6 +166,9 @@ void ucx_perf_set_warmup(ucx_perf_context_t* perf,
  */
 size_t ucx_perf_get_message_size(const ucx_perf_params_t *params);
 
+void ucx_perf_report(ucx_perf_context_t *perf);
+
+
 static UCS_F_ALWAYS_INLINE int ucx_perf_context_done(ucx_perf_context_t *perf)
 {
     return ucs_unlikely((perf->current.iters >= perf->max_iter) ||
@@ -184,11 +189,10 @@ static inline void ucx_perf_omp_barrier(ucx_perf_context_t *perf)
 #endif
 }
 
-static inline void ucx_perf_update(ucx_perf_context_t *perf,
-                                   ucx_perf_counter_t iters, size_t bytes)
+static UCS_F_ALWAYS_INLINE void ucx_perf_update(ucx_perf_context_t *perf,
+                                                ucx_perf_counter_t iters,
+                                                size_t bytes)
 {
-    ucx_perf_result_t result;
-
     perf->current.time   = ucs_get_time();
     perf->current.iters += iters;
     perf->current.bytes += bytes;
@@ -203,13 +207,9 @@ static inline void ucx_perf_update(ucx_perf_context_t *perf,
 
     perf->prev_time = perf->current.time;
 
-    if (perf->current.time - perf->prev.time >= perf->report_interval) {
-        ucx_perf_get_time(perf);
-
-        ucx_perf_calc_result(perf, &result);
-        rte_call(perf, report, &result, perf->params.report_arg, 0, 0);
-
-        perf->prev = perf->current;
+    if (ucs_unlikely((perf->current.time - perf->prev.time) >=
+                     perf->report_interval)) {
+        ucx_perf_report(perf);
     }
 }
 
