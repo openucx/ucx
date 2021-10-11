@@ -7,6 +7,7 @@
 #define UCP_RNDV_MTYPE_INL_
 
 #include "proto_rndv.inl"
+#include "rndv.h"
 
 #include <ucp/core/ucp_worker.h>
 
@@ -15,11 +16,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
                           ucp_md_map_t *mdesc_md_map_p, size_t *frag_size_p)
 {
-    ucp_worker_h worker = init_params->worker;
+    ucp_worker_h worker        = init_params->worker;
+    ucs_memory_type_t mem_type = init_params->select_param->mem_type;
     ucs_status_t status;
 
     if ((init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        (worker->mem_type_ep[init_params->select_param->mem_type] == NULL)) {
+        (worker->mem_type_ep[mem_type] == NULL)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -28,7 +30,7 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
         return status;
     }
 
-    *frag_size_p = worker->context->config.ext.rndv_frag_size;
+    *frag_size_p = worker->context->config.ext.rndv_frag_size[UCS_MEMORY_TYPE_HOST];
     return UCS_OK;
 }
 
@@ -37,7 +39,8 @@ ucp_proto_rndv_mtype_request_init(ucp_request_t *req)
 {
     ucp_worker_h worker = req->send.ep->worker;
 
-    req->send.rndv.mdesc = ucp_worker_mpool_get(&worker->rndv_frag_mp);
+    req->send.rndv.mdesc = ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+                                              UCS_SYS_DEVICE_ID_UNKNOWN);
     if (req->send.rndv.mdesc == NULL) {
         return UCS_ERR_NO_MEMORY;
     }
@@ -67,7 +70,7 @@ ucp_proto_rndv_mtype_iov_init(ucp_request_t *req, size_t length, size_t offset,
     ucs_assert(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG);
 
     iov->length = length;
-    iov->buffer = UCS_PTR_BYTE_OFFSET(req->send.rndv.mdesc + 1, offset);
+    iov->buffer = UCS_PTR_BYTE_OFFSET(mdesc->ptr, offset);
     iov->memh   = ucp_proto_rndv_mtype_get_memh(mdesc, memh_index);
     iov->stride = 0;
     iov->count  = 1;

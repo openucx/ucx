@@ -239,6 +239,17 @@ void *ucs_mpool_get_grow(ucs_mpool_t *mp);
 
 
 /**
+ * Return the number of elements in the chunk.
+ * @param mp               Memory pool structure.
+ * @param chunk            Pointer to memory pool chunk.
+ * @param chunk_size       Requested chunk size.
+ * @return Number of elements in the chunk.
+ */
+unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
+                                       ucs_mpool_chunk_t *chunk,
+                                       size_t chunk_size);
+
+/**
  * heap-based chunk allocator.
  */
 ucs_status_t ucs_mpool_chunk_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);

@@ -70,6 +70,24 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_LAST]           = NULL
 };
 
+static size_t ucp_rndv_frag_default_sizes[] = {
+    [UCS_MEMORY_TYPE_HOST]         = 512 * UCS_KBYTE,
+    [UCS_MEMORY_TYPE_CUDA]         = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_CUDA_MANAGED] = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ROCM]         = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ROCM_MANAGED] = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_LAST]         = 0
+};
+
+static size_t ucp_rndv_frag_default_num_elems[] = {
+    [UCS_MEMORY_TYPE_HOST]         = 128,
+    [UCS_MEMORY_TYPE_CUDA]         = 128,
+    [UCS_MEMORY_TYPE_CUDA_MANAGED] = 128,
+    [UCS_MEMORY_TYPE_ROCM]         = 128,
+    [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
+    [UCS_MEMORY_TYPE_LAST]         = 0
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -298,9 +316,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "and the resulting performance.",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_SIZE", "512k",
-   "RNDV fragment size",
-   ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+  {"RNDV_FRAG_SIZE", "host:512K,cuda:4M",
+   "Comma-separated list of memory types and associated fragment sizes.\n"
+   "The memory types in the list is used for rendezvous bounce buffers.",
+   ucs_offsetof(ucp_config_t, rndv_frag_sizes), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"RNDV_FRAG_ALLOC_COUNT", "host:128,cuda:128",
+   "Comma separated list of memory pool allocation granularity per memory type.",
+   ucs_offsetof(ucp_config_t, rndv_frag_elems), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
@@ -1447,6 +1470,41 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     }
 }
 
+static ucs_status_t
+ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
+                          const size_t *default_sizes, size_t *sizes)
+{
+    const char *mem_type_name, *size_str;
+    char config_str[128];
+    ucs_status_t status;
+    ssize_t mem_type;
+    unsigned i;
+
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+        sizes[mem_type] = default_sizes[mem_type];
+    }
+
+    for (i = 0; i < config->count; ++i) {
+        ucs_strncpy_safe(config_str, config->names[i], sizeof(config_str));
+        ucs_string_split(config_str, ":", 2, &mem_type_name, &size_str);
+        mem_type = ucs_string_find_in_list(mem_type_name, ucs_memory_type_names,
+                                           0);
+        if (mem_type < 0) {
+            ucs_error("invalid memory type specifier: '%s'", mem_type_name);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ucs_assert(mem_type < UCS_MEMORY_TYPE_LAST);
+        status = ucs_str_to_memunits(size_str, &sizes[mem_type]);
+        if (status != UCS_OK) {
+            ucs_error("failed to parse size configuration: '%s'", size_str);
+            return status;
+        }
+    }
+
+    return UCS_OK;
+}
+
 static ucs_status_t ucp_fill_config(ucp_context_h context,
                                     const ucp_params_t *params,
                                     const ucp_config_t *config)
@@ -1571,6 +1629,20 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                 goto err_free_alloc_methods;
             }
         }
+    }
+
+    status = ucp_fill_rndv_frag_config(&config->rndv_frag_sizes,
+                                       ucp_rndv_frag_default_sizes,
+                                       context->config.ext.rndv_frag_size);
+    if (status != UCS_OK) {
+        goto err_free_alloc_methods;
+    }
+
+    status = ucp_fill_rndv_frag_config(&config->rndv_frag_elems,
+                                       ucp_rndv_frag_default_num_elems,
+                                       context->config.ext.rndv_num_frags);
+    if (status != UCS_OK) {
+        goto err_free_alloc_methods;
     }
 
     /* Need to check TM_SEG_SIZE value if it is enabled only */
