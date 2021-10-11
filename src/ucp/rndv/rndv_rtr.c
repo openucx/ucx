@@ -249,7 +249,7 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ssize_t packed_rkey_size;
 
     ucs_assert(mdesc != NULL);
-    ucp_proto_rndv_rtr_hdr_pack(req, rtr, mdesc + 1);
+    ucp_proto_rndv_rtr_hdr_pack(req, rtr, mdesc->ptr);
 
     ucs_assert(ucs_test_all_flags(mdesc->memh->md_map, md_map));
     memh_index = 0;

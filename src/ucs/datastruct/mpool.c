@@ -18,8 +18,7 @@
 #include <ucs/sys/sys.h>
 
 
-static UCS_F_ALWAYS_INLINE size_t
-ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
+static size_t ucs_mpool_elem_total_size(ucs_mpool_data_t *data)
 {
     return ucs_align_up_pow2(data->elem_size, data->alignment);
 }
@@ -183,10 +182,33 @@ void ucs_mpool_put(void *obj)
     ucs_mpool_put_inline(obj);
 }
 
+static void *ucs_mpool_chunk_elems(ucs_mpool_t *mp, ucs_mpool_chunk_t *chunk)
+{
+    ucs_mpool_data_t *data = mp->data;
+    size_t chunk_padding;
+
+    chunk_padding = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
+                                data->alignment);
+    return UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
+}
+
+unsigned ucs_mpool_num_elems_per_chunk(ucs_mpool_t *mp,
+                                       ucs_mpool_chunk_t *chunk,
+                                       size_t chunk_size)
+{
+    ucs_mpool_data_t *data = mp->data;
+    void *chunk_end;
+    size_t elem_size;
+
+    chunk_end = UCS_PTR_BYTE_OFFSET(chunk, chunk_size);
+    elem_size = UCS_PTR_BYTE_DIFF(ucs_mpool_chunk_elems(mp, chunk), chunk_end);
+    return ucs_min(data->quota, elem_size / ucs_mpool_elem_total_size(data));
+}
+
 void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
 {
     ucs_mpool_data_t *data = mp->data;
-    size_t chunk_size, chunk_padding;
+    size_t chunk_size;
     ucs_mpool_chunk_t *chunk;
     ucs_mpool_elem_t *elem;
     ucs_status_t status;
@@ -208,11 +230,8 @@ void ucs_mpool_grow(ucs_mpool_t *mp, unsigned num_elems)
 
     /* Calculate padding, and update element count according to allocated size */
     chunk            = ptr;
-    chunk_padding    = ucs_padding((uintptr_t)(chunk + 1) + data->align_offset,
-                                   data->alignment);
-    chunk->elems     = UCS_PTR_BYTE_OFFSET(chunk + 1, chunk_padding);
-    chunk->num_elems = ucs_min(data->quota, (chunk_size - chunk_padding - sizeof(*chunk)) /
-                       ucs_mpool_elem_total_size(data));
+    chunk->elems     = ucs_mpool_chunk_elems(mp, chunk);
+    chunk->num_elems = ucs_mpool_num_elems_per_chunk(mp, chunk, chunk_size);
 
     ucs_debug("mpool %s: allocated chunk %p of %lu bytes with %u elements",
               ucs_mpool_name(mp), chunk, chunk_size, chunk->num_elems);

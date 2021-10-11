@@ -107,14 +107,6 @@ ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .obj_str       = NULL
 };
 
-ucs_mpool_ops_t ucp_frag_mpool_ops = {
-    .chunk_alloc   = ucp_frag_mpool_malloc,
-    .chunk_release = ucp_frag_mpool_free,
-    .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function,
-    .obj_str       = NULL
-};
-
 static ucs_mpool_ops_t ucp_rkey_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
@@ -1684,6 +1676,9 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
                                     if_attr->cap.am.max_zcopy);
     }
 
+    /* Create a hashtable of memory pools for mem_type devices */
+    kh_init_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
+
     /* Create memory pool for requests */
     status = ucs_mpool_init(&worker->req_mp, 0,
                             sizeof(ucp_request_t) + context->config.request.size,
@@ -1722,19 +1717,8 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_am_mp_cleanup;
     }
 
-    /* Create memory pool for pipelined rndv fragments */
-    status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
-                            context->config.ext.rndv_frag_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_PCI_MAX_PAYLOAD, 128,
-                            UINT_MAX, &ucp_frag_mpool_ops, "ucp_rndv_frags");
-    if (status != UCS_OK) {
-        goto err_reg_mp_cleanup;
-    }
-
     return UCS_OK;
 
-err_reg_mp_cleanup:
-    ucs_mpool_cleanup(&worker->reg_mp, 0);
 err_am_mp_cleanup:
     ucs_mpool_cleanup(&worker->am_mp, 0);
 err_rkey_mp_cleanup:
@@ -1747,7 +1731,17 @@ err:
 
 static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 {
-    ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
+    khint_t iter;
+
+    for (iter = kh_begin(&worker->mpool_hash);
+         iter != kh_end(&worker->mpool_hash); ++iter) {
+        if (!kh_exist(&worker->mpool_hash, iter)) {
+            continue;
+        }
+        ucs_mpool_cleanup(&kh_val(&worker->mpool_hash, iter), 1);
+    }
+
+    kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);

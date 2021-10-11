@@ -22,6 +22,7 @@
 #include <ucs/datastruct/bitmap.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
@@ -65,7 +66,9 @@ typedef struct ucp_context_config {
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
     /** RNDV pipeline fragment size */
-    size_t                                 rndv_frag_size;
+    size_t                                 rndv_frag_size[UCS_MEMORY_TYPE_LAST];
+    /** Number of RNDV pipeline fragments per allocation */
+    size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
@@ -121,6 +124,9 @@ typedef struct ucp_context_config {
 } ucp_context_config_t;
 
 
+typedef UCS_CONFIG_STRING_ARRAY_FIELD(names) ucp_context_config_names_t;
+
+
 struct ucp_config {
     /** Array of device lists names to use.
      *  This array holds four lists - network devices, shared memory devices,
@@ -132,6 +138,10 @@ struct ucp_config {
     ucs_config_allow_list_t                protos;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
+    /** Array of rendezvous fragment sizes */
+    ucp_context_config_names_t             rndv_frag_sizes;
+    /** Array of rendezvous fragment elems per allocation */
+    ucp_context_config_names_t             rndv_frag_elems;
     /** Array of transports for partial worker address to pack */
     UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
     /** Array of transports for client-server transports and port selection */

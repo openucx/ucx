@@ -413,3 +413,47 @@ const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb)
 out:
     return ucs_string_buffer_cstr(strb);
 }
+
+ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
+                                int case_sensitive)
+{
+    size_t i;
+
+    for (i = 0; string_list[i] != NULL; ++i) {
+        if ((case_sensitive && (strcmp(string_list[i], str) == 0)) ||
+            (!case_sensitive && (strcasecmp(string_list[i], str) == 0))) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+char* ucs_string_split(char *str, const char *delim, int count, ...)
+{
+    char *p = str;
+    size_t length;
+    va_list ap;
+    int i;
+
+    va_start(ap, count);
+    for (i = 0; i < count; ++i) {
+        *va_arg(ap, char**) = p;
+        if (p == NULL) {
+            continue;
+        }
+
+        length = strcspn(p, delim);
+        if (p[length] == '\0') {
+            /* 'p' is last element, so point to NULL from now on */
+            p = NULL;
+        } else {
+            /* There is another element after 'p', so point 'p' to it */
+            p[length] = '\0';
+            p        += length + 1;
+        }
+    }
+    va_end(ap);
+
+    return p;
+}
