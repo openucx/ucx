@@ -338,9 +338,9 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
                                     uct_tag_t stag, uint16_t flags,
                                     void **context)
 {
-    const size_t priv_len = sizeof(ucp_offload_first_desct_t);
+    const size_t priv_len = sizeof(ucp_offload_first_desc_t);
     ucp_tag_frag_match_t *matchq;
-    ucp_offload_first_desct_t *priv;
+    ucp_offload_first_desc_t *priv;
     ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
@@ -353,7 +353,7 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
      */
     priv                             = ucp_tag_eager_offload_priv(
                                            tl_flags, data, length,
-                                           ucp_offload_first_desct_t);
+                                           ucp_offload_first_desc_t);
     matchq                           = ucs_unaligned_ptr(&priv->matchq);
     *(ucp_tag_frag_match_t**)context = matchq;
     priv->super.super.tag            = stag;
@@ -404,7 +404,7 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
 {
     ucp_recv_desc_t *rdesc = NULL, *first_rdesc = NULL;
     ucp_offload_ssend_hdr_t *sync_hdr;
-    ucp_offload_first_desct_t *first_hdr;
+    ucp_offload_first_desc_t *first_hdr;
     ucp_tag_frag_match_t *matchq;
     void *hdr;
     size_t hdr_length;
@@ -454,14 +454,14 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
             first_rdesc = ucs_queue_pull_elem_non_empty(&matchq->unexp_q,
                                                         ucp_recv_desc_t,
                                                         tag_frag_queue);
-            first_hdr   = (ucp_offload_first_desct_t*)(first_rdesc + 1);
+            first_hdr   = (ucp_offload_first_desc_t*)(first_rdesc + 1);
             ucp_tag_unexp_recv(&worker->tm, first_rdesc,
                                first_hdr->super.super.tag);
         } else {
             first_rdesc = ucs_queue_head_elem_non_empty(&matchq->unexp_q,
                                                         ucp_recv_desc_t,
                                                         tag_frag_queue);
-            first_hdr   = (ucp_offload_first_desct_t*)(first_rdesc + 1);
+            first_hdr   = (ucp_offload_first_desc_t*)(first_rdesc + 1);
         }
 
         /* Increase total length in the first fragment header */
@@ -477,7 +477,7 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
              * until all fragments arrive and processed.
              */
             first_hdr   = ucs_container_of(matchq,
-                                           ucp_offload_first_desct_t, matchq);
+                                           ucp_offload_first_desc_t, matchq);
             first_rdesc = (ucp_recv_desc_t*)first_hdr - 1;
             ucp_recv_desc_release(first_rdesc);
         }
