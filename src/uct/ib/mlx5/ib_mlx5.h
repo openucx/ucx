@@ -606,6 +606,11 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
 void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
 
 /**
+ * Check whether the interface uses AR.
+ */
+int uct_ib_mlx5_iface_has_ar(uct_ib_iface_t *iface);
+
+/**
  * DEVX QP API
  */
 

@@ -73,20 +73,21 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
-    {"DCI_FULL_HANDSHAKE", "n",
+    {"DCI_FULL_HANDSHAKE", "off",
      "Force full-handshake protocol for DC initiator. Enabling this mode\n"
-     "increases network latency, but is more resilient to packet drops.",
+     "increases network latency, but is more resilient to packet drops.\n"
+     "Setting it to \"auto\" applies full-handshake on AR SLs.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dci_full_handshake),
-     UCS_CONFIG_TYPE_BOOL},
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-    {"DCI_KA_FULL_HANDSHAKE", "n",
+    {"DCI_KA_FULL_HANDSHAKE", "off",
      "Force full-handshake protocol for DC keepalive initiator.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dci_ka_full_handshake),
-     UCS_CONFIG_TYPE_BOOL},
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-    {"DCT_FULL_HANDSHAKE", "n", "Force full-handshake protocol for DC target.",
+    {"DCT_FULL_HANDSHAKE", "off", "Force full-handshake protocol for DC target.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dct_full_handshake),
-     UCS_CONFIG_TYPE_BOOL},
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {"RAND_DCI_SEED", "0",
      "Seed for DCI allocation when \"rand\" dci policy is used (0 - use default).",
@@ -399,6 +400,16 @@ err_qp:
     return status;
 }
 
+static int UCS_F_ALWAYS_INLINE
+uct_dc_mlx5_force_full_handshake(uct_dc_mlx5_iface_t *iface, int full_handshake_config)
+{
+    if (full_handshake_config == UCS_CONFIG_AUTO) {
+        return uct_ib_mlx5_iface_has_ar(&iface->super.super.super);
+    } else {
+        return full_handshake_config == UCS_CONFIG_ON;
+    }
+}
+
 #if HAVE_DC_DV
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci)
@@ -479,8 +490,10 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     int ret;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCT) {
-        return uct_dc_mlx5_iface_devx_create_dct(iface,
-                                                 config->dct_full_handshake);
+        return uct_dc_mlx5_iface_devx_create_dct(
+                iface,
+                uct_dc_mlx5_force_full_handshake(iface,
+                                                 config->dct_full_handshake));
     }
 
     init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
@@ -826,9 +839,10 @@ uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
         ucs_arbiter_init(&dci_pool->arbiter);
 
         for (i = 0; i < iface->tx.ndci; ++i) {
-            status = uct_dc_mlx5_iface_create_dci(iface, pool_index, dci_index,
-                                                  pool_index % num_paths,
-                                                  config->dci_full_handshake);
+            status = uct_dc_mlx5_iface_create_dci(
+                    iface, pool_index, dci_index, pool_index % num_paths,
+                    uct_dc_mlx5_force_full_handshake(
+                            iface, config->dci_full_handshake));
             if (status != UCS_OK) {
                 goto err;
             }
@@ -1350,7 +1364,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         self->flags           |= UCT_DC_MLX5_IFACE_FLAG_UIDX;
         self->tx.num_dci_pools = self->super.super.super.num_paths;
     }
-    if (config->dci_ka_full_handshake) {
+    if (uct_dc_mlx5_force_full_handshake(self, config->dci_ka_full_handshake)) {
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE_FULL_HANDSHAKE;
     }
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
