@@ -651,8 +651,6 @@ void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 
-int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
-
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self);
 
 void ucp_ep_flush_completion(uct_completion_t *self);
