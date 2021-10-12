@@ -352,7 +352,7 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
         ucs_diag("%s: rdma_resolve_route failed: %m",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_UNREACHABLE);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_UNREACHABLE, 1);
     }
 }
 
@@ -367,7 +367,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     ucs_assert(event->id == cep->id);
 
     if (cep->super.resolve_cb != NULL) {
-        status = uct_rdmacm_cm_ep_resolve_cb(cep);
+        status = uct_rdmacm_cm_ep_resolve_cb(cep, UCS_OK);
         goto out;
     }
 
@@ -384,7 +384,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
 out:
     if (status != UCS_OK) {
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status, 0);
     }
 }
 
@@ -581,7 +581,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
         ucs_diag("%s client (ep=%p id=%p) failed to process a connect response ",
                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                  cep, event->id);
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status, 1);
         return;
     }
 
@@ -696,7 +696,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
         uct_rdmacm_cm_handle_event_disconnected(event);
     } else {
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status, 1);
     }
 }
 

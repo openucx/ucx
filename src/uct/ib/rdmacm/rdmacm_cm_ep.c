@@ -54,6 +54,12 @@ const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
     return str;
 }
 
+int uct_rdmacm_ep_client_is_resolved(uct_rdmacm_cm_ep_t *cep)
+{
+    ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT);
+    return cep->flags & UCT_RDMACM_CM_EP_CLIENT_RESOLVE_CB_INVOKED;
+}
+
 int uct_rdmacm_ep_is_connected(uct_rdmacm_cm_ep_t *cep)
 {
     return cep->flags & (UCT_RDMACM_CM_EP_CLIENT_CONN_CB_INVOKED |
@@ -75,40 +81,89 @@ void uct_rdmacm_cm_ep_server_conn_notify_cb(uct_rdmacm_cm_ep_t *cep,
     uct_cm_ep_server_conn_notify_cb(&cep->super, status);
 }
 
+static int uct_rdmacm_cm_ep_disconnect_cb(uct_rdmacm_cm_ep_t *cep)
+{
+    if (uct_rdmacm_ep_is_connected(cep)) {
+        /* Already connected, so call disconnect callback */
+        uct_cm_ep_disconnect_cb(&cep->super);
+        return 1;
+    }
+
+    return 0;
+}
+
+static void uct_rdmacm_cm_ep_client_error_cb(uct_rdmacm_cm_ep_t *cep,
+                                             uct_cm_remote_data_t *remote_data,
+                                             ucs_status_t status)
+{
+    ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT);
+
+    if (uct_rdmacm_cm_ep_disconnect_cb(cep)) {
+        return;
+    }
+
+    if (uct_rdmacm_ep_client_is_resolved(cep)) {
+        /* Not connected yet, so call client side connect callback with err
+         * status. */
+        uct_rdmacm_cm_ep_client_connect_cb(cep, remote_data, status);
+        return;
+    }
+
+    /* Not resolved yet, so call client side resolve callback with err
+     * status. */
+    uct_rdmacm_cm_ep_resolve_cb(cep, status);
+}
+
+static void uct_rdmacm_cm_ep_server_error_cb(uct_rdmacm_cm_ep_t *cep,
+                                             ucs_status_t status)
+{
+    ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
+
+    if (uct_rdmacm_cm_ep_disconnect_cb(cep)) {
+        return;
+    }
+
+    /* Not connected yet, so call server side notify callback with err
+     * status */
+    uct_rdmacm_cm_ep_server_conn_notify_cb(cep, status);
+}
+
 void uct_rdmacm_cm_ep_error_cb(uct_rdmacm_cm_ep_t *cep,
                                uct_cm_remote_data_t *remote_data,
                                ucs_status_t status)
 {
-    if (cep->flags & UCT_RDMACM_CM_EP_FAILED) {
-        return;
-    }
+    ucs_assertv((status != UCS_OK) && (cep->status == UCS_OK) &&
+                !(cep->flags & UCT_RDMACM_CM_EP_FAILED),
+                "ep %p: calling err callback with status %s on ep with status "
+                "%s flags 0x%"PRIx16, cep, ucs_status_string(status),
+                ucs_status_string(cep->status), cep->flags);
 
-    ucs_assert(status != UCS_OK);
-    cep->status = status;
-
-    if (uct_rdmacm_ep_is_connected(cep)) {
-        /* already connected, so call disconnect callback */
-        uct_cm_ep_disconnect_cb(&cep->super);
-    } else if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
-        /* not connected yet, so call client side connect callback with err
-         * status */
-        uct_rdmacm_cm_ep_client_connect_cb(cep, remote_data, status);
+    if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
+        uct_rdmacm_cm_ep_client_error_cb(cep, remote_data, status);
     } else {
-        ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
-        /* not connected yet, so call server side notify callback with err
-         * status */
-        uct_rdmacm_cm_ep_server_conn_notify_cb(cep, status);
+        uct_rdmacm_cm_ep_server_error_cb(cep, status);
     }
 }
 
 void uct_rdmacm_cm_ep_set_failed(uct_rdmacm_cm_ep_t *cep,
                                  uct_cm_remote_data_t *remote_data,
-                                 ucs_status_t status)
+                                 ucs_status_t status, int invoke_cb)
 {
-    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
-    uct_rdmacm_cm_ep_error_cb(cep, remote_data, status);
+    ucs_assert(status != UCS_OK);
+    ucs_assert(ucs_async_is_blocked(uct_rdmacm_cm_ep_get_async(cep)));
+
+    if (cep->flags & UCT_RDMACM_CM_EP_FAILED) {
+        return;
+    }
+
+    if (invoke_cb) {
+        uct_rdmacm_cm_ep_error_cb(cep, remote_data, status);
+    }
+
+    /* update the state after err callback to return correct err code from
+     * @ref uct_ep_disconnect */
     cep->flags |= UCT_RDMACM_CM_EP_FAILED;
-    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    cep->status = status;
 }
 
 ucs_status_t uct_rdmacm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
@@ -147,32 +202,28 @@ ucs_status_t uct_rdmacm_cm_ep_conn_notify(uct_ep_h ep)
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
 
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
+
     ucs_trace("%s rdma_establish on client (cm_id %p, rdmacm %p, event_channel=%p)",
               uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
               cep->id, rdmacm_cm, rdmacm_cm->ev_ch);
 
-    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     if (cep->flags & (UCT_RDMACM_CM_EP_FAILED |
                       UCT_RDMACM_CM_EP_GOT_DISCONNECT)) {
-        goto ep_failed;
+        goto out;
     }
-
-    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
     if (rdma_establish(cep->id)) {
         uct_cm_ep_peer_error(&cep->super,
                              "rdma_establish on ep %p (to server addr=%s) failed: %m",
                              cep, ucs_sockaddr_str(remote_addr, ip_port_str,
                                                    UCS_SOCKADDR_STRING_LEN));
-        UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
         cep->status = UCS_ERR_CONNECTION_RESET;
         cep->flags |= UCT_RDMACM_CM_EP_FAILED;
-        goto ep_failed;
+        goto out;
     }
 
-    return UCS_OK;
-
-ep_failed:
+out:
     status = cep->status;
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
     return status;
@@ -395,12 +446,19 @@ ucs_status_t uct_rdmacm_cm_ep_pack_cb(uct_rdmacm_cm_ep_t *cep,
                              priv_data_length_p);
 }
 
-ucs_status_t uct_rdmacm_cm_ep_resolve_cb(uct_rdmacm_cm_ep_t *cep)
+ucs_status_t uct_rdmacm_cm_ep_resolve_cb(uct_rdmacm_cm_ep_t *cep,
+                                         ucs_status_t status)
 {
     uct_cm_ep_resolve_args_t args;
 
-    args.field_mask = UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME;
-    uct_rdmacm_cm_id_to_dev_name(cep->id, args.dev_name);
+    args.field_mask = UCT_CM_EP_RESOLVE_ARGS_FIELD_STATUS;
+    args.status     = status;
+    if (status == UCS_OK) {
+        args.field_mask |= UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME;
+        uct_rdmacm_cm_id_to_dev_name(cep->id, args.dev_name);
+    }
+
+    cep->flags |= UCT_RDMACM_CM_EP_CLIENT_RESOLVE_CB_INVOKED;
     return uct_cm_ep_resolve_cb(&cep->super, &args);
 }
 
@@ -632,8 +690,6 @@ uct_rdmacm_cm_ep_connect(uct_ep_h ep, const uct_ep_connect_params_t *params)
     const void *priv_data;
     size_t priv_data_length;
     ucs_status_t status;
-
-    ucs_assert(ucs_async_is_blocked(uct_rdmacm_cm_ep_get_async(cep)));
 
     uct_ep_connect_params_get(params, &priv_data, &priv_data_length);
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
