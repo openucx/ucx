@@ -1719,7 +1719,7 @@ typedef struct {
 
     /**
      * Memory handle for pre-registered buffer.
-     * The memory handle should be obtained by calling ucp_mem_map().
+     * The memory handle should be obtained via @ref ucp_mem_map.
      */
     ucp_mem_h memh;
 } ucp_request_param_t;

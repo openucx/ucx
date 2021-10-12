@@ -139,7 +139,6 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     req->flags              = UCP_REQUEST_FLAG_RECV_TAG | req_flags;
 
     ucp_dt_recv_state_init(&req->recv.state, buffer, datatype, count);
-    ucp_request_recv_memh_init(req, param);
 
     if (!UCP_DT_IS_CONTIG(datatype)) {
         req->flags         |= UCP_REQUEST_FLAG_BLOCK_OFFLOAD;
@@ -149,6 +148,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                                             &req->recv.state);
     req->recv.mem_type      = ucp_request_get_memory_type(worker->context, buffer,
                                                          req->recv.length, param);
+
+    ucp_request_recv_memh_init(req, param);
 
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;

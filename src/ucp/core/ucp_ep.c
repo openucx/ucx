@@ -2105,7 +2105,6 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             config->md_index[lane] = UCP_NULL_RESOURCE;
         }
     }
-    ucs_assert(ucs_popcount(config->md_map) <= UCP_MAX_OP_MDS);
 
     /* configuration for rndv */
     get_zcopy_lane_count = put_zcopy_lane_count = 0;

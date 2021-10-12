@@ -204,6 +204,10 @@ ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq)
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
 
+        if (sreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+            ucp_request_memh_reinit(sreq, md_map);
+        }
+
         /* Pass UCT_MD_MEM_FLAG_HIDE_ERRORS flag, because registration may fail
          * if md does not support send memory type (e.g. CUDA memory). In this
          * case RTS will be sent with empty key, and sender will fallback to

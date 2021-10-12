@@ -811,12 +811,12 @@ static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
     req->send.pending_lane               = UCP_NULL_LANE;
 
     ucp_request_send_state_init(req, datatype, count);
-    ucp_request_send_memh_init(req, param);
     req->send.length   = ucp_dt_length(req->send.datatype, count,
                                        req->send.buffer, &req->send.state.dt);
     req->send.mem_type = ucp_request_get_memory_type(ep->worker->context,
                                                      req->send.buffer,
                                                      req->send.length, param);
+    ucp_request_send_memh_init(req, param);
 }
 
 static UCS_F_ALWAYS_INLINE size_t

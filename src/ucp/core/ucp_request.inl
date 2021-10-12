@@ -373,6 +373,17 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_request_memh_reinit(ucp_request_t *req, ucp_md_map_t md_map)
+{
+    ucp_md_map_t *md_map_p   = &req->send.state.dt.dt.contig.md_map;
+
+    if (*md_map_p != md_map) {
+        *md_map_p   = 0;
+        req->flags &= ~UCP_REQUEST_FLAG_USER_MEMH;
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_request_memh_init(ucp_request_t *req, ucp_ep_h ep, ucp_mem_h memh)
 {
     ucp_md_map_t *md_map_p   = &req->send.state.dt.dt.contig.md_map;
@@ -381,7 +392,11 @@ ucp_request_memh_init(ucp_request_t *req, ucp_ep_h ep, ucp_mem_h memh)
     int i;
     ucp_md_index_t md_idx;
 
-    assert(memh != NULL);
+    if (ucs_popcount(ep_conf->md_map) > UCP_MAX_OP_MDS) {
+        return;
+    }
+
+    ucs_assert(memh != NULL);
 
     *md_map_p = ep_conf->md_map;
     i = 0;
@@ -397,7 +412,11 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_send_memh_init(ucp_request_t *req,
                            const ucp_request_param_t *param)
 {
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) ||
+        (param->memh           == NULL) ||
+        (param->memh->address  != req->send.buffer) ||
+        (param->memh->length   != req->send.length) ||
+        (param->memh->mem_type != req->send.mem_type)) {
         return;
     }
 
@@ -407,7 +426,11 @@ ucp_request_send_memh_init(ucp_request_t *req,
 static UCS_F_ALWAYS_INLINE void
 ucp_request_recv_memh_init(ucp_request_t *req, const ucp_request_param_t *param)
 {
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) ||
+        (param->memh           == NULL) ||
+        (param->memh->address  != req->recv.buffer) ||
+        (param->memh->length   != req->recv.length) ||
+        (param->memh->mem_type != req->recv.mem_type)) {
         return;
     }
 
