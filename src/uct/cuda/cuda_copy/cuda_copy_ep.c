@@ -43,6 +43,16 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_ep_t, uct_ep_t);
     ucs_trace_data("%s [ptr %p len %zu] to 0x%" PRIx64, _name, (_iov)->buffer, \
                    (_iov)->length, (_remote_addr))
 
+ucs_status_t uct_cuda_copy_init_stream(cudaStream_t *stream)
+{
+    if (*stream != 0) {
+        return UCS_OK;
+    }
+
+    return UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(stream,
+                                                           cudaStreamNonBlocking));
+}
+
 static UCS_F_ALWAYS_INLINE cudaStream_t *
 uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
                          ucs_memory_type_t src_type,
@@ -55,12 +65,10 @@ uct_cuda_copy_get_stream(uct_cuda_copy_iface_t *iface,
                (dst_type < UCS_MEMORY_TYPE_LAST));
 
     stream = &iface->queue_desc[src_type][dst_type].stream;
-    if (*stream == 0) {
-        status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(stream,
-                                                                 cudaStreamNonBlocking));
-        if (status != UCS_OK) {
-            return NULL;
-        }
+
+    status = uct_cuda_copy_init_stream(stream);
+    if (status != UCS_OK) {
+        return NULL;
     }
 
     return stream;
@@ -193,7 +201,10 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_put_short,
     cudaStream_t *stream         = &iface->short_stream;
     ucs_status_t status;
 
-    stream  = &iface->short_stream;
+    status = uct_cuda_copy_init_stream(stream);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync((void*)remote_addr, buffer, length,
                                           cudaMemcpyDefault, *stream));
@@ -213,6 +224,11 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_cuda_copy_ep_get_short,
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_cuda_copy_iface_t);
     cudaStream_t *stream         = &iface->short_stream;
     ucs_status_t status;
+
+    status = uct_cuda_copy_init_stream(stream);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     UCT_CUDA_FUNC_LOG_ERR(cudaMemcpyAsync(buffer, (void*)remote_addr, length,
                                           cudaMemcpyDefault, *stream));
