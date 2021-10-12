@@ -1126,7 +1126,7 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >=
                       sizeof(ucp_eager_sync_hdr_t));
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >=
-                      sizeof(ucp_offload_first_desct_t));
+                      sizeof(ucp_offload_first_desc_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
     iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_STATS_ROOT        |
