@@ -6,6 +6,7 @@
 #include "ucp_test.h"
 #include <common/test_helpers.h>
 #include <ifaddrs.h>
+#include <sys/poll.h>
 
 extern "C" {
 #include <ucp/core/ucp_worker.inl>
@@ -292,6 +293,42 @@ ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
 void ucp_test::request_release(void *req)
 {
     request_process(req, 0, false);
+}
+
+void ucp_test::wait_for_wakeup(const std::vector<ucp_worker_h> &workers,
+                               int poll_timeout, bool drain)
+{
+    std::vector<int> efds;
+
+    for (auto worker : workers) {
+        int efd;
+
+        ASSERT_UCS_OK(ucp_worker_get_efd(worker, &efd));
+        efds.push_back(efd);
+
+        ucs_status_t status = ucp_worker_arm(worker);
+        if (status == UCS_ERR_BUSY) {
+            return;
+        }
+        ASSERT_UCS_OK(status);
+    }
+
+    int ret;
+    do {
+        std::vector<struct pollfd> pfd;
+
+        for (int fd : efds) {
+            pfd.push_back({ fd, POLLIN });
+        }
+
+        ret = poll(&pfd[0], efds.size(), poll_timeout);
+    } while (((ret < 0) && (errno == EINTR)) || (drain && (ret > 0)));
+
+    if (ret < 0) {
+        UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
+    }
+
+    EXPECT_GE(ret, 1);
 }
 
 int ucp_test::max_connections() {

@@ -34,6 +34,8 @@
 #include <sys/poll.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
+#include <time.h>
 
 
 #define UCP_WORKER_KEEPALIVE_ITER_SKIP 32
@@ -1915,8 +1917,9 @@ err:
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
+static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 {
+    worker->keepalive.timerfd     = -1;
     worker->keepalive.cb_id       = UCS_CALLBACKQ_ID_NULL;
     worker->keepalive.last_round  = 0;
     worker->keepalive.lane_map    = 0;
@@ -2459,6 +2462,13 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 
+    if (worker->keepalive.timerfd >= 0) {
+        ucs_assert(worker->context->config.features & UCP_FEATURE_WAKEUP);
+        ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_DEL,
+                                 worker->keepalive.timerfd);
+        close(worker->keepalive.timerfd);
+    }
+
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_destroy_mpools(worker);
@@ -2875,6 +2885,44 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_worker_keepalive_timerfd_init(ucp_worker_h worker)
+{
+    ucs_time_t ka_interval = worker->context->config.ext.keepalive_interval;
+    struct itimerspec its;
+    struct timespec ts;
+    int ret;
+
+
+    if (!(worker->context->config.features & UCP_FEATURE_WAKEUP) ||
+        (worker->keepalive.timerfd >= 0)) {
+        return;
+    }
+
+    worker->keepalive.timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    if (worker->keepalive.timerfd < 0) {
+        ucs_warn("worker %p: failed to create keepalive timer fd: %m",
+                 worker);
+        return;
+    }
+
+    ucs_assert(ka_interval > 0);
+    ucs_sec_to_timespec(ucs_time_to_sec(ka_interval), &ts);
+    its.it_interval = ts;
+    its.it_value    = ts;
+
+    ret = timerfd_settime(worker->keepalive.timerfd, 0, &its, NULL);
+    if (ret != 0) {
+        ucs_warn("worker %p: keepalive timerfd_settime"
+                 "(fd=%d interval=%lu.%06lu) failed: %m", worker,
+                 worker->keepalive.timerfd, ts.tv_sec,
+                 ts.tv_nsec * UCS_NSEC_PER_USEC);
+    }
+
+    ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_ADD,
+                             worker->keepalive.timerfd);
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
 {
     ucs_assert(worker->keepalive.lane_map == 0);
@@ -2983,6 +3031,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
         return;
     }
 
+    ucp_worker_keepalive_timerfd_init(worker);
     ucs_trace("ep %p flags 0x%x: adding to keepalive lane_map 0x%x", ep,
               ep->flags, ucp_ep_config(ep)->key.ep_check_map);
     uct_worker_progress_register_safe(worker->uct,
