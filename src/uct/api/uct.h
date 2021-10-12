@@ -1235,9 +1235,6 @@ struct uct_ep_params {
      * This callback is invoked when the remote server address provided in field
      * @ref uct_ep_params_t::sockaddr is resolved to the local device to be used
      * for connection establishment.
-     * @note In the event of a connection error, this callback will not be
-     *       invoked; @ref uct_ep_params_t::sockaddr_cb_client with indicating
-     *       the error code will be invoked instead.
      * @note This field is mutually exclusive with
      *       @ref uct_ep_params::sockaddr_pack_cb.
      */
