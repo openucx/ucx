@@ -315,6 +315,8 @@ void uct_dc_mlx5_iface_pre_create_dci(uct_dc_mlx5_iface_t *iface,
         attr->full_handshake = full_handshake;
     }
 #endif
+
+    dci->local_ece = iface->tx.dci_pool[pool_index].local_ece;
 }
 
 static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
@@ -844,11 +846,14 @@ uct_dc_mlx5_iface_create_dcts(uct_dc_mlx5_iface_t *iface,
 {
     ucs_status_t status;
 
+    iface->rx.dct[0].local_ece.val = 0;
     status = uct_dc_mlx5_iface_create_dct(iface, &iface->rx.dct[0], config);
     if (status != UCS_OK || iface->gp == 1) {
         return status;
     }
 
+    iface->rx.dct[1].local_ece.val =
+        iface->super.super.super.config.ece_cfg.ece.val;
     status = uct_dc_mlx5_iface_create_dct(iface, &iface->rx.dct[1], config);
     if (status != UCS_OK) {
         uct_dc_mlx5_destroy_dcts(iface, 1);
@@ -915,6 +920,7 @@ uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
     dci_index = 0;
     for (pool_index = 0; pool_index < iface->tx.num_dci_pools; pool_index++) {
+        iface->tx.dci_pool[pool_index].local_ece.val = 0;
         status = uct_dc_mlx5_iface_create_dcis_per_pool(iface,
                                                         pool_index, &dci_index,
                                                         full_handshake);
@@ -924,6 +930,8 @@ uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
     }
 
     for (; pool_index < iface->tx.num_dci_pools * iface->gp; pool_index++) {
+        iface->tx.dci_pool[pool_index].local_ece =
+            iface->super.super.super.config.ece_cfg.ece;
         status = uct_dc_mlx5_iface_create_dcis_per_pool(iface,
                                                         pool_index, &dci_index,
                                                         full_handshake);

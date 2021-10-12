@@ -179,6 +179,7 @@ typedef struct uct_dc_dci {
     };
     uint8_t                       pool_index; /* DCI pool index. */
     uint8_t                       path_index; /* Path index */
+    union ece_t                   local_ece;
 } uct_dc_dci_t;
 
 
@@ -233,6 +234,8 @@ typedef struct {
     int8_t        release_stack_top;                       /* releasing dci's stack,
                                                               points to last DCI to release
                                                               or -1 if no DCI's to release */
+    /* dci ECE configurations */
+    union ece_t   local_ece;
 } uct_dc_mlx5_dci_pool_t;
 
 
