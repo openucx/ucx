@@ -522,12 +522,11 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
 {
     ucp_ep_h ep                = user_data;
     ucp_worker_h worker        = ep->worker;
-    ucs_status_t status        = UCS_OK;
+    ucs_status_t status        = UCS_PARAM_VALUE(UCT_CM_EP_RESOLVE_ARGS_FIELD,
+                                                 args, status, STATUS, UCS_OK);
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
     ucp_wireup_ep_t *cm_wireup_ep;
     char addr_str[UCS_SOCKADDR_STRING_LEN];
-
-    ucs_assert_always(args->field_mask & UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME);
 
     UCP_EP_CM_CALLBACK_ENTER(ep, ucp_ep_get_cm_uct_ep(ep),
                              {
@@ -535,6 +534,12 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
                                  status = UCS_ERR_CANCELED;
                                  goto out;
                              });
+
+    if (status != UCS_OK) {
+        goto try_fallback;
+    }
+
+    ucs_assert_always(args->field_mask & UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME);
 
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
     ucs_assert(cm_wireup_ep != NULL);
@@ -550,10 +555,7 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
                          addr_str, sizeof(addr_str)),
                  args->dev_name);
         status = UCS_ERR_UNREACHABLE;
-        if (!ucp_cm_client_try_fallback_cms(ep)) {
-            ucp_ep_set_failed_schedule(ep, ucp_ep_get_cm_lane(ep), status);
-        }
-        goto out;
+        goto try_fallback;
     }
 
     ucs_debug("client created ep %p on device %s, "
@@ -568,7 +570,12 @@ ucp_cm_client_resolve_cb(void *user_data, const uct_cm_ep_resolve_args_t *args)
                                       ep, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
     ucp_worker_signal_internal(worker);
+    goto out;
 
+try_fallback:
+    if (!ucp_cm_client_try_fallback_cms(ep)) {
+        ucp_ep_set_failed_schedule(ep, ucp_ep_get_cm_lane(ep), status);
+    }
 out:
     return status;
 }
