@@ -234,7 +234,8 @@ typedef ucs_status_t (*uct_ep_get_address_func_t)(uct_ep_h ep,
 
 typedef ucs_status_t (*uct_ep_connect_to_ep_func_t)(uct_ep_h ep,
                                                     const uct_device_addr_t *dev_addr,
-                                                    const uct_ep_addr_t *ep_addr);
+                                                    const uct_ep_addr_t *ep_addr,
+                                                    const uint32_t *ibv_ece);
 
 typedef ucs_status_t (*uct_iface_accept_func_t)(uct_iface_h iface,
                                                 uct_conn_request_h conn_request);

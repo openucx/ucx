@@ -677,7 +677,7 @@ int main(int argc, char **argv)
         CHKERR_JUMP(0 != status, "EPs exchange", out_free_ep);
 
         /* Connect endpoint to a remote endpoint */
-        status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep);
+        status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep, NULL);
         if (barrier(oob_sock, progress_worker, if_info.worker)) {
             status = UCS_ERR_IO_ERROR;
             goto out_free_ep;

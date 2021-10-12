@@ -542,7 +542,8 @@ ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr,
 
 ucs_status_t uct_tcp_ep_connect_to_ep(uct_ep_h ep,
                                       const uct_device_addr_t *dev_addr,
-                                      const uct_ep_addr_t *ep_addr);
+                                      const uct_ep_addr_t *ep_addr,
+                                      const uint32_t *ibv_ece);
 
 const char *uct_tcp_ep_ctx_caps_str(uint8_t ep_ctx_caps, char *str_buffer);
 

@@ -35,7 +35,8 @@ static inline ucs_queue_elem_t* ucp_wireup_ep_req_priv(uct_pending_req_t *req)
 
 static ucs_status_t
 ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
-                            const uct_ep_addr_t *ep_addr)
+                            const uct_ep_addr_t *ep_addr,
+                            const uint32_t *ibv_ece)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
@@ -44,7 +45,8 @@ ucp_wireup_ep_connect_to_ep(uct_ep_h uct_ep, const uct_device_addr_t *dev_addr,
     }
 
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    return uct_ep_connect_to_ep(wireup_ep->super.uct_ep, dev_addr, ep_addr);
+    return uct_ep_connect_to_ep(wireup_ep->super.uct_ep,
+                                dev_addr, ep_addr, ibv_ece);
 }
 
 /*

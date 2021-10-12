@@ -59,7 +59,8 @@ ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
                                           uint32_t *ibv_ece);
 ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
                                             const uct_device_addr_t *dev_addr,
-                                            const uct_ep_addr_t *ep_addr);
+                                            const uct_ep_addr_t *ep_addr,
+                                            const uint32_t *ibv_ece);
 
 static inline uint32_t uct_ugni_smsg_desc_compare(uct_ugni_smsg_desc_t *smsg1, uct_ugni_smsg_desc_t *smsg2)
 {

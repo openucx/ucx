@@ -710,7 +710,8 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                                           const uct_device_addr_t *dev_addr,
-                                          const uct_ep_addr_t *ep_addr)
+                                          const uct_ep_addr_t *ep_addr,
+                                          const uint32_t *ibv_ece)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;

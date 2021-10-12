@@ -774,7 +774,8 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         }
 
         if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
-            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, dev_addr, ep_addr);
+            status = uct_ep_connect_to_ep(perf->uct.peers[i].ep, dev_addr,
+                                          ep_addr, NULL);
         } else if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
             ep_params.dev_addr   = dev_addr;
             ep_params.iface_addr = iface_addr;

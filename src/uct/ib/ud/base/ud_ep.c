@@ -609,7 +609,8 @@ err_ep_destroy:
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
                                      const uct_device_addr_t *dev_addr,
-                                     const uct_ep_addr_t *uct_ep_addr)
+                                     const uct_ep_addr_t *uct_ep_addr,
+                                     const uint32_t *ibv_ece)
 {
     uct_ud_ep_t *ep                   = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
@@ -692,7 +693,7 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
     status = uct_ep_connect_to_ep(ep_h, (void*)uct_ud_creq_ib_addr(ctl),
-                                  (void*)&ctl->conn_req.ep_addr);
+                                  (void*)&ctl->conn_req.ep_addr, NULL);
     if (status != UCS_OK) {
         goto err_ep_destroy;
     }

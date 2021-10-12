@@ -615,9 +615,10 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr,
 }
 
 ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr,
-                                  const uct_ep_addr_t *ep_addr)
+                                  const uct_ep_addr_t *ep_addr,
+                                  const uint32_t *ibv_ece)
 {
-    return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr);
+    return ep->iface->ops.ep_connect_to_ep(ep, dev_addr, ep_addr, ibv_ece);
 }
 
 ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)

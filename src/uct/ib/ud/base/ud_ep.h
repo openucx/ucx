@@ -313,7 +313,8 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *params,
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
                                      const uct_device_addr_t *dev_addr,
-                                     const uct_ep_addr_t *uct_ep_addr);
+                                     const uct_ep_addr_t *uct_ep_addr,
+                                     const uint32_t *ibv_ece);
 
 ucs_status_t uct_ud_ep_pending_add(uct_ep_h ep, uct_pending_req_t *n,
                                    unsigned flags);

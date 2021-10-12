@@ -105,7 +105,7 @@ UCP_PROXY_EP_DEFINE_OP(ucs_status_t, fence, unsigned)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, check, unsigned, uct_completion_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, get_address, uct_ep_addr_t*, uint32_t*)
 UCP_PROXY_EP_DEFINE_OP(ucs_status_t, connect_to_ep, const uct_device_addr_t*,
-                       const uct_ep_addr_t*)
+                       const uct_ep_addr_t*, const uint32_t*)
 static UCS_CLASS_DEFINE_NAMED_DELETE_FUNC(ucp_proxy_ep_destroy, ucp_proxy_ep_t,
                                           uct_ep_t);
 
