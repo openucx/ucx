@@ -15,6 +15,13 @@ parameters:
 steps:
 - bash: |
     set -eEx
+    $(workspace)/buildlib/az-network-corrupter.sh reset=yes
+  displayName: Restore port state
+  condition: always()
+  timeoutInMinutes: 2
+
+- bash: |
+    set -eEx
     source $(workspace)/buildlib/az-helpers.sh
     $(workspace)/buildlib/az-network-corrupter.sh \
       initial_delay=${{ parameters.initial_delay }} \
