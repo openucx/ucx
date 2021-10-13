@@ -318,6 +318,10 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
                                uct_ud_ep_deferred_timeout_handler, ep,
                                UCS_CALLBACKQ_FLAG_ONESHOT);
+        if (iface->async.event_cb != NULL) {
+            /* notify user */
+            iface->async.event_cb(iface->async.event_arg, 0);
+        }
         return;
     }
 
