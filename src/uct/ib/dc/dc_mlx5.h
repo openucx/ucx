@@ -96,7 +96,9 @@ typedef enum {
 
 
 typedef struct uct_dc_mlx5_iface_addr {
+    uint32_t          ece;
     uct_ib_uint24_t   qp_num;
+    uct_ib_uint24_t   qp_num_ece;
     uint8_t           atomic_mr_id;
     uint8_t           flags;
 } UCS_S_PACKED uct_dc_mlx5_iface_addr_t;
