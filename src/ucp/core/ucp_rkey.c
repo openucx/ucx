@@ -348,7 +348,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
     ucs_status_t status;
     ucp_rkey_h rkey;
     uint8_t flags;
-    unsigned md_count;
+    int md_count;
 
     UCS_STATIC_ASSERT(ucs_offsetof(ucp_rkey_t, mem_type) ==
                       ucs_offsetof(ucp_rkey_t, cache.mem_type));
@@ -367,7 +367,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
      * allocations are done from a memory pool.
      * We keep all of them to handle a future transport switch.
      */
-    if (md_count <= UCP_RKEY_MPOOL_MAX_MD) {
+    if (md_count <= worker->context->config.ext.rkey_mpool_max_md) {
         rkey  = ucs_mpool_get_inline(&worker->rkey_mp);
         flags = UCP_RKEY_DESC_FLAG_POOL;
     } else {
