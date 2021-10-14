@@ -1132,6 +1132,7 @@ static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
+    /* coverity[check_return] */
     ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
 
     ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
