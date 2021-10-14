@@ -52,7 +52,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
     };
     ucs_status_t status;
 
-    if (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
+    if (!ucp_proto_rndv_op_check(init_params, UCP_OP_ID_RNDV_RECV, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
