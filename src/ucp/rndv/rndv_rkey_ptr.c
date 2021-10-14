@@ -16,9 +16,17 @@ enum {
     UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS
 };
 
+
+typedef struct {
+    ucp_proto_rndv_ack_priv_t ack;
+    ucp_proto_single_priv_t   spriv;
+} ucp_proto_rndv_rkey_ptr_priv_t;
+
+
 static ucs_status_t
 ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
 {
+    ucp_proto_rndv_rkey_ptr_priv_t *rpriv = init_params->priv;
     ucp_context_t *context                = init_params->worker->context;
     uint64_t rndv_modes                   = UCS_BIT(UCP_RNDV_MODE_RKEY_PTR);
     ucp_proto_single_init_params_t params = {
@@ -42,12 +50,19 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .lane_type           = UCP_LANE_TYPE_RKEY_PTR,
         .tl_cap_flags        = 0,
     };
+    ucs_status_t status;
 
     if (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV) {
         return UCS_ERR_UNSUPPORTED;
     }
 
-    return ucp_proto_single_init(&params);
+    status = ucp_proto_single_init_priv(&params, &rpriv->spriv);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    *init_params->priv_size = sizeof(*rpriv);
+    return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);
 }
 
 static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
@@ -95,13 +110,13 @@ static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
 static ucs_status_t
 ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req                   = ucs_container_of(uct_req,
-                                                            ucp_request_t,
-                                                            send.uct);
-    const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
-    ucp_worker_h worker                  = req->send.ep->worker;
-    unsigned rkey_index                  = spriv->super.rkey_index;
-    ucp_rkey_h rkey                      = req->send.rndv.rkey;
+    ucp_request_t *req                          = ucs_container_of(uct_req,
+                                                                   ucp_request_t,
+                                                                   send.uct);
+    const ucp_proto_rndv_rkey_ptr_priv_t *rpriv = req->send.proto_config->priv;
+    ucp_worker_h worker                         = req->send.ep->worker;
+    unsigned rkey_index                         = rpriv->spriv.super.rkey_index;
+    ucp_rkey_h rkey                             = req->send.rndv.rkey;
     ucs_status_t status;
 
     ucs_assert(rkey_index != UCP_NULL_RESOURCE);
