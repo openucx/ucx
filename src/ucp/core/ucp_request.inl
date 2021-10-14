@@ -132,7 +132,8 @@ UCS_PTR_MAP_IMPL(request, 0);
 
 #define ucp_request_cb_param(_param, _req, _cb, ...) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        param->cb._cb(req + 1, (_req)->status, ##__VA_ARGS__, param->user_data); \
+        (_param)->cb._cb(req + 1, (_req)->status, ##__VA_ARGS__, \
+                         (_param)->user_data); \
     }
 
 
