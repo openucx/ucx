@@ -127,6 +127,16 @@ static const char *ucp_wireup_event_flags[] = {
     [ucs_ilog2(UCT_IFACE_FLAG_EVENT_RECV_SIG)]  = "signaled message event"
 };
 
+static const char *ucp_wireup_peer_flags[] = {
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE)] = "connect to iface",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_AM_SYNC)]          = "am sync callback",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_CB_ASYNC)]         = "async callback",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_PUT)]              = "put",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_GET)]              = "get",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_TAG_EAGER)]        = "tag_eager",
+    [ucs_ilog2(UCP_ADDR_IFACE_FLAG_TAG_RNDV)]         = "tag_rndv"
+};
+
 static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
      [UCT_ATOMIC_OP_ADD]   = {.name = "add",   .fetch = "fetch-"},
      [UCT_ATOMIC_OP_AND]   = {.name = "and",   .fetch = "fetch-"},
@@ -332,20 +342,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             ucs_trace("addr[%d]: not in use, because on md[%d]", addr_index,
                       ae->md_index);
             continue;
-        } else if (!ucs_test_all_flags(ae->md_flags,
-                                       criteria->remote_md_flags)) {
-            ucs_trace("addr[%d] %s: no %s", addr_index,
-                      ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
-                      ucp_wireup_get_missing_flag_desc(ae->md_flags,
-                                                       criteria->remote_md_flags,
-                                                       ucp_wireup_md_flags));
-            continue;
         }
 
         /* Make sure we are indeed passing all flags required by the criteria in
          * ucp packed address */
-        ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_FLAGS,
-                                      criteria->remote_iface_flags));
         ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_EVENT_FLAGS,
                                       criteria->remote_event_flags));
 
@@ -354,7 +354,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
                                                        criteria->remote_iface_flags,
-                                                       ucp_wireup_iface_flags));
+                                                       ucp_wireup_peer_flags));
             continue;
         }
 
@@ -700,8 +700,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
 
     /* Select best transport which can reach registered memory */
     snprintf(title, sizeof(title), criteria->title, "registered");
-    mem_criteria.title           = title;
-    mem_criteria.remote_md_flags = UCT_MD_FLAG_REG | criteria->remote_md_flags;
+    mem_criteria.title          = title;
+    mem_criteria.local_md_flags = UCT_MD_FLAG_REG | criteria->local_md_flags;
     status = ucp_wireup_select_transport(select_ctx, select_params,
                                          &mem_criteria, tl_bitmap,
                                          remote_md_map, UINT64_MAX, UINT64_MAX,
@@ -734,9 +734,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
      * better performance than the transports which support only registered
      * remote memory. */
     snprintf(title, sizeof(title), criteria->title, "allocated");
-    mem_criteria.title           = title;
-    mem_criteria.remote_md_flags = UCT_MD_FLAG_ALLOC |
-                                   criteria->remote_md_flags;
+    mem_criteria.title          = title;
+    mem_criteria.local_md_flags = UCT_MD_FLAG_ALLOC | criteria->local_md_flags;
 
     for (;;) {
         status = ucp_wireup_select_transport(select_ctx, select_params,
@@ -798,15 +797,14 @@ static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
 {
     criteria->title                   = "auxiliary";
     criteria->local_md_flags          = 0;
-    criteria->remote_md_flags         = 0;
     criteria->local_iface_flags       = UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_PENDING;
-    criteria->remote_iface_flags      = UCT_IFACE_FLAG_AM_BCOPY;
+    criteria->remote_iface_flags      = UCP_ADDR_IFACE_FLAG_AM_SYNC;
     /* CM lane doesn't require to use CONNECT_TO_IFACE for auxiliary lane */
     if (!ucp_ep_init_flags_has_cm(ep_init_flags)) {
         criteria->local_iface_flags  |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
-        criteria->remote_iface_flags |= UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                                        UCT_IFACE_FLAG_CB_ASYNC;
+        criteria->remote_iface_flags |= UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE |
+                                        UCP_ADDR_IFACE_FLAG_CB_ASYNC;
     }
     criteria->local_event_flags       = 0;
     criteria->remote_event_flags      = 0;
@@ -874,14 +872,15 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
 
     if (ep_init_flags & UCP_EP_INIT_FLAG_MEM_TYPE) {
         criteria.title              = "copy across memory types";
-        criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT;
-        criteria.local_iface_flags  = criteria.remote_iface_flags;
+        criteria.local_iface_flags  = UCT_IFACE_FLAG_PUT_SHORT;
+        criteria.remote_iface_flags = UCP_ADDR_IFACE_FLAG_PUT;
     } else {
         criteria.title              = "remote %s memory access";
-        criteria.remote_iface_flags = UCT_IFACE_FLAG_PUT_SHORT |
+        criteria.remote_iface_flags = UCP_ADDR_IFACE_FLAG_PUT |
+                                      UCP_ADDR_IFACE_FLAG_GET;
+        criteria.local_iface_flags  = UCT_IFACE_FLAG_PUT_SHORT |
                                       UCT_IFACE_FLAG_PUT_BCOPY |
-                                      UCT_IFACE_FLAG_GET_BCOPY;
-        criteria.local_iface_flags  = criteria.remote_iface_flags |
+                                      UCT_IFACE_FLAG_GET_BCOPY |
                                       UCT_IFACE_FLAG_PENDING;
     }
     criteria.remote_event_flags     = 0;
@@ -1046,8 +1045,7 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
     /* Select one lane for active messages */
     for (;;) {
         criteria.title              = "active messages";
-        criteria.remote_iface_flags = UCT_IFACE_FLAG_AM_BCOPY |
-                                      UCT_IFACE_FLAG_CB_SYNC;
+        criteria.remote_iface_flags = UCP_ADDR_IFACE_FLAG_AM_SYNC;
         criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
         criteria.remote_event_flags = 0;
         criteria.local_event_flags  = 0;
@@ -1206,9 +1204,7 @@ ucp_wireup_add_am_bw_lanes(const ucp_wireup_select_params_t *select_params,
     /* Select one lane for active messages */
     bw_info.criteria.title              = "high-bw active messages";
     bw_info.criteria.local_md_flags     = 0;
-    bw_info.criteria.remote_md_flags    = 0;
-    bw_info.criteria.remote_iface_flags = UCT_IFACE_FLAG_AM_BCOPY |
-                                          UCT_IFACE_FLAG_CB_SYNC;
+    bw_info.criteria.remote_iface_flags = UCP_ADDR_IFACE_FLAG_AM_SYNC;
     bw_info.criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
     bw_info.criteria.remote_event_flags = 0;
     bw_info.criteria.local_event_flags  = 0;
@@ -1261,16 +1257,31 @@ static uint64_t ucp_wireup_get_rma_bw_iface_flags(ucp_rndv_mode_t rndv_mode)
     }
 }
 
+static uint64_t ucp_wireup_get_rndv_peer_flags(ucp_rndv_mode_t rndv_mode)
+{
+    switch (rndv_mode) {
+    case UCP_RNDV_MODE_AUTO:
+        return (UCP_ADDR_IFACE_FLAG_GET | UCP_ADDR_IFACE_FLAG_PUT);
+    case UCP_RNDV_MODE_GET_ZCOPY:
+        return UCP_ADDR_IFACE_FLAG_GET;
+    case UCP_RNDV_MODE_PUT_ZCOPY:
+        return UCP_ADDR_IFACE_FLAG_PUT;
+    default:
+        return 0;
+    }
+}
+
 static ucs_status_t
 ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                             ucp_wireup_select_context_t *select_ctx)
 {
-    ucp_ep_h ep                  = select_params->ep;
-    ucp_context_h context        = ep->worker->context;
-    unsigned ep_init_flags       = ucp_wireup_ep_init_flags(select_params,
-                                                            select_ctx);
-    uint64_t iface_rma_flags     = 0;
-    ucp_rndv_mode_t rndv_modes[] = {
+    ucp_ep_h ep                        = select_params->ep;
+    ucp_context_h context              = ep->worker->context;
+    unsigned ep_init_flags             = ucp_wireup_ep_init_flags(select_params,
+                                                                  select_ctx);
+    uint64_t iface_rma_flags           = 0;
+    uint64_t peer_rma_flags            = 0;
+    const ucp_rndv_mode_t rndv_modes[] = {
         context->config.ext.rndv_mode,
         UCP_RNDV_MODE_GET_ZCOPY,
         UCP_RNDV_MODE_PUT_ZCOPY
@@ -1302,7 +1313,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     bw_info.criteria.local_event_flags  = 0;
     bw_info.criteria.calc_score         = ucp_wireup_rma_bw_score_func;
     bw_info.criteria.tl_rsc_flags       = 0;
-    bw_info.criteria.remote_md_flags    = md_reg_flag;
+    bw_info.criteria.local_md_flags     = md_reg_flag;
     ucp_wireup_clean_amo_criteria(&bw_info.criteria);
     ucp_wireup_fill_peer_err_criteria(&bw_info.criteria, ep_init_flags);
 
@@ -1327,7 +1338,7 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
          */
         bw_info.lane_type                = UCP_LANE_TYPE_RKEY_PTR;
         bw_info.criteria.title           = "obtain remote memory pointer";
-        bw_info.criteria.local_md_flags  = UCT_MD_FLAG_RKEY_PTR;
+        bw_info.criteria.local_md_flags |= UCT_MD_FLAG_RKEY_PTR;
         bw_info.max_lanes                = 1;
 
         ucp_wireup_add_bw_lanes(select_params, &bw_info,
@@ -1335,8 +1346,6 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
                                 UCP_NULL_LANE, select_ctx);
     }
 
-    /* First checked RNDV mode has to be a mode specified in config */
-    ucs_assert(rndv_modes[0] == context->config.ext.rndv_mode);
     bw_info.lane_type               = UCP_LANE_TYPE_RMA_BW;
     bw_info.criteria.title          = "high-bw remote memory access";
     bw_info.max_lanes               = context->config.ext.max_rndv_lanes;
@@ -1357,14 +1366,15 @@ ucp_wireup_add_rma_bw_lanes(const ucp_wireup_select_params_t *select_params,
     UCS_STATIC_ASSERT(UCS_MEMORY_TYPE_HOST == 0);
     for (i = 0; i < ucs_static_array_size(rndv_modes); i++) {
         /* Remove the previous iface RMA flags */
-        bw_info.criteria.remote_iface_flags &= ~iface_rma_flags;
         bw_info.criteria.local_iface_flags  &= ~iface_rma_flags;
+        bw_info.criteria.remote_iface_flags &= ~peer_rma_flags;
 
         iface_rma_flags = ucp_wireup_get_rma_bw_iface_flags(rndv_modes[i]);
+        peer_rma_flags  = ucp_wireup_get_rndv_peer_flags(rndv_modes[i]);
 
         /* Set the new iface RMA flags */
-        bw_info.criteria.remote_iface_flags |= iface_rma_flags;
         bw_info.criteria.local_iface_flags  |= iface_rma_flags;
+        bw_info.criteria.remote_iface_flags |= peer_rma_flags;
 
         added_lanes = 0;
         UCS_BITMAP_CLEAR(&tl_bitmap);
@@ -1423,8 +1433,9 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
 
     criteria.title              = "tag_offload";
     criteria.local_md_flags     = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
-    criteria.remote_md_flags    = UCT_MD_FLAG_REG; /* needed for posting tags to HW */
-    criteria.remote_iface_flags = /* the same as local_iface_flags */
+    criteria.remote_iface_flags = UCP_ADDR_IFACE_FLAG_TAG_EAGER |
+                                  UCP_ADDR_IFACE_FLAG_TAG_RNDV  |
+                                  UCP_ADDR_IFACE_FLAG_GET;
     criteria.local_iface_flags  = UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
                                   UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
                                   UCT_IFACE_FLAG_GET_ZCOPY       |
@@ -1493,7 +1504,7 @@ ucp_wireup_select_wireup_msg_lane(ucp_worker_h worker,
             ucp_wireup_check_flags(resource,
                                    address_list[addr_index].iface_attr.cap_flags,
                                    criteria.remote_iface_flags, criteria.title,
-                                   ucp_wireup_iface_flags, NULL, 0) &&
+                                   ucp_wireup_peer_flags, NULL, 0) &&
             ucp_wireup_check_flags(resource,
                                    address_list[addr_index].iface_attr.event_flags,
                                    criteria.remote_event_flags, criteria.title,
