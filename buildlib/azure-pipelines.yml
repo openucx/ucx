@@ -17,6 +17,10 @@ stages:
   - stage: Prepare
     jobs:
       - job: Check
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         steps:
           - checkout: self
             clean: true

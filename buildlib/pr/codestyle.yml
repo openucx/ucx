@@ -2,6 +2,10 @@ jobs:
   # Check that commit title matches code style guidelines
   - job: commit_title
     displayName: commit title
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
     steps:
       - checkout: self
         clean: true
