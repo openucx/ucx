@@ -365,12 +365,12 @@ static void ucs_profile_thread_key_destr(void *data)
  * code, before the first record of each such location is made.
  * SHOULD NOT be used directly - use UCS_PROFILE macros instead.
  *
- * @param [in]  ctx          Pofile context.
+ * @param [in]  ctx          Profile context.
  * @param [in]  type         Location type.
+ * @param [in]  name         Location name.
  * @param [in]  file         Source file name.
  * @param [in]  line         Source line number.
  * @param [in]  function     Calling function name.
- * @param [in]  name         Location name.
  * @param [out] loc_id_p     Filled with location ID:
  *                             0   - profiling is disabled
  *                             >0  - location index + 1
