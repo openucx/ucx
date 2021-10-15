@@ -20,6 +20,7 @@ class scoped_profile {
 public:
     scoped_profile(ucs::test_base& test, const std::string &file_name,
                    const char *mode) : m_test(test), m_file_name(file_name) {
+        ucs_profile_reset_locations_id(ucs_profile_default_ctx);
         ucs_profile_cleanup(ucs_profile_default_ctx);
         m_test.push_config();
         m_test.modify_config("PROFILE_MODE", mode);
@@ -38,6 +39,7 @@ public:
     }
 
     ~scoped_profile() {
+        ucs_profile_reset_locations_id(ucs_profile_default_ctx);
         ucs_profile_cleanup(ucs_profile_default_ctx);
         unlink(m_file_name.c_str());
         m_test.pop_config();

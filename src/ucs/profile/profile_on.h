@@ -351,15 +351,6 @@ void ucs_profile_record(ucs_profile_context_t *ctx, ucs_profile_type_t type,
                         volatile int *loc_id_p);
 
 
-/**
- * Reset the internal array of profiling locations.
- * Used for testing purposes only.
- *
- * @param [in] ctx Global profile context.
- */
-void ucs_profile_reset_locations(ucs_profile_context_t *ctx);
-
-
 END_C_DECLS
 
 #endif

@@ -551,7 +551,7 @@ static void ucs_profile_check_active_threads(ucs_profile_context_t *ctx)
     }
 }
 
-void ucs_profile_reset_locations(ucs_profile_context_t *ctx)
+void ucs_profile_reset_locations_id(ucs_profile_context_t *ctx)
 {
     ucs_profile_global_location_t *loc;
 
@@ -560,6 +560,13 @@ void ucs_profile_reset_locations(ucs_profile_context_t *ctx)
     ucs_profile_ctx_for_each_location(ctx, loc) {
         *loc->loc_id_p = -1;
     }
+
+    pthread_mutex_unlock(&ctx->mutex);
+}
+
+static void ucs_profile_reset_locations(ucs_profile_context_t *ctx)
+{
+    pthread_mutex_lock(&ctx->mutex);
 
     ctx->num_locations = 0;
     ctx->max_locations = 0;
@@ -622,6 +629,7 @@ ucs_status_t ucs_profile_init(unsigned profile_mode, const char *file_name,
     ctx->profile_mode     = profile_mode;
     ctx->file_name        = file_name;
     ctx->max_file_size    = max_file_size;
+    /* coverity[missing_lock] */
     ctx->num_locations    = 0;
     ctx->locations        = NULL;
     ctx->max_locations    = 0;
