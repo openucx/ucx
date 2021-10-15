@@ -58,6 +58,7 @@ struct uct_dc_mlx5_ep {
     uint16_t                      atomic_mr_offset;
     uct_rc_fc_t                   fc;
     uct_ib_mlx5_base_av_t         av;
+    uint8_t                       gp_idx;
 };
 
 typedef struct {

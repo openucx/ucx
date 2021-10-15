@@ -1087,17 +1087,28 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
                     uct_ib_mlx5_base_av_t *av, uint8_t path_index)
 {
     uint32_t remote_dctn;
+    uint32_t local_ece, remote_ece;
 
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
+    remote_ece             = if_addr->ece & 0xf0000000;
+    local_ece              = iface->super.super.super.config.ece_cfg.ece.val &
+                             0xf0000000;
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
-    remote_dctn            = uct_ib_unpack_uint24(if_addr->qp_num);
+    if (iface->gp == 2 && remote_ece && remote_ece == local_ece) {
+        remote_dctn        = uct_ib_unpack_uint24(if_addr->qp_num_ece);
+        self->gp_idx       = 1;
+    } else {
+        remote_dctn        = uct_ib_unpack_uint24(if_addr->qp_num);
+        self->gp_idx       = 0;
+    }
 
     memcpy(&self->av, av, sizeof(*av));
     self->av.dqp_dct |= htonl(remote_dctn);
-    self->flags       = path_index % iface->tx.num_dci_pools;
+    self->flags       = path_index % iface->tx.num_dci_pools +
+                        self->gp_idx * iface->tx.num_dci_pools;
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }
