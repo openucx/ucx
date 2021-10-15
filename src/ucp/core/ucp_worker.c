@@ -42,9 +42,6 @@
 
 #define UCP_WORKER_MAX_DEBUG_STRING_SIZE 200
 
-#define UCP_WORKER_HEADROOM_SIZE \
-    (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
-
 typedef enum ucp_worker_event_fd_op {
     UCP_WORKER_EPFD_OP_ADD,
     UCP_WORKER_EPFD_OP_DEL
@@ -1730,29 +1727,34 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         }
     }
 
-    /* Create memory pool for incoming UCT messages without a UCT descriptor */
-    status = ucs_mpool_init(&worker->am_mp, 0,
-                            max_mp_entry_size + UCP_WORKER_HEADROOM_SIZE +
-                            worker->am.alignment,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_am_mpool_ops, "ucp_am_bufs");
-    if (status != UCS_OK) {
-        goto err_rkey_mp_cleanup;
-    }
-
     /* Create memory pool of bounce buffers */
     status = ucs_mpool_init(&worker->reg_mp, 0,
                             context->config.ext.seg_size + sizeof(ucp_mem_desc_t),
                             sizeof(ucp_mem_desc_t), UCS_SYS_CACHE_LINE_SIZE,
                             128, UINT_MAX, &ucp_reg_mpool_ops, "ucp_reg_bufs");
     if (status != UCS_OK) {
-        goto err_am_mp_cleanup;
+        goto err_rkey_mp_cleanup;
+    }
+
+    if (max_mp_entry_size > 0) {
+        /* Create memory pool for incoming UCT messages without a UCT descriptor */
+        status = ucs_mpool_set_init(&worker->am_mps,
+                                    context->config.am_mpools.sizes,
+                                    context->config.am_mpools.count,
+                                    max_mp_entry_size, 0,
+                                    UCP_WORKER_HEADROOM_SIZE + worker->am.alignment,
+                                    0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                                    &ucp_am_mpool_ops, "ucp_am_bufs");
+        if (status != UCS_OK) {
+            goto err_reg_mp_cleanup;
+        }
+        worker->flags |= UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;
     }
 
     return UCS_OK;
 
-err_am_mp_cleanup:
-    ucs_mpool_cleanup(&worker->am_mp, 0);
+err_reg_mp_cleanup:
+    ucs_mpool_cleanup(&worker->reg_mp, 0);
 err_rkey_mp_cleanup:
     if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
         ucs_mpool_cleanup(&worker->rkey_mp, 0);
@@ -1777,7 +1779,10 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
-    ucs_mpool_cleanup(&worker->am_mp, 1);
+    if (worker->flags & UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED) {
+        ucs_mpool_set_cleanup(&worker->am_mps, 1);
+        worker->flags &= ~UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED;
+    }
     if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
         ucs_mpool_cleanup(&worker->rkey_mp, 1);
     }

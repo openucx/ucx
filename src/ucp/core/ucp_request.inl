@@ -14,6 +14,7 @@
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
+#include <ucs/datastruct/mpool_set.inl>
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/debug/debug_int.h>
 #include <ucp/dt/dt.inl>
@@ -708,7 +709,8 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
         status                     = UCS_INPROGRESS;
     } else {
-        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
+        rdesc = (ucp_recv_desc_t*)ucs_mpool_set_get_inline(&worker->am_mps,
+                                                           length);
         if (rdesc == NULL) {
             ucs_error("ucp recv descriptor is not allocated");
             return UCS_ERR_NO_MEMORY;
@@ -743,7 +745,7 @@ ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
         /* uct desc is slowpath */
         uct_iface_release_desc(desc);
     } else {
-        ucs_mpool_put_inline(desc);
+        ucs_mpool_set_put_inline(desc);
     }
 }
 

@@ -16,6 +16,7 @@
 #include <ucp/core/ucp_am.h>
 #include <ucp/tag/tag_match.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/datastruct/mpool_set.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/datastruct/conn_match.h>
@@ -27,6 +28,10 @@
  * use for its own needs. This size does not include ucp_recv_desc_t length,
  * because it is common for all cases and protocols (TAG, STREAM). */
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 32
+
+
+#define UCP_WORKER_HEADROOM_SIZE \
+    (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
 
 
 #define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker) \
@@ -92,7 +97,11 @@ enum {
 
     /** Worker event fd is external */
     UCP_WORKER_FLAG_EXTERNAL_EVENT_FD =
-            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 3)
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 3),
+
+    /** Indicates that AM mpool was initialized on this worker */
+    UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 4)
 };
 
 
@@ -287,7 +296,7 @@ typedef struct ucp_worker {
     unsigned                         num_active_ifaces;   /* Number of activated ifaces  */
     ucp_tl_bitmap_t                  scalable_tl_bitmap;  /* Map of scalable tl resources */
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
-    ucs_mpool_t                      am_mp;               /* Memory pool for AM receives */
+    ucs_mpool_set_t                  am_mps;              /* Memory pool set for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
     ucp_worker_mpool_hash_t          mpool_hash;          /* Hash table of memory pools */
     ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that
