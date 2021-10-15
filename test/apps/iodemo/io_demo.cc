@@ -86,6 +86,7 @@ typedef struct {
     bool                     debug_timeout;
     bool                     use_epoll;
     ucs_memory_type_t        memory_type;
+    unsigned                 progress_count;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -1097,7 +1098,7 @@ public:
         while (_status == OK) {
             try {
                 for (size_t i = 0; i < BUSY_PROGRESS_COUNT; ++i) {
-                    progress();
+                    progress(_test_opts.progress_count);
                 }
 
                 double curr_time = get_time();
@@ -1862,7 +1863,7 @@ public:
         while (((_num_sent - _num_completed) > max_outstanding) &&
                (_status == OK)) {
             if ((count++ < BUSY_PROGRESS_COUNT) || timer_finished) {
-                progress();
+                progress(_test_opts.progress_count);
                 continue;
             }
 
@@ -2090,7 +2091,7 @@ public:
             long max_outstanding   = std::min(opts().window_size,
                                               conns_window_size) - 1;
 
-            progress();
+            progress(_test_opts.progress_count);
             wait_for_responses(max_outstanding);
             if (_status != OK) {
                 break;
@@ -2489,9 +2490,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->debug_timeout         = false;
     test_opts->use_epoll             = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
+    test_opts->progress_count        = 1;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2507,6 +2509,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
                           << "' value for retry interval" << std::endl;
                 return -1;
             }
+            break;
+        case 'L':
+            test_opts->progress_count = strtol(optarg, NULL, 0);
             break;
         case 'r':
             test_opts->iomsg_size = strtol(optarg, NULL, 0);
@@ -2672,6 +2677,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
                       << ", cuda, cuda-managed"
 #endif
                       << std::endl;
+            std::cout << "  -L <progress_count>         Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
             return -1;
         }
     }

@@ -219,10 +219,14 @@ bool UcxContext::listen(const struct sockaddr* saddr, size_t addrlen)
     return true;
 }
 
-void UcxContext::progress()
+void UcxContext::progress(unsigned count)
 {
-    progress_worker_event();
-    progress_io_message();
+    int i = 0;
+
+    while ((i++ < count) && progress_worker_event()) {
+        progress_io_message();
+    }
+
     progress_timed_out_conns();
     progress_conn_requests();
     progress_failed_connections();
@@ -377,17 +381,17 @@ ucs_status_t UcxContext::epoll_init()
     return UCS_OK;
 }
 
-void UcxContext::progress_worker_event()
+bool UcxContext::progress_worker_event()
 {
     int         ret;
     epoll_event ev;
 
     if (ucp_worker_progress(_worker)) {
-        return;
+        return true;
     }
 
     if ((_epoll_fd == -1) || (ucp_worker_arm(_worker) == UCS_ERR_BUSY)) {
-        return;
+        return false;
     }
 
     do {
@@ -395,6 +399,7 @@ void UcxContext::progress_worker_event()
     } while ((ret == -1) && (errno == EINTR || errno == EAGAIN));
 
     assert(ev.data.fd == _worker_fd);
+    return false;
 }
 
 void UcxContext::progress_timed_out_conns()
