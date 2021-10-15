@@ -15,7 +15,7 @@ parameters:
 steps:
 - bash: |
     set -eEx
-    $(workspace)/buildlib/az-network-corrupter.sh reset=yes
+    $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
   displayName: Restore port state
   condition: always()
   timeoutInMinutes: 2
@@ -93,7 +93,7 @@ steps:
 
 - bash: |
     set -eEx
-    $(workspace)/buildlib/az-network-corrupter.sh reset=yes
+    $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
   displayName: Restore port state
   condition: always()
   timeoutInMinutes: 2
