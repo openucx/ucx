@@ -11,7 +11,6 @@
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
 #include <ifaddrs.h>
-#include <sys/poll.h>
 
 extern "C" {
 #include <uct/base/uct_worker.h>
@@ -300,41 +299,6 @@ public:
         EXPECT_UCS_OK(status);
     }
 
-    static void wait_for_wakeup(ucp_worker_h send_worker, ucp_worker_h recv_worker)
-    {
-        int ret, send_efd, recv_efd;
-        ucs_status_t status;
-
-        ASSERT_UCS_OK(ucp_worker_get_efd(send_worker, &send_efd));
-        ASSERT_UCS_OK(ucp_worker_get_efd(recv_worker, &recv_efd));
-
-        status = ucp_worker_arm(recv_worker);
-        if (status == UCS_ERR_BUSY) {
-            return;
-        }
-        ASSERT_UCS_OK(status);
-
-        status = ucp_worker_arm(send_worker);
-        if (status == UCS_ERR_BUSY) {
-            return;
-        }
-        ASSERT_UCS_OK(status);
-
-        do {
-            struct pollfd pfd[2];
-            pfd[0].fd     = send_efd;
-            pfd[1].fd     = recv_efd;
-            pfd[0].events = POLLIN;
-            pfd[1].events = POLLIN;
-            ret = poll(pfd, 2, -1);
-        } while ((ret < 0) && (errno == EINTR));
-        if (ret < 0) {
-            UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
-        }
-
-        EXPECT_GE(ret, 1);
-    }
-
     void check_events(ucp_worker_h send_worker, ucp_worker_h recv_worker,
                       bool wakeup, void *req)
     {
@@ -347,7 +311,7 @@ public:
         }
 
         if (wakeup) {
-            wait_for_wakeup(send_worker, recv_worker);
+            wait_for_wakeup({ send_worker, recv_worker });
         }
     }
 

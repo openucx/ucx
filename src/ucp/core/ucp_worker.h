@@ -318,6 +318,8 @@ typedef struct ucp_worker {
     ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
 
     struct {
+        int                          timerfd;             /* Timer needed to signal to user's fd when
+                                                           * the next keepalive round must be done */
         uct_worker_cb_id_t           cb_id;               /* Keepalive callback id */
         ucs_time_t                   last_round;          /* Last round timestamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */

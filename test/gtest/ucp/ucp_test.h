@@ -238,6 +238,8 @@ protected:
                                    ucp_tag_recv_info_t *info, int remove = 1,
                                    int worker_index = 0);
     void request_release(void *req);
+    void wait_for_wakeup(const std::vector<ucp_worker_h> &workers,
+                         int poll_timeout = -1, bool drain = false);
     int max_connections();
     void set_tl_small_timeouts();
 
