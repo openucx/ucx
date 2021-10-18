@@ -44,16 +44,10 @@ func sendRecv(entity *TestEntity, sendAddress unsafe.Pointer, sendLength uint64,
 	recvAddr unsafe.Pointer, recvLength uint64, recvMemoryType UcsMemoryType) {
 
 	createSelfEp(entity)
-	recvRequest, _ := entity.worker.RecvTagNonBlocking(recvAddr, recvLength, selfEpTag, selfEpTag, &UcpRequestParams{
-		MemType:    recvMemoryType,
-		MemTypeSet: true,
-	})
+	recvRequest, _ := entity.worker.RecvTagNonBlocking(recvAddr, recvLength, selfEpTag, selfEpTag, (&UcpRequestParams{}).SetMemType(recvMemoryType))
 	defer recvRequest.Close()
 
-	sendReq, _ := entity.selfEp.SendTagNonBlocking(selfEpTag, sendAddress, sendLength, &UcpRequestParams{
-		MemType:    sendMemType,
-		MemTypeSet: true,
-	})
+	sendReq, _ := entity.selfEp.SendTagNonBlocking(selfEpTag, sendAddress, sendLength, (&UcpRequestParams{}).SetMemType(sendMemType))
 
 	defer sendReq.Close()
 
@@ -79,5 +73,18 @@ func memoryGet(entity *TestEntity) []byte {
 		recvMem := AllocateNativeMemory(memAttr.Length)
 		sendRecv(entity, memAttr.Address, memAttr.Length, memAttr.MemType, recvMem, memAttr.Length, UCS_MEMORY_TYPE_HOST)
 		return GoBytes(recvMem, memAttr.Length)
+	}
+}
+
+// Progress thread that progress a worker until it receives quit signal from channel.
+func progressThread(quit chan bool, worker *UcpWorker) {
+	for {
+		select {
+		case <-quit:
+			close(quit)
+			return
+		default:
+			worker.Progress()
+		}
 	}
 }
