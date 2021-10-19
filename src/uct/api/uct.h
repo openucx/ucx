@@ -1617,6 +1617,7 @@ enum {
 
 
 extern const char *uct_alloc_method_names[];
+extern const char *uct_device_type_names[];
 
 
 /**

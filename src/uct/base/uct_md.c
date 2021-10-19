@@ -60,6 +60,13 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
 };
 
 
+const char *uct_device_type_names[] = {
+    [UCT_DEVICE_TYPE_NET]  = "network",
+    [UCT_DEVICE_TYPE_SHM]  = "intra-node",
+    [UCT_DEVICE_TYPE_ACC]  = "accelerator",
+    [UCT_DEVICE_TYPE_SELF] = "loopback",
+};
+
 ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
                          const uct_md_config_t *config, uct_md_h *md_p)
 {

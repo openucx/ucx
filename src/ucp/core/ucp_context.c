@@ -38,13 +38,6 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
-static const char * ucp_device_type_names[] = {
-    [UCT_DEVICE_TYPE_NET]  = "network",
-    [UCT_DEVICE_TYPE_SHM]  = "intra-node",
-    [UCT_DEVICE_TYPE_ACC]  = "accelerator",
-    [UCT_DEVICE_TYPE_SELF] = "loopback",
-};
-
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -985,7 +978,7 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
     devs_p = p;
     for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; ++dev_type_idx) {
         ucp_resource_config_array_str(&config->devices[dev_type_idx],
-                                      ucp_device_type_names[dev_type_idx], p,
+                                      uct_device_type_names[dev_type_idx], p,
                                       endp - p);
         p += strlen(p);
     }
@@ -1277,7 +1270,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
             ucp_report_unavailable(&config->devices[dev_type],
                                    dev_cfg_masks[dev_type],
-                                   ucp_device_type_names[dev_type], " device",
+                                   uct_device_type_names[dev_type], " device",
                                    &avail_devices[dev_type]);
         }
 
