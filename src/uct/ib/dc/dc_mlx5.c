@@ -1492,7 +1492,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
     ucs_assert(rc_iface->config.fc_enabled);
 
     if (fc_hdr == UCT_RC_EP_FLAG_FC_HARD_REQ) {
-        ep = iface->tx.fc_ep;
+        ep = &iface->tx.fc_ep[htonl(imm_data & 0xff000000)];
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_HARD_REQ, 1);
 
         dc_req = ucs_mpool_get(&iface->super.super.tx.pending_mp);
@@ -1503,7 +1503,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
         dc_req->super.super.func = uct_dc_mlx5_iface_fc_grant;
         dc_req->super.ep         = &ep->super.super;
-        dc_req->dct_num          = imm_data;
+        dc_req->dct_num          = imm_data & 0xffffff;
         dc_req->lid              = lid;
         dc_req->sender           = *((uct_dc_fc_sender_data_t*)(hdr + 1));
 

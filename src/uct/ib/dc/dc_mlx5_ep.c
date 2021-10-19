@@ -1031,7 +1031,7 @@ uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
     sender.payload.gid       = ib_iface->gid_info.gid;
     sender.payload.is_global = ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
 
-    imm_inval_pkey = iface->rx.dct[ep->gp_idx].qp_num;
+    imm_inval_pkey = (ep->gp_idx << 24) | (iface->rx.dct[ep->gp_idx].qp_num);
 
     UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1);
 
