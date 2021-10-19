@@ -422,11 +422,7 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_copy_iface_t, uct_md_h md, uct_worker_h work
         }
     }
 
-    status = UCT_CUDA_FUNC_LOG_ERR(cudaStreamCreateWithFlags(&self->short_stream,
-                                                             cudaStreamNonBlocking));
-    if (UCS_OK != status) {
-        return UCS_ERR_IO_ERROR;
-    }
+    self->short_stream = 0;
 
     return UCS_OK;
 }
