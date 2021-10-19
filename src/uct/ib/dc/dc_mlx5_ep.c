@@ -977,7 +977,8 @@ void uct_dc_mlx5_ep_do_pending_fc(uct_dc_mlx5_ep_t *fc_ep,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(fc_ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
 
-    ucs_assert(iface->tx.fc_ep == fc_ep);
+    ucs_assert((&iface->tx.fc_ep[0] == fc_ep) ||
+               ((iface->gp != 1) && (&iface->tx.fc_ep[1] == fc_ep)));
     uct_dc_mlx5_ep_pending_common(iface, fc_ep, &fc_req->super.super, 0, 1,
                                   !(iface->flags &
                                     UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED));
@@ -1560,7 +1561,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
          * DCI */
         uct_dc_mlx5_iface_reset_dci(iface, dci_index);
 
-        if (ep == iface->tx.fc_ep) {
+        if ((ep == &iface->tx.fc_ep[0]) ||
+            ((iface->gp != 1) && (ep == &iface->tx.fc_ep[1]))) {
             iface->flags &= ~UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
 
             /* Since DCI isn't assigned for the FC endpoint, schedule DCI

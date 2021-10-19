@@ -1327,48 +1327,81 @@ ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_c
     return status;
 }
 
-ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
+static
+ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface,
+                                          uct_dc_mlx5_ep_t *fc_eps,
+                                          int32_t ep_idx)
 {
+    uct_dc_mlx5_ep_t *ep = &fc_eps[ep_idx];
+    int32_t idx          = 0;
     ucs_status_t status;
-    uct_dc_mlx5_ep_t *ep;
 
-    ep = ucs_malloc(sizeof(uct_dc_mlx5_ep_t), "fc_ep");
-    if (ep == NULL) {
-        ucs_error("Failed to allocate FC ep");
-        status =  UCS_ERR_NO_MEMORY;
-        goto err;
-    }
     /* We do not have any peer address at this point, so init basic subclasses
      * only (for statistics, iface, etc) */
     status = UCS_CLASS_INIT(uct_base_ep_t, (void*)(&ep->super),
                             &iface->super.super.super.super);
     if (status != UCS_OK) {
-        ucs_error("Failed to initialize fake FC ep, status: %s",
-                  ucs_status_string(status));
-        goto err_free;
+        ucs_error("Failed to initialize fake FC ep[%u], status: %s",
+                  ep_idx, ucs_status_string(status));
+        goto err;
     }
 
-    ep->flags = 0;
-    status    = uct_dc_mlx5_ep_basic_init(iface, ep);
+    ep->gp_idx = ep_idx;
+    /**
+     * ep flags is used to select dci from which pool,
+     * check uct_dc_mlx5_ep_pool_index for detail.
+     */
+    ep->flags  = ep_idx * iface->tx.num_dci_pools;
+    status     = uct_dc_mlx5_ep_basic_init(iface, ep);
     if (status != UCS_OK) {
-        ucs_error("FC ep init failed %s", ucs_status_string(status));
+        ucs_error("FC ep[%u] init failed %s",
+                  ep_idx, ucs_status_string(status));
         goto err_cleanup;
     }
 
-    iface->tx.fc_ep = ep;
     return UCS_OK;
 
-err_cleanup:
-    UCS_CLASS_CLEANUP(uct_base_ep_t, &ep->super);
-err_free:
-    ucs_free(ep);
 err:
+    ep_idx = ep_idx - 1;
+err_cleanup:
+    while (idx <= ep_idx) {
+        UCS_CLASS_CLEANUP(uct_base_ep_t, &fc_eps[idx].super);
+        idx = idx + 1;
+    }
     return status;
 }
 
-static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
+ucs_status_t uct_dc_mlx5_iface_create_fc_eps(uct_dc_mlx5_iface_t *iface)
 {
-    uct_dc_mlx5_ep_t *fc_ep = iface->tx.fc_ep;
+    uct_dc_mlx5_ep_t *fc_eps;
+    uint32_t ep_idx;
+    ucs_status_t status;
+
+    fc_eps = ucs_calloc(iface->gp, sizeof(uct_dc_mlx5_ep_t), "fc_ep");
+    if (fc_eps == NULL) {
+        ucs_error("Failed to allocate FC ep");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    for (ep_idx = 0; ep_idx < iface->gp; ep_idx++) {
+        status = uct_dc_mlx5_iface_init_fc_ep(iface, fc_eps, ep_idx);
+        if (status != UCS_OK) {
+            goto err_free;
+        }
+    }
+
+    iface->tx.fc_ep = fc_eps;
+    return UCS_OK;
+
+err_free:
+    ucs_free(fc_eps);
+    return status;
+}
+
+static
+void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface, int32_t ep_idx)
+{
+    uct_dc_mlx5_ep_t *fc_ep = &iface->tx.fc_ep[ep_idx];
     uct_rc_iface_send_op_t *op;
     ucs_queue_iter_t iter;
     uct_rc_txqp_t *txqp;
@@ -1395,7 +1428,18 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
     }
 
     UCS_CLASS_CLEANUP(uct_base_ep_t, fc_ep);
-    ucs_free(fc_ep);
+}
+
+static
+void uct_dc_mlx5_destroy_fc_eps(uct_dc_mlx5_iface_t *iface)
+{
+    int32_t ep_idx;
+
+    for (ep_idx = 0; ep_idx < iface->gp; ep_idx++) {
+        uct_dc_mlx5_iface_cleanup_fc_ep(iface, ep_idx);
+    }
+
+    ucs_free(iface->tx.fc_ep);
 }
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
@@ -1731,7 +1775,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
               0 : self->rx.dct[0].qp_num);
 
     /* Create fake endpoint which will be used for sending FC grants */
-    uct_dc_mlx5_iface_init_fc_ep(self);
+    uct_dc_mlx5_iface_create_fc_eps(self);
 
     /* mlx5 init part */
     status = uct_ud_mlx5_iface_common_init(&self->super.super.super,
@@ -1765,7 +1809,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 
     uct_dc_mlx5_destroy_dcts(self, self->gp);
     kh_destroy_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
-    uct_dc_mlx5_iface_cleanup_fc_ep(self);
+    uct_dc_mlx5_destroy_fc_eps(self);
     uct_worker_progress_unregister_safe(
             &self->super.super.super.super.worker->super,
             &self->tx.dci_release_prog_id);
@@ -1832,7 +1876,10 @@ uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,
     ep = ucs_derived_of(op->ep, uct_dc_mlx5_ep_t);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        ucs_assert(ep != iface->tx.fc_ep);
+        ucs_assert(ep != &iface->tx.fc_ep[0]);
+        if (iface->gp != 1) {
+            ucs_assert(ep != &iface->tx.fc_ep[1]);
+        }
         uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
     } else {
         /* ep has another dci assigned to post operations, which should be
@@ -1935,7 +1982,8 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
         return;
     }
 
-    if (ep == iface->tx.fc_ep) {
+    if ((ep == &iface->tx.fc_ep[0]) ||
+        ((iface->gp != 1) && (ep == &iface->tx.fc_ep[1]))) {
         iface->flags |= UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
 
         /* Do not report errors on flow control endpoint */
