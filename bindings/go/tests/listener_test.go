@@ -14,6 +14,7 @@ var connReq *UcpConnectionRequest = nil
 var rejected bool = false
 
 func TestUcpListener(t *testing.T) {
+	const clientId = 1
 	addr, _ := net.ResolveTCPAddr("tcp", "0.0.0.0")
 
 	ucpParams := (&UcpParams{}).EnableTag()
@@ -27,9 +28,21 @@ func TestUcpListener(t *testing.T) {
 	var logErrorHandler UcpEpErrHandler = func(ep *UcpEp, status UcsStatus) {
 		t.Fatalf("Error handler called with status %d", status)
 	}
-	epParams.SetPeerErrorHandling().SetErrorHandler(logErrorHandler)
+	epParams.SetPeerErrorHandling().SetErrorHandler(logErrorHandler).SendClientId()
 
 	listenerParams.SetConnectionHandler(func(connRequest *UcpConnectionRequest) {
+		connRequestParams, err := connRequest.Query(UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID, UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR)
+		if err != nil {
+			t.Fatalf("Failed to query connection request %v", err)
+		}
+
+		if connRequestParams.ClientId != clientId {
+			t.Fatalf("Client id %v != %v", connRequestParams.ClientId, clientId)
+		}
+
+		if connRequestParams.ClientAddress == nil {
+			t.Fatalf("Client address is empty")
+		}
 		// Use first request to create backward ep with epParams.SetConnRequest()
 		// And second request reject to test ep error handling.
 		if connReq == nil {
@@ -45,7 +58,7 @@ func TestUcpListener(t *testing.T) {
 	defer context2.Close()
 
 	worker1, _ := context1.NewWorker(ucpWorkerParams)
-	worker2, _ := context2.NewWorker(ucpWorkerParams)
+	worker2, _ := context2.NewWorker(ucpWorkerParams.SetClientId(clientId))
 	defer worker1.Close()
 	defer worker2.Close()
 

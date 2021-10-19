@@ -142,3 +142,12 @@ func (p *UcpWorkerParams) SetAmAlignment(alignment uint64) *UcpWorkerParams {
 	p.params.field_mask |= C.UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT
 	return p
 }
+
+// Client id that is sent as part of the connection request payload when connecting to a remote socket address.
+// On the remote side, this value can be obtained by calling
+// UcpConnectionRequest.Query(UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID)
+func (p *UcpWorkerParams) SetClientId(clientId uint64) *UcpWorkerParams {
+	p.params.client_id = C.uint64_t(clientId)
+	p.params.field_mask |= C.UCP_WORKER_PARAM_FIELD_CLIENT_ID
+	return p
+}

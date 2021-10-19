@@ -98,3 +98,11 @@ func (p *UcpEpParams) SetConnRequest(c *UcpConnectionRequest) *UcpEpParams {
 	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_CONN_REQUEST
 	return p
 }
+
+// Send client id when connecting to remote socket address as part of the connection request payload.
+// On the remote side value can be obtained by calling UcpConnectionRequest.Query(UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID)
+func (p *UcpEpParams) SendClientId() *UcpEpParams {
+	p.params.flags |= C.UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID
+	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_FLAGS
+	return p
+}
