@@ -59,12 +59,6 @@ static inline ucs_status_t ucx_perf_rocm_alloc(size_t length,
     return UCS_OK;
 }
 
-static void ucp_perf_rocm_free(const ucx_perf_context_t *perf,
-                               void *address, ucp_mem_h memh)
-{
-    hipFree(address);
-}
-
 static inline ucs_status_t
 uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
                             size_t length,
