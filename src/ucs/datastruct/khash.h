@@ -232,31 +232,34 @@ typedef khint_t khiter_t;
 	extern void kh_destroy_##name(kh_##name##_t *h); \
 	extern void kh_destroy_##name##_inplace(kh_##name##_t *h); \
 	extern void kh_clear_##name(kh_##name##_t *h); \
+	extern khint_t kh_get_next_##name(const kh_##name##_t *h, khkey_t key, khint_t first, khint_t next, khint_t *step, int is_value_match, khval_t *value); \
+	extern khint_t kh_get_first_##name(const kh_##name##_t *h, khkey_t key, khint_t *step); \
 	extern khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key); \
+	extern khint_t kh_getv_##name(const kh_##name##_t *h, khkey_t key, khval_t *value); \
+	extern int kh_anyv_##name(const kh_##name##_t *h, khint_t cnt, khval_t *values); \
 	extern int kh_resize_##name(kh_##name##_t *h, khint_t new_n_buckets); \
 	extern khint_t kh_put_##name(kh_##name##_t *h, khkey_t key, int *ret); \
 	extern void kh_del_##name(kh_##name##_t *h, khint_t x);
 
-#define __KHASH_IMPL(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+#define __KHASH_IMPL(name, SCOPE, khkey_t, khval_t, kh_is_map, kh_is_key_uniq, __hash_func, __hash_equal) \
 	SCOPE kh_##name##_t *kh_init_##name(void) { \
 		return (kh_##name##_t*)kcalloc(1, sizeof(kh_##name##_t)); \
 	} \
 	SCOPE kh_##name##_t *kh_init_##name##_inplace(kh_##name##_t *h) { \
 		return (kh_##name##_t*)kmemset(h, 0, sizeof(kh_##name##_t)); \
 	} \
-	SCOPE void kh_destroy_##name(kh_##name##_t *h) \
-	{ \
-		if (h) { \
-			kfree((void *)h->keys); kfree(h->flags); \
-			kfree((void *)h->vals); \
-			kfree(h); \
-		} \
-	} \
 	SCOPE void kh_destroy_##name##_inplace(kh_##name##_t *h) \
 	{ \
 		kfree((void *)h->keys); \
 		kfree((void *)h->flags); \
 		kfree((void *)h->vals); \
+	} \
+	SCOPE void kh_destroy_##name(kh_##name##_t *h) \
+	{ \
+		if (h) { \
+			kh_destroy_##name##_inplace(h); \
+			kfree(h); \
+		} \
 	} \
 	SCOPE void kh_clear_##name(kh_##name##_t *h) \
 	{ \
@@ -265,19 +268,54 @@ typedef khint_t khiter_t;
 			h->size = h->n_occupied = 0; \
 		} \
 	} \
-	SCOPE khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key) \
+	SCOPE khint_t kh_get_next_##name(const kh_##name##_t *h, khkey_t key, \
+	                                 khint_t first, khint_t next, khint_t *step, \
+									 int is_value_match, khval_t *value) \
 	{ \
 		if (h->n_buckets) { \
-			khint_t k, i, last, mask, step = 0; \
+			khint_t i, last, mask; \
 			mask = h->n_buckets - 1; \
-			k = __hash_func(key); i = k & mask; \
-			last = i; \
-			while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
-				i = (i + (++step)) & mask; \
+			last = first; \
+			i = next; \
+			while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || \
+												  !__hash_equal(h->keys[i], \
+																key) || \
+												  (is_value_match && \
+												   memcmp(&h->vals[i], value, \
+														  sizeof(*value))))) { \
+				i = (i + (++*step)) & mask; \
 				if (i == last) return h->n_buckets; \
 			} \
 			return __ac_iseither(h->flags, i)? h->n_buckets : i; \
 		} else return 0; \
+	} \
+	SCOPE khint_t kh_get_first_##name(const kh_##name##_t *h, khkey_t key, khint_t *step) \
+	{ \
+		if (h->n_buckets) { \
+			khint_t k, mask; \
+			mask = h->n_buckets - 1; \
+			k = __hash_func(key) & mask; \
+			return kh_get_next_##name(h, key, k, k, step, 0, NULL); \
+		} else return 0; \
+	} \
+	SCOPE khint_t kh_get_##name(const kh_##name##_t *h, khkey_t key) \
+	{ \
+		khint_t step = 0; \
+		return kh_get_first_##name(h, key, &step); \
+	} \
+	SCOPE khint_t kh_getv_##name(const kh_##name##_t *h, khkey_t key, khval_t *value) \
+	{ \
+		if (h->n_buckets) { \
+			khint_t k, mask, step = 0; \
+			mask = h->n_buckets - 1; \
+			k = __hash_func(key) & mask; \
+			return kh_get_next_##name(h, key, k, k, &step, 1, value); \
+		} else return 0; \
+	} \
+	SCOPE int kh_anyv_##name(const kh_##name##_t *h, khint_t cnt, khval_t *values) \
+	{ \
+		kh_foreach_value(h, values[--cnt], if (cnt == 0) return 0); \
+		return -1; \
 	} \
 	SCOPE int kh_resize_##name(kh_##name##_t *h, khint_t new_n_buckets) \
 	{ /* This function uses 0.25*n_buckets bytes of working space instead of [sizeof(key_t+val_t)+.25]*n_buckets. */ \
@@ -362,7 +400,7 @@ typedef khint_t khiter_t;
 			else { \
 				last = i; \
 				x = site; \
-				while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !kset(__hash_equal(h->keys[i], key)))) { \
+				while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || kh_is_key_uniq || !kset(__hash_equal(h->keys[i], key)))) { \
 					if (__ac_isdel(h->flags, i)) site = i; \
 					i = (i + (++step)) & mask; \
 					if (i == last) { x = site; break; } \
@@ -398,18 +436,18 @@ typedef khint_t khiter_t;
 	__KHASH_TYPE(name, khkey_t, khval_t) \
 	__KHASH_PROTOTYPES(name, khkey_t, khval_t)
 
-#define KHASH_INIT2(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
+#define KHASH_INIT2(name, SCOPE, khkey_t, khval_t, kh_is_map, kh_is_key_uniq, __hash_func, __hash_equal) \
 	__KHASH_TYPE(name, khkey_t, khval_t) \
-	__KHASH_IMPL(name, SCOPE, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
+	__KHASH_IMPL(name, SCOPE, khkey_t, khval_t, kh_is_map, kh_is_key_uniq, __hash_func, __hash_equal)
 
 #define KHASH_INIT(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
-	KHASH_INIT2(name, static kh_inline klib_unused, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
+	KHASH_INIT2(name, static kh_inline klib_unused, khkey_t, khval_t, kh_is_map, 0, __hash_func, __hash_equal)
 
 #define KHASH_TYPE(name, khkey_t, khval_t) \
 	__KHASH_TYPE(name, khkey_t, khval_t)
 
 #define KHASH_IMPL(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
-	__KHASH_IMPL(name, static kh_inline klib_unused, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
+	__KHASH_IMPL(name, static kh_inline klib_unused, khkey_t, khval_t, kh_is_map, 0, __hash_func, __hash_equal)
 
 #define KHASH_STATIC_INITIALIZER {0}
 
@@ -506,7 +544,7 @@ static kh_inline khint64_t __ac_Jenkins_hash64(khint64_t key)
 #define kh_init(name) kh_init_##name()
 
 /*! @function
-  @abstract     Initiate a hash table if the in-place case.
+  @abstract     Initiate a hash table in the in-place case.
   @param  name  Name of the hash table [symbol]
   @param  h     Pointer to the hash table [khash_t(name)*]
  */
@@ -520,7 +558,7 @@ static kh_inline khint64_t __ac_Jenkins_hash64(khint64_t key)
 #define kh_destroy(name, h) kh_destroy_##name(h)
 
 /*! @function
-  @abstract     Destroy a hash table if the in-place case.
+  @abstract     Destroy a hash table in the in-place case.
   @param  name  Name of the hash table [symbol]
   @param  h     Pointer to the hash table [khash_t(name)*]
  */
@@ -569,6 +607,26 @@ typedef enum ucs_kh_put {
   @return       Iterator to the found element, or kh_end(h) if the element is absent [khint_t]
  */
 #define kh_get(name, h, k) kh_get_##name(h, k)
+
+/*! @function
+  @abstract     Retrieve a value, by key, from the hash table.
+  @param  name  Name of the hash table [symbol]
+  @param  h     Pointer to the hash table [khash_t(name)*]
+  @param  k     Key [type of keys]
+  @param  v     Value [pointer to type of values]
+  @return       Iterator to the found element, or kh_end(h) if the element is absent [khint_t]
+ */
+#define kh_getv(name, h, k, v) kh_getv_##name(h, k, v)
+
+/*! @function
+  @abstract     Retrieve a value, by key, from the hash table.
+  @param  name  Name of the hash table [symbol]
+  @param  h     Pointer to the hash table [khash_t(name)*]
+  @param  k     Key [type of keys]
+  @param  v     Value [pointer to type of values]
+  @return       Iterator to the found element, or kh_end(h) if the element is absent [khint_t]
+ */
+#define kh_anyv(name, h, k, v) kh_anyv_##name(h, k, v)
 
 /*! @function
   @abstract     Remove a key from the hash table.
