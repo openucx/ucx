@@ -18,11 +18,6 @@
 #include <ucs/sys/sys.h>
 #include <ucs/time/time.h>
 #include <pthread.h>
-#ifdef HAVE_NVTX
-#include <nvtx3/nvToolsExt.h>
-#include <ucs/datastruct/khash.h>
-#include <ucs/profile/profile.h>
-#endif
 
 
 typedef struct ucs_profile_global_location {
@@ -666,70 +661,3 @@ void ucs_profile_cleanup(ucs_profile_context_t *ctx)
     pthread_key_delete(ctx->tls_key);
     ucs_free(ctx);
 }
-
-#ifdef HAVE_NVTX
-void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
-		             uint64_t *id)
-{
-    nvtxEventAttributes_t attrib = {0};
-
-    attrib.version       = NVTX_VERSION;
-    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
-    attrib.colorType     = NVTX_COLOR_ARGB;
-    attrib.color         = color;
-    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
-    attrib.message.ascii = name;
-
-    *id = (uint64_t)nvtxRangeStartEx(&attrib);
-}
-
-void ucs_profile_range_stop(uint64_t id)
-{
-    nvtxRangeEnd(id);
-}
-
-void ucs_profile_range_add_marker(const char *name)
-{
-    nvtxMarkA(name);
-}
-
-void ucs_profile_range_push(const char *name, ucs_profile_color_t color)
-{
-    nvtxEventAttributes_t attrib = {0};
-
-    attrib.version       = NVTX_VERSION;
-    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
-    attrib.colorType     = NVTX_COLOR_ARGB;
-    attrib.color         = color;
-    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
-    attrib.message.ascii = name;
-
-    nvtxRangePushEx(&attrib);
-}
-
-void ucs_profile_range_pop()
-{
-    nvtxRangePop();
-}
-#else
-void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
-		             uint64_t *id)
-{
-}
-
-void ucs_profile_range_stop(uint64_t id)
-{
-}
-
-void ucs_profile_range_add_marker(const char *name)
-{
-}
-
-void ucs_profile_range_push(const char *name, ucs_profile_color_t color)
-{
-}
-
-void ucs_profile_range_pop()
-{
-}
-#endif

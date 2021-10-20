@@ -12,6 +12,11 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/time/time_def.h>
 #include <limits.h>
+#ifdef HAVE_NVTX
+#include <nvtx3/nvToolsExt.h>
+#include <ucs/datastruct/khash.h>
+#include <ucs/profile/profile.h>
+#endif
 
 BEGIN_C_DECLS
 
@@ -170,6 +175,7 @@ void ucs_profile_cleanup(ucs_profile_context_t *ctx);
 void ucs_profile_dump(ucs_profile_context_t *ctx);
 
 
+#ifdef HAVE_NVTX
 
 /*
  * Start a range trace on an arbitrary event in a potentially nested fashion.
@@ -182,8 +188,21 @@ void ucs_profile_dump(ucs_profile_context_t *ctx);
  *
  * @return ID to be used to stop tracing a range
  */
-void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
-                             uint64_t *id);
+static inline void ucs_profile_range_start(const char *name,
+                                           ucs_profile_color_t color,
+		                                   uint64_t *id)
+{
+    nvtxEventAttributes_t attrib = {0};
+
+    attrib.version       = NVTX_VERSION;
+    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    attrib.colorType     = NVTX_COLOR_ARGB;
+    attrib.color         = color;
+    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
+    attrib.message.ascii = name;
+
+    *id = (uint64_t)nvtxRangeStartEx(&attrib);
+}
 
 
 /*
@@ -192,7 +211,10 @@ void ucs_profile_range_start(const char *name, ucs_profile_color_t color,
  * @param [in]     id          id that was returned from range start.
  *
  */
-void ucs_profile_range_stop(uint64_t id);
+static inline void ucs_profile_range_stop(uint64_t id)
+{
+    nvtxRangeEnd(id);
+}
 
 
 /*
@@ -201,7 +223,10 @@ void ucs_profile_range_stop(uint64_t id);
  * @param [in]     name        String name for the marker.
  *
  */
-void ucs_profile_range_add_marker(const char *name);
+static inline void ucs_profile_range_add_marker(const char *name)
+{
+    nvtxMarkA(name);
+}
 
 
 /*
@@ -212,14 +237,60 @@ void ucs_profile_range_add_marker(const char *name);
  * @param [in]     color       Color for the range.
  *
  */
-void ucs_profile_range_push(const char *name, ucs_profile_color_t color);
+static inline void ucs_profile_range_push(const char *name,
+                                          ucs_profile_color_t color)
+{
+    nvtxEventAttributes_t attrib = {0};
+
+    attrib.version       = NVTX_VERSION;
+    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    attrib.colorType     = NVTX_COLOR_ARGB;
+    attrib.color         = color;
+    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
+    attrib.message.ascii = name;
+
+    nvtxRangePushEx(&attrib);
+}
 
 
 /*
  * Stop a range trace in a non-nested fashion.
  *
  */
-void ucs_profile_range_pop();
+static inline void ucs_profile_range_pop()
+{
+    nvtxRangePop();
+}
+
+
+#else
+static inline void ucs_profile_range_start(const char *name,
+                                           ucs_profile_color_t color,
+		                                   uint64_t *id)
+{
+}
+
+
+static inline void ucs_profile_range_stop(uint64_t id)
+{
+}
+
+
+static inline void ucs_profile_range_add_marker(const char *name)
+{
+}
+
+
+static inline void ucs_profile_range_push(const char *name,
+                                          ucs_profile_color_t color)
+{
+}
+
+
+static inline void ucs_profile_range_pop()
+{
+}
+#endif
 
 
 END_C_DECLS
