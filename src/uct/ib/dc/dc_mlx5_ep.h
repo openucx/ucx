@@ -370,8 +370,10 @@ void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_dc_mlx5_iface_dci_pool_index(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 {
-    ucs_assert(iface->tx.dcis[dci_index].pool_index <
-               UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
+    ucs_assertv(iface->tx.dcis[dci_index].pool_index <
+                        UCT_DC_MLX5_IFACE_MAX_DCI_POOLS,
+                "pool_index=%d dci_index=%d",
+                iface->tx.dcis[dci_index].pool_index, dci_index);
     return iface->tx.dcis[dci_index].pool_index;
 }
 

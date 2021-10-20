@@ -310,9 +310,6 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 
     ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
 
-    dci->pool_index = pool_index;
-    dci->path_index = path_index;
-
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
                                 iface->super.super.config.tx_qp_len,
                                 &iface->super.rx.srq);
@@ -391,6 +388,9 @@ init_qp:
     }
 
     uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
+    dci->pool_index = pool_index;
+    dci->path_index = path_index;
+
     return UCS_OK;
 
 err:
