@@ -69,6 +69,7 @@ UCS_PTR_MAP_IMPL(request, 0);
         uint32_t _flags; \
         \
         ucs_assert(!((_req)->flags & UCP_REQUEST_FLAG_COMPLETED)); \
+        ucs_assert((_status) != UCS_INPROGRESS); \
         \
         _flags         = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
         (_req)->status = (_status); \

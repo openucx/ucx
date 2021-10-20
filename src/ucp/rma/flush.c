@@ -248,6 +248,7 @@ void ucp_ep_flush_completion(uct_completion_t *self)
     ucp_trace_req(req, "flush completion status=%d", status);
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
+    ucs_assert(status != UCS_INPROGRESS);
 
     req->status = status;
 

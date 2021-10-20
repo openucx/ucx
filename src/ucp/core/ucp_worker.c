@@ -3087,10 +3087,11 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
     }
 }
 
-static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                                         unsigned ep_flush_flags,
-                                         ucp_send_nbx_callback_t discarded_cb,
-                                         void *discarded_cb_arg)
+static ucs_status_t
+ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                             unsigned ep_flush_flags,
+                             ucp_send_nbx_callback_t discarded_cb,
+                             void *discarded_cb_arg)
 {
     ucp_worker_h worker = ucp_ep->worker;
     ucp_request_t *req;
@@ -3100,14 +3101,14 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     if (ucp_is_uct_ep_failed(uct_ep)) {
         /* No need to discard failed TL EP, because it may lead to adding the
          * same UCT EP to the hash of discarded UCT EPs */
-        return;
+        return UCS_OK;
     }
 
     req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
         ucs_error("unable to allocate request for discarding UCT EP %p "
                   "on UCP worker %p", uct_ep, worker);
-        return;
+        return UCS_ERR_NO_MEMORY;
     }
 
     ucp_ep_add_ref(ucp_ep);
@@ -3137,6 +3138,8 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     ucp_worker_discard_uct_ep_progress(req);
+
+    return UCS_INPROGRESS;
 }
 
 static uct_ep_h ucp_worker_discard_wireup_ep(
@@ -3171,12 +3174,12 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
            kh_end(&worker->discard_uct_ep_hash);
 }
 
-void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                               unsigned ep_flush_flags,
-                               uct_pending_purge_callback_t purge_cb,
-                               void *purge_arg,
-                               ucp_send_nbx_callback_t discarded_cb,
-                               void *discarded_cb_arg)
+ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                       unsigned ep_flush_flags,
+                                       uct_pending_purge_callback_t purge_cb,
+                                       void *purge_arg,
+                                       ucp_send_nbx_callback_t discarded_cb,
+                                       void *discarded_cb_arg)
 {
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
     ucs_assert(uct_ep != NULL);
@@ -3190,12 +3193,12 @@ void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                               purge_arg, discarded_cb,
                                               discarded_cb_arg);
         if (uct_ep == NULL) {
-            return;
+            return UCS_OK;
         }
     }
 
-    ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags, discarded_cb,
-                                 discarded_cb_arg);
+    return ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags,
+                                        discarded_cb, discarded_cb_arg);
 }
 
 void ucp_worker_vfs_refresh(void *obj)
