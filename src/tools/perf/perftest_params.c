@@ -94,6 +94,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -N             use numeric formatting (thousands separator)\n");
     printf("     -f             print only final numbers\n");
     printf("     -v             print CSV-formatted output\n");
+    printf("     -I             print extra information about the operation\n");
     printf("\n");
     printf("  UCT only:\n");
     printf("     -d <device>    device to use for testing\n");
@@ -534,7 +535,7 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     ctx->mpi             = mpi_initialized;
 
     optind = 1;
-    while ((c = getopt (argc, argv, "p:b:Nfvc:P:h" TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt(argc, argv, "p:b:NfvIc:P:h" TEST_PARAMS_ARGS)) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
@@ -552,6 +553,9 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
             break;
         case 'v':
             ctx->flags |= TEST_FLAG_PRINT_CSV;
+            break;
+        case 'I':
+            ctx->flags |= TEST_FLAG_PRINT_EXTRA_INFO;
             break;
         case 'c':
             ctx->flags |= TEST_FLAG_SET_AFFINITY;

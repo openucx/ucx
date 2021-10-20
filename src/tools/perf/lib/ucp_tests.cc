@@ -14,6 +14,7 @@
 #include "libperf_int.h"
 
 #include <ucs/sys/preprocessor.h>
+#include <ucs/sys/string.h>
 #include <limits>
 
 
@@ -41,6 +42,8 @@ public:
     {
         memset(&m_am_rx_params, 0, sizeof(m_am_rx_params));
         memset(&m_send_params, 0, sizeof(m_send_params));
+        memset(&m_send_get_info_params, 0, sizeof(m_send_get_info_params));
+        memset(&m_recv_params, 0, sizeof(m_recv_params));
 
         ucs_assert_always(m_max_outstanding > 0);
 
@@ -169,17 +172,37 @@ public:
             m_am_rx_length              = *recv_length;
         }
 
-        if ((CMD == UCX_PERF_CMD_AM) || is_atomic()) {
-            m_send_params.op_attr_mask  = UCP_OP_ATTR_FIELD_DATATYPE |
-                                          UCP_OP_ATTR_FIELD_CALLBACK;
-            m_send_params.datatype      = *send_dt;
-            m_send_params.cb.send       = send_nbx_cb;
+        fill_send_params(m_send_params, *send_buffer, *send_dt, send_cb, 0);
+        fill_send_params(m_send_get_info_params, *send_buffer, *send_dt,
+                         send_get_info_cb, UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
+
+        m_recv_params.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                                     UCP_OP_ATTR_FIELD_CALLBACK |
+                                     UCP_OP_ATTR_FIELD_USER_DATA;
+        m_recv_params.datatype     = *recv_dt;
+        m_recv_params.cb.recv      = tag_recv_cb;
+        m_recv_params.user_data    = this;
+    }
+
+    void fill_send_params(ucp_request_param_t &params, void *reply_buffer,
+                          ucp_datatype_t send_dt, ucp_send_nbx_callback_t cb,
+                          uint32_t op_attr_mask)
+    {
+        params.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
+                              UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA | op_attr_mask;
+        params.datatype     = send_dt;
+        params.cb.send      = cb;
+        params.user_data    = this;
+
+        if (TYPE == UCX_PERF_TEST_TYPE_STREAM_UNI) {
+            params.op_attr_mask |= UCP_OP_ATTR_FLAG_MULTI_SEND;
         }
 
         if ((CMD == UCX_PERF_CMD_FADD) || (CMD == UCX_PERF_CMD_SWAP) ||
             (CMD == UCX_PERF_CMD_CSWAP)) {
-            m_send_params.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
-            m_send_params.reply_buffer  = *send_buffer;
+            params.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
+            params.reply_buffer  = reply_buffer;
         }
     }
 
@@ -241,38 +264,25 @@ public:
         return UCS_INPROGRESS;
     }
 
-
-    static void send_cb(void *request, ucs_status_t status)
+    static void send_cb(void *request, ucs_status_t status, void *user_data)
     {
-        ucp_perf_request_t *r      = reinterpret_cast<ucp_perf_request_t*>(
-                                          request);
-        ucp_perf_test_runner *test = (ucp_perf_test_runner*)r->context;
-
+        ucp_perf_test_runner *test = (ucp_perf_test_runner*)user_data;
         test->send_completed();
-        r->context = NULL;
         ucp_request_free(request);
     }
 
-    static void send_nbx_cb(void *request, ucs_status_t status, void *user_data)
+    static void
+    send_get_info_cb(void *request, ucs_status_t status, void *user_data)
     {
-        send_cb(request, status);
+        ucp_perf_test_runner *test = (ucp_perf_test_runner*)user_data;
+        test->send_completed();
     }
 
     static void tag_recv_cb(void *request, ucs_status_t status,
-                            ucp_tag_recv_info_t *info)
+                            const ucp_tag_recv_info_t *info, void *user_data)
     {
-        ucp_perf_request_t *r = reinterpret_cast<ucp_perf_request_t*>(request);
-        ucp_perf_test_runner *test;
-
-        /* if the request is completed during tag_recv_nb(), the context is
-         * still NULL */
-        if (r->context == NULL) {
-            return;
-        }
-
-        test = (ucp_perf_test_runner*)r->context;
+        ucp_perf_test_runner *test = (ucp_perf_test_runner*)user_data;
         test->recv_completed();
-        r->context = NULL;
         ucp_request_free(request);
     }
 
@@ -298,8 +308,29 @@ public:
         return UCS_OK;
     }
 
+    void UCS_F_ALWAYS_INLINE send_started()
+    {
+        ++m_sends_outstanding;
+    }
+
+    void UCS_F_ALWAYS_INLINE recv_started()
+    {
+        ++m_recvs_outstanding;
+    }
+
+    void UCS_F_ALWAYS_INLINE send_completed()
+    {
+        --m_sends_outstanding;
+    }
+
+    void UCS_F_ALWAYS_INLINE recv_completed()
+    {
+        --m_recvs_outstanding;
+    }
+
     void UCS_F_ALWAYS_INLINE wait_send_window(unsigned n)
     {
+        ucs_assert(m_sends_outstanding >= 0);
         while (m_sends_outstanding >= (m_max_outstanding - n + 1)) {
             progress_requestor();
         }
@@ -347,10 +378,14 @@ public:
 
     ucs_status_t UCS_F_ALWAYS_INLINE
     send(ucp_ep_h ep, void *buffer, unsigned length, ucp_datatype_t datatype,
-         psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey)
+         psn_t sn, uint64_t remote_addr, ucp_rkey_h rkey, bool get_info = false)
     {
-        uint64_t value = 0;
+        ucp_request_param_t *param = get_info ? &m_send_get_info_params :
+                                                &m_send_params;
+        uint64_t value             = 0;
         void *request;
+
+        wait_send_window(1);
 
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
@@ -358,32 +393,27 @@ public:
         case UCX_PERF_CMD_TAG_SYNC:
         case UCX_PERF_CMD_STREAM:
         case UCX_PERF_CMD_AM:
-            wait_send_window(1);
             /* coverity[switch_selector_expr_is_constant] */
             switch (CMD) {
             case UCX_PERF_CMD_TAG:
-                request = ucp_tag_send_nb(ep, buffer, length, datatype, TAG,
-                                          send_cb);
+                request = ucp_tag_send_nbx(ep, buffer, length, TAG, param);
                 break;
             case UCX_PERF_CMD_TAG_SYNC:
-                request = ucp_tag_send_sync_nb(ep, buffer, length, datatype, TAG,
-                                               send_cb);
+                request = ucp_tag_send_sync_nbx(ep, buffer, length, TAG, param);
                 break;
             case UCX_PERF_CMD_STREAM:
-                request = ucp_stream_send_nb(ep, buffer, length, datatype,
-                                             send_cb, 0);
+                request = ucp_stream_send_nbx(ep, buffer, length, param);
                 break;
             case UCX_PERF_CMD_AM:
                 request = ucp_am_send_nbx(ep, AM_ID, m_perf.ucp.am_hdr,
                                           m_perf.params.ucp.am_hdr_size, buffer,
-                                          length, &m_send_params);
+                                          length, param);
                 break;
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
             break;
         case UCX_PERF_CMD_PUT:
-            wait_send_window(1);
             /* coverity[switch_selector_expr_is_constant] */
             switch (TYPE) {
             case UCX_PERF_TEST_TYPE_PINGPONG:
@@ -395,21 +425,17 @@ public:
             default:
                 return UCS_ERR_INVALID_PARAM;
             }
-            request = ucp_put_nb(ep, buffer, length, remote_addr, rkey,
-                                 send_cb);
+            request = ucp_put_nbx(ep, buffer, length, remote_addr, rkey, param);
             break;
         case UCX_PERF_CMD_GET:
-            wait_send_window(1);
-            request = ucp_get_nb(ep, buffer, length, remote_addr, rkey,
-                                 send_cb);
+            request = ucp_get_nbx(ep, buffer, length, remote_addr, rkey, param);
             break;
         case UCX_PERF_CMD_ADD:
         case UCX_PERF_CMD_FADD:
         case UCX_PERF_CMD_SWAP:
         case UCX_PERF_CMD_CSWAP:
-            wait_send_window(1);
-            request = ucp_atomic_op_nbx(ep, m_atomic_op, &value, 1,
-                                        remote_addr, rkey, &m_send_params);
+            request = ucp_atomic_op_nbx(ep, m_atomic_op, &value, 1, remote_addr,
+                                        rkey, param);
             break;
         default:
             return UCS_ERR_INVALID_PARAM;
@@ -420,7 +446,11 @@ public:
             return UCS_PTR_STATUS(request);
         }
 
-        reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
+        if (get_info) {
+            get_request_info(request);
+            ucp_request_release(request);
+        }
+
         send_started();
         return UCS_OK;
     }
@@ -443,17 +473,11 @@ public:
                     progress_responder();
                 }
             }
-            request = ucp_tag_recv_nb(worker, buffer, length, datatype, TAG, TAG_MASK,
-                                      tag_recv_cb);
+            request = ucp_tag_recv_nbx(worker, buffer, length, TAG, TAG_MASK,
+                                       &m_recv_params);
             if (ucs_likely(!UCS_PTR_IS_PTR(request))) {
                 return UCS_PTR_STATUS(request);
             }
-            if (ucp_request_is_completed(request)) {
-                /* request is already completed and callback was called */
-                ucp_request_free(request);
-                return UCS_OK;
-            }
-            reinterpret_cast<ucp_perf_request_t*>(request)->context = this;
             recv_started();
             return UCS_OK;
         case UCX_PERF_CMD_AM:
@@ -515,26 +539,19 @@ public:
         }
     }
 
-    static void free_cb(void *request, ucs_status_t status, void *user_data)
-    {
-        ucp_request_free(request);
-    }
-
     /* send the special flag as a last iteration in case of
      * unidirectional PUT test, since responder is waiting for
      * this message */
-    ucs_status_t send_last_iter(ucp_ep_h ep, void *buffer, size_t size,
-                                uint64_t remote_addr, ucp_rkey_h rkey)
+    void send_last_iter(ucp_ep_h ep, void *buffer, size_t size,
+                        uint64_t remote_addr, ucp_rkey_h rkey)
     {
         uint64_t atomic_value = 0;
         ucs_status_ptr_t status_p;
         ucp_request_param_t atomic_param;
 
-        if (!use_psn()) {
-            return UCS_OK;
+        if (use_psn()) {
+            fence();
         }
-
-        fence();
 
         /* Make sure that doing the last opetarion will write 1 to the end of
            the remote buffer */
@@ -544,18 +561,23 @@ public:
             atomic_value = 0;
             write_sn(&atomic_value, UCS_MEMORY_TYPE_HOST, size, LAST_ITER_SN);
             atomic_param.op_attr_mask = UCP_OP_ATTR_FIELD_DATATYPE |
-                                        UCP_OP_ATTR_FIELD_CALLBACK;
+                                        UCP_OP_ATTR_FIELD_CALLBACK |
+                                        UCP_OP_ATTR_FIELD_USER_DATA;
             atomic_param.datatype     = ucp_dt_make_contig(size);
-            atomic_param.cb.send      = free_cb;
+            atomic_param.cb.send      = send_cb;
+            atomic_param.user_data    = this;
         }
 
         /* coverity[switch_selector_expr_is_constant] */
         switch (CMD) {
         case UCX_PERF_CMD_PUT:
-            return ucp_put(ep, buffer, size, remote_addr, rkey);
+            status_p = ucp_put_nbx(ep, buffer, size, remote_addr, rkey,
+                                   &m_send_params);
+            break;
         case UCX_PERF_CMD_ADD:
-            return ucp_atomic_post(ep, UCP_ATOMIC_POST_OP_ADD, atomic_value,
-                                   size, remote_addr, rkey);
+            status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
+                                         remote_addr, rkey, &atomic_param);
+            break;
         case UCX_PERF_CMD_FADD:
         case UCX_PERF_CMD_SWAP:
             /* Atomic argument to add/swap with contains LAST_ITER_SN */
@@ -563,17 +585,24 @@ public:
             atomic_param.reply_buffer  = buffer;
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, &atomic_value, 1,
                                          remote_addr, rkey, &atomic_param);
-            return UCS_PTR_STATUS(status_p);
+            break;
         case UCX_PERF_CMD_CSWAP:
             /* Buffer to swap with contains LAST_ITER_SN */
             atomic_param.op_attr_mask |= UCP_OP_ATTR_FIELD_REPLY_BUFFER;
             atomic_param.reply_buffer  = &atomic_value;
             status_p = ucp_atomic_op_nbx(ep, m_atomic_op, buffer, 1,
                                          remote_addr, rkey, &atomic_param);
-            return UCS_PTR_STATUS(status_p);
+            break;
         default:
-            return UCS_OK;
+            status_p = NULL;
+            break;
         }
+
+        if (UCS_PTR_IS_PTR(status_p)) {
+            send_started();
+        }
+
+        wait_send_window(m_max_outstanding);
     }
 
     void flush()
@@ -649,13 +678,16 @@ public:
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
+                wait_recv_window(m_max_outstanding);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 recv(worker, ep, recv_buffer, recv_length, recv_datatype, sn);
-                send(ep, send_buffer, send_length, send_datatype, sn, remote_addr, rkey);
+                wait_recv_window(m_max_outstanding);
+                send(ep, send_buffer, send_length, send_datatype, sn,
+                     remote_addr, rkey, m_perf.current.iters == 0);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
@@ -729,13 +761,12 @@ public:
         } else if (my_index == 1) {
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 send(ep, send_buffer, send_length, send_datatype, sn,
-                     remote_addr, rkey);
+                     remote_addr, rkey, m_perf.current.iters == 0);
                 ucx_perf_update(&m_perf, 1, length);
                 ++sn;
             }
 
             send_last_iter(ep, send_buffer, send_length, remote_addr, rkey);
-            wait_send_window(m_max_outstanding);
         }
 
         flush();
@@ -812,30 +843,28 @@ private:
         return UCS_OK;
     }
 
-    void UCS_F_ALWAYS_INLINE send_started()
+    void get_request_info(void *request)
     {
-        ++m_sends_outstanding;
+        ucp_request_attr_t request_attr;
+        ucs_status_t status;
+
+        request_attr.field_mask        = UCP_REQUEST_ATTR_FIELD_INFO_STRING |
+                                         UCP_REQUEST_ATTR_FIELD_INFO_STRING_SIZE;
+        request_attr.debug_string      = m_perf.extra_info;
+        request_attr.debug_string_size = sizeof(m_perf.extra_info);
+
+        status = ucp_request_query(request, &request_attr);
+        if (status != UCS_OK) {
+            ucs_snprintf_safe(m_perf.extra_info, sizeof(m_perf.extra_info),
+                              "<failed to query: %s>",
+                              ucs_status_string(status));
+        }
     }
 
-    void UCS_F_ALWAYS_INLINE recv_started()
-    {
-        ++m_recvs_outstanding;
-    }
-
-    void UCS_F_ALWAYS_INLINE send_completed()
-    {
-        --m_sends_outstanding;
-    }
-
-    void UCS_F_ALWAYS_INLINE recv_completed()
-    {
-        --m_recvs_outstanding;
-    }
-
-    ucx_perf_context_t  &m_perf;
-    unsigned            m_recvs_outstanding;
-    unsigned            m_sends_outstanding;
-    const unsigned      m_max_outstanding;
+    ucx_perf_context_t &m_perf;
+    int                m_recvs_outstanding;
+    int                m_sends_outstanding;
+    const int          m_max_outstanding;
     /*
      * These fields are used by UCP AM flow only, because receive operation is
      * initiated from the data receive callback.
@@ -844,6 +873,8 @@ private:
     size_t              m_am_rx_length;
     ucp_request_param_t m_am_rx_params;
     ucp_request_param_t m_send_params;
+    ucp_request_param_t m_send_get_info_params;
+    ucp_request_param_t m_recv_params;
     ucp_atomic_op_t     m_atomic_op;
 };
 

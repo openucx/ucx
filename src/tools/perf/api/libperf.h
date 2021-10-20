@@ -141,8 +141,8 @@ typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
 typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
 typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
                                            const ucx_perf_result_t *result,
-                                           void *arg, int is_final,
-                                           int is_multi_thread);
+                                           void *arg, const char *extra_info,
+                                           int is_final, int is_multi_thread);
 
 /**
  * RTE used to bring-up the test

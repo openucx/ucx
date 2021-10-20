@@ -197,6 +197,7 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
     perf->prev.bytes        = 0;
     perf->prev.iters        = 0;
     perf->timing_queue_head = 0;
+    perf->extra_info[0]     = '\0';
 
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
@@ -1705,7 +1706,8 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
         ucx_perf_funcs[params->api].barrier(perf);
         if (status == UCS_OK) {
             ucx_perf_calc_result(perf, result);
-            rte_call(perf, report, result, perf->params.report_arg, 1, 0);
+            rte_call(perf, report, result, perf->params.report_arg,
+                     perf->extra_info, 1, 0);
         }
     } else {
         status = ucx_perf_thread_spawn(perf, result);
@@ -1739,4 +1741,14 @@ unsigned rte_peer_index(unsigned group_size, unsigned group_index)
 
     ucs_assert(group_index < group_size);
     return peer_index;
+}
+
+void ucx_perf_report(ucx_perf_context_t *perf)
+{
+    ucx_perf_result_t result;
+
+    ucx_perf_get_time(perf);
+    ucx_perf_calc_result(perf, &result);
+    rte_call(perf, report, &result, perf->params.report_arg, "", 0, 0);
+    perf->prev = perf->current;
 }

@@ -24,12 +24,13 @@
 #define TEST_ID_UNDEFINED       -1
 
 enum {
-    TEST_FLAG_PRINT_RESULTS = UCS_BIT(0),
-    TEST_FLAG_PRINT_TEST    = UCS_BIT(1),
-    TEST_FLAG_SET_AFFINITY  = UCS_BIT(8),
-    TEST_FLAG_NUMERIC_FMT   = UCS_BIT(9),
-    TEST_FLAG_PRINT_FINAL   = UCS_BIT(10),
-    TEST_FLAG_PRINT_CSV     = UCS_BIT(11)
+    TEST_FLAG_PRINT_RESULTS    = UCS_BIT(0),
+    TEST_FLAG_PRINT_TEST       = UCS_BIT(1),
+    TEST_FLAG_SET_AFFINITY     = UCS_BIT(8),
+    TEST_FLAG_NUMERIC_FMT      = UCS_BIT(9),
+    TEST_FLAG_PRINT_FINAL      = UCS_BIT(10),
+    TEST_FLAG_PRINT_CSV        = UCS_BIT(11),
+    TEST_FLAG_PRINT_EXTRA_INFO = UCS_BIT(12)
 };
 
 typedef struct sock_rte_group {
@@ -85,7 +86,8 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
 ucs_status_t adjust_test_params(perftest_params_t *params,
                                 const char *error_prefix);
 void print_progress(char **test_names, unsigned num_names,
-                    const ucx_perf_result_t *result, unsigned flags,
-                    int final, int is_server, int is_multi_thread);
+                    const ucx_perf_result_t *result, const char *extra_info,
+                    unsigned flags, int final, int is_server,
+                    int is_multi_thread);
 
 #endif /* UCX_PERFTEST_H */
