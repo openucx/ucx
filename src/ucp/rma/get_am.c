@@ -24,7 +24,7 @@ static size_t ucp_proto_get_am_bcopy_pack(void *dest, void *arg)
     getreqh->address    = req->send.rma.remote_addr;
     getreqh->length     = req->send.state.dt_iter.length;
     getreqh->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
-    getreqh->req.req_id = ucp_request_get_id(req);
+    getreqh->req.req_id = ucp_send_request_get_id(req);
     getreqh->mem_type   = req->send.rma.rkey->mem_type;
 
     return sizeof(*getreqh);
@@ -56,7 +56,7 @@ static ucs_status_t ucp_proto_get_am_bcopy_progress(uct_pending_req_t *self)
         req->send.buffer = req->send.state.dt_iter.type.contig.buffer;
         req->send.length = req->send.state.dt_iter.length;
         req->flags      |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
-        ucp_request_id_alloc(req);
+        ucp_send_request_id_alloc(req);
     }
 
     ucp_worker_flush_ops_count_inc(worker);
@@ -80,11 +80,15 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.overhead      = 40e-9,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_get_req_hdr_t),
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
-                               UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE,
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
+        .super.memtype_op    = UCT_EP_OP_PUT_SHORT,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
@@ -99,6 +103,6 @@ static ucp_proto_t ucp_get_am_bcopy_proto = {
     .flags      = 0,
     .init       = ucp_proto_get_am_bcopy_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_get_am_bcopy_progress
+    .progress   = {ucp_proto_get_am_bcopy_progress}
 };
 UCP_PROTO_REGISTER(&ucp_get_am_bcopy_proto);

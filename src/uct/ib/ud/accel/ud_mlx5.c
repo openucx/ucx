@@ -16,7 +16,7 @@
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_log.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <string.h>
 #include <arpa/inet.h> /* For htonl */
@@ -245,7 +245,6 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     uct_ud_send_skb_t *skb;
     ucs_status_t status;
     uct_ud_neth_t *neth;
-    ucs_iov_iter_t iov_iter;
 
     UCT_CHECK_AM_ID(am_id);
     UCT_UD_CHECK_ZCOPY_LENGTH(&iface->super, header_size + data_size,
@@ -263,10 +262,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     ctrl            = uct_ud_mlx5_ep_get_next_wqe(iface, ep, &wqe_size,
                                                   &next_seg);
     inl             = next_seg;
-    inline_size     = sizeof(*neth) + header_size + data_size + inl_iov_size;
+    skb->len        = sizeof(*neth) + header_size + data_size;
+    inline_size     = skb->len + inl_iov_size;
     inl->byte_count = htonl(inline_size | MLX5_INLINE_SEG);
     wqe_size       += sizeof(*inl) + inline_size;
-    skb->len        = inline_size;
 
     /* set network header */
     neth              = (void*)(inl + 1);
@@ -312,9 +311,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t uct_ud_mlx5_ep_inline_iov_post(
     memcpy(UCS_PTR_BYTE_OFFSET(skb->neth + 1, header_size), data, data_size);
     if (inl_iovcnt > 0) {
         ucs_assert((data_size == 0) && (header_size == 0));
-        ucs_iov_iter_init(&iov_iter);
-        uct_iov_to_buffer(inl_iov, inl_iovcnt, &iov_iter, skb->neth + 1,
-                          SIZE_MAX);
+        uct_ud_iov_to_skb(skb, inl_iov, inl_iovcnt);
     }
     if (iovcnt > 0) {
         uct_ud_skb_set_zcopy_desc(skb, iov, iovcnt, comp);
@@ -502,15 +499,19 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
                                 uct_ib_mlx5_cqe_is_grh_present(cqe),
                                 cqe->flags_rqpn & 0xFF)) {
         ucs_mpool_put_inline(desc);
-        goto out;
+        goto out_polled;
     }
 
     uct_ib_mlx5_log_rx(&iface->super.super, cqe, packet, uct_ud_dump_packet);
     /* coverity[tainted_data] */
-    uct_ud_ep_process_rx(&iface->super,
-                         (uct_ud_neth_t *)UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
-                         len - UCT_IB_GRH_LEN,
-                         (uct_ud_recv_skb_t *)ucs_unaligned_ptr(desc), is_async);
+    uct_ud_ep_process_rx(
+            &iface->super,
+            (uct_ud_neth_t*)UCS_PTR_BYTE_OFFSET(packet, UCT_IB_GRH_LEN),
+            len - UCT_IB_GRH_LEN,
+            (uct_ud_recv_skb_t*)ucs_unaligned_ptr(desc), is_async);
+
+out_polled:
+    uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_RX]);
 out:
     if (iface->super.rx.available >= iface->super.super.config.rx_max_batch) {
         /* we need to try to post buffers always. Otherwise it is possible
@@ -540,6 +541,7 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface, int is_async)
     iface->super.tx.available = uct_ib_mlx5_txwq_update_bb(&iface->tx.wq, hw_ci);
 
     uct_ud_iface_send_completion(&iface->super, hw_ci, is_async);
+    uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
 
     return 1;
 }
@@ -622,8 +624,9 @@ uct_ud_mlx5_iface_unpack_peer_address(uct_ud_iface_t *ud_iface,
     memset(peer_address, 0, sizeof(*peer_address));
 
     status = uct_ud_mlx5_iface_get_av(&ud_iface->super, &iface->ud_mlx5_common,
-                                      ib_addr, path_index, &peer_address->av,
-                                      &peer_address->grh_av, &is_global);
+                                      ib_addr, path_index, "UD mlx5 connect",
+                                      &peer_address->av, &peer_address->grh_av,
+                                      &is_global);
     if (status != UCS_OK) {
         return status;
     }
@@ -751,8 +754,29 @@ static void uct_ud_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg
 }
 
 static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
-    {
-    {
+    .super = {
+        .super = {
+            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+        },
+        .create_cq      = uct_ib_mlx5_create_cq,
+        .arm_cq         = uct_ud_mlx5_iface_arm_cq,
+        .event_cq       = uct_ud_mlx5_iface_event_cq,
+        .handle_failure = uct_ud_mlx5_iface_handle_failure,
+    },
+    .async_progress          = uct_ud_mlx5_iface_async_progress,
+    .send_ctl                = uct_ud_mlx5_ep_send_ctl,
+    .ep_free                 = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
+    .create_qp               = uct_ud_mlx5_iface_create_qp,
+    .destroy_qp              = uct_ud_mlx5_iface_destroy_qp,
+    .unpack_peer_address     = uct_ud_mlx5_iface_unpack_peer_address,
+    .ep_get_peer_address     = uct_ud_mlx5_ep_get_peer_address,
+    .get_peer_address_length = uct_ud_mlx5_get_peer_address_length,
+    .peer_address_str        = uct_ud_mlx5_iface_peer_address_str,
+};
+
+static uct_iface_ops_t uct_ud_mlx5_iface_tl_ops = {
     .ep_put_short             = uct_ud_mlx5_ep_put_short,
     .ep_am_short              = uct_ud_mlx5_ep_am_short,
     .ep_am_short_iov          = uct_ud_mlx5_ep_am_short_iov,
@@ -780,21 +804,6 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_get_address        = uct_ud_iface_get_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable
-    },
-    .create_cq                = uct_ib_mlx5_create_cq,
-    .arm_cq                   = uct_ud_mlx5_iface_arm_cq,
-    .event_cq                 = uct_ud_mlx5_iface_event_cq,
-    .handle_failure           = uct_ud_mlx5_iface_handle_failure,
-    },
-    .async_progress           = uct_ud_mlx5_iface_async_progress,
-    .send_ctl                 = uct_ud_mlx5_ep_send_ctl,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_ep_t),
-    .create_qp                = uct_ud_mlx5_iface_create_qp,
-    .destroy_qp               = uct_ud_mlx5_iface_destroy_qp,
-    .unpack_peer_address      = uct_ud_mlx5_iface_unpack_peer_address,
-    .ep_get_peer_address      = uct_ud_mlx5_ep_get_peer_address,
-    .get_peer_address_length  = uct_ud_mlx5_get_peer_address_length,
-    .peer_address_str         = uct_ud_mlx5_iface_peer_address_str
 };
 
 static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
@@ -818,7 +827,8 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_mlx5_iface_ops,
-                              md, worker, params, &config->super, &init_attr);
+                              &uct_ud_mlx5_iface_tl_ops, md, worker, params,
+                              &config->super, &init_attr);
 
     self->super.config.max_inline = uct_ud_mlx5_max_inline();
 

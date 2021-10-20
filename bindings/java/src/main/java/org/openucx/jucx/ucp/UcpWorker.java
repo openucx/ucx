@@ -82,7 +82,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      * @param callback - Active Message callback. To clear the already set callback,
      *                   this value should be set to null.
      */
-    public void setAmRecvHandler(int amId, UcpAmRecvCallback callback) {
+    public void setAmRecvHandler(int amId, UcpAmRecvCallback callback, long flags) {
         if (callback == null) {
             removeAmRecvHandler(amId);
             return;
@@ -91,7 +91,11 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
         callbackAndWorker[0] = callback;
         callbackAndWorker[1] = this;
         amRecvHandlers.put(amId, callbackAndWorker);
-        setAmRecvHandlerNative(getNativeId(), amId, callbackAndWorker);
+        setAmRecvHandlerNative(getNativeId(), amId, callbackAndWorker, flags);
+    }
+
+    public void setAmRecvHandler(int amId, UcpAmRecvCallback callback) {
+        setAmRecvHandler(amId, callback, 0L);
     }
 
     /**
@@ -99,7 +103,7 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
      */
     public void removeAmRecvHandler(int amId) {
         amRecvHandlers.remove(amId);
-        setAmRecvHandlerNative(getNativeId(), amId, null);
+        setAmRecvHandlerNative(getNativeId(), amId, null, 0L);
     }
 
     /**
@@ -352,7 +356,8 @@ public class UcpWorker extends UcxNativeStruct implements Closeable {
     private static native void signalWorkerNative(long workerId);
 
     private static native void setAmRecvHandlerNative(long workerId, int amId,
-                                                      Object[] callbackAndWorker);
+                                                      Object[] callbackAndWorker,
+                                                      long flags);
 
     private static native UcpRequest recvAmDataNonBlockingNative(long workerId, long dataDesc,
                                                                  long address, long size,

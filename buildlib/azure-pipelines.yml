@@ -1,38 +1,42 @@
 # See https://aka.ms/yaml
 # This pipeline to be run on direct pushes and merges
 
+pr:
+  - master
+  - v*.*.x
 trigger:
   - master
   - v*.*.x
 
 resources:
   containers:
-    - container: ubuntu20_cuda11_2
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5.0-cuda11.2:2
+    - container: centos7_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
 
 stages:
-  - stage: Check_Commit
+  - stage: Prepare
     jobs:
       - job: Check
+        pool:
+          name: MLNX
+          demands:
+          - ucx_docker -equals yes
         steps:
           - checkout: self
             clean: true
-
           - bash: |
               set -eE
               source ./buildlib/az-helpers.sh
               set -x
-              check_commit_message $(system.pullRequest.sourceCommitId) "AZP/SNAPSHOT: " $(Build.Reason)
-            name: Commit
+              check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/SNAPSHOT: "
+            name: Result
   - stage: Build
-    dependsOn: Check_Commit
-    variables:
-      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
-        TARGET: publish-snapshot
-      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-        TARGET: package
+    dependsOn: Prepare
+    condition: eq(dependencies.Prepare.outputs['Check.Result.Launch'], 'True')
     jobs:
       - template: jucx/jucx-publish.yml
         parameters:
-          target: $(TARGET)
-
+          ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+            target: publish-snapshot
+          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            target: package

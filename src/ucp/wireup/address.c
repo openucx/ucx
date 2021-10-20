@@ -15,13 +15,14 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
+#include <ucs/type/serialize.h>
 #include <inttypes.h>
 
 
 /*
  * Packed address layout:
  *
- * [ header(8bit) | uuid(64bit) | worker_name(string) ]
+ * [ header(8bit) | uuid(64bit) | client_id | worker_name(string) ]
  * [ device1_md_index | device1_address(var) ]
  *    [ tl1_name_csum(string) | tl1_info | tl1_address(var) ]
  *    [ tl2_name_csum(string) | tl2_info | tl2_address(var) ]
@@ -127,7 +128,9 @@ typedef struct {
                                          UCP_ADDRESS_FLAG_MD_REG))
 
 #define UCP_ADDRESS_HEADER_VERSION_MASK     UCS_MASK(4) /* Version - 4 bits */
-#define UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO  UCS_BIT(4)  /* Address has debug info */
+
+#define UCP_ADDRESS_DEFAULT_WORKER_UUID     0
+#define UCP_ADDRESS_DEFAULT_CLIENT_ID       0
 
 /* Enumeration of UCP address versions.
  * Every release which changes the address binary format must bump this number.
@@ -138,6 +141,12 @@ enum {
     UCP_ADDRESS_VERSION_CURRENT = UCP_ADDRESS_VERSION_LAST - 1
 };
 
+enum {
+    UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO  = UCS_BIT(4),  /* Address has debug info */
+    UCP_ADDRESS_HEADER_FLAG_WORKER_UUID = UCS_BIT(5),  /* Worker unique id */
+    UCP_ADDRESS_HEADER_FLAG_CLIENT_ID   = UCS_BIT(6),  /* Worker client id */
+    UCP_ADDRESS_HEADER_FLAG_AM_ONLY     = UCS_BIT(7)   /* Only AM lane info */
+};
 
 static size_t ucp_address_iface_attr_size(ucp_worker_t *worker,
                                           uint64_t flags)
@@ -302,6 +311,10 @@ static size_t ucp_address_packed_size(ucp_worker_h worker,
         size += sizeof(uint64_t);
     }
 
+    if (pack_flags & UCP_ADDRESS_PACK_FLAG_CLIENT_ID) {
+        size += sizeof(uint64_t);
+    }
+
     if ((worker->context->config.ext.address_debug_info) &&
         (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_NAME)) {
         size += strlen(ucp_worker_get_address_name(worker)) + 1;
@@ -387,6 +400,46 @@ static uint64_t ucp_address_unpack_flags(uint32_t input_flags,
     return result_flags;
 }
 
+static uint64_t ucp_address_flags_from_iface_flags(uint64_t iface_flags)
+{
+    uint64_t iface_cap_flags = 0;
+
+    if (iface_flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE;
+    }
+
+    if (iface_flags & UCT_IFACE_FLAG_CB_ASYNC) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_CB_ASYNC;
+    }
+
+    if (ucs_test_all_flags(iface_flags,
+                           UCT_IFACE_FLAG_CB_SYNC | UCT_IFACE_FLAG_AM_BCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_AM_SYNC;
+    }
+
+    if (iface_flags & (UCT_IFACE_FLAG_PUT_SHORT | UCT_IFACE_FLAG_PUT_BCOPY |
+                       UCT_IFACE_FLAG_PUT_ZCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_PUT;
+    }
+
+    if (iface_flags & (UCT_IFACE_FLAG_GET_SHORT | UCT_IFACE_FLAG_GET_BCOPY |
+                       UCT_IFACE_FLAG_GET_ZCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_GET;
+    }
+
+    if (iface_flags & (UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                       UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                       UCT_IFACE_FLAG_TAG_EAGER_ZCOPY)) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_TAG_EAGER;
+    }
+
+    if (iface_flags & UCT_IFACE_FLAG_TAG_RNDV_ZCOPY) {
+        iface_cap_flags |= UCP_ADDR_IFACE_FLAG_TAG_RNDV;
+    }
+
+    return iface_cap_flags;
+}
+
 static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
                                        ucp_rsc_index_t rsc_index,
                                        const uct_iface_attr_t *iface_attr,
@@ -396,13 +449,6 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     int packed_len;
     ucp_address_packed_iface_attr_t  *packed;
     ucp_address_unified_iface_attr_t *unified;
-
-    /* check if at least one of bandwidth values is 0 */
-    if ((iface_attr->bandwidth.dedicated * iface_attr->bandwidth.shared) != 0) {
-        ucs_error("Incorrect bandwidth value: one of bandwidth dedicated/shared must be zero");
-        return -1;
-    }
-
 
     if (ucp_worker_is_unified_mode(worker)) {
         /* In unified mode all workers have the same transports and tl bitmap.
@@ -420,7 +466,8 @@ static int ucp_address_pack_iface_attr(ucp_worker_h worker, void *ptr,
     packed                 = ptr;
     packed->prio_cap_flags = (uint8_t)iface_attr->priority;
     packed->overhead       = iface_attr->overhead;
-    packed->bandwidth      = iface_attr->bandwidth.dedicated - iface_attr->bandwidth.shared;
+    packed->bandwidth      = ucp_tl_iface_bandwidth(worker->context,
+                                                    &iface_attr->bandwidth);
     packed->lat_ovh        = iface_attr->latency.c;
 
     ucs_assert((ucs_popcount(UCP_ADDRESS_IFACE_FLAGS) +
@@ -471,6 +518,8 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     const ucp_address_unified_iface_attr_t *unified;
     ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_idx;
+    uct_ppn_bandwidth_t bandwidth;
+    uint64_t iface_flags;
 
     if (ucp_worker_is_unified_mode(worker)) {
         /* Address contains resources index and iface latency overhead
@@ -488,12 +537,16 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
 
         /* Just take the rest of iface attrs from the local resource. */
         wiface                    = ucp_worker_iface(worker, rsc_idx);
-        iface_attr->cap_flags     = wiface->attr.cap.flags;
+        iface_attr->cap_flags     = ucp_address_flags_from_iface_flags(
+                                        wiface->attr.cap.flags);
         iface_attr->event_flags   = wiface->attr.cap.event_flags;
         iface_attr->priority      = wiface->attr.priority;
         iface_attr->overhead      = wiface->attr.overhead;
-        iface_attr->bandwidth     = wiface->attr.bandwidth;
+        iface_attr->bandwidth     =
+                ucp_tl_iface_bandwidth(worker->context,
+                                       &wiface->attr.bandwidth);
         iface_attr->dst_rsc_index = rsc_idx;
+
         if (signbit(unified->lat_ovh)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
             iface_attr->atomic.atomic32.fop_flags = wiface->attr.cap.atomic32.fop_flags;
@@ -505,17 +558,35 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
         return UCS_OK;
     }
 
-    packed                          = ptr;
-    iface_attr->priority            = packed->prio_cap_flags & UCS_MASK(8);
-    iface_attr->overhead            = packed->overhead;
-    iface_attr->bandwidth.dedicated = ucs_max(0.0, packed->bandwidth);
-    iface_attr->bandwidth.shared    = ucs_max(0.0, -packed->bandwidth);
-    iface_attr->lat_ovh             = packed->lat_ovh;
+    packed               = ptr;
+    iface_attr->priority = packed->prio_cap_flags & UCS_MASK(8);
+    iface_attr->overhead = packed->overhead;
+    iface_attr->lat_ovh  = packed->lat_ovh;
+
+    if (packed->bandwidth < 0.0) {
+        /* The received value of the bandwidth is "dedicated - shared" which
+         * doesn't consider ppn and could be sent only by the peer which uses
+         * UCX version <= 1.11. Calculate the bandwidth value considering our
+         * ppn value to be the same value as on the peer */
+        bandwidth.shared      = fabs(packed->bandwidth);
+        bandwidth.dedicated   = 0.0;
+        iface_attr->bandwidth = ucp_tl_iface_bandwidth(worker->context,
+                                                       &bandwidth);
+    } else {
+        /* The received value is either a dedicated bandwidth value (when the
+         * peer is using an older version) or the total bandwidth considering
+         * remote ppn value (when the peer is using a newer version) */
+        iface_attr->bandwidth = packed->bandwidth;
+    }
+
+    if (iface_attr->bandwidth <= 0) {
+        return UCS_ERR_INVALID_ADDR;
+    }
 
     /* Unpack iface flags */
-    iface_attr->cap_flags =
-        ucp_address_unpack_flags(packed->prio_cap_flags,
-                                 UCP_ADDRESS_IFACE_FLAGS, 8);
+    iface_flags = ucp_address_unpack_flags(packed->prio_cap_flags,
+                                           UCP_ADDRESS_IFACE_FLAGS, 8);
+    iface_attr->cap_flags = ucp_address_flags_from_iface_flags(iface_flags);
 
     /* Unpack iface event flags */
     iface_attr->event_flags =
@@ -620,6 +691,39 @@ ucp_address_unpack_iface_length(ucp_worker_h worker, const void *flags_ptr,
     return UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 }
 
+uint64_t ucp_address_get_uuid(const void *address)
+{
+    const uint8_t address_header = *(const uint8_t *)address;
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID) {
+        return *(uint64_t*)UCS_PTR_TYPE_OFFSET(address, uint8_t);
+    } else {
+        return UCP_ADDRESS_DEFAULT_WORKER_UUID;
+    }
+}
+
+uint64_t ucp_address_get_client_id(const void *address)
+{
+    const uint8_t address_header = *(const uint8_t *)address;
+    const void *offset;
+
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_CLIENT_ID) {
+        offset = UCS_PTR_TYPE_OFFSET(address, uint8_t);
+        if (address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID) {
+            offset = UCS_PTR_TYPE_OFFSET(offset, uint64_t);
+        }
+        return *ucs_serialize_next(&offset, uint64_t);
+    } else {
+        return UCP_ADDRESS_DEFAULT_CLIENT_ID;
+    }
+}
+
+uint8_t ucp_address_is_am_only(const void *address)
+{
+    const uint8_t address_header = *(const uint8_t *)address;
+
+    return address_header & UCP_ADDRESS_HEADER_FLAG_AM_ONLY;
+}
+
 static ucs_status_t
 ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                     unsigned pack_flags, const ucp_lane_index_t *lanes2remote,
@@ -654,9 +758,20 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
     *address_header_p = UCP_ADDRESS_VERSION_CURRENT;
     ptr               = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
+    if (pack_flags & UCP_ADDRESS_PACK_FLAG_AM_ONLY) {
+        *address_header_p |= UCP_ADDRESS_HEADER_FLAG_AM_ONLY;
+    }
+
     if (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
-        *(uint64_t*)ptr = worker->uuid;
-        ptr             = UCS_PTR_TYPE_OFFSET(ptr, worker->uuid);
+        *(uint64_t*)ptr    = worker->uuid;
+        ptr                = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+        *address_header_p |= UCP_ADDRESS_HEADER_FLAG_WORKER_UUID;
+    }
+
+    if (pack_flags & UCP_ADDRESS_PACK_FLAG_CLIENT_ID) {
+        *(uint64_t*)ptr    = worker->client_id;
+        ptr                = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
+        *address_header_p |= UCP_ADDRESS_HEADER_FLAG_CLIENT_ID;
     }
 
     if (worker->context->config.ext.address_debug_info) {
@@ -954,7 +1069,7 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                                 ucp_unpacked_address_t *unpacked_address)
 {
     ucp_address_entry_t *address_list, *address;
-    uint8_t address_header, address_version;
+    uint8_t address_header;
     ucp_address_entry_ep_addr_t *ep_addr;
     int last_dev, last_tl, last_ep_addr;
     const uct_device_addr_t *dev_addr;
@@ -964,7 +1079,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     unsigned dev_num_paths;
     ucs_status_t status;
     int empty_dev;
-    uint64_t md_flags;
     size_t dev_addr_len;
     size_t iface_addr_len;
     size_t ep_addr_len;
@@ -981,19 +1095,25 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
     address_header                  = *(const uint8_t *)ptr;
     ptr                             = UCS_PTR_TYPE_OFFSET(ptr, uint8_t);
 
-    /* Check address version */
-    address_version = address_header & UCP_ADDRESS_HEADER_VERSION_MASK;
-    if (address_version != UCP_ADDRESS_VERSION_CURRENT) {
-        ucs_error("address version mismatch: expected %u, actual %u",
-                  UCP_ADDRESS_VERSION_CURRENT, address_version);
-        return UCS_ERR_UNREACHABLE;
+    if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
+        ucs_trace("unpacking address version %u",
+                  (uint8_t)(address_header & UCP_ADDRESS_HEADER_VERSION_MASK));
     }
 
     if (unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
-        unpacked_address->uuid = *(uint64_t*)ptr;
-        ptr = UCS_PTR_TYPE_OFFSET(ptr, unpacked_address->uuid);
+        ucs_assert(address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID);
+    }
+
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID) {
+        unpacked_address->uuid = ucp_address_get_uuid(buffer);
+        ptr                    = UCS_PTR_TYPE_OFFSET(ptr,
+                                                     unpacked_address->uuid);
     } else {
-        unpacked_address->uuid = 0;
+        unpacked_address->uuid = 0ul;
+    }
+
+    if (address_header & UCP_ADDRESS_HEADER_FLAG_CLIENT_ID) {
+        ptr = UCS_PTR_TYPE_OFFSET(ptr, uint64_t);
     }
 
     if ((address_header & UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO) &&
@@ -1026,8 +1146,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
         /* md_index */
         md_byte      = (*(uint8_t*)ptr);
         md_index     = md_byte & UCP_ADDRESS_FLAG_MD_MASK;
-        md_flags     = (md_byte & UCP_ADDRESS_FLAG_MD_ALLOC) ? UCT_MD_FLAG_ALLOC : 0;
-        md_flags    |= (md_byte & UCP_ADDRESS_FLAG_MD_REG)   ? UCT_MD_FLAG_REG   : 0;
         empty_dev    = md_byte & UCP_ADDRESS_FLAG_MD_EMPTY_DEV;
         ptr          = UCS_PTR_TYPE_OFFSET(ptr, md_byte);
 
@@ -1070,7 +1188,6 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
             address->md_index      = md_index;
             address->sys_dev       = sys_dev;
             address->dev_index     = dev_index;
-            address->md_flags      = md_flags;
             address->dev_num_paths = dev_num_paths;
 
             status = ucp_address_unpack_iface_attr(worker, &address->iface_attr,
@@ -1119,17 +1236,16 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
 
             if (!(unpack_flags & UCP_ADDRESS_PACK_FLAG_NO_TRACE)) {
                 ucs_trace("unpack addr[%d] : sysdev %d paths %d eps %u"
-                          " md_flags 0x%" PRIx64 " tl_iface_flags 0x%" PRIx64
-                          " tl_event_flags 0x%" PRIx64 " bw %.2f+%.2f/nMBs"
+                          " tl_iface_flags 0x%" PRIx64
+                          " tl_event_flags 0x%" PRIx64 " bw %.2f/nMBs"
                           " ovh %.0fns lat_ovh %.0fns dev_priority %d"
                           " a32 0x%" PRIx64 "/0x%" PRIx64 " a64 0x%" PRIx64
                           "/0x%" PRIx64,
                           (int)(address - address_list), address->sys_dev,
                           address->dev_num_paths, address->num_ep_addrs,
-                          address->md_flags, address->iface_attr.cap_flags,
+                          address->iface_attr.cap_flags,
                           address->iface_attr.event_flags,
-                          address->iface_attr.bandwidth.dedicated / UCS_MBYTE,
-                          address->iface_attr.bandwidth.shared / UCS_MBYTE,
+                          address->iface_attr.bandwidth / UCS_MBYTE,
                           address->iface_attr.overhead * 1e9,
                           address->iface_attr.lat_ovh * 1e9,
                           address->iface_attr.priority,

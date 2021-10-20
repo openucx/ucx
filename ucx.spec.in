@@ -3,11 +3,6 @@
 %bcond_with    cuda
 %bcond_with    gdrcopy
 %bcond_without ib
-%if 0%{?fedora} >= 30 || 0%{?rhel} >= 7
-%bcond_with ib_cm
-%else
-%bcond_without ib_cm
-%endif
 %bcond_with    knem
 %bcond_without rdmacm
 %bcond_with    rocm
@@ -49,9 +44,6 @@ BuildRequires: gdrcopy
 %endif
 %if %{with ib}
 BuildRequires: libibverbs-devel
-%endif
-%if %{with ib_cm}
-BuildRequires: libibcm-devel
 %endif
 %if %{with knem}
 BuildRequires: knem
@@ -109,7 +101,6 @@ Provides header files and examples for developing with UCX.
            %_with_arg cuda cuda \
            %_with_arg gdrcopy gdrcopy \
            %_with_arg ib verbs \
-           %_with_arg ib_cm cm \
            %_with_arg knem knem \
            %_with_arg rdmacm rdmacm \
            %_with_arg rocm rocm \
@@ -143,13 +134,11 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 %{_includedir}/uc*
 %{_libdir}/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
+%{_libdir}/cmake/ucx/*.cmake
 %{_datadir}/ucx/examples
 
 %post
 /sbin/ldconfig
-rm -f %{_sysconfdir}/ucx/ucx.conf
-mkdir -p %{_sysconfdir}/ucx
-ucx_info -fC > %{_sysconfdir}/ucx/ucx.conf
 
 %postun -p /sbin/ldconfig
 
@@ -213,19 +202,6 @@ hardware-offloaded data transfer.
 
 %files ib
 %{_libdir}/ucx/libuct_ib.so.*
-%endif
-
-%if %{with ib_cm}
-%package ib-cm
-Requires: %{name}-ib%{?_isa} = %{version}-%{release}
-Summary: UCX InfiniBand connection-manager support
-Group: System Environment/Libraries
-
-%description ib-cm
-Provides Infiniband Connection Manager (also known as ibcm) support for UCX.
-
-%files ib-cm
-%{_libdir}/ucx/libuct_ib_cm.so.*
 %endif
 
 %if %{with knem}
@@ -328,6 +304,10 @@ library internals, protocol objects, transports status, and more.
 %endif
 
 %changelog
+* Wed Jun 9 2021 Yossi Itigin <yosefe@mellanox.com> 1.12.0-1
+- Bump version to 1.12.0
+* Tue Apr 27 2021 Leonid Genkin <lgenkin@nvidia.com> 1.11.0-1
+- Remove obsolete ib/cm code
 * Wed Dec 16 2020 Yossi Itigin <yosefe@mellanox.com> 1.11.0-1
 - Add VFS sub-package
 * Wed Dec 16 2020 Yossi Itigin <yosefe@mellanox.com> 1.11.0-1

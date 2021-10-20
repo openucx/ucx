@@ -8,11 +8,12 @@
 #include "config.h"
 #endif
 
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/vfs/sock/vfs_sock.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 #include <ucs/debug/log.h>
 #include <sys/un.h>
 #include <pthread.h>
@@ -26,10 +27,6 @@
 #ifdef HAVE_INOTIFY
 #include <sys/inotify.h>
 #endif
-
-
-#define UCS_VFS_DUMMY_FILE_NAME   "dummy"
-#define UCS_VFS_DUMMY_FILE_DATA   "UCX FUSE\n"
 
 
 typedef struct {
@@ -94,11 +91,9 @@ static int ucs_vfs_fuse_getattr(const char *path, struct stat *stbuf,
 static int ucs_vfs_fuse_open(const char *path, struct fuse_file_info *fi)
 {
     ucs_string_buffer_t strb;
-    ucs_status_t status;
 
     ucs_string_buffer_init(&strb);
-    status = ucs_vfs_path_read_file(path, &strb);
-    if (status != UCS_OK) {
+    if (ucs_vfs_path_read_file(path, &strb) != UCS_OK) {
         return -ENOENT;
     }
 
@@ -126,6 +121,18 @@ static int ucs_vfs_fuse_read(const char *path, char *buf, size_t size,
     memcpy(buf, data + offset, nread);
 
     return nread;
+}
+
+static int ucs_vfs_fuse_readlink(const char *path, char *buf, size_t size)
+{
+    ucs_string_buffer_t strb;
+
+    ucs_string_buffer_init_fixed(&strb, buf, size);
+    if (ucs_vfs_path_get_link(path, &strb) != UCS_OK) {
+        return -ENOENT;
+    }
+
+    return 0;
 }
 
 static int ucs_vfs_fuse_readdir(const char *path, void *buf,
@@ -157,12 +164,36 @@ static int ucs_vfs_fuse_release(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
+static int ucs_vfs_fuse_write(const char *path, const char *buf, size_t size,
+                              off_t offset, struct fuse_file_info *fi)
+{
+    ucs_status_t status;
+
+    if (offset > 0) {
+        ucs_warn("cannot write to %s with non-zero offset", path);
+        return 0;
+    }
+
+    status = ucs_vfs_path_write_file(path, buf, size);
+    if (status == UCS_ERR_NO_ELEM) {
+        return -ENOENT;
+    } else if (status == UCS_ERR_INVALID_PARAM) {
+        return -EINVAL;
+    } else if (status != UCS_OK) {
+        return -EIO;
+    }
+
+    return size;
+}
+
 struct fuse_operations ucs_vfs_fuse_operations = {
-    .getattr = ucs_vfs_fuse_getattr,
-    .open    = ucs_vfs_fuse_open,
-    .read    = ucs_vfs_fuse_read,
-    .readdir = ucs_vfs_fuse_readdir,
-    .release = ucs_vfs_fuse_release,
+    .getattr  = ucs_vfs_fuse_getattr,
+    .open     = ucs_vfs_fuse_open,
+    .read     = ucs_vfs_fuse_read,
+    .readlink = ucs_vfs_fuse_readlink,
+    .readdir  = ucs_vfs_fuse_readdir,
+    .release  = ucs_vfs_fuse_release,
+    .write    = ucs_vfs_fuse_write,
 };
 
 static void ucs_vfs_fuse_main()
@@ -231,7 +262,14 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
     /* Create inotify channel */
     ucs_vfs_fuse_context.inotify_fd = inotify_init();
     if (ucs_vfs_fuse_context.inotify_fd < 0) {
-        ucs_error("inotify_init() failed: %m");
+        if ((errno == EMFILE) &&
+            (ucs_sys_check_fd_limit_per_process() == UCS_OK)) {
+            ucs_diag("inotify_init() failed: Too many inotify instances. "
+                     "Please increase sysctl fs.inotify.max_user_instances to "
+                     "avoid the error");
+        } else {
+            ucs_error("inotify_init() failed: %m");
+        }
         status = UCS_ERR_IO_ERROR;
         goto out;
     }
@@ -271,7 +309,10 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             break;
         }
 
-        if (nread < 0) {
+        if ((nread < 0) && (errno == EINTR)) {
+            ucs_trace("inotify read() failed: %m");
+            continue;
+        } else if (nread < 0) {
             ucs_error("inotify read() failed: %m");
             status = UCS_ERR_IO_ERROR;
             break;
@@ -286,7 +327,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
                 continue;
             }
 
-            ucs_debug("file '%s' created", event->name);
+            ucs_trace("file '%s' created", event->name);
             if (strcmp(event->name, watch_filename)) {
                 ucs_trace("ignoring inotify create event of '%s'", event->name);
                 continue;
@@ -311,6 +352,26 @@ out:
 #endif
 }
 
+static void ucs_vfs_fuse_thread_reset_affinity()
+{
+    ucs_sys_cpuset_t cpuset;
+    long i, num_cpus;
+
+    num_cpus = ucs_sys_get_num_cpus();
+    if (num_cpus == -1) {
+        return;
+    }
+
+    CPU_ZERO(&cpuset);
+    for (i = 0; i < num_cpus; ++i) {
+        CPU_SET(i, &cpuset);
+    }
+
+    if (ucs_sys_setaffinity(&cpuset) == -1) {
+        ucs_diag("failed to set affinity: %m");
+    }
+}
+
 static void *ucs_vfs_fuse_thread_func(void *arg)
 {
     ucs_vfs_sock_message_t vfs_msg_in, vfs_msg_out;
@@ -318,6 +379,12 @@ static void *ucs_vfs_fuse_thread_func(void *arg)
     ucs_status_t status;
     int connfd;
     int ret;
+
+    ucs_log_set_thread_name("f");
+
+    if (!ucs_global_opts.vfs_thread_affinity) {
+        ucs_vfs_fuse_thread_reset_affinity();
+    }
 
     connfd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (connfd < 0) {
@@ -347,8 +414,10 @@ again:
                 goto again;
             }
 
-            ucs_diag("failed to watch on '%s', VFS will be disabled",
-                     un_addr.sun_path);
+            if (!ucs_vfs_fuse_context.stop) {
+                ucs_diag("failed to watch on '%s': %s, VFS will be disabled",
+                         un_addr.sun_path, ucs_status_string(status));
+            }
         } else {
             ucs_warn("failed to connect to vfs socket '%s': %m",
                      un_addr.sun_path);
@@ -402,6 +471,7 @@ static void ucs_fuse_replace_fd_devnull()
 static void ucs_fuse_thread_stop()
 {
     sighandler_t orig_handler;
+    int ret;
 
     orig_handler = signal(SIGUSR1, ucs_empty_function);
 
@@ -412,8 +482,13 @@ static void ucs_fuse_thread_stop()
     /* If the thread is waiting in inotify loop, wake it */
     if (ucs_vfs_fuse_context.inotify_fd >= 0) {
 #ifdef HAVE_INOTIFY
-        inotify_rm_watch(ucs_vfs_fuse_context.inotify_fd,
-                         ucs_vfs_fuse_context.watch_desc);
+        ret = inotify_rm_watch(ucs_vfs_fuse_context.inotify_fd,
+                               ucs_vfs_fuse_context.watch_desc);
+        if (ret != 0) {
+            ucs_warn("inotify_rm_watch(fd=%d, wd=%d) failed: %m",
+                     ucs_vfs_fuse_context.inotify_fd,
+                     ucs_vfs_fuse_context.watch_desc);
+        }
 #endif
     }
 
@@ -426,15 +501,32 @@ static void ucs_fuse_thread_stop()
 
     pthread_mutex_unlock(&ucs_vfs_fuse_context.mutex);
 
-    pthread_join(ucs_vfs_fuse_context.thread_id, NULL);
+    ret = pthread_join(ucs_vfs_fuse_context.thread_id, NULL);
+    if (ret != 0) {
+        ucs_warn("pthread_join(0x%lx) failed: %m",
+                 ucs_vfs_fuse_context.thread_id);
+    }
+
     signal(SIGUSR1, orig_handler);
+}
+
+static void ucs_vfs_fuse_atfork_child()
+{
+    /* Reset thread context at fork, since doing inotify_rm_watch() from child
+       will prevent doing it later from the parent */
+    ucs_vfs_fuse_context.thread_id  = -1;
+    ucs_vfs_fuse_context.fuse       = NULL;
+    ucs_vfs_fuse_context.fuse_fd    = -1;
+    ucs_vfs_fuse_context.inotify_fd = -1;
+    ucs_vfs_fuse_context.watch_desc = -1;
 }
 
 UCS_STATIC_INIT
 {
     if (ucs_global_opts.vfs_enable) {
-        pthread_create(&ucs_vfs_fuse_context.thread_id, NULL,
-                       ucs_vfs_fuse_thread_func, NULL);
+        pthread_atfork(NULL, NULL, ucs_vfs_fuse_atfork_child);
+        ucs_pthread_create(&ucs_vfs_fuse_context.thread_id,
+                           ucs_vfs_fuse_thread_func, NULL, "fuse");
     }
 }
 

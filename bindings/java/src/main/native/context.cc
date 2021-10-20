@@ -84,8 +84,8 @@ Java_org_openucx_jucx_ucp_UcpContext_createContextNative(JNIEnv *env, jclass cls
 
     if (ucp_params.field_mask & UCP_PARAM_FIELD_TAG_SENDER_MASK) {
         field = env->GetFieldID(jucx_param_class, "tagSenderMask", "J");
-        ucp_params.estimated_num_eps = env->GetLongField(jucx_ctx_params,
-                                                         field);
+        ucp_params.tag_sender_mask = env->GetLongField(jucx_ctx_params,
+                                                       field);
     }
 
     ucp_config_t *config = NULL;

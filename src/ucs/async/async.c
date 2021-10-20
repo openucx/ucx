@@ -72,6 +72,8 @@ static int ucs_async_poll_tryblock(ucs_async_context_t *async)
 static ucs_async_ops_t ucs_async_poll_ops = {
     .init               = ucs_empty_function,
     .cleanup            = ucs_empty_function,
+    .is_from_async      =
+            (ucs_async_is_from_async_t)ucs_empty_function_return_zero,
     .block              = ucs_empty_function,
     .unblock            = ucs_empty_function,
     .context_init       = ucs_async_poll_init,
@@ -410,6 +412,11 @@ void ucs_async_context_destroy(ucs_async_context_t *async)
 {
     ucs_async_context_cleanup(async);
     ucs_free(async);
+}
+
+int ucs_async_is_from_async(const ucs_async_context_t *async)
+{
+    return ucs_async_method_call(async->mode, is_from_async);
 }
 
 static ucs_status_t

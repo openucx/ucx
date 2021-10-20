@@ -216,6 +216,7 @@ static ucs_mpool_ops_t uct_rocm_ipc_signal_desc_mpool_ops = {
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = uct_rocm_ipc_signal_desc_init,
     .obj_cleanup   = uct_rocm_ipc_signal_desc_cleanup,
+    .obj_str       = NULL
 };
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worker,
@@ -224,8 +225,9 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, md, worker,
-                              params, tl_config UCS_STATS_ARG(params->stats_root)
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, NULL,
+                              md, worker, params,
+                              tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
 
     status = ucs_mpool_init(&self->signal_pool,

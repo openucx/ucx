@@ -21,15 +21,15 @@
  *
  * Complexity:
  *  - O(1) for getting head element
- *  - O(Nelems) for memory, with the hard bound of sendwindowsize. In order insertion uses no memory. 
+ *  - O(Nelems) for memory, with the hard bound of sendwindowsize. In order insertion uses no memory.
  *  - O(k) insertion, where k is number of holes. Number of holes is expected to be
  *  something like SendWindowSize/BurstPacketSize. With win 1024 and burst 16 we
  *  get to 64 holes. In reality the number should be much less because:
  *  - each route send 'bursts' in order
  *  - it takes roughly the same time for each route
  *  - number of routes (burst generatos is expected to be small)
- *  
- *  so in the end number of holes is proportional to number of routes and time difference 
+ *
+ *  so in the end number of holes is proportional to number of routes and time difference
  *  between alternative paths. Better math is welcome :P
  *
  *  Organization
@@ -149,7 +149,7 @@ ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head);
 void ucs_frag_list_dump(ucs_frag_list_t *head, int how);
 
 
-static inline ucs_frag_list_sn_t ucs_frag_list_sn(ucs_frag_list_t *head) 
+static inline ucs_frag_list_sn_t ucs_frag_list_sn(ucs_frag_list_t *head)
 {
     return head->head_sn;
 }
@@ -197,7 +197,7 @@ ucs_frag_list_insert(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
     /* return either dup or slow */
 #ifdef ENABLE_STATS
     ret = ucs_frag_list_insert_slow(head, elem, sn);
-    UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_OUT, 
+    UCS_STATS_UPDATE_COUNTER(head->stats, UCS_FRAG_LIST_STAT_GAP_OUT,
                              ret != UCS_FRAG_LIST_INSERT_DUP ? head->list_count : 0);
     return ret;
 #else

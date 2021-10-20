@@ -733,3 +733,40 @@ UCS_TEST_P(test_ucp_worker_thread_mode, query)
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_thread_mode, all, "all")
+
+class test_ucp_worker_address_query : public ucp_test {
+public:
+    test_ucp_worker_address_query()
+    {
+        if (get_variant_value(0)) {
+            modify_config("UNIFIED_MODE", "y");
+        }
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 0, "");
+        add_variant_with_value(variants, UCP_FEATURE_TAG, 1, "unified");
+    }
+};
+
+UCS_TEST_P(test_ucp_worker_address_query, query)
+{
+    ucp_worker_attr_t worker_attr = {};
+
+    worker_attr.field_mask = UCP_WORKER_ATTR_FIELD_ADDRESS;
+    ucs_status_t status    = ucp_worker_query(sender().worker(), &worker_attr);
+    ASSERT_EQ(UCS_OK, status);
+    ASSERT_TRUE(worker_attr.address != NULL);
+
+    ucp_worker_address_attr_t address_attr = {};
+    address_attr.field_mask = UCP_WORKER_ADDRESS_ATTR_FIELD_UID;
+    status                  = ucp_worker_address_query(worker_attr.address,
+                                                       &address_attr);
+    ASSERT_EQ(UCS_OK, status);
+
+    EXPECT_EQ(sender().worker()->uuid, address_attr.worker_uid);
+    ucp_worker_release_address(sender().worker(), worker_attr.address);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_worker_address_query)

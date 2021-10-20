@@ -8,30 +8,59 @@
 #define UCP_WORKER_INL_
 
 #include "ucp_worker.h"
+#include "ucp_rkey.inl"
 
 #include <ucp/core/ucp_request.h>
 #include <ucp/wireup/address.h>
 #include <ucs/datastruct/ptr_map.inl>
 
 
-static UCS_F_ALWAYS_INLINE khint_t
-ucp_worker_rkey_config_hash_func(ucp_rkey_config_key_t rkey_config_key)
+UCS_PTR_MAP_IMPL(ep, 1);
+
+
+KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t,
+           ucp_worker_cfg_index_t, 1, ucp_rkey_config_hash_func,
+           ucp_rkey_config_is_equal);
+
+/**
+ * Resolve remote key configuration key to a remote key configuration index.
+ *
+ * @param [in]  worker          UCP worker to resolve configuration on.
+ * @param [in]  key             Rkey configuration key.
+ * @param [out] cfg_index_p     Filled with configuration index in the worker.
+ */
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_worker_rkey_config_get(
+        ucp_worker_h worker, const ucp_rkey_config_key_t *key,
+        const ucs_sys_dev_distance_t *lanes_distance,
+        ucp_worker_cfg_index_t *cfg_index_p)
 {
-    return (khint_t)rkey_config_key.md_map ^ rkey_config_key.ep_cfg_index ^
-           (rkey_config_key.mem_type << 16);
+    khiter_t khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
+                             *key);
+    if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
+        *cfg_index_p = kh_val(&worker->rkey_config_hash, khiter);
+        return UCS_OK;
+    }
+
+    return ucp_worker_add_rkey_config(worker, key, lanes_distance, cfg_index_p);
+}
+
+static UCS_F_ALWAYS_INLINE khint_t
+ucp_worker_mpool_hash_func(ucp_worker_mpool_key_t mpool_key)
+{
+    return (khint_t)mpool_key.mem_type ^ (mpool_key.sys_dev << 8);
 }
 
 static UCS_F_ALWAYS_INLINE int
-ucp_worker_rkey_config_is_equal(ucp_rkey_config_key_t rkey_config_key1,
-                                ucp_rkey_config_key_t rkey_config_key2)
+ucp_worker_mpool_key_is_equal(ucp_worker_mpool_key_t mpool_key1,
+                              ucp_worker_mpool_key_t mpool_key2)
 {
-    return (rkey_config_key1.md_map == rkey_config_key2.md_map) &&
-           (rkey_config_key1.ep_cfg_index == rkey_config_key2.ep_cfg_index) &&
-           (rkey_config_key1.mem_type == rkey_config_key2.mem_type);
+    return (mpool_key1.sys_dev == mpool_key2.sys_dev) &&
+           (mpool_key1.mem_type == mpool_key2.mem_type);
 }
 
-KHASH_IMPL(ucp_worker_rkey_config, ucp_rkey_config_key_t, ucp_worker_cfg_index_t,
-           1, ucp_worker_rkey_config_hash_func, ucp_worker_rkey_config_is_equal);
+KHASH_IMPL(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t,
+           1, ucp_worker_mpool_hash_func, ucp_worker_mpool_key_is_equal);
+
 
 /**
  * @return Worker name
@@ -52,9 +81,9 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
     ucs_status_t status;
     void *ptr;
 
-    ucs_assert(id != UCP_EP_ID_INVALID);
-    status = ucs_ptr_map_get(&worker->ptr_map, id, 0, &ptr);
-    if (ucs_unlikely(status != UCS_OK)) {
+    ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
+    status = UCS_PTR_MAP_GET(ep, &worker->ep_map, id, 0, &ptr);
+    if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }
 
@@ -67,7 +96,8 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 static UCS_F_ALWAYS_INLINE int
 ucp_worker_keepalive_is_enabled(ucp_worker_h worker)
 {
-    return worker->context->config.keepalive_interval != 0;
+    return (worker->context->config.ext.keepalive_num_eps != 0) &&
+           (worker->context->config.ext.keepalive_interval != UCS_TIME_INFINITY);
 }
 
 /**
@@ -181,27 +211,6 @@ ucp_worker_is_tl_2sockaddr(ucp_worker_h worker, ucp_rsc_index_t rsc_index)
 {
     return !!(ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags &
               UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR);
-}
-
-/**
- * Resolve remote key configuration key to a remote key configuration index
- *
- * @param [in]  worker       UCP worker to resolve configuration on
- * @param [in]  key          Rkey configuration key
- * @param [out] cfg_index_p  Filled with configuration index in the worker.
- */
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_worker_get_rkey_config(ucp_worker_h worker, const ucp_rkey_config_key_t *key,
-                           ucp_worker_cfg_index_t *cfg_index_p)
-{
-    khiter_t khiter = kh_get(ucp_worker_rkey_config, &worker->rkey_config_hash,
-                             *key);
-    if (ucs_likely(khiter != kh_end(&worker->rkey_config_hash))) {
-        *cfg_index_p = kh_val(&worker->rkey_config_hash, khiter);
-        return UCS_OK;
-    }
-
-    return ucp_worker_add_rkey_config(worker, key, cfg_index_p);
 }
 
 static UCS_F_ALWAYS_INLINE unsigned

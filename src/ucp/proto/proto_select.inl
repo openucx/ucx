@@ -45,8 +45,9 @@ ucp_proto_thresholds_search(const ucp_proto_threshold_elem_t *thresholds,
 static UCS_F_ALWAYS_INLINE uint8_t
 ucp_proto_select_op_attr_to_flags(uint32_t op_attr_mask)
 {
-    UCS_STATIC_ASSERT(UCP_PROTO_SELECT_OP_ATTR_MASK /
-                      UCP_PROTO_SELECT_OP_ATTR_BASE <= UINT8_MAX);
+    UCS_STATIC_ASSERT(
+            (UCP_PROTO_SELECT_OP_ATTR_MASK / UCP_PROTO_SELECT_OP_ATTR_BASE) <
+            UCP_PROTO_SELECT_OP_FLAGS_BASE);
     return op_attr_mask / UCP_PROTO_SELECT_OP_ATTR_BASE;
 }
 
@@ -102,7 +103,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
                             ucp_operation_id_t op_id, uint32_t op_attr_mask,
                             ucp_dt_class_t dt_class,
-                            const ucs_memory_info_t *mem_info, uint8_t sg_count)
+                            const ucp_memory_info_t *mem_info, uint8_t sg_count)
 {
     if (dt_class == UCP_DATATYPE_CONTIG) {
         ucs_assert(sg_count == 1);
@@ -130,7 +131,7 @@ ucp_proto_select_is_short(ucp_ep_h ep,
 {
     return ucs_likely(length <= proto_short->max_length_unknown_mem) ||
            ((length <= proto_short->max_length_host_mem) &&
-            ucp_memory_type_cache_is_empty(ep->worker->context));
+            ucs_memtype_cache_is_empty());
 }
 
 #endif

@@ -14,7 +14,7 @@
 
 #include <uct/base/uct_log.h>
 #include <uct/base/uct_iov.inl>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/math.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
@@ -27,28 +27,12 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
     uct_cuda_ipc_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_cuda_ipc_iface_t);
-    pid_t pid;
-    ucs_time_t start_time;
-    char proc[32];
-    ucs_status_t status;
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
-    pid = *(const pid_t*)params->iface_addr;
-
-    uct_ep_get_process_proc_dir(proc, sizeof(proc), pid);
-    status = ucs_sys_get_file_time(proc, UCS_SYS_FILE_TIME_CTIME,
-                                   &start_time);
-    if (status != UCS_OK) {
-        ucs_error("failed to get process start time");
-        return status;
-    }
-
-    self->keepalive = uct_ep_keepalive_create(pid, start_time);
-    if (self->keepalive == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
+    self->remote_pid = *(const pid_t*)params->iface_addr;
+    self->keepalive  = NULL;
 
     return UCS_OK;
 }
@@ -192,5 +176,6 @@ ucs_status_t uct_cuda_ipc_ep_check(const uct_ep_h tl_ep, unsigned flags,
 {
     uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
 
-    return uct_ep_keepalive_check(tl_ep, ep->keepalive, flags, comp);
+    return uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->remote_pid, flags,
+                                  comp);
 }

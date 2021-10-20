@@ -46,9 +46,11 @@ SUBDIRS += \
 	src/tools/info \
 	src/tools/perf \
 	src/tools/profile \
+	bindings/go \
 	bindings/java \
 	test/apps \
-	examples
+	examples \
+	cmake
 
 if HAVE_GTEST
 SUBDIRS += test/gtest

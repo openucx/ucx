@@ -425,6 +425,7 @@ typedef struct uct_rc_mlx5_iface_common {
     struct {
         uint8_t                        atomic_fence_flag;
         uct_rc_mlx5_srq_topo_t         srq_topo;
+        uint8_t                        log_ack_req_freq;
     } config;
     UCS_STATS_NODE_DECLARE(stats)
 } uct_rc_mlx5_iface_common_t;
@@ -443,15 +444,14 @@ typedef struct uct_rc_mlx5_iface_common_config {
         size_t                           mp_num_strides;
     } tm;
     unsigned                             exp_backoff;
+    uint8_t                              log_ack_req_freq;
     UCS_CONFIG_STRING_ARRAY_FIELD(types) srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
 
-UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t,
-                  uct_rc_iface_ops_t*,
-                  uct_md_h, uct_worker_h,
-                  const uct_iface_params_t*,
-                  uct_rc_iface_common_config_t*,
+UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
+                  uct_rc_iface_ops_t*, uct_md_h, uct_worker_h,
+                  const uct_iface_params_t*, uct_rc_iface_common_config_t*,
                   uct_rc_mlx5_iface_common_config_t*,
                   uct_ib_iface_init_attr_t*);
 
@@ -505,6 +505,11 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t,
        (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
        _length = _pack_cb(hdr, _arg); \
    }
+
+
+/* Max value for log_ack_req_freq field in QPC */
+#define UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ 8
+
 
 #if IBV_HW_TM
 void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,

@@ -87,9 +87,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
                                     dt_count, 0, req->send.length, msg_config,
                                     proto);
     if (ucs_likely(status == UCS_OK)) {
-        /* Eager send initialized successfuly */
+        /* Eager send initialized successfully */
         if (req->flags & UCP_REQUEST_FLAG_SYNC) {
-            ucp_request_id_alloc(req);
+            ucp_send_request_id_alloc(req);
             UCP_EP_STAT_TAG_OP(req->send.ep, EAGER_SYNC);
         } else {
             UCP_EP_STAT_TAG_OP(req->send.ep, EAGER);
@@ -113,7 +113,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
      * release the request and return the status.
      * Otherwise, return the request.
      */
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
         ucp_request_imm_cmpl_param(param, req, send);
     }
@@ -262,7 +262,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
             ucp_request_send_check_status(status, ret, goto out);
         }
     } else {
-        datatype = ucp_dt_make_contig(1);
+        datatype      = ucp_dt_make_contig(1);
+        contig_length = count;
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -298,11 +299,12 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
                  ucp_ep_h ep, const void *buffer, size_t count,
                  ucp_tag_t tag, const ucp_request_param_t *param)
 {
-    ucp_worker_h worker = ep->worker;
+    ucp_worker_h worker  = ep->worker;
+    size_t contig_length = 0;
+    uintptr_t datatype   = ucp_request_param_datatype(param);
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
-    uintptr_t datatype;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(
@@ -313,12 +315,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 
     ucs_trace_req("send_sync_nbx buffer %p count %zu tag %"PRIx64" to %s",
                   buffer, count, tag, ucp_ep_peer_name(ep));
-
-    datatype = ucp_request_param_datatype(param);
-    if (!ucp_ep_config_test_rndv_support(ucp_ep_config(ep))) {
-        ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
-        goto out;
-    }
 
     status = ucp_ep_resolve_remote_id(ep, ucp_ep_config(ep)->tag.lane);
     if (status != UCS_OK) {
@@ -332,12 +328,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 
     if (worker->context->config.ext.proto_enable) {
         req->send.msg_proto.tag = tag;
+        if (UCP_DT_IS_CONTIG(datatype)) {
+            contig_length = ucp_contig_dt_length(datatype, count);
+        }
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_TAG_SEND_SYNC, buffer, count,
-                                        datatype,
-                                        ucp_contig_dt_length(datatype, count),
-                                        param);
+                                        datatype, contig_length, param);
     } else {
         ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
                               UCP_REQUEST_FLAG_SYNC, param);

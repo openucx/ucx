@@ -9,7 +9,7 @@
 #define UCT_KNEM_MD_H_
 
 #include <ucs/config/types.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
 #include <ucs/memory/rcache.h>
 #include <uct/base/uct_md.h>

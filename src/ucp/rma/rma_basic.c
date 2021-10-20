@@ -42,12 +42,10 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
         ucp_memcpy_pack_context_t pack_ctx;
         pack_ctx.src    = req->send.buffer;
         pack_ctx.length = ucs_min(req->send.length, rma_config->max_put_bcopy);
-        packed_len = UCS_PROFILE_CALL(uct_ep_put_bcopy,
-                                      ep->uct_eps[lane],
-                                      ucp_memcpy_pack,
-                                      &pack_ctx,
-                                      req->send.rma.remote_addr,
-                                      rkey->cache.rma_rkey);
+        packed_len      = UCS_PROFILE_CALL(uct_ep_put_bcopy, ep->uct_eps[lane],
+                                           ucp_memcpy_pack_cb, &pack_ctx,
+                                           req->send.rma.remote_addr,
+                                           rkey->cache.rma_rkey);
         status = (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
     } else {
         uct_iov_t iov;
@@ -66,12 +64,10 @@ static ucs_status_t ucp_rma_basic_progress_put(uct_pending_req_t *self)
                                   req->send.rma.remote_addr,
                                   rkey->cache.rma_rkey,
                                   &req->send.state.uct_comp);
-        ucp_request_send_state_advance(req, NULL, UCP_REQUEST_SEND_PROTO_RMA,
-                                       status);
     }
 
     return ucp_rma_request_advance(req, packed_len, status,
-                                   UCP_REQUEST_ID_INVALID);
+                                   UCS_PTR_MAP_KEY_INVALID);
 }
 
 static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
@@ -113,13 +109,8 @@ static ucs_status_t ucp_rma_basic_progress_get(uct_pending_req_t *self)
                                   &req->send.state.uct_comp);
     }
 
-    if (status == UCS_INPROGRESS) {
-        ucp_request_send_state_advance(req, 0, UCP_REQUEST_SEND_PROTO_RMA,
-                                       UCS_INPROGRESS);
-    }
-
     return ucp_rma_request_advance(req, frag_length, status,
-                                   UCP_REQUEST_ID_INVALID);
+                                   UCS_PTR_MAP_KEY_INVALID);
 }
 
 ucp_rma_proto_t ucp_rma_basic_proto = {

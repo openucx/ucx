@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -14,16 +15,67 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <ucs/sys/stubs.h>
+#include <ucs/stats/stats_fwd.h>
+
+#include "stats_fwd.h"
 
 BEGIN_C_DECLS
 
 /** @file stats.h */
 
+/* Unassigned class id */
+#define UCS_STATS_CLASS_ID_INVALID (-1)
+
+typedef struct {
+    /* Counter class name */
+    const char *class_name;
+
+    /* Counter name */
+    const char *counter_name;
+
+} ucs_stats_aggrgt_counter_name_t;
+
+
 void ucs_stats_init();
 void ucs_stats_cleanup();
 void ucs_stats_dump();
 int ucs_stats_is_active();
-#include "stats_fwd.h"
+
+/**
+ * A UCX statistics API function to return the aggregate-sum of all counters
+ * from all workers/interfaces for a compact statistics trace.
+ * Used for Score-P UCX plugin to collect a compact trace of the counters.
+ *
+ * @param [out] counters     The aggregate-sum of all counters of each class/type.
+ * @param [in]  max_counters The number of elements in aggregate_sum_counters.
+ *
+ * Complexity: O(n) / recursive.
+ *
+ * @return: The actual number of aggregate_sum counters in the output
+ *          buffer.
+ *
+ * Remarks: The function calls a recursive function.
+ */
+size_t ucs_stats_aggregate(ucs_stats_counter_t *counters, size_t max_counters);
+
+
+/**
+ * A UCX statistics API to get the names of counters on the last call to
+ * ucs_stats_aggregate().
+ *
+ * Note, that ucs_stats_aggregate() must be called before calling this
+ * function.
+ *
+ * @param [out] names_p The aggregate-sum counters names database
+ * @param [out] size_p  number of counters in database
+ *
+ * Complexity: O(1)
+ *
+ */
+void ucs_stats_aggregate_get_counter_names(
+        const ucs_stats_aggrgt_counter_name_t **names_p, size_t *size_p);
+
+
 #ifdef ENABLE_STATS
 
 #include "libstats.h"

@@ -49,6 +49,11 @@ void ucs_async_pipe_destroy(ucs_async_pipe_t *p)
     close(p->write_fd);
 }
 
+void ucs_async_pipe_invalidate(ucs_async_pipe_t *p)
+{
+    p->read_fd = p->write_fd = UCS_ASYNC_PIPE_INVALID_FD;
+}
+
 void ucs_async_pipe_push(ucs_async_pipe_t *p)
 {
     int dummy = 0;

@@ -65,7 +65,7 @@
 #define UCT_TCP_EP_DEFAULT_KEEPALIVE_IDLE    10
 
 /* The seconds between individual keepalive probes */
-#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   1
+#define UCT_TCP_EP_DEFAULT_KEEPALIVE_INTVL   2
 
 
 /**
@@ -109,7 +109,9 @@ enum {
      * method. */
     UCT_TCP_EP_FLAG_CONNECT_TO_EP      = UCS_BIT(8),
     /* EP is on EP PTR map. */
-    UCT_TCP_EP_FLAG_ON_PTR_MAP         = UCS_BIT(9)
+    UCT_TCP_EP_FLAG_ON_PTR_MAP         = UCS_BIT(9),
+    /* EP has some operations done without flush */
+    UCT_TCP_EP_FLAG_NEED_FLUSH         = UCS_BIT(10)
 };
 
 
@@ -167,7 +169,7 @@ typedef enum uct_tcp_cm_conn_event {
     /* Connection acknowledgment from a EP that accepts a connection from
      * initiator of a connection request. */
     UCT_TCP_CM_CONN_ACK               = UCS_BIT(1),
-    /* Connection acknowledgment + Connection request. The mesasge is sent
+    /* Connection acknowledgment + Connection request. The message is sent
      * from a EP that accepts remote connection when it was in
      * `UCT_TCP_EP_CONN_STATE_CONNECTING` state (i.e. original
      * `UCT_TCP_CM_CONN_REQ` wasn't sent yet) and want to have RX capability
@@ -181,8 +183,8 @@ typedef enum uct_tcp_cm_conn_event {
  * TCP connection request packet flags
  */
 enum {
-    /* Inditicates whether both EPs of the connection has to use CONNECT_TO_EP
-     * CONNECT_TO_EP of connection establishmnet */
+    /* Indicates whether both EPs of the connection has to use CONNECT_TO_EP
+     * CONNECT_TO_EP of connection establishment */
     UCT_TCP_CM_CONN_REQ_PKT_FLAG_CONNECT_TO_EP = UCS_BIT(0)
 };
 
@@ -217,7 +219,7 @@ typedef enum uct_tcp_ep_am_id {
     UCT_TCP_EP_PUT_REQ_AM_ID   = UCT_AM_ID_MAX + 1,
     /* AM ID reserved for TCP internal PUT ACK message */
     UCT_TCP_EP_PUT_ACK_AM_ID   = UCT_AM_ID_MAX + 2,
-    /* AM ID reserved for TCP internal PUT ACK message */
+    /* AM ID reserved for TCP internal keepalive message */
     UCT_TCP_EP_KEEPALIVE_AM_ID = UCT_AM_ID_MAX + 3
 } uct_tcp_ep_am_id_t;
 
@@ -281,12 +283,45 @@ typedef struct uct_tcp_ep_zcopy_tx {
 
 
 /**
+ * TCP device address flags
+ */
+typedef enum uct_tcp_device_addr_flags {
+    /**
+     * Device address is extended by additional information:
+     * @ref uct_iface_local_addr_ns_t for loopback reachability
+     */
+    UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK = UCS_BIT(0)
+} uct_tcp_device_addr_flags_t;
+
+
+/**
+ * TCP device address
+ */
+typedef struct uct_tcp_device_addr {
+    uint8_t flags; /* Flags of type @ref uct_tcp_device_addr_flags_t */
+    uint8_t sa_family; /* Address family of packed address */
+    /* The following packed fields follow:
+     * 1. in_addr/in6_addr structure in case of non-loopback interface
+     * 2. @ref uct_iface_local_addr_ns_t in case of loopback interface
+     */
+} UCS_S_PACKED uct_tcp_device_addr_t;
+
+
+/**
+ * TCP iface address
+ */
+typedef struct uct_tcp_iface_addr {
+    uint16_t port; /* Listening port of iface */
+} UCS_S_PACKED uct_tcp_iface_addr_t;
+
+
+/**
  * TCP endpoint address
  */
 typedef struct uct_tcp_ep_addr {
-    in_port_t                     iface_addr;     /* Interface address */
-    ucs_ptr_map_key_t             ptr_map_key;    /* PTR map key, used by EPs created with
-                                                   * CONNECT_TO_EP method */
+    uct_tcp_iface_addr_t iface_addr; /* TCP iface address */
+    ucs_ptr_map_key_t    ptr_map_key; /* PTR map key, used by EPs created with
+                                       * CONNECT_TO_EP method */
 } UCS_S_PACKED uct_tcp_ep_addr_t;
 
 
@@ -318,6 +353,9 @@ struct uct_tcp_ep {
 };
 
 
+UCS_PTR_MAP_DEFINE(tcp_ep, 0);
+
+
 /**
  * TCP interface
  */
@@ -326,8 +364,9 @@ typedef struct uct_tcp_iface {
     int                           listen_fd;         /* Server socket */
     ucs_conn_match_ctx_t          conn_match_ctx;    /* Connection matching context that contains EPs
                                                       * created with CONNECT_TO_IFACE method */
-    ucs_ptr_map_t                 ep_ptr_map;        /* EP PTR map that contains EPs created
-                                                      * with CONNECT_TO_EP method */
+    UCS_PTR_MAP_T(tcp_ep)         ep_ptr_map;        /* EP PTR map that contains
+                                                      * EPs created with
+                                                      * CONNECT_TO_EP method */
     ucs_list_link_t               ep_list;           /* List of endpoints */
     char                          if_name[IFNAMSIZ]; /* Network interface name */
     ucs_sys_event_set_t           *event_set;        /* Event set identifier */
@@ -369,7 +408,7 @@ typedef struct uct_tcp_iface {
             ucs_time_t            idle;              /* The time the connection needs to remain
                                                       * idle before TCP starts sending keepalive
                                                       * probes (TCP_KEEPIDLE socket option) */
-            unsigned              cnt;               /* The maximum number of keepalive probes TCP
+            unsigned long         cnt;               /* The maximum number of keepalive probes TCP
                                                       * should send before dropping the connection
                                                       * (TCP_KEEPCNT socket option). */
             ucs_time_t            intvl;             /* The time between individual keepalive
@@ -407,10 +446,26 @@ typedef struct uct_tcp_iface_config {
     ucs_range_spec_t               port_range;
     struct {
         ucs_time_t                 idle;
-        unsigned                   cnt;
+        unsigned long              cnt;
         ucs_time_t                 intvl;
     } keepalive;
 } uct_tcp_iface_config_t;
+
+
+typedef struct uct_tcp_ep_pending_req {
+    uct_pending_req_t           super;
+    uct_tcp_ep_t                *ep;
+    struct {
+        uct_tcp_cm_conn_event_t event;
+        uint8_t                 log_error;
+    } cm;
+} uct_tcp_ep_pending_req_t;
+
+
+typedef struct uct_tcp_ep_pending_purge_arg {
+    uct_pending_purge_callback_t cb;
+    void                         *arg;
+} uct_tcp_ep_pending_purge_arg_t;
 
 
 extern uct_component_t uct_tcp_component;
@@ -421,9 +476,6 @@ extern const uct_tcp_ep_progress_t uct_tcp_ep_progress_rx_cb[];
 
 ucs_status_t uct_tcp_netif_caps(const char *if_name, double *latency_p,
                                 double *bandwidth_p);
-
-ucs_status_t uct_tcp_netif_inaddr(const char *if_name, struct sockaddr_in *ifaddr,
-                                  struct sockaddr_in *netmask);
 
 ucs_status_t uct_tcp_netif_is_default(const char *if_name, int *result_p);
 
@@ -452,6 +504,10 @@ ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
                              const struct sockaddr_in *dest_addr,
                              uct_tcp_ep_t **ep_p);
+
+ucs_status_t uct_tcp_ep_set_dest_addr(const uct_device_addr_t *dev_addr,
+                                      const uct_iface_addr_t *iface_addr,
+                                      struct sockaddr *dest_addr);
 
 uint64_t uct_tcp_ep_get_cm_id(const uct_tcp_ep_t *ep);
 
@@ -528,6 +584,8 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
 ucs_status_t
 uct_tcp_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
+ucs_status_t uct_tcp_cm_send_event_pending_cb(uct_pending_req_t *self);
+
 ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                    uct_tcp_cm_conn_event_t event,
                                    int log_error);
@@ -566,6 +624,13 @@ ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
 
 int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface);
+
+static UCS_F_ALWAYS_INLINE int uct_tcp_ep_ctx_buf_empty(uct_tcp_ep_ctx_t *ctx)
+{
+    ucs_assert((ctx->length == 0) || (ctx->buf != NULL));
+
+    return ctx->length == 0;
+}
 
 static inline void uct_tcp_iface_outstanding_inc(uct_tcp_iface_t *iface)
 {

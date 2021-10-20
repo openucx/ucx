@@ -57,13 +57,21 @@ public:
     struct event_ctx {
         uct_ib_async_event_wait_t super;
         volatile bool             got;
+        uct_ib_device_t           *dev;
     };
 
     static unsigned last_wqe_check_cb(void *arg) {
         event_ctx *event = (event_ctx *)arg;
-        event->got       = true;
-        ucs_callbackq_remove_safe(event->super.cbq, event->super.cb_id);
+        int cb_id;
+
+        ucs_spin_lock(&event->dev->async_event_lock);
+        cb_id              = event->super.cb_id;
         event->super.cb_id = UCS_CALLBACKQ_ID_NULL;
+        ucs_spin_unlock(&event->dev->async_event_lock);
+
+        EXPECT_FALSE(event->got);
+        event->got = true;
+        ucs_callbackq_remove_safe(event->super.cbq, cb_id);
         return 1;
     }
 
@@ -73,7 +81,7 @@ public:
         return &ucs_derived_of(e.md(), uct_ib_md_t)->dev;
     }
 
-    bool wait_for_last_wqe_event(entity &e, bool before, bool progress = true) {
+    bool wait_for_last_wqe_event(entity &e, bool before) {
         uint32_t qp_num = m_qp->qp_num();
         ucs_time_t deadline;
         ucs_status_t status;
@@ -81,6 +89,7 @@ public:
         m_event.got       = false;
         m_event.super.cb  = last_wqe_check_cb;
         m_event.super.cbq = &e.worker()->progress_q;
+        m_event.dev       = dev(e);
 
         if (before) {
             /* move QP to error state before scheduling event callback */
@@ -91,22 +100,15 @@ public:
         /* schedule event callback */
         status = uct_ib_device_async_event_wait(dev(e),
                 IBV_EVENT_QP_LAST_WQE_REACHED, qp_num, &m_event.super);
-        ASSERT_UCS_OK_OR_INPROGRESS(status);
-        if (status == UCS_OK) {
-            /* event already arrived */
-            return true;
-        }
+        ASSERT_UCS_OK(status);
+
+        /* event should not be called directly, but only from progress */
+        usleep(1000);
+        EXPECT_FALSE(m_event.got);
 
         if (!before) {
             /* move QP to error state after scheduling event callback */
             m_qp->to_err();
-        }
-
-        if (!progress) {
-            /* wait for last_wqe event arrival */
-            usleep(500);
-            /* without progress callback wan't be called */
-            return !m_event.got;
         }
 
         /* wait for callback */
@@ -308,7 +310,7 @@ public:
         m_e.reset(create_entity(0));
     }
 
-    bool wait_for_last_wqe_event(bool before, bool progress = true) {
+    bool wait_for_last_wqe_event(bool before) {
         ucs_status_t status;
         bool ret;
 
@@ -318,8 +320,7 @@ public:
                 IBV_EVENT_QP_LAST_WQE_REACHED, m_qp->qp_num());
         ASSERT_UCS_OK(status);
 
-        ret = uct_test_event_base::wait_for_last_wqe_event(*m_e, before,
-                                                           progress);
+        ret = uct_test_event_base::wait_for_last_wqe_event(*m_e, before);
 
         uct_ib_device_async_event_unregister(dev(*m_e),
                 IBV_EVENT_QP_LAST_WQE_REACHED, m_qp->qp_num());
@@ -429,11 +430,6 @@ UCS_TEST_P(uct_qp_test_event, last_wqe_cb_after_subscribe)
 UCS_TEST_P(uct_qp_test_event, last_wqe_cb_before_subscribe)
 {
     ASSERT_TRUE(wait_for_last_wqe_event(true));
-}
-
-UCS_TEST_P(uct_qp_test_event, last_wqe_cb_no_progress)
-{
-    ASSERT_TRUE(wait_for_last_wqe_event(false, false));
 }
 
 UCT_INSTANTIATE_RC_TEST_CASE(uct_qp_test_event);

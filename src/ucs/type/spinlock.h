@@ -138,6 +138,10 @@ static inline void ucs_recursive_spin_unlock(ucs_recursive_spinlock_t *lock)
     }
 }
 
+int ucs_spinlock_is_held(ucs_spinlock_t *lock);
+
+int ucs_recursive_spinlock_is_held(const ucs_recursive_spinlock_t *lock);
+
 END_C_DECLS
 
 #endif

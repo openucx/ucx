@@ -28,6 +28,7 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return NULL);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d", tag, tag_mask,
                   rem);
@@ -43,10 +44,11 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
             info->length = ((ucp_eager_first_hdr_t*)(rdesc + 1))->total_len;
         } else {
             ucs_assert(flags & UCP_RECV_DESC_FLAG_RNDV);
-            info->length = ucp_tag_rndv_rts_from_rdesc(rdesc)->super.size;
+            info->length = ucp_tag_rndv_rts_from_rdesc(rdesc)->size;
         }
     }
 
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 
     return rdesc;
 }

@@ -471,6 +471,45 @@ UCS_TEST_P(test_ud, crep_ack_drop) {
     m_e2->flush();
 }
 
+static const char resend_iov_buf[] = "abc";
+
+static ucs_status_t
+test_ud_am_handler(void *arg, void *data, size_t length, unsigned flags)
+{
+    *(uint32_t*)arg = 1;
+    EXPECT_STREQ(resend_iov_buf, (char*)data);
+    return UCS_OK;
+}
+
+UCS_TEST_P(test_ud, resend_iov)
+{
+    connect_to_iface();
+
+    ep(m_e2, 0)->rx.rx_hook = drop_rx;
+    rx_drop_count           = 0;
+
+    UCS_TEST_GET_BUFFER_IOV(iov, iovcnt, resend_iov_buf, sizeof(resend_iov_buf),
+                            UCT_MEM_HANDLE_NULL, 1);
+
+    uint32_t received = 0;
+    ASSERT_UCS_OK(uct_iface_set_am_handler(m_e2->iface(), 0, test_ud_am_handler,
+                                           &received, UCT_CB_FLAG_ASYNC));
+
+    ucs_status_t status;
+    do {
+        status = uct_ep_am_short_iov(m_e1->ep(0), 0, iov, iovcnt);
+        progress();
+    } while (status == UCS_ERR_NO_RESOURCE);
+    ASSERT_UCS_OK(status);
+
+    wait_for_flag(&rx_drop_count);
+    ep(m_e2, 0)->rx.rx_hook = uct_ud_ep_null_hook;
+    wait_for_flag(&received);
+
+    m_e1->flush();
+    m_e2->flush();
+}
+
 UCS_TEST_P(test_ud, creq_flush) {
     ucs_status_t status;
 

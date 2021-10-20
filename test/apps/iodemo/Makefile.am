@@ -11,7 +11,7 @@ noinst_HEADERS = \
 
 io_demo_LDFLAGS  = -ldl
 
-if HAVE_CUDA
+if IODEMO_CUDA
 io_demo_CUDA_LIBS     = $(CUDA_LIBS)
 io_demo_LDFLAGS      += $(CUDA_LDFLAGS)
 io_demo_CUDA_CPPFLAGS = $(CUDA_CPPFLAGS) -DHAVE_CUDA

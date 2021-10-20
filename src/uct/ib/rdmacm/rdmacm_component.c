@@ -24,6 +24,14 @@ static ucs_config_field_t uct_rdmacm_cm_config_table[] = {
      "Timeout for RDMA address and route resolve operations",
      ucs_offsetof(uct_rdmacm_cm_config_t, timeout), UCS_CONFIG_TYPE_TIME},
 
+    {"RESERVED_QPN", "try",
+     "Reserved qpn enable mode:\n"
+     "  yes  - Always use reserved qpn, app fail if it's not supported\n"
+     "  try  - Use reserved qpn if it's supported, otherwise use dummy qp\n"
+     "  no   - Always use dummy qp",
+     ucs_offsetof(uct_rdmacm_cm_config_t, reserved_qpn),
+                  UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 
@@ -53,7 +61,8 @@ uct_component_t uct_rdmacm_component = {
         .size           = sizeof(uct_rdmacm_cm_config_t),
     },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rdmacm_component),
-    .flags              = UCT_COMPONENT_FLAG_CM
+    .flags              = UCT_COMPONENT_FLAG_CM,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
 UCT_COMPONENT_REGISTER(&uct_rdmacm_component)

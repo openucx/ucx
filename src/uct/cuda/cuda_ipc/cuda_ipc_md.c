@@ -15,7 +15,7 @@
 #include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <sys/types.h>
@@ -271,9 +271,13 @@ static ucs_status_t uct_cuda_ipc_mem_reg(uct_md_h md, void *address, size_t leng
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_ipc_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t
+uct_cuda_ipc_mem_dereg(uct_md_h md,
+                       const uct_md_mem_dereg_params_t *params)
 {
-    ucs_free(memh);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ucs_free(params->memh);
     return UCS_OK;
 }
 
@@ -344,7 +348,9 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
         },
         .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
         .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cuda_ipc_component.super),
-        .flags              = 0
+        .flags              = 0,
+        .md_vfs_init        =
+                (uct_component_md_vfs_init_func_t)ucs_empty_function
     },
     .md                     = NULL,
 };

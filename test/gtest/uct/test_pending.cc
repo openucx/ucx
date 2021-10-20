@@ -487,8 +487,7 @@ UCS_TEST_SKIP_COND_P(test_uct_pending, pending_async,
  */
 UCS_TEST_SKIP_COND_P(test_uct_pending, pending_ucs_ok_dc_arbiter_bug,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT |
-                                 UCT_IFACE_FLAG_PENDING) ||
-                     has_transport("cm"))
+                                 UCT_IFACE_FLAG_PENDING))
 {
     int N, max_listen_conn;
 

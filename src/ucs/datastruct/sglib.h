@@ -1,4 +1,4 @@
-/* 
+/*
 
   This is SGLIB version 1.0.3
 
@@ -34,7 +34,7 @@
 /* ------------------------------ STATIC ARRAYS ------------------------------- */
 /* ---------------------------------------------------------------------------- */
 
-/* 
+/*
 
   Basic algorithms  for sorting arrays. Multiple  depending arrays can
   be rearranged using user defined 'elem_exchangers'
@@ -254,7 +254,7 @@
   table occurs on exactly one index.  Once an object is stored in the
   table, it can be represented via its index.
 
-  In case of collision while adding an object the index shifted 
+  In case of collision while adding an object the index shifted
   by SGLIB_HASH_TAB_SHIFT_CONSTANT (constant can be redefined)
 
   You can NOT delete an element from such hash table. The only
@@ -262,7 +262,7 @@
   file format, having an index table at the beginning and then
   refering objects via indexes.
 
-  !!!!!!! This data structure is NOT documented, do not use it !!!!!!!!!! 
+  !!!!!!! This data structure is NOT documented, do not use it !!!!!!!!!!
 
 */
 
@@ -937,7 +937,7 @@
   hash_function - is a hashing function mapping type* to unsigned
   comparator    - is a comparator on elements
 
-  !!!!!!! This data structure is NOT documented, do not use it !!!!!!!!!! 
+  !!!!!!! This data structure is NOT documented, do not use it !!!!!!!!!!
 */
 
 #define SGLIB_DEFINE_HASHED_TABLE_PROTOTYPES(type, dim, hash_function, comparator) \
@@ -1007,7 +1007,7 @@
 
 
 /* ------------------- hashed container (only for level 1)  -------------------- */
-/* 
+/*
   hashed container is a table of given fixed size containing another
   (dynamic) base container in each cell. Once an object should be
   inserted into the hashed container, a hash function is used to
@@ -1019,7 +1019,7 @@
   parameters:
   type - the type of the container stored in each cell.
   dim  - the size of the hashed array
-  hash_function - the hashing function hashing 'type *' to unsigned.  
+  hash_function - the hashing function hashing 'type *' to unsigned.
 
 */
 

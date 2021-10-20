@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 * Copyright (c) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,15 +14,18 @@
 #include "rc_iface.h"
 
 #include <uct/ib/base/ib_verbs.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
+#include <ucs/vfs/base/vfs_cb.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/type/class.h>
 #include <endian.h>
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_rc_fc_stats_class = {
-    .name = "rc_fc",
-    .num_counters = UCT_RC_FC_STAT_LAST,
+    .name          = "rc_fc",
+    .num_counters  = UCT_RC_FC_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_FC_STAT_NO_CRED]            = "no_cred",
         [UCT_RC_FC_STAT_TX_GRANT]           = "tx_grant",
@@ -37,8 +41,9 @@ static ucs_stats_class_t uct_rc_fc_stats_class = {
 };
 
 static ucs_stats_class_t uct_rc_txqp_stats_class = {
-    .name = "rc_txqp",
-    .num_counters = UCT_RC_TXQP_STAT_LAST,
+    .name          = "rc_txqp",
+    .num_counters  = UCT_RC_TXQP_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_RC_TXQP_STAT_QP_FULL]          = "qp_full",
         [UCT_RC_TXQP_STAT_SIGNAL]           = "signal"
@@ -66,6 +71,14 @@ void uct_rc_txqp_cleanup(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp)
     UCS_STATS_NODE_FREE(txqp->stats);
 }
 
+void uct_rc_txqp_vfs_populate(uct_rc_txqp_t *txqp, void *parent_obj)
+{
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txqp->unsignaled, UCS_VFS_TYPE_U16, "unsignaled");
+    ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
+                            &txqp->available, UCS_VFS_TYPE_I16, "available");
+}
+
 ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
                             UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
 {
@@ -89,45 +102,31 @@ void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
     UCS_STATS_NODE_FREE(fc->stats);
 }
 
-void uct_rc_ep_cleanup_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
-                          uct_rc_ep_cleanup_ctx_t *cleanup_ctx, uint32_t qp_num)
+void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
+                          uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx,
+                          uint32_t qp_num, uint16_t cq_credits)
 {
-    uct_rc_iface_ops_t *ops = ucs_derived_of(iface->super.ops, uct_rc_iface_ops_t);
-    uct_ib_md_t *md         = uct_ib_iface_md(&iface->super);
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_rc_iface_t);
+    uct_ib_md_t *md       = uct_ib_iface_md(&iface->super);
     ucs_status_t status;
 
-    cleanup_ctx->iface     = iface;
-    cleanup_ctx->super.cbq = &iface->super.super.worker->super.progress_q;
-    cleanup_ctx->super.cb  = ops->cleanup_qp;
+    ucs_assertv(cq_credits < (UINT16_MAX / 2), "cq_credits=%d", cq_credits);
 
     ucs_list_del(&ep->list);
-    ucs_list_add_tail(&iface->ep_gc_list, &cleanup_ctx->list);
-
     uct_rc_iface_remove_qp(iface, qp_num);
+
+    cleanup_ctx->super.cbq  = &iface->super.super.worker->super.progress_q;
+    cleanup_ctx->super.cb   = uct_rc_iface_qp_cleanup_progress;
+    cleanup_ctx->iface      = iface;
+    cleanup_ctx->qp_num     = qp_num;
+    cleanup_ctx->cq_credits = cq_credits;
+    ucs_list_add_tail(&iface->qp_gc_list, &cleanup_ctx->list);
 
     status = uct_ib_device_async_event_wait(&md->dev,
                                             IBV_EVENT_QP_LAST_WQE_REACHED,
                                             qp_num, &cleanup_ctx->super);
-    if (status == UCS_OK) {
-        /* event already arrived, finish cleaning up */
-        ops->cleanup_qp(&cleanup_ctx->super);
-    } else {
-        /* deferred cleanup callback was scheduled */
-        ucs_assert(status == UCS_INPROGRESS);
-    }
-}
-
-void uct_rc_ep_cleanup_qp_done(uct_rc_ep_cleanup_ctx_t *cleanup_ctx,
-                               uint32_t qp_num)
-{
-    uct_ib_md_t *md = ucs_derived_of(cleanup_ctx->iface->super.super.md,
-                                     uct_ib_md_t);
-
-    uct_ib_device_async_event_unregister(&md->dev,
-                                         IBV_EVENT_QP_LAST_WQE_REACHED,
-                                         qp_num);
-    ucs_list_del(&cleanup_ctx->list);
-    ucs_free(cleanup_ctx);
+    ucs_assert_always(status == UCS_OK);
 }
 
 UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
@@ -157,10 +156,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
     UCS_STATIC_ASSERT(UCT_RC_EP_FC_MASK < UINT8_MAX);
 
     ucs_arbiter_group_init(&self->arb_group);
-
-    ucs_spin_lock(&iface->eps_lock);
     ucs_list_add_head(&iface->ep_list, &self->list);
-    ucs_spin_unlock(&iface->eps_lock);
 
     ucs_debug("created rc ep %p", self);
     return UCS_OK;
@@ -366,7 +362,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
         return UCS_ARBITER_CB_RESULT_STOP;
     }
 
-    /* No any other pending operations (except no-op, flush(CANEL), and others
+    /* No any other pending operations (except no-op, flush(CANCEL), and others
      * which don't consume TX resources) allowed to be still scheduled on an
      * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL));
@@ -444,10 +440,15 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
+        op->status = status;
+        op->flags |= UCT_RC_IFACE_SEND_OP_STATUS;
+
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
             /* Allow clean flush cancel op from destroy flow */
-            if (warn && (op->handler != uct_rc_ep_flush_op_completion_handler)) {
-                ucs_warn("destroying txqp %p with uncompleted operation %p handler %s",
+            if (warn &&
+                (op->handler != uct_rc_ep_flush_op_completion_handler)) {
+                ucs_warn("destroying txqp %p with uncompleted operation %p"
+                         " handler %s",
                          txqp, op, ucs_debug_get_symbol_name(op->handler));
             }
 
@@ -471,16 +472,25 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
                 uct_rc_iface_update_reads(iface);
             }
         }
+
         op->flags &= ~(UCT_RC_IFACE_SEND_OP_FLAG_INUSE |
                        UCT_RC_IFACE_SEND_OP_FLAG_ZCOPY);
+
         if ((op->handler == uct_rc_ep_send_op_completion_handler) ||
             (op->handler == uct_rc_ep_get_zcopy_completion_handler)) {
             uct_rc_iface_put_send_op(op);
         } else if (op->handler == uct_rc_ep_flush_op_completion_handler) {
             ucs_mpool_put(op);
-        } else {
+        } else if ((op->handler == iface->config.atomic32_ext_handler) ||
+                   (op->handler == iface->config.atomic64_ext_handler) ||
+                   (op->handler == iface->config.atomic64_handler) ||
+                   (op->handler == uct_rc_ep_get_bcopy_handler) ||
+                   (op->handler == uct_rc_ep_get_bcopy_handler_no_completion) ||
+                   (op->handler == uct_rc_ep_am_zcopy_handler)) {
             desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
             ucs_mpool_put(desc);
+        } else {
+            op->handler(op, NULL);
         }
     }
 }

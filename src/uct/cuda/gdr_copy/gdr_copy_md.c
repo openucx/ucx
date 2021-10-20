@@ -15,7 +15,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
@@ -110,6 +110,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
     CUdeviceptr d_ptr     = ((CUdeviceptr )(char *) address);
+    ucs_log_level_t log_level;
     int ret;
 
     if (!length) {
@@ -117,15 +118,19 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_reg_internal,
         return UCS_OK;
     }
 
+    log_level = (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
+                UCS_LOG_LEVEL_ERROR;
+
     ret = gdr_pin_buffer(md->gdrcpy_ctx, d_ptr, length, 0, 0, &mem_hndl->mh);
     if (ret) {
-        ucs_error("gdr_pin_buffer failed. length :%lu ret:%d", length, ret);
+        ucs_log(log_level, "gdr_pin_buffer failed. length :%lu ret:%d",
+                length, ret);
         goto err;
     }
 
     ret = gdr_map(md->gdrcpy_ctx, mem_hndl->mh, &mem_hndl->bar_ptr, length);
     if (ret) {
-        ucs_error("gdr_map failed. length :%lu ret:%d", length, ret);
+        ucs_log(log_level, "gdr_map failed. length :%lu ret:%d", length, ret);
         goto unpin_buffer;
     }
 
@@ -176,7 +181,7 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_gdr_copy_mem_dereg_internal,
         return UCS_ERR_IO_ERROR;
     }
 
-    ucs_trace("deregistered memorory. info.va:0x%"PRIx64" bar_ptr:%p",
+    ucs_trace("deregistered memory. info.va:0x%"PRIx64" bar_ptr:%p",
               mem_hndl->info.va, mem_hndl->bar_ptr);
     return UCS_OK;
 }
@@ -210,12 +215,17 @@ static ucs_status_t uct_gdr_copy_mem_reg(uct_md_h uct_md, void *address, size_t 
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mem_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_gdr_copy_mem_dereg(uct_md_h uct_md,
+                       const uct_md_mem_dereg_params_t *params)
 {
-    uct_gdr_copy_mem_t *mem_hndl = memh;
+    uct_gdr_copy_mem_t *mem_hndl;
     ucs_status_t status;
 
-    status = uct_gdr_copy_mem_dereg_internal(uct_md, mem_hndl);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    mem_hndl = params->memh;
+    status   = uct_gdr_copy_mem_dereg_internal(uct_md, mem_hndl);
     if (status != UCS_OK) {
         ucs_warn("failed to deregister memory handle");
     }
@@ -296,11 +306,17 @@ uct_gdr_copy_mem_rcache_reg(uct_md_h uct_md, void *address, size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md, uct_mem_h memh)
+static ucs_status_t
+uct_gdr_copy_mem_rcache_dereg(uct_md_h uct_md,
+                              const uct_md_mem_dereg_params_t *params)
+
 {
     uct_gdr_copy_md_t *md = ucs_derived_of(uct_md, uct_gdr_copy_md_t);
-    uct_gdr_copy_rcache_region_t *region = uct_gdr_copy_rache_region_from_memh(memh);
+    uct_gdr_copy_rcache_region_t *region;
 
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    region = uct_gdr_copy_rache_region_from_memh(params->memh);
     ucs_rcache_region_put(md->rcache, &region->super);
     return UCS_OK;
 }
@@ -320,8 +336,12 @@ uct_gdr_copy_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcache,
                                uint16_t rcache_mem_reg_flags)
 {
     uct_gdr_copy_md_t *md = context;
-    int *flags = arg;
+    int *flags            = arg;
     uct_gdr_copy_rcache_region_t *region;
+
+    if (rcache_mem_reg_flags & UCS_RCACHE_MEM_REG_HIDE_ERRORS) {
+        *flags |= UCT_MD_MEM_FLAG_HIDE_ERRORS;
+    }
 
     region = ucs_derived_of(rregion, uct_gdr_copy_rcache_region_t);
     return uct_gdr_copy_mem_reg_internal(&md->super, (void*)region->super.super.start,
@@ -436,7 +456,8 @@ uct_component_t uct_gdr_copy_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_gdr_copy_component),
-    .flags              = 0
+    .flags              = 0,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_gdr_copy_component);
 

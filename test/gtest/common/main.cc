@@ -22,7 +22,7 @@ double ucs::perf_retry_interval  = 1.0;
 
 void parse_test_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "s:p:i:")) != -1) {
+    while ((c = getopt(argc, argv, "s:p:i:t:")) != -1) {
         switch (c) {
         case 's':
             ucs_gtest_random_seed = atoi(optarg);
@@ -33,8 +33,12 @@ void parse_test_opts(int argc, char **argv) {
         case 'i':
             ucs::perf_retry_interval = atof(optarg);
             break;
+        case 't':
+            ucs::watchdog_timeout = atof(optarg);
+            break;
         default:
-            fprintf(stderr, "Usage: gtest [ -s rand-seed ] [ -p count ] [ -i interval ]\n");
+            fprintf(stderr, "Usage: gtest [ -s rand-seed ] [ -p count ] "
+                            "[ -i interval ] [ -t timeout ]\n");
             exit(1);
         }
     }
@@ -77,16 +81,23 @@ int main(int argc, char **argv) {
     UCS_TEST_MESSAGE << "Using random seed of " << ucs_gtest_random_seed;
     srand(ucs_gtest_random_seed);
     if (RUNNING_ON_VALGRIND) {
-        modify_config_for_valgrind("IB_RX_QUEUE_LEN", "512");
-        modify_config_for_valgrind("IB_RX_BUFS_GROW", "512");
-        modify_config_for_valgrind("MM_RX_BUFS_GROW", "128");
+        modify_config_for_valgrind("MM_RX_BUFS_GROW", "32");
+        modify_config_for_valgrind("MM_FIFO_SIZE", "32");
+        modify_config_for_valgrind("IB_ALLOC", "heap");
+        modify_config_for_valgrind("IB_RX_BUFS_GROW", "128");
         modify_config_for_valgrind("IB_TX_QUEUE_LEN", "128");
         modify_config_for_valgrind("IB_TX_BUFS_GROW", "64");
-        modify_config_for_valgrind("RC_TX_CQ_LEN", "256");
+        modify_config_for_valgrind("UD_RX_QUEUE_LEN", "256");
+        modify_config_for_valgrind("UD_RX_QUEUE_LEN_INIT", "16");
+        modify_config_for_valgrind("RC_TX_CQ_LEN", "128");
+        modify_config_for_valgrind("RC_RX_QUEUE_LEN", "128");
+        modify_config_for_valgrind("DC_TX_QUEUE_LEN", "16");
+        modify_config_for_valgrind("DC_MLX5_NUM_DCI", "3");
         modify_config_for_valgrind("CM_TIMEOUT", "600ms");
-        modify_config_for_valgrind("TCP_TX_BUFS_GROW", "512");
-        modify_config_for_valgrind("TCP_RX_BUFS_GROW", "512");
-        modify_config_for_valgrind("TCP_RX_SEG_SIZE", "16k");
+        modify_config_for_valgrind("TCP_TX_BUFS_GROW", "64");
+        modify_config_for_valgrind("TCP_RX_BUFS_GROW", "64");
+        modify_config_for_valgrind("TCP_RX_SEG_SIZE", "8k");
+        modify_config_for_valgrind("RC_RX_SEG_SIZE", "4200");
         ucm_global_opts.enable_malloc_reloc = 1; /* Test reloc hooks with valgrind,
                                                     though it's generally unsafe. */
     }
@@ -98,14 +109,17 @@ int main(int argc, char **argv) {
 
     ret = ucs::watchdog_start();
     if (ret != 0) {
+        /* coverity[fun_call_w_exception] */
         ADD_FAILURE() << "Unable to start watchdog - abort";
         return ret;
     }
 
+    /* coverity[fun_call_w_exception] */
     ret = RUN_ALL_TESTS();
 
     ucs::watchdog_stop();
 
+    /* coverity[fun_call_w_exception] */
     ucs::analyze_test_results();
 
     return ret;

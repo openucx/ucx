@@ -20,7 +20,7 @@ GTEST_EXTRA_ARGS         ?=
 LAUNCHER                 ?=
 VALGRIND_EXTRA_ARGS      ?=
 
-SUBDIRS = ucs/test_module ucm/test_dlopen
+SUBDIRS = ucs/test_module ucm/test_dlopen common/googletest
 
 export UCX_HANDLE_ERRORS
 export UCX_LOG_LEVEL
@@ -43,6 +43,10 @@ VALGRIND_ARGS = \
 
 noinst_PROGRAMS = gtest
 
+EXTRA_DIST = \
+	ucs/ucx.conf \
+	ucs/ucx_test.conf
+
 gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
@@ -51,13 +55,14 @@ gtest_LDADD = \
 	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucp/libucp.la \
 	$(top_builddir)/src/tools/perf/lib/libucxperf.la \
+	common/googletest/libgtest.la \
 	$(OPENMP_CFLAGS) \
 	$(GTEST_LIBS)
 
 
 gtest_CPPFLAGS = \
 	$(BASE_CPPFLAGS) \
-	-DTOP_SRCDIR=\"$(top_srcdir)\" \
+	-DTOP_SRCDIR=\"$(abs_top_srcdir)\" \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/test \
 	-I$(top_builddir)/src \
@@ -68,11 +73,10 @@ gtest_CPPFLAGS = \
 gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install -Wl,-dynamic-list-data
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = \
-	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) \
+	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11 \
 	-DGTEST_UCM_HOOK_LIB_DIR="\"${abs_builddir}/ucm/test_dlopen/.libs\""
 
 gtest_SOURCES = \
-	common/gtest-all.cc \
 	common/main.cc \
 	common/test_gtest_cmn.cc \
 	common/mem_buffer.cc \
@@ -118,6 +122,7 @@ gtest_SOURCES = \
 	uct/tcp/test_tcp.cc \
 	\
 	ucp/test_ucp_am.cc \
+	ucp/test_ucp_ep.cc \
 	ucp/test_ucp_stream.cc \
 	ucp/test_ucp_peer_failure.cc \
 	ucp/test_ucp_atomic.cc \
@@ -142,6 +147,7 @@ gtest_SOURCES = \
 	ucp/test_ucp_context.cc \
 	ucp/test_ucp_worker.cc \
 	ucp/test_ucp_wireup.cc \
+	ucp/test_ucp_request.cc \
 	ucp/test_ucp_wakeup.cc \
 	ucp/test_ucp_fence.cc \
 	ucp/test_ucp_sockaddr.cc \
@@ -157,11 +163,13 @@ gtest_SOURCES = \
 	ucs/test_config.cc \
 	ucs/test_conn_match.cc \
 	ucs/test_datatype.cc \
+	ucs/test_bitops.cc \
 	ucs/test_debug.cc \
 	ucs/test_memtrack.cc \
 	ucs/test_math.cc \
 	ucs/test_mpmc.cc \
 	ucs/test_mpool.cc \
+	ucs/test_mpool_set.cc \
 	ucs/test_pgtable.cc \
 	ucs/test_profile.cc \
 	ucs/test_rcache.cc \
@@ -248,7 +256,6 @@ endif
 endif
 
 noinst_HEADERS = \
-	common/gtest.h \
 	common/mem_buffer.h \
 	common/test.h \
 	common/test_helpers.h \

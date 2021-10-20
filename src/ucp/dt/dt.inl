@@ -92,8 +92,8 @@ ucp_dt_unpack_only(ucp_worker_h worker, void *buffer, size_t count,
             }
         }
         iov_offset = iovcnt_offset = 0;
-        UCS_PROFILE_CALL(ucp_dt_iov_scatter, (const ucp_dt_iov_t*)buffer, count,
-                         data, length, &iov_offset, &iovcnt_offset);
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, worker, (const ucp_dt_iov_t*)buffer, count,
+                         data, length, &iov_offset, &iovcnt_offset, mem_type);
         return UCS_OK;
 
     case UCP_DATATYPE_GENERIC:

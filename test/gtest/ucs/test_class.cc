@@ -13,18 +13,18 @@ class test_class : public ucs::test {
 };
 
 
-typedef struct base {
+typedef struct {
     int            field1;
 } base_t;
 UCS_CLASS_DECLARE(base_t, int);
 
-typedef struct derived {
+typedef struct {
     base_t         super;
     int            field2;
 } derived_t;
 UCS_CLASS_DECLARE(derived_t, int, int);
 
-typedef struct derived2 {
+typedef struct {
     base_t         super;
     int            field2;
 } derived2_t;

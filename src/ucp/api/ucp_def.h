@@ -3,6 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2014-2015. ALL RIGHTS RESERVED.
 * Copyright (C) IBM 2015. ALL RIGHTS RESERVED.
 * Copyright (C) Los Alamos National Security, LLC. 2018. ALL RIGHTS RESERVED.
+* Copyright (C) Arm, Ltd. 2021. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -507,7 +508,7 @@ typedef void (*ucp_tag_recv_callback_t)(void *request, ucs_status_t status,
  *                        @ref UCS_ERR_MESSAGE_TRUNCATED error code is returned.
  *                        Otherwise, an @ref ucs_status_t "error status" is
  *                        returned.
- * @param [in]  info      @ref ucp_tag_recv_info_t "Completion information"
+ * @param [in]  tag_info  @ref ucp_tag_recv_info_t "Completion information"
  *                        The @a info descriptor is Valid only if the status is
  *                        UCS_OK.
  * @param [in]  user_data User data passed to "user_data" value,
@@ -623,10 +624,10 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * communication progress.
  *
  * @param [in]  arg           User-defined argument.
- * @param [in]  header        User defined active message header. Can be NULL.
- * @param [in]  header_length Active message header length in bytes. If this
- *                            value is 0, the @a header pointer is undefined
- *                            and should not be accessed.
+ * @param [in]  header        User defined active message header.
+ *                            If @a header_length is 0, this value is undefined
+ *                            and must not be accessed.
+ * @param [in]  header_length Active message header length in bytes. 
  * @param [in]  data          Points to the received data if @a
  *                            UCP_AM_RECV_ATTR_FLAG_RNDV flag is not set in
  *                            @ref ucp_am_recv_param_t.recv_attr. Otherwise
@@ -636,34 +637,30 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * @param [in]  length        Length of data. If @a UCP_AM_RECV_ATTR_FLAG_RNDV
  *                            flag is set in @ref ucp_am_recv_param_t.recv_attr,
  *                            it indicates the required receive buffer size for
- *                            initiating rendezvous protocol. If this receive
- *                            handler was registered without UCP_AM_FLAG_WHOLE_MSG
- *                            flag set, it represents length of received fragment.
- *                            In this case the whole message length is available in
- *                            @ref ucp_am_recv_param_t.total_length.
+ *                            initiating rendezvous protocol.
  * @param [in]  param         Data receive parameters.
  *
- * @return UCS_OK             @a data will not persist after the callback returns.
- *                            If UCP_AM_RECV_ATTR_FLAG_RNDV flag is set in
- *                            @a param->recv_attr and @ref ucp_am_recv_data_nbx was
- *                            not called for this data, the data descriptor will be
- *                            dropped and the corresponding @ref ucp_am_send_nbx
- *                            call will complete with UCS_OK status.
+ * @return UCS_OK         @a data will not persist after the callback returns.
+ *                        If UCP_AM_RECV_ATTR_FLAG_RNDV flag is set in
+ *                        @a param->recv_attr and @ref ucp_am_recv_data_nbx was
+ *                        not called for this data, the data descriptor will be
+ *                        dropped and the corresponding @ref ucp_am_send_nbx
+ *                        call will complete with UCS_OK status.
  *
- * @return UCS_INPROGRESS     Can only be returned if @a param->recv_attr flags
- *                            contains UCP_AM_RECV_ATTR_FLAG_DATA or
- *                            UCP_AM_RECV_ATTR_FLAG_RNDV. The @a data will persist
- *                            after the callback has returned. To free the memory,
- *                            a pointer to the data must be passed into
- *                            @ref ucp_am_data_release or data receive is initiated by
- *                            @ref ucp_am_recv_data_nbx.
+ * @return UCS_INPROGRESS Can only be returned if @a param->recv_attr flags
+ *                        contains UCP_AM_RECV_ATTR_FLAG_DATA or
+ *                        UCP_AM_RECV_ATTR_FLAG_RNDV. The @a data will persist
+ *                        after the callback has returned. To free the memory,
+ *                        a pointer to the data must be passed into
+ *                        @ref ucp_am_data_release or data receive is initiated
+ *                        by @ref ucp_am_recv_data_nbx.
  *
- * @return otherwise          Can only be returned if @a param->recv_attr contains
- *                            UCP_AM_RECV_ATTR_FLAG_RNDV. In this case data
- *                            descriptor @a data will be dropped and the
- *                            corresponding @ref ucp_am_send_nbx call on the
- *                            sender side will complete with the status returned
- *                            from the callback.
+ * @return otherwise      Can only be returned if @a param->recv_attr contains
+ *                        UCP_AM_RECV_ATTR_FLAG_RNDV. In this case data
+ *                        descriptor @a data will be dropped and the
+ *                        corresponding @ref ucp_am_send_nbx call on the
+ *                        sender side will complete with the status returned
+ *                        from the callback.
  *
  * @note This callback should be set and released
  *       by @ref ucp_worker_set_am_recv_handler function.
@@ -744,6 +741,15 @@ typedef struct ucp_ep_params {
      */
     ucp_conn_request_h      conn_request;
 
+    /**
+     * Endpoint name. Tracing and analysis tools can identify the endpoint using
+     * this name. To retrieve the endpoint's name, use @ref ucp_ep_query, as the
+     * name you supply may be changed by UCX under some circumstances, e.g. a
+     * name conflict. This field is only assigned if you set
+     * @ref UCP_EP_PARAM_FIELD_NAME in the field mask. If not, then a default
+     * unique name will be created for you.
+     */
+    const char              *name;
 } ucp_ep_params_t;
 
 

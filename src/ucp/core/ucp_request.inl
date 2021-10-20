@@ -11,24 +11,25 @@
 #include "ucp_worker.h"
 #include "ucp_ep.inl"
 
-
-#include <ucp/core/ucp_worker.h>
 #include <ucp/dt/dt.h>
 #include <ucs/profile/profile.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/datastruct/ptr_map.inl>
+#include <ucs/debug/debug_int.h>
 #include <ucp/dt/dt.inl>
 #include <inttypes.h>
 
 
+UCS_PTR_MAP_IMPL(request, 0);
+
+
 #define UCP_REQUEST_FLAGS_FMT \
-    "%c%c%c%c%c%c%c"
+    "%c%c%c%c%c%c"
 
 #define UCP_REQUEST_FLAGS_ARG(_flags) \
     (((_flags) & UCP_REQUEST_FLAG_COMPLETED)       ? 'd' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_RELEASED)        ? 'f' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_EXPECTED)        ? 'e' : '-'), \
-    (((_flags) & UCP_REQUEST_FLAG_LOCAL_COMPLETED) ? 'L' : '-'), \
+    (((_flags) & UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED) ? 'L' : '-'), \
     (((_flags) & UCP_REQUEST_FLAG_CALLBACK)        ? 'c' : '-'), \
     (((_flags) & (UCP_REQUEST_FLAG_RECV_TAG | \
                   UCP_REQUEST_FLAG_RECV_AM))       ? 'r' : '-'), \
@@ -65,10 +66,14 @@
     { \
         /* NOTE: external request can't have RELEASE flag and we */ \
         /* will never put it into mpool */ \
-        uint32_t _flags = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
+        uint32_t _flags; \
+        \
+        ucs_assert(!((_req)->flags & UCP_REQUEST_FLAG_COMPLETED)); \
+        \
+        _flags         = ((_req)->flags |= UCP_REQUEST_FLAG_COMPLETED); \
         (_req)->status = (_status); \
         \
-        ucp_request_id_check(_req, ==, UCP_REQUEST_ID_INVALID); \
+        ucp_request_id_check(_req, ==, UCS_PTR_MAP_KEY_INVALID); \
         \
         if (ucs_likely((_req)->flags & UCP_REQUEST_FLAG_CALLBACK)) { \
             (_req)->_cb((_req) + 1, (_status), ## __VA_ARGS__); \
@@ -78,13 +83,20 @@
         } \
     }
 
-#define ucp_request_set_callback(_req, _cb, _cb_value, _user_data) \
+
+#define ucp_request_set_callback(_req, _cb, _cb_value) \
     { \
         (_req)->_cb       = _cb_value; \
-        (_req)->user_data = _user_data; \
         (_req)->flags    |= UCP_REQUEST_FLAG_CALLBACK; \
+    }
+
+
+#define ucp_request_set_user_callback(_req, _cb, _cb_value, _user_data) \
+    { \
+        ucp_request_set_callback(_req, _cb, _cb_value); \
+        (_req)->user_data = _user_data; \
         ucs_trace_data("request %p %s set to %p, user data: %p", \
-                      _req, #_cb, _cb_value, _user_data); \
+                       _req, #_cb, _cb_value, _user_data); \
     }
 
 
@@ -114,13 +126,14 @@
     if (!((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) { \
         ucp_request_put(_req); \
     } else { \
-        ucp_request_id_check(_req, ==, UCP_REQUEST_ID_INVALID); \
+        ucp_request_id_check(_req, ==, UCS_PTR_MAP_KEY_INVALID); \
     }
 
 
 #define ucp_request_cb_param(_param, _req, _cb, ...) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        param->cb._cb(req + 1, (_req)->status, ##__VA_ARGS__, param->user_data); \
+        (_param)->cb._cb(req + 1, (_req)->status, ##__VA_ARGS__, \
+                         (_param)->user_data); \
     }
 
 
@@ -141,10 +154,12 @@
 
 #define ucp_request_set_callback_param(_param, _param_cb, _req, _req_cb) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        ucp_request_set_callback(_req, _req_cb.cb, (_param)->cb._param_cb, \
-                                 ((_param)->op_attr_mask & \
-                                  UCP_OP_ATTR_FIELD_USER_DATA) ? \
-                                 (_param)->user_data : NULL); \
+        ucp_request_set_user_callback(_req, _req_cb.cb, \
+                                      (_param)->cb._param_cb, \
+                                      ((_param)->op_attr_mask & \
+                                       UCP_OP_ATTR_FIELD_USER_DATA) ? \
+                                              (_param)->user_data : \
+                                              NULL); \
     }
 
 
@@ -167,9 +182,21 @@
     }
 
 
+#if UCS_ENABLE_ASSERT
+#  define UCP_REQUEST_RESET(_req) \
+    (_req)->send.uct.func = \
+            (uct_pending_callback_t)ucs_empty_function_do_assert; \
+    (_req)->send.state.uct_comp.func  = \
+            (uct_completion_callback_t)ucs_empty_function_do_assert_void; \
+    (_req)->send.state.uct_comp.count = 0;
+#else /* UCS_ENABLE_ASSERT */
+#  define UCP_REQUEST_RESET(_req)
+#endif /* UCS_ENABLE_ASSERT */
+
+
 static UCS_F_ALWAYS_INLINE void ucp_request_id_reset(ucp_request_t *req)
 {
-    req->id = UCP_REQUEST_ID_INVALID;
+    req->id = UCS_PTR_MAP_KEY_INVALID;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -177,15 +204,16 @@ ucp_request_reset_internal(ucp_request_t *req, ucp_worker_h worker)
 {
     VALGRIND_MAKE_MEM_DEFINED(&req->id, sizeof(req->id));
     VALGRIND_MAKE_MEM_DEFINED(req + 1, worker->context->config.request.size);
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_request_put(ucp_request_t *req)
 {
     ucs_trace_req("put request %p", req);
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
     UCS_PROFILE_REQUEST_FREE(req);
+    UCP_REQUEST_RESET(req);
     ucs_mpool_put_inline(req);
 }
 
@@ -282,7 +310,7 @@ ucp_request_mem_alloc(const char *name)
 static UCS_F_ALWAYS_INLINE void ucp_request_mem_free(ucp_request_t *req)
 {
     UCS_PROFILE_REQUEST_FREE(req);
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
     ucs_trace_req("freed request %p", req);
     ucs_free(req);
 }
@@ -291,8 +319,7 @@ static UCS_F_ALWAYS_INLINE void ucp_request_mem_free(ucp_request_t *req)
  * @return Whether completed.
  *         *req_status if filled with the completion status if completed.
  */
-static int UCS_F_ALWAYS_INLINE
-ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
+static int UCS_F_ALWAYS_INLINE ucp_request_try_send(ucp_request_t *req)
 {
     ucs_status_t status;
 
@@ -307,7 +334,7 @@ ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
         return 0;
     } else if (status == UCS_ERR_NO_RESOURCE) {
         /* No send resources, try to add to pending queue */
-        return ucp_request_pending_add(req, pending_flags);
+        return ucp_request_pending_add(req);
     }
 
     ucs_fatal("unexpected error: %s", ucs_status_string(status));
@@ -317,13 +344,11 @@ ucp_request_try_send(ucp_request_t *req, unsigned pending_flags)
  * Start sending a request.
  *
  * @param [in]  req             Request to start.
- * @param [in]  pending_flags   flags to be passed to UCT if request will be
- *                              added to pending queue.
  * */
 static UCS_F_ALWAYS_INLINE void
-ucp_request_send(ucp_request_t *req, unsigned pending_flags)
+ucp_request_send(ucp_request_t *req)
 {
-    while (!ucp_request_try_send(req, pending_flags));
+    while (!ucp_request_try_send(req));
 }
 
 static UCS_F_ALWAYS_INLINE
@@ -394,12 +419,21 @@ ucp_request_send_state_reset(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
-        req->send.state.uct_comp.func   = comp_cb;
         req->send.state.uct_comp.count  = 0;
         req->send.state.uct_comp.status = UCS_OK;
         /* Fall through */
     case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
-        req->send.state.dt.offset       = 0;
+        /* Always set completion function to make sure this value is initialized
+         * when doing send fast-forwarding in ucp_request_send_state_ff() */
+        req->send.state.uct_comp.func = comp_cb;
+        req->send.state.dt.offset     = 0;
+
+        if (proto == UCP_REQUEST_SEND_PROTO_BCOPY_AM) {
+            ucs_assertv(comp_cb == NULL,
+                        "completion function for AM Bcopy protocol must be NULL"
+                        " instead of %s",
+                        ucs_debug_get_symbol_name((void*)comp_cb));
+        }
         break;
     default:
         ucs_fatal("unknown protocol");
@@ -407,17 +441,10 @@ ucp_request_send_state_reset(ucp_request_t *req,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_send_state_advance_comp(ucp_request_t *req, ucs_status_t status)
+ucp_send_request_invoke_uct_completion(ucp_request_t *req)
 {
-    ucs_assert(status != UCS_ERR_NO_RESOURCE);
-
-    if (status == UCS_INPROGRESS) {
-        ++req->send.state.uct_comp.count;
-    } else if (UCS_STATUS_IS_ERR(status)) {
-        uct_completion_update_status(&req->send.state.uct_comp, status);
-        if (req->send.state.uct_comp.count == 0) {
-            req->send.state.uct_comp.func(&req->send.state.uct_comp);
-        }
+    if (req->send.state.uct_comp.count == 0) {
+        req->send.state.uct_comp.func(&req->send.state.uct_comp);
     }
 }
 
@@ -440,8 +467,13 @@ ucp_request_send_state_advance(ucp_request_t *req,
                                unsigned proto, ucs_status_t status)
 {
     if (status == UCS_ERR_NO_RESOURCE) {
-        /* Don't advance in order to continue
-         * on next try from last valid point. */
+        /* Don't advance in order to continue on next try from last valid point
+         */
+        return;
+    }
+
+    if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
+        ucp_request_send_state_ff(req, status);
         return;
     }
 
@@ -449,7 +481,6 @@ ucp_request_send_state_advance(ucp_request_t *req,
     case UCP_REQUEST_SEND_PROTO_ZCOPY_AM:
     case UCP_REQUEST_SEND_PROTO_RNDV_GET:
     case UCP_REQUEST_SEND_PROTO_RNDV_PUT:
-    case UCP_REQUEST_SEND_PROTO_BCOPY_AM:
         ucs_assert(new_dt_state != NULL);
         if (UCP_DT_IS_CONTIG(req->send.datatype)) {
             /* cppcheck-suppress nullPointer */
@@ -458,22 +489,14 @@ ucp_request_send_state_advance(ucp_request_t *req,
             /* cppcheck-suppress nullPointer */
             req->send.state.dt        = *new_dt_state;
         }
-
-        if (UCS_STATUS_IS_ERR(status)) {
-            /* fast-forward multi-fragment protocol */
-            req->send.state.dt.offset = req->send.length;
-        }
-
-        if (proto != UCP_REQUEST_SEND_PROTO_BCOPY_AM) {
-            ucp_request_send_state_advance_comp(req, status);
-        }
-
-        break;
+        /* Fall through */
     case UCP_REQUEST_SEND_PROTO_RMA:
-        ucp_request_send_state_advance_comp(req, status);
+        if (status == UCS_INPROGRESS) {
+            ++req->send.state.uct_comp.count;
+        }
         break;
     default:
-        ucs_fatal("unknown protocol");
+        ucs_fatal("unknown protocol %d", proto);
     }
 
     /* offset is not used for RMA */
@@ -627,10 +650,12 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
                             &req->recv.state.dt.iov.iovcnt_offset);
             req->recv.state.offset = offset;
         }
-        UCS_PROFILE_CALL(ucp_dt_iov_scatter, (ucp_dt_iov_t*)req->recv.buffer,
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, req->recv.worker,
+                         (ucp_dt_iov_t*)req->recv.buffer,
                          req->recv.state.dt.iov.iovcnt, data, length,
                          &req->recv.state.dt.iov.iov_offset,
-                         &req->recv.state.dt.iov.iovcnt_offset);
+                         &req->recv.state.dt.iov.iovcnt_offset,
+                         req->recv.mem_type);
         req->recv.state.offset += length;
         return UCS_OK;
 
@@ -650,24 +675,33 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
     }
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_recv_desc_set_name(ucp_recv_desc_t *rdesc, const char *name)
+{
+#if ENABLE_DEBUG_DATA
+    rdesc->name = name;
+#endif
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    int data_offset, unsigned am_flags, uint16_t hdr_len,
-                   uint16_t rdesc_flags, int priv_length,
-                   ucp_recv_desc_t **rdesc_p)
+                   uint16_t rdesc_flags, int priv_length, size_t alignment,
+                   const char *name, ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;
     void *data_hdr;
     ucs_status_t status;
+    size_t padding;
 
     if (ucs_unlikely(am_flags & UCT_CB_PARAM_FLAG_DESC)) {
         /* slowpath */
         ucs_assert(priv_length <= UCP_WORKER_HEADROOM_PRIV_SIZE);
-        data_hdr               = UCS_PTR_BYTE_OFFSET(data, -data_offset);
-        rdesc                  = (ucp_recv_desc_t *)data_hdr - 1;
-        rdesc->flags           = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
-        rdesc->uct_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
-        status                 = UCS_INPROGRESS;
+        data_hdr                   = UCS_PTR_BYTE_OFFSET(data, -data_offset);
+        rdesc                      = (ucp_recv_desc_t *)data_hdr - 1;
+        rdesc->flags               = rdesc_flags | UCP_RECV_DESC_FLAG_UCT_DESC;
+        rdesc->release_desc_offset = UCP_WORKER_HEADROOM_PRIV_SIZE - priv_length;
+        status                     = UCS_INPROGRESS;
     } else {
         rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
         if (rdesc == NULL) {
@@ -675,14 +709,18 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
+        padding = ucs_padding((uintptr_t)(rdesc + 1), worker->am.alignment);
+        rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
+        rdesc->release_desc_offset = padding;
+
         /* No need to initialize rdesc->priv_length here, because it is only
          * needed for releasing UCT descriptor. */
-
         rdesc->flags = rdesc_flags;
         status       = UCS_OK;
         memcpy(UCS_PTR_BYTE_OFFSET(rdesc + 1, data_offset), data, length);
     }
 
+    ucp_recv_desc_set_name(rdesc, name);
     rdesc->length         = length + data_offset;
     rdesc->payload_offset = hdr_len;
     *rdesc_p              = rdesc;
@@ -692,15 +730,15 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
 static UCS_F_ALWAYS_INLINE void
 ucp_recv_desc_release(ucp_recv_desc_t *rdesc)
 {
-    void *uct_desc;
+    void *desc = UCS_PTR_BYTE_OFFSET(rdesc, -rdesc->release_desc_offset);
 
     ucs_trace_req("release receive descriptor %p", rdesc);
+
     if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC)) {
         /* uct desc is slowpath */
-        uct_desc = UCS_PTR_BYTE_OFFSET(rdesc, -rdesc->uct_desc_offset);
-        uct_iface_release_desc(uct_desc);
+        uct_iface_release_desc(desc);
     } else {
-        ucs_mpool_put_inline(rdesc);
+        ucs_mpool_put_inline(desc);
     }
 }
 
@@ -727,6 +765,10 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
                          req->user_data);
 }
 
+/*
+ * process data, complete receive if done
+ * @return UCS_OK/ERR - completed, UCS_INPROGRESS - not completed
+ */
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_request_process_recv_data(ucp_request_t *req, const void *data,
                               size_t length, size_t offset, int is_zcopy,
@@ -795,10 +837,10 @@ ucp_send_request_next_am_bw_lane(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
 ucp_send_request_get_ep_remote_id(ucp_request_t *req)
 {
-    /* This function may return UCP_WORKER_PTR_KEY_INVALID, but in such cases
+    /* This function may return UCS_PTR_MAP_KEY_INVALID, but in such cases
      * the message should not be sent at all because the am_lane would point to
      * a wireup (proxy) endpoint. So only the receiver side has an assertion
-     * that remote_id != UCP_EP_ID_INVALID.
+     * that remote_id != UCS_PTR_MAP_KEY_INVALID.
      */
     return ucp_ep_remote_id(req->send.ep);
 }
@@ -821,7 +863,7 @@ static UCS_F_ALWAYS_INLINE ucs_memory_type_t
 ucp_request_get_memory_type(ucp_context_h context, const void *address,
                             size_t length, const ucp_request_param_t *param)
 {
-    ucs_memory_info_t mem_info;
+    ucp_memory_info_t mem_info;
 
     if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMORY_TYPE) ||
         (param->memory_type == UCS_MEMORY_TYPE_UNKNOWN)) {
@@ -835,85 +877,89 @@ ucp_request_get_memory_type(ucp_context_h context, const void *address,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_ep_ptr_id_alloc(ucp_ep_h ep, void *ptr, ucs_ptr_map_key_t *ptr_id_p)
+ucp_request_ptr_map_status_check(ucs_status_t status, const char *action_str,
+                                 ucp_ep_h ep, void *ptr)
 {
-    ucs_status_t UCS_V_UNUSED status;
-
-    status = ucs_ptr_map_put(&ep->worker->ptr_map, ptr,
-                             ucp_ep_use_indirect_id(ep), ptr_id_p);
-    ucs_assertv(status == UCS_OK, "ep %p: failed to get id for %p", ep, ptr);
+    ucs_assertv((status == UCS_OK) || (status == UCS_ERR_NO_PROGRESS),
+                "ep %p: failed to %s id for %p: %s", ep, action_str, ptr,
+                ucs_status_string(status));
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_request_id_alloc(ucp_request_t *req)
+static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
 {
-    ucp_request_id_check(req, ==, UCP_REQUEST_ID_INVALID);
-    ucp_ep_ptr_id_alloc(req->send.ep, req, &req->id);
+    ucp_ep_h ep = req->send.ep;
+    ucs_status_t status;
 
-    /* TODO: combine checks for err_mode and PTR MAP indirect flag */
-    if (ucs_unlikely(ucp_ep_config(req->send.ep)->key.err_mode ==
-                     UCP_ERR_HANDLING_MODE_PEER)) {
-        ucs_hlist_add_tail(&ucp_ep_ext_gen(req->send.ep)->proto_reqs,
+    ucp_request_id_check(req, ==, UCS_PTR_MAP_KEY_INVALID);
+    status = UCS_PTR_MAP_PUT(request, &ep->worker->request_map, req,
+                             ucp_ep_use_indirect_id(ep), &req->id);
+    ucp_request_ptr_map_status_check(status, "put", ep, req);
+
+    if (status == UCS_OK) {
+        ucs_hlist_add_tail(&ucp_ep_ext_gen(ep)->proto_reqs,
                            &req->send.list);
     }
 }
 
 static UCS_F_ALWAYS_INLINE ucs_ptr_map_key_t
-ucp_request_get_id(const ucp_request_t *req)
+ucp_send_request_get_id(const ucp_request_t *req)
 {
-    ucp_request_id_check(req, !=, UCP_REQUEST_ID_INVALID);
+    ucp_request_id_check(req, !=, UCS_PTR_MAP_KEY_INVALID);
     return req->id;
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_request_ep_list_del(ucp_request_t *req)
+/* Since release function resets request ID to @ref UCS_PTR_MAP_KEY_INVALID and
+ * PTR MAP considers @ref UCS_PTR_MAP_KEY_INVALID as direct key, release request
+ * ID is re-entrant function */
+static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
 {
-    ucp_ep_h ep = req->send.ep;
-
-    ucs_assert(ep != NULL);
-    /* TODO: combine checks for err_mode and PTR MAP indirect flag */
-    if (ucs_unlikely(ucp_ep_config(ep)->key.err_mode ==
-                     UCP_ERR_HANDLING_MODE_PEER)) {
-        ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_id_release(ucp_request_t *req)
-{
-    ucp_worker_h worker = req->send.ep->worker;
+    ucp_ep_h ep;
     ucs_status_t UCS_V_UNUSED status;
 
-    ucp_request_id_check(req, !=, UCP_REQUEST_ID_INVALID);
-    status = ucs_ptr_map_del(&worker->ptr_map, req->id);
-    ucs_assertv(status == UCS_OK, "req %p: failed to release id", req);
+    ucs_assert(!(req->flags &
+                 (UCP_REQUEST_FLAG_RECV_AM | UCP_REQUEST_FLAG_RECV_TAG)));
+    ep = req->send.ep;
+
+    status = UCS_PTR_MAP_DEL(request, &ep->worker->request_map, req->id);
+    ucp_request_ptr_map_status_check(status, "delete", ep, req);
+
+    if (status == UCS_OK) {
+        ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
+    }
+
     ucp_request_id_reset(req);
-    ucp_request_ep_list_del(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
-                      ucp_request_t **req_p, int extract)
+ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
+                           ucp_request_t **req_p, int extract)
 {
     ucs_status_t status;
     void *ptr;
 
-    ucs_assert(id != UCP_REQUEST_ID_INVALID);
+    ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
 
-    status = ucs_ptr_map_get(&worker->ptr_map, id, extract, &ptr);
-    if (ucs_unlikely(status != UCS_OK)) {
+    status = UCS_PTR_MAP_GET(request, &worker->request_map, id, extract, &ptr);
+    if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
         return status;
     }
 
     *req_p = (ucp_request_t*)ptr;
     ucp_request_id_check(*req_p, ==, id);
+
     if (extract) {
         /* If request ID was released, then need to reset the request ID to use
          * the value for checking whether the request ID should be put to PTR
          * map or not in case of error handling */
         ucp_request_id_reset(*req_p);
-        ucp_request_ep_list_del(*req_p);
+
+        if (status == UCS_OK) {
+            ucs_hlist_del(&ucp_ep_ext_gen((*req_p)->send.ep)->proto_reqs,
+                                          &(*req_p)->send.list);
+        }
     }
 
-    return status;
+    return UCS_OK;
 }
 
 static UCS_F_ALWAYS_INLINE void ucp_request_set_super(ucp_request_t *req,
@@ -936,6 +982,16 @@ ucp_request_get_super(ucp_request_t *req)
     ucs_assertv(req->flags & UCP_REQUEST_FLAG_SUPER_VALID,
                 "req=%p req->super_req=%p", req, req->super_req);
     return req->super_req;
+}
+
+static UCS_F_ALWAYS_INLINE ucp_request_t *
+ucp_request_user_data_get_super(void *request, void *user_data)
+{
+    ucp_request_t UCS_V_UNUSED *req = (ucp_request_t*)request - 1;
+    ucp_request_t *super_req        = (ucp_request_t*)user_data;
+
+    ucs_assert(ucp_request_get_super(req) == super_req);
+    return super_req;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -982,11 +1038,11 @@ ucp_request_complete_and_dereg_send(ucp_request_t *sreq, ucs_status_t status)
 }
 
 
-#define UCP_REQUEST_GET_BY_ID(_req_p, _worker, _req_id, _extract, \
-                              _action, _fmt_str, ...) \
+#define UCP_SEND_REQUEST_GET_BY_ID(_req_p, _worker, _req_id, _extract, \
+                                   _action, _fmt_str, ...) \
     { \
-        ucs_status_t __status = ucp_request_get_by_id(_worker, _req_id, \
-                                                      _req_p, _extract); \
+        ucs_status_t __status = ucp_send_request_get_by_id(_worker, _req_id, \
+                                                           _req_p, _extract); \
         if (ucs_unlikely(__status != UCS_OK)) { \
             ucs_trace_data("worker %p: req id 0x%" PRIx64 " doesn't exist" \
                            " drop " _fmt_str, \

@@ -10,6 +10,8 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/type/status.h>
 #include <ucs/datastruct/array.h>
+#include <sys/uio.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -44,7 +46,7 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
  * @code{.c}
  * char * build_my_string(char *buffer, size_t max_length)
  * {
- *    UCS_STRING_BUFFER_FIXED(strb, buffer, max_legth);
+ *    UCS_STRING_BUFFER_FIXED(strb, buffer, max_length);
  *    ucs_string_buffer_appendf(&strb, "%x%x", 57005, 48879);
  *    return buffer;
  * }
@@ -119,6 +121,14 @@ void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb);
 
 
 /**
+ * Reset a string buffer to initial empty state.
+ *
+ * @param [out] strb   String buffer reset.
+ */
+void ucs_string_buffer_reset(ucs_string_buffer_t *strb);
+
+
+/**
  * Get the number of characters in a string buffer
  *
  * @param [out] strb   Return the length of this string buffer.
@@ -154,6 +164,28 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
  */
 void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
                                   size_t size, size_t per_line);
+
+
+/**
+ * Append a flag bitmask representation to the string buffer.
+ *
+ * @param [inout] strb        String buffer to append to.
+ * @param [in]    mask        Append the representation of this mask value.
+ * @param [in]    flag_names  If non-NULL, use this array as flag names.
+ */
+void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
+                                    const char **flag_names);
+
+
+/**
+ * Append an IO vector representation to the string buffer.
+ *
+ * @param [inout] strb        String buffer to append to.
+ * @param [in]    iov         Pointer to an IO vector.
+ * @param [in]    iovcnt      Number of entries in the IO vector.
+ */
+void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
+                                    const struct iovec *iov, size_t iovcnt);
 
 
 /**

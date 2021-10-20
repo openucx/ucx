@@ -41,8 +41,8 @@ static void usage() {
     printf("                    'r' : remote memory access\n");
     printf("                    't' : tag matching \n");
     printf("                    'm' : active messages \n");
-    printf("                    'w' : wakeup\n");
     printf("                  Modifiers to use in combination with above features:\n");
+    printf("                    'w' : wakeup\n");
     printf("                    'e' : error handling\n");
     printf("\nOther settings:\n");
     printf("  -t <name>       Filter devices information using specified transport (requires -d)\n");
@@ -53,19 +53,29 @@ static void usage() {
     printf("                    'shm'  : shared memory devices only\n");
     printf("                    'net'  : network devices only\n");
     printf("                    'self' : self transport only\n");
+    printf("  -P <type>       Set peer process placement for printing UCP endpoint configuration:\n");
+    printf("                    'self'  : same process (default)\n");
+    printf("                    'intra' : same node\n");
+    printf("                    'inter' : different node\n");
     /* TODO: add IPv6 support */
     printf("  -A <ipv4>       Local IPv4 device address to use for creating\n"
-           "                  endpoint in client/server mode");
+           "                  endpoint in client/server mode\n");
+    printf("  -T              Print system topology\n");
+    printf("  -M              Print memory copy bandwidth\n");
     printf("  -h              Show this help message\n");
     printf("\n");
 }
 
 int main(int argc, char **argv)
 {
+    const uint64_t required_ucp_features = UCP_FEATURE_AMO32 |
+                                           UCP_FEATURE_AMO64 | UCP_FEATURE_RMA |
+                                           UCP_FEATURE_TAG | UCP_FEATURE_AM;
     char *ip_addr = NULL;
     ucs_config_print_flags_t print_flags;
     ucp_ep_params_t ucp_ep_params;
     unsigned dev_type_bitmap;
+    process_placement_t proc_placement;
     uint64_t ucp_features;
     size_t ucp_num_eps;
     size_t ucp_num_ppn;
@@ -82,9 +92,10 @@ int main(int argc, char **argv)
     ucp_num_ppn              = 1;
     mem_size                 = NULL;
     dev_type_bitmap          = UINT_MAX;
+    proc_placement           = PROCESS_PLACEMENT_SELF;
     ucp_ep_params.field_mask = 0;
 
-    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:m:N:A:")) != -1) {
+    while ((c = getopt(argc, argv, "fahvcydbswpeCt:n:u:D:P:m:N:A:TM")) != -1) {
         switch (c) {
         case 'f':
             print_flags |= UCS_CONFIG_PRINT_CONFIG | UCS_CONFIG_PRINT_HEADER | UCS_CONFIG_PRINT_DOC;
@@ -147,11 +158,11 @@ int main(int argc, char **argv)
                 case 't':
                     ucp_features |= UCP_FEATURE_TAG;
                     break;
-                case 'w':
-                    ucp_features |= UCP_FEATURE_WAKEUP;
-                    break;
                 case 'm':
                     ucp_features |= UCP_FEATURE_AM;
+                    break;
+                case 'w':
+                    ucp_features |= UCP_FEATURE_WAKEUP;
                     break;
                 case 'e':
                     ucp_ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
@@ -169,16 +180,35 @@ int main(int argc, char **argv)
             } else if (!strcasecmp(optarg, "shm")) {
                 dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SHM);
             } else if (!strcasecmp(optarg, "self")) {
-                dev_type_bitmap = UCS_BIT(UCT_DEVICE_TYPE_SELF);
-            } else if (!strcasecmp(optarg, "all")) {
-                dev_type_bitmap = UINT_MAX;
-            } else {
+                dev_type_bitmap = (UCS_BIT(UCT_DEVICE_TYPE_SELF) |
+                                   UCS_BIT(UCT_DEVICE_TYPE_ACC));
+            } else if (strcasecmp(optarg, "all")) {
+                usage();
+                return -1;
+            }
+            break;
+        case 'P':
+            if (!strcasecmp(optarg, "intra")) {
+                /* Only Network and SHM devices are allowed for processes on the
+                 * same node */
+                proc_placement = PROCESS_PLACEMENT_INTRA;
+            } else if (!strcasecmp(optarg, "inter")) {
+                /* Only Network devices are allowed for processes on the
+                 * different node */
+                proc_placement = PROCESS_PLACEMENT_INTER;
+            } else if (strcasecmp(optarg, "self")) {
                 usage();
                 return -1;
             }
             break;
         case 'A':
             ip_addr = optarg;
+            break;
+        case 'T':
+            print_opts |= PRINT_SYS_TOPO;
+            break;
+        case 'M':
+            print_opts |= PRINT_MEMCPY_BW;
             break;
         case 'h':
             usage();
@@ -198,10 +228,6 @@ int main(int argc, char **argv)
         print_version();
     }
 
-    if (print_opts & PRINT_SYS_INFO) {
-        print_sys_info();
-    }
-
     if (print_opts & PRINT_BUILD_CONFIG) {
         print_build_config();
     }
@@ -210,11 +236,16 @@ int main(int argc, char **argv)
         print_type_info(tl_name);
     }
 
-    if ((print_opts & PRINT_DEVICES) || (print_flags & UCS_CONFIG_PRINT_CONFIG)) {
+    if ((print_opts & (PRINT_DEVICES | PRINT_SYS_TOPO)) ||
+        (print_flags & UCS_CONFIG_PRINT_CONFIG)) {
         /* if UCS_CONFIG_PRINT_CONFIG is ON, trigger loading UCT modules by
          * calling print_uct_info()->uct_component_query()
          */
         print_uct_info(print_opts, print_flags, tl_name);
+    }
+
+    if (print_opts & (PRINT_SYS_INFO | PRINT_MEMCPY_BW | PRINT_SYS_TOPO)) {
+        print_sys_info(print_opts);
     }
 
     if (print_flags & UCS_CONFIG_PRINT_CONFIG) {
@@ -223,15 +254,17 @@ int main(int argc, char **argv)
     }
 
     if (print_opts & (PRINT_UCP_CONTEXT|PRINT_UCP_WORKER|PRINT_UCP_EP|PRINT_MEM_MAP)) {
-        if (ucp_features == 0) {
-            printf("Please select UCP features using -u switch: a|r|t|m|w\n");
+        if (!(ucp_features & required_ucp_features)) {
+            printf("Please select at least one of 'a','r','t','m' UCP features "
+                   "using -u switch.\n");
             usage();
             return -1;
         }
 
         return print_ucp_info(print_opts, print_flags, ucp_features,
                               &ucp_ep_params, ucp_num_eps, ucp_num_ppn,
-                              dev_type_bitmap, mem_size, ip_addr);
+                              dev_type_bitmap, proc_placement, mem_size,
+                              ip_addr);
     }
 
     return 0;

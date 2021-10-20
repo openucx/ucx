@@ -18,6 +18,8 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sock.h>
+#include <ucs/type/serialize.h>
+#include <ucs/vfs/base/vfs_obj.h>
 
 
 static unsigned ucp_listener_accept_cb_progress(void *arg)
@@ -74,6 +76,12 @@ ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (attr->field_mask & UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID) {
+         /* coverity[overrun-local] */
+        attr->client_id = ucp_address_get_client_id(
+            UCS_PTR_TYPE_OFFSET(&conn_request->sa_data, ucp_wireup_sockaddr_data_t));
     }
 
     return UCS_OK;
@@ -148,12 +156,14 @@ ucp_listen(ucp_listener_h listener, const ucp_listener_params_t *params)
     ucs_assert_always(num_cms > 0);
 
     uct_params.field_mask       = UCT_LISTENER_PARAM_FIELD_CONN_REQUEST_CB |
-                                  UCT_LISTENER_PARAM_FIELD_USER_DATA       |
-                                  UCT_LISTENER_PARAM_FIELD_BACKLOG;
+                                  UCT_LISTENER_PARAM_FIELD_USER_DATA;
     uct_params.conn_request_cb  = ucp_cm_server_conn_request_cb;
     uct_params.user_data        = listener;
-    uct_params.backlog          = ucs_min((size_t)INT_MAX,
-                                          worker->context->config.ext.listener_backlog);
+
+    if (worker->context->config.ext.listener_backlog != UCS_ULUNITS_AUTO) {
+        uct_params.field_mask |= UCT_LISTENER_PARAM_FIELD_BACKLOG;
+        uct_params.backlog     = worker->context->config.ext.listener_backlog;
+    }
 
     listener->num_rscs          = 0;
     uct_listeners               = ucs_calloc(num_cms, sizeof(*uct_listeners),
@@ -168,6 +178,10 @@ ucp_listen(ucp_listener_h listener, const ucp_listener_params_t *params)
     cm_index = 0;
     while (cm_index < num_cms) {
         ucp_cm = &worker->cms[cm_index++];
+        if (ucp_cm->cm == NULL) {
+            continue;
+        }
+
         status = uct_listener_create(ucp_cm->cm, addr,
                                      params->sockaddr.addrlen, &uct_params,
                                      &uct_listeners[listener->num_rscs]);
@@ -246,6 +260,43 @@ err_free_listeners:
     return status;
 }
 
+static void ucp_listener_vfs_show_ip(void *obj, ucs_string_buffer_t *strb,
+                                     void *arg_ptr, uint64_t arg_u64)
+{
+    ucp_listener_h listener   = obj;
+    struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
+    char ip_str[UCS_SOCKADDR_STRING_LEN];
+
+    if (ucs_sockaddr_get_ipstr(sockaddr, ip_str, UCS_SOCKADDR_STRING_LEN) ==
+        UCS_OK) {
+        ucs_string_buffer_appendf(strb, "%s\n", ip_str);
+    } else {
+        ucs_string_buffer_appendf(strb, "<unable to get ip>\n");
+    }
+}
+
+static void ucp_listener_vfs_show_port(void *obj, ucs_string_buffer_t *strb,
+                                       void *arg_ptr, uint64_t arg_u64)
+{
+    ucp_listener_h listener   = obj;
+    struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
+    uint16_t port;
+
+    if (ucs_sockaddr_get_port(sockaddr, &port) == UCS_OK) {
+        ucs_string_buffer_appendf(strb, "%u\n", port);
+    } else {
+        ucs_string_buffer_appendf(strb, "<unable to get port>\n");
+    }
+}
+
+void ucp_listener_vfs_init(ucp_listener_h listener)
+{
+    ucs_vfs_obj_add_dir(listener->worker, listener, "listener/%p", listener);
+    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_ip, NULL, 0, "ip");
+    ucs_vfs_obj_add_ro_file(listener, ucp_listener_vfs_show_port, NULL, 0,
+                            "port");
+}
+
 ucs_status_t ucp_listener_create(ucp_worker_h worker,
                                  const ucp_listener_params_t *params,
                                  ucp_listener_h *listener_p)
@@ -297,6 +348,7 @@ ucs_status_t ucp_listener_create(ucp_worker_h worker,
 
     status = ucp_listen(listener, params);
     if (status == UCS_OK) {
+        ucp_listener_vfs_init(listener);
         *listener_p = listener;
         goto out;
     }
@@ -313,6 +365,7 @@ void ucp_listener_destroy(ucp_listener_h listener)
     ucs_trace("listener %p: destroying", listener);
 
     UCS_ASYNC_BLOCK(&listener->worker->async);
+    ucs_vfs_obj_remove(listener);
     ucs_callbackq_remove_if(&listener->worker->uct->progress_q,
                             ucp_cm_server_conn_request_progress_cb_pred,
                             listener);

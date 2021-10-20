@@ -120,8 +120,11 @@ void test_ud_ds::test_cep_insert(entity *e, uct_ib_address_t *ib_addr,
     uct_ud_ep_t *my_ep;
 
     for (i = 0; i < N; i++) {
-        uct_ud_ep_conn_sn_t conn_sn =
-            uct_ud_iface_cep_get_conn_sn(iface(e), ib_addr, if_addr, 0);
+        uct_ud_ep_conn_sn_t conn_sn;
+        ucs_status_t status =
+                uct_ud_iface_cep_get_conn_sn(iface(e), ib_addr, if_addr, 0,
+                                             &conn_sn);
+        ASSERT_UCS_OK(status);
         EXPECT_EQ(i, conn_sn);
 
         create_and_insert_ep(e, ib_addr, if_addr, conn_sn, i + base, 0);
@@ -197,6 +200,7 @@ UCS_TEST_P(test_ud_ds, cep_insert) {
 
 UCS_TEST_P(test_ud_ds, cep_replace) {
     uct_ud_ep_conn_sn_t conn_sn;
+    ucs_status_t status;
     uct_ud_ep_t *ep;
 
     /* add N connections */
@@ -208,36 +212,48 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     create_and_insert_ep(m_e1, ib_adr1, &if_adr1, N + 5, N + 2, true);
 
     /* slot N is free */
-    conn_sn = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0);
+    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
+                                          &conn_sn);
+    ASSERT_UCS_OK(status);
     EXPECT_EQ(N, conn_sn);
     create_and_insert_ep(m_e1, ib_adr1, &if_adr1, conn_sn, N + 3, false);
 
     /* slot N + 1 already occupied */
-    conn_sn = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0);
+    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
+                                          &conn_sn);
+    ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 1, conn_sn);
     ep = get_ep(m_e1, ib_adr1, &if_adr1, conn_sn, true);
     ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
     insert_ep(m_e1, ib_adr1, &if_adr1, N, ep);
 
     /* slot N + 2 is free */
-    conn_sn = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0);
+    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
+                                          &conn_sn);
+    ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 2, conn_sn);
     create_and_insert_ep(m_e1, ib_adr1, &if_adr1, conn_sn, N + 4, false);
 
     /* slot N + 3 is free */
-    conn_sn = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0);
+    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
+                                          &conn_sn);
+    ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 3, conn_sn);
     create_and_insert_ep(m_e1, ib_adr1, &if_adr1, conn_sn, N + 5, false);
 
     /* slot N + 4 already occupied */
-    conn_sn = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0);
+    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
+                                          &conn_sn);
+    ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 4, conn_sn);
     ep = get_ep(m_e1, ib_adr1, &if_adr1, conn_sn, true);
     ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
     insert_ep(m_e1, ib_adr1, &if_adr1, N, ep);
 
     /* slot N + 5 already occupied */
-    conn_sn = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0);
+    status = uct_ud_iface_cep_get_conn_sn(iface(m_e1), ib_adr1, &if_adr1, 0,
+                                          &conn_sn);
+    ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 5, conn_sn);
     ep = get_ep(m_e1, ib_adr1, &if_adr1, conn_sn, true);
     ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;

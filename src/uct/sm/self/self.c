@@ -167,7 +167,8 @@ static ucs_mpool_ops_t uct_self_iface_mpool_ops = {
     .chunk_alloc   = ucs_mpool_chunk_malloc,
     .chunk_release = ucs_mpool_chunk_free,
     .obj_init      = NULL,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
@@ -191,12 +192,13 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_self_iface_ops, md, worker,
-                              params, tl_config
-                              UCS_STATS_ARG((params->field_mask & 
-                                             UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
-                                            params->stats_root : NULL)
-                              UCS_STATS_ARG(UCT_SELF_NAME));
+    UCS_CLASS_CALL_SUPER_INIT(
+            uct_base_iface_t, &uct_self_iface_ops,
+            &uct_base_iface_internal_ops, md, worker, params,
+            tl_config UCS_STATS_ARG(
+                    (params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                            params->stats_root :
+                            NULL) UCS_STATS_ARG(UCT_SELF_NAME));
 
     self->id          = ucs_generate_uuid((uintptr_t)self);
     self->send_size   = config->seg_size;
@@ -390,7 +392,7 @@ static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.max_alloc        = 0;
     attr->cap.max_reg          = ULONG_MAX;
-    attr->rkey_packed_size     = 0; /* uct_md_query adds UCT_COMPONENT_NAME_MAX to this */
+    attr->rkey_packed_size     = 0;
     attr->reg_cost             = ucs_linear_func_make(0, 0);
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
@@ -404,6 +406,16 @@ static ucs_status_t uct_self_mem_reg(uct_md_h md, void *address, size_t length,
     return UCS_OK;
 }
 
+static ucs_status_t uct_self_mem_dereg(uct_md_h uct_md,
+                                       const uct_md_mem_dereg_params_t *params)
+{
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ucs_assert(params->memh == (void*)0xdeadbeef);
+
+    return UCS_OK;
+}
+
 static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_name,
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
@@ -414,7 +426,7 @@ static ucs_status_t uct_self_md_open(uct_component_t *component, const char *md_
         .query              = uct_self_md_query,
         .mkey_pack          = ucs_empty_function_return_success,
         .mem_reg            = uct_self_mem_reg,
-        .mem_dereg          = ucs_empty_function_return_success,
+        .mem_dereg          = uct_self_mem_dereg,
         .detect_memory_type = ucs_empty_function_return_unsupported
     };
 
@@ -457,6 +469,7 @@ static uct_component_t uct_self_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
-    .flags              = 0
+    .flags              = 0,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_self_component);

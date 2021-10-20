@@ -15,22 +15,13 @@
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/exp/ib_exp.h>
+#include <ucs/vfs/base/vfs_cb.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/sys/compiler.h>
 #include <arpa/inet.h> /* For htonl */
 
 #include "rc_mlx5.inl"
-
-
-/**
- * RC MLX5 EP cleanup context
- */
-typedef struct {
-    uct_rc_ep_cleanup_ctx_t    super;           /* Base class */
-    uct_ib_mlx5_qp_t           tm_qp;           /* TM Renezvous QP */
-    uct_ib_mlx5_qp_t           qp;              /* Main QP */
-    uct_ib_mlx5_mmio_reg_t     *reg;            /* Doorbell register */
-} uct_rc_mlx5_ep_cleanup_ctx_t;
 
 
 /*
@@ -548,8 +539,7 @@ ucs_status_t uct_rc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags)
 void uct_rc_mlx5_ep_post_check(uct_ep_h tl_ep)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    /* use this variable as dummy buffer to suppress compiler warning */ 
-    uint64_t dummy = 0;
+    uint64_t dummy = 0; /* Dummy buffer to suppress compiler warning */
 
     uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                  &ep->super.txqp, &ep->tx.wq,
@@ -558,6 +548,17 @@ void uct_rc_mlx5_ep_post_check(uct_ep_h tl_ep)
                                  0, 0,
                                  NULL, NULL, 0, 0,
                                  INT_MAX);
+}
+
+void uct_rc_mlx5_ep_vfs_populate(uct_rc_ep_t *rc_ep)
+{
+    uct_rc_iface_t *rc_iface = ucs_derived_of(rc_ep->super.super.iface,
+                                              uct_rc_iface_t);
+    uct_rc_mlx5_ep_t *ep     = ucs_derived_of(rc_ep, uct_rc_mlx5_ep_t);
+
+    ucs_vfs_obj_add_dir(rc_iface, ep, "ep/%p", ep);
+    uct_ib_mlx5_txwq_vfs_populate(&ep->tx.wq, ep);
+    uct_rc_txqp_vfs_populate(&ep->super.txqp, ep);
 }
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
@@ -984,53 +985,20 @@ err:
     return status;
 }
 
-unsigned uct_rc_mlx5_ep_cleanup_qp(void *arg)
-{
-    uct_rc_mlx5_ep_cleanup_ctx_t *ep_cleanup_ctx
-                                      = arg;
-    uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(ep_cleanup_ctx->super.iface,
-                                                       uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
-                                                       uct_ib_mlx5_md_t);
-#if !HAVE_DECL_MLX5DV_INIT_OBJ
-    int count;
-
-    count = uct_rc_mlx5_iface_commom_clean(&iface->cq[UCT_IB_DIR_RX],
-                                           &iface->rx.srq,
-                                           ep_cleanup_ctx->qp.qp_num);
-    iface->super.rx.srq.available += count;
-    uct_rc_mlx5_iface_common_update_cqs_ci(iface, &iface->super.super);
-#endif
-
-#if IBV_HW_TM
-    if (UCT_RC_MLX5_TM_ENABLED(iface)) {
-        /* using uct_ib_mlx5_iface_put_res_domain and not
-         * uct_ib_mlx5_qp_mmio_cleanup: in case of devx, we don't have uar,
-         * and uct_ib_mlx5_qp_mmio_cleanup would try to release uar */
-        uct_ib_mlx5_iface_put_res_domain(&ep_cleanup_ctx->tm_qp);
-        uct_ib_mlx5_destroy_qp(md, &ep_cleanup_ctx->tm_qp);
-    }
-#endif
-
-    uct_ib_mlx5_qp_mmio_cleanup(&ep_cleanup_ctx->qp, ep_cleanup_ctx->reg);
-    uct_ib_mlx5_destroy_qp(md, &ep_cleanup_ctx->qp);
-    uct_rc_ep_cleanup_qp_done(&ep_cleanup_ctx->super, ep_cleanup_ctx->qp.qp_num);
-    return 1;
-}
-
 UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                        uct_rc_mlx5_iface_common_t);
     uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
                                                        uct_ib_mlx5_md_t);
-    uct_rc_mlx5_ep_cleanup_ctx_t *ep_cleanup_ctx;
+    uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
+    uint16_t outstanding, wqe_count;
 
-    ep_cleanup_ctx = ucs_malloc(sizeof(*ep_cleanup_ctx), "ep_cleanup_ctx");
-    ucs_assert_always(ep_cleanup_ctx != NULL);
-    ep_cleanup_ctx->tm_qp = self->tm_qp;
-    ep_cleanup_ctx->qp    = self->tx.wq.super;
-    ep_cleanup_ctx->reg   = self->tx.wq.reg;
+    cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "mlx5_qp_cleanup_ctx");
+    ucs_assert_always(cleanup_ctx != NULL);
+    cleanup_ctx->qp    = self->tx.wq.super;
+    cleanup_ctx->tm_qp = self->tm_qp;
+    cleanup_ctx->reg   = self->tx.wq.reg;
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
                                   UCS_ERR_CANCELED, self->tx.wq.sw_pi, 1);
@@ -1042,8 +1010,14 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 
     ucs_assert(self->mp.free == 1);
     (void)uct_ib_mlx5_modify_qp_state(md, &self->tx.wq.super, IBV_QPS_ERR);
-    uct_rc_ep_cleanup_qp(&iface->super, &self->super, &ep_cleanup_ctx->super,
-                         self->tx.wq.super.qp_num);
+
+    /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
+       overflow. These CQ credits will be released by error CQE handler. */
+    outstanding = self->tx.wq.bb_max - self->super.txqp.available;
+    wqe_count   = uct_ib_mlx5_txwq_num_posted_wqes(&self->tx.wq, outstanding);
+    ucs_assert(outstanding >= wqe_count);
+    uct_rc_ep_cleanup_qp(&self->super, &cleanup_ctx->super,
+                         self->tx.wq.super.qp_num, outstanding - wqe_count);
 }
 
 UCS_CLASS_DEFINE(uct_rc_mlx5_ep_t, uct_rc_ep_t);

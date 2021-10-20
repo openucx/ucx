@@ -15,7 +15,8 @@
 #include <ucs/arch/bitops.h>
 
 
-ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
+ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
+                                               int full_handshake)
 {
     uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super.super.super);
     struct mlx5dv_pd dvpd = {};
@@ -47,6 +48,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, rre, true);
     UCT_IB_MLX5DV_SET(dctc, dctc, rwe, true);
     UCT_IB_MLX5DV_SET(dctc, dctc, rae, true);
+    UCT_IB_MLX5DV_SET(dctc, dctc, force_full_handshake, !!full_handshake);
     UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, uct_ib_mlx5_qpc_cs_res(
                       iface->super.super.super.config.max_inl_cqe[UCT_IB_DIR_RX], 1));
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
@@ -54,7 +56,19 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
     UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->super.super.super.config.port_num);
 
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak, iface->super.super.config.min_rnr_timer);
-    UCT_IB_MLX5DV_SET(dctc, dctc, tclass, iface->super.super.super.config.traffic_class);
+
+    /* Infiniband and RoCE v1 set traffic class.
+     * Also set it for RoCE v2, because some old FW versions rely on tclass
+     * even for RoCE v2. */
+    UCT_IB_MLX5DV_SET(dctc, dctc, tclass,
+                      iface->super.super.super.config.traffic_class);
+
+    if (uct_ib_iface_is_roce_v2(&iface->super.super.super, dev)) {
+        /* RoCE V2 sets DSCP */
+        UCT_IB_MLX5DV_SET(dctc, dctc, dscp,
+                          uct_ib_iface_roce_dscp(&iface->super.super.super));
+    }
+
     UCT_IB_MLX5DV_SET(dctc, dctc, mtu, iface->super.super.super.config.path_mtu);
     UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, iface->super.super.super.gid_info.gid_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
@@ -139,6 +153,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, iface->super.super.config.rnr_retry);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout, iface->super.super.config.timeout);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm, iface->super.super.config.exp_backoff);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
+                      iface->super.config.log_ack_req_freq);
 
     return uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
                                       out_2rts, sizeof(out_2rts));

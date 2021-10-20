@@ -41,7 +41,26 @@ typedef struct ucp_mem {
  */
 typedef struct ucp_mem_desc {
     ucp_mem_h                     memh;
+    void                          *ptr;
 } ucp_mem_desc_t;
+
+
+/**
+ * Memory descriptor details for rndv fragments.
+ */
+typedef struct ucp_rndv_frag_mp_chunk_hdr {
+    ucp_mem_h                     memh;
+    void                          *next_frag_ptr;
+} ucp_rndv_frag_mp_chunk_hdr_t;
+
+
+/**
+ * Memory pool private data descriptor.
+ */
+typedef struct ucp_rndv_mpool_priv {
+    ucp_worker_h                  worker;
+    ucs_memory_type_t             mem_type;
+} ucp_rndv_mpool_priv_t;
 
 
 ucs_status_t ucp_reg_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
@@ -53,6 +72,12 @@ void ucp_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
 ucs_status_t ucp_frag_mpool_malloc(ucs_mpool_t *mp, size_t *size_p, void **chunk_p);
 
 void ucp_frag_mpool_free(ucs_mpool_t *mp, void *chunk);
+
+void ucp_frag_mpool_obj_init(ucs_mpool_t *mp, void *obj, void *chunk);
+
+ucs_status_t
+ucp_mm_get_alloc_md_map(ucp_context_h context, ucp_md_map_t *md_map_p);
+
 
 /**
  * Update memory registration to a specified set of memory domains.
@@ -111,7 +136,7 @@ static UCS_F_ALWAYS_INLINE uct_mem_h
 ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_idx)
 {
     if (!(md_map & UCS_BIT(md_idx))) {
-        return NULL;
+        return UCT_MEM_HANDLE_NULL;
     }
 
     return uct[ucs_bitmap2idx(md_map, md_idx)];

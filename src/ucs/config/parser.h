@@ -18,14 +18,14 @@
 
 #define UCS_DEFAULT_ENV_PREFIX "UCX_"
 #define UCS_CONFIG_ARRAY_MAX   128
-#define UCX_CONF_FILE          UCX_CONF_DIR "/ucx.conf"
+#define UCX_CONFIG_FILE_NAME   "ucx.conf"
 
 BEGIN_C_DECLS
 
 /** @file parser.h */
 
 /*
- * Configuration varaibles syntax:
+ * Configuration variables syntax:
  *
  * name: <env_prefix><table_prefix><field_name>
  *
@@ -62,6 +62,15 @@ typedef struct ucs_config_field {
     size_t                   offset;
     ucs_config_parser_t      parser;
 } ucs_config_field_t;
+
+
+typedef struct ucs_config_cached_key {
+    char            *key;   /* Cached configuration key */
+    char            *value; /* Cached configuration value */
+    int             used;   /* Whether this configuration was
+                             * applied successfully */
+    ucs_list_link_t list;   /* Element in a list of key/value entries */
+} ucs_config_cached_key_t;
 
 
 typedef struct ucs_ib_port_spec {
@@ -376,11 +385,20 @@ ucs_config_parser_set_default_values(void *opts, ucs_config_field_t *fields);
 
 /**
  * Parse INI configuration file with UCX options.
- * 
- * @param path     Path file at this path.
- * @param override Whether to override, if another file was previously parsed
+ *
+ * @param dir_path  Parse file at this location.
+ * @param file_name Parse this file.
+ * @param override  Whether to override, if another file was previously parsed
  */
-ucs_status_t ucs_config_parse_config_file(const char *path, int override);
+void ucs_config_parse_config_file(const char *dir_path, const char *file_name,
+                                  int override);
+
+
+/**
+ * Parse configuration files. This function searches for config in several
+ * locations and parses them in order of precedence.
+ */
+void ucs_config_parse_config_files();
 
 
 /**
@@ -389,7 +407,7 @@ ucs_status_t ucs_config_parse_config_file(const char *path, int override);
  * @param opts           User-defined options structure to fill.
  * @param fields         Array of fields which define how to parse.
  * @param env_prefix     Prefix to add to all environment variables,
- *                       env_prefix may consist of multiple sub preifxes
+ *                       env_prefix may consist of multiple sub prefixes
  * @param table_prefix   Optional prefix to add to the variables of top-level table.
  * @param ignore_errors  Whether to ignore parsing errors and continue parsing
  *                       other fields.
@@ -468,14 +486,14 @@ ucs_status_t ucs_config_parser_set_value(void *opts, ucs_config_field_t *fields,
                                          const char *name, const char *value);
 
 /**
- * Wrapper for `ucs_config_parser_warn_unused_env_vars`
+ * Wrapper for `ucs_config_parser_print_env_vars`
  * that ensures that this is called once
  *
  * @param env_prefix     Environment variable prefix.
- *                       env_prefix may consist of multiple sub prefixex
+ *                       env_prefix may consist of multiple sub prefixes
  */
 
-void ucs_config_parser_warn_unused_env_vars_once(const char *env_prefix);
+void ucs_config_parser_print_env_vars_once(const char *env_prefix);
 
 /**
  * Translate configuration value of "MEMUNITS" type to actual value.
@@ -493,7 +511,7 @@ size_t ucs_config_memunits_get(size_t config_size, size_t auto_size,
  * @param config_names     lookup array of counters patterns.
  * @param str              string to search.
  */
-int ucs_config_names_search(ucs_config_names_array_t config_names,
+int ucs_config_names_search(const ucs_config_names_array_t *config_names,
                             const char *str);
 
 END_C_DECLS

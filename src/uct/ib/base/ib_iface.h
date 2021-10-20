@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -153,6 +154,9 @@ struct uct_ib_iface_config {
     /* Number of paths to expose for the interface  */
     unsigned long           num_paths;
 
+    /* Whether to use local IP address and subnet mask for RoCE(v2) routing */
+    int                     rocev2_use_netmask;
+
     /* Multiplier for RoCE LAG UDP source port calculation */
     unsigned                roce_path_factor;
 
@@ -172,7 +176,12 @@ struct uct_ib_iface_config {
 
 enum {
     UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
-    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
+    UCT_IB_TM_SUPPORTED              = UCS_BIT(1),
+
+    /* Indicates that TX cq len in uct_ib_iface_init_attr_t is specified per
+     * each IB path. Therefore IB interface constructor would need to multiply
+     * TX CQ len by the number of IB paths (when it is properly initialized). */
+    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2)
 };
 
 
@@ -226,7 +235,7 @@ typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface,
 
 
 struct uct_ib_iface_ops {
-    uct_iface_ops_t                    super;
+    uct_iface_internal_ops_t           super;
     uct_ib_iface_create_cq_func_t      create_cq;
     uct_ib_iface_arm_cq_func_t         arm_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
@@ -247,6 +256,7 @@ struct uct_ib_iface {
     uint16_t                  pkey_index;
     uint16_t                  pkey;
     uint8_t                   addr_size;
+    uint8_t                   addr_prefix_bits;
     uct_ib_device_gid_info_t  gid_info;
 
     struct {
@@ -280,8 +290,9 @@ typedef struct uct_ib_fence_info {
 } uct_ib_fence_info_t;
 
 
-UCS_CLASS_DECLARE(uct_ib_iface_t, uct_ib_iface_ops_t*, uct_md_h, uct_worker_h,
-                  const uct_iface_params_t*, const uct_ib_iface_config_t*,
+UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
+                  uct_md_h, uct_worker_h, const uct_iface_params_t*,
+                  const uct_ib_iface_config_t*,
                   const uct_ib_iface_init_attr_t*);
 
 /*
@@ -501,7 +512,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 
 ucs_status_t uct_ib_iface_create_ah(uct_ib_iface_t *iface,
                                     struct ibv_ah_attr *ah_attr,
-                                    struct ibv_ah **ah_p);
+                                    const char *usage, struct ibv_ah **ah_p);
 
 void uct_ib_iface_fill_ah_attr_from_gid_lid(uct_ib_iface_t *iface, uint16_t lid,
                                             const union ibv_gid *gid,
@@ -605,19 +616,44 @@ uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
     fence->fence_beat = 0;
 }
 
-static UCS_F_ALWAYS_INLINE
-ucs_log_level_t uct_ib_iface_failure_log_level(uct_ib_iface_t *ib_iface,
-                                               ucs_status_t err_handler_status,
-                                               ucs_status_t status)
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ib_cq_size(uct_ib_iface_t *iface, const uct_ib_iface_init_attr_t *init_attr,
+               uct_ib_dir_t dir)
 {
-    if (err_handler_status != UCS_OK) {
-        return UCS_LOG_LEVEL_FATAL;
-    } else if ((status == UCS_ERR_ENDPOINT_TIMEOUT) ||
-               (status == UCS_ERR_CONNECTION_RESET)) {
-        return ib_iface->super.config.failure_level;
+    if (dir == UCT_IB_DIR_RX) {
+        return init_attr->cq_len[UCT_IB_DIR_RX];
+    } else if (init_attr->flags & UCT_IB_TX_OPS_PER_PATH) {
+        return init_attr->cq_len[UCT_IB_DIR_TX] * iface->num_paths;
     } else {
-        return UCS_LOG_LEVEL_ERROR;
+        return init_attr->cq_len[UCT_IB_DIR_TX];
     }
 }
+
+static UCS_F_ALWAYS_INLINE unsigned
+uct_ib_iface_roce_dscp(uct_ib_iface_t *iface)
+{
+    ucs_assert(uct_ib_iface_is_roce(iface));
+    return iface->config.traffic_class >> 2;
+}
+
+#if HAVE_DECL_IBV_CREATE_CQ_EX
+static UCS_F_ALWAYS_INLINE void
+uct_ib_fill_cq_attr(struct ibv_cq_init_attr_ex *cq_attr,
+                    const uct_ib_iface_init_attr_t *init_attr,
+                    uct_ib_iface_t *iface, int preferred_cpu, unsigned cq_size)
+{
+    cq_attr->cqe         = cq_size;
+    cq_attr->channel     = iface->comp_channel;
+    cq_attr->comp_vector = preferred_cpu;
+#if HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN
+    /* Always check CQ overrun if assert mode enabled. */
+    /* coverity[dead_error_condition] */
+    if (!UCS_ENABLE_ASSERT && (init_attr->flags & UCT_IB_CQ_IGNORE_OVERRUN)) {
+        cq_attr->comp_mask = IBV_CQ_INIT_ATTR_MASK_FLAGS;
+        cq_attr->flags     = IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN;
+    }
+#endif /* HAVE_DECL_IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN */
+}
+#endif /* HAVE_DECL_IBV_CREATE_CQ_EX */
 
 #endif

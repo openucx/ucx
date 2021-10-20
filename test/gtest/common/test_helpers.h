@@ -8,7 +8,7 @@
 #ifndef UCS_TEST_HELPERS_H
 #define UCS_TEST_HELPERS_H
 
-#include "gtest.h"
+#include "googletest/gtest.h"
 
 #include <common/mem_buffer.h>
 
@@ -58,11 +58,12 @@
 /* Abort test */
 #define UCS_TEST_ABORT(_message) \
     do { \
-        std::stringstream ss; \
-        ss << _message; \
-        GTEST_MESSAGE_(ss.str().c_str(), ::testing::TestPartResult::kFatalFailure); \
+        std::stringstream _ss; \
+        _ss << _message; \
+        GTEST_MESSAGE_(_ss.str().c_str(), \
+                       ::testing::TestPartResult::kFatalFailure); \
         throw ucs::test_abort_exception(); \
-    } while(0)
+    } while (0)
 
 
 /* UCS error check */
@@ -177,8 +178,7 @@
 namespace ucs {
 
 extern const double test_timeout_in_sec;
-extern const double watchdog_timeout_default;
-
+extern double watchdog_timeout;
 extern std::set< const ::testing::TestInfo*> skipped_tests;
 
 typedef enum {
@@ -328,9 +328,11 @@ class sock_addr_storage {
 public:
     sock_addr_storage();
 
-    sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr);
+    sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr,
+                      bool is_rdmacm_netdev = false);
 
-    void set_sock_addr(const struct sockaddr &addr, const size_t size);
+    void set_sock_addr(const struct sockaddr &addr, const size_t size,
+                       bool is_rdmacm_netdev = false);
 
     void reset_to_any();
 
@@ -339,6 +341,8 @@ public:
     void set_port(uint16_t port);
 
     uint16_t get_port() const;
+
+    bool is_rdmacm_netdev() const;
 
     size_t get_addr_size() const;
 
@@ -354,6 +358,7 @@ private:
     struct sockaddr_storage m_storage;
     size_t                  m_size;
     bool                    m_is_valid;
+    bool                    m_is_rdmacm_netdev;
 };
 
 
@@ -384,6 +389,10 @@ std::ostream& operator<<(std::ostream& os, const std::vector<char>& vec);
 static inline int rand() {
     /* coverity[dont_call] */
     return ::rand();
+}
+
+static inline int rand_range(int max) {
+    return rand() % max;
 }
 
 static inline void srand(unsigned seed) {
@@ -873,6 +882,17 @@ private:
 };
 
 
+class scoped_mutex_lock {
+public:
+    scoped_mutex_lock(pthread_mutex_t &mutex);
+
+    ~scoped_mutex_lock();
+
+private:
+    pthread_mutex_t &m_mutex;
+};
+
+
 /**
  * N-ary Cartesian product over the N vectors provided in the input vector
  * The cardinality of the result vector:
@@ -924,7 +944,7 @@ std::vector<std::vector<T> > make_pairs(const std::vector<T> &input_vec) {
     return result;
 }
 
-std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
+const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs();
 
 
 /**

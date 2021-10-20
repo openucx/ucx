@@ -30,7 +30,8 @@ protected:
         TEST_TAG     = UCS_BIT(1),
         TEST_STREAM  = UCS_BIT(2),
         UNIFIED_MODE = UCS_BIT(3),
-        TEST_AMO     = UCS_BIT(4)
+        TEST_AMO     = UCS_BIT(4),
+        NO_EP_MATCH  = UCS_BIT(5)
     };
 
     typedef uint64_t               elem_type;
@@ -55,8 +56,6 @@ protected:
 
     void send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker, ucp_ep_h recv_ep,
                    size_t vecsize, int repeat);
-
-    void waitall(std::vector<void*> reqs);
 
     void disconnect(ucp_ep_h ep);
 
@@ -106,12 +105,22 @@ void test_ucp_wireup::get_test_variants(std::vector<ucp_test_variant>& variants,
         add_variant_with_value(variants, UCP_FEATURE_RMA, TEST_RMA, "rma");
         add_variant_with_value(variants, UCP_FEATURE_RMA,
                                TEST_RMA | UNIFIED_MODE, "rma,unified");
+        add_variant_with_value(variants, UCP_FEATURE_RMA,
+                               TEST_RMA | NO_EP_MATCH, "rma,no_ep_match");
+        add_variant_with_value(variants, UCP_FEATURE_RMA,
+                               TEST_RMA | UNIFIED_MODE | NO_EP_MATCH,
+                               "rma,unified,no_ep_match");
     }
 
     if (features & UCP_FEATURE_TAG) {
         add_variant_with_value(variants, UCP_FEATURE_TAG, TEST_TAG, "tag");
         add_variant_with_value(variants, UCP_FEATURE_TAG,
                                TEST_TAG | UNIFIED_MODE, "tag,unified");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | NO_EP_MATCH, "tag,no_ep_match");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | UNIFIED_MODE | NO_EP_MATCH,
+                               "tag,unified,no_ep_match");
     }
 
     if (features & UCP_FEATURE_STREAM) {
@@ -123,6 +132,8 @@ void test_ucp_wireup::get_test_variants(std::vector<ucp_test_variant>& variants,
     if (features & (UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64)) {
         add_variant_with_value(variants, UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64,
                                TEST_AMO, "amo");
+        add_variant_with_value(variants, UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64,
+                               TEST_AMO | NO_EP_MATCH, "amo,no_ep_match");
     }
 
     if (test_all) {
@@ -148,6 +159,11 @@ void test_ucp_wireup::init()
     }
 
     ucp_test::init();
+
+    if (get_variant_value() & NO_EP_MATCH) {
+        sender().worker()->conn_match_ctx.max_conn_sn   = 0;
+        receiver().worker()->conn_match_ctx.max_conn_sn = 0;
+    }
 
     m_send_data.resize(BUFFER_LENGTH, 0);
     m_recv_data.resize(BUFFER_LENGTH, 0);
@@ -271,7 +287,7 @@ void test_ucp_wireup::send_b(ucp_ep_h ep, size_t length, int repeat,
 {
     std::vector<void*> reqs;
     send_nb(ep, length, repeat, reqs, send_data);
-    waitall(reqs);
+    requests_wait(reqs);
 }
 
 void test_ucp_wireup::recv_b(ucp_worker_h worker, ucp_ep_h ep, size_t length,
@@ -345,7 +361,7 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
 
     send_nb(send_ep, length, repeat, send_reqs, send_data);
     recv_b (recv_worker, recv_ep, length, repeat, send_data);
-    waitall(send_reqs);
+    requests_wait(send_reqs);
     m_rkeys.clear();
 }
 
@@ -359,14 +375,6 @@ void test_ucp_wireup::disconnect(ucp_ep_h ep) {
 
 void test_ucp_wireup::disconnect(ucp_test::entity &e) {
     disconnect(e.revoke_ep());
-}
-
-void test_ucp_wireup::waitall(std::vector<void*> reqs)
-{
-    while (!reqs.empty()) {
-        request_wait(reqs.back());
-        reqs.pop_back();
-    }
 }
 
 bool test_ucp_wireup::ep_iface_has_caps(const entity& e, const std::string& tl,
@@ -544,7 +552,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, one_sided_wireup_rndv, "RNDV_THRESH=1") {
 UCS_TEST_P(test_ucp_wireup_1sided, multi_wireup) {
     skip_loopback();
 
-    const size_t count = 10;
+    const size_t count = ucs_max(2, 10 / ucs::test_time_multiplier());
     while (entities().size() < count) {
         create_entity();
     }
@@ -651,15 +659,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply1) {
     recv_b(sender().worker(), sender().ep(), 8, 1);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_wireup_1sided, send_disconnect_reply2,
-                     /* skip the test for TCP, because it fails from time to
-                      * time: the sender re-uses a socket fd from the already
-                      * accepted connection from the receiver, but then the
-                      * socket fd is closed, since the receiver closed the
-                      * connection and the underlying TCP EP isn't able to
-                      * receive the data on the failed socket.
-                      * TODO: fix the bug on TCP level */
-                     has_transport("tcp")) {
+UCS_TEST_P(test_ucp_wireup_1sided, send_disconnect_reply2) {
     sender().connect(&receiver(), get_ep_params());
 
     send_b(sender().ep(), 8, 1);
@@ -692,7 +692,7 @@ UCS_TEST_P(test_ucp_wireup_1sided, disconnect_nb_onesided) {
     sender().close_ep_req_free(req);
 
     recv_b(receiver().worker(), receiver().ep(), 1000, 1000);
-    waitall(sreqs);
+    requests_wait(sreqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_1sided, multi_ep_1sided) {
@@ -803,7 +803,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_2sided, async_connect,
     EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
 
     ucs_time_t deadline = ucs::get_deadline();
-    /* waiting of async reply on wiriup without calling progress on receiver */
+    /* waiting of async reply on wireup without calling progress on receiver */
     while(!(send_ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) &&
           (ucs_get_time() < deadline)) {
         ucp_worker_progress(sender().worker());
@@ -813,7 +813,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_2sided, async_connect,
     reqs.push_back(ucp_tag_recv_nb(receiver().worker(), NULL, 0, DT_U64, 1,
                                    (ucp_tag_t)-1, tag_recv_completion));
     EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
-    waitall(reqs);
+    requests_wait(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, connect_disconnect) {
@@ -850,7 +850,7 @@ UCS_TEST_P(test_ucp_wireup_2sided, close_nbx_callback) {
         EXPECT_FALSE(UCS_PTR_IS_ERR(reqs.back()));
     }
 
-    waitall(reqs);
+    requests_wait(reqs);
 }
 
 UCS_TEST_P(test_ucp_wireup_2sided, multi_ep_2sided) {
@@ -1074,7 +1074,7 @@ UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
 /* Test two scalable enough transports */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               dc_ud, "dc_x,ud_x,ud_v")
-/* Test unsacalable transports only */
+/* Test unscalable transports only */
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback,
                               rc, "rc_x,rc_v")
 /* Test all available IB transports */
@@ -1155,7 +1155,7 @@ public:
 
 UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
 {
-    // Accelerated transports have better performance charasteristics than their
+    // Accelerated transports have better performance characteristics than their
     // verbs counterparts. Check that corresponding verbs transports are not used
     // by workers in unified mode.
     check_unified_ifaces(&sender(), "rc_mlx5", "rc_verbs");
@@ -1359,10 +1359,68 @@ UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_fallback_amo,
                               shm_rc, "shm,rc_x,rc_v")
 
+
 /* NOTE: this fixture is NOT inherited from test_ucp_wireup, because we want to
  * create our own entities.
  */
 class test_ucp_wireup_asymmetric : public ucp_test {
+protected:
+    void tag_sendrecv(size_t size) {
+        std::string send_data(size, 's');
+        std::string recv_data(size, 'x');
+
+        ucs_status_ptr_t sreq = ucp_tag_send_nb(
+                        sender().ep(0), &send_data[0], size,
+                        ucp_dt_make_contig(1), 1,
+                        (ucp_send_callback_t)ucs_empty_function);
+        ucs_status_ptr_t rreq = ucp_tag_recv_nb(
+                        receiver().worker(), &recv_data[0], size,
+                        ucp_dt_make_contig(1), 1, 1,
+                        (ucp_tag_recv_callback_t)ucs_empty_function);
+        request_wait(sreq);
+        request_wait(rreq);
+
+        EXPECT_EQ(send_data, recv_data);
+    }
+
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
+        add_variant(variants, UCP_FEATURE_TAG);
+    }
+};
+
+
+/*
+ * Force asymmetric configuration by different PPN settings
+ */
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, different_ppn_connect,
+                     is_self())
+{
+    {
+        modify_config("NUM_PPN", ucs::to_string(1).c_str());
+        create_entity();
+    }
+
+    {
+        modify_config("NUM_PPN", ucs::to_string(128).c_str());
+        create_entity();
+    }
+
+    sender().connect(&receiver(), get_ep_params());
+    receiver().connect(&sender(), get_ep_params());
+
+    ucp_ep_print_info(sender().ep(), stdout);
+    ucp_ep_print_info(receiver().ep(), stdout);
+
+    tag_sendrecv(1);
+    tag_sendrecv(100000);
+    tag_sendrecv(1000000);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_asymmetric)
+
+
+class test_ucp_wireup_asymmetric_ib : public test_ucp_wireup_asymmetric {
 protected:
     virtual void init() {
         static const char *ibdev_sysfs_dir = "/sys/class/infiniband";
@@ -1388,24 +1446,6 @@ protected:
         closedir(dir);
     }
 
-    void tag_sendrecv(size_t size) {
-        std::string send_data(size, 's');
-        std::string recv_data(size, 'x');
-
-        ucs_status_ptr_t sreq = ucp_tag_send_nb(
-                        sender().ep(0), &send_data[0], size,
-                        ucp_dt_make_contig(1), 1,
-                        (ucp_send_callback_t)ucs_empty_function);
-        ucs_status_ptr_t rreq = ucp_tag_recv_nb(
-                        receiver().worker(), &recv_data[0], size,
-                        ucp_dt_make_contig(1), 1, 1,
-                        (ucp_tag_recv_callback_t)ucs_empty_function);
-        request_wait(sreq);
-        request_wait(rreq);
-
-        EXPECT_EQ(send_data, recv_data);
-    }
-
     /* Generate a pci_bw configuration string for IB devices, which assigns
      * the speed ai+b for device i.
      */
@@ -1422,18 +1462,14 @@ protected:
     }
 
     std::vector<std::string> m_ib_devices;
-
-public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants) {
-        add_variant(variants, UCP_FEATURE_TAG);
-    }
 };
 
 /*
  * Force asymmetric configuration by different PCI_BW settings
  */
-UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
-
+UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric_ib, different_pci_bw_connect,
+                     is_self())
+{
     /* Enable cross-dev connection */
     /* coverity[tainted_string_argument] */
     ucs::scoped_setenv path_mtu_env("UCX_RC_PATH_MTU", "1024");
@@ -1465,9 +1501,9 @@ UCS_TEST_SKIP_COND_P(test_ucp_wireup_asymmetric, connect, is_self()) {
     tag_sendrecv(1000000);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcv, "rc_v")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, rcx, "rc_x")
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric, ib, "ib")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, rcv, "rc_v")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, rcx, "rc_x")
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_asymmetric_ib, ib, "ib")
 
 class test_ucp_wireup_keepalive : public test_ucp_wireup {
 public:
@@ -1481,14 +1517,15 @@ public:
     }
 
     ucp_ep_params_t get_ep_params() {
-        ucp_ep_params_t params;
-        memset(&params, 0, sizeof(params));
-        params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+        ucp_ep_params_t params = test_ucp_wireup::get_ep_params();
+
+        params.field_mask     |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
                                  UCP_EP_PARAM_FIELD_ERR_HANDLER;
         params.err_mode        = UCP_ERR_HANDLING_MODE_PEER;
         params.err_handler.cb  = reinterpret_cast<ucp_err_handler_cb_t>
                                  (ucs_empty_function);
         params.err_handler.arg = reinterpret_cast<void*>(this);
+
         return params;
     }
 

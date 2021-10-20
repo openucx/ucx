@@ -62,6 +62,9 @@ enum {
 };
 
 
+typedef void (*ucs_rcache_invalidate_comp_func_t)(void *arg);
+
+
 /*
  * Registration cache operations.
  */
@@ -100,7 +103,7 @@ struct ucs_rcache_ops {
 
     /**
      * Dump memory region information to a string buffer.
-     * (Only the user-defined part of the memory regoin should be dumped)
+     * (Only the user-defined part of the memory region should be dumped)
      *
      * @param [in]  context    User context, as passed to @ref ucs_rcache_create
      * @param [in]  rcache     Pointer to the registration cache.
@@ -132,6 +135,7 @@ struct ucs_rcache_params {
     int                    flags;               /**< Flags */
     unsigned long          max_regions;         /**< Maximal number of regions */
     size_t                 max_size;            /**< Maximal total size of regions */
+    size_t                 max_unreleased;      /**< Threshold for triggering a cleanup */
 };
 
 
@@ -139,6 +143,7 @@ struct ucs_rcache_region {
     ucs_pgt_region_t       super;     /**< Base class - page table region */
     ucs_list_link_t        lru_list;  /**< LRU list element */
     ucs_list_link_t        tmp_list;  /**< Temp list element */
+    ucs_list_link_t        comp_list; /**< Completion list element */
     volatile uint32_t      refcount;  /**< Reference count, including +1 if it's
                                            in the page table */
     ucs_status_t           status;    /**< Current status code */
@@ -147,7 +152,7 @@ struct ucs_rcache_region {
     uint8_t                lru_flags; /**< LRU flags */
     union {
         uint64_t           priv;      /**< Used internally */
-        unsigned long     *pfn;       /**< Pointer to PFN array. In case if requested 
+        unsigned long     *pfn;       /**< Pointer to PFN array. In case if requested
                                            evaluation more than 1 page - PFN array is
                                            allocated, if 1 page requested - used
                                            in-place priv value. */
@@ -214,6 +219,22 @@ void ucs_rcache_region_hold(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
  * @param [in]  region      Memory region to release.
  */
 void ucs_rcache_region_put(ucs_rcache_t *rcache, ucs_rcache_region_t *region);
+
+
+/**
+  * Invalidate memory region and possibly destroy it.
+  *
+  * @param [in] rcache    Memory registration cache.
+  * @param [in] region    Memory region to invalidate.
+  * @param [in] cb        Completion callback, is called when region is
+  *                       released. Callback cannot do any operations which may
+  *                       access the rcache.
+  * @param [in] arg       Completion argument passed to completion callback.
+  */
+void ucs_rcache_region_invalidate(ucs_rcache_t *rcache,
+                                  ucs_rcache_region_t *region,
+                                  ucs_rcache_invalidate_comp_func_t cb,
+                                  void *arg);
 
 
 #endif

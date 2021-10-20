@@ -1,0 +1,195 @@
+resources:
+  containers:
+    - container: centos7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:3
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: fedora
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
+    - container: fedora34
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: coverity_rh7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/coverity:mofed-5.1-2.3.8.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel76_mofed47
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.6/builder:mofed-4.7-1.0.0.1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel74
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.4/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel72
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel7.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: rhel82
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu2004
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: ubuntu1804
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu18.04/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles15sp2
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles15sp2/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: sles12sp5
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/sles12sp5/builder:mofed-5.0-1.0.0.0
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+    - container: centos7_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1
+    - container: centos8_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1
+    - container: ubuntu16_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1
+    - container: ubuntu18_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1
+    - container: ubuntu20_cuda11
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
+      options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1
+
+stages:
+  - stage: Codestyle
+    jobs:
+    - template: codestyle.yml
+
+  - stage: Static_check
+    dependsOn: [Codestyle]
+    jobs:
+    - template: static_checks.yml
+
+  - stage: Build
+    dependsOn: [Static_check]
+    jobs:
+      - job: build_source
+        pool:
+          name: MLNX
+          demands:
+            - ucx_docker -equals yes
+        strategy:
+          matrix:
+            rhel72:
+              CONTAINER: rhel72
+            rhel74:
+              CONTAINER: rhel74
+            rhel76:
+              CONTAINER: rhel76
+              long_test: yes
+            rhel76_mofed47:
+              CONTAINER: rhel76_mofed47
+              long_test: yes
+            ubuntu2004:
+              CONTAINER: ubuntu2004
+              long_test: yes
+            ubuntu1804:
+              CONTAINER: ubuntu1804
+            sles15sp2:
+              CONTAINER: sles15sp2
+            rhel82:
+              CONTAINER: rhel82
+            fedora34:
+              CONTAINER: fedora34
+              long_test: yes
+        container: $[ variables['CONTAINER'] ]
+        timeoutInMinutes: 240
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+              long_test: $(long_test)
+
+  - stage: Distro
+    dependsOn: [Static_check]
+    jobs:
+    - template: distro.yml
+
+  - stage: Coverity
+    dependsOn: [Static_check]
+    jobs:
+      - template: coverity.yml
+        parameters:
+          demands: ucx_docker -equals yes
+          container: coverity_rh7
+
+  - stage: Tests
+    dependsOn: [Static_check]
+    jobs:
+    - template: tests.yml
+      parameters:
+        name: althca
+        demands: ucx_althca -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: gpu
+        demands: ucx_gpu -equals yes
+        test_perf: 1
+    - template: tests.yml
+      parameters:
+        name: new
+        demands: ucx_new -equals yes
+        test_perf: 1
+    - template: tests.yml
+      parameters:
+        name: hwi
+        demands: ucx_hwi -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: roce
+        demands: ucx_roce -equals yes
+        test_perf: 0
+    - template: tests.yml
+      parameters:
+        name: docker
+        demands:
+          - ucx_docker -equals yes
+          - ucx_amd -equals no
+        container: centos7
+
+  - stage: io_demo
+    dependsOn: [Static_check]
+    jobs:
+    - template: io_demo/io-demo.yml
+
+  - stage: jucx
+    dependsOn: [Static_check]
+    jobs:
+      - template: ../jucx/jucx-test.yml
+        parameters:
+          name: new
+          demands: ucx_new -equals yes
+      - template: ../jucx/jucx-test.yml
+        parameters:
+          name: gpu
+          demands: ucx_gpu -equals yes
+
+  - stage: go
+    dependsOn: [Static_check]
+    jobs:
+      - template: go/go-test.yml
+        parameters:
+          name: new
+          demands: ucx_new -equals yes
+      - template: go/go-test.yml
+        parameters:
+            name: gpu
+            demands: ucx_gpu -equals yes
+
+#  - stage: Cuda_compatible
+#    dependsOn: [Static_check]
+#    jobs:
+#    - template: cuda_compatible.yml

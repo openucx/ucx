@@ -48,7 +48,8 @@ size_t uct_sm_iface_get_device_addr_len();
 
 ucs_status_t uct_sm_ep_fence(uct_ep_t *tl_ep, unsigned flags);
 
-UCS_CLASS_DECLARE(uct_sm_iface_t, uct_iface_ops_t*, uct_md_h, uct_worker_h,
-                  const uct_iface_params_t*, const uct_iface_config_t*);
+UCS_CLASS_DECLARE(uct_sm_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*,
+                  uct_md_h, uct_worker_h, const uct_iface_params_t*,
+                  const uct_iface_config_t*);
 
 #endif

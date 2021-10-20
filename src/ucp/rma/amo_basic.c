@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2016.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -24,6 +25,7 @@ ucs_status_t ucp_amo_check_send_status(ucp_request_t *req, ucs_status_t status)
     /* Complete for UCS_OK and unexpected errors */
     if (status != UCS_ERR_NO_RESOURCE) {
         ucp_request_complete_send(req, status);
+        return UCS_OK;
     }
     return status;
 }

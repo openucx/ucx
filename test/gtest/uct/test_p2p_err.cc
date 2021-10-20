@@ -125,8 +125,7 @@ public:
     static void* get_unused_address(size_t length)
     {
         void *address = NULL;
-        ucs_status_t status = ucs_mmap_alloc(&length, &address, 0
-                                             UCS_MEMTRACK_NAME("test_dummy"));
+        ucs_status_t status = ucs_mmap_alloc(&length, &address, 0, "test_dummy");
         ASSERT_UCS_OK(status, << "length = " << length);
         status = ucs_mmap_free(address, length);
         ASSERT_UCS_OK(status);

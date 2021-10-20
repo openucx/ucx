@@ -79,6 +79,9 @@ typedef struct {
     /* Max. events per context, will be removed in the future */
     unsigned                   async_max_events;
 
+    /** Memtype cache */
+    int                        enable_memtype_cache;
+
     /* Destination for statistics: udp:host:port / file:path / stdout
      */
     char                       *stats_dest;
@@ -99,6 +102,9 @@ typedef struct {
     /* Destination for detailed memory tracking results: none / stdout / stderr
      */
     char                       *memtrack_dest;
+
+    /* Memory limit handled by memtrack to abort application */
+    size_t                     memtrack_limit;
 
     /* Profiling mode */
     unsigned                   profile_mode;
@@ -127,8 +133,14 @@ typedef struct {
     /* log level for module loader code */
     ucs_log_level_t            module_log_level;
 
+    /* which modules to load */
+    ucs_config_allow_list_t    modules;
+
     /* arch-specific global options */
-    ucs_arch_global_opts_t arch;
+    ucs_arch_global_opts_t     arch;
+
+    /* Enable affinity for virtual monitoring filesystem service thread */
+    int                        vfs_thread_affinity;
 } ucs_global_opts_t;
 
 

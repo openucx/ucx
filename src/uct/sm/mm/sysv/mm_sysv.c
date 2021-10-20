@@ -10,7 +10,7 @@
 
 #include <uct/sm/mm/base/mm_md.h>
 #include <uct/sm/mm/base/mm_iface.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 
@@ -42,7 +42,7 @@ static ucs_config_field_t uct_sysv_iface_config_table[] = {
 
 static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_t *md_attr)
 {
-    uct_mm_md_query(md, md_attr, 1);
+    uct_mm_md_query(md, md_attr, ULONG_MAX);
     md_attr->rkey_packed_size = sizeof(uct_sysv_packed_rkey_t);
     return UCS_OK;
 }

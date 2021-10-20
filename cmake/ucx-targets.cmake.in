@@ -1,0 +1,29 @@
+#
+# Copyright (C) NVIDIA Corporation. 2021.  ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+set(prefix "@prefix@")
+set(exec_prefix "@exec_prefix@")
+
+add_library(ucx::ucs SHARED IMPORTED)
+
+set_target_properties(ucx::ucs PROPERTIES
+  IMPORTED_LOCATION "@libdir@/libucs.so"
+  INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
+)
+
+add_library(ucx::ucp SHARED IMPORTED)
+
+set_target_properties(ucx::ucp PROPERTIES
+  IMPORTED_LOCATION "@libdir@/libucp.so"
+  INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
+)
+
+add_library(ucx::uct SHARED IMPORTED)
+
+set_target_properties(ucx::uct PROPERTIES
+  IMPORTED_LOCATION "@libdir@/libuct.so"
+  INTERFACE_INCLUDE_DIRECTORIES "@includedir@"
+)

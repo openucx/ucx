@@ -15,18 +15,15 @@
 #include <ucp/wireup/ep_match.h>
 #include <ucp/api/ucp.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/datastruct/queue.h>
-#include <ucs/datastruct/ptr_map.inl>
+#include <ucs/datastruct/ptr_map.h>
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/debug/assert.h>
 #include <ucs/stats/stats.h>
 
 
 #define UCP_MAX_IOV                16UL
-
-
-/* Used as invalidated value */
-#define UCP_EP_ID_INVALID          UINTPTR_MAX
 
 
 /* Endpoint flags type */
@@ -120,8 +117,14 @@ enum {
                                                            server side */
     UCP_EP_INIT_ERR_MODE_PEER_FAILURE  = UCS_BIT(4),  /**< Endpoint requires an
                                                            @ref UCP_ERR_HANDLING_MODE_PEER */
-    UCP_EP_INIT_CM_PHASE               = UCS_BIT(5)   /**< Endpoint connection to a peer is on
+    UCP_EP_INIT_CM_PHASE               = UCS_BIT(5),  /**< Endpoint connection to a peer is on
                                                            CM phase */
+    UCP_EP_INIT_FLAG_INTERNAL          = UCS_BIT(6),  /**< Endpoint for internal usage
+                                                           (e.g. memtype, reply on keepalive) */
+    UCP_EP_INIT_CONNECT_TO_IFACE_ONLY  = UCS_BIT(7),  /**< Select transports which
+                                                           support CONNECT_TO_IFACE
+                                                           mode only */
+    UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8)   /**< Endpoint requires an AM lane only */
 };
 
 
@@ -384,6 +387,8 @@ typedef struct ucp_ep {
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_ADDRESS_NAME_MAX];
+    /* Endpoint name for tracing and analysis */
+    char                          name[UCP_ENTITY_NAME_MAX];
 #endif
 
 #if UCS_ENABLE_ASSERT
@@ -429,6 +434,9 @@ typedef struct {
     ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
     ucp_err_handler_cb_t     err_cb; /* Error handler */
     ucp_ep_close_proto_req_t close_req; /* Close protocol request */
+#if UCS_ENABLE_ASSERT
+    ucs_time_t               ka_last_round; /* Time of last KA round done */
+#endif
 } ucp_ep_ext_control_t;
 
 
@@ -471,12 +479,12 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
-                                           for CM based wireup: there is only
-                                           iface and ep address of transport
-                                           lanes, remote device address is
-                                           provided by CM and has to be added to
-                                           unpacked UCP address locally. */
+    UCP_WIREUP_SA_DATA_CM_ADDR   = UCS_BIT(1)  /* Sockaddr client data contains address
+                                                  for CM based wireup: there is only
+                                                  iface and ep address of transport
+                                                  lanes, remote device address is
+                                                  provided by CM and has to be added to
+                                                  unpacked UCP address locally. */
 };
 
 
@@ -536,6 +544,8 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,
                                   ucp_ep_h *ep_p);
 
+void ucp_ep_delete(ucp_ep_h ep);
+
 void ucp_ep_release_id(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
@@ -574,6 +584,12 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force);
 
 void ucp_ep_destroy_internal(ucp_ep_h ep);
 
+ucs_status_t
+ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
+
+void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                                ucs_status_t status);
+
 void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
@@ -603,25 +619,37 @@ size_t ucp_ep_config_get_zcopy_auto_thresh(size_t iovcnt,
                                            const ucp_context_h context,
                                            double bandwidth);
 
-ucs_status_t ucp_worker_create_mem_type_endpoints(ucp_worker_h worker);
+ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker);
 
-void ucp_worker_destroy_mem_type_endpoints(ucp_worker_h worker);
+void ucp_worker_mem_type_eps_destroy(ucp_worker_h worker);
+
+void ucp_worker_mem_type_eps_print_info(ucp_worker_h worker,
+                                              FILE *stream);
 
 ucp_wireup_ep_t * ucp_ep_get_cm_wireup_ep(ucp_ep_h ep);
 
-ucp_tl_bitmap_t ucp_ep_get_tl_bitmap(ucp_ep_h ep);
+void ucp_ep_get_tl_bitmap(ucp_ep_h ep, ucp_tl_bitmap_t *tl_bitmap);
 
 uct_ep_h ucp_ep_get_cm_uct_ep(ucp_ep_h ep);
 
 int ucp_ep_is_cm_local_connected(ucp_ep_h ep);
 
+int ucp_ep_is_local_connected(ucp_ep_h ep);
+
 unsigned ucp_ep_local_disconnect_progress(void *arg);
 
 size_t ucp_ep_tag_offload_min_rndv_thresh(ucp_ep_config_t *config);
 
-void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
+void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
+                                     ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
 
-int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
+void ucp_ep_get_lane_info_str(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
+                              ucs_string_buffer_t *lane_info_strb);
+
+void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
+                                     ucp_ep_rndv_zcopy_config_t *rndv_zcopy);
+
+void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self);
 
@@ -657,13 +685,27 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 /**
  * @brief Do keepalive operation.
  *
- * @param [in]     ep       Endpoint object to operate keepalive.
- * @param [in/out] lane_map Map of lanes to process. During processing bit
- *                          corresponding to processed lane is set to 0.
- *                          Used for procerssing situation when any UCT lane
- *                          has no resources.
+ * @param [in] ep    UCP Endpoint object to operate keepalive.
+ * @param [in] now   Current time when keepalive started.
+ *
+ * @return Indication whether keepalive was fully done for UCP Endpoint or not.
  */
-void ucp_ep_do_keepalive(ucp_ep_h ep, ucp_lane_map_t *lane_map);
+int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now);
+
+
+/**
+ * @brief Purge the protocol request scheduled on a given UCP endpoint.
+ *
+ * @param [in]     ucp_ep           Endpoint object on which the request should
+ *                                  be purged.
+ * @param [in]     req              The request to purge.
+ * @param [in]     status           Completion status.
+ * @param [in]     recursive        Indicates if the function was called from
+ *                                  the @ref ucp_ep_req_purge recursively.
+ */
+void ucp_ep_req_purge(ucp_ep_h ucp_ep, ucp_request_t *req,
+                      ucs_status_t status, int recursive);
+
 
 /**
  * @brief Purge flush and protocol requests scheduled on a given UCP endpoint.

@@ -20,6 +20,7 @@
 #endif
 
 #include <errno.h>
+#include <string.h>
 
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
@@ -322,6 +323,28 @@ static inline ucs_status_t uct_ib_qp_max_send_sge(struct ibv_qp *qp,
     }
 
     *max_send_sge = qp_attr.cap.max_send_sge;
+
+    return UCS_OK;
+}
+
+static inline ucs_status_t
+uct_ib_query_qp_peer_info(struct ibv_qp *qp, struct ibv_ah_attr *ah_attr,
+                          uint32_t *dest_qpn)
+{
+    struct ibv_qp_attr qp_attr           = {};
+    struct ibv_qp_init_attr qp_init_attr = {};
+    int ret;
+
+    ret = ibv_query_qp(qp, &qp_attr, IBV_QP_AV | IBV_QP_DEST_QPN,
+                       &qp_init_attr);
+    if (ret) {
+        ucs_error("failed to query qp 0x%u (ret=%d): %m", qp->qp_num, ret);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *dest_qpn = qp_attr.dest_qp_num;
+
+    memcpy(ah_attr, &qp_attr.ah_attr, sizeof(*ah_attr));
 
     return UCS_OK;
 }

@@ -37,6 +37,16 @@ static ucs_status_t uct_tcp_md_mem_reg(uct_md_h md, void *address, size_t length
     return UCS_OK;
 }
 
+static ucs_status_t uct_tcp_mem_dereg(uct_md_h uct_md,
+                                      const uct_md_mem_dereg_params_t *params)
+{
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ucs_assert(params->memh == (void*)0xdeadbeef);
+
+    return UCS_OK;
+}
+
 static ucs_status_t
 uct_tcp_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
@@ -46,7 +56,7 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
         .query              = uct_tcp_md_query,
         .mkey_pack          = ucs_empty_function_return_success,
         .mem_reg            = uct_tcp_md_mem_reg,
-        .mem_dereg          = ucs_empty_function_return_success,
+        .mem_dereg          = uct_tcp_mem_dereg,
         .detect_memory_type = ucs_empty_function_return_unsupported
     };
     static uct_md_t md = {
@@ -87,6 +97,7 @@ uct_component_t uct_tcp_component = {
         .size           = sizeof(uct_tcp_sockcm_config_t),
      },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),
-    .flags              = UCT_COMPONENT_FLAG_CM
+    .flags              = UCT_COMPONENT_FLAG_CM,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_tcp_component)

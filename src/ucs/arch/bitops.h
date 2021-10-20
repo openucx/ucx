@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2020.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -9,6 +10,7 @@
 
 #include <ucs/sys/compiler_def.h>
 #include <stdint.h>
+#include <string.h>
 
 BEGIN_C_DECLS
 
@@ -115,9 +117,85 @@ BEGIN_C_DECLS
 #define ucs_count_trailing_zero_bits(_n) \
     ((sizeof(_n) <= 4) ? __builtin_ctz((uint32_t)(_n)) : __builtin_ctzl(_n))
 
+/* Returns the number of leading 0-bits in _n.
+ * If _n is 0, the result is undefined
+ */
+#define ucs_count_leading_zero_bits(_n) \
+    ((sizeof(_n) <= 4) ? __builtin_clz((uint32_t)(_n)) : __builtin_clzl(_n))
+
 /* Returns the number of 1-bits by _idx mask */
 #define ucs_bitmap2idx(_map, _idx) \
     ucs_popcount((_map) & (UCS_MASK(_idx)))
+
+
+/**
+ * Count how many bits at the end of the buffer are equal to zero.
+ *
+ * @param [in] ptr         Pointer to the buffer.
+ * @param [in] bit_length  Total Buffer length (in bits).
+ *
+ * @return The number of trailing zero bits.
+ */
+static inline unsigned
+ucs_count_ptr_trailing_zero_bits(const void *ptr, uint64_t bit_length)
+{
+    uint64_t idx = bit_length;
+    uint8_t tmp  = 0;
+
+    if (idx == 0) {
+        return 0;
+    }
+
+    /* Start from the end of the given buffer, with fractions of a bytes */
+    if ((idx % 8) != 0) {
+        tmp  = *(uint8_t*)UCS_PTR_BYTE_OFFSET(ptr, idx / 8);
+        tmp &= ~UCS_MASK(8 - (idx % 8));
+        if (idx < 8) {
+            tmp |= UCS_BIT(idx % 8);
+        }
+        if ((idx < 8) || (tmp != 0)) {
+            return __builtin_ctz(tmp | (((uint32_t)-1) << 8));
+        }
+    }
+
+    /* from now on - offsets are in bytes */
+    idx = (idx / 8) - 1;
+    while (((tmp = *(uint8_t*)UCS_PTR_BYTE_OFFSET(ptr, idx)) == 0) &&
+           (idx > 0)) {
+        idx--;
+    }
+
+    return bit_length - ((idx + 1) * 8) +
+           __builtin_ctz(tmp | (((uint32_t)-1) << 8));
+}
+
+/**
+ * Check if two buffers are equal (for the given amount of bits).
+ *
+ * @param [in] ptr1        Pointer to the first buffer.
+ * @param [in] ptr2        Pointer to the second buffer.
+ * @param [in] bit_length  Buffer length (in bits).
+ *
+ * @return Whether the buffers are equal.
+ */
+static inline int
+ucs_bitwise_is_equal(const void *ptr1, const void *ptr2, uint64_t bit_length)
+{
+    size_t length      = bit_length / 8;
+    unsigned remainder = bit_length % 8;
+
+    if (memcmp(ptr1, ptr2, length) != 0) {
+        return 0;
+    }
+
+    if (remainder == 0) {
+        return 1;
+    }
+
+    /* Compare up to 7 last bits */
+    return ((*((uint8_t*)ptr1 + length) & ~UCS_MASK(8 - remainder)) ==
+            (*((uint8_t*)ptr2 + length) & ~UCS_MASK(8 - remainder)));
+}
 
 END_C_DECLS
 

@@ -86,6 +86,7 @@ typedef struct uct_md_ops            uct_md_ops_t;
 typedef void                         *uct_rkey_ctx_h;
 typedef struct uct_iface_attr        uct_iface_attr_t;
 typedef struct uct_iface_params      uct_iface_params_t;
+typedef struct uct_ep_attr           uct_ep_attr_t;
 typedef struct uct_md_attr           uct_md_attr_t;
 typedef struct uct_completion        uct_completion_t;
 typedef struct uct_pending_req       uct_pending_req_t;
@@ -337,7 +338,7 @@ typedef struct uct_cm_listener_conn_request_args {
     /**
      * Mask of valid fields in this structure, using bits from
      * @ref uct_cm_listener_conn_request_args_field.
-     * Fields not specified by this mask should not be acceessed by the callback.
+     * Fields not specified by this mask should not be accessed by the callback.
      */
     uint64_t                   field_mask;
 

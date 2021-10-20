@@ -29,6 +29,15 @@ typedef struct {
 } UCS_S_PACKED ucp_reply_hdr_t;
 
 
+/**
+ * Header for transaction with offset
+ */
+typedef struct {
+    uint64_t req_id;
+    size_t   offset;
+} UCS_S_PACKED ucp_request_data_hdr_t;
+
+
 ucs_status_t
 ucp_do_am_single(uct_pending_req_t *self, uint8_t am_id,
                  uct_pack_callback_t pack_cb, ssize_t max_packed_size);

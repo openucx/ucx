@@ -133,26 +133,42 @@ typedef struct ucs_profile_record {
     uint32_t                 location;      /**< Location identifier */
 } UCS_S_PACKED ucs_profile_record_t;
 
+typedef struct ucs_profile_context ucs_profile_context_t;
+
 
 extern const char *ucs_profile_mode_names[];
+extern ucs_profile_context_t *ucs_profile_default_ctx;
 
 
 /**
  * Initialize profiling system.
+ *
+ * @param [in]  profile_mode  Profiling mode.
+ * @param [in]  file_name     Profiling file.
+ * @param [in]  max_file_size Limit for profiling log size.
+ * @param [out] ctx_p         Profile context.
+ *
+ * @return Status code.
  */
-void ucs_profile_global_init();
+ucs_status_t ucs_profile_init(unsigned profile_mode, const char *file_name,
+                              size_t max_file_size, ucs_profile_context_t **ctx_p);
 
 
 /**
  * Save and cleanup profiling.
+ *
+ * @param [in] ctx       Profile context.
  */
-void ucs_profile_global_cleanup();
+void ucs_profile_cleanup(ucs_profile_context_t *ctx);
 
 
 /**
  * Save and reset profiling.
+ *
+ * @param [in] ctx       Profile context.
  */
-void ucs_profile_dump();
+void ucs_profile_dump(ucs_profile_context_t *ctx);
+
 
 
 /*

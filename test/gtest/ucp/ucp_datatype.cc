@@ -170,7 +170,8 @@ dt_pack_copy(void *state, size_t offset, void *dest, size_t max_length)
     dt_gen_state *dt_state = (dt_gen_state*)state;
     size_t length;
 
-    ucs_assert(offset <= dt_state->count);
+    ucs_assertv(offset <= dt_state->count, "offset=%zu count=%zu", offset,
+                dt_state->count);
     length = std::min(max_length, dt_state->count - offset);
     memcpy(dest, UCS_PTR_BYTE_OFFSET(dt_state->buffer, offset), length);
 
@@ -182,7 +183,9 @@ dt_unpack_copy(void *state, size_t offset, const void *src, size_t length)
 {
     dt_gen_state *dt_state = (dt_gen_state*)state;
 
-    ucs_assert(offset + length <= dt_state->count);
+    ucs_assertv(offset + length <= dt_state->count,
+                "offset=%zu length=%zu count=%zu", offset, length,
+                dt_state->count);
     memcpy(UCS_PTR_BYTE_OFFSET(dt_state->buffer, offset), src, length);
 
     return UCS_OK;

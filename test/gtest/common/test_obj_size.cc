@@ -50,8 +50,13 @@ UCS_TEST_F(test_obj_size, size) {
     UCS_TEST_SKIP_R("Assert enabled");
 #else
     EXPECTED_SIZE(ucp_ep_t, 64);
+#if ENABLE_PARAMS_CHECK
+    EXPECTED_SIZE(ucp_rkey_t, 32 + sizeof(ucp_ep_h));
+#else
+    EXPECTED_SIZE(ucp_rkey_t, 32);
+#endif
     /* TODO reduce request size to 240 or less after removing old protocols state */
-    EXPECTED_SIZE(ucp_request_t, 272);
+    EXPECTED_SIZE(ucp_request_t, 280);
     EXPECTED_SIZE(ucp_recv_desc_t, 48);
     EXPECTED_SIZE(uct_ep_t, 8);
     EXPECTED_SIZE(uct_base_ep_t, 8);
@@ -70,7 +75,7 @@ UCS_TEST_F(test_obj_size, size) {
     EXPECTED_SIZE(uct_ud_verbs_ep_t, 264);
 #  endif
 #  if HAVE_CUDA
-    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 16);
+    EXPECTED_SIZE(uct_cuda_ipc_ep_t, 24);
 #  endif
 #endif
 }

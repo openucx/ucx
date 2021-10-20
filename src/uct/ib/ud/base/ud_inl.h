@@ -155,18 +155,12 @@ uct_ud_skb_set_zcopy_desc(uct_ud_send_skb_t *skb, const uct_iov_t *iov,
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_complete_tx(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                         uct_ud_send_skb_t *skb, int has_data, void *data,
-                         const void *buffer, unsigned length)
+uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                             uct_ud_send_skb_t *skb)
 {
     ucs_time_t now = uct_ud_iface_get_time(iface);
     iface->tx.skb  = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
-
-    if (has_data) {
-        skb->len += length;
-        memcpy(data, buffer, length);
-    }
 
     ucs_queue_push(&ep->tx.window, &skb->queue);
     ep->tx.tick = iface->tx.tick;
@@ -184,14 +178,9 @@ uct_ud_iface_complete_tx_inl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                              uct_ud_send_skb_t *skb, void *data,
                              const void *buffer, unsigned length)
 {
-    uct_ud_iface_complete_tx(iface, ep, skb, 1, data, buffer, length);
-}
-
-static UCS_F_ALWAYS_INLINE void
-uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                             uct_ud_send_skb_t *skb)
-{
-    uct_ud_iface_complete_tx(iface, ep, skb, 0, NULL, NULL, 0);
+    skb->len += length;
+    memcpy(data, buffer, length);
+    uct_ud_iface_complete_tx_skb(iface, ep, skb);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -256,4 +245,14 @@ uct_ud_iface_add_async_comp(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     cdesc->ep = ep;
     uct_completion_update_status(cdesc->comp, status);
     ucs_queue_push(&iface->tx.async_comp_q, &skb->queue);
+}
+
+static UCS_F_ALWAYS_INLINE void
+uct_ud_iov_to_skb(uct_ud_send_skb_t *skb, const uct_iov_t *iov, size_t iovcnt)
+{
+    ucs_iov_iter_t iov_iter;
+
+    ucs_iov_iter_init(&iov_iter);
+    skb->len += uct_iov_to_buffer(iov, iovcnt, &iov_iter, skb->neth + 1,
+                                  SIZE_MAX);
 }

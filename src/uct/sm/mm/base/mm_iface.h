@@ -13,7 +13,7 @@
 #include <uct/base/uct_iface.h>
 #include <uct/sm/base/sm_iface.h>
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/datastruct/arbiter.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/sys.h>
@@ -129,10 +129,7 @@ typedef struct uct_mm_fifo_ctl {
 
     /* 2nd cacheline */
     volatile uint64_t         tail;           /* How much was consumed */
-    struct {
-        pid_t                 pid;            /* Process owner pid */
-        ucs_time_t            start_time;     /* Process starttime */
-    } owner;
+    pid_t                     pid;            /* Process owner pid */
 } UCS_S_PACKED UCS_V_ALIGNED(UCS_SYS_CACHE_LINE_SIZE) uct_mm_fifo_ctl_t;
 
 
@@ -180,7 +177,7 @@ typedef struct uct_mm_recv_desc {
 
 
 /**
- * MM trandport interface
+ * MM transport interface
  */
 typedef struct uct_mm_iface {
     uct_sm_iface_t          super;

@@ -340,28 +340,49 @@ out:
 /* return 0 or negative value in case of error */
 int vfs_start()
 {
-    int ret;
+    int mountpoint_dir_created, ret, rmdir_ret;
+
+    mountpoint_dir_created = !mkdir(g_opts.mountpoint_dir, S_IRWXU);
+    if (!mountpoint_dir_created && (errno != EEXIST)) {
+        vfs_error("could not create directory '%s': %m", g_opts.mountpoint_dir);
+        return -1;
+    }
 
     ret = vfs_listen(1);
     if (ret != -EADDRINUSE) {
-        return ret;
+        goto out;
     }
 
     /* Failed to listen because 'socket_name' path already exists - try to
      * connect */
     ret = vfs_connect_and_act();
     if (ret != -ECONNREFUSED) {
-        return ret;
+        goto out;
     }
 
     /* Could not connect to the socket because no one is listening - remove the
      * socket file and try listening again */
     ret = vfs_unlink_socket(0);
     if (ret < 0) {
-        return ret;
+        goto out;
     }
 
-    return vfs_listen(0);
+    ret = vfs_listen(0);
+
+out:
+    if (mountpoint_dir_created) {
+        rmdir_ret = rmdir(g_opts.mountpoint_dir);
+        if (rmdir_ret < 0) {
+            vfs_error("failed to remove directory '%s': %m",
+                      g_opts.mountpoint_dir);
+
+            if (ret >= 0) {
+                ret = rmdir_ret;
+            }
+        }
+    }
+
+    return ret;
 }
 
 static void vfs_usage()
@@ -466,12 +487,6 @@ int main(int argc, char **argv)
 
     ret = vfs_test_fuse();
     if (ret < 0) {
-        return -1;
-    }
-
-    ret = mkdir(g_opts.mountpoint_dir, S_IRWXU);
-    if ((ret < 0) && (errno != EEXIST)) {
-        vfs_error("could not create directory '%s': %m", g_opts.mountpoint_dir);
         return -1;
     }
 

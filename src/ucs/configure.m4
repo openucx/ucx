@@ -46,7 +46,7 @@ AS_IF([test "x$enable_backtrace_detail" = xyes],
 	AC_CHECK_LIB(intl, main, LIBS="$LIBS -lintl", [AC_MSG_WARN([intl library not found])])
 	AC_CHECK_TYPES([struct dl_phdr_info], [], [AC_MSG_WARN([struct dl_phdr_info not defined])];BT=0,
 					[#define _GNU_SOURCE 1
-					 #include <link.h>]) 
+					 #include <link.h>])
 	AC_CHECK_DECLS([bfd_get_section_flags, bfd_section_flags, bfd_get_section_vma, bfd_section_vma],
 		       [], [], [#include <bfd.h>])
 
@@ -87,7 +87,7 @@ AS_IF([test "x$enable_backtrace_detail" = xyes],
 # Enable statistics and counters
 #
 AC_ARG_ENABLE([stats],
-	AS_HELP_STRING([--enable-stats], 
+	AS_HELP_STRING([--enable-stats],
 	               [Enable statistics, useful for profiling, default: NO]),
 	[],
 	[enable_stats=no])
@@ -105,7 +105,7 @@ AM_CONDITIONAL([HAVE_STATS],[test "x$HAVE_STATS" = "xyes"])
 # Enable tuning params at runtime
 #
 AC_ARG_ENABLE([tuning],
-	AS_HELP_STRING([--enable-tuning], 
+	AS_HELP_STRING([--enable-tuning],
 	               [Enable parameter tuning in run-time, default: NO]),
 	[],
 	[enable_tuning=no])
@@ -117,24 +117,6 @@ AS_IF([test "x$enable_tuning" = xyes],
 	  [:]
   )
 AM_CONDITIONAL([HAVE_TUNING],[test "x$HAVE_TUNING" = "xyes"])
-
-
-#
-# Enable memory tracking
-#
-AC_ARG_ENABLE([memtrack],
-	AS_HELP_STRING([--enable-memtrack], 
-	               [Enable memory tracking, useful for profiling, default: NO]),
-	[],
-	[enable_memtrack=no])
-	
-AS_IF([test "x$enable_memtrack" = xyes],
-	  [AS_MESSAGE([enabling memory tracking])
-	   AC_DEFINE([ENABLE_MEMTRACK], [1], [Enable memory tracking])
-	   HAVE_MEMTRACK=yes],
-	  [:]
-  )
-AM_CONDITIONAL([HAVE_MEMTRACK],[test "x$HAVE_MEMTRACK" = "xyes"])
 
 
 #
@@ -163,7 +145,7 @@ AS_CASE([$enable_logging],
 # Disable assertions
 #
 AC_ARG_ENABLE([assertions],
-	AS_HELP_STRING([--disable-assertions], 
+	AS_HELP_STRING([--disable-assertions],
 	               [Disable code assertions, default: NO])
 	)
 

@@ -473,7 +473,8 @@ static ucs_mpool_ops_t uct_ib_mlx5_dbrec_ops = {
     .chunk_alloc   = uct_ib_mlx5_add_page,
     .chunk_release = uct_ib_mlx5_free_page,
     .obj_init      = uct_ib_mlx5_init_dbrec,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static ucs_status_t
@@ -568,25 +569,43 @@ uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
 }
 
 static struct ibv_context *
-uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device,
-                             struct mlx5dv_context_attr *dv_attr)
+uct_ib_mlx5_devx_open_device(struct ibv_device *ibv_device)
 {
+    struct mlx5dv_context_attr dv_attr = {};
+    struct mlx5dv_devx_event_channel UCS_V_UNUSED *event_channel;
     struct ibv_context *ctx;
     struct ibv_cq *cq;
 
-    ctx = mlx5dv_open_device(ibv_device, dv_attr);
+    dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
+    ctx = mlx5dv_open_device(ibv_device, &dv_attr);
     if (ctx == NULL) {
         return NULL;
     }
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        ibv_close_device(ctx);
-        return NULL;
+        goto close_ctx;
     }
 
     ibv_destroy_cq(cq);
+
+#if HAVE_DECL_MLX5DV_DEVX_SUBSCRIBE_DEVX_EVENT
+    event_channel = mlx5dv_devx_create_event_channel(
+            ctx, MLX5_IB_UAPI_DEVX_CR_EV_CH_FLAGS_OMIT_DATA);
+    if (event_channel == NULL) {
+        ucs_diag("mlx5dv_devx_create_event_channel(%s) failed: %m",
+                 ibv_get_device_name(ibv_device));
+        goto close_ctx;
+    }
+
+    mlx5dv_devx_destroy_event_channel(event_channel);
+#endif
+
     return ctx;
+
+close_ctx:
+    ibv_close_device(ctx);
+    return NULL;
 }
 
 static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops;
@@ -597,7 +616,6 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_in)]   = {};
-    struct mlx5dv_context_attr dv_attr                     = {};
     ucs_status_t status                                    = UCS_OK;
     uint8_t lag_state                                      = 0;
     struct ibv_context *ctx;
@@ -616,8 +634,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    dv_attr.flags |= MLX5DV_CONTEXT_FLAGS_DEVX;
-    ctx = uct_ib_mlx5_devx_open_device(ibv_device, &dv_attr);
+    ctx = uct_ib_mlx5_devx_open_device(ibv_device);
     if (ctx == NULL) {
         if (md_config->devx == UCS_YES) {
             status = UCS_ERR_IO_ERROR;
@@ -720,6 +737,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, cqe_version)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_CQE_V1;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                          ib_striding_wq_cq_first_indication)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG;
     }
 
     status = uct_ib_mlx5_devx_check_odp(md, md_config, cap);

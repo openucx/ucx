@@ -242,7 +242,8 @@ static ucs_mpool_ops_t uct_ugni_rdma_desc_mpool_ops = {
     .chunk_alloc   = ucs_mpool_hugetlb_malloc,
     .chunk_release = ucs_mpool_hugetlb_free,
     .obj_init      = uct_ugni_base_desc_init,
-    .obj_cleanup   = NULL
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
 };
 
 static uct_iface_ops_t *uct_ugni_rdma_choose_ops_by_device(uct_ugni_device_t *dev)

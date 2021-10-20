@@ -52,6 +52,8 @@ build_disable_numa() {
 	echo "==== Check --disable-numa compilation option ===="
 	${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst --disable-numa
 	$MAKEP
+	# Make sure config.h file undefines HAVE_NUMA proceprocessor macro
+	grep 'undef HAVE_NUMA' config.h || exit 1
 }
 
 #
@@ -85,6 +87,10 @@ build_release_pkg() {
 		echo "==== Build RPM ===="
 		echo "$PWD"
 		${WORKSPACE}/contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
+		if rpm -qp ${PWD}/ls ucx-[0-9]*.rpm --requires | grep cuda; then
+			azure_log_error "Release build depends on CUDA while it should not"
+			exit 1
+		fi
 	fi
 
 	# check that UCX version is present in spec file
@@ -123,23 +129,23 @@ build_icc() {
 # Build with PGI compiler
 #
 build_pgi() {
-	pgi_test_file=$(mktemp ./XXXXXX).c
-	echo "int main() {return 0;}" > ${pgi_test_file}
-
-	if az_module_load $PGI_MODULE && pgcc18 --version && pgcc18 ${pgi_test_file} -o ${pgi_test_file}.out
+	if az_module_load $PGI_MODULE
 	then
+		# add_network_host utility from $PGI_MODULE it create config file for machine
+		# Doc: https://docs.nvidia.com/hpc-sdk/hpc-sdk-install-guide/index.html
+		add_network_host
 		echo "==== Build with PGI compiler ===="
 		# PGI failed to build valgrind headers, disable it for now
 		# TODO: Using non-default PGI compiler - pgcc18 which is going to be default
 		#       in next versions.
 		#       Switch to default CC compiler after pgcc18 is default for pgi module
-		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst CC=pgcc18 --without-valgrind
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --without-valgrind
 		$MAKEP
+		# TODO: Check why "make distclean" is needed to cleanup after PGI compiler
+		make_clean distclean
 	else
 		azure_log_warning "Not building with PGI compiler"
 	fi
-
-	rm -rf ${pgi_test_file} ${pgi_test_file}.out
 	az_module_unload $PGI_MODULE
 }
 
@@ -152,7 +158,7 @@ build_debug() {
 	$MAKEP
 
 	# Show UCX info
-	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart -m 20M
+	./src/tools/info/ucx_info -s -f -c -v -y -d -b -p -w -e -uart
 }
 
 #
@@ -313,13 +319,43 @@ check_config_h() {
 }
 
 #
+# Test if cmake can correctly find and link ucx
+#
+build_cmake_examples() {
+	echo "==== Build CMake sample ===="
+
+	if which cmake
+	then
+		${WORKSPACE}/contrib/configure-release --prefix=$ucx_inst
+		$MAKEP
+		$MAKEP install
+
+		mkdir -p /tmp/cmake-ucx
+		pushd /tmp/cmake-ucx
+		cmake ${WORKSPACE}/examples/cmake -DCMAKE_PREFIX_PATH=$ucx_inst
+		cmake --build .
+
+		if ./test_ucp && ./test_uct
+		then
+			echo "Check successful "
+		else
+			azure_log_error "CMake test failed."
+			exit 1
+		fi
+		popd
+	else
+		azure_log_warning "cmake executable not found, skipping cmake test"
+	fi
+}
+
+#
 # Do a given task and update progress indicator
 #
 do_task() {
 	amount=$1
 	shift
 	# cleanup build dir before the task
-	[ -n "${ucx_build_dir}" ] && rm -rf "${ucx_build_dir}/*"
+	[ -n "${ucx_build_dir}" ] && rm -rf ${ucx_build_dir}/*
 
 	$@
 
@@ -341,6 +377,7 @@ do_task "${prog}" build_disable_numa
 do_task "${prog}" build_cuda
 do_task "${prog}" build_no_verbs
 do_task "${prog}" build_release_pkg
+do_task "${prog}" build_cmake_examples
 
 if [ "${long_test}" = "yes" ]
 then

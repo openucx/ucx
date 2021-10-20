@@ -208,6 +208,7 @@ err_free_mem:
     return status;
 }
 
+#if IBV_HW_TM
 ucs_status_t
 uct_rc_mlx5_devx_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
                             const uct_rc_iface_common_config_t *config,
@@ -267,6 +268,7 @@ err_cleanup_srq:
     uct_rc_mlx5_devx_cleanup_srq(md, &iface->rx.srq);
     return status;
 }
+#endif
 
 ucs_status_t uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
                                       const uct_rc_iface_common_config_t *config)
@@ -354,7 +356,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
     if (uct_ib_iface_is_roce(&iface->super.super)) {
-        status = uct_ib_iface_create_ah(&iface->super.super, ah_attr, &ah);
+        status = uct_ib_iface_create_ah(&iface->super.super, ah_attr,
+                                        "RC DevX QP connect", &ah);
         if (status != UCS_OK) {
             return status;
         }
@@ -375,7 +378,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
                               ah_attr->dlid);
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
-                              iface->super.super.config.traffic_class >> 2);
+                              uct_ib_iface_roce_dscp(&iface->super.super));
         }
 
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
@@ -430,6 +433,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                       iface->super.config.timeout);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm,
                       iface->super.config.exp_backoff);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
+                      iface->config.log_ack_req_freq);
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
                                         out_2rts, sizeof(out_2rts));

@@ -176,7 +176,6 @@ typedef union ucm_event {
      *
      * This is a "read-only" event which is called whenever memory is mapped
      * or unmapped from process address space, in addition to the other events.
-     * It can return only UCM_EVENT_STATUS_NEXT.
      *
      * For UCM_EVENT_VM_MAPPED, callbacks are post
      * For UCM_EVENT_VM_UNMAPPED, callbacks are pre
@@ -213,7 +212,7 @@ typedef struct ucm_global_config {
     ucm_mmap_hook_mode_t mmap_hook_mode;              /* MMAP hook mode */
     int                  enable_malloc_hooks;         /* Enable installing malloc hooks */
     int                  enable_malloc_reloc;         /* Enable installing malloc relocations */
-    ucm_mmap_hook_mode_t cuda_hook_mode;              /* Cuda hooks mode */
+    int                  cuda_hook_modes;             /* Bitmap of allowed cuda hooks modes */
     int                  enable_dynamic_mmap_thresh;  /* Enable adaptive mmap threshold */
     size_t               alloc_alignment;             /* Alignment for memory allocations */
     int                  dlopen_process_rpath;        /* Process RPATH section in dlopen hook */

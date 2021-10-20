@@ -70,24 +70,29 @@ enum {
     UCT_IB_MLX5_CMD_OP_RTR2RTS_QP              = 0x504,
     UCT_IB_MLX5_CMD_OP_2ERR_QP                 = 0x507,
     UCT_IB_MLX5_CMD_OP_2RST_QP                 = 0x50a,
+    UCT_IB_MLX5_CMD_OP_QUERY_QP                = 0x50b,
     UCT_IB_MLX5_CMD_OP_CREATE_RMP              = 0x90c,
     UCT_IB_MLX5_CMD_OP_CREATE_DCT              = 0x710,
     UCT_IB_MLX5_CMD_OP_DRAIN_DCT               = 0x712,
     UCT_IB_MLX5_CMD_OP_CREATE_XRQ              = 0x717,
     UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY = 0x726,
     UCT_IB_MLX5_CMD_OP_QUERY_HCA_VPORT_CONTEXT = 0x762,
-    UCT_IB_MLX5_CMD_OP_QUERY_LAG               = 0x842
+    UCT_IB_MLX5_CMD_OP_QUERY_LAG               = 0x842,
+    UCT_IB_MLX5_CMD_OP_CREATE_GENERAL_OBJECT   = 0xa00,
+    UCT_IB_MLX5_CMD_OP_MODIFY_GENERAL_OBJECT   = 0xa01,
+    UCT_IB_MLX5_CMD_OP_QUERY_GENERAL_OBJECT    = 0xa02
 };
 
 enum {
-    UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX	= 0,
-    UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR	= 1
+    UCT_IB_MLX5_HCA_CAP_OPMOD_GET_MAX = 0,
+    UCT_IB_MLX5_HCA_CAP_OPMOD_GET_CUR = 1
 };
 
 enum {
-    UCT_IB_MLX5_CAP_GENERAL = 0,
-    UCT_IB_MLX5_CAP_ODP     = 2,
-    UCT_IB_MLX5_CAP_ATOMIC  = 3,
+    UCT_IB_MLX5_CAP_GENERAL   = 0x0,
+    UCT_IB_MLX5_CAP_ODP       = 0x2,
+    UCT_IB_MLX5_CAP_ATOMIC    = 0x3,
+    UCT_IB_MLX5_CAP_2_GENERAL = 0x20,
 };
 
 struct uct_ib_mlx5_cmd_hca_cap_bits {
@@ -242,7 +247,8 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    cq_oi[0x1];
     uint8_t    cq_resize[0x1];
     uint8_t    cq_moderation[0x1];
-    uint8_t    reserved_at_223[0x3];
+    uint8_t    reserved_at_223[0x2];
+    uint8_t    ib_striding_wq_cq_first_indication[0x1];
     uint8_t    cq_eq_remap[0x1];
     uint8_t    pg[0x1];
     uint8_t    block_lb_mc[0x1];
@@ -441,6 +447,18 @@ struct uct_ib_mlx5_atomic_caps_bits {
     uint8_t    reserved_at_2c0[0x540];
 };
 
+struct uct_ib_mlx5_cmd_hca_cap_2_bits {
+    uint8_t    reserved_at_0[0x80];
+
+    uint8_t    reserved_at_80[0x13];
+    /* Log (base 2) of the minimum bulk granularity of
+       allocated RESERVED_QPN objects */
+    uint8_t    log_reserved_qpn_granularity[0x5];
+    uint8_t    reserved_at_98[0x8];
+
+    uint8_t    reserved_at_a0[0x760];
+};
+
 struct uct_ib_mlx5_odp_per_transport_service_cap_bits {
     uint8_t         send[0x1];
     uint8_t         receive[0x1];
@@ -476,6 +494,7 @@ union uct_ib_mlx5_hca_cap_union_bits {
     struct uct_ib_mlx5_cmd_hca_cap_bits cmd_hca_cap;
     struct uct_ib_mlx5_odp_cap_bits odp_cap;
     struct uct_ib_mlx5_atomic_caps_bits atomic_caps;
+    struct uct_ib_mlx5_cmd_hca_cap_2_bits cmd_hca_cap_2;
     uint8_t    reserved_at_0[0x8000];
 };
 
@@ -791,8 +810,9 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         atomic_like_write_en[0x1];
     uint8_t         latency_sensitive[0x1];
     uint8_t         rlky[0x1];
-    uint8_t         free_ar[0x1];
-    uint8_t         reserved_at_73[0xd];
+    uint8_t         force_full_handshake[0x1];
+    uint8_t         multi_path[0x1];
+    uint8_t         reserved_at_74[0xc];
 
     uint8_t         reserved_at_80[0x8];
     uint8_t         cs_res[0x8];
@@ -1250,7 +1270,9 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         counter_set_id[0x8];
     uint8_t         uar_page[0x18];
 
-    uint8_t         reserved_at_80[0x8];
+    uint8_t         reserved_at_80[0x3];
+    uint8_t         full_handshake[0x1];
+    uint8_t         cnak_reverse_sl[0x4];
     uint8_t         user_index[0x18];
 
     uint8_t         reserved_at_a0[0x3];
@@ -1501,8 +1523,78 @@ struct uct_ib_mlx5_modify_qp_in_bits {
     uint8_t         reserved_at_60[0x20];
 };
 
+struct uct_ib_mlx5_query_qp_out_bits {
+    uint8_t         status[0x8];
+    uint8_t         reserved_at_8[0x18];
+
+    uint8_t         syndrome[0x20];
+
+    uint8_t         reserved_at_40[0x40];
+
+    uint8_t         opt_param_mask[0x20];
+
+    uint8_t         reserved_at_a0[0x20];
+
+    struct uct_ib_mlx5_qpc_bits qpc;
+
+    uint8_t         reserved_at_800[0x80];
+
+    uint8_t         pas[0][0x40];
+};
+
+struct uct_ib_mlx5_query_qp_in_bits {
+    uint8_t         opcode[0x10];
+    uint8_t         reserved_at_10[0x10];
+
+    uint8_t         reserved_at_20[0x10];
+    uint8_t         op_mod[0x10];
+
+    uint8_t         reserved_at_40[0x8];
+    uint8_t         qpn[0x18];
+
+    uint8_t         reserved_at_60[0x20];
+};
+
 enum {
     UCT_IB_MLX5_EVENT_TYPE_SRQ_LAST_WQE       = 0x13
+};
+
+struct uct_ib_mlx5_general_obj_out_cmd_hdr_bits {
+    uint8_t         status[0x8];
+    uint8_t         reserved_at_8[0x18];
+
+    uint8_t         syndrome[0x20];
+
+    uint8_t         obj_id[0x20];
+
+    uint8_t         reserved_at_60[0x20];
+};
+
+struct uct_ib_mlx5_general_obj_in_cmd_hdr_bits {
+    uint8_t         opcode[0x10];
+    uint8_t         uid[0x10];
+
+    uint8_t         reserved_at_20[0x10];
+    uint8_t         obj_type[0x10];
+
+    uint8_t         obj_id[0x20];
+
+    uint8_t         reserved_at_60[0x3];
+    uint8_t         log_obj_range[0x5];
+    uint8_t         reserved_at_68[0x18];
+};
+
+struct uct_ib_mlx5_reserved_qpn_bits {
+    uint8_t         reserved_at_0[0x80];
+};
+
+struct uct_ib_mlx5_create_reserved_qpn_in_bits {
+    struct uct_ib_mlx5_general_obj_in_cmd_hdr_bits  hdr;
+    struct uct_ib_mlx5_modify_qp_in_bits            qpns;
+};
+
+enum {
+    UCT_IB_MLX5_OBJ_TYPE_RESERVED_QPN = 0x002C,
 };
 
 #endif

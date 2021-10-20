@@ -14,6 +14,7 @@
 #include <uct/ib/ud/base/ud_iface_common.h>
 #include <uct/ib/ud/accel/ud_mlx5_common.h>
 #include <ucs/debug/assert.h>
+#include <ucs/datastruct/bitmap.h>
 
 
 /*
@@ -66,8 +67,20 @@ typedef enum {
 
 
 typedef enum {
-    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE = UCS_BIT(0), /**< keepalive dci is created */
-    UCT_DC_MLX5_IFACE_FLAG_UIDX      = UCS_BIT(1), /**< uidx is set to dci idx */
+    /** Keepalive dci is created */
+    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE                = UCS_BIT(0),
+
+    /** Enable full handshake for keepalive DCI */
+    UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE_FULL_HANDSHAKE = UCS_BIT(1),
+
+    /** uidx is set to dci idx */
+    UCT_DC_MLX5_IFACE_FLAG_UIDX                     = UCS_BIT(2),
+
+    /** Flow control endpoint is using a DCI in error state */
+    UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3),
+
+    /** Ignore DCI allocation reorder */
+    UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER      = UCS_BIT(4)
 } uct_dc_mlx5_iface_flags_t;
 
 
@@ -101,7 +114,7 @@ typedef struct uct_dc_mlx5_iface_addr {
  *            ep goes back to normal state
  * - random
  *    - dci is choosen by random() % ndci
- *    - ep keeps using dci as long as it has oustanding sends
+ *    - ep keeps using dci as long as it has outstanding sends
  *
  * Not implemented policies:
  *
@@ -124,8 +137,12 @@ typedef struct uct_dc_mlx5_iface_config {
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
+    ucs_on_off_auto_value_t             dci_full_handshake;
+    ucs_on_off_auto_value_t             dci_ka_full_handshake;
+    ucs_on_off_auto_value_t             dct_full_handshake;
     unsigned                            quota;
     unsigned                            rand_seed;
+    ucs_time_t                          fc_hard_req_timeout;
     uct_ud_mlx5_iface_common_config_t   mlx5_ud;
 } uct_dc_mlx5_iface_config_t;
 
@@ -151,9 +168,6 @@ typedef struct uct_dc_dci {
     };
     uint8_t                       pool_index; /* DCI pool index. */
     uint8_t                       path_index; /* Path index */
-#if UCS_ENABLE_ASSERT
-    uint8_t                       flags; /* debug state, @ref uct_dc_dci_state_t */
-#endif
 } uct_dc_dci_t;
 
 
@@ -177,14 +191,37 @@ typedef struct uct_dc_fc_request {
 } uct_dc_fc_request_t;
 
 
-KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uint64_t);
+typedef struct uct_dc_mlx5_ep_fc_entry {
+    uint64_t   seq; /* Sequence number in FC_HARD_REQ's sender data */
+    ucs_time_t send_time; /* Last time FC_HARD_REQ was sent */
+} uct_dc_mlx5_ep_fc_entry_t;
 
 
+KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
+
+
+/* DCI pool
+ * same array is used to store DCI's to allocate and DCI's to release:
+ * 
+ * +--------------+-----+-------------+
+ * | to release   |     | to allocate |
+ * +--------------+-----+-------------+
+ * ^              ^     ^             ^
+ * |              |     |             |
+ * 0        release     stack      ndci
+ *              top     top
+ * 
+ * Overall count of DCI's to relase and allocated DCI's could not be more than
+ * ndci and these stacks are not intersected
+ */
 typedef struct {
-    uint8_t       stack_top;                               /* dci stack top */
+    int8_t        stack_top;                               /* dci stack top */
     uint8_t       stack[UCT_DC_MLX5_IFACE_MAX_USER_DCIS];  /* LIFO of indexes of available dcis */
     ucs_arbiter_t arbiter;                                 /* queue of requests
                                                               waiting for DCI */
+    int8_t        release_stack_top;                       /* releasing dci's stack,
+                                                              points to last DCI to release
+                                                              or -1 if no DCI's to release */
 } uct_dc_mlx5_dci_pool_t;
 
 
@@ -215,10 +252,17 @@ struct uct_dc_mlx5_iface {
         /* Sequence number of expected FC grants */
         uint64_t                  fc_seq;
 
+        /* Timeout for sending FC_HARD_REQ when FC window is empty */
+        ucs_time_t                fc_hard_req_timeout;
+
         /* Seed used for random dci allocation */
         unsigned                  rand_seed;
 
         ucs_arbiter_callback_t    pend_cb;
+
+        uct_worker_cb_id_t        dci_release_prog_id;
+
+        uint8_t                   dci_pool_release_bitmap;
     } tx;
 
     struct {
@@ -238,7 +282,9 @@ struct uct_dc_mlx5_iface {
 
 extern ucs_config_field_t uct_dc_mlx5_iface_config_table[];
 
-ucs_status_t uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface);
+ucs_status_t
+uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
+                             const uct_dc_mlx5_iface_config_t *config);
 
 int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
@@ -251,8 +297,6 @@ ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_c
 void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_config_t *config);
 
 ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
-
-void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface);
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self);
 
@@ -277,13 +321,16 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                      uct_ib_mlx5_txwq_t *txwq,
                                      ucs_status_t ep_status);
 
-ucs_status_t uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface);
+ucs_status_t
+uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
+                              const uct_dc_mlx5_iface_config_t *config);
 
 void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 
 #if HAVE_DEVX
 
-ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface);
+ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
+                                               int full_handshake);
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface);
 
@@ -293,8 +340,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
 #else
 
-static UCS_F_MAYBE_UNUSED ucs_status_t
-uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
+static UCS_F_MAYBE_UNUSED ucs_status_t uct_dc_mlx5_iface_devx_create_dct(
+        uct_dc_mlx5_iface_t *iface, int full_handshake)
 {
     return UCS_ERR_UNSUPPORTED;
 }

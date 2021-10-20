@@ -16,8 +16,7 @@
 
 static inline size_t ucp_proto_max_packed_size()
 {
-    return ucs_max(sizeof(ucp_reply_hdr_t),
-                   sizeof(ucp_offload_ssend_hdr_t));
+    return ucs_max(sizeof(ucp_rndv_ack_hdr_t), sizeof(ucp_offload_ssend_hdr_t));
 }
 
 static size_t ucp_proto_pack(void *dest, void *arg)
@@ -25,15 +24,21 @@ static size_t ucp_proto_pack(void *dest, void *arg)
     ucp_request_t *req = arg;
     ucp_reply_hdr_t *rep_hdr;
     ucp_offload_ssend_hdr_t *off_rep_hdr;
+    ucp_rndv_ack_hdr_t *ack_hdr;
 
     switch (req->send.proto.am_id) {
     case UCP_AM_ID_EAGER_SYNC_ACK:
-    case UCP_AM_ID_RNDV_ATS:
-    case UCP_AM_ID_RNDV_ATP:
         rep_hdr = dest;
         rep_hdr->req_id = req->send.proto.remote_req_id;
         rep_hdr->status = req->send.proto.status;
         return sizeof(*rep_hdr);
+    case UCP_AM_ID_RNDV_ATS:
+    case UCP_AM_ID_RNDV_ATP:
+        ack_hdr               = dest;
+        ack_hdr->super.req_id = req->send.proto.remote_req_id;
+        ack_hdr->super.status = req->send.proto.status;
+        ack_hdr->size         = req->send.length;
+        return sizeof(*ack_hdr);
     case UCP_AM_ID_OFFLOAD_SYNC_ACK:
         off_rep_hdr = dest;
         off_rep_hdr->sender_tag = req->send.proto.sender_tag;
@@ -101,17 +106,10 @@ void ucp_proto_am_zcopy_completion(uct_completion_t *self)
     ucp_request_t *req  = ucs_container_of(self, ucp_request_t,
                                            send.state.uct_comp);
 
-    if (req->send.state.dt.offset == req->send.length) {
-        ucp_proto_am_zcopy_req_complete(req, self->status);
-    } else if (self->status != UCS_OK) {
-        ucs_assert(req->send.state.uct_comp.count == 0);
-        ucs_assert(self->status != UCS_INPROGRESS);
-
-        /* NOTE: the request is in pending queue if data was not completely sent,
-         *       just dereg the buffer here and complete request on purge
-         *       pending later.
-         */
-        ucp_request_send_buffer_dereg(req);
-        req->send.state.uct_comp.func = NULL;
+    if (req->send.state.dt.offset != req->send.length) {
+        /* Cannot complete since not all fragments were posted yet */
+        return;
     }
+
+    ucp_proto_am_zcopy_req_complete(req, self->status);
 }

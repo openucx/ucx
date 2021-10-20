@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "eager.h"
+#include "proto_eager.inl"
 
 #include <ucp/core/ucp_request.inl>
 #include <ucp/proto/proto_multi.inl>
@@ -49,7 +49,8 @@ ucp_proto_eager_multi_init_common(ucp_proto_multi_init_params_t *params,
     params->max_lanes        =
             params->super.super.worker->context->config.ext.max_eager_lanes;
 
-    return ucp_proto_multi_init(params);
+    return ucp_proto_multi_init(params, params->super.super.priv,
+                                params->super.super.priv_size);
 }
 
 static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
@@ -61,10 +62,15 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = hdr_size,
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_MEM_TYPE,
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
+        .super.flags         = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
     };
@@ -160,7 +166,7 @@ static ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_bcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_eager_bcopy_multi_progress
+    .progress   = {ucp_proto_eager_bcopy_multi_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_multi_proto);
 
@@ -180,7 +186,7 @@ static size_t ucp_eager_sync_bcopy_pack_first(void *dest, void *arg)
 
     ucp_proto_eager_set_first_hdr(req, &hdr->super);
     hdr->req.ep_id  = ucp_send_request_get_ep_remote_id(req);
-    hdr->req.req_id = ucp_request_get_id(req);
+    hdr->req.req_id = ucp_send_request_get_id(req);
 
     return sizeof(*hdr) + ucp_proto_multi_data_pack(pack_ctx, hdr + 1);
 }
@@ -196,28 +202,16 @@ ucp_proto_eager_sync_bcopy_multi_send_func(
             sizeof(ucp_eager_sync_first_hdr_t));
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_eager_sync_bcopy_send_completed(ucp_request_t *req)
-{
-    ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UINT_MAX);
-
-    req->flags |= UCP_REQUEST_FLAG_LOCAL_COMPLETED;
-    if (req->flags & UCP_REQUEST_FLAG_REMOTE_COMPLETED) {
-        ucp_request_complete_send(req, UCS_OK);
-    }
-    return UCS_OK;
-}
-
 void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
                                       const ucp_reply_hdr_t *rep_hdr)
 {
     ucp_request_t *req;
 
-    UCP_REQUEST_GET_BY_ID(&req, worker, rep_hdr->req_id, 1, return,
-                          "EAGER_S ACK %p", rep_hdr);
+    UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rep_hdr->req_id, 1, return,
+                               "EAGER_S ACK %p", rep_hdr);
 
-    req->flags |= UCP_REQUEST_FLAG_REMOTE_COMPLETED;
-    if (req->flags & UCP_REQUEST_FLAG_LOCAL_COMPLETED) {
+    req->flags |= UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
+    if (req->flags & UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED) {
         ucp_request_complete_send(req, rep_hdr->status);
     }
 }
@@ -226,7 +220,7 @@ static UCS_F_ALWAYS_INLINE void
 ucp_proto_eager_sync_bcopy_request_init(ucp_request_t *req)
 {
     ucp_proto_msg_multi_request_init(req);
-    ucp_request_id_alloc(req);
+    ucp_send_request_id_alloc(req);
 }
 
 static ucs_status_t
@@ -246,7 +240,7 @@ static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_sync_bcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_eager_sync_bcopy_multi_progress
+    .progress   = {ucp_proto_eager_sync_bcopy_multi_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_multi_proto);
 
@@ -258,9 +252,14 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 30,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
+        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
         .super.hdr_size      = sizeof(ucp_eager_first_hdr_t),
+        .super.send_op       = UCT_EP_OP_AM_ZCOPY,
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
@@ -278,9 +277,11 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
         ucp_eager_first_hdr_t  first;
         ucp_eager_middle_hdr_t middle;
     } hdr;
+    uct_iov_t iov[UCP_MAX_IOV];
+    size_t max_payload;
     ucp_am_id_t am_id;
     size_t hdr_size;
-    uct_iov_t iov;
+    size_t iov_count;
 
     if (req->send.state.dt_iter.offset == 0) {
         am_id    = UCP_AM_ID_EAGER_FIRST;
@@ -292,22 +293,26 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
         ucp_proto_eager_set_middle_hdr(req, &hdr.middle);
     }
 
-    ucp_datatype_iter_next_iov(&req->send.state.dt_iter, lpriv->super.memh_index,
-                               ucp_proto_multi_max_payload(req, lpriv, hdr_size),
-                               next_iter, &iov);
-    return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id, &hdr,
-                           hdr_size, &iov, 1, 0, &req->send.state.uct_comp);
+    max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
+    iov_count   = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
+                                             max_payload, lpriv->super.memh_index,
+                                             UCP_DT_MASK_CONTIG_IOV, next_iter,
+                                             iov, lpriv->super.max_iov);
+    return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,
+                           &hdr, hdr_size, iov, iov_count, 0,
+                           &req->send.state.uct_comp);
 }
 
 static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_multi_zcopy_progress(req, req->send.proto_config->priv,
-                                          ucp_proto_msg_multi_request_init,
-                                          UCT_MD_MEM_ACCESS_LOCAL_READ,
-                                          ucp_proto_eager_zcopy_multi_send_func,
-                                          ucp_proto_request_zcopy_completion);
+    return ucp_proto_multi_zcopy_progress(
+            req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
+            UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
+            ucp_proto_eager_zcopy_multi_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
 }
 
 static ucp_proto_t ucp_eager_zcopy_multi_proto = {
@@ -315,6 +320,6 @@ static ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_zcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = ucp_proto_eager_zcopy_multi_progress
+    .progress   = {ucp_proto_eager_zcopy_multi_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);

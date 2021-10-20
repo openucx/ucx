@@ -32,6 +32,17 @@ enum {
 };
 
 
+enum {
+    UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(0),
+    UCP_ADDR_IFACE_FLAG_AM_SYNC          = UCS_BIT(1),
+    UCP_ADDR_IFACE_FLAG_CB_ASYNC         = UCS_BIT(2),
+    UCP_ADDR_IFACE_FLAG_PUT              = UCS_BIT(3),
+    UCP_ADDR_IFACE_FLAG_GET              = UCS_BIT(4),
+    UCP_ADDR_IFACE_FLAG_TAG_EAGER        = UCS_BIT(5),
+    UCP_ADDR_IFACE_FLAG_TAG_RNDV         = UCS_BIT(6)
+};
+
+
 /* Which iface event flags would be packed in the address */
 enum {
     UCP_ADDRESS_IFACE_EVENT_FLAGS = UCT_IFACE_FLAG_EVENT_RECV
@@ -60,6 +71,12 @@ enum {
     /* Pack system device id */
     UCP_ADDRESS_PACK_FLAG_SYS_DEVICE  = UCS_BIT(6),
 
+    /* Pack client id */
+    UCP_ADDRESS_PACK_FLAG_CLIENT_ID   = UCS_BIT(7),
+
+     /* Address has only AM lane information */
+    UCP_ADDRESS_PACK_FLAG_AM_ONLY     = UCS_BIT(8),
+
     UCP_ADDRESS_PACK_FLAG_LAST,
 
     /* A bitmap of all flags: UCP_ADDRESS_PACK_FLAG_LAST is the last bit plus 1,
@@ -78,13 +95,21 @@ enum {
 
 
 /**
+ * UCP TL address bitmap
+ *
+ * Bitmap type for representing which TL addresses are in use.
+ */
+typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_addr_bitmap_t;
+
+
+/**
  * Remote interface attributes.
  */
 struct ucp_address_iface_attr {
     uint64_t                    cap_flags;    /* Interface capability flags */
     uint64_t                    event_flags;  /* Interface event capability flags */
     double                      overhead;     /* Interface performance - overhead */
-    uct_ppn_bandwidth_t         bandwidth;    /* Interface performance - bandwidth */
+    double                      bandwidth;    /* Interface performance - bandwidth */
     int                         priority;     /* Priority of device */
     double                      lat_ovh;      /* Latency overhead */
     ucp_rsc_index_t             dst_rsc_index;/* Destination resource index */
@@ -105,7 +130,6 @@ struct ucp_address_entry {
     unsigned                    num_ep_addrs;   /* How many endpoint address are in ep_addrs */
     ucp_address_entry_ep_addr_t ep_addrs[UCP_MAX_LANES]; /* Endpoint addresses */
     ucp_address_iface_attr_t    iface_attr;     /* Interface attributes information */
-    uint64_t                    md_flags;       /* MD reg/alloc flags */
     unsigned                    dev_num_paths;  /* Number of paths on the device */
     uint16_t                    tl_name_csum;   /* Checksum of transport name */
     ucp_md_index_t              md_index;       /* Memory domain index */
@@ -187,5 +211,32 @@ ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
                                 unsigned unpack_flags,
                                 ucp_unpacked_address_t *unpacked_address);
 
+
+/**
+ * Unpack worker unique id from the given address.
+ *
+ * @param [in] address Worker address.
+ *
+ * @return Worker unique id.
+  */
+uint64_t ucp_address_get_uuid(const void *address);
+
+/**
+ * Unpack client id from the given address.
+ *
+ * @param [in] address Worker address.
+ *
+ * @return Client id.
+  */
+uint64_t ucp_address_get_client_id(const void *address);
+
+/**
+ * Whether address has only AM lane information.
+ *
+ * @param [in] address Worker address.
+ * @return 1 if address has only AM lane information.
+ *         0 if address has all lanes information.
+ */
+uint8_t ucp_address_is_am_only(const void *address);
 
 #endif

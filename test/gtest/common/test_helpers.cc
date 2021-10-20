@@ -26,7 +26,7 @@ typedef std::pair<std::string, ::testing::TimeInMillis> test_result_t;
 
 const double test_timeout_in_sec = 60.;
 
-const double watchdog_timeout_default = 900.; // 15 minutes
+double watchdog_timeout = 900.; // 15 minutes
 
 static test_watchdog_t watchdog;
 
@@ -78,7 +78,7 @@ void *watchdog_func(void *arg)
             watchdog.state = WATCHDOG_DEFAULT_SET;
             break;
         case WATCHDOG_DEFAULT_SET:
-            watchdog.timeout     = watchdog_timeout_default;
+            watchdog.timeout     = watchdog_timeout;
             watchdog.state       = WATCHDOG_RUN;
             watchdog.kill_signal = SIGABRT;
             break;
@@ -116,7 +116,7 @@ void watchdog_set(test_watchdog_state_t new_state, double new_timeout)
 
 void watchdog_set(test_watchdog_state_t new_state)
 {
-    watchdog_set(new_state, watchdog_timeout_default);
+    watchdog_set(new_state, watchdog_timeout);
 }
 
 void watchdog_set(double new_timeout)
@@ -143,6 +143,7 @@ WATCHDOG_DEFINE_GETTER(kill_signal, int)
 int watchdog_start()
 {
     pthread_mutexattr_t mutex_attr;
+    ucs_status_t status;
     int ret;
 
     ret = pthread_mutexattr_init(&mutex_attr);
@@ -173,13 +174,14 @@ int watchdog_start()
 
     pthread_mutex_lock(&watchdog.mutex);
     watchdog.state          = WATCHDOG_RUN;
-    watchdog.timeout        = watchdog_timeout_default;
+    watchdog.timeout        = watchdog_timeout;
     watchdog.kill_signal    = SIGABRT;
     watchdog.watched_thread = pthread_self();
     pthread_mutex_unlock(&watchdog.mutex);
 
-    ret = pthread_create(&watchdog.thread, NULL, watchdog_func, NULL);
-    if (ret != 0) {
+    status = ucs_pthread_create(&watchdog.thread, watchdog_func, NULL,
+                                "watchdog");
+    if (status != UCS_OK) {
         goto err_destroy_barrier;
     }
 
@@ -588,27 +590,35 @@ std::string exit_status_info(int exit_status)
     return ss.str().substr(2, std::string::npos);
 }
 
-sock_addr_storage::sock_addr_storage() : m_size(0), m_is_valid(false) {
+sock_addr_storage::sock_addr_storage() :
+        m_size(0), m_is_valid(false), m_is_rdmacm_netdev(false)
+{
     memset(&m_storage, 0, sizeof(m_storage));
 }
 
-sock_addr_storage::sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr) {
+sock_addr_storage::sock_addr_storage(const ucs_sock_addr_t &ucs_sock_addr,
+                                     bool is_rdmacm_netdev)
+{
     if (sizeof(m_storage) < ucs_sock_addr.addrlen) {
         memset(&m_storage, 0, sizeof(m_storage));
-        m_size     = 0;
-        m_is_valid = false;
+        m_size             = 0;
+        m_is_valid         = false;
+        m_is_rdmacm_netdev = false;
     } else {
-        set_sock_addr(*ucs_sock_addr.addr, ucs_sock_addr.addrlen);
+        set_sock_addr(*ucs_sock_addr.addr, ucs_sock_addr.addrlen,
+                      is_rdmacm_netdev);
     }
 }
 
 void sock_addr_storage::set_sock_addr(const struct sockaddr &addr,
-                                      const size_t size) {
+                                      const size_t size, bool is_rdmacm_netdev)
+{
     ASSERT_GE(sizeof(m_storage), size);
     ASSERT_TRUE(ucs::is_inet_addr(&addr));
     memcpy(&m_storage, &addr, size);
-    m_size     = size;
-    m_is_valid = true;
+    m_size             = size;
+    m_is_valid         = true;
+    m_is_rdmacm_netdev = is_rdmacm_netdev;
 }
 
 void sock_addr_storage::reset_to_any() {
@@ -664,6 +674,11 @@ uint16_t sock_addr_storage::get_port() const {
         struct sockaddr_in6 *addr_in = (struct sockaddr_in6 *)&m_storage;
         return ntohs(addr_in->sin6_port);
     }
+}
+
+bool sock_addr_storage::is_rdmacm_netdev() const
+{
+    return m_is_rdmacm_netdev;
 }
 
 size_t sock_addr_storage::get_addr_size() const {
@@ -759,7 +774,18 @@ scoped_async_lock::~scoped_async_lock()
     UCS_ASYNC_UNBLOCK(&m_async);
 }
 
-std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs() {
+scoped_mutex_lock::scoped_mutex_lock(pthread_mutex_t &mutex) : m_mutex(mutex)
+{
+    pthread_mutex_lock(&m_mutex);
+}
+
+scoped_mutex_lock::~scoped_mutex_lock()
+{
+    pthread_mutex_unlock(&m_mutex);
+}
+
+const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs()
+{
     static std::vector<std::vector<ucs_memory_type_t> > result;
 
     if (result.empty()) {

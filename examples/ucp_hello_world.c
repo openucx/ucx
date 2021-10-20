@@ -85,6 +85,7 @@ static const ucp_tag_t tag      = 0x1337a880u;
 static const ucp_tag_t tag_mask = UINT64_MAX;
 static const char *addr_msg_str = "UCX address message";
 static const char *data_msg_str = "UCX data message";
+static int print_config         = 0;
 static ucp_address_t *local_addr;
 static ucp_address_t *peer_addr;
 
@@ -153,7 +154,7 @@ static ucs_status_t ucx_wait(ucp_worker_h ucp_worker, struct ucx_context *reques
 
         request->completed = 0;
         status             = ucp_request_check_status(request);
-        ucp_request_release(request);
+        ucp_request_free(request);
     } else {
         status = UCS_OK;
     }
@@ -292,7 +293,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
             CHKERR_JUMP(status != UCS_OK, "test_poll_wait\n", err_ep);
         }
     }
-    
+
     if (err_handling_opt.failure_mode == FAILURE_MODE_KEEPALIVE) {
         fprintf(stderr, "Emulating unexpected failure after receive completion "
                         "on client side, server should detect error by "
@@ -329,7 +330,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 err_msg:
     mem_type_free(msg);
 err_ep:
-    ucp_ep_destroy(server_ep);
+    ucp_ep_close_nb(server_ep, UCP_EP_CLOSE_MODE_FORCE);
 err:
     return ret;
 }
@@ -356,7 +357,7 @@ static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
             ucp_worker_progress(worker);
             status = ucp_request_check_status(request);
         } while (status == UCS_INPROGRESS);
-        ucp_request_release(request);
+        ucp_request_free(request);
         return status;
     }
 }
@@ -491,7 +492,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
 err_free_mem_type_msg:
     mem_type_free(msg);
 err_ep:
-    ucp_ep_destroy(client_ep);
+    ucp_ep_close_nb(client_ep, UCP_EP_CLOSE_MODE_FORCE);
 err:
     return ret;
 }
@@ -503,6 +504,11 @@ static int run_test(const char *client_target_name, ucp_worker_h ucp_worker)
     } else {
         return run_ucx_server(ucp_worker);
     }
+}
+
+static void progress_worker(void *arg)
+{
+    ucp_worker_progress((ucp_worker_h)arg);
 }
 
 int main(int argc, char **argv)
@@ -546,7 +552,9 @@ int main(int argc, char **argv)
 
     status = ucp_init(&ucp_params, config, &ucp_context);
 
-    ucp_config_print(config, stdout, NULL, UCS_CONFIG_PRINT_CONFIG);
+    if (print_config) {
+        ucp_config_print(config, stdout, NULL, UCS_CONFIG_PRINT_CONFIG);
+    }
 
     ucp_config_release(config);
     CHKERR_JUMP(status != UCS_OK, "ucp_init\n", err);
@@ -597,9 +605,9 @@ int main(int argc, char **argv)
 
     ret = run_test(client_target_name, ucp_worker);
 
-    if (!ret && (err_handling_opt.failure_mode != FAILURE_MODE_NONE)) {
+    if (!ret && (err_handling_opt.failure_mode == FAILURE_MODE_NONE)) {
         /* Make sure remote is disconnected before destroying local worker */
-        ret = barrier(oob_sock);
+        ret = barrier(oob_sock, progress_worker, ucp_worker);
     }
     close(oob_sock);
 
@@ -641,6 +649,7 @@ static void print_usage()
                                 "before receive completed\n");
     fprintf(stderr, "            keepalive - keepalive failure on client side "
                                 "after communication completed\n");
+    fprintf(stderr, "  -c      Print UCP configuration\n");
     print_common_help();
     fprintf(stderr, "\n");
 }
@@ -652,7 +661,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
     err_handling_opt.ucp_err_mode = UCP_ERR_HANDLING_MODE_NONE;
     err_handling_opt.failure_mode = FAILURE_MODE_NONE;
 
-    while ((c = getopt(argc, argv, "wfbe:n:p:s:m:h")) != -1) {
+    while ((c = getopt(argc, argv, "wfbe:n:p:s:m:ch")) != -1) {
         switch (c) {
         case 'w':
             ucp_test_mode = TEST_MODE_WAIT;
@@ -691,13 +700,16 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
             if (test_string_length < 0) {
                 fprintf(stderr, "Wrong string size %ld\n", test_string_length);
                 return UCS_ERR_UNSUPPORTED;
-            }	
+            }
             break;
         case 'm':
             test_mem_type = parse_mem_type(optarg);
             if (test_mem_type == UCS_MEMORY_TYPE_LAST) {
                 return UCS_ERR_UNSUPPORTED;
             }
+            break;
+        case 'c':
+            print_config = 1;
             break;
         case 'h':
         default:

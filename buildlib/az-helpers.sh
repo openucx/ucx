@@ -119,30 +119,47 @@ function az_module_unload() {
 # try load cuda modules if nvidia driver is installed
 #
 try_load_cuda_env() {
-	num_gpus=0
-	have_cuda=no
-	have_gdrcopy=no
-	if [ -f "/proc/driver/nvidia/version" ]; then
-		have_cuda=yes
-		have_gdrcopy=yes
-		az_module_load dev/cuda11.1.1 || have_cuda=no
-		az_module_load dev/gdrcopy2.1_cuda11.1.1 || have_gdrcopy=no
-		num_gpus=$(nvidia-smi -L | wc -l)
-	fi
+    num_gpus=0
+    have_cuda=no
+    have_gdrcopy=no
+    if [ -f "/proc/driver/nvidia/version" ]; then
+        have_cuda=yes
+        have_gdrcopy=yes
+        az_module_load dev/cuda11.1.1 || have_cuda=no
+        az_module_load dev/gdrcopy2.1_cuda11.1.1 || have_gdrcopy=no
+        nvidia-smi -a
+        ls -l /dev/nvidia*
+        num_gpus=$(nvidia-smi -L | wc -l)
+        if [ "$num_gpus" -gt 0 ] && ! [ -f /sys/kernel/mm/memory_peers/nv_mem/version ]
+        then
+            lsmod
+            azure_log_error "GPU direct driver not loaded"
+        fi
+    fi
 }
 
 
-check_commit_message() {
-    git_id=$1
-    title_mask=$2
-    build_reason=$3
-    echo "Get commit message target $git_id"
-    title=`git log -1 --format="%s" $git_id`
+check_release_build() {
+    build_reason=$1
+    build_sourceversion=$2
+    title_mask=$3
 
-    if [[ ( "$build_reason" == "IndividualCI" ) || ( "$title" == "$title_mask"* && "$build_reason" == "PullRequest" ) ]]
+
+    if [ "${build_reason}" == "IndividualCI" ] || \
+       [ "${build_reason}" == "ResourceTrigger" ]
     then
-        echo "##vso[task.setvariable variable=Launch;isOutput=true]Yes"
-    else
-        echo "##vso[task.setvariable variable=Launch;isOutput=true]No"
+        launch=True
+    elif [ "${build_reason}" == "PullRequest" ]
+    then
+        launch=False
+        # In case of pull request, HEAD^ is the branch commit we merge with
+        range="$(git rev-parse HEAD^)..${build_sourceversion}"
+        for sha1 in `git log $range --format="%h"`
+        do
+            title=`git log -1 --format="%s" $sha1`
+            [[ "$title" == "${title_mask}"* ]] && launch=True;
+        done
     fi
+
+    echo "##vso[task.setvariable variable=Launch;isOutput=true]${launch}"
 }

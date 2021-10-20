@@ -12,7 +12,7 @@
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
 #include <string.h>
@@ -40,6 +40,11 @@ void ucs_string_buffer_init_fixed(ucs_string_buffer_t *strb, char *buffer,
 void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)
 {
     ucs_array_cleanup_dynamic(&strb->str);
+}
+
+void ucs_string_buffer_reset(ucs_string_buffer_t *strb)
+{
+    ucs_array_length(&strb->str) = 0;
 }
 
 size_t ucs_string_buffer_length(ucs_string_buffer_t *strb)
@@ -108,6 +113,33 @@ void ucs_string_buffer_append_hex(ucs_string_buffer_t *strb, const void *data,
     new_length = prev_length + strlen(ucs_array_end(&strb->str));
     ucs_array_set_length(&strb->str, new_length);
     ucs_assert(*ucs_array_end(&strb->str) == '\0');
+}
+
+void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
+                                    const char **flag_names)
+{
+    unsigned flag;
+
+    ucs_for_each_bit(flag, mask) {
+        if (flag_names == NULL) {
+            ucs_string_buffer_appendf(strb, "%u,", flag);
+        } else {
+            ucs_string_buffer_appendf(strb, "%s|", flag_names[flag]);
+        }
+    }
+    ucs_string_buffer_rtrim(strb, ",|");
+}
+
+void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
+                                    const struct iovec *iov, size_t iovcnt)
+{
+    size_t iov_index;
+
+    for (iov_index = 0; iov_index < iovcnt; ++iov_index) {
+        ucs_string_buffer_appendf(strb, "%p,%zu|", iov[iov_index].iov_base,
+                                  iov[iov_index].iov_len);
+    }
+    ucs_string_buffer_rtrim(strb, "|");
 }
 
 void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)

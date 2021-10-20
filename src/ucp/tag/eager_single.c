@@ -47,22 +47,27 @@ static ucs_status_t
 ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucp_proto_single_init_params_t params = {
+    ucp_proto_single_init_params_t params        = {
         .super.super         = *init_params,
-        .super.latency       = -150e-9, /* no extra memory access to fetch data */
+        .super.latency       = -150e-9, /* no extra mem access to fetch data */
         .super.overhead      = 0,
         .super.cfg_thresh    = UCS_MEMUNITS_AUTO,
         .super.cfg_priority  = 0,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_short),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_hdr_t),
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG,
+        .super.send_op       = UCT_EP_OP_AM_SHORT,
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 0) ||
+    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0) ||
         /* short protocol requires contig/host */
         (select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         !UCP_MEM_IS_HOST(select_param->mem_type)) {
@@ -77,7 +82,7 @@ static ucp_proto_t ucp_eager_short_proto = {
     .flags      = UCP_PROTO_FLAG_AM_SHORT,
     .init       = ucp_proto_eager_short_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_eager_short_progress
+    .progress   = {ucp_eager_short_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_short_proto);
 
@@ -117,16 +122,21 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.overhead      = 5e-9,
         .super.cfg_thresh    = context->config.ext.bcopy_thresh,
         .super.cfg_priority  = 20,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_hdr_t),
-        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG,
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
+        .super.memtype_op    = UCT_EP_OP_GET_SHORT,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 0)) {
+    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -138,7 +148,7 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_bcopy_single_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_eager_bcopy_single_progress,
+    .progress   = {ucp_eager_bcopy_single_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
@@ -152,17 +162,23 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.overhead      = 0,
         .super.cfg_thresh    = context->config.ext.zcopy_thresh,
         .super.cfg_priority  = 30,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
+        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_hdr_t),
+        .super.send_op       = UCT_EP_OP_AM_ZCOPY,
+        .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
-                               UCP_PROTO_COMMON_INIT_FLAG_MAX_FRAG,
+                               UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG,
         .lane_type           = UCP_LANE_TYPE_AM,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
     /* AM based proto can not be used if tag offload lane configured */
-    if (!ucp_proto_eager_check_op_id(init_params, 0)) {
+    if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 0) ||
+        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -188,9 +204,10 @@ ucp_proto_eager_zcopy_single_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
-    return ucp_proto_zcopy_single_progress(req, UCT_MD_MEM_ACCESS_LOCAL_READ,
-                                           ucp_proto_eager_zcopy_send_func,
-                                           "am_zcopy_only");
+    return ucp_proto_zcopy_single_progress(
+            req, UCT_MD_MEM_ACCESS_LOCAL_READ, ucp_proto_eager_zcopy_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_zcopy_completion);
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {
@@ -198,6 +215,6 @@ static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_zcopy_single_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = ucp_proto_eager_zcopy_single_progress,
+    .progress   = {ucp_proto_eager_zcopy_single_progress}
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);

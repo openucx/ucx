@@ -49,6 +49,7 @@ ucs_status_t ucp_tag_match_init(ucp_tag_match_t *tm)
     tm->offload.thresh       = SIZE_MAX;
     tm->offload.zcopy_thresh = SIZE_MAX;
     tm->offload.iface        = NULL;
+
     return UCS_OK;
 }
 
@@ -148,12 +149,14 @@ ucp_tag_exp_search_all(ucp_tag_match_t *tm, ucp_request_queue_t *req_queue,
     return NULL;
 }
 
+/* Used in SW tag flow only, because fragments hash is not relevant for tag
+ * offload flow.
+ */
 void ucp_tag_frag_list_process_queue(ucp_tag_match_t *tm, ucp_request_t *req,
-                                     uint64_t msg_id UCS_STATS_ARG(int counter_idx))
+                                     uint64_t msg_id
+                                     UCS_STATS_ARG(int counter_idx))
 {
-    ucp_eager_middle_hdr_t *hdr;
     ucp_tag_frag_match_t *matchq;
-    ucp_recv_desc_t *rdesc;
     ucs_status_t status;
     khiter_t iter;
     int ret;
@@ -161,16 +164,8 @@ void ucp_tag_frag_list_process_queue(ucp_tag_match_t *tm, ucp_request_t *req,
     iter   = kh_put(ucp_tag_frag_hash, &tm->frag_hash, msg_id, &ret);
     matchq = &kh_value(&tm->frag_hash, iter);
     if (ret == 0) {
-        status = UCS_INPROGRESS;
-        ucs_assert(ucp_tag_frag_match_is_unexp(matchq));
-        ucs_queue_for_each_extract(rdesc, &matchq->unexp_q, tag_frag_queue,
-                                   status == UCS_INPROGRESS) {
-            UCS_STATS_UPDATE_COUNTER(req->recv.worker->stats, counter_idx, 1);
-            hdr    = (void*)(rdesc + 1);
-            status = ucp_tag_recv_request_process_rdesc(req, rdesc, hdr->offset);
-        }
-        ucs_assert(ucs_queue_is_empty(&matchq->unexp_q));
-
+        status = ucp_tag_frag_list_process_common(req, matchq, 0
+                                                  UCS_STATS_ARG(counter_idx));
         /* if we completed the request, delete hash entry */
         if (status != UCS_INPROGRESS) {
             kh_del(ucp_tag_frag_hash, &tm->frag_hash, iter);

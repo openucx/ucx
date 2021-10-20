@@ -17,6 +17,7 @@ enum {
     UCP_TAG_OFFLOAD_CANCEL_FORCE = UCS_BIT(0)
 };
 
+
 /**
  * Header for unexpected rendezvous
  */
@@ -37,13 +38,25 @@ typedef struct {
 
 
 /**
- * Header for multi-fragmented sync send acknowledgment
- * (carried by last fragment)
+ * Header for the first tag offload fragment. It is not actually sent on the
+ * wire, receiver adds it right before the data to simplify further processing.
  */
 typedef struct {
-    ucp_eager_middle_hdr_t    super;
-    ucp_offload_ssend_hdr_t   ssend_ack;
-} UCS_S_PACKED ucp_offload_last_ssend_hdr_t;
+    /* The first field of every tagged message must be the tag
+     * (needed for proper matching).
+     */
+    ucp_eager_hdr_t      super;
+
+    /* The total length is not sent with the first fragment in tag offload flow.
+     * This field is used to accumulate the total_length (every incoming
+     * fragment adds its length to this value).
+     */
+    size_t               total_length;
+
+    /* The queue of message fragments.
+     */
+    ucp_tag_frag_match_t matchq;
+} UCS_S_PACKED ucp_offload_first_desc_t;
 
 
 extern const ucp_request_send_proto_t ucp_tag_offload_proto;
@@ -158,6 +171,14 @@ ucp_tag_offload_unexp(ucp_worker_iface_t *wiface, ucp_tag_t tag, size_t length)
         ucs_assertv((ret == 1) || (ret == 2), "ret=%d", ret);
         kh_value(&worker->tm.offload.tag_hash, hash_it) = wiface;
     }
+}
+
+static UCS_F_ALWAYS_INLINE void ucp_tag_offload_sync_posted(ucp_request_t *req)
+{
+    ucp_worker_t *worker = req->send.ep->worker;
+
+    req->send.tag_offload.ssend_tag = req->send.msg_proto.tag;
+    ucs_queue_push(&worker->tm.offload.sync_reqs, &req->send.tag_offload.queue);
 }
 
 #endif

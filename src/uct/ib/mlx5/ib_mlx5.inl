@@ -62,6 +62,16 @@ uct_ib_mlx5_gid_from_cqe(struct mlx5_cqe64* cqe)
     return UCS_PTR_BYTE_OFFSET(cqe, -UCT_IB_GRH_LEN);
 }
 
+
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_update_db_cq_ci(uct_ib_mlx5_cq_t *cq)
+{
+#if UCS_ENABLE_ASSERT
+    cq->dbrec[UCT_IB_MLX5_CQ_SET_CI] = htobe32(cq->cq_ci & 0xffffff);
+#endif
+}
+
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
@@ -79,6 +89,7 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
         UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
         ucs_assert((op_own >> 4) != MLX5_CQE_INVALID);
         uct_ib_mlx5_check_completion(iface, cq, cqe);
+        uct_ib_mlx5_update_db_cq_ci(cq);
         return NULL; /* No CQE */
     }
 
@@ -143,6 +154,16 @@ uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
         ucs_fatal("tx wq overrun: hw_ci: %u sw_pi: %u cur: %u-%u num_bb: %u wqe_cnt: %u",
                 hw_ci, sw_pi, wqe_s, wqe_e, num_bb, wqe_cnt);
     }
+#endif
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_txwq_update_flags(uct_ib_mlx5_txwq_t *txwq, uint32_t flags_add,
+                              uint32_t flags_remove)
+{
+#if UCS_ENABLE_ASSERT
+    txwq->flags = (txwq->flags | flags_add) & ~flags_remove;
 #endif
 }
 
@@ -311,6 +332,13 @@ uct_ib_mlx5_set_dgram_seg(struct mlx5_wqe_datagram_seg *seg,
 }
 
 static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_set_ctrl_qpn_ds(struct mlx5_wqe_ctrl_seg *ctrl, uint32_t qp_num,
+                            uint8_t ds)
+{
+    ctrl->qpn_ds = htonl((qp_num << 8) | ds);
+}
+
+static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
                          uint8_t opcode, uint8_t opmod, uint32_t qp_num,
                          uint8_t fm_ce_se, unsigned wqe_size)
@@ -349,7 +377,7 @@ uct_ib_mlx5_set_ctrl_seg(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
     ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;
-    ctrl->qpn_ds           = htonl((qp_num << 8) | ds);
+    uct_ib_mlx5_set_ctrl_qpn_ds(ctrl, qp_num, ds);
     ctrl->fm_ce_se         = fm_ce_se;
 #endif
 }
@@ -376,7 +404,7 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
 #endif
 
     ucs_assert(((unsigned long)ctrl % UCT_IB_MLX5_WQE_SEG_SIZE) == 0);
-    
+
 #if defined(__SSE4_2__)
     *(__m128i *) ctrl = _mm_shuffle_epi8(
                     _mm_set_epi32(qp_num, imm, (ds << 16) | pi,
@@ -395,7 +423,7 @@ uct_ib_mlx5_set_ctrl_seg_with_imm(struct mlx5_wqe_ctrl_seg* ctrl, uint16_t pi,
     *(uint8x16_t *)ctrl = vqtbl1q_u8((uint8x16_t)data, table);
 #else
     ctrl->opmod_idx_opcode = (opcode << 24) | (htons(pi) << 8) | opmod;
-    ctrl->qpn_ds           = htonl((qp_num << 8) | ds);
+    uct_ib_mlx5_set_ctrl_qpn_ds(ctrl, qp_num, ds);
     ctrl->fm_ce_se         = fm_ce_se;
     ctrl->imm              = imm;
 #endif

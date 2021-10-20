@@ -60,6 +60,11 @@ Java_org_openucx_jucx_ucp_UcpWorker_createWorkerNative(JNIEnv *env, jobject jucx
         worker_params.event_fd = env->GetIntField(jucx_worker_params, field);
     }
 
+    if (worker_params.field_mask & UCP_WORKER_PARAM_FIELD_CLIENT_ID) {
+        field = env->GetFieldID(jucx_param_class, "clientId", "J");
+        worker_params.client_id = env->GetLongField(jucx_worker_params, field);
+    }
+
     ucs_status_t status = ucp_worker_create(ucp_context, &worker_params, &ucp_worker);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);
@@ -293,7 +298,8 @@ Java_org_openucx_jucx_ucp_UcpWorker_cancelRequestNative(JNIEnv *env, jclass cls,
 JNIEXPORT void JNICALL
 Java_org_openucx_jucx_ucp_UcpWorker_setAmRecvHandlerNative(JNIEnv *env, jclass cls,
                                                            jlong ucp_worker_ptr, jint amId,
-                                                           jobjectArray callbackAndWorker)
+                                                           jobjectArray callbackAndWorker,
+                                                           jlong flags)
 {
     ucp_am_handler_param_t param = {0};
     param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID    |
@@ -301,9 +307,13 @@ Java_org_openucx_jucx_ucp_UcpWorker_setAmRecvHandlerNative(JNIEnv *env, jclass c
                        UCP_AM_HANDLER_PARAM_FIELD_CB    |
                        UCP_AM_HANDLER_PARAM_FIELD_ARG;
     param.id         = amId;
-    param.flags      = UCP_AM_FLAG_WHOLE_MSG;
-    param.cb         = am_recv_callback;
-    param.arg        = env->NewWeakGlobalRef(callbackAndWorker);
+    param.flags      = flags;
+    if (callbackAndWorker == NULL) {
+        param.cb     = NULL;
+    } else {
+        param.cb     = am_recv_callback;
+        param.arg    = env->NewWeakGlobalRef(callbackAndWorker);
+    }
 
     ucs_status_t status = ucp_worker_set_am_recv_handler((ucp_worker_h)ucp_worker_ptr, &param);
 

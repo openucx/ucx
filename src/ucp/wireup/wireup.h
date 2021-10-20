@@ -39,7 +39,6 @@ enum {
 typedef struct {
     const char  *title;             /* Name of the criteria for debugging */
     uint64_t    local_md_flags;     /* Required local MD flags */
-    uint64_t    remote_md_flags;    /* Required remote MD flags */
     uint64_t    local_iface_flags;  /* Required local interface flags */
     uint64_t    remote_iface_flags; /* Required remote interface flags */
     uint64_t    local_event_flags;  /* Required local event flags */
@@ -70,13 +69,13 @@ typedef struct {
  * Packet structure for wireup requests.
  */
 typedef struct ucp_wireup_msg {
-    uint8_t                 type;         /* Message type */
-    uint8_t                 err_mode;     /* Peer error handling mode defined in
-                                             @ucp_err_handling_mode_t */
-    ucp_ep_match_conn_sn_t  conn_sn;      /* Connection sequence number */
-    uint64_t                src_ep_id;    /* Endpoint ID of source */
-    uint64_t                dst_ep_id;    /* Endpoint ID of destination, can be
-                                             UCP_EP_ID_INVALID */
+    uint8_t                type; /* Message type */
+    uint8_t                err_mode; /* Peer error handling mode defined in
+                                        @ucp_err_handling_mode_t */
+    ucp_ep_match_conn_sn_t conn_sn; /* Connection sequence number */
+    uint64_t               src_ep_id; /* Endpoint ID of source */
+    uint64_t               dst_ep_id; /* Endpoint ID of destination, can be
+                                         UCS_PTR_MAP_KEY_INVALID */
     /* packed addresses follow */
 } UCS_S_PACKED ucp_wireup_msg_t;
 
@@ -138,10 +137,18 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
                                         ucs_queue_head_t *tmp_pending_queue);
 
+/* Set lanes which are wireup_ep as remote connected.
+   If 'ready' is true - also mark them as ready and switch them to the real
+   transport uct_ep in the next progress call */
+void ucp_wireup_remote_connect_lanes(ucp_ep_h ep, int ready);
+
 void ucp_wireup_remote_connected(ucp_ep_h ep);
 
 unsigned ucp_ep_init_flags(const ucp_worker_h worker,
                            const ucp_ep_params_t *params);
+
+int ucp_wireup_connect_p2p(ucp_worker_h worker, ucp_rsc_index_t rsc_index,
+                           int has_cm_lane);
 
 ucs_status_t
 ucp_wireup_connect_local(ucp_ep_h ep,
@@ -149,7 +156,5 @@ ucp_wireup_connect_local(ucp_ep_h ep,
                          const ucp_lane_index_t *lanes2remote);
 
 uct_ep_h ucp_wireup_extract_lane(ucp_ep_h ep, ucp_lane_index_t lane);
-
-void ucp_wireup_pending_purge_cb(uct_pending_req_t *self, void *arg);
 
 #endif

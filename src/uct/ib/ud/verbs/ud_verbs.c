@@ -13,7 +13,7 @@
 #include <uct/base/uct_md.h>
 #include <uct/base/uct_log.h>
 #include <ucs/debug/log.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 #include <string.h>
 #include <arpa/inet.h> /* For htonl */
@@ -224,6 +224,7 @@ static ucs_status_t uct_ud_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
     uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE,
                            iface->tx.wr_inl.num_sge);
 
+    uct_ud_iov_to_skb(skb, iov, iovcnt);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, uct_iov_total_length(iov, iovcnt));
     uct_ud_leave(&iface->super);
@@ -501,7 +502,8 @@ uct_ud_verbs_iface_unpack_peer_address(uct_ud_iface_t *iface,
 
     uct_ib_iface_fill_ah_attr_from_addr(ib_iface, ib_addr, path_index,
                                         &ah_attr, &path_mtu);
-    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, &peer_address->ah);
+    status = uct_ib_iface_create_ah(ib_iface, &ah_attr, "UD verbs connect",
+                                    &peer_address->ah);
     if (status != UCS_OK) {
         return status;
     }
@@ -554,8 +556,29 @@ static void uct_ud_verbs_iface_destroy_qp(uct_ud_iface_t *ud_iface)
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 
 static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
-    {
-    {
+    .super = {
+        .super = {
+            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+        },
+        .create_cq      = uct_ib_verbs_create_cq,
+        .arm_cq         = uct_ib_iface_arm_cq,
+        .event_cq       = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
+        .handle_failure = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
+    },
+    .async_progress          = uct_ud_verbs_iface_async_progress,
+    .send_ctl                = uct_ud_verbs_ep_send_ctl,
+    .ep_free                 = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
+    .create_qp               = uct_ib_iface_create_qp,
+    .destroy_qp              = uct_ud_verbs_iface_destroy_qp,
+    .unpack_peer_address     = uct_ud_verbs_iface_unpack_peer_address,
+    .ep_get_peer_address     = uct_ud_verbs_ep_get_peer_address,
+    .get_peer_address_length = uct_ud_verbs_get_peer_address_length,
+    .peer_address_str        = uct_ud_verbs_iface_peer_address_str,
+};
+
+static uct_iface_ops_t uct_ud_verbs_iface_tl_ops = {
     .ep_put_short             = uct_ud_verbs_ep_put_short,
     .ep_am_short              = uct_ud_verbs_ep_am_short,
     .ep_am_short_iov          = uct_ud_verbs_ep_am_short_iov,
@@ -583,21 +606,6 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_get_address        = uct_ud_iface_get_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable
-    },
-    .create_cq                = uct_ib_verbs_create_cq,
-    .arm_cq                   = uct_ib_iface_arm_cq,
-    .event_cq                 = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
-    .handle_failure           = (uct_ib_iface_handle_failure_func_t)ucs_empty_function_do_assert,
-    },
-    .async_progress           = uct_ud_verbs_iface_async_progress,
-    .send_ctl                 = uct_ud_verbs_ep_send_ctl,
-    .ep_free                  = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
-    .create_qp                = uct_ib_iface_create_qp,
-    .destroy_qp               = uct_ud_verbs_iface_destroy_qp,
-    .unpack_peer_address      = uct_ud_verbs_iface_unpack_peer_address,
-    .ep_get_peer_address      = uct_ud_verbs_ep_get_peer_address,
-    .get_peer_address_length  = uct_ud_verbs_get_peer_address_length,
-    .peer_address_str         = uct_ud_verbs_iface_peer_address_str
 };
 
 static UCS_F_NOINLINE void
@@ -668,7 +676,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx.queue_len;
     init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, md,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, &uct_ud_verbs_iface_tl_ops, md,
                               worker, params, config, &init_attr);
 
     self->super.super.config.sl       = uct_ib_iface_config_select_sl(&config->super);

@@ -210,10 +210,9 @@ struct uct_ud_iface {
 };
 
 
-UCS_CLASS_DECLARE(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_md_h,
-                  uct_worker_h, const uct_iface_params_t*,
-                  const uct_ud_iface_config_t*,
-                  uct_ib_iface_init_attr_t*)
+UCS_CLASS_DECLARE(uct_ud_iface_t, uct_ud_iface_ops_t*, uct_iface_ops_t*,
+                  uct_md_h, uct_worker_h, const uct_iface_params_t*,
+                  const uct_ud_iface_config_t*, uct_ib_iface_init_attr_t*)
 
 
 struct uct_ud_ctl_hdr {
@@ -314,17 +313,18 @@ application calls ep_create_connected(). */
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 
-uct_ud_ep_conn_sn_t
+ucs_status_t
 uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
                              const uct_ib_address_t *ib_addr,
                              const uct_ud_iface_addr_t *if_addr,
-                             int path_index);
+                             int path_index, uct_ud_ep_conn_sn_t *conn_sn_p);
 
-void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
-                                const uct_ib_address_t *ib_addr,
-                                const uct_ud_iface_addr_t *if_addr,
-                                int path_index, uct_ud_ep_conn_sn_t conn_sn,
-                                uct_ud_ep_t *ep);
+ucs_status_t uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
+                                        const uct_ib_address_t *ib_addr,
+                                        const uct_ud_iface_addr_t *if_addr,
+                                        int path_index,
+                                        uct_ud_ep_conn_sn_t conn_sn,
+                                        uct_ud_ep_t *ep);
 
 uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *ib_addr,

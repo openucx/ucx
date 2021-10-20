@@ -70,7 +70,6 @@ typedef struct uct_ib_md_ext_config {
     int                      prefer_nearest_device; /**< Give priority for near
                                                          device */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
-    int                      enable_gpudirect_rdma; /** Enable GPUDirect RDMA */
 #ifdef HAVE_EXP_UMR
     unsigned                 max_inline_klm_list; /* Maximal length of inline KLM list */
 #endif
@@ -136,6 +135,7 @@ typedef struct uct_ib_md {
     int                      relaxed_order;
     int                      fork_init;
     size_t                   memh_struct_size;
+    uint64_t                 reg_mem_types;
 } uct_ib_md_t;
 
 
@@ -165,6 +165,7 @@ typedef struct uct_ib_md_config {
     unsigned                 devx;         /**< DEVX support */
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
     ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
+    int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
 } uct_ib_md_config_t;
 
 /**
@@ -446,6 +447,8 @@ static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
 
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);
+
+int uct_ib_device_is_accessible(struct ibv_device *device);
 
 ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                                    struct ibv_device *ib_device,

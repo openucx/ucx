@@ -1,0 +1,70 @@
+jobs:
+  # Check that commit title matches code style guidelines
+  - job: commit_title
+    displayName: commit title
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          set -eE
+          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+          range="$BASE_SOURCEVERSION..$(Build.SourceVersion)"
+          ok=1
+          for sha1 in `git log $range --format="%h"`
+          do
+              title=`git log -1 --format="%s" $sha1`
+              if echo $title | grep -qP '^Merge |^[0-9A-Z/_\-]*: \w'
+              then
+                  echo "Good commit title: '$title'"
+              else
+                  echo "Bad commit title: '$title'"
+                  ok=0
+              fi
+          done
+          if [ $ok -ne 1 ]
+          then
+              url="https://github.com/openucx/ucx/wiki/Guidance-for-contributors#general-guidelines"
+              echo "##vso[task.logissue type=error]Bad commit title(s), see $url for more info."
+              echo "##vso[task.complete result=Failed;]"
+          fi
+        condition: eq(variables['Build.Reason'], 'PullRequest')
+
+  # Check that the code is formatted according to the code style guidelines
+  - job: format
+    displayName: format code
+    pool:
+      name: MLNX
+      demands:
+      - ucx_docker -equals yes
+    container: fedora
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+          source ./buildlib/az-helpers.sh
+          set -x
+          git log -1 HEAD
+          git log -1 HEAD^
+          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
+          echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
+          git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
+          echo "Generated patch file:"
+          cat format.patch
+          if [ "`cat format.patch`" = "no modified files to format" ]; then
+              exit
+          fi
+          git apply format.patch
+          if ! git diff --quiet --exit-code
+          then
+              url="https://github.com/openucx/ucx/wiki/Code-style-checking"
+              azure_complete_with_issues "Code is not formatted according to the code style, see $url for more info."
+          fi
+        condition: eq(variables['Build.Reason'], 'PullRequest')

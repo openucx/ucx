@@ -54,14 +54,15 @@ static ucs_status_t uct_rocm_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
 static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
                                           uct_rocm_ipc_key_t *key)
 {
+    void *base_ptr = NULL;
+    size_t size    = 0;
     hsa_status_t status;
     hsa_agent_t agent;
-    void *base_ptr;
-    size_t size;
 
     status = uct_rocm_base_get_ptr_info(address, length, &base_ptr, &size, &agent);
-    if (status != HSA_STATUS_SUCCESS) {
-        ucs_error("pack none ROCM ptr %p/%lx", address, length);
+    if ((status != HSA_STATUS_SUCCESS) || (size < length)) {
+        ucs_error("failed to get base ptr for %p/%lx, ROCm returned %p/%lx",
+                   address, length, base_ptr, size);
         return status;
     }
 
@@ -72,7 +73,7 @@ static hsa_status_t uct_rocm_ipc_pack_key(void *address, size_t length,
     }
 
     key->address = (uintptr_t)base_ptr;
-    key->length = size;
+    key->length  = size;
     key->dev_num = uct_rocm_base_get_dev_num(agent);
 
     return HSA_STATUS_SUCCESS;
@@ -101,11 +102,16 @@ static ucs_status_t uct_rocm_ipc_mem_reg(uct_md_h md, void *address, size_t leng
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_ipc_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t
+uct_rocm_ipc_mem_dereg(uct_md_h md,
+                       const uct_md_mem_dereg_params_t *params)
 {
-    uct_rocm_ipc_key_t *key = (uct_rocm_ipc_key_t *)memh;
+    uct_rocm_ipc_key_t *mem_hndl;
 
-    ucs_free(key);
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    mem_hndl = params->memh;
+    ucs_free(mem_hndl);
     return UCS_OK;
 }
 
@@ -176,7 +182,8 @@ uct_component_t uct_rocm_ipc_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_ipc_component),
-    .flags              = 0
+    .flags              = 0,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_rocm_ipc_component);
 

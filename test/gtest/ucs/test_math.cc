@@ -54,29 +54,6 @@ UCS_TEST_F(test_math, circular_compare) {
     EXPECT_TRUE(  UCS_CIRCULAR_COMPARE32(0xffffffffU, <,  0x7fffffffU) );
 }
 
-UCS_TEST_F(test_math, bitops) {
-    EXPECT_EQ(0u,  ucs_ffs64(0xfffff));
-    EXPECT_EQ(16u, ucs_ffs64(0xf0000));
-    EXPECT_EQ(1u,  ucs_ffs64(0x4002));
-    EXPECT_EQ(41u, ucs_ffs64(1ull<<41));
-
-    EXPECT_EQ(0u,  ucs_ilog2(1));
-    EXPECT_EQ(2u,  ucs_ilog2(4));
-    EXPECT_EQ(2u,  ucs_ilog2(5));
-    EXPECT_EQ(2u,  ucs_ilog2(7));
-    EXPECT_EQ(14u, ucs_ilog2(17000));
-    EXPECT_EQ(40u, ucs_ilog2(1ull<<40));
-
-    EXPECT_EQ(0,  ucs_popcount(0));
-    EXPECT_EQ(2,  ucs_popcount(5));
-    EXPECT_EQ(16, ucs_popcount(0xffff));
-    EXPECT_EQ(48, ucs_popcount(0xffffffffffffUL));
-
-    EXPECT_EQ(0, ucs_count_trailing_zero_bits(1));
-    EXPECT_EQ(28, ucs_count_trailing_zero_bits(0x10000000));
-    EXPECT_EQ(32, ucs_count_trailing_zero_bits(0x100000000UL));
-}
-
 #define TEST_ATOMIC_ADD(_bitsize) \
     { \
         typedef uint##_bitsize##_t inttype; \
@@ -232,12 +209,12 @@ UCS_TEST_F(test_math, for_each_submask) {
 }
 
 UCS_TEST_F(test_math, linear_func) {
-    ucs_linear_func_t func[2];
-    double x, y[2];
+    ucs_linear_func_t func[3];
+    double x, y[3];
 
     /* Generate 2 random functions */
     x = ucs::rand() / (double)RAND_MAX;
-    for (unsigned i = 0; i < 2; ++i) {
+    for (unsigned i = 0; i < 3; ++i) {
         func[i] = ucs_linear_func_make(ucs::rand() / (double)RAND_MAX,
                                        ucs::rand() / (double)RAND_MAX);
         y[i]    = ucs_linear_func_apply(func[i], x);
@@ -247,6 +224,13 @@ UCS_TEST_F(test_math, linear_func) {
     ucs_linear_func_t sum_func = ucs_linear_func_add(func[0], func[1]);
     double y_sum               = ucs_linear_func_apply(sum_func, x);
     EXPECT_NEAR(y[0] + y[1], y_sum, 1e-6);
+
+    /* Add */
+    ucs_linear_func_t sum3_func = ucs_linear_func_add3(func[0], func[1],
+                                                       func[2]);
+    double y_sum3               = ucs_linear_func_apply(sum3_func, x);
+    EXPECT_NEAR(y[0] + y[1] + y[2], y_sum3, 1e-6);
+
 
     /* Add in-place */
     ucs_linear_func_t sum_func_inplace = func[0];

@@ -16,11 +16,12 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/string.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <sys/signal.h>
 
 
 ucs_global_opts_t ucs_global_opts = {
-    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX"},
+    .log_component         = {UCS_LOG_LEVEL_WARN, "UCX", "*"},
     .log_print_enable      = 0,
     .log_file              = "",
     .log_file_size         = SIZE_MAX,
@@ -36,20 +37,24 @@ ucs_global_opts_t ucs_global_opts = {
     .debug_signo           = SIGHUP,
     .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
     .warn_unused_env_vars  = 1,
+    .enable_memtype_cache  = 1,
     .async_max_events      = 64,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
     .tuning_path           = "",
     .memtrack_dest         = "",
+    .memtrack_limit        = UCS_MEMUNITS_INF,
     .stats_trigger         = "exit",
     .profile_mode          = 0,
     .profile_file          = "",
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
     .vfs_enable            = 1,
+    .vfs_thread_affinity   = 0,
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
+    .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
     .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER
 };
 
@@ -57,6 +62,7 @@ static const char *ucs_handle_error_modes[] = {
     [UCS_HANDLE_ERROR_BACKTRACE] = "bt",
     [UCS_HANDLE_ERROR_FREEZE]    = "freeze",
     [UCS_HANDLE_ERROR_DEBUG]     = "debug",
+    [UCS_HANDLE_ERROR_NONE]      = "none",
     [UCS_HANDLE_ERROR_LAST]      = NULL
 };
 
@@ -70,14 +76,21 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "UCS logging level. Messages with a level higher or equal to the selected "
   "will be printed.\n"
   "Possible values are: fatal, error, warn, info, debug, trace, data, func, poll.",
-  ucs_offsetof(ucs_global_opts_t, log_component),
+  ucs_offsetof(ucs_global_opts_t, log_component.log_level),
   UCS_CONFIG_TYPE_LOG_COMP},
+
+ {"LOG_FILE_FILTER", "*",
+  "Set a filter for log message according to source file path. See glob (7) for\n"
+  "pattern syntax.\n"
+  "NOTE: The source file path must fully match the given pattern.",
+  ucs_offsetof(ucs_global_opts_t, log_component.file_filter),
+               UCS_CONFIG_TYPE_STRING},
 
  {"LOG_FILE", "",
   "If not empty, UCS will print log messages to the specified file instead of stdout.\n"
   "The following substitutions are performed on this string:\n"
   "  %p - Replaced with process ID\n"
-  "  %h - Replaced with host name\n",
+  "  %h - Replaced with host name",
   ucs_offsetof(ucs_global_opts_t, log_file),
   UCS_CONFIG_TYPE_STRING},
 
@@ -100,7 +113,7 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, log_data_size), UCS_CONFIG_TYPE_ULONG},
 
  {"LOG_PRINT_ENABLE", "n",
-  "Enable output of ucs_print(). This option is intended for use by the library developers.\n",
+  "Enable output of ucs_print(). This option is intended for use by the library developers.",
   ucs_offsetof(ucs_global_opts_t, log_print_enable), UCS_CONFIG_TYPE_BOOL},
 
 #if ENABLE_DEBUG_DATA
@@ -116,8 +129,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
 #else
   "bt",
 #endif
-  "Error handling mode. A combination of: 'bt' (print backtrace),\n"
-  "'freeze' (freeze and wait for a debugger), 'debug' (attach debugger)",
+  "Error signal handling mode. Either 'none' to disable signal interception,\n"
+  "or a combination of:\n"
+  " - 'bt'     : Print backtrace\n"
+  " - 'freeze' : Freeze and wait for a debugger\n"
+  " - 'debug'  : Attach a debugger",
   ucs_offsetof(ucs_global_opts_t, handle_errors),
   UCS_CONFIG_TYPE_BITMAP(ucs_handle_error_modes)},
 
@@ -149,6 +165,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Issue warning about UCX_ environment variables which were not used by the\n"
   "configuration parser.",
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
+
+  {"MEMTYPE_CACHE", "y",
+   "Enable memory type (cuda/rocm) cache",
+   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
 
  {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
   "Maximal number of events which can be handled from one context",
@@ -199,26 +219,36 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "Enable virtual monitoring filesystem",
   ucs_offsetof(ucs_global_opts_t, vfs_enable), UCS_CONFIG_TYPE_BOOL},
 
-#ifdef ENABLE_MEMTRACK
+ {"VFS_THREAD_AFFINITY", "n",
+  "Enable inheriting main process affinity for virtual monitoring filesystem\n"
+  "service thread. Setting this value to 'n' will allow the service thread to\n"
+  "run on any CPU core.",
+  ucs_offsetof(ucs_global_opts_t, vfs_thread_affinity),
+  UCS_CONFIG_TYPE_BOOL},
+
  {"MEMTRACK_DEST", "",
   "Destination to output memory tracking report to. If the value is empty,\n"
   "results are not reported. Possible values are:\n"
   "  file:<filename>   - save to a file (%h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe)\n"
   "  stdout            - print to standard output.\n"
-  "  stderr            - print to standard error.\n",
+  "  stderr            - print to standard error.",
   ucs_offsetof(ucs_global_opts_t, memtrack_dest), UCS_CONFIG_TYPE_STRING},
-#endif
+
+ {"MEMTRACK_LIMIT", "inf",
+  "Memory limit allocated by memtrack. In case if limit is reached then\n"
+  "memtrack report is generated and process is terminated.",
+  ucs_offsetof(ucs_global_opts_t, memtrack_limit), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"PROFILE_MODE", "",
    "Profile collection modes. If none is specified, profiling is disabled.\n"
    " - log   - Record all timestamps.\n"
-   " - accum - Accumulate measurements per location.\n",
+   " - accum - Accumulate measurements per location.",
    ucs_offsetof(ucs_global_opts_t, profile_mode),
    UCS_CONFIG_TYPE_BITMAP(ucs_profile_mode_names)},
 
   {"PROFILE_FILE", "ucx_%h_%p.prof",
    "File name to dump profiling data to.\n"
-   "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.\n",
+   "Substitutions: %h: host, %p: pid, %c: cpu, %t: time, %u: user, %e: exe.",
    ucs_offsetof(ucs_global_opts_t, profile_file), UCS_CONFIG_TYPE_STRING},
 
   {"PROFILE_LOG_SIZE", "4m",
@@ -236,8 +266,15 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    ucs_offsetof(ucs_global_opts_t, module_dir), UCS_CONFIG_TYPE_STRING},
 
   {"MODULE_LOG_LEVEL", "trace",
-   "Logging level for module loader\n",
+   "Logging level for module loader",
    ucs_offsetof(ucs_global_opts_t, module_log_level), UCS_CONFIG_TYPE_ENUM(ucs_log_level_names)},
+
+  {"MODULES", "all",
+   "Comma-separated list of glob patterns specifying which module load.\n"
+   "The order is not meaningful. For example:\n"
+   " *     - load all modules\n"
+   " ^cu*  - do not load modules that begin with 'cu'",
+   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
 
   {"", "", NULL,
    ucs_offsetof(ucs_global_opts_t, arch),
@@ -287,4 +324,42 @@ void ucs_global_opts_print(FILE *stream, ucs_config_print_flags_t print_flags)
     ucs_config_parser_print_opts(stream, "Global configuration", &ucs_global_opts,
                                  ucs_global_opts_table, NULL,
                                  UCS_DEFAULT_ENV_PREFIX, print_flags);
+}
+
+static void ucs_vfs_read_log_level(void *obj, ucs_string_buffer_t *strb,
+                                   void *arg_ptr, uint64_t arg_u64)
+{
+    ucs_log_level_t ucs_log_level = ucs_global_opts.log_component.log_level;
+    ucs_string_buffer_appendf(strb, "%s\n", ucs_log_level_names[ucs_log_level]);
+}
+
+static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
+                                            size_t size, void *arg_ptr,
+                                            uint64_t arg_u64)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, 32);
+    unsigned log_level;
+
+    ucs_string_buffer_appendf(&strb, "%s", buffer);
+    ucs_string_buffer_rtrim(&strb, "\n");
+    if (!ucs_config_sscanf_enum(ucs_string_buffer_cstr(&strb), &log_level,
+                                ucs_log_level_names)) {
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    ucs_global_opts.log_component.log_level = log_level;
+    return UCS_OK;
+}
+
+/**
+ * VFS nodes representing global options are removed in UCS_STATIC_CLEANUP of
+ * vfs_obj.c file. Because removing elements using ucs_vfs_obj_remove in
+ * UCS_STATIC_CLEANUP in global_opts.c could happen after execution of
+ * UCS_STATIC_CLEANUP of vfs_obj.c file.
+ */
+UCS_STATIC_INIT
+{
+    ucs_vfs_obj_add_dir(NULL, &ucs_global_opts, "ucs/global_opts");
+    ucs_vfs_obj_add_rw_file(&ucs_global_opts, ucs_vfs_read_log_level,
+                            ucs_vfs_write_log_level, NULL, 0, "log_level");
 }

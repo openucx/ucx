@@ -3,7 +3,7 @@
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
-* Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
+* Copyright (C) ARM Ltd. 2020-2021.  ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 
@@ -86,7 +86,8 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_STREAM_RECV_DATA = UCS_BIT(8), /* For stream tests, use recv data API */
     UCX_PERF_TEST_FLAG_FLUSH_EP         = UCS_BIT(9), /* Issue flush on endpoint instead of worker */
     UCX_PERF_TEST_FLAG_WAKEUP           = UCS_BIT(10), /* Create context with wakeup feature enabled */
-    UCX_PERF_TEST_FLAG_ERR_HANDLING     = UCS_BIT(11) /* Create UCP eps with error handling support */
+    UCX_PERF_TEST_FLAG_ERR_HANDLING     = UCS_BIT(11), /* Create UCP eps with error handling support */
+    UCX_PERF_TEST_FLAG_LOOPBACK         = UCS_BIT(12)  /* Use loopback connection */
 };
 
 
@@ -117,7 +118,7 @@ typedef struct ucx_perf_result {
     double                  elapsed_time;
     ucx_perf_counter_t      bytes;
     struct {
-        double              typical;
+        double              percentile;
         double              moment_average; /* Average since last report */
         double              total_average;  /* Average of the whole test */
     }
@@ -195,6 +196,8 @@ typedef struct ucx_perf_params {
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
     double                 max_time;        /* Time limit (seconds), 0 - unlimited */
     double                 report_interval; /* Interval at which to call the report callback */
+    double                 percentile_rank; /* The percentile rank of the percentile reported
+                                               in latency tests */
 
     void                   *rte_group;      /* Opaque RTE group handle */
     ucx_perf_rte_t         *rte;            /* RTE functions used to exchange data */

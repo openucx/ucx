@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2013.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -8,20 +9,19 @@
 #  include "config.h"
 #endif
 
-#include "memtrack.h"
+#include "memtrack_int.h"
 
 #include <ucs/datastruct/khash.h>
 #include <ucs/debug/log.h>
 #include <ucs/stats/stats.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/string.h>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
 #include <stdio.h>
 
-
-#ifdef ENABLE_MEMTRACK
 
 #define UCS_MEMTRACK_FORMAT_STRING    ("%22s: size: %9lu / %9lu\tcount: %9u / %9u\n")
 
@@ -52,8 +52,9 @@ static ucs_memtrack_context_t ucs_memtrack_context = {
 
 #ifdef ENABLE_STATS
 static ucs_stats_class_t ucs_memtrack_stats_class = {
-    .name = "memtrack",
-    .num_counters = UCS_MEMTRACK_STAT_LAST,
+    .name          = "memtrack",
+    .num_counters  = UCS_MEMTRACK_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCS_MEMTRACK_STAT_ALLOCATION_COUNT] = "alloc_cnt",
         [UCS_MEMTRACK_STAT_ALLOCATION_SIZE]  = "alloc_size"
@@ -108,162 +109,6 @@ static void ucs_memtrack_entry_update(ucs_memtrack_entry_t *entry, ssize_t size)
     entry->peak_size   = ucs_max(entry->peak_size,  entry->size);
 }
 
-void ucs_memtrack_allocated(void *ptr, size_t size, const char *name)
-{
-    ucs_memtrack_entry_t *entry;
-    khiter_t iter;
-    int ret;
-
-#ifdef UCX_ALLOC_ALIGN
-    UCS_STATIC_ASSERT(UCX_ALLOC_ALIGN >= 16);
-    UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCX_ALLOC_ALIGN));
-    ucs_assert(!ucs_check_if_align_pow2((uintptr_t)ptr, UCX_ALLOC_ALIGN));
-#endif
-
-    if ((ptr == NULL) || !ucs_memtrack_is_enabled()) {
-        return;
-    }
-
-    pthread_mutex_lock(&ucs_memtrack_context.lock);
-
-    entry = ucs_memtrack_entry_get(name);
-    if (entry == NULL) {
-        goto out_unlock;
-    }
-
-    /* Add pointer to hash */
-    iter = kh_put(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs,
-                  (uintptr_t)ptr, &ret);
-    ucs_assertv(ret == 1 || ret == 2, "ret=%d", ret);
-    kh_value(&ucs_memtrack_context.ptrs, iter).entry = entry;
-    kh_value(&ucs_memtrack_context.ptrs, iter).size  = size;
-
-    /* update specific and global entries */
-    ucs_memtrack_entry_update(entry, size);
-    ucs_memtrack_entry_update(&ucs_memtrack_context.total, size);
-
-    UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_COUNT, 1);
-    UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_SIZE, size);
-
-out_unlock:
-    pthread_mutex_unlock(&ucs_memtrack_context.lock);
-}
-
-void ucs_memtrack_releasing(void* ptr)
-{
-    ucs_memtrack_entry_t *entry;
-    khiter_t iter;
-    size_t size;
-
-    if ((ptr == NULL) || !ucs_memtrack_is_enabled()) {
-        return;
-    }
-
-    pthread_mutex_lock(&ucs_memtrack_context.lock);
-
-    iter = kh_get(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs, (uintptr_t)ptr);
-    if (iter == kh_end(&ucs_memtrack_context.ptrs)) {
-        ucs_debug("address %p not found in memtrack ptr hash", ptr);
-        goto out_unlock;
-    }
-
-    /* remote pointer from hash */
-    entry = kh_val(&ucs_memtrack_context.ptrs, iter).entry;
-    size  = kh_val(&ucs_memtrack_context.ptrs, iter).size;
-    kh_del(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs, iter);
-
-    /* update counts */
-    ucs_memtrack_entry_update(entry, -size);
-    ucs_memtrack_entry_update(&ucs_memtrack_context.total, -size);
-
-out_unlock:
-    pthread_mutex_unlock(&ucs_memtrack_context.lock);
-}
-
-void *ucs_malloc(size_t size, const char *name)
-{
-    void *ptr = malloc(size);
-    ucs_memtrack_allocated(ptr, size, name);
-    return ptr;
-}
-
-void *ucs_calloc(size_t nmemb, size_t size, const char *name)
-{
-    void *ptr = calloc(nmemb, size);
-    ucs_memtrack_allocated(ptr, nmemb * size, name);
-    return ptr;
-}
-
-void *ucs_realloc(void *ptr, size_t size, const char *name)
-{
-    ucs_memtrack_releasing(ptr);
-    ptr = realloc(ptr, size);
-    ucs_memtrack_allocated(ptr, size, name);
-    return ptr;
-}
-
-int ucs_posix_memalign(void **ptr, size_t boundary, size_t size, const char *name)
-{
-    int ret;
-
-#if HAVE_POSIX_MEMALIGN
-    ret = posix_memalign(ptr, boundary, size);
-#else
-#error "Port me"
-#endif
-    if (ret == 0) {
-        ucs_memtrack_allocated(*ptr, size, name);
-    }
-    return ret;
-}
-
-void ucs_free(void *ptr)
-{
-    ucs_memtrack_releasing(ptr);
-    free(ptr);
-}
-
-void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
-               off_t offset, const char *name)
-{
-    void *ptr = mmap(addr, length, prot, flags, fd, offset);
-    if (ptr != MAP_FAILED) {
-        ucs_memtrack_allocated(ptr, length, name);
-    }
-    return ptr;
-}
-
-int ucs_munmap(void *addr, size_t length)
-{
-    ucs_memtrack_releasing(addr);
-    return munmap(addr, length);
-}
-
-char *ucs_strdup(const char *src, const char *name)
-{
-    char *str = strdup(src);
-    ucs_memtrack_allocated(str, strlen(str) + 1, name);
-    return str;
-}
-
-char *ucs_strndup(const char *src, size_t n, const char *name)
-{
-    char *str = strndup(src, n);
-    ucs_memtrack_allocated(str, strlen(str) + 1, name);
-    return str;
-}
-
-void ucs_memtrack_total(ucs_memtrack_entry_t* total)
-{
-    if (!ucs_memtrack_is_enabled()) {
-        return;
-    }
-
-    pthread_mutex_lock(&ucs_memtrack_context.lock);
-    *total = ucs_memtrack_context.total;
-    pthread_mutex_unlock(&ucs_memtrack_context.lock);
-}
-
 static int ucs_memtrack_cmp_entries(const void *ptr1, const void *ptr2)
 {
     ucs_memtrack_entry_t * const *e1 = ptr1;
@@ -307,13 +152,6 @@ static void ucs_memtrack_dump_internal(FILE* output_stream)
     }
 }
 
-void ucs_memtrack_dump(FILE* output_stream)
-{
-    pthread_mutex_lock(&ucs_memtrack_context.lock);
-    ucs_memtrack_dump_internal(output_stream);
-    pthread_mutex_unlock(&ucs_memtrack_context.lock);
-}
-
 static void ucs_memtrack_generate_report()
 {
     ucs_status_t status;
@@ -332,6 +170,210 @@ static void ucs_memtrack_generate_report()
     if (need_close) {
         fclose(output_stream);
     }
+}
+
+static UCS_F_NOINLINE void
+ucs_memtrack_do_allocated(void *ptr, size_t size, const char *name)
+{
+    ucs_memtrack_entry_t *entry;
+    khiter_t iter;
+    int ret;
+    char limit_str[256];
+
+#ifdef UCX_ALLOC_ALIGN
+    UCS_STATIC_ASSERT(UCX_ALLOC_ALIGN >= 16);
+    UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCX_ALLOC_ALIGN));
+    ucs_assert(!ucs_check_if_align_pow2((uintptr_t)ptr, UCX_ALLOC_ALIGN));
+#endif
+
+    if (ptr == NULL) {
+        return;
+    }
+
+    pthread_mutex_lock(&ucs_memtrack_context.lock);
+
+    entry = ucs_memtrack_entry_get(name);
+    if (entry == NULL) {
+        goto out_unlock;
+    }
+
+    /* Add pointer to hash */
+    iter = kh_put(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs,
+                  (uintptr_t)ptr, &ret);
+    /* do NOT use assert here because it may cause hang due to memtrack malloc
+       deadlock */
+    if ((ret != UCS_KH_PUT_BUCKET_EMPTY) && (ret != UCS_KH_PUT_BUCKET_CLEAR)) {
+        pthread_mutex_unlock(&ucs_memtrack_context.lock);
+        ucs_fatal("ret == %d, prev allocation: %s, new allocation: %s", ret,
+                  kh_value(&ucs_memtrack_context.ptrs, iter).entry->name, name);
+    }
+
+    kh_value(&ucs_memtrack_context.ptrs, iter).entry = entry;
+    kh_value(&ucs_memtrack_context.ptrs, iter).size  = size;
+
+    /* update specific and global entries */
+    ucs_memtrack_entry_update(entry, size);
+    ucs_memtrack_entry_update(&ucs_memtrack_context.total, size);
+    if (ucs_memtrack_context.total.size >= ucs_global_opts.memtrack_limit) {
+        ucs_memtrack_generate_report();
+        ucs_memunits_to_str(ucs_global_opts.memtrack_limit, limit_str,
+                            sizeof(limit_str));
+        /* disable memtrack to prevent hang */
+        ucs_memtrack_context.enabled = 0;
+        /* unlock memtrack context to eliminate deadlock */
+        pthread_mutex_unlock(&ucs_memtrack_context.lock);
+        ucs_fatal("reached memtrack memory limit %s", limit_str);
+    }
+
+    UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_COUNT, 1);
+    UCS_STATS_UPDATE_COUNTER(ucs_memtrack_context.stats, UCS_MEMTRACK_STAT_ALLOCATION_SIZE, size);
+
+out_unlock:
+    pthread_mutex_unlock(&ucs_memtrack_context.lock);
+}
+
+
+static UCS_F_ALWAYS_INLINE void
+ucs_memtrack_allocated_internal(void *ptr, size_t size, const char *name)
+{
+    if (!ucs_memtrack_is_enabled()) {
+        return;
+    }
+
+    ucs_memtrack_do_allocated(ptr, size, name);
+}
+
+static UCS_F_NOINLINE void ucs_memtrack_do_releasing(void *ptr)
+{
+    ucs_memtrack_entry_t *entry;
+    khiter_t iter;
+    size_t size;
+
+    if (ptr == NULL) {
+        return;
+    }
+
+    pthread_mutex_lock(&ucs_memtrack_context.lock);
+
+    iter = kh_get(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs, (uintptr_t)ptr);
+    if (iter == kh_end(&ucs_memtrack_context.ptrs)) {
+        /* workaround for coverity - print debug message from unlocked
+         * memtrack */
+        pthread_mutex_unlock(&ucs_memtrack_context.lock);
+        ucs_debug("address %p not found in memtrack ptr hash", ptr);
+        return;
+    }
+
+    /* remote pointer from hash */
+    entry = kh_val(&ucs_memtrack_context.ptrs, iter).entry;
+    size  = kh_val(&ucs_memtrack_context.ptrs, iter).size;
+    kh_del(ucs_memtrack_ptr_hash, &ucs_memtrack_context.ptrs, iter);
+
+    /* update counts */
+    ucs_memtrack_entry_update(entry, -size);
+    ucs_memtrack_entry_update(&ucs_memtrack_context.total, -size);
+
+    pthread_mutex_unlock(&ucs_memtrack_context.lock);
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_memtrack_releasing_internal(void *ptr)
+{
+    if (!ucs_memtrack_is_enabled()) {
+        return;
+    }
+
+    ucs_memtrack_do_releasing(ptr);
+}
+
+void *ucs_malloc(size_t size, const char *name)
+{
+    void *ptr = malloc(size);
+    ucs_memtrack_allocated_internal(ptr, size, name);
+    return ptr;
+}
+
+void *ucs_calloc(size_t nmemb, size_t size, const char *name)
+{
+    void *ptr = calloc(nmemb, size);
+    ucs_memtrack_allocated_internal(ptr, nmemb * size, name);
+    return ptr;
+}
+
+void *ucs_realloc(void *ptr, size_t size, const char *name)
+{
+    ucs_memtrack_releasing_internal(ptr);
+    ptr = realloc(ptr, size);
+    ucs_memtrack_allocated_internal(ptr, size, name);
+    return ptr;
+}
+
+int ucs_posix_memalign(void **ptr, size_t boundary, size_t size, const char *name)
+{
+    int ret;
+
+#if HAVE_POSIX_MEMALIGN
+    ret = posix_memalign(ptr, boundary, size);
+#else
+#error "Port me"
+#endif
+    if (ret == 0) {
+        ucs_memtrack_allocated_internal(*ptr, size, name);
+    }
+    return ret;
+}
+
+void ucs_free(void *ptr)
+{
+    ucs_memtrack_releasing_internal(ptr);
+    free(ptr);
+}
+
+void *ucs_mmap(void *addr, size_t length, int prot, int flags, int fd,
+               off_t offset, const char *name)
+{
+    void *ptr = mmap(addr, length, prot, flags, fd, offset);
+    if (ptr != MAP_FAILED) {
+        ucs_memtrack_allocated_internal(ptr, length, name);
+    }
+    return ptr;
+}
+
+int ucs_munmap(void *addr, size_t length)
+{
+    ucs_memtrack_releasing_internal(addr);
+    return munmap(addr, length);
+}
+
+char *ucs_strdup(const char *src, const char *name)
+{
+    char *str = strdup(src);
+    ucs_memtrack_allocated_internal(str, strlen(str) + 1, name);
+    return str;
+}
+
+char *ucs_strndup(const char *src, size_t n, const char *name)
+{
+    char *str = strndup(src, n);
+    ucs_memtrack_allocated_internal(str, strlen(str) + 1, name);
+    return str;
+}
+
+void ucs_memtrack_total(ucs_memtrack_entry_t* total)
+{
+    if (!ucs_memtrack_is_enabled()) {
+        return;
+    }
+
+    pthread_mutex_lock(&ucs_memtrack_context.lock);
+    *total = ucs_memtrack_context.total;
+    pthread_mutex_unlock(&ucs_memtrack_context.lock);
+}
+
+void ucs_memtrack_dump(FILE* output_stream)
+{
+    pthread_mutex_lock(&ucs_memtrack_context.lock);
+    ucs_memtrack_dump_internal(output_stream);
+    pthread_mutex_unlock(&ucs_memtrack_context.lock);
 }
 
 void ucs_memtrack_init()
@@ -391,8 +433,6 @@ int ucs_memtrack_is_enabled()
     return ucs_memtrack_context.enabled;
 }
 
-#endif
-
 int ucs_posix_memalign_realloc(void **ptr, size_t boundary, size_t size,
                                const char *name)
 {
@@ -418,9 +458,20 @@ int ucs_posix_memalign_realloc(void **ptr, size_t boundary, size_t size,
 
     ret = ucs_posix_memalign(ptr, boundary, size, name);
     if (ret == 0) {
+        ucs_assert(*ptr != NULL);
         memcpy(*ptr, tmp, ucs_min(size, old_size));
         ucs_free(tmp);
     }
 
     return ret;
+}
+
+void ucs_memtrack_allocated(void *ptr, size_t size, const char *name)
+{
+    ucs_memtrack_allocated_internal(ptr, size, name);
+}
+
+void ucs_memtrack_releasing(void *ptr)
+{
+    ucs_memtrack_releasing_internal(ptr);
 }

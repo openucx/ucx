@@ -11,7 +11,7 @@
 #include "dt_generic.h"
 
 #include <ucs/sys/math.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 
 
 ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *context,

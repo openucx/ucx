@@ -15,7 +15,7 @@
 #include <limits.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
 
 #include <hsa_ext_amd.h>
@@ -97,10 +97,15 @@ static ucs_status_t uct_rocm_gdr_mem_reg(uct_md_h md, void *address, size_t leng
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_gdr_mem_dereg(uct_md_h md, uct_mem_h memh)
+static ucs_status_t
+uct_rocm_gdr_mem_dereg(uct_md_h md,
+                       const uct_md_mem_dereg_params_t *params)
 {
-    uct_rocm_gdr_mem_t *mem_hndl = memh;
+    uct_rocm_gdr_mem_t *mem_hndl;
 
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    mem_hndl = params->memh;
     ucs_free(mem_hndl);
     return UCS_OK;
 }
@@ -156,7 +161,8 @@ uct_component_t uct_rocm_gdr_component = {
     },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_rocm_gdr_component),
-    .flags              = 0
+    .flags              = 0,
+    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 UCT_COMPONENT_REGISTER(&uct_rocm_gdr_component);
 

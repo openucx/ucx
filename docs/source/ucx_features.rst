@@ -57,6 +57,6 @@ Protocols, Optimizations and Advanced Features
 - Pipeline protocols for GPU memory
 - QoS and traffic isolation for RDMA transports
 - Platform (micro-architecture) specific optimizations (such as memcpy, memory barriers, etc.)
-- Multi-rail support
+- Multi-rail and RoCE link aggregation group support
 - Bare-metal, containers and cloud environments support
 - Advanced protocols for transfer messages of different sizes

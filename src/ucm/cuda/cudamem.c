@@ -99,25 +99,13 @@ UCM_DEFINE_REPLACE_DLSYM_PTR_FUNC(cudaMallocPitch, cudaError_t, -1, void**,
 static void ucm_cuda_dispatch_mem_alloc(CUdeviceptr ptr, size_t length,
                                         ucs_memory_type_t mem_type)
 {
-    unsigned sync_atr_value = 1;
-    const char *cu_err_str;
     ucm_event_t event;
-    CUresult ret;
-
-    if ((ptr != 0) && (mem_type == UCS_MEMORY_TYPE_CUDA)) {
-        /* Synchronous operation for GPU direct */
-        ret = cuPointerSetAttribute(&sync_atr_value,
-                                    CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, ptr);
-        if (ret != CUDA_SUCCESS) {
-            cuGetErrorString(ret, &cu_err_str);
-            ucm_warn("cuPointerSetAttribute(%p) failed: %s", (void*)ptr,
-                     cu_err_str);
-        }
-    }
 
     event.mem_type.address  = (void*)ptr;
     event.mem_type.size     = length;
-    event.mem_type.mem_type = mem_type;
+    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* indicate unknown type
+                                                       and let cuda_md detect
+                                                       attributes */
     ucm_event_dispatch(UCM_EVENT_MEM_TYPE_ALLOC, &event);
 }
 
@@ -206,9 +194,10 @@ static ucm_cuda_func_t ucm_cuda_runtime_funcs[] = {
     {{NULL}, NULL}
 };
 
-static ucm_mmap_hook_mode_t ucm_cuda_hook_mode()
+static int ucm_cuda_allow_hook_mode(ucm_mmap_hook_mode_t mode)
 {
-    return ucm_get_hook_mode(ucm_global_opts.cuda_hook_mode);
+    return (ucm_global_opts.cuda_hook_modes & UCS_BIT(mode)) &&
+           (ucm_get_hook_mode(mode) == mode);
 }
 
 static ucs_status_t
@@ -231,7 +220,7 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
 
         status = UCS_ERR_UNSUPPORTED;
 
-        if (ucm_cuda_hook_mode() == UCM_MMAP_HOOK_BISTRO) {
+        if (ucm_cuda_allow_hook_mode(UCM_MMAP_HOOK_BISTRO)) {
             status = ucm_bistro_patch(func_ptr, func->patch.value,
                                       func->patch.symbol, func->orig_func_ptr,
                                       NULL);
@@ -242,19 +231,24 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
                 continue;
             }
 
-            ucm_debug("failed to install bistro hook for '%s', trying reloc",
+            ucm_debug("failed to install bistro hook for '%s'",
                       func->patch.symbol);
         }
 
-        status = ucm_reloc_modify(&func->patch);
-        if (status != UCS_OK) {
-            ucm_diag("failed to install relocation table entry for '%s'",
-                     func->patch.symbol);
-            return status;
+        if (ucm_cuda_allow_hook_mode(UCM_MMAP_HOOK_RELOC)) {
+            status = ucm_reloc_modify(&func->patch);
+            if (status == UCS_OK) {
+                ++num_reloc;
+                ucm_trace("installed reloc hook on '%s'", func->patch.symbol);
+                continue;
+            }
+
+            ucm_debug("failed to install relocation table hook for '%s'",
+                      func->patch.symbol);
         }
 
-        ++num_reloc;
-        ucm_trace("installed reloc hook on '%s'", func->patch.symbol);
+        ucm_diag("failed to install hook for '%s'", func->patch.symbol);
+        return status;
     }
 
     *used_reloc = num_reloc > 0;
@@ -274,7 +268,7 @@ static ucs_status_t ucm_cudamem_install(int events)
         goto out;
     }
 
-    if (ucm_cuda_hook_mode() == UCM_MMAP_HOOK_NONE) {
+    if (ucm_global_opts.cuda_hook_modes == 0) {
         ucm_info("cuda memory hooks are disabled by configuration");
         status = UCS_ERR_UNSUPPORTED;
         goto out;

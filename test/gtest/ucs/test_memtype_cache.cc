@@ -17,19 +17,14 @@ extern "C" {
 
 class test_memtype_cache : public ucs::test_with_param<ucs_memory_type_t> {
 protected:
-    test_memtype_cache() : m_memtype_cache(NULL) {
+    test_memtype_cache() {
     }
 
     virtual void init() {
         ucs::test_with_param<ucs_memory_type_t>::init();
-        ucs_status_t status = ucs_memtype_cache_create(&m_memtype_cache);
-        ASSERT_UCS_OK(status);
     }
 
     virtual void cleanup() {
-        if (m_memtype_cache != NULL) {
-            ucs_memtype_cache_destroy(m_memtype_cache);
-        }
 
         ucs::test_with_param<ucs_memory_type_t>::cleanup();
     }
@@ -43,22 +38,22 @@ protected:
         }
 
         ucs_memory_info_t mem_info;
-        ucs_status_t status = ucs_memtype_cache_lookup(m_memtype_cache, ptr,
-                                                       size, &mem_info);
+        ucs_status_t status = ucs_memtype_cache_lookup(ptr, size, &mem_info);
 
         if (!expect_found || (expected_type == UCS_MEMORY_TYPE_HOST)) {
             /* memory type should be not found or unknown */
-            EXPECT_TRUE((status == UCS_ERR_NO_ELEM) ||
-                        ((status == UCS_OK) &&
-                         (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN)))
-                    << "ptr=" << ptr << " size=" << size << ": "
-                    << ucs_status_string(status) << " memtype="
-                    << mem_buffer::mem_type_name(
-                               (ucs_memory_type_t)mem_info.type);
+            if (status != UCS_ERR_NO_ELEM) {
+                ASSERT_UCS_OK(status, << "ptr=" << ptr << " size=" << size);
+                EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, mem_info.type)
+                        << "ptr=" << ptr << " size=" << size
+                        << mem_buffer::mem_type_name(mem_info.type);
+            }
         } else {
-            EXPECT_UCS_OK(status);
-            EXPECT_EQ(expected_type, mem_info.type)
-                    << "ptr=" << ptr << " size=" << size;
+            ASSERT_UCS_OK(status, << "ptr=" << ptr << " size=" << size);
+            EXPECT_TRUE((UCS_MEMORY_TYPE_UNKNOWN == mem_info.type) ||
+                        (expected_type == mem_info.type))
+                    << "ptr=" << ptr << " size=" << size
+                    << " type=" << mem_buffer::mem_type_name(mem_info.type);
         }
     }
 
@@ -168,19 +163,14 @@ protected:
         std::vector<std::pair<void*, size_t> > released_ptrs;
         std::vector<mem_buffer*> allocated_buffers;
 
-        const std::vector<ucs_memory_type_t> supported_mem_types =
-            mem_buffer::supported_mem_types();
-
         /* The tests try to allocate two buffers with different memory types */
-        for (std::vector<ucs_memory_type_t>::const_iterator iter =
-                 supported_mem_types.begin();
-             iter != supported_mem_types.end(); ++iter) {
+        for (auto mem_type : mem_buffer::supported_mem_types()) {
             for (size_t i = 1; i <= ucs_get_page_size(); i += step) {
                 mem_buffer *buf1 = allocate_mem_buffer(i, GetParam(),
                                                        &allocated_buffers, 0);
 
                 for (size_t j = 1; j <= ucs_get_page_size(); j += inner_step) {
-                    mem_buffer *buf2 = allocate_mem_buffer(j, *iter,
+                    mem_buffer *buf2 = allocate_mem_buffer(j, mem_type,
                                                            &allocated_buffers,
                                                            0);
                     if (!keep_buffers) {
@@ -289,7 +279,7 @@ protected:
         ucs_memory_info_t mem_info;
         mem_info.type    = mem_type;
         mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_memtype_cache_update(m_memtype_cache, ptr, size, &mem_info);
+        ucs_memtype_cache_update(ptr, size, &mem_info);
     }
 
     void memtype_cache_update(const mem_buffer &b) {
@@ -297,11 +287,8 @@ protected:
     }
 
     void memtype_cache_remove(const void *ptr, size_t size) {
-        ucs_memtype_cache_remove(m_memtype_cache, ptr, size);
+        ucs_memtype_cache_remove(ptr, size);
     }
-
-private:
-    ucs_memtype_cache_t *m_memtype_cache;
 };
 
 UCS_TEST_P(test_memtype_cache, basic) {
@@ -392,14 +379,9 @@ UCS_TEST_P(test_memtype_cache, update_adjacent_regions_and_remove_subintervals) 
 }
 
 UCS_TEST_P(test_memtype_cache, shared_page_regions) {
-    const std::vector<ucs_memory_type_t> supported_mem_types =
-        mem_buffer::supported_mem_types();
     const size_t size = 1000000;
 
-    for (std::vector<ucs_memory_type_t>::const_iterator iter =
-             supported_mem_types.begin();
-         iter != supported_mem_types.end(); ++iter) {
-
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
         std::vector<std::pair<void*, size_t> > released_ptrs;
 
         /* Create two buffers that possibly will share one page
@@ -414,7 +396,7 @@ UCS_TEST_P(test_memtype_cache, shared_page_regions) {
          *                               +----------------------+
          */
         mem_buffer *buf1 = allocate_mem_buffer(size, GetParam());
-        mem_buffer *buf2 = allocate_mem_buffer(size, *iter);
+        mem_buffer *buf2 = allocate_mem_buffer(size, mem_type);
 
         test_region_found(*buf1);
         test_region_found(*buf2);
@@ -448,7 +430,7 @@ UCS_TEST_P(test_memtype_cache, diff_mem_types_diff_bufs_keep_mem) {
     test_memtype_cache_alloc_diff_mem_types(true, false);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));
 
 class test_memtype_cache_deferred_create : public test_memtype_cache {
@@ -505,12 +487,12 @@ UCS_TEST_P(test_memtype_cache_deferred_create, allocate_and_update) {
 }
 
 UCS_TEST_P(test_memtype_cache_deferred_create, lookup_adjacent_regions) {
-    test_alloc_before_init(1000000, true, 0);
+    test_alloc_before_init(1000000, false, 0);
 }
 
 UCS_TEST_P(test_memtype_cache_deferred_create, lookup_overlapped_regions) {
-    test_alloc_before_init(1000000, true, 1);
+    test_alloc_before_init(1000000, false, 1);
 }
 
-INSTANTIATE_TEST_CASE_P(mem_type, test_memtype_cache_deferred_create,
+INSTANTIATE_TEST_SUITE_P(mem_type, test_memtype_cache_deferred_create,
                         ::testing::ValuesIn(mem_buffer::supported_mem_types()));

@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2021.  ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,17 +14,21 @@
 #include "ud_inl.h"
 
 #include <ucs/arch/cpu.h>
-#include <ucs/debug/memtrack.h>
+#include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
 #include <sys/poll.h>
 
 
+#define UCT_UD_IFACE_CEP_CONN_SN_MAX ((uct_ud_ep_conn_sn_t)-1)
+
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ud_iface_stats_class = {
-    .name = "ud_iface",
-    .num_counters = UCT_UD_IFACE_STAT_LAST,
+    .name          = "ud_iface",
+    .num_counters  = UCT_UD_IFACE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_UD_IFACE_STAT_RX_DROP] = "rx_drop"
     }
@@ -34,7 +39,7 @@ static ucs_stats_class_t uct_ud_iface_stats_class = {
 static void uct_ud_iface_free_pending_rx(uct_ud_iface_t *iface);
 static void uct_ud_iface_free_async_comps(uct_ud_iface_t *iface);
 
-static void *
+ucs_status_t
 uct_ud_iface_cep_get_peer_address(uct_ud_iface_t *iface,
                                   const uct_ib_address_t *ib_addr,
                                   const uct_ud_iface_addr_t *if_addr,
@@ -45,10 +50,10 @@ uct_ud_iface_cep_get_peer_address(uct_ud_iface_t *iface,
                                                            address_p);
 
     if (status != UCS_OK) {
-        ucs_fatal("iface %p: failed to get peer address", iface);
+        ucs_diag("iface %p: failed to get peer address", iface);
     }
 
-    return address_p;
+    return status;
 }
 
 static UCS_F_ALWAYS_INLINE ucs_conn_match_queue_type_t
@@ -59,38 +64,53 @@ uct_ud_iface_cep_ep_queue_type(uct_ud_ep_t *ep)
            UCS_CONN_MATCH_QUEUE_EXP;
 }
 
-uct_ud_ep_conn_sn_t
+ucs_status_t
 uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
                              const uct_ib_address_t *ib_addr,
                              const uct_ud_iface_addr_t *if_addr,
-                             int path_index)
+                             int path_index, uct_ud_ep_conn_sn_t *conn_sn_p)
 {
     void *peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
-    return (uct_ud_ep_conn_sn_t)
-           ucs_conn_match_get_next_sn(&iface->conn_match_ctx,
-                                      uct_ud_iface_cep_get_peer_address(
-                                          iface, ib_addr, if_addr, path_index,
-                                          peer_address));
+    ucs_status_t status;
+    
+    status = uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr,
+                                               path_index, peer_address);
+    if (status != UCS_OK) {
+        return status;
+    } 
+
+    *conn_sn_p = ucs_conn_match_get_next_sn(&iface->conn_match_ctx,
+                                            peer_address);
+    return UCS_OK;
 }
 
-void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
-                                const uct_ib_address_t *ib_addr,
-                                const uct_ud_iface_addr_t *if_addr,
-                                int path_index, uct_ud_ep_conn_sn_t conn_sn,
-                                uct_ud_ep_t *ep)
+ucs_status_t
+uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
+                           const uct_ib_address_t *ib_addr,
+                           const uct_ud_iface_addr_t *if_addr,
+                           int path_index, uct_ud_ep_conn_sn_t conn_sn,
+                           uct_ud_ep_t *ep)
 {
     ucs_conn_match_queue_type_t queue_type;
+    ucs_status_t status;
     void *peer_address;
+    int ret;
 
     queue_type   = uct_ud_iface_cep_ep_queue_type(ep);
     peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
-    uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr, path_index,
-                                      peer_address);
+    status       = uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr,
+                                                     path_index, peer_address);
+    if (status != UCS_OK) {
+        return status;
+    }
 
     ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
-    ucs_conn_match_insert(&iface->conn_match_ctx, peer_address,
-                          conn_sn, &ep->conn_match, queue_type);
+    ret = ucs_conn_match_insert(&iface->conn_match_ctx, peer_address,
+                                conn_sn, &ep->conn_match, queue_type);
+    ucs_assert_always(ret == 1);
+
     ep->flags |= UCT_UD_EP_FLAG_ON_CEP;
+    return UCS_OK;
 }
 
 uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
@@ -106,10 +126,15 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
                                              UCS_CONN_MATCH_QUEUE_ANY;
     ucs_conn_match_elem_t *conn_match;
     void *peer_address;
+    ucs_status_t status;
 
     peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
-    uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr,
-                                      path_index, peer_address);
+    status       = uct_ud_iface_cep_get_peer_address(iface, ib_addr,
+                                                     if_addr, path_index,
+                                                     peer_address);
+    if (status != UCS_OK) {
+        return NULL;
+    }
 
     conn_match = ucs_conn_match_get_elem(&iface->conn_match_ctx, peer_address,
                                          conn_sn, queue_type, is_private);
@@ -311,7 +336,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
                         uct_iface_invoke_ops_func(&iface->super,
                                                   uct_ud_iface_ops_t,
                                                   get_peer_address_length),
-                        &conn_match_ops);
+                        UCT_UD_IFACE_CEP_CONN_SN_MAX, &conn_match_ops);
 
     status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
                              uct_ud_iface_get_time(iface));
@@ -413,8 +438,9 @@ err:
     return status;
 }
 
-UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
-                    uct_worker_h worker, const uct_iface_params_t *params,
+UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
+                    uct_iface_ops_t *tl_ops, uct_md_h md, uct_worker_h worker,
+                    const uct_iface_params_t *params,
                     const uct_ud_iface_config_t *config,
                     uct_ib_iface_init_attr_t *init_attr)
 {
@@ -452,7 +478,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops, uct_md_h md,
     init_attr->seg_size    = ucs_min(mtu, config->super.seg_size);
     init_attr->qp_type     = IBV_QPT_UD;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, &ops->super, md, worker,
+    UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
                               params, &config->super, init_attr);
 
     if (self->super.super.worker->async == NULL) {
@@ -582,7 +608,7 @@ err_rx_mpool:
 err_qp:
     uct_ud_iface_destroy_qp(self);
 err_eps_array:
-    ucs_ptr_array_cleanup(&self->eps);
+    ucs_ptr_array_cleanup(&self->eps, 1);
     return status;
 }
 
@@ -617,7 +643,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_mpool_cleanup(&self->rx.mp, 0);
     uct_ud_iface_destroy_qp(self);
     ucs_debug("iface(%p): ptr_array cleanup", self);
-    ucs_ptr_array_cleanup(&self->eps);
+    ucs_ptr_array_cleanup(&self->eps, 1);
     ucs_arbiter_cleanup(&self->tx.pending_q);
     UCS_STATS_NODE_FREE(self->stats);
     kh_destroy_inplace(uct_ud_iface_gid, &self->gid_table.hash);

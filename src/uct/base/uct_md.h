@@ -14,8 +14,10 @@
 #include "uct_component.h"
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/config/parser.h>
 #include <ucs/memory/rcache.h>
+#include <ucs/type/param.h>
 #include <string.h>
 
 
@@ -23,12 +25,35 @@
     ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ## __VA_ARGS__)
 
 
+#define UCT_MD_MEM_DEREG_FIELD_VALUE(_params, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCT_MD_MEM_DEREG, _params, _name, _flag, _default)
+
+
+#define UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, _invalidate_supported) \
+    if (!UCT_MD_MEM_DEREG_FIELD_VALUE(_params, memh, FIELD_MEMH, NULL)) { \
+        return UCS_ERR_INVALID_PARAM; \
+    } \
+    if (ENABLE_PARAMS_CHECK) { \
+        if (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, flags, FIELD_FLAGS, 0) & \
+            UCT_MD_MEM_DEREG_FLAG_INVALIDATE) { \
+            if (!(_invalidate_supported)) { \
+                return UCS_ERR_UNSUPPORTED; \
+            } \
+            if (!UCT_MD_MEM_DEREG_FIELD_VALUE(params, comp, FIELD_COMPLETION, \
+                                              NULL)) { \
+                return UCS_ERR_INVALID_PARAM; \
+            } \
+        } \
+    }
+
+
 typedef struct uct_md_rcache_config {
-    size_t               alignment;    /**< Force address alignment */
-    unsigned             event_prio;   /**< Memory events priority */
-    double               overhead;     /**< Lookup overhead estimation */
-    unsigned long        max_regions;  /**< Maximal number of rcache regions */
-    size_t               max_size;     /**< Maximal size of mapped memory */
+    size_t        alignment;      /**< Force address alignment */
+    unsigned      event_prio;     /**< Memory events priority */
+    double        overhead;       /**< Lookup overhead estimation */
+    unsigned long max_regions;    /**< Maximal number of rcache regions */
+    size_t        max_size;       /**< Maximal size of mapped memory */
+    size_t        max_unreleased; /**< Threshold for triggering a cleanup */
 } uct_md_rcache_config_t;
 
 
@@ -70,7 +95,9 @@ typedef ucs_status_t (*uct_md_mem_reg_func_t)(uct_md_h md, void *address,
                                               unsigned flags,
                                               uct_mem_h *memh_p);
 
-typedef ucs_status_t (*uct_md_mem_dereg_func_t)(uct_md_h md, uct_mem_h memh);
+typedef ucs_status_t
+(*uct_md_mem_dereg_func_t)(uct_md_h md,
+                           const uct_md_mem_dereg_params_t *param);
 
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,
@@ -125,17 +152,6 @@ struct uct_md {
         .size        = sizeof(uct_md_config_t), \
     }
 
-
-static UCS_F_ALWAYS_INLINE void*
-uct_md_fill_md_name(uct_md_h md, void *buffer)
-{
-#if ENABLE_DEBUG_DATA
-    memcpy(buffer, md->component->name, UCT_COMPONENT_NAME_MAX);
-    return (char*)buffer + UCT_COMPONENT_NAME_MAX;
-#else
-    return buffer;
-#endif
-}
 
 /*
  * Base implementation of query_md_resources(), which returns a single md
@@ -213,5 +229,9 @@ static inline ucs_log_level_t uct_md_reg_log_lvl(unsigned flags)
     return (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
             UCS_LOG_LEVEL_ERROR;
 }
+
+
+void uct_md_vfs_init(uct_component_h component, uct_md_h md,
+                     const char *md_name);
 
 #endif

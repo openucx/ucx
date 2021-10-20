@@ -12,6 +12,8 @@
 #include "rc_verbs.h"
 #include "rc_verbs_impl.h"
 
+#include <ucs/vfs/base/vfs_cb.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/bitops.h>
 #include <uct/ib/base/ib_log.h>
 
@@ -478,6 +480,18 @@ void uct_rc_verbs_ep_post_check(uct_ep_h tl_ep)
     uct_rc_verbs_ep_post_flush(ep, 0);
 }
 
+void uct_rc_verbs_ep_vfs_populate(uct_rc_ep_t *rc_ep)
+{
+    uct_rc_iface_t *rc_iface = ucs_derived_of(rc_ep->super.super.iface,
+                                              uct_rc_iface_t);
+    uct_rc_verbs_ep_t *ep    = ucs_derived_of(rc_ep, uct_rc_verbs_ep_t);
+
+    ucs_vfs_obj_add_dir(rc_iface, ep, "ep/%p", ep);
+    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive, &ep->qp->qp_num,
+                            UCS_VFS_TYPE_U32_HEX, "qp_num");
+    uct_rc_txqp_vfs_populate(&ep->super.txqp, ep);
+}
+
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_pending_req_t *req)
 {
@@ -618,45 +632,24 @@ err:
     return status;
 }
 
-typedef struct {
-    uct_rc_ep_cleanup_ctx_t    super;
-    struct ibv_qp              *qp;
-} uct_rc_verbs_ep_cleanup_ctx_t;
-
-unsigned uct_rc_verbs_ep_cleanup_qp(void *arg)
-{
-    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx = arg;
-    uint32_t qp_num = ep_cleanup_ctx->qp->qp_num;
-
-    uct_ib_destroy_qp(ep_cleanup_ctx->qp);
-    uct_rc_ep_cleanup_qp_done(&ep_cleanup_ctx->super, qp_num);
-    return 1;
-}
-
 UCS_CLASS_CLEANUP_FUNC(uct_rc_verbs_ep_t)
 {
     uct_rc_verbs_iface_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                  uct_rc_verbs_iface_t);
-    uct_rc_verbs_ep_cleanup_ctx_t *ep_cleanup_ctx;
-
-    ep_cleanup_ctx = ucs_malloc(sizeof(*ep_cleanup_ctx), "ep_cleanup_ctx");
-    ucs_assert_always(ep_cleanup_ctx != NULL);
-    ep_cleanup_ctx->qp = self->qp;
+    uct_rc_verbs_iface_qp_cleanup_ctx_t *cleanup_ctx;
 
     uct_rc_txqp_purge_outstanding(&iface->super, &self->super.txqp,
                                   UCS_ERR_CANCELED, self->txcnt.pi, 1);
-    /* NOTE: usually, ci == pi here, but if user calls
-     *       flush(UCT_FLUSH_FLAG_CANCEL) then ep_destroy without next progress,
-     *       TX-completion handler is not able to return CQ credits because
-     *       the EP will not be found (base class destructor deletes itself from
-     *       iface->eps). So, lets return credits here since handle_failure
-     *       ignores not found EP. */
-    ucs_assert(self->txcnt.pi >= self->txcnt.ci);
-    iface->super.tx.cq_available += self->txcnt.pi - self->txcnt.ci;
-    ucs_assert(iface->super.tx.cq_available < iface->super.config.tx_ops_count);
     uct_ib_modify_qp(self->qp, IBV_QPS_ERR);
-    uct_rc_ep_cleanup_qp(&iface->super, &self->super, &ep_cleanup_ctx->super,
-                         self->qp->qp_num);
+
+    /* We can release all CQ credits after ibv_qp_destroy(), since it would
+     * clean any leftover CQEs from the CQ (and prevent CQ overflow) */
+    cleanup_ctx = ucs_malloc(sizeof(*cleanup_ctx), "verbs_qp_cleanup_ctx");
+    ucs_assert_always(cleanup_ctx != NULL);
+    cleanup_ctx->qp = self->qp;
+    ucs_assert(UCS_CIRCULAR_COMPARE16(self->txcnt.pi, >=, self->txcnt.ci));
+    uct_rc_ep_cleanup_qp(&self->super, &cleanup_ctx->super, self->qp->qp_num,
+                         self->txcnt.pi - self->txcnt.ci);
 }
 
 UCS_CLASS_DEFINE(uct_rc_verbs_ep_t, uct_rc_ep_t);

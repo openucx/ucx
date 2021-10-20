@@ -689,9 +689,10 @@ enum {
     UCT_MD_FLAG_RKEY_PTR   = UCS_BIT(6),  /**< MD supports direct access to
                                                remote memory via a pointer that
                                                is returned by @ref uct_rkey_ptr */
-    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7)   /**< MD support for client-server
+    UCT_MD_FLAG_SOCKADDR   = UCS_BIT(7),  /**< MD support for client-server
                                                connection establishment via
                                                sockaddr */
+    UCT_MD_FLAG_INVALIDATE = UCS_BIT(8)   /**< MD supports memory invalidation */
 };
 
 /**
@@ -1184,7 +1185,7 @@ struct uct_ep_params {
      * Callback that will be used for filling the user's private data to be
      * delivered to the remote peer by the callback on the server or client side.
      * This field is only valid if @ref uct_ep_params_t::sockaddr is set.
-     * @note It is never guaranteed that the callaback will be called. If, for
+     * @note It is never guaranteed that the callback will be called. If, for
      * example, the endpoint goes into error state before issuing the connection
      * request, the callback will not be invoked.
      * @note Can not be set together with @ref uct_ep_params_t::private_data or
@@ -1364,7 +1365,7 @@ struct uct_listener_params {
  */
 struct uct_md_attr {
     struct {
-        size_t               max_alloc; /**< Maximal allocation size */
+        uint64_t             max_alloc; /**< Maximal allocation size */
         size_t               max_reg;   /**< Maximal registration size */
         uint64_t             flags;     /**< UCT_MD_FLAG_xx */
         uint64_t             reg_mem_types; /**< Bitmap of memory types that Memory Domain can be registered with */
@@ -2396,7 +2397,6 @@ ucs_status_t uct_md_mem_dereg(uct_md_h md, uct_mem_h memh);
  * @ingroup UCT_MD
  * @brief Detect memory type
  *
- *
  * @param [in]     md           Memory domain to detect memory type
  * @param [in]     addr         Memory address to detect.
  * @param [in]     length       Size of memory
@@ -2468,7 +2468,6 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem);
 ucs_status_t uct_md_config_read(uct_component_h component,
                                 const char *env_prefix, const char *filename,
                                 uct_md_config_t **config_p);
-
 
 
 /**

@@ -130,23 +130,6 @@ protected:
         typedef uct_test::atomic_mode atomic_mode;
         typedef std::vector< ucs::handle<uct_ep_h> > eps_vec_t;
 
-        class sockaddr_user_data {
-        public:
-            sockaddr_user_data(uct_test *test, entity *entity,
-                               unsigned ep_index);
-
-            uct_test* get_test() const;
-
-            entity* get_entity() const;
-
-            uct_ep_h get_ep() const;
-
-        private:
-            uct_test *m_test;
-            entity   *m_entity;
-            unsigned m_ep_index;
-        };
-
         entity(const resource& resource, uct_iface_config_t *iface_config,
                uct_iface_params_t *params, uct_md_config_t *md_config);
 
@@ -210,7 +193,7 @@ protected:
                                  uct_cm_ep_resolve_callback_t resolve_cb,
                                  uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
-                                 uct_test *test);
+                                 void *user_data);
 
         ucs_status_t listen(const ucs::sock_addr_storage &listen_addr,
                             const uct_listener_params_t &params);
@@ -268,6 +251,7 @@ protected:
 
         void pattern_fill(uint64_t seed);
         void pattern_check(uint64_t seed);
+        void memset(int c);
 
         static size_t pack(void *dest, void *arg);
 
@@ -459,8 +443,7 @@ protected:
     rc_verbs,           \
     dc_mlx5,            \
     ud_verbs,           \
-    ud_mlx5,            \
-    cm
+    ud_mlx5
 
 
 #define UCT_TEST_CMS rdmacm, tcp
@@ -499,7 +482,7 @@ protected:
 #define UCT_INSTANTIATE_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_TLS)
 #define _UCT_INSTANTIATE_TEST_CASE(_test_case, _tl_name) \
-    INSTANTIATE_TEST_CASE_P(_tl_name, _test_case, \
+    INSTANTIATE_TEST_SUITE_P(_tl_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_resources(UCS_PP_QUOTE(_tl_name))));
 
 
@@ -530,7 +513,7 @@ protected:
 
 
 #define _UCT_INSTANTIATE_CM_TEST_CASE(_test_case, _cm_name) \
-    INSTANTIATE_TEST_CASE_P(_cm_name, _test_case, \
+    INSTANTIATE_TEST_SUITE_P(_cm_name, _test_case, \
                             testing::ValuesIn(_test_case::enum_cm_resources( \
                                     UCS_PP_QUOTE(_cm_name))));
 

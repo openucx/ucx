@@ -77,6 +77,7 @@ typedef enum {
     UCS_HANDLE_ERROR_BACKTRACE, /* Print backtrace */
     UCS_HANDLE_ERROR_FREEZE,    /* Freeze and wait for a debugger */
     UCS_HANDLE_ERROR_DEBUG,     /* Attach debugger */
+    UCS_HANDLE_ERROR_NONE,      /* Do not take any action */
     UCS_HANDLE_ERROR_LAST
 } ucs_handle_error_t;
 
@@ -138,12 +139,14 @@ typedef struct ucs_sock_addr {
     socklen_t                addrlen;   /**< Address length */
 } ucs_sock_addr_t;
 
+
 /**
  * Logging component.
  */
 typedef struct ucs_log_component_config {
     ucs_log_level_t log_level;
     char            name[16];
+    const char      *file_filter; /* glob pattern of source files */
 } ucs_log_component_config_t;
 
 #endif /* TYPES_H_ */

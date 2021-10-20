@@ -52,7 +52,7 @@ static size_t ucp_tag_pack_eager_sync_only_dt(void *dest, void *arg)
 
     hdr->super.super.tag = req->send.msg_proto.tag;
     hdr->req.ep_id       = ucp_send_request_get_ep_remote_id(req);
-    hdr->req.req_id      = ucp_request_get_id(req);
+    hdr->req.req_id      = ucp_send_request_get_id(req);
 
     return ucp_tag_pack_eager_common(req, hdr + 1, req->send.length,
                                      sizeof(*hdr), 1);
@@ -92,7 +92,7 @@ static size_t ucp_tag_pack_eager_sync_first_dt(void *dest, void *arg)
     hdr->super.total_len       = req->send.length;
     hdr->req.ep_id             = ucp_send_request_get_ep_remote_id(req);
     hdr->super.msg_id          = req->send.msg_proto.message_id;
-    hdr->req.req_id            = ucp_request_get_id(req);
+    hdr->req.req_id            = ucp_send_request_get_id(req);
 
     return ucp_tag_pack_eager_common(req, hdr + 1, length, sizeof(*hdr), 1);
 }
@@ -169,12 +169,11 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
     middle_hdr.msg_id         = req->send.msg_proto.message_id;
     middle_hdr.offset         = req->send.state.dt.offset;
 
-    return ucp_do_am_zcopy_multi(self,
-                                 UCP_AM_ID_EAGER_FIRST,
-                                 UCP_AM_ID_EAGER_MIDDLE,
-                                 &first_hdr, sizeof(first_hdr),
-                                 &middle_hdr, sizeof(middle_hdr),
-                                 NULL, 0ul, ucp_proto_am_zcopy_req_complete, 1);
+    return ucp_do_am_zcopy_multi(self, UCP_AM_ID_EAGER_FIRST,
+                                 UCP_AM_ID_EAGER_MIDDLE, &first_hdr,
+                                 sizeof(first_hdr), &middle_hdr,
+                                 sizeof(middle_hdr), NULL, 0ul, 0ul,
+                                 ucp_proto_am_zcopy_req_complete, 1);
 }
 
 ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
@@ -194,8 +193,9 @@ const ucp_request_send_proto_t ucp_tag_eager_proto = {
 void ucp_tag_eager_sync_completion(ucp_request_t *req, uint32_t flag,
                                    ucs_status_t status)
 {
-    static const uint16_t all_completed = UCP_REQUEST_FLAG_LOCAL_COMPLETED |
-                                          UCP_REQUEST_FLAG_REMOTE_COMPLETED;
+    static const uint16_t all_completed =
+            UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED |
+            UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
 
     ucs_assertv(!(req->flags & flag), "req->flags=%d flag=%d", req->flags, flag);
     req->flags |= flag;
@@ -229,7 +229,7 @@ ucp_tag_eager_sync_zcopy_req_complete(ucp_request_t *req, ucs_status_t status)
     ucs_assert(req->send.state.uct_comp.count == 0);
 
     ucp_request_send_buffer_dereg(req); /* TODO register+lane change */
-    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_LOCAL_COMPLETED,
+    ucp_tag_eager_sync_completion(req, UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED,
                                   status);
 }
 
@@ -253,7 +253,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_single(uct_pending_req_t *self)
 
     hdr.super.super.tag = req->send.msg_proto.tag;
     hdr.req.ep_id       = ucp_send_request_get_ep_remote_id(req);
-    hdr.req.req_id      = ucp_request_get_id(req);
+    hdr.req.req_id      = ucp_send_request_get_id(req);
 
     return ucp_do_am_zcopy_single(self, UCP_AM_ID_EAGER_SYNC_ONLY, &hdr,
                                   sizeof(hdr), NULL, 0ul,
@@ -273,18 +273,19 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
         return ucp_do_am_zcopy_multi(self, UCP_AM_ID_LAST,
                                      UCP_AM_ID_EAGER_MIDDLE, NULL, 0,
                                      &middle_hdr, sizeof(middle_hdr), NULL, 0ul,
-                                     ucp_tag_eager_sync_zcopy_req_complete, 1);
+                                     0ul, ucp_tag_eager_sync_zcopy_req_complete,
+                                     1);
     }
     
     first_hdr.super.super.super.tag = req->send.msg_proto.tag;
     first_hdr.super.total_len       = req->send.length;
     first_hdr.req.ep_id             = ucp_send_request_get_ep_remote_id(req);
-    first_hdr.req.req_id            = ucp_request_get_id(req);
+    first_hdr.req.req_id            = ucp_send_request_get_id(req);
     first_hdr.super.msg_id          = req->send.msg_proto.message_id;
 
     return ucp_do_am_zcopy_multi(self, UCP_AM_ID_EAGER_SYNC_FIRST,
                                  UCP_AM_ID_LAST, &first_hdr, sizeof(first_hdr),
-                                 NULL, 0, NULL, 0ul,
+                                 NULL, 0, NULL, 0ul, 0ul,
                                  ucp_tag_eager_sync_zcopy_req_complete, 1);
 }
 
@@ -319,7 +320,7 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
         return;
     }
 
-    ucs_assert(reqhdr->req_id != UCP_REQUEST_ID_INVALID);
+    ucs_assert(reqhdr->req_id != UCS_PTR_MAP_KEY_INVALID);
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, reqhdr->ep_id, return,
                                   "ACK for sync-send");
 
@@ -333,5 +334,5 @@ void ucp_tag_eager_sync_send_ack(ucp_worker_h worker, void *hdr, uint16_t recv_f
 
     ucs_trace_req("send_sync_ack req %p ep %p", req, req->send.ep);
 
-    ucp_request_send(req, 0);
+    ucp_request_send(req);
 }

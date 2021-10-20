@@ -282,12 +282,14 @@ static ucs_stats_class_t uct_cm_stats_class = {
 #endif
 
 UCS_CLASS_INIT_FUNC(uct_cm_t, uct_cm_ops_t* ops, uct_iface_ops_t* iface_ops,
+                    uct_iface_internal_ops_t* internal_ops,
                     uct_worker_h worker, uct_component_h component,
                     const uct_cm_config_t* config)
 {
     self->ops                     = ops;
     self->component               = component;
     self->iface.super.ops         = *iface_ops;
+    self->iface.internal_ops      = internal_ops;
     self->iface.worker            = ucs_derived_of(worker, uct_priv_worker_t);
 
     self->iface.md                = NULL;
@@ -318,6 +320,7 @@ UCS_CLASS_CLEANUP_FUNC(uct_cm_t)
 
 UCS_CLASS_DEFINE(uct_cm_t, void);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_cm_t, void, uct_cm_ops_t*, uct_iface_ops_t*,
+                          uct_iface_internal_ops_t*,
                           uct_worker_h, uct_component_h, const uct_cm_config_t*);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cm_t, void);
 

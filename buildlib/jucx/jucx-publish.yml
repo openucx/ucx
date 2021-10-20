@@ -1,31 +1,35 @@
 parameters:
-  target: publish-snapshot
   temp_cfg: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/tmp-settings.xml
   gpg_dir: $(System.DefaultWorkingDirectory)/bindings/java/src/main/native/build-java/gpg
+  target: package
 
 jobs:
   - job: jucx_release
-    condition: eq(stageDependencies.Check_Commit.Check.outputs['Commit.Launch'], 'Yes')
-    container: ubuntu20_cuda11_2
+
     pool:
       name: MLNX
       demands:
-      - ucx_docker -equals yes
+        - harbor_registry -equals yes
+
+    # we need to use lowest version for compatible
+    container: centos7_cuda11
 
     steps:
       - checkout: self
         clean: true
         fetchDepth: 100
+        path: "we/need/to/go/deeper"
+        # ^workaround agent issue with container in root path
 
       - bash: |
-          set -eE
+          set -eEx
           gcc --version
           ./autogen.sh
           ./contrib/configure-release --with-java
         displayName: Configure
 
       - bash: |
-          set -eE
+          set -eEx
           make -s -j`nproc`
         displayName: Build ucx
 

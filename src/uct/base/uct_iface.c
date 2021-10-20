@@ -1,7 +1,8 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2019.  ALL RIGHTS RESERVED.
-*
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
+* Copyright (C) Huawei Technologies Co., Ltd. 2021.  ALL RIGHTS RESERVED.
+*
 * See file LICENSE for terms.
 */
 
@@ -22,10 +23,36 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
+typedef struct uct_base_ep_error_handle_info {
+    uct_ep_h     ep;
+    ucs_status_t status;
+} uct_base_ep_error_handle_info_t;
+
+
+const char *uct_ep_operation_names[] = {
+    [UCT_EP_OP_AM_SHORT]     = "am_short",
+    [UCT_EP_OP_AM_BCOPY]     = "am_bcopy",
+    [UCT_EP_OP_AM_ZCOPY]     = "am_zcopy",
+    [UCT_EP_OP_PUT_SHORT]    = "put_short",
+    [UCT_EP_OP_PUT_BCOPY]    = "put_bcopy",
+    [UCT_EP_OP_PUT_ZCOPY]    = "put_zcopy",
+    [UCT_EP_OP_GET_SHORT]    = "get_short",
+    [UCT_EP_OP_GET_BCOPY]    = "get_bcopy",
+    [UCT_EP_OP_GET_ZCOPY]    = "get_zcopy",
+    [UCT_EP_OP_EAGER_SHORT]  = "eager_short",
+    [UCT_EP_OP_EAGER_BCOPY]  = "eager_bcopy",
+    [UCT_EP_OP_EAGER_ZCOPY]  = "eager_zcopy",
+    [UCT_EP_OP_RNDV_ZCOPY]   = "rndv_zcopy",
+    [UCT_EP_OP_ATOMIC_POST]  = "atomic_post",
+    [UCT_EP_OP_ATOMIC_FETCH] = "atomic_fetch",
+    [UCT_EP_OP_LAST]         = NULL
+};
+
 #ifdef ENABLE_STATS
 static ucs_stats_class_t uct_ep_stats_class = {
-    .name = "uct_ep",
-    .num_counters = UCT_EP_STAT_LAST,
+    .name          = "uct_ep",
+    .num_counters  = UCT_EP_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_EP_STAT_AM]          = "am",
         [UCT_EP_STAT_PUT]         = "put",
@@ -46,8 +73,9 @@ static ucs_stats_class_t uct_ep_stats_class = {
 };
 
 static ucs_stats_class_t uct_iface_stats_class = {
-    .name = "uct_iface",
-    .num_counters = UCT_IFACE_STAT_LAST,
+    .name          = "uct_iface",
+    .num_counters  = UCT_IFACE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
         [UCT_IFACE_STAT_RX_AM]       = "rx_am",
         [UCT_IFACE_STAT_RX_AM_BYTES] = "rx_am_bytes",
@@ -161,17 +189,10 @@ void uct_iface_set_async_event_params(const uct_iface_params_t *params,
                                       uct_async_event_cb_t *event_cb,
                                       void **event_arg)
 {
-    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_CB) {
-        *event_cb = params->async_event_cb;
-    } else {
-        *event_cb = NULL;
-    }
-
-    if (params->field_mask & UCT_IFACE_PARAM_FIELD_ASYNC_EVENT_ARG) {
-        *event_arg = params->async_event_arg;
-    } else {
-        *event_arg = NULL;
-    }
+    *event_cb  = UCT_IFACE_PARAM_VALUE(params, async_event_cb, ASYNC_EVENT_CB,
+                                       NULL);
+    *event_arg = UCT_IFACE_PARAM_VALUE(params, async_event_arg, ASYNC_EVENT_ARG,
+                                       NULL);
 }
 
 
@@ -180,26 +201,12 @@ ucs_status_t uct_iface_query(uct_iface_h iface, uct_iface_attr_t *iface_attr)
     return iface->ops.iface_query(iface, iface_attr);
 }
 
-ucs_status_t uct_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+ucs_status_t
+uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
-    uct_iface_attr_t iface_attr;
-    ucs_status_t status;
+    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
 
-    status = uct_iface_query(iface, &iface_attr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    /* By default, the performance is assumed to be the same for all operations */
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
-        perf_attr->bandwidth = iface_attr.bandwidth;
-    }
-
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
-        perf_attr->overhead = iface_attr.overhead;
-    }
-
-    return UCS_OK;
+    return iface->internal_ops->iface_estimate_perf(tl_iface, perf_attr);
 }
 
 ucs_status_t uct_iface_get_device_address(uct_iface_h iface, uct_device_addr_t *addr)
@@ -216,6 +223,13 @@ int uct_iface_is_reachable(const uct_iface_h iface, const uct_device_addr_t *dev
                            const uct_iface_addr_t *iface_addr)
 {
     return iface->ops.iface_is_reachable(iface, dev_addr, iface_addr);
+}
+
+int uct_iface_is_reachable_v2(const uct_iface_h iface,
+                              const uct_iface_is_reachable_params_t *params)
+{
+    ucs_fatal("uct_iface_is_reachable_v2 not supported yet");
+    return 0;
 }
 
 ucs_status_t uct_ep_check(const uct_ep_h ep, unsigned flags,
@@ -408,6 +422,40 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    uct_iface_attr_t iface_attr;
+    ucs_status_t status;
+
+    status = uct_iface_query(iface, &iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* By default, the performance is assumed to be the same for all operations */
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
+        perf_attr->overhead = iface_attr.overhead;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = iface_attr.latency;
+    }
+
+    return UCS_OK;
+}
+
+uct_iface_internal_ops_t uct_base_iface_internal_ops = {
+    .iface_estimate_perf = uct_base_iface_estimate_perf,
+    .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+};
+
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
 {
     ucs_assert_always(ops->ep_flush                 != NULL);
@@ -434,7 +482,8 @@ UCS_CLASS_CLEANUP_FUNC(uct_iface_t)
 UCS_CLASS_DEFINE(uct_iface_t, void);
 
 
-UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
+UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
+                    uct_iface_internal_ops_t *internal_ops, uct_md_h md,
                     uct_worker_h worker, const uct_iface_params_t *params,
                     const uct_iface_config_t *config
                     UCS_STATS_ARG(ucs_stats_node_t *stats_parent)
@@ -451,19 +500,21 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops, uct_md_h md,
                         UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
                        params->err_handler_flags : 0);
 
+    ucs_assert(internal_ops->iface_estimate_perf != NULL);
+    ucs_assert(internal_ops->iface_vfs_refresh != NULL);
+    ucs_assert(internal_ops->ep_query != NULL);
+
     self->md                = md;
+    self->internal_ops      = internal_ops;
     self->worker            = ucs_derived_of(worker, uct_priv_worker_t);
     self->am_tracer         = NULL;
     self->am_tracer_arg     = NULL;
-    self->err_handler       = (params->field_mask &
-                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER) ?
-                              params->err_handler : NULL;
-    self->err_handler_flags = (params->field_mask &
-                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
-                              params->err_handler_flags : 0;
-    self->err_handler_arg   = (params->field_mask &
-                               UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG) ?
-                              params->err_handler_arg : NULL;
+    self->err_handler       = UCT_IFACE_PARAM_VALUE(params, err_handler, ERR_HANDLER,
+                                                    NULL);
+    self->err_handler_flags = UCT_IFACE_PARAM_VALUE(params, err_handler_flags,
+                                                    ERR_HANDLER_FLAGS, 0);
+    self->err_handler_arg   = UCT_IFACE_PARAM_VALUE(params, err_handler_arg,
+                                                    ERR_HANDLER_ARG, NULL);
     self->progress_flags    = 0;
     uct_worker_progress_init(&self->prog);
 
@@ -517,8 +568,15 @@ ucs_status_t uct_iface_reject(uct_iface_h iface,
 
 ucs_status_t uct_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 {
+    ucs_status_t status;
+
     if (params->field_mask & UCT_EP_PARAM_FIELD_IFACE) {
-        return params->iface->ops.ep_create(params, ep_p);
+        status = params->iface->ops.ep_create(params, ep_p);
+        if (status == UCS_OK) {
+            ucs_vfs_obj_set_dirty(params->iface, uct_iface_vfs_refresh);
+        }
+
+        return status;
     } else if (params->field_mask & UCT_EP_PARAM_FIELD_CM) {
         return params->cm->ops->ep_create(params, ep_p);
     }
@@ -538,6 +596,7 @@ ucs_status_t uct_ep_disconnect(uct_ep_h ep, unsigned flags)
 
 void uct_ep_destroy(uct_ep_h ep)
 {
+    ucs_vfs_obj_remove(ep);
     ep->iface->ops.ep_destroy(ep);
 }
 
@@ -557,6 +616,13 @@ ucs_status_t uct_cm_client_ep_conn_notify(uct_ep_h ep)
     return ep->iface->ops.cm_ep_conn_notify(ep);
 }
 
+ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_query(ep, ep_attr);
+}
+
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
 {
     ep->iface = iface;
@@ -574,6 +640,33 @@ UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 
 UCS_CLASS_DEFINE(uct_ep_t, void);
 
+static unsigned uct_iface_ep_error_handle_progress(void *arg)
+{
+    uct_base_ep_error_handle_info_t *err_info = arg;
+    uct_base_iface_t *iface;
+
+    iface = ucs_derived_of(err_info->ep->iface, uct_base_iface_t);
+    iface->err_handler(iface->err_handler_arg, err_info->ep, err_info->status);
+    ucs_free(err_info);
+    return 1;
+}
+
+static int
+uct_iface_ep_error_handle_progress_remove(const ucs_callbackq_elem_t *elem,
+                                          void *arg)
+{
+    uct_base_ep_error_handle_info_t *err_info = elem->arg;
+    uct_base_ep_t *ep                         = arg;
+
+    if ((elem->cb == uct_iface_ep_error_handle_progress) &&
+        (err_info->ep == &ep->super)) {
+        ucs_free(err_info);
+        return 1;
+    }
+
+    return 0;
+}
+
 UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &iface->super);
@@ -584,6 +677,11 @@ UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
 {
+    uct_base_iface_t *iface = ucs_derived_of(self->super.iface,
+                                             uct_base_iface_t);
+
+    ucs_callbackq_remove_if(&iface->worker->super.progress_q,
+                            uct_iface_ep_error_handle_progress_remove, self);
     UCS_STATS_NODE_FREE(self->stats);
 }
 
@@ -689,46 +787,129 @@ int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
     return snprintf(buffer, max_len, "/proc/%d", (int)pid);
 }
 
-uct_keepalive_info_t* uct_ep_keepalive_create(pid_t pid, ucs_time_t start_time)
+ucs_status_t uct_ep_keepalive_create(pid_t pid, uct_keepalive_info_t **ka_p)
 {
     uct_keepalive_info_t *ka;
+    ucs_status_t status;
     int proc_len;
 
     proc_len = uct_ep_get_process_proc_dir(NULL, 0, pid);
     if (proc_len <= 0) {
         ucs_error("failed to get length to hold path to a process directory");
-        return NULL;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
     ka = ucs_malloc(sizeof(*ka) + proc_len + 1, "keepalive");
     if (ka == NULL) {
         ucs_error("failed to allocate keepalive info");
-        return NULL;
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
     }
 
-    ka->start_time = start_time;
     uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
 
-    return ka;
+    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
+                                   &ka->start_time);
+    if (status != UCS_OK) {
+        ucs_error("failed to get process start time");
+        goto err_free_ka;
+    }
+
+    *ka_p = ka;
+    return UCS_OK;
+
+err_free_ka:
+    ucs_free(ka);
+err:
+    return status;
 }
 
-ucs_status_t
-uct_ep_keepalive_check(uct_ep_h tl_ep, uct_keepalive_info_t *ka, unsigned flags,
-                       uct_completion_t *comp)
+static ucs_status_t uct_iface_schedule_ep_err(uct_ep_h ep, ucs_status_t status)
 {
+    uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+    uct_base_ep_error_handle_info_t *err_info;
+
+    if (iface->err_handler == NULL) {
+        ucs_diag("ep %p: unhandled error %s", ep, ucs_status_string(status));
+        return UCS_OK;
+    }
+
+    err_info = ucs_malloc(sizeof(*err_info), "uct_base_ep_err");
+    if (err_info == NULL) {
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    err_info->ep     = ep;
+    err_info->status = status;
+    ucs_callbackq_add_safe(&iface->worker->super.progress_q,
+                           uct_iface_ep_error_handle_progress, err_info,
+                           UCS_CALLBACKQ_FLAG_ONESHOT);
+    return UCS_OK;
+}
+
+ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t **ka_p,
+                                    pid_t pid, unsigned flags,
+                                    uct_completion_t *comp)
+{
+    struct timespec create_time;
+    uct_keepalive_info_t *ka;
     ucs_status_t status;
-    ucs_time_t create_time;
 
     UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
-    ucs_assert(ka != NULL);
+    if (*ka_p == NULL) {
+        status = uct_ep_keepalive_create(pid, ka_p);
+    } else {
+        ka     = *ka_p;
+        status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
+                                       &create_time);
+        if ((status != UCS_OK) ||
+            (ka->start_time.tv_sec != create_time.tv_sec) ||
+            (ka->start_time.tv_nsec != create_time.tv_nsec)) {
+            status = UCS_ERR_ENDPOINT_TIMEOUT;
+        }
+    }
 
-    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
-                                   &create_time);
-    if (ucs_unlikely((status != UCS_OK) || (ka->start_time != create_time))) {
-        return uct_iface_handle_ep_err(tl_ep->iface, tl_ep,
-                                       UCS_ERR_ENDPOINT_TIMEOUT);
+    if (status != UCS_OK) {
+        return uct_iface_schedule_ep_err(ep, status);
     }
 
     return UCS_OK;
+}
+
+void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
+                                 ucs_sys_namespace_type_t sys_ns_type)
+{
+    addr_ns->super.id = ucs_get_system_id() &
+                        ~UCT_IFACE_LOCAL_ADDR_FLAG_NS;
+
+    if (!ucs_sys_ns_is_default(sys_ns_type)) {
+        addr_ns->super.id |= UCT_IFACE_LOCAL_ADDR_FLAG_NS;
+        addr_ns->sys_ns    = ucs_sys_get_ns(sys_ns_type);
+    }
+}
+
+int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
+                                 ucs_sys_namespace_type_t sys_ns_type)
+{
+    uct_iface_local_addr_ns_t my_addr = {};
+
+    uct_iface_get_local_address(&my_addr, sys_ns_type);
+
+    /* Do not merge these evaluations into single 'if' due to Clang compilation
+     * warning */
+    /* Check if both processes are on same host and both of them are in root (or
+     * non-root) pid namespace */
+    if (addr_ns->super.id != my_addr.super.id) {
+        return 0;
+    }
+
+    if (!(addr_ns->super.id & UCT_IFACE_LOCAL_ADDR_FLAG_NS)) {
+        return 1; /* Both processes are in root namespace */
+    }
+
+    /* We are in non-root PID namespace - return 1 if ID of namespaces are the
+     * same */
+    return addr_ns->sys_ns == my_addr.sys_ns;
 }

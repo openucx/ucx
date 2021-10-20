@@ -53,23 +53,34 @@ static const char *uct_ib_mlx5_cqe_err_opcode(uct_ib_mlx5_err_cqe_t *ecqe)
     }
 }
 
+static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
+{
+    if (qp_type == IBV_QPT_UD) {
+        return 1;
+    }
+#if HAVE_TL_DC
+    if (qp_type == UCT_IB_QPT_DCI) {
+        return 1;
+    }
+#endif
+    return 0;
+}
+
 ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              uct_ib_mlx5_err_cqe_t *ecqe,
                                              uct_ib_mlx5_txwq_t *txwq,
                                              ucs_log_level_t log_level)
 {
-    ucs_status_t status        = UCS_ERR_IO_ERROR;
-    char         err_info[256] = {};
-    char         wqe_info[256] = {};
-    uint16_t     wqe_index;
-    uint32_t     qp_num;
-    void         *wqe;
-
-    wqe_index = ntohs(ecqe->wqe_counter);
-    qp_num    = ntohl(ecqe->s_wqe_opcode_qpn) & UCS_MASK(UCT_IB_QPN_ORDER);
-    if (txwq != NULL) {
-        wqe_index %= UCS_PTR_BYTE_DIFF(txwq->qstart, txwq->qend) / MLX5_SEND_WQE_BB;
-    }
+    ucs_status_t status = UCS_ERR_IO_ERROR;
+    char err_info[256]  = {};
+    char wqe_info[256]  = {};
+    char peer_info[128] = {};
+    uint16_t pi         = ntohs(ecqe->wqe_counter);
+    uint32_t qp_num     = ntohl(ecqe->s_wqe_opcode_qpn) &
+                          UCS_MASK(UCT_IB_QPN_ORDER);
+    void *wqe;
+    struct ibv_ah_attr ah_attr;
+    unsigned dest_qpn;
 
     switch (ecqe->syndrome) {
     case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
@@ -129,22 +140,34 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     }
 
     if ((txwq != NULL) && ((ecqe->op_own >> 4) == MLX5_CQE_REQ_ERR)) {
-        wqe = UCS_PTR_BYTE_OFFSET(txwq->qstart, MLX5_SEND_WQE_BB * wqe_index);
+        wqe = uct_ib_mlx5_txwq_get_wqe(txwq, pi);
         uct_ib_mlx5_wqe_dump(iface, wqe, txwq->qstart, txwq->qend, INT_MAX, 0,
                              NULL, wqe_info, sizeof(wqe_info) - 1, NULL);
+
+        /* If av is not required by the transport need to dump remote QP info,
+         * because it will not be shown in the wqe dump */
+        if (!uct_ib_mlx5_is_qp_require_av_seg(iface->config.qp_type)) {
+            status = uct_ib_mlx5_query_qp_peer_info(iface, &txwq->super,
+                                                    &ah_attr, &dest_qpn);
+            if (status == UCS_OK) {
+                uct_ib_log_dump_qp_peer_info(iface, &ah_attr, dest_qpn,
+                                             peer_info, sizeof(peer_info));
+            }
+        }
     } else {
         snprintf(wqe_info, sizeof(wqe_info) - 1, "opcode %s",
                  uct_ib_mlx5_cqe_err_opcode(ecqe));
     }
 
     ucs_log(log_level,
-            "%s on "UCT_IB_IFACE_FMT"/%s (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
-            "%s QP 0x%x wqe[%d]: %s",
+            "%s on " UCT_IB_IFACE_FMT
+            "/%s (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
+            "%s QP 0x%x wqe[%d]: %s %s",
             err_info, UCT_IB_IFACE_ARG(iface),
-            uct_ib_iface_is_roce(iface) ? "RoCE" : "IB",
-            ecqe->syndrome, ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4,
-            ecqe->hw_err_synd, uct_ib_qp_type_str(iface->config.qp_type),
-            qp_num, wqe_index, wqe_info);
+            uct_ib_iface_is_roce(iface) ? "RoCE" : "IB", ecqe->syndrome,
+            ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4, ecqe->hw_err_synd,
+            uct_ib_qp_type_str(iface->config.qp_type), qp_num, pi, wqe_info,
+            peer_info);
 
 out:
     return status;
@@ -226,19 +249,6 @@ static size_t uct_ib_mlx5_dump_dgram(char *buf, size_t max, void *seg, int is_et
 
     return (base_av.dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) ?
            UCT_IB_MLX5_AV_FULL_SIZE : UCT_IB_MLX5_AV_BASE_SIZE;
-}
-
-static int uct_ib_mlx5_is_qp_require_av_seg(int qp_type)
-{
-    if (qp_type == IBV_QPT_UD) {
-        return 1;
-    }
-#if HAVE_TL_DC
-    if (qp_type == UCT_IB_QPT_DCI) {
-        return 1;
-    }
-#endif
-    return 0;
 }
 
 static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
@@ -437,6 +447,7 @@ void uct_ib_mlx5_av_dump(char *buf, size_t max,
     p    = buf;
     endp = buf + max - 1;
 
+    /* cppcheck-suppress[uninitvar] */
     snprintf(p, endp - p, " [rqpn 0x%x",
              ntohl(base_av->dqp_dct & ~UCT_IB_MLX5_EXTENDED_UD_AV));
     p += strlen(p);
@@ -446,6 +457,7 @@ void uct_ib_mlx5_av_dump(char *buf, size_t max,
         p += strlen(p);
     }
 
+    /* cppcheck-suppress[uninitvar] */
     if (base_av->dqp_dct & UCT_IB_MLX5_EXTENDED_UD_AV) {
         if (is_eth || (grh_av->grh_gid_fl & UCT_IB_MLX5_AV_GRH_PRESENT)) {
             if (is_eth) {

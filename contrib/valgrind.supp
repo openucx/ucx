@@ -304,3 +304,30 @@
    Memcheck:Cond
    fun:xpmem_get
 }
+{
+   libc_resolv_leak
+   Memcheck:Leak
+   ...
+   fun:__resolv_conf_allocate
+   fun:__resolv_conf_load
+   ...
+   fun:__resolv_context_get
+}
+{
+   libnl_trans
+   Memcheck:Leak
+   ...
+   fun:__trans_list_add
+}
+{
+   ibv_cmd_create_srq
+   Memcheck:Cond
+   ...
+   fun:ibv_cmd_create_srq
+}
+{
+   ibv_poll_cq
+   Memcheck:Cond
+   obj:*libmlx5*
+   fun:ibv_poll_cq
+}
