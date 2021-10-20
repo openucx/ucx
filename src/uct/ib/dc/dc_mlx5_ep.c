@@ -896,6 +896,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     uct_ib_mlx5_base_av_t av;
     struct mlx5_wqe_av mlx5_av;
     struct ibv_ah *ah;
+    uint32_t remote_dctn;
     ucs_status_t status;
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -903,6 +904,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     ucs_assert((sizeof(uint8_t) + sizeof(sender_ep)) <=
                UCT_IB_MLX5_AV_FULL_SIZE);
 
+    remote_dctn = fc_req->dct_num & 0xffffff;
     UCT_DC_MLX5_CHECK_DCI_RES(iface, ep);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
@@ -944,7 +946,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
         av.rlid = fc_req->lid | htons(ib_iface->path_bits[0]);
     }
 
-    av.dqp_dct = htonl(fc_req->dct_num);
+    av.dqp_dct = htonl(remote_dctn);
 
     if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
         av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
@@ -1015,6 +1017,7 @@ uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
+    uint32_t imm_inval_pkey;
     uct_dc_fc_sender_data_t sender;
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -1027,13 +1030,15 @@ uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
     sender.payload.gid       = ib_iface->gid_info.gid;
     sender.payload.is_global = ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
 
+    imm_inval_pkey = iface->rx.dct.qp_num;
+
     UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1);
 
     uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
                                  txqp, txwq, MLX5_OPCODE_SEND_IMM,
                                  &sender.payload, sizeof(sender.payload),
                                  UCT_RC_EP_FLAG_FC_HARD_REQ, sender.ep,
-                                 iface->rx.dct.qp_num, 0, 0, &ep->av,
+                                 imm_inval_pkey, 0, 0, &ep->av,
                                  uct_dc_mlx5_ep_get_grh(ep),
                                  uct_ib_mlx5_wqe_av_size(&ep->av),
                                  MLX5_WQE_CTRL_SOLICITED, INT_MAX);
