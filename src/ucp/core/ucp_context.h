@@ -121,6 +121,9 @@ typedef struct ucp_context_config {
     unsigned                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
+    /** Remote keys with that many remote MDs or less would be allocated from a
+      * memory pool.*/
+    int                                    rkey_mpool_max_md;
 } ucp_context_config_t;
 
 

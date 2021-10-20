@@ -374,6 +374,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_config_t, ctx.rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
 
+  {"RKEY_MPOOL_MAX_MD", "2",
+   "Maximum number of UCP rkey MDs which can be unpacked into memory pool\n"
+   "element. UCP rkeys containing larger number of MDs will be unpacked to\n"
+   "dynamically allocated memory.",
+   ucs_offsetof(ucp_config_t, ctx.rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
+
    {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,

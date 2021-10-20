@@ -13,33 +13,6 @@
 #include <ucp/proto/proto_select.h>
 
 
-/* Remote keys with that many remote MDs or less would be allocated from a
- * memory pool.
- *
- * The element size of rkey mpool has aligned by the cache line (64B), so the
- * UCP_RKEY_MPOOL_MAX_MD is adjusted to 2 to minimize gaps between mpool items,
- * in turn, reduce the memory consumption.
- *
- * See the byte-scheme of the rkey mpool element:
- * +------+------------+------------+------------+------------+------------+------
- * |elem  |            |            |            |            |            |
- * |header| ucp_rkey_t | uct rkey 0 | uct rkey 1 | uct rkey 2 | uct rkey 3 | ...
- * +------+------------+------------+------------+------------+------------+-----
- * | 8B   |    32B     |    32B     |    32B     |    32B     |    32B     | ...
- * +----------------------------+-------------------------+----------------------+
- * |        64B Cache line      |     64B Cache line      |    64B Cache line    |
- * +----------------------------+-------------------------+---+------------------+
- * |                 UCP_RKEY_MPOOL_MAX_MD=3                  |     40B gap      |
- * +---------------------------------------------+--------+---+------------------+
- * |           UCP_RKEY_MPOOL_MAX_MD=2           | 16B gap|
- * +---------------------------------------------+--------+
- *
- * Thus UCP_RKEY_MPOOL_MAX_MD=2 is the optimal value to keeping short rkeys in
- * the rkey mpool.
- */
-#define UCP_RKEY_MPOOL_MAX_MD     2
-
-
 /**
  * Rkey proto index
  */

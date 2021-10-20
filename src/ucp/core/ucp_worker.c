@@ -1690,14 +1690,44 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err;
     }
 
-    /* Create memory pool for small rkeys */
-    status = ucs_mpool_init(&worker->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) +
-                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_rkey_mpool_ops, "ucp_rkeys");
-    if (status != UCS_OK) {
-        goto err_req_mp_cleanup;
+    if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
+        /* Create memory pool for small rkeys.
+         *
+         * `worker->context->config.ext.rkey_mpool_max_md`specifies the maximum
+         * number of remote keys with that many remote MDs or less would be
+         * allocated from a memory pool.
+         *
+         * The element size of rkey mpool has aligned by the cache line (64B),
+         * so the `worker->context->config.ext.rkey_mpool_max_md` is adjusted to
+         * 2 to minimize gaps between mpool items, in turn, reduce the memory
+         * consumption.
+         *
+         * See the byte-scheme of the rkey mpool element:
+         * +------+------------+------------+------------+------------+------------+------
+         * |elem  |            |            |            |            |            |
+         * |header| ucp_rkey_t | uct rkey 0 | uct rkey 1 | uct rkey 2 | uct rkey 3 | ...
+         * +------+------------+------------+------------+------------+------------+-----
+         * | 8B   |    32B     |    32B     |    32B     |    32B     |    32B     | ...
+         * +----------------------------+-------------------------+----------------------+
+         * |        64B Cache line      |     64B Cache line      |    64B Cache line    |
+         * +----------------------------+-------------------------+---+------------------+
+         * |                 rkey_mpool_max_md=3                      |     40B gap      |
+         * +---------------------------------------------+--------+---+------------------+
+         * |           rkey_mpool_max_md=2               | 16B gap|
+         * +---------------------------------------------+--------+
+         *
+         * Thus rkey_mpool_max_md=2 is the optimal value to keeping short
+         * rkeys in the rkey mpool.
+         */
+        status = ucs_mpool_init(&worker->rkey_mp, 0,
+                                sizeof(ucp_rkey_t) +
+                                sizeof(ucp_tl_rkey_t) *
+                                worker->context->config.ext.rkey_mpool_max_md,
+                                0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                                &ucp_rkey_mpool_ops, "ucp_rkeys");
+        if (status != UCS_OK) {
+            goto err_req_mp_cleanup;
+        }
     }
 
     /* Create memory pool for incoming UCT messages without a UCT descriptor */
@@ -1724,7 +1754,9 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 err_am_mp_cleanup:
     ucs_mpool_cleanup(&worker->am_mp, 0);
 err_rkey_mp_cleanup:
-    ucs_mpool_cleanup(&worker->rkey_mp, 0);
+    if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
+        ucs_mpool_cleanup(&worker->rkey_mp, 0);
+    }
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 0);
 err:
@@ -1746,7 +1778,9 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->am_mp, 1);
-    ucs_mpool_cleanup(&worker->rkey_mp, 1);
+    if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
+        ucs_mpool_cleanup(&worker->rkey_mp, 1);
+    }
     ucs_mpool_cleanup(&worker->req_mp,
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
