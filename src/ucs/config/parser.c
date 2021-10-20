@@ -262,10 +262,12 @@ int ucs_config_sprintf_ternary_auto(char *buf, size_t max,
 
 int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg)
 {
-    if (!strcasecmp(buf, "on") || !strcmp(buf, "1")) {
+    if (!strcasecmp(buf, "on") || !strcmp(buf, "1") ||
+        !strcasecmp(buf, "yes") || !strcasecmp(buf, "y")) {
         *(int*)dest = UCS_CONFIG_ON;
         return 1;
-    } else if (!strcasecmp(buf, "off") || !strcmp(buf, "0")) {
+    } else if (!strcasecmp(buf, "off") || !strcmp(buf, "0") ||
+               !strcasecmp(buf, "no") || !strcasecmp(buf, "n")) {
         *(int*)dest = UCS_CONFIG_OFF;
         return 1;
     } else {
