@@ -266,7 +266,7 @@ uct_rdmacm_cm_reserved_qpn_blk_add(uct_rdmacm_cm_device_context_t *ctx,
                                       out, sizeof(out));
     if (blk->obj == NULL) {
         ucs_error("mlx5dv_devx_obj_create(CREATE_GENERAL_OBJECT, type=RESERVED_QPN) failed, syndrome %x: %m",
-                  UCT_IB_MLX5DV_GET(create_mkey_out, out, syndrome));
+                  UCT_IB_MLX5DV_GET(general_obj_out_cmd_hdr, out, syndrome));
         status = UCS_ERR_IO_ERROR;
         goto err_free_blk;
     }
