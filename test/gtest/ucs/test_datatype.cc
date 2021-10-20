@@ -12,6 +12,7 @@ extern "C" {
 #include <ucs/datastruct/array.h>
 #include <ucs/datastruct/list.h>
 #include <ucs/datastruct/hlist.h>
+#include <ucs/datastruct/ndim_knn.h>
 #include <ucs/datastruct/ptr_array.h>
 #include <ucs/datastruct/ptr_map.inl>
 #include <ucs/datastruct/queue.h>
@@ -1076,6 +1077,105 @@ UCS_TEST_F(test_datatype, is_unsigned_type) {
     EXPECT_FALSE(ucs_is_unsigned_type(signed long));
 }
 
+NDIM_HASH_INIT_STR(nd_hash, 3)
+__NDIM_HASH_PROTOTYPES(nd_hash, 3, kh_cstr_t, uintptr_t) /* macro build test */
+
+UCS_TEST_F(test_datatype, ndim_hash_basic) {
+    static const char *key1[] = {"x1", "y1", "z1"};
+    static const char *key2[] = {"x2", "y2", "z2"};
+
+    ndhash_t(nd_hash) *ndh = ndh_init(nd_hash);
+
+    EXPECT_FALSE(ndh_insert(nd_hash, ndh, key1, 0x1));
+    EXPECT_FALSE(ndh_insert(nd_hash, ndh, key2, 0x2));
+    EXPECT_FALSE(ndh_insert(nd_hash, ndh, key2, 0x3));
+    EXPECT_FALSE(ndh_delv(nd_hash, ndh, 0x1));
+    EXPECT_FALSE(ndh_delv(nd_hash, ndh, 0x2));
+    EXPECT_FALSE(ndh_delv(nd_hash, ndh, 0x3));
+    EXPECT_TRUE(ndh_delv(nd_hash, ndh, 0x3));
+    EXPECT_TRUE(ndh_delv(nd_hash, ndh, 0x4));
+
+
+    EXPECT_FALSE(ndh_resize(nd_hash, ndh, 100));
+    EXPECT_FALSE(ndh_resize(nd_hash, ndh, 1000));
+    EXPECT_FALSE(ndh_resize(nd_hash, ndh, 500));
+
+    ndh_clear(nd_hash, ndh);
+    ndh_destroy(nd_hash, ndh);
+}
+
+#define TEST_K 1
+NDIM_WNN_INIT_STR(test, TEST_K, 3)
+__NDIM_WNN_PROTOTYPES(test, TEST_K, 3, kh_cstr_t, uintptr_t, float)
+
+UCS_TEST_F(test_datatype, ndim_nn_basic) {
+    wnn_t(test) * wnn;
+    uintptr_t query_res[TEST_K];
+    const float coefficients1[] = {1.11, 4.44, 2.22};
+    const float coefficients2[] = {1.00, 1.00, 1.00};
+    static const char *key1[]   = {"x1", "y1", "z1"};
+    static const char *key2[]   = {"x2", "y2", "z2"};
+    static const char *key3[]   = {"x3", "y3", "z3"};
+    static const char *query1[] = {"x1", "y1", "z1"};
+    static const char *query2[] = {"x2", "y2", "z2"};
+    static const char *query3[] = {"x1", "y2", "z1"};
+    static const char *query4[] = {"x4", "y4", "z4"};
+
+    wnn = wnn_init(test, 1.0, coefficients1);
+    EXPECT_NE(nn_search(w, test, wnn, query1, query_res), 0);
+    EXPECT_NE(nn_search(w, test, wnn, query2, query_res), 0);
+
+    EXPECT_FALSE(nn_insert(w, test, wnn, key2, 0x2));
+    EXPECT_FALSE(nn_insert(w, test, wnn, key3, 0x3));
+
+    EXPECT_EQ(nn_search(w, test, wnn, query1, query_res), 0);
+    EXPECT_EQ(query_res[0], 0x2);
+
+    EXPECT_FALSE(nn_insert(w, test, wnn, key1, 0x1));
+
+    EXPECT_EQ(nn_search(w, test, wnn, query1, query_res), 0);
+    EXPECT_EQ(query_res[0], 0x1);
+    EXPECT_EQ(nn_search(w, test, wnn, query2, query_res), 0);
+    EXPECT_EQ(query_res[0], 0x2);
+    EXPECT_EQ(nn_search(w, test, wnn, query3, query_res), 0);
+    EXPECT_EQ(query_res[0], 0x2);
+    EXPECT_EQ(nn_search(w, test, wnn, query4, query_res), 0);
+    EXPECT_GT(query_res[0], 0x0);
+
+    EXPECT_FALSE(nn_delv(w, test, wnn, 0x1));
+    EXPECT_FALSE(nn_delv(w, test, wnn, 0x2));
+
+    nn_destroy(w, test, wnn);
+
+    wnn = wnn_init(test, 2.0, coefficients2);
+    EXPECT_NE(nn_search(w, test, wnn, query1, query_res), 0);
+    EXPECT_NE(nn_search(w, test, wnn, query2, query_res), 0);
+
+    EXPECT_FALSE(nn_insert(w, test, wnn, key1, 0x1));
+    EXPECT_FALSE(nn_insert(w, test, wnn, key2, 0x2));
+    EXPECT_FALSE(nn_insert(w, test, wnn, key3, 0x3));
+
+    EXPECT_EQ(nn_search(w, test, wnn, query1, query_res), 0);
+    EXPECT_EQ(query_res[0], 0x1);
+    EXPECT_EQ(nn_search(w, test, wnn, query2, query_res), 0);
+    EXPECT_EQ(query_res[0], 0x2);
+    EXPECT_EQ(nn_search(w, test, wnn, query3, query_res), 0);
+    EXPECT_EQ(query_res[0], 0x1);
+    EXPECT_EQ(nn_search(w, test, wnn, query4, query_res), 0);
+    EXPECT_GT(query_res[0], 0x0);
+
+    EXPECT_FALSE(nn_delv(w, test, wnn, 0x1));
+    EXPECT_FALSE(nn_delv(w, test, wnn, 0x2));
+
+    EXPECT_FALSE(nn_resize(w, test, wnn, 100));
+    EXPECT_FALSE(nn_resize(w, test, wnn, 1000));
+    EXPECT_FALSE(nn_resize(w, test, wnn, 500));
+
+    nn_clear(w, test, wnn);
+    nn_destroy(w, test, wnn);
+}
+
+
 typedef struct {
     int  num1;
     int  num2;
@@ -1088,7 +1188,6 @@ static bool operator==(const test_value_type_t& v1, const test_value_type_t &v2)
 static std::ostream& operator<<(std::ostream& os, const test_value_type_t &v) {
     return os << "<" << v.num1 << "," << v.num2 << ">";
 }
-
 
 UCS_ARRAY_DECLARE_TYPE(test_2num_t, unsigned, test_value_type_t);
 UCS_ARRAY_DECLARE_TYPE(test_1int_t, size_t, int);
