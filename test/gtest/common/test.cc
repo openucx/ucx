@@ -106,10 +106,12 @@ void test_base::set_config(const std::string& config_str)
     modify_config(name, value, mode);
 }
 
-void test_base::modify_config(const std::string& name, const std::string& value,
+void test_base::modify_config(const std::string& name,
+                              const std::string& value,
                               modify_config_mode_t mode)
 {
-    ucs_status_t status = ucs_global_opts_set_value(name.c_str(), value.c_str());
+    ucs_status_t status = ucs_global_opts_set_value(name.c_str(),
+                                                    value.c_str());
     if (status == UCS_ERR_NO_ELEM) {
         switch (mode) {
         case FAIL_IF_NOT_EXIST:

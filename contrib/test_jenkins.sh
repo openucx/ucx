@@ -951,6 +951,14 @@ test_ucp_dlopen() {
 		echo "IB module was loaded even though it was disabled"
 		exit 1
 	fi
+
+	# Test module allow-list passed through ucp_config_modify()
+	./test/apps/test_ucp_config -c "UCX_MODULES=^ib,rdmacm" |& tee ucx_config_noib.log
+	if grep -in "component:\s*ib$" ucx_config_noib.log
+	then
+		echo "IB module was loaded even though it was disabled"
+		exit 1
+	fi
 }
 
 test_init_mt() {
