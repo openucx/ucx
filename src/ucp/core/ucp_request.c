@@ -570,7 +570,8 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                        size_t zcopy_thresh, size_t zcopy_max,
                        size_t dt_count, size_t priv_iov_count,
                        size_t length, const ucp_ep_msg_config_t* msg_config,
-                       const ucp_request_send_proto_t *proto)
+                       const ucp_request_send_proto_t *proto,
+                       const ucp_request_param_t *param)
 {
     ucs_status_t status;
     int          multi;
@@ -599,6 +600,7 @@ ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
         /* zcopy */
         ucp_request_send_state_reset(req, proto->zcopy_completion,
                                      UCP_REQUEST_SEND_PROTO_ZCOPY_AM);
+        ucp_request_send_memh_eager_init(req, param);
         status = ucp_request_send_buffer_reg_lane(req, req->send.lane, 0);
         if (status != UCS_OK) {
             return status;

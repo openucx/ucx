@@ -1778,6 +1778,20 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
      * msg packets */
     key->am_bw_lanes[0] = key->am_lane;
 
+    /* calculate am_bw_md_map */
+    for (i = 0;
+         (key->am_bw_lanes[i] != UCP_NULL_LANE) &&
+         (ucs_popcount(key->am_bw_md_map) < UCP_MAX_OP_MDS); i++) {
+        lane = key->am_bw_lanes[i];
+        rsc_index = select_ctx->lane_descs[lane].rsc_index;
+        md_index  = context->tl_rscs[rsc_index].md_index;
+
+        if ((context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_NEED_MEMH) &&
+            !(strstr(context->tl_rscs[rsc_index].tl_rsc.tl_name, "ugni"))) {
+            key->am_bw_md_map |= UCS_BIT(md_index);
+        }
+    }
+
     ucp_wireup_init_keepalive_map(worker, key);
 }
 

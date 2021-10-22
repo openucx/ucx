@@ -374,64 +374,75 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_memh_reinit(ucp_request_t *req, ucp_md_map_t md_map)
-{
-    ucp_md_map_t *md_map_p   = &req->send.state.dt.dt.contig.md_map;
-
-    if (*md_map_p != md_map) {
-        *md_map_p   = 0;
-        req->flags &= ~UCP_REQUEST_FLAG_USER_MEMH;
-    }
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_request_memh_init(ucp_request_t *req, ucp_ep_h ep, ucp_mem_h memh)
+ucp_request_memh_init(ucp_request_t *req, ucp_md_map_t md_map, ucp_mem_h memh)
 {
     ucp_md_map_t *md_map_p   = &req->send.state.dt.dt.contig.md_map;
     uct_mem_h *uct_memh      = req->send.state.dt.dt.contig.memh;
-    ucp_ep_config_t *ep_conf = ucp_ep_config(ep);
-    int i;
+    int i                    = 0;
     ucp_md_index_t md_idx;
-
-    if (ucs_popcount(ep_conf->md_map) > UCP_MAX_OP_MDS) {
-        return;
-    }
 
     ucs_assert(memh != NULL);
 
-    *md_map_p = ep_conf->md_map;
-    i = 0;
+    ucs_assert((memh->md_map & md_map) == md_map);
+
+    *md_map_p = md_map;
     ucs_for_each_bit(md_idx, *md_map_p) {
-        ucs_assert(memh->md_map & UCS_BIT(md_idx));
         uct_memh[i++] = ucp_memh2uct(memh, md_idx);
     }
 
     req->flags |= UCP_REQUEST_FLAG_USER_MEMH;
 }
 
+static UCS_F_ALWAYS_INLINE bool
+ucp_request_memh_check(const ucp_request_param_t *param,
+                       void *addr, size_t len, uint8_t mem_type)
+{
+    if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) &&
+        (param->memh != NULL) &&
+        (param->memh->mem_type == mem_type) &&
+        (param->memh->length >= len) &&
+        (param->memh->address <= addr) &&
+        (UCS_PTR_BYTE_OFFSET(param->memh->address, param->memh->length) >=
+        UCS_PTR_BYTE_OFFSET(addr, len))) {
+        return true;
+    }
+
+    return false;
+}
+
 static UCS_F_ALWAYS_INLINE void
-ucp_request_send_memh_init(ucp_request_t *req,
+ucp_request_send_memh_eager_init(ucp_request_t *req,
                            const ucp_request_param_t *param)
 {
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) ||
-        (param->memh           == NULL) ||
-        (param->memh->address  != req->send.buffer) ||
-        (param->memh->length   != req->send.length) ||
-        (param->memh->mem_type != req->send.mem_type)) {
+    if (!ucp_request_memh_check(param, req->send.buffer,
+                                req->send.length, req->send.mem_type)) {
         return;
     }
 
-    ucp_request_memh_init(req, req->send.ep, param->memh);
+    ucp_request_memh_init(req,
+                          ucp_ep_config(req->send.ep)->key.am_bw_md_map,
+                          param->memh);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_send_memh_rndv_init(ucp_request_t *req,
+                           const ucp_request_param_t *param)
+{
+    if (!ucp_request_memh_check(param, req->send.buffer,
+                                req->send.length, req->send.mem_type)) {
+        return;
+    }
+
+    ucp_request_memh_init(req,
+                          ucp_ep_config(req->send.ep)->key.rma_bw_md_map,
+                          param->memh);
 }
 
 static UCS_F_ALWAYS_INLINE void
 ucp_request_recv_memh_init(ucp_request_t *req, const ucp_request_param_t *param)
 {
-    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) ||
-        (param->memh           == NULL) ||
-        (param->memh->address  != req->recv.buffer) ||
-        (param->memh->length   != req->recv.length) ||
-        (param->memh->mem_type != req->recv.mem_type)) {
+    if (!ucp_request_memh_check(param, req->recv.buffer,
+                                req->recv.length, req->recv.mem_type)) {
         return;
     }
 

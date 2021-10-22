@@ -192,6 +192,9 @@ struct ucp_ep_config_key {
 
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
+
+    /* Bitmap of mds for am_bw_lanes */
+    ucp_md_map_t             am_bw_md_map;
 };
 
 
@@ -366,9 +369,6 @@ struct ucp_ep_config {
 
     /* Protocol selection data */
     ucp_proto_select_t            proto_select;
-
-    /* MD map for all lanes */
-    ucp_md_map_t                  md_map;
 };
 
 

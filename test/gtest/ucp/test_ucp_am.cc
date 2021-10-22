@@ -1451,8 +1451,4 @@ UCS_TEST_P(test_ucp_am_nbx_prereg, rndv_get, "RNDV_SCHEME=get_zcopy")
     test_am_send_recv(16 * UCS_KBYTE);
 }
 
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, dcx,    "dc_x") \
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, ud,     "ud_v") \
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, udx,    "ud_x") \
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, rc,     "rc_v") \
-UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_am_nbx_prereg, rcx,    "rc_x");
+UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_prereg);

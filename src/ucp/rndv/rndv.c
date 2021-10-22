@@ -112,7 +112,8 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq, worker->context)) {
+        ucp_rndv_is_get_zcopy(sreq, worker->context) &&
+        (ucp_ep_config(sreq->send.ep)->key.rma_bw_md_map != 0)) {
         /* pack rkey, ask target to do get_zcopy */
         mem_info.type         = sreq->send.mem_type;
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -192,21 +193,25 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
     return ucp_rndv_send_handle_status_from_pending(rndv_req, status);
 }
 
-ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq)
+ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq,
+                                      const ucp_request_param_t *param)
 {
     ucp_ep_h ep = sreq->send.ep;
     ucp_md_map_t md_map;
     ucs_status_t status;
 
+    if (ucp_ep_config(ep)->key.rma_bw_md_map != 0) {
+        ucp_request_send_memh_rndv_init(sreq, param);
+    }else {
+        ucp_request_send_memh_eager_init(sreq, param);
+    }
+
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq, ep->worker->context)) {
+        ucp_rndv_is_get_zcopy(sreq, ep->worker->context) &&
+        (ucp_ep_config(ep)->key.rma_bw_md_map != 0)) {
 
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
-
-        if (sreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-            ucp_request_memh_reinit(sreq, md_map);
-        }
 
         /* Pass UCT_MD_MEM_FLAG_HIDE_ERRORS flag, because registration may fail
          * if md does not support send memory type (e.g. CUDA memory). In this
@@ -778,7 +783,8 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
 
     ucp_request_send_state_init(rndv_req, ucp_dt_make_contig(1), 0);
     if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
-        ucp_request_memh_init(rndv_req, ep, rreq->recv.memh);
+        ucp_request_memh_init(rndv_req, ucp_ep_config(ep)->key.rma_bw_md_map,
+                              rreq->recv.memh);
     }
     ucp_request_send_state_reset(rndv_req, ucp_rndv_get_completion,
                                  UCP_REQUEST_SEND_PROTO_RNDV_GET);
@@ -2027,6 +2033,13 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
         (sreq->send.length >=
          ep_config->am.mem_type_zcopy_thresh[sreq->send.mem_type]))
     {
+        if ((sreq->flags & UCP_REQUEST_FLAG_USER_MEMH) &&
+            (sreq->send.state.dt.dt.contig.md_map !=
+            ucp_ep_config(sreq->send.ep)->key.am_bw_md_map)) {
+            sreq->send.state.dt.dt.contig.md_map = 0;
+            sreq->flags                         &= ~UCP_REQUEST_FLAG_USER_MEMH;
+        }
+
         status = ucp_request_send_buffer_reg_lane(sreq, ucp_ep_get_am_lane(ep), 0);
         ucs_assert_always(status == UCS_OK);
 
