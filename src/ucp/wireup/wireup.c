@@ -54,7 +54,7 @@ size_t ucp_wireup_msg_pack(void *dest, void *arg)
                         UCS_IOV_COPY_TO_BUF);
 }
 
-static const char* ucp_wireup_msg_str(uint8_t msg_type)
+const char* ucp_wireup_msg_str(uint8_t msg_type)
 {
     switch (msg_type) {
     case UCP_WIREUP_MSG_PRE_REQUEST:

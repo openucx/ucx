@@ -3177,9 +3177,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 }
 
 static uct_ep_h ucp_worker_discard_wireup_ep(
-        ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep, unsigned ep_flush_flags,
-        uct_pending_purge_callback_t purge_cb, void *purge_arg,
-        ucp_send_nbx_callback_t discarded_cb, void *discarded_cb_arg)
+        ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep, unsigned ep_flush_flags)
 {
     uct_ep_h uct_ep;
     int is_owner;
@@ -3223,9 +3221,7 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
     if (ucp_wireup_ep_test(uct_ep)) {
         uct_ep = ucp_worker_discard_wireup_ep(ucp_ep, ucp_wireup_ep(uct_ep),
-                                              ep_flush_flags, purge_cb,
-                                              purge_arg, discarded_cb,
-                                              discarded_cb_arg);
+                                              ep_flush_flags);
         if (uct_ep == NULL) {
             return UCS_OK;
         }
