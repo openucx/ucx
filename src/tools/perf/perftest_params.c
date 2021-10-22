@@ -70,7 +70,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
                                 ctx->params.super.warmup_iter);
     printf("     -c <cpulist>   set affinity to this CPU list (separated by comma) (off)\n");
-    printf("     -O <count>     maximal number of uncompleted outstanding sends\n");
+    printf("     -O <count>     maximal number of uncompleted outstanding sends (%u)\n",
+                                ctx->params.super.max_outstanding);
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
                                 ctx->params.super.iov_stride);
     printf("     -l             use loopback connection\n");

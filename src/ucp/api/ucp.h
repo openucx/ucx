@@ -832,7 +832,8 @@ enum ucp_am_handler_param_field {
  * @brief Structure for scatter-gather I/O.
  *
  * This structure is used to specify a list of buffers which can be used
- * within a single data transfer function call.
+ * within a single data transfer function call. This list should remain valid
+ * until the data transfer request is completed.
  *
  * @note If @a length is zero, the memory pointed to by @a buffer
  *       will not be accessed. Otherwise, @a buffer must point to valid memory.

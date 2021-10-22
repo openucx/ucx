@@ -56,7 +56,7 @@ typedef struct {
     /* The queue of message fragments.
      */
     ucp_tag_frag_match_t matchq;
-} UCS_S_PACKED ucp_offload_first_desct_t;
+} UCS_S_PACKED ucp_offload_first_desc_t;
 
 
 extern const ucp_request_send_proto_t ucp_tag_offload_proto;

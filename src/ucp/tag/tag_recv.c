@@ -23,7 +23,7 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
                                      ucp_recv_desc_t *rdesc)
 {
     ucp_eager_first_hdr_t *first_hdr;
-    ucp_offload_first_desct_t *offload_hdr;
+    ucp_offload_first_desc_t *offload_hdr;
     size_t recv_len;
     void *data;
     uint64_t msg_id;
@@ -36,7 +36,7 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
     req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
 
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        offload_hdr      = (ucp_offload_first_desct_t*)(rdesc + 1);
+        offload_hdr      = (ucp_offload_first_desc_t*)(rdesc + 1);
         req->recv.offset = 0;
         recv_len         = rdesc->length - sizeof(*offload_hdr);
         data             = UCS_PTR_BYTE_OFFSET(rdesc + 1, sizeof(*offload_hdr));

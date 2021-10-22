@@ -302,10 +302,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 {
     ucp_worker_h worker  = ep->worker;
     size_t contig_length = 0;
+    uintptr_t datatype   = ucp_request_param_datatype(param);
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
-    uintptr_t datatype;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(
@@ -316,12 +316,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 
     ucs_trace_req("send_sync_nbx buffer %p count %zu tag %"PRIx64" to %s",
                   buffer, count, tag, ucp_ep_peer_name(ep));
-
-    datatype = ucp_request_param_datatype(param);
-    if (!ucp_ep_config_test_rndv_support(ucp_ep_config(ep))) {
-        ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
-        goto out;
-    }
 
     status = ucp_ep_resolve_remote_id(ep, ucp_ep_config(ep)->tag.lane);
     if (status != UCS_OK) {

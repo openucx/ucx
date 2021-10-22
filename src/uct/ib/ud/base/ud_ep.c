@@ -318,6 +318,10 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
                                uct_ud_ep_deferred_timeout_handler, ep,
                                UCS_CALLBACKQ_FLAG_ONESHOT);
+        if (iface->async.event_cb != NULL) {
+            /* notify user */
+            iface->async.event_cb(iface->async.event_arg, 0);
+        }
         return;
     }
 
@@ -494,10 +498,8 @@ static ucs_status_t uct_ud_ep_connect_to_iface(uct_ud_ep_t *ep,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ep_h tl_ep)
+static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ud_ep_t *ep)
 {
-    uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
-
     ucs_frag_list_cleanup(&ep->rx.ooo_pkts);
     uct_ud_ep_reset(ep);
 
@@ -528,16 +530,22 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
     uct_ud_enter(iface);
 
     *new_ep_p = NULL;
+    status    = uct_ud_iface_cep_get_conn_sn(iface, ib_addr, if_addr,
+                                             path_index, &conn_sn);
+    if (status != UCS_OK) {
+        goto out;
+    }
 
-    conn_sn = uct_ud_iface_cep_get_conn_sn(iface, ib_addr, if_addr, path_index);
-    ep      = uct_ud_iface_cep_get_ep(iface, ib_addr, if_addr, path_index,
-                                      conn_sn, 1);
+    ep = uct_ud_iface_cep_get_ep(iface, ib_addr, if_addr, path_index,
+                                 conn_sn, 1);
     if (ep != NULL) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
         ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
-        status     = UCS_OK;
-        uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
-                                   conn_sn, ep);
+        status     = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr,
+                                                path_index, conn_sn, ep);
+        if (status != UCS_OK) {
+            goto err_ep_disconnect;
+        }
         goto out_set_ep;
     }
 
@@ -556,18 +564,22 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
 
     status = uct_ud_ep_connect_to_iface(ep, ib_addr, if_addr);
     if (status != UCS_OK) {
-        goto out;
+        goto err_ep_destroy;
     }
 
-    uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index, conn_sn, ep);
+    status = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
+                                        conn_sn, ep);
+    if (status != UCS_OK) {
+        goto err_ep_disconnect;
+    }
+
     peer_address = uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
                                              ep_get_peer_address, ep);
 
     status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
                                               ep->path_index, peer_address);
     if (status != UCS_OK) {
-        uct_ud_ep_disconnect_from_iface(&ep->super.super);
-        goto out;
+        goto err_ep_disconnect;
     }
 
     skb = uct_ud_ep_prepare_creq(ep);
@@ -586,6 +598,12 @@ out_set_ep:
 out:
     uct_ud_leave(iface);
     return status;
+
+err_ep_disconnect:
+    uct_ud_ep_disconnect_from_iface(ep);
+err_ep_destroy:
+    uct_ep_destroy(&ep->super.super);
+    goto out;
 }
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
@@ -665,23 +683,39 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     /* create new endpoint */
     params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
     params.iface      = &iface->super.super.super;
-    status = uct_ep_create(&params, &ep_h);
-    ucs_assert_always(status == UCS_OK);
+    status            = uct_ep_create(&params, &ep_h);
+    if (status != UCS_OK) {
+        return NULL;
+    }
+
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
     status = uct_ep_connect_to_ep(ep_h, (void*)uct_ud_creq_ib_addr(ctl),
                                   (void*)&ctl->conn_req.ep_addr);
-    ucs_assert_always(status == UCS_OK);
+    if (status != UCS_OK) {
+        goto err_ep_destroy;
+    }
 
     ep->path_index = ctl->conn_req.path_index;
 
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
 
     ep->conn_sn = ctl->conn_req.conn_sn;
-    uct_ud_iface_cep_insert_ep(iface, uct_ud_creq_ib_addr(ctl),
-                               &ctl->conn_req.ep_addr.iface_addr,
-                               ep->path_index, ctl->conn_req.conn_sn, ep);
+    status      = uct_ud_iface_cep_insert_ep(iface, uct_ud_creq_ib_addr(ctl),
+                                             &ctl->conn_req.ep_addr.iface_addr,
+                                             ep->path_index,
+                                             ctl->conn_req.conn_sn, ep);
+    if (status != UCS_OK) {
+        goto err_ep_disconnect;
+    }
+
     return ep;
+
+err_ep_disconnect:
+    uct_ud_ep_disconnect_from_iface(ep);
+err_ep_destroy:
+    uct_ep_destroy(&ep->super.super);
+    return NULL;
 }
 
 static void uct_ud_ep_rx_ctl_drop_packet(uct_ud_ep_t *ep, uct_ud_neth_t *neth,
@@ -712,7 +746,11 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
                                  ctl->conn_req.conn_sn, 0);
     if (ep == NULL) {
         ep = uct_ud_ep_create_passive(iface, ctl);
-        ucs_assert_always(ep != NULL);
+        if (ep == NULL) {
+            ucs_diag("iface %p: failed to create the passive endpoint", iface);
+            return;
+        }
+
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);

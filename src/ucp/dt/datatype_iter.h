@@ -20,6 +20,12 @@
  */
 #define UCP_DT_MASK_ALL UCS_MASK(UCP_DATATYPE_CLASS_MASK + 1)
 
+/*
+ * dt_mask argument which contains contiguous datatype and iov datatype
+ */
+#define UCP_DT_MASK_CONTIG_IOV \
+    (UCS_BIT(UCP_DATATYPE_CONTIG) | UCS_BIT(UCP_DATATYPE_IOV))
+
 
 /*
  * Iterator on a datatype, used to produce data from send buffer or consume data

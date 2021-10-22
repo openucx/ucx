@@ -951,3 +951,22 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
                                  UCT_IB_IFACE_ARG(iface),
                                  &iface->config.sl);
 }
+
+int uct_ib_mlx5_iface_has_ar(uct_ib_iface_t *iface)
+{
+#if HAVE_DEVX
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
+    uint16_t ooo_sl_mask = 0;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_query_ooo_sl_mask(md, iface->config.port_num,
+                                                &ooo_sl_mask);
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    return (ooo_sl_mask & UCS_BIT(iface->config.sl)) != 0;
+#else
+    return 0;
+#endif
+}

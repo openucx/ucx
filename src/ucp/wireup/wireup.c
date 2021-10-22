@@ -149,6 +149,8 @@ ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self)
         }
 
         ucs_diag("failed to send wireup: %s", ucs_status_string(status));
+        ucp_ep_set_failed_schedule(ep, req->send.lane, status);
+
         status = UCS_OK;
         goto out_free_req;
     } else {

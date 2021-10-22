@@ -304,6 +304,37 @@ size_t ucs_path_calc_distance(const char *path1, const char *path2);
 const char* ucs_mask_str(uint64_t mask, ucs_string_buffer_t *strb);
 
 
+/**
+ * Find a string in a NULL-terminated array of strings.
+ *
+ * @param str          String to search for.
+ * @param string_list  NULL-terminated array of strings.
+ * @param case_sensitive Whether to perform case sensitive search.
+ *
+ * @return Index of the string in the array, or -1 if not found.
+ */
+ssize_t ucs_string_find_in_list(const char *str, const char **string_list,
+                                int case_sensitive);
+
+
+/**
+ * Split a string to tokens. The given string is modified in-place.
+ * If the number of tokens is less than than count, the remaining variables
+ * are set to NULL.
+ *
+ * @param str     String to split
+ * @param delim   Delimiters to split by.
+ * @param count   Split to this number of tokens.
+ * @param ...     Variable argument list of pointers to strings (char **) that
+ *                will be filled with the tokens. The number of variables must
+ *                be equal to count.
+ *
+ * @return If the number of tokens in the string is grater than 'count', the
+           function returns the remainder. Otherwise, it returns NULL.
+ */
+char* ucs_string_split(char *str, const char *delim, int count, ...);
+
+
 /** Quantifier suffixes for memory units ("K", "M", "G", etc) */
 extern const char *ucs_memunits_suffixes[];
 

@@ -189,9 +189,8 @@ UCS_TEST_P(test_ucp_proto, dt_iter_mem_reg)
 {
     static const size_t buffer_size = 8192;
 
-    for (size_t i = 0; i < mem_buffer::supported_mem_types().size(); ++i) {
-        const ucs_memory_type_t mem_type = mem_buffer::supported_mem_types()[i];
-        ucp_md_map_t md_map              = get_md_map(mem_type);
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        ucp_md_map_t md_map = get_md_map(mem_type);
         if (md_map == 0) {
             UCS_TEST_MESSAGE << "No memory domains can register "
                              << ucs_memory_type_names[mem_type] << " memory";

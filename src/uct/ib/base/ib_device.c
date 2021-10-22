@@ -1132,6 +1132,7 @@ static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
+    /* coverity[check_return] */
     ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
 
     ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
@@ -1332,7 +1333,8 @@ uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
         ucs_error("ibv_create_ah(%s) for %s on %s failed: %m",
                   uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr), usage,
                   uct_ib_device_name(dev));
-        return UCS_ERR_INVALID_ADDR;
+        return (errno == ETIMEDOUT) ?
+                UCS_ERR_ENDPOINT_TIMEOUT : UCS_ERR_INVALID_ADDR;
     }
 
     *ah_p = ah;

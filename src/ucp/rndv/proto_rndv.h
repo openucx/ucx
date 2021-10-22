@@ -103,8 +103,7 @@ ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params);
 
 
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
-                                     ucp_proto_rndv_ack_priv_t *apriv,
-                                     ucs_linear_func_t *ack_perf);
+                                     ucp_proto_rndv_ack_priv_t *apriv);
 
 
 void ucp_proto_rndv_ack_config_str(size_t min_length, size_t max_length,

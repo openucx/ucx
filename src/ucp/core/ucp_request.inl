@@ -132,7 +132,8 @@ UCS_PTR_MAP_IMPL(request, 0);
 
 #define ucp_request_cb_param(_param, _req, _cb, ...) \
     if ((_param)->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) { \
-        param->cb._cb(req + 1, (_req)->status, ##__VA_ARGS__, param->user_data); \
+        (_param)->cb._cb(req + 1, (_req)->status, ##__VA_ARGS__, \
+                         (_param)->user_data); \
     }
 
 
@@ -723,10 +724,12 @@ ucp_request_recv_data_unpack(ucp_request_t *req, const void *data,
                             &req->recv.state.dt.iov.iovcnt_offset);
             req->recv.state.offset = offset;
         }
-        UCS_PROFILE_CALL(ucp_dt_iov_scatter, (ucp_dt_iov_t*)req->recv.buffer,
+        UCS_PROFILE_CALL(ucp_dt_iov_scatter, req->recv.worker,
+                         (ucp_dt_iov_t*)req->recv.buffer,
                          req->recv.state.dt.iov.iovcnt, data, length,
                          &req->recv.state.dt.iov.iov_offset,
-                         &req->recv.state.dt.iov.iovcnt_offset);
+                         &req->recv.state.dt.iov.iovcnt_offset,
+                         req->recv.mem_type);
         req->recv.state.offset += length;
         return UCS_OK;
 
@@ -780,7 +783,6 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
-        ucp_recv_desc_set_name(rdesc, name);
         padding = ucs_padding((uintptr_t)(rdesc + 1), worker->am.alignment);
         rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
         rdesc->release_desc_offset = padding;
@@ -792,6 +794,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         memcpy(UCS_PTR_BYTE_OFFSET(rdesc + 1, data_offset), data, length);
     }
 
+    ucp_recv_desc_set_name(rdesc, name);
     rdesc->length         = length + data_offset;
     rdesc->payload_offset = hdr_len;
     *rdesc_p              = rdesc;

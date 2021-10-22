@@ -326,13 +326,13 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
 }
 
 UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
-    std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
+    const std::vector<ucs_memory_type_t> &mem_types =
+            mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
     bool expect_rma_offload;
 
-    for (std::vector<ucs_memory_type_t>::iterator mem_type = mem_types.begin();
-         mem_type != mem_types.end(); ++mem_type) {
+    for (auto mem_type : mem_types) {
         for (int i = 0; i < (100 / ucs::test_time_multiplier()); ++i) {
             size_t size = ucs::rand() % (UCS_MBYTE);
 
@@ -343,7 +343,7 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
                                  UCP_MEM_MAP_PARAM_FIELD_FLAGS   |
                                  UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
             params.address     = NULL;
-            params.memory_type = *mem_type;
+            params.memory_type = mem_type;
             params.length      = size;
             params.flags       = UCP_MEM_MAP_ALLOCATE;
 
@@ -352,9 +352,9 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             ASSERT_UCS_OK(status);
 
             is_dummy           = (size == 0);
-            expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(*mem_type) &&
+            expect_rma_offload = !UCP_MEM_IS_CUDA_MANAGED(mem_type) &&
                                  (is_tl_rdma() || is_tl_shm()) &&
-                                 check_reg_mem_types(sender(), *mem_type);
+                                 check_reg_mem_types(sender(), mem_type);
             test_rkey_management(memh, is_dummy, expect_rma_offload);
 
             status = ucp_mem_unmap(sender().ucph(), memh);
@@ -364,7 +364,8 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
 }
 
 UCS_TEST_P(test_ucp_mmap, reg_mem_type) {
-    std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
+    const std::vector<ucs_memory_type_t> &mem_types =
+            mem_buffer::supported_mem_types();
     ucs_status_t status;
     bool is_dummy;
     bool expect_rma_offload;

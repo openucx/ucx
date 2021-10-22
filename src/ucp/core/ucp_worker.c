@@ -34,6 +34,8 @@
 #include <sys/poll.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
+#include <time.h>
 
 
 #define UCP_WORKER_KEEPALIVE_ITER_SKIP 32
@@ -102,14 +104,6 @@ ucs_mpool_ops_t ucp_am_mpool_ops = {
 ucs_mpool_ops_t ucp_reg_mpool_ops = {
     .chunk_alloc   = ucp_reg_mpool_malloc,
     .chunk_release = ucp_reg_mpool_free,
-    .obj_init      = ucp_mpool_obj_init,
-    .obj_cleanup   = ucs_empty_function,
-    .obj_str       = NULL
-};
-
-ucs_mpool_ops_t ucp_frag_mpool_ops = {
-    .chunk_alloc   = ucp_frag_mpool_malloc,
-    .chunk_release = ucp_frag_mpool_free,
     .obj_init      = ucp_mpool_obj_init,
     .obj_cleanup   = ucs_empty_function,
     .obj_str       = NULL
@@ -1134,7 +1128,7 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >=
                       sizeof(ucp_eager_sync_hdr_t));
     UCS_STATIC_ASSERT(UCP_WORKER_HEADROOM_PRIV_SIZE >=
-                      sizeof(ucp_offload_first_desct_t));
+                      sizeof(ucp_offload_first_desc_t));
 
     /* Fill rest of uct_iface params (caller should fill specific mode fields) */
     iface_params->field_mask       |= UCT_IFACE_PARAM_FIELD_STATS_ROOT        |
@@ -1684,6 +1678,9 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
                                     if_attr->cap.am.max_zcopy);
     }
 
+    /* Create a hashtable of memory pools for mem_type devices */
+    kh_init_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
+
     /* Create memory pool for requests */
     status = ucs_mpool_init(&worker->req_mp, 0,
                             sizeof(ucp_request_t) + context->config.request.size,
@@ -1722,19 +1719,8 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err_am_mp_cleanup;
     }
 
-    /* Create memory pool for pipelined rndv fragments */
-    status = ucs_mpool_init(&worker->rndv_frag_mp, 0,
-                            context->config.ext.rndv_frag_size + sizeof(ucp_mem_desc_t),
-                            sizeof(ucp_mem_desc_t), UCS_SYS_PCI_MAX_PAYLOAD, 128,
-                            UINT_MAX, &ucp_frag_mpool_ops, "ucp_rndv_frags");
-    if (status != UCS_OK) {
-        goto err_reg_mp_cleanup;
-    }
-
     return UCS_OK;
 
-err_reg_mp_cleanup:
-    ucs_mpool_cleanup(&worker->reg_mp, 0);
 err_am_mp_cleanup:
     ucs_mpool_cleanup(&worker->am_mp, 0);
 err_rkey_mp_cleanup:
@@ -1747,7 +1733,17 @@ err:
 
 static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 {
-    ucs_mpool_cleanup(&worker->rndv_frag_mp, 1);
+    khint_t iter;
+
+    for (iter = kh_begin(&worker->mpool_hash);
+         iter != kh_end(&worker->mpool_hash); ++iter) {
+        if (!kh_exist(&worker->mpool_hash, iter)) {
+            continue;
+        }
+        ucs_mpool_cleanup(&kh_val(&worker->mpool_hash, iter), 1);
+    }
+
+    kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->am_mp, 1);
     ucs_mpool_cleanup(&worker->rkey_mp, 1);
@@ -1921,8 +1917,9 @@ err:
     return status;
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_worker_keepalive_reset(ucp_worker_h worker)
+static void ucp_worker_keepalive_reset(ucp_worker_h worker)
 {
+    worker->keepalive.timerfd     = -1;
     worker->keepalive.cb_id       = UCS_CALLBACKQ_ID_NULL;
     worker->keepalive.last_round  = 0;
     worker->keepalive.lane_map    = 0;
@@ -2465,6 +2462,13 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_UNBLOCK(&worker->async);
 
+    if (worker->keepalive.timerfd >= 0) {
+        ucs_assert(worker->context->config.features & UCP_FEATURE_WAKEUP);
+        ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_DEL,
+                                 worker->keepalive.timerfd);
+        close(worker->keepalive.timerfd);
+    }
+
     ucs_vfs_obj_remove(worker);
     ucp_tag_match_cleanup(&worker->tm);
     ucp_worker_destroy_mpools(worker);
@@ -2881,6 +2885,44 @@ ucp_worker_keepalive_next_ep(ucp_worker_h worker)
 }
 
 static UCS_F_ALWAYS_INLINE void
+ucp_worker_keepalive_timerfd_init(ucp_worker_h worker)
+{
+    ucs_time_t ka_interval = worker->context->config.ext.keepalive_interval;
+    struct itimerspec its;
+    struct timespec ts;
+    int ret;
+
+
+    if (!(worker->context->config.features & UCP_FEATURE_WAKEUP) ||
+        (worker->keepalive.timerfd >= 0)) {
+        return;
+    }
+
+    worker->keepalive.timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    if (worker->keepalive.timerfd < 0) {
+        ucs_warn("worker %p: failed to create keepalive timer fd: %m",
+                 worker);
+        return;
+    }
+
+    ucs_assert(ka_interval > 0);
+    ucs_sec_to_timespec(ucs_time_to_sec(ka_interval), &ts);
+    its.it_interval = ts;
+    its.it_value    = ts;
+
+    ret = timerfd_settime(worker->keepalive.timerfd, 0, &its, NULL);
+    if (ret != 0) {
+        ucs_warn("worker %p: keepalive timerfd_settime"
+                 "(fd=%d interval=%lu.%06lu) failed: %m", worker,
+                 worker->keepalive.timerfd, ts.tv_sec,
+                 ts.tv_nsec * UCS_NSEC_PER_USEC);
+    }
+
+    ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_ADD,
+                             worker->keepalive.timerfd);
+}
+
+static UCS_F_ALWAYS_INLINE void
 ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
 {
     ucs_assert(worker->keepalive.lane_map == 0);
@@ -2989,6 +3031,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
         return;
     }
 
+    ucp_worker_keepalive_timerfd_init(worker);
     ucs_trace("ep %p flags 0x%x: adding to keepalive lane_map 0x%x", ep,
               ep->flags, ucp_ep_config(ep)->key.ep_check_map);
     uct_worker_progress_register_safe(worker->uct,

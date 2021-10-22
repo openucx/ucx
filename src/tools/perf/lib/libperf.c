@@ -207,14 +207,15 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
 static void ucx_perf_test_init(ucx_perf_context_t *perf,
                                const ucx_perf_params_t *params)
 {
-    unsigned group_index;
-
     perf->params = *params;
-    group_index  = rte_call(perf, group_index);
 
-    if (0 == group_index) {
+    if (params->send_mem_type != UCS_MEMORY_TYPE_HOST) {
+        ucs_debug("set allocator by send mem type %s",
+                  ucs_memory_type_names[params->send_mem_type]);
         perf->allocator = ucx_perf_mem_type_allocators[params->send_mem_type];
     } else {
+        ucs_debug("set allocator by recv mem type %s",
+                  ucs_memory_type_names[params->send_mem_type]);
         perf->allocator = ucx_perf_mem_type_allocators[params->recv_mem_type];
     }
 
@@ -302,23 +303,6 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((params->api == UCX_PERF_API_UCP) &&
-        ((params->send_mem_type != UCS_MEMORY_TYPE_HOST) ||
-         (params->recv_mem_type != UCS_MEMORY_TYPE_HOST)) &&
-        ((params->command == UCX_PERF_CMD_PUT) ||
-         (params->command == UCX_PERF_CMD_GET) ||
-         (params->command == UCX_PERF_CMD_ADD) ||
-         (params->command == UCX_PERF_CMD_FADD) ||
-         (params->command == UCX_PERF_CMD_SWAP) ||
-         (params->command == UCX_PERF_CMD_CSWAP))) {
-        /* TODO: remove when support for non-HOST memory types will be added */
-        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("UCP doesn't support RMA/AMO for \"%s\"<->\"%s\" memory types",
-                      ucs_memory_type_names[params->send_mem_type],
-                      ucs_memory_type_names[params->recv_mem_type]);
-        }
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     if (params->max_outstanding < 1) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {

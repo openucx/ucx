@@ -920,16 +920,35 @@ err_destroy_ep:
     goto out_free_address;
 }
 
+static void ucp_ep_params_check_err_handling(ucp_ep_h ep,
+                                             const ucp_ep_params_t *params)
+{
+    ucp_err_handling_mode_t err_mode =
+            UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
+                            UCP_ERR_HANDLING_MODE_NONE);
+
+    if (err_mode == UCP_ERR_HANDLING_MODE_NONE) {
+        return;
+    }
+
+    if (ucp_worker_keepalive_is_enabled(ep->worker) &&
+        ucp_ep_use_indirect_id(ep)) {
+        return;
+    }
+
+    ucs_diag("ep %p: creating endpoint with error handling but without "
+             "keepalive and indirect id", ep);
+}
+
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p)
 {
+    ucp_ep_h ep    = NULL;
+    unsigned flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     ucs_status_t status;
-    unsigned flags;
-    ucp_ep_h ep = NULL;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
         status = ucp_ep_create_to_sock_addr(worker, params, &ep);
     } else if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
@@ -951,6 +970,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
         }
 #endif
 
+        ucp_ep_params_check_err_handling(ep, params);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
         *ep_p = ep;
     }
@@ -1731,12 +1751,6 @@ static void ucp_ep_config_set_am_rndv_thresh(
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
-    if (!ucp_ep_config_test_rndv_support(config)) {
-        /* Disable RNDV */
-        ucs_trace("AM rendezvous protocol is not supported");
-        return;
-    }
-
     if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
         rndv_thresh = ucp_ep_config_calc_rndv_thresh(worker, config,
@@ -1780,10 +1794,7 @@ ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker, ucp_ep_config_t *config,
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (!ucp_ep_config_test_rndv_support(config)) {
-        /* Disable RNDV */
-        goto out_not_supported;
-    } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
         rndv_thresh       = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                            config->key.am_bw_lanes,
@@ -2870,12 +2881,6 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
               ucs_status_string(status));
     ucp_ep_update_flags(ep, UCP_EP_FLAG_ERR_HANDLER_INVOKED, 0);
     ucp_ep_ext_control(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
-}
-
-int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
-{
-    return (config->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
-           (config->key.cm_lane  != UCP_NULL_LANE);
 }
 
 /* if we have ep2iface transport we need to send an active-message based

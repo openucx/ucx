@@ -29,7 +29,8 @@ protected:
     enum {
         TEST_AM  = UCS_BIT(0),
         TEST_RMA = UCS_BIT(1),
-        FAIL_IMM = UCS_BIT(2)
+        FAIL_IMM = UCS_BIT(2),
+        WAKEUP   = UCS_BIT(3)
     };
 
     enum {
@@ -431,16 +432,6 @@ UCS_TEST_P(test_ucp_peer_failure, basic) {
             false /* must_fail */);
 }
 
-UCS_TEST_P(test_ucp_peer_failure, rndv_disable) {
-    const size_t size_max = std::numeric_limits<size_t>::max();
-
-    sender().connect(&receiver(), get_ep_params(), STABLE_EP_INDEX);
-    EXPECT_EQ(size_max, ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote);
-    EXPECT_EQ(size_max, ucp_ep_config(sender().ep())->tag.rndv.rma_thresh.remote);
-    EXPECT_EQ(size_max, ucp_ep_config(sender().ep())->tag.rndv.am_thresh.local);
-    EXPECT_EQ(size_max, ucp_ep_config(sender().ep())->tag.rndv.rma_thresh.local);
-}
-
 UCS_TEST_P(test_ucp_peer_failure, zcopy, "ZCOPY_THRESH=1023",
            /* to catch failure with TCP during progressing multi AM Zcopy,
             * since `must_fail=true` */
@@ -494,6 +485,8 @@ public:
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         add_variant_with_value(variants, UCP_FEATURE_AM, TEST_AM, "am");
+        add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_WAKEUP,
+                               TEST_AM | WAKEUP, "am_wakeup");
     }
 };
 
@@ -523,9 +516,16 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
 
     /* flush all outstanding ops to allow keepalive to run */
     flush_worker(sender());
+    if (get_variant_value() & WAKEUP) {
+        wait_for_wakeup({ sender().worker(), failing_receiver().worker() },
+                        100, true);
+    }
 
     /* kill EPs & ifaces */
     failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
+    if (get_variant_value() & WAKEUP) {
+        wait_for_wakeup({ sender().worker() });
+    }
     wait_for_flag(&m_err_count);
 
     /* dump warnings */

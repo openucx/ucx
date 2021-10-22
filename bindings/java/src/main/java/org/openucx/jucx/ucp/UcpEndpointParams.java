@@ -143,4 +143,15 @@ public class UcpEndpointParams extends UcxParams {
         this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_NAME;
         return this;
     }
+
+    /**
+     * Send worker's client id when connecting to remote socket address as part of the
+     * connection request payload. On the remote side client id can be obtained from
+     * {@link UcpConnectionRequest#getClientId}
+     */
+    public UcpEndpointParams sendClientId() {
+        this.fieldMask |= UcpConstants.UCP_EP_PARAM_FIELD_FLAGS;
+        this.flags |= UcpConstants.UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID;
+        return this;
+    }
 }

@@ -118,6 +118,38 @@ UCS_TEST_F(test_string, range_str) {
               ucs_memunits_range_str(10, 10, buf, sizeof(buf)));
 }
 
+UCS_TEST_F(test_string, split) {
+    // No remainder
+    {
+        char str1[] = "foo,bar";
+        char *p1, *p2;
+        char *ret = ucs_string_split(str1, ",", 2, &p1, &p2);
+        EXPECT_EQ(std::string("foo"), p1);
+        EXPECT_EQ(std::string("bar"), p2);
+        EXPECT_EQ(NULL, ret);
+    }
+    // Have a remainder
+    {
+        char str1[] = "foo,bar,baz,a,b,c";
+        char *p1, *p2;
+        char *ret = ucs_string_split(str1, ",", 2, &p1, &p2);
+        EXPECT_EQ(std::string("foo"), p1);
+        EXPECT_EQ(std::string("bar"), p2);
+        EXPECT_EQ(std::string("baz,a,b,c"), ret);
+    }
+    // Less tokens than requested, and some are empty
+    {
+        char str1[] = "foo,:bar";
+        char *p1, *p2, *p3, *p4;
+        char *ret = ucs_string_split(str1, ",:", 4, &p1, &p2, &p3, &p4);
+        EXPECT_EQ(std::string("foo"), p1);
+        EXPECT_EQ(std::string(""), p2);
+        EXPECT_EQ(std::string("bar"), p3);
+        EXPECT_EQ(NULL, p4);
+        EXPECT_EQ(NULL, ret);
+    }
+}
+
 class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);

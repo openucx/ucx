@@ -205,8 +205,9 @@ private:
 
     void test_mem_types(send_func_t send_func, unsigned num_iters,
                         uint64_t op_mask, int is_ep_flush) {
-        int atomic_mode = get_variant_value() & ATOMIC_MODE;
-        std::vector<std::vector<ucs_memory_type_t> > pairs =
+        const int atomic_mode                                     =
+                get_variant_value() & ATOMIC_MODE;
+        const std::vector<std::vector<ucs_memory_type_t> >& pairs =
                 ucs::supported_mem_type_pairs();
 
         for (size_t i = 0; i < pairs.size(); ++i) {

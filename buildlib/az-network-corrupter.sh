@@ -14,7 +14,7 @@ manager_script_dir=/hpc/noarch/git_projects/hpc-mtt-conf/scripts
 manager_script=${manager_script_dir}/switch_port_on_off.py
 
 if [ "x$reset" = "xyes" ]; then
-    echo "Resetting interface on $(hostname) interface ..."
+    echo "Resetting interface ${interface} on $(hostname) interface ..."
     ${manager_script} -d ${manager_script_dir}/hosts --host $(hostname) -a on -i ${interface}
     sleep "$uptime"
     exit $?

@@ -9,11 +9,32 @@
 #endif
 
 #include "stats.h"
+#include <inttypes.h>
 
 /*
  * Dump binary statistics file to stdout.
  * Usage: ucs_stats_parser [ file1 ] [ file2 ] ...
  */
+
+static ucs_status_t
+dump_stats_recurs(FILE *stream, ucs_stats_node_t *node, unsigned indent)
+{
+    ucs_stats_node_t *child;
+    unsigned i;
+
+    fprintf(stream, "%*s" UCS_STATS_NODE_FMT ":\n", indent * 2, "",
+            UCS_STATS_NODE_ARG(node));
+
+    for (i = 0; i < node->cls->num_counters; ++i) {
+        fprintf(stream, "%*s%s: %" PRIu64 "\n", (indent + 1) * 2, "",
+                node->cls->counter_names[i], node->counters[i]);
+    }
+    ucs_list_for_each(child, &node->children[UCS_STATS_ACTIVE_CHILDREN], list) {
+        dump_stats_recurs(stream, child, indent + 1);
+    }
+
+    return UCS_OK;
+}
 
 static ucs_status_t dump_file(const char *filename)
 {
@@ -33,7 +54,7 @@ static ucs_status_t dump_file(const char *filename)
             goto out;
         }
 
-        ucs_stats_serialize(stdout, root, 0);
+        dump_stats_recurs(stdout, root, 0);
         ucs_stats_free(root);
     }
 

@@ -247,7 +247,7 @@ UCP_PROTO_REGISTER(&ucp_rndv_get_mtype_proto);
 static ucs_status_t
 ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
 {
-    ucs_status_t status;
+    ucp_proto_perf_type_t perf_type;
     size_t max_length;
 
     if (ucp_proto_rndv_init_params_is_ppln_frag(params)) {
@@ -272,12 +272,6 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    status = ucp_proto_rndv_ack_init(params, params->priv,
-                                     params->caps->ranges[0].perf);
-    if (status != UCS_OK) {
-        return status;
-    }
-
     /* Support only 0-length messages */
     *params->priv_size                 = sizeof(ucp_proto_rndv_ack_priv_t);
     params->caps->cfg_thresh           = 0;
@@ -285,8 +279,11 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     params->caps->min_length           = 0;
     params->caps->num_ranges           = 1;
     params->caps->ranges[0].max_length = max_length;
+    for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
+        params->caps->ranges[0].perf[perf_type] = ucs_linear_func_make(0, 0);
+    }
 
-    return UCS_OK;
+    return ucp_proto_rndv_ack_init(params, params->priv);
 }
 
 static ucp_proto_t ucp_rndv_ats_proto = {

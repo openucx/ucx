@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (C) The University of Tennessee and The University 
+* Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017-2021.  ALL RIGHTS RESERVED.
@@ -316,6 +316,9 @@ static ucs_status_t setup_sock_rte_loobkack(struct perftest_context *ctx)
 
 static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 {
+    char addr_str[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr_storage client_addr;
+    socklen_t client_addr_len;
     struct sockaddr_in inaddr;
     struct hostent *he;
     ucs_status_t status;
@@ -358,7 +361,9 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
         printf("Waiting for connection...\n");
 
         /* Accept next connection */
-        connfd = accept(sockfd, NULL, NULL);
+        client_addr_len = sizeof(client_addr);
+        connfd          = accept(sockfd, (struct sockaddr*)&client_addr,
+                                 &client_addr_len);
         if (connfd < 0) {
             ucs_error("accept() failed: %m");
             status = UCS_ERR_IO_ERROR;
@@ -366,6 +371,10 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
         }
 
         close(sockfd);
+
+        ucs_sockaddr_str((struct sockaddr*)&client_addr, addr_str,
+                         sizeof(addr_str));
+        printf("Accepted connection from %s\n", addr_str);
 
         /* release the memory for the list of the message sizes allocated
          * during the initialization of the default testing parameters */
@@ -796,7 +805,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.super.report_arg = ctx;
 #elif defined (HAVE_RTE)
     ucs_trace_func("");
-    
+
     ctx->params.rte_group         = NULL;
     ctx->params.rte               = &mpi_rte;
     ctx->params.report_arg        = ctx;

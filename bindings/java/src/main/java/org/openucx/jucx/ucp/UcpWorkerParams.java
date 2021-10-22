@@ -24,6 +24,8 @@ public class UcpWorkerParams extends UcxParams {
 
     private int eventFD;
 
+    private long clientId;
+
     @Override
     public UcpWorkerParams clear() {
         super.clear();
@@ -32,6 +34,7 @@ public class UcpWorkerParams extends UcxParams {
         events = 0;
         userData = null;
         eventFD = 0;
+        clientId = 0;
         return this;
     }
 
@@ -157,6 +160,17 @@ public class UcpWorkerParams extends UcxParams {
     public UcpWorkerParams setEventFD(int eventFD) {
         this.fieldMask |= UcpConstants.UCP_WORKER_PARAM_FIELD_EVENT_FD;
         this.eventFD = eventFD;
+        return this;
+    }
+
+    /**
+     * User defined client id when connecting to remote socket address.
+     * This value is available via {@link UcpConnectionRequest#getClientId}
+     * function on the server side.
+     */
+    public UcpWorkerParams setClientId(long clientId) {
+        this.fieldMask |= UcpConstants.UCP_WORKER_PARAM_FIELD_CLIENT_ID;
+        this.clientId = clientId;
         return this;
     }
 }

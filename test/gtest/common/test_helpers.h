@@ -944,7 +944,7 @@ std::vector<std::vector<T> > make_pairs(const std::vector<T> &input_vec) {
     return result;
 }
 
-std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
+const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs();
 
 
 /**

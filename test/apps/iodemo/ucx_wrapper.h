@@ -118,7 +118,7 @@ public:
 
     bool listen(const struct sockaddr* saddr, size_t addrlen);
 
-    void progress();
+    void progress(unsigned count = 1);
 
     static const std::string sockaddr_str(const struct sockaddr* saddr,
                                           size_t addrlen);
@@ -215,7 +215,7 @@ private:
 
     ucs_status_t epoll_init();
 
-    void progress_worker_event();
+    bool progress_worker_event();
 
     void progress_timed_out_conns();
 

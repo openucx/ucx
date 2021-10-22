@@ -17,4 +17,6 @@
 #  include "profile_off.h"
 #endif
 
+void ucs_profile_reset_locations_id(ucs_profile_context_t *ctx);
+
 #endif

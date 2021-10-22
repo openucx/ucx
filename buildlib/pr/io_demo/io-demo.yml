@@ -44,14 +44,12 @@ parameters:
       "tag match on CX6/DC":
         args: ""
         duration: 600
-        initial_delay: 1000
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: tag_cx6_dc
       "active messages on CX6/DC":
         args: "-A"
         duration: 600
-        initial_delay: 1000
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_cx6_dc
