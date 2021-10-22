@@ -195,7 +195,9 @@ uct_rdamcm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
     blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t, entry);
     if (ucs_list_is_empty(&ctx->blk_list) ||
         (blk->next_avail_qpn_offset >= qpns_per_obj)) {
-        status = uct_rdmacm_cm_reserved_qpn_blk_add(ctx, cep->id->verbs, &blk);
+        status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, cep->id->verbs,
+                                                      UCS_LOG_LEVEL_ERROR,
+                                                      &blk);
         if (status != UCS_OK) {
             goto out;
         }
@@ -241,7 +243,8 @@ uct_rdamcm_cm_ep_destroy_reserved_qpn(uct_rdmacm_cm_device_context_t *ctx,
     --cep->blk->refcount;
     if ((cep->blk->next_avail_qpn_offset >= qpns_per_obj) &&
         (cep->blk->refcount == 0)) {
-        uct_rdmacm_cm_reserved_qpn_blk_destroy(cep->blk);
+        ucs_list_del(&cep->blk->entry);
+        uct_rdmacm_cm_reserved_qpn_blk_release(cep->blk);
     }
 
     ucs_spin_unlock(&ctx->lock);
