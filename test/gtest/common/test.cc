@@ -106,21 +106,6 @@ void test_base::set_config(const std::string& config_str)
     modify_config(name, value, mode);
 }
 
-void test_base::get_config(const std::string& name, std::string& value, size_t max)
-{
-    ucs_status_t status;
-
-    value.resize(max, '\0');
-    status = ucs_global_opts_get_value(name.c_str(),
-                                       const_cast<char*>(value.c_str()),
-                                       max);
-    if (status != UCS_OK) {
-        GTEST_FAIL() << "Invalid UCS configuration for " << name
-                     << ": " << ucs_status_string(status)
-                     << "(" << status << ")";
-    }
-}
-
 void test_base::modify_config(const std::string& name, const std::string& value,
                               modify_config_mode_t mode)
 {
@@ -128,9 +113,9 @@ void test_base::modify_config(const std::string& name, const std::string& value,
     if (status == UCS_ERR_NO_ELEM) {
         switch (mode) {
         case FAIL_IF_NOT_EXIST:
-            GTEST_FAIL() << "Invalid UCS configuration for " << name << " : "
-                         << value << ", error message: "
-                         << ucs_status_string(status) << "(" << status << ")";
+            UCS_TEST_ABORT("Invalid UCS configuration for " << name << " : "
+                    << value << ", error message: "
+                    << ucs_status_string(status) << "(" << status << ")");
         case SETENV_IF_NOT_EXIST:
             m_env_stack.push_back(new scoped_setenv(("UCX_" + name).c_str(),
                                                     value.c_str()));
@@ -317,7 +302,7 @@ void test_base::SetUpProxy() {
         check_skip_test();
         init();
         m_initialized = true;
-        m_state = RUNNING;
+        m_state       = RUNNING;
     } catch (test_skip_exception& e) {
         skipped(e);
     } catch (test_abort_exception&) {
