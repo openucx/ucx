@@ -37,7 +37,7 @@ public:
     void unset_handler(bool sync = true) {
         if (ucs_atomic_cswap32(&m_handler_set, 1, 0)) {
             ucs_status_t status = ucs_async_remove_handler(event_id(), sync);
-            ASSERT_UCS_OK(status);
+            ucs_assert_always(status == UCS_OK);
         }
     }
 
@@ -779,7 +779,7 @@ public:
         local_event::unset_handler(sync);
         if (m_event_set) {
             ucs_status_t status = ucs_async_remove_handler(m_pipefd[0], sync);
-            ASSERT_UCS_OK(status);
+            ucs_assert_always(status == UCS_OK);
             m_event_set = false;
         }
     }

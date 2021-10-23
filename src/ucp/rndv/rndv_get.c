@@ -65,6 +65,7 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
 {
+    /* coverity[tainted_data_downcast] */
     ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
@@ -109,6 +110,7 @@ ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
                                    const ucp_proto_multi_lane_priv_t *lpriv,
                                    ucp_datatype_iter_t *next_iter)
 {
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
     size_t max_payload;
     uct_iov_t iov;
@@ -125,7 +127,10 @@ ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
 static ucs_status_t
 ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
 {
-    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+    ucp_request_t *req                      = ucs_container_of(uct_req,
+                                                               ucp_request_t,
+                                                               send.uct);                      
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
 
     return ucp_proto_multi_zcopy_progress(
@@ -152,6 +157,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter)
 {
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
     uct_iov_t iov;
 
@@ -206,6 +212,7 @@ ucp_proto_rndv_get_mtype_fetch_progress(uct_pending_req_t *uct_req)
         req->flags |= UCP_REQUEST_FLAG_PROTO_INITIALIZED;
     }
 
+    /* coverity[tainted_data_downcast] */
     rpriv = req->send.proto_config->priv;
     return ucp_proto_multi_progress(req, &rpriv->mpriv,
                                     ucp_proto_rndv_get_mtype_send_func,

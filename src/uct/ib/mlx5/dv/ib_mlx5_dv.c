@@ -189,6 +189,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     attr->super.cap.max_recv_wr = max_rx;
 
     if (tx != NULL) {
+        ucs_assert(qp->devx.wq_buf != NULL);
         tx->reg    = &uar->super;
         tx->qstart = qp->devx.wq_buf;
         tx->qend   = UCS_PTR_BYTE_OFFSET(qp->devx.wq_buf, len_tx);
@@ -197,6 +198,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         ucs_assert(*tx->dbrec == 0);
         uct_ib_mlx5_txwq_reset(tx);
     } else {
+        ucs_assert(qp->devx.wq_buf == NULL);
         uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
     }
 

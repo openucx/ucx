@@ -100,7 +100,7 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
     ucs_stats_node_t* _node;
 
 #define UCS_STATS_NODE_ALLOC(_p_node, _class, _parent, ...) \
-    ucs_stats_node_alloc(_p_node, _class, _parent, ## __VA_ARGS__ , "")
+    ucs_stats_node_alloc(_p_node, _class, _parent, ## __VA_ARGS__)
 
 #define UCS_STATS_NODE_FREE(_node) \
     ucs_stats_node_free(_node)
@@ -151,7 +151,8 @@ void ucs_stats_node_free(ucs_stats_node_t *node);
 #define UCS_STATS_ARG(_arg)
 #define UCS_STATS_RVAL(_rval) NULL
 #define UCS_STATS_NODE_DECLARE(_node)
-#define UCS_STATS_NODE_ALLOC(_p_node, _class, _parent, ...) ucs_empty_function_return_success()
+#define UCS_STATS_NODE_ALLOC(_p_node, _class, _parent, ...) \
+        ucs_empty_function_return_success()
 #define UCS_STATS_NODE_FREE(_node)
 #define UCS_STATS_UPDATE_COUNTER(_node, _index, _delta)
 #define UCS_STATS_SET_COUNTER(_node, _index, _value)

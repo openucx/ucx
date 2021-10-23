@@ -695,7 +695,8 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
 }
 
 UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
-                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST))
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST) ||
+                     !ENABLE_PARAMS_CHECK)
 {
     static const size_t size = 1 * UCS_MBYTE;
     uct_mem_h memh;
@@ -720,24 +721,24 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
                             UCT_MD_MEM_DEREG_FIELD_FLAGS |
                             UCT_MD_MEM_DEREG_FIELD_MEMH;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_UNSUPPORTED, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
         status            = uct_md_mem_dereg_v2(md(), &params);
     } else {
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
                             UCT_MD_MEM_DEREG_FIELD_COMPLETION |

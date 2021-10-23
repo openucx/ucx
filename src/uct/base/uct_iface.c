@@ -671,8 +671,8 @@ UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &iface->super);
 
-    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats,
-                                "-%p", self);
+    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class,
+                                iface->stats, "-%p", self);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
@@ -723,8 +723,8 @@ ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 
     UCS_STATS_NODE_FREE(ep->stats);
 
-    status = UCS_STATS_NODE_ALLOC(&ep->stats, &uct_ep_stats_class, iface->stats,
-                                  "-%p", ep);
+    status = UCS_STATS_NODE_ALLOC(&ep->stats, &uct_ep_stats_class,
+                                  iface->stats, "-%p", ep);
 #ifdef ENABLE_STATS
     if (status != UCS_OK) {
         /* set the stats to NULL so that the UCS_STATS_NODE_FREE call on the

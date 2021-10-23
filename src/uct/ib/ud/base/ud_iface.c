@@ -587,7 +587,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     ucs_queue_head_init(&self->rx.pending_q);
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ud_iface_stats_class,
-                                  self->super.super.stats);
+                                  self->super.super.stats, "-%p", self);
     if (status != UCS_OK) {
         goto err_tx_mpool;
     }

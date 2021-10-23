@@ -136,25 +136,33 @@ int fill_buffer(ucp_dt_iov_t *iov)
     return 0;
 }
 
+static void common_cb(void *user_data, const char *type_str)
+{
+    test_req_t *ctx;
+
+    if (user_data == NULL) {
+        fprintf(stderr, "user_data passed to %s mustn't be NULL\n", type_str);
+        return;
+    }
+
+    ctx           = user_data;
+    ctx->complete = 1;
+}
+
 static void tag_recv_cb(void *request, ucs_status_t status,
                         const ucp_tag_recv_info_t *info, void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "tag_recv_cb");
 }
 
 /**
  * The callback on the receiving side, which is invoked upon receiving the
  * stream message.
  */
-static void
-stream_recv_cb(void *request, ucs_status_t status, size_t length,
-               void *user_data)
+static void stream_recv_cb(void *request, ucs_status_t status, size_t length,
+                           void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "stream_recv_cb");
 }
 
 /**
@@ -164,9 +172,7 @@ stream_recv_cb(void *request, ucs_status_t status, size_t length,
 static void am_recv_cb(void *request, ucs_status_t status, size_t length,
                        void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "am_recv_cb");
 }
 
 /**
@@ -175,9 +181,7 @@ static void am_recv_cb(void *request, ucs_status_t status, size_t length,
  */
 static void send_cb(void *request, ucs_status_t status, void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "send_cb");
 }
 
 /**

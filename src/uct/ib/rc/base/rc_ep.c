@@ -87,7 +87,7 @@ ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
     fc->fc_wnd = winsize;
 
     status = UCS_STATS_NODE_ALLOC(&fc->stats, &uct_rc_fc_stats_class,
-                                  stats_parent);
+                                  stats_parent, "");
     if (status != UCS_OK) {
        return status;
     }

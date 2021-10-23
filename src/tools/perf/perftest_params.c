@@ -146,6 +146,12 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
                                    ucs_memory_type_t *mem_type)
 {
     ucs_memory_type_t it;
+
+    if (opt_arg == NULL) {
+        ucs_error("memory type string is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
         if(!strcmp(opt_arg, ucs_memory_type_names[it]) &&
            (ucx_perf_mem_type_allocators[it] != NULL)) {
@@ -153,7 +159,8 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
             return UCS_OK;
         }
     }
-    ucs_error("Unsupported memory type: \"%s\"", opt_arg);
+
+    ucs_error("unsupported memory type: \"%s\"", opt_arg);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -161,11 +168,13 @@ static ucs_status_t parse_mem_type_params(const char *opt_arg,
                                           ucs_memory_type_t *send_mem_type,
                                           ucs_memory_type_t *recv_mem_type)
 {
-    const char *delim = ",";
-    char *token       = strtok((char*)opt_arg, delim);
+    const char *delim   = ",";
+    char *token         = strtok((char*)opt_arg, delim);
+    ucs_status_t status;
 
-    if (UCS_OK != parse_mem_type(token, send_mem_type)) {
-        return UCS_ERR_INVALID_PARAM;
+    status = parse_mem_type(token, send_mem_type);
+    if (status != UCS_OK) {
+        return status;
     }
 
     token = strtok(NULL, delim);

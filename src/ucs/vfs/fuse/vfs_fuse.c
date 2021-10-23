@@ -320,7 +320,7 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
 
         /* Go over new events in the buffer */
         for (offset  = 0; offset < nread;
-             offset += sizeof(*event) + event->len) {
+             offset += (sizeof(*event) + event->len)) {
             event = UCS_PTR_BYTE_OFFSET(event_buf, offset);
             if (!(event->mask & IN_CREATE)) {
                 ucs_trace("ignoring inotify event with mask 0x%x", event->mask);
@@ -328,7 +328,9 @@ static ucs_status_t ucs_vfs_fuse_wait_for_path(const char *path)
             }
 
             ucs_trace("file '%s' created", event->name);
-            if (strcmp(event->name, watch_filename)) {
+            /* coverity[tainted_data] */
+            if ((event->len != (strlen(watch_filename) + 1)) ||
+                (strncmp(event->name, watch_filename, event->len) != 0)) {
                 ucs_trace("ignoring inotify create event of '%s'", event->name);
                 continue;
             }
