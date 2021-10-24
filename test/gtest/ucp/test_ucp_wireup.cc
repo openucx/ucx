@@ -1168,10 +1168,9 @@ UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
 
     // Set some big enough number of endpoints for DC to be more performance
     // efficient than RC. Now check that DC is selected over RC.
-    // TODO: enable test when keepalive feature is enabled for DC transport
-    //modify_config("NUM_EPS", "1000");
-    //entity *e = create_entity();
-    //check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+    modify_config("NUM_EPS", "1000");
+    entity *e = create_entity();
+    check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
     EXPECT_FALSE(ep_iface_has_caps(sender(), "dc_mlx5",
                                    UCT_IFACE_FLAG_EP_CHECK));
 }
