@@ -46,7 +46,8 @@ public:
     enum {
         TEST_MODIFIER_MASK               = UCS_MASK(16),
         TEST_MODIFIER_MT                 = UCS_BIT(16),
-        TEST_MODIFIER_CM_USE_ALL_DEVICES = UCS_BIT(17)
+        TEST_MODIFIER_CM_USE_ALL_DEVICES = UCS_BIT(17),
+        TEST_MODIFIER_SA_DATA_V2         = UCS_BIT(18)
     };
 
     enum {
@@ -66,6 +67,7 @@ public:
         m_err_count = 0;
         modify_config("KEEPALIVE_INTERVAL", "10s");
         modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
+        modify_config("SA_DATA_VERSION", sa_data_version_v2() ? "v2" : "v1");
 
         get_sockaddr();
         ucp_test::init();
@@ -86,6 +88,9 @@ public:
     {
         get_test_variants_mt(variants, features,
                              modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES, name);
+        get_test_variants_mt(variants, features,
+                             modifier | TEST_MODIFIER_CM_USE_ALL_DEVICES |
+                             TEST_MODIFIER_SA_DATA_V2, name + ",sa_data_v2");
         get_test_variants_mt(variants, features, modifier, name + ",not_all_devs");
     }
 
@@ -670,6 +675,10 @@ protected:
 
     bool cm_use_all_devices() const {
         return get_variant_value() & TEST_MODIFIER_CM_USE_ALL_DEVICES;
+    }
+
+    bool sa_data_version_v2() const {
+        return get_variant_value() & TEST_MODIFIER_SA_DATA_V2;
     }
 
     bool has_rndv_lanes(ucp_ep_h ep)

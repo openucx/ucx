@@ -739,34 +739,46 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,
                                          ucp_ep_h *ep_p)
 {
-    const ucp_wireup_sockaddr_data_t *sa_data = &conn_request->sa_data;
-    unsigned ep_init_flags                    = 0;
-    const void *ucp_address                   = UCS_PTR_TYPE_OFFSET(sa_data,
-                                                ucp_wireup_sockaddr_data_t);
-    ucp_unpacked_address_t           remote_addr;
-    uint64_t                         addr_flags;
-    unsigned                         i;
-    ucs_status_t                     status;
+    ucp_wireup_sockaddr_data_base_t *sa_data = (void*)(conn_request + 1);
+    uint8_t sa_data_version                  = sa_data->header >>
+                                               UCP_SA_DATA_HEADER_VERSION_SHIFT;
+    ucp_wireup_sockaddr_data_v1_t *sa_data_v1;
+    ucp_unpacked_address_t remote_addr;
+    unsigned ep_init_flags;
+    uint64_t addr_flags;
+    ucs_status_t status;
+    void *worker_addr;
+    unsigned i;
 
-    if (sa_data->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-        ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
-    }
+    if (sa_data_version == UCP_SA_DATA_VERSION_V1) {
+        ep_init_flags = (sa_data->header == UCP_ERR_HANDLING_MODE_PEER) ?
+                        UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+        sa_data_v1    = ucs_derived_of(sa_data, ucp_wireup_sockaddr_data_v1_t);
+        worker_addr   = sa_data_v1 + 1;
 
-    if (!(sa_data->addr_mode & UCP_WIREUP_SA_DATA_CM_ADDR)) {
-        ucs_fatal("client sockaddr data contains invalid address mode %d",
-                  sa_data->addr_mode);
+        ucs_assertv_always(sa_data_v1->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR,
+                           "unsupported address mode %u",
+                           sa_data_v1->addr_mode);
+        ucs_assertv_always(sa_data_v1->dev_index == 0, "dev_index %u",
+                           sa_data_v1->dev_index);
+    } else if (sa_data_version == UCP_SA_DATA_VERSION_V2) {
+        ep_init_flags = (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER) ?
+                        UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+        worker_addr   = sa_data + 1;
+    } else {
+        ucs_error("unsupported sa_data version: %u", sa_data_version);
+        return UCS_ERR_UNSUPPORTED;
     }
 
     addr_flags = ucp_worker_common_address_pack_flags(worker) |
                  UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 
-    /* coverity[overrun-local] */
-    if (ucp_address_is_am_only(ucp_address)) {
+    if (ucp_address_is_am_only(worker_addr)) {
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE_ONLY;
     }
 
     /* coverity[overrun-local] */
-    status = ucp_address_unpack(worker, ucp_address, addr_flags, &remote_addr);
+    status = ucp_address_unpack(worker, worker_addr, addr_flags, &remote_addr);
     if (status != UCS_OK) {
         ucp_listener_reject(conn_request->listener, conn_request);
         return status;
@@ -774,7 +786,8 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 
     for (i = 0; i < remote_addr.address_count; ++i) {
         remote_addr.address_list[i].dev_addr  = conn_request->remote_dev_addr;
-        remote_addr.address_list[i].dev_index = conn_request->sa_data.dev_index;
+        remote_addr.address_list[i].dev_index = 0; /* CM addr contains only 1
+                                                      device */
     }
 
     status = ucp_ep_cm_server_create_connected(worker, ep_init_flags,
