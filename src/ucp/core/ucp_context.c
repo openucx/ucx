@@ -81,6 +81,12 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
+static const char *ucp_sa_client_hdr_versions[] = {
+    [UCP_SA_DATA_VERSION_V1]   = "v1",
+    [UCP_SA_DATA_VERSION_V2]   = "v2",
+    [UCP_SA_DATA_VERSION_LAST] = NULL
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -373,6 +379,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "messages and put operations, the protocol will do {put,fence,ATP} on the same\n"
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_config_t, ctx.rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
+
+  {"SA_DATA_VERSION", "v1",
+   "Defines the minimal header version the client will use for establishing\n"
+   "client/server connection",
+   ucs_offsetof(ucp_config_t, ctx.sa_client_min_hdr_version),
+   UCS_CONFIG_TYPE_ENUM(ucp_sa_client_hdr_versions)},
 
   {"RKEY_MPOOL_MAX_MD", "2",
    "Maximum number of UCP rkey MDs which can be unpacked into memory pool\n"

@@ -51,6 +51,9 @@ typedef uint16_t                   ucp_ep_flags_t;
 #endif
 
 
+#define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
+
+
 /**
  * Endpoint flags
  */
@@ -488,18 +491,58 @@ enum {
 };
 
 
-struct ucp_wireup_sockaddr_data {
-    uint64_t                  ep_id;         /**< Endpoint ID */
-    uint8_t                   err_mode;      /**< Error handling mode */
-    uint8_t                   addr_mode;     /**< The attached address format
-                                                  defined by
-                                                  UCP_WIREUP_SA_DATA_xx */
-    uint8_t                   dev_index;     /**< Device address index used to
-                                                  build remote address in
-                                                  UCP_WIREUP_SA_DATA_CM_ADDR
-                                                  mode */
+enum {
+    UCP_SA_DATA_VERSION_V1, /* represented by ucp_wireup_sockaddr_data_v1_t */
+    UCP_SA_DATA_VERSION_V2, /* represented by ucp_wireup_sockaddr_data_base_t */
+    UCP_SA_DATA_VERSION_LAST
+};
+
+
+/* Sockaddr data flags that are packed to the header field in
+ * ucp_wireup_sockaddr_data_base_t structure.
+ */
+enum {
+    /* Indicates support of UCP_ERR_HANDLING_MODE_PEER error mode. */
+    UCP_SA_DATA_FLAG_ERR_MODE_PEER = UCS_BIT(0)
+};
+
+
+/* Basic sockaddr data. Version 1 uses some additional fields which are not
+ * really needed and removed in version 2.
+ */
+typedef struct ucp_wireup_sockaddr_data_base {
+    uint64_t                  ep_id; /**< Endpoint ID */
+
+    /* This field has different meaning for sa_data v1 and other versions:
+     * v1:           it is error handling mode
+     * v2 and newer: it is sa_data header with the following format:
+     *   +---+-----+
+     *   | 3 |  5  |
+     *   +---+-----+
+     *     v    |
+     * version  |
+     *          v
+     *        flags
+     *
+     * It is safe to keep version in 3 MSB, because it will always be zeros
+     * (i.e. UCP_SA_DATA_VERSION_V1) in sa_data v1 (err_mode value is small).
+     */
+    uint8_t                   header;
+    /* packed worker address (or sa_data v1) follows */
+} UCS_S_PACKED ucp_wireup_sockaddr_data_base_t;
+
+
+typedef struct ucp_wireup_sockaddr_data_v1 {
+    ucp_wireup_sockaddr_data_base_t super;
+    uint8_t                         addr_mode; /**< The attached address format
+                                                    defined by
+                                                    UCP_WIREUP_SA_DATA_xx */
+    uint8_t                         dev_index; /**< Device address index used to
+                                                    build remote address in
+                                                    UCP_WIREUP_SA_DATA_CM_ADDR
+                                                    mode */
     /* packed worker address follows */
-} UCS_S_PACKED;
+} UCS_S_PACKED ucp_wireup_sockaddr_data_v1_t;
 
 
 typedef struct ucp_conn_request {
@@ -511,8 +554,7 @@ typedef struct ucp_conn_request {
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
     ucp_ep_h                    ep; /* valid only if request is handled internally */
-    ucp_wireup_sockaddr_data_t  sa_data;
-    /* packed worker address follows */
+    /* sa_data and packed worker address follow */
 } ucp_conn_request_t;
 
 

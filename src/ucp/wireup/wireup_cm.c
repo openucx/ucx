@@ -11,6 +11,7 @@
 #include "wireup_cm.h"
 #include <ucp/core/ucp_listener.h>
 #include <ucp/core/ucp_request.inl>
+#include <ucp/core/ucp_ep.h>
 #include <ucp/wireup/wireup.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <ucs/sys/sock.h>
@@ -230,9 +231,20 @@ out:
     return status;
 }
 
-static size_t ucp_cm_priv_data_length(size_t addr_size)
+size_t ucp_cm_sa_data_length(uint8_t sa_data_version)
 {
-    return sizeof(ucp_wireup_sockaddr_data_t) + addr_size;
+    ucs_assert((sa_data_version == UCP_SA_DATA_VERSION_V1) ||
+               (sa_data_version == UCP_SA_DATA_VERSION_V2));
+
+    return (sa_data_version == UCP_SA_DATA_VERSION_V1) ?
+           sizeof(ucp_wireup_sockaddr_data_v1_t) :
+           sizeof(ucp_wireup_sockaddr_data_base_t);
+}
+
+static size_t
+ucp_cm_priv_data_length(size_t addr_size, unsigned sa_data_version)
+{
+    return addr_size + ucp_cm_sa_data_length(sa_data_version);
 }
 
 static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
@@ -241,23 +253,50 @@ static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
            UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 }
 
+static void*
+ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
+                       unsigned sa_data_version)
+{
+    ucp_wireup_sockaddr_data_v1_t *sa_data_v1;
+
+    if (sa_data_version == UCP_SA_DATA_VERSION_V1) {
+        sa_data->header       = ucp_ep_config(ep)->key.err_mode;
+        sa_data_v1            = ucs_derived_of(sa_data,
+                                               ucp_wireup_sockaddr_data_v1_t);
+        sa_data_v1->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
+        sa_data_v1->dev_index = 0;
+        return sa_data_v1 + 1;
+    } else {
+        ucs_assertv_always(sa_data_version == UCP_SA_DATA_VERSION_V2,
+                           "sa_data version: %u", sa_data_version);
+        sa_data->header = UCP_SA_DATA_VERSION_V2 <<
+                          UCP_SA_DATA_HEADER_VERSION_SHIFT;
+        if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+            sa_data->header |= UCP_SA_DATA_FLAG_ERR_MODE_PEER;
+        }
+
+        return sa_data + 1;
+    }
+}
+
 static ucs_status_t
 ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
-                         ucp_rsc_index_t dev_index, int can_fallback,
+                         int can_fallback, unsigned sa_data_version,
                          void **data_buf_p, size_t *data_buf_length_p,
                          unsigned ep_init_flags)
 {
     ucp_worker_h worker = ep->worker;
     void *ucp_addr      = NULL;
     unsigned pack_flags = ucp_cm_address_pack_flags(worker);
-    ucp_wireup_sockaddr_data_t *sa_data;
-    size_t ucp_addr_size;
+    ucp_wireup_sockaddr_data_base_t *sa_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
     ucs_log_level_t log_level;
+    void *worker_addr_p;
+    size_t ucp_addr_size, sa_data_length;
 
     ucs_assert((int)ucp_ep_config(ep)->key.err_mode <= UINT8_MAX);
-    ucs_assert(dev_index != UCP_NULL_RESOURCE);
+
     if (ucp_ep_get_cm_wireup_ep(ep)->flags & UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID) {
         pack_flags |= UCP_ADDRESS_PACK_FLAG_CLIENT_ID;
     }
@@ -276,37 +315,33 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
         goto err;
     }
 
-    cm_idx = ucp_ep_ext_control(ep)->cm_idx;
-    if (worker->cms[cm_idx].attr.max_conn_priv <
-        ucp_cm_priv_data_length(ucp_addr_size)) {
-        log_level = can_fallback ?
-                    UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
+    sa_data_length = ucp_cm_priv_data_length(ucp_addr_size, sa_data_version);
+    cm_idx         = ucp_ep_ext_control(ep)->cm_idx;
+    if (worker->cms[cm_idx].attr.max_conn_priv < sa_data_length) {
+        log_level = can_fallback ?  UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
         ucs_log(log_level,
                 "CM private data buffer is too small to pack UCP endpoint"
-                " info, ep %p service data %lu, address length %lu, cm %p"
-                " max_conn_priv %lu", ep, sizeof(ucp_wireup_sockaddr_data_t),
-                ucp_addr_size, worker->cms[cm_idx].cm,
-                worker->cms[cm_idx].attr.max_conn_priv);
+                " info, ep %p service data version %u, size %lu, address "
+                "length %lu, cm %p max_conn_priv %lu", ep, sa_data_version,
+                sa_data_length - ucp_addr_size, ucp_addr_size,
+                worker->cms[cm_idx].cm, worker->cms[cm_idx].attr.max_conn_priv);
         status = UCS_ERR_BUFFER_TOO_SMALL;
         goto err;
     }
 
-    sa_data = ucs_malloc(ucp_cm_priv_data_length(ucp_addr_size),
-                         "client_priv_data");
+    sa_data = ucs_malloc(sa_data_length, "client_priv_data");
     if (sa_data == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto err;
     }
 
-    sa_data->ep_id     = ucp_ep_local_id(ep);
-    sa_data->err_mode  = ucp_ep_config(ep)->key.err_mode;
-    sa_data->addr_mode = UCP_WIREUP_SA_DATA_CM_ADDR;
-    sa_data->dev_index = dev_index;
-    memcpy(sa_data + 1, ucp_addr, ucp_addr_size);
+    sa_data->ep_id = ucp_ep_local_id(ep);
+    worker_addr_p  = ucp_cm_ep_sa_data_pack(ep, sa_data, sa_data_version);
+
+    memcpy(worker_addr_p, ucp_addr, ucp_addr_size);
 
     *data_buf_p        = sa_data;
-    *data_buf_length_p = ucp_cm_priv_data_length(ucp_addr_size);
-    status             = UCS_OK;
+    *data_buf_length_p = sa_data_length;
 
 err:
     ucs_free(ucp_addr);
@@ -342,8 +377,7 @@ ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
 }
 
 static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
-                                         ucp_tl_bitmap_t *tl_bitmap,
-                                         ucp_rsc_index_t *dev_index)
+                                         ucp_tl_bitmap_t *tl_bitmap)
 {
     ucp_worker_h worker = ep->worker;
     ucs_status_t status = UCS_ERR_NO_RESOURCE;
@@ -366,10 +400,6 @@ static ucs_status_t ucp_cm_ep_init_lanes(ucp_ep_h ep,
         if (status != UCS_OK) {
             goto out;
         }
-
-        ucs_assert((*dev_index == UCP_NULL_RESOURCE) ||
-                   (*dev_index == worker->context->tl_rscs[rsc_idx].dev_index));
-        *dev_index = worker->context->tl_rscs[rsc_idx].dev_index;
 
         UCS_BITMAP_SET(*tl_bitmap, rsc_idx);
         if (ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane_idx)) {
@@ -394,8 +424,8 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 {
     ucp_ep_h ep                   = arg;
     ucp_worker_h worker           = ep->worker;
+    ucp_context_h context         = worker->context;
     ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    ucp_rsc_index_t dev_index     = UCP_NULL_RESOURCE;
     void *ucp_addr                = NULL; /* Set to NULL to call ucs_free
                                              safely */
     unsigned ep_init_flags        = 0;
@@ -430,7 +460,7 @@ initial_config_retry:
 
     ep->am_lane = key.am_lane;
 
-    status = ucp_cm_ep_init_lanes(ep, &tl_bitmap, &dev_index);
+    status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
     if (status != UCS_OK) {
         goto err;
     }
@@ -440,9 +470,10 @@ initial_config_retry:
 
     can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
                    (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
-    status       = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index,
-                                            can_fallback, &priv_data,
-                                            &priv_data_length, ep_init_flags);
+    status       = ucp_cm_ep_priv_data_pack(
+                      ep, &tl_bitmap, can_fallback,
+                      context->config.ext.sa_client_min_hdr_version,
+                      &priv_data, &priv_data_length, ep_init_flags);
     if (status == UCS_ERR_BUFFER_TOO_SMALL) {
         if (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
             /* Create endpoint configuration with AM lane only to fit CM private
@@ -561,7 +592,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucp_context_h context                              = worker->context;
     uct_ep_h uct_cm_ep                                 = ucp_ep_get_cm_uct_ep(ucp_ep);
     unsigned pack_flags                                = ucp_cm_address_pack_flags(worker);
-    const void *ucp_address                            = progress_arg->sa_data + 1;
+    const void *ucp_address;
     ucp_wireup_ep_t *wireup_ep;
     ucp_unpacked_address_t addr;
     ucp_tl_bitmap_t tl_bitmap;
@@ -570,6 +601,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     unsigned addr_idx;
     unsigned addr_indices[UCP_MAX_RESOURCES];
     ucs_status_t status;
+    uint8_t sa_data_ver;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -583,8 +615,11 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     ucs_assert(wireup_ep != NULL);
     ucs_assert(wireup_ep->ep_init_flags & UCP_EP_INIT_CM_WIREUP_CLIENT);
 
-    status = ucp_address_unpack(worker, ucp_address,
-                                pack_flags, &addr);
+    sa_data_ver = progress_arg->sa_data->header >>
+                  UCP_SA_DATA_HEADER_VERSION_SHIFT;
+    ucp_address = UCS_PTR_BYTE_OFFSET(progress_arg->sa_data,
+                                      ucp_cm_sa_data_length(sa_data_ver));
+    status      = ucp_address_unpack(worker, ucp_address, pack_flags, &addr);
     if (status != UCS_OK) {
         goto out;
     }
@@ -596,7 +631,8 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
 
     for (addr_idx = 0; addr_idx < addr.address_count; ++addr_idx) {
         addr.address_list[addr_idx].dev_addr  = progress_arg->dev_addr;
-        addr.address_list[addr_idx].dev_index = progress_arg->sa_data->dev_index;
+        addr.address_list[addr_idx].dev_index = 0; /* CM addr contains only 1
+                                                      device */
     }
 
     if (ucp_address_is_am_only(ucp_address)) {
@@ -1050,7 +1086,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
               ucp_context_cm_name(worker->context, cm_idx),
               worker, listener->cm, cm_idx);
 
-    ucp_conn_request = ucs_malloc(ucs_offsetof(ucp_conn_request_t, sa_data) +
+    ucp_conn_request = ucs_malloc(sizeof(ucp_conn_request_t) +
                                   remote_data->conn_priv_data_length,
                                   "ucp_conn_request_h");
     if (ucp_conn_request == NULL) {
@@ -1085,7 +1121,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                      UCT_DEVICE_NAME_MAX);
     memcpy(ucp_conn_request->remote_dev_addr, remote_data->dev_addr,
            remote_data->dev_addr_length);
-    memcpy(&ucp_conn_request->sa_data, remote_data->conn_priv_data,
+    memcpy(ucp_conn_request + 1, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
 
     uct_worker_progress_register_safe(worker->uct,
@@ -1121,6 +1157,8 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_ep_h ep;
     ucs_status_t status;
     char client_addr_str[UCS_SOCKADDR_STRING_LEN];
+    ucp_wireup_sockaddr_data_base_t *sa_data;
+    uint8_t sa_data_version;
 
     ep_init_flags |= UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
 
@@ -1160,11 +1198,12 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep;
     }
 
-    status = ucp_ep_cm_connect_server_lane(ep, conn_request->uct_listener,
-                                           conn_request->uct_req,
-                                           conn_request->cm_idx,
-                                           conn_request->dev_name,
-                                           ep_init_flags);
+    sa_data         = (ucp_wireup_sockaddr_data_base_t*)(conn_request + 1);
+    sa_data_version = sa_data->header >> UCP_SA_DATA_HEADER_VERSION_SHIFT;
+    status          = ucp_ep_cm_connect_server_lane(
+                          ep, conn_request->uct_listener, conn_request->uct_req,
+                          conn_request->cm_idx, conn_request->dev_name,
+                          ep_init_flags, sa_data_version);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect CM lane on device %s, "
                  "tl_bitmap " UCT_TL_BITMAP_FMT ", status %s",
@@ -1173,7 +1212,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto err_destroy_ep;
     }
 
-    ucp_ep_update_remote_id(ep, conn_request->sa_data.ep_id);
+    ucp_ep_update_remote_id(ep, sa_data->ep_id);
     ucp_ep_flush_state_reset(ep);
 
     if (conn_request->listener->accept_cb == NULL) {
@@ -1198,14 +1237,13 @@ out:
 }
 
 static ucs_status_t
-ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
+ucp_ep_server_init_priv_data(ucp_ep_h ep, const char *dev_name,
                              const void **data_buf_p, size_t *data_buf_size_p,
-                             unsigned ep_init_flags)
+                             unsigned ep_init_flags, uint8_t sa_data_version)
 {
     ucp_worker_h worker = ep->worker;
     ucp_tl_bitmap_t tl_bitmap;
     ucp_tl_bitmap_t ctx_tl_bitmap;
-    ucp_rsc_index_t dev_index;
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -1221,10 +1259,9 @@ ucp_ep_server_init_priv_data(ucp_ep_h ep,  const char *dev_name,
     ucp_context_dev_tl_bitmap(worker->context, dev_name, &ctx_tl_bitmap);
     ucp_tl_bitmap_validate(&tl_bitmap, &ctx_tl_bitmap);
 
-    dev_index = ucp_cm_tl_bitmap_get_dev_idx(worker->context, &tl_bitmap);
-    status    = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, dev_index, 0,
-                                         (void **)data_buf_p, data_buf_size_p,
-                                         ep_init_flags);
+    status = ucp_cm_ep_priv_data_pack(ep, &tl_bitmap, 0, sa_data_version,
+                                      (void**)data_buf_p, data_buf_size_p,
+                                      ep_init_flags);
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1292,7 +1329,8 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            uct_conn_request_h uct_conn_req,
                                            ucp_rsc_index_t cm_idx,
                                            const char *dev_name,
-                                           unsigned ep_init_flags)
+                                           unsigned ep_init_flags,
+                                           uint8_t sa_data_version)
 {
     ucp_worker_h worker   = ep->worker;
     ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
@@ -1336,7 +1374,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
     status = ucp_ep_server_init_priv_data(ep, dev_name,
                                           &uct_ep_params.private_data,
                                           &uct_ep_params.private_data_length,
-                                          ep_init_flags);
+                                          ep_init_flags, sa_data_version);
     if (status != UCS_OK) {
         goto err;
     }
