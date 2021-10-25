@@ -241,7 +241,7 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.tag.info.sender_tag, req->recv.tag.info.length,
                   ucs_status_string(status));
-    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_tag_recv", status);
     ucp_request_complete(req, recv.tag.cb, status, &req->recv.tag.info,
                          req->user_data);
 }
@@ -262,7 +262,7 @@ ucp_request_complete_stream_recv(ucp_request_t *req, ucp_ep_ext_proto_t* ep_ext,
                   UCP_REQUEST_FLAGS_FMT " count %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.stream.length, ucs_status_string(status));
-    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_stream_recv", status);
     ucp_request_complete(req, recv.stream.cb, status, req->recv.stream.length,
                          req->user_data);
 }
@@ -754,7 +754,7 @@ ucp_request_complete_am_recv(ucp_request_t *req, ucs_status_t status)
                   " length %zu, %s",
                   req, req + 1, UCP_REQUEST_FLAGS_ARG(req->flags),
                   req->recv.length, ucs_status_string(status));
-    UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", status);
+    UCS_PROFILE_REQUEST_EVENT(req, "complete_am_recv", status);
 
     if (req->recv.am.desc->flags & UCP_RECV_DESC_FLAG_AM_CB_INPROGRESS) {
         /* Descriptor is not initialized by UCT yet, therefore can not call
