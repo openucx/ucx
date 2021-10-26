@@ -114,6 +114,9 @@ typedef enum {
  * Performance estimation for a range of message sizes.
  */
 typedef struct {
+    /* Protocol name */
+    const char        *name;
+
     /* Maximal payload size for this range */
     size_t            max_length;
 

@@ -10,6 +10,7 @@
 
 #include "proto_common.inl"
 #include "proto_multi.inl"
+#include "proto_init.h"
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>

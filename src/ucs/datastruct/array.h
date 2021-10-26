@@ -47,8 +47,7 @@ BEGIN_C_DECLS
                                           _index_type min_capacity); \
     \
     _scope ucs_status_t \
-    UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array, \
-                                         _index_type *index_p)
+    UCS_ARRAY_IDENTIFIER(_name, _append)(ucs_array_t(_name) *array);
 
 
 /**
@@ -199,7 +198,7 @@ BEGIN_C_DECLS
 
 
 /*
- * Add an element to the end of the array and return its index.
+ * Add an element to the end of the array.
  *
  * @param _name     Array name
  * @param _array    Array to add element to
@@ -208,6 +207,19 @@ BEGIN_C_DECLS
  */
 #define ucs_array_append(_name, _array) \
    UCS_ARRAY_IDENTIFIER(_name, _append)(_array)
+
+
+/*
+ * Add an element to the end of the array assuming it has enough space.
+ *
+ * @param _name     Array name
+ * @param _array    Array to add element to
+ */
+#define ucs_array_append_fixed(_name, _array) \
+    ({ \
+        ucs_assert_always(ucs_array_append(_name, _array) == UCS_OK); \
+        ucs_array_last(_array); \
+    })
 
 
 /**
@@ -292,6 +304,19 @@ BEGIN_C_DECLS
                     (size_t)ucs_array_capacity(_array)); \
         ucs_array_length(_array) = (_new_length); \
     }
+
+/**
+ * Extract array contents and reset the array
+ */
+#define ucs_array_extract_buffer(_name, _array) \
+    ({ \
+        UCS_ARRAY_IDENTIFIER(_name, _value_type_t) *buffer = (_array)->buffer; \
+        ucs_assert(!ucs_array_is_fixed(_array)); \
+        (_array)->buffer   = NULL; \
+        (_array)->length   = 0; \
+        (_array)->capacity = 0; \
+        buffer; \
+    })
 
 
 /**

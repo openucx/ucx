@@ -46,6 +46,7 @@ noinst_HEADERS = \
 	proto/lane_type.h \
 	proto/proto_am.h \
 	proto/proto_am.inl \
+	proto/proto_init.h \
 	proto/proto_common.h \
 	proto/proto_common.inl \
 	proto/proto_multi.h \
@@ -107,6 +108,7 @@ libucp_la_SOURCES = \
 	dt/dt.c \
 	proto/lane_type.c \
 	proto/proto_am.c \
+	proto/proto_init.c \
 	proto/proto_common.c \
 	proto/proto_reconfig.c \
 	proto/proto_multi.c \
