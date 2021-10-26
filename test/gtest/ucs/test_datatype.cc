@@ -1154,15 +1154,11 @@ UCS_TEST_F(test_array, fixed_onstack) {
 class test_datatype_ptr_map : public test_datatype {
 public:
     UCS_PTR_MAP_DEFINE(unsafe_put, 0);
-    UCS_PTR_MAP_DEFINE(safe_put, 1);
 
     typedef std::map<ucs_ptr_map_key_t, int*> std_map_t;
-    typedef std_map_t::const_iterator std_map_it_t;
     typedef std::vector<int> std_vec_t;
-    typedef std_vec_t::iterator std_vec_it_t;
 
-    static const size_t vec_size      = 10 * (1 << 10);
-    static const unsigned num_threads = 4;
+    static const size_t vec_size = 10 * (1 << 10);
 };
 
 UCS_TEST_F(test_datatype_ptr_map, unsafe_put) {
@@ -1173,7 +1169,7 @@ UCS_TEST_F(test_datatype_ptr_map, unsafe_put) {
 
     ASSERT_UCS_OK(UCS_PTR_MAP_INIT(unsafe_put, &ptr_map));
 
-    for (std_vec_it_t it = std_vec.begin(); it != std_vec.end(); ++it) {
+    for (auto it = std_vec.begin(); it != std_vec.end(); ++it) {
         bool indirect = ucs::rand() % 2;
         ucs_ptr_map_key_t ptr_key;
         ucs_status_t status = UCS_PTR_MAP_PUT(unsafe_put, &ptr_map, &(*it),
@@ -1190,7 +1186,7 @@ UCS_TEST_F(test_datatype_ptr_map, unsafe_put) {
         std_map[ptr_key] = &(*it);
     }
 
-    for (std_map_it_t i = std_map.begin(); i != std_map.end(); ++i) {
+    for (auto i = std_map.begin(); i != std_map.end(); ++i) {
         bool indirect = ucs_ptr_map_key_indirect(i->first);
         bool extract  = ucs::rand() % 2;
         void *value;
@@ -1216,25 +1212,39 @@ UCS_TEST_F(test_datatype_ptr_map, unsafe_put) {
     UCS_PTR_MAP_DESTROY(unsafe_put, &ptr_map);
 }
 
-UCS_MT_TEST_F(test_datatype_ptr_map, safe_put, num_threads)
-{
-    static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
-    static pthread_mutex_t mutex     = PTHREAD_MUTEX_INITIALIZER;
-    static UCS_PTR_MAP_T(safe_put) ptr_map;
+class test_datatype_ptr_map_safe : public test_datatype_ptr_map {
+public:
+    test_datatype_ptr_map_safe()
+    {
+        pthread_mutex_init(&m_mutex, NULL);
+        ASSERT_UCS_OK(UCS_PTR_MAP_INIT(safe_put, &m_ptr_map));
+    }
 
+    ~test_datatype_ptr_map_safe()
+    {
+        UCS_PTR_MAP_DESTROY(safe_put, &m_ptr_map);
+        pthread_mutex_destroy(&m_mutex);
+    }
+
+    UCS_PTR_MAP_DEFINE(safe_put, 1);
+
+    static const unsigned num_threads = 4;
+
+protected:
+    pthread_mutex_t m_mutex;
+    UCS_PTR_MAP_T(safe_put) m_ptr_map;
+};
+
+
+UCS_MT_TEST_F(test_datatype_ptr_map_safe, safe_put, num_threads)
+{
     std_map_t std_map;
     std_vec_t std_vec(vec_size / num_threads, 0);
 
-    UCS_INIT_ONCE(&init_once) {
-        ASSERT_UCS_OK(UCS_PTR_MAP_INIT(safe_put, &ptr_map));
-    }
-
-    barrier();
-
-    for (std_vec_it_t it = std_vec.begin(); it != std_vec.end(); ++it) {
+    for (auto it = std_vec.begin(); it != std_vec.end(); ++it) {
         bool indirect = ucs::rand() % 2;
         ucs_ptr_map_key_t ptr_key;
-        ucs_status_t status = UCS_PTR_MAP_PUT(safe_put, &ptr_map, &(*it),
+        ucs_status_t status = UCS_PTR_MAP_PUT(safe_put, &m_ptr_map, &(*it),
                                               indirect, &ptr_key);
 
         if (indirect) {
@@ -1249,13 +1259,13 @@ UCS_MT_TEST_F(test_datatype_ptr_map, safe_put, num_threads)
     }
 
     {
-        ucs::scoped_mutex_lock lock(mutex);
-        for (std_map_it_t i = std_map.begin(); i != std_map.end(); ++i) {
+        ucs::scoped_mutex_lock lock(m_mutex);
+        for (auto i = std_map.begin(); i != std_map.end(); ++i) {
             bool indirect = ucs_ptr_map_key_indirect(i->first);
             bool extract  = ucs::rand() % 2;
             void *value;
-            ucs_status_t status = UCS_PTR_MAP_GET(safe_put, &ptr_map, i->first,
-                                                  extract, &value);
+            ucs_status_t status = UCS_PTR_MAP_GET(safe_put, &m_ptr_map,
+                                                  i->first, extract, &value);
             if (indirect) {
                 ASSERT_EQ(UCS_OK, status);
             } else {
@@ -1264,7 +1274,7 @@ UCS_MT_TEST_F(test_datatype_ptr_map, safe_put, num_threads)
 
             ASSERT_EQ(i->second, value);
             if (!extract) {
-                status = UCS_PTR_MAP_DEL(safe_put, &ptr_map, i->first);
+                status = UCS_PTR_MAP_DEL(safe_put, &m_ptr_map, i->first);
                 if (indirect) {
                     ASSERT_EQ(UCS_OK, status);
                 } else {
@@ -1272,12 +1282,5 @@ UCS_MT_TEST_F(test_datatype_ptr_map, safe_put, num_threads)
                 }
             }
         }
-    }
-
-    barrier();
-
-    UCS_CLEANUP_ONCE(&init_once)
-    {
-        UCS_PTR_MAP_DESTROY(safe_put, &ptr_map);
     }
 }
