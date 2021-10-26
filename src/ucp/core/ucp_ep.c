@@ -2490,73 +2490,88 @@ static int ucp_ep_is_short_lower_thresh(ssize_t max_short,
             (((size_t)max_short + 1) < thresh));
 }
 
-static void
-ucp_ep_config_print_proto(FILE *stream, const char *name,
-                          ssize_t max_eager_short, size_t zcopy_thresh,
-                          size_t rndv_rma_thresh, size_t rndv_am_thresh)
+static void ucp_ep_config_print_short(FILE *stream, const char *proto_name,
+                                      ssize_t max_config_short)
 {
-    size_t max_bcopy, min_rndv, max_short;
+    size_t max_short;
 
-    min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
-    max_bcopy = ucs_min(zcopy_thresh, min_rndv);
-
-    fprintf(stream, "# %23s: 0", name);
-
-    /* print eager short */
-    if (max_eager_short > 0) {
-        max_short = max_eager_short;
+    if (max_config_short > 0) {
+        max_short = max_config_short;
         ucs_assert(max_short <= SSIZE_MAX);
-        fprintf(stream, "..<egr/short>..%zu" , max_short + 1);
-    } else if (!max_eager_short) {
-        fprintf(stream, "..<egr/short>..%zu" , max_eager_short);
+        fprintf(stream, "..<%s>..%zu", proto_name, max_short + 1);
+    } else if (max_config_short == 0) {
+        fprintf(stream, "..<%s>..0", proto_name);
     }
+}
 
-    /* print eager bcopy */
-    if (ucp_ep_is_short_lower_thresh(max_eager_short, max_bcopy) && max_bcopy) {
-        fprintf(stream, "..<egr/bcopy>..");
-        if (max_bcopy < SIZE_MAX) {
-            fprintf(stream, "%zu", max_bcopy);
+static void ucp_ep_config_print_proto_middle(FILE *stream,
+                                             const char *proto_name,
+                                             ssize_t max_config_short,
+                                             size_t min_current_proto,
+                                             size_t min_next_proto)
+{
+    if (ucp_ep_is_short_lower_thresh(max_config_short, min_next_proto) &&
+        (min_current_proto < min_next_proto)) {
+        fprintf(stream, "..<%s>..", proto_name);
+        if (min_next_proto < SIZE_MAX) {
+            fprintf(stream, "%zu", min_next_proto);
         }
     }
+}
 
-    /* print eager zcopy */
-    if (ucp_ep_is_short_lower_thresh(max_eager_short, min_rndv) &&
-        (zcopy_thresh < min_rndv)) {
-        fprintf(stream, "..<egr/zcopy>..");
-        if (min_rndv < SIZE_MAX) {
-            fprintf(stream, "%zu", min_rndv);
-        }
-    }
-
-    /* print rendezvous */
-    if (min_rndv < SIZE_MAX) {
-        fprintf(stream, "..<rndv>..");
+static void ucp_ep_config_print_proto_last(FILE *stream, const char *name,
+                                           size_t min_proto)
+{
+    if (min_proto < SIZE_MAX) {
+        fprintf(stream, "..<%s>..", name);
     }
 
     fprintf(stream, "(inf)\n");
 }
 
+static void
+ucp_ep_config_print_proto(FILE *stream, const char *name,
+                          ssize_t max_eager_short, size_t zcopy_thresh,
+                          size_t rndv_rma_thresh, size_t rndv_am_thresh)
+{
+    size_t min_zcopy, min_rndv;
+
+    min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
+    min_zcopy = ucs_min(zcopy_thresh, min_rndv);
+
+    fprintf(stream, "# %23s: 0", name);
+
+    /* print eager short */
+    ucp_ep_config_print_short(stream, "egr/short", max_eager_short);
+
+    /* print eager bcopy */
+    ucp_ep_config_print_proto_middle(stream, "egr/bcopy", max_eager_short, 0,
+                                     min_zcopy);
+
+    /* print eager zcopy */
+    ucp_ep_config_print_proto_middle(stream, "egr/zcopy", max_eager_short,
+                                     min_zcopy, min_rndv);
+
+    /* print rendezvous */
+    ucp_ep_config_print_proto_last(stream, "rndv", min_rndv);
+}
+
 static void ucp_ep_config_print_rma_proto(FILE *stream, const char *name,
                                           ucp_lane_index_t lane,
-                                          size_t bcopy_thresh, size_t zcopy_thresh)
+                                          ssize_t max_rma_short,
+                                          size_t zcopy_thresh)
 {
     fprintf(stream, "# %20s[%d]: 0", name, lane);
-    if (bcopy_thresh > 0) {
-        fprintf(stream, "..<short>");
-    }
-    if (bcopy_thresh < zcopy_thresh) {
-        if (bcopy_thresh > 0) {
-            fprintf(stream, "..%zu", bcopy_thresh);
-        }
-        fprintf(stream, "..<bcopy>");
-    }
-    if (zcopy_thresh < SIZE_MAX) {
-        if (zcopy_thresh > 0) {
-            fprintf(stream, "..%zu", zcopy_thresh);
-        }
-        fprintf(stream, "..<zcopy>");
-    }
-    fprintf(stream, "..(inf)\n");
+
+    /* print short */
+    ucp_ep_config_print_short(stream, "short", max_rma_short);
+
+    /* print bcopy */
+    ucp_ep_config_print_proto_middle(stream, "bcopy", max_rma_short, 0,
+                                     zcopy_thresh);
+
+    /* print zcopy */
+    ucp_ep_config_print_proto_last(stream, "zcopy", zcopy_thresh);
 }
 
 int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
@@ -2714,15 +2729,16 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                 continue;
             }
             ucp_ep_config_print_rma_proto(stream, "put", lane,
-                                          config->rma[lane].max_put_short + 1,
+                                          config->rma[lane].max_put_short,
                                           config->rma[lane].put_zcopy_thresh);
-            ucp_ep_config_print_rma_proto(stream, "get", lane, 0,
+            ucp_ep_config_print_rma_proto(stream, "get", lane,
+                                          config->rma[lane].max_get_short,
                                           config->rma[lane].get_zcopy_thresh);
         }
     }
 
     if (context->config.features &
-        (UCP_FEATURE_TAG|UCP_FEATURE_RMA|UCP_FEATURE_AM)) {
+        (UCP_FEATURE_TAG | UCP_FEATURE_RMA | UCP_FEATURE_AM)) {
         fprintf(stream, "#\n");
         fprintf(stream, "# %23s: mds ", "rma_bw");
         ucs_for_each_bit(md_index, config->key.rma_bw_md_map) {
