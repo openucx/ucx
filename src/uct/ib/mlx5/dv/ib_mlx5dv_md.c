@@ -551,7 +551,7 @@ static ucs_status_t
 uct_ib_mlx5_devx_query_lag(uct_ib_mlx5_md_t *md, uint8_t *state)
 {
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)] = {};
-    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_out)]  = {};
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_lag_in)]  = {};
     void *lag;
     int ret;
 
