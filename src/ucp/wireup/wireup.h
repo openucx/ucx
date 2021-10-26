@@ -108,6 +108,8 @@ double ucp_wireup_amo_score_func(ucp_context_h context,
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg);
 
+const char* ucp_wireup_msg_str(uint8_t msg_type);
+
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 
 ucs_status_t
