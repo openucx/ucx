@@ -132,8 +132,11 @@ typedef struct {
  * Lane performance characteristics
  */
 typedef struct {
-    /* Operation overhead */
-    double overhead;
+    /* Operation send overhead */
+    double send_overhead;
+
+    /* Operation receive overhead */
+    double recv_overhead;
 
     /* Transport bandwidth (without protocol memory copies) */
     double bandwidth;
@@ -217,6 +220,13 @@ ucp_proto_common_get_max_frag(const ucp_proto_common_init_params_t *params,
 size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
                                              ptrdiff_t field_offset,
                                              size_t dfl_value);
+
+
+ucs_status_t
+ucp_proto_common_lane_perf_attr(const ucp_proto_init_params_t *params,
+                                ucp_lane_index_t lane, uct_ep_operation_t op,
+                                uint64_t uct_field_mask,
+                                uct_perf_attr_t* perf_attr);
 
 
 ucs_status_t

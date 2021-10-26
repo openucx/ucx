@@ -70,12 +70,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     }
 
     /* Select the lanes to use, and calculate their aggregate performance */
-    perf.bandwidth   = 0;
-    perf.overhead    = 0;
-    perf.latency     = 0;
-    perf.sys_latency = 0;
-    lane_map         = 0;
-    max_frag_ratio   = 0;
+    perf.bandwidth     = 0;
+    perf.send_overhead = 0;
+    perf.recv_overhead = 0;
+    perf.latency       = 0;
+    perf.sys_latency   = 0;
+    lane_map           = 0;
+    max_frag_ratio     = 0;
     for (i = 0; i < num_lanes; ++i) {
         lane      = lanes[i];
         lane_perf = &lanes_perf[lane];
@@ -85,9 +86,11 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
             continue;
         }
 
-        ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(overhead)
+        ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(send_overhead)
+                  UCP_PROTO_TIME_FMT(recv_overhead)
                   UCP_PROTO_TIME_FMT(latency),
-                  lane, UCP_PROTO_TIME_ARG(lane_perf->overhead),
+                  lane, UCP_PROTO_TIME_ARG(lane_perf->send_overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->latency));
 
         /* Calculate maximal bandwidth-to-fragment-size ratio, which is used to
@@ -97,11 +100,12 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                  lane_perf->bandwidth / lane_perf->max_frag);
 
         /* Update aggregated performance metric */
-        perf.bandwidth  += lane_perf->bandwidth;
-        perf.overhead   += lane_perf->overhead;
-        perf.latency     = ucs_max(perf.latency, lane_perf->latency);
-        perf.sys_latency = ucs_max(perf.sys_latency, lane_perf->sys_latency);
-        lane_map        |= UCS_BIT(lane);
+        perf.bandwidth     += lane_perf->bandwidth;
+        perf.send_overhead += lane_perf->send_overhead;
+        perf.recv_overhead += lane_perf->recv_overhead;
+        perf.latency        = ucs_max(perf.latency, lane_perf->latency);
+        perf.sys_latency    = ucs_max(perf.sys_latency, lane_perf->sys_latency);
+        lane_map           |= UCS_BIT(lane);
     }
 
     /* Initialize multi-lane private data and relative weights */
