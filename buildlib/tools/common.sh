@@ -4,8 +4,8 @@ WORKSPACE=${WORKSPACE:=$PWD}
 # build in local directory which goes away when docker exits
 ucx_build_dir=$HOME/${BUILD_ID}/build
 ucx_inst=$ucx_build_dir/install
-CUDA_MODULE="dev/cuda11.1.1"
-GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
+CUDA_MODULE="dev/cuda11.4"
+GDRCOPY_MODULE="dev/gdrcopy2.3_cuda11.4"
 JDK_MODULE="dev/jdk"
 MVN_MODULE="dev/mvn"
 XPMEM_MODULE="dev/xpmem-90a95a4"

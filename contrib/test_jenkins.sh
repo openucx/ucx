@@ -26,8 +26,8 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda11.1.1"
-GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
+CUDA_MODULE="dev/cuda11.4"
+GDRCOPY_MODULE="dev/gdrcopy2.3_cuda11.4"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"

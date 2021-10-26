@@ -11,7 +11,7 @@ trigger:
 resources:
   containers:
     - container: centos7_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:2
 
 stages:
   - stage: Prepare
