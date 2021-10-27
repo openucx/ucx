@@ -252,7 +252,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
     }
 
     /* TODO remove once atomic post returning request supported by users */
-    if (op_id == UCP_OP_ID_AMO_POST) {
+    if ((op_id == UCP_OP_ID_AMO_POST) &&
+        !(param->op_attr_mask & UCP_OP_ATTR_FLAG_NO_IMM_CMPL)) {
         if (UCS_PTR_IS_PTR(status_p)) {
             ucp_request_free(status_p);
         }

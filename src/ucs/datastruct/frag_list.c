@@ -46,8 +46,9 @@ ucs_status_t ucs_frag_list_init(ucs_frag_list_sn_t initial_sn, ucs_frag_list_t *
 #ifdef ENABLE_STATS
     frag_list->prev_sn = initial_sn;
 #endif
-    status = UCS_STATS_NODE_ALLOC(&frag_list->stats, &ucs_frag_list_stats_class,
-                                 stats_parent);
+    status = UCS_STATS_NODE_ALLOC(&frag_list->stats,
+                                  &ucs_frag_list_stats_class,
+                                  stats_parent, "-%p", frag_list);
     return status;
 }
 

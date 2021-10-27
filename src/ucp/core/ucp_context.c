@@ -38,13 +38,6 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
-static const char * ucp_device_type_names[] = {
-    [UCT_DEVICE_TYPE_NET]  = "network",
-    [UCT_DEVICE_TYPE_SHM]  = "intra-node",
-    [UCT_DEVICE_TYPE_ACC]  = "accelerator",
-    [UCT_DEVICE_TYPE_SELF] = "loopback",
-};
-
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -86,6 +79,12 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_ROCM]         = 128,
     [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
     [UCS_MEMORY_TYPE_LAST]         = 0
+};
+
+static const char *ucp_sa_client_hdr_versions[] = {
+    [UCP_SA_DATA_VERSION_V1]   = "v1",
+    [UCP_SA_DATA_VERSION_V2]   = "v2",
+    [UCP_SA_DATA_VERSION_LAST] = NULL
 };
 
 static ucs_config_field_t ucp_config_table[] = {
@@ -380,6 +379,18 @@ static ucs_config_field_t ucp_config_table[] = {
    "messages and put operations, the protocol will do {put,fence,ATP} on the same\n"
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_config_t, ctx.rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
+
+  {"SA_DATA_VERSION", "v1",
+   "Defines the minimal header version the client will use for establishing\n"
+   "client/server connection",
+   ucs_offsetof(ucp_config_t, ctx.sa_client_min_hdr_version),
+   UCS_CONFIG_TYPE_ENUM(ucp_sa_client_hdr_versions)},
+
+  {"RKEY_MPOOL_MAX_MD", "2",
+   "Maximum number of UCP rkey MDs which can be unpacked into memory pool\n"
+   "element. UCP rkeys containing larger number of MDs will be unpacked to\n"
+   "dynamically allocated memory.",
+   ucs_offsetof(ucp_config_t, ctx.rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
 
    {NULL}
 };
@@ -1112,7 +1123,7 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
     devs_p = p;
     for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; ++dev_type_idx) {
         ucp_resource_config_array_str(&config->devices[dev_type_idx],
-                                      ucp_device_type_names[dev_type_idx], p,
+                                      uct_device_type_names[dev_type_idx], p,
                                       endp - p);
         p += strlen(p);
     }
@@ -1392,7 +1403,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
             ucp_report_unavailable(&config->devices[dev_type],
                                    dev_cfg_masks[dev_type],
-                                   ucp_device_type_names[dev_type], " device",
+                                   uct_device_type_names[dev_type], " device",
                                    &avail_devices[dev_type]);
         }
 

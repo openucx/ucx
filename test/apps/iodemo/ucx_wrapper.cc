@@ -847,7 +847,11 @@ void UcxConnection::disconnect(UcxCallback *callback)
     if (!is_established()) {
         assert(_ucx_status == UCS_INPROGRESS);
         established(UCS_ERR_CANCELED);
+    } else if (_ucx_status == UCS_OK) {
+        _ucx_status = UCS_ERR_NOT_CONNECTED;
     }
+
+    assert(UCS_STATUS_IS_ERR(_ucx_status));
 
     _context.move_connection_to_disconnecting(this);
 

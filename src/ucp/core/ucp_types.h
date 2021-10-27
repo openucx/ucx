@@ -57,22 +57,21 @@ typedef uint8_t                      ucp_worker_cfg_index_t;
 
 
 /* Forward declarations */
-typedef struct ucp_request              ucp_request_t;
-typedef struct ucp_recv_desc            ucp_recv_desc_t;
-typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
-typedef struct ucp_address_entry        ucp_address_entry_t;
-typedef struct ucp_unpacked_address     ucp_unpacked_address_t;
-typedef struct ucp_wireup_ep            ucp_wireup_ep_t;
-typedef struct ucp_request_send_proto   ucp_request_send_proto_t;
-typedef struct ucp_worker_iface         ucp_worker_iface_t;
-typedef struct ucp_worker_cm            ucp_worker_cm_t;
-typedef struct ucp_rma_proto            ucp_rma_proto_t;
-typedef struct ucp_amo_proto            ucp_amo_proto_t;
-typedef struct ucp_wireup_sockaddr_data ucp_wireup_sockaddr_data_t;
-typedef struct ucp_ep_config            ucp_ep_config_t;
-typedef struct ucp_ep_config_key        ucp_ep_config_key_t;
-typedef struct ucp_rkey_config_key      ucp_rkey_config_key_t;
-typedef struct ucp_proto                ucp_proto_t;
+typedef struct ucp_request            ucp_request_t;
+typedef struct ucp_recv_desc          ucp_recv_desc_t;
+typedef struct ucp_address_iface_attr ucp_address_iface_attr_t;
+typedef struct ucp_address_entry      ucp_address_entry_t;
+typedef struct ucp_unpacked_address   ucp_unpacked_address_t;
+typedef struct ucp_wireup_ep          ucp_wireup_ep_t;
+typedef struct ucp_request_send_proto ucp_request_send_proto_t;
+typedef struct ucp_worker_iface       ucp_worker_iface_t;
+typedef struct ucp_worker_cm          ucp_worker_cm_t;
+typedef struct ucp_rma_proto          ucp_rma_proto_t;
+typedef struct ucp_amo_proto          ucp_amo_proto_t;
+typedef struct ucp_ep_config          ucp_ep_config_t;
+typedef struct ucp_ep_config_key      ucp_ep_config_key_t;
+typedef struct ucp_rkey_config_key    ucp_rkey_config_key_t;
+typedef struct ucp_proto              ucp_proto_t;
 
 
 /**

@@ -145,6 +145,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
 
     printf("#      Transport: %s\n", resource->tl_name);
     printf("#         Device: %s\n", resource->dev_name);
+    printf("#           Type: %s\n", uct_device_type_names[resource->dev_type]);
     printf("#  System device: %s",
            ucs_topo_sys_device_get_name(resource->sys_device));
     if (resource->sys_device != UCS_SYS_DEVICE_ID_UNKNOWN) {

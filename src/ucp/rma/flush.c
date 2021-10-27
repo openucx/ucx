@@ -248,6 +248,7 @@ void ucp_ep_flush_completion(uct_completion_t *self)
     ucp_trace_req(req, "flush completion status=%d", status);
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
+    ucs_assert(status != UCS_INPROGRESS);
 
     req->status = status;
 
@@ -465,6 +466,9 @@ static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t statu
             ucp_worker_flush_req_set_next_ep(req, 1, &worker->all_eps);
         }
 
+        /* Coverity wrongly resolves completion callback function to
+         * 'ucp_cm_server_conn_request_progress' */
+        /* coverity[offset_free] */
         ucp_request_complete(req, flush_worker.cb, status, req->user_data);
     }
 }

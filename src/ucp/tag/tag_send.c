@@ -115,6 +115,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
      */
     ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        /* Coverity wrongly resolves completion callback function to
+         * 'ucp_cm_client_connect_progress' */
+        /* coverity[offset_free] */
         ucp_request_imm_cmpl_param(param, req, send);
     }
 

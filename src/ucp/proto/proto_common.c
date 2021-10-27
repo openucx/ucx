@@ -147,6 +147,30 @@ static void ucp_proto_common_update_lane_perf_by_distance(
 }
 
 ucs_status_t
+ucp_proto_common_lane_perf_attr(const ucp_proto_init_params_t *params,
+                                ucp_lane_index_t lane, uct_ep_operation_t op,
+                                uint64_t uct_field_mask,
+                                uct_perf_attr_t* perf_attr)
+{
+    ucp_worker_h worker        = params->worker;
+    ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(params, lane);
+    ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
+    ucs_status_t status;
+
+    /* Use the v2 API to query overhead and BW */
+    perf_attr->field_mask = UCT_PERF_ATTR_FIELD_OPERATION | uct_field_mask;
+    perf_attr->operation  = op;
+
+    status = uct_iface_estimate_perf(wiface->iface, perf_attr);
+    if (status != UCS_OK) {
+        ucs_error("failed to get iface %p performance: %s", wiface->iface,
+                  ucs_status_string(status));
+    }
+
+    return status;
+}
+
+ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
                                ucp_proto_common_tl_perf_t *perf)
@@ -173,28 +197,23 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     ucs_assertv(tl_max_frag >= hdr_size, "tl_max_frag=%zu max_hdr_size=%zu",
                 tl_max_frag, hdr_size);
 
-    /* Use the v2 API to query overhead and BW */
-    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
-                           UCT_PERF_ATTR_FIELD_OVERHEAD |
-                           UCT_PERF_ATTR_FIELD_BANDWIDTH |
-                           UCT_PERF_ATTR_FIELD_LATENCY;
-    perf_attr.operation  = params->send_op;
-
-    status = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    status = ucp_proto_common_lane_perf_attr(&params->super, lane,
+            params->send_op, UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD | UCT_PERF_ATTR_FIELD_BANDWIDTH |
+            UCT_PERF_ATTR_FIELD_LATENCY, &perf_attr);
     if (status != UCS_OK) {
-        ucs_error("failed to get iface %p performance: %s", wiface->iface,
-                  ucs_status_string(status));
         return status;
     }
 
-    perf->overhead    = perf_attr.overhead + params->overhead;
-    perf->bandwidth   = ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
-    perf->latency     = ucp_tl_iface_latency(context, &perf_attr.latency) +
-                        params->latency;
-    perf->sys_latency = 0;
-    perf->min_length  = ucs_max(params->min_length, tl_min_frag);
-    perf->max_frag    = ucs_min(tl_max_frag - hdr_size, params->max_length) +
-                        hdr_size; /* Avoid overflow if max_length ~ SIZE_MAX */
+    perf->send_overhead = perf_attr.send_pre_overhead + params->overhead;
+    perf->recv_overhead = perf_attr.recv_overhead + params->overhead;
+    perf->bandwidth     = ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
+    perf->latency       = ucp_tl_iface_latency(context, &perf_attr.latency) +
+                          params->latency;
+    perf->sys_latency   = 0;
+    perf->min_length    = ucs_max(params->min_length, tl_min_frag);
+    perf->max_frag      = ucs_min(tl_max_frag - hdr_size, params->max_length) +
+                          hdr_size; /* Avoid overflow if max_length ~ SIZE_MAX */
 
     /* For zero copy send, consider local system topology distance */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
@@ -215,7 +234,8 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     }
 
     ucs_assert(perf->bandwidth > 1.0);
-    ucs_assert(perf->overhead >= 0);
+    ucs_assert(perf->send_overhead >= 0);
+    ucs_assert(perf->recv_overhead >= 0);
     ucs_assert(perf->max_frag > 0);
     ucs_assert(perf->max_frag >= hdr_size);
     ucs_assert(perf->sys_latency >= 0);
@@ -523,8 +543,10 @@ ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
     perf_attr.field_mask         = UCT_PERF_ATTR_FIELD_OPERATION |
                                    UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
-                                   UCT_PERF_ATTR_FIELD_OVERHEAD |
-                                   UCT_PERF_ATTR_FIELD_BANDWIDTH;
+                                   UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+                                   UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
+                                   UCT_PERF_ATTR_FIELD_BANDWIDTH |
+                                   UCT_PERF_ATTR_FIELD_LATENCY;
     perf_attr.local_memory_type  = local_mem_type;
     perf_attr.remote_memory_type = remote_mem_type;
     perf_attr.operation          = memtype_op;
@@ -554,9 +576,10 @@ ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
         return status;
     }
 
-    copy_time->c = ucp_tl_iface_latency(context,
-                                        &memtype_wiface->attr.latency) +
-                   perf_attr.overhead;
+    /* all allowed copy operations are one-sided */
+    ucs_assert(perf_attr.recv_overhead < 1e-15);
+    copy_time->c = ucp_tl_iface_latency(context, &perf_attr.latency) +
+                   perf_attr.send_pre_overhead + perf_attr.recv_overhead;
     copy_time->m = 1.0 / ucp_tl_iface_bandwidth(context, &perf_attr.bandwidth);
 
     return UCS_OK;
@@ -703,8 +726,10 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     ucs_status_t status;
     size_t frag_size;
 
-    ucs_trace("caps" UCP_PROTO_TIME_FMT(overhead) UCP_PROTO_TIME_FMT(latency),
-              UCP_PROTO_TIME_ARG(perf->overhead),
+    ucs_trace("caps" UCP_PROTO_TIME_FMT(send_overhead)
+              UCP_PROTO_TIME_FMT(recv_overhead) UCP_PROTO_TIME_FMT(latency),
+              UCP_PROTO_TIME_ARG(perf->send_overhead),
+              UCP_PROTO_TIME_ARG(perf->recv_overhead),
               UCP_PROTO_TIME_ARG(perf->latency));
 
     /* Remote access implies zero copy on receiver */
@@ -730,7 +755,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     }
 
     /* Add constant CPU overhead */
-    send_overhead.c += perf->overhead;
+    send_overhead.c += perf->send_overhead;
 
     /*
      * Add the latency of response/ACK back from the receiver.
@@ -789,7 +814,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
         /* Receiver has to process the incoming message */
         if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS)) {
             /* latency measure: add remote-side processing time */
-            recv_overhead.c += perf->overhead;
+            recv_overhead.c += perf->recv_overhead;
         }
     }
 

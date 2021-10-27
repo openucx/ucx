@@ -58,6 +58,7 @@ typedef struct uct_md_rcache_config {
 
 
 extern ucs_config_field_t uct_md_config_rcache_table[];
+extern const char *uct_device_type_names[];
 
 /**
  * "Base" structure which defines MD configuration options.

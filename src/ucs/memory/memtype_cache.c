@@ -46,15 +46,24 @@ static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
         return NULL;
     }
 
-    if (ucs_memtype_cache_global_instance == NULL) {
-        ucs_spin_lock(&ucs_memtype_cache_global_instance_lock);
+    /* Double-check lock scheme */
+    if (ucs_unlikely(ucs_memtype_cache_global_instance == NULL)) {
+        /* Create the memtype cache outside the lock, to avoid a Coverity error
+           of lock inversion with UCS_INIT_ONCE from ucm_set_event_handler() */
         status = UCS_CLASS_NEW(ucs_memtype_cache_t, &memtype_cache);
         if (status != UCS_OK) {
-            ucs_spin_unlock(&ucs_memtype_cache_global_instance_lock);
             return NULL;
         }
 
-        ucs_memtype_cache_global_instance = memtype_cache;
+        ucs_spin_lock(&ucs_memtype_cache_global_instance_lock);
+        if (ucs_memtype_cache_global_instance == NULL) {
+            ucs_memtype_cache_global_instance = memtype_cache;
+        } else {
+            /* In case of a race, the memtype cache could already created by
+             * another thread, so discard the one created by this thread.
+             */
+            UCS_CLASS_DELETE(ucs_memtype_cache_t, memtype_cache);
+        }
         ucs_spin_unlock(&ucs_memtype_cache_global_instance_lock);
     }
 

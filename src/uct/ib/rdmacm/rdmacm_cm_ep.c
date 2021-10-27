@@ -195,7 +195,9 @@ uct_rdamcm_cm_ep_create_reserved_qpn(uct_rdmacm_cm_ep_t *cep,
     blk = ucs_list_tail(&ctx->blk_list, uct_rdmacm_cm_reserved_qpn_blk_t, entry);
     if (ucs_list_is_empty(&ctx->blk_list) ||
         (blk->next_avail_qpn_offset >= qpns_per_obj)) {
-        status = uct_rdmacm_cm_reserved_qpn_blk_add(ctx, cep->id->verbs, &blk);
+        status = uct_rdmacm_cm_reserved_qpn_blk_alloc(ctx, cep->id->verbs,
+                                                      UCS_LOG_LEVEL_ERROR,
+                                                      &blk);
         if (status != UCS_OK) {
             goto out;
         }
@@ -241,7 +243,8 @@ uct_rdamcm_cm_ep_destroy_reserved_qpn(uct_rdmacm_cm_device_context_t *ctx,
     --cep->blk->refcount;
     if ((cep->blk->next_avail_qpn_offset >= qpns_per_obj) &&
         (cep->blk->refcount == 0)) {
-        uct_rdmacm_cm_reserved_qpn_blk_destroy(cep->blk);
+        ucs_list_del(&cep->blk->entry);
+        uct_rdmacm_cm_reserved_qpn_blk_release(cep->blk);
     }
 
     ucs_spin_unlock(&ctx->lock);
@@ -454,47 +457,22 @@ err:
     return status;
 }
 
-static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
-                                                 const uct_ep_params_t *params)
+static ucs_status_t
+uct_rdamcm_cm_ep_server_send_priv_data(uct_rdmacm_cm_ep_t *cep,
+                                       const uct_ep_params_t *params)
 {
-    struct rdma_cm_event *event = (struct rdma_cm_event*)params->conn_request;
-    uct_rdmacm_cm_t *cm         = uct_rdmacm_cm_ep_get_cm(cep);
-    uct_cm_base_ep_t *cm_ep     = &cep->super;
     uint8_t pack_priv_data[UCT_RDMACM_TCP_PRIV_DATA_LEN];
     size_t pack_priv_data_length;
     const void *priv_data;
     size_t priv_data_length;
     ucs_status_t status;
-    char ep_str[UCT_RDMACM_EP_STRING_LEN];
 
-    cep->id     = event->id;
-    cep->flags |= UCT_RDMACM_CM_EP_ON_SERVER;
+    UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
-    if (event->listen_id->channel != cm->ev_ch) {
-        /* the server will open the ep to the client on a different CM.
-         * not the one on which its listener is listening on */
-        if (rdma_migrate_id(event->id, cm->ev_ch)) {
-            ucs_error("failed to migrate id %p to event_channel %p (cm=%p)",
-                      event->id, cm->ev_ch, cm);
-            status = UCS_ERR_IO_ERROR;
-            goto err_reject;
-        }
-
-        ucs_debug("%s migrated id %p from event_channel=%p to "
-                  "new cm %p (event_channel=%p)",
-                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
-                  event->id, event->listen_id->channel, cm, cm->ev_ch);
-    }
-
-    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
-                           cm_ep->server.notify_cb, params->sockaddr_cb_server,
-                           uct_cm_ep_server_conn_notify_callback_t,
-                           ucs_empty_function);
-    if (status != UCS_OK) {
-        goto err_reject;
-    }
-
-    cep->id->context = cep;
+    /* Assume that rdma_ack_cm_event and rdma_migrate_id don't generate events,
+     * so the status can't be changed. */
+    ucs_assertv(cep->status == UCS_OK, "ep %p: status %s", cep,
+                ucs_status_string(cep->status));
 
     if (ucs_test_all_flags(params->field_mask,
                            UCT_EP_PARAM_FIELD_PRIV_DATA |
@@ -505,7 +483,8 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         status = uct_rdmacm_cm_ep_pack_cb(cep, pack_priv_data,
                                           &pack_priv_data_length);
         if (status != UCS_OK) {
-            goto err_reject;
+            uct_rdmacm_cm_reject(uct_rdmacm_cm_ep_get_cm(cep), cep->id);
+            goto err;
         }
 
         priv_data        = &pack_priv_data;
@@ -516,17 +495,68 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
     }
 
     status = uct_rdmacm_cm_ep_send_priv_data(cep, priv_data, priv_data_length);
+    if (status == UCS_OK) {
+        goto out;
+    }
+
+err:
+    uct_rdmacm_cm_destroy_id(cep->id);
+    cep->id = NULL;
+out:
+    UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
+    return status;
+}
+
+static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
+                                                 const uct_ep_params_t *params)
+{
+    struct rdma_cm_event *event             = (struct rdma_cm_event*)params->conn_request;
+    struct rdma_cm_id *id                   = event->id;
+    struct rdma_event_channel *listen_ev_ch = event->listen_id->channel;
+    uct_rdmacm_cm_t *cm                     = uct_rdmacm_cm_ep_get_cm(cep);
+    ucs_status_t status;
+    char ep_str[UCT_RDMACM_EP_STRING_LEN];
+
+    status = uct_rdmacm_cm_ack_event(event);
+    if (status != UCS_OK) {
+        goto err_destroy_id;
+    }
+
+    cep->id          = id;
+    cep->id->context = cep;
+    cep->flags      |= UCT_RDMACM_CM_EP_ON_SERVER;
+
+    status = UCT_CM_SET_CB(params, UCT_EP_PARAM_FIELD_SOCKADDR_NOTIFY_CB_SERVER,
+                           cep->super.server.notify_cb,
+                           params->sockaddr_cb_server,
+                           uct_cm_ep_server_conn_notify_callback_t,
+                           ucs_empty_function);
     if (status != UCS_OK) {
         goto err;
     }
 
-    return uct_rdmacm_cm_ack_event(event);
-err_reject:
-    uct_rdmacm_cm_reject(cm, cep->id);
+    if (listen_ev_ch != cm->ev_ch) {
+        /* The server will open the ep to the client on a different CM.
+         * not the one on which its listener is listening on */
+        if (rdma_migrate_id(id, cm->ev_ch)) {
+            ucs_error("failed to migrate id %p to event_channel %p (cm=%p)",
+                      id, cm->ev_ch, cm);
+            status = UCS_ERR_IO_ERROR;
+            goto err;
+        }
+
+        ucs_debug("%s migrated id %p from event_channel=%p to "
+                  "new cm %p (event_channel=%p)",
+                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+                  id, listen_ev_ch, cm, cm->ev_ch);
+    }
+
+    return uct_rdamcm_cm_ep_server_send_priv_data(cep, params);
+
 err:
-    uct_rdmacm_cm_destroy_id(cep->id);
     cep->id = NULL;
-    uct_rdmacm_cm_ack_event(event);
+err_destroy_id:
+    uct_rdmacm_cm_destroy_id(id);
     return status;
 }
 

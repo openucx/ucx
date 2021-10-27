@@ -77,14 +77,20 @@ enum uct_perf_attr_field {
     /** Enables @ref uct_perf_attr_t::remote_sys_device */
     UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE  = UCS_BIT(4),
 
-    /** Enables @ref uct_perf_attr_t::overhead */
-    UCT_PERF_ATTR_FIELD_OVERHEAD           = UCS_BIT(5),
+    /** Enables @ref uct_perf_attr_t::send_pre_overhead */
+    UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD  = UCS_BIT(5),
+
+    /** Enables @ref uct_perf_attr_t::send_post_overhead */
+    UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD = UCS_BIT(6),
+
+    /** Enables @ref uct_perf_attr_t::recv_overhead */
+    UCT_PERF_ATTR_FIELD_RECV_OVERHEAD      = UCS_BIT(7),
 
     /** Enables @ref uct_perf_attr_t::bandwidth */
-    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(6),
+    UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
 
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(7)
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9)
 };
 
 
@@ -136,9 +142,27 @@ typedef struct {
     ucs_sys_device_t    remote_sys_device;
 
     /**
-     * Message overhead time, in seconds. This field is set by the UCT layer.
+     * This is the time spent in the UCT layer to prepare message request and
+     * pass it to the hardware or system software layers, in seconds.
+     * This field is set by the UCT layer.
      */
-    double              overhead;
+    double              send_pre_overhead;
+
+    /**
+     * This is the time spent in the UCT layer after the message request has
+     * been passed to the hardware or system software layers and before
+     * operation has been finalized, in seconds.
+     * This value has no effect on how long it takes to deliver the message to
+     * remote side.
+     * This field is set by the UCT layer.
+     */
+    double              send_post_overhead;
+
+    /**
+     * Message receive overhead time, in seconds.
+     * This field is set by the UCT layer.
+     */
+    double              recv_overhead;
 
     /**
      * Bandwidth model. This field is set by the UCT layer.

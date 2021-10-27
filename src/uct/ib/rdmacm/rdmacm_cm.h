@@ -108,10 +108,12 @@ ucs_status_t uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_t *cm,
                                               uct_rdmacm_cm_device_context_t **ctx_p);
 
 ucs_status_t
-uct_rdmacm_cm_reserved_qpn_blk_add(uct_rdmacm_cm_device_context_t *ctx,
-                                   struct ibv_context *verbs,
-                                   uct_rdmacm_cm_reserved_qpn_blk_t **blk_p);
+uct_rdmacm_cm_reserved_qpn_blk_alloc(uct_rdmacm_cm_device_context_t *ctx,
+                                     struct ibv_context *verbs,
+                                     ucs_log_level_t err_level,
+                                     uct_rdmacm_cm_reserved_qpn_blk_t **blk_p);
 
-void uct_rdmacm_cm_reserved_qpn_blk_destroy(uct_rdmacm_cm_reserved_qpn_blk_t *blk);
+void uct_rdmacm_cm_reserved_qpn_blk_release(
+        uct_rdmacm_cm_reserved_qpn_blk_t *blk);
 
 #endif

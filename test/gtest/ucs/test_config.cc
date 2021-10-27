@@ -289,6 +289,10 @@ protected:
 
         car_opts(const car_opts& orig) : m_max(orig.m_max)
         {
+            /* reset 'm_opts' to suppress Coverity warning that fields are not
+             * initialized in the constructor */ 
+            memset(&m_opts, 0, sizeof(m_opts));
+
             m_value = new char[m_max];
             strncpy(m_value, orig.m_value, m_max);
 

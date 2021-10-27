@@ -1690,14 +1690,44 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
         goto err;
     }
 
-    /* Create memory pool for small rkeys */
-    status = ucs_mpool_init(&worker->rkey_mp, 0,
-                            sizeof(ucp_rkey_t) +
-                            sizeof(ucp_tl_rkey_t) * UCP_RKEY_MPOOL_MAX_MD,
-                            0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
-                            &ucp_rkey_mpool_ops, "ucp_rkeys");
-    if (status != UCS_OK) {
-        goto err_req_mp_cleanup;
+    if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
+        /* Create memory pool for small rkeys.
+         *
+         * `worker->context->config.ext.rkey_mpool_max_md`specifies the maximum
+         * number of remote keys with that many remote MDs or less would be
+         * allocated from a memory pool.
+         *
+         * The element size of rkey mpool has aligned by the cache line (64B),
+         * so the `worker->context->config.ext.rkey_mpool_max_md` is adjusted to
+         * 2 to minimize gaps between mpool items, in turn, reduce the memory
+         * consumption.
+         *
+         * See the byte-scheme of the rkey mpool element:
+         * +------+------------+------------+------------+------------+------------+------
+         * |elem  |            |            |            |            |            |
+         * |header| ucp_rkey_t | uct rkey 0 | uct rkey 1 | uct rkey 2 | uct rkey 3 | ...
+         * +------+------------+------------+------------+------------+------------+-----
+         * | 8B   |    32B     |    32B     |    32B     |    32B     |    32B     | ...
+         * +----------------------------+-------------------------+----------------------+
+         * |        64B Cache line      |     64B Cache line      |    64B Cache line    |
+         * +----------------------------+-------------------------+---+------------------+
+         * |                 rkey_mpool_max_md=3                      |     40B gap      |
+         * +---------------------------------------------+--------+---+------------------+
+         * |           rkey_mpool_max_md=2               | 16B gap|
+         * +---------------------------------------------+--------+
+         *
+         * Thus rkey_mpool_max_md=2 is the optimal value to keeping short
+         * rkeys in the rkey mpool.
+         */
+        status = ucs_mpool_init(&worker->rkey_mp, 0,
+                                sizeof(ucp_rkey_t) +
+                                sizeof(ucp_tl_rkey_t) *
+                                worker->context->config.ext.rkey_mpool_max_md,
+                                0, UCS_SYS_CACHE_LINE_SIZE, 128, UINT_MAX,
+                                &ucp_rkey_mpool_ops, "ucp_rkeys");
+        if (status != UCS_OK) {
+            goto err_req_mp_cleanup;
+        }
     }
 
     /* Create memory pool for incoming UCT messages without a UCT descriptor */
@@ -1724,7 +1754,9 @@ static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
 err_am_mp_cleanup:
     ucs_mpool_cleanup(&worker->am_mp, 0);
 err_rkey_mp_cleanup:
-    ucs_mpool_cleanup(&worker->rkey_mp, 0);
+    if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
+        ucs_mpool_cleanup(&worker->rkey_mp, 0);
+    }
 err_req_mp_cleanup:
     ucs_mpool_cleanup(&worker->req_mp, 0);
 err:
@@ -1746,7 +1778,9 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
     kh_destroy_inplace(ucp_worker_mpool_hash, &worker->mpool_hash);
     ucs_mpool_cleanup(&worker->reg_mp, 1);
     ucs_mpool_cleanup(&worker->am_mp, 1);
-    ucs_mpool_cleanup(&worker->rkey_mp, 1);
+    if (worker->context->config.ext.rkey_mpool_max_md >= 0) {
+        ucs_mpool_cleanup(&worker->rkey_mp, 1);
+    }
     ucs_mpool_cleanup(&worker->req_mp,
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
@@ -2132,7 +2166,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     status = UCS_STATS_NODE_ALLOC(&worker->tm_offload_stats,
                                   &ucp_worker_tm_offload_stats_class,
-                                  worker->stats);
+                                  worker->stats, "");
     if (status != UCS_OK) {
         goto err_free_stats;
     }
@@ -2260,6 +2294,9 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
 
     UCP_EP_ASSERT_COUNTER_DEC(&ucp_ep->discard_refcount);
     ucp_worker_flush_ops_count_dec(ucp_ep->worker);
+    /* Coverity wrongly resolves completion callback function to
+     * 'ucp_cm_server_conn_request_progress' */
+    /* coverity[offset_free] */
     ucp_request_complete(req, send.cb, UCS_OK, req->user_data);
     ucp_ep_remove_ref(ucp_ep);
 }
@@ -3087,10 +3124,11 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
     }
 }
 
-static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                                         unsigned ep_flush_flags,
-                                         ucp_send_nbx_callback_t discarded_cb,
-                                         void *discarded_cb_arg)
+static ucs_status_t
+ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                             unsigned ep_flush_flags,
+                             ucp_send_nbx_callback_t discarded_cb,
+                             void *discarded_cb_arg)
 {
     ucp_worker_h worker = ucp_ep->worker;
     ucp_request_t *req;
@@ -3100,14 +3138,14 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     if (ucp_is_uct_ep_failed(uct_ep)) {
         /* No need to discard failed TL EP, because it may lead to adding the
          * same UCT EP to the hash of discarded UCT EPs */
-        return;
+        return UCS_OK;
     }
 
     req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
         ucs_error("unable to allocate request for discarding UCT EP %p "
                   "on UCP worker %p", uct_ep, worker);
-        return;
+        return UCS_ERR_NO_MEMORY;
     }
 
     ucp_ep_add_ref(ucp_ep);
@@ -3137,12 +3175,12 @@ static void ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     ucp_worker_discard_uct_ep_progress(req);
+
+    return UCS_INPROGRESS;
 }
 
 static uct_ep_h ucp_worker_discard_wireup_ep(
-        ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep, unsigned ep_flush_flags,
-        uct_pending_purge_callback_t purge_cb, void *purge_arg,
-        ucp_send_nbx_callback_t discarded_cb, void *discarded_cb_arg)
+        ucp_ep_h ucp_ep, ucp_wireup_ep_t *wireup_ep, unsigned ep_flush_flags)
 {
     uct_ep_h uct_ep;
     int is_owner;
@@ -3171,12 +3209,12 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
            kh_end(&worker->discard_uct_ep_hash);
 }
 
-void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                               unsigned ep_flush_flags,
-                               uct_pending_purge_callback_t purge_cb,
-                               void *purge_arg,
-                               ucp_send_nbx_callback_t discarded_cb,
-                               void *discarded_cb_arg)
+ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                       unsigned ep_flush_flags,
+                                       uct_pending_purge_callback_t purge_cb,
+                                       void *purge_arg,
+                                       ucp_send_nbx_callback_t discarded_cb,
+                                       void *discarded_cb_arg)
 {
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
     ucs_assert(uct_ep != NULL);
@@ -3186,16 +3224,14 @@ void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
     if (ucp_wireup_ep_test(uct_ep)) {
         uct_ep = ucp_worker_discard_wireup_ep(ucp_ep, ucp_wireup_ep(uct_ep),
-                                              ep_flush_flags, purge_cb,
-                                              purge_arg, discarded_cb,
-                                              discarded_cb_arg);
+                                              ep_flush_flags);
         if (uct_ep == NULL) {
-            return;
+            return UCS_OK;
         }
     }
 
-    ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags, discarded_cb,
-                                 discarded_cb_arg);
+    return ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags,
+                                        discarded_cb, discarded_cb_arg);
 }
 
 void ucp_worker_vfs_refresh(void *obj)

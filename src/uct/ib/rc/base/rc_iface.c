@@ -638,7 +638,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                         uct_rc_ep_atomic_handler_64_be0;
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
-                                  self->super.super.stats);
+                                  self->super.super.stats, "-%p", self);
     if (status != UCS_OK) {
         goto err_cleanup_tx_ops;
     }

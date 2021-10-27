@@ -559,6 +559,7 @@ void ucs_sys_iterate_vm(void *address, size_t size, ucs_sys_vma_cb_t cb,
             }
         }
 
+        /* coverity[tainted_data] */
         cb(&info, ctx);
     }
 

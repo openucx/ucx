@@ -395,7 +395,7 @@ void ucs_memtrack_init()
 
     status = UCS_STATS_NODE_ALLOC(&ucs_memtrack_context.stats,
                                   &ucs_memtrack_stats_class,
-                                  ucs_stats_get_root());
+                                  ucs_stats_get_root(), "");
     if (status != UCS_OK) {
         return;
     }

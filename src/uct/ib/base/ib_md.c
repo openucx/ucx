@@ -1141,6 +1141,10 @@ uct_ib_mem_global_odp_dereg(uct_md_h uct_md,
 
     ib_memh = params->memh;
     status  = uct_ib_memh_dereg(md, ib_memh);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_ib_memh_free(ib_memh);
     return status;
 }
@@ -1357,9 +1361,10 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
 static ucs_status_t
 uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
+    char *flags_str = NULL;
     uct_ib_device_spec_t *spec;
     ucs_status_t status;
-    char *flags_str, *p;
+    char *p;
     unsigned i, count;
     int nfields;
 
@@ -1391,6 +1396,9 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
         }
 
         if (nfields >= 4) {
+            /* Check that 'flags_str' is not NULL to suppress the Coverity warning */
+            ucs_assert(flags_str != NULL);
+
             for (p = flags_str; *p != 0; ++p) {
                 if (*p == '4') {
                     spec->flags |= UCT_IB_DEVICE_FLAG_MLX4_PRM;
@@ -1405,11 +1413,13 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
                 } else {
                     ucs_error("invalid device flag: '%c'", *p);
                     free(flags_str);
+                    flags_str = NULL;
                     status = UCS_ERR_INVALID_PARAM;
                     goto err_free;
                 }
             }
             free(flags_str);
+            flags_str = NULL;
         }
 
         ucs_trace("added device '%s' vendor_id 0x%x device_id %d flags %c%c prio %d",
@@ -1677,8 +1687,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
-                                  ucs_stats_get_root(),
-                                  "%s-%p", ibv_get_device_name(ib_device), md);
+                                  ucs_stats_get_root(), "%s-%p",
+                                  ibv_get_device_name(ib_device), md);
     if (status != UCS_OK) {
         goto err;
     }
