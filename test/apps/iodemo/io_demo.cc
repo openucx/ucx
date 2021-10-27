@@ -554,21 +554,27 @@ protected:
     class BufferIov {
     public:
         BufferIov(size_t size, MemoryPool<BufferIov> &pool) :
-            _data_size(0lu), _memory_type(UCS_MEMORY_TYPE_UNKNOWN), _pool(pool)
+                _data_size(0lu), _memory_type(UCS_MEMORY_TYPE_UNKNOWN),
+                _validate(false), _pool(pool), _extra_buf(NULL)
         {
             _iov.reserve(size);
-            _extra_buf = NULL;
         }
 
-        size_t size() const {
+        size_t size() const
+        {
+            assert(!_iov.empty() || _extra_buf);
             return _iov.size() + !!_extra_buf;
         }
 
-        size_t data_size() const {
+        size_t data_size() const
+        {
+            assert(!_iov.empty() || _extra_buf);
             return _data_size;
         }
 
-        ucs_memory_type_t mem_type() const {
+        ucs_memory_type_t mem_type() const
+        {
+            assert(!_iov.empty() || _extra_buf);
             return _memory_type;
         }
 
@@ -576,7 +582,9 @@ protected:
                   uint32_t sn, uint64_t conn_id, bool validate)
         {
             assert(_iov.empty());
+            assert(_extra_buf == NULL);
 
+            _validate     = validate;
             _data_size    = data_size;
             _memory_type  = chunk_pool.memory_type();
             Buffer *chunk = chunk_pool.get();
@@ -597,6 +605,8 @@ protected:
         void init(size_t data_size, void *ext_buf)
         {
             assert(ext_buf != NULL);
+            assert(_iov.empty());
+            assert(_extra_buf == NULL);
 
             _data_size = data_size;
             _extra_buf = ext_buf;
@@ -608,11 +618,20 @@ protected:
         }
 
         void release() {
+            assert(!_iov.empty() || _extra_buf);
+
+            if (_validate) {
+                fill_data(std::numeric_limits<unsigned>::max(),
+                          std::numeric_limits<uint64_t>::max(),
+                          _memory_type);
+            }
+
             while (!_iov.empty()) {
                 _iov.back()->release();
                 _iov.pop_back();
             }
 
+            _validate  = false;
             _extra_buf = NULL;
             _pool.put(this);
         }
@@ -620,6 +639,7 @@ protected:
         inline size_t validate(unsigned seed, uint64_t conn_id,
                                std::stringstream &err_str) const {
             assert(!_iov.empty() || _extra_buf);
+            assert(_validate);
 
             for (size_t iov_err_pos = 0, i = 0; i < _iov.size(); ++i) {
                 size_t buf_err_pos = IoDemoRandom::validate(
@@ -635,8 +655,9 @@ protected:
                 size_t buf_err_pos = IoDemoRandom::validate(
                         seed, uint16_t(conn_id), _extra_buf, _data_size,
                         _memory_type, err_str);
-                if (buf_err_pos < _data_size)
+                if (buf_err_pos < _data_size) {
                     return buf_err_pos;
+                }
             }
 
             return _npos;
@@ -666,6 +687,7 @@ protected:
         static const size_t    _npos = static_cast<size_t>(-1);
         size_t                 _data_size;
         ucs_memory_type_t      _memory_type;
+        bool                   _validate;
         std::vector<Buffer*>   _iov;
         MemoryPool<BufferIov>& _pool;
         void                   *_extra_buf;
@@ -820,7 +842,11 @@ protected:
     void send_recv_data(UcxConnection* conn, const BufferIov &iov, uint32_t sn,
                         xfer_type_t send_recv_data,
                         UcxCallback* callback = EmptyCallback::get()) {
-        for (size_t i = 0; i < iov.size(); ++i) {
+        // Store the size of the IO vector into an auxillary variable to avoid
+        // touching IO vector object after it was released in the callback
+        size_t iov_size = iov.size();
+
+        for (size_t i = 0; i < iov_size; ++i) {
             if (send_recv_data == XFER_TYPE_SEND) {
                 conn->send_data(iov[i].buffer(), iov[i].size(), sn, callback);
             } else {
