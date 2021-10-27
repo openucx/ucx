@@ -2116,6 +2116,25 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
+    /* calculate config->am_bw_md_map */
+    for (i = 0; (i < config->key.num_lanes) &&
+                (config->key.am_bw_lanes[i] != UCP_NULL_LANE); ++i) {
+        lane      = config->key.am_bw_lanes[i];
+        rsc_index = config->key.lanes[lane].rsc_index;
+        if (rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+
+        if ((md_attr->cap.flags & UCT_MD_FLAG_NEED_MEMH) &&
+            (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY)) {
+            config->am_bw_md_map |= UCS_BIT(context->tl_rscs[rsc_index].md_index);
+        }
+    }
+    ucs_assert(ucs_popcount(config->am_bw_md_map) <= UCP_MAX_OP_MDS);
+
     /* configuration for rndv */
     get_zcopy_lane_count = put_zcopy_lane_count = 0;
 

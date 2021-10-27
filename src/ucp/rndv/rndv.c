@@ -2034,8 +2034,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rndv_rtr_handler,
          ep_config->am.mem_type_zcopy_thresh[sreq->send.mem_type]))
     {
         if ((sreq->flags & UCP_REQUEST_FLAG_USER_MEMH) &&
-            (sreq->send.state.dt.dt.contig.md_map !=
-            ucp_ep_config(sreq->send.ep)->key.am_bw_md_map)) {
+            !ucs_test_all_flags(sreq->send.state.dt.dt.contig.md_map,
+            ucp_ep_config(sreq->send.ep)->am_bw_md_map)) {
             sreq->send.state.dt.dt.contig.md_map = 0;
             sreq->flags                         &= ~UCP_REQUEST_FLAG_USER_MEMH;
         }

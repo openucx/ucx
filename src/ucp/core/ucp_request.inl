@@ -376,38 +376,44 @@ void ucp_request_recv_generic_dt_finish(ucp_request_t *req)
 static UCS_F_ALWAYS_INLINE void
 ucp_request_memh_init(ucp_request_t *req, ucp_md_map_t md_map, ucp_mem_h memh)
 {
-    ucp_md_map_t *md_map_p   = &req->send.state.dt.dt.contig.md_map;
     uct_mem_h *uct_memh      = req->send.state.dt.dt.contig.memh;
     int i                    = 0;
     ucp_md_index_t md_idx;
 
     ucs_assert(memh != NULL);
 
-    ucs_assert((memh->md_map & md_map) == md_map);
+    ucs_assertv(ucs_test_all_flags(memh->md_map, md_map),
+                "requested md_map %lx is not contained in user provided memh %lx",
+                md_map, memh->md_map);
 
-    *md_map_p = md_map;
-    ucs_for_each_bit(md_idx, *md_map_p) {
+    req->send.state.dt.dt.contig.md_map = md_map;
+    ucs_for_each_bit(md_idx, md_map) {
         uct_memh[i++] = ucp_memh2uct(memh, md_idx);
     }
 
     req->flags |= UCP_REQUEST_FLAG_USER_MEMH;
 }
 
-static UCS_F_ALWAYS_INLINE bool
+static UCS_F_ALWAYS_INLINE int
 ucp_request_memh_check(const ucp_request_param_t *param,
                        void *addr, size_t len, uint8_t mem_type)
 {
-    if ((param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) &&
-        (param->memh != NULL) &&
-        (param->memh->mem_type == mem_type) &&
-        (param->memh->length >= len) &&
-        (param->memh->address <= addr) &&
-        (UCS_PTR_BYTE_OFFSET(param->memh->address, param->memh->length) >=
-        UCS_PTR_BYTE_OFFSET(addr, len))) {
-        return true;
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH)) {
+        return 0;
     }
 
-    return false;
+#if ENABLE_PARAM_CHECK
+    if ((param->memh == NULL) ||
+        (param->memh->mem_type != mem_type) ||
+        (param->memh->length < len) ||
+        (param->memh->address > addr) ||
+        (UCS_PTR_BYTE_OFFSET(param->memh->address, param->memh->length) <
+        UCS_PTR_BYTE_OFFSET(addr, len))) {
+        return 0;
+    }
+#endif
+
+    return 1;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -420,7 +426,7 @@ ucp_request_send_memh_eager_init(ucp_request_t *req,
     }
 
     ucp_request_memh_init(req,
-                          ucp_ep_config(req->send.ep)->key.am_bw_md_map,
+                          ucp_ep_config(req->send.ep)->am_bw_md_map,
                           param->memh);
 }
 
