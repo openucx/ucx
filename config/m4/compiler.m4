@@ -185,6 +185,13 @@ AC_DEFUN([DETECT_UARCH],
           ax_cpu="thunderxt88" ;;
         esac
         ;;
+      0x46) case $cpupart in
+        0x001)
+          AC_DEFINE([HAVE_AARCH64_A64FX], 1, [Fujitsu A64FX])
+          ax_cpu="a64fx"
+          ax_arch="armv8.2-a+sve" ;;
+        esac
+        ;;
       0x48) case $cpupart in
         0xd01 | 0x0d01)
           AC_DEFINE([HAVE_AARCH64_HI1620], 1, [Huawei Kunpeng 920])
@@ -194,10 +201,11 @@ AC_DEFUN([DETECT_UARCH],
         ;;
       *)
         ;;
-    esac 
+    esac
     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [test x$ax_cpu = xthunderx2t99])
     AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [test x$ax_cpu = xthunderxt88])
     AM_CONDITIONAL([HAVE_AARCH64_HI1620], [test x$ax_cpu = xtsv110])
+    AM_CONDITIONAL([HAVE_AARCH64_A64FX], [test x$ax_cpu = xa64fx])
 ])
 
 

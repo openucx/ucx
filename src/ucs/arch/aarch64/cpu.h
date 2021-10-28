@@ -93,6 +93,10 @@ void ucs_aarch64_cpuid(ucs_aarch64_cpuid_t *cpuid);
 extern void *__memcpy_thunderx2(void *, const void *, size_t);
 #endif
 
+#if defined(HAVE_AARCH64_A64FX)
+extern void *__memcpy_a64fx(void *, const void *, size_t);
+#endif
+
 
 #if HAVE_HW_TIMER
 static inline uint64_t ucs_arch_read_hres_clock(void)
@@ -258,6 +262,8 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 {
 #if defined(HAVE_AARCH64_THUNDERX2)
     return __memcpy_thunderx2(dst, src, len);
+#elif defined(HAVE_AARCH64_A64FX)
+    return __memcpy_a64fx(dst, src, len);
 #elif defined(__ARM_FEATURE_SVE)
     return memcpy_aarch64_sve(dst, src, len);
 #else

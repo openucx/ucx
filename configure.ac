@@ -212,6 +212,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX2], [false])
      AM_CONDITIONAL([HAVE_AARCH64_THUNDERX1], [false])
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
+     AM_CONDITIONAL([HAVE_AARCH64_A64FX], [false])
      AM_CONDITIONAL([HAVE_FUSE3], [false])
      AM_CONDITIONAL([IODEMO_CUDA], [false])
     ],

@@ -23,7 +23,7 @@ ucs_config_field_t uct_sm_iface_config_table[] = {
      ucs_offsetof(uct_sm_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
-    {"BW", "12179MBs",
+    {"BW", "auto",
      "Effective memory bandwidth",
      ucs_offsetof(uct_sm_iface_config_t, bandwidth), UCS_CONFIG_TYPE_BW},
 
@@ -99,7 +99,15 @@ UCS_CLASS_INIT_FUNC(uct_sm_iface_t, uct_iface_ops_t *ops,
                             params->stats_root :
                             NULL) UCS_STATS_ARG(params->mode.device.dev_name));
 
-    self->config.bandwidth = sm_config->bandwidth;
+    if (sm_config->bandwidth == UCS_CONFIG_BW_AUTO) {
+        if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
+            self->config.bandwidth = ucs_cpu_get_memcpy_bw();
+        } else {
+            self->config.bandwidth = 12179 * UCS_MBYTE;
+        }
+    } else {
+        self->config.bandwidth = sm_config->bandwidth;
+    }
 
     return UCS_OK;
 }
