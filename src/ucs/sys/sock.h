@@ -79,6 +79,16 @@ int ucs_netif_is_active(const char *if_name);
 
 
 /**
+ * Check if the given interface is in loopback.
+ *
+ * @param [in]  if_name      Interface name to check.
+ *
+ * @return 1 if true, otherwise 0
+ */
+int ucs_netif_is_loopback(const char *if_name);
+
+
+/**
  * Get number of active 802.3ad ports for a bond device. If the device is not
  * a bond device, or 802.3ad is not enabled, return 1.
  *

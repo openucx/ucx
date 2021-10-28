@@ -100,22 +100,39 @@ out:
     return status;
 }
 
-int ucs_netif_is_active(const char *if_name)
+static ucs_status_t ucs_netif_get(const char *if_name,
+                                  struct ifreq *ifr)
 {
     ucs_status_t status;
-    struct ifreq ifr;
 
-    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, &ifr);
+    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, ifr);
     if (status != UCS_OK) {
-        return 0;
+        return -1;
     }
 
-    status = ucs_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
-    if (status != UCS_OK) {
+    return ucs_netif_ioctl(if_name, SIOCGIFFLAGS, ifr);
+}
+
+int ucs_netif_is_active(const char *if_name)
+{
+    struct ifreq ifr;
+
+    if (ucs_netif_get(if_name, &ifr) != UCS_OK) {
         return 0;
     }
 
     return ucs_netif_flags_is_active(ifr.ifr_flags);
+}
+
+int ucs_netif_is_loopback(const char *if_name)
+{
+    struct ifreq ifr;
+
+    if (ucs_netif_get(if_name, &ifr) != UCS_OK) {
+        return 0;
+    }
+
+    return ifr.ifr_flags & IFF_LOOPBACK;
 }
 
 unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)

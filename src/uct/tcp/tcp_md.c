@@ -12,6 +12,19 @@
 #include <uct/base/uct_md.h>
 
 
+static ucs_config_field_t uct_tcp_md_config_table[] = {
+    {"", "", NULL,
+    ucs_offsetof(uct_tcp_md_config_t, super),
+    UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+    {"LOOPBACK_ENABLE", "y",
+     "Enable loopback interface support",
+     ucs_offsetof(uct_tcp_md_config_t, lo_enable), UCS_CONFIG_TYPE_BOOL},
+
+    {NULL}
+};
+
+
 static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
@@ -51,6 +64,8 @@ static ucs_status_t
 uct_tcp_md_open(uct_component_t *component, const char *md_name,
                 const uct_md_config_t *md_config, uct_md_h *md_p)
 {
+    uct_tcp_md_config_t *config = ucs_derived_of(md_config,
+                                                 uct_tcp_md_config_t);
     static uct_md_ops_t md_ops = {
         .close              = ucs_empty_function,
         .query              = uct_tcp_md_query,
@@ -59,12 +74,16 @@ uct_tcp_md_open(uct_component_t *component, const char *md_name,
         .mem_dereg          = uct_tcp_mem_dereg,
         .detect_memory_type = ucs_empty_function_return_unsupported
     };
-    static uct_md_t md = {
-        .ops          = &md_ops,
-        .component    = &uct_tcp_component
+    static uct_tcp_md_t md = {
+        .super = {
+            .ops       = &md_ops,
+            .component = &uct_tcp_component
+        },
     };
 
-    *md_p = &md;
+    md.config.lo_enable = config->lo_enable;
+
+    *md_p = (uct_md_h)&md;
     return UCS_OK;
 }
 
@@ -89,12 +108,17 @@ uct_component_t uct_tcp_component = {
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = UCT_TCP_NAME,
-    .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .md_config          = {
+        .name           = "TCP memory domain",
+        .prefix         = "TCP_",
+        .table          = uct_tcp_md_config_table,
+        .size           = sizeof(uct_tcp_md_config_t)
+    },
     .cm_config          = {
         .name           = "TCP-SOCKCM connection manager",
         .prefix         = "TCP_CM_",
         .table          = uct_tcp_sockcm_config_table,
-        .size           = sizeof(uct_tcp_sockcm_config_t),
+        .size           = sizeof(uct_tcp_sockcm_config_t)
      },
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_tcp_component),
     .flags              = UCT_COMPONENT_FLAG_CM,

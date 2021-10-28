@@ -115,7 +115,11 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_tcp_iface_t, uct_iface_t);
 static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
                                                      uct_device_addr_t *addr)
 {
-    uct_tcp_iface_t *iface          = ucs_derived_of(tl_iface, uct_tcp_iface_t);
+    uct_tcp_iface_t *iface          = ucs_derived_of(tl_iface,
+                                                     uct_tcp_iface_t);
+    uct_tcp_md_t UCS_V_UNUSED *md   =
+            ucs_derived_of(ucs_derived_of(tl_iface, uct_base_iface_t)->md,
+                           uct_tcp_md_t);
     uct_tcp_device_addr_t *dev_addr = (uct_tcp_device_addr_t*)addr;
     void *pack_ptr                   = dev_addr + 1;
     const struct sockaddr *saddr    = (struct sockaddr*)&iface->config.ifaddr;
@@ -127,6 +131,7 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
     dev_addr->sa_family = iface->config.ifaddr.sin_family;
 
     if (ucs_sockaddr_is_inaddr_loopback(saddr)) {
+        ucs_assert(md->config.lo_enable);
         dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK;
         uct_iface_get_local_address(pack_ptr, UCS_SYS_NS_TYPE_NET);
     } else {
@@ -144,12 +149,16 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
 
 static size_t uct_tcp_iface_get_device_address_length(uct_tcp_iface_t *iface)
 {
+    uct_tcp_md_t UCS_V_UNUSED *md   =
+            ucs_derived_of(ucs_derived_of(iface, uct_base_iface_t)->md,
+                           uct_tcp_md_t);
     const struct sockaddr *saddr = (struct sockaddr*)&iface->config.ifaddr;
     size_t addr_len              = sizeof(uct_tcp_device_addr_t);
     size_t in_addr_len;
     ucs_status_t status;
 
     if (ucs_sockaddr_is_inaddr_loopback(saddr)) {
+        ucs_assert(md->config.lo_enable);
         addr_len += sizeof(uct_iface_local_addr_ns_t);
     } else {
         status = ucs_sockaddr_inet_addr_sizeof(saddr, &in_addr_len);
@@ -796,10 +805,11 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_tcp_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
 
-ucs_status_t uct_tcp_query_devices(uct_md_h md,
+ucs_status_t uct_tcp_query_devices(uct_md_h tl_md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
 {
+    uct_tcp_md_t *md = ucs_derived_of(tl_md, uct_tcp_md_t);
     uct_tl_device_resource_t *devices, *tmp;
     static const char *netdev_dir = "/sys/class/net";
     struct dirent *entry;
@@ -839,7 +849,9 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             continue;
         }
 
-        if (!ucs_netif_is_active(entry->d_name)) {
+        if (!ucs_netif_is_active(entry->d_name) ||
+            (!md->config.lo_enable &&
+             ucs_netif_is_loopback(entry->d_name))) {
             continue;
         }
 
