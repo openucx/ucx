@@ -65,6 +65,11 @@ typedef struct uct_scopy_ep {
 
 UCS_CLASS_DECLARE(uct_scopy_ep_t, const uct_ep_params_t *);
 
+void uct_scopy_ep_tx_error(uct_scopy_ep_t *ep, int id, const char *op_name,
+                           ssize_t op_ret, int op_errno,
+                           const struct iovec *local_iov, size_t local_iov_cnt,
+                           const struct iovec *remote_iov);
+
 ucs_status_t uct_scopy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
                                     size_t iov_cnt, uint64_t remote_addr,
                                     uct_rkey_t rkey, uct_completion_t *comp);

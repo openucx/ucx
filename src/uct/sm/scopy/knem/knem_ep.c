@@ -56,6 +56,7 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
                             uint64_t remote_addr, uct_rkey_t rkey,
                             uct_scopy_tx_op_t tx_op)
 {
+    uct_knem_ep_t *knem_ep;
     uct_knem_iface_t *knem_iface = ucs_derived_of(tl_ep->iface,
                                                   uct_knem_iface_t);
     int knem_fd                  = knem_iface->knem_md->knem_fd;
@@ -92,9 +93,10 @@ ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt
     ret = ioctl(knem_fd, KNEM_CMD_INLINE_COPY, &icopy);
     if (ucs_unlikely((ret < 0) ||
                      (icopy.current_status != KNEM_STATUS_SUCCESS))) {
-        ucs_error("KNEM inline copy \"%s\" failed, ioctl() return value - %d, "
-                  "copy status - %d: %m",
-                  uct_knem_ep_tx_op_str[tx_op], ret, icopy.current_status);
+        knem_ep = ucs_derived_of(tl_ep, uct_knem_ep_t);
+        uct_scopy_ep_tx_error(&knem_ep->super, knem_fd,
+                              uct_knem_ep_tx_op_str[tx_op], ret, errno, NULL,
+                              0, NULL);
         return UCS_ERR_IO_ERROR;
     }
 
