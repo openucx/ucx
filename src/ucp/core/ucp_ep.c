@@ -732,6 +732,59 @@ err:
     return status;
 }
 
+static ucs_status_t
+ucp_sa_data_v1_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
+                      unsigned *ep_init_flags_p,
+                      const void** worker_addr_p)
+{
+    const ucp_wireup_sockaddr_data_v1_t *sa_data_v1 =
+            ucs_derived_of(sa_data, ucp_wireup_sockaddr_data_v1_t);
+
+    if (sa_data_v1->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
+        ucs_error("sa_data_v1 contains unsupported address mode %u",
+                  sa_data_v1->addr_mode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *ep_init_flags_p = (sa_data->header == UCP_ERR_HANDLING_MODE_PEER) ?
+                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    *worker_addr_p   = sa_data_v1 + 1;
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_sa_data_v2_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
+                      unsigned *ep_init_flags_p,
+                      const void** worker_addr_p)
+{
+    *ep_init_flags_p = (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER) ?
+                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    *worker_addr_p   = sa_data + 1;
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_conn_request_unpack_sa_data(const ucp_conn_request_h conn_request,
+                                unsigned *ep_init_flags_p,
+                                const void** worker_addr_p)
+{
+    const ucp_wireup_sockaddr_data_base_t *sa_data =
+            UCS_PTR_TYPE_OFFSET(conn_request, *conn_request);
+    uint8_t sa_data_version                        =
+            sa_data->header >> UCP_SA_DATA_HEADER_VERSION_SHIFT;
+
+    switch (sa_data_version) {
+    case UCP_SA_DATA_VERSION_V1:
+        return ucp_sa_data_v1_unpack(sa_data, ep_init_flags_p, worker_addr_p);
+    case UCP_SA_DATA_VERSION_V2:
+        return ucp_sa_data_v2_unpack(sa_data, ep_init_flags_p, worker_addr_p);
+    default:
+        ucs_error("conn_request %p: unsupported sa_data version: %u",
+                  conn_request, sa_data_version);
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
+
 /**
  * Create an endpoint on the server side connected to the client endpoint.
  */
@@ -739,35 +792,17 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,
                                          ucp_ep_h *ep_p)
 {
-    ucp_wireup_sockaddr_data_base_t *sa_data = (void*)(conn_request + 1);
-    uint8_t sa_data_version                  = sa_data->header >>
-                                               UCP_SA_DATA_HEADER_VERSION_SHIFT;
-    ucp_wireup_sockaddr_data_v1_t *sa_data_v1;
     ucp_unpacked_address_t remote_addr;
     unsigned ep_init_flags;
     uint64_t addr_flags;
     ucs_status_t status;
-    void *worker_addr;
+    const void *worker_addr;
     unsigned i;
 
-    if (sa_data_version == UCP_SA_DATA_VERSION_V1) {
-        ep_init_flags = (sa_data->header == UCP_ERR_HANDLING_MODE_PEER) ?
-                        UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
-        sa_data_v1    = ucs_derived_of(sa_data, ucp_wireup_sockaddr_data_v1_t);
-        worker_addr   = sa_data_v1 + 1;
-
-        ucs_assertv_always(sa_data_v1->addr_mode == UCP_WIREUP_SA_DATA_CM_ADDR,
-                           "unsupported address mode %u",
-                           sa_data_v1->addr_mode);
-        ucs_assertv_always(sa_data_v1->dev_index == 0, "dev_index %u",
-                           sa_data_v1->dev_index);
-    } else if (sa_data_version == UCP_SA_DATA_VERSION_V2) {
-        ep_init_flags = (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER) ?
-                        UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
-        worker_addr   = sa_data + 1;
-    } else {
-        ucs_error("unsupported sa_data version: %u", sa_data_version);
-        return UCS_ERR_UNSUPPORTED;
+    status = ucp_conn_request_unpack_sa_data(conn_request, &ep_init_flags,
+                                             &worker_addr);
+    if (status != UCS_OK) {
+        return status;
     }
 
     addr_flags = ucp_worker_common_address_pack_flags(worker) |
