@@ -352,7 +352,7 @@ static void uct_rdmacm_cm_handle_event_addr_resolved(struct rdma_cm_event *event
         ucs_diag("%s: rdma_resolve_route failed: %m",
                   uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN));
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_UNREACHABLE);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, UCS_ERR_UNREACHABLE, 1);
     }
 }
 
@@ -361,12 +361,13 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
     uct_rdmacm_cm_ep_t *cep = (uct_rdmacm_cm_ep_t*)event->id->context;
     uint8_t pack_priv_data[UCT_RDMACM_TCP_PRIV_DATA_LEN];
     size_t pack_priv_data_length;
+    uct_cm_remote_data_t remote_data;
     ucs_status_t status;
 
     ucs_assert(event->id == cep->id);
 
     if (cep->super.resolve_cb != NULL) {
-        status = uct_rdmacm_cm_ep_resolve_cb(cep);
+        status = uct_rdmacm_cm_ep_resolve_cb(cep, UCS_OK);
         goto out;
     }
 
@@ -382,8 +383,8 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
 
 out:
     if (status != UCS_OK) {
-        cep->status = status;
-        cep->flags |= UCT_RDMACM_CM_EP_FAILED;
+        remote_data.field_mask = 0;
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status, 0);
     }
 }
 
@@ -580,7 +581,7 @@ static void uct_rdmacm_cm_handle_event_connect_response(struct rdma_cm_event *ev
         ucs_diag("%s client (ep=%p id=%p) failed to process a connect response ",
                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
                  cep, event->id);
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status, 1);
         return;
     }
 
@@ -631,8 +632,8 @@ static void uct_rdmacm_cm_handle_event_disconnected(struct rdma_cm_event *event)
               uct_rdmacm_cm_event_status_str(event), event->status);
 
     cep->flags |= UCT_RDMACM_CM_EP_GOT_DISCONNECT;
-    /* calling error_cb instead of disconnect CB directly handles out-of-order
-     * disconnect event prior connect_response/connect_established event */
+    /* uct_rdmacm_cm_ep_error_cb() will call the right user callback, according
+     * to the current ep state */
     remote_data.field_mask = 0;
     uct_rdmacm_cm_ep_error_cb(cep, &remote_data, UCS_ERR_CONNECTION_RESET);
 }
@@ -695,7 +696,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
         uct_rdmacm_cm_handle_event_disconnected(event);
     } else {
         remote_data.field_mask = 0;
-        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status);
+        uct_rdmacm_cm_ep_set_failed(cep, &remote_data, status, 1);
     }
 }
 
