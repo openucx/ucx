@@ -58,13 +58,31 @@ UCS_CLASS_DEFINE(uct_cma_ep_t, uct_scopy_ep_t)
 UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_ep_t, uct_ep_t);
 
+void uct_cma_ep_tx_error(uct_cma_ep_t *ep, uct_scopy_tx_op_t tx_op,
+                         ssize_t ret, int op_errno, struct iovec *local_iov,
+                         size_t local_iov_cnt, struct iovec *remote_iov)
+{
+    UCS_STRING_BUFFER_ONSTACK(remote_pid_strb, 32);
+    UCS_STRING_BUFFER_ONSTACK(ret_strb, 32);
+
+    ucs_string_buffer_appendf(&remote_pid_strb, "remote_pid=%d",
+                              ep->remote_pid);
+    ucs_string_buffer_appendf(&ret_strb, "ret=%zd", ret);
+
+    uct_scopy_ep_tx_error(&ep->super, &remote_pid_strb,
+                          uct_cma_ep_fn[tx_op].name, &ret_strb, op_errno,
+                          sizeof(struct iovec), (const void*)local_iov,
+                          local_iov_cnt, (const void*)remote_iov,
+                          (ucs_iov_get_length_t)ucs_iovec_get_length,
+                          (ucs_iov_get_buffer_t)ucs_iovec_get_buffer);
+}
+
 ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
                            ucs_iov_iter_t *iov_iter, size_t *length_p,
                            uint64_t remote_addr, uct_rkey_t rkey,
                            uct_scopy_tx_op_t tx_op)
 {
     uct_cma_ep_t *ep     = ucs_derived_of(tl_ep, uct_cma_ep_t);
-    size_t local_iov_idx = 0;
     size_t local_iov_cnt = UCT_SM_MAX_IOV;
     size_t total_iov_length;
     struct iovec local_iov[UCT_SM_MAX_IOV], remote_iov;
@@ -80,14 +98,11 @@ ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
     remote_iov.iov_base = (void*)(uintptr_t)remote_addr;
     remote_iov.iov_len  = total_iov_length;
 
-    ret = uct_cma_ep_fn[tx_op].fn(ep->remote_pid, &local_iov[local_iov_idx],
-                                  local_iov_cnt - local_iov_idx, &remote_iov,
-                                  1, 0);
+    ret = uct_cma_ep_fn[tx_op].fn(ep->remote_pid, local_iov, local_iov_cnt,
+                                  &remote_iov, 1, 0);
     if (ucs_unlikely(ret < 0)) {
-        uct_scopy_ep_tx_error(&ep->super, ep->remote_pid,
-                              uct_cma_ep_fn[tx_op].name, ret, errno,
-                              &local_iov[local_iov_idx],
-                              local_iov_cnt - local_iov_idx, &remote_iov);
+        uct_cma_ep_tx_error(ep, tx_op, ret, errno, local_iov, local_iov_cnt,
+                            &remote_iov);
         return UCS_ERR_IO_ERROR;
     }
 

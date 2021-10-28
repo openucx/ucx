@@ -30,6 +30,10 @@ typedef struct ucs_iov_iter {
 } ucs_iov_iter_t;
 
 
+typedef size_t (*ucs_iov_get_length_t)(const void *iov);
+typedef void* (*ucs_iov_get_buffer_t)(const void *iov);
+
+
 /**
  * Copy a data from iovec [buffer] to buffer [iovec].
  *

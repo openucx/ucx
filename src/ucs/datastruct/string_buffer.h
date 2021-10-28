@@ -8,6 +8,7 @@
 #define UCS_STRING_BUFFER_H_
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/sys/iovec.h>
 #include <ucs/type/status.h>
 #include <ucs/datastruct/array.h>
 #include <sys/uio.h>
@@ -180,12 +181,18 @@ void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
 /**
  * Append an IO vector representation to the string buffer.
  *
- * @param [inout] strb        String buffer to append to.
- * @param [in]    iov         Pointer to an IO vector.
- * @param [in]    iovcnt      Number of entries in the IO vector.
+ * @param [inout] strb          String buffer to append to.
+ * @param [in]    iov           Pointer to an IO vector.
+ * @param [in]    iov_type_size Size of type of IO vector.
+ * @param [in]    iovcnt        Number of entries in the IO vector.
+ * @param [in]    get_length_f  Function to get length of IO vector element.
+ * @param [in]    get_buffer_f  Function to get buffer of IO vector element.
  */
-void ucs_string_buffer_append_iovec(ucs_string_buffer_t *strb,
-                                    const struct iovec *iov, size_t iovcnt);
+void ucs_string_buffer_append_iov(ucs_string_buffer_t *strb,
+                                  const void *iov, size_t iov_type_size,
+                                  size_t iovcnt,
+                                  ucs_iov_get_length_t get_length_f,
+                                  ucs_iov_get_buffer_t get_buffer_f);
 
 
 /**

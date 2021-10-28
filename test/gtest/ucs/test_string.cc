@@ -10,6 +10,8 @@ extern "C" {
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/datastruct/string_set.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/iovec.h>
+#include <ucs/sys/iovec.inl>
 }
 
 class test_string : public ucs::test {
@@ -257,7 +259,10 @@ UCS_TEST_F(test_string_buffer, append_iovec) {
                                         {(void*)0x1234, 100},
                                         {(void*)0x4567, 200}};
     UCS_STRING_BUFFER_ONSTACK(strb, 128);
-    ucs_string_buffer_append_iovec(&strb, iov, ucs_static_array_size(iov));
+    ucs_string_buffer_append_iov(&strb, iov, sizeof(*iov),
+                                 ucs_static_array_size(iov),
+                                 (ucs_iov_get_length_t)ucs_iovec_get_length,
+                                 (ucs_iov_get_buffer_t)ucs_iovec_get_buffer);
     EXPECT_EQ(std::string("(nil),0|0x1234,100|0x4567,200"),
               ucs_string_buffer_cstr(&strb));
 }
