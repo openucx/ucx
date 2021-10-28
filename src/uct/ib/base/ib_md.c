@@ -1007,7 +1007,7 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static void ucs_ib_mem_region_invalidate_cb(void *arg)
+static void uct_ib_mem_region_invalidate_cb(void *arg)
 {
     uct_completion_t *comp = arg;
 
@@ -1027,7 +1027,7 @@ uct_ib_mem_rcache_dereg(uct_md_h uct_md,
     if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
         UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
         ucs_rcache_region_invalidate(md->rcache, &region->super,
-                                     ucs_ib_mem_region_invalidate_cb,
+                                     uct_ib_mem_region_invalidate_cb,
                                      params->comp);
     }
 
