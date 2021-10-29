@@ -125,8 +125,8 @@ try_load_cuda_env() {
     if [ -f "/proc/driver/nvidia/version" ]; then
         have_cuda=yes
         have_gdrcopy=yes
-        az_module_load dev/cuda11.1.1 || have_cuda=no
-        az_module_load dev/gdrcopy2.1_cuda11.1.1 || have_gdrcopy=no
+        az_module_load dev/cuda11.4 || have_cuda=no
+        az_module_load dev/gdrcopy2.3_cuda11.4 || have_gdrcopy=no
         nvidia-smi -a
         ls -l /dev/nvidia*
         num_gpus=$(nvidia-smi -L | wc -l)
