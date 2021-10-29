@@ -130,11 +130,10 @@ void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
     ucs_string_buffer_rtrim(strb, ",|");
 }
 
-void ucs_string_buffer_append_iov(ucs_string_buffer_t *strb,
-                                  const void *iov, size_t iov_type_size,
-                                  size_t iovcnt,
-                                  ucs_iov_get_length_t get_length_f,
-                                  ucs_iov_get_buffer_t get_buffer_f)
+void ucs_string_buffer_append_iov(
+        ucs_string_buffer_t *strb, const void *iov, size_t iov_type_size,
+        size_t iovcnt, ucs_string_buffer_iov_get_length_func_t get_length_f,
+        ucs_string_buffer_iov_get_buffer_func_t get_buffer_f)
 {
     size_t iov_index;
     void *iov_elem;

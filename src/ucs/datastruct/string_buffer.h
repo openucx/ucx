@@ -95,6 +95,18 @@ typedef struct ucs_string_buffer {
 
 
 /**
+ * Type of function to get length of IO vector element.
+ */
+typedef size_t (*ucs_string_buffer_iov_get_length_func_t)(const void *iov);
+
+
+/**
+ * Type of function to get buffer of IO vector element.
+ */
+typedef void* (*ucs_string_buffer_iov_get_buffer_func_t)(const void *iov);
+
+
+/**
  * Initialize a string buffer
  *
  * @param [out] strb   String buffer to initialize.
@@ -188,11 +200,10 @@ void ucs_string_buffer_append_flags(ucs_string_buffer_t *strb, uint64_t mask,
  * @param [in]    get_length_f  Function to get length of IO vector element.
  * @param [in]    get_buffer_f  Function to get buffer of IO vector element.
  */
-void ucs_string_buffer_append_iov(ucs_string_buffer_t *strb,
-                                  const void *iov, size_t iov_type_size,
-                                  size_t iovcnt,
-                                  ucs_iov_get_length_t get_length_f,
-                                  ucs_iov_get_buffer_t get_buffer_f);
+void ucs_string_buffer_append_iov(
+        ucs_string_buffer_t *strb, const void *iov, size_t iov_type_size,
+        size_t iovcnt, ucs_string_buffer_iov_get_length_func_t get_length_f,
+        ucs_string_buffer_iov_get_buffer_func_t get_buffer_f);
 
 
 /**

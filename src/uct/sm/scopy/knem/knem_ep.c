@@ -80,13 +80,12 @@ static void uct_knem_ep_tx_error(uct_ep_h tl_ep, int knem_fd,
     remote_iov.base = (uintptr_t)remote_addr;
     remote_iov.len  = remote_lenth;
 
-    uct_scopy_ep_tx_error(&knem_ep->super, &knem_fd_strb,
-                          uct_knem_ep_tx_op_str[tx_op], &ret_strb, errno,
-                          sizeof(struct knem_cmd_param_iovec),
-                          (const void*)local_iov, local_iov_cnt,
-                          (const void*)&remote_iov,
-                          (ucs_iov_get_length_t)uct_knem_iovec_get_length,
-                          (ucs_iov_get_buffer_t)uct_knem_iovec_get_buffer);
+    uct_scopy_ep_tx_error(
+            &knem_ep->super, &knem_fd_strb, uct_knem_ep_tx_op_str[tx_op],
+            &ret_strb, errno, sizeof(struct knem_cmd_param_iovec),
+            (const void*)local_iov, local_iov_cnt, (const void*)&remote_iov,
+            (ucs_string_buffer_iov_get_length_func_t)uct_knem_iovec_get_length,
+            (ucs_string_buffer_iov_get_buffer_func_t)uct_knem_iovec_get_buffer);
 }
 
 ucs_status_t uct_knem_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,

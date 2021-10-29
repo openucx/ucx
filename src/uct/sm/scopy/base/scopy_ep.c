@@ -109,15 +109,15 @@ uct_scopy_ep_tx_init(uct_ep_h tl_ep, const uct_iov_t *iov,
     return UCS_INPROGRESS;
 }
 
-void uct_scopy_ep_tx_error(uct_scopy_ep_t *ep,
-                           const ucs_string_buffer_t *arg_strb,
-                           const char *op_name,
-                           const ucs_string_buffer_t *op_ret_strb,
-                           int op_errno, size_t iov_type_size,
-                           const void *local_iov, size_t local_iov_cnt,
-                           const void *remote_iov,
-                           ucs_iov_get_length_t get_length_f,
-                           ucs_iov_get_buffer_t get_buffer_f)
+void
+uct_scopy_ep_tx_error(uct_scopy_ep_t *ep, const ucs_string_buffer_t *arg_strb,
+                      const char *op_name,
+                      const ucs_string_buffer_t *op_ret_strb,
+                      int op_errno, size_t iov_type_size,
+                      const void *local_iov, size_t local_iov_cnt,
+                      const void *remote_iov,
+                      ucs_string_buffer_iov_get_length_func_t get_length_f,
+                      ucs_string_buffer_iov_get_buffer_func_t get_buffer_f)
 {
     uct_base_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                              uct_base_iface_t);

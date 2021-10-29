@@ -69,12 +69,12 @@ void uct_cma_ep_tx_error(uct_cma_ep_t *ep, uct_scopy_tx_op_t tx_op,
                               ep->remote_pid);
     ucs_string_buffer_appendf(&ret_strb, "ret=%zd", ret);
 
-    uct_scopy_ep_tx_error(&ep->super, &remote_pid_strb,
-                          uct_cma_ep_fn[tx_op].name, &ret_strb, op_errno,
-                          sizeof(struct iovec), (const void*)local_iov,
-                          local_iov_cnt, (const void*)remote_iov,
-                          (ucs_iov_get_length_t)ucs_iovec_get_length,
-                          (ucs_iov_get_buffer_t)ucs_iovec_get_buffer);
+    uct_scopy_ep_tx_error(
+            &ep->super, &remote_pid_strb, uct_cma_ep_fn[tx_op].name, &ret_strb,
+            op_errno, sizeof(struct iovec), (const void*)local_iov,
+            local_iov_cnt, (const void*)remote_iov,
+            (ucs_string_buffer_iov_get_length_func_t)ucs_iovec_get_length,
+            (ucs_string_buffer_iov_get_buffer_func_t)ucs_iovec_get_buffer);
 }
 
 ucs_status_t uct_cma_ep_tx(uct_ep_h tl_ep, const uct_iov_t *iov, size_t iov_cnt,
