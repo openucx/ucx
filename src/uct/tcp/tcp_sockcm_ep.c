@@ -191,6 +191,79 @@ void uct_tcp_sockcm_close_ep(uct_tcp_sockcm_ep_t *ep)
     UCS_CLASS_DELETE(uct_tcp_sockcm_ep_t, ep);
 }
 
+static ucs_status_t
+uct_tcp_sockcm_ep_invoke_resolve_cb(uct_tcp_sockcm_ep_t *cep,
+                                    const char *ifname,
+                                    ucs_status_t resolve_status)
+{
+    uct_cm_ep_resolve_args_t resolve_args;
+    ucs_status_t status;
+
+    resolve_args.field_mask = UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME |
+                              UCT_CM_EP_RESOLVE_ARGS_FIELD_STATUS;
+    resolve_args.status     = resolve_status;
+    ucs_strncpy_safe(resolve_args.dev_name, ifname, UCT_DEVICE_NAME_MAX);
+    status      = uct_cm_ep_resolve_cb(&cep->super, &resolve_args);
+    cep->state |= UCT_TCP_SOCKCM_EP_RESOLVE_CB_INVOKED;
+    if (status != UCS_OK) {
+        cep->state |= UCT_TCP_SOCKCM_EP_RESOLVE_CB_FAILED;
+    }
+
+    return status;
+}
+
+static ucs_status_t
+uct_tcp_sockcm_ep_invoke_pack_cb(uct_tcp_sockcm_ep_t *cep,
+                                 const char *ifname)
+{
+    uct_cm_ep_priv_data_pack_args_t pack_args;
+    uct_tcp_sockcm_priv_data_hdr_t *hdr;
+    ucs_status_t status;
+
+    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
+    ucs_strncpy_safe(pack_args.dev_name, ifname, UCT_DEVICE_NAME_MAX);
+
+    ucs_assert(cep->comm_ctx.offset == 0);
+    hdr = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
+    status = uct_cm_ep_pack_cb(&cep->super, cep->super.user_data, &pack_args,
+                               hdr + 1,
+                               uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len,
+                               &hdr->length);
+    if (status != UCS_OK) {
+        cep->state |= UCT_TCP_SOCKCM_EP_PACK_CB_FAILED;
+        return status;
+    }
+
+    hdr->status          = (uint8_t)UCS_OK;
+    cep->comm_ctx.length = sizeof(*hdr) + hdr->length;
+    cep->state          |= UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_tcp_sockcm_ep_resolve(uct_tcp_sockcm_ep_t *cep,
+                                              ucs_status_t resolve_status)
+{
+    char ifname_str[UCT_DEVICE_NAME_MAX];
+    ucs_status_t status;
+
+    /* get interface name associated with the connected client fd */
+    status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, sizeof(ifname_str));
+    if (status != UCS_OK) {
+        goto out;
+    }
+
+    if (cep->super.resolve_cb != NULL) {
+        status = uct_tcp_sockcm_ep_invoke_resolve_cb(cep, ifname_str,
+                                                     resolve_status);
+    } else {
+        ucs_assert(cep->super.priv_pack_cb != NULL);
+        status = uct_tcp_sockcm_ep_invoke_pack_cb(cep, ifname_str);
+    }
+
+out:
+    return status;
+}
+
 static void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep,
                                               ucs_status_t status)
 {
@@ -206,8 +279,12 @@ static void uct_tcp_sockcm_ep_invoke_error_cb(uct_tcp_sockcm_ep_t *cep,
         /* ep is already connected, call disconnect callback */
         uct_tcp_sockcm_ep_disconnect_cb(cep);
     } else if (cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT) {
-        remote_data.field_mask = 0;
-        uct_tcp_sockcm_ep_client_connect_cb(cep, &remote_data, status);
+        if (cep->state & UCT_TCP_SOCKCM_EP_RESOLVE_CB_INVOKED) {
+            remote_data.field_mask = 0;
+            uct_tcp_sockcm_ep_client_connect_cb(cep, &remote_data, status);
+        } else {
+            uct_tcp_sockcm_ep_resolve(cep, status);
+        }
     } else {
         ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_SERVER);
         /* the server might not have a valid ep yet. in this case the notify_cb
@@ -441,74 +518,6 @@ out:
     return status;
 }
 
-static ucs_status_t
-uct_tcp_sockcm_ep_invoke_resolve_cb(uct_tcp_sockcm_ep_t *cep,
-                                    const char *ifname)
-{
-    uct_cm_ep_resolve_args_t resolve_args;
-    ucs_status_t status;
-
-    resolve_args.field_mask = UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME;
-    ucs_strncpy_safe(resolve_args.dev_name, ifname, UCT_DEVICE_NAME_MAX);
-    status      = uct_cm_ep_resolve_cb(&cep->super, &resolve_args);
-    cep->state |= UCT_TCP_SOCKCM_EP_RESOLVE_CB_INVOKED;
-    if (status != UCS_OK) {
-        cep->state |= UCT_TCP_SOCKCM_EP_RESOLVE_CB_FAILED;
-    }
-
-    return status;
-}
-
-static ucs_status_t
-uct_tcp_sockcm_ep_invoke_pack_cb(uct_tcp_sockcm_ep_t *cep,
-                                 const char *ifname)
-{
-    uct_cm_ep_priv_data_pack_args_t pack_args;
-    uct_tcp_sockcm_priv_data_hdr_t *hdr;
-    ucs_status_t status;
-
-    pack_args.field_mask = UCT_CM_EP_PRIV_DATA_PACK_ARGS_FIELD_DEVICE_NAME;
-    ucs_strncpy_safe(pack_args.dev_name, ifname, UCT_DEVICE_NAME_MAX);
-
-    ucs_assert(cep->comm_ctx.offset == 0);
-    hdr = (uct_tcp_sockcm_priv_data_hdr_t*)cep->comm_ctx.buf;
-    status = uct_cm_ep_pack_cb(&cep->super, cep->super.user_data, &pack_args,
-                               hdr + 1,
-                               uct_tcp_sockcm_ep_get_cm(cep)->priv_data_len,
-                               &hdr->length);
-    if (status != UCS_OK) {
-        cep->state |= UCT_TCP_SOCKCM_EP_PACK_CB_FAILED;
-        return status;
-    }
-
-    hdr->status          = (uint8_t)UCS_OK;
-    cep->comm_ctx.length = sizeof(*hdr) + hdr->length;
-    cep->state          |= UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED;
-    return UCS_OK;
-}
-
-static ucs_status_t uct_tcp_sockcm_ep_resolve(uct_tcp_sockcm_ep_t *cep)
-{
-    char ifname_str[UCT_DEVICE_NAME_MAX];
-    ucs_status_t status;
-
-    /* get interface name associated with the connected client fd */
-    status = ucs_sockaddr_get_ifname(cep->fd, ifname_str, sizeof(ifname_str));
-    if (status != UCS_OK) {
-        goto out;
-    }
-
-    if (cep->super.resolve_cb != NULL) {
-        status = uct_tcp_sockcm_ep_invoke_resolve_cb(cep, ifname_str);
-    } else {
-        ucs_assert(cep->super.priv_pack_cb != NULL);
-        status = uct_tcp_sockcm_ep_invoke_pack_cb(cep, ifname_str);
-    }
-
-out:
-    return status;
-}
-
 static int uct_tcp_sockcm_ep_send_skip_event(uct_tcp_sockcm_ep_t *cep)
 {
     /* if the ep got a disconnect notice from the peer or had an internal local
@@ -536,7 +545,7 @@ ucs_status_t uct_tcp_sockcm_ep_send(uct_tcp_sockcm_ep_t *cep)
                         UCT_TCP_SOCKCM_EP_PRIV_DATA_PACKED   |
                         UCT_TCP_SOCKCM_EP_ON_SERVER))) {
         ucs_assert(cep->state & UCT_TCP_SOCKCM_EP_ON_CLIENT);
-        return uct_tcp_sockcm_ep_resolve(cep);
+        return uct_tcp_sockcm_ep_resolve(cep, UCS_OK);
     }
 
     if (uct_tcp_sockcm_ep_send_skip_event(cep)) {
