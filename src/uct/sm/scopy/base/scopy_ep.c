@@ -110,9 +110,8 @@ uct_scopy_ep_tx_init(uct_ep_h tl_ep, const uct_iov_t *iov,
 }
 
 void
-uct_scopy_ep_tx_error(uct_scopy_ep_t *ep, const ucs_string_buffer_t *arg_strb,
-                      const char *op_name,
-                      const ucs_string_buffer_t *op_ret_strb,
+uct_scopy_ep_tx_error(uct_scopy_ep_t *ep, const char *arg_str,
+                      const char *op_name, const char *op_ret_str,
                       int op_errno, size_t iov_type_size,
                       const void *local_iov, size_t local_iov_cnt,
                       const void *remote_iov,
@@ -140,10 +139,9 @@ uct_scopy_ep_tx_error(uct_scopy_ep_t *ep, const ucs_string_buffer_t *arg_strb,
                                  get_buffer_f);
 
     ucs_log(log_lvl, "ep %p: %s(%s, {%s}-->{%s}) returned %s: %s", ep,
-            op_name, ucs_string_buffer_cstr(arg_strb),
-            ucs_string_buffer_cstr(&local_iov_str),
-            ucs_string_buffer_cstr(&remote_iov_str),
-            ucs_string_buffer_cstr(op_ret_strb), strerror(op_errno));
+            op_name, arg_str, ucs_string_buffer_cstr(&local_iov_str),
+            ucs_string_buffer_cstr(&remote_iov_str), op_ret_str,
+            strerror(op_errno));
 }
 
 ucs_status_t uct_scopy_ep_put_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,

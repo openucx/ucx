@@ -59,8 +59,9 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_ep_t, uct_ep_t);
 
 void uct_cma_ep_tx_error(uct_cma_ep_t *ep, uct_scopy_tx_op_t tx_op,
-                         ssize_t ret, int op_errno, struct iovec *local_iov,
-                         size_t local_iov_cnt, struct iovec *remote_iov)
+                         ssize_t ret, int op_errno,
+                         const struct iovec *local_iov, size_t local_iov_cnt,
+                         const struct iovec *remote_iov)
 {
     UCS_STRING_BUFFER_ONSTACK(remote_pid_strb, 32);
     UCS_STRING_BUFFER_ONSTACK(ret_strb, 32);
@@ -70,9 +71,10 @@ void uct_cma_ep_tx_error(uct_cma_ep_t *ep, uct_scopy_tx_op_t tx_op,
     ucs_string_buffer_appendf(&ret_strb, "ret=%zd", ret);
 
     uct_scopy_ep_tx_error(
-            &ep->super, &remote_pid_strb, uct_cma_ep_fn[tx_op].name, &ret_strb,
-            op_errno, sizeof(struct iovec), (const void*)local_iov,
-            local_iov_cnt, (const void*)remote_iov,
+            &ep->super, ucs_string_buffer_cstr(&remote_pid_strb),
+            uct_cma_ep_fn[tx_op].name, ucs_string_buffer_cstr(&ret_strb),
+            op_errno, sizeof(struct iovec), local_iov, local_iov_cnt,
+            remote_iov,
             (ucs_string_buffer_iov_get_length_func_t)ucs_iovec_get_length,
             (ucs_string_buffer_iov_get_buffer_func_t)ucs_iovec_get_buffer);
 }
