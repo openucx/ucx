@@ -1557,7 +1557,7 @@ ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
                                     (char*)dst + field->offset,
                                     field->parser.arg);
         if (status != UCS_OK) {
-            ucs_error("Failed to clone the filed '%s': %s", field->name,
+            ucs_error("Failed to clone the field '%s': %s", field->name,
                       ucs_status_string(status));
             return status;
         }

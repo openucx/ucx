@@ -557,6 +557,11 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
         return status;
     }
 
+    status = ucs_global_opts_set_value_modifiable(name, value);
+    if (status != UCS_ERR_NO_ELEM) {
+        return status;
+    }
+
     return ucp_config_cached_key_add(&config->cached_key_list, name, value);
 }
 
@@ -602,8 +607,8 @@ void ucp_apply_uct_config_list(ucp_context_h context, void *config)
     ucs_list_for_each(key_val, &context->cached_key_list, list) {
         status = uct_config_modify(config, key_val->key, key_val->value);
         if (status == UCS_OK) {
-            ucs_debug("apply uct configuration %s=%s",
-                      key_val->key, key_val->value);
+            ucs_debug("apply UCT configuration %s=%s", key_val->key,
+                      key_val->value);
             key_val->used = 1;
         }
     }
