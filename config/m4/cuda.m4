@@ -41,7 +41,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          LDFLAGS="$LDFLAGS $CUDA_LDFLAGS"
 
          # Check cuda header files
-         AC_CHECK_HEADERS([cuda.h cuda_runtime.h],
+         AC_CHECK_HEADERS([cuda.h cuda_runtime.h nvml.h],
                           [cuda_happy="yes"], [cuda_happy="no"])
 
          # Check cuda libraries
@@ -51,6 +51,9 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          AS_IF([test "x$cuda_happy" = "xyes"],
                [AC_CHECK_LIB([cudart], [cudaGetDeviceCount],
                              [CUDA_LIBS="$CUDA_LIBS -lcudart"], [cuda_happy="no"])])
+         AS_IF([test "x$cuda_happy" = "xyes"],
+               [AC_CHECK_LIB([nvidia-ml], [nvmlInit],
+                             [CUDA_LIBS="$CUDA_LIBS -lnvidia-ml"], [cuda_happy="no"])])
 
          LDFLAGS="$save_LDFLAGS"
 
