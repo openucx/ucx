@@ -8,7 +8,6 @@
 #define UCS_STRING_BUFFER_H_
 
 #include <ucs/sys/compiler_def.h>
-#include <ucs/sys/iovec.h>
 #include <ucs/type/status.h>
 #include <ucs/datastruct/array.h>
 #include <sys/uio.h>
