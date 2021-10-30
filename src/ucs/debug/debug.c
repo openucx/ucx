@@ -1096,6 +1096,26 @@ int ucs_debug_is_handle_errors()
     return ucs_global_opts.handle_errors & mask;
 }
 
+static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
+{
+    void *func_ptr;
+
+    func_ptr = dlsym(RTLD_NEXT, symbol);
+    if (func_ptr == NULL) {
+        func_ptr = dlsym(RTLD_DEFAULT, symbol);
+    }
+    return func_ptr;
+}
+
+#ifdef ENABLE_SIGACTION_OVERRIDE
+#if !HAVE_SIGHANDLER_T
+#if HAVE___SIGHANDLER_T
+typedef __sighandler_t *sighandler_t;
+#else
+#error "Port me"
+#endif
+#endif
+
 static int ucs_debug_is_error_signal(int signum)
 {
     khiter_t hash_it;
@@ -1113,24 +1133,6 @@ static int ucs_debug_is_error_signal(int signum)
     return result;
 }
 
-static void* ucs_debug_get_orig_func(const char *symbol, void *replacement)
-{
-    void *func_ptr;
-
-    func_ptr = dlsym(RTLD_NEXT, symbol);
-    if (func_ptr == NULL) {
-        func_ptr = dlsym(RTLD_DEFAULT, symbol);
-    }
-    return func_ptr;
-}
-
-#if !HAVE_SIGHANDLER_T
-#if HAVE___SIGHANDLER_T
-typedef __sighandler_t *sighandler_t;
-#else
-#error "Port me"
-#endif
-#endif
 sighandler_t signal(int signum, sighandler_t handler)
 {
     typedef sighandler_t (*sighandler_func_t)(int, sighandler_t);
@@ -1148,6 +1150,17 @@ sighandler_t signal(int signum, sighandler_t handler)
     return orig(signum, handler);
 }
 
+int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
+{
+    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
+        return orig_sigaction(signum, NULL, oact); /* Return old, do not set new */
+    }
+
+    return orig_sigaction(signum, act, oact);
+}
+
+#endif /* ENABLE_SIGACTION_OVERRIDE */
+
 static int orig_sigaction(int signum, const struct sigaction *act,
                           struct sigaction *oact)
 {
@@ -1160,15 +1173,6 @@ static int orig_sigaction(int signum, const struct sigaction *act,
     }
 
     return orig(signum, act, oact);
-}
-
-int sigaction(int signum, const struct sigaction *act, struct sigaction *oact)
-{
-    if (ucs_debug_initialized && ucs_debug_is_error_signal(signum)) {
-        return orig_sigaction(signum, NULL, oact); /* Return old, do not set new */
-    }
-
-    return orig_sigaction(signum, act, oact);
 }
 
 static void ucs_debug_signal_handler(int signo)
