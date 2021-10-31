@@ -653,6 +653,10 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
     ucs_status_t status;
     uct_md_mem_dereg_params_t params;
 
+    if (GetParam().md_name == "cuda_ipc") {
+        UCS_TEST_SKIP_R("test not needed with cuda-ipc");
+    }
+
     params.field_mask  = UCT_MD_MEM_DEREG_FIELD_FLAGS |
                          UCT_MD_MEM_DEREG_FIELD_MEMH |
                          UCT_MD_MEM_DEREG_FIELD_COMPLETION;
