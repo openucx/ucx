@@ -35,7 +35,7 @@ func (l *UcpListener) Query(attrs ...UcpListenerAttribute) (*UcpListenerAttribut
 	}
 
 	if status := C.ucp_listener_query(l.listener, &listenerAttr); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	result := &UcpListenerAttributes{}

@@ -65,7 +65,7 @@ func NewRequest(request C.ucs_status_ptr_t, callbackId uint64, immidiateInfo int
 				callback(ucpRequest, requestStatus, uint64(immidiateInfo.(C.size_t)))
 			}
 			if requestStatus != C.UCS_OK {
-				return ucpRequest, NewUcxError(C.ucs_status_t(requestStatus))
+				return ucpRequest, NewUcxError(requestStatus)
 			}
 		}
 	}
