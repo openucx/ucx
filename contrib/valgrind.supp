@@ -304,3 +304,15 @@
    Memcheck:Cond
    fun:xpmem_get
 }
+{
+   ibv_cmd_create_srq
+   Memcheck:Cond
+   ...
+   fun:ibv_cmd_create_srq
+}
+{
+   ibv_poll_cq
+   Memcheck:Cond
+   obj:*libmlx5*
+   fun:ibv_poll_cq
+}

@@ -747,6 +747,7 @@ UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
         std::vector<char> recvbuf(size, 0);
 
         ucs::fill_random(sendbuf);
+        VALGRIND_MAKE_MEM_UNDEFINED(&recvbuf[0], recvbuf.size());
 
         my_recv_req = recv_nb(&recvbuf[0], recvbuf.size(), DATATYPE, 0x1337, 0xffff);
         ASSERT_TRUE(!UCS_PTR_IS_ERR(my_recv_req));

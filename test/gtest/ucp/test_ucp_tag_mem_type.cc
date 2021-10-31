@@ -40,6 +40,8 @@ public:
             if (RUNNING_ON_VALGRIND) {
                 m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE",  "8k"));
                 m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
+                m_env.push_back(
+                        new ucs::scoped_setenv("UCX_RC_RX_QUEUE_LEN", "1024"));
             }
         }
 
