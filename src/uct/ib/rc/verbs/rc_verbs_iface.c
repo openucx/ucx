@@ -497,7 +497,7 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_estimate_perf = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh   = uct_rc_iface_vfs_refresh,
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
         },

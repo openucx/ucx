@@ -155,13 +155,14 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_init_params_t *params,
 
     status = ucp_proto_common_lane_perf_attr(params, lane, UCT_EP_OP_AM_BCOPY,
             UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
             UCT_PERF_ATTR_FIELD_RECV_OVERHEAD | UCT_PERF_ATTR_FIELD_LATENCY,
             &perf_attr);
     if (status != UCS_OK) {
         return status;
     }
 
-    *send_time    = perf_attr.send_pre_overhead;
+    *send_time    = perf_attr.send_pre_overhead + perf_attr.send_post_overhead;
     *receive_time = perf_attr.recv_overhead +
                     ucp_tl_iface_latency(context, &perf_attr.latency);
     return UCS_OK;
@@ -176,7 +177,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     const ucp_proto_select_param_t *select_param;
     const ucp_proto_select_range_t *remote_range;
     ucp_proto_select_param_t remote_select_param;
-    ucs_linear_func_t send_overhead, rndv_bias;
+    ucs_linear_func_t send_overhead[UCP_PROTO_PERF_TYPE_LAST], rndv_bias;
     double send_time, receive_time;
     ucp_memory_info_t mem_info;
     ucs_status_t status;
@@ -243,7 +244,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ctrl_latency = send_time + receive_time + params->super.overhead * 2;
     ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
               UCP_PROTO_TIME_ARG(ctrl_latency));
-    send_overhead = ucs_linear_func_add3(
+    send_overhead[UCP_PROTO_PERF_TYPE_SINGLE] =
+    send_overhead[UCP_PROTO_PERF_TYPE_MULTI]  = ucs_linear_func_add3(
             ucp_proto_common_memreg_time(&params->super, rpriv->md_map),
             ucs_linear_func_make(ctrl_latency, 0.0), params->unpack_time);
 
@@ -370,8 +372,10 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
         for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
             ucs_linear_func_add_inplace(&caps->ranges[i].perf[perf_type],
                                         ack_perf[perf_type]);
-            ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_FMT(ack),
+            ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_FMT(ack)
+                      UCP_PROTO_PERF_FUNC_FMT(total),
                       i, ucp_proto_perf_types[perf_type],
+                      UCP_PROTO_PERF_FUNC_ARG(&ack_perf[perf_type]),
                       UCP_PROTO_PERF_FUNC_ARG(&caps->ranges[i].perf[perf_type]));
         }
     }

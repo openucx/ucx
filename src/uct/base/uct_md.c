@@ -20,6 +20,7 @@
 #include <ucs/type/class.h>
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
+#include <ucs/time/time.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
@@ -33,8 +34,8 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
     {"RCACHE_MEM_PRIO", "1000", "Registration cache memory event priority",
      ucs_offsetof(uct_md_rcache_config_t, event_prio), UCS_CONFIG_TYPE_UINT},
 
-    {"RCACHE_OVERHEAD", "180ns", "Registration cache lookup overhead",
-     ucs_offsetof(uct_md_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME},
+    {"RCACHE_OVERHEAD", "auto", "Registration cache lookup overhead",
+     ucs_offsetof(uct_md_rcache_config_t, overhead), UCS_CONFIG_TYPE_TIME_UNITS},
 
     {"RCACHE_ADDR_ALIGN", UCS_PP_MAKE_STRING(UCS_SYS_CACHE_LINE_SIZE),
      "Registration cache address alignment, must be power of 2\n"
@@ -493,4 +494,17 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
     rcache_params->max_unreleased     = rcache_config->max_unreleased;
+}
+
+double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config)
+{
+    if (rcache_config->overhead == UCS_TIME_AUTO) {
+        if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_FUJITSU_ARM) {
+            return 360e-9;
+        } else {
+            return 180e-9;
+        }
+    } else {
+        return ucs_time_to_sec(rcache_config->overhead);
+    }
 }

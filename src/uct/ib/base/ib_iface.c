@@ -1702,6 +1702,60 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     return UCS_OK;
 }
 
+ucs_status_t
+uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                           OPERATION, UCT_EP_OP_LAST);
+    uct_iface_attr_t iface_attr;
+    double send_post_overhead_bcopy;
+    double send_post_overhead_zcopy;
+    double send_pre_overhead;
+    ucs_status_t status;
+
+    status = uct_iface_query(iface, &iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    switch (ucs_arch_get_cpu_vendor()) {
+    case UCS_CPU_VENDOR_FUJITSU_ARM:
+        send_pre_overhead        = 100e-9;
+        send_post_overhead_bcopy = 400e-9;
+        send_post_overhead_zcopy = 450e-9;
+        break;
+    default:
+        send_pre_overhead        = iface_attr.overhead;
+        send_post_overhead_bcopy = send_post_overhead_zcopy = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        perf_attr->send_pre_overhead = send_pre_overhead;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
+        if (uct_ep_op_is_zcopy(op)) {
+            perf_attr->send_post_overhead = send_post_overhead_zcopy;
+        } else {
+            perf_attr->send_post_overhead = send_post_overhead_bcopy;
+        }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        perf_attr->recv_overhead = iface_attr.overhead;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = iface_attr.latency;
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_iface_event_fd_get(uct_iface_h tl_iface, int *fd_p)
 {
     uct_ib_iface_t *iface = ucs_derived_of(tl_iface, uct_ib_iface_t);

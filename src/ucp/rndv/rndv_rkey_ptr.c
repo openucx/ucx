@@ -23,6 +23,16 @@ typedef struct {
 } ucp_proto_rndv_rkey_ptr_priv_t;
 
 
+static double ucp_proto_rndv_rkey_ptr_overhead()
+{
+    switch (ucs_arch_get_cpu_vendor()) {
+    case UCS_CPU_VENDOR_FUJITSU_ARM:
+        return 500e-9;
+    default:
+        return 0;
+    }
+}
+
 static ucs_status_t
 ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
 {
@@ -33,7 +43,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .super.super         = *init_params,
         .super.cfg_thresh    = ucp_proto_rndv_cfg_thresh(context, rndv_modes),
         .super.cfg_priority  = 0,
-        .super.overhead      = 0,
+        .super.overhead      = ucp_proto_rndv_rkey_ptr_overhead(),
         .super.latency       = 0,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
