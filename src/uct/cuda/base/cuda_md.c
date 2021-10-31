@@ -26,6 +26,7 @@
 
 ucs_spinlock_t uct_cuda_base_lock;
 
+
 ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
                                        ucs_sys_device_t *sys_dev_p)
 {
