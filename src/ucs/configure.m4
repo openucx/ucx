@@ -84,6 +84,20 @@ AS_IF([test "x$enable_backtrace_detail" = xyes],
 
 
 #
+# Disable overriding sigaction
+#
+AC_ARG_ENABLE([sigaction-override],
+    AS_HELP_STRING([--disable-sigaction-override],
+                   [Disable sigaction,signal function overriding, default: NO]),
+    [],
+    [enable_sigaction_override=yes])
+
+AS_IF([test "x$enable_sigaction_override" = xyes],
+      AC_DEFINE([ENABLE_SIGACTION_OVERRIDE], [1], [Enable sigaction,signal function overriding])
+    )
+
+
+#
 # Enable statistics and counters
 #
 AC_ARG_ENABLE([stats],
