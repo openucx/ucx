@@ -199,9 +199,23 @@ gtest_SOURCES += \
 	uct/ib/test_ib_event.cc
 gtest_CPPFLAGS += \
 	$(IBVERBS_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(IBVERBS_LDFLAGS)
 gtest_LDADD += \
-	$(IBVERBS_LDFLAGS) \
+	$(IBVERBS_LIBS) \
 	$(top_builddir)/src/uct/ib/libuct_ib.la
+if HAVE_MLX5
+gtest_CPPFLAGS += \
+	$(MLX5_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(MLX5_LDFLAGS)
+gtest_LDADD += \
+	$(top_builddir)/src/uct/ib/mlx5/libuct_ib_mlx5.la
+endif
+if HAVE_MLX5_DV
+gtest_LDADD += \
+	$(MLX5_LIBS)
+endif
 if HAVE_DEVX
 gtest_SOURCES += \
 	uct/ib/test_devx.cc
