@@ -26,6 +26,7 @@ typedef struct {
 typedef struct {
     char               *server_name;
     uint16_t            server_port;
+    sa_family_t         ai_family;
     func_am_t           func_am_type;
     const char         *dev_name;
     const char         *tl_name;
@@ -450,10 +451,11 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
 
     /* Defaults */
     args->server_port   = 13337;
+    args->ai_family     = AF_INET;
     args->func_am_type  = FUNC_AM_SHORT;
     args->test_strlen   = 16;
 
-    while ((c = getopt(argc, argv, "ibzd:t:n:p:s:m:h")) != -1) {
+    while ((c = getopt(argc, argv, "6ibzd:t:n:p:s:m:h")) != -1) {
         switch (c) {
         case 'i':
             args->func_am_type = FUNC_AM_SHORT;
@@ -472,6 +474,9 @@ int parse_cmd(int argc, char * const argv[], cmd_args_t *args)
             break;
         case 'n':
             args->server_name = optarg;
+            break;
+        case '6':
+            args->ai_family = AF_INET6;
             break;
         case 'p':
             args->server_port = atoi(optarg);
@@ -620,11 +625,9 @@ int main(int argc, char **argv)
     CHKERR_JUMP(NULL == own_iface, "allocate memory for if addr",
                 out_free_dev_addrs);
 
-    if (cmd_args.server_name) {
-        oob_sock = client_connect(cmd_args.server_name, cmd_args.server_port);
-    } else {
-        oob_sock = server_connect(cmd_args.server_port);
-    }
+    oob_sock = connect_common(cmd_args.server_name, cmd_args.server_port,
+                              cmd_args.ai_family);
+
     CHKERR_ACTION(oob_sock < 0, "OOB connect",
                   status = UCS_ERR_IO_ERROR; goto out_close_oob_sock);
 

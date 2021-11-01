@@ -99,13 +99,22 @@ static void listener_accept_callback(ucp_ep_h ep, void *arg)
     *(ucp_ep_h*)arg = ep;
 }
 
-static void
-set_saddr(const char *addr_str, uint16_t port, struct sockaddr_in *saddr)
+static void set_saddr(const char *addr_str, uint16_t port, sa_family_t af,
+                      struct sockaddr_storage *saddr)
 {
     memset(saddr, 0, sizeof(*saddr));
-    saddr->sin_family      = AF_INET;
-    saddr->sin_addr.s_addr = inet_addr(addr_str);
-    saddr->sin_port        = htons(port);
+
+    if (addr_str != NULL) {
+        /* coverity[check_return] */
+        ucs_sock_ipstr_to_sockaddr(addr_str, saddr);
+        ucs_assert(saddr->ss_family == af);
+    } else {
+        saddr->ss_family = af;
+        /* coverity[check_return] */
+        ucs_sockaddr_set_inaddr_any((struct sockaddr*)saddr, af);
+    }
+
+    ucs_sockaddr_set_port((struct sockaddr*)saddr, port);
 }
 
 static ucs_status_t
@@ -144,17 +153,18 @@ ep_close(ucp_worker_h worker, ucp_worker_h peer_worker, ucp_ep_h ep,
     wait_completion(worker, peer_worker, status_ptr);
 }
 
-static ucs_status_t
-create_listener(ucp_worker_h worker, ucp_listener_h *listener_p,
-                uint16_t *listen_port_p, void *accept_cb_arg)
+static ucs_status_t create_listener(ucp_worker_h worker,
+                                    ucp_listener_h *listener_p,
+                                    uint16_t *listen_port_p,
+                                    sa_family_t ai_family, void *accept_cb_arg)
 {
     ucp_listener_h listener;
-    struct sockaddr_in listen_saddr;
+    struct sockaddr_storage listen_saddr;
     ucp_listener_params_t listen_params;
     ucp_listener_attr_t listen_attr;
     ucs_status_t status;
 
-    set_saddr("0.0.0.0", 0, &listen_saddr);
+    set_saddr(NULL, 0, ai_family, &listen_saddr);
 
     listen_params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
                                        UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
@@ -196,7 +206,7 @@ out_destroy_listener:
 static ucs_status_t
 print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
                   const ucp_ep_params_t *base_ep_params, const char *ip_addr,
-                  process_placement_t proc_placement)
+                  sa_family_t af, process_placement_t proc_placement)
 {
     ucp_listener_h listener        = NULL;
     ucp_ep_h server_ep             = NULL;
@@ -204,21 +214,22 @@ print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
     ucp_worker_attr_t worker_attrs = {};
     ucs_status_t status;
     ucs_status_ptr_t status_ptr;
-    struct sockaddr_in connect_saddr;
+    struct sockaddr_storage connect_saddr;
     uint16_t listen_port;
     ucp_ep_h ep;
     char ep_name[64];
     ucp_request_param_t request_param;
 
     if (ip_addr != NULL) {
-        status = create_listener(peer_worker, &listener, &listen_port, &server_ep);
+        status = create_listener(peer_worker, &listener, &listen_port, af,
+                                 &server_ep);
         if (status != UCS_OK) {
             return status;
         }
 
         ucs_strncpy_zero(ep_name, "client", sizeof(ep_name));
 
-        set_saddr(ip_addr, listen_port, &connect_saddr);
+        set_saddr(ip_addr, listen_port, af, &connect_saddr);
 
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
                                      UCP_EP_PARAM_FIELD_SOCK_ADDR;
@@ -289,7 +300,7 @@ print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
                uint64_t ctx_features, const ucp_ep_params_t *base_ep_params,
                size_t estimated_num_eps, size_t estimated_num_ppn,
                unsigned dev_type_bitmap, process_placement_t proc_placement,
-               const char *mem_size, const char *ip_addr)
+               const char *mem_size, const char *ip_addr, sa_family_t af)
 {
     ucp_worker_h peer_worker = NULL;
     ucp_config_t *config;
@@ -372,7 +383,7 @@ print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
         }
 
         status = print_ucp_ep_info(worker, peer_worker, base_ep_params, ip_addr,
-                                   proc_placement);
+                                   af, proc_placement);
         if (peer_worker != worker) {
             ucp_worker_destroy(peer_worker);
         }

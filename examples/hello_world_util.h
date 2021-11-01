@@ -183,6 +183,7 @@ ucs_memory_type_t parse_mem_type(const char *opt_arg)
 void print_common_help()
 {
     fprintf(stderr, "  -p <port>     Set alternative server port (default:13337)\n");
+    fprintf(stderr, "  -6            Use IPv6 address in data exchange\n");
     fprintf(stderr, "  -s <size>     Set test string length (default:16)\n");
     fprintf(stderr, "  -m <mem type> Memory type of messages\n");
     fprintf(stderr, "                host - system memory (default)\n");
@@ -194,76 +195,68 @@ void print_common_help()
     }
 }
 
-int server_connect(uint16_t server_port)
+int connect_common(const char *server, uint16_t server_port, sa_family_t af)
 {
-    struct sockaddr_in inaddr;
-    int lsock  = -1;
-    int dsock  = -1;
-    int optval = 1;
+    int sockfd   = -1;
+    int listenfd = -1;
+    int optval   = 1;
+    char service[8];
+    struct addrinfo hints, *res, *t;
     int ret;
 
-    lsock = socket(AF_INET, SOCK_STREAM, 0);
-    CHKERR_JUMP(lsock < 0, "open server socket", err);
+    snprintf(service, sizeof(service), "%u", server_port);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_flags    = (server == NULL) ? AI_PASSIVE : 0;
+    hints.ai_family   = af;
+    hints.ai_socktype = SOCK_STREAM;
 
-    optval = 1;
-    ret = setsockopt(lsock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-    CHKERR_JUMP(ret < 0, "server setsockopt()", err_sock);
+    ret = getaddrinfo(server, service, &hints, &res);
+    CHKERR_JUMP(ret < 0, "getaddrinfo() failed", out);
 
-    inaddr.sin_family      = AF_INET;
-    inaddr.sin_port        = htons(server_port);
-    inaddr.sin_addr.s_addr = INADDR_ANY;
-    memset(inaddr.sin_zero, 0, sizeof(inaddr.sin_zero));
-    ret = bind(lsock, (struct sockaddr*)&inaddr, sizeof(inaddr));
-    CHKERR_JUMP(ret < 0, "bind server", err_sock);
+    for (t = res; t != NULL; t = t->ai_next) {
+        sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
+        if (sockfd < 0) {
+            continue;
+        }
 
-    ret = listen(lsock, 0);
-    CHKERR_JUMP(ret < 0, "listen server", err_sock);
+        if (server != NULL) {
+            if (connect(sockfd, t->ai_addr, t->ai_addrlen) == 0) {
+                break;
+            }
+        } else {
+            ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval,
+                             sizeof(optval));
+            CHKERR_JUMP(ret < 0, "server setsockopt()", err_close_sockfd);
 
-    fprintf(stdout, "Waiting for connection...\n");
+            if (bind(sockfd, t->ai_addr, t->ai_addrlen) == 0) {
+                ret = listen(sockfd, 0);
+                CHKERR_JUMP(ret < 0, "listen server", err_close_sockfd);
 
-    /* Accept next connection */
-    dsock = accept(lsock, NULL, NULL);
-    CHKERR_JUMP(dsock < 0, "accept server", err_sock);
+                /* Accept next connection */
+                fprintf(stdout, "Waiting for connection...\n");
+                listenfd = sockfd;
+                sockfd   = accept(listenfd, NULL, NULL);
+                close(listenfd);
+                break;
+            }
+        }
 
-    close(lsock);
+        close(sockfd);
+        sockfd = -1;
+    }
 
-    return dsock;
+    CHKERR_ACTION(sockfd < 0,
+                  (server) ? "open client socket" : "open server socket",
+                  (void)sockfd /* no action */);
 
-err_sock:
-    close(lsock);
-
-err:
-    return -1;
-}
-
-int client_connect(const char *server, uint16_t server_port)
-{
-    struct sockaddr_in conn_addr;
-    struct hostent *he;
-    int connfd;
-    int ret;
-
-    connfd = socket(AF_INET, SOCK_STREAM, 0);
-    CHKERR_JUMP(connfd < 0, "open client socket", err);
-
-    he = gethostbyname(server);
-    CHKERR_JUMP((he == NULL || he->h_addr_list == NULL), "found a host", err_conn);
-
-    conn_addr.sin_family = he->h_addrtype;
-    conn_addr.sin_port   = htons(server_port);
-
-    memcpy(&conn_addr.sin_addr, he->h_addr_list[0], he->h_length);
-    memset(conn_addr.sin_zero, 0, sizeof(conn_addr.sin_zero));
-
-    ret = connect(connfd, (struct sockaddr*)&conn_addr, sizeof(conn_addr));
-    CHKERR_JUMP(ret < 0, "connect client", err_conn);
-
-    return connfd;
-
-err_conn:
-    close(connfd);
-err:
-    return -1;
+out_free_res:
+    freeaddrinfo(res);
+out:
+    return sockfd;
+err_close_sockfd:
+    close(sockfd);
+    sockfd = -1;
+    goto out_free_res;
 }
 
 static inline int

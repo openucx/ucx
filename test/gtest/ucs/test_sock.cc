@@ -40,26 +40,24 @@ protected:
 };
 
 UCS_TEST_F(test_socket, sockaddr_sizeof) {
-    struct sockaddr_un sa_un = {};
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
+    struct sockaddr_storage ss = {0};
+    struct sockaddr *saddr     = (struct sockaddr*)&ss;
     size_t size;
 
-    sa_in.sin_family   = AF_INET;
-    sa_in6.sin6_family = AF_INET6;
-    sa_un.sun_family   = AF_UNIX;
 
     /* Check with IPv4 */
     {
-        size = 0;
-        EXPECT_UCS_OK(ucs_sockaddr_sizeof((const struct sockaddr*)&sa_in, &size));
+        size             = 0;
+        saddr->sa_family = AF_INET;
+        EXPECT_UCS_OK(ucs_sockaddr_sizeof(saddr, &size));
         EXPECT_EQ(sizeof(struct sockaddr_in), size);
     }
 
     /* Check with IPv6 */
     {
-        size = 0;
-        EXPECT_UCS_OK(ucs_sockaddr_sizeof((const struct sockaddr*)&sa_in6, &size));
+        size             = 0;
+        saddr->sa_family = AF_INET6;
+        EXPECT_UCS_OK(ucs_sockaddr_sizeof(saddr, &size));
         EXPECT_EQ(sizeof(struct sockaddr_in6), size);
     }
 
@@ -68,37 +66,32 @@ UCS_TEST_F(test_socket, sockaddr_sizeof) {
         socket_err_exp_str = "unknown address family:";
         scoped_log_handler log_handler(socket_error_handler);
 
-        size = 0;
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  ucs_sockaddr_sizeof((const struct sockaddr*)&sa_un, &size));
+        size             = 0;
+        saddr->sa_family = AF_UNIX;
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_sockaddr_sizeof(saddr, &size));
         /* Check that doesn't touch provided memory in error case */
         EXPECT_EQ(0ULL, size);
     }
 }
 
 UCS_TEST_F(test_socket, sockaddr_inet_addr_sizeof) {
-    struct sockaddr_un sa_un = {};
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
+    struct sockaddr_storage ss = {0};
+    struct sockaddr *saddr     = (struct sockaddr*)&ss;
     size_t size;
-
-    sa_in.sin_family   = AF_INET;
-    sa_in6.sin6_family = AF_INET6;
-    sa_un.sun_family   = AF_UNIX;
 
     /* Check with IPv4 */
     {
-        size = 0;
-        EXPECT_UCS_OK(ucs_sockaddr_inet_addr_sizeof((const struct sockaddr*)
-                                                            &sa_in, &size));
+        size             = 0;
+        saddr->sa_family = AF_INET;
+        EXPECT_UCS_OK(ucs_sockaddr_inet_addr_sizeof(saddr, &size));
         EXPECT_EQ(UCS_IPV4_ADDR_LEN, size);
     }
 
     /* Check with IPv6 */
     {
-        size = 0;
-        EXPECT_UCS_OK(ucs_sockaddr_inet_addr_sizeof((const struct sockaddr*)
-                                                            &sa_in6, &size));
+        size             = 0;
+        saddr->sa_family = AF_INET6;
+        EXPECT_UCS_OK(ucs_sockaddr_inet_addr_sizeof(saddr, &size));
         EXPECT_EQ(UCS_IPV6_ADDR_LEN, size);
     }
 
@@ -107,39 +100,36 @@ UCS_TEST_F(test_socket, sockaddr_inet_addr_sizeof) {
         socket_err_exp_str = "unknown address family:";
         scoped_log_handler log_handler(socket_error_handler);
 
-        size = 0;
+        size             = 0;
+        saddr->sa_family = AF_UNIX;
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  ucs_sockaddr_inet_addr_sizeof((const struct sockaddr*)&sa_un,
-                                                &size));
+                  ucs_sockaddr_inet_addr_sizeof(saddr, &size));
         /* Check that doesn't touch provided memory in error case */
         EXPECT_EQ(0ULL, size);
     }
 }
 
 UCS_TEST_F(test_socket, sockaddr_get_port) {
-    const uint16_t sin_port  = 5555;
-    uint16_t port            = 0;
-    struct sockaddr_un sa_un = {};
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
-
-    sa_in.sin_family   = AF_INET;
-    sa_in.sin_port     = htons(sin_port);
-    sa_in6.sin6_family = AF_INET6;
-    sa_in6.sin6_port   = htons(sin_port);
-    sa_un.sun_family   = AF_UNIX;
+    const uint16_t sin_port    = 5555;
+    uint16_t port              = 0;
+    struct sockaddr_storage ss = {0};
+    struct sockaddr *saddr     = (struct sockaddr*)&ss;
 
     /* Check with IPv4 */
     {
-        port = 0;
-        EXPECT_UCS_OK(ucs_sockaddr_get_port((const struct sockaddr*)&sa_in, &port));
+        port                                   = 0;
+        saddr->sa_family                       = AF_INET;
+        ((struct sockaddr_in*)saddr)->sin_port = htons(sin_port);
+        EXPECT_UCS_OK(ucs_sockaddr_get_port(saddr, &port));
         EXPECT_EQ(sin_port, port);
     }
 
     /* Check with IPv6 */
     {
-        port = 0;
-        EXPECT_UCS_OK(ucs_sockaddr_get_port((const struct sockaddr*)&sa_in6, &port));
+        port                                     = 0;
+        saddr->sa_family                         = AF_INET6;
+        ((struct sockaddr_in6*)saddr)->sin6_port = htons(sin_port);
+        EXPECT_UCS_OK(ucs_sockaddr_get_port(saddr, &port));
         EXPECT_EQ(sin_port, port);
     }
 
@@ -148,147 +138,129 @@ UCS_TEST_F(test_socket, sockaddr_get_port) {
         socket_err_exp_str = "unknown address family:";
         scoped_log_handler log_handler(socket_error_handler);
 
-        port = sin_port;
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  ucs_sockaddr_get_port((const struct sockaddr*)&sa_un, &port));
+        port             = sin_port;
+        saddr->sa_family = AF_UNIX;
+        EXPECT_EQ(UCS_ERR_INVALID_PARAM, ucs_sockaddr_get_port(saddr, &port));
         /* Check that doesn't touch provided memory in error case */
         EXPECT_EQ(sin_port, port);
     }
 }
 
 UCS_TEST_F(test_socket, sockaddr_get_inet_addr) {
-    struct sockaddr_un sa_un = {};
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
+    struct sockaddr_storage ss = {0};
+    struct sockaddr *saddr     = (struct sockaddr*)&ss;
+    struct sockaddr_in *saddr_in;
+    struct sockaddr_in6 *saddr_in6;
     struct in_addr sin_addr;
     struct in6_addr sin6_addr;
 
-    sa_in.sin_family   = AF_INET;
-    sa_in6.sin6_family = AF_INET6;
-    sa_un.sun_family   = AF_UNIX;
-
-    sin_addr.s_addr = sa_in.sin_addr.s_addr = htonl(INADDR_ANY);
-    sin6_addr       = sa_in6.sin6_addr      = in6addr_any;
-
     /* Check with wrong IPv4 */
     {
-        EXPECT_EQ(&sa_in.sin_addr,
-                  ucs_sockaddr_get_inet_addr((const struct sockaddr*)&sa_in));
-        EXPECT_EQ(0, memcmp(&sa_in.sin_addr, &sin_addr,
-                            sizeof(sa_in.sin_addr)));
+        saddr->sa_family                              = AF_INET;
+        sin_addr.s_addr                               = htonl(INADDR_ANY);
+        ((struct sockaddr_in*)saddr)->sin_addr.s_addr = htonl(INADDR_ANY);
+        EXPECT_EQ(&((struct sockaddr_in*)saddr)->sin_addr,
+                  ucs_sockaddr_get_inet_addr(saddr));
+        saddr_in = (struct sockaddr_in*)saddr;
+        EXPECT_EQ(0, memcmp(&saddr_in->sin_addr, &sin_addr, sizeof(sin_addr)));
     }
 
     /* Check with wrong IPv6 */
     {
-        EXPECT_EQ(&sa_in6.sin6_addr,
-                  ucs_sockaddr_get_inet_addr((const struct sockaddr*)&sa_in6));
-        EXPECT_EQ(0, memcmp(&sa_in6.sin6_addr, &sin6_addr,
-                            sizeof(sa_in6.sin6_addr)));
+        saddr->sa_family                         = AF_INET6;
+        sin6_addr                                = in6addr_any;
+        ((struct sockaddr_in6*)saddr)->sin6_addr = in6addr_any;
+        EXPECT_EQ(&((struct sockaddr_in6*)saddr)->sin6_addr,
+                  ucs_sockaddr_get_inet_addr(saddr));
+        saddr_in6 = (struct sockaddr_in6*)saddr;
+        EXPECT_EQ(0,
+                  memcmp(&saddr_in6->sin6_addr, &sin6_addr, sizeof(sin6_addr)));
     }
 
     /* Check with wrong address family */
     {
+        saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
         scoped_log_handler log_handler(socket_error_handler);
 
-        EXPECT_EQ(NULL, ucs_sockaddr_get_inet_addr((const struct sockaddr*)&sa_un));
+        EXPECT_EQ(NULL, ucs_sockaddr_get_inet_addr(saddr));
     }
 }
 
 UCS_TEST_F(test_socket, sockaddr_set_port) {
     const uint16_t sin_port     = 5555;
     const uint16_t sin_port_net = htons(sin_port);
-    struct sockaddr_un sa_un    = {};
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
-
-    sa_in.sin_family   = AF_INET;
-    sa_in6.sin6_family = AF_INET6;
-    sa_un.sun_family   = AF_UNIX;
+    struct sockaddr_storage ss  = {0};
+    struct sockaddr *saddr      = (struct sockaddr*)&ss;
 
     /* Check with IPv4 */
     {
-        EXPECT_UCS_OK(ucs_sockaddr_set_port((struct sockaddr*)&sa_in,
-                                            sin_port));
-        EXPECT_EQ(sin_port_net, sa_in.sin_port);
+        saddr->sa_family = AF_INET;
+        EXPECT_UCS_OK(ucs_sockaddr_set_port(saddr, sin_port));
+        EXPECT_EQ(sin_port_net, ((struct sockaddr_in*)saddr)->sin_port);
     }
 
     /* Check with IPv6 */
     {
-        EXPECT_UCS_OK(ucs_sockaddr_set_port((struct sockaddr*)&sa_in6,
-                                            sin_port));
-        EXPECT_EQ(sin_port_net, sa_in6.sin6_port);
+        saddr->sa_family = AF_INET6;
+        EXPECT_UCS_OK(ucs_sockaddr_set_port(saddr, sin_port));
+        EXPECT_EQ(sin_port_net, ((struct sockaddr_in6*)saddr)->sin6_port);
     }
 
     /* Check with wrong address family */
     {
+        saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
         scoped_log_handler log_handler(socket_error_handler);
 
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  ucs_sockaddr_set_port((struct sockaddr*)&sa_un,
-                                        sin_port));
+                  ucs_sockaddr_set_port(saddr, sin_port));
     }
 }
 
 UCS_TEST_F(test_socket, sockaddr_set_inet_addr) {
-    struct sockaddr_un sa_un = {};
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
-    struct sockaddr *sa;
+    struct sockaddr_storage ss = {0};
+    struct sockaddr *saddr     = (struct sockaddr*)&ss;
     struct in_addr sin_addr;
     struct in6_addr sin6_addr;
-
-    sa_in.sin_family   = AF_INET;
-    sa_in6.sin6_family = AF_INET6;
-    sa_un.sun_family   = AF_UNIX;
 
     sin_addr.s_addr = htonl(INADDR_ANY);
     sin6_addr       = in6addr_any;
 
     /* Check with IPv4 */
     {
-        /* To suppress Coverity warning about possible overruning in_addr */
-        sa = reinterpret_cast<struct sockaddr*>(&sa_in);
-        ucs_assert(sa->sa_family == AF_INET);
+        saddr->sa_family = AF_INET;
 
-        EXPECT_UCS_OK(ucs_sockaddr_set_inet_addr(sa, &sin_addr));
-        EXPECT_EQ(0, memcmp(&sa_in.sin_addr, &sin_addr,
-                            sizeof(sa_in.sin_addr)));
+        EXPECT_UCS_OK(ucs_sockaddr_set_inet_addr(saddr, &sin_addr));
+        EXPECT_EQ(0, memcmp(&((struct sockaddr_in*)saddr)->sin_addr, &sin_addr,
+                            sizeof(sin_addr)));
     }
 
     /* Check with IPv6 */
     {
-        /* To suppress Coverity warning about possible overruning in_addr */
-        sa = reinterpret_cast<struct sockaddr*>(&sa_in6);
-        ucs_assert(sa->sa_family == AF_INET6);
+        saddr->sa_family = AF_INET6;
 
-        EXPECT_UCS_OK(ucs_sockaddr_set_inet_addr(sa, &sin6_addr));
-        EXPECT_EQ(0, memcmp(&sa_in6.sin6_addr, &sin6_addr,
-                            sizeof(sa_in6.sin6_addr)));
+        EXPECT_UCS_OK(ucs_sockaddr_set_inet_addr(saddr, &sin6_addr));
+        EXPECT_EQ(0, memcmp(&((struct sockaddr_in6*)saddr)->sin6_addr,
+                            &sin6_addr, sizeof(sin6_addr)));
     }
 
     /* Check with wrong address family */
     {
+        saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
         scoped_log_handler log_handler(socket_error_handler);
 
         EXPECT_EQ(UCS_ERR_INVALID_PARAM,
-                  ucs_sockaddr_set_inet_addr((struct sockaddr*)&sa_un, NULL));
+                  ucs_sockaddr_set_inet_addr(saddr, NULL));
     }
 }
 
 UCS_TEST_F(test_socket, sockaddr_is_inaddr) {
-    struct sockaddr_un sa_un = {};
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
-    struct sockaddr *sa;
+    struct sockaddr_storage ss = {0};
+    struct sockaddr *saddr     = (struct sockaddr*)&ss;
     struct in_addr sin_addr_loopback, sin_addr_any;
     struct in6_addr sin6_addr_loopback, sin6_addr_any;
-
-    sa_in.sin_family   = AF_INET;
-    sa_in6.sin6_family = AF_INET6;
-    sa_un.sun_family   = AF_UNIX;
 
     sin_addr_any.s_addr = htonl(INADDR_ANY);
     sin6_addr_any       = in6addr_any;
@@ -298,119 +270,107 @@ UCS_TEST_F(test_socket, sockaddr_is_inaddr) {
 
     /* Check with IPv4 */
     {
+        saddr->sa_family = AF_INET;
+
         /* ANY is specified to address */
-
-        /* To suppress Coverity warning about possible overruning in_addr */
-        sa = reinterpret_cast<struct sockaddr*>(&sa_in);
-        ucs_assert(sa->sa_family == AF_INET);
-
-        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(sa, &sin_addr_any));
-        EXPECT_TRUE(ucs_sockaddr_is_inaddr_any((struct sockaddr*)&sa_in));
-        EXPECT_FALSE(ucs_sockaddr_is_inaddr_loopback((struct sockaddr*)&sa_in));
+        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(saddr, &sin_addr_any));
+        EXPECT_TRUE(ucs_sockaddr_is_inaddr_any(saddr));
+        EXPECT_FALSE(ucs_sockaddr_is_inaddr_loopback(saddr));
 
         /* LOOPBACK is specified to address */
-        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(sa, &sin_addr_loopback));
-        EXPECT_FALSE(ucs_sockaddr_is_inaddr_any((struct sockaddr*)&sa_in));
-        EXPECT_TRUE(ucs_sockaddr_is_inaddr_loopback((struct sockaddr*)&sa_in));
+        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(saddr, &sin_addr_loopback));
+        EXPECT_FALSE(ucs_sockaddr_is_inaddr_any(saddr));
+        EXPECT_TRUE(ucs_sockaddr_is_inaddr_loopback(saddr));
     }
 
     /* Check with IPv6 */
     {
+        saddr->sa_family = AF_INET6;
+
         /* ANY is specified to address */
-
-        /* To suppress Coverity warning about possible overruning in_addr */
-        sa = reinterpret_cast<struct sockaddr*>(&sa_in6);
-        ucs_assert(sa->sa_family == AF_INET6);
-
-        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(sa, &sin6_addr_any));
-        EXPECT_TRUE(ucs_sockaddr_is_inaddr_any((struct sockaddr*)&sa_in6));
-        EXPECT_FALSE(ucs_sockaddr_is_inaddr_loopback((struct sockaddr*)&sa_in6));
+        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(saddr, &sin6_addr_any));
+        EXPECT_TRUE(ucs_sockaddr_is_inaddr_any(saddr));
+        EXPECT_FALSE(ucs_sockaddr_is_inaddr_loopback(saddr));
 
         /* LOOPBACK is specified to address */
-        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(sa, &sin6_addr_loopback));
-        EXPECT_FALSE(ucs_sockaddr_is_inaddr_any((struct sockaddr*)&sa_in6));
-        EXPECT_TRUE(ucs_sockaddr_is_inaddr_loopback((struct sockaddr*)&sa_in6));
+        ASSERT_UCS_OK(ucs_sockaddr_set_inet_addr(saddr, &sin6_addr_loopback));
+        EXPECT_FALSE(ucs_sockaddr_is_inaddr_any(saddr));
+        EXPECT_TRUE(ucs_sockaddr_is_inaddr_loopback(saddr));
     }
 
     /* Check with wrong address family */
     {
+        saddr->sa_family   = AF_UNIX;
         socket_err_exp_str = "unknown address family:";
         scoped_log_handler log_handler(socket_error_handler);
 
-        EXPECT_FALSE(ucs_sockaddr_is_inaddr_any((struct sockaddr*)&sa_un));
+        EXPECT_FALSE(ucs_sockaddr_is_inaddr_any(saddr));
     }
 }
 
 UCS_TEST_F(test_socket, str_sockaddr_str) {
-    const uint16_t port   = 65534;
-    const char *ipv4_addr = "192.168.122.157";
-    const char *ipv6_addr = "fe80::218:e7ff:fe16:fb97";
-    struct sockaddr_in sa_in;
-    struct sockaddr_in6 sa_in6;
+    const uint16_t port        = 65534;
+    const char *ipv4_addr      = "192.168.122.157";
+    const char *ipv6_addr      = "fe80::218:e7ff:fe16:fb97";
+    struct sockaddr_storage ss = {0};
+    struct sockaddr *saddr     = (struct sockaddr*)&ss;
     char ipv4_addr_out[128], ipv6_addr_out[128], *str, test_str[1024];
     ucs_status_t status;
-
-    sa_in.sin_family   = AF_INET;
-    sa_in.sin_port     = htons(port);
-    sa_in6.sin6_family = AF_INET6;
-    sa_in6.sin6_port   = htons(port);
 
     sprintf(ipv4_addr_out, "%s:%d", ipv4_addr, port);
     sprintf(ipv6_addr_out, "%s:%d", ipv6_addr, port);
 
-    status = ucs_sock_ipstr_to_sockaddr(ipv4_addr,
-                                        (struct sockaddr_storage *)&sa_in);
-    ASSERT_EQ(UCS_OK, status);
-
-    status = ucs_sock_ipstr_to_sockaddr(ipv6_addr,
-                                        (struct sockaddr_storage *)&sa_in6);
-    ASSERT_EQ(UCS_OK, status);
-
-    /* Check with short `str_len` to fit IP address only */
+    /* Check `str_len` with IPv4 address */
     {
-        str = (char*)ucs_sockaddr_str((const struct sockaddr*)&sa_in,
-                                      test_str, INET_ADDRSTRLEN);
+        saddr->sa_family                       = AF_INET;
+        ((struct sockaddr_in*)saddr)->sin_port = htons(port);
+        status = ucs_sock_ipstr_to_sockaddr(ipv4_addr, &ss);
+        ASSERT_EQ(UCS_OK, status);
+
+        /* Check with short `str_len` to fit IP address only */
+        str = (char*)ucs_sockaddr_str(saddr, test_str, INET_ADDRSTRLEN);
         EXPECT_EQ(str, test_str);
         EXPECT_EQ(0, strncmp(test_str, ipv4_addr_out,
                              INET_ADDRSTRLEN - 1));
 
-        str = (char*)ucs_sockaddr_str((const struct sockaddr*)&sa_in6,
-                                      test_str, INET6_ADDRSTRLEN);
-        EXPECT_EQ(str, test_str);
-        EXPECT_EQ(0, strncmp(test_str, ipv6_addr_out,
-                             INET6_ADDRSTRLEN - 1));
-    }
-
-    /* Check with big enough `str_len` */
-    {
-        str = (char*)ucs_sockaddr_str((const struct sockaddr*)&sa_in,
-                                      test_str, 1024);
+        /* Check with big enough `str_len` */
+        str = (char*)ucs_sockaddr_str(saddr, test_str, 1024);
         EXPECT_EQ(str, test_str);
         EXPECT_EQ(0, strcmp(test_str, ipv4_addr_out));
+    }
 
-        str = (char*)ucs_sockaddr_str((const struct sockaddr*)&sa_in6,
-                                      test_str, 1024);
+    /* Check `str_len` with IPv6 address */
+    {
+        saddr->sa_family                         = AF_INET6;
+        ((struct sockaddr_in6*)saddr)->sin6_port = htons(port);
+        status = ucs_sock_ipstr_to_sockaddr(ipv6_addr, &ss);
+        ASSERT_EQ(UCS_OK, status);
+
+        /* Check with short `str_len` to fit IP address only */
+        str = (char*)ucs_sockaddr_str(saddr, test_str, INET6_ADDRSTRLEN);
+        EXPECT_EQ(str, test_str);
+        EXPECT_EQ(0, strncmp(test_str, ipv6_addr_out, INET6_ADDRSTRLEN - 1));
+
+        /* Check with big enough `str_len` */
+        str = (char*)ucs_sockaddr_str(saddr, test_str, 1024);
         EXPECT_TRUE(str == test_str);
         EXPECT_EQ(0, strcmp(test_str, ipv6_addr_out));
     }
 
     /* Check with wrong sa_family */
     {
-        struct sockaddr_un sa_un = {};
-        sa_un.sun_family = AF_UNIX;
+        saddr->sa_family = AF_UNIX;
 
         /* with big enough string */
         {
-            str = (char*)ucs_sockaddr_str((const struct sockaddr*)&sa_un,
-                                          test_str, 1024);
+            str = (char*)ucs_sockaddr_str(saddr, test_str, 1024);
             EXPECT_EQ(test_str, str);
             EXPECT_EQ(0, strcmp(str, "<invalid address family>"));
         }
 
         /* without string */
         {
-            str = (char*)ucs_sockaddr_str((const struct sockaddr*)&sa_un,
-                                          NULL, 0);
+            str = (char*)ucs_sockaddr_str(saddr, NULL, 0);
             EXPECT_EQ(NULL, str);
         }
     }
@@ -540,56 +500,40 @@ static void sockaddr_cmp_test(int sa_family, const char *ip_addr1,
 }
 
 UCS_TEST_F(test_socket, sockaddr_cmp) {
-    const unsigned port1         = 65534;
-    const unsigned port2         = 65533;
-    const char *ipv4_addr1       = "192.168.122.157";
-    const char *ipv4_addr2       = "192.168.123.157";
-    const char *ipv6_addr1       = "fe80::218:e7ff:fe16:fb97";
-    const char *ipv6_addr2       = "fe80::219:e7ff:fe16:fb97";
-    struct sockaddr_in sa_in_1   = { 0 };
-    struct sockaddr_in sa_in_2   = { 0 };
-    struct sockaddr_in6 sa_in6_1 = { 0 };
-    struct sockaddr_in6 sa_in6_2 = { 0 };
+    const unsigned port1        = 65534;
+    const unsigned port2        = 65533;
+    const char *ipv4_addr1      = "192.168.122.157";
+    const char *ipv4_addr2      = "192.168.123.157";
+    const char *ipv6_addr1      = "fe80::218:e7ff:fe16:fb97";
+    const char *ipv6_addr2      = "fe80::219:e7ff:fe16:fb97";
+    struct sockaddr_storage ss1 = {0};
+    struct sockaddr_storage ss2 = {0};
+    struct sockaddr *saddr1     = (struct sockaddr*)&ss1;
+    struct sockaddr *saddr2     = (struct sockaddr*)&ss2;
 
     // Same addresses; same ports
-    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr1,
-                      port1, port1,
-                      (struct sockaddr*)&sa_in_1,
-                      (struct sockaddr*)&sa_in_2);
-    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr1,
-                      port1, port1,
-                      (struct sockaddr*)&sa_in6_1,
-                      (struct sockaddr*)&sa_in6_2);
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr1, port1, port1, saddr1,
+                      saddr2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr1, port1, port1, saddr1,
+                      saddr2);
 
     // Same addresses; different ports
-    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr1,
-                      port1, port2,
-                      (struct sockaddr*)&sa_in_1,
-                      (struct sockaddr*)&sa_in_2);
-    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr1,
-                      port1, port2,
-                      (struct sockaddr*)&sa_in6_1,
-                      (struct sockaddr*)&sa_in6_2);
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr1, port1, port2, saddr1,
+                      saddr2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr1, port1, port2, saddr1,
+                      saddr2);
 
     // Different addresses; same ports
-    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr2,
-                      port1, port1,
-                      (struct sockaddr*)&sa_in_1,
-                      (struct sockaddr*)&sa_in_2);
-    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr2,
-                      port1, port1,
-                      (struct sockaddr*)&sa_in6_1,
-                      (struct sockaddr*)&sa_in6_2);
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr2, port1, port1, saddr1,
+                      saddr2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr2, port1, port1, saddr1,
+                      saddr2);
 
     // Different addresses; different ports
-    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr2,
-                      port1, port2,
-                      (struct sockaddr*)&sa_in_1,
-                      (struct sockaddr*)&sa_in_2);
-    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr2,
-                      port1, port2,
-                      (struct sockaddr*)&sa_in6_1,
-                      (struct sockaddr*)&sa_in6_2);
+    sockaddr_cmp_test(AF_INET, ipv4_addr1, ipv4_addr2, port1, port2, saddr1,
+                      saddr2);
+    sockaddr_cmp_test(AF_INET6, ipv6_addr1, ipv6_addr2, port1, port2, saddr1,
+                      saddr2);
 }
 
 static void sockaddr_cmp_err_test(const struct sockaddr *sa1,
@@ -654,22 +598,21 @@ static void sockaddr_get_ipstr_check_ip(void *sockaddr, const char *ip_str)
 }
 
 UCS_TEST_F(test_socket, sockaddr_get_ipstr) {
+    struct sockaddr_storage ss;
+    struct sockaddr *saddr = (struct sockaddr*)&ss;
+
     /* Check ipv4 */
-    struct sockaddr_in sa_in;
-    sa_in.sin_family = AF_INET;
-    sockaddr_get_ipstr_check_ip(&sa_in, "192.168.122.157");
+    saddr->sa_family = AF_INET;
+    sockaddr_get_ipstr_check_ip(saddr, "192.168.122.157");
 
     /* Check ipv6 */
-    struct sockaddr_in6 sa_in6;
-    sa_in6.sin6_family = AF_INET6;
-    sockaddr_get_ipstr_check_ip(&sa_in6, "fe80::218:e7ff:fe16:fb97");
+    saddr->sa_family = AF_INET6;
+    sockaddr_get_ipstr_check_ip(saddr, "fe80::218:e7ff:fe16:fb97");
 
     /* Check invalid sa_family */
     socket_err_exp_str = "unknown address family:";
     scoped_log_handler log_handler(socket_error_handler);
 
-    struct sockaddr_un sa_un;
-    sa_un.sun_family = AF_UNIX;
-    sockaddr_get_ipstr_check((const struct sockaddr*)&sa_un,
-                             UCS_ERR_INVALID_PARAM);
+    saddr->sa_family = AF_UNIX;
+    sockaddr_get_ipstr_check(saddr, UCS_ERR_INVALID_PARAM);
 }

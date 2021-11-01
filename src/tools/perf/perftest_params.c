@@ -85,6 +85,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -R <rank>      percentile rank of the percentile data in latency tests (%.1f)\n",
                                 ctx->params.super.percentile_rank);
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
+    printf("     -6             Use IPv6 address for in data exchange\n");
 #ifdef HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
@@ -540,14 +541,18 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     ctx->server_addr     = NULL;
     ctx->num_batch_files = 0;
     ctx->port            = 13337;
+    ctx->af              = AF_INET;
     ctx->flags           = 0;
     ctx->mpi             = mpi_initialized;
 
     optind = 1;
-    while ((c = getopt(argc, argv, "p:b:NfvIc:P:h" TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt(argc, argv, "p:b:6NfvIc:P:h" TEST_PARAMS_ARGS)) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
+            break;
+        case '6':
+            ctx->af = AF_INET6;
             break;
         case 'b':
             if (ctx->num_batch_files < MAX_BATCH_FILES) {

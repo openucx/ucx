@@ -60,6 +60,7 @@ struct perftest_context {
     perftest_params_t            params;
     const char                   *server_addr;
     int                          port;
+    sa_family_t                  af;
     int                          mpi;
     unsigned                     num_cpus;
     unsigned                     cpus[MAX_CPUS];
