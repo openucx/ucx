@@ -3081,6 +3081,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
+    ucs_time_t now;
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
@@ -3091,8 +3092,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
     if ((worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) &&
         (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list)) {
-        /* Move the iterator and the stop element to the previous element and
-         * complete the current keepalive round if it is in-progress.
+        /* We are removing the current and last endpoint in the keepalive round
          */
         ucs_debug("worker %p: removed the keepalive current/stop endpoint %p",
                   worker, ep);
@@ -3102,19 +3102,30 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         ucs_assert(worker->keepalive.iter != &ucp_ep_ext_gen(ep)->ep_list);
 
         if (worker->keepalive.lane_map != 0) {
-            ucs_assert((ucs_get_time() - worker->keepalive.last_round) >=
-                               worker->context->config.ext.keepalive_interval);
+            /* Finish the current keepalive round */
+#if UCS_ENABLE_ASSERT
+            now = ucs_get_time();
+            ucs_assertv((now - worker->keepalive.last_round) >=
+                                worker->context->config.ext.keepalive_interval,
+                        "worker %p: now=<%lf sec> ka_last_round=<%lf sec>"
+                        "(diff=<%lf sec>) ka_interval=<%lf sec>",
+                        worker, ucs_time_to_sec(now),
+                        ucs_time_to_sec(worker->keepalive.last_round),
+                        ucs_time_to_sec(now - worker->keepalive.last_round),
+                        ucs_time_to_sec(
+                                worker->context->config.ext.keepalive_interval));
+#endif
             worker->keepalive.lane_map = 0;
             ucp_worker_keepalive_complete(worker, ucs_get_time());
         } else {
             /* Keepalive is not in-progress */
+            ucs_assertv(worker->keepalive.ep_count == 0,
+                        "worker %p: ep_count=%u", worker,
+                        worker->keepalive.ep_count);
         }
     } else if (worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) {
-        /* Move the iterator to the next element to continue doing keeaplive
-         * starting from the next element during progressing since its lane
-         * map isn't empty (if it is empty, keepalive will just go to the next
-         * element).
-         */
+        /* Removing the current but not last endpoint - move to the next
+         * endpoint */
         ucs_debug("worker %p: removed the keepalive current endpoint %p",
                   worker, ep);
 
@@ -3122,9 +3133,8 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         worker->keepalive.lane_map = 0;
         ucp_worker_keepalive_next_ep(worker);
     } else if (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list) {
-        /* Move the iterator to the previous element to stop the keepalive
-         * round when keepalive will be completed for the new stop element.
-         */
+        /* Removing the last but not current endpoint - move iter_end to the
+         * previous endpoint */
         ucs_debug("worker %p: removed the keepalive stop endpoint %p", worker,
                   ep);
 
