@@ -3081,7 +3081,7 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 {
     ucp_worker_h worker = ep->worker;
-    ucs_time_t now;
+    ucs_time_t UCS_V_UNUSED now;
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
