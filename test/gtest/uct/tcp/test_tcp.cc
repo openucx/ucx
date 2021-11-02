@@ -179,14 +179,17 @@ private:
         status = uct_iface_get_address(to.iface(), iface_addr);
         ASSERT_UCS_OK(status);
 
-        struct sockaddr dest_addr;
-        uct_tcp_ep_set_dest_addr(dev_addr, iface_addr, &dest_addr);
+        struct sockaddr_storage dest_addr;
+        uct_tcp_ep_set_dest_addr(dev_addr, iface_addr,
+                                 (struct sockaddr*)&dest_addr);
 
         int fd;
-        status = ucs_socket_create(AF_INET, SOCK_STREAM, &fd);
+        EXPECT_TRUE((dest_addr.ss_family == AF_INET) ||
+                    (dest_addr.ss_family == AF_INET6));
+        status = ucs_socket_create(dest_addr.ss_family, SOCK_STREAM, &fd);
         ASSERT_UCS_OK(status);
 
-        status = ucs_socket_connect(fd, &dest_addr);
+        status = ucs_socket_connect(fd, (struct sockaddr*)&dest_addr);
         ASSERT_UCS_OK(status);
 
         status = ucs_sys_fcntl_modfl(fd, O_NONBLOCK, 0);

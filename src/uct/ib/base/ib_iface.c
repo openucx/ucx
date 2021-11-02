@@ -1194,7 +1194,7 @@ uct_ib_iface_init_roce_mask_info(uct_ib_iface_t *iface, size_t md_config_index)
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
 
-    struct sockaddr_in mask;
+    struct sockaddr_storage mask;
     char ndev_name[IFNAMSIZ];
     ucs_status_t status;
     size_t addr_size;
@@ -1209,7 +1209,8 @@ uct_ib_iface_init_roce_mask_info(uct_ib_iface_t *iface, size_t md_config_index)
         goto mask_info_failed;
     }
 
-    status = ucs_sockaddr_get_ifmask(ndev_name, &mask);
+    status = ucs_netif_get_addr(ndev_name, AF_UNSPEC, NULL,
+                                (struct sockaddr*)&mask);
     if (status != UCS_OK) {
         goto mask_info_failed;
     }

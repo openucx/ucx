@@ -100,22 +100,73 @@ out:
     return status;
 }
 
-int ucs_netif_is_active(const char *if_name)
+ucs_status_t ucs_netif_get_addr(const char *if_name, sa_family_t af,
+                                struct sockaddr *saddr,
+                                struct sockaddr *netmask)
 {
-    ucs_status_t status;
-    struct ifreq ifr;
+    ucs_status_t status = UCS_ERR_NO_DEVICE;
+    struct ifaddrs *ifa;
+    struct ifaddrs *ifaddrs;
+    const struct sockaddr_in6 *saddr6;
+    size_t addrlen;
 
-    status = ucs_netif_ioctl(if_name, SIOCGIFADDR, &ifr);
-    if (status != UCS_OK) {
-        return 0;
+    if (getifaddrs(&ifaddrs)) {
+        ucs_warn("getifaddrs error: %m");
+        status = UCS_ERR_IO_ERROR;
+        goto out;
     }
 
-    status = ucs_netif_ioctl(if_name, SIOCGIFFLAGS, &ifr);
-    if (status != UCS_OK) {
-        return 0;
+    for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
+        if ((if_name != NULL) && (0 != strcmp(if_name, ifa->ifa_name))) {
+            continue;
+        }
+
+        if ((ifa->ifa_addr == NULL) ||
+            ((ifa->ifa_addr->sa_family != AF_INET) &&
+             (ifa->ifa_addr->sa_family != AF_INET6))) {
+            continue;
+        }
+
+        if (!ucs_netif_flags_is_active(ifa->ifa_flags)) {
+            continue;
+        }
+
+        if (ifa->ifa_addr->sa_family == AF_INET6) {
+            saddr6 = (const struct sockaddr_in6*)ifa->ifa_addr;
+            if (IN6_IS_ADDR_LOOPBACK(&saddr6->sin6_addr) ||
+                IN6_IS_ADDR_LINKLOCAL(&saddr6->sin6_addr)) {
+                continue;
+            }
+        }
+
+        if ((af == AF_UNSPEC) || (ifa->ifa_addr->sa_family == af)) {
+            status = ucs_sockaddr_sizeof(ifa->ifa_addr, &addrlen);
+            if (status != UCS_OK) {
+                goto out_free_ifaddr;
+            }
+
+            if (saddr != NULL) {
+                memcpy(saddr, ifa->ifa_addr, addrlen);
+            }
+
+            if (netmask != NULL) {
+                memcpy(netmask, ifa->ifa_netmask, addrlen);
+            }
+
+            status = UCS_OK;
+            break;
+        }
     }
 
-    return ucs_netif_flags_is_active(ifr.ifr_flags);
+out_free_ifaddr:
+    freeifaddrs(ifaddrs);
+out:
+    return status;
+}
+
+int ucs_netif_is_active(const char *if_name, sa_family_t af)
+{
+    return ucs_netif_get_addr(if_name, af, NULL, NULL) == UCS_OK;
 }
 
 unsigned ucs_netif_bond_ad_num_ports(const char *bond_name)
@@ -822,6 +873,27 @@ int ucs_sockaddr_ip_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
                   UCS_IPV4_ADDR_LEN : UCS_IPV6_ADDR_LEN);
 }
 
+ucs_status_t ucs_sockaddr_set_inaddr_any(struct sockaddr *saddr, sa_family_t af)
+{
+    struct sockaddr_in *sa_in;
+    struct sockaddr_in6 *sa_in6;
+
+    switch (af) {
+    case AF_INET:
+        sa_in                  = (struct sockaddr_in*)saddr;
+        sa_in->sin_addr.s_addr = INADDR_ANY;
+        break;
+    case AF_INET6:
+        sa_in6            = (struct sockaddr_in6*)saddr;
+        sa_in6->sin6_addr = in6addr_any;
+        break;
+    default:
+        ucs_debug("invalid address family: %d", af);
+        return UCS_ERR_INVALID_PARAM;
+    }
+    return UCS_OK;
+}
+
 int ucs_sockaddr_is_inaddr_any(const struct sockaddr *addr)
 {
     switch (addr->sa_family) {
@@ -918,40 +990,6 @@ ucs_status_t ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen
     freeifaddrs(ifaddrs);
 
     return status;
-}
-
-static ucs_status_t ucs_sockaddr_ifreq(const char *if_name,
-                                       unsigned long request,
-                                       struct sockaddr_in *dest)
-{
-    ucs_status_t status;
-    struct ifreq ifr;
-
-    status = ucs_netif_ioctl(if_name, request, &ifr);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    if (ifr.ifr_addr.sa_family != AF_INET) {
-        ucs_error("%s address is not INET", if_name);
-        return UCS_ERR_INVALID_ADDR;
-    }
-
-    memcpy(dest, &ifr.ifr_addr, sizeof(*dest));
-
-    return UCS_OK;
-}
-
-ucs_status_t
-ucs_sockaddr_get_ifaddr(const char *if_name, struct sockaddr_in *addr)
-{
-    return ucs_sockaddr_ifreq(if_name, SIOCGIFADDR, addr);
-}
-
-ucs_status_t
-ucs_sockaddr_get_ifmask(const char *if_name, struct sockaddr_in *mask)
-{
-    return ucs_sockaddr_ifreq(if_name, SIOCGIFNETMASK, mask);
 }
 
 const char *ucs_sockaddr_address_family_str(sa_family_t af)

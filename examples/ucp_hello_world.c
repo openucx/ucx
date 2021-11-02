@@ -80,6 +80,7 @@ static struct err_handling {
 
 static ucs_status_t ep_status   = UCS_OK;
 static uint16_t server_port     = 13337;
+static sa_family_t ai_family    = AF_INET;
 static long test_string_length  = 16;
 static const ucp_tag_t tag      = 0x1337a880u;
 static const ucp_tag_t tag_mask = UINT64_MAX;
@@ -575,7 +576,7 @@ int main(int argc, char **argv)
     if (client_target_name) {
         peer_addr_len = local_addr_len;
 
-        oob_sock = client_connect(client_target_name, server_port);
+        oob_sock = connect_common(client_target_name, server_port, ai_family);
         CHKERR_JUMP(oob_sock < 0, "client_connect\n", err_addr);
 
         ret = recv(oob_sock, &addr_len, sizeof(addr_len), MSG_WAITALL);
@@ -590,7 +591,7 @@ int main(int argc, char **argv)
         CHKERR_JUMP_RETVAL(ret != (int)peer_addr_len,
                            "receive address\n", err_peer_addr, ret);
     } else {
-        oob_sock = server_connect(server_port);
+        oob_sock = connect_common(NULL, server_port, ai_family);
         CHKERR_JUMP(oob_sock < 0, "server_connect\n", err_peer_addr);
 
         addr_len = local_addr_len;
@@ -661,7 +662,7 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
     err_handling_opt.ucp_err_mode = UCP_ERR_HANDLING_MODE_NONE;
     err_handling_opt.failure_mode = FAILURE_MODE_NONE;
 
-    while ((c = getopt(argc, argv, "wfbe:n:p:s:m:ch")) != -1) {
+    while ((c = getopt(argc, argv, "wfb6e:n:p:s:m:ch")) != -1) {
         switch (c) {
         case 'w':
             ucp_test_mode = TEST_MODE_WAIT;
@@ -687,6 +688,9 @@ ucs_status_t parse_cmd(int argc, char * const argv[], char **server_name)
             break;
         case 'n':
             *server_name = optarg;
+            break;
+        case '6':
+            ai_family = AF_INET6;
             break;
         case 'p':
             server_port = atoi(optarg);
