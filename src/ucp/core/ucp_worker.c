@@ -3115,8 +3115,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
     if ((worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) &&
         (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list)) {
-        /* We are removing the current and last endpoint in the keepalive round
-         */
+        /* Remove the current and last endpoint in the keepalive round */
         ucs_debug("worker %p: removed the keepalive current/stop endpoint %p",
                   worker, ep);
 
