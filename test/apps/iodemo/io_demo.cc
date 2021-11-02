@@ -771,9 +771,10 @@ protected:
     static void signal_terminate_handler(int signo)
     {
         char msg[64];
+        ssize_t ret __attribute__((unused));
 
         snprintf(msg, sizeof(msg), "Run-time signal handling: %d\n", signo);
-        write(STDOUT_FILENO, msg, strlen(msg) + 1);
+        ret = write(STDOUT_FILENO, msg, strlen(msg) + 1);
 
         _status = TERMINATE_SIGNALED;
     }
