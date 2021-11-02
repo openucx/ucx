@@ -54,6 +54,22 @@ Java_org_openucx_jucx_ucp_UcpListener_createUcpListener(JNIEnv *env, jobject lis
     return (native_ptr)listener;
 }
 
+JNIEXPORT jobject JNICALL
+Java_org_openucx_jucx_ucp_UcpListener_queryAddressNative(JNIEnv *env,
+                                                         jclass cls,
+                                                         jlong listener_ptr)
+{
+    ucp_listener_attr_t listener_attr;
+    listener_attr.field_mask = UCP_LISTENER_ATTR_FIELD_SOCKADDR;
+
+    ucs_status_t status = ucp_listener_query((ucp_listener_h)listener_ptr, &listener_attr);
+    if (status != UCS_OK) {
+        JNU_ThrowExceptionByStatus(env, status);
+    }
+
+    return c2jInetSockAddr(env, &listener_attr.sockaddr);
+}
+
 JNIEXPORT void JNICALL
 Java_org_openucx_jucx_ucp_UcpListener_destroyUcpListenerNative(JNIEnv *env,
                                                                jclass cls,

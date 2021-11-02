@@ -22,8 +22,6 @@ import java.util.stream.Stream;
 import static org.junit.Assert.*;
 
 public class UcpListenerTest  extends UcxTest {
-    static final int port = Integer.parseInt(
-        System.getenv().getOrDefault("JUCX_TEST_PORT", "55321"));
 
     static Stream<NetworkInterface> getInterfaces() {
         try {
@@ -51,19 +49,10 @@ public class UcpListenerTest  extends UcxTest {
             .collect(Collectors.toList());
         Collections.reverse(addresses);
         for (InetAddress address : addresses) {
-            for (int i = 0; i < 10; i++) {
-                try {
-                    result = worker.newListener(
-                        params.setSockAddr(new InetSocketAddress(address, port + i)));
-                    break;
-                } catch (UcxException ex) {
-                    if (ex.getStatus() != UcsConstants.STATUS.UCS_ERR_BUSY) {
-                        break;
-                    }
-                }
-            }
+            result = worker.newListener(params.setSockAddr(new InetSocketAddress(address, 0)));
         }
         assertNotNull("Could not find socket address to start UcpListener", result);
+        assertNotEquals(0, result.getAddress().getPort());
         System.out.println("Bound UcpListner on: " + result.getAddress());
         return result;
     }
