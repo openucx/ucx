@@ -3165,8 +3165,6 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
         worker->keepalive.iter_end = worker->keepalive.iter_end->prev;
         ucs_assert(worker->keepalive.iter_end != &ucp_ep_ext_gen(ep)->ep_list);
-    } else {
-        ucp_worker_keeplive_check_in_progress(worker);
     }
 }
 
