@@ -112,8 +112,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
 
     /* Pack remote keys (which can be empty list) */
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq, worker->context) &&
-        (ucp_ep_config(sreq->send.ep)->key.rma_bw_md_map != 0)) {
+        ucp_rndv_is_get_zcopy(sreq, worker->context)) {
         /* pack rkey, ask target to do get_zcopy */
         mem_info.type         = sreq->send.mem_type;
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
@@ -200,15 +199,10 @@ ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq,
     ucp_md_map_t md_map;
     ucs_status_t status;
 
-    if (ucp_ep_config(ep)->key.rma_bw_md_map != 0) {
-        ucp_request_send_memh_rndv_init(sreq, param);
-    }else {
-        ucp_request_send_memh_eager_init(sreq, param);
-    }
+    ucp_request_send_memh_rndv_init(sreq, param);
 
     if (UCP_DT_IS_CONTIG(sreq->send.datatype) &&
-        ucp_rndv_is_get_zcopy(sreq, ep->worker->context) &&
-        (ucp_ep_config(ep)->key.rma_bw_md_map != 0)) {
+        ucp_rndv_is_get_zcopy(sreq, ep->worker->context)) {
 
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
