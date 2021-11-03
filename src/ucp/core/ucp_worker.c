@@ -2436,6 +2436,7 @@ ucp_worker_discard_uct_ep_purge(uct_pending_req_t *self, void *arg)
 static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
 {
     ucp_request_t *req;
+    ucp_ep_h ucp_ep;
     uct_ep_h uct_ep;
 
     /* Destroying UCP EP in ucp_ep_disconnected() could start UCT EP discarding
@@ -2445,12 +2446,19 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
 
     kh_foreach(&worker->discard_uct_ep_hash, uct_ep, req, {
         ucs_assert(uct_ep == req->send.discard_uct_ep.uct_ep);
+
+        /* Make sure the UCP endpoint won't be destroyed by
+         * ucp_worker_discard_uct_ep_complete() since
+         * ucp_request_t::send.state.uct_comp.func of another operation could
+         * access it */
+        ucp_ep = req->send.ep;
+        ucp_ep_add_ref(ucp_ep);
         uct_ep_pending_purge(uct_ep, ucp_worker_discard_uct_ep_purge, NULL);
         uct_ep_destroy(uct_ep);
+        ucp_ep_remove_ref(ucp_ep);
 
-        /* Either flush is in-progress (will be completed in UCT EP destroy)
-         * or some progress callback is scheduled (will be removed after UCT
-         * EP destroy) */
+        /* We must do this operation as a last step, because uct_ep_destroy()
+         * could move a discard operation to the progress queue */
         ucs_callbackq_remove_if(&worker->uct->progress_q,
                                 ucp_worker_discard_remove_filter, req);
     })
