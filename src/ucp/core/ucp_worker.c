@@ -3145,16 +3145,21 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
         worker->keepalive.lane_map = 0;
         next_ep                    = ucp_worker_keepalive_next_ep(worker);
 
-        if ((worker->keepalive.iter == worker->keepalive.iter_end) &&
-            (next_ep == NULL)) {
-            /* If the current element points to the iter_end and the next
-             * endpoint wasn't selected (e.g. the element is all_eps or the
-             * endpoint is in FAILED state), complete the current keeaplive
-             * round */
+        if (next_ep == NULL) {
             ucs_assertv(worker->keepalive.lane_map == 0,
                         "worker %p: lane_map=0x%x", worker,
                         worker->keepalive.lane_map);
-            ucp_worker_keepalive_complete(worker, ucs_get_time());
+            if (worker->keepalive.iter == worker->keepalive.iter_end) {
+                /* If the current element points to the iter_end and the next
+                 * endpoint wasn't selected (e.g. the element is all_eps or the
+                 * endpoint is in FAILED state), complete the current keeaplive
+                 * round */
+                ucp_worker_keepalive_complete(worker, ucs_get_time());
+            }
+        } else {
+            ucs_assertv(worker->keepalive.lane_map != 0,
+                        "worker %p: lane_map=0x%x", worker,
+                        worker->keepalive.lane_map);
         }
     } else if (worker->keepalive.iter_end == &ucp_ep_ext_gen(ep)->ep_list) {
         /* Removing the last but not current endpoint - move the iter_end to
@@ -3165,6 +3170,14 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
         worker->keepalive.iter_end = worker->keepalive.iter_end->prev;
         ucs_assert(worker->keepalive.iter_end != &ucp_ep_ext_gen(ep)->ep_list);
+
+        if ((worker->keepalive.iter == worker->keepalive.iter_end) &&
+            (worker->keepalive.lane_map == 0)) {
+            /* If the current element points to the iter_end and the lane_map
+             * is set to 0 due to previous remove operations, complete the
+             * current keepalive round */
+            ucp_worker_keepalive_complete(worker, ucs_get_time());
+        }
     }
 }
 
