@@ -41,12 +41,12 @@ BEGIN_C_DECLS
 
 static inline uint64_t ucs_arch_read_hres_clock()
 {
-#ifndef HAVE_SYS_PLATFORM_PPC_H
+#ifdef HAVE___PPC_GET_TIMEBASE
+    return __ppc_get_timebase();
+#else
     uint64_t tb;
     asm volatile ("mfspr %0, 268" : "=r" (tb));
     return tb;
-#else
-    return __ppc_get_timebase();
 #endif
 }
 
