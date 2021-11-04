@@ -10,8 +10,11 @@
 #include <uct/base/uct_cm.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/string.h>
+#include <ucs/type/spinlock.h>
 #include <ucs/datastruct/bitmap.h>
+#if HAVE_MLX5_HW
 #include <uct/ib/mlx5/ib_mlx5.h>
+#endif
 
 #include <rdma/rdma_cma.h>
 
@@ -61,7 +64,9 @@ typedef struct uct_rdmacm_cm_reserved_qpn_blk {
     uint32_t               next_avail_qpn_offset; /** Offset of next available qpn */
     uint32_t               refcount;              /** The counter of qpns which were created and hasn't been destroyed */
     ucs_list_link_t        entry;                 /** List link of blocks */
+#if HAVE_DECL_MLX5DV_IS_SUPPORTED
     struct mlx5dv_devx_obj *obj;                  /** The devx obj used to create the block */
+#endif
 } uct_rdmacm_cm_reserved_qpn_blk_t;
 
 

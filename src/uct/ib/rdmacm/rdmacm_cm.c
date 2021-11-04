@@ -11,7 +11,6 @@
 #include "rdmacm_cm_ep.h"
 #include <uct/ib/base/ib_iface.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
-#include <uct/ib/mlx5/ib_mlx5.h>
 #include <ucs/async/async.h>
 
 #include <poll.h>
