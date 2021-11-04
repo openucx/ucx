@@ -92,7 +92,6 @@ protected:
         unsigned total_ep_count              = ep_count + wireup_aux_ep_count;
         unsigned discarded_count             = 0;
         void *flush_req                      = NULL;
-        ucp_ep_h ucp_ep;
         uct_iface_t iface;
         std::vector<uct_ep_t> eps(total_ep_count);
         std::vector<uct_ep_h> wireup_eps(wireup_ep_count);
@@ -101,7 +100,7 @@ protected:
         ASSERT_LE(wireup_ep_count, ep_count);
         ASSERT_LE(wireup_aux_ep_count, wireup_ep_count);
 
-        ucp_ep = sender().ep();
+        m_ucp_ep = sender().ep();
 
         ops.ep_flush         = (uct_ep_flush_func_t)ep_flush_func;
         ops.ep_pending_add   = (uct_ep_pending_add_func_t)ep_pending_add_func;
@@ -123,7 +122,7 @@ protected:
             std::vector<ucp_request_t*> pending_reqs;
 
             if (i < wireup_ep_count) {
-                status = ucp_wireup_ep_create(ucp_ep, &discard_ep);
+                status = ucp_wireup_ep_create(m_ucp_ep, &discard_ep);
                 ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);
@@ -145,6 +144,8 @@ protected:
                     m_created_ep_count++;
                 }
 
+                EXPECT_LE(m_created_ep_count, total_ep_count);
+
                 if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
                     /* add WIREUP MSGs to the WIREUP EP (it will be added to
                      * UCT EP or WIREUP AUX EP) */
@@ -156,9 +157,6 @@ protected:
             } else {
                 discard_ep = &eps[i];
             }
-
-            EXPECT_LE(m_created_ep_count, total_ep_count);
-
 
             if (ep_pending_purge_func == (void*)ep_pending_purge_func_iter_reqs) {
                 /* add user's pending requests */
@@ -178,7 +176,7 @@ protected:
 
             UCS_ASYNC_BLOCK(&sender().worker()->async);
             ucp_worker_iface_progress_ep(wiface);
-            ucp_worker_discard_uct_ep(ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
+            ucp_worker_discard_uct_ep(m_ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
                                       ep_pending_purge_count_reqs_cb,
                                       &purged_reqs_count, discarded_cb,
                                       static_cast<void*>(&discarded_count));
@@ -260,7 +258,7 @@ protected:
             EXPECT_EQ(NULL, eps[i].iface);
         }
 
-        EXPECT_EQ(1u, ucp_ep->refcount);
+        EXPECT_EQ(1u, m_ucp_ep->refcount);
 
 out:
         disconnect(sender());
@@ -279,9 +277,13 @@ out:
                  * operations are completed with status UCS_ERR_CANCELED */
                 uct_invoke_completion(&req->send.state.uct_comp, UCS_ERR_CANCELED);
                 m_flush_comps.erase(iter);
+                EXPECT_EQ(m_ucp_ep, req->send.ep);
+                EXPECT_GT(m_ucp_ep->refcount, 0u);
                 break;
             }
         }
+
+        EXPECT_GT(m_ucp_ep->refcount, 0u);
 
         ep->iface = NULL;
         m_destroyed_ep_count++;
@@ -389,6 +391,7 @@ protected:
     static       unsigned m_created_ep_count;
     static       unsigned m_destroyed_ep_count;
     static       ucp_ep_t m_fake_ep;
+    static       ucp_ep_h m_ucp_ep;
     static const unsigned m_pending_purge_reqs_count;
 
     static std::vector<uct_completion_t*>  m_flush_comps;
@@ -399,6 +402,7 @@ protected:
 unsigned test_ucp_worker_discard::m_created_ep_count               = 0;
 unsigned test_ucp_worker_discard::m_destroyed_ep_count             = 0;
 ucp_ep_t test_ucp_worker_discard::m_fake_ep                        = {};
+ucp_ep_h test_ucp_worker_discard::m_ucp_ep                         = NULL;
 const unsigned test_ucp_worker_discard::m_pending_purge_reqs_count = 10;
 
 std::vector<uct_completion_t*>              test_ucp_worker_discard::m_flush_comps;
