@@ -66,6 +66,11 @@ static void usage() {
     printf("\n");
 }
 
+static void ep_error_callback(void *arg, ucp_ep_h ep, ucs_status_t status)
+{
+    /* Empty error callback */
+}
+
 int main(int argc, char **argv)
 {
     const uint64_t required_ucp_features = UCP_FEATURE_AMO32 |
@@ -167,8 +172,11 @@ int main(int argc, char **argv)
                     ucp_features |= UCP_FEATURE_WAKEUP;
                     break;
                 case 'e':
-                    ucp_ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-                    ucp_ep_params.err_mode    = UCP_ERR_HANDLING_MODE_PEER;
+                    ucp_ep_params.field_mask |=
+                            UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE |
+                            UCP_EP_PARAM_FIELD_ERR_HANDLER;
+                    ucp_ep_params.err_mode       = UCP_ERR_HANDLING_MODE_PEER;
+                    ucp_ep_params.err_handler.cb = ep_error_callback;
                     break;
                 default:
                     usage();
