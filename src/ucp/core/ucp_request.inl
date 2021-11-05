@@ -1023,6 +1023,9 @@ ucp_request_param_rndv_thresh(ucp_request_t *req,
 static UCS_F_ALWAYS_INLINE void
 ucp_invoke_uct_completion(uct_completion_t *comp, ucs_status_t status)
 {
+    ucs_assertv(comp->count > 0, "comp=%p count=%d func=%p status %s", comp,
+                comp->count, comp->func, ucs_status_string(status));
+
     uct_completion_update_status(comp, status);
     if (--comp->count == 0) {
         comp->func(comp);
