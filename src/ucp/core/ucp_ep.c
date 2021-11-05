@@ -2306,8 +2306,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             min_rndv_thresh                    = ucp_ep_tag_offload_min_rndv_thresh(config);
             min_am_rndv_thresh                 = min_rndv_thresh;
 
-            ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
-                              sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
+            ucs_assertv_always(iface_attr->cap.tag.rndv.max_hdr >=
+                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t),
+                               "rndv.max_hdr %zu, offload_unexp_rndv_hdr %zu",
+                               iface_attr->cap.tag.rndv.max_hdr,
+                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
 
             /* Must have active messages for using rendezvous */
             if (config->key.am_lane != UCP_NULL_LANE) {
@@ -2392,7 +2395,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             /* All keys must fit in RNDV packet.
              * TODO remove some MDs if they don't
              */
-            ucs_assert_always(config->rndv.rkey_size <= config->am.max_bcopy);
+            ucs_assertv_always(config->rndv.rkey_size <= config->am.max_bcopy,
+                               "rkey_size %zu, am.max_bcopy %zu",
+                               config->rndv.rkey_size, config->am.max_bcopy);
 
             if (!ucp_ep_config_key_has_tag_lane(&config->key)) {
                 /* Tag offload is disabled, AM will be used for all

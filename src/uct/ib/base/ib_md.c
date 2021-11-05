@@ -779,7 +779,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
         memh->flags |= UCT_IB_MEM_FLAG_RELAXED_ORDERING;
     }
 
-    ucs_debug("registered memory %p..%p on %s lkey 0x%x rkey 0x%x "
+    ucs_trace("registered memory %p..%p on %s lkey 0x%x rkey 0x%x "
               "access 0x%lx flags 0x%x", address,
               UCS_PTR_BYTE_OFFSET(address, length),
               uct_ib_device_name(&md->dev), memh->lkey, memh->rkey,
