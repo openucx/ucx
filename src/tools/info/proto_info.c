@@ -94,9 +94,37 @@ static void print_resource_usage(const resource_usage_t *usage_before,
     printf("#\n");
 }
 
-static void listener_accept_callback(ucp_ep_h ep, void *arg)
+
+typedef struct conn_handler_arg {
+    struct {
+        ucp_worker_h          worker;
+        const ucp_ep_params_t *ep_params;
+    } in;
+
+    struct {
+        ucp_ep_h *ep;
+    } out;
+} conn_handler_arg_t;
+
+
+static void conn_handler_callback(ucp_conn_request_h conn_req, void *arg)
 {
-    *(ucp_ep_h*)arg = ep;
+    conn_handler_arg_t *conn_handler_arg = (conn_handler_arg_t*)arg;
+    ucp_ep_params_t ep_params            = *conn_handler_arg->in.ep_params;
+    ucp_worker_h worker                  = conn_handler_arg->in.worker;
+    ucp_ep_h ep;
+    ucs_status_t status;
+
+    ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST;
+    ep_params.conn_request = conn_req;
+
+    status = ucp_ep_create(worker, &ep_params, &ep);
+    if (status != UCS_OK) {
+        printf("<Failed to create UCP endpoint>\n");
+        return;
+    }
+
+    *conn_handler_arg->out.ep = ep;
 }
 
 static void set_saddr(const char *addr_str, uint16_t port, sa_family_t af,
@@ -156,7 +184,8 @@ ep_close(ucp_worker_h worker, ucp_worker_h peer_worker, ucp_ep_h ep,
 static ucs_status_t create_listener(ucp_worker_h worker,
                                     ucp_listener_h *listener_p,
                                     uint16_t *listen_port_p,
-                                    sa_family_t ai_family, void *accept_cb_arg)
+                                    sa_family_t ai_family,
+                                    conn_handler_arg_t *conn_handler_arg)
 {
     ucp_listener_h listener;
     struct sockaddr_storage listen_saddr;
@@ -167,11 +196,11 @@ static ucs_status_t create_listener(ucp_worker_h worker,
     set_saddr(NULL, 0, ai_family, &listen_saddr);
 
     listen_params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
-                                       UCP_LISTENER_PARAM_FIELD_ACCEPT_HANDLER;
+                                       UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
     listen_params.sockaddr.addr      = (const struct sockaddr*)&listen_saddr;
     listen_params.sockaddr.addrlen   = sizeof(listen_saddr);
-    listen_params.accept_handler.cb  = listener_accept_callback;
-    listen_params.accept_handler.arg = accept_cb_arg;
+    listen_params.conn_handler.cb    = conn_handler_callback;
+    listen_params.conn_handler.arg   = conn_handler_arg;
 
     status = ucp_listener_create(worker, &listen_params, &listener);
     if (status != UCS_OK) {
@@ -212,6 +241,7 @@ print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
     ucp_ep_h server_ep             = NULL;
     ucp_ep_params_t ep_params      = *base_ep_params;
     ucp_worker_attr_t worker_attrs = {};
+    conn_handler_arg_t conn_handler_arg;
     ucs_status_t status;
     ucs_status_ptr_t status_ptr;
     struct sockaddr_storage connect_saddr;
@@ -221,8 +251,12 @@ print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
     ucp_request_param_t request_param;
 
     if (ip_addr != NULL) {
+        conn_handler_arg.in.worker    = worker;
+        conn_handler_arg.in.ep_params = base_ep_params;
+        conn_handler_arg.out.ep       = &server_ep;
+
         status = create_listener(peer_worker, &listener, &listen_port, af,
-                                 &server_ep);
+                                 &conn_handler_arg);
         if (status != UCS_OK) {
             return status;
         }
