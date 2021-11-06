@@ -161,6 +161,8 @@ struct ucp_config {
     ucp_context_config_t                   ctx;
     /** Save ucx configurations not listed in ucp_config_table **/
     ucs_list_link_t                        cached_key_list;
+    /** Array of worker memory pool sizes */
+    UCS_CONFIG_ARRAY_FIELD(size_t, memunits) mpool_sizes;
 };
 
 
@@ -282,6 +284,10 @@ typedef struct ucp_context {
 
         /* MD to compare for transport selection scores */
         char                      *selection_cmp;
+        struct {
+           unsigned               count;
+           size_t                 *sizes;
+        } am_mpools;
     } config;
 
     /* Configuration of multi-threading support */

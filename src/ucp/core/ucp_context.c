@@ -87,6 +87,9 @@ static const char *ucp_sa_client_hdr_versions[] = {
     [UCP_SA_DATA_VERSION_LAST] = NULL
 };
 
+static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
+                               UCS_CONFIG_TYPE_MEMUNITS);
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -391,6 +394,13 @@ static ucs_config_field_t ucp_config_table[] = {
    "element. UCP rkeys containing larger number of MDs will be unpacked to\n"
    "dynamically allocated memory.",
    ucs_offsetof(ucp_config_t, ctx.rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
+
+  {"RX_MPOOL_SIZES", "64,1kb",
+   "List of worker mpool sizes separated by comma. The values must be power of 2\n"
+   "Values larger than the maximum UCT transport segment size will be ignored.\n"
+   "These pools are used for UCP AM and unexpected TAG messages. When assigning\n"
+   "pool sizes, note that the data may be stored with some header.",
+   ucs_offsetof(ucp_config_t, mpool_sizes), UCS_CONFIG_TYPE_ARRAY(memunit_sizes)},
 
    {NULL}
 };
@@ -1694,6 +1704,17 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    context->config.am_mpools.count = config->mpool_sizes.count;
+    context->config.am_mpools.sizes = ucs_malloc(sizeof(size_t) *
+                                                 config->mpool_sizes.count,
+                                                 "am_mpool_sizes");
+    if (context->config.am_mpools.sizes == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_key_list;
+    }
+    memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
+           config->mpool_sizes.count * sizeof(size_t));
+
     return UCS_OK;
 
 err_free_key_list:
@@ -1715,6 +1736,7 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.env_prefix);
     ucs_free(context->config.selection_cmp);
     ucp_cached_key_list_release(&context->cached_key_list);
+    ucs_free(context->config.am_mpools.sizes);
 }
 
 static void ucp_context_create_vfs(ucp_context_h context)

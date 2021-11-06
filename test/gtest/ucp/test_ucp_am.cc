@@ -19,6 +19,7 @@
 extern "C" {
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_ep.inl>
+#include <ucs/datastruct/mpool.inl>
 }
 
 #define NUM_MESSAGES 17
@@ -688,6 +689,64 @@ UCS_TEST_P(test_ucp_am_nbx, max_short_thresh_zcopy, "ZCOPY_THRESH=0")
             ep_cfg->am_u.max_reply_eager_short.memtype_on + 1);
 
     EXPECT_LE(max_reply_short, ep_cfg->am.zcopy_thresh[0]);
+}
+
+UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
+           "RX_MPOOL_SIZES=2,8,64,128", "RNDV_THRESH=inf")
+{
+    void *rx_data = NULL;
+
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_hold_cb, &rx_data,
+                        UCP_AM_FLAG_PERSISTENT_DATA);
+
+    static const std::string ib_tls[] = { "dc_x", "rc_v", "rc_x", "ud_v",
+                                          "ud_x", "ib" };
+
+    // UCP takes desc from mpool only for data arrived as inlined from UCT.
+    // Typically, with IB, data is inlined up to 32 bytes, so use smaller range
+    // of values for IB transports.
+    bool has_ib = has_any_transport(
+            std::vector<std::string>(ib_tls,
+                                     ib_tls + ucs_static_array_size(ib_tls)));
+    ssize_t length = ucs::rand() % (has_ib ? 32 : 256);
+    std::vector<char> sbuf(length, 'd');
+
+    ucp_request_param_t param;
+    param.op_attr_mask = 0ul;
+
+    ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
+                                            0ul, sbuf.data(), sbuf.size(),
+                                            &param);
+    wait_for_flag(&rx_data);
+    EXPECT_TRUE(rx_data != NULL);
+    EXPECT_EQ(UCS_OK, request_wait(sptr));
+
+    ucp_recv_desc_t *rdesc = (ucp_recv_desc_t*)rx_data - 1;
+    if (rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC) {
+        ucp_am_data_release(receiver().worker(), rx_data);
+        UCS_TEST_SKIP_R("non-inline data arrived");
+    } else {
+        UCS_TEST_MESSAGE << "length " << length;
+    }
+
+    ucp_worker_h worker = receiver().worker();
+
+    for (int i = 0; i < ucs_popcount(worker->am_mps.bitmap); ++i) {
+        ucs_mpool_t *mpool =
+            &reinterpret_cast<ucs_mpool_t*>(worker->am_mps.data)[i];
+        ssize_t elem_size  = mpool->data->elem_size - (sizeof(ucs_mpool_elem_t) +
+                             UCP_WORKER_HEADROOM_SIZE + worker->am.alignment);
+        ASSERT_TRUE(elem_size >= 0);
+
+        if (elem_size >= (length + 1)) {
+            EXPECT_EQ(ucs_mpool_obj_owner(rdesc), mpool);
+            break;
+        }
+
+        EXPECT_NE(ucs_mpool_obj_owner(rdesc), mpool);
+    }
+
+    ucp_am_data_release(receiver().worker(), rx_data);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)

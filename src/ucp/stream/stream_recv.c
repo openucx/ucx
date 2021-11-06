@@ -443,7 +443,8 @@ ucp_stream_am_data_process(ucp_worker_t *worker, ucp_ep_ext_proto_t *ep_ext,
 
     /* Now, enqueue the rest of data */
     if (ucs_likely(!(am_flags & UCT_CB_PARAM_FLAG_DESC))) {
-        rdesc = (ucp_recv_desc_t*)ucs_mpool_get_inline(&worker->am_mp);
+        rdesc = (ucp_recv_desc_t*)ucs_mpool_set_get_inline(&worker->am_mps,
+                                                           length);
         ucs_assertv_always(rdesc != NULL,
                            "ucp recv descriptor is not allocated");
         rdesc->length              = rdesc_tmp.length;
