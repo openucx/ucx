@@ -34,7 +34,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            ucp_rsc_index_t cm_idx,
                                            const char *dev_name,
                                            unsigned ep_init_flags,
-                                           uint8_t sa_data_version);
+                                           ucp_object_version_t sa_data_version);
 
 ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
                                             const ucp_ep_params_t *params);
@@ -61,6 +61,6 @@ ucp_request_t* ucp_ep_cm_close_request_get(ucp_ep_h ep,
 
 void ucp_ep_cm_slow_cbq_cleanup(ucp_ep_h ep);
 
-size_t ucp_cm_sa_data_length(uint8_t sa_data_version);
+size_t ucp_cm_sa_data_length(ucp_object_version_t sa_data_version);
 
 #endif /* WIREUP_CM_H_ */

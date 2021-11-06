@@ -8,9 +8,11 @@
 #define UCP_TYPES_H_
 
 #include <ucp/api/ucp.h>
+#include <ucs/type/float8.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/bitmap.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/sys/math.h>
 #include <stdint.h>
 
 
@@ -111,6 +113,18 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
                    UCP_MAX_RESOURCES)
 
 
+/* Pack bandwidth as bytes/second, range: 512 MB/s to 4 TB/s */
+UCS_FP8_DECLARE_TYPE(BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+
+
+/* Pack latency as nanoseconds, range: 16 nsec to 131 usec */
+UCS_FP8_DECLARE_TYPE(LATENCY, UCS_BIT(4), UCS_BIT(17))
+
+
+/* Pack overhead as nanoseconds, range: 1 nsec to 4 usec */
+UCS_FP8_DECLARE_TYPE(OVERHEAD, UCS_BIT(0), UCS_BIT(12))
+
+
 /**
  * Operation for which protocol is selected
  */
@@ -202,6 +216,16 @@ typedef enum {
     UCP_RNDV_MODE_RKEY_PTR, /* Use rkey_ptr in RNDV protocol */
     UCP_RNDV_MODE_LAST
 } ucp_rndv_mode_t;
+
+
+/* Versions enumeration used for various UCP objects (e.g. ucp worker address,
+ * sockaddr data structure, etc).
+ */
+typedef enum {
+    UCP_OBJECT_VERSION_V1,
+    UCP_OBJECT_VERSION_V2,
+    UCP_OBJECT_VERSION_LAST
+} ucp_object_version_t;
 
 
 /**

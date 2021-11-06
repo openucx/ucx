@@ -142,6 +142,8 @@ typedef struct ucp_ep_config_key_lane {
     uint8_t              path_index; /* Device path index */
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
+    size_t               seg_size; /* Maximal fragment size which can be
+                                      received by the peer */
 } ucp_ep_config_key_lane_t;
 
 
@@ -491,13 +493,6 @@ enum {
 };
 
 
-enum {
-    UCP_SA_DATA_VERSION_V1, /* represented by ucp_wireup_sockaddr_data_v1_t */
-    UCP_SA_DATA_VERSION_V2, /* represented by ucp_wireup_sockaddr_data_base_t */
-    UCP_SA_DATA_VERSION_LAST
-};
-
-
 /* Sockaddr data flags that are packed to the header field in
  * ucp_wireup_sockaddr_data_base_t structure.
  */
@@ -525,7 +520,7 @@ typedef struct ucp_wireup_sockaddr_data_base {
      *        flags
      *
      * It is safe to keep version in 3 MSB, because it will always be zeros
-     * (i.e. UCP_SA_DATA_VERSION_V1) in sa_data v1 (err_mode value is small).
+     * (i.e. UCP_OBJECT_VERSION_V1) in sa_data v1 (err_mode value is small).
      */
     uint8_t                   header;
     /* packed worker address (or sa_data v1) follows */

@@ -137,6 +137,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].dst_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
         key->lanes[i].path_index   = 0;
         key->lanes[i].lane_types   = 0;
+        key->lanes[i].seg_size     = 0;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_msg_lane  = UCP_NULL_LANE;
@@ -515,8 +516,9 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
 
         status = ucp_address_pack(worker, NULL,
                                   &context->mem_type_access_tls[mem_type],
-                                  pack_flags, NULL, &address_length,
-                                  &address_buffer);
+                                  pack_flags,
+                                  context->config.ext.worker_addr_version, NULL,
+                                  &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
@@ -774,9 +776,9 @@ ucp_conn_request_unpack_sa_data(const ucp_conn_request_h conn_request,
             sa_data->header >> UCP_SA_DATA_HEADER_VERSION_SHIFT;
 
     switch (sa_data_version) {
-    case UCP_SA_DATA_VERSION_V1:
+    case UCP_OBJECT_VERSION_V1:
         return ucp_sa_data_v1_unpack(sa_data, ep_init_flags_p, worker_addr_p);
-    case UCP_SA_DATA_VERSION_V2:
+    case UCP_OBJECT_VERSION_V2:
         return ucp_sa_data_v2_unpack(sa_data, ep_init_flags_p, worker_addr_p);
     default:
         ucs_error("conn_request %p: unsupported sa_data version: %u",
@@ -1625,7 +1627,8 @@ static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->path_index == config_lane2->path_index) &&
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
-           (config_lane1->lane_types == config_lane2->lane_types);
+           (config_lane1->lane_types == config_lane2->lane_types) &&
+           (config_lane1->seg_size == config_lane2->seg_size);
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
@@ -2038,7 +2041,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                          ucp_ep_msg_config_t *config, size_t max_bcopy,
                          size_t max_zcopy, size_t max_iov, size_t max_hdr,
                          uint64_t bcopy_flag, uint64_t zcopy_flag,
-                         size_t adjust_min_val)
+                         size_t adjust_min_val, size_t max_seg_size)
 {
     ucp_context_t *context = worker->context;
     const uct_md_attr_t *md_attr;
@@ -2051,7 +2054,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
     if (iface_attr->cap.flags & bcopy_flag) {
-        config->max_bcopy = max_bcopy;
+        config->max_bcopy = ucs_min(max_bcopy, max_seg_size);
     } else {
         config->max_bcopy = SIZE_MAX;
     }
@@ -2063,7 +2066,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
         return;
     }
 
-    config->max_zcopy = max_zcopy;
+    config->max_zcopy = ucs_min(max_zcopy, max_seg_size);
     config->max_hdr   = max_hdr;
     config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
 
@@ -2294,7 +2297,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.tag.eager.max_iov, 0,
                                      UCT_IFACE_FLAG_TAG_EAGER_BCOPY,
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY,
-                                     iface_attr->cap.tag.eager.max_bcopy);
+                                     iface_attr->cap.tag.eager.max_bcopy,
+                                     UINT_MAX);
 
             config->tag.offload.max_rndv_iov   = iface_attr->cap.tag.rndv.max_iov;
             config->tag.offload.max_rndv_zcopy = iface_attr->cap.tag.rndv.max_zcopy;
@@ -2352,7 +2356,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.am.max_iov,
                                      iface_attr->cap.am.max_hdr,
                                      UCT_IFACE_FLAG_AM_BCOPY,
-                                     UCT_IFACE_FLAG_AM_ZCOPY, SIZE_MAX);
+                                     UCT_IFACE_FLAG_AM_ZCOPY, SIZE_MAX,
+                                     config->key.lanes[lane].seg_size);
 
             /* Configuration stored in config->am is used by TAG, UCP AM and
              * STREAM protocol implementations, do not adjust max_short value by

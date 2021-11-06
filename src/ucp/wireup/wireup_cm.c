@@ -182,6 +182,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
                                     ucp_ep_config_key_t *key)
 {
     ucp_worker_h worker        = ucp_ep->worker;
+    ucp_context_h context      = worker->context;
     unsigned addr_pack_flags   = ucp_worker_common_address_pack_flags(worker) |
                                  UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR |
                                  UCP_ADDRESS_PACK_FLAG_IFACE_ADDR;
@@ -198,7 +199,8 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
     /* Construct local dummy address for lanes selection taking an assumption
      * that server has the transports which are the best from client's
      * perspective. */
-    status = ucp_address_pack(worker, NULL, tl_bitmap, addr_pack_flags, NULL,
+    status = ucp_address_pack(worker, NULL, tl_bitmap, addr_pack_flags,
+                              context->config.ext.worker_addr_version, NULL,
                               &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto out;
@@ -231,18 +233,18 @@ out:
     return status;
 }
 
-size_t ucp_cm_sa_data_length(uint8_t sa_data_version)
+size_t ucp_cm_sa_data_length(ucp_object_version_t sa_data_version)
 {
-    ucs_assert((sa_data_version == UCP_SA_DATA_VERSION_V1) ||
-               (sa_data_version == UCP_SA_DATA_VERSION_V2));
+    ucs_assert((sa_data_version == UCP_OBJECT_VERSION_V1) ||
+               (sa_data_version == UCP_OBJECT_VERSION_V2));
 
-    return (sa_data_version == UCP_SA_DATA_VERSION_V1) ?
+    return (sa_data_version == UCP_OBJECT_VERSION_V1) ?
            sizeof(ucp_wireup_sockaddr_data_v1_t) :
            sizeof(ucp_wireup_sockaddr_data_base_t);
 }
 
 static size_t
-ucp_cm_priv_data_length(size_t addr_size, unsigned sa_data_version)
+ucp_cm_priv_data_length(size_t addr_size, ucp_object_version_t sa_data_version)
 {
     return addr_size + ucp_cm_sa_data_length(sa_data_version);
 }
@@ -255,11 +257,11 @@ static unsigned ucp_cm_address_pack_flags(ucp_worker_h worker)
 
 static void*
 ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
-                       unsigned sa_data_version)
+                       ucp_object_version_t sa_data_version)
 {
     ucp_wireup_sockaddr_data_v1_t *sa_data_v1;
 
-    if (sa_data_version == UCP_SA_DATA_VERSION_V1) {
+    if (sa_data_version == UCP_OBJECT_VERSION_V1) {
         sa_data->header       = ucp_ep_config(ep)->key.err_mode;
         sa_data_v1            = ucs_derived_of(sa_data,
                                                ucp_wireup_sockaddr_data_v1_t);
@@ -267,9 +269,9 @@ ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
         sa_data_v1->dev_index = 0;
         return sa_data_v1 + 1;
     } else {
-        ucs_assertv_always(sa_data_version == UCP_SA_DATA_VERSION_V2,
+        ucs_assertv_always(sa_data_version == UCP_OBJECT_VERSION_V2,
                            "sa_data version: %u", sa_data_version);
-        sa_data->header = UCP_SA_DATA_VERSION_V2 <<
+        sa_data->header = UCP_OBJECT_VERSION_V2 <<
                           UCP_SA_DATA_HEADER_VERSION_SHIFT;
         if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
             sa_data->header |= UCP_SA_DATA_FLAG_ERR_MODE_PEER;
@@ -281,13 +283,14 @@ ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
 
 static ucs_status_t
 ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
-                         int can_fallback, unsigned sa_data_version,
+                         int can_fallback, ucp_object_version_t sa_data_version,
                          void **data_buf_p, size_t *data_buf_length_p,
                          unsigned ep_init_flags)
 {
-    ucp_worker_h worker = ep->worker;
-    void *ucp_addr      = NULL;
-    unsigned pack_flags = ucp_cm_address_pack_flags(worker);
+    ucp_worker_h worker   = ep->worker;
+    ucp_context_h context = worker->context;
+    void *ucp_addr        = NULL;
+    unsigned pack_flags   = ucp_cm_address_pack_flags(worker);
     ucp_wireup_sockaddr_data_base_t *sa_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
@@ -308,8 +311,8 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     /* Don't pack the device address to reduce address size, it will be
      * delivered by uct_cm_listener_conn_request_callback_t in
      * uct_cm_remote_data_t */
-    status = ucp_address_pack(worker, ep, tl_bitmap,
-                              pack_flags, NULL,
+    status = ucp_address_pack(worker, ep, tl_bitmap, pack_flags,
+                              context->config.ext.worker_addr_version, NULL,
                               &ucp_addr_size, &ucp_addr);
     if (status != UCS_OK) {
         goto err;
@@ -1165,7 +1168,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     ucs_status_t status;
     char client_addr_str[UCS_SOCKADDR_STRING_LEN];
     ucp_wireup_sockaddr_data_base_t *sa_data;
-    uint8_t sa_data_version;
+    ucp_object_version_t sa_data_version;
 
     ep_init_flags |= UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
 
@@ -1246,7 +1249,8 @@ out:
 static ucs_status_t
 ucp_ep_server_init_priv_data(ucp_ep_h ep, const char *dev_name,
                              const void **data_buf_p, size_t *data_buf_size_p,
-                             unsigned ep_init_flags, uint8_t sa_data_version)
+                             unsigned ep_init_flags,
+                             ucp_object_version_t sa_data_version)
 {
     ucp_worker_h worker = ep->worker;
     ucp_tl_bitmap_t tl_bitmap;
@@ -1337,7 +1341,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                            ucp_rsc_index_t cm_idx,
                                            const char *dev_name,
                                            unsigned ep_init_flags,
-                                           uint8_t sa_data_version)
+                                           ucp_object_version_t sa_data_version)
 {
     ucp_worker_h worker   = ep->worker;
     ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);

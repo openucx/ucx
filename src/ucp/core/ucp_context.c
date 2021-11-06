@@ -81,10 +81,10 @@ static size_t ucp_rndv_frag_default_num_elems[] = {
     [UCS_MEMORY_TYPE_LAST]         = 0
 };
 
-static const char *ucp_sa_client_hdr_versions[] = {
-    [UCP_SA_DATA_VERSION_V1]   = "v1",
-    [UCP_SA_DATA_VERSION_V2]   = "v2",
-    [UCP_SA_DATA_VERSION_LAST] = NULL
+const char *ucp_object_versions[] = {
+    [UCP_OBJECT_VERSION_V1]   = "v1",
+    [UCP_OBJECT_VERSION_V2]   = "v2",
+    [UCP_OBJECT_VERSION_LAST] = NULL
 };
 
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
@@ -387,7 +387,7 @@ static ucs_config_field_t ucp_config_table[] = {
    "Defines the minimal header version the client will use for establishing\n"
    "client/server connection",
    ucs_offsetof(ucp_config_t, ctx.sa_client_min_hdr_version),
-   UCS_CONFIG_TYPE_ENUM(ucp_sa_client_hdr_versions)},
+   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
 
   {"RKEY_MPOOL_MAX_MD", "2",
    "Maximum number of UCP rkey MDs which can be unpacked into memory pool\n"
@@ -401,6 +401,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "These pools are used for UCP AM and unexpected TAG messages. When assigning\n"
    "pool sizes, note that the data may be stored with some header.",
    ucs_offsetof(ucp_config_t, mpool_sizes), UCS_CONFIG_TYPE_ARRAY(memunit_sizes)},
+
+  {"ADDRESS_VERSION", "v1",
+   "Defines UCP worker address format obtained with ucp_worker_get_address() or\n"
+   "ucp_worker_query() routines.",
+   ucs_offsetof(ucp_config_t, ctx.worker_addr_version),
+   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
 
    {NULL}
 };

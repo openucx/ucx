@@ -39,7 +39,10 @@ enum {
     UCP_ADDR_IFACE_FLAG_PUT              = UCS_BIT(3),
     UCP_ADDR_IFACE_FLAG_GET              = UCS_BIT(4),
     UCP_ADDR_IFACE_FLAG_TAG_EAGER        = UCS_BIT(5),
-    UCP_ADDR_IFACE_FLAG_TAG_RNDV         = UCS_BIT(6)
+    UCP_ADDR_IFACE_FLAG_TAG_RNDV         = UCS_BIT(6),
+    UCP_ADDR_IFACE_FLAG_EVENT_RECV       = UCS_BIT(7),
+    UCP_ADDR_IFACE_FLAG_ATOMIC32         = UCS_BIT(8),
+    UCP_ADDR_IFACE_FLAG_ATOMIC64         = UCS_BIT(9)
 };
 
 
@@ -106,20 +109,27 @@ typedef ucs_bitmap_t(UCP_MAX_RESOURCES) ucp_tl_addr_bitmap_t;
  * Remote interface attributes.
  */
 struct ucp_address_iface_attr {
-    uint64_t                    cap_flags;    /* Interface capability flags */
-    uint64_t                    event_flags;  /* Interface event capability flags */
+    uint64_t                    flags;        /* Interface capability and event
+                                                 flags */
     double                      overhead;     /* Interface performance - overhead */
     double                      bandwidth;    /* Interface performance - bandwidth */
     int                         priority;     /* Priority of device */
-    double                      lat_ovh;      /* Latency overhead */
+    double                      lat_ovh;      /* Address v1: latency overhead
+                                               * address v2: latency */
     ucp_rsc_index_t             dst_rsc_index;/* Destination resource index */
     ucp_tl_iface_atomic_flags_t atomic;       /* Atomic operations */
+    size_t                      seg_size;     /* Maximal fragment size which can
+                                                 be received on the particular
+                                                 interface */
+    ucp_object_version_t        addr_version; /* Peer address version */
 };
+
 
 typedef struct ucp_address_entry_ep_addr {
     ucp_lane_index_t            lane;         /* Lane index (local or remote) */
     const uct_ep_addr_t         *addr;        /* Pointer to ep address */
 } ucp_address_entry_ep_addr_t;
+
 
 /**
  * Address entry.
@@ -176,6 +186,7 @@ struct ucp_unpacked_address {
  *                            (ep or iface) should be packed.
  * @param [in]  pack_flags    UCP_ADDRESS_PACK_FLAG_xx flags to specify address
  *                            format.
+ * @param [in]  addr_version  Address format version to pack.
  * @param [in]  lanes2remote  If NULL, the lane index in each packed ep address
  *                            will be the local lane index. Otherwise, specifies
  *                            which lane index should be packed in the ep address
@@ -187,6 +198,7 @@ struct ucp_unpacked_address {
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               const ucp_tl_bitmap_t *tl_bitmap,
                               unsigned pack_flags,
+                              ucp_object_version_t addr_version,
                               const ucp_lane_index_t *lanes2remote,
                               size_t *size_p, void **buffer_p);
 

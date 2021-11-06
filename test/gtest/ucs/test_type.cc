@@ -99,7 +99,7 @@ UCS_TEST_F(test_type, serialize) {
 }
 
 /* Represents latency (in ns) */
-UCS_FP8_DECLARE_TYPE(LATENCY, UCS_BIT(7), UCS_BIT(20))
+UCS_FP8_DECLARE_TYPE(TEST_LATENCY, UCS_BIT(7), UCS_BIT(20))
 
 UCS_TEST_F(test_type, pack_float) {
     const std::size_t values_size    = 10;
@@ -110,28 +110,32 @@ UCS_TEST_F(test_type, pack_float) {
     float unpacked;
 
     /* 0 -> 0 */
-    unpacked = UCS_FP8_UNPACK(LATENCY, UCS_FP8_PACK(LATENCY, 0));
+    unpacked = UCS_FP8_UNPACK(TEST_LATENCY, UCS_FP8_PACK(TEST_LATENCY, 0));
     EXPECT_EQ(unpacked, 0);
 
     /* NaN -> NaN */
-    unpacked = UCS_FP8_UNPACK(LATENCY, UCS_FP8_PACK(LATENCY, NAN));
+    unpacked = UCS_FP8_UNPACK(TEST_LATENCY, UCS_FP8_PACK(TEST_LATENCY, NAN));
     EXPECT_TRUE(isnan(unpacked));
 
     /* Below min -> min */
-    EXPECT_EQ(UCS_FP8_UNPACK(LATENCY, UCS_FP8_PACK(LATENCY, UCS_BIT(7))),
-              UCS_FP8_UNPACK(LATENCY, UCS_FP8_PACK(LATENCY, 15)));
+    EXPECT_EQ(UCS_FP8_UNPACK(TEST_LATENCY,
+                             UCS_FP8_PACK(TEST_LATENCY, UCS_BIT(7))),
+              UCS_FP8_UNPACK(TEST_LATENCY, UCS_FP8_PACK(TEST_LATENCY, 15)));
 
     /* Precision test throughout the whole range */
     for (std::vector<double>::const_iterator it = values.begin();
          it < values.end(); it++) {
-        unpacked = UCS_FP8_UNPACK(LATENCY, UCS_FP8_PACK(LATENCY, *it));
+        unpacked = UCS_FP8_UNPACK(TEST_LATENCY,
+                                  UCS_FP8_PACK(TEST_LATENCY, *it));
         ucs_assert((UCS_FP8_PRECISION < unpacked / *it) &&
                    (unpacked / *it <= 1));
     }
 
     /* Above max -> max */
-    EXPECT_EQ(UCS_FP8_UNPACK(LATENCY, UCS_FP8_PACK(LATENCY, UCS_BIT(20))),
-              UCS_FP8_UNPACK(LATENCY, UCS_FP8_PACK(LATENCY, 200000000)));
+    EXPECT_EQ(UCS_FP8_UNPACK(TEST_LATENCY,
+                             UCS_FP8_PACK(TEST_LATENCY, UCS_BIT(20))),
+              UCS_FP8_UNPACK(TEST_LATENCY,
+                             UCS_FP8_PACK(TEST_LATENCY, 200000000)));
 }
 
 class test_init_once: public test_type {

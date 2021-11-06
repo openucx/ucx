@@ -91,12 +91,6 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
     }
 }
 
-/* Pack bandwidth as bytes/second, range: 512 MB/s to 4 TB/s */
-UCS_FP8_DECLARE_TYPE(RKEY_BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
-
-/* Pack latency as nanoseconds, range: 16 nsec to 131 usec */
-UCS_FP8_DECLARE_TYPE(RKEY_LATENCY, UCS_BIT(4), UCS_BIT(17))
-
 static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
                                    const ucs_sys_dev_distance_t *distance,
                                    ucp_rkey_packed_distance_t *packed_distance)
@@ -104,9 +98,8 @@ static void ucp_rkey_pack_distance(ucs_sys_device_t sys_dev,
     double latency_nsec = distance->latency * UCS_NSEC_PER_SEC;
 
     packed_distance->sys_dev   = sys_dev;
-    packed_distance->latency   = UCS_FP8_PACK(RKEY_LATENCY, latency_nsec);
-    packed_distance->bandwidth = UCS_FP8_PACK(RKEY_BANDWIDTH,
-                                              distance->bandwidth);
+    packed_distance->latency   = UCS_FP8_PACK(LATENCY, latency_nsec);
+    packed_distance->bandwidth = UCS_FP8_PACK(BANDWIDTH, distance->bandwidth);
 }
 
 static void
@@ -114,13 +107,11 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
                          ucs_sys_device_t *sys_dev_p,
                          ucs_sys_dev_distance_t *distance)
 {
-    double latency_nsec = UCS_FP8_UNPACK(RKEY_LATENCY,
-                                         packed_distance->latency);
+    double latency_nsec = UCS_FP8_UNPACK(LATENCY, packed_distance->latency);
 
     *sys_dev_p          = packed_distance->sys_dev;
     distance->latency   = latency_nsec / UCS_NSEC_PER_SEC;
-    distance->bandwidth = UCS_FP8_UNPACK(RKEY_BANDWIDTH,
-                                         packed_distance->bandwidth);
+    distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
 }
 
 UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,

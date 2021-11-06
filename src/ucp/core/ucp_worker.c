@@ -1434,11 +1434,12 @@ static void ucp_worker_init_device_atomics(ucp_worker_h worker)
 
     iface_cap_flags = UCT_IFACE_FLAG_ATOMIC_DEVICE;
 
-    dummy_iface_attr.bandwidth = 1e12;
-    dummy_iface_attr.cap_flags = UINT64_MAX;
-    dummy_iface_attr.overhead  = 0;
-    dummy_iface_attr.priority  = 0;
-    dummy_iface_attr.lat_ovh   = 0;
+    dummy_iface_attr.bandwidth    = 1e12;
+    dummy_iface_attr.flags        = UINT64_MAX;
+    dummy_iface_attr.overhead     = 0;
+    dummy_iface_attr.priority     = 0;
+    dummy_iface_attr.lat_ovh      = 0;
+    dummy_iface_attr.addr_version = UCP_OBJECT_VERSION_V1;
 
     best_score    = -1;
     best_rsc      = NULL;
@@ -2566,7 +2567,8 @@ static ucs_status_t ucp_worker_address_pack(ucp_worker_h worker,
         UCS_BITMAP_SET_ALL(tl_bitmap);
     }
 
-    return ucp_address_pack(worker, NULL, &tl_bitmap, flags, NULL,
+    return ucp_address_pack(worker, NULL, &tl_bitmap, flags,
+                            context->config.ext.worker_addr_version, NULL,
                             address_length_p, (void**)address_p);
 }
 
