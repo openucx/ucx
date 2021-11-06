@@ -108,55 +108,6 @@ uct_ib_mlx5_txwq_update_bb(uct_ib_mlx5_txwq_t *wq, uint16_t hw_ci)
 }
 
 
-/* check that work queue has enough space for the new work request */
-static inline void
-uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb)
-{
-
-#if UCS_ENABLE_ASSERT
-    uint16_t wqe_s, wqe_e;
-    uint16_t hw_ci, sw_pi;
-    uint16_t wqe_cnt;
-    int is_ok = 1;
-
-    if (wq->hw_ci == 0xFFFF) {
-        return;
-    }
-
-    wqe_cnt = UCS_PTR_BYTE_DIFF(wq->qstart, wq->qend) / MLX5_SEND_WQE_BB;
-    if (wqe_cnt < wq->bb_max) {
-        ucs_fatal("wqe count (%u) < bb_max (%u)", wqe_cnt, wq->bb_max);
-    }
-
-    wqe_s = UCS_PTR_BYTE_DIFF(wq->qstart, wq->curr) / MLX5_SEND_WQE_BB;
-    wqe_e = (wqe_s + num_bb) % wqe_cnt;
-
-    sw_pi = wq->prev_sw_pi % wqe_cnt;
-    hw_ci = wq->hw_ci % wqe_cnt;
-
-    if (hw_ci <= sw_pi) {
-        if (hw_ci <= wqe_s && wqe_s <= sw_pi) {
-            is_ok = 0;
-        }
-        if (hw_ci <= wqe_e && wqe_e <= sw_pi) {
-            is_ok = 0;
-        }
-    }
-    else {
-        if (!(sw_pi < wqe_s && wqe_s < hw_ci)) {
-            is_ok = 0;
-        }
-        if (!(sw_pi < wqe_e && wqe_e < hw_ci)) {
-            is_ok = 0;
-        }
-    }
-    if (!is_ok) {
-        ucs_fatal("tx wq overrun: hw_ci: %u sw_pi: %u cur: %u-%u num_bb: %u wqe_cnt: %u",
-                hw_ci, sw_pi, wqe_s, wqe_e, num_bb, wqe_cnt);
-    }
-#endif
-}
-
 
 static UCS_F_ALWAYS_INLINE void
 uct_ib_mlx5_txwq_update_flags(uct_ib_mlx5_txwq_t *txwq, uint32_t flags_add,
@@ -164,6 +115,25 @@ uct_ib_mlx5_txwq_update_flags(uct_ib_mlx5_txwq_t *txwq, uint32_t flags_add,
 {
 #if UCS_ENABLE_ASSERT
     txwq->flags = (txwq->flags | flags_add) & ~flags_remove;
+#endif
+}
+
+
+/**
+ * Check the work queue is in a consistent state, and that it has enough space
+ * for the new work request.
+ *
+ * @param wq             Work queue to validate.
+ * @param num_bb         How much we are posting now.
+ * @param hw_ci_updated  Whether wq->hw_ci field kept up-to-date on this
+ *                       workqueue.
+ */
+static UCS_F_ALWAYS_INLINE void
+uct_ib_mlx5_txwq_validate(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
+                          int hw_ci_updated)
+{
+#if UCS_ENABLE_ASSERT
+    uct_ib_mlx5_txwq_validate_always(wq, num_bb, hw_ci_updated);
 #endif
 }
 
@@ -499,8 +469,8 @@ void *uct_ib_mlx5_bf_copy(void *dst, void *src, uint16_t num_bb,
 }
 
 static UCS_F_ALWAYS_INLINE uint16_t
-uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
-                      struct mlx5_wqe_ctrl_seg *ctrl, unsigned wqe_size)
+uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
+                      unsigned wqe_size, int hw_ci_updated)
 {
     uint16_t sw_pi, num_bb, res_count;
     void *src, *dst;
@@ -509,7 +479,8 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq,
     num_bb  = ucs_div_round_up(wqe_size, MLX5_SEND_WQE_BB);
     sw_pi   = wq->sw_pi;
 
-    uct_ib_mlx5_txwq_validate(wq, num_bb);
+    uct_ib_mlx5_txwq_validate(wq, num_bb, hw_ci_updated);
+
     /* TODO Put memory store fence here too, to prevent WC being flushed after DBrec */
     ucs_memory_cpu_store_fence();
 

@@ -965,3 +965,52 @@ int uct_ib_mlx5_iface_has_ar(uct_ib_iface_t *iface)
     return 0;
 #endif
 }
+
+void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
+                                      int hw_ci_updated)
+{
+#if UCS_ENABLE_ASSERT
+    uint16_t wqe_first_bb, wqe_last_pi;
+    uint16_t qp_length, max_pi;
+    uint16_t hw_ci;
+
+    /* num_bb must be non-zero and not larger than MAX_BB */
+    ucs_assertv((num_bb > 0) && (num_bb <= UCT_IB_MLX5_MAX_BB), "num_bb=%u",
+                num_bb);
+
+    /* bb_max must be smaller than the full QP length */
+    qp_length = UCS_PTR_BYTE_DIFF(wq->qstart, wq->qend) / MLX5_SEND_WQE_BB;
+    ucs_assertv(wq->bb_max < qp_length, "bb_max=%u qp_length=%u ", wq->bb_max,
+                qp_length);
+
+    /* wq->curr and wq->sw_pi should be in sync */
+    wqe_first_bb = UCS_PTR_BYTE_DIFF(wq->qstart, wq->curr) / MLX5_SEND_WQE_BB;
+    ucs_assertv(wqe_first_bb == (wq->sw_pi % qp_length),
+                "first_bb=%u sw_pi=%u qp_length=%u", wqe_first_bb, wq->sw_pi,
+                qp_length);
+
+    /* sw_pi must be ahead of prev_sw_pi */
+    ucs_assertv(UCS_CIRCULAR_COMPARE16(wq->sw_pi, >, wq->prev_sw_pi),
+                "sw_pi=%u prev_sw_pi=%u", wq->sw_pi, wq->prev_sw_pi);
+
+    if (!hw_ci_updated) {
+        return;
+    }
+
+    hw_ci = wq->hw_ci;
+
+    /* hw_ci must be less or equal to prev_sw_pi, since we could get completion
+       only for what was actually posted */
+    ucs_assertv(UCS_CIRCULAR_COMPARE16(hw_ci, <=, wq->prev_sw_pi),
+                "hw_ci=%u prev_sw_pi=%u", hw_ci, wq->prev_sw_pi);
+
+    /* Check for QP overrun: our WQE's last BB index must be <= hw_ci+qp_length.
+       max_pi is the largest BB index that is guaranteed to be free. */
+    wqe_last_pi = wq->sw_pi + num_bb - 1;
+    max_pi      = hw_ci + qp_length;
+    ucs_assertv(UCS_CIRCULAR_COMPARE16(wqe_last_pi, <=, max_pi),
+                "TX WQ overrun: wq=%p wqe_last_pi=%u max_pi=%u sw_pi=%u "
+                "num_bb=%u hw_ci=%u qp_length=%u",
+                wq, wqe_last_pi, max_pi, wq->sw_pi, num_bb, hw_ci, qp_length);
+#endif
+}
