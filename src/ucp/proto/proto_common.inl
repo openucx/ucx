@@ -113,6 +113,30 @@ ucp_proto_common_frag_complete(ucp_request_t *req, size_t frag_size,
     return req->send.state.completed_size == req->send.state.dt_iter.length;
 }
 
+/* Adjust a zero-copy operation to a minimal fragment size, by overlapping with
+ * the previous or subsequent fragment, assuming it will not impact data
+ * delivery. For example, it's safe to do with one-sided operations.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_common_zcopy_adjust_min_frag(ucp_request_t *req, size_t min_frag,
+                                       size_t length, uct_iov_t *iov,
+                                       size_t iovcnt, size_t *offset_p)
+{
+    ssize_t min_frag_diff = min_frag - length;
+    if (ucs_likely(min_frag_diff < 0)) {
+        /* if length is already larger than min_frag - no need to adjust */
+        return;
+    }
+
+    /* Make sure increasing payload size would not exceed request data size */
+    ucs_assertv((length + min_frag_diff) <= req->send.state.dt_iter.length,
+                "req=%p length=%zu min_frag_diff=%zd dt_iter.length=%zu", req,
+                length, min_frag_diff, req->send.state.dt_iter.length);
+
+    ucp_proto_common_zcopy_adjust_min_frag_always(req, min_frag_diff, iov,
+                                                  iovcnt, offset_p);
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_set_stage(ucp_request_t *req, uint8_t proto_stage)
 {
