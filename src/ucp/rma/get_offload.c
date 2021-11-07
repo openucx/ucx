@@ -120,16 +120,21 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
 {
     uct_rkey_t tl_rkey = ucp_rkey_get_tl_rkey(req->send.rma.rkey,
                                               lpriv->super.rkey_index);
+    size_t offset      = req->send.state.dt_iter.offset;
+    const ucp_proto_multi_priv_t *mpriv;
     uct_iov_t iov;
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
                                lpriv->super.memh_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
+
+    mpriv = req->send.proto_config->priv;
+    ucp_proto_common_zcopy_adjust_min_frag(req, mpriv->min_frag, iov.length,
+                                           &iov, 1, &offset);
     return uct_ep_get_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
-                            req->send.rma.remote_addr +
-                            req->send.state.dt_iter.offset,
-                            tl_rkey, &req->send.state.uct_comp);
+                            req->send.rma.remote_addr + offset, tl_rkey,
+                            &req->send.state.uct_comp);
 }
 
 static ucs_status_t ucp_proto_get_offload_zcopy_progress(uct_pending_req_t *self)
@@ -168,7 +173,8 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
+                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .max_lanes           = 1,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
         .first.lane_type     = UCP_LANE_TYPE_RMA,

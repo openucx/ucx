@@ -183,15 +183,18 @@ size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
 
 UCS_TEST_P(test_ucp_tag_mem_type, realloc_buffers)
 {
-    const size_t max_iter = RUNNING_ON_VALGRIND ? 3 : 7;
+    std::vector<size_t> sizes =
+            {0, 1, 16, 128, 1048512, 1011439, UCS_MBYTE + 4, 4194324};
+    const size_t max_iter     = RUNNING_ON_VALGRIND ? 3 : 7;
+    const size_t multiplier   = RUNNING_ON_VALGRIND ? 2 : 1;
+    for (unsigned i = 0; i < max_iter; ++i) {
+        sizes.push_back((i * multiplier));
+    }
 
     ucs::detail::message_stream ms("INFO");
-    for (unsigned i = 1; i <= max_iter; ++i) {
-        const size_t multiplier = RUNNING_ON_VALGRIND ? 2 : 1;
-        const size_t length     = test_length(i * multiplier);
+    for (auto length : sizes) {
         mem_buffer recv_mem_buf(length, m_recv_mem_type);
         mem_buffer send_mem_buf(length, m_send_mem_type);
-
         do_basic_xfer(send_mem_buf, recv_mem_buf, length, ms);
     }
 }
@@ -204,7 +207,7 @@ UCS_TEST_P(test_ucp_tag_mem_type, reuse_buffers_mrail, "IB_NUM_PATHS?=2")
     mem_buffer send_mem_buf(max_length, m_send_mem_type);
 
     // Test few specific sizes that expose corner cases, plush a few random ones
-    std::vector<size_t> sizes = {0, 1, 16, 128, UCS_MBYTE + 4, 4194324};
+    std::vector<size_t> sizes = {0, 1, 16, 128, 1048512, UCS_MBYTE + 4, 4194324};
     const size_t max_iter     = RUNNING_ON_VALGRIND ? 1 : 4;
     for (unsigned i = 0; i < max_iter; ++i) {
         sizes.push_back(test_length(7));
