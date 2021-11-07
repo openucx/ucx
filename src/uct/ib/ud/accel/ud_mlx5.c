@@ -86,7 +86,7 @@ uct_ud_mlx5_post_send(uct_ud_mlx5_iface_t *iface, uct_ud_mlx5_ep_t *ep,
     uct_ib_mlx5_log_tx(&iface->super.super, ctrl, iface->tx.wq.qstart,
                        iface->tx.wq.qend, max_log_sge, NULL, uct_ud_dump_packet);
     iface->super.tx.available -= uct_ib_mlx5_post_send(&iface->tx.wq, ctrl,
-                                                       wqe_size);
+                                                       wqe_size, 1);
     ucs_assert((int16_t)iface->tx.wq.bb_max >= iface->super.tx.available);
 }
 

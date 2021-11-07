@@ -481,7 +481,7 @@ uct_rc_mlx5_common_post_send(uct_rc_mlx5_iface_common_t *iface, int qp_type,
                        ((opcode == MLX5_OPCODE_SEND) || (opcode == MLX5_OPCODE_SEND_IMM)) ?
                        uct_rc_mlx5_common_packet_dump : NULL);
 
-    res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size);
+    res_count = uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 1);
     if (fm_ce_se & MLX5_WQE_CTRL_CQ_UPDATE) {
         txwq->sig_pi = txwq->prev_sw_pi;
     }
@@ -1071,7 +1071,7 @@ uct_rc_mlx5_iface_common_post_srq_op(uct_rc_mlx5_cmd_wq_t *cmd_wq,
     uct_rc_mlx5_set_tm_seg(txwq, tm, op_code, next_idx, unexp_cnt,
                            tag, tag_mask, tm_flags);
 
-    uct_ib_mlx5_post_send(txwq, ctrl, wqe_size);
+    uct_ib_mlx5_post_send(txwq, ctrl, wqe_size, 0);
 }
 
 
