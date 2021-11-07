@@ -72,61 +72,6 @@ ucp_eager_offload_handler(void *arg, void *data, size_t length,
     return status;
 }
 
-/* Process the following messages:
- * - SW eager expected
- * - HW eager that were not posted to the transport, but expected in UCP
- */
-static UCS_F_ALWAYS_INLINE void
-ucp_eager_expected_handler(ucp_worker_h worker, ucp_request_t *req, void *data,
-                           size_t length, unsigned am_flags, uint16_t flags,
-                           uint16_t hdr_len, uint16_t priv_length)
-{
-    ucp_eager_hdr_t *eager_hdr = data;
-    ucp_tag_t recv_tag         = eager_hdr->super.tag;
-    size_t recv_len            = length - hdr_len;
-    const void *payload        = UCS_PTR_BYTE_OFFSET(data, hdr_len);
-    ucp_eager_first_hdr_t *eagerf_hdr;
-    ucs_status_t status;
-
-    ucs_assert(length >= hdr_len);
-    ucs_assert(flags & UCP_RECV_DESC_FLAG_EAGER);
-
-    ucp_eager_common_matched(worker, req, data, recv_len, recv_tag, flags);
-
-    if (flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) {
-        ucp_tag_eager_sync_send_ack(worker, data, flags);
-    }
-
-    if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
-        req->recv.tag.info.length = recv_len;
-        status = ucp_request_recv_data_unpack(req, payload, recv_len, 0, 1);
-        ucp_request_complete_tag_recv(req, status);
-        return;
-    }
-
-    eagerf_hdr                = data;
-    req->recv.tag.info.length = eagerf_hdr->total_len;
-
-    if (flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        req->recv.offset = 0ul;
-        ucp_request_recv_offload_data(req, payload, recv_len, flags);
-        return;
-    }
-
-    req->recv.remaining = eagerf_hdr->total_len;
-
-    status = ucp_request_process_recv_data(req, payload, recv_len, 0, 0, 0);
-    if (status == UCS_INPROGRESS) {
-        /* With tag offload message fragments always arrive in order. Thus,
-         * process other (possibly already arrived) fragments for SW flow
-         * only.
-         */
-        ucp_tag_frag_list_process_queue(
-                &worker->tm, req, eagerf_hdr->msg_id
-                UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP));
-    }
-}
-
 /* Common handler for eager only, eager sync only, eager first, eager sync
  * first, eager offload only and eager sync offload only messages
  */
@@ -137,24 +82,53 @@ ucp_eager_tagged_handler(void *arg, void *data, size_t length, unsigned am_flags
 {
     ucp_worker_h worker        = arg;
     ucp_eager_hdr_t *eager_hdr = data;
+    ucp_tag_t recv_tag         = eager_hdr->super.tag;
+    ucp_eager_first_hdr_t *eagerf_hdr;
+    size_t recv_len;
+    void *payload;
     ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
-    ucp_tag_t recv_tag;
-
-    recv_tag = eager_hdr->super.tag;
 
     req = ucp_tag_exp_search(&worker->tm, recv_tag);
     if (req != NULL) {
-        ucp_eager_expected_handler(worker, req, data, length, am_flags, flags,
-                                   hdr_len, priv_length);
-        return UCS_OK;
-    }
+        recv_len = length - hdr_len;
+        payload  = UCS_PTR_BYTE_OFFSET(data, hdr_len);
 
-    status = ucp_recv_desc_init(worker, data, length, 0, am_flags, hdr_len,
-                                flags, priv_length, 1, name, &rdesc);
-    if (!UCS_STATUS_IS_ERR(status)) {
-        ucp_tag_unexp_recv(&worker->tm, rdesc, eager_hdr->super.tag);
+        ucp_eager_common_matched(worker, req, data, recv_len, recv_tag, flags);
+
+        if (flags & UCP_RECV_DESC_FLAG_EAGER_SYNC) {
+            ucp_tag_eager_sync_send_ack(worker, data, flags);
+        }
+
+        if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
+            req->recv.tag.info.length = recv_len;
+            status = ucp_request_recv_data_unpack(req, payload, recv_len, 0, 1);
+            ucp_request_complete_tag_recv(req, status);
+        } else {
+            /* Multi fragment tag offload flow does not use this handler */
+            ucs_assert(!(flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD));
+
+            eagerf_hdr                = data;
+            req->recv.tag.info.length = eagerf_hdr->total_len;
+            req->recv.remaining       = eagerf_hdr->total_len;
+
+            status = ucp_request_process_recv_data(req, payload, recv_len, 0, 0,
+                                                   0);
+            if (status == UCS_INPROGRESS) {
+                ucp_tag_frag_list_process_queue(
+                        &worker->tm, req, eagerf_hdr->msg_id
+                        UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_EXP));
+            }
+        }
+
+        status = UCS_OK;
+    } else {
+        status = ucp_recv_desc_init(worker, data, length, 0, am_flags, hdr_len,
+                                    flags, priv_length, 1, name, &rdesc);
+        if (!UCS_STATUS_IS_ERR(status)) {
+            ucp_tag_unexp_recv(&worker->tm, rdesc, eager_hdr->super.tag);
+        }
     }
 
     return status;
@@ -340,57 +314,40 @@ ucp_tag_offload_eager_first_handler(ucp_worker_h worker, void *data,
 {
     const size_t priv_len = sizeof(ucp_offload_first_desc_t);
     ucp_tag_frag_match_t *matchq;
-    ucp_offload_first_desc_t *priv;
+    ucp_offload_first_desc_t *priv_hdr;
     ucp_recv_desc_t *rdesc;
     ucp_request_t *req;
     ucs_status_t status;
 
-    /* First part of the fragmented message. Initialize matching queue and pass
-     * pointer to it back to UCT, so it will be provided with the rest of
-     * message fragments. Immediate data (indicating sync send) is passed with
-     * last fragment only, so ack will be sent upon receiving of the last
-     * fragment.
-     */
-    priv                             = ucp_tag_eager_offload_priv(
-                                           tl_flags, data, length,
-                                           ucp_offload_first_desc_t);
-    matchq                           = ucs_unaligned_ptr(&priv->matchq);
-    *(ucp_tag_frag_match_t**)context = matchq;
-    priv->super.super.tag            = stag;
-    priv->total_length               = length; /* total length is not final at
-                                                * this point */
-
     /* We have always keep the first fragment until the messages is processed,
      * because matchq is stored in its private data.
      */
-    status = ucp_recv_desc_init(worker, priv, length + priv_len, 0,
+    status = ucp_recv_desc_init(worker, data, length, priv_len,
                                 tl_flags, priv_len, flags, priv_len, 1,
                                 "eager_offload_first_handler", &rdesc);
     if (ucs_unlikely(UCS_STATUS_IS_ERR(status))) {
         return UCS_OK;
     }
 
+    priv_hdr                  = (ucp_offload_first_desc_t*)(rdesc + 1);
+    priv_hdr->super.super.tag = stag;
+    priv_hdr->total_length    = length; /* total length is not final at this point */
+    matchq                    = ucs_unaligned_ptr(&priv_hdr->matchq);
+
+    /* Set msg context to the first fragment address, so that the other
+     * fragments could take matchq from it.
+     */
+    *(ucp_offload_first_desc_t**)context = priv_hdr;
+
     req = ucp_tag_exp_search(&worker->tm, stag);
     if (req != NULL) {
-        ucp_eager_expected_handler(worker, req, priv, length + priv_len,
-                                   tl_flags, flags, priv_len, priv_len);
-        /* With tag offload all fragments arrive in order, there should not
-         * be any other fragment yet. Just init matchq as expected one.
-         */
+        req->recv.offset = 0ul;
         ucp_tag_frag_hash_init_exp(matchq, req);
+        ucp_eager_common_matched(worker, req, data, length, stag, flags);
+        ucp_request_recv_offload_data(req, data, length, flags);
     } else {
         ucp_tag_frag_match_init_unexp(matchq);
-        /* Do not add the first fragment to the tm unexpected queue, because the
-         * total length is not known yet, which means tag_probe will not work
-         * correctly. Instead, add it to the unexpected matching fragments
-         * queue, to be accessible by middle fragments handler. This way every
-         * incoming middle fragment will add its length to the total_length
-         * field in the first fragment. Once all fragments received (and
-         * therefore first fragment header contains correct total_length), the
-         * first fragment is ready for matching/probing and can be added to the
-         * tm unexpected queue.
-         */
-        ucp_tag_frag_match_add_unexp(matchq, rdesc, 0ul);
+        ucp_tag_unexp_recv(&worker->tm, rdesc, stag);
     }
 
     return status;
@@ -402,15 +359,19 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
                                      uct_tag_t stag, uint64_t imm,
                                      uint16_t flags, void **context)
 {
-    ucp_recv_desc_t *rdesc = NULL, *first_rdesc = NULL;
+    ucp_offload_first_desc_t *priv_hdr = *(ucp_offload_first_desc_t**)context;
+    ucp_tag_frag_match_t *matchq       = ucs_unaligned_ptr(&priv_hdr->matchq);
+    ucp_recv_desc_t *rdesc             = NULL;
     ucp_offload_ssend_hdr_t *sync_hdr;
-    ucp_offload_first_desc_t *first_hdr;
-    ucp_tag_frag_match_t *matchq;
     void *hdr;
     size_t hdr_length;
     ucs_status_t status;
 
-    matchq = *(ucp_tag_frag_match_t**)context;
+    /* With tag offload, the total message length is not sent with the first
+     * fragment due to lack of space in the header, every incoming fragment
+     * adds its length to the first_fragment->total_length.
+     */
+    priv_hdr->total_length += length;
 
     if (!(tl_flags & UCT_CB_PARAM_FLAG_MORE)) {
         flags |= UCP_RECV_DESC_FLAG_EAGER_LAST;
@@ -443,43 +404,13 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
             return UCS_OK;
         }
 
-        /* Offset is not know at this point, pass 0 */
+        /* Offset is not known at this point, pass 0 */
         ucp_tag_frag_match_add_unexp(matchq, rdesc, 0ul);
-
-        if (!(tl_flags & UCT_CB_PARAM_FLAG_MORE)) {
-            /* Last fragment arrived, remove first element from the matching
-             * queue and add it to the unexpected queue instead
-             * (because the total length is finally known).
-             */
-            first_rdesc = ucs_queue_pull_elem_non_empty(&matchq->unexp_q,
-                                                        ucp_recv_desc_t,
-                                                        tag_frag_queue);
-            first_hdr   = (ucp_offload_first_desc_t*)(first_rdesc + 1);
-            ucp_tag_unexp_recv(&worker->tm, first_rdesc,
-                               first_hdr->super.super.tag);
-        } else {
-            first_rdesc = ucs_queue_head_elem_non_empty(&matchq->unexp_q,
-                                                        ucp_recv_desc_t,
-                                                        tag_frag_queue);
-            first_hdr   = (ucp_offload_first_desc_t*)(first_rdesc + 1);
-        }
-
-        /* Increase total length in the first fragment header */
-        first_hdr->total_length += length;
-
-        ucs_assert(matchq == ucs_unaligned_ptr(&first_hdr->matchq));
     } else {
         status = ucp_request_recv_offload_data(matchq->exp_req, data, length,
                                                flags);
         if (status != UCS_INPROGRESS) {
-            /* All fragments are handled, need to release the first fragment
-             * rdesc. Since matchq is stored in its private data, it is kept
-             * until all fragments arrive and processed.
-             */
-            first_hdr   = ucs_container_of(matchq,
-                                           ucp_offload_first_desc_t, matchq);
-            first_rdesc = (ucp_recv_desc_t*)first_hdr - 1;
-            ucp_recv_desc_release(first_rdesc);
+            ucp_tag_offload_release_first(priv_hdr);
         }
         status = UCS_OK;
     }
@@ -487,9 +418,6 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
     return status;
 }
 
-/* TODO: can handle multi-fragment messages in a more efficient way by saving
- * request or some unexp descriptors handle in the context. This would eliminate
- * the need for fragments hashing on UCP level. */
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
                  (arg, data, length, tl_flags, stag, imm, context),
                  void *arg, void *data, size_t length, unsigned tl_flags,
