@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,7 +14,10 @@
 #include <stdint.h>
 #endif
 
+#ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS 1
+#endif
+
 #include <inttypes.h>
 
 #include "test_helpers.h"

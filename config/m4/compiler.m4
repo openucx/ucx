@@ -2,6 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (c) UT-Battelle, LLC. 2017. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2016-2020.  ALL RIGHTS RESERVED.
+# Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -499,6 +500,13 @@ CHECK_COMPILER_FLAG([-pedantic], [-pedantic],
                     [CFLAGS_PEDANTIC="$CFLAGS_PEDANTIC -pedantic"],
                     [])
 
+#
+# Check if "-dynamic-list-data" flag is supported
+#
+CHECK_COMPILER_FLAG([-Wl,-dynamic-list-data], [-Wl,-dynamic-list-data],
+                    [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                    [LDFLAGS_DYNAMIC_LIST_DATA="-Wl,-dynamic-list-data"],
+                    [LDFLAGS_DYNAMIC_LIST_DATA="-Wl,-export-dynamic"])
 
 #
 # Add strict compilation flags
@@ -537,6 +545,7 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-pointer-sign],
 AC_SUBST([BASE_CFLAGS])
 AC_SUBST([BASE_CXXFLAGS])
 AC_SUBST([CFLAGS_PEDANTIC])
+AC_SUBST([LDFLAGS_DYNAMIC_LIST_DATA])
 
 
 #

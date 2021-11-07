@@ -3,6 +3,7 @@
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
+# Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,7 +12,9 @@
 #  include "config.h"
 #endif
 
+#ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS /* For PRIu64 */
+#endif
 
 #include "libperf_int.h"
 

@@ -1,5 +1,6 @@
 #
 # Copyright (C) NVIDIA Corporation. 2021.  ALL RIGHTS RESERVED.
+# Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -18,7 +19,7 @@ libgtest_la_CPPFLAGS = \
 	$(GTEST_CPPFLAGS) \
 	$(OPENMP_CFLAGS)
 
-libgtest_la_LDFLAGS  = $(GTEST_LDFLAGS) -no-install -Wl,-dynamic-list-data
+libgtest_la_LDFLAGS  = $(GTEST_LDFLAGS) -no-install $(LDFLAGS_DYNAMIC_LIST_DATA)
 libgtest_la_CFLAGS   = $(BASE_CFLAGS)
 libgtest_la_CXXFLAGS = \
 	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11
