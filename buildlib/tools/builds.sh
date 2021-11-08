@@ -87,10 +87,12 @@ build_release_pkg() {
 		echo "==== Build RPM ===="
 		echo "$PWD"
 		${WORKSPACE}/contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
-		if rpm -qp ${PWD}/ls ucx-[0-9]*.rpm --requires | grep cuda; then
+		if rpm -qp ${PWD}/rpm-dist/ucx-[0-9]*.rpm --requires | grep cuda; then
 			azure_log_error "Release build depends on CUDA while it should not"
 			exit 1
 		fi
+		echo "==== Build debug RPM ===="
+		${WORKSPACE}/contrib/buildrpm.sh -s -b -d --nodeps --define "_topdir $PWD/debug"
 	fi
 
 	# check that UCX version is present in spec file

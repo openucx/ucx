@@ -12,7 +12,7 @@
 
 Name: ucx
 Version: @VERSION@
-Release: 1%{?dist}
+Release: 1%{?dist}%{?debug:.debug}
 Summary: UCX is a communication library implementing high-performance messaging
 Group: System Environment/Libraries
 
@@ -60,6 +60,9 @@ BuildRequires: xpmem-devel
 %if %{with vfs}
 BuildRequires: fuse3-devel
 %endif
+%if "%{debug}" == "1"
+BuildRequires: valgrind-devel
+%endif
 
 %description
 UCX is an optimized communication framework for high-performance distributed
@@ -92,10 +95,17 @@ Provides header files and examples for developing with UCX.
 %define _with_arg()   %{expand:%%{?with_%{1}:--with-%{2}}%%{!?with_%{1}:--without-%{2}}}
 %define _enable_arg() %{expand:%%{?with_%{1}:--enable-%{2}}%%{!?with_%{1}:--disable-%{2}}}
 %configure --disable-optimizations \
-           --disable-logging \
-           --disable-debug \
-           --disable-assertions \
-           --disable-params-check \
+           %{!?debug:--disable-logging} \
+           %{!?debug:--disable-debug} \
+           %{!?debug:--disable-assertions} \
+           %{!?debug:--disable-params-check} \
+           %{?debug:--with-valgrind} \
+           %{?debug:--enable-profiling} \
+           %{?debug:--enable-frame-pointer} \
+           %{?debug:--enable-stats} \
+           %{?debug:--enable-fault-injection} \
+           %{?debug:--enable-debug-data} \
+           %{?debug:--enable-mt} \
            --without-java \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
@@ -123,6 +133,9 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 %{_bindir}/ucx_info
 %{_bindir}/ucx_perftest
 %{_bindir}/ucx_read_profile
+%if "%{debug}" == "1"
+%{_bindir}/ucs_stats_parser
+%endif
 @HAVE_GLIBCXX_NOTHROW_TRUE@%{_bindir}/io_demo
 %{_datadir}/ucx
 %exclude %{_datadir}/ucx/examples
