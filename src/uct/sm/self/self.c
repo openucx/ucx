@@ -175,10 +175,13 @@ static UCS_CLASS_INIT_FUNC(uct_self_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+    
     uct_self_iface_config_t *config = ucs_derived_of(tl_config,
                                                      uct_self_iface_config_t);
     size_t align_offset, alignment;
     ucs_status_t status;
+
+    printf("SELF: UCS_CLASS_INIT_FUNC\n");
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");

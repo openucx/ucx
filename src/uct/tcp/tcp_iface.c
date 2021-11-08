@@ -814,6 +814,8 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
         goto out;
     }
 
+    
+
     devices     = NULL;
     num_devices = 0;
     for (;;) {

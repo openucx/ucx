@@ -142,7 +142,7 @@ static void print_iface_info(uct_worker_h worker, uct_md_h md,
     if (status != UCS_OK) {
         return;
     }
-
+    
     printf("#      Transport: %s\n", resource->tl_name);
     printf("#         Device: %s\n", resource->dev_name);
     printf("#  System device: %s",
@@ -393,6 +393,8 @@ static void print_md_info(uct_component_h component,
     uct_md_config_t *md_config;
     uct_md_attr_t md_attr;
     uct_md_h md;
+
+    printf("md_info %s %s \n", md_name, req_tl_name);
 
     status = uct_md_config_read(component, NULL, NULL, &md_config);
     if (status != UCS_OK) {
