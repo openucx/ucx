@@ -2190,13 +2190,13 @@ public:
             if (is_control_iter(total_iter) &&
                 ((total_iter - total_prev_iter) >= _server_index_lookup.size())) {
                 // Print performance every <print_interval> seconds
-                double curr_time = get_time();
-                if (curr_time >= (prev_time + opts().print_interval)) {
+                if (get_time() >= (prev_time + opts().print_interval)) {
                     wait_for_responses(0);
                     if (_status != OK) {
                         break;
                     }
 
+                    double curr_time = get_time();
                     report_performance(total_iter - total_prev_iter,
                                        curr_time - prev_time);
 
