@@ -1364,14 +1364,10 @@ UCS_TEST_P(test_ucp_wireup_amo, relese_key_after_flush) {
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_amo)
 
 UCS_TEST_P(test_ucp_wireup_fallback_amo, different_amo_types) {
-    std::vector<std::string> tls;
-
     /* the 1st peer support RC only (device atomics) */
-    tls.push_back("rc");
     /* the 2nd peer support RC and SHM (device and CPU atomics) */
-    tls.push_back("rc,shm");
-
-    size_t min_max_num_eps = test_wireup_fallback_amo(tls, 1, 1);
+    std::vector<std::string> tls = { "rc", "rc,shm" };
+    size_t min_max_num_eps       = test_wireup_fallback_amo(tls, 1, 1);
     test_wireup_fallback_amo(tls, min_max_num_eps + 1, 0);
 }
 

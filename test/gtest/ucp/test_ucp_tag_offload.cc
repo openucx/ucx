@@ -425,10 +425,8 @@ public:
         test_ucp_tag_offload::init();
 
         // TODO: add more tls which support tag offloading
-        std::vector<std::string> tls;
-        tls.push_back("dc_x");
-        tls.push_back("rc_x");
-        ucp_test_param params = GetParam();
+        std::vector<std::string> tls = { "dc_x", "rc_x" };
+        ucp_test_param params        = GetParam();
 
         // Create new entity and add to to the end of vector
         // (thus it will be receiver without any connections)

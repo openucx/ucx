@@ -237,23 +237,4 @@ ucp_generic_dt_ops test_dt_copy_ops = {
     dt_common_finish
 };
 
-std::string datatype_name(ucp_datatype_t dt)
-{
-    return ucp_datatype_class_names[ucp_datatype_class(dt)];
-}
-
-std::vector<std::vector<ucp_datatype_t> >
-datatype_pairs(const ucp_generic_dt_ops_t *ops, size_t contig_elem_size)
-{
-    ucp_datatype_t dt;
-    ASSERT_UCS_OK(ucp_dt_create_generic(ops, NULL, &dt));
-
-    ucp_datatype_t dt_arr[] = { ucp_dt_make_contig(contig_elem_size),
-                                ucp_dt_make_iov(),
-                                dt };
-    std::vector<ucp_datatype_t> dts(dt_arr, dt_arr + 3);
-
-    return ucs::make_pairs(dts);
-}
-
 } // ucp

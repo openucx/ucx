@@ -122,11 +122,6 @@ bool ucp_test::has_any_transport(const std::vector<std::string>& tl_names) const
            all_tl_names.end();
 }
 
-bool ucp_test::has_any_transport(const std::string *tls, size_t tl_size) const {
-    const std::vector<std::string> tl_names(tls, tls + tl_size);
-    return has_any_transport(tl_names);
-}
-
 bool ucp_test::is_self() const {
     return "self" == GetParam().transports.front();
 }

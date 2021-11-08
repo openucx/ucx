@@ -105,10 +105,6 @@ struct dt_gen_state {
     void                *buffer;
 };
 
-std::vector<std::vector<ucp_datatype_t> >
-datatype_pairs(const ucp_generic_dt_ops_t *ops, size_t contig_elem_size = 1);
-
-std::string datatype_name(ucp_datatype_t dt);
 
 extern int dt_gen_start_count;
 extern int dt_gen_finish_count;

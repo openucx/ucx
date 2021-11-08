@@ -88,8 +88,6 @@ protected:
         std::vector<std::vector<uint16_t> > > ib_pkey_pairs_t;
 
     ib_pkey_pairs_t supported_pkey_pairs(bool full_membership_only = true) {
-        static std::vector<std::vector<uint16_t> > supported_pkey_pairs;
-        static std::vector<std::vector<uint16_t> > supported_pkey_idx_pairs;
         static ib_pkey_pairs_t result;
 
         if (result.first.empty()) {
@@ -106,11 +104,9 @@ protected:
                 supported_pkeys_idx.push_back(table_idx);
             }
 
-            supported_pkey_pairs = ucs::make_pairs(supported_pkeys);
-            supported_pkey_idx_pairs = ucs::make_pairs(supported_pkeys_idx);
-
-            result = std::make_pair(supported_pkey_pairs,
-                                    supported_pkey_idx_pairs);
+            // rely on RVO for the created pairs and the result
+            result = std::make_pair(ucs::make_pairs(supported_pkeys),
+                                    ucs::make_pairs(supported_pkeys_idx));
         }
 
         return result;

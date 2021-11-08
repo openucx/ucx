@@ -293,9 +293,7 @@ out:
         ep_test_info_map_t::iterator it = m_ep_test_info_map.find(ep);
 
         if (it == m_ep_test_info_map.end()) {
-            ep_test_info_t test_info;
-
-            m_ep_test_info_map.insert(std::make_pair(ep, test_info));
+            m_ep_test_info_map.insert(std::make_pair(ep, ep_test_info_t()));
             it = m_ep_test_info_map.find(ep);
         }
 

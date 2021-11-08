@@ -283,7 +283,7 @@ void analyze_test_results()
                 test_name += ".";
                 test_name += test->name();
 
-                test_results.push_back(std::make_pair(test_name,
+                test_results.push_back(std::make_pair(std::move(test_name),
                                                       result->elapsed_time()));
 
                 max_name_size = std::max(test_name.size(), max_name_size);
