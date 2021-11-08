@@ -51,6 +51,37 @@ typedef uint16_t                   ucp_ep_flags_t;
 #endif
 
 
+#define ucp_ep_refcount_add(_ep, _type) \
+({ \
+    ucs_assert((_ep)->refcount < UINT8_MAX); \
+    ++(_ep)->refcount; \
+    UCP_EP_ASSERT_COUNTER_INC(&(_ep)->refcounts._type); \
+})
+
+/* Return 1 if the endpoint was destroyed, 0 if not */
+#define ucp_ep_refcount_remove(_ep, _type) \
+({ \
+    int __ret = 0; \
+    \
+    UCP_EP_ASSERT_COUNTER_DEC(&(_ep)->refcounts._type); \
+    ucs_assert((_ep)->refcount > 0); \
+    if (--(_ep)->refcount == 0) { \
+        ucp_ep_destroy_base(_ep); \
+        __ret = 1; \
+    } \
+    \
+    (__ret); \
+})
+
+#define ucp_ep_refcount_field_assert(_ep, _refcount_field, _cmp, _val) \
+    ucs_assertv((_ep)->_refcount_field _cmp (_val), "ep=%p: %s=%u vs %u", \
+                (_ep), UCS_PP_MAKE_STRING(_refcount_field), \
+                (_ep)->_refcount_field, _val);
+
+#define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
+    ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
+
+
 #define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
 
 
@@ -398,12 +429,19 @@ typedef struct ucp_ep {
 #endif
 
 #if UCS_ENABLE_ASSERT
-    /* How many Worker flush operations are in-progress where the EP is the next
-     * EP for flushing */
-    unsigned                      flush_iter_refcount;
-    /* How many UCT EP discarding operations are in-progress scheduled for the
-     * EP */
-    unsigned                      discard_refcount;
+    struct {
+        /* How many times the EP create was done */
+        unsigned                      create;
+        /* How many Worker flush operations are in-progress where the EP is the
+         * next EP for flushing */
+        unsigned                      flush;
+        /* How many UCT EP discarding operations are in-progress scheduled for
+         * the EP */
+        unsigned                      discard;
+        /* How many UCP operations are in-progress scheduled for the memory
+         * invalidation on the current EP */
+        unsigned                      invalidate;
+    } refcounts;
 #endif
 
     UCS_STATS_NODE_DECLARE(stats)
@@ -562,12 +600,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  ucp_rsc_index_t aux_rsc_index,
                                  ucs_string_buffer_t *buf);
 
-ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
-                                const char *message, ucp_ep_h *ep_p);
-
-void ucp_ep_add_ref(ucp_ep_h ep);
-
-int ucp_ep_remove_ref(ucp_ep_h ep);
+void ucp_ep_destroy_base(ucp_ep_h ep);
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,
