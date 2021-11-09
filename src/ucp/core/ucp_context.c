@@ -154,10 +154,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_AUX_TLS", "ud",
-   "Transports to use for exchanging additional address information while\n"
-   "establishing client/server connection. ",
-   ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+  {"SOCKADDR_AUX_TLS", "",
+   "The configuration parameter is deprecated. UCX_TLS should be used to\n"
+   "specify the transport for client/server connection establishment.",
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",

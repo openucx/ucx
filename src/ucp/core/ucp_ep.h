@@ -618,11 +618,6 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name);
 
-ucs_status_t
-ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
-                           const ucp_unpacked_address_t *remote_address,
-                           ucp_ep_h *ep_p);
-
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
 
