@@ -77,6 +77,17 @@ enum {
 
 
 /**
+ * Discarding UCT EP flags assign on a request
+ */
+enum {
+    UCP_REQUEST_DISCARD_UCT_EP_ON_PENDING          = UCS_BIT(0),
+    UCP_REQUEST_DISCARD_UCT_EP_ON_PROGRESS         = UCS_BIT(1),
+    UCP_REQUEST_DISCARD_UCT_EP_ON_FLUSH            = UCS_BIT(2),
+    UCP_REQUEST_DISCARD_UCT_EP_ON_DESTROY_PROGRESS = UCS_BIT(3)
+};
+
+
+/**
  * Receive descriptor flags.
  */
 enum {
@@ -315,6 +326,8 @@ struct ucp_request {
                     /* Progress ID, if it's UCS_CALLBACKQ_ID_NULL, no operations
                      * are in-progress */
                     uct_worker_cb_id_t cb_id;
+                    /* Flags */
+                    uint8_t            flags;
                 } discard_uct_ep;
 
                 struct {

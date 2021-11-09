@@ -2336,6 +2336,21 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
     return 1;
 }
 
+static UCS_F_ALWAYS_INLINE void
+ucp_worker_discard_uct_ep_set_state_flag(ucp_request_t *req, uint8_t flag)
+{
+    static const uint8_t UCS_V_UNUSED state_flags =
+            (UCP_REQUEST_DISCARD_UCT_EP_ON_PENDING |
+             UCP_REQUEST_DISCARD_UCT_EP_ON_PROGRESS |
+             UCP_REQUEST_DISCARD_UCT_EP_ON_FLUSH |
+             UCP_REQUEST_DISCARD_UCT_EP_ON_DESTROY_PROGRESS);
+
+    ucs_assert(flag & state_flags);
+    ucs_assert(!(req->send.discard_uct_ep.flags & state_flags));
+
+    req->send.discard_uct_ep.flags = flag;
+}
+
 static void ucp_worker_discard_uct_ep_progress_register(ucp_request_t *req,
                                                         ucs_callback_t func)
 {
@@ -2355,8 +2370,12 @@ void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
     ucp_trace_req(req, "discard_uct_ep flush completion status %s",
                   ucs_status_string(self->status));
 
+    req->send.discard_uct_ep.flags &= ~UCP_REQUEST_DISCARD_UCT_EP_ON_FLUSH;
+
     /* don't destroy UCT EP from the flush completion callback, schedule
      * a progress callback on the main thread to destroy UCT EP */
+    ucp_worker_discard_uct_ep_set_state_flag(
+            req, UCP_REQUEST_DISCARD_UCT_EP_ON_DESTROY_PROGRESS);
     ucp_worker_discard_uct_ep_progress_register(
             req, ucp_worker_discard_uct_ep_destroy_progress);
 }
@@ -2372,6 +2391,10 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
     status = uct_ep_flush(uct_ep, req->send.discard_uct_ep.ep_flush_flags,
                           &req->send.state.uct_comp);
     if (status == UCS_INPROGRESS) {
+        req->send.discard_uct_ep.flags &=
+                ~UCP_REQUEST_DISCARD_UCT_EP_ON_PENDING;
+        ucp_worker_discard_uct_ep_set_state_flag(
+                req, UCP_REQUEST_DISCARD_UCT_EP_ON_FLUSH);
         return UCS_OK;
     }
 
@@ -2382,8 +2405,10 @@ ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
         return UCS_ERR_NO_RESOURCE;
     }
 
+    req->send.discard_uct_ep.flags &= ~UCP_REQUEST_DISCARD_UCT_EP_ON_PENDING;
     uct_completion_update_status(&req->send.state.uct_comp, status);
     ucp_worker_discard_uct_ep_flush_comp(&req->send.state.uct_comp);
+
     return UCS_OK;
 }
 
@@ -2393,7 +2418,8 @@ unsigned ucp_worker_discard_uct_ep_progress(void *arg)
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;
     ucs_status_t status;
 
-    req->send.discard_uct_ep.cb_id = UCS_CALLBACKQ_ID_NULL;
+    req->send.discard_uct_ep.flags &= ~UCP_REQUEST_DISCARD_UCT_EP_ON_PROGRESS;
+    req->send.discard_uct_ep.cb_id  = UCS_CALLBACKQ_ID_NULL;
 
     status = ucp_worker_discard_uct_ep_pending_cb(&req->send.uct);
     if (status == UCS_ERR_NO_RESOURCE) {
@@ -2402,8 +2428,13 @@ unsigned ucp_worker_discard_uct_ep_progress(void *arg)
         if (status == UCS_ERR_BUSY) {
             /* adding to the pending queue failed, schedule the UCT EP discard
              * operation on UCT worker progress again */
+            ucp_worker_discard_uct_ep_set_state_flag(
+                    req, UCP_REQUEST_DISCARD_UCT_EP_ON_PROGRESS);
             ucp_worker_discard_uct_ep_progress_register(
                     req, ucp_worker_discard_uct_ep_progress);
+        } else {
+            ucp_worker_discard_uct_ep_set_state_flag(
+                    req, UCP_REQUEST_DISCARD_UCT_EP_ON_PENDING);
         }
 
         return 0;
@@ -3166,6 +3197,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
     req->send.discard_uct_ep.cb_id          = UCS_CALLBACKQ_ID_NULL;
+    req->send.discard_uct_ep.flags          = 0;
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     ucp_worker_discard_uct_ep_progress(req);

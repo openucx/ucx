@@ -652,7 +652,11 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
     } else if (req->send.state.uct_comp.func ==
-               ucp_worker_discard_uct_ep_flush_comp) {
+                       ucp_worker_discard_uct_ep_flush_comp) {
+        ucs_assert(req->send.discard_uct_ep.flags &
+                UCP_REQUEST_DISCARD_UCT_EP_ON_PENDING);
+        req->send.discard_uct_ep.flags &=
+                ~UCP_REQUEST_DISCARD_UCT_EP_ON_PENDING;
         ucp_worker_discard_uct_ep_progress(req);
     } else if (req->send.state.uct_comp.func != NULL) {
         /* Fast-forward the sending state to complete the operation when last
