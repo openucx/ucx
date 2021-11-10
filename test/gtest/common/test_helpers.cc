@@ -283,10 +283,11 @@ void analyze_test_results()
                 test_name += ".";
                 test_name += test->name();
 
-                test_results.push_back(std::make_pair(std::move(test_name),
-                                                      result->elapsed_time()));
+                test_results.emplace_back(std::move(test_name),
+                                          result->elapsed_time());
 
-                max_name_size = std::max(test_name.size(), max_name_size);
+                max_name_size = std::max(test_results.back().first.size(),
+                                         max_name_size);
 
                 skipped_it = skipped_tests.find(test);
                 if (skipped_it != skipped_tests.end()) {
@@ -789,7 +790,7 @@ const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs()
     static std::vector<std::vector<ucs_memory_type_t> > result;
 
     if (result.empty()) {
-        result = ucs::make_pairs(mem_buffer::supported_mem_types());
+        result = std::move(ucs::make_pairs(mem_buffer::supported_mem_types()));
     }
 
     return result;

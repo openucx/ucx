@@ -104,9 +104,9 @@ protected:
                 supported_pkeys_idx.push_back(table_idx);
             }
 
-            // rely on RVO for the created pairs and the result
-            result = std::make_pair(ucs::make_pairs(supported_pkeys),
-                                    ucs::make_pairs(supported_pkeys_idx));
+            result = std::move(
+                    std::make_pair(ucs::make_pairs(supported_pkeys),
+                                   ucs::make_pairs(supported_pkeys_idx)));
         }
 
         return result;
