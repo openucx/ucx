@@ -72,7 +72,7 @@ steps:
   timeoutInMinutes: 15
 
 - bash: |
-    python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list CI,$(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
+    python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list $(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 1
 
