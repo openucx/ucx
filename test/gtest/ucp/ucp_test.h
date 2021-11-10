@@ -213,7 +213,8 @@ public:
 private:
     static void set_ucp_config(ucp_config_t *config, const std::string& tls);
     static bool check_tls(const std::string& tls);
-    ucs_status_t request_process(void *req, int worker_index, bool wait);
+    ucs_status_t request_process(void *req, int worker_index, bool wait,
+                                 bool wakeup = false);
 
 protected:
     typedef void (*get_variants_func_t)(std::vector<ucp_test_variant>&);
@@ -226,20 +227,31 @@ protected:
     bool has_any_transport(const std::string *tls, size_t tl_size) const;
     entity* create_entity(bool add_in_front = false);
     entity* create_entity(bool add_in_front, const ucp_test_param& test_param);
+    unsigned progress(const std::vector<entity*> &entities,
+                      int worker_index = 0) const;
     unsigned progress(int worker_index = 0) const;
     void short_progress_loop(int worker_index = 0) const;
     void flush_ep(const entity &e, int worker_index = 0, int ep_index = 0);
     void flush_worker(const entity &e, int worker_index = 0);
     void flush_workers();
     void disconnect(entity& entity);
-    ucs_status_t request_wait(void *req, int worker_index = 0);
+    void check_events(const std::vector<entity*> &entities, bool wakeup,
+                      int worker_index = 0);
+    ucs_status_t
+    request_progress(void *req, const std::vector<entity*> &entities,
+                     double timeout = 10.0, int worker_index = 0);
+    ucs_status_t request_wait(void *req, int worker_index = 0, bool wakeup = false);
     ucs_status_t requests_wait(std::vector<void*> &reqs, int worker_index = 0);
+    ucs_status_t requests_wait(const std::initializer_list<void*> reqs_list,
+                               int worker_index = 0);
     ucp_tag_message_h message_wait(entity& e, ucp_tag_t tag, ucp_tag_t tag_mask,
                                    ucp_tag_recv_info_t *info, int remove = 1,
                                    int worker_index = 0);
     void request_release(void *req);
-    void wait_for_wakeup(const std::vector<ucp_worker_h> &workers,
-                         int poll_timeout = -1, bool drain = false);
+    void request_cancel(entity &e, void *req);
+    void wait_for_wakeup(const std::vector<entity*> &entities,
+                         int poll_timeout = -1, bool drain = false,
+                         int worker_index = 0);
     int max_connections();
     void set_tl_small_timeouts();
 

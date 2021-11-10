@@ -58,6 +58,19 @@ typedef struct ucp_ep_set_failed_arg {
 } ucp_ep_set_failed_arg_t;
 
 
+/**
+ * Argument for discarding UCP endpoint's lanes
+ */
+typedef struct ucp_ep_discard_lanes_arg {
+    unsigned     counter; /* How many discarding operations on UCT lanes are
+                           * in-progress if purging of the UCP endpoint is
+                           * required */
+    ucs_status_t status; /* Completion status of operations after discarding is
+                          * done */
+    ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
+} ucp_ep_discard_lanes_arg_t;
+
+
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
 extern const ucp_request_send_proto_t ucp_am_reply_proto;
@@ -1153,13 +1166,59 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
     ucs_free(arg);
 }
 
+static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
+{
+    unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==
+                                       UCP_ERR_HANDLING_MODE_NONE) ?
+                                      UCT_FLUSH_FLAG_LOCAL :
+                                      UCT_FLUSH_FLAG_CANCEL;
+    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
+    ucp_ep_discard_lanes_arg_t *discard_arg;
+    ucs_status_t status;
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
+    if (discard_arg == NULL) {
+        ucs_error("ep %p: failed to allocate memory for discarding lanes"
+                  " argument", ep);
+        ucp_ep_cleanup_lanes(ep); /* Just close all UCT endpoints */
+        ucp_ep_reqs_purge(ep, discard_status);
+        return;
+    }
+
+    discard_arg->ucp_ep  = ep;
+    discard_arg->status  = discard_status;
+    discard_arg->counter = 1;
+
+    ucs_debug("ep %p: discarding lanes", ep);
+    ucp_ep_set_lanes_failed(ep, uct_eps);
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = uct_eps[lane];
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
+        status = ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
+                                           ucp_ep_err_pending_purge,
+                                           UCS_STATUS_PTR(discard_status),
+                                           ucp_ep_discard_lanes_callback,
+                                           discard_arg);
+        if (status == UCS_INPROGRESS) {
+            ++discard_arg->counter;
+        }
+    }
+
+    ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
+}
+
 ucs_status_t
 ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 {
     UCS_STRING_BUFFER_ONSTACK(lane_info_strb, 64);
     ucp_ep_ext_control_t *ep_ext_control = ucp_ep_ext_control(ucp_ep);
     ucp_err_handling_mode_t err_mode;
-    ucp_ep_discard_lanes_arg_t *discard_arg;
     ucs_log_level_t log_level;
     ucp_request_t *close_req;
 
@@ -1181,22 +1240,8 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         return UCS_OK;
     }
 
-    discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
-    if (discard_arg == NULL) {
-        ucs_error("ep %p: failed to allocate memory for discarding lanes"
-                  " argument", ucp_ep);
-        return UCS_ERR_NO_MEMORY;
-    }
-
     /* The EP can be closed from last completion callback */
-    discard_arg->ucp_ep   = ucp_ep;
-    discard_arg->status   = status;
-    discard_arg->counter  = 1;
-    discard_arg->counter += ucp_ep_discard_lanes(ucp_ep, status,
-                                                 ucp_ep_discard_lanes_callback,
-                                                 discard_arg);
-    ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
-
+    ucp_ep_discard_lanes(ucp_ep, status);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
@@ -1308,7 +1353,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_stream_ep_cleanup(ep, UCS_ERR_CANCELED);
     ucp_am_ep_cleanup(ep);
-    ucp_ep_reqs_purge(ep, UCS_ERR_CANCELED);
 
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_USED);
 
@@ -1417,44 +1461,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     return ucp_ep_close_nbx(ep, &param);
 }
 
-unsigned ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status,
-                              ucp_send_nbx_callback_t discard_cb,
-                              ucp_ep_discard_lanes_arg_t *discard_arg)
-{
-    unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==
-                                       UCP_ERR_HANDLING_MODE_NONE) ?
-                                      UCT_FLUSH_FLAG_LOCAL:
-                                      UCT_FLUSH_FLAG_CANCEL;
-    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
-    unsigned num_discard_lanes      = 0;
-    ucs_status_t status;
-    ucp_lane_index_t lane;
-    uct_ep_h uct_ep;
-
-    ucs_debug("ep %p: discarding lanes", ep);
-
-    ucp_ep_set_lanes_failed(ep, uct_eps);
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = uct_eps[lane];
-        if (uct_ep == NULL) {
-            continue;
-        }
-
-        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
-
-        status = ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
-                                           ucp_ep_err_pending_purge,
-                                           UCS_STATUS_PTR(discard_status),
-                                           discard_cb, discard_arg);
-        if (status == UCS_INPROGRESS) {
-            ++num_discard_lanes;
-        }
-    }
-
-    return num_discard_lanes;
-}
-
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
     ucp_worker_h  worker = ep->worker;
@@ -1480,9 +1486,7 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
     ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSED, 0);
 
     if (ucp_request_param_flags(param) & UCP_EP_CLOSE_FLAG_FORCE) {
-        ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED,
-                             (ucp_send_nbx_callback_t)ucs_empty_function,
-                             NULL);
+        ucp_ep_discard_lanes(ep, UCS_ERR_CANCELED);
         ucp_ep_disconnected(ep, 1);
     } else {
         request = ucp_ep_flush_internal(ep, 0, param, NULL,

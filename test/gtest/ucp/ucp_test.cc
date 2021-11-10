@@ -160,15 +160,20 @@ ucp_ep_params_t ucp_test::get_ep_params() {
     return params;
 }
 
-unsigned ucp_test::progress(int worker_index) const {
+unsigned ucp_test::progress(const std::vector<entity*> &entities,
+                            int worker_index) const
+{
     unsigned count = 0;
-    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
-         iter != entities().end(); ++iter)
-    {
-        count += (*iter)->progress(worker_index);
+    for (auto e : entities) {
+        count += e->progress(worker_index);
         sched_yield();
     }
+
     return count;
+}
+
+unsigned ucp_test::progress(int worker_index) const {
+    return progress(entities(), worker_index);
 }
 
 void ucp_test::short_progress_loop(int worker_index) const {
@@ -238,7 +243,35 @@ ucp_tag_message_h ucp_test::message_wait(entity& e, ucp_tag_t tag,
     return message;
 }
 
-ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
+void ucp_test::check_events(const std::vector<entity*> &entities, bool wakeup,
+                            int worker_index)
+{
+    if (progress(entities, worker_index)) {
+        return;
+    }
+
+    if (wakeup) {
+        wait_for_wakeup(entities, -1, false, worker_index);
+    }
+}
+
+ucs_status_t
+ucp_test::request_progress(void *req, const std::vector<entity*> &entities,
+                           double timeout, int worker_index)
+{
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+    ucs_status_t status;
+    do {
+        progress(entities, worker_index);
+        status = ucp_request_check_status(req);
+    } while ((status == UCS_INPROGRESS) &&
+             (ucs_get_time() < loop_end_limit));
+
+    return status;
+}
+
+ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait,
+                                       bool wakeup)
 {
     if (req == NULL) {
         return UCS_OK;
@@ -250,17 +283,14 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
         return UCS_PTR_STATUS(req);
     }
 
-    ucs_status_t status;
-    if (wait) {
-        ucs_time_t deadline = ucs::get_deadline();
-        do {
-            progress(worker_index);
-            status = ucp_request_check_status(req);
-        } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
-    } else {
-        status = ucp_request_check_status(req);
+    ucs_time_t deadline = ucs::get_deadline();
+    while (wait &&
+           (ucp_request_check_status(req) == UCS_INPROGRESS) &&
+           (ucs_get_time() < deadline)) {
+        check_events(entities(), wakeup, worker_index);
     }
 
+    ucs_status_t status = ucp_request_check_status(req);
     if (status == UCS_INPROGRESS) {
         if (wait) {
             ucs_error("request %p did not complete on time", req);
@@ -275,9 +305,9 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
     return status;
 }
 
-ucs_status_t ucp_test::request_wait(void *req, int worker_index)
+ucs_status_t ucp_test::request_wait(void *req, int worker_index, bool wakeup)
 {
-    return request_process(req, worker_index, true);
+    return request_process(req, worker_index, true, wakeup);
 }
 
 ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
@@ -297,17 +327,34 @@ ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
     return ret_status;
 }
 
+ucs_status_t
+ucp_test::requests_wait(const std::initializer_list<void*> reqs_list,
+                        int worker_index)
+{
+    std::vector<void*> reqs(reqs_list);
+    return requests_wait(reqs, worker_index);
+}
+
 void ucp_test::request_release(void *req)
 {
     request_process(req, 0, false);
 }
 
-void ucp_test::wait_for_wakeup(const std::vector<ucp_worker_h> &workers,
-                               int poll_timeout, bool drain)
+void ucp_test::request_cancel(entity &e, void *req)
+{
+    if (UCS_PTR_IS_PTR(req)) {
+        ucp_request_cancel(e.worker(), req);
+        ucp_request_free(req);
+    }
+}
+
+void ucp_test::wait_for_wakeup(const std::vector<entity*> &entities,
+                               int poll_timeout, bool drain, int worker_index)
 {
     std::vector<int> efds;
 
-    for (auto worker : workers) {
+    for (auto e : entities) {
+        ucp_worker_h worker = e->worker(worker_index);
         int efd;
 
         ASSERT_UCS_OK(ucp_worker_get_efd(worker, &efd));

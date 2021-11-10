@@ -281,6 +281,19 @@ public:
         UCS_TEST_ABORT("Error: " << ucs_status_string(status));
     }
 
+    static void scomplete_cbx(void *req, ucs_status_t status, void *user_data)
+    {
+        ASSERT_EQ(NULL, user_data);
+        scomplete_cb(req, status);
+    }
+
+    static void scomplete_reset_data_cbx(void *req, ucs_status_t status,
+                                         void *user_data)
+    {
+        mem_buffer *send_buffer = reinterpret_cast<mem_buffer*>(user_data);
+        send_buffer->pattern_fill(0, send_buffer->size());
+    }
+
     static void scomplete_err_handling_cb(void *req, ucs_status_t status)
     {
         complete_err_handling_status_verify(status);
@@ -289,7 +302,28 @@ public:
     static void rtag_complete_cb(void *req, ucs_status_t status,
                                  ucp_tag_recv_info_t *info)
     {
-        EXPECT_UCS_OK(status);
+        EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_CANCELED));
+    }
+
+    static void rtag_complete_cbx(void *req, ucs_status_t status,
+                                  const ucp_tag_recv_info_t *info,
+                                  void *user_data)
+    {
+        ASSERT_EQ(NULL, user_data);
+        rtag_complete_cb(req, status, const_cast<ucp_tag_recv_info_t*>(info));
+    }
+
+    static void rtag_complete_check_data_cbx(void *req, ucs_status_t status,
+                                             const ucp_tag_recv_info_t *tag_info,
+                                             void *user_data)
+    {
+        mem_buffer UCS_V_UNUSED *recv_buffer = reinterpret_cast<mem_buffer*>(user_data);
+
+        UCS_TEST_MESSAGE << "TAG receive operation completed: "
+                         << ucs_status_string(status);
+        if (status == UCS_OK) {
+            recv_buffer->pattern_check(1, recv_buffer->size());
+        }
     }
 
     static void rtag_complete_err_handling_cb(void *req, ucs_status_t status,
@@ -301,57 +335,22 @@ public:
     static void rstream_complete_cb(void *req, ucs_status_t status,
                                     size_t length)
     {
-        EXPECT_UCS_OK(status);
+        EXPECT_TRUE((status == UCS_OK) || (status == UCS_ERR_CANCELED));
     }
 
-    void check_events(ucp_worker_h send_worker, ucp_worker_h recv_worker,
-                      bool wakeup, void *req)
+    static void rstream_complete_cbx(void *req, ucs_status_t status,
+                                     size_t length, void *user_data)
     {
-        if (progress()) {
-            return;
-        }
-
-        if ((req != NULL) && (ucp_request_check_status(req) == UCS_ERR_UNREACHABLE)) {
-            return;
-        }
-
-        if (wakeup) {
-            wait_for_wakeup({ send_worker, recv_worker });
-        }
+        ASSERT_EQ(NULL, user_data);
+        rstream_complete_cb(req, status, length);
     }
 
-    void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
-                   bool wakeup, ucp_test_base::entity::listen_cb_type_t cb_type)
+    bool check_send_status(ucs_status_t send_status, entity &receiver,
+                           void* recv_req,
+                           ucp_test_base::entity::listen_cb_type_t cb_type)
     {
-        const uint64_t send_data = ucs_generate_uuid(0);
-        void *send_req = NULL;
-        if (send_recv_type == SEND_RECV_TAG) {
-            send_req = ucp_tag_send_nb(from.ep(), &send_data, 1,
-                                       ucp_dt_make_contig(sizeof(send_data)), 1,
-                                       scomplete_cb);
-        } else if (send_recv_type == SEND_RECV_STREAM) {
-            send_req = ucp_stream_send_nb(from.ep(), &send_data, 1,
-                                          ucp_dt_make_contig(sizeof(send_data)),
-                                          scomplete_cb, 0);
-        } else {
-            ASSERT_TRUE(false) << "unsupported communication type";
-        }
-
-        ucs_status_t send_status;
-        if (send_req == NULL) {
-            send_status = UCS_OK;
-        } else if (UCS_PTR_IS_ERR(send_req)) {
-            send_status = UCS_PTR_STATUS(send_req);
-            ASSERT_UCS_OK(send_status);
-        } else {
-            while (!ucp_request_is_completed(send_req)) {
-                check_events(from.worker(), to.worker(), wakeup, send_req);
-            }
-            send_status = ucp_request_check_status(send_req);
-            ucp_request_free(send_req);
-        }
-
         if (send_status == UCS_ERR_UNREACHABLE) {
+            request_cancel(receiver, recv_req);
             /* Check if the error was completed due to the error handling flow.
              * If so, skip the test since a valid error occurred - the one expected
              * from the error handling flow - cases of failure to handle long worker
@@ -362,44 +361,110 @@ public:
                             " address)");
         } else if ((send_status == UCS_ERR_REJECTED) &&
                    (cb_type == ucp_test_base::entity::LISTEN_CB_REJECT)) {
-            return;
+            request_cancel(receiver, recv_req);
+            return false;
         } else {
-            ASSERT_UCS_OK(send_status);
+            EXPECT_UCS_OK(send_status);
         }
+
+        return true;
+    }
+
+    void* send(entity& from, const void *contig_buffer, size_t length,
+               send_recv_type_t send_type, ucp_send_nbx_callback_t cb,
+               void *user_data  )
+    {
+        ucp_request_param_t params;
+
+        params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA;
+        params.cb.send      = cb;
+        params.user_data    = user_data;
+
+        if (send_type == SEND_RECV_TAG) {
+            return ucp_tag_send_nbx(from.ep(), contig_buffer, length, 1,
+                                    &params);
+        } else if (send_type == SEND_RECV_STREAM) {
+            return ucp_stream_send_nbx(from.ep(), contig_buffer, length,
+                                       &params);
+        }
+
+        UCS_TEST_ABORT("unsupported communication type " << send_type);
+    }
+
+    void* recv(entity& to, void *contig_buffer, size_t length,
+               ucp_tag_recv_nbx_callback_t cb, void *user_data)
+    {
+        ucp_request_param_t params = {};
+
+        params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                              UCP_OP_ATTR_FIELD_USER_DATA;
+        params.user_data    = user_data;
+        params.cb.recv      = cb;
+        return ucp_tag_recv_nbx(to.worker(), contig_buffer, length, 1, 0,
+                                &params);
+    }
+
+    void* recv(entity& to, void *contig_buffer, size_t length,
+               ucp_stream_recv_nbx_callback_t cb, void *user_data)
+    {
+        ucp_request_param_t params;
+
+        params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK |
+                                UCP_OP_ATTR_FIELD_USER_DATA |
+                                UCP_OP_ATTR_FIELD_FLAGS;
+        params.flags          = UCP_STREAM_RECV_FLAG_WAITALL;
+        params.user_data      = user_data;
+        params.cb.recv_stream = cb;
+
+        ucs_time_t deadline = ucs::get_deadline();
+        ucp_stream_poll_ep_t poll_eps;
+        ssize_t ep_count;
+        do {
+            progress();
+            ep_count = ucp_stream_worker_poll(to.worker(), &poll_eps, 1, 0);
+        } while ((ep_count == 0) && (ucs_get_time() < deadline));
+        EXPECT_EQ(1, ep_count);
+        EXPECT_EQ(to.ep(), poll_eps.ep);
+        EXPECT_EQ(&to, poll_eps.user_data);
+
+        size_t recv_length;
+        return ucp_stream_recv_nbx(to.ep(), contig_buffer, length,
+                                   &recv_length, &params);
+    }
+
+    void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
+                   bool wakeup, ucp_test_base::entity::listen_cb_type_t cb_type)
+    {
+        const uint64_t send_data = ucs_generate_uuid(0);
+        ucs_status_t send_status;
+
+        void *send_req = send(from, &send_data, sizeof(send_data),
+                              send_recv_type, scomplete_cbx, NULL);
 
         uint64_t recv_data = 0;
         void *recv_req;
         if (send_recv_type == SEND_RECV_TAG) {
-            recv_req = ucp_tag_recv_nb(to.worker(), &recv_data, 1,
-                                       ucp_dt_make_contig(sizeof(recv_data)),
-                                       1, 0, rtag_complete_cb);
+            recv_req = recv(to, &recv_data, sizeof(recv_data),
+                            rtag_complete_cbx, NULL);
+        } else if (send_recv_type == SEND_RECV_STREAM) {
+            recv_req = recv(to, &recv_data, sizeof(recv_data),
+                            rstream_complete_cbx, NULL);
         } else {
-            ASSERT_TRUE(send_recv_type == SEND_RECV_STREAM);
-            ucp_stream_poll_ep_t poll_eps;
-            ssize_t              ep_count;
-            size_t               recv_length;
-            do {
-                progress();
-                ep_count = ucp_stream_worker_poll(to.worker(), &poll_eps, 1, 0);
-            } while (ep_count == 0);
-            ASSERT_EQ(1,       ep_count);
-            EXPECT_EQ(to.ep(), poll_eps.ep);
-            EXPECT_EQ(&to,     poll_eps.user_data);
-
-            recv_req = ucp_stream_recv_nb(to.ep(), &recv_data, 1,
-                                          ucp_dt_make_contig(sizeof(recv_data)),
-                                          rstream_complete_cb, &recv_length,
-                                          UCP_STREAM_RECV_FLAG_WAITALL);
+            UCS_TEST_ABORT("unsupported communication type " +
+                           std::to_string(send_recv_type));
         }
 
-        if (recv_req != NULL) {
-            ASSERT_TRUE(UCS_PTR_IS_PTR(recv_req));
-            while (!ucp_request_is_completed(recv_req)) {
-                check_events(from.worker(), to.worker(), wakeup, recv_req);
+        {
+            // Suppress possible reject/unreachable errors
+            scoped_log_handler slh(wrap_errors_logger);
+            send_status = request_wait(send_req, 0, wakeup);
+            if (!check_send_status(send_status, to, recv_req, cb_type)) {
+                return;
             }
-            ucp_request_free(recv_req);
         }
 
+        request_wait(recv_req, 0, wakeup);
         EXPECT_EQ(send_data, recv_data);
     }
 
@@ -409,7 +474,7 @@ public:
 
         while ((receiver().get_num_eps() == 0) &&
                (sender().get_err_num() == 0) && (ucs_get_time() < deadline)) {
-            check_events(sender().worker(), receiver().worker(), wakeup, NULL);
+            check_events({ &sender(), &receiver() }, wakeup);
         }
 
         return (sender().get_err_num() == 0) && (receiver().get_num_eps() > 0);
@@ -420,7 +485,7 @@ public:
         ucs_time_t deadline = ucs::get_deadline();
 
         while ((e.get_err_num_rejected() == 0) && (ucs_get_time() < deadline)) {
-            check_events(sender().worker(), receiver().worker(), wakeup, NULL);
+            check_events({ &sender(), &receiver() }, wakeup);
         }
 
         EXPECT_GT(deadline, ucs_get_time());
@@ -894,6 +959,80 @@ UCS_TEST_P(test_ucp_sockaddr, err_handle_without_err_cb)
     }
 
     EXPECT_EQ(1u, sender().get_err_num());
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, force_close_during_rndv,
+                     (send_recv_type() != SEND_RECV_TAG), "RNDV_THRESH=0")
+{
+    constexpr size_t length = 4 * UCS_KBYTE;
+
+    listen_and_communicate(false, SEND_DIRECTION_BIDI);
+
+    mem_buffer recv_buffer(length, UCS_MEMORY_TYPE_HOST);
+    recv_buffer.pattern_fill(2, length);
+    void *rreq = recv(receiver(), recv_buffer.ptr(), length,
+                      rtag_complete_check_data_cbx,
+                      reinterpret_cast<void*>(&recv_buffer));
+
+    mem_buffer send_buffer(length, UCS_MEMORY_TYPE_HOST);
+    send_buffer.pattern_fill(1, length);
+    void *sreq = send(sender(), send_buffer.ptr(), length,
+                      send_recv_type(), scomplete_reset_data_cbx,
+                      reinterpret_cast<void*>(&send_buffer));
+
+    ucp_ep_h ep = sender().revoke_ep();
+
+    // Wait for the TAG RNDV/RTS packet sent and the request scheduled to be
+    // tracked until RNDV/ATS packet is not received from a peer
+    ucs_time_t deadline = ucs::get_deadline();
+    do {
+        ucp_worker_progress(sender().worker());
+    } while (ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs) &&
+             (ucs_get_time() < deadline));
+    EXPECT_FALSE(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
+
+    std::map<uct_iface_h, uct_iface_ops_t> sender_uct_ops;
+
+    // Prevent destroying UCT endpoints from discarding to not detect error by
+    // the receiver earlier than data could invalidate by the sender
+    for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        if (lane == ucp_ep_get_cm_lane(ep)) {
+            continue;
+        }
+
+        uct_iface_h uct_iface = ep->uct_eps[lane]->iface;
+        auto res = sender_uct_ops.emplace(uct_iface, uct_iface->ops);
+        if (res.second) {
+            uct_iface->ops.ep_flush =
+                    reinterpret_cast<uct_ep_flush_func_t>(
+                            ucs_empty_function_return_no_resource);
+            uct_iface->ops.ep_pending_add =
+                    reinterpret_cast<uct_ep_pending_add_func_t>(
+                            ucs_empty_function_return_busy);
+        }
+    }
+
+    void *close_req = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
+
+    // Do some progress of sender's worker to check that it doesn't complete
+    // UCP requests prior closing UCT endpoint from discarding
+    request_progress(sreq, { &sender() }, 0.5);
+
+    // Restore UCT endpoint's flush function to the original one to allow
+    // complation of descarding
+    for (auto &elem : sender_uct_ops) {
+        elem.first->ops.ep_flush       = elem.second.ep_flush;
+        elem.first->ops.ep_pending_add = elem.second.ep_pending_add;
+    }
+
+    request_progress(sreq, { &sender() });
+    request_progress(rreq, { &receiver() });
+
+    {
+        scoped_log_handler slh(wrap_errors_logger);
+        std::vector<void*> reqs = { sreq, rreq, close_req };
+        requests_wait(reqs);
+    }
 }
 
 UCS_TEST_SKIP_COND_P(test_ucp_sockaddr, listener_invalid_params,

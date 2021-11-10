@@ -553,19 +553,6 @@ typedef struct ucp_conn_request {
 } ucp_conn_request_t;
 
 
-/**
- * Argument for discarding UCP endpoint's lanes
- */
-typedef struct ucp_ep_discard_lanes_arg {
-    unsigned     counter; /* How many discarding operations on UCT lanes are
-                           * in-progress if purging of the UCP endpoint is
-                           * required */
-    ucs_status_t status; /* Completion status of operations after discarding is
-                          * done */
-    ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
-} ucp_ep_discard_lanes_arg_t;
-
-
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep);
 
 void ucp_ep_config_key_reset(ucp_ep_config_key_t *key);
@@ -710,10 +697,6 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 void
 ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
                    void *purge_arg);
-
-unsigned ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status,
-                              ucp_send_nbx_callback_t discard_cb,
-                              ucp_ep_discard_lanes_arg_t *discard_arg);
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req);
 
