@@ -374,6 +374,9 @@ UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
 {
     activate_offload(sender());
 
+    // TODO: Update length to bigger value so that multi-fragment eager is used
+    //       when multi-eager offload probe issue is fixed (like below).
+    // size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
     size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
     ucp_tag_t tag = 0x11;
     std::vector<uint8_t> sendbuf(length);
