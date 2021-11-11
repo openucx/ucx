@@ -1791,6 +1791,33 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
+static void
+ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
+                                ucp_worker_cfg_index_t ep_cfg_index,
+                                unsigned feature_flag, ucp_operation_id_t op_id,
+                                unsigned proto_flags, ucp_lane_index_t exp_lane,
+                                ucp_memtype_thresh_t *max_eager_short)
+{
+    ucp_proto_select_short_t proto_short;
+
+    if (worker->context->config.features & feature_flag) {
+        ucp_proto_select_short_init(worker, &ep_config->proto_select,
+                                    ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+                                    op_id, 0, proto_flags, &proto_short);
+
+         /* Short protocol should be either disabled, or use expected lane */
+         ucs_assertv((proto_short.max_length_host_mem < 0) ||
+                     (proto_short.lane == exp_lane),
+                     "max_length_host_mem %ld, lane %d",
+                     proto_short.max_length_host_mem, proto_short.lane);
+    } else {
+        ucp_proto_select_short_disable(&proto_short);
+    }
+
+    max_eager_short->memtype_off = proto_short.max_length_unknown_mem;
+    max_eager_short->memtype_on  = proto_short.max_length_host_mem;
+}
+
 /* All the ucp endpoints will share the configurations. No need for every ep to
  * have it's own configuration (to save memory footprint). Same config can be used
  * by different eps.
@@ -1803,9 +1830,10 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 {
     ucp_context_h context = worker->context;
     ucp_worker_cfg_index_t ep_cfg_index;
-    ucp_proto_select_short_t tag_short;
     ucp_ep_config_t *ep_config;
-    ucp_memtype_thresh_t *max_eager_short;
+    ucp_memtype_thresh_t *tag_max_short;
+    ucp_lane_index_t tag_exp_lane;
+    unsigned tag_proto_flags;
     ucs_status_t status;
     char tl_info[256];
 
@@ -1837,29 +1865,25 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
     ++worker->ep_config_count;
 
     if (context->config.ext.proto_enable) {
-        if (context->config.features & UCP_FEATURE_TAG) {
-            /* Set threshold for short send */
-            ucp_proto_select_short_init(worker, &ep_config->proto_select,
-                                        ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
-                                        UCP_OP_ID_TAG_SEND, 0,
-                                        ucp_ep_config_key_has_tag_lane(key) ?
-                                                UCP_PROTO_FLAG_TAG_SHORT :
-                                                UCP_PROTO_FLAG_AM_SHORT,
-                                        &tag_short);
-            /* short protocol should be either disabled, or use key->am_lane */
-            ucs_assert((tag_short.max_length_host_mem < 0) ||
-                       (tag_short.lane == key->am_lane));
+        if (ucp_ep_config_key_has_tag_lane(key)) {
+            tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
+            tag_max_short   = &ep_config->tag.offload.max_eager_short;
+            tag_exp_lane    = key->tag_lane;
         } else {
-            ucp_proto_select_short_disable(&tag_short);
+            tag_proto_flags = UCP_PROTO_FLAG_AM_SHORT;
+            tag_max_short   = &ep_config->tag.max_eager_short;
+            tag_exp_lane    = key->am_lane;
         }
 
-        /* TODO replace ep_config->tag.max_eager_short by this struct */
-        max_eager_short = ucp_ep_config_key_has_tag_lane(key) ?
-                                  &ep_config->tag.offload.max_eager_short :
-                                  &ep_config->tag.max_eager_short;
+        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
+                                        UCP_FEATURE_TAG, UCP_OP_ID_TAG_SEND,
+                                        tag_proto_flags, tag_exp_lane,
+                                        tag_max_short);
 
-        max_eager_short->memtype_off = tag_short.max_length_unknown_mem;
-        max_eager_short->memtype_on  = tag_short.max_length_host_mem;
+        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
+                                        UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
+                                        UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
+                                        &ep_config->am_u.max_eager_short);
     }
 
     if (print_cfg) {

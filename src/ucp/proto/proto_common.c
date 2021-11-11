@@ -919,3 +919,10 @@ void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
     ucs_fatal("abort request %p proto %s status %s: unimplemented", req,
               req->send.proto_config->proto->name, ucs_status_string(status));
 }
+
+int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
+{
+    /* Short protocol requires contig/host */
+    return (select_param->dt_class == UCP_DATATYPE_CONTIG) &&
+           UCP_MEM_IS_HOST(select_param->mem_type);
+}

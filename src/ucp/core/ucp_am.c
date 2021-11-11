@@ -17,6 +17,7 @@
 #include <ucp/core/ucp_context.h>
 #include <ucp/rndv/rndv.h>
 #include <ucp/proto/proto_am.inl>
+#include <ucp/proto/proto_common.inl>
 #include <ucp/dt/dt.h>
 #include <ucp/dt/dt.inl>
 
@@ -951,6 +952,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
                  size_t header_length, const void *buffer, size_t count,
                  const ucp_request_param_t *param)
 {
+    ucp_worker_h worker = ep->worker;
     ucs_status_t status;
     ucs_status_ptr_t ret;
     ucp_datatype_t datatype;
@@ -959,12 +961,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     uint32_t flags;
     ucp_memtype_thresh_t *max_short;
     const ucp_request_send_proto_t *proto;
+    size_t contig_length;
 
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(ep->worker->context, UCP_FEATURE_AM,
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
     UCP_REQUEST_CHECK_PARAM(param);
 
-    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
+    UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
     flags     = ucp_request_param_flags(param);
     attr_mask = param->op_attr_mask &
@@ -982,19 +985,24 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         status = ucp_am_try_send_short(ep, id, flags, header, header_length,
                                        buffer, count, max_short);
         ucp_request_send_check_status(status, ret, goto out);
-        datatype = ucp_dt_make_contig(1);
+        datatype      = ucp_dt_make_contig(1);
+        contig_length = count;
     } else if (attr_mask == UCP_OP_ATTR_FIELD_DATATYPE) {
         datatype = param->datatype;
         if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
-            status = ucp_am_try_send_short(ep, id, flags, header,
-                                           header_length, buffer,
-                                           ucp_contig_dt_length(datatype,
-                                                                count),
-                                           max_short);
+            contig_length = ucp_contig_dt_length(datatype, count);
+            status        = ucp_am_try_send_short(ep, id, flags, header,
+                                                  header_length, buffer,
+                                                  ucp_contig_dt_length(datatype,
+                                                                       count),
+                                                  max_short);
             ucp_request_send_check_status(status, ret, goto out);
+        } else {
+            contig_length = 0ul;
         }
     } else {
-        datatype = ucp_dt_make_contig(1);
+        datatype      = ucp_dt_make_contig(1);
+        contig_length = count;
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -1008,21 +1016,32 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         goto out;
     }
 
-    req = ucp_request_get_param(ep->worker, param,
+    req = ucp_request_get_param(worker, param,
                                 {ret = UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
                                  goto out;});
 
-    ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
-                         count, flags, id, param);
+    if (worker->context->config.ext.proto_enable) {
+        req->send.msg_proto.am.am_id         = id;
+        req->send.msg_proto.am.flags         = flags;
+        req->send.msg_proto.am.header        = (void*)header;
+        req->send.msg_proto.am.header_length = header_length;
+        ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
+                                        UCP_WORKER_CFG_INDEX_NULL, req,
+                                        UCP_OP_ID_AM_SEND, buffer, count,
+                                        datatype, contig_length, param);
+    } else {
+        ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
+                             count, flags, id, param);
 
-    /* Note that max_eager_short.memtype_on is always initialized to real
-     * max_short value
-     */
-    ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param, proto,
-                          max_short->memtype_on, flags);
+        /* Note that max_eager_short.memtype_on is always initialized to real
+         * max_short value
+         */
+        ret = ucp_am_send_req(req, count, &ucp_ep_config(ep)->am, param, proto,
+                              max_short->memtype_on, flags);
+    }
 
 out:
-    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
+    UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
     return ret;
 }
 

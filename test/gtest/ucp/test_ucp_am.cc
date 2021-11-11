@@ -895,7 +895,22 @@ public:
     {
         modify_config("RNDV_THRESH", "inf");
         modify_config("ZCOPY_THRESH", "inf");
+        if (enable_proto()) {
+            modify_config("PROTO_ENABLE", "y");
+        }
         m_data_ptr = NULL;
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           1, "proto");
+    }
+
+    virtual unsigned enable_proto()
+    {
+        return get_variant_value(0);
     }
 
     virtual ucs_status_t
@@ -940,7 +955,7 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single)
     test_data_release(fragment_size() / 2);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi)
+UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_eager_data_release, multi, enable_proto())
 {
     test_data_release(fragment_size() * 2);
 }

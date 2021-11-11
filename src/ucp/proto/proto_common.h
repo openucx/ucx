@@ -285,6 +285,9 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
 
 
+int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param);
+
+
 void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length);
 
 

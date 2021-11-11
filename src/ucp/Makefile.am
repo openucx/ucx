@@ -151,5 +151,6 @@ libucp_la_SOURCES = \
 	wireup/wireup.c \
 	wireup/wireup_cm.c \
 	stream/stream_send.c \
-	stream/stream_recv.c
+	stream/stream_recv.c \
+	am/eager.c
 

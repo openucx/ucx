@@ -52,6 +52,7 @@ static const char *ucp_rndv_modes[] = {
 const char *ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND]       = "tag_send",
     [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
+    [UCP_OP_ID_AM_SEND]        = "am_send",
     [UCP_OP_ID_PUT]            = "put",
     [UCP_OP_ID_GET]            = "get",
     [UCP_OP_ID_AMO_POST]       = "amo_post",

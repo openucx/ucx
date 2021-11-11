@@ -72,6 +72,10 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
 
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_PUT);
 
+    if (!ucp_proto_is_short_supported(init_params->select_param)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     return ucp_proto_single_init(&params);
 }
 
