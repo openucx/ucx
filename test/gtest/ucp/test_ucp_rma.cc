@@ -268,7 +268,7 @@ UCS_TEST_P(test_ucp_rma, get_nonblocking) {
 UCS_TEST_SKIP_COND_P(test_ucp_rma, get_nonblocking_iov_zcopy, !enable_proto(),
                      "ZCOPY_THRESH=0") {
     if (!sender().has_lane_with_caps(UCT_IFACE_FLAG_GET_ZCOPY)) {
-        UCS_TEST_SKIP_R("put_zcopy is not supported");
+        UCS_TEST_SKIP_R("get_zcopy is not supported");
     }
 
     test_mem_types(static_cast<send_func_t>(&test_ucp_rma::get_nbi_iov), 2000,
