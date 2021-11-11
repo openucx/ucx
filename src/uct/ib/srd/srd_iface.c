@@ -691,7 +691,7 @@ uct_srd_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *iface_attr)
     iface_attr->cap.am.max_bcopy = iface->super.config.seg_size - sizeof(uct_srd_neth_t);
     iface_attr->cap.am.min_zcopy = 0;
     iface_attr->cap.am.max_zcopy = iface->super.config.seg_size - sizeof(uct_srd_neth_t);
-    iface_attr->cap.am.max_iov   = iface->config.max_send_sge - 1;
+    iface_attr->cap.am.max_iov   = iface->config.max_send_sge;
     iface_attr->cap.am.max_hdr   = uct_ib_iface_hdr_size(iface->super.config.seg_size,
                                                          sizeof(uct_srd_neth_t));
 

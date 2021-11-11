@@ -1283,7 +1283,7 @@ uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     uct_srd_send_desc_t *desc;
     uct_srd_neth_t *neth;
 
-    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge - 1,
+    UCT_CHECK_IOV_SIZE(iovcnt, iface->config.max_send_sge,
                        "uct_srd_ep_am_zcopy");
 
     UCT_SRD_CHECK_AM_ZCOPY(iface, id, header_length,
@@ -1302,9 +1302,18 @@ uct_srd_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *header,
     UCT_SRD_AM_COMMON(iface, ep, id, neth);
 
     memcpy(neth + 1, header, header_length);
+    desc->super.len = sizeof(*neth) + header_length;
+
+    if (iovcnt > 1) {
+        // EFA's max_sge is 2. Copy the first iov entry after the header
+        size_t iov0_len = uct_iov_get_length(&iov[0]);
+        memcpy(neth + 1 + header_length, iov[0].buffer, iov0_len);
+        desc->super.len += iov0_len;
+        iovcnt--;
+        iov++;
+    }
 
     uct_srd_zcopy_op_set_comp(&desc->super, comp);
-    desc->super.len = sizeof(*neth) + header_length;
 
     iface->tx.wr_desc.num_sge =
         uct_ib_verbs_sge_fill_iov(iface->tx.sge + 1, iov, iovcnt) + 1;
