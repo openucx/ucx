@@ -149,8 +149,6 @@ struct ucp_config {
     ucp_context_config_names_t             rndv_frag_sizes;
     /** Array of rendezvous fragment elems per allocation */
     ucp_context_config_names_t             rndv_frag_elems;
-    /** Array of transports for partial worker address to pack */
-    UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
     /** Array of transports for client-server transports and port selection */
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
