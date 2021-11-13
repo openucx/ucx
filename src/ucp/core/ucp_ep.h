@@ -596,6 +596,10 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
 
 void ucp_ep_delete(ucp_ep_h ep);
 
+void ucp_ep_flush_state_reset(ucp_ep_h ep);
+
+void ucp_ep_flush_state_invalidate(ucp_ep_h ep);
+
 void ucp_ep_release_id(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,

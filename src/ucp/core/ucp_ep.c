@@ -375,6 +375,8 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         ++ep->worker->num_all_eps;
     }
 
+    ucp_ep_flush_state_reset(ep);
+
     *ep_p = ep;
     return UCS_OK;
 
@@ -395,6 +397,28 @@ void ucp_ep_delete(ucp_ep_h ep)
     ucp_ep_release_id(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucp_ep_remove_ref(ep);
+}
+
+void ucp_ep_flush_state_reset(ucp_ep_h ep)
+{
+    ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
+
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
+               ((flush_state->send_sn == 0) &&
+                (flush_state->cmpl_sn == 0) &&
+                ucs_hlist_is_empty(&flush_state->reqs)));
+
+    flush_state->send_sn = 0;
+    flush_state->cmpl_sn = 0;
+    ucs_hlist_head_init(&flush_state->reqs);
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
+}
+
+void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
+{
+    ucs_assert(ucs_hlist_is_empty(&ucp_ep_flush_state(ep)->reqs));
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
 }
 
 /* Since release function resets EP ID to @ref UCS_PTR_MAP_KEY_INVALID and PTR
@@ -546,7 +570,6 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
             goto err_free_address_list;
         }
 
-        ucp_ep_flush_state_reset(worker->mem_type_ep[mem_type]);
         UCS_ASYNC_UNBLOCK(&worker->async);
 
         ucs_free(local_address.address_list);
@@ -720,8 +743,6 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
-
-    ucp_ep_flush_state_reset(ep);
 
     *ep_p = ep;
     return UCS_OK;
@@ -904,7 +925,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
             ucp_ep_destroy_internal(ep);
         }
 
-        ucp_ep_flush_state_reset(ep);
         ucp_stream_ep_activate(ep);
         goto out_free_address;
     }
@@ -934,7 +954,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     if ((remote_address.uuid == worker->uuid) &&
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
-        ucp_ep_flush_state_reset(ep);
     } else if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
                                     UCS_CONN_MATCH_QUEUE_EXP)) {
         if (worker->context->config.features & UCP_FEATURE_STREAM) {
@@ -943,7 +962,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
                       "connection matching and Stream API support", worker);
             goto err_destroy_ep;
         }
-        ucp_ep_flush_state_reset(ep);
     }
 
     /* if needed, send initial wireup message */
