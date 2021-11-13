@@ -638,13 +638,14 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     if (req->send.uct.func == ucp_proto_progress_am_single) {
         req->send.proto.comp_cb(req);
     } else if (req->send.uct.func == ucp_wireup_msg_progress) {
-        /* Sending EP_REMOVED/EP_CHECK WIREUP_MSGs could be scheduled on UCT
-         * endpoint which is not a WIREUP_EP. Other WIREUP MSGs should not be
-         * returned from 'uct_ep_pending_purge()', since they are released by
-         * WIREUP endpoint's purge function
+        /* Sending EP_REMOVED/EP_CHECK/ACK WIREUP_MSGs could be scheduled on
+         * UCT endpoint which is not a WIREUP_EP. Other WIREUP MSGs should not
+         * be returned from 'uct_ep_pending_purge()', since they are released
+         * by WIREUP endpoint's purge function
          */
         ucs_assertv((req->send.wireup.type == UCP_WIREUP_MSG_EP_REMOVED) ||
-                    (req->send.wireup.type == UCP_WIREUP_MSG_EP_CHECK),
+                    (req->send.wireup.type == UCP_WIREUP_MSG_EP_CHECK) ||
+                    (req->send.wireup.type == UCP_WIREUP_MSG_ACK),
                     "req %p ep %p: got %s message", req, req->send.ep,
                     ucp_wireup_msg_str(req->send.wireup.type));
         ucs_free(req->send.buffer);
