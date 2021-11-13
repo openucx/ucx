@@ -901,7 +901,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
         if (status != UCS_OK) {
-            ucp_ep_destroy_internal(ep);
+            goto err_destroy_ep;
         }
 
         ucp_ep_flush_state_reset(ep);
