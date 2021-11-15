@@ -309,7 +309,7 @@ void ucm_prevent_dl_unload()
         ret = dladdr(ucm_prevent_dl_unload, &info);
         if (ret == 0) {
             ucm_warn("could not find address of current library: %s", dlerror());
-            return;
+            continue;
         }
 
         /* Load the current library with NODELETE flag, to prevent it from being
@@ -320,7 +320,7 @@ void ucm_prevent_dl_unload()
         dl = dlopen(info.dli_fname, flags);
         if (dl == NULL) {
             ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
-            return;
+            continue;
         }
 
         ucm_debug("loaded '%s' at %p with NODELETE flag", info.dli_fname, dl);
