@@ -2353,8 +2353,20 @@ public:
         }
 
         m_err_count = 0;
+        modify_config("CM_USE_ALL_DEVICES", cm_use_all_devices() ? "y" : "n");
+
         get_sockaddr();
         test_base::init();
+    }
+
+    static void
+    get_test_variants(std::vector<ucp_test_variant>& variants) {
+        uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
+                            UCP_FEATURE_RMA | UCP_FEATURE_AM;
+
+        add_variant_with_value(variants, features,
+                               TEST_MODIFIER_CM_USE_ALL_DEVICES, "all_devs");
+        add_variant_with_value(variants, features, 0, "not_all_devs");
     }
 
     void init_entity(const char *num_paths) {
