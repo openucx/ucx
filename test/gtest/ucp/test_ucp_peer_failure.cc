@@ -517,14 +517,14 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     /* flush all outstanding ops to allow keepalive to run */
     flush_worker(sender());
     if (get_variant_value() & WAKEUP) {
-        wait_for_wakeup({ sender().worker(), failing_receiver().worker() },
+        wait_for_wakeup({ &sender(), &failing_receiver() },
                         100, true);
     }
 
     /* kill EPs & ifaces */
     failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
     if (get_variant_value() & WAKEUP) {
-        wait_for_wakeup({ sender().worker() });
+        wait_for_wakeup({ &sender() });
     }
     wait_for_flag(&m_err_count);
 

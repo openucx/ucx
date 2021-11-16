@@ -524,6 +524,11 @@ public:
         clear();
     }
 
+    operator const std::vector<T*>&() const
+    {
+        return m_vec;
+    }
+
     /** Add and take ownership */
     void push_back(T* ptr) {
         m_vec.push_back(ptr);
