@@ -181,20 +181,20 @@ ucs_count_ptr_trailing_zero_bits(const void *ptr, uint64_t bit_length)
 static inline int
 ucs_bitwise_is_equal(const void *ptr1, const void *ptr2, uint64_t bit_length)
 {
-    size_t length      = bit_length / 8;
-    unsigned remainder = bit_length % 8;
+    size_t length          = bit_length / 8;
+    unsigned remainder_val = bit_length % 8;
 
     if (memcmp(ptr1, ptr2, length) != 0) {
         return 0;
     }
 
-    if (remainder == 0) {
+    if (remainder_val == 0) {
         return 1;
     }
 
     /* Compare up to 7 last bits */
-    return ((*((uint8_t*)ptr1 + length) & ~UCS_MASK(8 - remainder)) ==
-            (*((uint8_t*)ptr2 + length) & ~UCS_MASK(8 - remainder)));
+    return ((*((uint8_t*)ptr1 + length) & ~UCS_MASK(8 - remainder_val)) ==
+            (*((uint8_t*)ptr2 + length) & ~UCS_MASK(8 - remainder_val)));
 }
 
 END_C_DECLS
