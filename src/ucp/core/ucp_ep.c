@@ -1023,7 +1023,10 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
         ucp_ep_params_check_err_handling(ep, params);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
         *ep_p = ep;
+    } else {
+        ++worker->counters.ep_creation_failures;
     }
+    ++worker->counters.ep_creations;
 
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;

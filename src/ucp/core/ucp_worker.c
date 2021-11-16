@@ -2056,6 +2056,13 @@ void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
     ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
                             &worker->keepalive.round_count, UCS_VFS_TYPE_SIZET,
                             "keepalive/round_count");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
+                            &worker->counters.ep_creations, UCS_VFS_TYPE_ULONG,
+                            "counters/ep_creations");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
+                            &worker->counters.ep_creation_failures,
+                            UCS_VFS_TYPE_ULONG,
+                            "counters/ep_creation_failures");
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,
@@ -2091,6 +2098,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     ucs_list_head_init(&worker->internal_eps);
     kh_init_inplace(ucp_worker_rkey_config, &worker->rkey_config_hash);
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
+    worker->counters.ep_creations         = 0;
+    worker->counters.ep_creation_failures = 0;
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
