@@ -80,7 +80,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_sisci_ep_t, uct_ep_t);
 
 static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
                                               uct_md_resource_desc_t **resources_p,
-                                              unsigned *num_resources_p)
+                                            uct_sisci_ep_put_short  unsigned *num_resources_p)
 {
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     return UCS_OK;
@@ -105,6 +105,103 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     return UCS_OK;
 }
 
+ucs_status uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
+                                 unsigned length, uint64_t remote_addr,
+                                 uct_rkey_t rkey)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ssize_t uct_sisci_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
+                            void *arg, uint64_t remote_addr, uct_rkey_t rkey)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,
+                                 void *arg, size_t length,
+                                 uint64_t remote_addr, uct_rkey_t rkey,
+                                 uct_completion_t *comp)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sisci_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t value,
+                                     uint64_t remote_addr, uct_rkey_t rkey)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sisci_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t value,
+                                     uint64_t remote_addr, uct_rkey_t rkey)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sisci_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                      uint64_t value, uint64_t *result,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sisci_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
+                                      uint32_t value, uint32_t *result,
+                                      uint64_t remote_addr, uct_rkey_t rkey,
+                                      uct_completion_t *comp)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sisci_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
+                                      uint64_t swap, uint64_t remote_addr,
+                                      uct_rkey_t rkey, uint64_t *result,
+                                      uct_completion_t *comp)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sisci_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
+                                      uint32_t swap, uint64_t remote_addr,
+                                      uct_rkey_t rkey, uint32_t *result,
+                                      uct_completion_t *comp)
+{
+    //TODO
+    return UCS_OK;
+}
+
+//from sm self.c
+
+ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                  const void *payload, unsigned length)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ucs_status_t uct_sisci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
+                                      const uct_iov_t *iov, size_t iovcnt)
+{
+    //TODO
+    return UCS_OK;
+}
+
+ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                             uct_pack_callback_t pack_cb, void *arg,
+                             unsigned flags)
+{
+    //TODO
+    return 0;
+}
 
 static ucs_status_t uct_sisci_md_rkey_unpack(uct_component_t *component,
                                             const void *rkey_buffer, uct_rkey_t *rkey_p,
@@ -145,10 +242,39 @@ UCT_COMPONENT_REGISTER(&uct_sisci_component)
 
 //the operations that we should support or something : )
 static uct_iface_ops_t uct_sisci_iface_ops = {
-    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_sisci_ep_t),
+    
 
-    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),
+    
 
+    .ep_put_short             = uct_sisci_ep_put_short,     // bap
+    .ep_put_bcopy             = uct_sisci_ep_put_bcopy,     // bap
+    .ep_get_bcopy             = uct_sisci_ep_get_bcopy,     // bap
+    .ep_am_short              = uct_sisci_ep_am_short,      // bap
+    .ep_am_short_iov          = uct_sisci_ep_am_short_iov,  // bap
+    .ep_am_bcopy              = uct_sisci_ep_am_bcopy,      // bap
+    .ep_atomic_cswap64        = uct_sisci_ep_atomic_cswap64,// bap
+    .ep_atomic64_post         = uct_sisci_ep_atomic64_post, // bap
+    .ep_atomic64_fetch        = uct_sisci_ep_atomic64_fetch,// bap
+    .ep_atomic_cswap32        = uct_sisci_ep_atomic_cswap32,// bap
+    .ep_atomic32_post         = uct_sisci_ep_atomic32_post, // bap
+    .ep_atomic32_fetch        = uct_sisci_ep_atomic32_fetch,// bap
+    .ep_flush                 = uct_base_ep_flush,          // maybe TODO, trenger vi å endre dette
+    .ep_fence                 = uct_base_ep_fence,
+    .ep_check                 = ucs_empty_function_return_success,
+    .ep_pending_add           = ucs_empty_function_return_busy,
+    .ep_pending_purge         = ucs_empty_function,
+    .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_sisci_ep_t),            //bapped
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_susci_ep_t),         
+    .iface_flush              = uct_base_iface_flush,
+    .iface_fence              = uct_base_iface_fence,
+    .iface_progress_enable    = ucs_empty_function,
+    .iface_progress_disable   = ucs_empty_function,
+    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped
+    .iface_query              = uct_self_iface_query,
+    .iface_get_device_address = ucs_empty_function_return_success,
+    .iface_get_address        = uct_self_iface_get_address,
+    .iface_is_reachable       = uct_self_iface_is_reachable
 };
 
 
