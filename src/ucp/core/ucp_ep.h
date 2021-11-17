@@ -93,7 +93,9 @@ enum {
                                                         @uct_ep_disconnect was called for CM EP */
     UCP_EP_FLAG_CLIENT_CONNECT_CB      = UCS_BIT(23),/* DEBUG: Client connect callback invoked */
     UCP_EP_FLAG_SERVER_NOTIFY_CB       = UCS_BIT(24),/* DEBUG: Server notify callback invoked */
-    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25) /* DEBUG: Got disconnect notification */
+    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25),/* DEBUG: Got disconnect notification */
+    UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ   = UCS_BIT(26) /* DEBUG: Connection pre-request needs to be
+                                                        received from a peer */
 };
 
 

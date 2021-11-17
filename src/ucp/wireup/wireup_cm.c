@@ -681,6 +681,7 @@ static unsigned ucp_cm_client_connect_progress(void *arg)
     }
 
     if (context->config.ext.cm_use_all_devices) {
+        ucp_ep->flags |= UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ;
         ucp_wireup_remote_connect_lanes(ucp_ep, 0);
     } else {
         ucp_wireup_remote_connected(ucp_ep);
