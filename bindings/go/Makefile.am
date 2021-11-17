@@ -38,6 +38,7 @@ bench: $(GOTMPDIR)
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} $(GO) test -v -bench=.
 
 goperftest: $(GOTMPDIR)
+	$(GO) env -w GO111MODULE=off ; \
 	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
 	$(GO) build -o ${GOTMPDIR}/goperftest
 
