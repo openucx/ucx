@@ -1224,7 +1224,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     }
 
     ucp_ep_update_remote_id(ep, sa_data->ep_id);
-    ucp_ep_flush_state_reset(ep);
 
     if (conn_request->listener->accept_cb == NULL) {
         goto out_free_request;

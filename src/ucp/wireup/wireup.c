@@ -470,7 +470,6 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
     /* restore the EP here to avoid access to incomplete configuration before
        this point */
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
-    ucp_ep_flush_state_reset(ep);
 
     if (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
@@ -509,7 +508,6 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
     if (ep != NULL) {
         ucs_assert(msg->dst_ep_id != UCS_PTR_MAP_KEY_INVALID);
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
-        ucp_ep_flush_state_reset(ep);
         ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE;
     } else {
         ucs_assert(msg->dst_ep_id == UCS_PTR_MAP_KEY_INVALID);
@@ -536,10 +534,7 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                              " requested on the context %p",
                              worker, ep, worker->context);
                 }
-                ucp_ep_flush_state_reset(ep);
             }
-        } else {
-            ucp_ep_flush_state_reset(ep);
         }
 
         ucp_ep_update_remote_id(ep, msg->src_ep_id);
@@ -660,7 +655,6 @@ ucp_wireup_process_reply(ucp_worker_h worker, ucp_ep_h ep,
 
     ucp_ep_match_remove_ep(worker, ep);
     ucp_ep_update_remote_id(ep, msg->src_ep_id);
-    ucp_ep_flush_state_reset(ep);
 
     /* Connect p2p addresses to remote endpoint */
     if (!(ep->flags & UCP_EP_FLAG_LOCAL_CONNECTED) ||
@@ -738,7 +732,6 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
     }
 
     ucp_ep_update_remote_id(reply_ep, msg->src_ep_id);
-    ucp_ep_flush_state_reset(reply_ep);
     status = ucp_wireup_msg_send(reply_ep, UCP_WIREUP_MSG_EP_REMOVED,
                                  &ucp_tl_bitmap_min, NULL);
     if (status != UCS_OK) {

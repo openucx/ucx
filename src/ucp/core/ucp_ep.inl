@@ -229,28 +229,6 @@ static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 #endif
 }
 
-static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
-{
-    ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
-
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
-               ((flush_state->send_sn == 0) &&
-                (flush_state->cmpl_sn == 0) &&
-                ucs_hlist_is_empty(&flush_state->reqs)));
-
-    flush_state->send_sn = 0;
-    flush_state->cmpl_sn = 0;
-    ucs_hlist_head_init(&flush_state->reqs);
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
-}
-
-static inline void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
-{
-    ucs_assert(ucs_hlist_is_empty(&ucp_ep_flush_state(ep)->reqs));
-    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
-}
-
 /* get index of the local component which can reach a remote memory domain */
 static inline ucp_rsc_index_t
 ucp_ep_config_get_dst_md_cmpt(const ucp_ep_config_key_t *key,
