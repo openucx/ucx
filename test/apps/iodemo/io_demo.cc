@@ -923,6 +923,11 @@ protected:
         size_t buf_size = iomsg_size - sizeof(*msg);
         std::stringstream err_str;
 
+        if (msg->op == IO_WRITE) {
+            assert(msg->conn_id == conn->remote_id());
+        } else {
+            assert(msg->conn_id == conn->id());
+        }
         size_t err_pos = IoDemoRandom::validate(seed, msg->conn_id, buf,
                                                 buf_size, UCS_MEMORY_TYPE_HOST,
                                                 err_str);
@@ -1162,6 +1167,7 @@ public:
         // send data
         VERBOSE_LOG << "sending IO read data";
         assert(opts().max_data_size >= msg->data_size);
+        assert(msg->conn_id == conn->remote_id());
 
         BufferIov *iov            = _data_buffers_pool.get();
         SendCompleteCallback *cb  = _send_callback_pool.get();
@@ -1183,6 +1189,7 @@ public:
     void handle_io_am_read_request(UcxConnection* conn, const iomsg_t *msg) {
         VERBOSE_LOG << "sending AM IO read data";
         assert(opts().max_data_size >= msg->data_size);
+        assert(msg->conn_id == conn->remote_id());
 
         IoMessage *m = _io_msg_pool.get();
         m->init(IO_READ_COMP, msg->sn, msg->conn_id, msg->data_size,
@@ -1207,6 +1214,7 @@ public:
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
         VERBOSE_LOG << "receiving IO write data";
         assert(msg->data_size != 0);
+        assert(msg->conn_id == conn->remote_id());
 
         BufferIov *iov             = _data_buffers_pool.get();
         IoWriteResponseCallback *w = _callback_pool.get();
@@ -1225,6 +1233,7 @@ public:
                                     const UcxAmDesc &data_desc) {
         VERBOSE_LOG << "receiving AM IO write data";
         assert(msg->data_size != 0);
+        assert(msg->conn_id == conn->remote_id());
 
         BufferIov *iov             = _data_buffers_pool.get();
         IoWriteResponseCallback *w = _callback_pool.get();
@@ -1292,7 +1301,13 @@ public:
 
         VERBOSE_LOG << "got io (AM) message " << io_op_names[msg->op] << " sn "
                     << msg->sn << " data size " << msg->data_size
-                    << " conn " << conn;
+                    << " conn " << conn;  
+
+#ifndef NDEBUG
+        if (conn->remote_id() == std::numeric_limits<uint64_t>::max()) {
+            conn->set_remote_id(msg->conn_id);
+        }
+#endif
 
         assert(conn->ucx_status() == UCS_OK);
 
