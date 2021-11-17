@@ -41,7 +41,7 @@ func (m *UcpMemory) Query(attrs ...UcpMemAttribute) (*UcpMemAttributes, error) {
 	}
 
 	if status := C.ucp_mem_query(m.memHandle, &memAttr); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	result := &UcpMemAttributes{}
@@ -62,7 +62,7 @@ func (m *UcpMemory) Query(attrs ...UcpMemAttribute) (*UcpMemAttributes, error) {
 
 func (m *UcpMemory) Close() error {
 	if status := C.ucp_mem_unmap(m.context, m.memHandle); status != C.UCS_OK {
-		return NewUcxError(status)
+		return newUcxError(status)
 	}
 
 	return nil

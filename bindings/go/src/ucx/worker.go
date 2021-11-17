@@ -67,7 +67,7 @@ func (w *UcpWorker) Query(attrs ...UcpWorkerAttribute) (*UcpWorkerAttributes, er
 	}
 
 	if status := C.ucp_worker_query(w.worker, &workerAttr); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	result := &UcpWorkerAttributes{}
@@ -142,7 +142,7 @@ func (w *UcpWorker) Progress() uint {
 // calling UcpWorker.Progress() (which is not invoked in that duration).
 func (w *UcpWorker) Wait() error {
 	if status := C.ucp_worker_wait(w.worker); status != C.UCS_OK {
-		return NewUcxError(status)
+		return newUcxError(status)
 	}
 	return nil
 }
@@ -167,7 +167,7 @@ func (w *UcpWorker) Wait() error {
 func (w *UcpWorker) GetEfd() (int, error) {
 	var efd C.int
 	if status := C.ucp_worker_get_efd(w.worker, &efd); status != C.UCS_OK {
-		return 0, NewUcxError(status)
+		return 0, newUcxError(status)
 	}
 	return int(efd), nil
 }
@@ -178,7 +178,7 @@ func (w *UcpWorker) GetEfd() (int, error) {
 // if no event from the underlying interfaces has taken place.
 func (w *UcpWorker) Signal() error {
 	if status := C.ucp_worker_signal(w.worker); status != C.UCS_OK {
-		return NewUcxError(status)
+		return newUcxError(status)
 	}
 	return nil
 }
@@ -202,7 +202,7 @@ func (w *UcpWorker) NewEndpoint(epParams *UcpEpParams) (*UcpEp, error) {
 	var ep C.ucp_ep_h
 
 	if status := C.ucp_ep_create(w.worker, &epParams.params, &ep); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	if epParams.errorHandler != nil {
@@ -259,7 +259,7 @@ func (w *UcpWorker) NewListener(listenerParams *UcpListenerParams) (*UcpListener
 	var listener C.ucp_listener_h
 
 	if status := C.ucp_listener_create(w.worker, &listenerParams.params, &listener); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	connHandles2Listener[listenerParams.connHandlerId] = listener
@@ -288,7 +288,7 @@ func (w *UcpWorker) SetAmRecvHandler(id uint, flags UcpAmCbFlags, cb UcpAmRecvCa
 
 	status := C.ucp_worker_set_am_recv_handler(w.worker, &amHandlerParams)
 	if status != C.UCS_OK {
-		return NewUcxError(status)
+		return newUcxError(status)
 	}
 
 	return nil

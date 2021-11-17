@@ -23,7 +23,7 @@ type UcpConnectionRequestAttributes struct {
 
 func (c *UcpConnectionRequest) Reject() error {
 	if status := C.ucp_listener_reject(c.listener, c.connRequest); status != C.UCS_OK {
-		return NewUcxError(status)
+		return newUcxError(status)
 	}
 	return nil
 }
@@ -36,7 +36,7 @@ func (c *UcpConnectionRequest) Query(attrs ...UcpConnRequestAttribute) (*UcpConn
 	}
 
 	if status := C.ucp_conn_request_query(c.connRequest, &connReqAttr); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	result := &UcpConnectionRequestAttributes{}
