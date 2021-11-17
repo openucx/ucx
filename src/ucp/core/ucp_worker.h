@@ -338,6 +338,13 @@ typedef struct ucp_worker {
                                                            * used to minimize call of ucs_get_time */
         size_t                       round_count;         /* Number of rounds done */
     } keepalive;
+
+    struct {
+        /* Number of requests to create endpoint */
+        uint64_t                     ep_creations;
+        /* Number of failed requests to create endpoint */
+        uint64_t                     ep_creation_failures;
+    } counters;
 } ucp_worker_t;
 
 
