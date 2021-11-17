@@ -12,7 +12,7 @@ libucs_fuse_la_CFLAGS   = $(BASE_CFLAGS)
 libucs_fuse_la_LIBADD   = $(FUSE3_LIBS) \
                           $(top_builddir)/src/ucs/vfs/sock/libucs_vfs_sock.la \
                           $(top_builddir)/src/ucs/libucs.la
-libucs_fuse_la_LDFLAGS  = -version-info $(SOVERSION)
+libucs_fuse_la_LDFLAGS  = $(FUSE3_LDFLAGS) -version-info $(SOVERSION)
 libucs_fuse_la_SOURCES  = vfs_fuse.c
 include $(top_srcdir)/config/module.am
 

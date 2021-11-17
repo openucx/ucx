@@ -8,6 +8,7 @@ if HAVE_FUSE3
 
 bin_PROGRAMS     = ucx_vfs
 ucx_vfs_CPPFLAGS = $(BASE_CPPFLAGS) $(FUSE3_CPPFLAGS)
+ucx_vfs_LDFLAGS  = $(FUSE3_LDFLAGS)
 ucx_vfs_CFLAGS   = $(BASE_CFLAGS)
 ucx_vfs_SOURCES  = vfs_main.c vfs_server.c
 noinst_HEADERS   = vfs_daemon.h
