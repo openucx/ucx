@@ -701,6 +701,12 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
             } else {
                 ib_iface->config.ece_cfg.ece.val    =
                     ep.tx.wq.super.local_ece.val;
+
+                if (ep.tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+                    /* make coverity happy [FORWARD_NULL] */
+                    ucs_assert(ep.tx.wq.reg != NULL);
+                }
+
                 uct_ib_mlx5_qp_mmio_cleanup(&ep.tx.wq.super, ep.tx.wq.reg);
                 uct_ib_mlx5_destroy_qp(md, &ep.tx.wq.super);
             }
