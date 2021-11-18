@@ -223,7 +223,8 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     }
 
     ucp_request_set_send_callback_param(param, req, send);
-    ucs_trace_req("returning send request %p", req);
+    ucs_trace_req("returning send request %p: %s buffer %p count %zu",
+                  req, ucp_operation_names[op_id], buffer, count);
     return req + 1;
 }
 
