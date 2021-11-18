@@ -599,6 +599,16 @@ static ucs_status_t uct_rdamcm_cm_ep_server_init(uct_rdmacm_cm_ep_t *cep,
         goto err;
     }
 
+#if HAVE_RDMACM_ECE
+    if (params->field_mask & UCT_EP_PARAM_FIELD_ECE) {
+        cep->ece.vendor_id = UCT_IB_VENDOR_ID_MLNX;
+        cep->ece.options   = params->ece;
+        cep->ece.comp_mask = 0;
+    } else {
+        cep->ece.vendor_id = 0xffffffff;
+    }
+#endif
+
     if (listen_ev_ch != cm->ev_ch) {
         /* The server will open the ep to the client on a different CM.
          * not the one on which its listener is listening on */
