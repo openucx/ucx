@@ -72,8 +72,7 @@ enum {
     UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
-                                                        close_req is valid */
+    /* 11 bit is vacant for a flag */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -424,15 +423,6 @@ typedef struct {
 
 
 /**
- * Status of protocol-level remote completions
- */
-typedef struct {
-    ucp_request_t             *req;             /* Flush request which is
-                                                   used in close protocol */
-} ucp_ep_close_proto_req_t;
-
-
-/**
  * Endpoint extension for control data path
  */
 typedef struct {
@@ -440,7 +430,7 @@ typedef struct {
     ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
     ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
     ucp_err_handler_cb_t     err_cb; /* Error handler */
-    ucp_ep_close_proto_req_t close_req; /* Close protocol request */
+    ucp_request_t            *close_req; /* Close protocol request */
 #if UCS_ENABLE_ASSERT
     ucs_time_t               ka_last_round; /* Time of last KA round done */
 #endif
