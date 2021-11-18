@@ -701,6 +701,16 @@ uct_rdmacm_cm_ep_connect(uct_ep_h ep, const uct_ep_connect_params_t *params)
     size_t priv_data_length;
     ucs_status_t status;
 
+#if HAVE_RDMACM_ECE
+    if (params->field_mask & UCT_EP_CONNECT_PARAM_FIELD_ECE) {
+        cep->ece.vendor_id = UCT_IB_VENDOR_ID_MLNX;
+        cep->ece.options   = params->ece;
+        cep->ece.comp_mask = 0;
+    } else {
+        cep->ece.vendor_id = 0xffffffff;
+    }
+#endif
+
     uct_ep_connect_params_get(params, &priv_data, &priv_data_length);
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
     status = uct_rdmacm_cm_ep_send_priv_data(cep, priv_data, priv_data_length);
