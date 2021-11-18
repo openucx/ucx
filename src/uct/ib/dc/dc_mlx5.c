@@ -308,7 +308,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp *qp;
 
-    ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
+    ucs_assert(ib_iface->config.qp_type == UCT_IB_QPT_DCI);
 
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
                                 iface->super.super.config.tx_qp_len,
@@ -379,7 +379,7 @@ init_qp:
     }
 
     if (dci->txwq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
-        status = uct_ib_mlx5_txwq_init(iface->super.super.super.super.worker,
+        status = uct_ib_mlx5_txwq_init(ib_iface->super.worker,
                                        iface->super.tx.mmio_mode, &dci->txwq,
                                        dci->txwq.super.verbs.qp);
         if (status != UCS_OK) {
