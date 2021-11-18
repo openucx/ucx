@@ -1122,6 +1122,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
     void *ptr;
     int enable_amo;
     uint8_t addr_flags;
+    uint32_t ece_val = 0xffffffff;
 
     ptr               = buffer;
     addr_index        = 0;
@@ -1288,7 +1289,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                                                      0);
 
                     /* pack ep address */
-                    status = uct_ep_get_address(ep->uct_eps[lane], ptr, NULL);
+                    status = uct_ep_get_address(ep->uct_eps[lane], ptr, &ece_val);
                     if (status != UCS_OK) {
                         return status;
                     }
@@ -1363,6 +1364,14 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         } else {
             /* cppcheck-suppress internalAstError */
             ucs_assert(UCS_BITMAP_IS_ZERO_INPLACE(&dev_tl_bitmap));
+        }
+    }
+
+    if ((ep != NULL) && (ep->flags & UCP_EP_FLAG_OOB_ECE)) {
+        if (ece_val == 0xffffffff || ece_val == 0) {
+            ep->flags &= ~UCP_EP_FLAG_OOB_ECE;
+        } else {
+            ep->local_ece = ece_val;
         }
     }
 
