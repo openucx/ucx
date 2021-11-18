@@ -555,6 +555,7 @@ typedef struct ucp_conn_request {
     char                        dev_name[UCT_DEVICE_NAME_MAX];
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
+    uint32_t                    ece; /* OOB ECE of the remote peer */
     ucp_ep_h                    ep; /* valid only if request is handled internally */
     /* sa_data and packed worker address follow */
 } ucp_conn_request_t;

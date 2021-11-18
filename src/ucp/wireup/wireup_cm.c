@@ -1149,6 +1149,11 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
            remote_data->dev_addr_length);
     memcpy(ucp_conn_request + 1, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
+    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_OOB_ECE) {
+        ucp_conn_request->ece = remote_data->ece;
+    } else {
+        ucp_conn_request->ece = 0;
+    }
 
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_server_conn_request_progress,
