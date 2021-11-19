@@ -315,8 +315,7 @@ public:
     }
 
     void set_remote_id(uint64_t remote_conn_id) {
-        assert((_remote_conn_id == std::numeric_limits<uint64_t>::max()) ||
-               (_remote_conn_id == remote_conn_id));
+        assert(_remote_conn_id == std::numeric_limits<uint64_t>::max());
         assert(_use_am);
         _remote_conn_id = remote_conn_id;
     }

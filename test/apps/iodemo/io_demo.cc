@@ -1304,7 +1304,9 @@ public:
                     << " conn " << conn;  
 
 #ifndef NDEBUG
-        conn->set_remote_id(msg->conn_id);
+        if (conn->remote_id() == std::numeric_limits<uint64_t>::max()) {
+            conn->set_remote_id(msg->conn_id);
+        }
 #endif
 
         assert(conn->ucx_status() == UCS_OK);
