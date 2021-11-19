@@ -401,6 +401,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
     char dev_name[UCT_DEVICE_NAME_MAX];
     char ah_attr_str[128];
     uct_ib_roce_version_info_t roce_info;
+    uint16_t udp_sport;
     int ret;
 
     params.flags = 0;
@@ -424,6 +425,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
         ucs_error("ibv_query_port (%s) failed: %m", dev_name);
         return UCS_ERR_IO_ERROR;
     }
+    ucs_warn("flow lable %d", qp_attr.ah_attr.grh.flow_label);
 
     if (qp_attr.ah_attr.is_global) {
         params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
@@ -438,6 +440,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
     params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     params.path_mtu = qp_attr.path_mtu;
 
+    udp_sport = 0;
     if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
@@ -448,6 +451,9 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
         roce_info.addr_family = 0;
         params.roce_info      = roce_info;
         params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
+
+        udp_sport = ibv_flow_label_to_udp_sport(qp_attr.ah_attr.grh.flow_label);
+        ucs_warn("udp_sport %u", udp_sport);
     } else if (qp_attr.ah_attr.is_global) {
         params.flags         |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX |
                                 UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID;
@@ -476,6 +482,11 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
         return UCS_ERR_NO_MEMORY;
     }
 
+    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
+        params.lid = udp_sport;
+    } else {
+        params.lid = qp_attr.ah_attr.dlid;
+    }
     uct_ib_address_pack(&params, dev_addr);
 
     *dev_addr_p     = (uct_device_addr_t*)dev_addr;

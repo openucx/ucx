@@ -137,6 +137,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     uct_ib_mlx5_base_av_t av;
     struct mlx5_grh_av grh_av;
     unsigned path_index;
+    uct_ib_address_pack_params_t pack_params;
 
     ucs_trace_func("");
 
@@ -151,6 +152,12 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
+
+
+    uct_ib_address_unpack(ib_addr, &pack_params);
+    ucs_warn("lid is %d", pack_params.lid);
+    ucs_warn("rlid is %d", av.rlid);
+    av.rlid = htons(pack_params.lid);
 
     if (is_global) {
         return UCS_CLASS_NEW(uct_dc_mlx5_grh_ep_t, ep_p, iface, if_addr, &av,

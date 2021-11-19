@@ -52,6 +52,7 @@
 #define UCT_IB_SITE_LOCAL_MASK            be64toh(0xffffffffffff0000ul) /* IBTA 4.1.1 12b */
 #define UCT_IB_DEFAULT_ROCEV2_DSCP        106  /* Default DSCP for RoCE v2 */
 #define UCT_IB_ROCE_UDP_SRC_PORT_BASE     0xC000
+#define UCT_IB_ROCE_MAX_PATH_FACTOR       0x400
 #define UCT_IB_CQE_SL_PKTYPE_MASK         0x7 /* SL for IB or packet type
                                                  (GRH/IPv4/IPv6) for RoCE in the
                                                  CQE */
@@ -134,6 +135,7 @@ typedef struct uct_ib_address {
      * - uint16_t subnet16
      * - uint64_t subnet64
      * For RoCE:
+     * - uint16_t udp_sport
      * - uint8_t gid[16]
      */
 } UCS_S_PACKED uct_ib_address_t;
