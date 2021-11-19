@@ -1237,7 +1237,6 @@ public:
                                     const UcxAmDesc &data_desc) {
         VERBOSE_LOG << "receiving AM IO write data";
         assert(msg->data_size != 0);
-        assert(msg->conn_id == conn->remote_id());
 
         BufferIov *iov             = _data_buffers_pool.get();
         IoWriteResponseCallback *w = _callback_pool.get();
