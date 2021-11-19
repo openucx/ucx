@@ -900,7 +900,7 @@ protected:
         abort();
     }
 
-    static void validate(UcxConnection *conn, const BufferIov& iov,
+    static void validate(const UcxConnection *conn, const BufferIov& iov,
                          unsigned seed, uint64_t conn_id, io_op_t op) {
         std::stringstream err_str;
 
@@ -916,14 +916,12 @@ protected:
         }
     }
 
-    static void validate(UcxConnection *conn, const iomsg_t *msg,
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
                          size_t iomsg_size) {
         unsigned seed   = msg->sn;
         const void *buf = msg + 1;
         size_t buf_size = iomsg_size - sizeof(*msg);
         std::stringstream err_str;
-
-        handle_io_msg(msg, conn);
 
         size_t err_pos = IoDemoRandom::validate(seed, msg->conn_id, buf,
                                                 buf_size, UCS_MEMORY_TYPE_HOST,
@@ -937,7 +935,7 @@ protected:
         }
     }
 
-    static void validate(UcxConnection *conn, const iomsg_t *msg,
+    static void validate(const UcxConnection *conn, const iomsg_t *msg,
                          uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
             std::stringstream err_log_str;
@@ -954,10 +952,12 @@ protected:
 #ifndef NDEBUG
         if (conn->use_am() && (msg->op == IO_READ_COMP)) {
             assert(conn->id() == msg->conn_id);
-        } else {
+        } else if (conn->use_am()) {
             assert((conn->remote_id() == 0) ||
                    (conn->remote_id() == msg->conn_id));
             conn->set_remote_id(msg->conn_id);
+        } else {
+            assert(conn->remote_id() == msg->conn_id);
         }
 #endif
     }
@@ -1287,6 +1287,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
+            handle_io_msg(msg, conn);
             validate(conn, msg, length);
         }
 
@@ -1312,6 +1313,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
+            handle_io_msg(msg, conn);
             validate(conn, msg, length);
         }
 
@@ -1510,6 +1512,7 @@ public:
                     // in place to avoid unneeded memory copy to this
                     // IoReadResponseCallback _buffer.
                     iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
+                    handle_io_msg(msg, server_info.conn);
                     validate(server_info.conn, msg, _sn, _buffer_size);
                 }
             }
@@ -1788,6 +1791,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
+            handle_io_msg(msg, conn);
             validate(conn, msg, opts().iomsg_size);
         }
 
@@ -1819,6 +1823,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
+            handle_io_msg(msg, conn);
             validate(conn, msg, opts().iomsg_size);
         }
 
