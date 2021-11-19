@@ -88,12 +88,16 @@ static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_inde
 
 static inline size_t ucp_ep_get_max_bcopy(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    return ucp_ep_get_iface_attr(ep, lane)->cap.am.max_bcopy;
+    size_t max_bcopy = ucp_ep_get_iface_attr(ep, lane)->cap.am.max_bcopy;
+
+    return ucs_min(ucp_ep_config(ep)->key.lanes[lane].seg_size, max_bcopy);
 }
 
 static inline size_t ucp_ep_get_max_zcopy(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    return ucp_ep_get_iface_attr(ep, lane)->cap.am.max_zcopy;
+    size_t max_zcopy = ucp_ep_get_iface_attr(ep, lane)->cap.am.max_zcopy;
+
+    return ucs_min(ucp_ep_config(ep)->key.lanes[lane].seg_size, max_zcopy);
 }
 
 static inline size_t ucp_ep_get_max_iov(ucp_ep_h ep, ucp_lane_index_t lane)

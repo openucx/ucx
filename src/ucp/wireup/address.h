@@ -13,6 +13,10 @@
 #include <ucs/sys/math.h>
 
 
+/* Multiplicator of ucp_address_v2_packed_iface_attr_t->seg_size value */
+#define UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR 64
+
+
 /* Which iface flags would be packed in the address */
 enum {
     UCP_ADDRESS_IFACE_FLAGS =
@@ -250,5 +254,15 @@ uint64_t ucp_address_get_client_id(const void *address);
  *         0 if address has all lanes information.
  */
 uint8_t ucp_address_is_am_only(const void *address);
+
+
+/**
+ * Returns maximal AM fragment size which can be received by the iface.
+ *
+ * @param [in] iface_attr Interface attributes.
+ *
+ * @return Maximal AM fragment size.
+ */
+size_t ucp_address_iface_seg_size(const uct_iface_attr_t *iface_attr);
 
 #endif

@@ -172,9 +172,6 @@ typedef struct {
                                                 packed after device address or
                                                 number of paths (if present) */
 
-/* Multiplicator of ucp_address_v2_packed_iface_attr_t->seg_size value */
-#define UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR 64
-
 /* Mask for iface and endpoint address length */
 #define UCP_ADDRESS_IFACE_LEN_MASK   (UCS_MASK(8) ^ \
                                       (UCP_ADDRESS_FLAG_HAS_EP_ADDR | \
@@ -189,10 +186,12 @@ typedef struct {
 #define UCP_ADDRESS_FLAG_MD_EMPTY_DEV 0x80u  /* Device without TL addresses */
 #define UCP_ADDRESS_FLAG_MD_ALLOC     0x40u  /* MD can register  */
 #define UCP_ADDRESS_FLAG_MD_REG       0x20u  /* MD can allocate */
-#define UCP_ADDRESS_FLAG_MD_MASK      (UCS_MASK(8) ^ \
+#define UCP_ADDRESS_FLAG_MD_MASK_V1   (UCS_MASK(8) ^ \
                                         (UCP_ADDRESS_FLAG_MD_EMPTY_DEV | \
                                          UCP_ADDRESS_FLAG_MD_ALLOC | \
                                          UCP_ADDRESS_FLAG_MD_REG))
+#define UCP_ADDRESS_FLAG_MD_MASK      (UCS_MASK(8) ^ \
+                                       UCP_ADDRESS_FLAG_MD_EMPTY_DEV)
 
 #define UCP_ADDRESS_HEADER_VERSION_MASK     UCS_MASK(4) /* Version - 4 bits */
 #define UCP_ADDRESS_HEADER_FLAGS_SHIFT_V1   4
@@ -403,14 +402,17 @@ ucp_address_packed_size(ucp_worker_h worker,
                         ucp_object_version_t addr_version)
 {
     size_t size = 0;
+    size_t md_mask;
     const ucp_address_packed_device_t *dev;
     ucp_md_index_t md_index;
 
     /* header: version and flags */
     if (addr_version == UCP_OBJECT_VERSION_V1) {
-        size += sizeof(uint8_t);
+        size   += sizeof(uint8_t);
+        md_mask = UCP_ADDRESS_FLAG_MD_MASK_V1;
     } else {
-        size += sizeof(uint16_t);
+        size   += sizeof(uint16_t);
+        md_mask = UCP_ADDRESS_FLAG_MD_MASK;
     }
 
     if (pack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
@@ -433,8 +435,7 @@ ucp_address_packed_size(ucp_worker_h worker,
             /* device md_index */
             md_index = worker->context->tl_rscs[dev->rsc_index].md_index;
             /* md index (+flags) can take 2 bytes with address version 2 */
-            size    += ucp_address_packed_value_size(md_index,
-                                                     UCP_ADDRESS_FLAG_MD_MASK,
+            size    += ucp_address_packed_value_size(md_index, md_mask,
                                                      addr_version);
             if (pack_flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) {
                 /* device address length */
@@ -506,27 +507,35 @@ ucp_address_unpack_byte_extended(const void *ptr, size_t value_mask,
     return (void*)ptr;
 }
 
+static size_t ucp_address_md_mask(ucp_object_version_t addr_version)
+{
+    return (addr_version == UCP_OBJECT_VERSION_V1) ?
+           UCP_ADDRESS_FLAG_MD_MASK_V1 : UCP_ADDRESS_FLAG_MD_MASK;
+}
+
 static void *
 ucp_address_pack_md_info(void *ptr, int is_empty_dev, uint64_t md_flags,
                          ucp_md_index_t md_index,
                          ucp_object_version_t addr_version)
 {
-    void *flags_ptr = ptr;
+    uint8_t *flags_ptr = ptr;
+    size_t mask        = ucp_address_md_mask(addr_version);
 
-    ptr = ucp_address_pack_byte_extended(ptr, md_index,
-                                         UCP_ADDRESS_FLAG_MD_MASK,
-                                         addr_version);
+    ptr = ucp_address_pack_byte_extended(ptr, md_index, mask, addr_version);
 
     if (is_empty_dev) {
-        *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_MD_EMPTY_DEV;
+        *flags_ptr |= UCP_ADDRESS_FLAG_MD_EMPTY_DEV;
     }
 
-    if (md_flags & UCT_MD_FLAG_ALLOC) {
-        *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_MD_ALLOC;
-    }
+    if (addr_version == UCP_OBJECT_VERSION_V1) {
+        /* Preserve wire protocol even though these flags are not used */
+        if (md_flags & UCT_MD_FLAG_ALLOC) {
+            *flags_ptr |= UCP_ADDRESS_FLAG_MD_ALLOC;
+        }
 
-    if (md_flags & UCT_MD_FLAG_REG) {
-        *(uint8_t*)flags_ptr |= UCP_ADDRESS_FLAG_MD_REG;
+        if (md_flags & UCT_MD_FLAG_REG) {
+            *flags_ptr |= UCP_ADDRESS_FLAG_MD_REG;
+        }
     }
 
     return ptr;
@@ -538,11 +547,12 @@ static void *ucp_address_unpack_md_info(const void *ptr,
                                         int *empty_dev)
 {
     uint8_t md_byte = *(uint8_t*)ptr;
+    size_t mask;
 
     *empty_dev = md_byte & UCP_ADDRESS_FLAG_MD_EMPTY_DEV;
+    mask       = ucp_address_md_mask(addr_version);
 
-    return ucp_address_unpack_byte_extended(ptr, UCP_ADDRESS_FLAG_MD_MASK,
-                                            addr_version, md_index);
+    return ucp_address_unpack_byte_extended(ptr, mask, addr_version, md_index);
 }
 
 static uint32_t ucp_address_pack_flags(uint64_t input_flags,
@@ -669,37 +679,49 @@ ucp_address_pack_iface_attr_v1(ucp_worker_h worker, void *ptr,
     return sizeof(*packed);
 }
 
+size_t ucp_address_iface_seg_size(const uct_iface_attr_t *iface_attr)
+{
+    /* To be replaced by iface_attr.cap.am.max_recv when it is added to the
+     * UCT API */
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+        return iface_attr->cap.am.max_bcopy;
+    } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+       return iface_attr->cap.am.max_zcopy;
+    } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+        return iface_attr->cap.am.max_short;
+    } else {
+        return 0ul;
+    }
+}
+
 static unsigned
 ucp_address_pack_iface_attr_v2(ucp_worker_h worker, void *ptr,
                                const uct_iface_attr_t *iface_attr,
                                unsigned atomic_flags)
 {
-    unsigned seg_size                          = 0;
     ucp_address_v2_packed_iface_attr_t *packed = ptr;
     uint64_t addr_iface_flags;
+    double latency_nsec, overhead_nsec;
+    size_t seg_size;
 
-    packed->overhead  = UCS_FP8_PACK(OVERHEAD, iface_attr->overhead);
+    latency_nsec  = ucp_tl_iface_latency(worker->context, &iface_attr->latency) *
+                    UCS_NSEC_PER_SEC;
+    overhead_nsec = iface_attr->overhead * UCS_NSEC_PER_SEC;
+
+    packed->overhead  = UCS_FP8_PACK(OVERHEAD, overhead_nsec);
     packed->bandwidth = UCS_FP8_PACK(BANDWIDTH,
                                      ucp_tl_iface_bandwidth(worker->context,
                                      &iface_attr->bandwidth));
-    packed->latency   = UCS_FP8_PACK(LATENCY,
-                                     ucp_tl_iface_latency(worker->context,
-                                                          &iface_attr->latency));
+    packed->latency   = UCS_FP8_PACK(LATENCY, latency_nsec);
     packed->prio      = ucs_min(UINT8_MAX, iface_attr->priority);
     addr_iface_flags  = ucp_address_flags_from_iface_flags(
                             iface_attr->cap.flags, iface_attr->cap.event_flags);
     packed->flags     = (uint16_t)(addr_iface_flags | atomic_flags);
+    seg_size          = ucp_address_iface_seg_size(iface_attr) /
+                        UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR;
+    packed->seg_size  = (uint16_t)seg_size;
 
-    /* To be replaced by iface_attr.cap.am.max_recv when it is added to the
-     * UCT API */
-    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
-        seg_size = iface_attr->cap.am.max_bcopy;
-    } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
-        seg_size = iface_attr->cap.am.max_zcopy;
-    } else if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
-        seg_size = iface_attr->cap.am.max_short;
-    }
-    packed->seg_size = seg_size / UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR;
+    ucs_assertv(seg_size <= UINT16_MAX, "seg_size %zu", seg_size);
 
     return sizeof(*packed);
 }
@@ -869,7 +891,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
                                        &wiface->attr.bandwidth);
         iface_attr->dst_rsc_index = rsc_idx;
         iface_attr->seg_size      = wiface->attr.cap.am.max_bcopy;
-        iface_attr->addr_version  = UCP_OBJECT_VERSION_V1;
+        iface_attr->addr_version  = addr_version;
 
         if (signbit(unified->lat_ovh)) {
             iface_attr->atomic.atomic32.op_flags  = wiface->attr.cap.atomic32.op_flags;
