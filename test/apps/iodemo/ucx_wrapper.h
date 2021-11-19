@@ -316,6 +316,10 @@ public:
         _remote_conn_id = remote_conn_id;
     }
 
+    bool use_am() const {
+        return _use_am;
+    }
+
     ucs_status_t ucx_status() const {
         return _ucx_status;
     }

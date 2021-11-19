@@ -900,7 +900,7 @@ protected:
         abort();
     }
 
-    static void validate(const UcxConnection *conn, const BufferIov& iov,
+    static void validate(UcxConnection *conn, const BufferIov& iov,
                          unsigned seed, uint64_t conn_id, io_op_t op) {
         std::stringstream err_str;
 
@@ -916,12 +916,14 @@ protected:
         }
     }
 
-    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+    static void validate(UcxConnection *conn, const iomsg_t *msg,
                          size_t iomsg_size) {
         unsigned seed   = msg->sn;
         const void *buf = msg + 1;
         size_t buf_size = iomsg_size - sizeof(*msg);
         std::stringstream err_str;
+
+        handle_io_msg(msg, conn);
 
         size_t err_pos = IoDemoRandom::validate(seed, msg->conn_id, buf,
                                                 buf_size, UCS_MEMORY_TYPE_HOST,
@@ -935,7 +937,7 @@ protected:
         }
     }
 
-    static void validate(const UcxConnection *conn, const iomsg_t *msg,
+    static void validate(UcxConnection *conn, const iomsg_t *msg,
                          uint32_t sn, size_t iomsg_size) {
         if (sn != msg->sn) {
             std::stringstream err_log_str;
@@ -948,9 +950,9 @@ protected:
         validate(conn, msg, iomsg_size);
     }
 
-    inline void handle_io_msg(const iomsg_t *msg, UcxConnection *conn) {
+    static inline void handle_io_msg(const iomsg_t *msg, UcxConnection *conn) {
 #ifndef NDEBUG
-        if (opts().use_am && (msg->op == IO_READ_COMP)) {
+        if (conn->use_am() && (msg->op == IO_READ_COMP)) {
             assert(conn->id() == msg->conn_id);
         } else {
             assert((conn->remote_id() == 0) ||
@@ -1287,7 +1289,6 @@ public:
             assert(length == opts().iomsg_size);
             validate(conn, msg, length);
         }
-        handle_io_msg(msg, conn);
 
         if (msg->op == IO_READ) {
             handle_io_read_request(conn, msg);
@@ -1313,7 +1314,6 @@ public:
             assert(length == opts().iomsg_size);
             validate(conn, msg, length);
         }
-        handle_io_msg(msg, conn);
 
         if (msg->op == IO_READ) {
             handle_io_am_read_request(conn, msg);
@@ -1790,7 +1790,6 @@ public:
             assert(length == opts().iomsg_size);
             validate(conn, msg, opts().iomsg_size);
         }
-        handle_io_msg(msg, conn);
 
         if (msg->op >= IO_COMP_MIN) {
             assert(msg->op == IO_WRITE_COMP);
@@ -1822,7 +1821,6 @@ public:
             assert(length == opts().iomsg_size);
             validate(conn, msg, opts().iomsg_size);
         }
-        handle_io_msg(msg, conn);
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
         if (msg->op == IO_WRITE_COMP) {
