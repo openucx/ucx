@@ -1902,4 +1902,4 @@ uct_component_t uct_ib_component = {
     .flags              = 0,
     .md_vfs_init        = uct_ib_md_vfs_init
 };
-UCT_COMPONENT_REGISTER(&uct_ib_component);
+UCT_COMPONENT_REGISTER(ib, &uct_ib_component);

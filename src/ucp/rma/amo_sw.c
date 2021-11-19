@@ -422,7 +422,7 @@ static ucp_proto_t ucp_get_amo_post_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_amo_sw_progress_post}
 };
-UCP_PROTO_REGISTER(&ucp_get_amo_post_proto);
+UCP_PROTO_REGISTER(get_amo_post, &ucp_get_amo_post_proto);
 
 static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
 {
@@ -449,4 +449,4 @@ static ucp_proto_t ucp_get_amo_fetch_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_amo_sw_progress_fetch}
 };
-UCP_PROTO_REGISTER(&ucp_get_amo_fetch_proto);
+UCP_PROTO_REGISTER(get_amo_fetch, &ucp_get_amo_fetch_proto);

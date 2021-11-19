@@ -202,7 +202,7 @@ static ucp_proto_t ucp_amo_proto_##_id = { \
     .progress   = {ucp_amo_progress_##_id} \
 }; \
 \
-UCP_PROTO_REGISTER(&ucp_amo_proto_##_id)
+UCP_PROTO_REGISTER(amo_##_id, &ucp_amo_proto_##_id)
 
 #define UCP_PROTO_AMO_REGISTER_MTYPE(_id, _op_id, _bits) \
     UCP_PROTO_AMO_REGISTER(_id,         _op_id, _bits, UCT_EP_OP_LAST,      offload) \

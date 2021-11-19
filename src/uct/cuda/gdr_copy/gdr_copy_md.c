@@ -459,5 +459,5 @@ uct_component_t uct_gdr_copy_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_gdr_copy_component);
+UCT_COMPONENT_REGISTER(gdr_copy, &uct_gdr_copy_component);
 

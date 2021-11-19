@@ -86,7 +86,7 @@ static ucp_proto_t ucp_put_offload_short_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_put_offload_short_progress}
 };
-UCP_PROTO_REGISTER(&ucp_put_offload_short_proto);
+UCP_PROTO_REGISTER(put_offload_short, &ucp_put_offload_short_proto);
 
 static size_t ucp_proto_put_offload_bcopy_pack(void *dest, void *arg)
 {
@@ -180,7 +180,7 @@ static ucp_proto_t ucp_put_offload_bcopy_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_put_offload_bcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_put_offload_bcopy_proto);
+UCP_PROTO_REGISTER(put_offload_bcopy, &ucp_put_offload_bcopy_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
@@ -258,4 +258,4 @@ static ucp_proto_t ucp_put_offload_zcopy_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_put_offload_zcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_put_offload_zcopy_proto);
+UCP_PROTO_REGISTER(put_offload_zcopy, &ucp_put_offload_zcopy_proto);

@@ -660,7 +660,7 @@ ucs_status_t ucm_test_external_events(int events)
     return ucm_mmap_test_events(events & ucm_external_events, "external");
 }
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP(ucm_library) {
     UCS_CLEANUP_ONCE(&ucm_library_init_once) {
         kh_destroy_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
         pthread_spin_destroy(&ucm_kh_lock);

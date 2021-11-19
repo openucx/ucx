@@ -211,8 +211,8 @@ struct ucp_proto {
 /**
  * Register a protocol definition.
  */
-#define UCP_PROTO_REGISTER(_proto) \
-    UCS_STATIC_INIT { \
+#define UCP_PROTO_REGISTER(_id, _proto) \
+    UCS_STATIC_INIT(proto_##_id) { \
         ucs_assert_always(ucp_protocols_count < UCP_PROTO_MAX_COUNT); \
         ucp_protocols[ucp_protocols_count++] = (_proto); \
     }

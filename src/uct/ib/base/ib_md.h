@@ -359,7 +359,7 @@ typedef struct uct_ib_md_ops_entry {
 
 #define UCT_IB_MD_OPS(_md_ops, _priority) \
     extern ucs_list_link_t uct_ib_md_ops_list; \
-    UCS_STATIC_INIT { \
+    UCS_STATIC_INIT(_md_ops) { \
         static uct_ib_md_ops_entry_t *p, entry = { \
             .name     = UCS_PP_MAKE_STRING(_md_ops), \
             .ops      = &_md_ops, \

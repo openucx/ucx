@@ -109,12 +109,12 @@ typedef struct ucs_config_bw_spec {
     }
 
 
-#define UCS_CONFIG_REGISTER_TABLE_ENTRY(_entry, _list) \
-    UCS_STATIC_INIT { \
+#define UCS_CONFIG_REGISTER_TABLE_ENTRY(_id, _entry, _list) \
+    UCS_STATIC_INIT(_id) { \
         ucs_list_add_tail(_list, &(_entry)->list); \
     } \
     \
-    UCS_STATIC_CLEANUP { \
+    UCS_STATIC_CLEANUP(_id) { \
         ucs_list_del(&(_entry)->list); \
     }
 
@@ -125,7 +125,7 @@ typedef struct ucs_config_bw_spec {
         .prefix = _prefix, \
         .size   = sizeof(_type) \
     }; \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry, _list);
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(_table, &_table##_config_entry, _list);
 
 extern ucs_list_link_t ucs_config_global_list;
 

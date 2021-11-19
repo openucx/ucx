@@ -79,7 +79,7 @@ static ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_eager_tag_offload_short_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_tag_offload_short_proto);
+UCP_PROTO_REGISTER(eager_tag_offload_short, &ucp_eager_tag_offload_short_proto);
 
 static size_t ucp_eager_tag_offload_pack(void *dest, void *arg)
 {
@@ -169,7 +169,7 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_eager_tag_offload_bcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
+UCP_PROTO_REGISTER(eager_bcopy_single, &ucp_eager_bcopy_single_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_sync_tag_offload_bcopy_posted(ucp_request_t *req)
@@ -206,7 +206,7 @@ static ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_eager_sync_tag_offload_bcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_single_proto);
+UCP_PROTO_REGISTER(eager_sync_bcopy_single, &ucp_eager_sync_bcopy_single_proto);
 
 static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
         const ucp_proto_init_params_t *init_params, ucp_proto_id_t op_id)
@@ -279,7 +279,7 @@ static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_eager_tag_offload_zcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);
+UCP_PROTO_REGISTER(eager_zcopy_single, &ucp_eager_zcopy_single_proto);
 
 static ucs_status_t ucp_proto_eager_sync_tag_offload_zcopy_init(
         const ucp_proto_init_params_t *init_params)
@@ -335,4 +335,4 @@ static ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_proto_eager_sync_tag_offload_zcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_sync_zcopy_single_proto);
+UCP_PROTO_REGISTER(eager_sync_zcopy_single, &ucp_eager_sync_zcopy_single_proto);

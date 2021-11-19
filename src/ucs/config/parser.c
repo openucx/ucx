@@ -1977,7 +1977,7 @@ int ucs_config_names_search(const ucs_config_names_array_t *config_names,
     return -1;
 }
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP(parser) {
     const char *key;
     char *value;
 

@@ -345,12 +345,12 @@ static ucm_event_installer_t ucm_cuda_initializer = {
     .get_existing_alloc = ucm_cudamem_get_existing_alloc
 };
 
-UCS_STATIC_INIT
+UCS_STATIC_INIT(cudamem)
 {
     ucs_list_add_tail(&ucm_event_installer_list, &ucm_cuda_initializer.list);
 }
 
-UCS_STATIC_CLEANUP
+UCS_STATIC_CLEANUP(cudamem)
 {
     ucs_list_del(&ucm_cuda_initializer.list);
 }

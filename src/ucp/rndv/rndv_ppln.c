@@ -267,7 +267,7 @@ static ucp_proto_t ucp_rndv_send_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_send_ppln_atp_progress,
     },
 };
-UCP_PROTO_REGISTER(&ucp_rndv_send_ppln_proto);
+UCP_PROTO_REGISTER(rndv_send_ppln, &ucp_rndv_send_ppln_proto);
 
 static ucs_status_t
 ucp_proto_rndv_recv_ppln_init(const ucp_proto_init_params_t *init_params)
@@ -301,4 +301,4 @@ static ucp_proto_t ucp_rndv_recv_ppln_proto = {
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_recv_ppln_ats_progress,
     },
 };
-UCP_PROTO_REGISTER(&ucp_rndv_recv_ppln_proto);
+UCP_PROTO_REGISTER(rndv_recv_ppln, &ucp_rndv_recv_ppln_proto);

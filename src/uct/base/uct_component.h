@@ -170,13 +170,15 @@ struct uct_component {
  *
  * @param [in] _component  Pointer to a global component structure to register.
  */
-#define UCT_COMPONENT_REGISTER(_component) \
+#define UCT_COMPONENT_REGISTER(_id, _component) \
     extern ucs_list_link_t uct_components_list; \
-    UCS_STATIC_INIT { \
+    UCS_STATIC_INIT(_id) { \
         ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config, &ucs_config_global_list); \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config, &ucs_config_global_list);
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(component_##_id##_md_config, \
+                                    &(_component)->md_config, &ucs_config_global_list); \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(component_##_id##_cm_config, \
+                                    &(_component)->cm_config, &ucs_config_global_list);
 
 
 /**

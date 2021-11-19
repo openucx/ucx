@@ -119,7 +119,7 @@ static ucs_config_field_t ucm_global_config_table[] = {
 UCS_CONFIG_REGISTER_TABLE(ucm_global_config_table, "UCM", UCM_CONFIG_PREFIX,
                           ucm_global_config_t, &ucs_config_global_list)
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(ucm_opts) {
     ucm_global_config_t ucm_opts;
     (void)ucs_config_parser_fill_opts(&ucm_opts, ucm_global_config_table,
                                       UCS_DEFAULT_ENV_PREFIX, UCM_CONFIG_PREFIX,

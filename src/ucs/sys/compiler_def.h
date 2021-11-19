@@ -194,14 +194,14 @@
 /*
  * Define code which runs at global constructor phase
  */
-#define UCS_STATIC_INIT \
-    static void UCS_F_CTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_ctor)()
+#define UCS_STATIC_INIT(_id) \
+    static void UCS_F_CTOR UCS_PP_TOKENPASTE3(ucs_initializer_, _id, _ctor)()
 
 /*
  * Define code which runs at global destructor phase
  */
-#define UCS_STATIC_CLEANUP \
-    static void UCS_F_DTOR UCS_PP_APPEND_UNIQUE_ID(ucs_initializer_dtor)()
+#define UCS_STATIC_CLEANUP(_id) \
+    static void UCS_F_DTOR UCS_PP_TOKENPASTE3(ucs_initializer_, _id, _dtor)()
 
 /*
  * Check if the two types are the same

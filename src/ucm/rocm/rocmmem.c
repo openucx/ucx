@@ -185,10 +185,10 @@ static ucm_event_installer_t ucm_rocm_initializer = {
     .get_existing_alloc = ucm_rocmmem_get_existing_alloc
 };
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(rockmem) {
     ucs_list_add_tail(&ucm_event_installer_list, &ucm_rocm_initializer.list);
 }
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP(rockmem) {
     ucs_list_del(&ucm_rocm_initializer.list);
 }

@@ -76,12 +76,12 @@ static ucs_config_field_t uct_xpmem_iface_config_table[] = {
   {NULL}
 };
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(xpmem) {
     ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
     kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
 }
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP(xpmem) {
     unsigned long num_leaked_segments;
     uct_xpmem_remote_mem_t *rmem;
 

@@ -427,4 +427,4 @@ uct_component_t uct_knem_component = {
     .flags              = 0,
     .md_vfs_init        = uct_knem_md_vfs_init
 };
-UCT_COMPONENT_REGISTER(&uct_knem_component);
+UCT_COMPONENT_REGISTER(knem, &uct_knem_component);

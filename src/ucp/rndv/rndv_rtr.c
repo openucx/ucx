@@ -233,7 +233,7 @@ static ucp_proto_t ucp_rndv_rtr_proto = {
     .config_str = ucp_proto_rndv_ctrl_config_str,
     .progress   = {ucp_proto_rndv_rtr_progress}
 };
-UCP_PROTO_REGISTER(&ucp_rndv_rtr_proto);
+UCP_PROTO_REGISTER(rndv_rtr, &ucp_rndv_rtr_proto);
 
 
 static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
@@ -371,7 +371,7 @@ static ucp_proto_t ucp_rndv_rtr_mtype_proto = {
     .config_str = ucp_proto_rndv_ctrl_config_str,
     .progress   = {ucp_proto_rndv_rtr_mtype_progress}
 };
-UCP_PROTO_REGISTER(&ucp_rndv_rtr_mtype_proto);
+UCP_PROTO_REGISTER(rndv_rtr_mtype, &ucp_rndv_rtr_mtype_proto);
 
 ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
                                            unsigned flags)

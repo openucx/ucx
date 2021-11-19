@@ -142,7 +142,7 @@ static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
     return dst;
 }
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(cuda_alloc) {
     static ucx_perf_allocator_t cuda_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_CUDA,
         .init      = ucx_perf_cuda_init,
@@ -163,7 +163,7 @@ UCS_STATIC_INIT {
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA]         = &cuda_allocator;
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] = &cuda_managed_allocator;
 }
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP(cuda_alloc) {
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA]         = NULL;
     ucx_perf_mem_type_allocators[UCS_MEMORY_TYPE_CUDA_MANAGED] = NULL;
 

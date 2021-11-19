@@ -422,7 +422,7 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
  * UCS_STATIC_CLEANUP in global_opts.c could happen after execution of
  * UCS_STATIC_CLEANUP of vfs_obj.c file.
  */
-UCS_STATIC_INIT
+UCS_STATIC_INIT(global_opts)
 {
     ucs_vfs_obj_add_dir(NULL, &ucs_global_opts, "ucs/global_opts");
     ucs_vfs_obj_add_rw_file(&ucs_global_opts, ucs_vfs_read_log_level,

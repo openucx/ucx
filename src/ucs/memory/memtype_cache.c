@@ -398,11 +398,11 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
     pthread_rwlock_destroy(&self->lock);
 }
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(memory_cache) {
     ucs_spinlock_init(&ucs_memtype_cache_global_instance_lock, 0);
 }
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP(memory_cache) {
     ucs_spinlock_destroy(&ucs_memtype_cache_global_instance_lock);
 
     if (ucs_memtype_cache_global_instance) {

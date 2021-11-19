@@ -110,5 +110,5 @@ static ucp_proto_t ucp_put_am_bcopy_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_put_am_bcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_put_am_bcopy_proto);
+UCP_PROTO_REGISTER(put_am_bcopy, &ucp_put_am_bcopy_proto);
 

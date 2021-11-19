@@ -151,7 +151,7 @@ static ucp_proto_t ucp_rndv_get_zcopy_proto = {
          [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     }
 };
-UCP_PROTO_REGISTER(&ucp_rndv_get_zcopy_proto);
+UCP_PROTO_REGISTER(rndv_get_zcopy, &ucp_rndv_get_zcopy_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
@@ -248,7 +248,7 @@ static ucp_proto_t ucp_rndv_get_mtype_proto = {
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress,
     }
 };
-UCP_PROTO_REGISTER(&ucp_rndv_get_mtype_proto);
+UCP_PROTO_REGISTER(rndv_get_mtype, &ucp_rndv_get_mtype_proto);
 
 
 static ucs_status_t
@@ -300,4 +300,4 @@ static ucp_proto_t ucp_rndv_ats_proto = {
     .config_str = ucp_proto_rndv_ack_config_str,
     .progress   = {ucp_proto_rndv_ats_progress}
 };
-UCP_PROTO_REGISTER(&ucp_rndv_ats_proto);
+UCP_PROTO_REGISTER(rndv_ats, &ucp_rndv_ats_proto);

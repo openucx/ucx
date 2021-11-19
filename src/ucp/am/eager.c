@@ -107,7 +107,7 @@ static ucp_proto_t ucp_eager_short_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_eager_short_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_short_proto);
+UCP_PROTO_REGISTER(eager_short, &ucp_eager_short_proto);
 
 static UCS_F_ALWAYS_INLINE void
 ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
@@ -214,4 +214,4 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .config_str = ucp_proto_single_config_str,
     .progress   = {ucp_eager_bcopy_single_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
+UCP_PROTO_REGISTER(eager_bcopy_single, &ucp_eager_bcopy_single_proto);

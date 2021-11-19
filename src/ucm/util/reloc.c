@@ -750,6 +750,6 @@ out_unlock:
     return status;
 }
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(reloc) {
     kh_init_inplace(ucm_dl_info_hash, &ucm_dl_info_hash);
 }

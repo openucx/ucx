@@ -169,7 +169,7 @@ static ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_eager_bcopy_multi_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_bcopy_multi_proto);
+UCP_PROTO_REGISTER(eager_bcopy_multi, &ucp_eager_bcopy_multi_proto);
 
 static ucs_status_t
 ucp_proto_eager_sync_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
@@ -244,7 +244,7 @@ static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_eager_sync_bcopy_multi_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_multi_proto);
+UCP_PROTO_REGISTER(eager_sync_bcopy_multi, &ucp_eager_sync_bcopy_multi_proto);
 
 static ucs_status_t
 ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
@@ -325,4 +325,4 @@ static ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_eager_zcopy_multi_progress}
 };
-UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);
+UCP_PROTO_REGISTER(eager_zcopy_multi, &ucp_eager_zcopy_multi_proto);

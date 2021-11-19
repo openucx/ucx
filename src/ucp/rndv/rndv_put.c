@@ -387,7 +387,7 @@ static ucp_proto_t ucp_rndv_put_zcopy_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
 };
-UCP_PROTO_REGISTER(&ucp_rndv_put_zcopy_proto);
+UCP_PROTO_REGISTER(rndv_put_zcopy, &ucp_rndv_put_zcopy_proto);
 
 
 static void ucp_proto_rndv_put_mtype_pack_completion(uct_completion_t *uct_comp)
@@ -512,4 +512,4 @@ static ucp_proto_t ucp_rndv_put_mtype_proto = {
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
 };
-UCP_PROTO_REGISTER(&ucp_rndv_put_mtype_proto);
+UCP_PROTO_REGISTER(rndv_put_mtype, &ucp_rndv_put_mtype_proto);

@@ -523,7 +523,7 @@ static void ucs_vfs_fuse_atfork_child()
     ucs_vfs_fuse_context.watch_desc = -1;
 }
 
-UCS_STATIC_INIT
+UCS_STATIC_INIT(vfs_fuse)
 {
     if (ucs_global_opts.vfs_enable) {
         pthread_atfork(NULL, NULL, ucs_vfs_fuse_atfork_child);
@@ -532,7 +532,7 @@ UCS_STATIC_INIT
     }
 }
 
-UCS_STATIC_CLEANUP
+UCS_STATIC_CLEANUP(vfs_fuse)
 {
     if (ucs_vfs_fuse_context.thread_id != -1) {
         ucs_fuse_thread_stop();

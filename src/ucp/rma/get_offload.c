@@ -111,7 +111,7 @@ static ucp_proto_t ucp_get_offload_bcopy_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_get_offload_bcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_get_offload_bcopy_proto);
+UCP_PROTO_REGISTER(get_offload_bcopy, &ucp_get_offload_bcopy_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
@@ -189,4 +189,4 @@ static ucp_proto_t ucp_get_offload_zcopy_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_get_offload_zcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_get_offload_zcopy_proto);
+UCP_PROTO_REGISTER(get_offload_zcopy, &ucp_get_offload_zcopy_proto);

@@ -8,6 +8,6 @@
 
 extern int test_module_loaded;
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(test_module) {
     ++test_module_loaded;
 }

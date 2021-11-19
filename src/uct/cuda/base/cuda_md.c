@@ -296,11 +296,11 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                            num_resources_p);
 }
 
-UCS_STATIC_INIT {
+UCS_STATIC_INIT(cuda_md) {
     ucs_spinlock_init(&uct_cuda_base_lock, 0);
 }
 
-UCS_STATIC_CLEANUP {
+UCS_STATIC_CLEANUP(cuda_md) {
     ucs_spinlock_destroy(&uct_cuda_base_lock);
 }
 

@@ -332,7 +332,7 @@ typedef struct ucp_tl_iface_atomic_flags {
  * Define UCP active message handler.
  */
 #define UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags) \
-    UCS_STATIC_INIT { \
+    UCS_STATIC_INIT(_cb) { \
         ucp_am_handlers[_id].features = _features; \
         ucp_am_handlers[_id].cb       = _cb; \
         ucp_am_handlers[_id].tracer   = _tracer; \
@@ -355,7 +355,7 @@ typedef struct ucp_tl_iface_atomic_flags {
         return ucp_am_handlers[_id].cb(wiface->worker, data, length, flags); \
     } \
     \
-    UCS_STATIC_INIT { \
+    UCS_STATIC_INIT(PROXY_##_id) { \
         ucp_am_handlers[_id].proxy_cb = ucp_am_##_id##_counting_proxy; \
     }
 

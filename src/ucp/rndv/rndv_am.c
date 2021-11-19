@@ -123,4 +123,4 @@ static ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .config_str = ucp_proto_multi_config_str,
     .progress   = {ucp_proto_rndv_am_bcopy_progress}
 };
-UCP_PROTO_REGISTER(&ucp_rndv_am_bcopy_proto);
+UCP_PROTO_REGISTER(rndv_am_bcopy, &ucp_rndv_am_bcopy_proto);

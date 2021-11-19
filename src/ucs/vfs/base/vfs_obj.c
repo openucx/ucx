@@ -816,7 +816,7 @@ out_unlock:
     return status;
 }
 
-UCS_STATIC_CLEANUP
+UCS_STATIC_CLEANUP(ucs_vfs)
 {
     UCS_CLEANUP_ONCE(&ucs_vfs_init_once) {
         ucs_vfs_node_remove_children(&ucs_vfs_obj_context.root);

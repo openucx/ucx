@@ -155,4 +155,4 @@ static ucp_proto_t ucp_tag_rndv_proto = {
     .config_str = ucp_proto_rndv_ctrl_config_str,
     .progress   = {ucp_tag_rndv_rts_progress}
 };
-UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);
+UCP_PROTO_REGISTER(tag_rndv, &ucp_tag_rndv_proto);

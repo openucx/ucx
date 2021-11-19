@@ -386,8 +386,10 @@ typedef struct uct_iface_local_addr_ns {
             .size           = sizeof(_cfg_struct), \
          } \
     }; \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(uct_##_name##_tl).config, &ucs_config_global_list); \
-    UCS_STATIC_INIT { \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(component_##_name, \
+                                    &(uct_##_name##_tl).config, \
+                                    &ucs_config_global_list); \
+    UCS_STATIC_INIT(tl_##_name) { \
         ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
     }
 
