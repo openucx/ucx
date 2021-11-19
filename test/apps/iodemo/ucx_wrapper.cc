@@ -1053,7 +1053,7 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 
 void UcxConnection::connect_tag(UcxCallback *callback)
 {
-    static const ucp_datatype_t dt = ucp_dt_make_contig(sizeof(uint64_t));
+    const ucp_datatype_t dt = ucp_dt_make_contig(sizeof(uint64_t));
     size_t recv_len;
 
     // receive remote connection id
