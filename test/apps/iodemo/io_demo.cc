@@ -923,11 +923,6 @@ protected:
         size_t buf_size = iomsg_size - sizeof(*msg);
         std::stringstream err_str;
 
-        if (msg->op == IO_WRITE) {
-            assert(msg->conn_id == conn->remote_id());
-        } else {
-            assert(msg->conn_id == conn->id());
-        }
         size_t err_pos = IoDemoRandom::validate(seed, msg->conn_id, buf,
                                                 buf_size, UCS_MEMORY_TYPE_HOST,
                                                 err_str);
@@ -951,6 +946,18 @@ protected:
         }
 
         validate(conn, msg, iomsg_size);
+    }
+
+    inline void handle_io_msg(const iomsg_t *msg, UcxConnection *conn) {
+#ifndef NDEBUG
+        if (opts().use_am && (msg->op == IO_READ_COMP)) {
+            assert(conn->id() == msg->conn_id);
+        } else {
+            assert((conn->remote_id() == 0) ||
+                   (conn->remote_id() == msg->conn_id));
+            conn->set_remote_id(msg->conn_id);
+        }
+#endif
     }
 
 private:
@@ -1167,7 +1174,6 @@ public:
         // send data
         VERBOSE_LOG << "sending IO read data";
         assert(opts().max_data_size >= msg->data_size);
-        assert(msg->conn_id == conn->remote_id());
 
         BufferIov *iov            = _data_buffers_pool.get();
         SendCompleteCallback *cb  = _send_callback_pool.get();
@@ -1189,7 +1195,6 @@ public:
     void handle_io_am_read_request(UcxConnection* conn, const iomsg_t *msg) {
         VERBOSE_LOG << "sending AM IO read data";
         assert(opts().max_data_size >= msg->data_size);
-        assert(msg->conn_id == conn->remote_id());
 
         IoMessage *m = _io_msg_pool.get();
         m->init(IO_READ_COMP, msg->sn, msg->conn_id, msg->data_size,
@@ -1214,7 +1219,6 @@ public:
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
         VERBOSE_LOG << "receiving IO write data";
         assert(msg->data_size != 0);
-        assert(msg->conn_id == conn->remote_id());
 
         BufferIov *iov             = _data_buffers_pool.get();
         IoWriteResponseCallback *w = _callback_pool.get();
@@ -1284,6 +1288,7 @@ public:
             assert(length == opts().iomsg_size);
             validate(conn, msg, length);
         }
+        handle_io_msg(msg, conn);
 
         if (msg->op == IO_READ) {
             handle_io_read_request(conn, msg);
@@ -1303,18 +1308,13 @@ public:
                     << msg->sn << " data size " << msg->data_size
                     << " conn " << conn;  
 
-#ifndef NDEBUG
-        if (conn->remote_id() == std::numeric_limits<uint64_t>::max()) {
-            conn->set_remote_id(msg->conn_id);
-        }
-#endif
-
         assert(conn->ucx_status() == UCS_OK);
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
             validate(conn, msg, length);
         }
+        handle_io_msg(msg, conn);
 
         if (msg->op == IO_READ) {
             handle_io_am_read_request(conn, msg);
@@ -1787,6 +1787,12 @@ public:
 
         assert(conn->ucx_status() == UCS_OK);
 
+        if (opts().validate) {
+            assert(length == opts().iomsg_size);
+            validate(conn, msg, opts().iomsg_size);
+        }
+        handle_io_msg(msg, conn);
+
         if (msg->op >= IO_COMP_MIN) {
             assert(msg->op == IO_WRITE_COMP);
 
@@ -1817,6 +1823,7 @@ public:
             assert(length == opts().iomsg_size);
             validate(conn, msg, opts().iomsg_size);
         }
+        handle_io_msg(msg, conn);
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
         if (msg->op == IO_WRITE_COMP) {

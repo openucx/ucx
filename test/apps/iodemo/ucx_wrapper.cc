@@ -754,7 +754,7 @@ UcxConnection::UcxConnection(UcxContext &context, bool use_am) :
     _establish_cb(NULL),
     _disconnect_cb(NULL),
     _conn_id(context.get_next_conn_id()),
-    _remote_conn_id(std::numeric_limits<uint64_t>::max()),
+    _remote_conn_id(0),
     _ep(NULL),
     _close_request(NULL),
     _ucx_status(UCS_INPROGRESS),
@@ -1053,11 +1053,11 @@ void UcxConnection::set_log_prefix(const struct sockaddr* saddr,
 
 void UcxConnection::connect_tag(UcxCallback *callback)
 {
-    const ucp_datatype_t dt = ucp_dt_make_contig(sizeof(uint64_t));
+    const ucp_datatype_t dt_int = ucp_dt_make_contig(sizeof(uint32_t));
     size_t recv_len;
 
     // receive remote connection id
-    void *rreq = ucp_stream_recv_nb(_ep, &_remote_conn_id, 1, dt,
+    void *rreq = ucp_stream_recv_nb(_ep, &_remote_conn_id, 1, dt_int,
                                     stream_recv_callback, &recv_len,
                                     UCP_STREAM_RECV_FLAG_WAITALL);
     if (UCS_PTR_IS_PTR(rreq)) {
@@ -1076,7 +1076,7 @@ void UcxConnection::connect_tag(UcxCallback *callback)
     }
 
     // send local connection id
-    void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt,
+    void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
                                     common_request_callback, 0);
     // we do not have to check the status here, in case if the endpoint is
     // failed we should handle it in ep_params.err_handler.cb set above
@@ -1132,9 +1132,7 @@ void UcxConnection::established(ucs_status_t status)
     _ucx_status = status;
 
     if (!_use_am && (status == UCS_OK)) {
-        /* Connection ID must be lower than maximal 32-bit value to be packed
-         * to TAG */
-        assert(_remote_conn_id <= std::numeric_limits<uint32_t>::max());
+        assert(_remote_conn_id != 0);
 
         ep_attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
                              UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
