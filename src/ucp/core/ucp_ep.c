@@ -1199,6 +1199,14 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
 
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* Avoid calling ucp_ep_discard_lanes_callback() that will purge UCP
+         * endpoint's requests, if we already started discard and purge process
+         * this endpoint. Doing so could complete send requests before UCT lanes
+         * using them are flushed and destroyed. */
+        return;
+    }
+
     discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
     if (discard_arg == NULL) {
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
