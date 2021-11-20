@@ -8,9 +8,7 @@
 
 SUBDIRS = profiling
 
-if HAVE_GLIBCXX_NOTHROW
 SUBDIRS += iodemo
-endif
 
 if HAVE_CXX11
 SUBDIRS += sockaddr
