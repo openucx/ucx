@@ -8,6 +8,7 @@ libuct_sisci_la_CPPFLAGS = $(BASE_CPPFLAGS)
 libuct_sisci_la_CFLAGS   = $(BASE_CFLAGS) $(INCLUDE)
 libuct_sisci_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
                         $(top_builddir)/src/uct/libuct.la
+libuct_sisci_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 
 
 noinst_HEADERS = \

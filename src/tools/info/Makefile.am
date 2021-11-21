@@ -5,6 +5,10 @@
 # See file LICENSE for terms.
 #
 
+DIS_HOME = /opt/DIS
+INCLUDE  = -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
+
+
 bin_PROGRAMS = ucx_info
 
 BUILT_SOURCES  = build_config.h
@@ -17,7 +21,7 @@ build_config.h: $(top_builddir)/config.h Makefile
 	$(SED) -nr 's:\s*#define\s+(\w+)(\s+(\w+)|\s+(".*")|\s*)$$:{"\1", UCS_PP_MAKE_STRING(\3\4)},:p' <$(top_builddir)/config.h >$@
 
 ucx_info_CPPFLAGS  = $(BASE_CPPFLAGS)
-ucx_info_CFLAGS    = $(BASE_CFLAGS)
+ucx_info_CFLAGS    = $(BASE_CFLAGS) $(INCLUDE)
 if HAVE_IB
 ucx_info_CPPFLAGS += $(IBVERBS_CPPFLAGS)
 endif

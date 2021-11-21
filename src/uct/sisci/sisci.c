@@ -22,7 +22,9 @@ static ucs_config_field_t uct_sisci_md_config_table[] = {
     NULL
 };
 
-
+void sisci_testing() {
+    printf("Linking is correct to some degree :) \n");
+}
 
 //various "class" funcitons, don't really know how they work yet, but seems to be some sort of glue code. 
 //also known as "macro hell"
@@ -34,7 +36,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    printf("UCS_CLASS_INIT_FUNC\n");
+    printf("UCS_SISCI_CLASS_INIT_FUNC\n");
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sisci_iface_ops,
             &uct_base_iface_internal_ops, md, worker, params,
@@ -66,7 +68,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //uct_self_iface_t *iface = ucs_derived_of(params->iface, uct_self_iface_t);
 
     //UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
-    
+
 
     return UCS_ERR_NOT_IMPLEMENTED;
 }
@@ -94,7 +96,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
 {
 
     printf("UCT_SISCI_QUERY_DEVICES\n");
-    return UCS_ERR_NOT_IMPLEMENTED;
+    return UCS_OK;
 }
 
 
@@ -318,7 +320,7 @@ uct_component_t uct_sisci_component = {
     .name               = UCT_SISCI_NAME, //change me
     .md_config          = {
         .name           = "Self memory domain",
-        .prefix         = "SELF_",
+        .prefix         = "SISCI_",
         .table          = uct_sisci_md_config_table,
         .size           = sizeof(uct_sisci_md_config_t),
     },
@@ -331,9 +333,7 @@ UCT_COMPONENT_REGISTER(&uct_sisci_component)
 
 //the operations that we should support or something : )
 static uct_iface_ops_t uct_sisci_iface_ops = {
-    
-
-    
+     
 
     .ep_put_short             = uct_sisci_ep_put_short,     // bap
     .ep_put_bcopy             = uct_sisci_ep_put_bcopy,     // bap
