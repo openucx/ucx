@@ -142,6 +142,9 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
 
+    uct_sisci_md_config_t *md_config = ucs_derived_of(config,
+                                                     uct_sisci_md_config_t);
+
     static uct_md_ops_t md_ops = {
         .close              = ucs_empty_function,
         .query              = uct_sisci_md_query,
@@ -157,7 +160,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
 
     md.super.ops       = &md_ops;
     md.super.component = &uct_sisci_component;
-    md.num_devices     = config->num_devices;
+    md.num_devices     = md_config->num_devices;
 
     *md_p = &md.super;
 
