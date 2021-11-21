@@ -1,5 +1,5 @@
 DIS_HOME = /opt/DIS
-INCLUDE  = -I$(PWD)/.. -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include -I$(CU_HOME)/include
+INCLUDE  = -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
 
 module_LTLIBRARIES    = libuct_sisci.la
 
