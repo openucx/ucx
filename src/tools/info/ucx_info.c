@@ -84,7 +84,6 @@ int main(int argc, char **argv)
     char *tl_name, *mem_size;
     const char *f;
     int c;
-    sisci_testing();
 
     print_opts               = 0;
     print_flags              = (ucs_config_print_flags_t)0;
