@@ -100,38 +100,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
 }
 
 
-static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md_name,
-                                     const uct_md_config_t *config, uct_md_h *md_p)
-{
 
-    static uct_md_ops_t md_ops = {
-        .close              = ucs_empty_function,
-        .query              = uct_sisci_md_query,
-        .mkey_pack          = ucs_empty_function_return_success,
-        .mem_reg            = uct_sisci_mem_reg,
-        .mem_dereg          = uct_sisci_mem_dereg,
-        .detect_memory_type = ucs_empty_function_return_unsupported
-    };
-
-    //create sisci memory domain struct
-    //TODO, make it not full of poo poo
-    static uct_sisci_md_t md;
-
-    md.super.ops       = &md_ops;
-    md.super.component = &uct_sisci_component;
-    md.num_devices     = md_config->num_devices;
-
-    *md_p = &md.super;
-
-    //uct_md_h = sisci_md;
-
-    //md_name = "sisci";
-
-
-
-    printf("UCT_SISCI_MD_OPEN\n");
-    return UCS_OK;
-}
 
 static ucs_status_t uct_sisci_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
@@ -168,6 +137,40 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
 
     return UCS_OK;
 }
+
+static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md_name,
+                                     const uct_md_config_t *config, uct_md_h *md_p)
+{
+
+    static uct_md_ops_t md_ops = {
+        .close              = ucs_empty_function,
+        .query              = uct_sisci_md_query,
+        .mkey_pack          = ucs_empty_function_return_success,
+        .mem_reg            = uct_sisci_mem_reg,
+        .mem_dereg          = uct_sisci_mem_dereg,
+        .detect_memory_type = ucs_empty_function_return_unsupported
+    };
+
+    //create sisci memory domain struct
+    //TODO, make it not full of poo poo
+    static uct_sisci_md_t md;
+
+    md.super.ops       = &md_ops;
+    md.super.component = &uct_sisci_component;
+    md.num_devices     = md_config->num_devices;
+
+    *md_p = &md.super;
+
+    //uct_md_h = sisci_md;
+
+    //md_name = "sisci";
+
+
+
+    printf("UCT_SISCI_MD_OPEN\n");
+    return UCS_OK;
+}
+
 
 ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
