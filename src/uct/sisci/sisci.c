@@ -68,7 +68,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
     
 
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 UCS_CLASS_DEFINE(uct_sisci_ep_t, uct_base_ep_t);
@@ -83,7 +83,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
                                               unsigned int *num_resources_p)
 {
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 
 }
 
@@ -94,7 +94,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
 {
 
     printf("UCT_SISCI_QUERY_DEVICES\n");
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 
@@ -105,12 +105,18 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
 
     //create sisci memory domain struct
     //TODO, make it not full of poo poo
-    static uct_sisci_md sisci_md = {
+    static uct_sisci_md_t sisci_md = {
         num_devices = 1;
         segment_id = 0;
         localAdapterNo = 0;
         segment_size = 1024;
     };
+
+    uct_md_h = sisci_md;
+
+    md_name = "sisci"
+
+
 
     printf("UCT_SISCI_MD_OPEN\n");
     return UCS_OK;
@@ -121,14 +127,14 @@ ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  uct_rkey_t rkey)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ssize_t uct_sisci_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                             void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,
@@ -137,21 +143,21 @@ ucs_status_t uct_sisci_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack
                                  uct_completion_t *comp)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t value,
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t value,
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
@@ -160,7 +166,7 @@ ucs_status_t uct_sisci_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
@@ -169,7 +175,7 @@ ucs_status_t uct_sisci_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
@@ -178,7 +184,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
@@ -187,7 +193,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 //from sm self.c
@@ -196,14 +202,14 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sisci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
                                       const uct_iov_t *iov, size_t iovcnt)
 {
     //TODO
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
@@ -232,12 +238,12 @@ static ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
     //TODO
     //const uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
     //*(uct_self_iface_addr_t*)addr = iface->id;
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
-    return UCS_NOT_IMPLEMENTED;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 
