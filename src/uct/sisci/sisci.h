@@ -11,6 +11,8 @@
 typedef uint64_t uct_sisci_iface_addr_t;
 
 
+void sisci_testing();
+
 typedef struct uct_sisci_iface_config {
     uct_iface_config_t    super;
     size_t                seg_size;      /* Maximal send size */

@@ -22,7 +22,9 @@ static ucs_config_field_t uct_sisci_md_config_table[] = {
     NULL
 };
 
-
+void sisci_testing() {
+    printf("Linking is correct to some degree :) \n");
+}
 
 //various "class" funcitons, don't really know how they work yet, but seems to be some sort of glue code. 
 //also known as "macro hell"
