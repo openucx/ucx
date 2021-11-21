@@ -107,9 +107,9 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     //TODO, make it not full of poo poo
     static uct_sisci_md_t sisci_md;
 
-    uct_md_h = sisci_md;
+    //uct_md_h = sisci_md;
 
-    md_name = "sisci"
+    //md_name = "sisci";
 
 
 
