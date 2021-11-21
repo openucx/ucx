@@ -301,30 +301,28 @@ const std::string UcxContext::sockaddr_str(const struct sockaddr* saddr,
                                            size_t addrlen)
 {
     char buf[128];
-    int port;
+    uint16_t port;
 
     if (saddr->sa_family != AF_INET) {
         return "<unknown address family>";
     }
 
-    struct sockaddr_storage addr = {0};
-    memcpy(&addr, saddr, addrlen);
-    switch (addr.ss_family) {
+    switch (saddr->sa_family) {
     case AF_INET:
-        inet_ntop(AF_INET, &((struct sockaddr_in*)&addr)->sin_addr,
+        inet_ntop(AF_INET, &((const struct sockaddr_in*)saddr)->sin_addr,
                   buf, sizeof(buf));
-        port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+        port = ntohs(((const struct sockaddr_in*)saddr)->sin_port);
         break;
     case AF_INET6:
-        inet_ntop(AF_INET6, &((struct sockaddr_in6*)&addr)->sin6_addr,
+        inet_ntop(AF_INET6, &((const struct sockaddr_in6*)saddr)->sin6_addr,
                   buf, sizeof(buf));
-        port = ntohs(((struct sockaddr_in6*)&addr)->sin6_port);
+        port = ntohs(((const struct sockaddr_in6*)saddr)->sin6_port);
         break;
     default:
         return "<invalid address>";
     }
 
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%d", port);
+    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%u", port);
     return buf;
 }
 
