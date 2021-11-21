@@ -2104,6 +2104,9 @@ protected:
         bool err_handling_test = send_stop || recv_stop;
         unsigned num_iters     = err_handling_test ? 1 : m_num_iters;
 
+        // do small send-recv to check reachability of peers
+        send_recv(sender(), receiver(), SEND_RECV_TAG, false, cb_type());
+
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < num_iters; i++) {
@@ -2180,6 +2183,9 @@ protected:
 
     void test_stream_send_recv(size_t size, bool is_exp)
     {
+        // do small send-recv to check reachability of peers
+        send_recv(sender(), receiver(), SEND_RECV_STREAM, false, cb_type());
+
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < m_num_iters; i++) {
