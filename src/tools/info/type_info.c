@@ -27,7 +27,7 @@
 #include <uct/base/uct_iface.h>
 #include <uct/sm/self/self.h>
 #include <uct/tcp/tcp.h>
-#include <uct/sisci/sisci.h>
+//#include <uct/sisci/sisci.h>
 #include <ucp/core/ucp_context.h>
 #include <ucp/core/ucp_ep.h>
 #include <ucp/core/ucp_mm.h>
