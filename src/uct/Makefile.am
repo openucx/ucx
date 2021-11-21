@@ -50,9 +50,9 @@ noinst_HEADERS = \
 	tcp/tcp_sockcm.h \
 	tcp/tcp_listener.h \
 	tcp/tcp_sockcm_ep.h \
-	sisci.h \
-	sisci_ep.h \
-	sisci_iface.h
+	sisci/sisci.h \
+	sisci/sisci_ep.h \
+	sisci/sisci_iface.h
 
 
 libuct_la_SOURCES = \
@@ -84,8 +84,8 @@ libuct_la_SOURCES = \
 	tcp/tcp_sockcm.c \
 	tcp/tcp_listener.c \
 	tcp/tcp_sockcm_ep.c \
-	sisci_ep.c \
-	sisci_iface.c \
-	sisci_md.c \
-	sisci.c
+	sisci/sisci_ep.c \
+	sisci/sisci_iface.c \
+	sisci/sisci_md.c \
+	sisci/sisci.c
 
