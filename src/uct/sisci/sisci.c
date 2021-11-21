@@ -295,8 +295,9 @@ static ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
-static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
+static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
+    printf("UCT_sisci_iface_query\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -367,7 +368,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_progress_disable   = ucs_empty_function,
     .iface_progress           = ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped
-    .iface_query              = uct_self_iface_query,       //
+    .iface_query              = uct_sisci_iface_query,       //
     .iface_get_device_address = ucs_empty_function_return_success,
     .iface_get_address        = uct_sisci_iface_get_address, //
     .iface_is_reachable       = uct_sisci_iface_is_reachable //
