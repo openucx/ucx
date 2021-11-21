@@ -1,7 +1,8 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
-
+#include <sisci_error.h>
+#include <sisci_api.h>
 
 #define UCT_SISCI_NAME "sisci"
 #define UCT_SISCI_CONFIG_PREFIX "SISCI_"
