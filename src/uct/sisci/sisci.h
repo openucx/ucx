@@ -22,6 +22,16 @@ typedef struct uct_sisci_iface_config {
 typedef struct uct_sisci_md {
     uct_md_t super;
     size_t   num_devices; /* Number of devices to create */
+
+    unsigned int segment_id;
+    size_t segment_size;
+    unsigned int localAdapterNo;
+
+    sci_desc_t sisci_virtual_device;
+    sci_local_segment_t local_segment;
+
+    
+
 } uct_sisci_md_t;
 
 
@@ -31,6 +41,8 @@ typedef struct uct_sisci_md {
 typedef struct uct_sisci_md_config {
     uct_md_config_t super;
     size_t          num_devices; /* Number of devices to create */
+    size_t          segment_size;
+    size_t          segment_id;
 } uct_sisci_md_config_t;
 
 

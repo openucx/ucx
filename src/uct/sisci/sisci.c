@@ -271,10 +271,10 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_progress_disable   = ucs_empty_function,
     .iface_progress           = ucs_empty_function_return_zero,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped
-    .iface_query              = uct_self_iface_query,
+    .iface_query              = uct_self_iface_query,       //
     .iface_get_device_address = ucs_empty_function_return_success,
-    .iface_get_address        = uct_self_iface_get_address,
-    .iface_is_reachable       = uct_self_iface_is_reachable
+    .iface_get_address        = uct_self_iface_get_address, //
+    .iface_is_reachable       = uct_self_iface_is_reachable //
 };
 
 
