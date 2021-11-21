@@ -59,7 +59,8 @@ public:
 
     typedef enum {
         SEND_RECV_TAG,
-        SEND_RECV_STREAM
+        SEND_RECV_STREAM,
+        SEND_RECV_AM
     } send_recv_type_t;
 
     ucs::sock_addr_storage m_test_addr;
@@ -388,6 +389,9 @@ public:
         } else if (send_type == SEND_RECV_STREAM) {
             return ucp_stream_send_nbx(from.ep(), contig_buffer, length,
                                        &params);
+        } else if (send_type == SEND_RECV_AM) {
+            return ucp_am_send_nbx(from.ep(), 0, NULL, 0, contig_buffer,
+                                   length, &params);
         }
 
         UCS_TEST_ABORT("unsupported communication type " << send_type);
@@ -434,16 +438,61 @@ public:
                                    &recv_length, &params);
     }
 
+    struct rx_am_msg_arg_t {
+        bool received;
+        void *hdr;
+        void *buf;
+
+        rx_am_msg_arg_t(void *_hdr, void *_buf) :
+                received(false), hdr(_hdr), buf(_buf) { }
+    };
+
+    static ucs_status_t rx_am_msg_cb(void *arg, const void *header,
+                                     size_t header_length, void *data,
+                                     size_t length,
+                                     const ucp_am_recv_param_t *param)
+    {
+        volatile rx_am_msg_arg_t *rx_arg =
+                reinterpret_cast<volatile rx_am_msg_arg_t*>(arg);
+        EXPECT_FALSE(rx_arg->received);
+
+        memcpy(rx_arg->hdr, header, header_length);
+        memcpy(rx_arg->buf, data, length);
+
+        rx_arg->received = true;
+        return UCS_OK;
+    }
+
+    void set_am_data_handler(entity &e, uint16_t am_id,
+                             ucp_am_recv_callback_t cb, void *arg)
+    {
+        ucp_am_handler_param_t param;
+
+        /* Initialize Active Message data handler */
+        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_CB |
+                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
+        param.id         = am_id;
+        param.cb         = cb;
+        param.arg        = arg;
+        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
+    }
+
     void send_recv(entity& from, entity& to, send_recv_type_t send_recv_type,
                    bool wakeup, ucp_test_base::entity::listen_cb_type_t cb_type)
     {
         const uint64_t send_data = ucs_generate_uuid(0);
+        uint64_t recv_data       = 0;
+        rx_am_msg_arg_t am_rx_arg(NULL, &recv_data);
         ucs_status_t send_status;
+
+        if (send_recv_type == SEND_RECV_AM) {
+            set_am_data_handler(to, 0, rx_am_msg_cb, &am_rx_arg);
+        }
 
         void *send_req = send(from, &send_data, sizeof(send_data),
                               send_recv_type, scomplete_cbx, NULL);
 
-        uint64_t recv_data = 0;
         void *recv_req;
         if (send_recv_type == SEND_RECV_TAG) {
             recv_req = recv(to, &recv_data, sizeof(recv_data),
@@ -451,7 +500,7 @@ public:
         } else if (send_recv_type == SEND_RECV_STREAM) {
             recv_req = recv(to, &recv_data, sizeof(recv_data),
                             rstream_complete_cbx, NULL);
-        } else {
+        } else if (send_recv_type != SEND_RECV_AM) {
             UCS_TEST_ABORT("unsupported communication type " +
                            std::to_string(send_recv_type));
         }
@@ -465,7 +514,12 @@ public:
             }
         }
 
-        request_wait(recv_req, 0, wakeup);
+        if (send_recv_type == SEND_RECV_AM) {
+            wait_for_flag(&am_rx_arg.received);
+            set_am_data_handler(to, 0, NULL, NULL);
+        } else {
+            request_wait(recv_req, 0, wakeup);
+        }
         EXPECT_EQ(send_data, recv_data);
     }
 
@@ -2248,6 +2302,9 @@ protected:
 
     void test_rma(size_t size, rma_nb_func_t rma_func)
     {
+        // do small AM send-recv to check reachability of peers
+        send_recv(sender(), receiver(), SEND_RECV_AM, false, cb_type());
+
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < m_num_iters; i++) {
@@ -2278,53 +2335,33 @@ protected:
 
     void test_am_send_recv(size_t size, size_t hdr_size = 0ul)
     {
+        // do small send-recv to check reachability of peers
+        send_recv(sender(), receiver(), SEND_RECV_AM, false, cb_type());
+
         /* send multiple messages to test the protocol both before and after
          * connection establishment */
         for (int i = 0; i < m_num_iters; i++) {
             std::string sb(size, 'x');
-            std::string hdr(hdr_size, 'x');
+            std::string rb(size, 'y');
+            std::string shdr(hdr_size, 'x');
+            std::string rhdr(hdr_size, 'x');
 
-            bool am_received = false;
-
-            set_am_data_handler(receiver(), 0, rx_am_msg_cb, &am_received);
+            rx_am_msg_arg_t arg(&rhdr[0], &rb[0]);
+            set_am_data_handler(receiver(), 0, rx_am_msg_cb, &arg);
 
             ucp_request_param_t param = {};
             ucs_status_ptr_t sreq     = ucp_am_send_nbx(sender().ep(), 0,
-                                                        &hdr[0], hdr_size,
+                                                        &shdr[0], hdr_size,
                                                         &sb[0], size, &param);
             request_wait(sreq);
-            wait_for_flag(&am_received);
-            EXPECT_TRUE(am_received);
+            wait_for_flag(&arg.received);
+            EXPECT_TRUE(arg.received);
+
+            compare_buffers(sb, rb);
+            compare_buffers(shdr, rhdr);
 
             set_am_data_handler(receiver(), 0, NULL, NULL);
         }
-    }
-
-private:
-    static ucs_status_t rx_am_msg_cb(void *arg, const void *header,
-                                     size_t header_length, void *data,
-                                     size_t length,
-                                     const ucp_am_recv_param_t *param)
-    {
-        volatile bool *am_rx = reinterpret_cast<volatile bool*>(arg);
-        EXPECT_FALSE(*am_rx);
-        *am_rx = true;
-        return UCS_OK;
-    }
-
-    void set_am_data_handler(entity &e, uint16_t am_id,
-                             ucp_am_recv_callback_t cb, void *arg)
-    {
-        ucp_am_handler_param_t param;
-
-        /* Initialize Active Message data handler */
-        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
-                           UCP_AM_HANDLER_PARAM_FIELD_CB |
-                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
-        param.id         = am_id;
-        param.cb         = cb;
-        param.arg        = arg;
-        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
     }
 
 protected:
