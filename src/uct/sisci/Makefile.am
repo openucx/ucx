@@ -11,12 +11,12 @@ libuct_sisci_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 
 
 noinst_HEADERS = \
-	sisci/sisci.h \
-	sisci/sisci_ep.h \
-	sisci/sisci_iface.h
+	sisci.h \
+	sisci_ep.h \
+	sisci_iface.h
 
 libuct_sisci_la_SOURCES =  \
-	sisci/sisci_ep.c \
-	sisci/sisci_iface.c \
-	sisci/sisci_md.c \
-	sisci/sisci.c
+	sisci_ep.c \
+	sisci_iface.c \
+	sisci_md.c \
+	sisci.c
