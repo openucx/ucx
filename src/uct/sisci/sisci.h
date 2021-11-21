@@ -29,9 +29,7 @@ typedef struct uct_sisci_md {
 
     sci_desc_t sisci_virtual_device;
     sci_local_segment_t local_segment;
-
     
-
 } uct_sisci_md_t;
 
 

@@ -80,7 +80,7 @@ UCS_CLASS_DEFINE_DELETE_FUNC(uct_sisci_ep_t, uct_ep_t);
 
 static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
                                               uct_md_resource_desc_t **resources_p,
-                                            uct_sisci_ep_put_short  unsigned *num_resources_p)
+                                              unsigned int *num_resources_p)
 {
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     return UCS_OK;
@@ -105,7 +105,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     return UCS_OK;
 }
 
-ucs_status uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
+ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
                                  uct_rkey_t rkey)
 {
@@ -120,7 +120,7 @@ ssize_t uct_sisci_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
     return UCS_OK;
 }
 
-ucs_status_t uct_sm_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,
+ucs_status_t uct_sisci_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_cb,
                                  void *arg, size_t length,
                                  uint64_t remote_addr, uct_rkey_t rkey,
                                  uct_completion_t *comp)
@@ -203,6 +203,33 @@ ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     return 0;
 }
 
+static int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
+                                       const uct_device_addr_t *dev_addr,
+                                       const uct_iface_addr_t *iface_addr)
+{
+    //TODO
+    //const uct_self_iface_t     *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
+    //const uct_self_iface_addr_t *addr = (const uct_self_iface_addr_t*)iface_addr;
+
+    //return (addr != NULL) && (iface->id == *addr);
+    return 0;
+}
+
+static ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
+                                               uct_iface_addr_t *addr)
+{
+    //TODO
+    //const uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
+    //*(uct_self_iface_addr_t*)addr = iface->id;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
+{
+    return UCS_OK;
+}
+
+
 static ucs_status_t uct_sisci_md_rkey_unpack(uct_component_t *component,
                                             const void *rkey_buffer, uct_rkey_t *rkey_p,
                                             void **handle_p)
@@ -264,7 +291,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .ep_pending_add           = ucs_empty_function_return_busy,
     .ep_pending_purge         = ucs_empty_function,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_sisci_ep_t),            //bapped
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_susci_ep_t),         
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_ep_t),         
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
     .iface_progress_enable    = ucs_empty_function,
@@ -273,8 +300,8 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped
     .iface_query              = uct_self_iface_query,       //
     .iface_get_device_address = ucs_empty_function_return_success,
-    .iface_get_address        = uct_self_iface_get_address, //
-    .iface_is_reachable       = uct_self_iface_is_reachable //
+    .iface_get_address        = uct_sisci_iface_get_address, //
+    .iface_is_reachable       = uct_sisci_iface_is_reachable //
 };
 
 
