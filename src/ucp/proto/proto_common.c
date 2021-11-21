@@ -129,13 +129,17 @@ size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
     return *(const size_t*)UCS_PTR_BYTE_OFFSET(iface_attr, field_offset);
 }
 
-size_t
-ucp_proto_common_get_max_frag(const ucp_proto_common_init_params_t *params,
-                              const uct_iface_attr_t *iface_attr)
+static void
+ucp_proto_common_get_frag_size(const ucp_proto_common_init_params_t *params,
+                               const uct_iface_attr_t *iface_attr,
+                               size_t *min_frag_p, size_t *max_frag_p)
 {
-    return ucp_proto_common_get_iface_attr_field(iface_attr,
-                                                 params->max_frag_offs,
-                                                 params->max_length);
+    *min_frag_p = ucp_proto_common_get_iface_attr_field(iface_attr,
+                                                        params->min_frag_offs,
+                                                        0);
+    *max_frag_p = ucp_proto_common_get_iface_attr_field(iface_attr,
+                                                        params->max_frag_offs,
+                                                        SIZE_MAX);
 }
 
 static void ucp_proto_common_update_lane_perf_by_distance(
@@ -177,7 +181,6 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 {
     ucp_worker_h worker        = params->super.worker;
     ucp_context_h context      = worker->context;
-    const size_t hdr_size      = params->hdr_size;
     ucp_rsc_index_t rsc_index  = ucp_proto_common_get_rsc_index(&params->super,
                                                                 lane);
     ucp_worker_iface_t *wiface = ucp_worker_iface(worker, rsc_index);
@@ -187,15 +190,8 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     uct_perf_attr_t perf_attr;
     ucs_status_t status;
 
-    tl_min_frag = ucp_proto_common_get_iface_attr_field(&wiface->attr,
-                                                        params->min_frag_offs,
-                                                        0);
-    tl_max_frag = ucp_proto_common_get_iface_attr_field(&wiface->attr,
-                                                        params->max_frag_offs,
-                                                        SIZE_MAX);
-
-    ucs_assertv(tl_max_frag >= hdr_size, "tl_max_frag=%zu max_hdr_size=%zu",
-                tl_max_frag, hdr_size);
+    ucp_proto_common_get_frag_size(params, &wiface->attr, &tl_min_frag,
+                                   &tl_max_frag);
 
     status = ucp_proto_common_lane_perf_attr(&params->super, lane,
             params->send_op, UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
@@ -216,9 +212,7 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                params->latency;
     perf->sys_latency        = 0;
     perf->min_length         = ucs_max(params->min_length, tl_min_frag);
-    perf->max_frag           = ucs_min(tl_max_frag - hdr_size,
-                                       params->max_length) +
-                               hdr_size; /* Avoid overflow if max_length ~ SIZE_MAX */
+    perf->max_frag           = tl_max_frag;
 
     /* For zero copy send, consider local system topology distance */
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
@@ -242,8 +236,8 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
     ucs_assert(perf->send_pre_overhead >= 0);
     ucs_assert(perf->send_post_overhead >= 0);
     ucs_assert(perf->recv_overhead >= 0);
-    ucs_assert(perf->max_frag > 0);
-    ucs_assert(perf->max_frag >= hdr_size);
+    ucs_assertv(perf->max_frag >= params->hdr_size, "max_frag=%zu hdr_size=%zu",
+                perf->max_frag, params->hdr_size);
     ucs_assert(perf->sys_latency >= 0);
 
     return UCS_OK;
@@ -442,7 +436,7 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
 {
     ucp_lane_index_t lane_index, lane, num_lanes, num_valid_lanes;
     const uct_iface_attr_t *iface_attr;
-    size_t frag_size;
+    size_t tl_min_frag, tl_max_frag;
 
     num_lanes = ucp_proto_common_find_lanes_internal(&params->super,
                                                      params->memtype_op,
@@ -454,11 +448,22 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
         lane       = lanes[lane_index];
         iface_attr = ucp_proto_common_get_iface_attr(&params->super, lane);
-        frag_size  = ucp_proto_common_get_max_frag(params, iface_attr);
-        /* Max fragment size should be larger than header size */
-        if (frag_size <= params->hdr_size) {
+
+        ucp_proto_common_get_frag_size(params, iface_attr, &tl_min_frag,
+                                       &tl_max_frag);
+
+        /* Minimal fragment size must be 0, unless 'MIN_FRAG' flag is set */
+        if (!(params->flags & UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG) &&
+            (tl_min_frag > 0)) {
+            ucs_trace("lane[%d]: minimal fragment %zu is not 0", lane,
+                      tl_min_frag);
+            continue;
+        }
+
+        /* Maximal fragment size should be larger than header size */
+        if (tl_max_frag <= params->hdr_size) {
             ucs_trace("lane[%d]: max fragment is too small %zu, need > %zu",
-                      lane, frag_size, params->hdr_size);
+                      lane, tl_max_frag, params->hdr_size);
             continue;
         }
 
@@ -905,6 +910,29 @@ void ucp_proto_request_select_error(ucp_request_t *req,
               req, ep, ucp_ep_peer_name(ep),
               ucs_string_buffer_cstr(&sel_param_strb), msg_length,
               ucs_string_buffer_cstr(&proto_select_strb));
+}
+
+void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
+                                                   size_t min_frag_diff,
+                                                   uct_iov_t *iov,
+                                                   size_t iovcnt,
+                                                   size_t *offset_p)
+{
+    if (ucs_likely(*offset_p > 0)) {
+        /* Move backward: the first IOV element would send additional
+           overlapping data before its start, to reach min_frag length */
+        ucs_assert(*offset_p >= min_frag_diff);
+        *offset_p -= min_frag_diff;
+
+        ucs_assert(iov[0].count == 1);
+        iov[0].buffer  = UCS_PTR_BYTE_OFFSET(iov[0].buffer, -min_frag_diff);
+        iov[0].length += min_frag_diff;
+    } else {
+        /* Move forward: the last IOV element would send additional overlapping
+           data after its end, to reach min_frag length */
+        ucs_assert(iov[iovcnt - 1].count == 1);
+        iov[iovcnt - 1].length += min_frag_diff;
+    }
 }
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)

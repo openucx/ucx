@@ -118,6 +118,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
     mpriv->lane_map     = lane_map;
     mpriv->num_lanes    = 0;
+    mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
     perf.max_frag       = SIZE_MAX;
     perf.min_length     = 0;
@@ -188,6 +189,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         perf.min_length = ucs_max(perf.min_length, min_length);
 
         weight_sum          += lpriv->weight;
+        mpriv->min_frag      = ucs_max(mpriv->min_frag, lane_perf->min_length);
         mpriv->max_frag_sum += lpriv->max_frag;
         lpriv->weight_sum    = weight_sum;
         lpriv->max_frag_sum  = mpriv->max_frag_sum;
