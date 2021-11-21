@@ -34,7 +34,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    printf("UCS_CLASS_INIT_FUNC\n");
+    printf("UCS_SISCI_CLASS_INIT_FUNC\n");
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sisci_iface_ops,
             &uct_base_iface_internal_ops, md, worker, params,
