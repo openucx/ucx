@@ -157,7 +157,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
 
     md.super.ops       = &md_ops;
     md.super.component = &uct_sisci_component;
-    md.num_devices     = md_config->num_devices;
+    md.num_devices     = config->num_devices;
 
     *md_p = &md.super;
 
