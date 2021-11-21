@@ -1,3 +1,3 @@
 
 
-AC_CONFIG_FILES([src/uct/rocm/Makefile])
+AC_CONFIG_FILES([src/uct/sisci/Makefile])
