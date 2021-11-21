@@ -317,7 +317,7 @@ static ucs_status_t uct_sisci_md_rkey_unpack(uct_component_t *component,
 /*
     TODO: Figure out what to change the commented lines to : )
 */
-uct_component_t uct_sisci_component = {
+static uct_component_t uct_sisci_component = {
     .query_md_resources = uct_sisci_query_md_resources, 
     .md_open            = uct_sisci_md_open,
     .cm_open            = ucs_empty_function_return_unsupported, //UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_t), //change me
