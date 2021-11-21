@@ -94,7 +94,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
 {
 
     printf("UCT_SISCI_QUERY_DEVICES\n");
-    return UCS_ERR_NOT_IMPLEMENTED;
+    return UCS_OK;
 }
 
 
@@ -268,7 +268,7 @@ uct_component_t uct_sisci_component = {
     .name               = UCT_SISCI_NAME, //change me
     .md_config          = {
         .name           = "Self memory domain",
-        .prefix         = "SELF_",
+        .prefix         = "SISCI_",
         .table          = uct_sisci_md_config_table,
         .size           = sizeof(uct_sisci_md_config_t),
     },
@@ -281,9 +281,7 @@ UCT_COMPONENT_REGISTER(&uct_sisci_component)
 
 //the operations that we should support or something : )
 static uct_iface_ops_t uct_sisci_iface_ops = {
-    
-
-    
+     
 
     .ep_put_short             = uct_sisci_ep_put_short,     // bap
     .ep_put_bcopy             = uct_sisci_ep_put_bcopy,     // bap
