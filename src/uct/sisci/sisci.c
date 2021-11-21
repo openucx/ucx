@@ -102,10 +102,24 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
 
+    static uct_md_ops_t md_ops = {
+        .close              = ucs_empty_function,
+        .query              = uct_sisci_md_query,
+        .mkey_pack          = ucs_empty_function_return_success,
+        .mem_reg            = uct_sisci_mem_reg,
+        .mem_dereg          = uct_sisci_mem_dereg,
+        .detect_memory_type = ucs_empty_function_return_unsupported
+    };
 
     //create sisci memory domain struct
     //TODO, make it not full of poo poo
-    //static uct_sisci_md_t sisci_md;
+    static uct_sisci_md_t md;
+
+    md.super.ops       = &md_ops;
+    md.super.component = &uct_sisci_component;
+    md.num_devices     = md_config->num_devices;
+
+    *md_p = &md.super;
 
     //uct_md_h = sisci_md;
 
@@ -114,6 +128,42 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
 
 
     printf("UCT_SISCI_MD_OPEN\n");
+    return UCS_OK;
+}
+
+static ucs_status_t uct_sisci_md_query(uct_md_h md, uct_md_attr_t *attr)
+{
+    /* Dummy memory registration provided. No real memory handling exists */
+    
+    
+    attr->cap.flags            = UCT_MD_FLAG_REG |
+                                 UCT_MD_FLAG_NEED_RKEY; // TODO ignore rkey in rma/amo ops 
+    attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->cap.detect_mem_types = 0;
+    attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->cap.max_alloc        = 0;
+    attr->cap.max_reg          = ULONG_MAX;
+    attr->rkey_packed_size     = 0;
+    attr->reg_cost             = ucs_linear_func_make(0, 0);
+    memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
+    return UCS_OK;
+}
+
+static ucs_status_t uct_sisci_mem_reg(uct_md_h md, void *address, size_t length,
+                                     unsigned flags, uct_mem_h *memh_p)
+{
+    /* We have to emulate memory registration. Return dummy pointer */
+    *memh_p = (void *) 0xdeadbeef;
+    return UCS_OK;
+}
+
+static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
+                                       const uct_md_mem_dereg_params_t *params)
+{
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+
+    ucs_assert(params->memh == (void*)0xdeadbeef);
+
     return UCS_OK;
 }
 
