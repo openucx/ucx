@@ -1261,6 +1261,8 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         return UCS_OK;
     }
 
+    ++ucp_ep->worker->counters.ep_failures;
+
     /* The EP can be closed from last completion callback */
     ucp_ep_discard_lanes(ucp_ep, status);
     ucp_stream_ep_cleanup(ucp_ep, status);
@@ -1528,6 +1530,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
             }
         }
     }
+
+    ++worker->counters.ep_closures;
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
