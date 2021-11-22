@@ -12,7 +12,7 @@
  - use small letters
  - avoid using '=': "device %s" instead of "device=%s" - to allow selecting the
    value using double-click from the terminal, and searching for it in text editors.
- - print flags using characters, for exaple:
+ - print flags using characters, for example:
     "%c%c", (flag1 ? '1' : '-'), (flag2 ? '2' : '-') 
     
 * Errors:
