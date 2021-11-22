@@ -378,8 +378,8 @@ private:
 
     void ep_close(enum ucp_ep_close_mode mode);
 
-    bool process_request(const char *what, ucs_status_ptr_t ptr_status,
-                         UcxCallback* callback);
+    bool process_request(const char *what, size_t length,
+                         ucs_status_ptr_t ptr_status, UcxCallback* callback);
 
     static void invoke_callback(UcxCallback *&cb, ucs_status_t status);
 
