@@ -493,14 +493,16 @@ public:
         void *send_req = send(from, &send_data, sizeof(send_data),
                               send_recv_type, scomplete_cbx, NULL);
 
-        void *recv_req;
+        void *recv_req = NULL;
         if (send_recv_type == SEND_RECV_TAG) {
             recv_req = recv(to, &recv_data, sizeof(recv_data),
                             rtag_complete_cbx, NULL);
         } else if (send_recv_type == SEND_RECV_STREAM) {
             recv_req = recv(to, &recv_data, sizeof(recv_data),
                             rstream_complete_cbx, NULL);
-        } else if (send_recv_type != SEND_RECV_AM) {
+        } else if (send_recv_type == SEND_RECV_AM) {
+            recv_req = NULL; // to suppress compiler warning
+        } else {
             UCS_TEST_ABORT("unsupported communication type " +
                            std::to_string(send_recv_type));
         }
