@@ -344,6 +344,10 @@ typedef struct ucp_worker {
         uint64_t                     ep_creations;
         /* Number of failed requests to create endpoint */
         uint64_t                     ep_creation_failures;
+        /* Number of endpoint closures */
+        uint64_t                     ep_closures;
+        /* Number of failed endpoints */
+        uint64_t                     ep_failures;
     } counters;
 } ucp_worker_t;
 
