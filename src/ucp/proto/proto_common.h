@@ -72,6 +72,9 @@ typedef enum {
 
     /* Requires rkey_ptr capable MD */
     UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR      = UCS_BIT(6),
+
+    /* Supports non-zero minimal fragment size */
+    UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG      = UCS_BIT(7),
 } ucp_proto_common_init_flags_t;
 
 
@@ -215,11 +218,6 @@ ucp_proto_common_get_iface_attr(const ucp_proto_init_params_t *params,
                                 ucp_lane_index_t lane);
 
 
-size_t
-ucp_proto_common_get_max_frag(const ucp_proto_common_init_params_t *params,
-                              const uct_iface_attr_t *iface_attr);
-
-
 size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
                                              ptrdiff_t field_offset,
                                              size_t dfl_value);
@@ -293,6 +291,14 @@ void ucp_proto_request_select_error(ucp_request_t *req,
                                     ucp_worker_cfg_index_t rkey_cfg_index,
                                     const ucp_proto_select_param_t *sel_param,
                                     size_t msg_length);
+
+
+void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
+                                                   size_t min_frag_diff,
+                                                   uct_iov_t *iov,
+                                                   size_t iovcnt,
+                                                   size_t *offset_p);
+
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 

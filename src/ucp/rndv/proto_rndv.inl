@@ -224,25 +224,45 @@ ucp_proto_rndv_bulk_max_payload(ucp_request_t *req,
                                 const ucp_proto_rndv_bulk_priv_t *rpriv,
                                 const ucp_proto_multi_lane_priv_t *lpriv)
 {
+    size_t total_offset = req->send.rndv.offset +
+                          req->send.state.dt_iter.offset;
     size_t total_length = ucp_proto_rndv_request_total_length(req);
     size_t max_frag_sum = rpriv->mpriv.max_frag_sum;
-    size_t offset, max_payload;
+    size_t lane_offset, max_payload, scaled_length;
 
-    offset = req->send.rndv.offset + req->send.state.dt_iter.offset;
     if (ucs_likely(total_length < max_frag_sum)) {
         /* Each lane sends less than its maximal fragment size */
-        max_payload = ucp_proto_multi_scaled_length(lpriv->weight_sum,
-                                                    total_length) -
-                      offset;
+        scaled_length = ucp_proto_multi_scaled_length(lpriv->weight_sum,
+                                                      total_length);
+
+        ucs_assertv(scaled_length >= total_offset,
+                    "req=%p scaled_length=%zu total_offset=%zu "
+                    "total_length=%zu weight_sum=%zu%% ",
+                    req, scaled_length, total_offset, total_length,
+                    ucp_proto_multi_scaled_length(lpriv->weight_sum, 100));
+
+        max_payload = scaled_length - total_offset;
     } else {
         /* Send in round-robin fashion, each lanes sends its maximal size */
-        max_payload = lpriv->max_frag_sum - (offset % max_frag_sum);
+        lane_offset = total_offset % max_frag_sum;
+        ucs_assertv(lpriv->max_frag_sum >= lane_offset,
+                    "req=%p lpriv->max_frag_sum=%zu lane_offset=%zu", req,
+                    lpriv->max_frag_sum, lane_offset);
+
+        max_payload = lpriv->max_frag_sum - lane_offset;
     }
 
-    ucp_trace_req(req, "offset %zu/%zu (start %zu/%zu): max_payload %zu",
+    ucp_trace_req(req,
+                  "offset %zu/%zu (start %zu/%zu) max_frag_sum %zu/%zu: "
+                  "max_payload %zu",
                   req->send.state.dt_iter.offset,
                   req->send.state.dt_iter.length, req->send.rndv.offset,
-                  total_length, max_payload);
+                  total_length, lpriv->max_frag_sum, max_frag_sum, max_payload);
+
+    /* Check that send length is not greater than maximal fragment size */
+    ucs_assertv(max_payload <= lpriv->max_frag,
+                "req=%p max_payload=%zu max_frag=%zu", req, max_payload,
+                lpriv->max_frag);
     return max_payload;
 }
 

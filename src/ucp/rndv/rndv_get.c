@@ -43,7 +43,8 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
         .super.memtype_op    = memtype_op,
         .super.flags         = flags | UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_REMOTE_ACCESS |
-                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
+                               UCP_PROTO_COMMON_INIT_FLAG_RESPONSE |
+                               UCP_PROTO_COMMON_INIT_FLAG_MIN_FRAG,
         .max_lanes           = context->config.ext.max_rndv_lanes,
         .initial_reg_md_map  = initial_reg_md_map,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_GET_ZCOPY,
@@ -69,15 +70,13 @@ ucp_proto_rndv_get_common_request_init(ucp_request_t *req)
     ucp_proto_rndv_bulk_request_init(req, req->send.proto_config->priv);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_get_common_send(ucp_request_t *req,
-                               const ucp_proto_multi_lane_priv_t *lpriv,
-                               const uct_iov_t *iov, uct_completion_t *comp)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_common_send(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        const uct_iov_t *iov, size_t offset, uct_completion_t *comp)
 {
     uct_rkey_t tl_rkey      = ucp_rkey_get_tl_rkey(req->send.rndv.rkey,
                                                    lpriv->super.rkey_index);
-    uint64_t remote_address = req->send.rndv.remote_address +
-                              req->send.state.dt_iter.offset;
+    uint64_t remote_address = req->send.rndv.remote_address + offset;
 
     return uct_ep_get_zcopy(req->send.ep->uct_eps[lpriv->super.lane], iov, 1,
                             remote_address, tl_rkey, comp);
@@ -112,6 +111,7 @@ ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
 {
     /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
+    size_t offset                           = req->send.state.dt_iter.offset;
     size_t max_payload;
     uct_iov_t iov;
 
@@ -120,7 +120,11 @@ ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
                                lpriv->super.memh_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
                                1);
-    return ucp_proto_rndv_get_common_send(req, lpriv, &iov,
+
+    ucs_assert(iov.count == 1);
+    ucp_proto_common_zcopy_adjust_min_frag(req, rpriv->mpriv.min_frag,
+                                           iov.length, &iov, 1, &offset);
+    return ucp_proto_rndv_get_common_send(req, lpriv, &iov, offset,
                                           &req->send.state.uct_comp);
 }
 
@@ -129,7 +133,7 @@ ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req                      = ucs_container_of(uct_req,
                                                                ucp_request_t,
-                                                               send.uct);                      
+                                                               send.uct);
     /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
 
@@ -159,10 +163,15 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
 {
     /* coverity[tainted_data_downcast] */
     const ucp_proto_rndv_bulk_priv_t *rpriv = req->send.proto_config->priv;
+    size_t offset                           = req->send.state.dt_iter.offset;
     uct_iov_t iov;
 
     ucp_proto_rndv_mtype_next_iov(req, rpriv, lpriv, next_iter, &iov);
-    return ucp_proto_rndv_get_common_send(req, lpriv, &iov,
+
+    ucs_assert(iov.count == 1);
+    ucp_proto_common_zcopy_adjust_min_frag(req, rpriv->mpriv.min_frag,
+                                           iov.length, &iov, 1, &offset);
+    return ucp_proto_rndv_get_common_send(req, lpriv, &iov, offset,
                                           &req->send.state.uct_comp);
 }
 
