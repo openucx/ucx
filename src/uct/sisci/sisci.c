@@ -349,9 +349,9 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .ep_atomic32_fetch        = uct_sisci_ep_atomic32_fetch,// bap
     .ep_flush                 = uct_base_ep_flush,          // maybe TODO, trenger vi å endre dette
     .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = ucs_empty_function_return_success,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_check                 = ucs_empty_function_return_success,  //covered tror jeg
+    .ep_pending_add           = ucs_empty_function_return_busy,     //samme
+    .ep_pending_purge         = ucs_empty_function,                 //samme
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_sisci_ep_t),            //bapped
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_ep_t),         
     .iface_flush              = uct_base_iface_flush,
@@ -362,8 +362,8 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped
     .iface_query              = uct_self_iface_query,       //
     .iface_get_device_address = ucs_empty_function_return_success,
-    .iface_get_address        = uct_sisci_iface_get_address, //
-    .iface_is_reachable       = uct_sisci_iface_is_reachable //
+    .iface_get_address        = uct_sisci_iface_get_address, // bap
+    .iface_is_reachable       = uct_sisci_iface_is_reachable // bap
 };
 
 
