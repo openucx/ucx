@@ -76,6 +76,9 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, iface->super.super.super.gid_info.gid_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
 
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        UCT_IB_MLX5DV_SET(dctc, dctc, ece, UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
+    }
     iface->rx.dct.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                                     out, sizeof(out));
     if (iface->rx.dct.devx.obj == NULL) {
