@@ -467,7 +467,7 @@ void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
 }
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
-                                   uint32_t *ibv_ece)
+                                   uint32_t *ece_val)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
@@ -610,7 +610,7 @@ err_ep_destroy:
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
                                      const uct_device_addr_t *dev_addr,
                                      const uct_ep_addr_t *uct_ep_addr,
-                                     const uint32_t *ibv_ece)
+                                     const uint32_t *ece_val)
 {
     uct_ud_ep_t *ep                   = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface             = ucs_derived_of(ep->super.super.iface,

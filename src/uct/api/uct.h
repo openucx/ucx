@@ -2244,10 +2244,10 @@ void uct_ep_destroy(uct_ep_h ep);
  * @param [in]  ep       Endpoint to query.
  * @param [out] addr     Filled with endpoint address. The size of the buffer
  *                       provided must be at least @ref uct_iface_attr_t::ep_addr_len.
- * @param [out] ibv_ece  filled with reduced ECE
+ * @param [out] ece_val  filled with reduced ECE
  */
 ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr,
-                                uint32_t *ibv_ece);
+                                uint32_t *ece_val);
 
 
 /**
@@ -2259,11 +2259,11 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr,
  * @param [in] ep           Endpoint to connect.
  * @param [in] dev_addr     Remote device address.
  * @param [in] ep_addr      Remote endpoint address.
- * @param [in] ibv_ece      Remote endpoint ECE
+ * @param [in] ece_val      Remote endpoint ECE
  */
 ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr,
                                   const uct_ep_addr_t *ep_addr,
-                                  const uint32_t *ibv_ece);
+                                  const uint32_t *ece_val);
 
 
 /**
