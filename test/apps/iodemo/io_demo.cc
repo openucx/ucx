@@ -948,7 +948,8 @@ protected:
         validate(conn, msg, iomsg_size);
     }
 
-    static inline void handle_io_msg(const iomsg_t *msg, UcxConnection *conn) {
+    static inline void check_conn_id(const iomsg_t *msg, UcxConnection *conn)
+    {
 #ifndef NDEBUG
         if (conn->use_am() && (msg->op == IO_READ_COMP)) {
             assert(conn->id() == msg->conn_id);
@@ -1287,7 +1288,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            handle_io_msg(msg, conn);
+            check_conn_id(msg, conn);
             validate(conn, msg, length);
         }
 
@@ -1313,7 +1314,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            handle_io_msg(msg, conn);
+            check_conn_id(msg, conn);
             validate(conn, msg, length);
         }
 
@@ -1512,7 +1513,7 @@ public:
                     // in place to avoid unneeded memory copy to this
                     // IoReadResponseCallback _buffer.
                     iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                    handle_io_msg(msg, server_info.conn);
+                    check_conn_id(msg, server_info.conn);
                     validate(server_info.conn, msg, _sn, _buffer_size);
                 }
             }
@@ -1791,7 +1792,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            handle_io_msg(msg, conn);
+            check_conn_id(msg, conn);
             validate(conn, msg, opts().iomsg_size);
         }
 
@@ -1823,7 +1824,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            handle_io_msg(msg, conn);
+            check_conn_id(msg, conn);
             validate(conn, msg, opts().iomsg_size);
         }
 
