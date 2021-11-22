@@ -185,5 +185,5 @@ uct_component_t uct_rocm_ipc_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_rocm_ipc_component);
+UCT_COMPONENT_REGISTER(rocm_ipc, &uct_rocm_ipc_component);
 
