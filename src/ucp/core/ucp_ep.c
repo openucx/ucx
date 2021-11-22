@@ -203,9 +203,10 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
 #endif
     ucp_ep_ext_gen(ep)->user_data         = NULL;
     ucp_ep_ext_control(ep)->cm_idx        = UCP_NULL_RESOURCE;
-    ucp_ep_ext_control(ep)->err_cb        = NULL;
     ucp_ep_ext_control(ep)->local_ep_id   = UCS_PTR_MAP_KEY_INVALID;
     ucp_ep_ext_control(ep)->remote_ep_id  = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->err_cb        = NULL;
+    ucp_ep_ext_control(ep)->close_req     = NULL;
 #if UCS_ENABLE_ASSERT
     ucp_ep_ext_control(ep)->ka_last_round = 0;
 #endif
@@ -1275,11 +1276,10 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
-            if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+            if (ep_ext_control->close_req != NULL) {
                 /* Promote close operation to CANCEL in case of transport error,
                  * since the disconnect event may never arrive. */
-                close_req                        =
-                        ep_ext_control->close_req.req;
+                close_req                        = ep_ext_control->close_req;
                 close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
                 ucp_ep_local_disconnect_progress(close_req);
             }
@@ -1423,11 +1423,10 @@ unsigned ucp_ep_local_disconnect_progress(void *arg)
 static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
                                      const char *debug_msg)
 {
+    ucs_assertv(ucp_ep_ext_control(ep)->close_req == NULL,
+                "ep=%p: close_req=%p", ep, ucp_ep_ext_control(ep)->close_req);
     ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
-
-    ucp_ep_flush_state_invalidate(ep);
-    ucp_ep_ext_control(ep)->close_req.req = request;
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSE_REQ_VALID, 0);
+    ucp_ep_ext_control(ep)->close_req = request;
 }
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
@@ -3249,9 +3248,8 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     }
 
     if (/* Flush state is already valid (i.e. EP doesn't exist on matching
-         * context) and not invalidated yet, also remote EP ID is already set */
-        !(ucp_ep->flags &
-          (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID))) {
+         * context) and not invalidated yet */
+        !(ucp_ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
         flush_state = ucp_ep_flush_state(ucp_ep);
 
         /* Adjust 'comp_sn' value to a value stored in 'send_sn' by emulating

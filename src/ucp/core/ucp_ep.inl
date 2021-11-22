@@ -156,7 +156,6 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
 
