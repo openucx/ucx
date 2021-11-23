@@ -5,6 +5,10 @@
 # See file LICENSE for terms.
 #
 
+DIS_HOME = /opt/DIS
+INCLUDE  = -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
+
+
 SUBDIRS = vfs/sock . vfs/fuse
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
@@ -13,7 +17,7 @@ bin_PROGRAMS        =
 
 libucs_la_CPPFLAGS = $(BASE_CPPFLAGS) -DUCX_MODULE_DIR=\"$(moduledir)\" \
                      -DUCX_CONFIG_DIR=\"$(ucx_config_dir)\"
-libucs_la_CFLAGS   = $(BASE_CFLAGS)
+libucs_la_CFLAGS   = $(BASE_CFLAGS) $(INCLUDE)
 libucs_la_LDFLAGS  = -ldl $(NUMA_LIBS) -version-info $(SOVERSION)
 libucs_ladir       = $(includedir)/ucs
 libucs_la_LIBADD   = $(LIBM) $(top_builddir)/src/ucm/libucm.la
