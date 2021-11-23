@@ -93,12 +93,12 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     sci_error = 0;
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
-    //SCIInitialize(0, &sci_error);
+    SCIInitialize(0, &sci_error);
 
     printf("after first open %d\n" , sci_error);
 
 
-    //SCIInitialize(0, &sci_error);
+    SCIInitialize(0, &sci_error);
 
     printf("after second open %d\n" , sci_error);
 
