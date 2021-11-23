@@ -4,7 +4,9 @@
 #include <ucs/type/status.h>
 //#include <uct/tcp/tcp_md.c>
 #include "stdio.h"
+
 #include "sisci.h"
+#include <sisci_api.h>
 
 
 /* Forward declarations */
