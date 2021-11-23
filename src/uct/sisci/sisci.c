@@ -6,7 +6,6 @@
 #include "stdio.h"
 
 #include "sisci.h"
-#include <sisci_api.h>
 
 
 /* Forward declarations */
