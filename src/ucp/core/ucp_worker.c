@@ -2338,13 +2338,12 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
 {
     ucp_ep_h ucp_ep = req->send.ep;
 
-    UCP_EP_ASSERT_COUNTER_DEC(&ucp_ep->discard_refcount);
     ucp_worker_flush_ops_count_dec(ucp_ep->worker);
     /* Coverity wrongly resolves completion callback function to
      * 'ucp_cm_server_conn_request_progress' */
     /* coverity[offset_free] */
     ucp_request_complete(req, send.cb, UCS_OK, req->user_data);
-    ucp_ep_remove_ref(ucp_ep);
+    ucp_ep_refcount_remove(ucp_ep, discard);
 }
 
 static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
@@ -2498,10 +2497,10 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
          * ucp_request_t::send.state.uct_comp.func of another operation could
          * access it */
         ucp_ep = req->send.ep;
-        ucp_ep_add_ref(ucp_ep);
+        ucp_ep_refcount_add(ucp_ep, discard);
         uct_ep_pending_purge(uct_ep, ucp_worker_discard_uct_ep_purge, NULL);
         uct_ep_destroy(uct_ep);
-        ucp_ep_remove_ref(ucp_ep);
+        ucp_ep_refcount_remove(ucp_ep, discard);
 
         /* We must do this operation as a last step, because uct_ep_destroy()
          * could move a discard operation to the progress queue */
@@ -3183,8 +3182,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucp_ep_add_ref(ucp_ep);
-    UCP_EP_ASSERT_COUNTER_INC(&ucp_ep->discard_refcount);
+    ucp_ep_refcount_add(ucp_ep, discard);
     ucp_worker_flush_ops_count_inc(worker);
     iter = kh_put(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep, &ret);
