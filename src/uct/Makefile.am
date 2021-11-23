@@ -18,7 +18,8 @@ SUBDIRS = . cuda ib rocm sm ugni
 lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS) $(INCLUDE)
 libuct_la_CPPFLAGS = $(BASE_CPPFLAGS) $(INCLUDE)
-libuct_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la
+libuct_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
+	$(DIS_HOME)/lib64/libsisci.la
 libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_ladir       = $(includedir)/uct
 
