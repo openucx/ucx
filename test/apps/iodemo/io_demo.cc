@@ -801,7 +801,7 @@ protected:
         _status = TERMINATE_SIGNALED;
     }
 
-    P2pDemoCommon(const options_t &test_opts) :
+    P2pDemoCommon(const options_t &test_opts, uint32_t iov_buf_filler) :
         UcxContext(test_opts.iomsg_size, test_opts.connect_timeout,
                    test_opts.use_am, test_opts.use_epoll),
         _test_opts(test_opts),
@@ -811,7 +811,8 @@ protected:
                                          test_opts.chunk_size),
                            "data iovs"),
         _data_chunks_pool(test_opts.chunk_size, "data chunks",
-                          test_opts.memory_type, test_opts.num_offcache_buffers)
+                          test_opts.memory_type, test_opts.num_offcache_buffers),
+        _iov_buf_filler(iov_buf_filler)
     {
         _status                  = OK;
 
@@ -948,6 +949,30 @@ protected:
         validate(conn, msg, iomsg_size);
     }
 
+    BufferIov* prepare_recv_data_iov(size_t data_size)
+    {
+        BufferIov *iov = _data_buffers_pool.get();
+        iov->init(data_size, _data_chunks_pool, _iov_buf_filler,
+                  _iov_buf_filler, opts().validate);
+        return iov;
+    }
+
+    BufferIov* prepare_am_recv_data_iov(size_t data_size,
+                                        const UcxAmDesc &data_desc)
+    {
+        BufferIov *iov;
+
+        if (!ucx_am_is_rndv(data_desc)) {
+            iov = _data_buffers_pool.get();
+            iov->init(data_size, ucx_am_get_data(data_desc));
+        } else {
+            iov = prepare_recv_data_iov(data_size);
+        }
+
+        assert(iov->size() == 1);
+        return iov;
+    }
+
 private:
     bool send_io_message(UcxConnection *conn, IoMessage *msg) {
         VERBOSE_LOG << "sending IO " << io_op_names[msg->msg()->op] << ", sn "
@@ -970,6 +995,7 @@ protected:
     MemoryPool<BufferIov>            _data_buffers_pool;
     BufferMemoryPool<Buffer>         _data_chunks_pool;
     static status_t                  _status;
+    const uint32_t                   _iov_buf_filler;
 };
 
 
@@ -1095,7 +1121,7 @@ public:
     };
 
     DemoServer(const options_t& test_opts) :
-        P2pDemoCommon(test_opts), _callback_pool(0, "callbacks") {
+        P2pDemoCommon(test_opts, 0xeeeeeeeeu), _callback_pool(0, "callbacks") {
     }
 
     ~DemoServer()
@@ -1208,15 +1234,13 @@ public:
         VERBOSE_LOG << "receiving IO write data";
         assert(msg->data_size != 0);
 
-        BufferIov *iov             = _data_buffers_pool.get();
+        BufferIov *iov             = prepare_recv_data_iov(msg->data_size);
         IoWriteResponseCallback *w = _callback_pool.get();
         ConnectionStat &conn_stat  = _conn_stat_map.find(conn)->second;
 
-        iov->init(msg->data_size, _data_chunks_pool, 0, 0, opts().validate);
         // Expect the write data to have sender's connection id
         w->init(this, conn, msg->sn, msg->conn_id, iov,
                 &conn_stat.completions<IO_WRITE>());
-
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
         recv_data(conn, *iov, msg->sn, w);
     }
@@ -1226,19 +1250,13 @@ public:
         VERBOSE_LOG << "receiving AM IO write data";
         assert(msg->data_size != 0);
 
-        BufferIov *iov             = _data_buffers_pool.get();
+        BufferIov *iov             = prepare_am_recv_data_iov(msg->data_size,
+                                                              data_desc);
         IoWriteResponseCallback *w = _callback_pool.get();
         ConnectionStat &conn_stat  = _conn_stat_map.find(conn)->second;
 
-        if (!ucx_am_is_rndv(data_desc)) {
-            iov->init(msg->data_size, ucx_am_get_data(data_desc));
-        } else {
-            iov->init(msg->data_size, _data_chunks_pool, 0, 0, opts().validate);
-        }
         w->init(this, conn, msg->sn, msg->conn_id, iov,
                 &conn_stat.completions<IO_WRITE>());
-        assert(iov->size() == 1);
-
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
         if (!ucx_am_is_rndv(data_desc)) {
             conn->recv_am_data(NULL, 0, data_desc, w);
@@ -1524,7 +1542,7 @@ public:
     };
 
     DemoClient(const options_t &test_opts) :
-        P2pDemoCommon(test_opts),
+        P2pDemoCommon(test_opts, 0xddddddddu),
         _next_active_index(0),
         _num_sent(0),
         _num_completed(0),
@@ -1623,12 +1641,10 @@ public:
 
         commit_operation(server_index, IO_READ, data_size);
 
-        BufferIov *iov            = _data_buffers_pool.get();
+        BufferIov *iov            = prepare_recv_data_iov(data_size);
         IoReadResponseCallback *r = _read_callback_pool.get();
 
-        iov->init(data_size, _data_chunks_pool, 0, 0, validate);
         r->init(this, server_index, sn, server_info.conn->id(), validate, iov);
-
         recv_data(server_info.conn, *iov, sn, r);
         server_info.conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
 
@@ -1809,20 +1825,12 @@ public:
             handle_operation_completion(server_index, IO_WRITE,
                                         msg->data_size);
         } else if (msg->op == IO_READ_COMP) {
-            BufferIov *iov = _data_buffers_pool.get();
-
-            if (!ucx_am_is_rndv(data_desc)) {
-                iov->init(msg->data_size, ucx_am_get_data(data_desc));
-            } else {
-                iov->init(msg->data_size, _data_chunks_pool, 0, 0,
-                          opts().validate);
-            }
+            BufferIov *iov            =
+                    prepare_am_recv_data_iov(msg->data_size, data_desc);
             IoReadResponseCallback *r = _read_callback_pool.get();
+
             r->init(this, server_index, msg->sn, conn->id(), opts().validate,
                     iov, 0);
-
-            assert(iov->size() == 1);
-
             if (!ucx_am_is_rndv(data_desc)) {
                 conn->recv_am_data(NULL, 0, data_desc, r);
             } else {
