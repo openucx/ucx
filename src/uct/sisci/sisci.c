@@ -86,6 +86,23 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
                                               unsigned int *num_resources_p)
 {
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
+    
+    sci_error_t sci_error;
+
+    SCIInitialize(0, &sci_error);
+
+    printf("after first open %d\n" , sci_error);
+
+
+    SCIInitialize(0, &sci_error);
+
+    printf("after second open %d\n" , sci_error);
+
+
+    SCITerminate();
+
+    
+
     return UCS_ERR_NOT_IMPLEMENTED;
 
 }
