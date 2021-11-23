@@ -87,6 +87,9 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 {
     sci_error_t sci_error;
     
+
+
+    sci_error = 0;
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
     //SCIInitialize(0, &sci_error);
