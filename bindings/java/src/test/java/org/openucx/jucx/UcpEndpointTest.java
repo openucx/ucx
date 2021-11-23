@@ -58,7 +58,7 @@ public class UcpEndpointTest extends UcxTest {
     @Theory
     public void testGetNB(int memType) throws Exception {
         System.out.println("Running testGetNB with memType: " + memType);
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
         UcpContext context1 = new UcpContext(params);
@@ -119,7 +119,7 @@ public class UcpEndpointTest extends UcxTest {
 
     @Test
     public void testPutNB() throws Exception {
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
         UcpContext context1 = new UcpContext(params);
@@ -151,7 +151,7 @@ public class UcpEndpointTest extends UcxTest {
     public void testSendRecv(int memType) throws Exception {
         System.out.println("Running testSendRecv with memType: " + memType);
         long tagSender = 0xFFFFFFFFFFFF0000L;
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
         UcpContext context1 = new UcpContext(params.setTagSenderMask(tagSender));
@@ -207,7 +207,7 @@ public class UcpEndpointTest extends UcxTest {
     @Test
     public void testRecvAfterSend() {
         long sendTag = 4L;
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature().requestTagFeature()
             .setMtWorkersShared(true);
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA()
@@ -289,7 +289,7 @@ public class UcpEndpointTest extends UcxTest {
     public void testBufferOffset() throws Exception {
         int msgSize = 200;
         int offset = 100;
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestTagFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
         UcpContext context1 = new UcpContext(params);
@@ -336,7 +336,7 @@ public class UcpEndpointTest extends UcxTest {
     @Test
     public void testFlushEp() throws Exception {
         int numRequests = 10;
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
         UcpContext context1 = new UcpContext(params);
@@ -472,7 +472,7 @@ public class UcpEndpointTest extends UcxTest {
         long buffMultiplier = 10L;
 
         UcpMemMapParams memMapParams = new UcpMemMapParams().allocate();
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestTagFeature().requestStreamFeature();
         UcpWorkerParams workerParams = new UcpWorkerParams();
         UcpContext context1 = new UcpContext(params);
@@ -561,7 +561,7 @@ public class UcpEndpointTest extends UcxTest {
 
     @Test
     public void testEpErrorHandler() throws Exception {
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestTagFeature();
         UcpWorkerParams workerParams = new UcpWorkerParams();
         UcpContext context1 = new UcpContext(params);

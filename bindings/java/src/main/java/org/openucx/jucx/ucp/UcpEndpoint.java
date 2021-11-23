@@ -233,7 +233,7 @@ public class UcpEndpoint extends UcxNativeStruct implements Closeable {
     }
 
     /**
-     * Iov version of non blocking send operaation
+     * Iov version of non blocking send operation
      */
     public UcpRequest sendTaggedNonBlocking(long[] localAddresses, long[] sizes,
                                             long tag, UcxCallback callback, int memoryType) {

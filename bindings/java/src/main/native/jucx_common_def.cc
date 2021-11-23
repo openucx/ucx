@@ -379,7 +379,7 @@ void process_request(JNIEnv *env, jobject jucx_request, ucs_status_ptr_t status)
     if (UCS_PTR_IS_PTR(status)) {
       env->CallVoidMethod(jucx_request, jucx_set_native_id, (native_ptr)status);
     } else {
-        // Request completed immidiately. Call jucx callback.
+        // Request completed immediately. Call jucx callback.
         set_jucx_request_completed(env, jucx_request, UCS_PTR_RAW_STATUS(status));
         jobject callback = env->GetObjectField(jucx_request, request_callback);
         if (callback != NULL) {
