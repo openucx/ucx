@@ -526,6 +526,7 @@ make_scripts()
 			    echo "  -stop <tag>        Stop iodemo for given tag"
 			    echo "  -kill <tag>        Kill iodemo for given tag"
 			    echo "  -status <tag>      Show status of iodemo for given tag"
+			    echo "  -num_path <val>    Set UCX_IB_NUM_PATHS variable"
 			    echo
 			    echo "<tag> can be particular client/server or all_servers / all_clients"
 			    echo
@@ -533,6 +534,7 @@ make_scripts()
 			    echo
 			}
 
+			add_cmd_vars=""
 			parse_args() {
 			    action=""
 			    tag=""
@@ -558,6 +560,10 @@ make_scripts()
 			        -status)
 			            action="status"
 			            tag="\$2"
+			            shift
+			            ;;
+			        -num_path)
+			            add_cmd_vars+=" UCX_IB_NUM_PATHS=\$2"
 			            shift
 			            ;;
 			        -list-tags)
@@ -617,7 +623,7 @@ make_scripts()
 			cat >>${command_file} <<-EOF
 				function start_server_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=server_${i} ${cmd_prefix} \\
+				    env IODEMO_ROLE=server_${i} ${add_cmd_vars} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_server_args} -p ${port_num} \\
 				            ${log_redirect} ${log_file} &
@@ -635,7 +641,7 @@ make_scripts()
 			cat >>${command_file} <<-EOF
 				function start_client_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=client_${i} ${cmd_prefix} \\
+				    env IODEMO_ROLE=client_${i} ${add_cmd_vars} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_client_args} ${client_connect_list} \\
 				            ${log_redirect} ${log_file} &
