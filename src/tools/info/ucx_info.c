@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <uct/sisci/sisci.h>
+//#include <uct/sisci/sisci.h>
 
 
 static void usage() {
