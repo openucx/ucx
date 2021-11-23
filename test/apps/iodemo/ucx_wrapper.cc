@@ -1077,7 +1077,7 @@ void UcxConnection::connect_tag(UcxCallback *callback)
     }
 
     // send local connection id
-    void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_size,
+    void *sreq = ucp_stream_send_nb(_ep, &_conn_id, 1, dt_int,
                                     common_request_callback, 0);
     // we do not have to check the status here, in case if the endpoint is
     // failed we should handle it in ep_params.err_handler.cb set above
