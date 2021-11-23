@@ -379,8 +379,8 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
                                    &knem_md->rcache);
         if (status == UCS_OK) {
             knem_md->super.ops = &uct_knem_md_rcache_ops;
-            knem_md->reg_cost  = ucs_linear_func_make(md_config->rcache.overhead,
-                                                      0);
+            knem_md->reg_cost  = ucs_linear_func_make(
+                                 uct_md_rcache_overhead(&md_config->rcache), 0);
         } else {
             ucs_assert(knem_md->rcache == NULL);
             if (md_config->rcache_enable == UCS_YES) {
