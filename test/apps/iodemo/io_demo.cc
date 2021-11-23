@@ -948,19 +948,19 @@ protected:
         validate(conn, msg, iomsg_size);
     }
 
-    static inline void check_conn_id(const iomsg_t *msg, UcxConnection *conn)
+    static inline void validate_msg(const iomsg_t *msg, UcxConnection *conn)
     {
-#ifndef NDEBUG
-        if (conn->use_am() && (msg->op == IO_READ_COMP)) {
-            assert(conn->id() == msg->conn_id);
-        } else if (conn->use_am()) {
-            assert((conn->remote_id() == 0) ||
-                   (conn->remote_id() == msg->conn_id));
-            conn->set_remote_id(msg->conn_id);
+        if (conn->use_am()) {
+            if (msg->op == IO_READ_COMP) {
+                assert(conn->id() == msg->conn_id);
+            } else {
+                assert((conn->remote_id() == 0) ||
+                       (conn->remote_id() == msg->conn_id));
+                conn->set_remote_id(msg->conn_id);
+            }
         } else {
             assert(conn->remote_id() == msg->conn_id);
         }
-#endif
     }
 
 private:
@@ -1288,7 +1288,7 @@ public:
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            check_conn_id(msg, conn);
+            validate_msg(msg, conn);
             validate(conn, msg, length);
         }
 
@@ -1308,13 +1308,13 @@ public:
 
         VERBOSE_LOG << "got io (AM) message " << io_op_names[msg->op] << " sn "
                     << msg->sn << " data size " << msg->data_size
-                    << " conn " << conn;  
+                    << " conn " << conn;
 
         assert(conn->ucx_status() == UCS_OK);
 
         if (opts().validate) {
             assert(length == opts().iomsg_size);
-            check_conn_id(msg, conn);
+            validate_msg(msg, conn);
             validate(conn, msg, length);
         }
 
@@ -1513,7 +1513,7 @@ public:
                     // in place to avoid unneeded memory copy to this
                     // IoReadResponseCallback _buffer.
                     iomsg_t *msg = reinterpret_cast<iomsg_t*>(_buffer);
-                    check_conn_id(msg, server_info.conn);
+                    validate_msg(msg, server_info.conn);
                     validate(server_info.conn, msg, _sn, _buffer_size);
                 }
             }
@@ -1793,7 +1793,7 @@ public:
         if (opts().validate) {
             assert(length == opts().iomsg_size);
             check_conn_id(msg, conn);
-            validate(conn, msg, opts().iomsg_size);
+            validate(conn, msg, length);
         }
 
         if (msg->op >= IO_COMP_MIN) {
@@ -1825,7 +1825,7 @@ public:
         if (opts().validate) {
             assert(length == opts().iomsg_size);
             check_conn_id(msg, conn);
-            validate(conn, msg, opts().iomsg_size);
+            validate(conn, msg, length);
         }
 
         // Client can receive IO_WRITE_COMP or IO_READ_COMP only
