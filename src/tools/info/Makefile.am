@@ -22,7 +22,7 @@ build_config.h: $(top_builddir)/config.h Makefile
 
 ucx_info_CPPFLAGS  = $(BASE_CPPFLAGS) $(INCLUDE)
 ucx_info_CFLAGS    = $(BASE_CFLAGS) $(INCLUDE)
-ucx_info_LDFLAGS = $(BASE_LDFLAGS) -lsisci
+
 if HAVE_IB
 ucx_info_CPPFLAGS += $(IBVERBS_CPPFLAGS)
 endif
@@ -48,4 +48,5 @@ ucx_info_LDADD    = \
     $(abs_top_builddir)/src/uct/libuct.la \
     $(abs_top_builddir)/src/ucp/libucp.la \
     $(abs_top_builddir)/src/ucs/libucs.la \
-    $(abs_top_builddir)/src/ucm/libucm.la
+    $(abs_top_builddir)/src/ucm/libucm.la \
+	$(DIS_HOME)/lib64/libsisci.la
