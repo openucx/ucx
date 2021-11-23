@@ -373,22 +373,22 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .ep_atomic32_post         = uct_sisci_ep_atomic32_post, // bap
     .ep_atomic32_fetch        = uct_sisci_ep_atomic32_fetch,// bap
     .ep_flush                 = uct_base_ep_flush,          // maybe TODO, trenger vi å endre dette
-    .ep_fence                 = uct_base_ep_fence,
-    .ep_check                 = ucs_empty_function_return_success,
-    .ep_pending_add           = ucs_empty_function_return_busy,
-    .ep_pending_purge         = ucs_empty_function,
+    .ep_fence                 = uct_base_ep_fence,          // covered av uct base
+    .ep_check                 = ucs_empty_function_return_success,  //covered tror jeg
+    .ep_pending_add           = ucs_empty_function_return_busy,     //covered
+    .ep_pending_purge         = ucs_empty_function,                 //covered
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_sisci_ep_t),            //bapped
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_ep_t),         
-    .iface_flush              = uct_base_iface_flush,
-    .iface_fence              = uct_base_iface_fence,
-    .iface_progress_enable    = ucs_empty_function,
-    .iface_progress_disable   = ucs_empty_function,
-    .iface_progress           = ucs_empty_function_return_zero,
+    .iface_flush              = uct_base_iface_flush,           //covered av uct base
+    .iface_fence              = uct_base_iface_fence,           //covered av uct base
+    .iface_progress_enable    = ucs_empty_function,             //covered
+    .iface_progress_disable   = ucs_empty_function,             //covered
+    .iface_progress           = ucs_empty_function_return_zero, //covered
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped
-    .iface_query              = uct_sisci_iface_query,       //
-    .iface_get_device_address = ucs_empty_function_return_success,
-    .iface_get_address        = uct_sisci_iface_get_address, //
-    .iface_is_reachable       = uct_sisci_iface_is_reachable //
+    .iface_query              = uct_sisci_iface_query,       //bap
+    .iface_get_device_address = ucs_empty_function_return_success, //covered
+    .iface_get_address        = uct_sisci_iface_get_address, // bap
+    .iface_is_reachable       = uct_sisci_iface_is_reachable // bap
 };
 
 
