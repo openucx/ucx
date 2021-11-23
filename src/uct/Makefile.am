@@ -19,7 +19,7 @@ lib_LTLIBRARIES    = libuct.la
 libuct_la_CFLAGS   = $(BASE_CFLAGS) $(INCLUDE)
 libuct_la_CPPFLAGS = $(BASE_CPPFLAGS) $(INCLUDE)
 libuct_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la
-libuct_la_LDFLAGS  = -ldl -lsisci -version-info $(SOVERSION)
+libuct_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libuct_ladir       = $(includedir)/uct
 
 nobase_dist_libuct_la_HEADERS = \

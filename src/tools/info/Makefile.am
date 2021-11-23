@@ -6,7 +6,7 @@
 #
 
 DIS_HOME = /opt/DIS
-INCLUDE  =  I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
+INCLUDE  =  -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
 
 
 bin_PROGRAMS = ucx_info
