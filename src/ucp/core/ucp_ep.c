@@ -533,18 +533,17 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
+    ucp_tl_bitmap_t mem_access_tls;
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     ucs_memory_type_for_each(mem_type) {
+        ucp_context_get_mem_access_tls(context, mem_type, &mem_access_tls);
         if (UCP_MEM_IS_HOST(mem_type) ||
-            UCS_BITMAP_IS_ZERO_INPLACE(
-                    &context->mem_type_access_tls[mem_type])) {
+            UCS_BITMAP_IS_ZERO_INPLACE(&mem_access_tls)) {
             continue;
         }
 
-        status = ucp_address_pack(worker, NULL,
-                                  &context->mem_type_access_tls[mem_type],
-                                  pack_flags,
+        status = ucp_address_pack(worker, NULL, &mem_access_tls, pack_flags,
                                   context->config.ext.worker_addr_version, NULL,
                                   &address_length, &address_buffer);
         if (status != UCS_OK) {

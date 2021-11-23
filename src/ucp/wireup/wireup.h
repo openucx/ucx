@@ -43,6 +43,8 @@ typedef struct {
     uint64_t    remote_iface_flags; /* Required remote interface flags */
     uint64_t    local_event_flags;  /* Required local event flags */
     uint64_t    remote_event_flags; /* Required remote event flags */
+    uint64_t    alloc_mem_types;    /* Mandatory memory types for allocation */
+    uint64_t    reg_mem_types;      /* Mandatory memory types for registration */
 
     /**
      * Calculates score of a potential transport.
