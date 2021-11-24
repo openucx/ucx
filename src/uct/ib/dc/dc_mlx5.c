@@ -1579,6 +1579,13 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
     uct_ib_iface_t *ib_iface = &iface->super.super.super;
     ucs_status_t status;
     ucs_log_level_t log_lvl;
+    ucs_arbiter_t *waitq;
+    ucs_arbiter_group_t *group;
+    uint8_t pool_index;
+
+    uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
+    ucs_arbiter_group_purge(waitq, group,
+                            uct_dc_mlx5_ep_arbiter_purge_internal_cb, ep);
 
     if (ep->flags & (UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED |
                      UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL)) {
