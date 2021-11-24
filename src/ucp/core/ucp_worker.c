@@ -3151,7 +3151,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
     }
 }
 
-static ucs_status_t
+static ucs_status_ptr_t
 ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                              unsigned ep_flush_flags,
                              ucp_send_nbx_callback_t discarded_cb,
@@ -3165,14 +3165,14 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     if (ucp_is_uct_ep_failed(uct_ep)) {
         /* No need to discard failed TL EP, because it may lead to adding the
          * same UCT EP to the hash of discarded UCT EPs */
-        return UCS_OK;
+        return NULL;
     }
 
     req = ucp_request_get(worker);
     if (ucs_unlikely(req == NULL)) {
         ucs_error("unable to allocate request for discarding UCT EP %p "
                   "on UCP worker %p", uct_ep, worker);
-        return UCS_ERR_NO_MEMORY;
+        return UCS_STATUS_PTR(UCS_ERR_NO_MEMORY);
     }
 
     ucp_ep_refcount_add(ucp_ep, discard);
@@ -3202,7 +3202,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 
     ucp_worker_discard_uct_ep_progress(req);
 
-    return UCS_INPROGRESS;
+    return req;
 }
 
 static uct_ep_h ucp_worker_discard_wireup_ep(
@@ -3235,12 +3235,13 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
            kh_end(&worker->discard_uct_ep_hash);
 }
 
-ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                                       unsigned ep_flush_flags,
-                                       uct_pending_purge_callback_t purge_cb,
-                                       void *purge_arg,
-                                       ucp_send_nbx_callback_t discarded_cb,
-                                       void *discarded_cb_arg)
+ucs_status_ptr_t
+ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                          unsigned ep_flush_flags,
+                          uct_pending_purge_callback_t purge_cb,
+                          void *purge_arg,
+                          ucp_send_nbx_callback_t discarded_cb,
+                          void *discarded_cb_arg)
 {
     UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ucp_ep->worker);
     ucs_assert(uct_ep != NULL);
@@ -3252,7 +3253,7 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
         uct_ep = ucp_worker_discard_wireup_ep(ucp_ep, ucp_wireup_ep(uct_ep),
                                               ep_flush_flags);
         if (uct_ep == NULL) {
-            return UCS_OK;
+            return NULL;
         }
     }
 

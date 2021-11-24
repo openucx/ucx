@@ -315,6 +315,9 @@ struct ucp_request {
                     /* Progress ID, if it's UCS_CALLBACKQ_ID_NULL, no operations
                      * are in-progress */
                     uct_worker_cb_id_t cb_id;
+#if UCS_ENABLE_ASSERT
+                    ucs_list_link_t    elem;
+#endif
                 } discard_uct_ep;
 
                 struct {

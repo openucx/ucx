@@ -461,16 +461,33 @@ typedef struct {
 
 
 /**
+ * Argument for discarding UCP endpoint's lanes
+ */
+typedef struct ucp_ep_discard_lanes_arg {
+    unsigned        counter; /* How many discarding operations on UCT lanes are
+                              * in-progress if purging of the UCP endpoint is
+                              * required */
+    ucs_status_t    status; /* Completion status of operations after discarding is
+                             * done */
+    ucp_ep_h        ucp_ep; /* UCP endpoint which should be discarded */
+#if UCS_ENABLE_ASSERT
+    ucs_list_link_t reqs; /* List of discarding operation requests */
+#endif
+} ucp_ep_discard_lanes_arg_t;
+
+
+/**
  * Endpoint extension for control data path
  */
 typedef struct {
-    ucp_rsc_index_t          cm_idx; /* CM index */
-    ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
-    ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
-    ucp_err_handler_cb_t     err_cb; /* Error handler */
-    ucp_request_t            *close_req; /* Close protocol request */
+    ucp_rsc_index_t            cm_idx; /* CM index */
+    ucs_ptr_map_key_t          local_ep_id; /* Local EP ID */
+    ucs_ptr_map_key_t          remote_ep_id; /* Remote EP ID */
+    ucp_err_handler_cb_t       err_cb; /* Error handler */
+    ucp_request_t              *close_req; /* Close protocol request */
 #if UCS_ENABLE_ASSERT
-    ucs_time_t               ka_last_round; /* Time of last KA round done */
+    ucs_time_t                 ka_last_round; /* Time of last KA round done */
+    ucp_ep_discard_lanes_arg_t *discard_lanes_arg; /* Argument for discarding lanes */
 #endif
 } ucp_ep_ext_control_t;
 

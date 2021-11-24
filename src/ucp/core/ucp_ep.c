@@ -58,19 +58,6 @@ typedef struct ucp_ep_set_failed_arg {
 } ucp_ep_set_failed_arg_t;
 
 
-/**
- * Argument for discarding UCP endpoint's lanes
- */
-typedef struct ucp_ep_discard_lanes_arg {
-    unsigned     counter; /* How many discarding operations on UCT lanes are
-                           * in-progress if purging of the UCP endpoint is
-                           * required */
-    ucs_status_t status; /* Completion status of operations after discarding is
-                          * done */
-    ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
-} ucp_ep_discard_lanes_arg_t;
-
-
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
 extern const ucp_request_send_proto_t ucp_am_proto;
 extern const ucp_request_send_proto_t ucp_am_reply_proto;
@@ -191,26 +178,27 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ep->refcount                          = 0;
-    ep->cfg_index                         = UCP_WORKER_CFG_INDEX_NULL;
-    ep->worker                            = worker;
-    ep->am_lane                           = UCP_NULL_LANE;
-    ep->flags                             = 0;
-    ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
+    ep->refcount                              = 0;
+    ep->cfg_index                             = UCP_WORKER_CFG_INDEX_NULL;
+    ep->worker                                = worker;
+    ep->am_lane                               = UCP_NULL_LANE;
+    ep->flags                                 = 0;
+    ep->conn_sn                               = UCP_EP_MATCH_CONN_SN_MAX;
 #if UCS_ENABLE_ASSERT
-    ep->refcounts.create                  =
-    ep->refcounts.flush                   =
-    ep->refcounts.discard                 =
-    ep->refcounts.invalidate              = 0;
+    ep->refcounts.create                      =
+    ep->refcounts.flush                       =
+    ep->refcounts.discard                     =
+    ep->refcounts.invalidate                  = 0;
 #endif
-    ucp_ep_ext_gen(ep)->user_data         = NULL;
-    ucp_ep_ext_control(ep)->cm_idx        = UCP_NULL_RESOURCE;
-    ucp_ep_ext_control(ep)->local_ep_id   = UCS_PTR_MAP_KEY_INVALID;
-    ucp_ep_ext_control(ep)->remote_ep_id  = UCS_PTR_MAP_KEY_INVALID;
-    ucp_ep_ext_control(ep)->err_cb        = NULL;
-    ucp_ep_ext_control(ep)->close_req     = NULL;
+    ucp_ep_ext_gen(ep)->user_data             = NULL;
+    ucp_ep_ext_control(ep)->cm_idx            = UCP_NULL_RESOURCE;
+    ucp_ep_ext_control(ep)->local_ep_id       = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->remote_ep_id      = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->err_cb            = NULL;
+    ucp_ep_ext_control(ep)->close_req         = NULL;
 #if UCS_ENABLE_ASSERT
-    ucp_ep_ext_control(ep)->ka_last_round = 0;
+    ucp_ep_ext_control(ep)->ka_last_round     = 0;
+    ucp_ep_ext_control(ep)->discard_lanes_arg = NULL;
 #endif
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
@@ -1155,13 +1143,27 @@ static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
                                           void *user_data)
 {
     ucp_ep_discard_lanes_arg_t *arg = (ucp_ep_discard_lanes_arg_t*)user_data;
+    ucp_request_t UCS_V_UNUSED *req;
 
     ucs_assert(arg != NULL);
     ucs_assert(arg->counter > 0);
 
+    ucs_assert(ucp_ep_ext_control(arg->ucp_ep)->discard_lanes_arg == arg);
+#if UCS_ENABLE_ASSERT
+    if (request != NULL) {
+        req = (ucp_request_t*)request - 1;
+        ucs_list_del(&req->send.discard_uct_ep.elem);
+    }
+#endif
+
     if (--arg->counter > 0) {
         return;
     }
+
+    ucs_assert(ucs_list_is_empty(&arg->reqs));
+#if UCS_ENABLE_ASSERT
+    ucp_ep_ext_control(arg->ucp_ep)->discard_lanes_arg = NULL;
+#endif
 
     ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
     ucs_free(arg);
@@ -1175,7 +1177,8 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
                                       UCT_FLUSH_FLAG_CANCEL;
     uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
     ucp_ep_discard_lanes_arg_t *discard_arg;
-    ucs_status_t status;
+    ucs_status_ptr_t status_ptr;
+    ucp_request_t UCS_V_UNUSED *req;
     ucp_lane_index_t lane;
     uct_ep_h uct_ep;
 
@@ -1187,6 +1190,7 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
         return;
     }
 
+    ucs_assert(ucp_ep_ext_control(ep)->discard_lanes_arg == NULL);
     discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
     if (discard_arg == NULL) {
         ucs_error("ep %p: failed to allocate memory for discarding lanes"
@@ -1195,6 +1199,11 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
         ucp_ep_reqs_purge(ep, discard_status);
         return;
     }
+
+#if UCS_ENABLE_ASSERT
+    ucp_ep_ext_control(ep)->discard_lanes_arg = discard_arg;
+    ucs_list_head_init(&discard_arg->reqs);
+#endif
 
     discard_arg->ucp_ep  = ep;
     discard_arg->status  = discard_status;
@@ -1209,12 +1218,18 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
         }
 
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
-        status = ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
-                                           ucp_ep_err_pending_purge,
-                                           UCS_STATUS_PTR(discard_status),
-                                           ucp_ep_discard_lanes_callback,
-                                           discard_arg);
-        if (status == UCS_INPROGRESS) {
+        status_ptr = ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
+                                               ucp_ep_err_pending_purge,
+                                               UCS_STATUS_PTR(discard_status),
+                                               ucp_ep_discard_lanes_callback,
+                                               discard_arg);
+        if (UCS_PTR_IS_PTR(status_ptr)) {
+#if UCS_ENABLE_ASSERT
+            req = (ucp_request_t*)status_ptr;
+            ucs_list_add_tail(
+                    &ucp_ep_ext_control(ep)->discard_lanes_arg->reqs,
+                    &req->send.discard_uct_ep.elem);
+#endif
             ++discard_arg->counter;
         }
     }
