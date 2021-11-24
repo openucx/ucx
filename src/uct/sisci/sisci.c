@@ -7,7 +7,7 @@
 
 #include "sisci.h"
 #include "sisci_iface.h" //TODO, is this needed?
-#include "sisci_iface.c"
+//#include "sisci_iface.c"
 
 
 
