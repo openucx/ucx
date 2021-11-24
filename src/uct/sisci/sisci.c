@@ -97,11 +97,28 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     unsigned int local_node_id; 
     sci_query_adapter_t query; 
     sci_error_t error; 
- 
+    int num_resources = 1;
+    uct_md_resource_desc_t = *resources;
+    ucs_status_t status;
+
+    resources = ucs_malloc(sizeof(*resources), "SCI resources");
+
+    printf("component name: %s\n", component->name);
+
+    if(resources == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        prinf("NO MEMORY\n");
+    }
+
+    ucs_snprintf_zero(resource->md_nam, UCT_MD_NAME_MAX, "%s", component->name);
+
+    *resources_p = resources;
+    *num_resources_p = 1;
+
     query.subcommand = SCI_Q_ADAPTER_NODEID; 
     query.localAdapterNo = ADAPTER_NO; 
     query.data = &local_node_id; 
- 
+    
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
     SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
@@ -115,6 +132,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     sci_error = 0;
     SCIInitialize(0, &sci_error);
     
+    printf("after first open %d\n" , sci_error);
 
     SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
     
@@ -126,21 +144,9 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     } 
 
 
-    printf("after first open %d\n" , sci_error);
-
-
-    sci_error = 1;
-
-    SCIInitialize(0, &sci_error);
-
-    printf("after second open %d\n" , sci_error);
-
-
     SCITerminate();
 
-    
-
-    return UCS_ERR_NOT_IMPLEMENTED;
+    return UCS_OK;
 
 }
 
