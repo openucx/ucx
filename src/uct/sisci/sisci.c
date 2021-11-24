@@ -110,10 +110,12 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
         prinf("NO MEMORY\n");
     }
 
-    ucs_snprintf_zero(resource->md_nam, UCT_MD_NAME_MAX, "%s", component->name);
+    status = UCS_OK;
+
+    ucs_snprintf_zero(resources->md_nam, UCT_MD_NAME_MAX, "%s", component->name);
 
     *resources_p = resources;
-    *num_resources_p = 1;
+    *num_resources_p = num_resources;
 
     query.subcommand = SCI_Q_ADAPTER_NODEID; 
     query.localAdapterNo = ADAPTER_NO; 
@@ -146,7 +148,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 
     SCITerminate();
 
-    return UCS_OK;
+    return status;
 
 }
 
