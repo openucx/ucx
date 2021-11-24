@@ -2,7 +2,8 @@
 #include <uct/base/uct_md.h>
 #include <ucs/type/class.h>
 #include <ucs/type/status.h>
-//#include <uct/tcp/tcp_md.c>
+#include <ucs/sys/string.h>
+
 #include "stdio.h"
 
 #include "sisci.h"
@@ -107,7 +108,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 
     if(resources == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        prinf("NO MEMORY\n");
+        printf("NO MEMORY\n");
     }
 
     status = UCS_OK;
