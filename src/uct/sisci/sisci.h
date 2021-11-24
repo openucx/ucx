@@ -16,7 +16,7 @@ void sisci_testing();
 
 // iface file contents
 
-extern ucs_config_field_t uct_sisci_iface_config_table[];
+//extern ucs_config_field_t uct_sisci_iface_config_table[];
 
 typedef struct uct_sisci_iface_config {
     uct_iface_config_t    super;
