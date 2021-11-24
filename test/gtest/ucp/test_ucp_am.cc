@@ -1020,7 +1020,66 @@ UCS_TEST_P(test_ucp_am_nbx_align, multi)
                       UCP_AM_FLAG_PERSISTENT_DATA);
 }
 
-UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_align)
+class test_ucp_am_nbx_seg_size : public test_ucp_am_nbx {
+public:
+    test_ucp_am_nbx_seg_size() : m_size(0ul)
+    {
+        modify_config("ADDRESS_VERSION", "v2");
+        modify_config("RNDV_THRESH", "inf");
+    }
+
+    void init()
+    {
+        m_size               = ucs_max(UCS_KBYTE,
+                                       ucs::rand() % (64 * UCS_KBYTE));
+        std::string str_size = ucs::to_string(m_size);
+
+        test_ucp_am_nbx::init();
+
+        // Create new sender() with different segment size
+        m_env.push_back(new ucs::scoped_setenv("UCX_IB_SEG_SIZE", str_size.c_str()));
+        m_env.push_back(new ucs::scoped_setenv("UCX_MM_SEG_SIZE", str_size.c_str()));
+        m_env.push_back(new ucs::scoped_setenv("UCX_SCOPY_SEG_SIZE", str_size.c_str()));
+
+        entity *ent = create_entity(true);
+        ent->connect(&receiver(), get_ep_params());
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_AM_SEND_REPLY, "reply");
+    }
+
+protected:
+    size_t seg_size()
+    {
+        return m_size;
+    }
+
+    void test_am_different_seg_sizes(size_t data_size)
+    {
+        UCS_TEST_MESSAGE << "seg size " << m_size << " data size " << data_size;
+        test_am_send_recv(data_size);
+    }
+
+private:
+    size_t m_size;
+
+};
+
+UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_seg_size, single, has_transport("self"))
+{
+    test_am_different_seg_sizes(seg_size() / 2);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_seg_size, multi, has_transport("self"))
+{
+    test_am_different_seg_sizes(seg_size() * 2);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_seg_size)
 
 
 class test_ucp_am_nbx_dts : public test_ucp_am_nbx {
