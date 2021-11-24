@@ -247,6 +247,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
+    uct_rc_ep_pending_purge_internal(&ep->super);
 
     /* Do not invoke pending requests on a failed endpoint */
     ucs_arbiter_group_desched(&iface->tx.arbiter, &ep->super.arb_group);

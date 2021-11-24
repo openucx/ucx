@@ -255,6 +255,8 @@ ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
                                                    ucs_arbiter_elem_t *elem,
                                                    void *arg);
 
+void uct_rc_ep_pending_purge_internal(uct_rc_ep_t *ep);
+
 void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void*arg);
 

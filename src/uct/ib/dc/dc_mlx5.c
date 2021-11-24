@@ -1580,6 +1580,8 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
     ucs_status_t status;
     ucs_log_level_t log_lvl;
 
+    uct_dc_mlx5_ep_pending_purge_internal(
+            ep, iface, uct_dc_mlx5_ep_arbiter_purge_internal_cb, NULL, NULL);
     if (ep->flags & (UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED |
                      UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL)) {
         return;

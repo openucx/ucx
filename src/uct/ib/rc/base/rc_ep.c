@@ -374,42 +374,66 @@ ucs_arbiter_cb_result_t uct_rc_ep_process_pending(ucs_arbiter_t *arbiter,
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
-ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
-                                                   ucs_arbiter_group_t *group,
-                                                   ucs_arbiter_elem_t *elem,
-                                                   void *arg)
+static UCS_F_ALWAYS_INLINE ucs_arbiter_cb_result_t
+uct_rc_ep_arbiter_purge_internal_cb(ucs_arbiter_t *arbiter,
+                                    ucs_arbiter_group_t *group,
+                                    ucs_arbiter_elem_t *elem, void *arg)
 {
-    uct_purge_cb_args_t *cb_args    = arg;
-    uct_pending_purge_callback_t cb = cb_args->cb;
-    uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t,
-                                                       priv);
-    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(group, uct_rc_ep_t,
-                                                       arb_group);
+    uct_pending_req_t *req = ucs_container_of(elem, uct_pending_req_t, priv);
+    uct_rc_ep_t *ep        = ucs_container_of(group, uct_rc_ep_t, arb_group);
     uct_rc_pending_req_t *freq;
 
     if (req->func == uct_rc_ep_check_progress) {
         ep->flags &= ~UCT_RC_EP_FLAG_KEEPALIVE_PENDING;
         ucs_mpool_put(req);
-    } else if (ucs_likely(req->func != uct_rc_ep_fc_grant)) {
+    } else if (req->func == uct_rc_ep_fc_grant) {
+        freq = ucs_derived_of(req, uct_rc_pending_req_t);
+        ucs_mpool_put(freq);
+    } else {
+        return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+    }
+    return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+}
+
+ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
+                                                   ucs_arbiter_group_t *group,
+                                                   ucs_arbiter_elem_t *elem,
+                                                   void *arg)
+{
+    uct_pending_req_t *req          = ucs_container_of(elem, uct_pending_req_t,
+                                                       priv);
+    uct_purge_cb_args_t *cb_args    = arg;
+    uct_pending_purge_callback_t cb = cb_args->cb;
+    uct_rc_ep_t UCS_V_UNUSED *ep    = ucs_container_of(group, uct_rc_ep_t,
+                                                       arb_group);
+    ucs_arbiter_cb_result_t result;
+
+    result = uct_rc_ep_arbiter_purge_internal_cb(arbiter, group, elem, arg);
+    if (ucs_likely(result != UCS_ARBITER_CB_RESULT_REMOVE_ELEM)) {
         /* Invoke user's callback only if it is not internal FC message */
         if (cb != NULL) {
             cb(req, cb_args->arg);
         } else {
             ucs_debug("ep=%p cancelling user pending request %p", ep, req);
         }
-    } else {
-        freq = ucs_derived_of(req, uct_rc_pending_req_t);
-        ucs_mpool_put(freq);
     }
     return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+}
+
+void uct_rc_ep_pending_purge_internal(uct_rc_ep_t *ep)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_rc_iface_t);
+    ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->arb_group,
+                            uct_rc_ep_arbiter_purge_internal_cb, NULL);
 }
 
 void uct_rc_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb,
                              void *arg)
 {
-    uct_rc_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
-    uct_rc_ep_t *ep       = ucs_derived_of(tl_ep, uct_rc_ep_t);
-    uct_purge_cb_args_t  args = {cb, arg};
+    uct_rc_iface_t *iface    = ucs_derived_of(tl_ep->iface, uct_rc_iface_t);
+    uct_rc_ep_t *ep          = ucs_derived_of(tl_ep, uct_rc_ep_t);
+    uct_purge_cb_args_t args = {cb, arg};
 
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->arb_group,
                             uct_rc_ep_arbiter_purge_cb, &args);

@@ -96,6 +96,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     count = uct_rc_verbs_get_tx_res_count(ep, wc);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status,
                                   ep->txcnt.ci + count, 0);
+    uct_rc_ep_pending_purge_internal(&ep->super);
 
     /* Don't need to invoke UCT pending requests for a given UCT EP */
     ucs_arbiter_group_desched(&iface->tx.arbiter, &ep->super.arb_group);
