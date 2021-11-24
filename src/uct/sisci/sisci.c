@@ -113,7 +113,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 
     status = UCS_OK;
 
-    ucs_snprintf_zero(resources->md_nam, UCT_MD_NAME_MAX, "%s", component->name);
+    ucs_snprintf_zero(resources->md_name, UCT_MD_NAME_MAX, "%s", component->name);
 
     *resources_p = resources;
     *num_resources_p = num_resources;
