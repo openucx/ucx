@@ -300,7 +300,7 @@ ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
     return 0;
 }
 
-static int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
+int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
                                        const uct_device_addr_t *dev_addr,
                                        const uct_iface_addr_t *iface_addr)
 {

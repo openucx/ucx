@@ -38,7 +38,7 @@ uct_sisci_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
 ucs_status_t uct_sisci_iface_get_device_address(uct_iface_t *tl_iface,
                                              uct_device_addr_t *addr);
 
-static int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
+int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,
                               const uct_iface_addr_t *iface_addr);
 
 ucs_status_t uct_sisci_iface_fence(uct_iface_t *tl_iface, unsigned flags);
