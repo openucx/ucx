@@ -31,6 +31,7 @@ typedef struct uct_sisci_iface {
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
 } uct_sisci_iface_t;
 
+/*
 ucs_status_t
 uct_sisci_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                              unsigned *num_tl_devices_p);
@@ -51,6 +52,7 @@ UCS_CLASS_DECLARE(uct_sisci_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
                   const uct_iface_config_t*);
 
+*/
 
 /**
  * @brief self device MD descriptor

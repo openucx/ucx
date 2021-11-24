@@ -14,7 +14,7 @@
 
 
 
-extern ucs_config_field_t uct_sisci_iface_config_table[];
+
 
 /*typedef struct uct_sisci_iface_common_config {
     uct_iface_config_t     super;
