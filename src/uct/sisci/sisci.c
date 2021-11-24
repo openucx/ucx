@@ -104,16 +104,27 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
  
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
-    
-    sci_error = 0;
     SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
-    SCIInitialize(0, &sci_error);
 
     if (error == SCI_ERR_OK) { 
-        printf("local node id %d/n", local_node_id);
+        printf("local node id %d\n", local_node_id);
     } else { 
         printf("%s/n", SCIGetErrorString(error));
     } 
+
+    sci_error = 0;
+    SCIInitialize(0, &sci_error);
+    
+
+    SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
+    
+    
+    if (error == SCI_ERR_OK) { 
+        printf("local node id %d\n", local_node_id);
+    } else { 
+        printf("%s/n", SCIGetErrorString(error));
+    } 
+
 
     printf("after first open %d\n" , sci_error);
 
