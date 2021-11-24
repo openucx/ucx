@@ -5,11 +5,14 @@
 # See file LICENSE for terms.
 #
 
+DIS_HOME = /opt/DIS
+INCLUDE  = -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
+
 lib_LTLIBRARIES     = libucp.la
 
-libucp_la_CFLAGS   = $(BASE_CFLAGS)
+libucp_la_CFLAGS   = $(BASE_CFLAGS) $(INCLUDE)
 libucp_la_LIBS     =
-libucp_la_CPPFLAGS = $(BASE_CPPFLAGS)
+libucp_la_CPPFLAGS = $(BASE_CPPFLAGS)  $(INCLUDE)
 libucp_la_LDFLAGS  = -ldl -version-info $(SOVERSION)
 libucp_la_LIBADD   = ../ucs/libucs.la ../uct/libuct.la
 libucp_ladir       = $(includedir)/ucp

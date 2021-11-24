@@ -6,7 +6,7 @@
 #
 
 DIS_HOME = /opt/DIS
-INCLUDE  = -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
+INCLUDE  =  -I$(DIS_HOME)/include -I$(DIS_HOME)/include/dis -I $(DIS_HOME)/src/include
 
 
 bin_PROGRAMS = ucx_info
@@ -20,8 +20,9 @@ DISTCLEANFILES = build_config.h
 build_config.h: $(top_builddir)/config.h Makefile
 	$(SED) -nr 's:\s*#define\s+(\w+)(\s+(\w+)|\s+(".*")|\s*)$$:{"\1", UCS_PP_MAKE_STRING(\3\4)},:p' <$(top_builddir)/config.h >$@
 
-ucx_info_CPPFLAGS  = $(BASE_CPPFLAGS)
+ucx_info_CPPFLAGS  = $(BASE_CPPFLAGS) $(INCLUDE)
 ucx_info_CFLAGS    = $(BASE_CFLAGS) $(INCLUDE)
+
 if HAVE_IB
 ucx_info_CPPFLAGS += $(IBVERBS_CPPFLAGS)
 endif
@@ -47,4 +48,6 @@ ucx_info_LDADD    = \
     $(abs_top_builddir)/src/uct/libuct.la \
     $(abs_top_builddir)/src/ucp/libucp.la \
     $(abs_top_builddir)/src/ucs/libucs.la \
-    $(abs_top_builddir)/src/ucm/libucm.la
+    $(abs_top_builddir)/src/ucm/libucm.la 
+
+#	$(DIS_HOME)/lib64/libsisci.la

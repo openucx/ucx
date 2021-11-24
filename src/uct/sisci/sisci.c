@@ -4,6 +4,7 @@
 #include <ucs/type/status.h>
 //#include <uct/tcp/tcp_md.c>
 #include "stdio.h"
+
 #include "sisci.h"
 #include "sisci_iface.h" //TODO, is this needed?
 #include "sisci_iface.c"
@@ -88,7 +89,29 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
                                               uct_md_resource_desc_t **resources_p,
                                               unsigned int *num_resources_p)
 {
+    sci_error_t sci_error;
+    
+
+
+    sci_error = 0;
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
+    
+    SCIInitialize(0, &sci_error);
+
+    printf("after first open %d\n" , sci_error);
+
+
+    sci_error = 1;
+
+    SCIInitialize(0, &sci_error);
+
+    printf("after second open %d\n" , sci_error);
+
+
+    SCITerminate();
+
+    
+
     return UCS_ERR_NOT_IMPLEMENTED;
 
 }
