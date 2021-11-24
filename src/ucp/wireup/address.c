@@ -1464,11 +1464,18 @@ ucs_status_t ucp_address_unpack(ucp_worker_t *worker, const void *buffer,
                   addr_version, addr_flags);
     }
 
-    if (unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) {
-        ucs_assert(addr_flags & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID);
-    }
-
-    if (addr_flags & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID) {
+    if (((unpack_flags & UCP_ADDRESS_PACK_FLAG_WORKER_UUID) &&
+         (addr_version == UCP_OBJECT_VERSION_V1)) ||
+        (addr_flags & UCP_ADDRESS_HEADER_FLAG_WORKER_UUID)) {
+        /* NOTE:
+         * 1. addr_flags may not contain UCP_ADDRESS_HEADER_FLAG_WORKER_UUID
+         *    even though the worker uuid is packed, because this flags was
+         *    introduced in UCX v1.12.
+         * 2. Unpack worker uuid if addr_flags contains
+         *    UCP_ADDRESS_HEADER_FLAG_WORKER_UUID, even if there is no
+         *    UCP_ADDRESS_PACK_FLAG_WORKER_UUID bit in unpack_flags, to
+         *    correctly unpack the address.
+         */
         unpacked_address->uuid = ucp_address_get_uuid(buffer);
         ptr                    = UCS_PTR_TYPE_OFFSET(ptr,
                                                      unpacked_address->uuid);
