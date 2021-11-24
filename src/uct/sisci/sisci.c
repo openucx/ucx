@@ -109,7 +109,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     if (error == SCI_ERR_OK) { 
         printf("local node id %d\n", local_node_id);
     } else { 
-        printf("%s/n", SCIGetErrorString(error));
+        printf("%s\n", SCIGetErrorString(error));
     } 
 
     sci_error = 0;
@@ -122,7 +122,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     if (error == SCI_ERR_OK) { 
         printf("local node id %d\n", local_node_id);
     } else { 
-        printf("%s/n", SCIGetErrorString(error));
+        printf("%s\n", SCIGetErrorString(error));
     } 
 
 
