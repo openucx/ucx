@@ -382,8 +382,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
          * (otherwise it will be dispatched by tx progress) */
         if (cur_wnd <= 0) {
             ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
-            ucs_arbiter_dispatch(&iface->tx.arbiter, 1,
-                                 uct_rc_ep_process_pending, NULL);
+            uct_rc_iface_arbiter_dispatch(iface);
         }
         if  (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
             /* Special FC grant message can't be bundled with any other FC
@@ -703,7 +702,8 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
     ops->cleanup_qp(cleanup_ctx);
 
     if (cleanup_ctx->cq_credits > 0) {
-        uct_rc_iface_add_cq_credits_dispatch(iface, cleanup_ctx->cq_credits);
+        uct_rc_iface_add_cq_credits(iface, cleanup_ctx->cq_credits);
+        uct_rc_iface_arbiter_dispatch(iface);
     }
 
     ucs_list_del(&cleanup_ctx->list);
