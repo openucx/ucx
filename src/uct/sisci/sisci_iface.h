@@ -1,8 +1,8 @@
 
-//#include <uct/api/uct.h>
-//#include <uct/base/uct_iface.h>
-//#include <ucs/sys/math.h>
-//#include <ucs/sys/iovec.h>
+#include <uct/api/uct.h>
+#include <uct/base/uct_iface.h>
+#include <ucs/sys/math.h>
+#include <ucs/sys/iovec.h>
 
 #ifndef SISCI_IFACE_H_
 #define SISCI_IFACE_H_
