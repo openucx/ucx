@@ -91,16 +91,28 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 {
     sci_error_t sci_error;
     sci_error = 0;
-    void* data = {30};
+    char data[64];
 
     
-    
-    
+    unsigned int local_node_id; 
+    sci_query_adapter_t query; 
+    sci_error_t error; 
+ 
+    query.subcommand = SCI_Q_ADAPTER_NODE_ID; 
+    query.localAdapterNo = ADAPTER_NO; 
+    query.data = &local_node_id; 
+ 
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
-    SCIQuery(SCI_Q_ADAPTER, &data,SCI_Q_ADAPTER_NODEID ,&sci_error);
+    
+    SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error)
     SCIInitialize(0, &sci_error);
 
+    if (error == SCI_ERR_OK) { 
+        printf("local node id %d/n", local_node_id);
+    } else { 
+        printf("%s/n", SCIGetErrorString(error));
+    } 
 
     printf("%p\n", data );
     printf("after first open %d\n" , sci_error);
