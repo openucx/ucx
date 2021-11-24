@@ -625,7 +625,7 @@ make_scripts()
 			cat >>${command_file} <<-EOF
 				function start_server_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=server_${i} ${add_cmd_vars} ${cmd_prefix} \\
+				    env IODEMO_ROLE=server_${i} \${add_cmd_vars} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_server_args} -p ${port_num} \\
 				            ${log_redirect} ${log_file} &
@@ -643,7 +643,7 @@ make_scripts()
 			cat >>${command_file} <<-EOF
 				function start_client_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=client_${i} ${add_cmd_vars} ${cmd_prefix} \\
+				    env IODEMO_ROLE=client_${i} \${add_cmd_vars} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_client_args} ${client_connect_list} \\
 				            ${log_redirect} ${log_file} &
