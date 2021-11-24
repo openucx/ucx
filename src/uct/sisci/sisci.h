@@ -31,11 +31,11 @@ typedef struct uct_sisci_iface {
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
 } uct_sisci_iface_t;
 
-/*
 ucs_status_t
 uct_sisci_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                              unsigned *num_tl_devices_p);
 
+/*
 ucs_status_t uct_sisci_iface_get_device_address(uct_iface_t *tl_iface,
                                              uct_device_addr_t *addr);
 
