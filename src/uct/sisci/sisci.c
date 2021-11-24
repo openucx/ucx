@@ -5,6 +5,9 @@
 //#include <uct/tcp/tcp_md.c>
 #include "stdio.h"
 #include "sisci.h"
+#include "sisci_iface.h" //TODO, is this needed?
+#include "sisci_iface.c"
+
 
 
 /* Forward declarations */
@@ -298,6 +301,7 @@ static ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     printf("UCT_sisci_iface_query\n");
+    
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
