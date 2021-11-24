@@ -5,6 +5,8 @@
 # See file LICENSE for terms.
 #
 
+set -x
+
 # set $? to zero iff verbose mode is on
 is_verbose()
 {
