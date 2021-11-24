@@ -457,6 +457,9 @@ static void print_md_info(uct_component_h component,
         if (md_attr.cap.flags & UCT_MD_FLAG_RKEY_PTR) {
             printf("#           rkey_ptr is supported\n");
         }
+        if (md_attr.cap.flags & UCT_MD_FLAG_INVALIDATE) {
+            printf("#           memory invalidation is supported\n");
+        }
     }
 
     if (num_resources == 0) {
