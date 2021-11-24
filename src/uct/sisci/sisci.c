@@ -11,7 +11,7 @@
 
 
 #define ADAPTER_NO 0
-
+#define NO_FLAGS 0
 
 /* Forward declarations */
 static uct_iface_ops_t uct_sisci_iface_ops;
@@ -92,21 +92,20 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
                                               unsigned int *num_resources_p)
 {
     sci_error_t sci_error;
-    sci_error = 0;
-    char data[64];
 
     
     unsigned int local_node_id; 
     sci_query_adapter_t query; 
     sci_error_t error; 
  
-    query.subcommand = SCI_Q_ADAPTER_NODE_ID; 
+    query.subcommand = SCI_Q_ADAPTER_NODEID; 
     query.localAdapterNo = ADAPTER_NO; 
     query.data = &local_node_id; 
  
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
     
+    sci_error = 0;
     SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
     SCIInitialize(0, &sci_error);
 
