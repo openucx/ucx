@@ -16,14 +16,8 @@ static ucp_rsc_index_t
 ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
                                ucp_lane_index_t lane)
 {
-    ucp_rsc_index_t rsc_index;
-
     ucs_assert(lane < UCP_MAX_LANES);
-
-    rsc_index = params->ep_config_key->lanes[lane].rsc_index;
-    ucs_assert(rsc_index < UCP_MAX_RESOURCES);
-
-    return rsc_index;
+    return params->ep_config_key->lanes[lane].rsc_index;
 }
 
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
@@ -100,12 +94,18 @@ void ucp_proto_common_get_lane_distance(const ucp_proto_init_params_t *params,
                                         ucs_sys_device_t sys_dev,
                                         ucs_sys_dev_distance_t *distance)
 {
-    ucp_context_h context       = params->worker->context;
-    ucp_rsc_index_t rsc_index   = ucp_proto_common_get_rsc_index(params, lane);
-    ucs_sys_device_t tl_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
+    ucp_context_h context     = params->worker->context;
+    ucp_rsc_index_t rsc_index = ucp_proto_common_get_rsc_index(params, lane);
+    ucs_sys_device_t tl_sys_dev;
     ucs_status_t status;
 
-    status = ucs_topo_get_distance(sys_dev, tl_sys_dev, distance);
+    if (rsc_index == UCP_NULL_RESOURCE) {
+        *distance = ucs_topo_default_distance;
+        return;
+    }
+
+    tl_sys_dev = context->tl_rscs[rsc_index].tl_rsc.sys_device;
+    status     = ucs_topo_get_distance(sys_dev, tl_sys_dev, distance);
     ucs_assertv_always(status == UCS_OK, "sys_dev=%d tl_sys_dev=%d", sys_dev,
                        tl_sys_dev);
 }
