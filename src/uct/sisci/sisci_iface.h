@@ -18,7 +18,7 @@ extern ucs_config_field_t uct_sisci_iface_config_table[];
 
 /*typedef struct uct_sisci_iface_common_config {
     uct_iface_config_t     super;
-    double                 bandwidth; /* Memory bandwidth in bytes per second
+    double                 bandwidth; // Memory bandwidth in bytes per second
 } uct_sisci_iface_config_t; */
 
 /*typedef struct uct_sisci_iface {
