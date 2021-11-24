@@ -2,7 +2,7 @@
 
 #include <uct/base/uct_md.h>
 
-
+/*
 ucs_config_field_t uct_sisci_iface_config_table[] = {
     {"", "", NULL,
      ucs_offsetof(uct_sisci_iface_config_t, super),
@@ -25,6 +25,7 @@ uct_sisci_base_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devic
                                       UCS_SYS_DEVICE_ID_UNKNOWN, tl_devices_p,
                                       num_tl_devices_p);
 }
+*/
 
 //uct_sisci_iface_get_device_address
 //uct_sisci_iface_is_reachable
