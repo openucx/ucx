@@ -102,7 +102,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     SCIInitialize(0, &sci_error);
 
 
-    printf("%s\n", data );
+    printf("%p\n", data );
     printf("after first open %d\n" , sci_error);
 
 
