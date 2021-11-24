@@ -10,6 +10,8 @@
 //#include "sisci_iface.c"
 
 
+#define ADAPTER_NO 0
+
 
 /* Forward declarations */
 static uct_iface_ops_t uct_sisci_iface_ops;
