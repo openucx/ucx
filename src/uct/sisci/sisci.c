@@ -98,7 +98,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
-    SCIQuery(SCI_Q_ADAPTER, &data,SCI_Q_ADAPTER_NODEID ,sci_error);
+    SCIQuery(SCI_Q_ADAPTER, &data,SCI_Q_ADAPTER_NODEID ,&sci_error);
     SCIInitialize(0, &sci_error);
 
 
