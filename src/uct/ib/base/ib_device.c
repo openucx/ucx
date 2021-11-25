@@ -819,10 +819,10 @@ void uct_ib_device_ece_check(uct_ib_device_t *dev,
                              struct ibv_context *ctx, struct ibv_pd *pd)
 {
 #if HAVE_RDMACM_ECE
+    struct ibv_ece dummy_ece = {};
     struct ibv_qp *dummy_qp;
     struct ibv_cq *dummy_cq;
     struct ibv_qp_init_attr dummy_qp_init_attr;
-    struct ibv_ece dummy_ece = {};
 
     dummy_cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     ucs_assert(dummy_cq != NULL);
