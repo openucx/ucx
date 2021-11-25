@@ -27,6 +27,29 @@
 #endif
 
 
+typedef struct uct_cma_md {
+    struct uct_md       super;
+    uint64_t            extra_caps;
+} uct_cma_md_t;
+
+typedef struct uct_cma_md_config {
+    uct_md_config_t     super;
+    int                 mem_invalidate;
+} uct_cma_md_config_t;
+
+static ucs_config_field_t uct_cma_md_config_table[] = {
+    {"", "", NULL,
+     ucs_offsetof(uct_cma_md_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_md_config_table)},
+
+    {"MEMORY_INVALIDATE", "n", "Expose memory invalidate support capability.\n"
+     "Note: this capability is not really supported yet. This variable will\n"
+     "be deprecated, when memory invalidation support is implemented.",
+     ucs_offsetof(uct_cma_md_config_t, mem_invalidate), UCS_CONFIG_TYPE_BOOL},
+
+    {NULL}
+};
+
 static int uct_cma_test_ptrace_scope()
 {
     static const char *ptrace_scope_file = "/proc/sys/kernel/yama/ptrace_scope";
@@ -148,12 +171,19 @@ static ucs_status_t uct_cma_mem_dereg(uct_md_h uct_md,
     return UCS_OK;
 }
 
+static void uct_cma_md_close(uct_md_h md)
+{
+    ucs_free(md);
+}
+
 static ucs_status_t
 uct_cma_md_open(uct_component_t *component, const char *md_name,
-                const uct_md_config_t *md_config, uct_md_h *md_p)
+                const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
+    const uct_cma_md_config_t *md_config = ucs_derived_of(uct_md_config,
+                                                          uct_cma_md_config_t);
     static uct_md_ops_t md_ops = {
-        .close                  = (uct_md_close_func_t)ucs_empty_function,
+        .close                  = uct_cma_md_close,
         .query                  = uct_cma_md_query,
         .mem_alloc              = (uct_md_mem_alloc_func_t)ucs_empty_function_return_success,
         .mem_free               = (uct_md_mem_free_func_t)ucs_empty_function_return_success,
@@ -163,19 +193,29 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
         .is_sockaddr_accessible = ucs_empty_function_return_zero_int,
         .detect_memory_type     = ucs_empty_function_return_unsupported,
     };
-    static uct_md_t md = {
-        .ops          = &md_ops,
-        .component    = &uct_cma_component
-    };
+    uct_cma_md_t *cma_md;
 
-    *md_p = &md;
+    cma_md = ucs_malloc(sizeof(uct_cma_md_t), "uct_cma_md_t");
+    if (cma_md == NULL) {
+        ucs_error("Failed to allocate memory for uct_cma_md_t");
+        return UCS_ERR_NO_MEMORY;
+    }
+
+    cma_md->super.ops       = &md_ops;
+    cma_md->super.component = &uct_cma_component;
+    cma_md->extra_caps      = (md_config->mem_invalidate == UCS_YES) ?
+                              UCT_MD_FLAG_INVALIDATE : 0ul;
+    *md_p                   = &cma_md->super;
+
     return UCS_OK;
 }
 
-ucs_status_t uct_cma_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
+    uct_cma_md_t *md = ucs_derived_of(uct_md, uct_cma_md_t);
+
     md_attr->rkey_packed_size     = 0;
-    md_attr->cap.flags            = UCT_MD_FLAG_REG;
+    md_attr->cap.flags            = UCT_MD_FLAG_REG | md->extra_caps;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
@@ -196,7 +236,12 @@ uct_component_t uct_cma_component = {
     .rkey_ptr           = ucs_empty_function_return_unsupported,
     .rkey_release       = ucs_empty_function_return_success,
     .name               = "cma",
-    .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    .md_config          = {
+        .name           = "CMA memory domain",
+        .prefix         = "CMA_",
+        .table          = uct_cma_md_config_table,
+        .size           = sizeof(uct_cma_md_config_t),
+    },
     .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_cma_component),
     .flags              = 0,
