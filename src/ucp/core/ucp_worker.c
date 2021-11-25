@@ -436,6 +436,8 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_t *wireup_ep;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        /* No pending operations should be scheduled */
+        uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
         return UCS_OK;
     }
 
