@@ -623,7 +623,7 @@ ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
 }
 
 ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
-                                        uint32_t *ece_val)
+                                        uint32_t *ece)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     uct_rc_mlx5_ep_address_t *rc_addr = (uct_rc_mlx5_ep_address_t*)addr;
@@ -638,12 +638,12 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
         uct_ib_pack_uint24(rc_addr->tm_qp_num, ep->tm_qp.qp_num);
     }
 
-    if (ece_val != NULL) {
+    if (ece != NULL) {
         if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
             (iface->super.super.config.ece_cfg.ece_enable == 0)) {
-            *ece_val = 0;
+            *ece = 0;
         } else {
-            *ece_val = ece_int(*ece_val, ep->super.local_ece.val);
+            *ece = ece_int(*ece, ep->super.local_ece.val);
         }
     }
 
@@ -711,7 +711,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
 ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
                                           const uct_device_addr_t *dev_addr,
                                           const uct_ep_addr_t *ep_addr,
-                                          const uint32_t *ece_val)
+                                          const uint32_t *ece)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
     const uct_ib_address_t *ib_addr = (const uct_ib_address_t *)dev_addr;
@@ -726,7 +726,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         (iface->super.super.config.ece_cfg.ece_enable == 0)) {
         ep->super.remote_ece.val = 0;
     } else {
-        ep->super.remote_ece.val = *ece_val;
+        ep->super.remote_ece.val = *ece;
     }
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,

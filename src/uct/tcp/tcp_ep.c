@@ -816,7 +816,7 @@ ucs_status_t uct_tcp_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
 }
 
 ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr,
-                                    uint32_t *ece_val)
+                                    uint32_t *ece)
 {
     uct_tcp_ep_t *ep        = ucs_derived_of(tl_ep, uct_tcp_ep_t);
     uct_tcp_ep_addr_t *addr = (uct_tcp_ep_addr_t*)ep_addr;
@@ -832,7 +832,7 @@ ucs_status_t uct_tcp_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *ep_addr,
 ucs_status_t uct_tcp_ep_connect_to_ep(uct_ep_h tl_ep,
                                       const uct_device_addr_t *dev_addr,
                                       const uct_ep_addr_t *ep_addr,
-                                      const uint32_t *ece_val)
+                                      const uint32_t *ece)
 {
     uct_tcp_ep_t *ep                    = ucs_derived_of(tl_ep, uct_tcp_ep_t);
     uct_tcp_iface_t UCS_V_UNUSED *iface = ucs_derived_of(ep->super.super.iface,
