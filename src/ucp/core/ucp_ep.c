@@ -191,26 +191,24 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ep->refcount                          = 0;
-    ep->cfg_index                         = UCP_WORKER_CFG_INDEX_NULL;
-    ep->worker                            = worker;
-    ep->am_lane                           = UCP_NULL_LANE;
-    ep->flags                             = 0;
-    ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
+    ep->cfg_index                                = UCP_WORKER_CFG_INDEX_NULL;
+    ep->worker                                   = worker;
+    ep->am_lane                                  = UCP_NULL_LANE;
+    ep->flags                                    = 0;
+    ep->conn_sn                                  = UCP_EP_MATCH_CONN_SN_MAX;
+    ucp_ep_ext_gen(ep)->user_data                = NULL;
+    ucp_ep_ext_control(ep)->refcount             = 0lu;
+    ucp_ep_ext_control(ep)->cm_idx               = UCP_NULL_RESOURCE;
+    ucp_ep_ext_control(ep)->local_ep_id          = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->remote_ep_id         = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->err_cb               = NULL;
+    ucp_ep_ext_control(ep)->close_req            = NULL;
 #if UCS_ENABLE_ASSERT
-    ep->refcounts.create                  =
-    ep->refcounts.flush                   =
-    ep->refcounts.discard                 =
-    ep->refcounts.invalidate              = 0;
-#endif
-    ucp_ep_ext_gen(ep)->user_data         = NULL;
-    ucp_ep_ext_control(ep)->cm_idx        = UCP_NULL_RESOURCE;
-    ucp_ep_ext_control(ep)->local_ep_id   = UCS_PTR_MAP_KEY_INVALID;
-    ucp_ep_ext_control(ep)->remote_ep_id  = UCS_PTR_MAP_KEY_INVALID;
-    ucp_ep_ext_control(ep)->err_cb        = NULL;
-    ucp_ep_ext_control(ep)->close_req     = NULL;
-#if UCS_ENABLE_ASSERT
-    ucp_ep_ext_control(ep)->ka_last_round = 0;
+    ucp_ep_ext_control(ep)->ka_last_round        = 0;
+    ucp_ep_ext_control(ep)->refcounts.create     =
+    ucp_ep_ext_control(ep)->refcounts.flush      =
+    ucp_ep_ext_control(ep)->refcounts.discard    =
+    ucp_ep_ext_control(ep)->refcounts.invalidate = 0lu;
 #endif
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
@@ -324,11 +322,11 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 
 void ucp_ep_destroy_base(ucp_ep_h ep)
 {
-    ucp_ep_refcount_field_assert(ep, refcount, ==, 0);
-    ucp_ep_refcount_assert(ep, create, ==, 0);
-    ucp_ep_refcount_assert(ep, flush, ==, 0);
-    ucp_ep_refcount_assert(ep, discard, ==, 0);
-    ucp_ep_refcount_assert(ep, invalidate, ==, 0);
+    ucp_ep_refcount_field_assert(ep, refcount, ==, 0lu);
+    ucp_ep_refcount_assert(ep, create, ==, 0lu);
+    ucp_ep_refcount_assert(ep, flush, ==, 0lu);
+    ucp_ep_refcount_assert(ep, discard, ==, 0lu);
+    ucp_ep_refcount_assert(ep, invalidate, ==, 0lu);
     ucs_assert(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
 
     ucs_vfs_obj_remove(ep);
@@ -383,7 +381,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
     return UCS_OK;
 
 err_destroy_ep_base:
-    ucp_ep_refcount_assert(ep, create, ==, 1);
+    ucp_ep_refcount_assert(ep, create, ==, 1lu);
     ucp_ep_refcount_remove(ep, create);
 err:
     return status;
@@ -399,7 +397,7 @@ void ucp_ep_delete(ucp_ep_h ep)
 
     ucp_ep_release_id(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    ucp_ep_refcount_assert(ep, create, ==, 1);
+    ucp_ep_refcount_assert(ep, create, ==, 1lu);
     ucp_ep_refcount_remove(ep, create);
 }
 
@@ -1115,9 +1113,12 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
 static void ucp_ep_check_lanes(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
-    uint8_t num_inprog       = ep->refcounts.discard + ep->refcounts.flush +
-                               ep->refcounts.invalidate + ep->refcounts.create;
-    uint8_t num_failed_tl_ep = 0;
+    ucp_ep_ext_control_t *ep_cntrl_ext = ucp_ep_ext_control(ep);
+    size_t num_inprog                  = ep_cntrl_ext->refcounts.discard +
+                                         ep_cntrl_ext->refcounts.flush +
+                                         ep_cntrl_ext->refcounts.invalidate +
+                                         ep_cntrl_ext->refcounts.create;
+    uint8_t num_failed_tl_ep           = 0;
     ucp_lane_index_t lane;
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {

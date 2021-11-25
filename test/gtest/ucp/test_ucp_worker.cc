@@ -11,6 +11,7 @@
 extern "C" {
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_worker.inl>
+#include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_request.h>
 #include <ucp/wireup/wireup_ep.h>
 #include <uct/base/uct_iface.h>
@@ -258,7 +259,7 @@ protected:
             EXPECT_EQ(NULL, eps[i].iface);
         }
 
-        EXPECT_EQ(1u, m_ucp_ep->refcount);
+        EXPECT_EQ(1lu, ucp_ep_ext_control(m_ucp_ep)->refcount);
 
 out:
         disconnect(sender());
@@ -278,12 +279,12 @@ out:
                 uct_invoke_completion(&req->send.state.uct_comp, UCS_ERR_CANCELED);
                 m_flush_comps.erase(iter);
                 EXPECT_EQ(m_ucp_ep, req->send.ep);
-                EXPECT_GT(m_ucp_ep->refcount, 0u);
+                EXPECT_GT(ucp_ep_ext_control(m_ucp_ep)->refcount, 0lu);
                 break;
             }
         }
 
-        EXPECT_GT(m_ucp_ep->refcount, 0u);
+        EXPECT_GT(ucp_ep_ext_control(m_ucp_ep)->refcount, 0lu);
 
         ep->iface = NULL;
         m_destroyed_ep_count++;

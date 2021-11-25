@@ -36,7 +36,7 @@ typedef uint16_t                   ucp_ep_flags_t;
 #if UCS_ENABLE_ASSERT
 #define UCP_EP_ASSERT_COUNTER_INC(_counter) \
     do { \
-        ucs_assert(*(_counter) < UINT_MAX); \
+        ucs_assert(*(_counter) < SIZE_MAX); \
         ++(*(_counter)); \
     } while (0)
 
@@ -53,9 +53,9 @@ typedef uint16_t                   ucp_ep_flags_t;
 
 #define ucp_ep_refcount_add(_ep, _type) \
 ({ \
-    ucs_assert((_ep)->refcount < UINT8_MAX); \
-    ++(_ep)->refcount; \
-    UCP_EP_ASSERT_COUNTER_INC(&(_ep)->refcounts._type); \
+    ucs_assert(ucp_ep_ext_control(_ep)->refcount < SIZE_MAX); \
+    ++ucp_ep_ext_control(_ep)->refcount; \
+    UCP_EP_ASSERT_COUNTER_INC(&ucp_ep_ext_control(_ep)->refcounts._type); \
 })
 
 /* Return 1 if the endpoint was destroyed, 0 if not */
@@ -63,9 +63,9 @@ typedef uint16_t                   ucp_ep_flags_t;
 ({ \
     int __ret = 0; \
     \
-    UCP_EP_ASSERT_COUNTER_DEC(&(_ep)->refcounts._type); \
-    ucs_assert((_ep)->refcount > 0); \
-    if (--(_ep)->refcount == 0) { \
+    UCP_EP_ASSERT_COUNTER_DEC(&ucp_ep_ext_control(_ep)->refcounts._type); \
+    ucs_assert(ucp_ep_ext_control(_ep)->refcount > 0); \
+    if (--ucp_ep_ext_control(_ep)->refcount == 0) { \
         ucp_ep_destroy_base(_ep); \
         __ret = 1; \
     } \
@@ -74,9 +74,10 @@ typedef uint16_t                   ucp_ep_flags_t;
 })
 
 #define ucp_ep_refcount_field_assert(_ep, _refcount_field, _cmp, _val) \
-    ucs_assertv((_ep)->_refcount_field _cmp (_val), "ep=%p: %s=%u vs %u", \
-                (_ep), UCS_PP_MAKE_STRING(_refcount_field), \
-                (_ep)->_refcount_field, _val);
+    ucs_assertv(ucp_ep_ext_control(_ep)->_refcount_field _cmp (_val), \
+                "ep=%p: %s=%zu vs %zu", (_ep), \
+                UCS_PP_MAKE_STRING(_refcount_field), \
+                ucp_ep_ext_control(_ep)->_refcount_field, _val);
 
 #define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
     ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
@@ -411,9 +412,7 @@ struct ucp_ep_config {
  */
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
-
-    uint8_t                       refcount;      /* Reference counter: 0 - it is
-                                                    allowed to destroy EP */
+    /* Place for 1-byte field is vacant here */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
@@ -427,25 +426,7 @@ typedef struct ucp_ep {
     /* Endpoint name for tracing and analysis */
     char                          name[UCP_ENTITY_NAME_MAX];
 #endif
-
-#if UCS_ENABLE_ASSERT
-    struct {
-        /* How many times the EP create was done */
-        unsigned                      create;
-        /* How many Worker flush operations are in-progress where the EP is the
-         * next EP for flushing */
-        unsigned                      flush;
-        /* How many UCT EP discarding operations are in-progress scheduled for
-         * the EP */
-        unsigned                      discard;
-        /* How many UCP operations are in-progress scheduled for the memory
-         * invalidation on the current EP */
-        unsigned                      invalidate;
-    } refcounts;
-#endif
-
     UCS_STATS_NODE_DECLARE(stats)
-
 } ucp_ep_t;
 
 
@@ -465,12 +446,27 @@ typedef struct {
  */
 typedef struct {
     ucp_rsc_index_t          cm_idx; /* CM index */
+    size_t                   refcount; /* Reference counter: 0 - it is
+                                          allowed to destroy EP */
     ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
     ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
     ucp_err_handler_cb_t     err_cb; /* Error handler */
     ucp_request_t            *close_req; /* Close protocol request */
 #if UCS_ENABLE_ASSERT
     ucs_time_t               ka_last_round; /* Time of last KA round done */
+    struct {
+        /* How many times the EP create was done */
+        size_t               create;
+        /* How many Worker flush operations are in-progress where the EP is the
+         * next EP for flushing */
+        size_t               flush;
+        /* How many UCT EP discarding operations are in-progress scheduled for
+         * the EP */
+        size_t               discard;
+        /* How many UCP operations are in-progress scheduled for the memory
+         * invalidation on the current EP */
+        size_t               invalidate;
+    } refcounts;
 #endif
 } ucp_ep_ext_control_t;
 
