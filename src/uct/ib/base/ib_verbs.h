@@ -22,7 +22,9 @@
 #if HAVE_RDMACM_ECE
 typedef struct ibv_ece uct_ibv_ece_t;
 #else
-typedef struct {void *placeholder;} uct_ibv_ece_t;
+typedef struct {
+    void *placeholder;
+} uct_ibv_ece_t;
 #endif
 
 #include <errno.h>
