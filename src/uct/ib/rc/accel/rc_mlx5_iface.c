@@ -358,10 +358,10 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
         (0 == ibv_query_ece(qp->verbs.qp, &ece))) {
         qp->local_ece.val = ece.options;
     } else {
-#endif
         qp->local_ece.val = 0;
-#if HAVE_RDMACM_ECE
     }
+#else
+    qp->local_ece.val = 0;
 #endif
 
     return UCS_OK;

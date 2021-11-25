@@ -1025,10 +1025,12 @@ ucs_status_t
 uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
                               const uct_dc_mlx5_iface_config_t *config)
 {
-    int full_handshake =
-        uct_dc_mlx5_force_full_handshake(iface, config->dci_full_handshake);
+    int full_handshake;
     int pool_index, dci_index;
     ucs_status_t status;
+
+    full_handshake =
+        uct_dc_mlx5_force_full_handshake(iface, config->dci_full_handshake);
 
     dci_index = 0;
     for (pool_index = 0; pool_index < iface->tx.num_dci_pools; pool_index++) {
