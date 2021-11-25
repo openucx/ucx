@@ -308,9 +308,7 @@ typedef struct uct_cm_remote_data {
      */
     size_t                  conn_priv_data_length;
 
-    /**
-     * OOB ECE of the remote peer.
-     */
+    /** OOB ECE of the remote peer. */
     uint32_t                ece;
 } uct_cm_remote_data_t;
 

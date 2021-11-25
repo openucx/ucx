@@ -417,6 +417,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
         ucs_debug("init2rtr_qp_in with ece 0x%x", qp->remote_ece.val);
         UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, qp->remote_ece.val);
     }
+
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
@@ -424,6 +425,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     if (status != UCS_OK) {
         return status;
     }
+
     if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
         ucs_debug("rc devx under rtr with ece 0x%x",
                   UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece));

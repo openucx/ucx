@@ -974,6 +974,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
         if (status != UCS_OK) {
             goto err_destroy_txqp;
         }
+
         self->super.local_ece.val = ece_int(self->super.local_ece.val,
                                             self->tm_qp.local_ece.val);
     }
@@ -984,6 +985,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     if (status != UCS_OK) {
         goto err_destroy_tmqp;
     }
+
     uct_rc_iface_add_qp(&iface->super, &self->super, self->tx.wq.super.qp_num);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
@@ -999,6 +1001,7 @@ err_destroy_tmqp:
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
         uct_ib_mlx5_destroy_qp(md, &self->tm_qp);
     }
+
 err_destroy_txqp:
     uct_ib_mlx5_destroy_qp(md, &self->tx.wq.super);
     return status;

@@ -1246,9 +1246,7 @@ struct uct_ep_params {
      */
     uct_cm_ep_resolve_callback_t        cm_resolve_cb;
 
-    /**
-     * ECE to be passed from server to client
-     */
+    /** ECE to be passed from server to client */
     uint32_t                             ece;
 
     /**
@@ -1290,9 +1288,7 @@ struct uct_ep_connect_params {
      */
     size_t                              private_data_length;
 
-    /**
-     * ECE to be passed from client to server
-     */
+    /** ECE to be passed from client to server */
     uint32_t                             ece;
 };
 
