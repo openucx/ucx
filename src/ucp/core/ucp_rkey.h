@@ -40,7 +40,7 @@ typedef struct ucp_tl_rkey {
  */
 enum {
     UCP_RKEY_DESC_FLAG_POOL       = UCS_BIT(0)  /* Descriptor was allocated from pool
-                                                   and must be retuned to pool, not free */
+                                                   and must be returned to pool, not free */
 };
 
 

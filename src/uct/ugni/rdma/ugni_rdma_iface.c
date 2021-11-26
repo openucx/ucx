@@ -137,7 +137,7 @@ unsigned uct_ugni_progress(void *arg)
         }
         if ((GNI_RC_SUCCESS != ugni_rc && !event_data) || GNI_CQ_OVERRUN(event_data)) {
             uct_ugni_cdm_unlock(&iface->cdm);
-            ucs_error("GNI_CqGetEvent falied. Error status %s %d ",
+            ucs_error("GNI_CqGetEvent failed. Error status %s %d ",
                       gni_err_str[ugni_rc], ugni_rc);
             return count;
         }
@@ -145,7 +145,7 @@ unsigned uct_ugni_progress(void *arg)
         ugni_rc = GNI_GetCompleted(iface->local_cq, event_data, &event_post_desc_ptr);
         uct_ugni_cdm_unlock(&iface->cdm);
         if (GNI_RC_SUCCESS != ugni_rc && GNI_RC_TRANSACTION_ERROR != ugni_rc) {
-            ucs_error("GNI_GetCompleted falied. Error status %s %d",
+            ucs_error("GNI_GetCompleted failed. Error status %s %d",
                       gni_err_str[ugni_rc], ugni_rc);
             return count;
         }

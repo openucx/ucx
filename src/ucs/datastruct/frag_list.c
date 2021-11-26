@@ -348,7 +348,7 @@ ucs_frag_list_insert_slow(ucs_frag_list_t *head, ucs_frag_list_elem_t *elem,
 
  * mode of action
  *  - check if we have elements on ready list, if we do take one from there
- *  - see if h is ready for extraction (sn check), extract firt, move rest to the ready list
+ *  - see if h is ready for extraction (sn check), extract first, move rest to the ready list
  */
 
 ucs_frag_list_elem_t *ucs_frag_list_pull_slow(ucs_frag_list_t *head)

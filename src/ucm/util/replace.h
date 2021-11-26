@@ -22,8 +22,8 @@ extern pthread_t volatile ucm_reloc_get_orig_thread;
  * function.
  */
 
-/* Due to CUDA API redifinition we have to create proxy macro to eliminate
- * redifinition of internal finction names */
+/* Due to CUDA API redefinition we have to create proxy macro to eliminate
+ * redefinition of internal function names */
 #define UCM_DEFINE_REPLACE_FUNC(_name, _rettype, _fail_val, ...) \
     _UCM_DEFINE_REPLACE_FUNC(ucm_override_##_name, ucm_##_name, _rettype, _fail_val, __VA_ARGS__)
 
