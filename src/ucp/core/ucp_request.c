@@ -382,7 +382,7 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
                UCP_ERR_HANDLING_MODE_NONE);
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 
-    /* Do not allow destroying UCP endpoint, since the memeroy invalidation
+    /* Do not allow destroying UCP endpoint, since the memory invalidation
      * depends on it */
     ucp_ep_refcount_add(req->send.ep, invalidate);
 

@@ -412,7 +412,7 @@ struct ucp_ep_config {
  */
 typedef struct ucp_ep {
     ucp_worker_h                  worker;        /* Worker this endpoint belongs to */
-    /* Place for 1-byte field is vacant here */
+    /* Place for 2-bytes field is vacant here */
     ucp_worker_cfg_index_t        cfg_index;     /* Configuration index */
     ucp_ep_match_conn_sn_t        conn_sn;       /* Sequence number for remote connection */
     ucp_lane_index_t              am_lane;       /* Cached value */
