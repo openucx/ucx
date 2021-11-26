@@ -743,6 +743,23 @@ void UcxContext::free(void *ptr)
     ::free(ptr);
 }
 
+bool UcxContext::map_buffer(size_t length, void *address, ucp_mem_h *memh_p)
+{
+    ucp_mem_map_params_t mem_map_params;
+
+    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                                UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    mem_map_params.address    = address;
+    mem_map_params.length     = length;
+
+    return ucp_mem_map(_context, &mem_map_params, memh_p) == UCS_OK;
+}
+
+bool UcxContext::unmap_buffer(ucp_mem_h memh)
+{
+    return ucp_mem_unmap(_context, memh) == UCS_OK;
+}
+
 #define UCX_CONN_LOG UcxLog(_log_prefix, true)
 
 unsigned UcxConnection::_num_instances = 0;
@@ -879,18 +896,18 @@ bool UcxConnection::send_io_message(const void *buffer, size_t length,
                                     UcxCallback* callback)
 {
     ucp_tag_t tag = make_iomsg_tag(_remote_conn_id, 0);
-    return send_common(buffer, length, tag, callback);
+    return send_common(buffer, length, NULL, tag, callback);
 }
 
-bool UcxConnection::send_data(const void *buffer, size_t length, uint32_t sn,
-                              UcxCallback* callback)
+bool UcxConnection::send_data(const void *buffer, size_t length, ucp_mem_h memh,
+                              uint32_t sn, UcxCallback *callback)
 {
     ucp_tag_t tag = make_data_tag(_remote_conn_id, sn);
-    return send_common(buffer, length, tag, callback);
+    return send_common(buffer, length, memh, tag, callback);
 }
 
-bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
-                              UcxCallback* callback)
+bool UcxConnection::recv_data(void *buffer, size_t length, ucp_mem_h memh,
+                              uint32_t sn, UcxCallback *callback)
 {
     if (_ep == NULL) {
         (*callback)(UCS_ERR_CANCELED);
@@ -899,16 +916,25 @@ bool UcxConnection::recv_data(void *buffer, size_t length, uint32_t sn,
 
     ucp_tag_t tag      = make_data_tag(_conn_id, sn);
     ucp_tag_t tag_mask = std::numeric_limits<ucp_tag_t>::max();
-    ucs_status_ptr_t ptr_status = ucp_tag_recv_nb(_context.worker(), buffer,
-                                                  length, ucp_dt_make_contig(1),
-                                                  tag, tag_mask,
-                                                  data_recv_callback);
-    return process_request("ucp_tag_recv_nb", ptr_status, callback);
+
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.recv      = (ucp_tag_recv_nbx_callback_t)data_recv_callback;
+    if (memh) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+        param.memh          = memh;
+    }
+
+    ucs_status_ptr_t status_ptr = ucp_tag_recv_nbx(_context.worker(), buffer,
+                                                   length, tag, tag_mask,
+                                                   &param);
+    return process_request("ucp_tag_recv_nbx", status_ptr, callback);
 }
 
 bool UcxConnection::send_am(const void *meta, size_t meta_length,
-                            const void *buffer, size_t length,
-                            UcxCallback* callback)
+                            const void *buffer, size_t length, ucp_mem_h memh,
+                            UcxCallback *callback)
 {
     if (_ep == NULL) {
         (*callback)(UCS_ERR_CANCELED);
@@ -921,15 +947,19 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
     param.cb.send      = common_request_callback_nbx;
     param.flags        = UCP_AM_SEND_REPLY;
     param.datatype     = 0; // make coverity happy
+    if (memh) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+        param.memh          = memh;
+    }
 
     ucs_status_ptr_t sptr = ucp_am_send_nbx(_ep, AM_MSG_ID, meta, meta_length,
                                             buffer, length, &param);
     return process_request("ucp_am_send_nbx", sptr, callback);
 }
 
-bool UcxConnection::recv_am_data(void *buffer, size_t length,
+bool UcxConnection::recv_am_data(void *buffer, size_t length, ucp_mem_h memh,
                                  const UcxAmDesc &data_desc,
-                                 UcxCallback* callback)
+                                 UcxCallback *callback)
 {
     assert(_ep != NULL);
 
@@ -938,13 +968,18 @@ bool UcxConnection::recv_am_data(void *buffer, size_t length,
         return true;
     }
 
-    ucp_request_param_t params;
-    params.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
-                          UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
-    params.cb.recv_am   = am_data_recv_callback;
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                         UCP_OP_ATTR_FLAG_NO_IMM_CMPL;
+    param.cb.recv_am   = am_data_recv_callback;
+    if (memh) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+        param.memh          = memh;
+    }
+
     ucs_status_ptr_t sp = ucp_am_recv_data_nbx(_context.worker(),
-                                               data_desc._data,
-                                               buffer, length, &params);
+                                               data_desc._data, buffer, length,
+                                               &param);
     return process_request("ucp_am_recv_data_nbx", sp, callback);
 }
 
@@ -1164,8 +1199,9 @@ void UcxConnection::established(ucs_status_t status)
     invoke_callback(_establish_cb, status);
 }
 
-bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag,
-                                UcxCallback* callback)
+bool UcxConnection::send_common(const void *buffer, size_t length,
+                                ucp_mem_h memh, ucp_tag_t tag,
+                                UcxCallback *callback)
 {
     if (_ep == NULL) {
         (*callback)(UCS_ERR_CANCELED);
@@ -1174,10 +1210,19 @@ bool UcxConnection::send_common(const void *buffer, size_t length, ucp_tag_t tag
 
     assert(_ucx_status == UCS_OK);
 
-    ucs_status_ptr_t ptr_status = ucp_tag_send_nb(_ep, buffer, length,
-                                                  ucp_dt_make_contig(1), tag,
-                                                  common_request_callback);
-    return process_request("ucp_tag_send_nb", ptr_status, callback);
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
+    param.datatype     = 0; // make coverity happy
+    param.cb.send      = (ucp_send_nbx_callback_t)common_request_callback;
+
+    if (memh) {
+        param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+        param.memh          = memh;
+    }
+
+    ucs_status_ptr_t status_ptr = ucp_tag_send_nbx(_ep, buffer, length, tag,
+                                                   &param);
+    return process_request("ucp_tag_send_nbx", status_ptr, callback);
 }
 
 void UcxConnection::request_started(ucx_request *r)

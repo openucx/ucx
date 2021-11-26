@@ -88,6 +88,7 @@ typedef struct {
     ucs_memory_type_t        memory_type;
     unsigned                 progress_count;
     const char*              src_addr;
+    bool                     prereg;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -102,9 +103,16 @@ typedef struct {
 
 template<class BufferType, bool use_offcache = false> class ObjectPool {
 public:
-    ObjectPool(size_t buffer_size, const std::string &name) :
-        _buffer_size(buffer_size), _num_allocated(0), _name(name)
+    ObjectPool(size_t buffer_size, size_t num_offcache,
+               const std::string &name) :
+        _buffer_size(buffer_size),
+        _num_offcache(num_offcache),
+        _num_allocated(0),
+        _name(name)
     {
+        if (!use_offcache) {
+            ASSERTV(_num_offcache == 0) << "_num_offcache=" << _num_offcache;
+        }
     }
 
     ~ObjectPool()
@@ -121,13 +129,6 @@ public:
 
         for (size_t i = 0; i < _free_stack.size(); i++) {
             delete _free_stack[i];
-        }
-    }
-
-    void init(size_t offcache)
-    {
-        for (size_t i = 0; i < offcache; ++i) {
-            _offcache_queue.push(get_free());
         }
     }
 
@@ -172,13 +173,31 @@ protected:
     virtual BufferType *construct() = 0;
 
 private:
+    BufferType *get_new()
+    {
+        BufferType *item = construct();
+        _num_allocated++;
+        return item;
+    }
+
+    void fill_offcache_queue()
+    {
+        while (_offcache_queue.size() < _num_offcache) {
+            _offcache_queue.push(get_new());
+        }
+    }
+
     inline BufferType *get_free()
     {
         BufferType *item;
 
         if (_free_stack.empty()) {
-            item = construct();
-            _num_allocated++;
+            // Fill the offcache queue on first use. Assume the free stack will
+            // also be empty on the first use.
+            if (_offcache_queue.size() < _num_offcache) {
+                fill_offcache_queue();
+            }
+            item = get_new();
         } else {
             item = _free_stack.back();
             _free_stack.pop_back();
@@ -188,6 +207,7 @@ private:
 
 private:
     size_t                   _buffer_size;
+    const size_t             _num_offcache;
     std::vector<BufferType*> _free_stack;
     std::queue<BufferType*>  _offcache_queue;
     uint32_t                 _num_allocated;
@@ -199,9 +219,9 @@ class MemoryPool : public ObjectPool<BufferType, use_offcache> {
 public:
     MemoryPool(size_t buffer_size, const std::string &name,
                size_t offcache = 0) :
-        ObjectPool<BufferType, use_offcache>::ObjectPool(buffer_size, name)
+        ObjectPool<BufferType, use_offcache>::ObjectPool(buffer_size, offcache,
+                                                         name)
     {
-        this->init(offcache);
     }
 
 public:
@@ -214,17 +234,19 @@ public:
 template<typename BufferType>
 class BufferMemoryPool : public ObjectPool<BufferType, true> {
 public:
-    BufferMemoryPool(size_t buffer_size, const std::string &name,
-                     ucs_memory_type_t memory_type, size_t offcache = 0) :
-        ObjectPool<BufferType, true>(buffer_size, name),
-        _memory_type(memory_type)
+    BufferMemoryPool(size_t buffer_size, size_t offcache,
+                     const std::string &name, ucs_memory_type_t memory_type,
+                     UcxContext *context) :
+        ObjectPool<BufferType, true>(buffer_size, offcache, name),
+        _memory_type(memory_type),
+        _context(context)
     {
-        this->init(offcache);
     }
 
     virtual BufferType *construct()
     {
-        return BufferType::allocate(this->buffer_size(), *this, _memory_type);
+        return BufferType::allocate(this->buffer_size(), *this, _memory_type,
+                                    _context);
     }
 
     virtual ucs_memory_type_t memory_type() const
@@ -234,6 +256,7 @@ public:
 
 private:
     ucs_memory_type_t _memory_type;
+    UcxContext*       _context;
 };
 
 /**
@@ -449,21 +472,26 @@ protected:
     class Buffer {
     public:
         Buffer(void *buffer, size_t size, BufferMemoryPool<Buffer> &pool,
-               ucs_memory_type_t memory_type = UCS_MEMORY_TYPE_HOST) :
+               ucs_memory_type_t memory_type, UcxContext *map_context,
+               ucp_mem_h memh) :
             _capacity(size),
             _buffer(buffer),
             _size(0),
             _pool(pool),
-            _memory_type(memory_type)
+            _memory_type(memory_type),
+            _map_context(map_context),
+            _memh(memh)
         {
         }
 
         static Buffer *allocate(size_t size, BufferMemoryPool<Buffer> &pool,
-                                ucs_memory_type_t memory_type)
+                                ucs_memory_type_t memory_type,
+                                UcxContext *map_context)
         {
 #ifdef HAVE_CUDA
             cudaError_t cerr;
 #endif
+            ucp_mem_h memh;
             void *buffer;
 
             switch (memory_type) {
@@ -494,11 +522,24 @@ protected:
                 throw std::bad_alloc();
             }
 
-            return new Buffer(buffer, size, pool, memory_type);
+            if (map_context != NULL) {
+                if (!map_context->map_buffer(size, buffer, &memh)) {
+                    LOG << "ERROR: Failed to map buffer " << buffer << " size "
+                        << size;
+                    throw std::bad_alloc();
+                }
+            } else {
+                memh = NULL;
+            }
+            return new Buffer(buffer, size, pool, memory_type, map_context,
+                              memh);
         }
 
         ~Buffer()
         {
+            if ((_memh != NULL) && !_map_context->unmap_buffer(_memh)) {
+                LOG << "WARNING: Failed to unmap buffer" << _buffer;
+            }
             switch (_memory_type) {
 #ifdef HAVE_CUDA
             case UCS_MEMORY_TYPE_CUDA:
@@ -530,6 +571,11 @@ protected:
             return (uint8_t*)_buffer + offset;
         }
 
+        inline ucp_mem_h memh() const
+        {
+            return _memh;
+        }
+
         inline void resize(size_t size)
         {
             assert(size <= _capacity);
@@ -549,6 +595,8 @@ protected:
         size_t                   _size;
         BufferMemoryPool<Buffer> &_pool;
         ucs_memory_type_t        _memory_type;
+        UcxContext               *_map_context;
+        ucp_mem_h                _memh;
     };
 
     class BufferIov {
@@ -810,8 +858,9 @@ protected:
         _data_buffers_pool(get_chunk_cnt(test_opts.max_data_size,
                                          test_opts.chunk_size),
                            "data iovs"),
-        _data_chunks_pool(test_opts.chunk_size, "data chunks",
-                          test_opts.memory_type, test_opts.num_offcache_buffers),
+        _data_chunks_pool(test_opts.chunk_size, test_opts.num_offcache_buffers,
+                          "data chunks", test_opts.memory_type,
+                          test_opts.prereg ? this : NULL),
         _iov_buf_filler(iov_buf_filler)
     {
         _status                  = OK;
@@ -853,9 +902,11 @@ protected:
 
         for (size_t i = 0; i < iov_size; ++i) {
             if (send_recv_data == XFER_TYPE_SEND) {
-                conn->send_data(iov[i].buffer(), iov[i].size(), sn, callback);
+                conn->send_data(iov[i].buffer(), iov[i].size(), iov[i].memh(),
+                                sn, callback);
             } else {
-                conn->recv_data(iov[i].buffer(), iov[i].size(), sn, callback);
+                conn->recv_data(iov[i].buffer(), iov[i].size(), iov[i].memh(),
+                                sn, callback);
             }
         }
     }
@@ -878,7 +929,7 @@ protected:
         if (opts().use_am) {
             IoMessage *m = _io_msg_pool.get();
             m->init(IO_WRITE_COMP, sn, conn->id(), data_size, opts().validate);
-            conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0ul, m);
+            conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0, NULL, m);
         } else {
             send_io_message(conn, IO_WRITE_COMP, sn, data_size,
                             opts().validate);
@@ -981,7 +1032,7 @@ private:
         /* send IO_READ_COMP as a data since the transaction must be matched
          * by sn on receiver side */
         if (msg->msg()->op == IO_READ_COMP) {
-            return conn->send_data(msg->buffer(), opts().iomsg_size,
+            return conn->send_data(msg->buffer(), opts().iomsg_size, NULL,
                                    msg->msg()->sn, msg);
         } else {
             return conn->send_io_message(msg->buffer(), opts().iomsg_size, msg);
@@ -1037,7 +1088,7 @@ public:
                 if (_server->opts().validate) {
                     validate(_conn, *_iov, _sn, _conn_id, IO_WRITE);
                 }
-                
+
                 if (_conn->ucx_status() == UCS_OK) {
                     _server->send_io_write_response(_conn, *_iov, _sn);
                 }
@@ -1227,7 +1278,7 @@ public:
         // Send IO_READ_COMP as AM header and first iov element as payload
         // (note that multi-iov send is not supported for IODEMO with AM yet)
         conn->send_am(m->buffer(), opts().iomsg_size, (*iov)[0].buffer(),
-                      (*iov)[0].size(), cb);
+                      (*iov)[0].size(), (*iov)[0].memh(), cb);
     }
 
     void handle_io_write_request(UcxConnection* conn, const iomsg_t *msg) {
@@ -1259,9 +1310,10 @@ public:
                 &conn_stat.completions<IO_WRITE>());
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
         if (!ucx_am_is_rndv(data_desc)) {
-            conn->recv_am_data(NULL, 0, data_desc, w);
+            conn->recv_am_data(NULL, 0, NULL, data_desc, w);
         } else {
-            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(), data_desc, w);
+            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(),
+                               (*iov)[0].memh(), data_desc, w);
         }
     }
 
@@ -1376,7 +1428,7 @@ private:
 
         log << "active: " << _conn_stat_map.size() << "/"
             << UcxConnection::get_num_instances()
-            << ", buffers:" << _data_buffers_pool.allocated();
+            << ", buffers:" << _data_chunks_pool.allocated();
 
         for (it = _conn_stat_map.begin(); it != _conn_stat_map.end(); ++it) {
             it->second.reset();
@@ -1646,7 +1698,8 @@ public:
 
         r->init(this, server_index, sn, server_info.conn->id(), validate, iov);
         recv_data(server_info.conn, *iov, sn, r);
-        server_info.conn->recv_data(r->buffer(), opts().iomsg_size, sn, r);
+        server_info.conn->recv_data(r->buffer(), opts().iomsg_size, NULL, sn,
+                                    r);
 
         return data_size;
     }
@@ -1661,7 +1714,8 @@ public:
         m->init(IO_READ, sn, server_info.conn->id(), data_size,
                 opts().validate);
 
-        server_info.conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0, m);
+        server_info.conn->send_am(m->buffer(), opts().iomsg_size, NULL, 0, NULL,
+                                  m);
 
         return data_size;
     }
@@ -1717,7 +1771,8 @@ public:
         // Send IO_WRITE as AM header and first iov element as payload
         // (note that multi-iov send is not supported for IODEMO with AM yet)
         server_info.conn->send_am(m->buffer(), opts().iomsg_size,
-                                  (*iov)[0].buffer(), (*iov)[0].size(), cb);
+                                  (*iov)[0].buffer(), (*iov)[0].size(),
+                                  (*iov)[0].memh(), cb);
 
         return data_size;
     }
@@ -1832,9 +1887,10 @@ public:
             r->init(this, server_index, msg->sn, conn->id(), opts().validate,
                     iov, 0);
             if (!ucx_am_is_rndv(data_desc)) {
-                conn->recv_am_data(NULL, 0, data_desc, r);
+                conn->recv_am_data(NULL, 0, NULL, data_desc, r);
             } else {
-                conn->recv_am_data((*iov)[0].buffer(), msg->data_size, data_desc, r);
+                conn->recv_am_data((*iov)[0].buffer(), msg->data_size,
+                                   (*iov)[0].memh(), data_desc, r);
             }
         }
     }
@@ -2378,7 +2434,7 @@ private:
             log << " latency:" << latency_usec << "usec";
         }
 
-        log << " buffers:" << _data_buffers_pool.allocated();
+        log << " buffers:" << _data_chunks_pool.allocated();
     }
 
     inline void check_time_limit(double current_time) {
@@ -2586,9 +2642,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
     test_opts->progress_count        = 1;
     test_opts->src_addr              = NULL;
+    test_opts->prereg                = false;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:z")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2736,6 +2793,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'I':
             test_opts->src_addr = optarg;
             break;
+        case 'z':
+            test_opts->prereg = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -2777,6 +2837,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
                       << std::endl;
             std::cout << "  -L <progress_count>         Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
             std::cout << "  -I <src_addr>               Set source IP address to select network interface on client side" << std::endl;
+            std::cout << "  -z                          Enable pre-register buffers for zero-copy" << std::endl;
             return -1;
         }
     }
