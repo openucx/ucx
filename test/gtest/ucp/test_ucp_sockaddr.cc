@@ -336,10 +336,9 @@ public:
                                              const ucp_tag_recv_info_t *tag_info,
                                              void *user_data)
     {
-        mem_buffer UCS_V_UNUSED *recv_buffer = reinterpret_cast<mem_buffer*>(user_data);
+        mem_buffer UCS_V_UNUSED *recv_buffer =
+                reinterpret_cast<mem_buffer*>(user_data);
 
-        UCS_TEST_MESSAGE << "TAG receive operation completed: "
-                         << ucs_status_string(status);
         if (status == UCS_OK) {
             recv_buffer->pattern_check(1, recv_buffer->size());
         }
@@ -2806,9 +2805,10 @@ protected:
      * on CONNECT_TO_IFACE transports with memory invalidation support: in case
      * if sender EP was killed right after sent RTS then receiver may get
      * incorrect/corrupted data */
-    void do_tag_rndv_killed_sender_test(size_t num_senders)
+    void do_tag_rndv_killed_sender_test(size_t num_senders,
+                                        size_t size = 64 * UCS_KBYTE,
+                                        size_t num_sends = 1)
     {
-        static constexpr size_t size = 64 * UCS_KBYTE;
         std::vector<ucp_tag_message_h> messages;
         std::vector<void*> reqs;
         ucs_status_t status;
@@ -2832,24 +2832,26 @@ protected:
             send_recv(sender(), receiver(), send_recv_type(), false, cb_type(),
                       sender_idx);
 
-            void *sreq = send(sender(), send_buf.ptr(), size, SEND_RECV_TAG,
-                              send_cb, NULL, sender_idx);
-            ASSERT_TRUE(UCS_PTR_IS_PTR(sreq));
-            ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
-            reqs.push_back(sreq);
+            for (size_t i = 0; i < num_sends; ++i) {
+                void *sreq = send(sender(), send_buf.ptr(), size,
+                                  SEND_RECV_TAG, send_cb, NULL, sender_idx);
+                ASSERT_TRUE(UCS_PTR_IS_PTR(sreq));
+                ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
+                reqs.push_back(sreq);
 
-            /* Allow receiver to get RTS notification, but do not receive message
-             * body */
-            ucp_tag_recv_info_t info;
-            ucp_tag_message_h message = message_wait(receiver(), 0, 0, &info);
-            ASSERT_NE((void*)NULL, message);
-            ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
+                /* Allow receiver to get RTS notification, but do not receive message
+                 * body */
+                ucp_tag_recv_info_t info;
+                ucp_tag_message_h message = message_wait(receiver(), 0, 0, &info);
+                ASSERT_NE((void*)NULL, message);
+                ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
 
-            messages.emplace_back(message);
+                messages.emplace_back(message);
+            }
         }
 
         /* Ignore all errors - it is expected */
-        scoped_log_handler slh(wrap_errors_logger);
+        scoped_log_handler slh(hide_errors_logger);
 
         /* Close the first sender's EP to force send operation to be completed
          * with CANCEL status */
@@ -2857,7 +2859,7 @@ protected:
 
         mem_buffer extra_recv_buf(size, UCS_MEMORY_TYPE_HOST);
         extra_recv_buf.pattern_fill(2, size);
-        for (size_t i = 1; i < messages.size(); ++i) {
+        for (size_t i = num_sends; i < messages.size(); ++i) {
             void *rreq = recv(receiver(), extra_recv_buf.ptr(), size,
                               messages[i], rtag_complete_always_ok_cbx, NULL);
             reqs.push_back(rreq);
@@ -2865,16 +2867,20 @@ protected:
 
         status = requests_wait(reqs);
         ASSERT_EQ(UCS_ERR_CANCELED, status);
+        ASSERT_TRUE(reqs.empty());
 
         /* Update send buffer by new data - emulation of free(buffer) */
         send_buf.pattern_fill(3, size);
 
-        /* Complete receive operation */
-        mem_buffer recv_buf(size, UCS_MEMORY_TYPE_HOST);
-        recv_buf.pattern_fill(2, size);
-        void *rreq = recv(receiver(), recv_buf.ptr(), size, messages[0],
-                          rtag_complete_check_data_cbx, recv_buf.ptr());
-        request_wait(rreq);
+        /* Complete receive operations */
+        for (size_t i = 0; i < num_sends; ++i) {
+            mem_buffer recv_buf(size, UCS_MEMORY_TYPE_HOST);
+            recv_buf.pattern_fill(2, size);
+            void *rreq = recv(receiver(), recv_buf.ptr(), size, messages[i],
+                              rtag_complete_check_data_cbx, recv_buf.ptr());
+            reqs.push_back(rreq);
+        }
+        requests_wait(reqs);
     }
 
 private:
@@ -2893,6 +2899,20 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
            "RNDV_SCHEME=get_zcopy")
 {
     do_tag_rndv_killed_sender_test(5);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
+           tag_rndv_killed_sender_multiple_sends, "RNDV_THRESH=0",
+           "RNDV_SCHEME=get_zcopy")
+{
+    do_tag_rndv_killed_sender_test(1, 128, 100000);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
+           tag_rndv_killed_sender_4_extra_senders_multiple_sends,
+           "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
+{
+    do_tag_rndv_killed_sender_test(4, 128, 100000);
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)

@@ -133,7 +133,7 @@ struct ucp_request {
         /* "send" part - used for tag_send, am_send, stream_send, put, get, and atomic
          * operations */
         struct {
-            ucp_ep_h                ep;
+            ucp_ep_h                   ep;
             union {
                 void                   *buffer; /* Send buffer */
                 ucp_request_callback_t flushed_cb; /* Called when flushed */
@@ -306,6 +306,10 @@ struct ucp_request {
                     uint8_t            num_lanes; /* How many lanes are being flushed */
                     ucp_lane_map_t     started_lanes; /* Which lanes need were flushed */
                 } flush;
+
+                struct {
+                    ucp_worker_h       worker;
+                } invalidate;
 
                 struct {
                     /* UCT EP that should be flushed and destroyed */
