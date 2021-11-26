@@ -384,9 +384,9 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                 status = UCS_ERR_UNSUPPORTED;
                 goto err_common_cleanup;
             }
-            if (conn_ece->ece_sr == UCS_CONFIG_OFF) {
+            if (conn_ece->sr == UCS_CONFIG_OFF) {
                 self->super.super.config.ece_cfg.ece.field.sr = 0;
-            } else if (conn_ece->ece_sr == UCS_CONFIG_ON &&
+            } else if (conn_ece->sr == UCS_CONFIG_ON &&
                        self->super.super.config.ece_cfg.ece.field.sr == 0) {
                 ucs_error("device %s not support ECE/SR",
                            uct_ib_device_name(

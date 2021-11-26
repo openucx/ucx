@@ -1138,9 +1138,9 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
                 return UCS_ERR_UNSUPPORTED;
             }
 
-            if (conn_ece->ece_sr == UCS_CONFIG_OFF) {
+            if (conn_ece->sr == UCS_CONFIG_OFF) {
                 ib_iface->config.ece_cfg.ece.field.sr = 0;
-            } else if (conn_ece->ece_sr == UCS_CONFIG_ON &&
+            } else if (conn_ece->sr == UCS_CONFIG_ON &&
                        ib_iface->config.ece_cfg.ece.field.sr == 0) {
                 ucs_error("device %s not support ECE/SR",
                           uct_ib_device_name(&md->super.dev));

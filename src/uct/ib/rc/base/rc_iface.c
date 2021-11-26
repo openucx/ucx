@@ -112,7 +112,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
     " on   - Force using ECE/SR. Note: Only effective when ECE_ENABLE is on. "
     "Device may not support ECE/SR and abort.\n"
     " off  - Do not use ECE/SR. Note: Only effecitve when ECE_ENABLE is on",
-    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.ece_sr),
+    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.sr),
     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
   {NULL}
