@@ -471,12 +471,11 @@ public:
          * memory pages (will fail to register memory) */
         modify_config("ZCOPY_THRESH", "inf");
         test_ucp_tag::init();
-        m_completed = 0;
     }
 
 protected:
     static const size_t MSG_SIZE;
-    uint32_t m_completed;
+    static const ucp_request_param_t null_param;
 
     static void send_callback(void *req, ucs_status_t status,
                               void *user_data)
@@ -492,14 +491,78 @@ protected:
         request_free((request*)req);
         ucs_atomic_add32((volatile uint32_t*)user_data, 1);
     }
+
+    void test_recv_send(size_t size, const void *send_buffer, void *recv_buffer,
+                        bool prereg = false,
+                        const ucp_request_param_t &sparam = null_param,
+                        const ucp_request_param_t &rparam = null_param)
+    {
+        ucp_request_param_t send_param = sparam;
+        ucp_request_param_t recv_param = rparam;
+
+        if (prereg) {
+            send_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            send_param.memh          = sender().mem_map(
+                                               const_cast<void*>(send_buffer),
+                                               size);
+
+            recv_param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+            recv_param.memh          = receiver().mem_map(recv_buffer, size);
+        }
+
+        ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
+                                                     recv_buffer, size, 0, 0,
+                                                     &recv_param);
+        ASSERT_UCS_PTR_OK(recv_req);
+
+        ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), send_buffer,
+                                                     size, 0, &send_param);
+        ASSERT_UCS_PTR_OK(send_req);
+
+        if (!(recv_param.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+            request_wait(recv_req);
+        }
+
+        if (!(send_param.op_attr_mask & UCP_OP_ATTR_FIELD_REQUEST)) {
+            request_wait(send_req);
+        }
+
+        if (prereg) {
+            sender().mem_unmap(send_param.memh);
+            receiver().mem_unmap(recv_param.memh);
+        }
+    }
+
+    void test_recv_send(size_t size = MSG_SIZE, bool prereg = false)
+    {
+        std::vector<char> send_buffer(size);
+        std::vector<char> recv_buffer(size);
+        test_recv_send(size, &send_buffer[0], &recv_buffer[0], prereg);
+    }
 };
 
 const size_t test_ucp_tag_nbx::MSG_SIZE  = 4 * UCS_KBYTE * ucs_get_page_size();
+const ucp_request_param_t test_ucp_tag_nbx::null_param = {0};
+
+
+UCS_TEST_P(test_ucp_tag_nbx, basic)
+{
+    test_recv_send();
+}
+
+UCS_TEST_P(test_ucp_tag_nbx, eager_zcopy_prereg, "ZCOPY_THRESH=0",
+           "RNDV_THRESH=inf")
+{
+    test_recv_send(4 * UCS_KBYTE, true);
+}
+
+UCS_TEST_P(test_ucp_tag_nbx, rndv_prereg, "RNDV_THRESH=0")
+{
+    test_recv_send(64 * UCS_KBYTE, true);
+}
 
 UCS_TEST_P(test_ucp_tag_nbx, fallback)
 {
-    ucp_request_param_t param = {0};
-
     /* allocate read-only pages - it force ibv_reg_mr() failure */
     void *send_buffer = mmap(NULL, MSG_SIZE, PROT_READ,
                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -507,50 +570,37 @@ UCS_TEST_P(test_ucp_tag_nbx, fallback)
 
     std::vector<char> recv_buffer(MSG_SIZE);
 
-    ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
-                                                 &recv_buffer[0], MSG_SIZE,
-                                                 0, 0, &param);
-    ASSERT_UCS_PTR_OK(recv_req);
-
-    ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), send_buffer,
-                                                 MSG_SIZE, 0, &param);
-    ASSERT_UCS_PTR_OK(send_req);
-
-    request_wait(send_req);
-    request_wait(recv_req);
+    test_recv_send(MSG_SIZE, send_buffer, &recv_buffer[0]);
 
     munmap(send_buffer, MSG_SIZE);
 }
 
 UCS_TEST_P(test_ucp_tag_nbx, external_request_free)
 {
-    ucp_request_param_t send_param;
-    ucp_request_param_t recv_param;
+    ucp_request_param_t send_param = {0};
+    ucp_request_param_t recv_param = {0};
+    uint32_t completed             = 0;
+    uint32_t op_attr_mask;
 
-    send_param.op_attr_mask = recv_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                                                        UCP_OP_ATTR_FIELD_REQUEST  |
-                                                        UCP_OP_ATTR_FLAG_NO_IMM_CMPL |
-                                                        UCP_OP_ATTR_FIELD_USER_DATA;
-    send_param.request     = request_alloc();
-    recv_param.request     = request_alloc();
-    send_param.cb.send     = (ucp_send_nbx_callback_t)send_callback;
-    recv_param.cb.recv     = (ucp_tag_recv_nbx_callback_t)recv_callback;
-    send_param.user_data   = &m_completed;
-    recv_param.user_data   = &m_completed;
+    op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_REQUEST |
+                   UCP_OP_ATTR_FLAG_NO_IMM_CMPL | UCP_OP_ATTR_FIELD_USER_DATA;
+
+    send_param.op_attr_mask = op_attr_mask;
+    recv_param.op_attr_mask = op_attr_mask;
+    send_param.request      = request_alloc();
+    recv_param.request      = request_alloc();
+    send_param.cb.send      = send_callback;
+    recv_param.cb.recv      = recv_callback;
+    send_param.user_data    = &completed;
+    recv_param.user_data    = &completed;
 
     std::vector<char> send_buffer(MSG_SIZE);
     std::vector<char> recv_buffer(MSG_SIZE);
 
-    ucs_status_ptr_t recv_req = ucp_tag_recv_nbx(receiver().worker(),
-                                                 &recv_buffer[0], MSG_SIZE,
-                                                 0, 0, &recv_param);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(recv_req));
+    test_recv_send(MSG_SIZE, &send_buffer[0], &recv_buffer[0], false,
+                   send_param, recv_param);
 
-    ucs_status_ptr_t send_req = ucp_tag_send_nbx(sender().ep(), &send_buffer[0],
-                                                 MSG_SIZE, 0, &send_param);
-    ASSERT_TRUE(UCS_PTR_IS_PTR(send_req));
-
-    wait_for_value(&m_completed, 2u);
+    wait_for_value(&completed, 2u);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_tag_nbx)

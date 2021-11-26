@@ -1017,7 +1017,30 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     return progress_count + ucp_worker_progress(ucp_worker);
 }
 
-int ucp_test_base::entity::get_num_workers() const {
+ucp_mem_h ucp_test_base::entity::mem_map(void *address, size_t length)
+{
+    ucp_mem_map_params_t params;
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = address;
+    params.length     = length;
+
+    ucp_mem_h memh;
+    ucs_status_t status = ucp_mem_map(ucph(), &params, &memh);
+    ASSERT_UCS_OK(status);
+
+    return memh;
+}
+
+void ucp_test_base::entity::mem_unmap(ucp_mem_h memh)
+{
+    ucs_status_t status = ucp_mem_unmap(ucph(), memh);
+    ASSERT_UCS_OK(status);
+}
+
+int ucp_test_base::entity::get_num_workers() const
+{
     return m_workers.size();
 }
 
