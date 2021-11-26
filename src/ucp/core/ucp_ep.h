@@ -36,7 +36,7 @@ typedef uint16_t                   ucp_ep_flags_t;
 #if UCS_ENABLE_ASSERT
 #define UCP_EP_ASSERT_COUNTER_INC(_counter) \
     do { \
-        ucs_assert(*(_counter) < SIZE_MAX); \
+        ucs_assert(*(_counter) < UINT32_MAX); \
         ++(*(_counter)); \
     } while (0)
 
@@ -53,7 +53,7 @@ typedef uint16_t                   ucp_ep_flags_t;
 
 #define ucp_ep_refcount_add(_ep, _type) \
 ({ \
-    ucs_assert(ucp_ep_ext_control(_ep)->refcount < SIZE_MAX); \
+    ucs_assert(ucp_ep_ext_control(_ep)->refcount < UINT32_MAX); \
     ++ucp_ep_ext_control(_ep)->refcount; \
     UCP_EP_ASSERT_COUNTER_INC(&ucp_ep_ext_control(_ep)->refcounts._type); \
 })
@@ -75,7 +75,7 @@ typedef uint16_t                   ucp_ep_flags_t;
 
 #define ucp_ep_refcount_field_assert(_ep, _refcount_field, _cmp, _val) \
     ucs_assertv(ucp_ep_ext_control(_ep)->_refcount_field _cmp (_val), \
-                "ep=%p: %s=%zu vs %zu", (_ep), \
+                "ep=%p: %s=%u vs %u", (_ep), \
                 UCS_PP_MAKE_STRING(_refcount_field), \
                 ucp_ep_ext_control(_ep)->_refcount_field, _val);
 
@@ -442,11 +442,17 @@ typedef struct {
 
 
 /**
+ * UCP endpoint reference counter
+ */
+typedef uint32_t ucp_ep_refcount_t;
+
+
+/**
  * Endpoint extension for control data path
  */
 typedef struct {
     ucp_rsc_index_t          cm_idx; /* CM index */
-    size_t                   refcount; /* Reference counter: 0 - it is
+    ucp_ep_refcount_t        refcount; /* Reference counter: 0 - it is
                                           allowed to destroy EP */
     ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
     ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
@@ -456,16 +462,16 @@ typedef struct {
     ucs_time_t               ka_last_round; /* Time of last KA round done */
     struct {
         /* How many times the EP create was done */
-        size_t               create;
+        ucp_ep_refcount_t    create;
         /* How many Worker flush operations are in-progress where the EP is the
          * next EP for flushing */
-        size_t               flush;
+        ucp_ep_refcount_t    flush;
         /* How many UCT EP discarding operations are in-progress scheduled for
          * the EP */
-        size_t               discard;
+        ucp_ep_refcount_t    discard;
         /* How many UCP operations are in-progress scheduled for the memory
          * invalidation on the current EP */
-        size_t               invalidate;
+        ucp_ep_refcount_t    invalidate;
     } refcounts;
 #endif
 } ucp_ep_ext_control_t;

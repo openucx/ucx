@@ -197,7 +197,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ep->flags                                    = 0;
     ep->conn_sn                                  = UCP_EP_MATCH_CONN_SN_MAX;
     ucp_ep_ext_gen(ep)->user_data                = NULL;
-    ucp_ep_ext_control(ep)->refcount             = 0lu;
+    ucp_ep_ext_control(ep)->refcount             = 0u;
     ucp_ep_ext_control(ep)->cm_idx               = UCP_NULL_RESOURCE;
     ucp_ep_ext_control(ep)->local_ep_id          = UCS_PTR_MAP_KEY_INVALID;
     ucp_ep_ext_control(ep)->remote_ep_id         = UCS_PTR_MAP_KEY_INVALID;
@@ -208,7 +208,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ucp_ep_ext_control(ep)->refcounts.create     =
     ucp_ep_ext_control(ep)->refcounts.flush      =
     ucp_ep_ext_control(ep)->refcounts.discard    =
-    ucp_ep_ext_control(ep)->refcounts.invalidate = 0lu;
+    ucp_ep_ext_control(ep)->refcounts.invalidate = 0u;
 #endif
 
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
@@ -322,11 +322,11 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 
 void ucp_ep_destroy_base(ucp_ep_h ep)
 {
-    ucp_ep_refcount_field_assert(ep, refcount, ==, 0lu);
-    ucp_ep_refcount_assert(ep, create, ==, 0lu);
-    ucp_ep_refcount_assert(ep, flush, ==, 0lu);
-    ucp_ep_refcount_assert(ep, discard, ==, 0lu);
-    ucp_ep_refcount_assert(ep, invalidate, ==, 0lu);
+    ucp_ep_refcount_field_assert(ep, refcount, ==, 0u);
+    ucp_ep_refcount_assert(ep, create, ==, 0u);
+    ucp_ep_refcount_assert(ep, flush, ==, 0u);
+    ucp_ep_refcount_assert(ep, discard, ==, 0u);
+    ucp_ep_refcount_assert(ep, invalidate, ==, 0u);
     ucs_assert(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
 
     ucs_vfs_obj_remove(ep);
@@ -381,7 +381,7 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
     return UCS_OK;
 
 err_destroy_ep_base:
-    ucp_ep_refcount_assert(ep, create, ==, 1lu);
+    ucp_ep_refcount_assert(ep, create, ==, 1u);
     ucp_ep_refcount_remove(ep, create);
 err:
     return status;
@@ -397,7 +397,7 @@ void ucp_ep_delete(ucp_ep_h ep)
 
     ucp_ep_release_id(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    ucp_ep_refcount_assert(ep, create, ==, 1lu);
+    ucp_ep_refcount_assert(ep, create, ==, 1u);
     ucp_ep_refcount_remove(ep, create);
 }
 
@@ -1114,7 +1114,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
     ucp_ep_ext_control_t *ep_cntrl_ext = ucp_ep_ext_control(ep);
-    size_t num_inprog                  = ep_cntrl_ext->refcounts.discard +
+    ucp_ep_refcount_t num_inprog       = ep_cntrl_ext->refcounts.discard +
                                          ep_cntrl_ext->refcounts.flush +
                                          ep_cntrl_ext->refcounts.invalidate +
                                          ep_cntrl_ext->refcounts.create;
