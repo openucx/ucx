@@ -22,7 +22,7 @@ enum  {
 
 
 typedef struct mlx5_ece_cfg {
-    ucs_on_off_auto_value_t ece_enable;
+    ucs_on_off_auto_value_t enable;
     ucs_on_off_auto_value_t ece_sr;
 } mlx5_ece_cfg_t;
 

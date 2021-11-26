@@ -1076,7 +1076,7 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
     ucs_status_t status;
 
     if (md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE) {
-        if (conn_ece->ece_enable == UCS_CONFIG_OFF) {
+        if (conn_ece->enable == UCS_CONFIG_OFF) {
             ib_iface->config.ece_cfg.ece_enable = 0;
             ib_iface->config.ece_cfg.ece.val    = 0;
         } else {
@@ -1130,7 +1130,7 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
             }
         }
 
-        if (conn_ece->ece_enable == UCS_CONFIG_ON) {
+        if (conn_ece->enable == UCS_CONFIG_ON) {
             if (ib_iface->config.ece_cfg.ece_enable == 0) {
                 ucs_error("device %s not support ECE",
                           uct_ib_device_name(&md->super.dev));
@@ -1152,7 +1152,7 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
         ib_iface->config.ece_cfg.ece_enable = 0;
         ib_iface->config.ece_cfg.ece.val    = 0;
 
-        if (conn_ece->ece_enable == UCS_CONFIG_ON) {
+        if (conn_ece->enable == UCS_CONFIG_ON) {
 #if HAVE_RDMACM_ECE
             ucs_error("device %s not support ECE",
                       uct_ib_device_name(&md->super.dev));

@@ -103,7 +103,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
     " auto - Let runtime decide whether ECE should be used.\n"
     " on   - Force using ECE. Note: Device may not support ECE and abort.\n"
     " off  - Do not use ECE.",
-    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.ece_enable),
+    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.enable),
     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
    {"ECE_SR", "auto",

@@ -360,7 +360,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
 #if HAVE_RDMACM_ECE
     if (uct_ib_iface_device(&self->super.super)->flags &
         UCT_IB_DEVICE_FLAG_ECE) {
-        if (conn_ece->ece_enable == UCS_CONFIG_OFF) {
+        if (conn_ece->enable == UCS_CONFIG_OFF) {
             self->super.super.config.ece_cfg.ece_enable = 0;
             self->super.super.config.ece_cfg.ece.val    = 0;
         } else {
@@ -376,7 +376,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
             }
         }
 
-        if (conn_ece->ece_enable == UCS_CONFIG_ON) {
+        if (conn_ece->enable == UCS_CONFIG_ON) {
             if (self->super.super.config.ece_cfg.ece_enable == 0) {
                 ucs_error("device %s not support ECE",
                            uct_ib_device_name(
@@ -400,7 +400,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         self->super.super.config.ece_cfg.ece_enable = 0;
         self->super.super.config.ece_cfg.ece.val    = 0;
 
-        if (conn_ece->ece_enable == UCS_CONFIG_ON) {
+        if (conn_ece->enable == UCS_CONFIG_ON) {
 #if HAVE_RDMACM_ECE
             ucs_error("device %s not support ECE",
                        uct_ib_device_name(
