@@ -200,8 +200,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
 #if UCS_ENABLE_ASSERT
     ep->refcounts.create                  =
     ep->refcounts.flush                   =
-    ep->refcounts.discard                 =
-    ep->refcounts.invalidate              = 0;
+    ep->refcounts.discard                 = 0;
 #endif
     ucp_ep_ext_gen(ep)->user_data         = NULL;
     ucp_ep_ext_control(ep)->cm_idx        = UCP_NULL_RESOURCE;
@@ -328,7 +327,6 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_ep_refcount_assert(ep, create, ==, 0);
     ucp_ep_refcount_assert(ep, flush, ==, 0);
     ucp_ep_refcount_assert(ep, discard, ==, 0);
-    ucp_ep_refcount_assert(ep, invalidate, ==, 0);
     ucs_assert(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
 
     ucs_vfs_obj_remove(ep);
@@ -1116,7 +1114,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
     uint8_t num_inprog       = ep->refcounts.discard + ep->refcounts.flush +
-                               ep->refcounts.invalidate + ep->refcounts.create;
+                               ep->refcounts.create;
     uint8_t num_failed_tl_ep = 0;
     ucp_lane_index_t lane;
 

@@ -438,9 +438,6 @@ typedef struct ucp_ep {
         /* How many UCT EP discarding operations are in-progress scheduled for
          * the EP */
         unsigned                      discard;
-        /* How many UCP operations are in-progress scheduled for the memory
-         * invalidation on the current EP */
-        unsigned                      invalidate;
     } refcounts;
 #endif
 
