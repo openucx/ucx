@@ -27,6 +27,7 @@ type PerfTestParams struct {
 	wakeup        bool
 	ip            string
 	printIter     uint
+	warmUpIter    uint
 }
 
 type PerfTest struct {
@@ -260,7 +261,7 @@ func serverStart() error {
 	for i := uint(0); i < perfTestParams.numIterations; i += 1 {
 		perfTest.numCompletedRequests = 0
 
-		perfTest.wg.Add(int(perfTestParams.numThreads))
+		perfTest.wg.Add(int(perfTestParams.numThreads + 1))
 		for t := uint(0); t < perfTestParams.numThreads+1; t += 1 {
 			go func(tid uint) {
 				for perfTest.numCompletedRequests < uint32(perfTestParams.numThreads) {
@@ -276,7 +277,7 @@ func serverStart() error {
 	return nil
 }
 
-func clientThreadDoIter(i uint, t uint) {
+func clientThreadDoIter(i int, t uint) {
 	start := time.Now()
 	var request *UcpRequest
 	requestParams := (&UcpRequestParams{}).SetMemType(perfTestParams.memType)
@@ -290,8 +291,8 @@ func clientThreadDoIter(i uint, t uint) {
 	perfTest.completionTime[t] = time.Since(start)
 	request.Close()
 
-	if i%perfTestParams.printIter == 0 {
-		printPerThreadStatistics(i, t)
+	if (i > 0) && (uint(i)%perfTestParams.printIter) == 0 {
+		printPerThreadStatistics(uint(i), t)
 	}
 	perfTest.wg.Done()
 }
@@ -313,7 +314,7 @@ func clientStart() error {
 
 	var totalDuration time.Duration = 0
 	printHeader()
-	for i := uint(0); i < perfTestParams.numIterations; i += 1 {
+	for i := -int(perfTestParams.warmUpIter); i < int(perfTestParams.numIterations); i += 1 {
 		perfTest.wg.Add(int(perfTestParams.numThreads))
 		for t := uint(0); t < perfTestParams.numThreads; t += 1 {
 			go clientThreadDoIter(i, t)
@@ -340,6 +341,7 @@ func main() {
 	flag.UintVar(&perfTestParams.numIterations, "n", 1000, "Number of iterations to run: 1000(default)")
 	flag.UintVar(&perfTestParams.printIter, "printIter", 100, "Print summary every n iterations: 1000(default)")
 	flag.BoolVar(&perfTestParams.wakeup, "wakeup", false, "use polling: false(default)")
+	flag.UintVar(&perfTestParams.warmUpIter, "warmup", 5, "warmup iterations: 5(default)")
 	flag.StringVar(&perfTestParams.ip, "i", "", "server address to connect")
 
 	perfTestParams.memType = UCS_MEMORY_TYPE_HOST
