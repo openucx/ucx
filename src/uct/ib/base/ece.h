@@ -49,12 +49,12 @@ typedef struct mlx5_ece {
  * ece intersection
  */
 static UCS_F_ALWAYS_INLINE
-uint32_t ece_int(uint32_t ece_val0, uint32_t ece_val1)
+uint32_t ece_int(uint32_t val0, uint32_t val1)
 {
     union ece_t ece0, ece1, ece_rst;
 
-    ece0.val    = ece_val0;
-    ece1.val    = ece_val1;
+    ece0.val    = val0;
+    ece1.val    = val1;
     ece_rst.val = 0;
 
     ucs_assert(ece0.field.ver != 1 && ece1.field.ver != 1);
