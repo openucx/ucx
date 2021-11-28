@@ -693,7 +693,6 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
 
             status = uct_rc_mlx5_iface_create_qp(iface, &ep.tx.wq.super,
                                                  &ep.tx.wq, &attr);
-
             if (status != UCS_OK) {
                 ib_iface->config.ece_cfg.ece_enable = 0;
                 ib_iface->config.ece_cfg.ece.val    = 0;
@@ -713,7 +712,6 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
 
             ib_iface->config.ece_cfg.ece.val = ece_int(
                     ib_iface->config.ece_cfg.ece.val, 0x20000001);
-
             if ((ib_iface->config.ece_cfg.ece.val & 0x1) == 0) {
                 ib_iface->config.ece_cfg.ece_enable = 0;
                 ib_iface->config.ece_cfg.ece.val    = 0;

@@ -78,6 +78,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
         ib_iface->config.ece_cfg.ece_enable) {
         UCT_IB_MLX5DV_SET(dctc, dctc, ece, ece);
     }
+
     dct->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                            out, sizeof(out));
     if (dct->devx.obj == NULL) {
@@ -103,6 +104,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
         dct->local_ece.val = 0;
         ucs_debug("mlx5dv_devx_obj_create(DCT) with no ece");
     }
+
     dct->type   = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     dct->qp_num = UCT_IB_MLX5DV_GET(create_dct_out, out, dctn);
     return UCS_OK;
@@ -166,6 +168,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
         ucs_debug("init2rtr_qp_in with ece 0x%x", qp->remote_ece.val);
         UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, qp->remote_ece.val);
     }
+
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),

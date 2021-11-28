@@ -1081,11 +1081,12 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
             ib_iface->config.ece_cfg.ece.val    = 0;
         } else {
             ib_iface->config.ece_cfg.ece_enable = 1;
-            ib_iface->config.ece_cfg.ece.val = UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
+            ib_iface->config.ece_cfg.ece.val    =
+                UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
 
             dct.local_ece.val = UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
-            status = uct_dc_mlx5_iface_create_dct(iface, &dct, config);
 
+            status = uct_dc_mlx5_iface_create_dct(iface, &dct, config);
             if (status != UCS_OK) {
                 ib_iface->config.ece_cfg.ece_enable = 0;
                 ib_iface->config.ece_cfg.ece.val    = 0;
@@ -1096,8 +1097,8 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
             uct_dc_mlx5_iface_pre_create_dci(iface, &dci, &attr, 0, 0,
                                              config->dci_full_handshake);
             dci.local_ece.val = UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
-            status = uct_dc_mlx5_iface_create_dci(iface, &dci, &attr, 0, 0);
 
+            status = uct_dc_mlx5_iface_create_dci(iface, &dci, &attr, 0, 0);
             if (status != UCS_OK) {
                 ib_iface->config.ece_cfg.ece_enable = 0;
                 ib_iface->config.ece_cfg.ece.val    = 0;
