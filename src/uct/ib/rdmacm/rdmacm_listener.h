@@ -12,7 +12,7 @@
 typedef struct uct_rdmacm_listener {
     uct_listener_t                          super;
 
-    /** The rdmacm id assiciated with the listener */
+    /** The rdmacm id associated with the listener */
     struct rdma_cm_id                       *id;
 
     /** Callback to invoke upon receiving a connection request from a client */

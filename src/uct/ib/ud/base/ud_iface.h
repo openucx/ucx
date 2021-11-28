@@ -287,13 +287,13 @@ and connection id.
 Connection id is essentially a counter of endpoints that are created by
 ep_create_connected(). The counter is per destination interface. Purpose of
 conn_sn is to ensure order between multiple CREQ packets and to handle
-simultanuous connection establishment. The case when both sides call
+simultaneous connection establishment. The case when both sides call
 ep_create_connected(). The rule is that connected endpoints must have
 same conn_sn.
 
 2: CREP (dest_ep_id)
 
-Connection reply. It includes id of destination endpoint and optinally ACK
+Connection reply. It includes id of destination endpoint and optionally ACK
 request flag. From this point reliability is handled by UD protocol as
 source and destination endpoint ids are known.
 

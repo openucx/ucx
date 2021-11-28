@@ -232,7 +232,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ugni_ep_t)
                                              uct_ugni_iface_t);
     gni_return_t ugni_rc;
 
-    ucs_debug("Removinig ep hash %x from iface %p", self->hash_key, iface);
+    ucs_debug("Removing ep hash %x from iface %p", self->hash_key, iface);
 
     ucs_arbiter_group_purge(&iface->arbiter, &self->arb_group,
                             uct_ugni_ep_arbiter_purge_cb, NULL);

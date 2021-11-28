@@ -35,7 +35,7 @@ const double uct_ib_qp_rnr_time_ms[] = {
 };
 
 
-/* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
+/* use both gid + lid data for key generation (lid - ib based, gid - RoCE) */
 static UCS_F_ALWAYS_INLINE
 khint32_t uct_ib_kh_ah_hash_func(struct ibv_ah_attr attr)
 {

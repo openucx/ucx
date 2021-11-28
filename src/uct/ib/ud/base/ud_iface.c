@@ -678,7 +678,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
     {"MIN_POKE_TIME", "250ms",
      "Minimal interval to send ACK request with solicited flag, to wake up\n"
      "the remote peer in case it is not actively calling progress.\n"
-     "Smaller values may incur performance overhead, while extermely large\n"
+     "Smaller values may incur performance overhead, while extremely large\n"
      "values can cause delays in presence of packet drops.",
      ucs_offsetof(uct_ud_iface_config_t, min_poke_time), UCS_CONFIG_TYPE_TIME},
 

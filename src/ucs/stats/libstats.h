@@ -120,7 +120,7 @@ struct ucs_stats_class {
 
 struct ucs_stats_node {
     ucs_stats_class_t        *cls;               /* Class info */
-    ucs_stats_node_t         *parent;            /* Hierachy structure */
+    ucs_stats_node_t         *parent;            /* Hierarchy structure */
     char                     name[UCS_STAT_NAME_MAX + 1];
                                                  /* instance name */
     ucs_list_link_t          list;               /* nodes sharing same parent */
@@ -168,7 +168,7 @@ ucs_status_t ucs_stats_serialize(FILE *stream, ucs_stats_node_t *root, int optio
  * De-serialize statistics.
  *
  * @param stream   Source data.
- * @param p_roo    Filled with tatistics node root.
+ * @param p_roo    Filled with statistics node root.
  *
  * @return UCS_ERR_NO_ELEM if hit EOF.
  */

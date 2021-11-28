@@ -18,7 +18,7 @@
 #include <ucp/core/ucp_request.inl>
 
 
-/* Common hanler for HW unexpected and SW tag flows when the message is
+/* Common handler for HW unexpected and SW tag flows when the message is
  * matched. */
 static UCS_F_ALWAYS_INLINE void
 ucp_eager_common_matched(ucp_worker_t *worker, ucp_request_t *req, void *data,

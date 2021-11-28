@@ -755,11 +755,11 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     } else if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
-        /* simultaneuous CREQ */
+        /* simultaneous CREQ */
         uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
         ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
-        ucs_debug("simultaneuous CREQ ep=%p"
+        ucs_debug("simultaneous CREQ ep=%p"
                   "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
                   ep, iface, ep->conn_sn, ep->ep_id,
                   ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
@@ -1165,7 +1165,7 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
     ucs_assert_always(ep->dest_ep_id != UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
-    /* Check that CREQ is neither sheduled nor waiting for CREP ack */
+    /* Check that CREQ is neither scheduled nor waiting for CREP ack */
     ucs_assertv_always(!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) &&
                        uct_ud_ep_is_last_ack_received(ep),
                        "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "

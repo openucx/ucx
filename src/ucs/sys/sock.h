@@ -223,7 +223,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 
 /**
  * Initialize a TCP server.
- * Open a socket, bind a sockadrr to that socket and start listening on it for
+ * Open a socket, bind a sockaddr to that socket and start listening on it for
  * incoming connection requests.
  *
  * @param [in]  saddr             Sockaddr for the server to listen on.
@@ -487,7 +487,7 @@ const char *ucs_socket_getname_str(int fd, char *str, size_t max_size);
  *         < 0 - the first socket address is lower than the second
  *               socket address;
  *         = 0 - the socket addresses are equal.
- *         Note: it returns a positive integer value in case of error occured
+ *         Note: it returns a positive integer value in case of error occurred
  *               during comparison.
  */
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,
