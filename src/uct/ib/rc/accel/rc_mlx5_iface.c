@@ -971,7 +971,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     }
 
     self->super.super.super.config.ece_cfg.ece_enable = 0;
-    self->super.super.super.config.ece_cfg.ece.val = 0;
+    self->super.super.super.config.ece_cfg.ece.val    = 0;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,

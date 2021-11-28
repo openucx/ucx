@@ -269,7 +269,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_ib_iface_init_attr_t init_attr  = {};
     uct_ib_qp_attr_t attr               = {};
     uct_ibv_ece_t UCS_V_UNUSED ece      = {};
-    mlx5_ece_cfg_t *conn_ece = &config->super.super.conn_ece;
+    mlx5_ece_cfg_t *conn_ece            = &config->super.super.conn_ece;
     const char *dev_name;
     ucs_status_t status;
     struct ibv_qp *qp;
