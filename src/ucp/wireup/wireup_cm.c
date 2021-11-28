@@ -815,6 +815,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     } else {
         ucp_ep->remote_ece = 0;
     }
+
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_client_connect_progress,
                                       progress_arg, UCS_CALLBACKQ_FLAG_ONESHOT,

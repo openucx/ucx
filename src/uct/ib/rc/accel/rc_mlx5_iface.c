@@ -745,6 +745,7 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
                      } else {
                          ib_iface->config.ece_cfg.ece_enable = 1;
                      }
+
                     uct_ib_mlx5_destroy_qp(md, &ep.tm_qp);
                 }
             }
@@ -989,7 +990,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     }
 
     status = uct_rc_mlx5_init_ece(&self->super, &config->super.super);
-
     return status;
 }
 
