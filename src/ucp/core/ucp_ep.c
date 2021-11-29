@@ -692,10 +692,9 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     }
 
     /* initialize transport endpoints */
-    ep->flags    |= UCP_EP_FLAG_ECE;
-    ep->local_ece = 0xffffffff;
-    status = ucp_wireup_init_lanes(ep, ep_init_flags, local_tl_bitmap,
-                                   remote_address, addr_indices);
+    ep->flags |= UCP_EP_FLAG_ECE;
+    status     = ucp_wireup_init_lanes(ep, ep_init_flags, local_tl_bitmap,
+                                       remote_address, addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }

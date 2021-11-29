@@ -471,10 +471,6 @@ initial_config_retry:
         goto err;
     }
 
-    if (ep->local_ece == 0) {
-        ep->flags &= ~UCP_EP_FLAG_ECE;
-    }
-
     /* Replay pending requests from the tmp_pending_queue */
     ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
 
