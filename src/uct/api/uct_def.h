@@ -268,7 +268,7 @@ enum uct_cm_remote_data_field {
     UCT_CM_REMOTE_DATA_FIELD_CONN_PRIV_DATA_LENGTH = UCS_BIT(3),
 
     /** Enables @ref uct_cm_remote_data::ece */
-    UCT_CM_REMOTE_DATA_FIELD_OOB_ECE               = UCS_BIT(4)
+    UCT_CM_REMOTE_DATA_FIELD_ECE                   = UCS_BIT(4)
 };
 
 
@@ -308,7 +308,7 @@ typedef struct uct_cm_remote_data {
      */
     size_t                  conn_priv_data_length;
 
-    /** OOB ECE of the remote peer. */
+    /** ECE of the remote peer. */
     uint32_t                ece;
 } uct_cm_remote_data_t;
 

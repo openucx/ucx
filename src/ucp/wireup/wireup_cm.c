@@ -472,7 +472,7 @@ initial_config_retry:
     }
 
     if (ep->local_ece == 0) {
-        ep->flags &= ~UCP_EP_FLAG_OOB_ECE;
+        ep->flags &= ~UCP_EP_FLAG_ECE;
     }
 
     /* Replay pending requests from the tmp_pending_queue */
@@ -480,7 +480,7 @@ initial_config_retry:
 
     can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
                    (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
-    ep->flags   |= UCP_EP_FLAG_OOB_ECE;
+    ep->flags   |= UCP_EP_FLAG_ECE;
     status       = ucp_cm_ep_priv_data_pack(
                       ep, &tl_bitmap, can_fallback,
                       context->config.ext.sa_client_min_hdr_version,
@@ -502,7 +502,7 @@ initial_config_retry:
                                  UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH;
     params.private_data        = priv_data;
     params.private_data_length = priv_data_length;
-    if (ep->flags & UCP_EP_FLAG_OOB_ECE) {
+    if (ep->flags & UCP_EP_FLAG_ECE) {
         params.field_mask |= UCT_EP_CONNECT_PARAM_FIELD_ECE;
         params.ece         = ep->local_ece;
     }
@@ -526,7 +526,7 @@ try_fallback:
     }
 
 err:
-    ep->flags    &= ~UCP_EP_FLAG_OOB_ECE;
+    ep->flags    &= ~UCP_EP_FLAG_ECE;
     ep->local_ece = 0;
     ucp_ep_set_failed(ep, ucp_ep_get_cm_lane(ep), status);
 out:
@@ -810,7 +810,7 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
     memcpy(progress_arg->sa_data, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
 
-    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_OOB_ECE) {
+    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_ECE) {
         ucp_ep->remote_ece = remote_data->ece;
     } else {
         ucp_ep->remote_ece = 0;
@@ -1155,7 +1155,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
            remote_data->dev_addr_length);
     memcpy(ucp_conn_request + 1, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
-    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_OOB_ECE) {
+    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_ECE) {
         ucp_conn_request->ece = remote_data->ece;
     } else {
         ucp_conn_request->ece = 0;
@@ -1417,7 +1417,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         goto err;
     }
 
-    if (ep->flags & UCP_EP_FLAG_OOB_ECE) {
+    if (ep->flags & UCP_EP_FLAG_ECE) {
         uct_ep_params.field_mask |= UCT_EP_PARAM_FIELD_ECE;
         uct_ep_params.ece         = ep->local_ece;
     } else {

@@ -1367,9 +1367,9 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         }
     }
 
-    if ((ep != NULL) && (ep->flags & UCP_EP_FLAG_OOB_ECE)) {
+    if ((ep != NULL) && (ep->flags & UCP_EP_FLAG_ECE)) {
         if (ece == 0xffffffff || ece == 0) {
-            ep->flags &= ~UCP_EP_FLAG_OOB_ECE;
+            ep->flags &= ~UCP_EP_FLAG_ECE;
         } else {
             ep->local_ece = ece;
         }

@@ -509,7 +509,7 @@ uct_rdmacm_get_oob_ece(struct rdma_cm_id *cm_id,
         return UCS_ERR_IO_ERROR;
     }
 
-    remote_data->field_mask |= UCT_CM_REMOTE_DATA_FIELD_OOB_ECE;
+    remote_data->field_mask |= UCT_CM_REMOTE_DATA_FIELD_ECE;
     remote_data->ece = ece.options;
 #else
     remote_data->ece = 0;
