@@ -211,10 +211,10 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
     return UCS_OK;
 }
 
-static ucs_status_t uct_sisci_md_close() {
+static void uct_sisci_md_close() {
     printf("uct_sisci_md_close: teehee\n");
     SCITerminate();
-    return UCS_OK;
+    //return UCS_OK;
 }
 
 static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md_name,
