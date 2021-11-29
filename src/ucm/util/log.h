@@ -59,6 +59,8 @@
 extern const char *ucm_log_level_names[];
 
 
+void ucm_init_log();
+
 void __ucm_log(const char *file, unsigned line, const char *function,
                ucs_log_level_t level, const char *message, ...)
     UCS_F_PRINTF(5, 6);

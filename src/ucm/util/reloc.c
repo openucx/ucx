@@ -68,7 +68,7 @@ KHASH_MAP_INIT_INT64(ucm_dl_info_hash, ucm_dl_info_t)
 static UCS_LIST_HEAD(ucm_reloc_patch_list);
 static pthread_mutex_t ucm_reloc_patch_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static khash_t(ucm_dl_info_hash) ucm_dl_info_hash;
+static khash_t(ucm_dl_info_hash) ucm_dl_info_hash      = KHASH_STATIC_INITIALIZER;
 static ucm_reloc_dlopen_func_t  ucm_reloc_orig_dlopen  = NULL;
 static ucm_reloc_dlclose_func_t ucm_reloc_orig_dlclose = NULL;
 
@@ -748,8 +748,4 @@ ucs_status_t ucm_reloc_modify(ucm_reloc_patch_t *patch)
 out_unlock:
     pthread_mutex_unlock(&ucm_reloc_patch_list_lock);
     return status;
-}
-
-UCS_STATIC_INIT {
-    kh_init_inplace(ucm_dl_info_hash, &ucm_dl_info_hash);
 }
