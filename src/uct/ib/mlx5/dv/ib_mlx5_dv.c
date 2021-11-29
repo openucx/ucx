@@ -155,7 +155,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     }
 
     if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
-        iface->config.ece_cfg.ece_enable) {
+        iface->config.ece_cfg.enable) {
         UCT_IB_MLX5DV_SET(create_qp_in, in, ece,
                           iface->config.ece_cfg.ece.val);
     } else if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {

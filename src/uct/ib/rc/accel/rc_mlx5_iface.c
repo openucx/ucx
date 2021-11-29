@@ -354,7 +354,7 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
 
 #if HAVE_RDMACM_ECE
     if ((dev->flags & UCT_IB_DEVICE_FLAG_ECE) &&
-        iface->super.super.config.ece_cfg.ece_enable &&
+        iface->super.super.config.ece_cfg.enable &&
         (0 == ibv_query_ece(qp->verbs.qp, &ece))) {
         qp->local_ece.val = ece.options;
     } else {
@@ -679,12 +679,11 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
 
     if (md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE) {
         if (conn_ece->enable == UCS_CONFIG_OFF) {
-            ib_iface->config.ece_cfg.ece_enable = 0;
-            ib_iface->config.ece_cfg.ece.val    = 0;
+            ib_iface->config.ece_cfg.enable  = 0;
+            ib_iface->config.ece_cfg.ece.val = 0;
         } else {
-            ib_iface->config.ece_cfg.ece_enable = 1;
-            ib_iface->config.ece_cfg.ece.val    =
-                UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
+            ib_iface->config.ece_cfg.enable  = 1;
+            ib_iface->config.ece_cfg.ece.val = UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
 
             uct_rc_mlx5_iface_fill_attr(iface, &attr,
                                         iface->super.config.tx_qp_len,
@@ -694,12 +693,11 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
             status = uct_rc_mlx5_iface_create_qp(iface, &ep.tx.wq.super,
                                                  &ep.tx.wq, &attr);
             if (status != UCS_OK) {
-                ib_iface->config.ece_cfg.ece_enable = 0;
-                ib_iface->config.ece_cfg.ece.val    = 0;
+                ib_iface->config.ece_cfg.enable  = 0;
+                ib_iface->config.ece_cfg.ece.val = 0;
                 return status;
             } else {
-                ib_iface->config.ece_cfg.ece.val    =
-                    ep.tx.wq.super.local_ece.val;
+                ib_iface->config.ece_cfg.ece.val = ep.tx.wq.super.local_ece.val;
 
                 if (ep.tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
                     /* make coverity happy [FORWARD_NULL] */
@@ -713,13 +711,13 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
             ib_iface->config.ece_cfg.ece.val = ece_int(
                     ib_iface->config.ece_cfg.ece.val, 0x20000001);
             if ((ib_iface->config.ece_cfg.ece.val & 0x1) == 0) {
-                ib_iface->config.ece_cfg.ece_enable = 0;
-                ib_iface->config.ece_cfg.ece.val    = 0;
+                ib_iface->config.ece_cfg.enable  = 0;
+                ib_iface->config.ece_cfg.ece.val = 0;
             } else {
-                ib_iface->config.ece_cfg.ece_enable = 1;
+                ib_iface->config.ece_cfg.enable  = 1;
             }
 
-            if ((ib_iface->config.ece_cfg.ece_enable == 1) &&
+            if ((ib_iface->config.ece_cfg.enable == 1) &&
                 UCT_RC_MLX5_TM_ENABLED(iface)) {
                 memset(&attr, 0, sizeof(attr));
 
@@ -729,8 +727,8 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
                 status = uct_rc_mlx5_iface_create_qp(iface, &ep.tm_qp, NULL,
                                                      &attr);
                 if (status != UCS_OK) {
-                     ib_iface->config.ece_cfg.ece_enable = 0;
-                     ib_iface->config.ece_cfg.ece.val    = 0;
+                     ib_iface->config.ece_cfg.enable  = 0;
+                     ib_iface->config.ece_cfg.ece.val = 0;
                      return status;
                 } else {
                      ib_iface->config.ece_cfg.ece.val = ece_int(
@@ -738,10 +736,10 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
                              ep.tm_qp.local_ece.val);
 
                      if (!(ib_iface->config.ece_cfg.ece.val & 0x1)) {
-                         ib_iface->config.ece_cfg.ece_enable = 0;
-                         ib_iface->config.ece_cfg.ece.val    = 0;
+                         ib_iface->config.ece_cfg.enable  = 0;
+                         ib_iface->config.ece_cfg.ece.val = 0;
                      } else {
-                         ib_iface->config.ece_cfg.ece_enable = 1;
+                         ib_iface->config.ece_cfg.enable  = 1;
                      }
 
                     uct_ib_mlx5_destroy_qp(md, &ep.tm_qp);
@@ -750,7 +748,7 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
         }
 
         if (conn_ece->enable == UCS_CONFIG_ON) {
-            if (ib_iface->config.ece_cfg.ece_enable == 0) {
+            if (ib_iface->config.ece_cfg.enable == 0) {
                 ucs_error("device %s not support ECE",
                            uct_ib_device_name(&md->super.dev));
                 return UCS_ERR_UNSUPPORTED;
@@ -766,8 +764,8 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
             }
         }
     } else {
-        ib_iface->config.ece_cfg.ece_enable = 0;
-        ib_iface->config.ece_cfg.ece.val    = 0;
+        ib_iface->config.ece_cfg.enable  = 0;
+        ib_iface->config.ece_cfg.ece.val = 0;
 
         if (conn_ece->enable == UCS_CONFIG_ON) {
 #if HAVE_RDMACM_ECE
@@ -969,8 +967,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    self->super.super.super.config.ece_cfg.ece_enable = 0;
-    self->super.super.super.config.ece_cfg.ece.val    = 0;
+    self->super.super.super.config.ece_cfg.enable  = 0;
+    self->super.super.super.config.ece_cfg.ece.val = 0;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,

@@ -556,7 +556,7 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
 
     if (ece!= NULL) {
         if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
-            (iface->super.super.config.ece_cfg.ece_enable == 0)) {
+            (iface->super.super.config.ece_cfg.enable == 0)) {
             *ece = 0;
         } else {
             *ece = ece_int(*ece, ep->super.local_ece.val);
@@ -591,7 +591,7 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
     if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
-        (iface->super.config.ece_cfg.ece_enable == 0)) {
+        (iface->super.config.ece_cfg.enable == 0)) {
         ep->super.remote_ece.val = 0;
     } else {
         ep->super.remote_ece.val = *ece;
@@ -644,7 +644,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     }
 
 #if HAVE_RDMACM_ECE
-    if (iface->super.super.config.ece_cfg.ece_enable) {
+    if (iface->super.super.config.ece_cfg.enable) {
         if (0 != ibv_query_ece(self->qp, &ece)) {
             ucs_error("failed to query ece");
             status = UCS_ERR_IO_ERROR;

@@ -807,7 +807,7 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
     ece.vendor_id = md->dev.pci_id.vendor;
 
     if ((md->dev.flags & UCT_IB_DEVICE_FLAG_ECE) &&
-        iface->super.config.ece_cfg.ece_enable) {
+        iface->super.config.ece_cfg.enable) {
         ece.options = iface->super.config.ece_cfg.ece.val;
 
         if (ibv_set_ece(qp, &ece)) {
@@ -866,7 +866,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     dev = uct_ib_iface_device(&iface->super);
 #if HAVE_RDMACM_ECE
     if ((dev->flags & UCT_IB_DEVICE_FLAG_ECE) &&
-        (iface->super.config.ece_cfg.ece_enable)) {
+        (iface->super.config.ece_cfg.enable)) {
         ibv_ece.vendor_id = UCT_IB_VENDOR_ID_MLNX;
         ibv_ece.options = ece;
         ibv_ece.comp_mask = 0;

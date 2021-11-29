@@ -21,6 +21,7 @@ enum  {
 };
 
 
+/* user ece configuration option */
 typedef struct mlx5_ece_cfg {
     ucs_on_off_auto_value_t enable;
     ucs_on_off_auto_value_t sr;
@@ -38,8 +39,9 @@ union ece_t {
 };
 
 
+/* ece configuration under user cfg and hardware limitation*/
 typedef struct mlx5_ece {
-    uint32_t ece_enable;
+    uint8_t     enable;
 
     union ece_t ece;
 } mlx5_ece_t;

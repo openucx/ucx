@@ -75,7 +75,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, ib_iface->config.hop_limit);
 
     if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
-        ib_iface->config.ece_cfg.ece_enable) {
+        ib_iface->config.ece_cfg.enable) {
         UCT_IB_MLX5DV_SET(dctc, dctc, ece, ece);
     }
 
@@ -164,7 +164,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     }
 
     if ((dev->flags & UCT_IB_DEVICE_FLAG_ECE) &&
-        ib_iface->config.ece_cfg.ece_enable) {
+        ib_iface->config.ece_cfg.enable) {
         ucs_debug("init2rtr_qp_in with ece 0x%x", qp->remote_ece.val);
         UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, qp->remote_ece.val);
     }

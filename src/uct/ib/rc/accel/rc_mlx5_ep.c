@@ -640,7 +640,7 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
 
     if (ece != NULL) {
         if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
-            (iface->super.super.config.ece_cfg.ece_enable == 0)) {
+            (iface->super.super.config.ece_cfg.enable == 0)) {
             *ece = 0;
         } else {
             *ece = ece_int(*ece, ep->super.local_ece.val);
@@ -723,7 +723,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     ucs_status_t status;
 
     if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
-        (iface->super.super.config.ece_cfg.ece_enable == 0)) {
+        (iface->super.super.config.ece_cfg.enable == 0)) {
         ep->super.remote_ece.val = 0;
     } else {
         ep->super.remote_ece.val = *ece;
