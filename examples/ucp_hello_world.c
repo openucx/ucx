@@ -34,6 +34,7 @@
  */
 
 #include "hello_world_util.h"
+#include "ucp_util.h"
 
 #include <ucp/api/ucp.h>
 
@@ -212,6 +213,19 @@ err:
     return ret;
 }
 
+static void ep_close_err_mode(ucp_worker_h ucp_worker, ucp_ep_h ucp_ep)
+{
+    uint64_t ep_close_flags;
+
+    if (err_handling_opt.ucp_err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+        ep_close_flags = UCP_EP_CLOSE_FLAG_FORCE;
+    } else {
+        ep_close_flags = 0;
+    }
+
+    ep_close(ucp_worker, ucp_ep, ep_close_flags);
+}
+
 static int run_ucx_client(ucp_worker_h ucp_worker)
 {
     struct msg *msg = NULL;
@@ -331,7 +345,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 err_msg:
     mem_type_free(msg);
 err_ep:
-    ucp_ep_close_nb(server_ep, UCP_EP_CLOSE_MODE_FORCE);
+    ep_close_err_mode(ucp_worker, server_ep);
 err:
     return ret;
 }
@@ -493,7 +507,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
 err_free_mem_type_msg:
     mem_type_free(msg);
 err_ep:
-    ucp_ep_close_nb(client_ep, UCP_EP_CLOSE_MODE_FORCE);
+    ep_close_err_mode(ucp_worker, client_ep);
 err:
     return ret;
 }
