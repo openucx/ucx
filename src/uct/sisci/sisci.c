@@ -158,6 +158,15 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
 {
+    /*
+        At this point its not clear if the memory domain has been opened yet.
+    */
+
+
+    /*
+    Currently we are hard coding in the amount of devices and its properties.
+    The reasoning for this is the rather "limited" scope of our master thesis,  
+    */
 
     printf("UCT_SISCI_QUERY_DEVICES\n");
     return UCS_OK;
@@ -202,15 +211,20 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
     return UCS_OK;
 }
 
+static ucs_status_t uct_sisci_md_close() {
+    printf("uct_sisci_md_close: teehee\n");
+    SCITerminate();
+}
+
 static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md_name,
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
-
+    /*This seems like the most reasonable place to call SCI_INIT, not sure when the memory domain is closed though : )*/
     uct_sisci_md_config_t *md_config = ucs_derived_of(config,
                                                      uct_sisci_md_config_t);
 
     static uct_md_ops_t md_ops = {
-        .close              = ucs_empty_function,
+        .close              = uct_sisci_md_close, //ucs_empty_function
         .query              = uct_sisci_md_query,
         .mkey_pack          = ucs_empty_function_return_success,
         .mem_reg            = uct_sisci_mem_reg,
