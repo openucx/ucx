@@ -366,7 +366,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
         } else {
             ucs_assert(ibv_query_ece(qp, &ece) == 0);
             self->super.super.config.ece_cfg.ece.val =
-                    ece_int(ece.options, 0x20000001);
+                    ece_intersect(ece.options, 0x20000001);
             if ((self->super.super.config.ece_cfg.ece.val & 0x1) == 0) {
                 self->super.super.config.ece_cfg.enable  = 0;
                 self->super.super.config.ece_cfg.ece.val = 0;

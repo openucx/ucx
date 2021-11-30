@@ -643,7 +643,7 @@ ucs_status_t uct_rc_mlx5_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
             (iface->super.super.config.ece_cfg.enable == 0)) {
             *ece = 0;
         } else {
-            *ece = ece_int(*ece, ep->super.local_ece.val);
+            *ece = ece_intersect(*ece, ep->super.local_ece.val);
         }
     }
 
@@ -975,8 +975,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
             goto err_destroy_txqp;
         }
 
-        self->super.local_ece.val = ece_int(self->super.local_ece.val,
-                                            self->tm_qp.local_ece.val);
+        self->super.local_ece.val = ece_intersect(self->super.local_ece.val,
+                                                  self->tm_qp.local_ece.val);
     }
 
     status = uct_ib_device_async_event_register(&md->super.dev,

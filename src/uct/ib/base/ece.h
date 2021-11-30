@@ -47,11 +47,8 @@ typedef struct mlx5_ece {
 } mlx5_ece_t;
 
 
-/**
- * ece intersection
- */
 static UCS_F_ALWAYS_INLINE
-uint32_t ece_int(uint32_t val0, uint32_t val1)
+uint32_t ece_intersect(uint32_t val0, uint32_t val1)
 {
     union ece_t ece0, ece1, ece_rst;
 

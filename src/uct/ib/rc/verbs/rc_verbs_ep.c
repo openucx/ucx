@@ -559,7 +559,7 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
             (iface->super.super.config.ece_cfg.enable == 0)) {
             *ece = 0;
         } else {
-            *ece = ece_int(*ece, ep->super.local_ece.val);
+            *ece = ece_intersect(*ece, ep->super.local_ece.val);
         }
     }
 

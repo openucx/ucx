@@ -708,7 +708,7 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
                 uct_ib_mlx5_destroy_qp(md, &ep.tx.wq.super);
             }
 
-            ib_iface->config.ece_cfg.ece.val = ece_int(
+            ib_iface->config.ece_cfg.ece.val = ece_intersect(
                     ib_iface->config.ece_cfg.ece.val, 0x20000001);
             if ((ib_iface->config.ece_cfg.ece.val & 0x1) == 0) {
                 ib_iface->config.ece_cfg.enable  = 0;
@@ -731,7 +731,7 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
                      ib_iface->config.ece_cfg.ece.val = 0;
                      return status;
                 } else {
-                     ib_iface->config.ece_cfg.ece.val = ece_int(
+                     ib_iface->config.ece_cfg.ece.val = ece_intersect(
                              ib_iface->config.ece_cfg.ece.val,
                              ep.tm_qp.local_ece.val);
 

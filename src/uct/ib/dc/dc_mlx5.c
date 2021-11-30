@@ -1108,9 +1108,9 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
             }
 
             ib_iface->config.ece_cfg.ece.val =
-                ece_int(dct.local_ece.val, dci.local_ece.val);
+                ece_intersect(dct.local_ece.val, dci.local_ece.val);
             ib_iface->config.ece_cfg.ece.val =
-                ece_int(ib_iface->config.ece_cfg.ece.val, 0x20000001);
+                ece_intersect(ib_iface->config.ece_cfg.ece.val, 0x20000001);
 
             uct_dc_mlx5_destroy_dct(&dct);
 
