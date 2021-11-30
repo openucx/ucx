@@ -1288,7 +1288,7 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                                                      ep_addr_len, addr_version,
                                                      0);
 
-                    /* pack ep address */
+                    /* pack ep address, ece is both input and output */
                     status = uct_ep_get_address(ep->uct_eps[lane], ptr, &ece);
                     if (status != UCS_OK) {
                         return status;
