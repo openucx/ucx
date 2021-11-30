@@ -444,9 +444,9 @@ uct_dc_mlx5_force_full_handshake(uct_dc_mlx5_iface_t *iface, int full_handshake_
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci)
 {
-    uct_ib_iface_t *ib_iface = &iface->super.super.super;
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md,
-                                              uct_ib_mlx5_md_t);
+    uct_ib_iface_t *ib_iface          = &iface->super.super.super;
+    uct_ib_mlx5_md_t *md              = ucs_derived_of(ib_iface->super.md,
+                                                       uct_ib_mlx5_md_t);
     uct_ib_device_t UCS_V_UNUSED *dev = uct_ib_iface_device(ib_iface);
     uct_ibv_ece_t UCS_V_UNUSED ibv_ece;
     struct ibv_qp_attr attr;
