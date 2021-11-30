@@ -104,6 +104,8 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 
     resources = ucs_malloc(sizeof(*resources), "SCI resources");
 
+    printf("sizeof(*resources): %zd", sizeof(*resources));
+
     printf("component name: %s\n", component->name);
 
     if(resources == NULL) {
@@ -214,6 +216,8 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
 
 static void uct_sisci_md_close() {
     printf("uct_sisci_md_close: teehee\n");
+    
+    
     SCITerminate();
     //return UCS_OK;
 }
