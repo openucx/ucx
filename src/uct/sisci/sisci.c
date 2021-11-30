@@ -169,7 +169,8 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
     */
 
     printf("UCT_SISCI_QUERY_DEVICES\n");
-    return UCS_OK;
+    return UCS_ERR_NO_DEVICE;
+    //return UCS_OK;
 }
 
 
