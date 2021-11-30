@@ -2917,14 +2917,18 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
            tag_rndv_killed_sender_multiple_sends, "RNDV_THRESH=0",
            "RNDV_SCHEME=get_zcopy")
 {
-    do_tag_rndv_killed_sender_test(1, 128, 100000);
+    size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
+                                    ucs::test_time_multiplier());
+    do_tag_rndv_killed_sender_test(1, 128, num_sends);
 }
 
 UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
            tag_rndv_killed_sender_4_extra_senders_multiple_sends,
            "RNDV_THRESH=0", "RNDV_SCHEME=get_zcopy")
 {
-    do_tag_rndv_killed_sender_test(4, 128, 100000);
+    size_t num_sends = ucs_max(100, 100000 / ucs::test_time_multiplier() /
+                                    ucs::test_time_multiplier());
+    do_tag_rndv_killed_sender_test(4, 128, num_sends);
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)
