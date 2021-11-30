@@ -208,5 +208,9 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
     .is_reachable      = ucs_empty_function_return_one_int
 };
 
-UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,
-                 uct_sysv_rkey_release, "SYSV_", uct_sysv_iface_config_table)
+void uct_init_sysv_tl()
+{
+    UCT_MM_TL_REGISTER(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,
+                       uct_sysv_rkey_release, "SYSV_",
+                       uct_sysv_iface_config_table);
+}

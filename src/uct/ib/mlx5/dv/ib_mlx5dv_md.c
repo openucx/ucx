@@ -857,7 +857,10 @@ static uct_ib_md_ops_t uct_ib_mlx5_devx_md_ops = {
     .get_atomic_mr_id    = uct_ib_mlx5_md_get_atomic_mr_id,
 };
 
-UCT_IB_MD_OPS(uct_ib_mlx5_devx_md_ops, 2);
+void uct_init_ib_mlx5_devx_md_ops()
+{
+    UCT_IB_MD_OPS(uct_ib_mlx5_devx_md_ops, 2);
+}
 
 #endif
 
@@ -1067,5 +1070,7 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)ucs_empty_function_return_unsupported,
 };
 
-UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);
-
+void uct_init_ib_mlx5_md_ops()
+{
+    UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);
+}

@@ -17,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <knem_iface.h>
 
 
 #define UCT_KNEM_MD_MEM_DEREG_CHECK_PARAMS(_params) \
@@ -427,4 +428,9 @@ uct_component_t uct_knem_component = {
     .flags              = 0,
     .md_vfs_init        = uct_knem_md_vfs_init
 };
-UCT_COMPONENT_REGISTER(&uct_knem_component);
+
+void UCS_F_CTOR uct_init_knem_component()
+{
+    UCT_COMPONENT_REGISTER(uct_knem_component);
+    uct_init_knem_tl();
+}

@@ -18,6 +18,10 @@
 #include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
+#include <uct/cuda/cuda_copy/cuda_copy_iface.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_md.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_iface.h>
+#include <uct/cuda/cuda_ipc/cuda_ipc_cache.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
 
@@ -296,14 +300,22 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
                                            num_resources_p);
 }
 
-UCS_STATIC_INIT {
+void UCS_F_CTOR uct_init_cuda()
+{
     ucs_spinlock_init(&uct_cuda_base_lock, 0);
+    uct_init_cuda_copy_component();
+    uct_init_cuda_copy_tl();
+    uct_init_cuda_ipc_component();
+    uct_init_cuda_ipc_tl();
+    uct_init_cuda_ipc_cache();
 }
 
-UCS_STATIC_CLEANUP {
+void UCS_F_DTOR uct_cleanup_cuda()
+{
     ucs_spinlock_destroy(&uct_cuda_base_lock);
 }
 
+/* TODO: fixme for static lib */
 UCS_MODULE_INIT() {
     /* TODO make gdrcopy independent of cuda */
     UCS_MODULE_FRAMEWORK_DECLARE(uct_cuda);

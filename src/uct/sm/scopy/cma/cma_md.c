@@ -20,6 +20,7 @@
 #include <ucs/sys/sys.h>
 #include <sys/prctl.h>
 #include <sys/uio.h>
+#include <cma_iface.h>
 #include <string.h>
 
 #if HAVE_SYS_CAPABILITY_H
@@ -247,4 +248,9 @@ uct_component_t uct_cma_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_cma_component);
+
+void UCS_F_CTOR uct_init_cma_component()
+{
+    UCT_COMPONENT_REGISTER(uct_cma_component);
+    uct_init_cma_tl();
+}

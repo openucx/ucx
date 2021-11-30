@@ -34,4 +34,6 @@ typedef struct uct_cuda_copy_md_config {
     double                      max_reg_ratio;
 } uct_cuda_copy_md_config_t;
 
+void uct_init_cuda_copy_component();
+
 #endif

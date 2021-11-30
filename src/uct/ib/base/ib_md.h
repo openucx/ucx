@@ -358,8 +358,7 @@ typedef struct uct_ib_md_ops_entry {
 } uct_ib_md_ops_entry_t;
 
 #define UCT_IB_MD_OPS(_md_ops, _priority) \
-    extern ucs_list_link_t uct_ib_md_ops_list; \
-    UCS_STATIC_INIT { \
+    do { \
         static uct_ib_md_ops_entry_t *p, entry = { \
             .name     = UCS_PP_MAKE_STRING(_md_ops), \
             .ops      = &_md_ops, \
@@ -372,9 +371,11 @@ typedef struct uct_ib_md_ops_entry {
             } \
         } \
         ucs_list_add_tail(&uct_ib_md_ops_list, &entry.list); \
-    }
+    } while(0)
 
 extern uct_component_t uct_ib_component;
+
+extern ucs_list_link_t uct_ib_md_ops_list;
 
 static inline uint32_t uct_ib_md_direct_rkey(uct_rkey_t uct_rkey)
 {
@@ -474,4 +475,38 @@ ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
                                  size_t length, uint64_t access_flags,
                                  uct_ib_mem_t *memh, uct_ib_mr_t *mrs,
                                  uct_ib_mr_type_t mr_type, int silent);
+
+#if HAVE_TL_RC
+void uct_init_ib_rc_verbs_tl();
+#endif /* HAVE_TL_RC */
+
+#if HAVE_MLX5_HW
+void uct_init_ib_rc_mlx5_tl();
+#endif /* HAVE_MLX5_HW */
+
+#if HAVE_TL_DC
+void uct_init_ib_dc_mlx5_tl();
+#endif /* HAVE_TL_DC */
+
+#if HAVE_TL_UD
+void uct_init_ib_ud_verbs_tl();
+#endif /* HAVE_TL_UD */
+
+#if HAVE_MLX5_HW_UD
+void uct_init_ib_ud_mlx5_tl();
+#endif /* HAVE_MLX5_HW_UD */
+
+#if HAVE_MLX5_DV
+void uct_init_ib_mlx5_md_ops();
+
+#if HAVE_DEVX
+void uct_init_ib_mlx5_devx_md_ops();
+#endif /* HAVE_DEVX */
+
+#endif /* HAVE_MLX5_DV */
+
+#if HAVE_EXP
+void uct_init_ib_mlx5_exp_md_ops();
+#endif /* HAVE_EXP */
+
 #endif

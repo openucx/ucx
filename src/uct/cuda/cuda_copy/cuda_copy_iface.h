@@ -66,4 +66,8 @@ typedef struct uct_cuda_copy_event_desc {
     uct_completion_t *comp;
     ucs_queue_elem_t queue;
 } uct_cuda_copy_event_desc_t;
+
+
+void uct_init_cuda_copy_tl();
+
 #endif

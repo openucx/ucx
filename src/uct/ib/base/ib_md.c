@@ -1881,7 +1881,10 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)ucs_empty_function_return_unsupported,
 };
 
-UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);
+static void uct_init_ib_verbs_md_ops()
+{
+    UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);
+}
 
 uct_component_t uct_ib_component = {
     .query_md_resources = uct_ib_query_md_resources,
@@ -1902,4 +1905,43 @@ uct_component_t uct_ib_component = {
     .flags              = 0,
     .md_vfs_init        = uct_ib_md_vfs_init
 };
-UCT_COMPONENT_REGISTER(&uct_ib_component);
+
+void UCS_F_CTOR uct_init_ib_component()
+{
+    UCT_COMPONENT_REGISTER(uct_ib_component);
+
+    uct_init_ib_verbs_md_ops();
+
+#if HAVE_MLX5_DV
+    uct_init_ib_mlx5_md_ops();
+
+#if HAVE_DEVX
+    uct_init_ib_mlx5_devx_md_ops();
+#endif /* HAVE_DEVX */
+
+#endif /* HAVE_MLX5_DV */
+
+#if HAVE_EXP
+    uct_init_ib_mlx5_exp_md_ops();
+#endif /* HAVE_EXP */
+
+#if HAVE_TL_RC
+    uct_init_ib_rc_verbs_tl();
+#endif /* HAVE_TL_RC */
+
+#if HAVE_MLX5_HW
+    uct_init_ib_rc_mlx5_tl();
+#endif /* HAVE_MLX5_HW */
+
+#if HAVE_TL_DC
+    uct_init_ib_dc_mlx5_tl();
+#endif /* HAVE_TL_DC */
+
+#if HAVE_TL_UD
+    uct_init_ib_ud_verbs_tl();
+#endif /* HAVE_TL_UD */
+
+#if HAVE_MLX5_HW_UD
+    uct_init_ib_ud_mlx5_tl();
+#endif /* HAVE_MLX5_HW_UD */
+}

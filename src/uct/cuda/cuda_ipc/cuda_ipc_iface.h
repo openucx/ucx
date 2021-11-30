@@ -63,4 +63,7 @@ typedef struct uct_cuda_ipc_event_desc {
 
 
 ucs_status_t uct_cuda_ipc_iface_init_streams(uct_cuda_ipc_iface_t *iface);
+
+void uct_init_cuda_ipc_tl();
+
 #endif

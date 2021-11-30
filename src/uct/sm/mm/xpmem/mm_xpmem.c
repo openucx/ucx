@@ -76,11 +76,6 @@ static ucs_config_field_t uct_xpmem_iface_config_table[] = {
   {NULL}
 };
 
-UCS_STATIC_INIT {
-    ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
-    kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
-}
-
 UCS_STATIC_CLEANUP {
     unsigned long num_leaked_segments;
     uct_xpmem_remote_mem_t *rmem;
@@ -571,5 +566,12 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
     .is_reachable      = ucs_empty_function_return_one_int
 };
 
-UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
-                 uct_xpmem_rkey_release, "XPMEM_", uct_xpmem_iface_config_table)
+void UCS_F_CTOR uct_init_knem_tl()
+{
+    UCT_MM_TL_REGISTER(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
+                       uct_xpmem_rkey_release, "XPMEM_",
+                       uct_xpmem_iface_config_table);
+
+    ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
+    kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
+}

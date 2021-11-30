@@ -150,7 +150,7 @@ typedef struct uct_mm_component {
 
 
 /*
- * Define a memory-mapper component for MM.
+ * Register a memory-mapper component for MM.
  *
  * @param _var          Variable for MM component.
  * @param _name         String which is the component name.
@@ -159,8 +159,8 @@ typedef struct uct_mm_component {
  * @param _rkey_release Remote key release function.
  * @param _cfg_prefix   Prefix for configuration environment vars.
  */
-#define UCT_MM_COMPONENT_DEFINE(_var, _name, _md_ops, _rkey_unpack, \
-                                _rkey_release, _cfg_prefix) \
+#define UCT_MM_COMPONENT_REGISTER(_var, _name, _md_ops, _rkey_unpack, \
+                                  _rkey_release, _cfg_prefix) \
     \
     static uct_mm_component_t _var = { \
         .super = { \
@@ -186,7 +186,7 @@ typedef struct uct_mm_component {
        }, \
        .md_ops                  = (_md_ops) \
     }; \
-    UCT_COMPONENT_REGISTER(&(_var).super); \
+    UCT_COMPONENT_REGISTER((_var).super)
 
 
 extern ucs_config_field_t uct_mm_md_config_table[];

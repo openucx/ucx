@@ -10,6 +10,8 @@
 #include "rocm_base.h"
 
 #include <ucs/sys/module.h>
+#include <uct/rocm/copy/rocm_copy_iface.h>
+#include <uct/rocm/ipc/rocm_ipc_iface.h>
 
 #include <pthread.h>
 
@@ -279,8 +281,15 @@ ucs_status_t uct_rocm_base_get_link_type(hsa_amd_link_info_type_t *link_type)
     return UCS_OK;
 }
 
+/* TODO: fixme for static lib */
 UCS_MODULE_INIT() {
     UCS_MODULE_FRAMEWORK_DECLARE(uct_rocm);
     UCS_MODULE_FRAMEWORK_LOAD(uct_rocm, 0);
     return UCS_OK;
+}
+
+void UCS_F_CTOR uct_init_rocm()
+{
+    uct_init_rocm_copy_tl();
+    uct_init_rocm_ipc_tl();
 }

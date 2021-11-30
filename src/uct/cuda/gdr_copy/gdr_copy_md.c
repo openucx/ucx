@@ -20,6 +20,7 @@
 #include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/gdr_copy/gdr_copy_iface.h>
 
 #define UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN 65536
 
@@ -459,5 +460,10 @@ uct_component_t uct_gdr_copy_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_gdr_copy_component);
+
+void UCS_F_CTOR uct_init_cuda_gdr_copy_component()
+{
+    UCT_COMPONENT_REGISTER(uct_gdr_copy_component);
+    uct_init_cuda_gdr_copy_tl();
+}
 

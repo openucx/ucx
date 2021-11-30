@@ -492,6 +492,9 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_udt_iface_t, uct_iface_t, uct_md_h,
                           uct_worker_h, const uct_iface_params_t*,
                           const uct_iface_config_t*);
 
-UCT_TL_DEFINE(&uct_ugni_component, ugni_udt, uct_ugni_query_devices,
-              uct_ugni_udt_iface_t, "UGNI_UDT_",
-              uct_ugni_udt_iface_config_table, uct_ugni_iface_config_t);
+void uct_init_ugni_udt_tl()
+{
+    UCT_TL_REGISTER(&uct_ugni_component, ugni_udt, uct_ugni_query_devices,
+                    uct_ugni_udt_iface_t, "UGNI_UDT_",
+                    uct_ugni_udt_iface_config_table, uct_ugni_iface_config_t);
+}

@@ -43,6 +43,8 @@ typedef struct uct_tcp_send_recv_buf_config {
      (_offset) , UCS_CONFIG_TYPE_ULUNITS}
 
 
+void uct_init_tcp_tl();
+
 ucs_status_t ucs_tcp_base_set_syn_cnt(int fd, int tcp_syn_cnt);
 
 #endif /* UCT_TCP_BASE_H */

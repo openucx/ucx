@@ -24,4 +24,6 @@ typedef struct uct_knem_iface {
 } uct_knem_iface_t;
 
 
+void uct_init_knem_tl();
+
 #endif

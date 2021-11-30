@@ -167,7 +167,10 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_copy_iface_t, uct_iface_t, uct_md_h, uct_work
                           const uct_iface_params_t*, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_copy_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_rocm_copy_component, rocm_copy,
-              uct_rocm_base_query_devices, uct_rocm_copy_iface_t,
-              "ROCM_COPY_", uct_rocm_copy_iface_config_table,
-              uct_rocm_copy_iface_config_t);
+void uct_init_rocm_copy_tl()
+{
+    UCT_TL_REGISTER(&uct_rocm_copy_component, rocm_copy,
+                    uct_rocm_base_query_devices, uct_rocm_copy_iface_t,
+                    "ROCM_COPY_", uct_rocm_copy_iface_config_table,
+                    uct_rocm_copy_iface_config_t);
+}

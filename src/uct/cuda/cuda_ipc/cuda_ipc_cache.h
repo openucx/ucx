@@ -48,4 +48,5 @@ ucs_status_t
 uct_cuda_ipc_map_memhandle(const uct_cuda_ipc_key_t *key, void **mapped_addr);
 ucs_status_t uct_cuda_ipc_unmap_memhandle(pid_t pid, uintptr_t d_bptr,
                                           void *mapped_addr, int cache_enabled);
+void uct_init_cuda_ipc_cache();
 #endif

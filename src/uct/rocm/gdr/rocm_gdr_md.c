@@ -164,5 +164,9 @@ uct_component_t uct_rocm_gdr_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_rocm_gdr_component);
+
+void UCS_F_CTOR uct_init_rocm_gdr_component()
+{
+    UCT_COMPONENT_REGISTER(uct_rocm_gdr_component);
+}
 

@@ -73,4 +73,7 @@ typedef struct uct_cuda_ipc_key {
         }                                                               \
     } while(0);
 
+
+void uct_init_cuda_ipc_component();
+
 #endif

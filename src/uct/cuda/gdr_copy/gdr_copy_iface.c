@@ -200,6 +200,10 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_gdr_copy_iface_t, uct_iface_t, uct_md_h, uct_worke
                           const uct_iface_params_t*, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_gdr_copy_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_gdr_copy_component, gdr_copy, uct_cuda_base_query_devices,
-              uct_gdr_copy_iface_t, "GDR_COPY_",
-              uct_gdr_copy_iface_config_table, uct_gdr_copy_iface_config_t);
+void uct_init_cuda_gdr_copy_tl()
+{
+    UCT_TL_REGISTER(&uct_gdr_copy_component, gdr_copy,
+                    uct_cuda_base_query_devices, uct_gdr_copy_iface_t,
+                    "GDR_COPY_", uct_gdr_copy_iface_config_table,
+                    uct_gdr_copy_iface_config_t);
+}

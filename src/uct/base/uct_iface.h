@@ -362,7 +362,7 @@ typedef struct uct_iface_local_addr_ns {
 
 
 /**
- * Define a transport
+ * Register a transport
  *
  * @param _component      Component to add the transport to
  * @param _name           Name of the transport (should be a token, not a string)
@@ -372,24 +372,24 @@ typedef struct uct_iface_local_addr_ns {
  * @param _cfg_table      Transport configuration table
  * @param _cfg_struct     Struct type defining transport configuration
  */
-#define UCT_TL_DEFINE(_component, _name, _query_devices, _iface_class, \
-                      _cfg_prefix, _cfg_table, _cfg_struct) \
-    \
-    uct_tl_t uct_##_name##_tl = { \
-        .name               = #_name, \
-        .query_devices      = _query_devices, \
-        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
-        .config = { \
-            .name           = #_name" transport", \
-            .prefix         = _cfg_prefix, \
-            .table          = _cfg_table, \
-            .size           = sizeof(_cfg_struct), \
-         } \
-    }; \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(uct_##_name##_tl).config, &ucs_config_global_list); \
-    UCS_STATIC_INIT { \
+#define UCT_TL_REGISTER(_component, _name, _query_devices, _iface_class, \
+                        _cfg_prefix, _cfg_table, _cfg_struct) \
+    do { \
+        static uct_tl_t uct_##_name##_tl = { \
+            .name               = #_name, \
+            .query_devices      = _query_devices, \
+            .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
+            .config = { \
+                .name           = #_name" transport", \
+                .prefix         = _cfg_prefix, \
+                .table          = _cfg_table, \
+                .size           = sizeof(_cfg_struct), \
+             } \
+        }; \
+        ucs_list_add_tail(&ucs_config_global_list, \
+                          &(uct_##_name##_tl).config.list); \
         ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
-    }
+    } while(0)
 
 
 /**

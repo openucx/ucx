@@ -64,4 +64,7 @@ typedef struct uct_ugni_rdma_fetch_desc {
     size_t tail;                    /**< Tail parameter to specify how many bytes at the end of a fma/rdma are garbage*/
 } uct_ugni_rdma_fetch_desc_t;
 
+
+void uct_init_ugni_rdma_tl();
+
 #endif

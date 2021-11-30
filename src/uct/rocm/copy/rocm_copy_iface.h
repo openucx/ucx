@@ -30,4 +30,7 @@ typedef struct uct_rocm_copy_iface_config {
     size_t              h2d_thresh;
 } uct_rocm_copy_iface_config_t;
 
+
+void uct_init_rocm_copy_tl();
+
 #endif

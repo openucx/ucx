@@ -141,6 +141,10 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_gdr_iface_t, uct_iface_t, uct_md_h, uct_worke
                           const uct_iface_params_t*, const uct_iface_config_t*);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_gdr_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_rocm_gdr_component, rocm_gdr, uct_rocm_base_query_devices,
-              uct_rocm_gdr_iface_t, "ROCM_GDR_",
-              uct_rocm_gdr_iface_config_table, uct_rocm_gdr_iface_config_t);
+void UCS_F_CTOR uct_init_rocm_gdb_tl()
+{
+    UCT_TL_REGISTER(&uct_rocm_gdr_component, rocm_gdr,
+                    uct_rocm_base_query_devices, uct_rocm_gdr_iface_t,
+                    "ROCM_GDR_", uct_rocm_gdr_iface_config_table,
+                    uct_rocm_gdr_iface_config_t);
+}

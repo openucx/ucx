@@ -24,4 +24,6 @@ typedef struct uct_cma_iface {
 } uct_cma_iface_t;
 
 
+void uct_init_cma_tl();
+
 #endif

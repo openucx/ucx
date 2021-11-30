@@ -409,7 +409,8 @@ void uct_cuda_ipc_destroy_cache(uct_cuda_ipc_cache_t *cache)
     ucs_free(cache);
 }
 
-UCS_STATIC_INIT {
+void uct_init_cuda_ipc_cache()
+{
     ucs_recursive_spinlock_init(&uct_cuda_ipc_remote_cache.lock, 0);
     kh_init_inplace(cuda_ipc_rem_cache, &uct_cuda_ipc_remote_cache.hash);
 }

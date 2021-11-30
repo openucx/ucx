@@ -30,4 +30,7 @@ typedef struct uct_rocm_ipc_iface_config {
     uct_iface_config_t super;
 } uct_rocm_ipc_iface_config_t;
 
+
+void uct_init_rocm_ipc_tl();
+
 #endif

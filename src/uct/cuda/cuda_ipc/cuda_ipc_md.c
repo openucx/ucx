@@ -355,5 +355,9 @@ uct_cuda_ipc_component_t uct_cuda_ipc_component = {
     },
     .md                     = NULL,
 };
-UCT_COMPONENT_REGISTER(&uct_cuda_ipc_component.super);
+
+void uct_init_cuda_ipc_component()
+{
+    UCT_COMPONENT_REGISTER(uct_cuda_ipc_component.super);
+}
 

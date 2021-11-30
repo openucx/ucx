@@ -22,4 +22,7 @@ typedef struct uct_gdr_copy_iface_config {
     uct_iface_config_t      super;
 } uct_gdr_copy_iface_config_t;
 
+
+void uct_init_cuda_gdr_copy_tl();
+
 #endif

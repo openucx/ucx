@@ -903,6 +903,10 @@ uct_ud_mlx5_query_tl_devices(uct_md_h md,
                                      tl_devices_p, num_tl_devices_p);
 }
 
-UCT_TL_DEFINE(&uct_ib_component, ud_mlx5, uct_ud_mlx5_query_tl_devices,
-              uct_ud_mlx5_iface_t, "UD_MLX5_", uct_ud_mlx5_iface_config_table,
-              uct_ud_mlx5_iface_config_t);
+void uct_init_ib_ud_mlx5_tl()
+{
+    UCT_TL_REGISTER(&uct_ib_component, ud_mlx5, uct_ud_mlx5_query_tl_devices,
+                    uct_ud_mlx5_iface_t, "UD_MLX5_",
+                    uct_ud_mlx5_iface_config_table,
+                    uct_ud_mlx5_iface_config_t);
+}

@@ -574,6 +574,10 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
                                      num_tl_devices_p);
 }
 
-UCT_TL_DEFINE(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,
-              uct_rc_verbs_iface_t, "RC_VERBS_", uct_rc_verbs_iface_config_table,
-              uct_rc_verbs_iface_config_t);
+void uct_init_ib_rc_verbs_tl()
+{
+    UCT_TL_REGISTER(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,
+                    uct_rc_verbs_iface_t, "RC_VERBS_",
+                    uct_rc_verbs_iface_config_table,
+                    uct_rc_verbs_iface_config_t);
+}

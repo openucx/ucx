@@ -145,3 +145,11 @@ err_free_bundle:
 err:
     return status;
 }
+
+void UCS_F_CTOR uct_init()
+{
+    uct_init_self_component();
+    uct_init_tcp_component();
+    uct_init_posix_tl();
+    uct_init_sysv_tl();
+}

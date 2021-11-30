@@ -65,4 +65,7 @@ uct_component_t uct_rdmacm_component = {
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
 
-UCT_COMPONENT_REGISTER(&uct_rdmacm_component)
+void UCS_F_CTOR uct_init_rdmacm_component()
+{
+    UCT_COMPONENT_REGISTER(uct_rdmacm_component)
+}

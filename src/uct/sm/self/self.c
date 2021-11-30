@@ -379,8 +379,12 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .iface_is_reachable       = uct_self_iface_is_reachable
 };
 
-UCT_TL_DEFINE(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
-              "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
+static void uct_init_self_tl()
+{
+    UCT_TL_REGISTER(&uct_self_component, self, uct_self_query_tl_devices,
+                    uct_self_iface_t, "SELF_", uct_self_iface_config_table,
+                    uct_self_iface_config_t);
+}
 
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
@@ -472,4 +476,9 @@ static uct_component_t uct_self_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_self_component);
+
+void uct_init_self_component()
+{
+    UCT_COMPONENT_REGISTER(uct_self_component);
+    uct_init_self_tl();
+}

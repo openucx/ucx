@@ -39,4 +39,6 @@ typedef struct uct_ugni_smsg_header {
 
 ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface);
 
+void uct_init_ugni_smsg_tl();
+
 #endif

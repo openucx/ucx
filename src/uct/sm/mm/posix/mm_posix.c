@@ -699,5 +699,9 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
     .is_reachable      = uct_posix_is_reachable
 };
 
-UCT_MM_TL_DEFINE(posix, &uct_posix_md_ops, uct_posix_rkey_unpack,
-                 uct_posix_rkey_release, "POSIX_", uct_posix_iface_config_table)
+void uct_init_posix_tl()
+{
+    UCT_MM_TL_REGISTER(posix, &uct_posix_md_ops, uct_posix_rkey_unpack,
+                       uct_posix_rkey_release, "POSIX_",
+                       uct_posix_iface_config_table);
+}

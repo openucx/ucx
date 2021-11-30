@@ -11,6 +11,9 @@
 #include "ugni_device.h"
 #include "ugni_iface.h"
 #include "ugni_md.h"
+#include <uct/ugni/rdma/ugni_rdma_iface.h>
+#include <uct/ugni/smsg/ugni_smsg_iface.h>
+#include <uct/ugni/udt/ugni_udt_iface.h>
 
 /* Forward declarations */
 
@@ -243,4 +246,12 @@ uct_component_t uct_ugni_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_ugni_component);
+
+void UCS_F_CTOR uct_init_ugni_component()
+{
+    UCT_COMPONENT_REGISTER(uct_ugni_component);
+
+    uct_init_ugni_rdma_tl();
+    uct_init_ugni_smsg_tl();
+    uct_init_ugni_udt_tl();
+}

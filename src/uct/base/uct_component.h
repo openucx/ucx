@@ -164,6 +164,9 @@ struct uct_component {
 };
 
 
+extern ucs_list_link_t uct_components_list;
+
+
 /**
  * Register a component for usage, so it will be returned from
  * @ref uct_query_components.
@@ -171,12 +174,9 @@ struct uct_component {
  * @param [in] _component  Pointer to a global component structure to register.
  */
 #define UCT_COMPONENT_REGISTER(_component) \
-    extern ucs_list_link_t uct_components_list; \
-    UCS_STATIC_INIT { \
-        ucs_list_add_tail(&uct_components_list, &(_component)->list); \
-    } \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config, &ucs_config_global_list); \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config, &ucs_config_global_list);
+    ucs_list_add_tail(&uct_components_list, &(_component).list); \
+    ucs_list_add_tail(&ucs_config_global_list, &(_component).md_config.list); \
+    ucs_list_add_tail(&ucs_config_global_list, &(_component).cm_config.list);
 
 
 /**
@@ -190,5 +190,10 @@ ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
                              ucs_config_field_t *config_table,
                              size_t config_size, const char *env_prefix,
                              const char *cfg_prefix);
+
+void uct_init_self_component(void);
+void uct_init_tcp_component(void);
+void uct_init_posix_tl();
+void uct_init_sysv_tl();
 
 #endif
