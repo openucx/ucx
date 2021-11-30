@@ -16,8 +16,8 @@
 enum  {
     MLX5_ECE_DISABLED  = 0,
     MLX5_ECE_VER_1     = 1,
-    MLX5_ECE_VER_SR    = 2,  /* selective repeat */
-    MLX5_ECE_VER_MAX   = MLX5_ECE_VER_SR,
+    MLX5_ECE_VER_2     = 2,  /* selective repeat */
+    MLX5_ECE_VER_MAX   = MLX5_ECE_VER_2,
 };
 
 
@@ -66,7 +66,7 @@ uint32_t ece_intersect(uint32_t val0, uint32_t val1)
     ece_rst.field.sr = ece0.field.sr & ece1.field.sr;
 
     /* ece version */
-    ece_rst.field.ver = MLX5_ECE_VER_SR;
+    ece_rst.field.ver = MLX5_ECE_VER_2;
 
     return ece_rst.val;
 }
