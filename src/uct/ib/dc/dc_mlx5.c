@@ -458,6 +458,7 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
         } else {
             dci->txwq.super.remote_ece = dci->txwq.super.local_ece;
         }
+
         return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super,
                                                   dci->path_index);
     }
@@ -1370,6 +1371,7 @@ err_cleanup:
         UCS_CLASS_CLEANUP(uct_base_ep_t, &fc_eps[idx].super);
         idx = idx + 1;
     }
+
     return status;
 }
 
@@ -1882,6 +1884,7 @@ uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,
         if (iface->gp != 1) {
             ucs_assert(ep != &iface->tx.fc_ep[1]);
         }
+
         uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
     } else {
         /* ep has another dci assigned to post operations, which should be
