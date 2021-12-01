@@ -28,6 +28,7 @@
  */
 
 #include "hello_world_util.h"
+#include "ucp_util.h"
 
 #include <ucp/api/ucp.h>
 
@@ -573,33 +574,6 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
 }
 
 /**
- * Close the given endpoint.
- * Currently closing the endpoint with UCP_EP_CLOSE_MODE_FORCE since we currently
- * cannot rely on the client side to be present during the server's endpoint
- * closing process.
- */
-static void ep_close(ucp_worker_h ucp_worker, ucp_ep_h ep)
-{
-    ucp_request_param_t param;
-    ucs_status_t status;
-    void *close_req;
-
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-    param.flags        = UCP_EP_CLOSE_FLAG_FORCE;
-    close_req          = ucp_ep_close_nbx(ep, &param);
-    if (UCS_PTR_IS_PTR(close_req)) {
-        do {
-            ucp_worker_progress(ucp_worker);
-            status = ucp_request_check_status(close_req);
-        } while (status == UCS_INPROGRESS);
-
-        ucp_request_free(close_req);
-    } else if (UCS_PTR_STATUS(close_req) != UCS_OK) {
-        fprintf(stderr, "failed to close ep %p\n", (void*)ep);
-    }
-}
-
-/**
  * Print this application's usage help message.
  */
 static void usage()
@@ -1005,7 +979,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         }
 
         /* Close the endpoint to the client */
-        ep_close(ucp_data_worker, server_ep);
+        ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_MODE_FORCE);
 
         /* Reinitialize the server's context to be used for the next client */
         context.conn_request = NULL;
@@ -1014,7 +988,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
     }
 
 err_ep:
-    ep_close(ucp_data_worker, server_ep);
+    ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_MODE_FORCE);
 err_listener:
     ucp_listener_destroy(context.listener);
 err_worker:
@@ -1040,7 +1014,7 @@ static int run_client(ucp_worker_h ucp_worker, char *server_addr,
     ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0);
 
     /* Close the endpoint to the server */
-    ep_close(ucp_worker, client_ep);
+    ep_close(ucp_worker, client_ep, UCP_EP_CLOSE_MODE_FORCE);
 
 out:
     return ret;
