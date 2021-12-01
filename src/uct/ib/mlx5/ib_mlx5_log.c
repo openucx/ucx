@@ -160,11 +160,9 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     }
 
     ucs_log(log_level,
-            "%s on " UCT_IB_IFACE_FMT
-            "/%s (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
+            "%s on " UCT_IB_IFACE_FMT " (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
             "%s QP 0x%x wqe[%d]: %s %s",
-            err_info, UCT_IB_IFACE_ARG(iface),
-            uct_ib_iface_is_roce(iface) ? "RoCE" : "IB", ecqe->syndrome,
+            err_info, UCT_IB_IFACE_ARG(iface), ecqe->syndrome,
             ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4, ecqe->hw_err_synd,
             uct_ib_qp_type_str(iface->config.qp_type), qp_num, pi, wqe_info,
             peer_info);

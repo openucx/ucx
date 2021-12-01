@@ -786,12 +786,19 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
                                            const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev    = uct_ib_iface_device(iface);
-    uint16_t pkey_tbl_len   = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
-    int pkey_found          = 0;
-    uint16_t lim_pkey       = UCT_IB_ADDRESS_INVALID_PKEY;
-    uint16_t lim_pkey_index = UINT16_MAX;
+    uct_ib_device_t *dev        = uct_ib_iface_device(iface);
+    uint16_t pkey_tbl_len       = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
+    int UCS_V_UNUSED pkey_found = 0;
+    uint16_t lim_pkey           = UCT_IB_ADDRESS_INVALID_PKEY;
+    uint16_t lim_pkey_index     = UINT16_MAX;
     uint16_t pkey_index, port_pkey, pkey;
+
+    if (uct_ib_iface_is_roce(iface)) {
+        /* RoCE: use PKEY index 0, which contains the default PKEY: 0xffff */
+        iface->pkey_index = 0;
+        iface->pkey       = UCT_IB_PKEY_DEFAULT;
+        goto out_pkey_found;
+    }
 
     if ((config->pkey != UCS_HEXUNITS_AUTO) &&
         (config->pkey > UCT_IB_PKEY_PARTITION_MASK)) {
@@ -821,43 +828,42 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
         if ((config->pkey == UCS_HEXUNITS_AUTO) ||
             /* take only the lower 15 bits for the comparison */
             ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey)) {
-            if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) &&
+            if (pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) {
+                iface->pkey_index = pkey_index;
+                iface->pkey       = pkey;
+                pkey_found        = 1;
+                goto out_pkey_found;
+            } else if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
                 /* limited PKEY has not yet been found */
-                (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY)) {
                 lim_pkey_index = pkey_index;
                 lim_pkey       = pkey;
-                continue;
             }
-
-            iface->pkey_index = pkey_index;
-            iface->pkey       = pkey;
-            pkey_found        = 1;
-            break;
         }
     }
 
-    if (!pkey_found) {
-        if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
-            /* PKEY neither with full nor with limited membership was found */
-            if (config->pkey == UCS_HEXUNITS_AUTO) {
-                ucs_error("there is no valid pkey to use on "
-                          UCT_IB_IFACE_FMT, UCT_IB_IFACE_ARG(iface));
-            } else {
-                ucs_error("unable to find specified pkey 0x%x on "UCT_IB_IFACE_FMT,
-                          config->pkey, UCT_IB_IFACE_ARG(iface));
-            }
+    ucs_assert(!pkey_found);
 
-            return UCS_ERR_NO_ELEM;
+    if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
+        /* PKEY neither with full nor with limited membership was found */
+        if (config->pkey == UCS_HEXUNITS_AUTO) {
+            ucs_error("there is no valid pkey to use on " UCT_IB_IFACE_FMT,
+                      UCT_IB_IFACE_ARG(iface));
         } else {
-            ucs_assert(lim_pkey_index != UINT16_MAX);
-            iface->pkey_index = lim_pkey_index;
-            iface->pkey       = lim_pkey;
+            ucs_error("unable to find specified pkey 0x%x on "UCT_IB_IFACE_FMT,
+                      config->pkey, UCT_IB_IFACE_ARG(iface));
         }
+
+        return UCS_ERR_NO_ELEM;
     }
 
+    ucs_assertv(lim_pkey_index < pkey_tbl_len, "lim_pkey_index=%u"
+                " pkey_tbl_len=%u", lim_pkey_index, pkey_tbl_len);
+    iface->pkey_index = lim_pkey_index;
+    iface->pkey       = lim_pkey;
+
+out_pkey_found:
     ucs_debug("using pkey[%d] 0x%x on "UCT_IB_IFACE_FMT, iface->pkey_index,
               iface->pkey, UCT_IB_IFACE_ARG(iface));
-
     return UCS_OK;
 }
 
@@ -1666,7 +1672,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         encoding              = 64.0/66.0;
         break;
     default:
-        ucs_error("Invalid active_speed on %s:%d: %d",
+        ucs_error("Invalid active_speed on " UCT_IB_IFACE_FMT ": %d",
                   UCT_IB_IFACE_ARG(iface), active_speed);
         return UCS_ERR_IO_ERROR;
     }

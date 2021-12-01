@@ -553,9 +553,12 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
 
 
 #define UCT_IB_IFACE_FMT \
-    "%s:%d"
+    "%s:%d/%s"
 #define UCT_IB_IFACE_ARG(_iface) \
-    uct_ib_device_name(uct_ib_iface_device(_iface)), (_iface)->config.port_num
+    uct_ib_device_name(uct_ib_iface_device(_iface)), \
+    (_iface)->config.port_num, \
+    uct_ib_iface_is_roce(_iface) ? "RoCE" : "IB"
+    
 
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \
