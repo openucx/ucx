@@ -70,21 +70,14 @@ static UCS_F_ALWAYS_INLINE ucs_memtype_cache_t *ucs_memtype_cache_get_global()
     return ucs_memtype_cache_global_instance;
 }
 
-static UCS_F_ALWAYS_INLINE void
-ucs_memory_info_set_unknown(ucs_memory_info_t *mem_info)
+void ucs_memory_info_set(ucs_memory_info_t *mem_info,
+                         ucs_memory_type_t mem_type, const void *address,
+                         size_t length)
 {
-    mem_info->type         = UCS_MEMORY_TYPE_UNKNOWN;
+    mem_info->type         = mem_type;
     mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-    mem_info->base_address = NULL;
-    mem_info->alloc_length = -1;
-}
-
-void ucs_memory_info_set_host(ucs_memory_info_t *mem_info)
-{
-    mem_info->type         = UCS_MEMORY_TYPE_HOST;
-    mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
-    mem_info->base_address = NULL;
-    mem_info->alloc_length = -1;
+    mem_info->base_address = (void*)address;
+    mem_info->alloc_length = length;
 }
 
 static ucs_pgt_dir_t *ucs_memtype_cache_pgt_dir_alloc(const ucs_pgtable_t *pgtable)
@@ -271,7 +264,7 @@ void ucs_memtype_cache_remove(const void *address, size_t size)
 {
     ucs_memory_info_t mem_info;
 
-    ucs_memory_info_set_unknown(&mem_info);
+    ucs_memory_info_set(&mem_info, UCS_MEMORY_TYPE_UNKNOWN, NULL, SIZE_MAX);
     ucs_memtype_cache_update_internal(ucs_memtype_cache_global_instance,
                                       address, size, &mem_info,
                                       UCS_MEMTYPE_CACHE_ACTION_REMOVE);
@@ -341,7 +334,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
         region    = ucs_derived_of(pgt_region, ucs_memtype_cache_region_t);
         *mem_info = region->mem_info;
     } else {
-        ucs_memory_info_set_unknown(mem_info);
+        ucs_memory_info_set(mem_info, UCS_MEMORY_TYPE_UNKNOWN, address, size);
     }
     status = UCS_OK;
 

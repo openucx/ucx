@@ -1991,7 +1991,34 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
     }
 
     /* Memory type not detected by any memtype MD - assume it is host memory */
-    ucs_memory_info_set_host(mem_info);
+    ucs_memory_info_set(mem_info, UCS_MEMORY_TYPE_HOST, address, length);
+}
+
+void ucp_context_get_reg_memory(ucp_context_h context, void *address,
+                                size_t length, void **reg_address_p,
+                                size_t *reg_length_p,
+                                ucs_memory_type_t mem_type)
+{
+    ucs_memory_info_t mem_info;
+
+    ucs_assert(address != NULL);
+    ucs_assert(length != 0);
+    ucs_assert(reg_address_p != NULL);
+    ucs_assert(reg_length_p != NULL);
+
+    *reg_address_p = address;
+    *reg_length_p  = length;
+
+    if (ucs_likely(!(context->config.ext.reg_whole_alloc_bitmap &
+                     UCS_BIT(mem_type)))) {
+        return;
+    }
+
+    ucp_memory_detect_internal(context, address, length, &mem_info);
+    if (mem_info.type == mem_type) {
+        *reg_address_p = mem_info.base_address;
+        *reg_length_p  = mem_info.alloc_length;
+    }
 }
 
 void

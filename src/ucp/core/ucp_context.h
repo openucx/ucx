@@ -425,6 +425,11 @@ const char* ucp_feature_flags_str(unsigned feature_flags, char *str,
 void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
                                 size_t length, ucs_memory_info_t *mem_info);
 
+void ucp_context_get_reg_memory(ucp_context_h context, void *address,
+                                size_t length, void **reg_address_p,
+                                size_t *reg_length_p,
+                                ucs_memory_type_t mem_type);
+
 /**
  * Calculate a small value to overcome float imprecision
  * between two float values
@@ -520,7 +525,7 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
 
 out_host_mem:
     /* Memory type cache lookup failed - assume it is host memory */
-    ucs_memory_info_set_host(mem_info);
+    ucs_memory_info_set(mem_info, UCS_MEMORY_TYPE_HOST, address, length);
 }
 
 static UCS_F_ALWAYS_INLINE void

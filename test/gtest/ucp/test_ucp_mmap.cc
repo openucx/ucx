@@ -266,6 +266,13 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
 {
     ucs_status_t status;
 
+    if (!(sender().ucph()->mem_type_mask & UCS_BIT(memh->mem_type))) {
+        /* If there are no MDs for detecting buffer affiliation to some memory
+         * type, don't perform checks since they could be incorrect (the test
+         * registers/allocates memory with the "memory_type" hint) */
+        return;
+    }
+
     /* Detect system device of the allocated memory */
     ucp_memory_info_t mem_info;
     ucp_memory_detect(sender().ucph(), memh->address, memh->length, &mem_info);
@@ -348,6 +355,12 @@ UCS_TEST_P(test_ucp_mmap, alloc_mem_type) {
             params.flags       = UCP_MEM_MAP_ALLOCATE;
 
             status = ucp_mem_map(sender().ucph(), &params, &memh);
+            if (!(sender().ucph()->mem_type_mask & UCS_BIT(mem_type))) {
+                /* If there are no MDs for detecting buffer affiliation to some memory
+                 * type, allocation has to be failed */
+                ASSERT_EQ(UCS_ERR_NO_MEMORY, status);
+                return;
+            }
 
             ASSERT_UCS_OK(status);
 
@@ -575,4 +588,5 @@ UCS_TEST_P(test_ucp_mmap, fixed) {
     }
 }
 
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_mmap, ib_no_gpu, "ib")
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_mmap)

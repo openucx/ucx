@@ -93,8 +93,13 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
  * Helper function to set memory info structure to host memory type.
  *
  * @param [out] mem_info        Pointer to memory info structure.
+ * @param [in]  mem_type        Memory type.
+ * @param [in]  address         Address of the buffer.
+ * @param [in]  length          Size of the buffer.
  */
-void ucs_memory_info_set_host(ucs_memory_info_t *mem_info);
+void ucs_memory_info_set(ucs_memory_info_t *mem_info,
+                         ucs_memory_type_t mem_type, const void *address,
+                         size_t length);
 
 
 /**
