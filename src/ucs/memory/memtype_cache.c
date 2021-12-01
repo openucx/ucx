@@ -325,7 +325,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
     ucs_status_t status;
 
     if (memtype_cache == NULL) {
-        return UCS_ERR_NO_ELEM;
+        return UCS_ERR_UNSUPPORTED;
     }
 
     pthread_rwlock_rdlock(&memtype_cache->lock);
@@ -353,6 +353,10 @@ UCS_PROFILE_FUNC(ucs_status_t, ucs_memtype_cache_lookup,
         ucs_memory_info_set_unknown(mem_info);
     }
     status = UCS_OK;
+
+    /* The memory type cache is not expected to return HOST memory type */
+    ucs_assertv(mem_info->type != UCS_MEMORY_TYPE_HOST, "%s (%d)",
+                ucs_memory_type_names[mem_info->type], mem_info->type);
 
 out_unlock:
     pthread_rwlock_unlock(&memtype_cache->lock);

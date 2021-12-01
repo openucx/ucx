@@ -505,25 +505,19 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
     }
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
-    if (status != UCS_ERR_NO_ELEM) {
-        if (ucs_likely(status != UCS_OK)) {
-            ucs_assert(status == UCS_ERR_NO_ELEM);
-            goto out_host_mem;
-        }
-
-        if ((mem_info->type != UCS_MEMORY_TYPE_UNKNOWN) &&
-            ((mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN))) {
-            return;
-        }
-
-        /* Fall thru to slow-path memory type and system device detection by UCT
-         * memory domains. In any case, the memory type cache is not expected to
-         * return HOST memory type.
-         */
-        ucs_assert(mem_info->type != UCS_MEMORY_TYPE_HOST);
+    if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        goto out_host_mem;
+    } else if ((status == UCS_ERR_UNSUPPORTED) ||
+               ((status == UCS_OK) &&
+                ((mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) ||
+                 (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)))) {
+        ucp_memory_detect_slowpath(context, address, length, mem_info);
+    } else {
+        ucs_assertv(status == UCS_OK, "%s (%d)", ucs_status_string(status),
+                    status);
     }
 
-    ucp_memory_detect_slowpath(context, address, length, mem_info);
+    /* Memory type and system device was detected successfully */
     return;
 
 out_host_mem:
