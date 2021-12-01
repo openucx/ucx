@@ -106,6 +106,18 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
     ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.enable),
     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
+   {"ECE_CC", "255",
+    "Set congestion control algorithm\n"
+    " 255 - Let run time decide which CC algo should be used.\n"
+    " 0   - default DCQCN cc algo\n"
+    " 1   - use 1st CC algo\n"
+    " 2   - use 2nd CC algo\n"
+    " 4   - use 3rd CC algo\n"
+    "...\n"
+    " 128 - use 8th CC algo",
+    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.cc),
+    UCS_CONFIG_TYPE_ULONG},
+
    {"ECE_SR", "auto",
     "Enable ECE select repeative\n"
     " auto - Let runtime decide whether ECE/SR should be used.\n"
