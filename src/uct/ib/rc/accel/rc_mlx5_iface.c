@@ -709,7 +709,7 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
             }
 
             ib_iface->config.ece_cfg.ece.val = ece_intersect(
-                    ib_iface->config.ece_cfg.ece.val, 0x20000001);
+                    ib_iface->config.ece_cfg.ece.val, ECE_USED_BITS);
             if ((ib_iface->config.ece_cfg.ece.val & 0x1) == 0) {
                 ib_iface->config.ece_cfg.enable  = 0;
                 ib_iface->config.ece_cfg.ece.val = 0;

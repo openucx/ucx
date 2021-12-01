@@ -39,6 +39,9 @@ union ece_t {
 };
 
 
+#define ECE_USED_BITS (MLX5_ECE_VER_MAX << 28 | 0x1)
+
+
 /* ece configuration under user cfg and hardware limitation*/
 typedef struct mlx5_ece {
     uint8_t     enable;
