@@ -17,7 +17,8 @@ enum  {
     MLX5_ECE_DISABLED  = 0,
     MLX5_ECE_VER_1     = 1,
     MLX5_ECE_VER_2     = 2,  /* selective repeat */
-    MLX5_ECE_VER_MAX   = MLX5_ECE_VER_2,
+    MLX5_ECE_VER_3     = 3,  /* congestion control */
+    MLX5_ECE_VER_MAX   = MLX5_ECE_VER_3,
 };
 
 
@@ -31,7 +32,8 @@ typedef struct mlx5_ece_cfg {
 union ece_t {
     struct {
         uint32_t sr  : 1;
-        uint32_t rsv : 27;
+        uint32_t cc  : 8;
+        uint32_t rsv : 19;
         uint32_t ver : 4;
     } field;
 
@@ -39,7 +41,7 @@ union ece_t {
 };
 
 
-#define ECE_USED_BITS (MLX5_ECE_VER_MAX << 28 | 0x1)
+#define ECE_USED_BITS (MLX5_ECE_VER_MAX << 28 | 0x1fe | 0x1)
 
 
 /* ece configuration under user cfg and hardware limitation*/
@@ -54,6 +56,7 @@ static UCS_F_ALWAYS_INLINE
 uint32_t ece_intersect(uint32_t val0, uint32_t val1)
 {
     union ece_t ece0, ece1, ece_rst;
+    uint32_t cc_algo_bit;
 
     ece0.val    = val0;
     ece1.val    = val1;
@@ -68,8 +71,12 @@ uint32_t ece_intersect(uint32_t val0, uint32_t val1)
     /* selective repeat */
     ece_rst.field.sr = ece0.field.sr & ece1.field.sr;
 
+    /* congestion control */
+    cc_algo_bit = ffs(ece0.field.cc & ece1.field.cc);
+    ece_rst.field.cc = cc_algo_bit ? (1 << (cc_algo_bit - 1)) : 0;
+
     /* ece version */
-    ece_rst.field.ver = MLX5_ECE_VER_2;
+    ece_rst.field.ver = MLX5_ECE_VER_MAX;
 
     return ece_rst.val;
 }
