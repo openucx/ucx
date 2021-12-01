@@ -211,6 +211,12 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
 
 ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                                         unsigned flags);
+
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_ep_arbiter_purge_internal_cb(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_group_t *group,
+                                         ucs_arbiter_elem_t *elem, void *arg);
+
 void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg);
 
 void uct_dc_mlx5_ep_do_pending_fc(uct_dc_mlx5_ep_t *fc_ep,
