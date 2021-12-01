@@ -71,7 +71,7 @@ uct_rc_verbs_update_tx_res(uct_rc_iface_t *iface, uct_rc_verbs_ep_t *ep,
     ep->txcnt.ci += count;
     uct_rc_txqp_available_add(&ep->super.txqp, count);
     uct_rc_iface_update_reads(iface);
-    uct_rc_iface_add_cq_credits_dispatch(iface, count);
+    uct_rc_iface_add_cq_credits(iface, count);
 }
 
 static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
@@ -96,14 +96,11 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     count = uct_rc_verbs_get_tx_res_count(ep, wc);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status,
                                   ep->txcnt.ci + count, 0);
-
-    /* Don't need to invoke UCT pending requests for a given UCT EP */
-    ucs_arbiter_group_desched(&iface->tx.arbiter, &ep->super.arb_group);
     uct_rc_verbs_update_tx_res(iface, ep, count);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        return;
+        goto out;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
@@ -122,6 +119,9 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
             "send completion with error: %s [qpn 0x%x wrid 0x%lx"
             "vendor_err 0x%x]\n%s", ibv_wc_status_str(wc->status), wc->qp_num,
             wc->wr_id, wc->vendor_err, peer_info);
+
+out:
+    uct_rc_iface_arbiter_dispatch(iface);
 }
 
 static ucs_status_t uct_rc_verbs_wc_to_ucs_status(enum ibv_wc_status status)
@@ -172,6 +172,8 @@ uct_rc_verbs_iface_poll_tx(uct_rc_verbs_iface_t *iface)
         ucs_arbiter_group_schedule(&iface->super.tx.arbiter,
                                    &ep->super.arb_group);
         uct_rc_verbs_update_tx_res(&iface->super, ep, count);
+        ucs_arbiter_dispatch(&iface->super.tx.arbiter, 1, uct_rc_ep_process_pending,
+                             NULL);
     }
 
     return num_wcs;

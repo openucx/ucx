@@ -73,7 +73,8 @@ protected:
     size_t                           m_tx_window;
     size_t                           m_err_count;
     size_t                           m_am_count;
-    static size_t                    m_req_purge_count;
+    size_t                           m_req_purge_count;
+    size_t                           m_req_pending_count;
     static const uint64_t            m_required_caps;
 };
 

@@ -121,7 +121,7 @@ uct_rc_mlx5_iface_update_tx_res(uct_rc_iface_t *rc_iface,
     ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
 
     uct_rc_iface_update_reads(rc_iface);
-    uct_rc_iface_add_cq_credits_dispatch(rc_iface, bb_num);
+    uct_rc_iface_add_cq_credits(rc_iface, bb_num);
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
@@ -154,6 +154,7 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
     uct_rc_mlx5_txqp_process_tx_cqe(&ep->super.txqp, cqe, hw_ci);
     ucs_arbiter_group_schedule(&iface->super.tx.arbiter, &ep->super.arb_group);
     uct_rc_mlx5_iface_update_tx_res(&iface->super, ep, hw_ci);
+    uct_rc_iface_arbiter_dispatch(&iface->super);
     uct_ib_mlx5_update_db_cq_ci(&iface->cq[UCT_IB_DIR_TX]);
 
     return 1;
@@ -242,20 +243,17 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
 
     if (ep == NULL) {
         ucs_diag("ignoring failure on removed qpn 0x%x wqe[%d]", qp_num, pi);
-        uct_rc_iface_add_cq_credits_dispatch(iface, 1);
-        return;
+        uct_rc_iface_add_cq_credits(iface, 1);
+        goto out;
     }
 
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
-
-    /* Do not invoke pending requests on a failed endpoint */
-    ucs_arbiter_group_desched(&iface->tx.arbiter, &ep->super.arb_group);
     uct_rc_mlx5_iface_update_tx_res(iface, ep, pi);
     uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
 
     if (ep->super.flags & (UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED |
                            UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        return;
+        goto out;
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
@@ -266,6 +264,9 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
                                                ep_status);
 
     uct_ib_mlx5_completion_with_err(ib_iface, arg, &ep->tx.wq, log_lvl);
+
+out:
+    uct_rc_iface_arbiter_dispatch(iface);
 }
 
 static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned flags)
