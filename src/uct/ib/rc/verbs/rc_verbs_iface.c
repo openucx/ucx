@@ -367,7 +367,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
             ucs_assert(ibv_query_ece(qp, &ece) == 0);
             self->super.super.config.ece_cfg.ece.val =
                     ece_intersect(ece.options, ECE_USED_BITS);
-            if ((self->super.super.config.ece_cfg.ece.val & 0x1) == 0) {
+            if ((self->super.super.config.ece_cfg.ece.val & 0x1ff) == 0) {
                 self->super.super.config.ece_cfg.enable  = 0;
                 self->super.super.config.ece_cfg.ece.val = 0;
             } else {
@@ -383,6 +383,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                 status = UCS_ERR_UNSUPPORTED;
                 goto err_common_cleanup;
             }
+
             if (conn_ece->sr == UCS_CONFIG_OFF) {
                 self->super.super.config.ece_cfg.ece.field.sr = 0;
             } else if (conn_ece->sr == UCS_CONFIG_ON &&
@@ -392,6 +393,22 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                                uct_ib_iface_device(&self->super.super)));
                 status = UCS_ERR_UNSUPPORTED;
                 goto err_common_cleanup;
+            }
+
+            if (conn_ece->cc != 0 && conn_ece->cc != 0xff &&
+                (conn_ece->cc & self->super.super.config.ece_cfg.ece.field.cc)
+                != conn_ece->cc) {
+                ucs_error("device %s cc : 0x%x not match the requested ECE/CC :"
+                          "0x%lx",
+                           uct_ib_device_name(
+                               uct_ib_iface_device(&self->super.super)),
+                           self->super.super.config.ece_cfg.ece.field.cc,
+                           conn_ece->cc);
+                status = UCS_ERR_UNSUPPORTED;
+                goto err_common_cleanup;
+            } else {
+                self->super.super.config.ece_cfg.ece.field.cc = conn_ece->cc &
+                    self->super.super.config.ece_cfg.ece.field.cc;
             }
         }
     } else {

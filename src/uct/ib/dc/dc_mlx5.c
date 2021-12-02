@@ -1123,7 +1123,7 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
             uct_rc_txqp_cleanup(&iface->super.super, &dci.txqp);
             uct_ib_mlx5_destroy_qp(md, &dci.txwq.super);
 
-            if ((ib_iface->config.ece_cfg.ece.val & 0x1) == 0) {
+            if ((ib_iface->config.ece_cfg.ece.val & 0x1ff) == 0) {
                 ib_iface->config.ece_cfg.enable  = 0;
                 ib_iface->config.ece_cfg.ece.val = 0;
             } else {
@@ -1147,6 +1147,20 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
                           uct_ib_device_name(&md->super.dev));
                 iface->gp = 1;
                 return UCS_ERR_UNSUPPORTED;
+            }
+
+            if (conn_ece->cc != 0 && conn_ece->cc != 0xff &&
+                (conn_ece->cc & ib_iface->config.ece_cfg.ece.field.cc)
+                != conn_ece->cc) {
+                ucs_error("device %s cc : 0x%x not match the requested ECE/CC :"
+                          "0x%lx",
+                           uct_ib_device_name(&md->super.dev),
+                           ib_iface->config.ece_cfg.ece.field.cc, conn_ece->cc);
+                iface->gp = 1;
+                return UCS_ERR_UNSUPPORTED;
+            } else {
+                ib_iface->config.ece_cfg.ece.field.cc = conn_ece->cc &
+                    ib_iface->config.ece_cfg.ece.field.cc;
             }
         }
     } else {

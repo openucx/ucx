@@ -710,7 +710,7 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
 
             ib_iface->config.ece_cfg.ece.val = ece_intersect(
                     ib_iface->config.ece_cfg.ece.val, ECE_USED_BITS);
-            if ((ib_iface->config.ece_cfg.ece.val & 0x1) == 0) {
+            if ((ib_iface->config.ece_cfg.ece.val & 0x1ff) == 0) {
                 ib_iface->config.ece_cfg.enable  = 0;
                 ib_iface->config.ece_cfg.ece.val = 0;
             } else {
@@ -735,11 +735,9 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
                              ib_iface->config.ece_cfg.ece.val,
                              ep.tm_qp.local_ece.val);
 
-                     if (!(ib_iface->config.ece_cfg.ece.val & 0x1)) {
+                     if (!(ib_iface->config.ece_cfg.ece.val & 0x1ff)) {
                          ib_iface->config.ece_cfg.enable  = 0;
                          ib_iface->config.ece_cfg.ece.val = 0;
-                     } else {
-                         ib_iface->config.ece_cfg.enable  = 1;
                      }
 
                     uct_ib_mlx5_destroy_qp(md, &ep.tm_qp);
@@ -761,6 +759,19 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface,
                 ucs_error("device %s not support ECE/SR",
                            uct_ib_device_name(&md->super.dev));
                 return UCS_ERR_UNSUPPORTED;
+            }
+
+            if (conn_ece->cc != 0 && conn_ece->cc != 0xff &&
+                (conn_ece->cc & ib_iface->config.ece_cfg.ece.field.cc)
+                != conn_ece->cc) {
+                ucs_error("device %s cc : 0x%x not match the requested ECE/CC :"
+                          "0x%lx",
+                           uct_ib_device_name(&md->super.dev),
+                           ib_iface->config.ece_cfg.ece.field.cc, conn_ece->cc);
+                return UCS_ERR_UNSUPPORTED;
+            } else {
+                ib_iface->config.ece_cfg.ece.field.cc = conn_ece->cc &
+                    ib_iface->config.ece_cfg.ece.field.cc;
             }
         }
     } else {
