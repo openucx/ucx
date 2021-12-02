@@ -104,11 +104,12 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 
     resources = ucs_malloc(sizeof(*resources), "SCI resources");
 
-    printf("sizeof(*resources): %zd", sizeof(*resources));
+    printf("sizeof(*resources): %zd\n", sizeof(*resources));
 
     printf("component name: %s\n", component->name);
 
     if(resources == NULL) {
+        //TODO Handle memory errors.
         status = UCS_ERR_NO_MEMORY;
         printf("NO MEMORY\n");
     }
@@ -162,6 +163,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
 {
     /*
         At this point its not clear if the memory domain has been opened yet.
+        The memory domain is most likely opened.
     */
 
 
@@ -171,7 +173,17 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
     */
 
     printf("UCT_SISCI_QUERY_DEVICES\n");
-    return UCS_ERR_NO_DEVICE;
+
+    /* 
+        Taken from self.c, 
+    */
+    return uct_single_device_resource(md, UCT_SISCI_NAME,
+                                      UCT_DEVICE_TYPE_SHM,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, devices_p,
+                                      num_devices_p);
+    
+    
+    //return UCS_ERR_NO_DEVICE;
     //return UCS_OK;
 }
 
