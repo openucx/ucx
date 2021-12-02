@@ -394,7 +394,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 {
     printf("UCT_sisci_iface_query\n");
     
-    return UCS_ERR_NO_MEMORY
+    return UCS_ERR_NO_MEMORY;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
 
