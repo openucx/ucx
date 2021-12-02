@@ -51,13 +51,14 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
             tl_config UCS_STATS_ARG(
                     (params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
                             params->stats_root :
-                            NULL) UCS_STATS_ARG(UCT_sisci_NAME));
+                            NULL) UCS_STATS_ARG(UCT_SISCI_NAME));
     
     return UCS_OK;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sisci_iface_t)
 {
+    printf("UCS_CLASS_CLEANUP_FUNC: SISCI_IFACE\n");
     ucs_mpool_cleanup(&self->msg_mp, 1);
 }
 
