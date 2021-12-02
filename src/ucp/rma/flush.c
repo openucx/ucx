@@ -193,9 +193,9 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_lane_index_t lane = req->send.lane;
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep           = req->send.ep;
     ucs_status_t status;
     int completed;
 
@@ -203,10 +203,12 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
     status = uct_ep_flush(ep->uct_eps[lane], req->send.flush.uct_flags,
                           &req->send.state.uct_comp);
-    ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
+    ucs_trace("flushing ep %p lane[%d]=%p: %s", ep, lane, ep->uct_eps[lane],
               ucs_status_string(status));
     if (status == UCS_OK) {
         --req->send.state.uct_comp.count; /* UCT endpoint is flushed */
+    } else if (UCS_STATUS_IS_ERR(status) && (status != UCS_ERR_NO_RESOURCE)) {
+        ucp_ep_flush_error(req, status);
     }
 
     /* since req->flush.pend.lane is still non-NULL, this function will not
@@ -225,18 +227,16 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
                                           req, 0, &req->send.flush.prog_id);
     }
 
-    if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return UCS_ERR_NO_RESOURCE;
+    } else if (!UCS_STATUS_IS_ERR(status)) {
         /* flushed callback might release the request */
         if (!completed) {
             req->send.lane = UCP_NULL_LANE;
         }
-        return UCS_OK;
-    } else if (status == UCS_ERR_NO_RESOURCE) {
-        return UCS_ERR_NO_RESOURCE;
-    } else {
-        ucp_ep_flush_error(req, status);
-        return UCS_OK;
     }
+
+    return UCS_OK;
 }
 
 void ucp_ep_flush_completion(uct_completion_t *self)
