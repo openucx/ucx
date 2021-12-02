@@ -102,27 +102,10 @@ AC_CHECK_HEADERS([sys/platform/ppc.h])
 
 
 #
-# PowerPC query for getting TB frequency
+# PowerPC query for getting TB and frequency
 #
-AC_CHECK_DECL([__ppc_get_timebase_freq],
-              [AC_CHECK_FUNCS([__ppc_get_timebase_freq])], [],
-              [#include <sys/platform/ppc.h>])
-
-
-#
-# PowerPC query for getting TB.
-# Note: AC_CHECK_FUNCS doesn't work for checking __ppc_get_timebase()
-#
-AC_LINK_IFELSE([AC_LANG_SOURCE([[
-                #include <sys/platform/ppc.h>
-                int main(int argc, char** argv) {
-                    __ppc_get_timebase();
-                    return 0;
-                } ]])],
-                [AC_MSG_RESULT([no])
-                 AC_DEFINE([HAVE___PPC_GET_TIMEBASE], [1],
-                           [__ppc_get_timebase is defined in ppc.h])],
-                [AC_MSG_RESULT([no])])
+AC_CHECK_DECLS([__ppc_get_timebase_freq, __ppc_get_timebase], [], [],
+               [[#include <sys/platform/ppc.h>]])
 
 
 #
