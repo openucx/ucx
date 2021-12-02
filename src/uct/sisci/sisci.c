@@ -58,8 +58,11 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
 
 static UCS_CLASS_CLEANUP_FUNC(uct_sisci_iface_t)
 {
+    /* 
+        TODO: Add proper cleanup for iface, i.e free resources that were allocated on init. 
+    */
     printf("UCS_CLASS_CLEANUP_FUNC: SISCI_IFACE\n");
-    ucs_mpool_cleanup(&self->msg_mp, 1);
+    //ucs_mpool_cleanup(&self->msg_mp, 1);
 }
 
 UCS_CLASS_DEFINE(uct_sisci_iface_t, uct_base_iface_t);
