@@ -23,12 +23,6 @@ parameters:
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_cx4_rc
-      "active messages on CX4":
-        args: "-A"
-        duration: 600
-        interface: $(roce_iface_cx4)
-        tls: "rc_x"
-        test_name: am_cx4_rc
       "tag match on CX6/RC":
         args: ""
         duration: 600

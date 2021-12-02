@@ -436,6 +436,8 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
     ucp_wireup_ep_t *wireup_ep;
 
     if (ucp_ep->flags & UCP_EP_FLAG_FAILED) {
+        /* No pending operations should be scheduled */
+        uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ucp_ep);
         return UCS_OK;
     }
 
@@ -1236,7 +1238,6 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
 {
     ucp_context_h context            = worker->context;
     ucp_tl_resource_desc_t *resource = &context->tl_rscs[tl_id];
-    uint8_t mem_type_index;
     ucs_status_t status;
 
     ucs_assert(wiface != NULL);
@@ -1279,12 +1280,6 @@ ucs_status_t ucp_worker_iface_init(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         } else {
             ucp_worker_iface_activate(wiface, 0);
         }
-    }
-
-    ucs_for_each_bit(mem_type_index,
-        context->tl_mds[resource->md_index].attr.cap.access_mem_types) {
-        ucs_assert(mem_type_index < UCS_MEMORY_TYPE_LAST);
-        UCS_BITMAP_SET(context->mem_type_access_tls[mem_type_index], tl_id);
     }
 
     return UCS_OK;
@@ -2087,6 +2082,12 @@ void ucp_worker_create_vfs(ucp_context_h context, ucp_worker_h worker)
                             &worker->counters.ep_creation_failures,
                             UCS_VFS_TYPE_ULONG,
                             "counters/ep_creation_failures");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
+                            &worker->counters.ep_closures, UCS_VFS_TYPE_ULONG,
+                            "counters/ep_closures");
+    ucs_vfs_obj_add_ro_file(worker, ucp_worker_vfs_show_primitive,
+                            &worker->counters.ep_failures, UCS_VFS_TYPE_ULONG,
+                            "counters/ep_failures");
 }
 
 ucs_status_t ucp_worker_create(ucp_context_h context,
@@ -2124,6 +2125,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     kh_init_inplace(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash);
     worker->counters.ep_creations         = 0;
     worker->counters.ep_creation_failures = 0;
+    worker->counters.ep_closures          = 0;
+    worker->counters.ep_failures          = 0;
 
     /* Copy user flags, and mask-out unsupported flags for compatibility */
     worker->flags = UCP_PARAM_VALUE(WORKER, params, flags, FLAGS, 0) &
@@ -2330,13 +2333,12 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
 {
     ucp_ep_h ucp_ep = req->send.ep;
 
-    UCP_EP_ASSERT_COUNTER_DEC(&ucp_ep->discard_refcount);
     ucp_worker_flush_ops_count_dec(ucp_ep->worker);
     /* Coverity wrongly resolves completion callback function to
      * 'ucp_cm_server_conn_request_progress' */
     /* coverity[offset_free] */
     ucp_request_complete(req, send.cb, UCS_OK, req->user_data);
-    ucp_ep_remove_ref(ucp_ep);
+    ucp_ep_refcount_remove(ucp_ep, discard);
 }
 
 static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
@@ -2490,10 +2492,10 @@ static void ucp_worker_discard_uct_ep_cleanup(ucp_worker_h worker)
          * ucp_request_t::send.state.uct_comp.func of another operation could
          * access it */
         ucp_ep = req->send.ep;
-        ucp_ep_add_ref(ucp_ep);
+        ucp_ep_refcount_add(ucp_ep, discard);
         uct_ep_pending_purge(uct_ep, ucp_worker_discard_uct_ep_purge, NULL);
         uct_ep_destroy(uct_ep);
-        ucp_ep_remove_ref(ucp_ep);
+        ucp_ep_refcount_remove(ucp_ep, discard);
 
         /* We must do this operation as a last step, because uct_ep_destroy()
          * could move a discard operation to the progress queue */
@@ -3175,8 +3177,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
         return UCS_ERR_NO_MEMORY;
     }
 
-    ucp_ep_add_ref(ucp_ep);
-    UCP_EP_ASSERT_COUNTER_INC(&ucp_ep->discard_refcount);
+    ucp_ep_refcount_add(ucp_ep, discard);
     ucp_worker_flush_ops_count_inc(worker);
     iter = kh_put(ucp_worker_discard_uct_ep_hash, &worker->discard_uct_ep_hash,
                   uct_ep, &ret);

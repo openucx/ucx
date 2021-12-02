@@ -59,7 +59,7 @@ typedef int ucs_qsort_r_compare_cb_t(const void *elem1, const void *elem2,
  * @param [in]  nmemb    Number of members in the array.
  * @param [in]  size     Size of each member in the array.
  * @param [in]  compare  Compare callback.
- * @param [in]  arg      Custome argument for the compare callback.
+ * @param [in]  arg      Custom argument for the compare callback.
  */
 void ucs_qsort_r(void *base, size_t nmemb, size_t size,
                  ucs_qsort_r_compare_cb_t *compare, void *arg);

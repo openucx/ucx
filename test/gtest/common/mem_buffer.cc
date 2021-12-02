@@ -118,6 +118,10 @@ void mem_buffer::set_device_context()
 #if HAVE_CUDA
     if (is_cuda_supported()) {
         cudaSetDevice(0);
+        /* need to call free as context maybe lazily initialized when calling
+         * cudaSetDevice(0) but calling cudaFree(0) should guarantee context
+         * creation upon return */
+        cudaFree(0);
     }
 #endif
 

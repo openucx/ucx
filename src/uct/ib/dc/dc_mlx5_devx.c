@@ -55,7 +55,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, uct_ib_mlx5_qpc_cs_res(
                       ib_iface->config.max_inl_cqe[UCT_IB_DIR_RX], 1));
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
-    UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index, ib_iface->pkey_index);
+    if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
+        UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index,
+                          ib_iface->pkey_index);
+    }
     UCT_IB_MLX5DV_SET(dctc, dctc, port, ib_iface->config.port_num);
 
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak, iface->super.super.config.min_rnr_timer);
@@ -135,8 +138,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num,
                       ib_iface->config.port_num);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
-                      ib_iface->pkey_index);
+    if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
+                          ib_iface->pkey_index);
+    }
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init),
                                         out_2init, sizeof(out_2init));
@@ -208,7 +213,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(set_xrq_dc_params_entry_out)] = {};
     int ret;
 
-    UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, pkey_table_index, iface->super.super.super.pkey_index);
+    if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
+        UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, pkey_table_index,
+                          iface->super.super.super.pkey_index);
+    }
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, mtu, iface->super.super.super.config.path_mtu);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, sl, iface->super.super.super.config.sl);
     UCT_IB_MLX5DV_SET(set_xrq_dc_params_entry_in, in, reverse_sl, iface->super.super.super.config.sl);

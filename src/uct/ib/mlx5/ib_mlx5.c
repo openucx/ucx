@@ -917,6 +917,7 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
 #if HAVE_DEVX
     uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
 #endif
+    const char *dev_name = uct_ib_device_name(uct_ib_iface_device(iface));
     uint16_t ooo_sl_mask = 0;
     ucs_status_t status;
 
@@ -926,8 +927,8 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
                                    iface->config.port_num)) {
         /* Ethernet priority for RoCE devices can't be selected regardless
          * AR support requested by user, pass empty ooo_sl_mask */
-        return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1,
-                                     UCT_IB_IFACE_ARG(iface),
+        return uct_ib_mlx5_select_sl(ib_config, UCS_NO, 0, 1, dev_name,
+                                     iface->config.port_num,
                                      &iface->config.sl);
     }
 
@@ -942,8 +943,8 @@ uct_ib_mlx5_iface_select_sl(uct_ib_iface_t *iface,
 #endif
 
     return uct_ib_mlx5_select_sl(ib_config, ib_mlx5_config->ar_enable,
-                                 ooo_sl_mask, status == UCS_OK,
-                                 UCT_IB_IFACE_ARG(iface),
+                                 ooo_sl_mask, status == UCS_OK, dev_name,
+                                 iface->config.port_num,
                                  &iface->config.sl);
 }
 

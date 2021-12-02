@@ -505,7 +505,7 @@ static void uct_ugni_unalign_fma_get_cb(uct_completion_t *self)
     uct_ugni_rdma_fetch_desc_t *fma_desc = (uct_ugni_rdma_fetch_desc_t *)
         ucs_container_of(self, uct_ugni_rdma_fetch_desc_t, tmp);
 
-    /* Call the orignal callback and skip padding */
+    /* Call the original callback and skip padding */
     fma_desc->super.unpack_cb(fma_desc->user_buffer, (char *)(fma_desc + 1) + fma_desc->padding,
                               fma_desc->super.desc.length - fma_desc->padding - fma_desc->tail);
 

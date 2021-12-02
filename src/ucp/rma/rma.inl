@@ -108,7 +108,7 @@ ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id, ucp_lane_index_t lane,
     ucp_ep_t *ep = req->send.ep;
     ssize_t packed_len;
 
-    /* make an asuumption here that EP was able to send the AM, since there
+    /* make an assumption here that EP was able to send the AM, since there
      * are transports (e.g. SELF - it does send-recv in the AM function) that is
      * able to complete the remote request operation inside uct_ep_am_bcopy()
      * and decrement the flush_ops_count before it was incremented */

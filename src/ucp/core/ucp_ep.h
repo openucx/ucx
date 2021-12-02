@@ -51,6 +51,37 @@ typedef uint16_t                   ucp_ep_flags_t;
 #endif
 
 
+#define ucp_ep_refcount_add(_ep, _type) \
+({ \
+    ucs_assert((_ep)->refcount < UINT8_MAX); \
+    ++(_ep)->refcount; \
+    UCP_EP_ASSERT_COUNTER_INC(&(_ep)->refcounts._type); \
+})
+
+/* Return 1 if the endpoint was destroyed, 0 if not */
+#define ucp_ep_refcount_remove(_ep, _type) \
+({ \
+    int __ret = 0; \
+    \
+    UCP_EP_ASSERT_COUNTER_DEC(&(_ep)->refcounts._type); \
+    ucs_assert((_ep)->refcount > 0); \
+    if (--(_ep)->refcount == 0) { \
+        ucp_ep_destroy_base(_ep); \
+        __ret = 1; \
+    } \
+    \
+    (__ret); \
+})
+
+#define ucp_ep_refcount_field_assert(_ep, _refcount_field, _cmp, _val) \
+    ucs_assertv((_ep)->_refcount_field _cmp (_val), "ep=%p: %s=%u vs %u", \
+                (_ep), UCS_PP_MAKE_STRING(_refcount_field), \
+                (_ep)->_refcount_field, _val);
+
+#define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
+    ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
+
+
 #define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
 
 
@@ -72,8 +103,7 @@ enum {
     UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
-                                                        close_req is valid */
+    /* 11 bit is vacant for a flag */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -404,12 +434,16 @@ typedef struct ucp_ep {
 #endif
 
 #if UCS_ENABLE_ASSERT
-    /* How many Worker flush operations are in-progress where the EP is the next
-     * EP for flushing */
-    unsigned                      flush_iter_refcount;
-    /* How many UCT EP discarding operations are in-progress scheduled for the
-     * EP */
-    unsigned                      discard_refcount;
+    struct {
+        /* How many times the EP create was done */
+        unsigned                      create;
+        /* How many Worker flush operations are in-progress where the EP is the
+         * next EP for flushing */
+        unsigned                      flush;
+        /* How many UCT EP discarding operations are in-progress scheduled for
+         * the EP */
+        unsigned                      discard;
+    } refcounts;
 #endif
 
     UCS_STATS_NODE_DECLARE(stats)
@@ -429,15 +463,6 @@ typedef struct {
 
 
 /**
- * Status of protocol-level remote completions
- */
-typedef struct {
-    ucp_request_t             *req;             /* Flush request which is
-                                                   used in close protocol */
-} ucp_ep_close_proto_req_t;
-
-
-/**
  * Endpoint extension for control data path
  */
 typedef struct {
@@ -445,7 +470,7 @@ typedef struct {
     ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
     ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
     ucp_err_handler_cb_t     err_cb; /* Error handler */
-    ucp_ep_close_proto_req_t close_req; /* Close protocol request */
+    ucp_request_t            *close_req; /* Close protocol request */
 #if UCS_ENABLE_ASSERT
     ucs_time_t               ka_last_round; /* Time of last KA round done */
 #endif
@@ -578,12 +603,7 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  ucp_rsc_index_t aux_rsc_index,
                                  ucs_string_buffer_t *buf);
 
-ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
-                                const char *message, ucp_ep_h *ep_p);
-
-void ucp_ep_add_ref(ucp_ep_h ep);
-
-int ucp_ep_remove_ref(ucp_ep_h ep);
+void ucp_ep_destroy_base(ucp_ep_h ep);
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,

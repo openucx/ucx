@@ -234,10 +234,6 @@ typedef struct ucp_context {
                                                * Not all resources may be used if unified
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
-
-    /* Mask of memory type communication resources */
-    ucp_tl_bitmap_t               mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
-
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
 
     struct {
@@ -563,5 +559,10 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
+
+
+void ucp_context_get_mem_access_tls(ucp_context_h context,
+                                    ucs_memory_type_t mem_type,
+                                    ucp_tl_bitmap_t *tl_bitmap);
 
 #endif

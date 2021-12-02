@@ -252,6 +252,11 @@ void uct_rc_ep_flush_op_completion_handler(uct_rc_iface_send_op_t *op,
 ucs_status_t uct_rc_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *n,
                                    unsigned flags);
 
+ucs_arbiter_cb_result_t
+uct_rc_ep_arbiter_purge_internal_cb(ucs_arbiter_t *arbiter,
+                                    ucs_arbiter_group_t *group,
+                                    ucs_arbiter_elem_t *elem, void *arg);
+
 ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
                                                    ucs_arbiter_group_t *group,
                                                    ucs_arbiter_elem_t *elem,
@@ -278,6 +283,8 @@ uct_rc_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
                           uct_rc_iface_qp_cleanup_ctx_t *cleanup_ctx,
                           uint32_t qp_num, uint16_t cq_credits);
+
+void uct_rc_ep_pending_purge_warn_cb(uct_pending_req_t *self, void *arg);
 
 void UCT_RC_DEFINE_ATOMIC_HANDLER_FUNC_NAME(32, 0)(uct_rc_iface_send_op_t *op,
                                                    const void *resp);

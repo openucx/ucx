@@ -241,7 +241,7 @@ const char* ucs_flags_str(char *str, size_t max,
 
 
 /**
- * Find the number of occurences of a char in the given string.
+ * Find the number of occurrences of a char in the given string.
  *
  * @param  str String buffer to search.
  * @param  c   Character to search in the string.

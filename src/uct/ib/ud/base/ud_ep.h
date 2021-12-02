@@ -125,14 +125,14 @@ do { \
  *
  * tx window is increased when ack is received and decreased when
  * resend is scheduled. Ack must be a 'new' one that is it must
- * acknowledge packets on window. Increasing window on ack does not casue
+ * acknowledge packets on window. Increasing window on ack does not cause
  * exponential window increase because, unlike tcp, only two acks
  * per window are sent.
  *
  * Todo:
  *
- * Consider trigering window decrease before resend timeout:
- * - on ECN (explicit congestion notification) from receiever. ECN can
+ * Consider trigerring window decrease before resend timeout:
+ * - on ECN (explicit congestion notification) from receiver. ECN can
  *   be based on some heuristic. For example on number of rx completions
  *   that receiver picked from CQ.
  * - upon receiving a 'duplicate ack' packet
@@ -149,9 +149,9 @@ do { \
  * Resend operation will resend no more then the current cwnd
  * If ack arrives when resend window is active it means that
  *  - something new in the resend window was acked. As a
- *  resutlt a new resend operation will be scheduled.
+ *  result a new resend operation will be scheduled.
  *  - either resend window or something beyond it was
- *  acked. It means that no more retransmisions are needed.
+ *  acked. It means that no more retransmissions are needed.
  *  Current 'resend window' is deactivated
  *
  * When retransmitting, ack is requested if:
@@ -180,7 +180,7 @@ enum {
 
 typedef struct uct_ud_ep_pending_op {
     ucs_arbiter_group_t   group;
-    uint32_t              ops;    /* bitmask that describes what control ops are sceduled */
+    uint32_t              ops;    /* bitmask that describes what control ops are scheduled */
     ucs_arbiter_elem_t    elem;
 } uct_ud_ep_pending_op_t;
 

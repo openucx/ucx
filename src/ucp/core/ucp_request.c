@@ -328,7 +328,7 @@ static void ucp_request_mem_invalidate_completion(uct_completion_t *comp)
                                                   send.state.uct_comp);
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
-    uct_worker_progress_register_safe(req->send.ep->worker->uct,
+    uct_worker_progress_register_safe(req->send.invalidate.worker->uct,
                                       ucp_request_dt_invalidate_progress,
                                       req, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
@@ -367,8 +367,9 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
         .flags      = UCT_MD_MEM_DEREG_FLAG_INVALIDATE,
         .comp       = &req->send.state.uct_comp
     };
-    ucp_context_t *context = req->send.ep->worker->context;
-    uct_mem_h *uct_memh    = req->send.state.dt.dt.contig.memh;
+    ucp_worker_h worker   = req->send.ep->worker;
+    ucp_context_h context = worker->context;
+    uct_mem_h *uct_memh   = req->send.state.dt.dt.contig.memh;
     ucp_md_map_t invalidate_map;
     unsigned md_index;
     unsigned memh_index;
@@ -378,11 +379,13 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
                UCP_ERR_HANDLING_MODE_NONE);
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 
+    invalidate_map                  = ucp_request_get_invalidation_map(req);
+    req->send.ep                    = NULL;
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_request_mem_invalidate_completion;
     req->send.state.uct_comp.status = UCS_OK;
+    req->send.invalidate.worker     = worker;
     req->status                     = status;
-    invalidate_map                  = ucp_request_get_invalidation_map(req);
 
     ucp_trace_req(req, "mem dereg buffer md_map 0x%"PRIx64, invalidate_map);
     /* dereg all lanes except for 'invalidate_map' */

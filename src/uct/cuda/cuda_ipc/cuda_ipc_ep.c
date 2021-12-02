@@ -75,6 +75,15 @@ uct_cuda_ipc_post_cuda_async_copy(uct_ep_h tl_ep, uint64_t remote_addr,
         return UCS_ERR_IO_ERROR;
     }
 
+    /* ensure context is set before creating events/streams */
+    if (iface->cuda_context == NULL) {
+        UCT_CUDA_FUNC_LOG_ERR(cuCtxGetCurrent(&iface->cuda_context));
+        if (iface->cuda_context == NULL) {
+            ucs_error("attempt to perform cuda memcpy without active context");
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
     offset          = (uintptr_t)remote_addr - (uintptr_t)key->d_bptr;
     mapped_rem_addr = (void *) ((uintptr_t) mapped_addr + offset);
     ucs_assert(offset <= key->b_len);

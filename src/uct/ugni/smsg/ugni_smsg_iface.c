@@ -151,7 +151,7 @@ ucs_status_t progress_remote_cq(uct_ugni_smsg_iface_t *iface)
             uct_ugni_smsg_handle_remote_overflow(iface);
             return UCS_OK;
         }
-        ucs_error("GNI_CqGetEvent falied with unhandled error. Error status %s %d ",
+        ucs_error("GNI_CqGetEvent failed with unhandled error. Error status %s %d ",
                   gni_err_str[ugni_rc], ugni_rc);
         return UCS_ERR_IO_ERROR;
     }

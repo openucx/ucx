@@ -58,7 +58,7 @@ jobs:
         az_init_modules
         try_load_cuda_env
         az_module_load dev/go-latest
-        go_port=$((20000 + $RANDOM % 10000))
+        go_port=$((30000 + $(AZP_AGENT_ID) * 100))
         args="-p=$go_port"
         if [ "${{ parameters.name }}" == "gpu" ]; then
           args="-m=cuda"

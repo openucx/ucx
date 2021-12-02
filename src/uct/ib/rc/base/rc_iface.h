@@ -439,6 +439,13 @@ ucs_arbiter_cb_result_t
 uct_rc_ep_process_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                           ucs_arbiter_elem_t *elem, void *arg);
 
+static UCS_F_ALWAYS_INLINE void
+uct_rc_iface_arbiter_dispatch(uct_rc_iface_t *iface)
+{
+    ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending,
+                         NULL);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 uct_rc_fc_ctrl(uct_ep_t *ep, unsigned op, uct_rc_pending_req_t *req)
 {
@@ -480,14 +487,12 @@ uct_rc_iface_update_reads(uct_rc_iface_t *iface)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_rc_iface_add_cq_credits_dispatch(uct_rc_iface_t *iface, uint16_t cq_credits)
+uct_rc_iface_add_cq_credits(uct_rc_iface_t *iface, uint16_t cq_credits)
 {
     iface->tx.cq_available += cq_credits;
     ucs_assertv(iface->tx.cq_available <= iface->config.tx_cq_len,
                 "cq_available=%d tx_cq_len=%d cq_credits=%d",
                 iface->tx.cq_available, iface->config.tx_cq_len, cq_credits);
-    ucs_arbiter_dispatch(&iface->tx.arbiter, 1, uct_rc_ep_process_pending,
-                         NULL);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_iface_send_op_t*

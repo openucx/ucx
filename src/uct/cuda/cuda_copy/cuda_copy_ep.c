@@ -111,6 +111,15 @@ uct_cuda_copy_post_cuda_async_copy(uct_ep_h tl_ep, void *dst, void *src,
         return UCS_OK;
     }
 
+    /* ensure context is set before creating events/streams */
+    if (iface->cuda_context == NULL) {
+        UCT_CUDA_FUNC_LOG_ERR(cuCtxGetCurrent(&iface->cuda_context));
+        if (iface->cuda_context == NULL) {
+            ucs_error("attempt to perform cuda memcpy without active context");
+            return UCS_ERR_IO_ERROR;
+        }
+    }
+
     src_type = uct_cuda_copy_get_mem_type(base_iface->md, src, length);
     dst_type = uct_cuda_copy_get_mem_type(base_iface->md, dst, length);
     q_desc   = &iface->queue_desc[src_type][dst_type];

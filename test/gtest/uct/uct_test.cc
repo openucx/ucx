@@ -1494,32 +1494,37 @@ void uct_test::async_event_ctx::signal() {
 }
 
 bool uct_test::async_event_ctx::wait_for_event(entity &e, double timeout_sec) {
-    if (wakeup_fd.fd == -1) {
+    /* Caching fd locally to workaround bug in gcc (GCC) 11.2.1 20210728 FC35
+     * See details in https://github.com/openucx/ucx/issues/7705 */
+    struct pollfd local_fd = wakeup_fd;
+
+    if (local_fd.fd == -1) {
         /* create wakeup */
         if (e.iface_attr().cap.event_flags & UCT_IFACE_FLAG_EVENT_FD) {
-            ucs_status_t status =
-                uct_iface_event_fd_get(e.iface(), &wakeup_fd.fd);
+            ucs_status_t status = uct_iface_event_fd_get(e.iface(),
+                                                         &local_fd.fd);
             ASSERT_UCS_OK(status);
         } else {
-            ucs_status_t status =
-                ucs_async_pipe_create(&aux_pipe);
+            ucs_status_t status = ucs_async_pipe_create(&aux_pipe);
             ASSERT_UCS_OK(status);
             aux_pipe_init = true;
-            wakeup_fd.fd = ucs_async_pipe_rfd(&aux_pipe);
+            local_fd.fd   = ucs_async_pipe_rfd(&aux_pipe);
         }
     }
 
     int timeout_ms = static_cast<int>((timeout_sec * UCS_MSEC_PER_SEC) *
                                       ucs::test_time_multiplier());
-    int ret        = poll(&wakeup_fd, 1, timeout_ms);
+    int ret        = poll(&local_fd, 1, timeout_ms);
     EXPECT_TRUE((ret == 0) || (ret == 1));
     if (ret > 0) {
         if (e.iface_attr().cap.event_flags & UCT_IFACE_FLAG_EVENT_ASYNC_CB) {
             ucs_async_pipe_drain(&aux_pipe);
         }
+        wakeup_fd = local_fd;
         return true;
     }
 
+    wakeup_fd = local_fd;
     return false;
 }
 

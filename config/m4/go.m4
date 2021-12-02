@@ -18,7 +18,9 @@ AS_IF([test "x$with_go" != xno],
       [
             AC_CHECK_PROG(GOBIN, go, yes)
             AS_IF([test "x${GOBIN}" = "xyes"],
-                  [go_happy="yes"],
+                  [AS_VERSION_COMPARE([1.16], [`go version | awk '{print substr($3, 3, length($3)-2)}'`],
+                        [go_happy="yes"], [go_happy="yes"],
+                        [AC_MSG_ERROR([Need Go compiler of version 1.16 or newer.])])],
                   [AS_IF([test "x$with_go" = "xguess"],
                         [AC_MSG_WARN([Disabling GO support - GO compiler not found.])],
                         [AC_MSG_ERROR([GO support was explicitly requested, but go compiler not found.])])

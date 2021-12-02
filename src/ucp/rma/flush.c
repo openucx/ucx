@@ -428,8 +428,7 @@ ucp_worker_flush_req_set_next_ep(ucp_request_t *req, int is_current_ep_valid,
     if (next_ep_iter != &worker->all_eps) {
         /* Increment UCP EP reference counter to avoid destroying UCP EP while
          * it is being scheduled to be flushed */
-        ucp_ep_add_ref(next_ep);
-        UCP_EP_ASSERT_COUNTER_INC(&next_ep->flush_iter_refcount);
+        ucp_ep_refcount_add(next_ep, flush);
     }
 
     if (!is_current_ep_valid) {
@@ -439,9 +438,7 @@ ucp_worker_flush_req_set_next_ep(ucp_request_t *req, int is_current_ep_valid,
     ucs_assert(&current_ep_ext->ep_list != &worker->all_eps);
 
     current_ep = ucp_ep_from_ext_gen(current_ep_ext);
-    UCP_EP_ASSERT_COUNTER_DEC(&current_ep->flush_iter_refcount);
-
-    return ucp_ep_remove_ref(current_ep) ? NULL : current_ep;
+    return ucp_ep_refcount_remove(current_ep, flush) ? NULL : current_ep;
 }
 
 static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t status,

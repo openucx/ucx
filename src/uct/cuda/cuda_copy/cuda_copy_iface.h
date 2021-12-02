@@ -35,6 +35,8 @@ typedef struct uct_cuda_copy_iface {
     ucs_queue_head_t            active_queue;
     /* stream used to issue short operations */
     cudaStream_t                short_stream;
+    /* stream used to issue short operations */
+    CUcontext                   cuda_context;
     /* array of queue descriptors for each src/dst memory type combination */
     uct_cuda_copy_queue_desc_t  queue_desc[UCS_MEMORY_TYPE_LAST][UCS_MEMORY_TYPE_LAST];
     /* config parameters to control cuda copy transport */
@@ -60,8 +62,8 @@ typedef struct uct_cuda_copy_iface_config {
 
 
 typedef struct uct_cuda_copy_event_desc {
-    cudaEvent_t event;
+    cudaEvent_t      event;
     uct_completion_t *comp;
-    ucs_queue_elem_t  queue;
+    ucs_queue_elem_t queue;
 } uct_cuda_copy_event_desc_t;
 #endif

@@ -126,7 +126,7 @@ public class UcpWorkerTest extends UcxTest {
     @Test
     public void testFlushWorker() throws Exception {
         int numRequests = 10;
-        // Crerate 2 contexts + 2 workers
+        // Create 2 contexts + 2 workers
         UcpParams params = new UcpParams().requestRmaFeature();
         UcpWorkerParams rdmaWorkerParams = new UcpWorkerParams().requestWakeupRMA();
         UcpContext context1 = new UcpContext(params);

@@ -1334,10 +1334,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
 
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
-        UCS_BITMAP_CLEAR(&context->mem_type_access_tls[i]);
-    }
-
     ucs_string_set_init(&avail_tls);
     UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
     for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
@@ -2040,4 +2036,22 @@ const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)
 {
     ucs_assert(cm_idx != UCP_NULL_RESOURCE);
     return context->tl_cmpts[context->config.cm_cmpt_idxs[cm_idx]].attr.name;
+}
+
+void ucp_context_get_mem_access_tls(ucp_context_h context,
+                                    ucs_memory_type_t mem_type,
+                                    ucp_tl_bitmap_t *tl_bitmap)
+{
+    const uct_md_attr_t *md_attr;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t tl_id;
+
+    UCS_BITMAP_CLEAR(tl_bitmap);
+    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
+        md_index = context->tl_rscs[tl_id].md_index;
+        md_attr  = &context->tl_mds[md_index].attr;
+        if (md_attr->cap.access_mem_types & UCS_BIT(mem_type)) {
+            UCS_BITMAP_SET(*tl_bitmap, tl_id);
+        }
+    }
 }

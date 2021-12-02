@@ -135,11 +135,8 @@ void ucp_ep_match_remove_ep(ucp_worker_h worker, ucp_ep_h ep)
                                UCS_CONN_MATCH_QUEUE_EXP);
 
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_ON_MATCH_CTX);
-    if (!(ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID)) {
-        /* Reset the endpoint's flush state to make it valid in case of
-         * discarding the endpoint during error handling. The flush state
-         * will be used to complete remote RMA requests during purging
-         * requests */
-        ucp_ep_flush_state_reset(ep);
-    }
+    /* Reset the endpoint's flush state to make it valid in case of discarding
+     * the endpoint during error handling. The flush state will be used to
+     * complete remote RMA requests during purging requests */
+    ucp_ep_flush_state_reset(ep);
 }

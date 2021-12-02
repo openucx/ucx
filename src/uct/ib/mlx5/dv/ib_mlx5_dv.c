@@ -184,6 +184,10 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
         UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, attr->super.port);
+        if (!uct_ib_iface_is_roce(iface)) {
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
+                              iface->pkey_index);
+        }
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
         ret = mlx5dv_devx_obj_modify(qp->devx.obj, in_2init, sizeof(in_2init),

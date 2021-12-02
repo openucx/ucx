@@ -1132,7 +1132,8 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
                                                 uct_dc_mlx5_iface_t);
     khiter_t it;
 
-    uct_dc_mlx5_ep_pending_purge(&self->super.super, NULL, NULL);
+    uct_dc_mlx5_ep_pending_purge(&self->super.super,
+                                 uct_rc_ep_pending_purge_warn_cb, self);
     uct_dc_mlx5_ep_fc_cleanup(self);
     uct_dc_mlx5_ep_keepalive_cleanup(self);
 
@@ -1393,6 +1394,36 @@ uct_dc_mlx5_iface_dci_do_rand_pending_tx(ucs_arbiter_t *arbiter,
     return res;
 }
 
+ucs_arbiter_cb_result_t
+uct_dc_mlx5_ep_arbiter_purge_internal_cb(ucs_arbiter_t *arbiter,
+                                         ucs_arbiter_group_t *group,
+                                         ucs_arbiter_elem_t *elem, void *arg)
+{
+    uct_dc_mlx5_ep_t *ep         = arg;
+    uct_dc_mlx5_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
+                                                  uct_dc_mlx5_iface_t);
+    uct_pending_req_t *req       = ucs_container_of(elem, uct_pending_req_t,
+                                                    priv);
+    uct_rc_pending_req_t *freq;
+
+    if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
+        (uct_dc_mlx5_pending_req_priv(req)->ep != ep)) {
+        /* Element belongs to another ep - do not remove it */
+        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
+    }
+
+    if (ucs_unlikely(req->func == uct_dc_mlx5_iface_fc_grant)) {
+        /* User callback should not be called for FC messages. Just return
+         * pending request memory to the pool */
+        freq = ucs_derived_of(req, uct_rc_pending_req_t);
+        ucs_mpool_put(freq);
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    }
+
+    /* Non-internal request was found */
+    return UCS_ARBITER_CB_RESULT_RESCHED_GROUP;
+}
+
 static ucs_arbiter_cb_result_t
 uct_dc_mlx5_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                                 ucs_arbiter_elem_t *elem, void *arg)
@@ -1400,34 +1431,25 @@ uct_dc_mlx5_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *gro
     uct_purge_cb_args_t *cb_args = arg;
     void **priv_args             = cb_args->arg;
     uct_dc_mlx5_ep_t *ep         = priv_args[0];
-    uct_dc_mlx5_iface_t *iface   = ucs_derived_of(ep->super.super.iface,
-                                                  uct_dc_mlx5_iface_t);
-    uct_pending_req_t *req       = ucs_container_of(elem, uct_pending_req_t, priv);
-    uct_rc_pending_req_t *freq;
+    uct_pending_req_t *req       = ucs_container_of(elem, uct_pending_req_t,
+                                                    priv);
+    ucs_arbiter_cb_result_t result;
 
-    if (uct_dc_mlx5_iface_is_dci_rand(iface) &&
-        (uct_dc_mlx5_pending_req_priv(req)->ep != ep)) {
-        /* element belongs to another ep - do not remove it */
-        return UCS_ARBITER_CB_RESULT_NEXT_GROUP;
-    }
-
-    if (ucs_likely(req->func != uct_dc_mlx5_iface_fc_grant)){
+    result = uct_dc_mlx5_ep_arbiter_purge_internal_cb(arbiter, group, elem, ep);
+    if (result == UCS_ARBITER_CB_RESULT_RESCHED_GROUP) {
         if (cb_args->cb != NULL) {
             cb_args->cb(req, priv_args[1]);
         } else {
             ucs_debug("ep=%p cancelling user pending request %p", ep, req);
         }
-    } else {
-        /* User callback should not be called for FC messages.
-         * Just return pending request memory to the pool */
-        freq = ucs_derived_of(req, uct_rc_pending_req_t);
-        ucs_mpool_put(freq);
+        return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
     }
 
-    return UCS_ARBITER_CB_RESULT_REMOVE_ELEM;
+    return result;
 }
 
-void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep, uct_pending_purge_callback_t cb, void *arg)
+void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
+                                  uct_pending_purge_callback_t cb, void *arg)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
     uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
@@ -1530,8 +1552,6 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci_index].txqp;
     uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci_index].txwq;
     uint16_t pi                = ntohs(cqe->wqe_counter);
-    ucs_arbiter_t *waitq;
-    ucs_arbiter_group_t *group;
     uint8_t pool_index;
 
     ucs_debug("handle failure iface %p, ep %p, dci[%d] qpn 0x%x, status: %s",
@@ -1546,12 +1566,6 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     /* Try to return DCI into iface stack */
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
-    uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
-
-    /* Do not invoke pending requests on a failed endpoint. This call should be
-     * done after uct_dc_mlx5_iface_dci_put because uct_dc_mlx5_iface_dci_put
-     * may schedule group to arbiter */
-    ucs_arbiter_group_desched(waitq, group);
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
@@ -1572,6 +1586,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
         }
     }
 
+    pool_index = uct_dc_mlx5_ep_pool_index(ep);
     uct_dc_mlx5_iface_progress_pending(iface, pool_index);
     uct_dc_mlx5_iface_check_tx(iface);
 }

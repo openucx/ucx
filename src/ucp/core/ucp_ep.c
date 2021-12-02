@@ -191,7 +191,7 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ep->refcount                          = 1;
+    ep->refcount                          = 0;
     ep->cfg_index                         = UCP_WORKER_CFG_INDEX_NULL;
     ep->worker                            = worker;
     ep->am_lane                           = UCP_NULL_LANE;
@@ -200,14 +200,16 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ep->remote_ece                        = 0;
     ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
 #if UCS_ENABLE_ASSERT
-    ep->flush_iter_refcount               = 0;
-    ep->discard_refcount                  = 0;
+    ep->refcounts.create                  =
+    ep->refcounts.flush                   =
+    ep->refcounts.discard                 = 0;
 #endif
     ucp_ep_ext_gen(ep)->user_data         = NULL;
     ucp_ep_ext_control(ep)->cm_idx        = UCP_NULL_RESOURCE;
-    ucp_ep_ext_control(ep)->err_cb        = NULL;
     ucp_ep_ext_control(ep)->local_ep_id   = UCS_PTR_MAP_KEY_INVALID;
     ucp_ep_ext_control(ep)->remote_ep_id  = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->err_cb        = NULL;
+    ucp_ep_ext_control(ep)->close_req     = NULL;
 #if UCS_ENABLE_ASSERT
     ucp_ep_ext_control(ep)->ka_last_round = 0;
 #endif
@@ -239,6 +241,8 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
 
     /* Create endpoint VFS node on demand to avoid memory bloat */
     ucs_vfs_obj_set_dirty(worker, ucp_worker_vfs_refresh);
+
+    ucp_ep_refcount_add(ep, create);
 
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
@@ -274,7 +278,7 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
     ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
     ucs_assert(req->send.uct.func == ucp_ep_flush_progress_pending);
 
-    ucp_request_complete_send(req, UCS_OK);
+    ucp_request_complete_send(req, req->status);
     return 1;
 }
 
@@ -319,11 +323,12 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
     return 0;
 }
 
-static void ucp_ep_destroy_base(ucp_ep_h ep)
+void ucp_ep_destroy_base(ucp_ep_h ep)
 {
-    ucs_assert(ep->refcount == 0);
-    ucs_assert(ep->flush_iter_refcount == 0);
-    ucs_assert(ep->discard_refcount == 0);
+    ucp_ep_refcount_field_assert(ep, refcount, ==, 0);
+    ucp_ep_refcount_assert(ep, create, ==, 0);
+    ucp_ep_refcount_assert(ep, flush, ==, 0);
+    ucp_ep_refcount_assert(ep, discard, ==, 0);
     ucs_assert(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
 
     ucs_vfs_obj_remove(ep);
@@ -332,24 +337,6 @@ static void ucp_ep_destroy_base(ucp_ep_h ep)
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ucp_ep_ext_control(ep));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
-}
-
-void ucp_ep_add_ref(ucp_ep_h ep)
-{
-    ucs_assert(ep->refcount < UINT8_MAX);
-    ++ep->refcount;
-}
-
-/* Return 1 if the endpoint was destroyed, 0 if not */
-int ucp_ep_remove_ref(ucp_ep_h ep)
-{
-    ucs_assert(ep->refcount > 0);
-    if (--ep->refcount == 0) {
-        ucp_ep_destroy_base(ep);
-        return 1;
-    }
-
-    return 0;
 }
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
@@ -396,7 +383,8 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
     return UCS_OK;
 
 err_destroy_ep_base:
-    ucp_ep_remove_ref(ep);
+    ucp_ep_refcount_assert(ep, create, ==, 1);
+    ucp_ep_refcount_remove(ep, create);
 err:
     return status;
 }
@@ -411,7 +399,8 @@ void ucp_ep_delete(ucp_ep_h ep)
 
     ucp_ep_release_id(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    ucp_ep_remove_ref(ep);
+    ucp_ep_refcount_assert(ep, create, ==, 1);
+    ucp_ep_refcount_remove(ep, create);
 }
 
 void ucp_ep_flush_state_reset(ucp_ep_h ep)
@@ -544,18 +533,17 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
+    ucp_tl_bitmap_t mem_access_tls;
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     ucs_memory_type_for_each(mem_type) {
+        ucp_context_get_mem_access_tls(context, mem_type, &mem_access_tls);
         if (UCP_MEM_IS_HOST(mem_type) ||
-            UCS_BITMAP_IS_ZERO_INPLACE(
-                    &context->mem_type_access_tls[mem_type])) {
+            UCS_BITMAP_IS_ZERO_INPLACE(&mem_access_tls)) {
             continue;
         }
 
-        status = ucp_address_pack(worker, NULL,
-                                  &context->mem_type_access_tls[mem_type],
-                                  pack_flags,
+        status = ucp_address_pack(worker, NULL, &mem_access_tls, pack_flags,
                                   context->config.ext.worker_addr_version, NULL,
                                   &address_length, &address_buffer);
         if (status != UCS_OK) {
@@ -1129,10 +1117,10 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
 static void ucp_ep_check_lanes(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
-    uint8_t num_inprog       = ep->discard_refcount + ep->flush_iter_refcount;
+    uint8_t num_inprog       = ep->refcounts.discard + ep->refcounts.flush +
+                               ep->refcounts.create;
     uint8_t num_failed_tl_ep = 0;
     ucp_lane_index_t lane;
-
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         num_failed_tl_ep += ucp_is_uct_ep_failed(ep->uct_eps[lane]);
@@ -1140,17 +1128,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 
     ucs_assert((num_failed_tl_ep == 0) ||
                (ucp_ep_num_lanes(ep) == num_failed_tl_ep));
-
-    if (num_failed_tl_ep != 0) {
-        /* EP reference count is the number of outstanding flush operations and
-         * discards, plus 1 if not destroyed yet */
-        ucs_assert((ep->refcount == num_inprog) ||
-                   (ep->refcount == (num_inprog + 1)));
-    } else {
-        /* EP is used, so reference count is the number of outstanding flush
-         * operations and discards plus 1 */
-        ucs_assert(ep->refcount == (num_inprog + 1));
-    }
+    ucp_ep_refcount_field_assert(ep, refcount, ==, num_inprog);
 #endif
 }
 
@@ -1273,17 +1251,18 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         return UCS_OK;
     }
 
+    ++ucp_ep->worker->counters.ep_failures;
+
     /* The EP can be closed from last completion callback */
     ucp_ep_discard_lanes(ucp_ep, status);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
-            if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+            if (ep_ext_control->close_req != NULL) {
                 /* Promote close operation to CANCEL in case of transport error,
                  * since the disconnect event may never arrive. */
-                close_req                        =
-                        ep_ext_control->close_req.req;
+                close_req                        = ep_ext_control->close_req;
                 close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
                 ucp_ep_local_disconnect_progress(close_req);
             }
@@ -1427,11 +1406,10 @@ unsigned ucp_ep_local_disconnect_progress(void *arg)
 static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
                                      const char *debug_msg)
 {
+    ucs_assertv(ucp_ep_ext_control(ep)->close_req == NULL,
+                "ep=%p: close_req=%p", ep, ucp_ep_ext_control(ep)->close_req);
     ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
-
-    ucp_ep_flush_state_invalidate(ep);
-    ucp_ep_ext_control(ep)->close_req.req = request;
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSE_REQ_VALID, 0);
+    ucp_ep_ext_control(ep)->close_req = request;
 }
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
@@ -1540,6 +1518,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
             }
         }
     }
+
+    ++worker->counters.ep_closures;
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -3158,8 +3138,10 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
 
 static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
 {
-    if ((status != UCS_OK) &&
-        (ucp_ep_config(req->send.ep)->key.err_mode !=
+    ucs_assertv(UCS_STATUS_IS_ERR(status), "req %p: status %s", req,
+                ucs_status_string(status));
+
+    if ((ucp_ep_config(req->send.ep)->key.err_mode !=
          UCP_ERR_HANDLING_MODE_NONE) &&
         (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         ucp_request_dt_invalidate(req, status);
@@ -3253,9 +3235,8 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     }
 
     if (/* Flush state is already valid (i.e. EP doesn't exist on matching
-         * context) and not invalidated yet, also remote EP ID is already set */
-        !(ucp_ep->flags &
-          (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID))) {
+         * context) and not invalidated yet */
+        !(ucp_ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
         flush_state = ucp_ep_flush_state(ucp_ep);
 
         /* Adjust 'comp_sn' value to a value stored in 'send_sn' by emulating
