@@ -1081,6 +1081,79 @@ ucp_worker_get_sys_device_distance(ucp_context_h context,
     return UCS_ERR_NO_RESOURCE;
 }
 
+static void ucp_worker_iface_attr_cap_check_max(size_t max)
+{
+    ucs_assertv(max > 0, "max=%zu", max);
+}
+
+static void ucp_worker_iface_attr_cap_check_zcopy(size_t min, size_t max)
+{
+    ucs_assertv((max > 0) && (min <= max), "min=%zu max=%zu", min, max);
+}
+
+static void ucp_worker_iface_attr_check(const uct_iface_attr_t *iface_attr)
+{
+    /* PUT */
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_SHORT) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.put.max_short);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_BCOPY) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.put.max_bcopy);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_PUT_ZCOPY) {
+        ucp_worker_iface_attr_cap_check_zcopy(iface_attr->cap.put.min_zcopy,
+                                              iface_attr->cap.put.max_zcopy);
+    }
+
+    /* GET */
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_SHORT) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.get.max_short);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_BCOPY) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.get.max_bcopy);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_GET_ZCOPY) {
+        ucp_worker_iface_attr_cap_check_zcopy(iface_attr->cap.get.min_zcopy,
+                                              iface_attr->cap.get.max_zcopy);
+    }
+
+    /* AM */
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.am.max_short);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_BCOPY) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.am.max_bcopy);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+        ucp_worker_iface_attr_cap_check_zcopy(iface_attr->cap.am.min_zcopy,
+                                              iface_attr->cap.am.max_zcopy);
+    }
+
+    /* TAG EAGER */
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_TAG_EAGER_SHORT) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.tag.eager.max_short);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_TAG_EAGER_BCOPY) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.tag.eager.max_bcopy);
+    }
+
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_TAG_EAGER_ZCOPY) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.tag.eager.max_zcopy);
+    }
+
+    /* TAG RNDV */
+    if (iface_attr->cap.flags & UCT_IFACE_FLAG_TAG_RNDV_ZCOPY) {
+        ucp_worker_iface_attr_cap_check_max(iface_attr->cap.tag.rndv.max_zcopy);
+    }
+}
+
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t **wiface_p)
@@ -1186,6 +1259,8 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     if (status != UCS_OK) {
         goto err_close_iface;
     }
+
+    ucp_worker_iface_attr_check(&wiface->attr);
 
     if (!context->config.ext.proto_enable) {
         status = ucp_worker_get_sys_device_distance(context, wiface->rsc_index,

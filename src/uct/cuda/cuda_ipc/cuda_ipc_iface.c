@@ -176,7 +176,9 @@ err:
     return 0;
 }
 
-static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
+static size_t
+uct_cuda_ipc_iface_get_max_get_zcopy(const uct_cuda_ipc_iface_t *iface,
+                                     uct_iface_attr_t *iface_attr)
 {
     int num_nvlinks;
 
@@ -188,6 +190,7 @@ static size_t uct_cuda_ipc_iface_get_max_get_zcopy(uct_cuda_ipc_iface_t *iface)
         return 0;
     }
 
+    iface_attr->cap.flags |= UCT_IFACE_FLAG_GET_ZCOPY;
     return ULONG_MAX;
 }
 
@@ -206,7 +209,6 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
                                           UCT_IFACE_FLAG_EP_CHECK               |
                                           UCT_IFACE_FLAG_CONNECT_TO_IFACE       |
                                           UCT_IFACE_FLAG_PENDING                |
-                                          UCT_IFACE_FLAG_GET_ZCOPY              |
                                           UCT_IFACE_FLAG_PUT_ZCOPY;
     iface_attr->cap.event_flags         = UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                           UCT_IFACE_FLAG_EVENT_RECV      |
@@ -222,7 +224,8 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 
     iface_attr->cap.get.max_bcopy       = 0;
     iface_attr->cap.get.min_zcopy       = 0;
-    iface_attr->cap.get.max_zcopy       = uct_cuda_ipc_iface_get_max_get_zcopy(iface);
+    iface_attr->cap.get.max_zcopy       =
+            uct_cuda_ipc_iface_get_max_get_zcopy(iface, iface_attr);
     iface_attr->cap.get.opt_zcopy_align = 1;
     iface_attr->cap.get.align_mtu       = iface_attr->cap.get.opt_zcopy_align;
     iface_attr->cap.get.max_iov         = 1;
