@@ -294,7 +294,7 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         ep->dci = UCT_DC_MLX5_EP_NO_DCI;
     }
 
-    return uct_rc_fc_init(&ep->fc, iface->super.super.config.fc_wnd_size
+    return uct_rc_fc_init(&ep->fc, &iface->super.super
                           UCS_STATS_ARG(ep->super.stats));
 }
 
@@ -352,11 +352,14 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
                           uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)));
 }
 
-static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
+static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep,
+                                                    int flush_cancel)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
     return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
-           uct_rc_fc_has_resources(&iface->super.super, &ep->fc) &&
+           (/* Ignore FC limitations when performing flush(CANCEL) */
+            flush_cancel ||
+            uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) &&
            uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
@@ -449,7 +452,8 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     /* it is possible that dci is released while ep still has scheduled pending ops.
      * move the group to the 'wait for dci alloc' state
      */
-    ucs_arbiter_group_desched(uct_dc_mlx5_iface_tx_waitq(iface), &ep->arb_group);
+    ucs_arbiter_group_desched(uct_dc_mlx5_iface_tx_waitq(iface),
+                              &ep->arb_group);
     uct_dc_mlx5_iface_schedule_dci_alloc(iface, ep);
 }
 
