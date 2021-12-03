@@ -6,7 +6,7 @@ jobs:
       demands:
       - azp_master -equals yes
     displayName: Deploy
-    environment: $(envName).$(resourceName)
+    environment:  ${{ variables.envName }}.${{ variables.resourceName }}
     strategy:
       runOnce:
         deploy:
@@ -20,7 +20,7 @@ jobs:
             inputs:
               action: deploy
               # kubernetesServiceConnection: $(k8sServiceConnection)
-              namespace: $(resourceName)
+              namespace: ${{ variables.resourceName }}
               manifests: |
                 buildlib/pr/manifests/2nd-stage-agent.yaml
 
