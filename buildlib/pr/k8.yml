@@ -1,0 +1,64 @@
+variables:
+  dockerRegistryServiceConnection: 'swx-rdmz-cstor01-vip' # Docker service connection identifier
+  vmImageName: 'ubuntu-latest' # name of your VM
+  envName: 'myEnv' # name of your environment
+  resourceName: 'scratch' # name of the resource you are referencing (namespace+SA in K8s instance)
+  dockerfilePath: '**/Dockerfile'
+  # tag: '$(Build.BuildId)' # tag added for your build
+  tag: 'latest' # tag added for your build
+  k8sNamespaceForPR: 'scratch-pr' # namespace used in your PR
+  imagePullSecret: 'swx-rdmz-cstor01-vip' # image pull secret
+  imageRepository: 'demo/alpine' # name of image repository
+  containerRegistry: 'swx-rdmz-cstor01-vip.rdmz.labs.mlnx:18181' # path to container registry
+  k8sServiceConnection: 'RDMZ'
+
+jobs:
+  # https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema?view=azure-devops&tabs=schema%2Cparameter-schema#pool
+  - deployment: Deploy
+    pool:
+      name: RDMZ-K8S
+      demands:
+      - azp_master -equals yes
+    displayName: Deploy
+    environment: $(envName).$(resourceName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+              
+          - task: KubernetesManifest@0
+            displayName: Deploy 2nd stage to K8s
+            inputs:
+              action: deploy
+              # kubernetesServiceConnection: $(k8sServiceConnection)
+              namespace: $(resourceName)
+              manifests: |
+                buildlib/pr/manifests/2nd-stage-agent.yaml
+
+  - job: build_a_code
+    displayName: Build a code
+    #container: ubuntu2004
+    pool:
+      name: RDMZ-K8S
+      demands:
+      - my_second_stage -equals yes
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+
+      - bash: |
+            kubectl -n $(resourceName) get pods
+            kubectl -n $(resourceName) describe pod azp-2nd-stage
+            kubectl -n $(resourceName) exec -ti azp-2nd-stage -c ubuntu -- /bin/bash -c 'ls -l /work/'
+        displayName: check kubectl
+
+  - job: do_cleanup
+    condition: in(dependencies.build_a_code.result, 'Succeeded', 'Canceled')
+    steps:
+      - bash: |
+            kubectl -n $(resourceName) delete pod azp-2nd-stage
+        displayName: delete azp-2nd-stage pod
