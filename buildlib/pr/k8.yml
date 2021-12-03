@@ -1,17 +1,4 @@
 jobs:
-  variables:
-    dockerRegistryServiceConnection: 'swx-rdmz-cstor01-vip' # Docker service connection identifier
-    vmImageName: 'ubuntu-latest' # name of your VM
-    envName: 'myEnv' # name of your environment
-    resourceName: 'scratch' # name of the resource you are referencing (namespace+SA in K8s instance)
-    dockerfilePath: '**/Dockerfile'
-    # tag: '$(Build.BuildId)' # tag added for your build
-    tag: 'latest' # tag added for your build
-    k8sNamespaceForPR: 'scratch-pr' # namespace used in your PR
-    imagePullSecret: 'swx-rdmz-cstor01-vip' # image pull secret
-    imageRepository: 'demo/alpine' # name of image repository
-    containerRegistry: 'swx-rdmz-cstor01-vip.rdmz.labs.mlnx:18181' # path to container registry
-    k8sServiceConnection: 'RDMZ'
   # https://docs.microsoft.com/en-us/azure/devops/pipelines/yaml-schema?view=azure-devops&tabs=schema%2Cparameter-schema#pool
   - deployment: Deploy
     pool:
