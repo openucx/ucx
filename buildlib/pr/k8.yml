@@ -6,7 +6,7 @@ jobs:
       demands:
       - azp_master -equals yes
     displayName: Deploy
-    environment: $(envName).$(resourceName)
+    #environment: $(envName).$(resourceName)
     strategy:
       runOnce:
         deploy:
