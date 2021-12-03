@@ -55,7 +55,12 @@ resources:
       options: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools --gpus all --device=/dev/infiniband/rdma_cm --device=/dev/infiniband/uverbs0 --device=/dev/infiniband/uverbs1
 
 stages:
+  - stage: Kubernetus
+    jobs:
+    - template: k8.yml
+
   - stage: Codestyle
+    dependsOn: [Kubernetus]
     jobs:
     - template: codestyle.yml
 
