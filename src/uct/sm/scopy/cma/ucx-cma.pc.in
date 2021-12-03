@@ -1,0 +1,5 @@
+Name: @PACKAGE@-cma
+Description: Unified Communication X Library CMA module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:

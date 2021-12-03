@@ -22,6 +22,9 @@ libuct_knem_la_SOURCES = \
     knem_iface.c \
     knem_md.c
 
+PKG_CONFIG_NAME=knem
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif

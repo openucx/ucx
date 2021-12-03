@@ -146,7 +146,7 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 %files devel
 %{_includedir}/uc*
 %{_libdir}/lib*.so
-%{_libdir}/pkgconfig/ucx.pc
+%{_libdir}/pkgconfig/ucx*.pc
 %{_libdir}/cmake/ucx/*.cmake
 %{_datadir}/ucx/examples
 

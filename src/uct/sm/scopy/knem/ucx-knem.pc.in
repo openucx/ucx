@@ -1,0 +1,5 @@
+Name: @PACKAGE@-knem
+Description: Unified Communication X Library KNEM module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:
