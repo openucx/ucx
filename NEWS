@@ -9,11 +9,32 @@
 
 ## Current
 ### Features:
-#### UCP
-* Added API for querying UCP library attributes
-#### UCS
-* Added API to Read boot ID value or use machine_guid
 ### Bugfixes:
+
+## 1.11.2 (September 30, 2021)
+### Bugfixes
+* Fixes in Java release pipeline
+* Fixes in handling large number of devices
+* Fixes in UD out-of-order processing
+* Fixes in switching transports during client/server connection setup
+* Fixes in transport-level error reporting
+
+## 1.11.1 (August 31, 2021)
+### Features:
+#### UCS
+* Added API to read boot ID value or use machine_guid
+
+### Bugfixes:
+* Fixes in Cuda memory hooks
+* Fixes in setting traffic class for DCT RoCE transport
+* Fixes in TCP endpoint flush
+* Fixes in TCP pending operations progress
+* Fixes in release pipelines
+* Fixes in error handling flow
+* Fixes in multi-threaded tag probe
+* Fixes in TCP disconnect flow
+* Fixes in RPM post-install script
+* Fixes in UCT common keepalive
 
 ## 1.11.0 (July 26, 2021)
 ### Features:
