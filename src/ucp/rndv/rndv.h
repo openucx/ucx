@@ -91,7 +91,8 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
 
 ucs_status_t ucp_proto_progress_rndv_rtr(uct_pending_req_t *self);
 
-ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq);
+ucs_status_t
+ucp_rndv_reg_send_buffer(ucp_request_t *sreq, const ucp_request_param_t *param);
 
 ucp_mem_desc_t *
 ucp_rndv_mpool_get(ucp_worker_h worker, ucs_memory_type_t mem_type,

@@ -37,7 +37,7 @@ enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
     UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
-    /* UCS_BIT(3) is a vacant flag */
+    UCP_REQUEST_FLAG_USER_MEMH             = UCS_BIT(3),
     UCP_REQUEST_FLAG_SYNC_LOCAL_COMPLETED  = UCS_BIT(4),
     UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED = UCS_BIT(5),
     UCP_REQUEST_FLAG_CALLBACK              = UCS_BIT(6),
@@ -373,10 +373,15 @@ struct ucp_request {
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */
             union {
-                ssize_t           remaining; /* How much more data
-                                              * to be received */
-                size_t            offset; /* offset in recv buffer for multi
-                                             fragment tag offload flow */
+                /* How much more data to be received */
+                ssize_t   remaining;
+
+                /* Offset in recv buffer for multi fragment tag offload flow */
+                size_t    offset;
+
+                /* User-defined memory handle supplied to ucp_[tag|am)_recv_nbx,
+                   valid if UCP_REQUEST_FLAG_USER_MEMH is set */
+                ucp_mem_h user_memh;
             };
 
             /* Remote request ID received from a peer */
@@ -500,13 +505,14 @@ extern const ucp_request_param_t ucp_request_null_param;
 
 int ucp_request_pending_add(ucp_request_t *req);
 
-ucs_status_t ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
-                                    void *buffer, size_t length, ucp_datatype_t datatype,
-                                    ucp_dt_state_t *state, ucs_memory_type_t mem_type,
-                                    ucp_request_t *req_dbg, unsigned uct_flags);
+ucs_status_t
+ucp_request_memory_reg(ucp_context_t *context, ucp_md_map_t md_map,
+                       void *buffer, size_t length, ucp_datatype_t datatype,
+                       ucp_dt_state_t *state, ucs_memory_type_t mem_type,
+                       ucp_request_t *req, unsigned uct_flags);
 
 void ucp_request_memory_dereg(ucp_context_t *context, ucp_datatype_t datatype,
-                              ucp_dt_state_t *state, ucp_request_t *req_dbg);
+                              ucp_dt_state_t *state, ucp_request_t *req);
 
 void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status);
 
@@ -514,8 +520,9 @@ ucs_status_t ucp_request_send_start(ucp_request_t *req, ssize_t max_short,
                                     size_t zcopy_thresh, size_t zcopy_max,
                                     size_t dt_count, size_t priv_iov_count,
                                     size_t length,
-                                    const ucp_ep_msg_config_t* msg_config,
-                                    const ucp_request_send_proto_t *proto);
+                                    const ucp_ep_msg_config_t *msg_config,
+                                    const ucp_request_send_proto_t *proto,
+                                    const ucp_request_param_t *param);
 
 /* Fast-forward to data end */
 void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status);

@@ -127,8 +127,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     /* TODO: allocate request only in case if flag
      * UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not set */
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
-        ucp_request_put_param(param, req);
-        return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
+        status = UCS_ERR_NO_RESOURCE;
+        goto err;
     }
 
     /* Initialize receive request */
@@ -165,6 +165,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.info.sender_tag = 0;
     }
 
+    status = ucp_recv_request_set_user_memh(req, param);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     if (ucs_unlikely(rdesc == NULL)) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
@@ -192,6 +197,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     }
 
     return req + 1;
+
+err:
+    ucp_request_put_param(param, req);
+    return UCS_STATUS_PTR(status);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,

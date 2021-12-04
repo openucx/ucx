@@ -85,7 +85,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     dt_count, 0, req->send.length, msg_config,
-                                    proto);
+                                    proto, param);
     if (ucs_likely(status == UCS_OK)) {
         /* Eager send initialized successfully */
         if (req->flags & UCP_REQUEST_FLAG_SYNC) {
@@ -97,7 +97,7 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
     } else if (status == UCS_ERR_NO_PROGRESS) {
         /* RMA/AM rendezvous */
         ucs_assert(req->send.length >= rndv_thresh);
-        status = ucp_tag_send_start_rndv(req);
+        status = ucp_tag_send_start_rndv(req, param);
         if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }

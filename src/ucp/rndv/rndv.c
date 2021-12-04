@@ -223,7 +223,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_rndv_rtr, (self),
     return ucp_rndv_send_handle_status_from_pending(rndv_req, status);
 }
 
-ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq)
+ucs_status_t
+ucp_rndv_reg_send_buffer(ucp_request_t *sreq, const ucp_request_param_t *param)
 {
     ucp_ep_h ep = sreq->send.ep;
     ucp_md_map_t md_map;
@@ -235,6 +236,11 @@ ucs_status_t ucp_rndv_reg_send_buffer(ucp_request_t *sreq)
         /* register a contiguous buffer for rma_get */
         md_map = ucp_ep_config(ep)->key.rma_bw_md_map;
         ucp_rndv_memtype_direct_update_md_map(ep->worker->context, sreq, &md_map);
+
+        status = ucp_send_request_set_user_memh(sreq, md_map, param);
+        if (status != UCS_OK) {
+            return status;
+        }
 
         /* Pass UCT_MD_MEM_FLAG_HIDE_ERRORS flag, because registration may fail
          * if md does not support send memory type (e.g. CUDA memory). In this
@@ -375,7 +381,6 @@ static void ucp_rndv_complete_rma_put_zcopy(ucp_request_t *sreq, int is_frag_put
     }
 
     ucp_request_send_buffer_dereg(sreq);
-    ucs_assert(sreq->send.state.dt.dt.contig.md_map == 0);
     ucp_request_complete_send(sreq, status);
 }
 
@@ -605,11 +610,11 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_get_completion, (self), uct_completion_t *self)
         ucp_request_put(rndv_req);
     }
 
+    /* Check for possible leak of memory registration: we should either not have
+     * any memory registration, or not own it, or be called from the context of
+     * ucp_request_send_state_ff() */
     ucs_assert((rreq->recv.state.dt.contig.md_map == 0) ||
-               /* Request send state fast-forward after failure detection, i.e.
-                * it is called from ucp_request_send_state_ff() function.
-                * md_map can be NULL, if GET Zcopy was started, but no fragments
-                * were really sent yet */
+               (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) ||
                ((ep->flags & UCP_EP_FLAG_FAILED) && (status != UCS_OK)));
     ucp_rndv_recv_req_complete(rreq, status);
 }
@@ -790,6 +795,8 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     ucp_ep_h ep = rndv_req->send.ep;
     ucs_status_t status;
     uct_rkey_t uct_rkey;
+    ucp_lane_index_t lane;
+    ucp_md_map_t md_map;
 
     ucp_trace_req(rndv_req, "start rma_get rreq %p", rreq);
 
@@ -817,6 +824,19 @@ static ucs_status_t ucp_rndv_req_send_rma_get(ucp_request_t *rndv_req,
     ucp_rndv_req_init_zcopy_lane_map(rndv_req, rndv_req->send.mem_type,
                                      rndv_req->send.length,
                                      UCP_REQUEST_SEND_PROTO_RNDV_GET);
+
+    /* Copy user registration from receive request to rndv send request */
+    if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        md_map = 0;
+        ucs_for_each_bit(lane, rndv_req->send.rndv.lanes_map_all) {
+            ucs_assert(lane < UCP_MAX_LANES);
+            md_map |= ucp_ep_md_index(ep, lane);
+        }
+
+        ucp_request_init_dt_reg_from_memh(rndv_req, md_map,
+                                          rreq->recv.user_memh,
+                                          &rndv_req->send.state.dt.dt.contig);
+    }
 
     rndv_req->send.lane =
         ucp_rndv_zcopy_get_lane(rndv_req, &uct_rkey,
@@ -1527,6 +1547,14 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
         }
 
         if (!is_get_zcopy_failed || !UCP_MEM_IS_HOST(src_mem_type)) {
+            if (rreq->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+                /* At this point we know the datatype is contig */
+                ucp_request_init_dt_reg_from_memh(rreq,
+                                                  ep_config->key.rma_bw_md_map,
+                                                  rreq->recv.user_memh,
+                                                  &rreq->recv.state.dt.contig);
+            }
+
             /* register receive buffer for
              * put protocol (or) pipeline rndv for non-host memory type
              */

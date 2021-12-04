@@ -176,7 +176,8 @@ static ucs_status_t ucp_tag_eager_zcopy_multi(uct_pending_req_t *self)
                                  ucp_proto_am_zcopy_req_complete, 1);
 }
 
-ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self);
+ucs_status_t ucp_tag_send_start_rndv(uct_pending_req_t *self,
+                                     const ucp_request_param_t *param);
 
 const ucp_request_send_proto_t ucp_tag_eager_proto = {
     .contig_short            = ucp_tag_eager_contig_short,
@@ -276,7 +277,7 @@ static ucs_status_t ucp_tag_eager_sync_zcopy_multi(uct_pending_req_t *self)
                                      0ul, ucp_tag_eager_sync_zcopy_req_complete,
                                      1);
     }
-    
+
     first_hdr.super.super.super.tag = req->send.msg_proto.tag;
     first_hdr.super.total_len       = req->send.length;
     first_hdr.req.ep_id             = ucp_send_request_get_ep_remote_id(req);

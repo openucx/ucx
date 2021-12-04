@@ -19,7 +19,8 @@
     })
 
 
-ucs_status_t ucp_tag_send_start_rndv(ucp_request_t *req);
+ucs_status_t
+ucp_tag_send_start_rndv(ucp_request_t *req, const ucp_request_param_t *param);
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *req,
                           const ucp_rndv_rts_hdr_t *rts_hdr, size_t hdr_length);

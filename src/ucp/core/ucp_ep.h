@@ -403,6 +403,9 @@ struct ucp_ep_config {
 
     /* Protocol selection data */
     ucp_proto_select_t            proto_select;
+
+    /* Bitmap of preregistration for am_bw lanes */
+    ucp_md_map_t                  am_bw_prereg_md_map;
 };
 
 
