@@ -733,6 +733,15 @@ typedef struct ucp_ep_params {
     ucs_sock_addr_t         sockaddr;
 
     /**
+     * The sockaddr to bind locally. Specifies the associated network device
+     * to bind locally to establish new connections.
+     * To retrieve the endpoint's local_sockaddr, use @ref ucp_ep_query.
+     * This setting is optional. To enable it, the corresponding - @ref
+     * UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR bit in the field mask must be set.
+     */
+    ucs_sock_addr_t         local_sockaddr;
+
+    /**
      * Connection request from client; this field should be set along with its
      * corresponding bit in the field_mask - @ref
      * UCP_EP_PARAM_FIELD_CONN_REQUEST and must be obtained from @ref

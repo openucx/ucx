@@ -859,6 +859,7 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     const struct sockaddr *server_addr;
     ucs_async_context_t *async_ctx;
     ucs_status_t status;
+    int ret;
 
     cep->state |= UCT_TCP_SOCKCM_EP_ON_CLIENT;
 
@@ -886,6 +887,19 @@ static ucs_status_t uct_tcp_sockcm_ep_client_init(uct_tcp_sockcm_ep_t *cep,
     status = uct_tcp_sockcm_ep_set_sockopt(cep);
     if (status != UCS_OK) {
         goto err_close_socket;
+    }
+
+    if (params->field_mask & UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR) {
+        ret = bind(cep->fd, (const struct sockaddr *)params->local_sockaddr->addr,
+                   params->local_sockaddr->addrlen);
+        if (ret < 0) {
+            ucs_diag("bind socket to %s failed (%d): %m",
+                     ucs_sockaddr_str(params->local_sockaddr->addr,
+                                      ip_port_str, UCS_SOCKADDR_STRING_LEN),
+                     errno);
+            status = UCS_ERR_IO_ERROR;
+            goto err_close_socket;
+        }
     }
 
     /* try to connect to the server */
