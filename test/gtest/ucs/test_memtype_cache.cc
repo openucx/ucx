@@ -22,6 +22,8 @@ protected:
 
     virtual void init() {
         ucs::test_with_param<ucs_memory_type_t>::init();
+        // Trigger on-demand create of the global memtype cache instance
+        test_lookup_notfound(NULL, ucs_get_page_size());
     }
 
     virtual void cleanup() {
