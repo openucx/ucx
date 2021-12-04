@@ -36,6 +36,10 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
+    /* actually set device context as calling cudaSetDevice may result in
+     * context being initialized lazily */
+    cudaFree(0);
+
     return UCS_OK;
 }
 
