@@ -744,10 +744,14 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
 
 /**
- * @brief Create objects in VFS to represent endpoint and its features.
+ * @brief Query local and/or remote socket address of endpoint @a ucp_ep.
  *
- * @param [in] ep Endpoint object to be described.
+ * @param [in]     ucp_ep           Endpoint object to query.
+ * @param [inout]  attr             Filled with attributes containing socket
+ *                                  address of the endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
-void ucp_ep_vfs_init(ucp_ep_h ep);
+ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
 
 #endif
