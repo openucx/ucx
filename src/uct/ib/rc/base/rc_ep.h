@@ -263,12 +263,12 @@ ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
 void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void*arg);
 
-void uct_rc_fc_reset(const uct_rc_iface_t *iface, uct_rc_fc_t *fc);
+void uct_rc_fc_reset(uct_rc_fc_t *fc, const uct_rc_iface_t *iface);
 
 ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, const uct_rc_iface_t *iface
-                            UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
+                               UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 
-void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
+void uct_rc_fc_cleanup(uct_rc_fc_t *fc, const uct_rc_iface_t *iface);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 

@@ -1042,7 +1042,7 @@ static void uct_dc_mlx5_iface_cleanup_fc_ep(uct_dc_mlx5_iface_t *iface)
 
     uct_dc_mlx5_ep_pending_purge(&fc_ep->super.super, NULL, NULL);
     ucs_arbiter_group_cleanup(&fc_ep->arb_group);
-    uct_rc_fc_cleanup(&fc_ep->fc);
+    uct_rc_fc_cleanup(&fc_ep->fc, &iface->super.super);
 
     if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
         txqp = &iface->tx.dcis[fc_ep->dci].txqp;
@@ -1606,7 +1606,7 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
     }
 
     ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
-    uct_rc_fc_reset(&iface->super.super, &ep->fc);
+    uct_rc_fc_reset(&ep->fc, &iface->super.super);
 
     status  = uct_iface_handle_ep_err(&ib_iface->super.super,
                                       &ep->super.super, ep_status);

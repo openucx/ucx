@@ -1101,7 +1101,7 @@ static void uct_dc_mlx5_ep_fc_cleanup(uct_dc_mlx5_ep_t *ep)
                                                 uct_dc_mlx5_iface_t);
     khiter_t it;
 
-    uct_rc_fc_cleanup(&ep->fc);
+    uct_rc_fc_cleanup(&ep->fc, &iface->super.super);
 
     it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)ep);
     if (it != kh_end(&iface->tx.fc_hash)) {

@@ -79,7 +79,7 @@ void uct_rc_txqp_vfs_populate(uct_rc_txqp_t *txqp, void *parent_obj)
                             &txqp->available, UCS_VFS_TYPE_I16, "available");
 }
 
-void uct_rc_fc_reset(const uct_rc_iface_t *iface, uct_rc_fc_t *fc)
+void uct_rc_fc_reset(uct_rc_fc_t *fc, const uct_rc_iface_t *iface)
 {
     fc->fc_wnd = iface->config.fc_wnd_size;
 }
@@ -89,7 +89,11 @@ ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, const uct_rc_iface_t *iface
 {
     ucs_status_t status;
 
-    uct_rc_fc_reset(iface, fc);
+    uct_rc_fc_reset(fc, iface);
+
+    if (!iface->config.fc_enabled) {
+        return UCS_OK;
+    }
 
     status = UCS_STATS_NODE_ALLOC(&fc->stats, &uct_rc_fc_stats_class,
                                   stats_parent, "");
@@ -102,9 +106,11 @@ ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, const uct_rc_iface_t *iface
     return UCS_OK;
 }
 
-void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
+void uct_rc_fc_cleanup(uct_rc_fc_t *fc, const uct_rc_iface_t *iface)
 {
-    UCS_STATS_NODE_FREE(fc->stats);
+    if (iface->config.fc_enabled) {
+        UCS_STATS_NODE_FREE(fc->stats);
+    }
 }
 
 void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
@@ -187,7 +193,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     uct_rc_ep_pending_purge(&self->super.super,
                             uct_rc_ep_pending_purge_warn_cb, self);
-    uct_rc_fc_cleanup(&self->fc);
+    uct_rc_fc_cleanup(&self->fc, iface);
     uct_rc_txqp_cleanup(iface, &self->txqp);
 }
 
