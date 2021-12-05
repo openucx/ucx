@@ -1542,7 +1542,6 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_fc_reset(&iface->super.super, &ep->fc);
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
