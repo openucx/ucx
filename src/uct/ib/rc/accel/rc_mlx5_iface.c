@@ -247,7 +247,6 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         goto out;
     }
 
-    uct_rc_fc_reset(iface, &ep->super.fc);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status, pi, 0);
     ucs_arbiter_group_purge(&iface->tx.arbiter, &ep->super.arb_group,
                             uct_rc_ep_arbiter_purge_internal_cb, NULL);
@@ -260,6 +259,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+    uct_rc_fc_reset(iface, &ep->super.fc);
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);

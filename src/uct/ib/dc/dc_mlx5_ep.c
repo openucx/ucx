@@ -1545,11 +1545,11 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_rc_fc_reset(&iface->super.super, &ep->fc);
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
+    uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
     /* Try to return DCI into iface stack */
     uct_dc_mlx5_iface_dci_put(iface, dci_index);
-    uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         /* No more operations scheduled on DCI, reset it.
