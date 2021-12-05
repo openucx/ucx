@@ -565,6 +565,8 @@ UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
 
         ASSERT_UCS_OK(status);
     }
+
+    set_fc_enabled(m_e1);
 }
 
 /* Check that soft request is not handled by DC */
