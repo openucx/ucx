@@ -100,6 +100,11 @@ public:
         set_fc_attributes(e, false, std::numeric_limits<int16_t>::max(), 0, 0);
     }
 
+    void set_fc_enabled(entity *e) {
+        /* same as default settings in rc_iface_init */
+        set_fc_attributes(e, true, std::numeric_limits<int16_t>::max(), 0, 0);
+    }
+
     void send_am_and_flush(entity *e, int num_msg);
 
     void progress_loop(double delta_ms=10.0) {

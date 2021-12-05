@@ -663,6 +663,8 @@ void test_rc_flow_control::test_flush_fc_disabled()
     /* flush must have resources */
     status = uct_ep_flush(m_e1->ep(0), 0, NULL);
     EXPECT_FALSE(UCS_STATUS_IS_ERR(status)) << ucs_status_string(status);
+
+    set_fc_enabled(m_e1);
 }
 
 void test_rc_flow_control::test_pending_purge(int wnd, int num_pend_sends)
