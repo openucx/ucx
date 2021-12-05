@@ -9,6 +9,7 @@
 #endif
 
 #include "ucp_listener.h"
+#include "ucp_vfs.h"
 #include "uct/base/uct_cm.h"
 
 #include <ucp/stream/stream.h>
@@ -272,14 +273,8 @@ static void ucp_listener_vfs_show_ip(void *obj, ucs_string_buffer_t *strb,
 {
     ucp_listener_h listener   = obj;
     struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
-    char ip_str[UCS_SOCKADDR_STRING_LEN];
 
-    if (ucs_sockaddr_get_ipstr(sockaddr, ip_str, UCS_SOCKADDR_STRING_LEN) ==
-        UCS_OK) {
-        ucs_string_buffer_appendf(strb, "%s\n", ip_str);
-    } else {
-        ucs_string_buffer_appendf(strb, "<unable to get ip>\n");
-    }
+    ucp_vfs_read_ip(sockaddr, strb);
 }
 
 static void ucp_listener_vfs_show_port(void *obj, ucs_string_buffer_t *strb,
@@ -287,13 +282,8 @@ static void ucp_listener_vfs_show_port(void *obj, ucs_string_buffer_t *strb,
 {
     ucp_listener_h listener   = obj;
     struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
-    uint16_t port;
 
-    if (ucs_sockaddr_get_port(sockaddr, &port) == UCS_OK) {
-        ucs_string_buffer_appendf(strb, "%u\n", port);
-    } else {
-        ucs_string_buffer_appendf(strb, "<unable to get port>\n");
-    }
+    ucp_vfs_read_port(sockaddr, strb);
 }
 
 void ucp_listener_vfs_init(ucp_listener_h listener)

@@ -10,6 +10,7 @@
 #endif
 
 #include "ucp_am.h"
+#include "ucp_ep_vfs.h"
 #include "ucp_worker.h"
 #include "ucp_rkey.h"
 #include "ucp_request.inl"

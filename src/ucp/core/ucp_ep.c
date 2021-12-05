@@ -34,7 +34,6 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
-#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
@@ -125,11 +124,6 @@ static uct_iface_t ucp_failed_tl_iface = {
 
 static uct_ep_t ucp_failed_tl_ep = {
     .iface = &ucp_failed_tl_iface
-};
-
-static const char *ucp_err_handling_mode_names[] = {
-    [UCP_ERR_HANDLING_MODE_NONE] = "none",
-    [UCP_ERR_HANDLING_MODE_PEER] = "peer"
 };
 
 
@@ -3248,36 +3242,7 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     }
 }
 
-static void ucp_ep_vfs_show_peer_name(void *obj, ucs_string_buffer_t *strb,
-                                      void *arg_ptr, uint64_t arg_u64)
-{
-    ucp_ep_h ep = obj;
-
-    ucs_string_buffer_appendf(strb, "%s\n", ucp_ep_peer_name(ep));
-}
-
-void ucp_ep_vfs_init(ucp_ep_h ep)
-{
-    ucp_err_handling_mode_t err_mode;
-
-#if ENABLE_DEBUG_DATA
-    ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%s", ep->name);
-    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_memory_address, NULL, 0,
-                            "memory_address");
-#else
-    ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%p", ep);
-#endif
-
-    ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_peer_name, NULL, 0,
-                            "peer_name");
-
-    err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive,
-                            (void*)ucp_err_handling_mode_names[err_mode],
-                            UCS_VFS_TYPE_STRING, "error_mode");
-}
-
-static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
+ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
     uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
     uct_ep_attr_t uct_cm_ep_attr;
@@ -3303,7 +3268,7 @@ static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
         return status;
     }
 
-    if (uct_cm_ep_attr.field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
         status = ucs_sockaddr_copy((struct sockaddr*)&attr->local_sockaddr,
                                    (struct sockaddr*)&uct_cm_ep_attr.local_address);
         if (status != UCS_OK) {
@@ -3311,7 +3276,7 @@ static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
         }
     }
 
-    if (uct_cm_ep_attr.field_mask & UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
         status = ucs_sockaddr_copy((struct sockaddr*)&attr->remote_sockaddr,
                                    (struct sockaddr*)&uct_cm_ep_attr.remote_address);
         if (status != UCS_OK) {
