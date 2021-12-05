@@ -1544,6 +1544,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
+    /* Invoke a user's error callback and release TX/FC resources before
+     * releasing DCI to have DCI for doing possible flush(CANCEL) */
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
