@@ -22,6 +22,24 @@
 #include <endian.h>
 
 #ifdef ENABLE_STATS
+static ucs_stats_class_t uct_rc_fc_stats_class = {
+    .name          = "rc_fc",
+    .num_counters  = UCT_RC_FC_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
+    .counter_names = {
+        [UCT_RC_FC_STAT_NO_CRED]            = "no_cred",
+        [UCT_RC_FC_STAT_TX_GRANT]           = "tx_grant",
+        [UCT_RC_FC_STAT_TX_PURE_GRANT]      = "tx_pure_grant",
+        [UCT_RC_FC_STAT_TX_SOFT_REQ]        = "tx_soft_req",
+        [UCT_RC_FC_STAT_TX_HARD_REQ]        = "tx_hard_req",
+        [UCT_RC_FC_STAT_RX_GRANT]           = "rx_grant",
+        [UCT_RC_FC_STAT_RX_PURE_GRANT]      = "rx_pure_grant",
+        [UCT_RC_FC_STAT_RX_SOFT_REQ]        = "rx_soft_req",
+        [UCT_RC_FC_STAT_RX_HARD_REQ]        = "rx_hard_req",
+        [UCT_RC_FC_STAT_FC_WND]             = "fc_wnd"
+    }
+};
+
 static ucs_stats_class_t uct_rc_txqp_stats_class = {
     .name          = "rc_txqp",
     .num_counters  = UCT_RC_TXQP_STAT_LAST,
@@ -59,6 +77,34 @@ void uct_rc_txqp_vfs_populate(uct_rc_txqp_t *txqp, void *parent_obj)
                             &txqp->unsignaled, UCS_VFS_TYPE_U16, "unsignaled");
     ucs_vfs_obj_add_ro_file(parent_obj, ucs_vfs_show_primitive,
                             &txqp->available, UCS_VFS_TYPE_I16, "available");
+}
+
+void uct_rc_fc_reset(const uct_rc_iface_t *iface, uct_rc_fc_t *fc)
+{
+    fc->fc_wnd = iface->config.fc_wnd_size;
+}
+
+ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, const uct_rc_iface_t *iface
+                            UCS_STATS_ARG(ucs_stats_node_t* stats_parent))
+{
+    ucs_status_t status;
+
+    uct_rc_fc_reset(iface, fc);
+
+    status = UCS_STATS_NODE_ALLOC(&fc->stats, &uct_rc_fc_stats_class,
+                                  stats_parent, "");
+    if (status != UCS_OK) {
+       return status;
+    }
+
+    UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
+
+    return UCS_OK;
+}
+
+void uct_rc_fc_cleanup(uct_rc_fc_t *fc)
+{
+    UCS_STATS_NODE_FREE(fc->stats);
 }
 
 void uct_rc_ep_cleanup_qp(uct_rc_ep_t *ep,
@@ -104,8 +150,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_ep_t, uct_rc_iface_t *iface, uint32_t qp_num,
     self->path_index = UCT_EP_PARAMS_GET_PATH_INDEX(params);
     self->flags      = 0;
 
-    status = uct_rc_iface_fc_init(iface, &self->fc
-                                  UCS_STATS_ARG(self->super.stats));
+    status = uct_rc_fc_init(&self->fc, iface
+                            UCS_STATS_ARG(self->super.stats));
     if (status != UCS_OK) {
         goto err_txqp_cleanup;
     }
@@ -141,7 +187,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_ep_t)
 
     uct_rc_ep_pending_purge(&self->super.super,
                             uct_rc_ep_pending_purge_warn_cb, self);
-    uct_rc_iface_fc_cleanup(iface, &self->fc);
+    uct_rc_fc_cleanup(&self->fc);
     uct_rc_txqp_cleanup(iface, &self->txqp);
 }
 

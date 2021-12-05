@@ -204,6 +204,13 @@ struct uct_rc_txqp {
     UCS_STATS_NODE_DECLARE(stats)
 };
 
+typedef struct uct_rc_fc {
+    /* Not more than fc_wnd active messages can be sent w/o acknowledgment */
+    int16_t             fc_wnd;
+    /* used only for FC protocol at this point (3 higher bits) */
+    UCS_STATS_NODE_DECLARE(stats)
+} uct_rc_fc_t;
+
 struct uct_rc_ep {
     uct_base_ep_t       super;
     uct_rc_txqp_t       txqp;
@@ -255,6 +262,13 @@ ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
 
 void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void*arg);
+
+void uct_rc_fc_reset(const uct_rc_iface_t *iface, uct_rc_fc_t *fc);
+
+ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, const uct_rc_iface_t *iface
+                            UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
+
+void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_ep_fc_grant(uct_pending_req_t *self);
 

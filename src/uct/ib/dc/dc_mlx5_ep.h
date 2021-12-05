@@ -294,8 +294,8 @@ uct_dc_mlx5_ep_basic_init(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
         ep->dci = UCT_DC_MLX5_EP_NO_DCI;
     }
 
-    return uct_rc_iface_fc_init(&iface->super.super, &ep->fc
-                                UCS_STATS_ARG(ep->super.stats));
+    return uct_rc_fc_init(&ep->fc, &iface->super.super
+                          UCS_STATS_ARG(ep->super.stats));
 }
 
 static UCS_F_ALWAYS_INLINE int
