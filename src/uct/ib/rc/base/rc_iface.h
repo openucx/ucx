@@ -320,6 +320,14 @@ UCS_CLASS_DECLARE(uct_rc_iface_t, uct_iface_ops_t*, uct_rc_iface_ops_t*,
                   const uct_ib_iface_init_attr_t*);
 
 
+typedef struct uct_rc_fc {
+    /* Not more than fc_wnd active messages can be sent w/o acknowledgment */
+    int16_t             fc_wnd;
+    /* used only for FC protocol at this point (3 higher bits) */
+    UCS_STATS_NODE_DECLARE(stats)
+} uct_rc_fc_t;
+
+
 struct uct_rc_iface_send_op {
     union {
         ucs_queue_elem_t          queue;  /* used when enqueued on a txqp */
@@ -380,6 +388,14 @@ void uct_rc_iface_add_qp(uct_rc_iface_t *iface, uct_rc_ep_t *ep,
                          unsigned qp_num);
 
 void uct_rc_iface_remove_qp(uct_rc_iface_t *iface, unsigned qp_num);
+
+void uct_rc_iface_fc_reset(const uct_rc_iface_t *iface, uct_rc_fc_t *fc);
+
+ucs_status_t
+uct_rc_iface_fc_init(const uct_rc_iface_t *iface, uct_rc_fc_t *fc
+                     UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
+
+void uct_rc_iface_fc_cleanup(const uct_rc_iface_t *iface, uct_rc_fc_t *fc);
 
 ucs_status_t uct_rc_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp);

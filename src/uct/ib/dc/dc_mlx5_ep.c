@@ -1101,7 +1101,7 @@ static void uct_dc_mlx5_ep_fc_cleanup(uct_dc_mlx5_ep_t *ep)
                                                 uct_dc_mlx5_iface_t);
     khiter_t it;
 
-    uct_rc_fc_cleanup(&ep->fc);
+    uct_rc_iface_fc_cleanup(ucs_derived_of(iface, uct_rc_iface_t), &ep->fc);
 
     it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)ep);
     if (it != kh_end(&iface->tx.fc_hash)) {
@@ -1544,6 +1544,8 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
+    /* Invoke a user's error callback before releasing DCI to have DCI for
+     * doing possible flush(CANCEL) */
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
     ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
