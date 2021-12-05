@@ -65,7 +65,7 @@ AS_IF([test "x$with_fuse3" != "xno" -o "x$with_fuse3_static" != "xno"],
        CPPFLAGS="$save_CPPFLAGS"
        LDFLAGS="$save_LDFLAGS"
        LIBS="$save_LIBS"
-       PKG_CONFIG_PATH="$save_PKG_CONFIG_PATH"
+       export PKG_CONFIG_PATH="$save_PKG_CONFIG_PATH"
     ],
     [AC_MSG_WARN([FUSEv3 was explicitly disabled])]
 )
