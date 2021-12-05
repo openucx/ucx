@@ -613,8 +613,7 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep,
-                                           flags & UCT_FLUSH_FLAG_CANCEL)) {
+    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 
@@ -1201,7 +1200,7 @@ ucs_status_t uct_dc_mlx5_ep_pending_add(uct_ep_h tl_ep, uct_pending_req_t *r,
                 return UCS_ERR_BUSY;
             }
         } else {
-            if (uct_dc_mlx5_iface_dci_ep_can_send(ep, 0)) {
+            if (uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
                 return UCS_ERR_BUSY;
             }
         }
@@ -1265,7 +1264,7 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
      * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL));
 
-    ucs_assertv(!uct_dc_mlx5_iface_dci_ep_can_send(ep, 0),
+    ucs_assertv(!uct_dc_mlx5_iface_dci_ep_can_send(ep),
                 "pending callback returned error, but send resources are"
                 " available");
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
@@ -1543,7 +1542,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
 
     ucs_assert(!uct_dc_mlx5_iface_is_dci_rand(iface));
 
-    uct_rc_fc_reset(&ep->fc, &iface->super.super);
+    uct_rc_fc_reset(&iface->super.super, &ep->fc);
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
 

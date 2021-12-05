@@ -79,7 +79,7 @@ void uct_rc_txqp_vfs_populate(uct_rc_txqp_t *txqp, void *parent_obj)
                             &txqp->available, UCS_VFS_TYPE_I16, "available");
 }
 
-void uct_rc_fc_reset(uct_rc_fc_t *fc, const uct_rc_iface_t *iface)
+void uct_rc_fc_reset(const uct_rc_iface_t *iface, uct_rc_fc_t *fc)
 {
     fc->fc_wnd = iface->config.fc_wnd_size;
 }
@@ -89,7 +89,7 @@ ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, const uct_rc_iface_t *iface
 {
     ucs_status_t status;
 
-    uct_rc_fc_reset(fc, iface);
+    uct_rc_fc_reset(iface, fc);
 
     status = UCS_STATS_NODE_ALLOC(&fc->stats, &uct_rc_fc_stats_class,
                                   stats_parent, "");

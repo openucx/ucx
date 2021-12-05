@@ -93,7 +93,7 @@ static void uct_rc_verbs_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
         return;
     }
 
-    uct_rc_fc_reset(&ep->super.fc, iface);
+    uct_rc_fc_reset(iface, &ep->super.fc);
     count = uct_rc_verbs_get_tx_res_count(ep, wc);
     uct_rc_txqp_purge_outstanding(iface, &ep->super.txqp, ep_status,
                                   ep->txcnt.ci + count, 0);

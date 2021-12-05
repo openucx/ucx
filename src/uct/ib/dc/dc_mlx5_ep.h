@@ -352,22 +352,12 @@ uct_dc_mlx5_iface_progress_pending(uct_dc_mlx5_iface_t *iface,
                           uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)));
 }
 
-static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep,
-                                                    int flush_cancel)
+static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
-                                                uct_dc_mlx5_iface_t);
-
-    if (!uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
-        return 0;
-    } if (flush_cancel) {
-        /* Ignore FC limitations and waiting of TX resources when performing
-         * flush(CANCEL) */
-        return 1;
-    }
-
-    return !(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT) &&
-           uct_rc_fc_has_resources(&iface->super.super, &ep->fc);
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_dc_mlx5_iface_t);
+    return (!(ep->flags & UCT_DC_MLX5_EP_FLAG_TX_WAIT)) &&
+           uct_rc_fc_has_resources(&iface->super.super, &ep->fc) &&
+           uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci);
 }
 
 static UCS_F_ALWAYS_INLINE
