@@ -404,6 +404,8 @@ uct_dc_mlx5_iface_dci_put(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     ucs_arbiter_t *waitq;
     uint8_t pool_index;
 
+    ucs_assert(dci_index != UCT_DC_MLX5_EP_NO_DCI);
+
     if (uct_dc_mlx5_iface_is_dci_rand(iface) ||
         uct_dc_mlx5_iface_is_dci_keepalive(iface, dci_index)) {
         return;

@@ -1531,10 +1531,11 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_iface_h tl_iface       = ep->super.super.iface;
     uint8_t dci_index          = ep->dci;
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
-    uct_rc_txqp_t *txqp        = &iface->tx.dcis[dci_index].txqp;
-    uct_ib_mlx5_txwq_t *txwq   = &iface->tx.dcis[dci_index].txwq;
     uint16_t pi                = ntohs(cqe->wqe_counter);
     uint8_t pool_index;
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+
+    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
 
     ucs_debug("handle failure iface %p, ep %p, dci[%d] qpn 0x%x, status: %s",
               iface, ep, dci_index, txwq->super.qp_num,
@@ -1545,10 +1546,15 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
     uct_dc_mlx5_update_tx_res(iface, txwq, txqp, pi);
     uct_rc_txqp_purge_outstanding(&iface->super.super, txqp, ep_status, pi, 0);
 
-    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
-    /* Try to return DCI into iface stack */
-    uct_dc_mlx5_iface_dci_put(iface, dci_index);
+    /* Invoke a user's error callback and release TX/FC resources before
+     * releasing DCI, to have DCI for doing possible flush(CANCEL) */
     uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
+
+    if (ep->dci != UCT_DC_MLX5_EP_NO_DCI) {
+        /* If DCI wasn't detached during purging of pending queue inside a
+         * user's error callback, try to return DCI into iface stack */
+        uct_dc_mlx5_iface_dci_put(iface, dci_index);
+    }
 
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
         /* No more operations scheduled on DCI, reset it.

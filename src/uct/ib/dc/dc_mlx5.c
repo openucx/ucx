@@ -1154,13 +1154,12 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
-        ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
+        uct_rc_fc_restore_wnd(rc_iface, &ep->fc);
 
         /* Remove entry for flush to complete */
         kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
 
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
-        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0 */
@@ -1605,12 +1604,13 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
         return;
     }
 
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
+    uct_rc_fc_restore_wnd(&iface->super.super, &ep->fc);
+
     status  = uct_iface_handle_ep_err(&ib_iface->super.super,
                                       &ep->super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
     uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
                                     txwq, log_lvl);
-
-    ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
 }

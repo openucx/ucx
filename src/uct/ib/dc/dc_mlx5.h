@@ -49,6 +49,7 @@ struct ibv_ravh {
 
 #define UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, _dci, _txqp, _txwq) \
     { \
+        ucs_assert(_dci != UCT_DC_MLX5_EP_NO_DCI); \
         _txqp = &(_iface)->tx.dcis[_dci].txqp; \
         _txwq = &(_iface)->tx.dcis[_dci].txwq; \
     }
