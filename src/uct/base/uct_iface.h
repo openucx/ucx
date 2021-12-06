@@ -239,11 +239,16 @@ typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
 typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 
+/* Invalidate the ep to emulate transport level error */
+typedef ucs_status_t (*uct_ep_invalidate_func_t)(uct_ep_h ep, unsigned flags);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_estimate_perf_func_t iface_estimate_perf;
     uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
     uct_ep_query_func_t            ep_query;
+    uct_ep_invalidate_func_t       ep_invalidate;
 } uct_iface_internal_ops_t;
 
 
@@ -860,6 +865,7 @@ ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 
 void uct_iface_vfs_refresh(void *obj);
 
+ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_zcopy(uct_ep_operation_t op)
 {

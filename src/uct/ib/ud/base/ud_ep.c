@@ -287,6 +287,20 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_last_ack_received(uct_ud_ep_t *ep)
     return UCT_UD_PSN_COMPARE(ep->tx.acked_psn, ==, ep->tx.psn - 1);
 }
 
+static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_ud_iface_t);
+
+    ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
+                           uct_ud_ep_deferred_timeout_handler, ep,
+                           UCS_CALLBACKQ_FLAG_ONESHOT);
+    if (iface->async.event_cb != NULL) {
+        /* notify user */
+        iface->async.event_cb(iface->async.event_arg, 0);
+    }
+}
+
 static void uct_ud_ep_timer(ucs_wtimer_t *self)
 {
     uct_ud_ep_t    *ep    = ucs_container_of(self, uct_ud_ep_t, timer);
@@ -315,13 +329,7 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
                   ep, ucs_time_to_sec(diff),
                   ucs_time_to_sec(iface->config.peer_timeout));
-        ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
-                               uct_ud_ep_deferred_timeout_handler, ep,
-                               UCS_CALLBACKQ_FLAG_ONESHOT);
-        if (iface->async.event_cb != NULL) {
-            /* notify user */
-            iface->async.event_cb(iface->async.event_arg, 0);
-        }
+        uct_ud_ep_handle_timeout(ep);
         return;
     }
 
@@ -1702,4 +1710,16 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
                    UCT_UD_SLOW_TIMER_MAX_TICK(iface));
 
     uct_ud_leave(iface);
+}
+
+ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+{
+    uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_ud_iface_t);
+
+    uct_ud_enter(iface);
+    uct_ud_ep_handle_timeout(ep);
+    uct_ud_leave(iface);
+    return UCS_OK;
 }

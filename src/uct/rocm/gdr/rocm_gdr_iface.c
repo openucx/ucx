@@ -104,6 +104,7 @@ static uct_iface_ops_t uct_rocm_gdr_iface_ops = {
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_gdr_ep_t),
+    .ep_invalidate            = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_gdr_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
