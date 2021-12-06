@@ -127,6 +127,10 @@ public:
 
         unsigned progress(int worker_index = 0);
 
+        ucp_mem_h mem_map(void *address, size_t length);
+
+        void mem_unmap(ucp_mem_h memh);
+
         int get_num_workers() const;
 
         int get_num_eps(int worker_index = 0) const;
