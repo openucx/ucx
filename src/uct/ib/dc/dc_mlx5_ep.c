@@ -588,32 +588,29 @@ ucs_status_t uct_dc_mlx5_ep_get_zcopy(uct_ep_h tl_ep, const uct_iov_t *iov,
     return UCS_INPROGRESS;
 }
 
-ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
-                                  uct_completion_t *comp)
+static UCS_F_NOINLINE ucs_status_t
+uct_dc_mlx5_ep_flush_cancel(uct_dc_mlx5_ep_t *ep)
 {
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_dc_mlx5_iface_t);
-    uct_dc_mlx5_ep_t    *ep    = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
-    uct_ib_mlx5_md_t    *md    = ucs_derived_of(iface->super.super.super.super.md,
-                                                uct_ib_mlx5_md_t);
-    uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
-    ucs_status_t        status;
-    uint16_t            sn;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    uct_ib_mlx5_md_t *md       =
+            ucs_derived_of(iface->super.super.super.super.md,
+                           uct_ib_mlx5_md_t);
+    ucs_status_t status;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
+    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        /* flush(cancel) is supported only with error handling, which is not
+         * supported by random policy */
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
-            UCT_TL_EP_STAT_FLUSH(&ep->super); /* no sends */
-            return UCS_OK;
-        }
-
-        return UCS_ERR_NO_RESOURCE; /* waiting for dci */
+        UCT_TL_EP_STAT_FLUSH(&ep->super);
+        return UCS_OK; /* nothing to cancel */
     }
 
-    if (!uct_dc_mlx5_iface_has_tx_resources(iface)) {
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    if (!uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
+    if (!uct_dc_mlx5_iface_dci_has_tx_resources(iface, ep->dci)) {
         return UCS_ERR_NO_RESOURCE; /* cannot send */
     }
 
@@ -623,45 +620,75 @@ ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         return UCS_OK; /* all sends completed */
     }
 
-    ucs_assert(status == UCS_INPROGRESS);
-    ucs_assert(ep->dci != UCT_DC_MLX5_EP_NO_DCI);
+    /* Must be after uct_dc_mlx5_iface_flush_dci() so if QP is flushed already
+     * we will return OK for the subsequent flush(cancel) operations */
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL) {
+        return UCS_INPROGRESS;
+    }
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
-    sn = txwq->sig_pi;
+    status = uct_ib_mlx5_modify_qp_state(md, &txwq->super, IBV_QPS_ERR);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL;
+
+    /* Post NOP on the DCI to avoid releasing it from dci_put while it's in
+     * error state. We could check its state when it's released, but it would
+     * add another branch on the fast path. */ 
+    uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI, txqp, txwq,
+                                 MLX5_OPCODE_NOP, NULL, 0, 0, 0, 0, 0, 0,
+                                 &ep->av, uct_dc_mlx5_ep_get_grh(ep),
+                                 uct_ib_mlx5_wqe_av_size(&ep->av), 0, INT_MAX);
+
+    return UCS_INPROGRESS;
+}
+
+ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
+                                  uct_completion_t *comp)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_ep->iface,
+                                                uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_ep_t *ep       = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+    uint8_t pool_index         = uct_dc_mlx5_ep_pool_index(ep);
+    ucs_status_t status;
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        UCT_DC_MLX5_CHECK_RES(iface, ep);
-
-        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-            return UCS_ERR_UNSUPPORTED;
-        }
-
-        if (ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL) {
-            goto out;
-        }
-
-        status = uct_ib_mlx5_modify_qp_state(md, &txwq->super, IBV_QPS_ERR);
-        if (status != UCS_OK) {
+        status = uct_dc_mlx5_ep_flush_cancel(ep);
+        if (status != UCS_INPROGRESS) {
             return status;
         }
 
-        ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL;
-        sn         = txwq->sw_pi;
-        /* post NOP operation which will complete with error, to trigger DCI
-         * reset. Otherwise, DCI could be returned to poll in error state */
-        uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
-                                     txqp, txwq,
-                                     MLX5_OPCODE_NOP, NULL, 0,
-                                     0, 0, 0,
-                                     0, 0,
-                                     &ep->av, uct_dc_mlx5_ep_get_grh(ep),
-                                     uct_ib_mlx5_wqe_av_size(&ep->av),
-                                     0, INT_MAX);
+        goto out;
+    }
+
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        if (uct_dc_mlx5_iface_dci_can_alloc(iface, pool_index)) {
+            UCT_TL_EP_STAT_FLUSH(&ep->super);
+            return UCS_OK; /* nothing to flush */
+        }
+
+        return UCS_ERR_NO_RESOURCE; /* waiting for dci */
+    }
+
+    if (!uct_dc_mlx5_iface_has_tx_resources(iface) ||
+        !uct_dc_mlx5_iface_dci_ep_can_send(ep)) {
+        return UCS_ERR_NO_RESOURCE; /* cannot send */
+    }
+
+    status = uct_dc_mlx5_iface_flush_dci(iface, ep->dci);
+    if (status == UCS_OK) {
+        UCT_TL_EP_STAT_FLUSH(&ep->super);
+        return UCS_OK; /* all sends completed */
     }
 
 out:
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
     return uct_rc_txqp_add_flush_comp(&iface->super.super, &ep->super, txqp,
-                                      comp, sn);
+                                      comp, txwq->sig_pi);
 }
 
 #if IBV_HW_TM
