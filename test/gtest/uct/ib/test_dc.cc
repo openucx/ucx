@@ -543,11 +543,11 @@ UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
     pending_req.uct.func = pending_cb;
     pending_req.cb_count = 0;
 
-    set_fc_disabled(m_e1);
-
     /* Send on new endpoints until out of DCIs */
     for (int ep_index = 0; ep_index < 20; ++ep_index) {
         m_e1->connect(ep_index, *m_e2, ep_index);
+
+        set_fc_disabled(m_e1);
 
         ucs_status_t status = uct_ep_am_short(m_e1->ep(ep_index), 0, 0, NULL, 0);
         if (status == UCS_ERR_NO_RESOURCE) {
@@ -560,13 +560,15 @@ UCS_TEST_P(test_dc_flow_control, fc_disabled_pending_no_dci) {
 
             wait_for_flag(&pending_req.cb_count);
             EXPECT_EQ(1, pending_req.cb_count);
+
+            set_fc_enabled(m_e1);
             break;
         }
 
         ASSERT_UCS_OK(status);
-    }
 
-    set_fc_enabled(m_e1);
+        set_fc_enabled(m_e1);
+    }
 }
 
 /* Check that soft request is not handled by DC */
