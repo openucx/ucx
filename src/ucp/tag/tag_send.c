@@ -264,9 +264,15 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
                                              contig_length, tag);
             ucp_request_send_check_status(status, ret, goto out);
         }
-    } else {
+    } else if (attr_mask == UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
         datatype      = ucp_dt_make_contig(1);
         contig_length = count;
+    } else {
+        /* UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL */
+        datatype = param->datatype;
+        if (UCP_DT_IS_CONTIG(datatype)) {
+            contig_length = ucp_contig_dt_length(datatype, count);
+        }
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
