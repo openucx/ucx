@@ -32,6 +32,14 @@
 ## C++
   * used only for unit testing
   * lower-case class names (same as stl/boost)
+  * the unit tests in test/gtest are written using [C++11](https://en.cppreference.com/w/cpp/11). Whenever applicable, the usage of advanced language features is allowed and preferred over legacy code. For example:
+    * Prefer references over pointers
+    * `auto` for type deduction 
+    * Use [move semantics](https://www.cprogramming.com/c++11/rvalue-references-and-move-semantics-in-c++11.html) where applicable
+    * `constexpr` for compile-time values, instead of `const` or `#define`
+    * `using` [instead of](https://en.cppreference.com/w/cpp/language/type_alias) `typedef`
+    * [List initialization](https://en.cppreference.com/w/cpp/language/list_initialization)
+    * [Range-based](https://en.cppreference.com/w/cpp/language/range-for) `for` loop
  
 
 ## Include order:
