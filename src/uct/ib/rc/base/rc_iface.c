@@ -374,8 +374,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
-        ep->fc.fc_wnd = iface->config.fc_wnd_size;
-        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
+        uct_rc_fc_restore_wnd(iface, &ep->fc);
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0

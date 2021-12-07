@@ -327,6 +327,13 @@ int uct_rc_fc_has_resources(uct_rc_iface_t *iface, uct_rc_fc_t *fc)
     return (fc->fc_wnd > 0) || !iface->config.fc_enabled;
 }
 
+static UCS_F_ALWAYS_INLINE void uct_rc_fc_restore_wnd(uct_rc_iface_t *iface,
+                                                      uct_rc_fc_t *fc)
+{
+    fc->fc_wnd = iface->config.fc_wnd_size;
+    UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
+}
+
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)
 {
     uct_rc_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_rc_iface_t);
