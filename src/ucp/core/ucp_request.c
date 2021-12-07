@@ -633,6 +633,9 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     ucp_trace_req(req, "fast-forward with status %s",
                   ucs_status_string(status));
 
+    ucs_assertv(UCS_STATUS_IS_ERR(status), "status=%s",
+                ucs_status_string(status));
+
     /* Set REMOTE_COMPLETED flag to make sure that TAG/Sync operations will be
      * fully completed here */
     req->flags |= UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
@@ -657,6 +660,11 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         ucp_ep_flush_request_ff(req, status);
     } else if (req->send.state.uct_comp.func ==
                ucp_worker_discard_uct_ep_flush_comp) {
+        /* Discard operations with flush(LOCAL) could be started (e.g. closing
+         * unneeded UCT EPs from intersection procedure), convert them to
+         * flush(CANCEL) to avoid flushing failed UCT EPs
+         */
+        req->send.discard_uct_ep.ep_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
         ucp_worker_discard_uct_ep_progress(req);
     } else if (req->send.state.uct_comp.func != NULL) {
         /* Fast-forward the sending state to complete the operation when last
