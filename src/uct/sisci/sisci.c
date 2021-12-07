@@ -392,7 +392,7 @@ int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
     return 1;
 }
 
-ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
+ucs_status_t uct_sisci_iface_get_address(uct_iface_t tl_iface,
                                                uct_iface_addr_t *addr)
 {
     //TODO
