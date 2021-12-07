@@ -10,6 +10,7 @@
 
 #include <ucs/type/status.h>
 #include <ucs/async/async_fwd.h>
+#include <ucs/arch/atomic.h>
 #include <pthread.h>
 #include <errno.h>
 
@@ -18,16 +19,26 @@ BEGIN_C_DECLS
 /** @file spinlock.h */
 
 
+/* Spinlock static initializer */
+#define UCS_SPINLOCK_INITIALIZER {UCS_SPINLOCK_FREE}
+
+
 /* Spinlock creation modifiers */
 enum {
     UCS_SPINLOCK_FLAG_SHARED = UCS_BIT(0) /**< Make spinlock sharable in memory */
+};
+
+/* Spinlock state constants */
+enum {
+    UCS_SPINLOCK_FREE = 0,
+    UCS_SPINLOCK_BUSY = 1
 };
 
 /**
  * Simple spinlock.
  */
 typedef struct ucs_spinlock {
-    pthread_spinlock_t lock;
+    volatile unsigned int lock;
 } ucs_spinlock_t;
 
 /**
@@ -42,19 +53,7 @@ typedef struct ucs_recursive_spinlock {
 
 static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock, int flags)
 {
-    int ret, lock_flags;
-
-    if (flags & UCS_SPINLOCK_FLAG_SHARED) {
-        lock_flags = PTHREAD_PROCESS_SHARED;
-    } else {
-        lock_flags = PTHREAD_PROCESS_PRIVATE;
-    }
-
-    ret = pthread_spin_init(&lock->lock, lock_flags);
-    if (ret != 0) {
-        return UCS_ERR_IO_ERROR;
-    }
-
+    lock->lock = UCS_SPINLOCK_FREE;
     return UCS_OK;
 }
 
@@ -78,9 +77,24 @@ ucs_recursive_spin_is_owner(const ucs_recursive_spinlock_t *lock,
     return lock->owner == self;
 }
 
+static inline int ucs_spin_try_lock(ucs_spinlock_t *lock)
+{
+    return ucs_atomic_cswap32(&lock->lock, UCS_SPINLOCK_FREE,
+                              UCS_SPINLOCK_BUSY) == UCS_SPINLOCK_FREE;
+}
+
 static inline void ucs_spin_lock(ucs_spinlock_t *lock)
 {
-    pthread_spin_lock(&lock->lock);
+    while (!ucs_spin_try_lock(lock)) {
+        while (lock->lock != UCS_SPINLOCK_FREE) {
+            /* spin */
+        }
+    }
+}
+
+static inline void ucs_spin_unlock(ucs_spinlock_t *lock)
+{
+    lock->lock = UCS_SPINLOCK_FREE;
 }
 
 static inline void ucs_recursive_spin_lock(ucs_recursive_spinlock_t *lock)
@@ -95,15 +109,6 @@ static inline void ucs_recursive_spin_lock(ucs_recursive_spinlock_t *lock)
     ucs_spin_lock(&lock->super);
     lock->owner = self;
     ++lock->count;
-}
-
-static inline int ucs_spin_try_lock(ucs_spinlock_t *lock)
-{
-    if (pthread_spin_trylock(&lock->lock) != 0) {
-        return 0;
-    }
-
-    return 1;
 }
 
 static inline int ucs_recursive_spin_trylock(ucs_recursive_spinlock_t *lock)
@@ -122,11 +127,6 @@ static inline int ucs_recursive_spin_trylock(ucs_recursive_spinlock_t *lock)
     lock->owner = self;
     ++lock->count;
     return 1;
-}
-
-static inline void ucs_spin_unlock(ucs_spinlock_t *lock)
-{
-    pthread_spin_unlock(&lock->lock);
 }
 
 static inline void ucs_recursive_spin_unlock(ucs_recursive_spinlock_t *lock)
