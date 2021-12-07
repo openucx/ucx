@@ -409,6 +409,7 @@ ucs_status_t uct_single_device_resource(uct_md_h md, const char *dev_name,
 
     device = ucs_calloc(1, sizeof(*device), "device resource");
     if (NULL == device) {
+        printf("happens?\n");
         ucs_error("failed to allocate device resource");
         return UCS_ERR_NO_MEMORY;
     }
