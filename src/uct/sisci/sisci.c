@@ -373,12 +373,14 @@ int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
                                        const uct_device_addr_t *dev_addr,
                                        const uct_iface_addr_t *iface_addr)
 {
-    //TODO
+    //TODO make not die
+    
     //const uct_self_iface_t     *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
     //const uct_self_iface_addr_t *addr = (const uct_self_iface_addr_t*)iface_addr;
 
     //return (addr != NULL) && (iface->id == *addr);
-    return 0;
+    printf("UCT_sisci_iface_is reachable\n");
+    return 1;
 }
 
 static ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
