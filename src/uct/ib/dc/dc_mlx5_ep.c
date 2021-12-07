@@ -254,7 +254,7 @@ uct_dc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  uct_ib_mlx5_wqe_av_size(&ep->av),
                                  MLX5_WQE_CTRL_SOLICITED, INT_MAX);
 
-    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->fc);
+    UCT_RC_UPDATE_FC_WND(&ep->fc);
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(hdr) + length);
     return UCS_OK;
 }
@@ -276,7 +276,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_dc_mlx5_ep_am_short_iov_inline(
                                      iov, iovcnt, iov_length, id, &ep->av,
                                      uct_dc_mlx5_ep_get_grh(ep),
                                      uct_ib_mlx5_wqe_av_size(&ep->av));
-    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->fc);
+    UCT_RC_UPDATE_FC_WND(&ep->fc);
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, iov_length);
 
     return UCS_OK;
@@ -319,7 +319,7 @@ ucs_status_t uct_dc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
         return status;
     }
     UCT_TL_EP_STAT_OP(&ep->super, AM, SHORT, sizeof(cache.am_hdr) + length);
-    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->fc);
+    UCT_RC_UPDATE_FC_WND(&ep->fc);
     return UCS_OK;
 #endif
 }
@@ -356,7 +356,7 @@ ucs_status_t uct_dc_mlx5_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
         return status;
     }
 
-    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->fc);
+    UCT_RC_UPDATE_FC_WND(&ep->fc);
 
     return UCS_OK;
 #endif
@@ -381,7 +381,7 @@ ssize_t uct_dc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                  sizeof(uct_rc_mlx5_hdr_t) + length, 0, 0, desc,
                                  MLX5_WQE_CTRL_SOLICITED, 0, desc + 1, NULL);
 
-    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->fc);
+    UCT_RC_UPDATE_FC_WND(&ep->fc);
     UCT_TL_EP_STAT_OP(&ep->super, AM, BCOPY, length);
     return length;
 }
@@ -406,7 +406,7 @@ ucs_status_t uct_dc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
                                  uct_rc_ep_send_op_completion_handler, 0,
                                  comp, MLX5_WQE_CTRL_SOLICITED);
 
-    UCT_RC_UPDATE_FC_WND(&iface->super.super, &ep->fc);
+    UCT_RC_UPDATE_FC_WND(&ep->fc);
     UCT_TL_EP_STAT_OP(&ep->super, AM, ZCOPY, header_length +
                       uct_iov_total_length(iov, iovcnt));
 

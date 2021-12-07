@@ -96,7 +96,7 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  MLX5_WQE_CTRL_SOLICITED,
                                  INT_MAX);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
     return UCS_OK;
 }
 
@@ -111,7 +111,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_ep_am_short_iov_inline(
                                      &ep->tx.wq, iov, iovcnt, iov_length, id,
                                      NULL, NULL, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, iov_length);
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
 
     return UCS_OK;
 }
@@ -258,7 +258,6 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
 #if HAVE_IBV_DM
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    uct_rc_iface_t *rc_iface = &iface->super;
     ucs_status_t status;
     uct_rc_mlx5_dm_copy_data_t cache;
 
@@ -286,7 +285,7 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     }
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(cache.am_hdr) + length);
-    UCT_RC_UPDATE_FC(rc_iface, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
     return UCS_OK;
 #endif
 }
@@ -319,7 +318,7 @@ ucs_status_t uct_rc_mlx5_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
         return status;
     }
 
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
 
     return UCS_OK;
 #endif
@@ -345,7 +344,7 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                        NULL, NULL, 0, MLX5_WQE_CTRL_SOLICITED,
                                        0, desc, desc + 1, NULL);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
 
     return length;
 }
@@ -372,7 +371,7 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     if (ucs_likely(status >= 0)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
                           header_length + uct_iov_total_length(iov, iovcnt));
-        UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+        UCT_RC_UPDATE_FC(&ep->super, id);
     }
     return status;
 }
