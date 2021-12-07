@@ -165,6 +165,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
 {
+    ucs_status_t status = -1;
     /*
         At this point its not clear if the memory domain has been opened yet.
         The memory domain is most likely opened.
@@ -181,11 +182,15 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
     /* 
         Taken from self.c, 
     */
-    return uct_single_device_resource(md, UCT_SISCI_NAME,
+
+    
+    status = uct_single_device_resource(md, UCT_SISCI_NAME,
                                       UCT_DEVICE_TYPE_SHM,
                                       UCS_SYS_DEVICE_ID_UNKNOWN, devices_p,
                                       num_devices_p);
     
+    printf("query_devices_status: %d\n", status);
+    return status; 
 
     //return UCS_ERR_NO_DEVICE;
     //return UCS_OK;
