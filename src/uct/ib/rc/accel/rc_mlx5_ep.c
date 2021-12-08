@@ -590,6 +590,9 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         if (status != UCS_OK) {
             return status;
         }
+
+        uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED,
+                                      0);
     }
 
     return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
