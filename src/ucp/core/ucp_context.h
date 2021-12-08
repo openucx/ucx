@@ -121,6 +121,8 @@ typedef struct ucp_context_config {
     unsigned                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
+    /** Maximum size of mem type direct rndv*/
+    size_t                                 rndv_memtype_direct_size;
     /** UCP sockaddr private data format version */
     ucp_object_version_t                   sa_client_min_hdr_version;
     /** Remote keys with that many remote MDs or less would be allocated from a
