@@ -279,6 +279,12 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     return UCS_OK;
 }
 
+static uct_sisci_md_t uct_sisci_md(){
+    //empty struct
+    //sci_error_t errors;
+    //sci_desc_t sc_descriptor;
+
+}
 
 ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
