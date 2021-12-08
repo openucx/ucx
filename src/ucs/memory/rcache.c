@@ -1294,12 +1294,12 @@ err_remove_vfs:
     ucs_vfs_obj_remove(self);
     ucs_rcache_global_list_remove(self);
 err_destroy_mp:
+    ucs_spinlock_destroy(&self->lru.lock);
     ucs_mpool_cleanup(&self->mp, 1);
 err_cleanup_pgtable:
     ucs_pgtable_cleanup(&self->pgtable);
 err_destroy_inv_q_lock:
     ucs_spinlock_destroy(&self->lock);
-err_destroy_rwlock:
     pthread_rwlock_destroy(&self->pgt_lock);
 err_destroy_stats:
     UCS_STATS_NODE_FREE(self->stats);
