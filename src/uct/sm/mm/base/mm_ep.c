@@ -124,6 +124,19 @@ static void uct_mm_ep_signal_remote(uct_mm_ep_t *ep)
     }
 }
 
+void uct_mm_ep_cleanup_remote_segs(uct_mm_ep_t *ep)
+{
+    uct_mm_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_mm_iface_t);
+    uct_mm_remote_seg_t remote_seg;
+
+    kh_foreach_value(&ep->remote_segs, remote_seg, {
+        uct_mm_iface_mapper_call(iface, mem_detach, &remote_seg);
+    })
+
+    kh_destroy_inplace(uct_mm_remote_seg, &ep->remote_segs);
+}
+
 static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
 {
     uct_mm_iface_t            *iface = ucs_derived_of(params->iface, uct_mm_iface_t);
@@ -163,14 +176,20 @@ static UCS_CLASS_INIT_FUNC(uct_mm_ep_t, const uct_ep_params_t *params)
     /* Initialize remote FIFO control structure */
     uct_mm_iface_set_fifo_ptrs(fifo_ptr, &self->fifo_ctl, &self->fifo_elems);
     self->cached_tail = self->fifo_ctl->tail;
-    self->keepalive   = NULL;
     ucs_arbiter_elem_init(&self->arb_elem);
+
+    status = uct_ep_keepalive_init(&self->keepalive, self->fifo_ctl->pid);
+    if (status != UCS_OK) {
+        goto err_free_segs;
+    }
 
     ucs_debug("created mm ep %p, connected to remote FIFO id 0x%"PRIx64,
               self, addr->fifo_seg_id);
 
     return UCS_OK;
 
+err_free_segs:
+    uct_mm_ep_cleanup_remote_segs(self);
 err_free_md_addr:
     ucs_free(self->remote_iface_addr);
 err:
@@ -179,18 +198,9 @@ err:
 
 static UCS_CLASS_CLEANUP_FUNC(uct_mm_ep_t)
 {
-    uct_mm_iface_t  *iface = ucs_derived_of(self->super.super.iface, uct_mm_iface_t);
-    uct_mm_remote_seg_t remote_seg;
-
-    ucs_free(self->keepalive);
     uct_mm_ep_pending_purge(&self->super.super, NULL, NULL);
-
-    kh_foreach_value(&self->remote_segs, remote_seg, {
-        uct_mm_iface_mapper_call(iface, mem_detach, &remote_seg);
-    })
-
+    uct_mm_ep_cleanup_remote_segs(self);
     ucs_free(self->remote_iface_addr);
-    kh_destroy_inplace(uct_mm_remote_seg, &self->remote_segs);
 }
 
 UCS_CLASS_DEFINE(uct_mm_ep_t, uct_base_ep_t)

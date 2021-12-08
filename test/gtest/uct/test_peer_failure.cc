@@ -464,23 +464,28 @@ UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
 class test_uct_keepalive : public uct_test {
 public:
     test_uct_keepalive() :
-        m_ka(NULL), m_pid(getpid()), m_entity(NULL), m_err_handler_count(0)
+        m_pid(getpid()), m_entity(NULL), m_err_handler_count(0)
     {
     }
 
     void init()
     {
-        ASSERT_UCS_OK(uct_ep_keepalive_create(m_pid, &m_ka));
-
         m_entity = create_entity(0, err_handler_cb);
         m_entity->connect(0, *m_entity, 0);
         m_entities.push_back(m_entity);
+        ASSERT_TRUE(has_mm());
     }
 
     void cleanup()
     {
         m_entities.clear();
-        ucs_free(m_ka);
+    }
+
+    uct_keepalive_info_t *m_ka()
+    {
+        uct_mm_ep_t *ep = ucs_derived_of(m_entity->ep(0), uct_mm_ep_t);
+
+        return &ep->keepalive;
     }
 
     static ucs_status_t
@@ -494,12 +499,11 @@ public:
 protected:
     void do_keepalive()
     {
-        ucs_status_t status = uct_ep_keepalive_check(m_entity->ep(0), &m_ka,
+        ucs_status_t status = uct_ep_keepalive_check(m_entity->ep(0), m_ka(),
                                                      m_pid, 0, NULL);
         EXPECT_UCS_OK(status);
     }
 
-    uct_keepalive_info_t *m_ka;
     pid_t                m_pid;
     entity               *m_entity;
     unsigned             m_err_handler_count;
@@ -513,7 +517,7 @@ UCS_TEST_P(test_uct_keepalive, ep_check)
     EXPECT_EQ(0u, m_err_handler_count);
 
     /* change start time saved in KA to force an error from EP check */
-    m_ka->start_time.tv_sec--;
+    m_ka()->start_time--;
 
     do_keepalive();
     EXPECT_EQ(0u, m_err_handler_count);
@@ -540,27 +544,18 @@ public:
          * peer EP, but instead we bit change process owner info to force
          * ep_check failure. Simulation of case when peer process is
          * terminated and PID is immediately reused by another process */
-        uct_ep_h tl_ep                = ep0();
-        uct_keepalive_info_t *ka_info = NULL;
 
         if (has_mm()) {
-            uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
-            ka_info         = ep->keepalive;
-            ASSERT_TRUE(ka_info != NULL);
+            uct_mm_ep_t *ep = ucs_derived_of(ep0(), uct_mm_ep_t);
+            ep->keepalive.start_time--;
         } else if (has_cuda_ipc()) {
 #if HAVE_CUDA
-            uct_cuda_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_cuda_ipc_ep_t);
-            ka_info               = ep->keepalive;
-            ASSERT_TRUE(ka_info != NULL);
+            uct_cuda_ipc_ep_t *ep = ucs_derived_of(ep0(), uct_cuda_ipc_ep_t);
+            ep->keepalive.start_time--;
 #endif
         } else if (has_cma()) {
-            uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
-            ka_info          = ep->keepalive;
-            ASSERT_TRUE(ka_info != NULL);
-        }
-
-        if (ka_info != NULL) {
-            ka_info->start_time.tv_sec--;
+            uct_cma_ep_t *ep = ucs_derived_of(ep0(), uct_cma_ep_t);
+            ep->keepalive.start_time--;
         }
 
         test_uct_peer_failure::kill_receiver();

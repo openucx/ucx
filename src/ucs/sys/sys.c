@@ -45,6 +45,7 @@
 #define UCS_PROCESS_NS_DIR         "/proc/self/ns"
 #define UCS_PROCESS_BOOTID_FILE    "/proc/sys/kernel/random/boot_id"
 #define UCS_PROCESS_BOOTID_FMT     "%x-%4hx-%4hx-%4hx-%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx"
+#define UCS_PROCCESS_STAT_FMT      "/proc/%d/stat"
 #define UCS_PROCESS_NS_FIRST       0xF0000000U
 #define UCS_PROCESS_NS_NET_DFLT    0xF0000080U
 
@@ -1462,32 +1463,6 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx)
     return ucs_sys_readdir(task_dir, &ucs_sys_enum_threads_cb, &param);
 }
 
-ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
-                                   struct timespec *ts)
-{
-    struct stat stat_buf;
-    int res;
-
-    res = stat(name, &stat_buf);
-    if (res != 0) {
-        return UCS_ERR_IO_ERROR; /* failed to get file info */
-    }
-
-    switch (type) {
-    case UCS_SYS_FILE_TIME_CTIME:
-        *ts = stat_buf.st_ctim;
-        return UCS_OK;
-    case UCS_SYS_FILE_TIME_ATIME:
-        *ts = stat_buf.st_atim;
-        return UCS_OK;
-    case UCS_SYS_FILE_TIME_MTIME:
-        *ts = stat_buf.st_mtim;
-        return UCS_OK;
-    default:
-        return UCS_ERR_INVALID_PARAM;
-    }
-}
-
 ucs_status_t ucs_sys_check_fd_limit_per_process()
 {
     int fd;
@@ -1541,3 +1516,37 @@ long ucs_sys_get_num_cpus()
 
     return num_cpus;
 }
+
+unsigned long ucs_sys_get_proc_create_time(pid_t pid)
+{
+    char stat[1024];
+    char *start_str;
+    ssize_t size;
+    unsigned long stime;
+    int res;
+
+    size = ucs_read_file_str(stat, sizeof(stat), 1, UCS_PROCCESS_STAT_FMT, pid);
+    if (size < 0) {
+        goto err;
+    }
+
+    /* Start sscanf right after the executable name which may contain spaces or
+     * brackets itself */
+    start_str = strrchr(stat, ')');
+    if (start_str == NULL) {
+        goto scan_err;
+    }
+
+    res = sscanf(start_str, ") %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u"
+                 "%*u %*d %*d %*d %*d %*d %*d %lu", &stime);
+    if (res == 1) {
+        return stime;
+    }
+
+scan_err:
+    ucs_error("failed to scan "UCS_PROCCESS_STAT_FMT, pid);
+err:
+    return 0ul;
+}
+
+

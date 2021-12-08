@@ -787,52 +787,6 @@ ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *
     return status;
 }
 
-int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid)
-{
-    ucs_assert((buffer != NULL) || (max_len == 0));
-    /* cppcheck-suppress nullPointer */
-    /* cppcheck-suppress ctunullpointer */
-    return snprintf(buffer, max_len, "/proc/%d", (int)pid);
-}
-
-ucs_status_t uct_ep_keepalive_create(pid_t pid, uct_keepalive_info_t **ka_p)
-{
-    uct_keepalive_info_t *ka;
-    ucs_status_t status;
-    int proc_len;
-
-    proc_len = uct_ep_get_process_proc_dir(NULL, 0, pid);
-    if (proc_len <= 0) {
-        ucs_error("failed to get length to hold path to a process directory");
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    ka = ucs_malloc(sizeof(*ka) + proc_len + 1, "keepalive");
-    if (ka == NULL) {
-        ucs_error("failed to allocate keepalive info");
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    uct_ep_get_process_proc_dir(ka->proc, proc_len + 1, pid);
-
-    status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
-                                   &ka->start_time);
-    if (status != UCS_OK) {
-        ucs_error("failed to get process start time");
-        goto err_free_ka;
-    }
-
-    *ka_p = ka;
-    return UCS_OK;
-
-err_free_ka:
-    ucs_free(ka);
-err:
-    return status;
-}
-
 static ucs_status_t uct_iface_schedule_ep_err(uct_ep_h ep, ucs_status_t status)
 {
     uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
@@ -856,31 +810,32 @@ static ucs_status_t uct_iface_schedule_ep_err(uct_ep_h ep, ucs_status_t status)
     return UCS_OK;
 }
 
-ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t **ka_p,
+ucs_status_t uct_ep_keepalive_init(uct_keepalive_info_t *ka, pid_t pid)
+{
+    ka->start_time = ucs_sys_get_proc_create_time(pid);
+    if (ka->start_time == 0) {
+        ucs_diag("failed to get start time for pid %d", pid);
+        return UCS_ERR_ENDPOINT_TIMEOUT;
+    }
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka,
                                     pid_t pid, unsigned flags,
                                     uct_completion_t *comp)
 {
-    struct timespec create_time;
-    uct_keepalive_info_t *ka;
-    ucs_status_t status;
+    unsigned long start_time;
 
     UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
-    if (*ka_p == NULL) {
-        status = uct_ep_keepalive_create(pid, ka_p);
-    } else {
-        ka     = *ka_p;
-        status = ucs_sys_get_file_time(ka->proc, UCS_SYS_FILE_TIME_CTIME,
-                                       &create_time);
-        if ((status != UCS_OK) ||
-            (ka->start_time.tv_sec != create_time.tv_sec) ||
-            (ka->start_time.tv_nsec != create_time.tv_nsec)) {
-            status = UCS_ERR_ENDPOINT_TIMEOUT;
-        }
-    }
+    ucs_assert(ka->start_time != 0);
 
-    if (status != UCS_OK) {
-        return uct_iface_schedule_ep_err(ep, status);
+    start_time = ucs_sys_get_proc_create_time(pid);
+    if (ka->start_time != start_time) {
+        ucs_diag("ka failed for pid %d start time %lu != %lu", pid,
+                 ka->start_time, start_time);
+        return uct_iface_schedule_ep_err(ep, UCS_ERR_ENDPOINT_TIMEOUT);
     }
 
     return UCS_OK;
