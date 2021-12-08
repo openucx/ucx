@@ -170,6 +170,11 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.reg_whole_alloc_bitmap),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
 
+  {"RNDV_MEMTYPE_DIRECT_SIZE", "inf",
+   "Maximum size for mem type direct in rendezvous protocol\n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_memtype_direct_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
+
   {"WARN_INVALID_CONFIG", "y",
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
