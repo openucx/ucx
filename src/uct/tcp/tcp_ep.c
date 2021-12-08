@@ -2094,12 +2094,7 @@ ucs_status_t uct_tcp_ep_flush(uct_ep_h tl_ep, unsigned flags,
     ucs_status_t status;
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        /* TCP is able to cancel only pending operations, posted TX operations
-         * couldn't be canceled, since some data was already sent to the peer
-         * and the peer is waiting for the remaining part of the data */
-        uct_ep_pending_purge(tl_ep,
-                             (uct_pending_purge_callback_t)ucs_empty_function,
-                             0);
+        uct_tcp_ep_purge(ep, UCS_ERR_CANCELED);
         return UCS_OK;
     }
 
