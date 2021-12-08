@@ -77,7 +77,7 @@ static ucs_config_field_t uct_xpmem_iface_config_table[] = {
 };
 
 UCS_STATIC_INIT {
-    ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
+    ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock);
     kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
 }
 

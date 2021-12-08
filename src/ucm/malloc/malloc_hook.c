@@ -901,5 +901,5 @@ void ucm_malloc_state_reset(int default_mmap_thresh, int default_trim_thresh)
 
 void ucm_init_malloc_hook()
 {
-    ucs_recursive_spinlock_init(&ucm_malloc_hook_state.lock, 0);
+    ucs_recursive_spinlock_init(&ucm_malloc_hook_state.lock);
 }

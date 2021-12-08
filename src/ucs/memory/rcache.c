@@ -1246,7 +1246,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_destroy_stats;
     }
 
-    status = ucs_spinlock_init(&self->lock, 0);
+    status = ucs_spinlock_init(&self->lock);
     if (status != UCS_OK) {
         goto err_destroy_rwlock;
     }
@@ -1276,7 +1276,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     self->num_regions = 0;
     self->total_size  = 0;
     ucs_list_head_init(&self->lru.list);
-    ucs_spinlock_init(&self->lru.lock, 0);
+    ucs_spinlock_init(&self->lru.lock);
 
     status = ucs_rcache_global_list_add(self);
     if (status != UCS_OK) {

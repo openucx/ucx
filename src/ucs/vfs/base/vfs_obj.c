@@ -156,7 +156,7 @@ static void ucs_vfs_node_init(ucs_vfs_node_t *node, ucs_vfs_node_type_t type,
 static void ucs_vfs_global_init()
 {
     UCS_INIT_ONCE(&ucs_vfs_init_once) {
-        ucs_spinlock_init(&ucs_vfs_obj_context.lock, 0);
+        ucs_spinlock_init(&ucs_vfs_obj_context.lock);
         ucs_vfs_node_init(&ucs_vfs_obj_context.root, UCS_VFS_NODE_TYPE_DIR,
                           NULL, NULL);
         kh_init_inplace(vfs_obj, &ucs_vfs_obj_context.obj_hash);

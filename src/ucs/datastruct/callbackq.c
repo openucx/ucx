@@ -438,7 +438,7 @@ ucs_status_t ucs_callbackq_init(ucs_callbackq_t *cbq)
         ucs_callbackq_elem_reset(cbq, &cbq->fast_elems[idx]);
     }
 
-    ucs_recursive_spinlock_init(&priv->lock, 0);
+    ucs_recursive_spinlock_init(&priv->lock);
     priv->slow_elems        = NULL;
     priv->num_slow_elems    = 0;
     priv->max_slow_elems    = 0;

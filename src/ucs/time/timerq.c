@@ -20,7 +20,7 @@ ucs_status_t ucs_timerq_init(ucs_timer_queue_t *timerq)
 {
     ucs_trace_func("timerq=%p", timerq);
 
-    ucs_recursive_spinlock_init(&timerq->lock, 0);
+    ucs_recursive_spinlock_init(&timerq->lock);
     timerq->timers       = NULL;
     timerq->num_timers   = 0;
     /* coverity[missing_lock] */

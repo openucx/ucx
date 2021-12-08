@@ -403,7 +403,7 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
 }
 
 UCS_STATIC_INIT {
-    ucs_spinlock_init(&ucs_memtype_cache_global_instance_lock, 0);
+    ucs_spinlock_init(&ucs_memtype_cache_global_instance_lock);
 }
 
 UCS_STATIC_CLEANUP {

@@ -324,7 +324,7 @@ ucs_ptr_array_locked_init(ucs_ptr_array_locked_t *locked_ptr_array,
     ucs_status_t status;
 
     /* Initialize spinlock */
-    status = ucs_recursive_spinlock_init(&locked_ptr_array->lock, 0);
+    status = ucs_recursive_spinlock_init(&locked_ptr_array->lock);
     if (status != UCS_OK) {
        return status;
     }

@@ -659,9 +659,9 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
     }
 
     kh_init_inplace(uct_ib_ah, &dev->ah_hash);
-    ucs_recursive_spinlock_init(&dev->ah_lock, 0);
+    ucs_recursive_spinlock_init(&dev->ah_lock);
     kh_init_inplace(uct_ib_async_event, &dev->async_events_hash);
-    ucs_spinlock_init(&dev->async_event_lock, 0);
+    ucs_spinlock_init(&dev->async_event_lock);
 
     ucs_debug("initialized device '%s' (%s) with %d ports", uct_ib_device_name(dev),
               ibv_node_type_str(ibv_device->node_type),

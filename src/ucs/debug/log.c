@@ -480,7 +480,7 @@ void ucs_log_init()
                   ucs_global_opts.log_file_rotate, INT_MAX);
     }
 
-    ucs_spinlock_init(&ucs_log_global_filter_lock, 0);
+    ucs_spinlock_init(&ucs_log_global_filter_lock);
     kh_init_inplace(ucs_log_filter, &ucs_log_global_filter);
 
     strcpy(ucs_log_hostname, ucs_get_host_name());

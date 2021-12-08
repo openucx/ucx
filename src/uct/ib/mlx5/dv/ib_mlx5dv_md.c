@@ -803,7 +803,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    ucs_recursive_spinlock_init(&md->dbrec_lock, 0);
+    ucs_recursive_spinlock_init(&md->dbrec_lock);
     status = ucs_mpool_init(&md->dbrec_pool, 0,
                             sizeof(uct_ib_mlx5_dbrec_t), 0,
                             UCS_SYS_CACHE_LINE_SIZE,

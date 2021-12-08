@@ -46,7 +46,7 @@ do {\
 
 #if ENABLE_MT
 #define uct_ugni_check_lock_needed(_cdm) UCS_THREAD_MODE_MULTI == (_cdm)->thread_mode
-#define uct_ugni_cdm_init_lock(_cdm) ucs_recursive_spinlock_init(&(_cdm)->lock, 0)
+#define uct_ugni_cdm_init_lock(_cdm) ucs_recursive_spinlock_init(&(_cdm)->lock)
 #define uct_ugni_cdm_destroy_lock(_cdm) ucs_recursive_spinlock_destroy(&(_cdm)->lock)
 #define uct_ugni_cdm_lock(_cdm) \
 if (uct_ugni_check_lock_needed(_cdm)) {  \

@@ -297,7 +297,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 }
 
 UCS_STATIC_INIT {
-    ucs_spinlock_init(&uct_cuda_base_lock, 0);
+    ucs_spinlock_init(&uct_cuda_base_lock);
 }
 
 UCS_STATIC_CLEANUP {

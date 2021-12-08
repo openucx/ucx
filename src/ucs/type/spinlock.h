@@ -24,12 +24,7 @@ BEGIN_C_DECLS
 #define UCS_SPINLOCK_INITIALIZER {UCS_SPINLOCK_FREE}
 
 
-/* Spinlock creation modifiers */
-enum {
-    UCS_SPINLOCK_FLAG_SHARED = UCS_BIT(0) /**< Make spinlock sharable in memory */
-};
-
-/* Spinlock state constants */
+/* Spinlock states */
 enum {
     UCS_SPINLOCK_FREE = 0,
     UCS_SPINLOCK_BUSY = 1
@@ -55,7 +50,7 @@ typedef struct ucs_recursive_spinlock {
 void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
 
 /* spinlock implementation section */
-static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock, int flags)
+static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
 {
     lock->lock = UCS_SPINLOCK_FREE;
     return UCS_OK;
@@ -91,12 +86,12 @@ static UCS_F_ALWAYS_INLINE void ucs_spin_unlock(ucs_spinlock_t *lock)
 
 /* recirsive implementation section */
 static inline ucs_status_t
-ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock, int flags)
+ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock)
 {
     lock->count = 0;
     lock->owner = UCS_ASYNC_PTHREAD_ID_NULL;
 
-    return ucs_spinlock_init(&lock->super, flags);
+    return ucs_spinlock_init(&lock->super);
 }
 
 static UCS_F_ALWAYS_INLINE int

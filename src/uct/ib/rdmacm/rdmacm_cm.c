@@ -142,7 +142,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 
     ctx->use_reserved_qpn = 1;
 
-    ucs_spinlock_init(&ctx->lock, 0);
+    ucs_spinlock_init(&ctx->lock);
     ucs_list_head_init(&ctx->blk_list);
     return UCS_OK;
 

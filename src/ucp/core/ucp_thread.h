@@ -47,7 +47,7 @@ typedef struct ucp_mt_lock {
         if ((_lock_ptr)->mt_type == UCP_MT_TYPE_MUTEX) { \
             pthread_mutex_init(&((_lock_ptr)->lock.mt_mutex), NULL); \
         } else { \
-            ucs_recursive_spinlock_init(&((_lock_ptr)->lock.mt_spinlock), 0); \
+            ucs_recursive_spinlock_init(&((_lock_ptr)->lock.mt_spinlock)); \
         } \
     } while (0)
 #define UCP_THREAD_LOCK_FINALIZE(_lock_ptr)                                  \

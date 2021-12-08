@@ -68,7 +68,7 @@ UCS_TEST_F(test_sys, spinlock) {
 
     self = pthread_self();
 
-    ucs_recursive_spinlock_init(&lock, 0);
+    ucs_recursive_spinlock_init(&lock);
 
     ucs_recursive_spin_lock(&lock);
     EXPECT_TRUE(ucs_recursive_spin_is_owner(&lock, self));

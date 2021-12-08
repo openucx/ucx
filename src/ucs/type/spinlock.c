@@ -13,16 +13,6 @@
 #include <ucs/debug/log.h>
 
 
-void ucs_spinlock_destroy(ucs_spinlock_t *lock)
-{
-    int ret;
-
-    ret = pthread_spin_destroy(&lock->lock);
-    if (ret != 0) {
-        ucs_warn("pthread_spin_destroy() failed: %d", ret);
-    }
-}
-
 void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock)
 {
     if (lock->count != 0) {

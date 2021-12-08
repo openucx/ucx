@@ -1291,7 +1291,7 @@ static int ucs_debug_backtrace_is_excluded(void *address, const char *symbol)
 
 void ucs_debug_init()
 {
-    ucs_recursive_spinlock_init(&ucs_kh_lock, 0);
+    ucs_recursive_spinlock_init(&ucs_kh_lock);
 
     kh_init_inplace(ucs_signal_orig_action, &ucs_signal_orig_action_map);
     kh_init_inplace(ucs_debug_symbol, &ucs_debug_symbols_cache);

@@ -62,7 +62,7 @@ ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 
 void ucs_topo_init()
 {
-    ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
+    ucs_spinlock_init(&ucs_topo_global_ctx.lock);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices = 0;
 }

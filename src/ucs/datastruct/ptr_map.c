@@ -24,7 +24,7 @@ static void ucs_ptr_hash_destroy(ucs_ptr_hash_t *ptr_hash)
 static ucs_status_t ucs_ptr_safe_hash_init(ucs_ptr_safe_hash_t *safe_hash)
 {
     kh_init_inplace(ucs_ptr_map_impl, &safe_hash->hash);
-    return ucs_spinlock_init(&safe_hash->lock, 0);
+    return ucs_spinlock_init(&safe_hash->lock);
 }
 
 static void ucs_ptr_safe_hash_destroy(ucs_ptr_safe_hash_t *safe_hash)
