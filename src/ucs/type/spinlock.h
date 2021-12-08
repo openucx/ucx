@@ -9,6 +9,7 @@
 #define UCS_SPINLOCK_H
 
 #include <ucs/type/status.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/async/async_fwd.h>
 #include <ucs/arch/atomic.h>
 #include <pthread.h>
@@ -51,12 +52,44 @@ typedef struct ucs_recursive_spinlock {
 } ucs_recursive_spinlock_t;
 
 
+void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
+
+/* spinlock implementation section */
 static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock, int flags)
 {
     lock->lock = UCS_SPINLOCK_FREE;
     return UCS_OK;
 }
 
+static inline void ucs_spinlock_destroy(ucs_spinlock_t *lock) {
+}
+
+static UCS_F_ALWAYS_INLINE int ucs_spin_try_lock(ucs_spinlock_t *lock)
+{
+    return ucs_atomic_cswap32(&lock->lock, UCS_SPINLOCK_FREE,
+                              UCS_SPINLOCK_BUSY) == UCS_SPINLOCK_FREE;
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_spin_lock(ucs_spinlock_t *lock)
+{
+    while (!ucs_spin_try_lock(lock)) {
+        while (lock->lock != UCS_SPINLOCK_FREE) {
+            /* spin */
+#ifdef __x86_64__
+            asm volatile("pause" ::: "memory");
+#elif defined __aarch64__
+            asm volatile ("dmb ishld" ::: "memory");
+#endif
+        }
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_spin_unlock(ucs_spinlock_t *lock)
+{
+    lock->lock = UCS_SPINLOCK_FREE;
+}
+
+/* recirsive implementation section */
 static inline ucs_status_t
 ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock, int flags)
 {
@@ -66,38 +99,15 @@ ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock, int flags)
     return ucs_spinlock_init(&lock->super, flags);
 }
 
-void ucs_spinlock_destroy(ucs_spinlock_t *lock);
-
-void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
-
-static inline int
+static UCS_F_ALWAYS_INLINE int
 ucs_recursive_spin_is_owner(const ucs_recursive_spinlock_t *lock,
                             pthread_t self)
 {
     return lock->owner == self;
 }
 
-static inline int ucs_spin_try_lock(ucs_spinlock_t *lock)
-{
-    return ucs_atomic_cswap32(&lock->lock, UCS_SPINLOCK_FREE,
-                              UCS_SPINLOCK_BUSY) == UCS_SPINLOCK_FREE;
-}
-
-static inline void ucs_spin_lock(ucs_spinlock_t *lock)
-{
-    while (!ucs_spin_try_lock(lock)) {
-        while (lock->lock != UCS_SPINLOCK_FREE) {
-            /* spin */
-        }
-    }
-}
-
-static inline void ucs_spin_unlock(ucs_spinlock_t *lock)
-{
-    lock->lock = UCS_SPINLOCK_FREE;
-}
-
-static inline void ucs_recursive_spin_lock(ucs_recursive_spinlock_t *lock)
+static UCS_F_ALWAYS_INLINE void
+ucs_recursive_spin_lock(ucs_recursive_spinlock_t *lock)
 {
     pthread_t self = pthread_self();
 
