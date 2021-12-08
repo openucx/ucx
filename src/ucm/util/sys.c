@@ -16,7 +16,9 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucm/util/reloc.h>
 #include <ucm/mmap/mmap.h>
+#include <ucm/malloc/malloc_hook.h>
 #include <ucs/type/init_once.h>
 #include <ucs/sys/math.h>
 #include <linux/mman.h>
@@ -381,3 +383,10 @@ pid_t ucm_get_tid()
 {
     return syscall(SYS_gettid);
 }
+
+void UCS_F_CTOR ucm_init()
+{
+    ucm_init_log();
+    ucm_init_malloc_hook();
+}
+

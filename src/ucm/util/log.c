@@ -289,6 +289,7 @@ void __ucm_log(const char *file, unsigned line, const char *function,
     }
 }
 
-UCS_STATIC_INIT {
+void ucm_init_log()
+{
     gethostname(ucm_log_hostname, sizeof(ucm_log_hostname));
 }
