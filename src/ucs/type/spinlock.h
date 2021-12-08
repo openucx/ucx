@@ -56,13 +56,12 @@ void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
 /**
  * Spinlock implementation section
  */
-static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
+static UCS_F_ALWAYS_INLINE void ucs_spinlock_init(ucs_spinlock_t *lock)
 {
     lock->lock = UCS_SPINLOCK_FREE;
-    return UCS_OK;
 }
 
-static inline void ucs_spinlock_destroy(ucs_spinlock_t *lock)
+static UCS_F_ALWAYS_INLINE void ucs_spinlock_destroy(ucs_spinlock_t *lock)
 {
 }
 
@@ -98,13 +97,13 @@ static UCS_F_ALWAYS_INLINE void ucs_spin_unlock(ucs_spinlock_t *lock)
 /**
  * Recursive implementation section
  */
-static inline ucs_status_t
+static UCS_F_ALWAYS_INLINE void
 ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock)
 {
     lock->count = 0;
     lock->owner = UCS_ASYNC_PTHREAD_ID_NULL;
 
-    return ucs_spinlock_init(&lock->super);
+    ucs_spinlock_init(&lock->super);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -129,7 +128,8 @@ ucs_recursive_spin_lock(ucs_recursive_spinlock_t *lock)
     ++lock->count;
 }
 
-static inline int ucs_recursive_spin_trylock(ucs_recursive_spinlock_t *lock)
+static UCS_F_ALWAYS_INLINE int
+ucs_recursive_spin_trylock(ucs_recursive_spinlock_t *lock)
 {
     pthread_t self = pthread_self();
 
@@ -147,7 +147,8 @@ static inline int ucs_recursive_spin_trylock(ucs_recursive_spinlock_t *lock)
     return 1;
 }
 
-static inline void ucs_recursive_spin_unlock(ucs_recursive_spinlock_t *lock)
+static UCS_F_ALWAYS_INLINE void
+ucs_recursive_spin_unlock(ucs_recursive_spinlock_t *lock)
 {
     --lock->count;
     if (lock->count == 0) {

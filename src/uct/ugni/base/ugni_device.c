@@ -457,10 +457,7 @@ ucs_status_t uct_ugni_create_cdm(uct_ugni_cdm_t *cdm, uct_ugni_device_t *device,
         return UCS_ERR_NO_DEVICE;
     }
 
-    status = uct_ugni_cdm_init_lock(cdm);
-    if (UCS_OK != status) {
-        ucs_error("Couldn't initalize CDM lock.");
-    }
+    uct_ugni_cdm_init_lock(cdm);
 
     if (UCS_OK == status) {
         ucs_debug("Made ugni cdm. nic_addr = %i domain_id = 0x%08x", device->address, cdm->domain_id);

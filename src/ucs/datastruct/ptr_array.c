@@ -321,13 +321,8 @@ ucs_status_t
 ucs_ptr_array_locked_init(ucs_ptr_array_locked_t *locked_ptr_array,
                           const char *name)
 {
-    ucs_status_t status;
-
     /* Initialize spinlock */
-    status = ucs_recursive_spinlock_init(&locked_ptr_array->lock);
-    if (status != UCS_OK) {
-       return status;
-    }
+    ucs_recursive_spinlock_init(&locked_ptr_array->lock);
 
     /* Call unlocked function */
     ucs_ptr_array_init(&locked_ptr_array->super, name);

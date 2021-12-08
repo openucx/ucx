@@ -1246,10 +1246,7 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
         goto err_destroy_stats;
     }
 
-    status = ucs_spinlock_init(&self->lock);
-    if (status != UCS_OK) {
-        goto err_destroy_rwlock;
-    }
+    ucs_spinlock_init(&self->lock);
 
     status = ucs_pgtable_init(&self->pgtable, ucs_rcache_pgt_dir_alloc,
                               ucs_rcache_pgt_dir_release);

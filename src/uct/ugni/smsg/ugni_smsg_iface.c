@@ -291,10 +291,7 @@ static UCS_CLASS_INIT_FUNC(uct_ugni_smsg_iface_t, uct_md_h md, uct_worker_h work
     smsg_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
     smsg_attr.mbox_maxcredit = self->config.smsg_max_credit;
     smsg_attr.msg_maxsize = self->config.smsg_seg_size;
-    status = ucs_recursive_spinlock_init(&self->mbox_lock);
-    if (UCS_OK != status) {
-            goto exit;
-    }
+    ucs_recursive_spinlock_init(&self->mbox_lock);
 
     status = uct_ugni_create_cq(&self->remote_cq, 40000, &self->super.cdm);
     if (UCS_OK != status) {

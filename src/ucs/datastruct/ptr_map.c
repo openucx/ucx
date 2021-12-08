@@ -21,10 +21,10 @@ static void ucs_ptr_hash_destroy(ucs_ptr_hash_t *ptr_hash)
     kh_destroy_inplace(ucs_ptr_map_impl, ptr_hash);
 }
 
-static ucs_status_t ucs_ptr_safe_hash_init(ucs_ptr_safe_hash_t *safe_hash)
+static void ucs_ptr_safe_hash_init(ucs_ptr_safe_hash_t *safe_hash)
 {
     kh_init_inplace(ucs_ptr_map_impl, &safe_hash->hash);
-    return ucs_spinlock_init(&safe_hash->lock);
+    ucs_spinlock_init(&safe_hash->lock);
 }
 
 static void ucs_ptr_safe_hash_destroy(ucs_ptr_safe_hash_t *safe_hash)
@@ -67,17 +67,15 @@ ucs_status_t ucs_ptr_safe_hash_put(ucs_ptr_map_t *map, void *ptr,
 ucs_status_t ucs_ptr_map_init(ucs_ptr_map_t *map, int is_put_thread_safe,
                               ucs_ptr_safe_hash_t *safe_hash)
 {
-    ucs_status_t status = UCS_OK;
-
     UCS_STATIC_ASSERT(!ucs_ptr_map_key_indirect(UCS_PTR_MAP_KEY_INVALID));
     map->next_id = 0;
     kh_init_inplace(ucs_ptr_map_impl, &map->hash);
 
     if (is_put_thread_safe) {
-        status = ucs_ptr_safe_hash_init(safe_hash);
+        ucs_ptr_safe_hash_init(safe_hash);
     }
 
-    return status;
+    return UCS_OK;
 }
 
 void ucs_ptr_map_destroy(ucs_ptr_map_t *map, int is_put_thread_safe,
