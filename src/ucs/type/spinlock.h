@@ -20,11 +20,15 @@ BEGIN_C_DECLS
 /** @file spinlock.h */
 
 
-/* Spinlock static initializer */
+/**
+ * Spinlock static initializer
+ */
 #define UCS_SPINLOCK_INITIALIZER {UCS_SPINLOCK_FREE}
 
 
-/* Spinlock states */
+/**
+ * Spinlock states
+ */
 enum {
     UCS_SPINLOCK_FREE = 0,
     UCS_SPINLOCK_BUSY = 1
@@ -49,14 +53,17 @@ typedef struct ucs_recursive_spinlock {
 
 void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
 
-/* spinlock implementation section */
+/**
+ * Spinlock implementation section
+ */
 static ucs_status_t ucs_spinlock_init(ucs_spinlock_t *lock)
 {
     lock->lock = UCS_SPINLOCK_FREE;
     return UCS_OK;
 }
 
-static inline void ucs_spinlock_destroy(ucs_spinlock_t *lock) {
+static inline void ucs_spinlock_destroy(ucs_spinlock_t *lock)
+{
 }
 
 static UCS_F_ALWAYS_INLINE int ucs_spin_try_lock(ucs_spinlock_t *lock)
@@ -70,10 +77,14 @@ static UCS_F_ALWAYS_INLINE void ucs_spin_lock(ucs_spinlock_t *lock)
     while (!ucs_spin_try_lock(lock)) {
         while (lock->lock != UCS_SPINLOCK_FREE) {
             /* spin */
-#ifdef __x86_64__
+#if defined(__x86_64__)
             asm volatile("pause" ::: "memory");
-#elif defined __aarch64__
+#elif defined(__aarch64__)
             asm volatile ("dmb ishld" ::: "memory");
+#elif defined(__powerpc64__)
+            asm volatile ("lwsync \n" \
+                          "isync  \n" \
+                          ::: "memory");
 #endif
         }
     }
@@ -84,7 +95,9 @@ static UCS_F_ALWAYS_INLINE void ucs_spin_unlock(ucs_spinlock_t *lock)
     lock->lock = UCS_SPINLOCK_FREE;
 }
 
-/* recirsive implementation section */
+/**
+ * Recursive implementation section
+ */
 static inline ucs_status_t
 ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock)
 {
