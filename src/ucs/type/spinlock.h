@@ -79,7 +79,7 @@ static UCS_F_ALWAYS_INLINE void ucs_spin_lock(ucs_spinlock_t *lock)
 #if defined(__x86_64__)
             asm volatile("pause" ::: "memory");
 #elif defined(__aarch64__)
-            asm volatile ("dmb ishld" ::: "memory");
+            asm volatile ("wfe"); /* suspend until event register is set */
 #elif defined(__powerpc64__)
             asm volatile ("lwsync \n" \
                           "isync  \n" \
@@ -91,7 +91,13 @@ static UCS_F_ALWAYS_INLINE void ucs_spin_lock(ucs_spinlock_t *lock)
 
 static UCS_F_ALWAYS_INLINE void ucs_spin_unlock(ucs_spinlock_t *lock)
 {
-    lock->lock = UCS_SPINLOCK_FREE;
+    static unsigned int lockfree = UCS_SPINLOCK_FREE;
+
+    __atomic_store(&lock->lock, &lockfree, __ATOMIC_RELAXED);
+    
+#if defined(__aarch64__)
+    asm volatile ("sevl"); /* set event register */
+#endif
 }
 
 /**
