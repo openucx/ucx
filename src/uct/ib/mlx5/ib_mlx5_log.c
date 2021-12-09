@@ -11,6 +11,8 @@
 #include "ib_mlx5_log.h"
 
 #include <uct/ib/base/ib_device.h>
+#include <uct/ib/mlx5/ib_mlx5.inl>
+#include <uct/ib/rc/accel/rc_mlx5_common.h>
 #include <string.h>
 
 
@@ -18,6 +20,10 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                  void *qend, int max_sge, int dump_qp,
                                  uct_log_data_dump_func_t packet_dump_cb,
                                  char *buffer, size_t max, uct_ib_log_sge_t *log_sge);
+
+static void uct_ib_mlx5_resp_error_dump(uct_ib_iface_t *iface,
+                                        uct_ib_mlx5_err_cqe_t *ecqe, char *buf,
+                                        size_t max);
 
 static const char *uct_ib_mlx5_cqe_err_opcode(uct_ib_mlx5_err_cqe_t *ecqe)
 {
@@ -155,6 +161,8 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              peer_info, sizeof(peer_info));
             }
         }
+    } else if ((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) {
+        uct_ib_mlx5_resp_error_dump(iface, ecqe, err_info, sizeof(err_info));
     } else {
         snprintf(wqe_info, sizeof(wqe_info) - 1, "opcode %s",
                  uct_ib_mlx5_cqe_err_opcode(ecqe));
@@ -407,6 +415,42 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                 packet_dump_cb, log_sge->num_sge, s, ends - s);
     }
 }
+
+static void uct_ib_mlx5_resp_error_dump(uct_ib_iface_t *iface,
+                                        uct_ib_mlx5_err_cqe_t *ecqe,
+                                        char *buffer, size_t max)
+{
+    uct_rc_mlx5_iface_common_t *mlx5_iface = ucs_derived_of(iface,
+                                                            uct_rc_mlx5_iface_common_t);
+    char *ends                             = buffer + max;
+    uct_ib_mlx5_srq_t *srq                 = &mlx5_iface->rx.srq;
+    uct_ib_mlx5_srq_seg_t *seg             = uct_ib_mlx5_srq_get_wqe(srq,
+                                                                     ecqe->wqe_counter);
+    int i;
+
+    snprintf(buffer, ends - buffer, "strides %d%s next wqe %u desc %p",
+             seg->srq.strides, seg->srq.free ? " F" : "",
+             htons(seg->srq.next_wqe_index), seg->srq.desc);
+    buffer += strlen(buffer);
+
+    if (seg->srq.strides > 1) {
+        snprintf(buffer, ends - buffer, " ptr_mask %d", seg->srq.ptr_mask);
+        buffer += strlen(buffer);
+    }
+
+    for (i = 0; i < mlx5_iface->tm.mp.num_strides; i++) {
+        snprintf(buffer, ends - buffer,
+                 " [seg %d bytes %d lkey 0x%x addr 0x%lx]", i,
+                 htobe32(seg->dptr[i].byte_count), htobe32(seg->dptr[i].lkey),
+                 htobe64(seg->dptr[i].addr));
+        buffer += strlen(buffer);
+
+        if (buffer == ends) {
+            break;
+        }
+    }
+}
+
 
 void __uct_ib_mlx5_log_tx(const char *file, int line, const char *function,
                           uct_ib_iface_t *iface, void *wqe, void *qstart,
