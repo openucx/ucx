@@ -729,6 +729,9 @@ run_ucx_perftest() {
 			run_client_server_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}" \
 								"$(hostname)" 0 0
 
+			# Run UCT loopback performance test
+			run_loopback_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}"
+
 			# Run UCP performance test
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 

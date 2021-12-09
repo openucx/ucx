@@ -31,9 +31,16 @@ static ucs_status_t ucx_perf_thread_run_test(void* arg)
     ucs_status_t status;
 
     /* new threads need explicit device association */
-    status = perf->allocator->init(perf);
+    status = perf->send_allocator->init(perf);
     if (status != UCS_OK) {
         goto out;
+    }
+
+    if (perf->send_allocator != perf->recv_allocator) {
+        status = perf->recv_allocator->init(perf);
+        if (status != UCS_OK) {
+            goto out;
+        }
     }
 
     if (params->warmup_iter > 0) {
