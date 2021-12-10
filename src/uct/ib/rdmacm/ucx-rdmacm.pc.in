@@ -1,0 +1,5 @@
+Name: @PACKAGE@-rdmacm
+Description: Unified Communication X Library RDMACM module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:
