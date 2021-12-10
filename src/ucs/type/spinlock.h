@@ -67,8 +67,19 @@ static UCS_F_ALWAYS_INLINE void ucs_spinlock_destroy(ucs_spinlock_t *lock)
 
 static UCS_F_ALWAYS_INLINE int ucs_spin_try_lock(ucs_spinlock_t *lock)
 {
-    return ucs_atomic_cswap32(&lock->lock, UCS_SPINLOCK_FREE,
-                              UCS_SPINLOCK_BUSY) == UCS_SPINLOCK_FREE;
+    int res;
+
+    res = ucs_atomic_cswap32(&lock->lock, UCS_SPINLOCK_FREE,
+                             UCS_SPINLOCK_BUSY) == UCS_SPINLOCK_FREE;
+
+#if defined(__powerpc64__)
+    /* barrier on locked spin */
+    if (res) {
+        asm volatile ("isync " ::: "memory");
+    }
+#endif
+
+    return res;
 }
 
 static UCS_F_ALWAYS_INLINE void ucs_spin_lock(ucs_spinlock_t *lock)
@@ -92,6 +103,10 @@ static UCS_F_ALWAYS_INLINE void ucs_spin_lock(ucs_spinlock_t *lock)
 static UCS_F_ALWAYS_INLINE void ucs_spin_unlock(ucs_spinlock_t *lock)
 {
     static unsigned int lockfree = UCS_SPINLOCK_FREE;
+
+#if defined(__powerpc64__)
+    asm volatile("lwsync" : : : "memory");
+#endif
 
     __atomic_store(&lock->lock, &lockfree, __ATOMIC_RELAXED);
     
