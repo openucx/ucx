@@ -592,7 +592,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         goto err_tx_mpool;
     }
 
+    uct_ud_enter(self);
     status = uct_ud_iface_gid_hash_init(self, md);
+    uct_ud_leave(self);
     if (status != UCS_OK) {
         goto err_release_stats;
     }

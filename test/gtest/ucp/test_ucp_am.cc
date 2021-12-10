@@ -1088,6 +1088,8 @@ public:
 
         test_ucp_am_nbx::init();
 
+        UCS_TEST_MESSAGE << "seg size " << m_size;
+
         // Create new sender() with different segment size
         m_env.push_back(new ucs::scoped_setenv("UCX_IB_SEG_SIZE", str_size.c_str()));
         m_env.push_back(new ucs::scoped_setenv("UCX_MM_SEG_SIZE", str_size.c_str()));
@@ -1112,7 +1114,6 @@ protected:
 
     void test_am_different_seg_sizes(size_t data_size)
     {
-        UCS_TEST_MESSAGE << "seg size " << m_size << " data size " << data_size;
         test_am_send_recv(data_size);
     }
 
