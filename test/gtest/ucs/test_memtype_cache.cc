@@ -278,10 +278,8 @@ protected:
             return;
         }
 
-        ucs_memory_info_t mem_info;
-        mem_info.type    = mem_type;
-        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_memtype_cache_update(ptr, size, &mem_info);
+        ucs_memtype_cache_update(ptr, size, mem_type,
+                                 UCS_SYS_DEVICE_ID_UNKNOWN);
     }
 
     void memtype_cache_update(const mem_buffer &b) {
