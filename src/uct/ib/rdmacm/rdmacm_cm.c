@@ -664,7 +664,7 @@ static void uct_rdmacm_cm_handle_error_event(struct rdma_cm_event *event)
                 ucs_assert(event->param.conn.private_data_len >= sizeof(*hdr));
                 status = UCS_ERR_REJECTED;
             } else {
-                status = UCS_ERR_UNREACHABLE;
+                status = UCS_ERR_CONNECTION_RESET;
             }
         }
 
