@@ -84,7 +84,11 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     ucs_status_t status;
     void *cap;
     int ret;
+#endif
 
+    ctx->num_dummy_qps = 0;
+
+#if HAVE_DECL_MLX5DV_IS_SUPPORTED
     if (cm->config.reserved_qpn == UCS_NO) {
         goto dummy_qp_ctx_init;
     }
@@ -155,6 +159,7 @@ dummy_qp_ctx_init:
     }
 
     ctx->use_reserved_qpn = 0;
+
     /* Create a dummy completion queue */
     ctx->cq = ibv_create_cq(verbs, 1, NULL, NULL, 0);
     if (ctx->cq == NULL) {
@@ -184,6 +189,11 @@ uct_rdmacm_cm_device_context_cleanup(uct_rdmacm_cm_device_context_t *ctx)
         ret = ibv_destroy_cq(ctx->cq);
         if (ret != 0) {
             ucs_warn("ibv_destroy_cq() returned %d: %m", ret);
+        }
+
+        if (ctx->num_dummy_qps != 0) {
+            ucs_warn("ctx %p: %u dummy qps were not destroyed", ctx,
+                     ctx->num_dummy_qps);
         }
     }
 }
