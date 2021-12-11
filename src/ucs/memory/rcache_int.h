@@ -63,7 +63,6 @@ struct ucs_rcache {
                                               The head of the list is the least
                                               recently used region, and the tail
                                               is the most recently used region. */
-        unsigned long   count;           /**< Number of regions on list */
     } lru;
     
     char                *name;           /**< Name of the cache, for debug purpose */

@@ -336,7 +336,6 @@ ucs_rcache_region_lru_add(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 
     ucs_rcache_region_trace(rcache, region, "lru add");
     ucs_list_add_tail(&rcache->lru.list, &region->lru_list);
-    ++rcache->lru.count;
     region->lru_flags |= UCS_RCACHE_LRU_FLAG_IN_LRU;
 }
 
@@ -350,7 +349,6 @@ ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 
     ucs_rcache_region_trace(rcache, region, "lru remove");
     ucs_list_del(&region->lru_list);
-    --rcache->lru.count;
     region->lru_flags &= ~UCS_RCACHE_LRU_FLAG_IN_LRU;
 }
 
@@ -1272,7 +1270,6 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     /* coverity[missing_lock] */
     self->unreleased_size = 0;
     ucs_list_head_init(&self->gc_list);
-    self->lru.count   = 0;
     self->num_regions = 0;
     self->total_size  = 0;
     ucs_list_head_init(&self->lru.list);
@@ -1322,14 +1319,11 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_rcache_t)
     ucs_rcache_check_gc_list(self);
     ucs_rcache_purge(self);
 
-    if (self->lru.count > 0) {
-        ucs_assert(!ucs_list_is_empty(&self->lru.list));
+    if (!ucs_list_is_empty(&self->lru.list)) {
         ucs_warn(
                 "rcache %s: %lu regions remained on lru list, first region: %p",
-                self->name, self->lru.count,
+                self->name, ucs_list_length(&self->lru.list),
                 ucs_list_head(&self->lru.list, ucs_rcache_region_t, lru_list));
-    } else {
-        ucs_assert(ucs_list_is_empty(&self->lru.list));
     }
 
     ucs_spinlock_destroy(&self->lru.lock);
