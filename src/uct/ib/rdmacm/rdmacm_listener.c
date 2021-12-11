@@ -98,10 +98,10 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_listener_t, uct_cm_h cm,
         goto err_destroy_id;
     }
 
-    ucs_debug("created an RDMACM listener %p on cm %p with cm_id: %p. "
-              "listening on %s", self, cm, self->id,
-              ucs_sockaddr_str(saddr, ip_port_str, UCS_SOCKADDR_STRING_LEN));
-
+    ucs_sockaddr_str(rdma_get_local_addr(self->id), ip_port_str,
+                     UCS_SOCKADDR_STRING_LEN);
+    ucs_debug("listener %p: created on cm %p %s rdma_cm_id %p", self, cm,
+              ip_port_str, self->id);
     return UCS_OK;
 
 err_destroy_id:
@@ -128,6 +128,7 @@ ucs_status_t uct_rdmacm_listener_reject(uct_listener_h listener,
 
 UCS_CLASS_CLEANUP_FUNC(uct_rdmacm_listener_t)
 {
+    ucs_debug("listener %p: destroying rdma_cm_id %p", self, self->id);
     uct_rdmacm_cm_destroy_id(self->id);
 }
 
