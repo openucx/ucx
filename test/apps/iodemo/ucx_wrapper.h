@@ -274,7 +274,9 @@ public:
 
     ~UcxConnection();
 
-    void connect(const struct sockaddr *saddr, socklen_t addrlen,
+    void connect(const struct sockaddr *src_saddr,
+                 const struct sockaddr *dst_saddr,
+                 socklen_t addrlen,
                  UcxCallback *callback);
 
     void accept(ucp_conn_request_h conn_req, UcxCallback *callback);

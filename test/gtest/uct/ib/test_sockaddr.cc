@@ -217,11 +217,13 @@ protected:
     }
 
     void connect(uct_test::entity &e, unsigned index,
-                 uct_ep_disconnect_cb_t disconnect_cb) {
+                 uct_ep_disconnect_cb_t disconnect_cb,
+                 const ucs::sock_addr_storage *local_addr = NULL) {
         client_user_data *user_data = new client_user_data(*this, e, index);
         ucs::scoped_async_lock lock(e.async());
-        e.connect_to_sockaddr(index, m_connect_addr, client_resolve_cb,
-                              client_connect_cb, disconnect_cb, user_data);
+        e.connect_to_sockaddr(index, m_connect_addr, local_addr,
+                              client_resolve_cb, client_connect_cb,
+                              disconnect_cb, user_data);
         add_user_data(user_data);
     }
 
@@ -229,9 +231,11 @@ protected:
         connect(*m_client, index, client_disconnect_cb);
     }
 
-    void listen_and_connect() {
+    void listen_and_connect(bool specify_src_addr = false) {
         start_listen(test_uct_sockaddr::conn_request_cb);
-        connect();
+        connect(*m_client, 0, client_disconnect_cb,
+                specify_src_addr ? &GetParam()->connect_sock_addr : NULL);
+
         wait_for_bits(&m_state, TEST_STATE_CONNECT_REQUESTED);
         EXPECT_TRUE(m_state & TEST_STATE_CONNECT_REQUESTED);
     }
@@ -805,6 +809,17 @@ UCS_TEST_P(test_uct_sockaddr, ep_query)
 
     ep_query();
 
+    cm_disconnect(m_client);
+}
+
+UCS_TEST_P(test_uct_sockaddr, set_local_sockaddr)
+{
+    listen_and_connect(true);
+    wait_for_bits(&m_state, TEST_STATE_SERVER_CONNECTED |
+                            TEST_STATE_CLIENT_CONNECTED);
+    EXPECT_TRUE(ucs_test_all_flags(m_state, TEST_STATE_SERVER_CONNECTED |
+                                            TEST_STATE_CLIENT_CONNECTED));
+    ep_query();
     cm_disconnect(m_client);
 }
 

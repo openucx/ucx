@@ -87,6 +87,7 @@ typedef struct {
     bool                     use_epoll;
     ucs_memory_type_t        memory_type;
     unsigned                 progress_count;
+    const char*              src_addr;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -98,7 +99,6 @@ typedef struct {
 #define ASSERTV(_expression) \
         UcxLog(LOG_PREFIX, !(_expression), &std::cerr, do_assert) \
                 << ASSERTV_STR(#_expression)
-
 
 template<class BufferType, bool use_offcache = false> class ObjectPool {
 public:
@@ -1955,15 +1955,35 @@ public:
         }
     }
 
+    bool set_sockaddr(const std::string &ip_str, uint16_t port,
+                      struct sockaddr *saddr)
+    {
+        struct sockaddr_in* sa_in = (struct sockaddr_in*)saddr;
+        if (inet_pton(AF_INET, ip_str.c_str(), &sa_in->sin_addr) == 1) {
+            sa_in->sin_family = AF_INET;
+            sa_in->sin_port   = htons(port);
+            return true;
+        }
+
+        struct sockaddr_in6* sa_in6 = (struct sockaddr_in6*)saddr;
+        if (inet_pton(AF_INET6, ip_str.c_str(), &sa_in6->sin6_addr) == 1) {
+            sa_in6->sin6_family = AF_INET6;
+            sa_in6->sin6_port   = htons(port);
+            return true;
+        }
+
+        std::cout << "invalid address '" << ip_str << "'" << std::endl;
+        return false;
+    }
+
     void connect(size_t server_index)
     {
         const char *server = opts().servers[server_index];
-        struct sockaddr_in connect_addr;
+        struct sockaddr_storage *src_addr_p = NULL;
+        struct sockaddr_storage dst_addr, src_addr;
         std::string server_addr;
         int port_num;
-
-        memset(&connect_addr, 0, sizeof(connect_addr));
-        connect_addr.sin_family = AF_INET;
+        bool ret;
 
         const char *port_separator = strchr(server, ':');
         if (port_separator == NULL) {
@@ -1977,11 +1997,18 @@ public:
             port_num    = atoi(port_separator + 1);
         }
 
-        connect_addr.sin_port = htons(port_num);
-        int ret = inet_pton(AF_INET, server_addr.c_str(), &connect_addr.sin_addr);
-        if (ret != 1) {
-            LOG << "invalid address " << server_addr;
+        ret = set_sockaddr(server_addr, port_num, (struct sockaddr*)&dst_addr);
+        if (ret != true) {
             abort();
+        }
+
+        if (opts().src_addr != NULL) {
+            ret = set_sockaddr(opts().src_addr, 0, (struct sockaddr*)&src_addr);
+            if (ret != true) {
+                abort();
+            }
+
+            src_addr_p = &src_addr;
         }
 
         if (!_connecting_servers.insert(server_index).second) {
@@ -1991,8 +2018,9 @@ public:
 
         UcxConnection *conn = new UcxConnection(*this, opts().use_am);
         _server_info[server_index].conn = conn;
-        conn->connect((const struct sockaddr*)&connect_addr,
-                      sizeof(connect_addr),
+        conn->connect((const struct sockaddr*)src_addr_p,
+                      (const struct sockaddr*)&dst_addr,
+                      sizeof(dst_addr),
                       new ConnectCallback(*this, server_index));
     }
 
@@ -2557,9 +2585,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->use_epoll             = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
     test_opts->progress_count        = 1;
+    test_opts->src_addr              = NULL;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2704,6 +2733,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
                 return -1;
             }
             break;
+        case 'I':
+            test_opts->src_addr = optarg;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -2744,6 +2776,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
 #endif
                       << std::endl;
             std::cout << "  -L <progress_count>         Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
+            std::cout << "  -I <src_addr>               Set source IP address to select network interface on client side" << std::endl;
             return -1;
         }
     }

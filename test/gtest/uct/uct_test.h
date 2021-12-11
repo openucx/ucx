@@ -190,6 +190,7 @@ protected:
                            unsigned other_index);
         void connect_to_sockaddr(unsigned index,
                                  const ucs::sock_addr_storage &remote_addr,
+                                 const ucs::sock_addr_storage *local_addr,
                                  uct_cm_ep_resolve_callback_t resolve_cb,
                                  uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,

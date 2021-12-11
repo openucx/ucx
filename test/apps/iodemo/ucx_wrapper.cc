@@ -780,21 +780,28 @@ UcxConnection::~UcxConnection()
     --_num_instances;
 }
 
-void UcxConnection::connect(const struct sockaddr *saddr, socklen_t addrlen,
+void UcxConnection::connect(const struct sockaddr *src_saddr,
+                            const struct sockaddr *dst_saddr,
+                            socklen_t addrlen,
                             UcxCallback *callback)
 {
-    set_log_prefix(saddr, addrlen);
+    set_log_prefix(dst_saddr, addrlen);
 
     ucp_ep_params_t ep_params;
     ep_params.field_mask       = UCP_EP_PARAM_FIELD_FLAGS |
                                  UCP_EP_PARAM_FIELD_SOCK_ADDR;
     ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
-    ep_params.sockaddr.addr    = saddr;
+    ep_params.sockaddr.addr    = dst_saddr;
     ep_params.sockaddr.addrlen = addrlen;
+    if (src_saddr != NULL) {
+        ep_params.field_mask            |= UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
+        ep_params.local_sockaddr.addr    = src_saddr;
+        ep_params.local_sockaddr.addrlen = addrlen;
+    }
 
     char sockaddr_str[UCS_SOCKADDR_STRING_LEN];
     UCX_CONN_LOG << "Connecting to "
-                 << ucs_sockaddr_str(saddr, sockaddr_str,
+                 << ucs_sockaddr_str(dst_saddr, sockaddr_str,
                                      UCS_SOCKADDR_STRING_LEN);
     connect_common(ep_params, callback);
 }

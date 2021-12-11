@@ -81,7 +81,10 @@ unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucs_assert_always(cm_wireup_ep != NULL);
-    ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
+    if (ucp_wireup_ep_has_next_ep(cm_wireup_ep)) {
+        /* If we failed to create CM ep, next_ep is not initialized */
+        ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
+    }
 
     ucs_debug("client switching from %s to %s in attempt to connect to the"
               " server",
@@ -934,7 +937,7 @@ ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep)
     ucp_rsc_index_t cm_idx     = ucp_ep_ext_control(ucp_ep)->cm_idx;
     ucp_worker_h worker        = ucp_ep->worker;
     uct_ep_params_t cm_lane_params;
-    ucs_sock_addr_t remote_addr;
+    ucs_sock_addr_t remote_addr, local_addr;
     size_t sockaddr_size;
     ucs_status_t status;
     uct_ep_h cm_ep;
@@ -963,6 +966,20 @@ ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep)
     cm_lane_params.sockaddr_cb_client = ucp_cm_client_connect_cb;
     cm_lane_params.disconnect_cb      = ucp_cm_disconnect_cb;
     cm_lane_params.cm                 = worker->cms[cm_idx].cm;
+
+    if (wireup_ep->cm_local_sockaddr.ss_family != 0) {
+        /* user specifed local address */
+        status = ucs_sockaddr_sizeof((const struct sockaddr*)&wireup_ep->cm_local_sockaddr,
+                                     &sockaddr_size);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        local_addr.addrlen            = sockaddr_size;
+        local_addr.addr               = (struct sockaddr*)&wireup_ep->cm_local_sockaddr;
+        cm_lane_params.field_mask    |= UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR;
+        cm_lane_params.local_sockaddr = &local_addr;
+    }
 
     status = uct_ep_create(&cm_lane_params, &cm_ep);
     if (status != UCS_OK) {
@@ -995,9 +1012,20 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
         return status;
     }
 
+    if (params->field_mask & UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR) {
+        /* save local address from the ep_params on the wireup_ep */
+        status = ucs_sockaddr_copy((struct sockaddr*)&wireup_ep->cm_local_sockaddr,
+                                   params->local_sockaddr.addr);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        memset(&wireup_ep->cm_local_sockaddr, 0, sizeof(wireup_ep->cm_local_sockaddr));
+    }
+
     status = ucp_ep_client_cm_create_uct_ep(ucp_ep);
-    if (status != UCS_OK) {
-        return status;
+    if ((status != UCS_OK) && !ucp_cm_client_try_fallback_cms(ucp_ep)) {
+        ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
     return UCS_OK;

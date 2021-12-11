@@ -597,9 +597,12 @@ public:
     }
 
     void client_ep_connect_basic(const ucp_ep_params_t &base_ep_params,
-                                 size_t ep_index = 0)
+                                 size_t ep_index = 0,
+                                 bool specify_src_addr = false)
     {
         ucp_ep_params_t ep_params = base_ep_params;
+        ucs::sock_addr_storage src_addr(m_test_addr.to_ucs_sock_addr());
+        src_addr.set_port(0);
 
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
                                      UCP_EP_PARAM_FIELD_SOCK_ADDR |
@@ -609,19 +612,26 @@ public:
         ep_params.sockaddr.addrlen = m_test_addr.get_addr_size();
         ep_params.user_data        = &sender();
 
+        if (specify_src_addr) {
+            ep_params.field_mask            |= UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
+            ep_params.local_sockaddr.addr    = src_addr.get_sock_addr_ptr();
+            ep_params.local_sockaddr.addrlen = src_addr.get_addr_size();
+        }
+
         sender().connect(&receiver(), ep_params, ep_index);
     }
 
-    void client_ep_connect(size_t ep_index = 0)
+    void client_ep_connect(size_t ep_index = 0, bool specify_src_addr = false)
     {
-        client_ep_connect_basic(get_ep_params(), ep_index);
+        client_ep_connect_basic(get_ep_params(), ep_index, specify_src_addr);
     }
 
-    void connect_and_send_recv(bool wakeup, uint64_t flags)
+    void connect_and_send_recv(bool wakeup, uint64_t flags,
+                               bool specify_src_addr = false)
     {
         {
             scoped_log_handler slh(detect_error_logger);
-            client_ep_connect();
+            client_ep_connect(specify_src_addr);
             if (!wait_for_server_ep(wakeup)) {
                 UCS_TEST_SKIP_R("cannot connect to server");
             }
@@ -657,10 +667,11 @@ public:
         start_listener(cb_type);
     }
 
-    void listen_and_communicate(bool wakeup, uint64_t flags)
+    void listen_and_communicate(bool wakeup, uint64_t flags,
+                                bool specify_src_addr = false)
     {
         listen(cb_type());
-        connect_and_send_recv(wakeup, flags);
+        connect_and_send_recv(wakeup, flags, specify_src_addr);
     }
 
     void listen_and_reject(bool wakeup)
@@ -963,6 +974,12 @@ UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
 
 UCS_TEST_P(test_ucp_sockaddr, ep_query) {
     listen_and_communicate(false, 0);
+    ep_query();
+}
+
+UCS_TEST_P(test_ucp_sockaddr, set_local_sockaddr)
+{
+    listen_and_communicate(false, 0, true);
     ep_query();
 }
 
