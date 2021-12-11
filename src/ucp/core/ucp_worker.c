@@ -2742,7 +2742,7 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
             if (errno == EAGAIN) {
                 break; /* No more events */
             } else if (errno != EINTR) {
-                ucs_error("Read from internal event fd failed: %m");
+                ucs_error("read from internal event fd failed: %m");
                 status = UCS_ERR_IO_ERROR;
                 goto out;
             }
@@ -2757,8 +2757,8 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
     ucs_list_for_each(wiface, &worker->arm_ifaces, arm_list) {
         ucs_assert(wiface->activate_count > 0);
         status = uct_iface_event_arm(wiface->iface, worker->uct_events);
-        ucs_trace("arm iface %p returned %s", wiface->iface,
-                  ucs_status_string(status));
+        ucs_trace_data("arm iface %p returned %s", wiface->iface,
+                       ucs_status_string(status));
         if (status != UCS_OK) {
             goto out_unlock;
         }
@@ -2769,7 +2769,6 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
 out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
 out:
-    ucs_trace("ucp_worker_arm returning %s", ucs_status_string(status));
     return status;
 }
 
