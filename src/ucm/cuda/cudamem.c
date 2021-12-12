@@ -225,8 +225,8 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
                                       func->patch.symbol, func->orig_func_ptr,
                                       NULL);
             if (status == UCS_OK) {
-                ucm_trace("installed bistro hook for '%s': %s",
-                          func->patch.symbol, ucs_status_string(status));
+                ucm_debug("installed bistro hook for '%s': %d",
+                          func->patch.symbol, status);
                 ++num_bistro;
                 continue;
             }
@@ -239,7 +239,7 @@ ucm_cuda_install_hooks(ucm_cuda_func_t *funcs, int *used_reloc,
             status = ucm_reloc_modify(&func->patch);
             if (status == UCS_OK) {
                 ++num_reloc;
-                ucm_trace("installed reloc hook on '%s'", func->patch.symbol);
+                ucm_debug("installed reloc hook on '%s'", func->patch.symbol);
                 continue;
             }
 
@@ -319,7 +319,7 @@ static int ucm_cudamem_scan_regions_cb(void *arg, void *addr, size_t length,
         return 0;
     }
 
-    ucm_trace("dispatching initial memtype allocation for %p..%p %s", addr,
+    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
               UCS_PTR_BYTE_OFFSET(addr, length), path);
 
     event.mem_type.address  = addr;

@@ -359,7 +359,7 @@ out:
 
 void ucp_listener_destroy(ucp_listener_h listener)
 {
-    ucs_trace("listener %p: destroying", listener);
+    ucs_debug("listener %p: destroying", listener);
 
     UCS_ASYNC_BLOCK(&listener->worker->async);
     ucs_vfs_obj_remove(listener);
