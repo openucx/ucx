@@ -2032,7 +2032,7 @@ static void ucp_warn_unused_uct_config(ucp_context_h context)
 
     if (num_unused_cached_kv > 0) {
         ucs_string_buffer_rtrim(&unused_cached_uct_cfg , ",");
-        ucs_warn("Invalid configuration%s: %s",
+        ucs_warn("invalid configuration%s: %s",
                  (num_unused_cached_kv > 1) ? "s" : "",
                  ucs_string_buffer_cstr(&unused_cached_uct_cfg));
     }

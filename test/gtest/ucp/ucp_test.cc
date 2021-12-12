@@ -540,13 +540,18 @@ void ucp_test::modify_config(const std::string& name, const std::string& value,
 {
     ucs_status_t status;
 
-    status = ucp_config_modify_internal(m_ucp_config, name.c_str(), value.c_str());
-    if (status == UCS_ERR_NO_ELEM) {
-        test_base::modify_config(name, value, mode);
-    } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't modify ucp config parameter: " <<
-                        name.c_str() << " to " << value.c_str() << ": " <<
-                        ucs_status_string(status));
+    if (mode == IGNORE_IF_NOT_EXIST) {
+        (void)ucp_config_modify(m_ucp_config, name.c_str(), value.c_str());
+    } else {
+        status = ucp_config_modify_internal(m_ucp_config, name.c_str(),
+                                            value.c_str());
+        if (status == UCS_ERR_NO_ELEM) {
+            test_base::modify_config(name, value, mode);
+        } else if (status != UCS_OK) {
+            UCS_TEST_ABORT("Couldn't modify ucp config parameter: "
+                           << name.c_str() << " to " << value.c_str() << ": "
+                           << ucs_status_string(status));
+        }
     }
 }
 
@@ -664,6 +669,9 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
+        /* We could have "invalid configuration" errors only when used
+           ucp_config_modify(), in which case we wanted to ignore them. */
+        scoped_log_handler slh(hide_config_warns_logger);
         UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_workers[i].first,
                                ucp_worker_destroy, ucp_worker_create, m_ucph,
                                &local_worker_params);
@@ -789,6 +797,20 @@ void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
         m_workers[worker_index].second.push_back(
                         ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
     }
+}
+
+ucs_log_func_rc_t ucp_test_base::entity::hide_config_warns_logger(
+        const char *file, unsigned line, const char *function,
+        ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
+        const char *message, va_list ap)
+{
+    if (strstr(message, "invalid configuration") == NULL) {
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    return common_logger(UCS_LOG_LEVEL_WARN, false, m_warnings,
+                         std::numeric_limits<size_t>::max(), file, line,
+                         function, level, comp_conf, message, ap);
 }
 
 void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
