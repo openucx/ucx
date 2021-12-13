@@ -758,14 +758,14 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=128")
+UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=1")
 {
     uint64_t tag = 0x11;
-    std::vector<char> dummy(256, 0);
+    uint64_t dummy;
 
     activate_offload(sender());
 
-    request *rreq = recv_nb(dummy.data(), dummy.size(), DATATYPE, tag,
+    request *rreq = recv_nb(&dummy, sizeof(dummy), DATATYPE, tag,
                             UCP_TAG_MASK_FULL);
 
     wait_counter(worker_offload_stats(receiver()),
@@ -777,10 +777,10 @@ UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=128")
                  UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED);
 }
 
-UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=128")
+UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=1")
 {
     uint64_t tag = 0x11;
-    std::vector<char> buf(256, 0);
+    std::vector<char> buf(64, 0);
 
     activate_offload(sender());
 
@@ -883,7 +883,7 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_tag_offload_stats_gpu, block_gpu_no_gpu_direct,
-           "TM_THRESH=128")
+           "TM_THRESH=1")
 {
     activate_offload(sender());
 
