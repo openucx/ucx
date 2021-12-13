@@ -84,7 +84,8 @@ static ucp_proto_t ucp_put_offload_short_proto = {
     .flags      = UCP_PROTO_FLAG_PUT_SHORT,
     .init       = ucp_proto_put_offload_short_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_put_offload_short_progress}
+    .progress   = {ucp_proto_put_offload_short_progress},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_put_offload_short_proto);
 
@@ -178,7 +179,8 @@ static ucp_proto_t ucp_put_offload_bcopy_proto = {
     .flags      = 0,
     .init       = ucp_proto_put_offload_bcopy_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_put_offload_bcopy_progress}
+    .progress   = {ucp_proto_put_offload_bcopy_progress},
+    .abort      = ucp_proto_request_bcopy_abort
 };
 UCP_PROTO_REGISTER(&ucp_put_offload_bcopy_proto);
 
@@ -251,11 +253,19 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                 init_params->priv_size);
 }
 
+static void ucp_put_offload_zcopy_abort(ucp_request_t *request,
+                                        ucs_status_t status)
+{
+    /* zcopy request starts from uct_comp.count = 1 */
+    ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
+}
+
 static ucp_proto_t ucp_put_offload_zcopy_proto = {
     .name       = "put/offload/zcopy",
     .flags      = 0,
     .init       = ucp_proto_put_offload_zcopy_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_put_offload_zcopy_progress}
+    .progress   = {ucp_proto_put_offload_zcopy_progress},
+    .abort      = ucp_put_offload_zcopy_abort
 };
 UCP_PROTO_REGISTER(&ucp_put_offload_zcopy_proto);

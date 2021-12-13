@@ -21,6 +21,7 @@
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
+#include <ucp/proto/proto_common.h>
 #include <ucp/proto/proto_select.h>
 #include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
@@ -1070,7 +1071,13 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t  status    = UCS_PTR_STATUS(arg);
 
-    ucp_request_send_state_ff(req, status);
+    /* TODO: check for context->config.ext.proto_enable when all protocols are
+     *       implemented, such as flush, AM/RNDV, etc */
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
+        ucp_proto_request_abort(req, status);
+    } else {
+        ucp_request_send_state_ff(req, status);
+    }
 }
 
 void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
@@ -3221,7 +3228,11 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
 
     while (!ucs_hlist_is_empty(proto_reqs)) {
         req = ucs_hlist_head_elem(proto_reqs, ucp_request_t, send.list);
-        ucp_ep_req_purge(ucp_ep, req, status, 0);
+        if (ucp_ep->worker->context->config.ext.proto_enable) {
+            ucp_proto_request_abort(req, status);
+        } else {
+            ucp_ep_req_purge(ucp_ep, req, status, 0);
+        }
     }
 
     if (/* Flush state is already valid (i.e. EP doesn't exist on matching
