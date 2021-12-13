@@ -81,7 +81,11 @@ nobase_dist_libucs_la_HEADERS = \
 	arch/aarch64/global_opts.h \
 	arch/generic/atomic.h \
 	arch/ppc64/global_opts.h \
-	arch/global_opts.h
+	arch/global_opts.h \
+	arch/lock.h \
+	arch/x86_64/lock.h \
+	arch/aarch64/lock.h \
+	arch/ppc64/lock.h
 
 noinst_HEADERS = \
 	arch/aarch64/cpu.h \
