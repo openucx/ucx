@@ -470,6 +470,12 @@ run_client_server_app() {
 run_hello() {
 	api=$1
 	shift
+	if [[ $1 == "proto" ]]
+	then
+		export UCX_PROTO_ENABLE=y
+		shift
+	fi
+
 	test_args="$@"
 	test_name=${api}_hello_world
 
@@ -501,6 +507,7 @@ run_hello() {
 		unset UCX_RC_TIMEOUT
 		unset UCX_RC_RETRY_COUNT
 	fi
+	unset UCX_PROTO_ENABLE
 }
 
 #
@@ -527,7 +534,7 @@ run_ucp_hello() {
 	for tls in all tcp,cuda shm,cuda
 	do
 		export UCX_TLS=${tls}
-		for test_mode in -w -f -b -erecv -esend -ekeepalive
+		for test_mode in -w -f -b -erecv -esend -ekeepalive proto
 		do
 			for mem_type in $mem_types_list
 			do
@@ -645,6 +652,9 @@ run_io_demo() {
 
 		for server_ip in $server_rdma_addr $server_nonrdma_addr
 		do
+			export UCX_PROTO_ENABLE=y
+			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+			unset UCX_PROTO_ENABLE
 			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 		done
 
