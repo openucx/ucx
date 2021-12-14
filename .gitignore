@@ -63,7 +63,7 @@ debian/control
 debian/rules
 debian/ucx.postinst
 ucx.spec
-ucx.pc
+ucx*.pc
 docs/_build
 docs/doxygen-doc
 docs/doxygen/header.tex
@@ -95,6 +95,8 @@ src/tools/vfs/ucx_vfs
 test/apps/test_init_mt
 test/apps/iodemo/io_demo
 test/apps/test_cuda_hook_dynamic
+test/apps/test_cuda_hook_static
+test/apps/test_ucp_config
 test/apps/test_memtrack_limit
 test/apps/profiling/ucx_profiling
 cmake/*.cmake
