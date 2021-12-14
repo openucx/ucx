@@ -22,6 +22,28 @@ BEGIN_C_DECLS
 
 
 /**
+ * Spinlock static initializer
+ */
+#define UCS_SPINLOCK_INITIALIZER {UCS_SPINLOCK_FREE}
+
+
+/**
+ * Spinlock states
+ */
+enum {
+    UCS_SPINLOCK_FREE = 0,
+    UCS_SPINLOCK_BUSY = 1
+};
+
+
+/**
+ * Simple spinlock.
+ */
+typedef struct ucs_spinlock {
+    volatile unsigned int lock;
+} ucs_spinlock_t;
+
+/**
  * Reentrant spinlock.
  */
 typedef struct ucs_recursive_spinlock {
@@ -31,11 +53,56 @@ typedef struct ucs_recursive_spinlock {
 } ucs_recursive_spinlock_t;
 
 
-void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
+/**
+ * Simple implementation section
+ */
+static UCS_F_ALWAYS_INLINE void ucs_spinlock_init(ucs_spinlock_t *lock)
+{
+    lock->lock = UCS_SPINLOCK_FREE;
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_spinlock_destroy(ucs_spinlock_t *lock)
+{
+}
+
+static UCS_F_ALWAYS_INLINE int ucs_spin_try_lock(ucs_spinlock_t *lock)
+{
+    int res;
+
+    res = ucs_atomic_cswap32(&lock->lock, UCS_SPINLOCK_FREE,
+                             UCS_SPINLOCK_BUSY) == UCS_SPINLOCK_FREE;
+
+    if (res) {
+        ucs_spin_try_lock_barrier();
+    }
+
+    return res;
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_spin_lock(ucs_spinlock_t *lock)
+{
+    while (!ucs_spin_try_lock(lock)) {
+        while (lock->lock != UCS_SPINLOCK_FREE) {
+            /* spin */
+            ucs_spin_lock_pause();
+        }
+    }
+}
+
+static UCS_F_ALWAYS_INLINE void ucs_spin_unlock(ucs_spinlock_t *lock)
+{
+    static unsigned int lockfree = UCS_SPINLOCK_FREE;
+
+    ucs_spin_unlock_barrier();
+    __atomic_store(&lock->lock, &lockfree, __ATOMIC_RELAXED);
+    ucs_spin_unlock_event();
+}
 
 /**
  * Recursive implementation section
  */
+void ucs_recursive_spinlock_destroy(ucs_recursive_spinlock_t *lock);
+
 static UCS_F_ALWAYS_INLINE void
 ucs_recursive_spinlock_init(ucs_recursive_spinlock_t* lock)
 {
