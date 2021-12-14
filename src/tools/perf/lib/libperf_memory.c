@@ -41,6 +41,53 @@ static ucs_status_t ucp_perf_test_alloc_iov_mem(ucp_perf_datatype_t datatype,
     return UCS_OK;
 }
 
+static ucs_status_t ucp_perf_mem_alloc(const ucx_perf_context_t *perf,
+                                       size_t length,
+                                       ucs_memory_type_t mem_type,
+                                       void **address_p, ucp_mem_h *memh_p)
+{
+    ucp_mem_map_params_t params;
+    ucp_mem_attr_t attr;
+    ucs_status_t status;
+
+    params.field_mask  = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                         UCP_MEM_MAP_PARAM_FIELD_LENGTH |
+                         UCP_MEM_MAP_PARAM_FIELD_FLAGS |
+                         UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE;
+    params.address     = NULL;
+    params.memory_type = mem_type;
+    params.length      = length;
+    params.flags       = UCP_MEM_MAP_ALLOCATE;
+    if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
+        params.flags |= UCP_MEM_MAP_NONBLOCK;
+    }
+
+    status = ucp_mem_map(perf->ucp.context, &params, memh_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
+    status          = ucp_mem_query(*memh_p, &attr);
+    if (status != UCS_OK) {
+        ucp_mem_unmap(perf->ucp.context, *memh_p);
+        return status;
+    }
+
+    *address_p = attr.address;
+    return UCS_OK;
+}
+
+static void ucp_perf_mem_free(const ucx_perf_context_t *perf, ucp_mem_h memh)
+{
+    ucs_status_t status;
+
+    status = ucp_mem_unmap(perf->ucp.context, memh);
+    if (status != UCS_OK) {
+        ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
+    }
+}
+
 ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
 {
     ucx_perf_params_t *params = &perf->params;
@@ -54,19 +101,17 @@ ucs_status_t ucp_perf_test_alloc_mem(ucx_perf_context_t *perf)
     }
 
     /* Allocate send buffer memory */
-    perf->send_buffer = NULL;
-    status = perf->allocator->ucp_alloc(perf, buffer_size * params->thread_count,
-                                        &perf->send_buffer, &perf->ucp.send_memh,
-                                        UCP_MEM_MAP_NONBLOCK);
+    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+                                params->send_mem_type, &perf->send_buffer,
+                                &perf->ucp.send_memh);
     if (status != UCS_OK) {
         goto err;
     }
 
     /* Allocate receive buffer memory */
-    perf->recv_buffer = NULL;
-    status = perf->allocator->ucp_alloc(perf, buffer_size * params->thread_count,
-                                        &perf->recv_buffer, &perf->ucp.recv_memh,
-                                        0);
+    status = ucp_perf_mem_alloc(perf, buffer_size * params->thread_count,
+                                params->recv_mem_type, &perf->recv_buffer,
+                                &perf->ucp.recv_memh);
     if (status != UCS_OK) {
         goto err_free_send_buffer;
     }
@@ -107,9 +152,9 @@ err_free_send_iov_buffers:
 err_free_am_hdr:
     free(perf->ucp.am_hdr);
 err_free_buffers:
-    perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
+    ucp_perf_mem_free(perf, perf->ucp.recv_memh);
 err_free_send_buffer:
-    perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
+    ucp_perf_mem_free(perf, perf->ucp.send_memh);
 err:
     return UCS_ERR_NO_MEMORY;
 }
@@ -119,55 +164,8 @@ void ucp_perf_test_free_mem(ucx_perf_context_t *perf)
     free(perf->ucp.recv_iov);
     free(perf->ucp.send_iov);
     free(perf->ucp.am_hdr);
-    perf->allocator->ucp_free(perf, perf->recv_buffer, perf->ucp.recv_memh);
-    perf->allocator->ucp_free(perf, perf->send_buffer, perf->ucp.send_memh);
-}
-
-static ucs_status_t
-ucp_perf_test_alloc_host(const ucx_perf_context_t *perf, size_t length,
-                         void **address_p, ucp_mem_h *memh, int non_blk_flag)
-{
-    ucp_mem_map_params_t mem_map_params;
-    ucp_mem_attr_t mem_attr;
-    ucs_status_t status;
-
-    mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
-                                UCP_MEM_MAP_PARAM_FIELD_LENGTH |
-                                UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    mem_map_params.address    = *address_p;
-    mem_map_params.length     = length;
-    mem_map_params.flags      = UCP_MEM_MAP_ALLOCATE;
-    if (perf->params.flags & UCX_PERF_TEST_FLAG_MAP_NONBLOCK) {
-        mem_map_params.flags |= non_blk_flag;
-    }
-
-    status = ucp_mem_map(perf->ucp.context, &mem_map_params, memh);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    mem_attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS;
-    status = ucp_mem_query(*memh, &mem_attr);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    *address_p = mem_attr.address;
-    return UCS_OK;
-
-err:
-    return status;
-}
-
-static void ucp_perf_test_free_host(const ucx_perf_context_t *perf,
-                                    void *address, ucp_mem_h memh)
-{
-    ucs_status_t status;
-
-    status = ucp_mem_unmap(perf->ucp.context, memh);
-    if (status != UCS_OK) {
-        ucs_warn("ucp_mem_unmap() failed: %s", ucs_status_string(status));
-    }
+    ucp_perf_mem_free(perf, perf->ucp.recv_memh);
+    ucp_perf_mem_free(perf, perf->ucp.send_memh);
 }
 
 static void
@@ -228,8 +226,10 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     flags |= UCT_MD_MEM_ACCESS_ALL;
 
     /* Allocate send buffer memory */
-    status = perf->allocator->uct_alloc(perf, buffer_size * params->thread_count,
-                                        flags, &perf->uct.send_mem);
+    status = perf->send_allocator->uct_alloc(perf,
+                                             buffer_size * params->thread_count,
+                                             flags, &perf->uct.send_mem);
+
     if (status != UCS_OK) {
         goto err;
     }
@@ -237,8 +237,9 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     perf->send_buffer = perf->uct.send_mem.address;
 
     /* Allocate receive buffer memory */
-    status = perf->allocator->uct_alloc(perf, buffer_size * params->thread_count,
-                                        flags, &perf->uct.recv_mem);
+    status = perf->recv_allocator->uct_alloc(perf,
+                                             buffer_size * params->thread_count,
+                                             flags, &perf->uct.recv_mem);
     if (status != UCS_OK) {
         goto err_free_send;
     }
@@ -262,17 +263,17 @@ ucs_status_t uct_perf_test_alloc_mem(ucx_perf_context_t *perf)
     return UCS_OK;
 
 err_free_recv:
-    perf->allocator->uct_free(perf, &perf->uct.recv_mem);
+    perf->recv_allocator->uct_free(perf, &perf->uct.recv_mem);
 err_free_send:
-    perf->allocator->uct_free(perf, &perf->uct.send_mem);
+    perf->send_allocator->uct_free(perf, &perf->uct.send_mem);
 err:
     return status;
 }
 
 void uct_perf_test_free_mem(ucx_perf_context_t *perf)
 {
-    perf->allocator->uct_free(perf, &perf->uct.send_mem);
-    perf->allocator->uct_free(perf, &perf->uct.recv_mem);
+    perf->send_allocator->uct_free(perf, &perf->uct.send_mem);
+    perf->recv_allocator->uct_free(perf, &perf->uct.recv_mem);
     free(perf->uct.iov);
 }
 
@@ -281,8 +282,6 @@ void ucx_perf_global_init()
     static ucx_perf_allocator_t host_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_HOST,
         .init      = ucs_empty_function_return_success,
-        .ucp_alloc = ucp_perf_test_alloc_host,
-        .ucp_free  = ucp_perf_test_free_host,
         .uct_alloc = uct_perf_test_alloc_host,
         .uct_free  = uct_perf_test_free_host,
         .memcpy    = ucx_perf_test_memcpy_host,

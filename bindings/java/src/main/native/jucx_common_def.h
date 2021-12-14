@@ -58,6 +58,11 @@ typedef uintptr_t native_ptr;
 bool j2cInetSockAddr(JNIEnv *env, jobject sock_addr, sockaddr_storage& ss, socklen_t& sa_len);
 
 /**
+ * @brief Utility to convert c sockaddr to java InetSocketAddress
+ */
+jobject c2jInetSockAddr(JNIEnv *env, const sockaddr_storage* ss);
+
+/**
  * @brief Get the jni env object. To be able to call java methods from ucx async callbacks.
  */
 JNIEnv* get_jni_env();

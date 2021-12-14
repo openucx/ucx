@@ -15,11 +15,74 @@ extern "C" {
 #define MB                        pow(1024, -2)
 #define UCT_PERF_TEST_MULTIPLIER  5
 #define UCT_ARM_PERF_TEST_MULTIPLIER  15
+#define UCT_CUDA_PERF_TEST_MULTIPLIER  5
 
 class test_uct_perf : public uct_test, public test_perf {
+public:
+    void test_execute(unsigned flags, ucs_memory_type_t send_mem_type,
+                      ucs_memory_type_t recv_mem_type);
 protected:
     const static test_spec tests[];
 };
+
+void test_uct_perf::test_execute(unsigned flags = 0,
+                                 ucs_memory_type_t send_mem_type =
+                                 UCS_MEMORY_TYPE_HOST,
+                                 ucs_memory_type_t recv_mem_type =
+                                 UCS_MEMORY_TYPE_HOST) {
+    if (has_transport("ugni_udt")) {
+        UCS_TEST_SKIP;
+    }
+
+    /* For SandyBridge CPUs, don't check performance of far-socket devices */
+    std::vector<int> cpus = get_affinity();
+    bool check_perf       = true;
+    size_t max_iter       = std::numeric_limits<size_t>::max();
+
+    if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
+        for (std::vector<int>::iterator iter = cpus.begin();
+             iter != cpus.end(); ++iter) {
+            if (!ucs_cpu_is_set(*iter, &GetParam()->local_cpus)) {
+                UCS_TEST_MESSAGE << "Not enforcing performance on "
+                                    "SandyBridge far socket";
+                check_perf = false;
+                break;
+            }
+        }
+    }
+
+    if (has_transport("tcp")) {
+        check_perf = false; /* TODO calibrate expected performance based on transport */
+        max_iter   = 1000lu;
+    }
+
+    /* Run all tests */
+    for (const test_spec *test_iter = tests; test_iter->title != NULL;
+         ++test_iter) {
+        test_spec test = *test_iter;
+
+        test.send_mem_type = send_mem_type;
+        test.recv_mem_type = recv_mem_type;
+
+        if (has_transport("cuda_copy")) {
+            test.max *= UCT_CUDA_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_CUDA_PERF_TEST_MULTIPLIER;
+        }
+
+        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
+            test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
+        } else {
+            test.max *= UCT_PERF_TEST_MULTIPLIER;
+            test.min /= UCT_PERF_TEST_MULTIPLIER;
+        }
+
+        test.iters = ucs_min(test.iters, max_iter);
+
+        run_test(test, flags, check_perf, GetParam()->tl_name,
+                 GetParam()->dev_name);
+    }
+}
 
 
 const test_perf::test_spec test_uct_perf::tests[] =
@@ -175,44 +238,50 @@ const test_perf::test_spec test_uct_perf::tests[] =
 
 
 UCS_TEST_P(test_uct_perf, envelope) {
-    if (has_transport("ugni_udt")) {
-        UCS_TEST_SKIP;
-    }
-
-    /* For SandyBridge CPUs, don't check performance of far-socket devices */
-    std::vector<int> cpus = get_affinity();
-    bool check_perf       = true;
-    size_t max_iter       = std::numeric_limits<size_t>::max();
-
-    if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_INTEL_SANDYBRIDGE) {
-        for (std::vector<int>::iterator iter = cpus.begin(); iter != cpus.end(); ++iter) {
-            if (!ucs_cpu_is_set(*iter, &GetParam()->local_cpus)) {
-                UCS_TEST_MESSAGE << "Not enforcing performance on SandyBridge far socket";
-                check_perf = false;
-                break;
-            }
-        }
-    }
-
-    if (has_transport("tcp")) {
-        check_perf = false; /* TODO calibrate expected performance based on transport */
-        max_iter   = 1000lu;
-    }
-
-    /* Run all tests */
-    for (const test_spec *test_iter = tests; test_iter->title != NULL; ++test_iter) {
-        test_spec test = *test_iter;
-
-        if (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64) {
-            test.max *= UCT_ARM_PERF_TEST_MULTIPLIER;
-            test.min /= UCT_ARM_PERF_TEST_MULTIPLIER;
-        } else {
-            test.max *= UCT_PERF_TEST_MULTIPLIER;
-            test.min /= UCT_PERF_TEST_MULTIPLIER;
-        }
-        test.iters = ucs_min(test.iters, max_iter);
-        run_test(test, 0, check_perf, GetParam()->tl_name, GetParam()->dev_name);
-    }
+    test_execute();
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_perf);
+
+class test_uct_loopback : public test_uct_perf {
+};
+
+UCS_TEST_P(test_uct_loopback, envelope)
+{
+    test_execute(UCX_PERF_TEST_FLAG_LOOPBACK);
+}
+
+UCT_INSTANTIATE_NO_GPU_TEST_CASE(test_uct_loopback);
+
+class test_uct_loopback_cuda : public test_uct_perf {
+public:
+    const std::vector<std::vector<ucs_memory_type_t>> mem_type_pairs() {
+        std::vector<std::vector<ucs_memory_type_t>> result;
+        std::vector<ucs_memory_type_t> input = {UCS_MEMORY_TYPE_HOST,
+                                                UCS_MEMORY_TYPE_CUDA};
+
+        /* gdr_copy test supports from host to GPU mem case only */
+        if (has_transport("gdr_copy")) {
+            result.push_back(input);
+        } else {
+            result = ucs::make_pairs(input);
+        }
+
+        return result;
+    }
+};
+
+UCS_TEST_P(test_uct_loopback_cuda, envelope)
+{
+    std::vector<std::vector<ucs_memory_type_t>> pairs = mem_type_pairs();
+
+    for (auto pair : pairs) {
+        UCS_TEST_MESSAGE << "send mem type: "
+                         << ucs_memory_type_names[pair[0]] << " / "
+                         << "recv mem type: "
+                         << ucs_memory_type_names[pair[1]];
+        test_execute(UCX_PERF_TEST_FLAG_LOOPBACK, pair[0], pair[1]);
+    }
+}
+
+UCT_INSTANTIATE_CUDA_TEST_CASE(test_uct_loopback_cuda);

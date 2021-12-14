@@ -25,6 +25,8 @@ BEGIN_C_DECLS
 #define UCS_IPV4_ADDR_LEN            sizeof(struct in_addr)
 #define UCS_IPV6_ADDR_LEN            sizeof(struct in6_addr)
 
+#define UCS_IPV4_SOCKADDR_LEN        sizeof(struct sockaddr_in)
+#define UCS_IPV6_SOCKADDR_LEN        sizeof(struct sockaddr_in6)
 /* A string to hold the IP address and port from a sockaddr */
 #define UCS_SOCKADDR_STRING_LEN      60
 
@@ -72,10 +74,26 @@ ucs_status_t ucs_netif_ioctl(const char *if_name, unsigned long request,
  * Check if the given interface is in an active state.
  *
  * @param [in]  if_name      Interface name to check.
+ * @param [in]  af           Address family.
  *
  * @return 1 if true, otherwise 0
  */
-int ucs_netif_is_active(const char *if_name);
+int ucs_netif_is_active(const char *if_name, sa_family_t af);
+
+
+/**
+ * Get address and netmask for a given interface.
+ *
+ * @param [in]  if_name      Interface name to check.
+ * @param [in]  af           Address family.
+ * @param [out] addr         Interface address.
+ * @param [out] netmask      Interface address.
+ *
+ * @return UCS_OK on success or an error code on failure.
+ */
+ucs_status_t ucs_netif_get_addr(const char *if_name, sa_family_t af,
+                                struct sockaddr *saddr,
+                                struct sockaddr *netmask);
 
 
 /**
@@ -205,7 +223,7 @@ ucs_status_t ucs_socket_set_buffer_size(int fd, size_t sockopt_sndbuf,
 
 /**
  * Initialize a TCP server.
- * Open a socket, bind a sockadrr to that socket and start listening on it for
+ * Open a socket, bind a sockaddr to that socket and start listening on it for
  * incoming connection requests.
  *
  * @param [in]  saddr             Sockaddr for the server to listen on.
@@ -469,7 +487,7 @@ const char *ucs_socket_getname_str(int fd, char *str, size_t max_size);
  *         < 0 - the first socket address is lower than the second
  *               socket address;
  *         = 0 - the socket addresses are equal.
- *         Note: it returns a positive integer value in case of error occured
+ *         Note: it returns a positive integer value in case of error occurred
  *               during comparison.
  */
 int ucs_sockaddr_cmp(const struct sockaddr *sa1,
@@ -513,6 +531,17 @@ int ucs_sockaddr_is_inaddr_loopback(const struct sockaddr *addr);
 
 
 /**
+ * set INADDR_ANY (IPV4) or in6addr_any (IPV6) to addr.
+ *
+ * @param [out]  addr       Pointer to sockaddr structure.
+ * @param [in]   af         Address family.
+ *
+ * @return UCS_OK on success or UCS_ERR_INVALID_PARAM on failure.
+ */
+ucs_status_t ucs_sockaddr_set_inaddr_any(struct sockaddr *addr, sa_family_t af);
+
+
+/**
  * Copy the src_addr sockaddr to dst_addr sockaddr. The length to copy is
  * the size of the src_addr sockaddr.
  *
@@ -535,24 +564,6 @@ ucs_status_t ucs_sockaddr_copy(struct sockaddr *dst_addr,
  */
 ucs_status_t
 ucs_sockaddr_get_ifname(int fd, char *ifname_str, size_t max_strlen);
-
-/**
- * Copy the IP address associated with the given network interface.
- *
- * @param [in]   if_name     Interface name.
- * @param [out]  addr        The IP address of the given interface.
- */
-ucs_status_t
-ucs_sockaddr_get_ifaddr(const char *if_name, struct sockaddr_in *addr);
-
-/**
- * Copy the IP subnet mask associated with the given network interface.
- *
- * @param [in]   if_name     Interface name.
- * @param [out]  addr        The IP address of the given interface.
- */
-ucs_status_t
-ucs_sockaddr_get_ifmask(const char *if_name, struct sockaddr_in *mask);
 
 
 /**

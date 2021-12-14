@@ -818,11 +818,12 @@ UCS_TEST_P(test_ucp_tag_match_rndv, req_exp_auto_thresh, "RNDV_THRESH=auto") {
 }
 
 UCS_TEST_P(test_ucp_tag_match_rndv, exp_huge_mix) {
-    const size_t sizes[] = { 1000, 2000, 8000, 2500ul * UCS_MBYTE };
+    const std::vector<size_t> sizes = {1000, 2000, 8000, 2500ul * UCS_MBYTE,
+                                       UCS_GBYTE + 32};
 
     /* small sizes should warm-up tag cache */
-    for (unsigned i = 0; i < ucs_static_array_size(sizes); ++i) {
-        const size_t size = sizes[i] / ucs::test_time_multiplier() /
+    for (auto c_size : sizes) {
+        const size_t size = c_size / ucs::test_time_multiplier() /
                             ucs::test_time_multiplier();
         request *my_send_req, *my_recv_req;
 

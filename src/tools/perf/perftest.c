@@ -1,6 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
-* Copyright (C) The University of Tennessee and The University 
+* Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2017-2021.  ALL RIGHTS RESERVED.
@@ -275,11 +275,13 @@ static void sock_rte_recv(void *rte_group, unsigned src, void *buffer,
 }
 
 static void sock_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                            void *arg, int is_final, int is_multi_thread)
+                            void *arg, const char *extra_info, int is_final,
+                            int is_multi_thread)
 {
     struct perftest_context *ctx = arg;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, ctx->server_addr == NULL, is_multi_thread);
+    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
+                   ctx->flags, is_final, ctx->server_addr == NULL,
+                   is_multi_thread);
 }
 
 static ucx_perf_rte_t sock_rte = {
@@ -316,57 +318,96 @@ static ucs_status_t setup_sock_rte_loobkack(struct perftest_context *ctx)
 
 static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
 {
-    struct sockaddr_in inaddr;
-    struct hostent *he;
-    ucs_status_t status;
     int optval = 1;
-    int sockfd, connfd;
+    int sockfd = -1;
+    char addr_str[UCS_SOCKADDR_STRING_LEN];
+    struct sockaddr_storage client_addr;
+    socklen_t client_addr_len;
+    int connfd;
+    struct addrinfo hints, *res, *t;
+    ucs_status_t status;
     int ret;
+    char service[8];
+    char err_str[64];
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        ucs_error("socket() failed: %m");
+    ucs_snprintf_safe(service, sizeof(service), "%u", ctx->port);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_flags    = (ctx->server_addr == NULL) ? AI_PASSIVE : 0;
+    hints.ai_family   = ctx->af;
+    hints.ai_socktype = SOCK_STREAM;
+
+    ret = getaddrinfo(ctx->server_addr, service, &hints, &res);
+    if (ret < 0) {
+        ucs_error("getaddrinfo(server:%s, port:%s) error: [%s]",
+                  ctx->server_addr, service, gai_strerror(ret));
         status = UCS_ERR_IO_ERROR;
-        goto err;
+        goto out;
+    }
+
+    if (res == NULL) {
+        snprintf(err_str, 64, "getaddrinfo() returned empty list");
+    }
+
+    for (t = res; t != NULL; t = t->ai_next) {
+        sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
+        if (sockfd < 0) {
+            snprintf(err_str, 64, "socket() failed: %m");
+            continue;
+        }
+
+        if (ctx->server_addr != NULL) {
+            if (connect(sockfd, t->ai_addr, t->ai_addrlen) == 0) {
+                break;
+            }
+            snprintf(err_str, 64, "connect() failed: %m");
+        } else {
+            status = ucs_socket_setopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
+                                       &optval, sizeof(optval));
+            if (status != UCS_OK) {
+                status = UCS_ERR_IO_ERROR;
+                goto err_close_sockfd;
+            }
+
+            if (bind(sockfd, t->ai_addr, t->ai_addrlen) == 0) {
+                ret = listen(sockfd, 10);
+                if (ret < 0) {
+                    ucs_error("listen() failed: %m");
+                    status = UCS_ERR_IO_ERROR;
+                    goto err_close_sockfd;
+                }
+
+                printf("Waiting for connection...\n");
+
+                /* Accept next connection */
+                client_addr_len = sizeof(client_addr);
+                connfd          = accept(sockfd, (struct sockaddr*)&client_addr,
+                                         &client_addr_len);
+                if (connfd < 0) {
+                    ucs_error("accept() failed: %m");
+                    status = UCS_ERR_IO_ERROR;
+                    goto err_close_sockfd;
+                }
+
+                ucs_sockaddr_str((struct sockaddr*)&client_addr, addr_str,
+                                 sizeof(addr_str));
+                printf("Accepted connection from %s\n", addr_str);
+                close(sockfd);
+                break;
+            }
+            snprintf(err_str, 64, "bind() failed: %m");
+        }
+        close(sockfd);
+        sockfd = -1;
+    }
+
+    if (sockfd < 0) {
+        ucs_error("%s failed. %s",
+                  (ctx->server_addr != NULL) ? "client" : "server", err_str);
+        status = UCS_ERR_IO_ERROR;
+        goto out_free_res;
     }
 
     if (ctx->server_addr == NULL) {
-        status = ucs_socket_setopt(sockfd, SOL_SOCKET, SO_REUSEADDR,
-                                   &optval, sizeof(optval));
-        if (status != UCS_OK) {
-            goto err_close_sockfd;
-        }
-
-        inaddr.sin_family      = AF_INET;
-        inaddr.sin_port        = htons(ctx->port);
-        inaddr.sin_addr.s_addr = INADDR_ANY;
-        memset(inaddr.sin_zero, 0, sizeof(inaddr.sin_zero));
-        ret = bind(sockfd, (struct sockaddr*)&inaddr, sizeof(inaddr));
-        if (ret < 0) {
-            ucs_error("bind() failed: %m");
-            status = UCS_ERR_INVALID_ADDR;
-            goto err_close_sockfd;
-        }
-
-        ret = listen(sockfd, 10);
-        if (ret < 0) {
-            ucs_error("listen() failed: %m");
-            status = UCS_ERR_IO_ERROR;
-            goto err_close_sockfd;
-        }
-
-        printf("Waiting for connection...\n");
-
-        /* Accept next connection */
-        connfd = accept(sockfd, NULL, NULL);
-        if (connfd < 0) {
-            ucs_error("accept() failed: %m");
-            status = UCS_ERR_IO_ERROR;
-            goto err_close_sockfd;
-        }
-
-        close(sockfd);
-
         /* release the memory for the list of the message sizes allocated
          * during the initialization of the default testing parameters */
         free(ctx->params.super.msg_size_list);
@@ -402,27 +443,6 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
         ctx->sock_rte_group.peer      = 1;
         ctx->sock_rte_group.is_server = 1;
     } else {
-        he = gethostbyname(ctx->server_addr);
-        if (he == NULL || he->h_addr_list == NULL) {
-            ucs_error("host %s not found: %s", ctx->server_addr,
-                      hstrerror(h_errno));
-            status = UCS_ERR_INVALID_ADDR;
-            goto err_close_sockfd;
-        }
-
-        inaddr.sin_family = he->h_addrtype;
-        inaddr.sin_port   = htons(ctx->port);
-        ucs_assert(he->h_length == sizeof(inaddr.sin_addr));
-        memcpy(&inaddr.sin_addr, he->h_addr_list[0], he->h_length);
-        memset(inaddr.sin_zero, 0, sizeof(inaddr.sin_zero));
-
-        ret = connect(sockfd, (struct sockaddr*)&inaddr, sizeof(inaddr));
-        if (ret < 0) {
-            ucs_error("connect() failed: %m");
-            status = UCS_ERR_UNREACHABLE;
-            goto err_close_sockfd;
-        }
-
         safe_send(sockfd, &ctx->params, sizeof(ctx->params), NULL, NULL);
         if (ctx->params.super.msg_size_cnt != 0) {
             safe_send(sockfd, ctx->params.super.msg_size_list,
@@ -445,14 +465,17 @@ static ucs_status_t setup_sock_rte_p2p(struct perftest_context *ctx)
         ctx->flags |= TEST_FLAG_PRINT_RESULTS;
     }
 
-    return UCS_OK;
+    status = UCS_OK;
+    goto out_free_res;
 
 err_close_connfd:
-    close(connfd);
-    goto err;
+    ucs_close_fd(&connfd);
+    goto out_free_res;
 err_close_sockfd:
-    close(sockfd);
-err:
+    ucs_close_fd(&sockfd);
+out_free_res:
+    freeaddrinfo(res);
+out:
     return status;
 }
 
@@ -622,11 +645,13 @@ static void mpi_rte_recv(void *rte_group, unsigned src, void *buffer, size_t max
 }
 
 static void mpi_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, int is_final, int is_multi_thread)
+                           void *arg, const char *extra_info, int is_final,
+                           int is_multi_thread)
 {
     struct perftest_context *ctx = arg;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, ctx->server_addr == NULL, is_multi_thread);
+    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
+                   ctx->flags, is_final, ctx->server_addr == NULL,
+                   is_multi_thread);
 }
 #elif defined (HAVE_RTE)
 static unsigned ext_rte_group_size(void *rte_group)
@@ -733,11 +758,13 @@ static void ext_rte_exchange_vec(void *rte_group, void * req)
 }
 
 static void ext_rte_report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, int is_final, int is_multi_thread)
+                           const char *extra_info, void *arg, int is_final,
+                           int is_multi_thread)
 {
     struct perftest_context *ctx = arg;
-    print_progress(ctx->test_names, ctx->num_batch_files, result, ctx->flags,
-                   is_final, ctx->server_addr == NULL, is_multi_thread);
+    print_progress(ctx->test_names, ctx->num_batch_files, result, extra_info,
+                   ctx->flags, is_final, ctx->server_addr == NULL,
+                   is_multi_thread);
 }
 
 static ucx_perf_rte_t ext_rte = {
@@ -796,7 +823,7 @@ static ucs_status_t setup_mpi_rte(struct perftest_context *ctx)
     ctx->params.super.report_arg = ctx;
 #elif defined (HAVE_RTE)
     ucs_trace_func("");
-    
+
     ctx->params.rte_group         = NULL;
     ctx->params.rte               = &mpi_rte;
     ctx->params.report_arg        = ctx;

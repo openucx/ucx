@@ -60,7 +60,9 @@ struct ucs_memtype_cache {
  *                              means the memory type is an unknown non-host
  *                              memory, and should be detected in another way.
  *
- * @return Error code.
+ * @return UCS_OK              - an element was found and the memory info is valid.
+ * @return UCS_ERR_NO_ELEM     - an element was not found.
+ * @return UCS_ERR_UNSUPPORTED - the memory type cache is disabled.
  */
 ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
                                       ucs_memory_info_t *mem_info);

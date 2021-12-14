@@ -219,10 +219,15 @@ bool UcxContext::listen(const struct sockaddr* saddr, size_t addrlen)
     return true;
 }
 
-void UcxContext::progress()
+void UcxContext::progress(unsigned count)
 {
+    int i = 0;
+
     progress_worker_event();
-    progress_io_message();
+    do {
+        progress_io_message();
+    } while ((++i < count) && progress_worker_event());
+
     progress_timed_out_conns();
     progress_conn_requests();
     progress_failed_connections();
@@ -296,30 +301,28 @@ const std::string UcxContext::sockaddr_str(const struct sockaddr* saddr,
                                            size_t addrlen)
 {
     char buf[128];
-    int port;
+    uint16_t port;
 
     if (saddr->sa_family != AF_INET) {
         return "<unknown address family>";
     }
 
-    struct sockaddr_storage addr = {0};
-    memcpy(&addr, saddr, addrlen);
-    switch (addr.ss_family) {
+    switch (saddr->sa_family) {
     case AF_INET:
-        inet_ntop(AF_INET, &((struct sockaddr_in*)&addr)->sin_addr,
+        inet_ntop(AF_INET, &((const struct sockaddr_in*)saddr)->sin_addr,
                   buf, sizeof(buf));
-        port = ntohs(((struct sockaddr_in*)&addr)->sin_port);
+        port = ntohs(((const struct sockaddr_in*)saddr)->sin_port);
         break;
     case AF_INET6:
-        inet_ntop(AF_INET6, &((struct sockaddr_in6*)&addr)->sin6_addr,
+        inet_ntop(AF_INET6, &((const struct sockaddr_in6*)saddr)->sin6_addr,
                   buf, sizeof(buf));
-        port = ntohs(((struct sockaddr_in6*)&addr)->sin6_port);
+        port = ntohs(((const struct sockaddr_in6*)saddr)->sin6_port);
         break;
     default:
         return "<invalid address>";
     }
 
-    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%d", port);
+    snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), ":%u", port);
     return buf;
 }
 
@@ -377,17 +380,17 @@ ucs_status_t UcxContext::epoll_init()
     return UCS_OK;
 }
 
-void UcxContext::progress_worker_event()
+bool UcxContext::progress_worker_event()
 {
     int         ret;
     epoll_event ev;
 
     if (ucp_worker_progress(_worker)) {
-        return;
+        return true;
     }
 
     if ((_epoll_fd == -1) || (ucp_worker_arm(_worker) == UCS_ERR_BUSY)) {
-        return;
+        return false;
     }
 
     do {
@@ -395,6 +398,7 @@ void UcxContext::progress_worker_event()
     } while ((ret == -1) && (errno == EINTR || errno == EAGAIN));
 
     assert(ev.data.fd == _worker_fd);
+    return false;
 }
 
 void UcxContext::progress_timed_out_conns()
@@ -776,21 +780,28 @@ UcxConnection::~UcxConnection()
     --_num_instances;
 }
 
-void UcxConnection::connect(const struct sockaddr *saddr, socklen_t addrlen,
+void UcxConnection::connect(const struct sockaddr *src_saddr,
+                            const struct sockaddr *dst_saddr,
+                            socklen_t addrlen,
                             UcxCallback *callback)
 {
-    set_log_prefix(saddr, addrlen);
+    set_log_prefix(dst_saddr, addrlen);
 
     ucp_ep_params_t ep_params;
     ep_params.field_mask       = UCP_EP_PARAM_FIELD_FLAGS |
                                  UCP_EP_PARAM_FIELD_SOCK_ADDR;
     ep_params.flags            = UCP_EP_PARAMS_FLAGS_CLIENT_SERVER;
-    ep_params.sockaddr.addr    = saddr;
+    ep_params.sockaddr.addr    = dst_saddr;
     ep_params.sockaddr.addrlen = addrlen;
+    if (src_saddr != NULL) {
+        ep_params.field_mask            |= UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
+        ep_params.local_sockaddr.addr    = src_saddr;
+        ep_params.local_sockaddr.addrlen = addrlen;
+    }
 
     char sockaddr_str[UCS_SOCKADDR_STRING_LEN];
     UCX_CONN_LOG << "Connecting to "
-                 << ucs_sockaddr_str(saddr, sockaddr_str,
+                 << ucs_sockaddr_str(dst_saddr, sockaddr_str,
                                      UCS_SOCKADDR_STRING_LEN);
     connect_common(ep_params, callback);
 }
@@ -826,7 +837,11 @@ void UcxConnection::disconnect(UcxCallback *callback)
     if (!is_established()) {
         assert(_ucx_status == UCS_INPROGRESS);
         established(UCS_ERR_CANCELED);
+    } else if (_ucx_status == UCS_OK) {
+        _ucx_status = UCS_ERR_NOT_CONNECTED;
     }
+
+    assert(UCS_STATUS_IS_ERR(_ucx_status));
 
     _context.move_connection_to_disconnecting(this);
 

@@ -35,7 +35,7 @@ const double uct_ib_qp_rnr_time_ms[] = {
 };
 
 
-/* use both gid + lid data for key generarion (lid - ib based, gid - RoCE) */
+/* use both gid + lid data for key generation (lid - ib based, gid - RoCE) */
 static UCS_F_ALWAYS_INLINE
 khint32_t uct_ib_kh_ah_hash_func(struct ibv_ah_attr attr)
 {
@@ -632,8 +632,8 @@ ucs_status_t uct_ib_device_init(uct_ib_device_t *dev,
 
     dev->async_events = async_events;
 
-    uct_ib_device_get_locality(ibv_get_device_name(ibv_device), &dev->local_cpus,
-                               &dev->numa_node);
+    uct_ib_device_get_locality(ibv_get_device_name(ibv_device),
+                               &dev->local_cpus, &dev->numa_node);
 
     status = UCS_STATS_NODE_ALLOC(&dev->stats, &uct_ib_device_stats_class,
                                   stats_parent, "device");
@@ -1132,7 +1132,8 @@ static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
         return UCS_SYS_DEVICE_ID_UNKNOWN;
     }
 
-    ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
+    status = ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
+    ucs_assert_always(status == UCS_OK);
 
     ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
               uct_ib_device_name(dev), bus_id.domain, bus_id.bus, bus_id.slot,
@@ -1332,7 +1333,8 @@ uct_ib_device_create_ah(uct_ib_device_t *dev, struct ibv_ah_attr *ah_attr,
         ucs_error("ibv_create_ah(%s) for %s on %s failed: %m",
                   uct_ib_ah_attr_str(buf, sizeof(buf), ah_attr), usage,
                   uct_ib_device_name(dev));
-        return UCS_ERR_INVALID_ADDR;
+        return (errno == ETIMEDOUT) ?
+                UCS_ERR_ENDPOINT_TIMEOUT : UCS_ERR_INVALID_ADDR;
     }
 
     *ah_p = ah;

@@ -76,3 +76,7 @@ const (
 	UCS_ERR_LAST_ENDPOINT_FAILURE  UcsStatus = C.UCS_ERR_LAST_ENDPOINT_FAILURE
 	UCS_ERR_LAST                   UcsStatus = C.UCS_ERR_LAST
 )
+
+func (m UcsStatus) String() string {
+	return C.GoString(C.ucs_status_string(C.ucs_status_t(m)))
+}

@@ -19,6 +19,58 @@
 #include <ucs/datastruct/queue.h>
 
 
+static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
+                                     ucp_recv_desc_t *rdesc)
+{
+    ucp_eager_first_hdr_t *first_hdr;
+    ucp_offload_first_desc_t *offload_hdr;
+    size_t recv_len;
+    void *data;
+    uint64_t msg_id;
+    ucs_status_t status;
+
+    UCP_WORKER_STAT_EAGER_MSG(worker, rdesc->flags);
+    UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
+    ucs_assert(rdesc->flags & UCP_RECV_DESC_FLAG_EAGER);
+
+    req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
+
+    if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
+        offload_hdr      = (ucp_offload_first_desc_t*)(rdesc + 1);
+        req->recv.offset = 0;
+        recv_len         = rdesc->length - sizeof(*offload_hdr);
+        data             = UCS_PTR_BYTE_OFFSET(rdesc + 1, sizeof(*offload_hdr));
+
+        status = ucp_request_recv_offload_data(req, data, recv_len,
+                                               rdesc->flags);
+        if (status == UCS_INPROGRESS) {
+            ucp_tag_frag_list_process_common(
+                    req, ucs_unaligned_ptr(&offload_hdr->matchq), 1
+                    UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
+        }
+
+        /* No other fragments are expected, because first rdesc is added to
+         * unexpected queue only when all fragments arrived. Can release first
+         * rdesc now. */
+        ucp_recv_desc_release(rdesc);
+    } else {
+        first_hdr           = (ucp_eager_first_hdr_t*)(rdesc + 1);
+        req->recv.remaining = req->recv.tag.info.length = first_hdr->total_len;
+        msg_id              = first_hdr->msg_id;
+
+        if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC)) {
+            ucp_tag_eager_sync_send_ack(worker, rdesc + 1, rdesc->flags);
+        }
+
+        status = ucp_tag_recv_request_process_rdesc(req, rdesc, 0, 0);
+        if (status == UCS_INPROGRESS) {
+            ucp_tag_frag_list_process_queue(
+                    &worker->tm, req, msg_id
+                    UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
+        }
+    }
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                     uintptr_t datatype, ucp_tag_t tag, ucp_tag_t tag_mask,
@@ -27,12 +79,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
 {
     uint32_t req_flags = (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) ?
                          UCP_REQUEST_FLAG_CALLBACK : 0;
-    ucp_eager_first_hdr_t *eagerf_hdr;
     ucp_request_queue_t *req_queue;
     ucs_memory_type_t memory_type;
     size_t hdr_len, recv_len;
     ucs_status_t status;
-    uint64_t msg_id;
 
     ucp_trace_req(req, "%s buffer %p dt 0x%lx count %zu tag %"PRIx64"/%"PRIx64,
                   debug_name, buffer, datatype, count, tag, tag_mask);
@@ -69,7 +119,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         ucp_recv_desc_release(rdesc);
 
         req->status = status;
-        UCS_PROFILE_REQUEST_EVENT(req, "complete_recv", 0);
+        UCS_PROFILE_REQUEST_EVENT(req, "complete_imm_tag_recv", 0);
 
         ucp_request_imm_cmpl_param(param, req, recv, &req->recv.tag.info);
     }
@@ -137,28 +187,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                              rdesc->length);
         UCP_WORKER_STAT_RNDV(worker, UNEXP, 1);
         ucp_recv_desc_release(rdesc);
-        return req + 1;
-    }
-
-    if (ucs_unlikely(rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_SYNC)) {
-        ucp_tag_eager_sync_send_ack(worker, rdesc + 1, rdesc->flags);
-    }
-
-    UCP_WORKER_STAT_EAGER_MSG(worker, rdesc->flags);
-    ucs_assert(rdesc->flags & UCP_RECV_DESC_FLAG_EAGER);
-    eagerf_hdr                    = (void*)(rdesc + 1);
-    req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
-    req->recv.tag.info.length     =
-    req->recv.remaining           = eagerf_hdr->total_len;
-
-    /* process first fragment */
-    UCP_WORKER_STAT_EAGER_CHUNK(worker, UNEXP);
-    msg_id = eagerf_hdr->msg_id;
-    status = ucp_tag_recv_request_process_rdesc(req, rdesc, 0);
-    if (status == UCS_INPROGRESS) {
-        /* process additional fragments */
-        ucp_tag_frag_list_process_queue(&worker->tm, req, msg_id
-                                        UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
+    } else {
+        ucp_tag_recv_eager_multi(worker, req, rdesc);
     }
 
     return req + 1;

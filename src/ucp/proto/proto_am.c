@@ -16,8 +16,7 @@
 
 static inline size_t ucp_proto_max_packed_size()
 {
-    return ucs_max(sizeof(ucp_reply_hdr_t),
-                   sizeof(ucp_offload_ssend_hdr_t));
+    return ucs_max(sizeof(ucp_rndv_ack_hdr_t), sizeof(ucp_offload_ssend_hdr_t));
 }
 
 static size_t ucp_proto_pack(void *dest, void *arg)
@@ -25,21 +24,21 @@ static size_t ucp_proto_pack(void *dest, void *arg)
     ucp_request_t *req = arg;
     ucp_reply_hdr_t *rep_hdr;
     ucp_offload_ssend_hdr_t *off_rep_hdr;
-    ucp_rndv_atp_hdr_t *atp_hdr;
+    ucp_rndv_ack_hdr_t *ack_hdr;
 
     switch (req->send.proto.am_id) {
     case UCP_AM_ID_EAGER_SYNC_ACK:
-    case UCP_AM_ID_RNDV_ATS:
         rep_hdr = dest;
         rep_hdr->req_id = req->send.proto.remote_req_id;
         rep_hdr->status = req->send.proto.status;
         return sizeof(*rep_hdr);
+    case UCP_AM_ID_RNDV_ATS:
     case UCP_AM_ID_RNDV_ATP:
-        atp_hdr               = dest;
-        atp_hdr->super.req_id = req->send.proto.remote_req_id;
-        atp_hdr->super.status = req->send.proto.status;
-        atp_hdr->count        = 1;
-        return sizeof(*atp_hdr);
+        ack_hdr               = dest;
+        ack_hdr->super.req_id = req->send.proto.remote_req_id;
+        ack_hdr->super.status = req->send.proto.status;
+        ack_hdr->size         = req->send.length;
+        return sizeof(*ack_hdr);
     case UCP_AM_ID_OFFLOAD_SYNC_ACK:
         off_rep_hdr = dest;
         off_rep_hdr->sender_tag = req->send.proto.sender_tag;

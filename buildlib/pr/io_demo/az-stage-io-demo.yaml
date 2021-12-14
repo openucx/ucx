@@ -9,13 +9,22 @@ parameters:
   default: 60
 - name: roce_iface
   default: $(roce_iface)
+- name: initial_delay
+  default: 20
 
 steps:
 - bash: |
     set -eEx
+    $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
+  displayName: Restore port state
+  condition: always()
+  timeoutInMinutes: 2
+
+- bash: |
+    set -eEx
     source $(workspace)/buildlib/az-helpers.sh
     $(workspace)/buildlib/az-network-corrupter.sh \
-      initial_delay=$(initial_delay) \
+      initial_delay=${{ parameters.initial_delay }} \
       cycles=$(cycles) \
       downtime=$(downtime) \
       uptime=$(uptime) \
@@ -63,7 +72,7 @@ steps:
   timeoutInMinutes: 15
 
 - bash: |
-    python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list CI,$(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
+    python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list $(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 1
 
@@ -84,7 +93,7 @@ steps:
 
 - bash: |
     set -eEx
-    $(workspace)/buildlib/az-network-corrupter.sh reset=yes
+    $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
   displayName: Restore port state
   condition: always()
   timeoutInMinutes: 2

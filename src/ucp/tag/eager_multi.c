@@ -68,6 +68,7 @@ static ucs_status_t ucp_proto_eager_bcopy_multi_common_init(
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = hdr_size,
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = 0,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
@@ -154,6 +155,7 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
+    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_bcopy_progress(
             req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
             ucp_proto_eager_bcopy_multi_send_func,
@@ -227,6 +229,7 @@ ucp_proto_eager_sync_bcopy_multi_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
+    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_bcopy_progress(
             req, req->send.proto_config->priv,
             ucp_proto_eager_sync_bcopy_request_init,
@@ -257,6 +260,7 @@ ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
         .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
         .super.hdr_size      = sizeof(ucp_eager_first_hdr_t),
+        .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
@@ -294,8 +298,8 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
     max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
     iov_count   = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                              max_payload, lpriv->super.memh_index,
-                                             UCP_DT_MASK_ALL, next_iter, iov,
-                                             lpriv->super.max_iov);
+                                             UCP_DT_MASK_CONTIG_IOV, next_iter,
+                                             iov, lpriv->super.max_iov);
     return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,
                            &hdr, hdr_size, iov, iov_count, 0,
                            &req->send.state.uct_comp);
@@ -305,9 +309,10 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
+    /* coverity[tainted_data_downcast] */
     return ucp_proto_multi_zcopy_progress(
             req, req->send.proto_config->priv, ucp_proto_msg_multi_request_init,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_ALL,
+            UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_eager_zcopy_multi_send_func,
             ucp_request_invoke_uct_completion_success,
             ucp_proto_request_zcopy_completion);

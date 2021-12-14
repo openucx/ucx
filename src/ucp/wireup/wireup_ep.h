@@ -25,8 +25,11 @@ enum {
     /* Debug: next_ep connected to remote address */
     UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED  = UCS_BIT(1),
 
-    /* Remote peer has conencted to next_ep */
-    UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(2)
+    /* Remote peer has connected to next_ep */
+    UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(2),
+
+    /* Send client id */
+    UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3)
 };
 
 
@@ -42,12 +45,15 @@ struct ucp_wireup_ep {
     struct sockaddr_storage   cm_remote_sockaddr;  /**< sockaddr of the remote peer -
                                                         used only on the client side
                                                         in a client-server flow */
+    struct sockaddr_storage   cm_local_sockaddr;   /**< local sockaddr
+                                                        used only on the client side
+                                                        in a client-server flow */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
     uct_worker_cb_id_t        progress_id;   /**< ID of progress function */
     unsigned                  ep_init_flags; /**< UCP wireup EP init flags */
-    /**< TLs which are awailable on client side resolved device */
+    /**< TLs which are available on client side resolved device */
     ucp_tl_bitmap_t           cm_resolve_tl_bitmap;
     /**< Destination resource indicies used for checking intersection between
          between two configurations in case of CM */
@@ -101,6 +107,8 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   unsigned ep_flush_flags,
                                   uct_pending_purge_callback_t purge_cb,
                                   void *purge_arg);
+
+int ucp_wireup_ep_has_next_ep(ucp_wireup_ep_t *wireup_ep);
 
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
 

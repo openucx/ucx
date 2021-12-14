@@ -80,7 +80,7 @@ size_t uct_iov_iter_flat_offset(const uct_iov_t *iov, size_t iov_cnt,
  * The function avoids copying IOVs with zero length.
  *
  * @param [out]    io_vec          Pointer to the resulted array of IOVECs.
- * @param [in/out] io_vec_cnt_p    Pointer to the varibale that holds the number
+ * @param [in/out] io_vec_cnt_p    Pointer to the variable that holds the number
  *                                 of the elements in the array of IOVECs (input:
  *                                 initial, out: result).
  * @param [in]     uct_iov         Pointer to the array of UCT IOVs.

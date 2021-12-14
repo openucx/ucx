@@ -22,8 +22,6 @@ import java.util.stream.Stream;
 import static org.junit.Assert.*;
 
 public class UcpListenerTest  extends UcxTest {
-    static final int port = Integer.parseInt(
-        System.getenv().getOrDefault("JUCX_TEST_PORT", "55321"));
 
     static Stream<NetworkInterface> getInterfaces() {
         try {
@@ -51,32 +49,24 @@ public class UcpListenerTest  extends UcxTest {
             .collect(Collectors.toList());
         Collections.reverse(addresses);
         for (InetAddress address : addresses) {
-            for (int i = 0; i < 10; i++) {
-                try {
-                    result = worker.newListener(
-                        params.setSockAddr(new InetSocketAddress(address, port + i)));
-                    break;
-                } catch (UcxException ex) {
-                    if (ex.getStatus() != UcsConstants.STATUS.UCS_ERR_BUSY) {
-                        break;
-                    }
-                }
-            }
+            result = worker.newListener(params.setSockAddr(new InetSocketAddress(address, 0)));
         }
         assertNotNull("Could not find socket address to start UcpListener", result);
+        assertNotEquals(0, result.getAddress().getPort());
         System.out.println("Bound UcpListner on: " + result.getAddress());
         return result;
     }
 
     @Test
     public void testConnectionHandler() throws Exception {
+        long clientId = 3L;
         UcpContext context1 = new UcpContext(new UcpParams().requestStreamFeature()
             .requestRmaFeature());
         UcpContext context2 = new UcpContext(new UcpParams().requestStreamFeature()
             .requestRmaFeature());
         UcpWorker serverWorker1 = context1.newWorker(new UcpWorkerParams());
         UcpWorker serverWorker2 = context1.newWorker(new UcpWorkerParams());
-        UcpWorker clientWorker = context2.newWorker(new UcpWorkerParams());
+        UcpWorker clientWorker = context2.newWorker(new UcpWorkerParams().setClientId(clientId));
 
         AtomicReference<UcpConnectionRequest> connRequest = new AtomicReference<>(null);
         AtomicReference<UcpConnectionRequest> connReject = new AtomicReference<>(null);
@@ -94,7 +84,7 @@ public class UcpListenerTest  extends UcxTest {
         UcpListener clientListener = tryBindListener(clientWorker, listenerParams);
 
         UcpEndpoint clientToServer = clientWorker.newEndpoint(new UcpEndpointParams()
-            .setErrorHandler((ep, status, errorMsg) ->
+            .sendClientId().setErrorHandler((ep, status, errorMsg) ->
                 System.err.println("clientToServer error: " + errorMsg))
             .setPeerErrorHandlingMode().setSocketAddress(serverListener.getAddress()));
 
@@ -103,6 +93,7 @@ public class UcpListenerTest  extends UcxTest {
             clientWorker.progress();
         }
 
+        assertEquals(clientId, connRequest.get().getClientId());
         assertNotNull(connRequest.get().getClientAddress());
         UcpEndpoint serverToClientListener = serverWorker2.newEndpoint(
             new UcpEndpointParams().setSocketAddress(connRequest.get().getClientAddress())

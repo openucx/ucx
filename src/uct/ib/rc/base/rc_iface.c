@@ -374,16 +374,14 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
-        ep->fc.fc_wnd = iface->config.fc_wnd_size;
-        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
+        uct_rc_fc_restore_wnd(iface, &ep->fc);
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0
          * (otherwise it will be dispatched by tx progress) */
         if (cur_wnd <= 0) {
             ucs_arbiter_group_schedule(&iface->tx.arbiter, &ep->arb_group);
-            ucs_arbiter_dispatch(&iface->tx.arbiter, 1,
-                                 uct_rc_ep_process_pending, NULL);
+            uct_rc_iface_arbiter_dispatch(iface);
         }
         if  (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
             /* Special FC grant message can't be bundled with any other FC
@@ -638,7 +636,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                         uct_rc_ep_atomic_handler_64_be0;
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
-                                  self->super.super.stats);
+                                  self->super.super.stats, "-%p", self);
     if (status != UCS_OK) {
         goto err_cleanup_tx_ops;
     }
@@ -703,7 +701,8 @@ unsigned uct_rc_iface_qp_cleanup_progress(void *arg)
     ops->cleanup_qp(cleanup_ctx);
 
     if (cleanup_ctx->cq_credits > 0) {
-        uct_rc_iface_add_cq_credits_dispatch(iface, cleanup_ctx->cq_credits);
+        uct_rc_iface_add_cq_credits(iface, cleanup_ctx->cq_credits);
+        uct_rc_iface_arbiter_dispatch(iface);
     }
 
     ucs_list_del(&cleanup_ctx->list);

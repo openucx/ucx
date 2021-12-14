@@ -29,6 +29,7 @@ ucp_datatype_iter_mem_dereg_some(ucp_context_h context,
     memh_index_old = 0;
     memh_index     = 0;
     ucs_for_each_bit(md_index, dt_reg->md_map) {
+        ucs_assertv(memh_index < UCP_MAX_OP_MDS, "memh_index=%d", memh_index);
         uct_memh = dt_reg->memh[memh_index++];
         if (keep_md_map & UCS_BIT(md_index)) {
             prev_memh[memh_index_old++] = uct_memh;
@@ -74,8 +75,11 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_datatype_iter_mem_reg_internal,
     }
 
     if (ucs_unlikely(length == 0)) {
-        for (memh_index = 0; UCS_BIT(memh_index) <= md_map; ++memh_index) {
-            dt_reg->memh[memh_index] = UCT_MEM_HANDLE_NULL;
+        memh_index = 0;
+        ucs_for_each_bit(md_index, md_map) {
+            ucs_assertv(memh_index < UCP_MAX_OP_MDS, "memh_index=%d",
+                        memh_index);
+            dt_reg->memh[memh_index++] = UCT_MEM_HANDLE_NULL;
         }
         goto out;
     }
@@ -94,9 +98,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_datatype_iter_mem_reg_internal,
     memh_index_old = 0;
     memh_index     = 0;
     ucs_for_each_bit(md_index, md_map) {
+        ucs_assertv(memh_index < UCP_MAX_OP_MDS, "memh_index=%d", memh_index);
+
         if (UCS_BIT(md_index) & dt_reg->md_map) {
             /* memh already registered */
-            ucs_assert(memh_index_old < UCP_MAX_OP_MDS);
+            ucs_assertv(memh_index_old < UCP_MAX_OP_MDS, "memh_index_old=%d",
+                        memh_index_old);
             dt_reg->memh[memh_index++] = tmp_reg[memh_index_old++];
             continue;
         }

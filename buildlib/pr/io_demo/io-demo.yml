@@ -23,12 +23,6 @@ parameters:
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_cx4_rc
-      "active messages on CX4":
-        args: "-A"
-        duration: 600
-        interface: $(roce_iface_cx4)
-        tls: "rc_x"
-        test_name: am_cx4_rc
       "tag match on CX6/RC":
         args: ""
         duration: 600
@@ -111,17 +105,17 @@ jobs:
             test_time: ${{ test.Value.duration }}
             test_intefrafe: ${{ test.Value.interface }}
             test_ucx_tls: ${{ test.Value.tls }}
+            initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
       maxParallel: 1
 
     variables:
       workspace: drop_$(Build.BuildId)
       io_demo_exe: drop_$(Build.BuildId)/install/bin/io_demo
-      initial_delay: ${{ parameters.initial_delay }}
       cycles: ${{ parameters.cycles }}
       downtime: ${{ parameters.downtime }}
       uptime: ${{ parameters.uptime }}
 
-    displayName: "Test: "
+    displayName: "Test "
     steps:
       - checkout: none
         clean: true
@@ -138,3 +132,4 @@ jobs:
           duration: $(test_time)
           roce_iface: $(test_intefrafe)
           iodemo_tls: $(test_ucx_tls)
+          initial_delay: $(initial_delay)

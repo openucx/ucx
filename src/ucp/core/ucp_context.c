@@ -38,13 +38,6 @@ static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_LAST]   = NULL,
 };
 
-static const char * ucp_device_type_names[] = {
-    [UCT_DEVICE_TYPE_NET]  = "network",
-    [UCT_DEVICE_TYPE_SHM]  = "intra-node",
-    [UCT_DEVICE_TYPE_ACC]  = "accelerator",
-    [UCT_DEVICE_TYPE_SELF] = "loopback",
-};
-
 static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AUTO]         = "auto",
     [UCP_RNDV_MODE_GET_ZCOPY]    = "get_zcopy",
@@ -57,17 +50,46 @@ static const char *ucp_rndv_modes[] = {
 };
 
 const char *ucp_operation_names[] = {
-    [UCP_OP_ID_TAG_SEND]      = "tag_send",
-    [UCP_OP_ID_TAG_SEND_SYNC] = "tag_send_sync",
-    [UCP_OP_ID_PUT]           = "put",
-    [UCP_OP_ID_GET]           = "get",
-    [UCP_OP_ID_AMO_POST]      = "amo_post",
-    [UCP_OP_ID_AMO_FETCH]     = "amo_fetch",
-    [UCP_OP_ID_AMO_CSWAP]     = "amo_cswap",
-    [UCP_OP_ID_RNDV_SEND]     = "rndv_send",
-    [UCP_OP_ID_RNDV_RECV]     = "rndv_recv",
-    [UCP_OP_ID_LAST]          = NULL
+    [UCP_OP_ID_TAG_SEND]       = "tag_send",
+    [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
+    [UCP_OP_ID_AM_SEND]        = "am_send",
+    [UCP_OP_ID_PUT]            = "put",
+    [UCP_OP_ID_GET]            = "get",
+    [UCP_OP_ID_AMO_POST]       = "amo_post",
+    [UCP_OP_ID_AMO_FETCH]      = "amo_fetch",
+    [UCP_OP_ID_AMO_CSWAP]      = "amo_cswap",
+    [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
+    [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
+    [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
+    [UCP_OP_ID_LAST]           = NULL
 };
+
+static size_t ucp_rndv_frag_default_sizes[] = {
+    [UCS_MEMORY_TYPE_HOST]         = 512 * UCS_KBYTE,
+    [UCS_MEMORY_TYPE_CUDA]         = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_CUDA_MANAGED] = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ROCM]         = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_ROCM_MANAGED] = 4 * UCS_MBYTE,
+    [UCS_MEMORY_TYPE_LAST]         = 0
+};
+
+static size_t ucp_rndv_frag_default_num_elems[] = {
+    [UCS_MEMORY_TYPE_HOST]         = 128,
+    [UCS_MEMORY_TYPE_CUDA]         = 128,
+    [UCS_MEMORY_TYPE_CUDA_MANAGED] = 128,
+    [UCS_MEMORY_TYPE_ROCM]         = 128,
+    [UCS_MEMORY_TYPE_ROCM_MANAGED] = 128,
+    [UCS_MEMORY_TYPE_LAST]         = 0
+};
+
+const char *ucp_object_versions[] = {
+    [UCP_OBJECT_VERSION_V1]   = "v1",
+    [UCP_OBJECT_VERSION_V2]   = "v2",
+    [UCP_OBJECT_VERSION_LAST] = NULL
+};
+
+static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
+                               UCS_CONFIG_TYPE_MEMUNITS);
 
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
@@ -133,10 +155,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "The '*' wildcard expands to all the available sockaddr transports.",
    ucs_offsetof(ucp_config_t, sockaddr_cm_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
 
-  {"SOCKADDR_AUX_TLS", "ud",
-   "Transports to use for exchanging additional address information while\n"
-   "establishing client/server connection. ",
-   ucs_offsetof(ucp_config_t, sockaddr_aux_tls), UCS_CONFIG_TYPE_STRING_ARRAY},
+  {"SOCKADDR_AUX_TLS", "",
+   "The configuration parameter is deprecated. UCX_TLS should be used to\n"
+   "specify the transport for client/server connection establishment.",
+   UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
   {"SELECT_DISTANCE_MD", "cuda_cpy",
    "MD whose distance is queried when evaluating transport selection score",
@@ -147,6 +169,11 @@ static ucs_config_field_t ucp_config_table[] = {
    "Allowed memory types: cuda, rocm, rocm-managed",
    ucs_offsetof(ucp_config_t, ctx.reg_whole_alloc_bitmap),
    UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+  {"RNDV_MEMTYPE_DIRECT_SIZE", "inf",
+   "Maximum size for mem type direct in rendezvous protocol\n",
+   ucs_offsetof(ucp_config_t, ctx.rndv_memtype_direct_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
 
   {"WARN_INVALID_CONFIG", "y",
    "Issue a warning in case of invalid device and/or transport configuration.",
@@ -297,9 +324,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "and the resulting performance.",
    ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
 
-  {"RNDV_FRAG_SIZE", "512k",
-   "RNDV fragment size",
-   ucs_offsetof(ucp_config_t, ctx.rndv_frag_size), UCS_CONFIG_TYPE_MEMUNITS},
+  {"RNDV_FRAG_SIZE", "host:512K,cuda:4M",
+   "Comma-separated list of memory types and associated fragment sizes.\n"
+   "The memory types in the list is used for rendezvous bounce buffers.",
+   ucs_offsetof(ucp_config_t, rndv_frag_sizes), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"RNDV_FRAG_ALLOC_COUNT", "host:128,cuda:128",
+   "Comma separated list of memory pool allocation granularity per memory type.",
+   ucs_offsetof(ucp_config_t, rndv_frag_elems), UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
@@ -357,6 +389,31 @@ static ucs_config_field_t ucp_config_table[] = {
    "lane without waiting for remote completion.",
    ucs_offsetof(ucp_config_t, ctx.rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
 
+  {"SA_DATA_VERSION", "v1",
+   "Defines the minimal header version the client will use for establishing\n"
+   "client/server connection",
+   ucs_offsetof(ucp_config_t, ctx.sa_client_min_hdr_version),
+   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
+
+  {"RKEY_MPOOL_MAX_MD", "2",
+   "Maximum number of UCP rkey MDs which can be unpacked into memory pool\n"
+   "element. UCP rkeys containing larger number of MDs will be unpacked to\n"
+   "dynamically allocated memory.",
+   ucs_offsetof(ucp_config_t, ctx.rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
+
+  {"RX_MPOOL_SIZES", "64,1kb",
+   "List of worker mpool sizes separated by comma. The values must be power of 2\n"
+   "Values larger than the maximum UCT transport segment size will be ignored.\n"
+   "These pools are used for UCP AM and unexpected TAG messages. When assigning\n"
+   "pool sizes, note that the data may be stored with some header.",
+   ucs_offsetof(ucp_config_t, mpool_sizes), UCS_CONFIG_TYPE_ARRAY(memunit_sizes)},
+
+  {"ADDRESS_VERSION", "v1",
+   "Defines UCP worker address format obtained with ucp_worker_get_address() or\n"
+   "ucp_worker_query() routines.",
+   ucs_offsetof(ucp_config_t, ctx.worker_addr_version),
+   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
+
    {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
@@ -365,17 +422,17 @@ UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
   { "mm",    { "posix", "sysv", "xpmem", NULL } }, /* for backward compatibility */
-  { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
-  { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", "rdmacm", "sockcm", NULL } },
-  { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", "rdmacm", NULL } },
-  { "ud_v",  { "ud_verbs", "rdmacm", NULL } },
-  { "ud_x",  { "ud_mlx5", "rdmacm", NULL } },
-  { "ud",    { "ud_mlx5", "ud_verbs", "rdmacm", NULL } },
-  { "rc_v",  { "rc_verbs", "ud_verbs:aux", "rdmacm", NULL } },
-  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", "rdmacm", NULL } },
-  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc_verbs", "ud_verbs:aux", "rdmacm", NULL } },
-  { "dc",    { "dc_mlx5", "rdmacm", NULL } },
-  { "dc_x",  { "dc_mlx5", "rdmacm", NULL } },
+  { "sm",    { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
+  { "shm",   { "posix", "sysv", "xpmem", "knem", "cma", NULL } },
+  { "ib",    { "rc_verbs", "ud_verbs", "rc_mlx5", "ud_mlx5", "dc_mlx5", NULL } },
+  { "ud_v",  { "ud_verbs", NULL } },
+  { "ud_x",  { "ud_mlx5", NULL } },
+  { "ud",    { "ud_mlx5", "ud_verbs", NULL } },
+  { "rc_v",  { "rc_verbs", "ud_verbs:aux", NULL } },
+  { "rc_x",  { "rc_mlx5", "ud_mlx5:aux", NULL } },
+  { "rc",    { "rc_mlx5", "ud_mlx5:aux", "rc_verbs", "ud_verbs:aux", NULL } },
+  { "dc",    { "dc_mlx5", NULL } },
+  { "dc_x",  { "dc_mlx5", NULL } },
   { "ugni",  { "ugni_smsg", "ugni_udt:aux", "ugni_rdma", NULL } },
   { "cuda",  { "cuda_copy", "cuda_ipc", "gdr_copy", NULL } },
   { "rocm",  { "rocm_copy", "rocm_ipc", "rocm_gdr", NULL } },
@@ -522,6 +579,11 @@ ucs_status_t ucp_config_modify(ucp_config_t *config, const char *name,
         return status;
     }
 
+    status = ucs_global_opts_set_value_modifiable(name, value);
+    if (status != UCS_ERR_NO_ELEM) {
+        return status;
+    }
+
     return ucp_config_cached_key_add(&config->cached_key_list, name, value);
 }
 
@@ -567,8 +629,8 @@ void ucp_apply_uct_config_list(ucp_context_h context, void *config)
     ucs_list_for_each(key_val, &context->cached_key_list, list) {
         status = uct_config_modify(config, key_val->key, key_val->value);
         if (status == UCS_OK) {
-            ucs_debug("apply uct configuration %s=%s",
-                      key_val->key, key_val->value);
+            ucs_debug("apply UCT configuration %s=%s", key_val->key,
+                      key_val->value);
             key_val->used = 1;
         }
     }
@@ -1088,7 +1150,7 @@ static void ucp_resource_config_str(const ucp_config_t *config, char *buf,
     devs_p = p;
     for (dev_type_idx = 0; dev_type_idx < UCT_DEVICE_TYPE_LAST; ++dev_type_idx) {
         ucp_resource_config_array_str(&config->devices[dev_type_idx],
-                                      ucp_device_type_names[dev_type_idx], p,
+                                      uct_device_type_names[dev_type_idx], p,
                                       endp - p);
         p += strlen(p);
     }
@@ -1277,10 +1339,6 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
 
-    for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
-        UCS_BITMAP_CLEAR(&context->mem_type_access_tls[i]);
-    }
-
     ucs_string_set_init(&avail_tls);
     UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
     for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
@@ -1368,7 +1426,7 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
         for (dev_type = UCT_DEVICE_TYPE_NET; dev_type < UCT_DEVICE_TYPE_LAST; ++dev_type) {
             ucp_report_unavailable(&config->devices[dev_type],
                                    dev_cfg_masks[dev_type],
-                                   ucp_device_type_names[dev_type], " device",
+                                   uct_device_type_names[dev_type], " device",
                                    &avail_devices[dev_type]);
         }
 
@@ -1444,6 +1502,41 @@ static void ucp_apply_params(ucp_context_h context, const ucp_params_t *params,
     } else {
         ucs_snprintf_zero(context->name, UCP_ENTITY_NAME_MAX, "%p", context);
     }
+}
+
+static ucs_status_t
+ucp_fill_rndv_frag_config(const ucp_context_config_names_t *config,
+                          const size_t *default_sizes, size_t *sizes)
+{
+    const char *mem_type_name, *size_str;
+    char config_str[128];
+    ucs_status_t status;
+    ssize_t mem_type;
+    unsigned i;
+
+    for (mem_type = 0; mem_type < UCS_MEMORY_TYPE_LAST; ++mem_type) {
+        sizes[mem_type] = default_sizes[mem_type];
+    }
+
+    for (i = 0; i < config->count; ++i) {
+        ucs_strncpy_safe(config_str, config->names[i], sizeof(config_str));
+        ucs_string_split(config_str, ":", 2, &mem_type_name, &size_str);
+        mem_type = ucs_string_find_in_list(mem_type_name, ucs_memory_type_names,
+                                           0);
+        if (mem_type < 0) {
+            ucs_error("invalid memory type specifier: '%s'", mem_type_name);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        ucs_assert(mem_type < UCS_MEMORY_TYPE_LAST);
+        status = ucs_str_to_memunits(size_str, &sizes[mem_type]);
+        if (status != UCS_OK) {
+            ucs_error("failed to parse size configuration: '%s'", size_str);
+            return status;
+        }
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t ucp_fill_config(ucp_context_h context,
@@ -1572,6 +1665,20 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    status = ucp_fill_rndv_frag_config(&config->rndv_frag_sizes,
+                                       ucp_rndv_frag_default_sizes,
+                                       context->config.ext.rndv_frag_size);
+    if (status != UCS_OK) {
+        goto err_free_alloc_methods;
+    }
+
+    status = ucp_fill_rndv_frag_config(&config->rndv_frag_elems,
+                                       ucp_rndv_frag_default_num_elems,
+                                       context->config.ext.rndv_num_frags);
+    if (status != UCS_OK) {
+        goto err_free_alloc_methods;
+    }
+
     /* Need to check TM_SEG_SIZE value if it is enabled only */
     if (context->config.ext.tm_max_bb_size > context->config.ext.tm_thresh) {
         if (context->config.ext.tm_max_bb_size < sizeof(ucp_request_hdr_t)) {
@@ -1605,6 +1712,17 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
+    context->config.am_mpools.count = config->mpool_sizes.count;
+    context->config.am_mpools.sizes = ucs_malloc(sizeof(size_t) *
+                                                 config->mpool_sizes.count,
+                                                 "am_mpool_sizes");
+    if (context->config.am_mpools.sizes == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err_free_key_list;
+    }
+    memcpy(context->config.am_mpools.sizes, config->mpool_sizes.memunits,
+           config->mpool_sizes.count * sizeof(size_t));
+
     return UCS_OK;
 
 err_free_key_list:
@@ -1626,6 +1744,7 @@ static void ucp_free_config(ucp_context_h context)
     ucs_free(context->config.env_prefix);
     ucs_free(context->config.selection_cmp);
     ucp_cached_key_list_release(&context->cached_key_list);
+    ucs_free(context->config.am_mpools.sizes);
 }
 
 static void ucp_context_create_vfs(ucp_context_h context)
@@ -1922,4 +2041,22 @@ const char* ucp_context_cm_name(ucp_context_h context, ucp_rsc_index_t cm_idx)
 {
     ucs_assert(cm_idx != UCP_NULL_RESOURCE);
     return context->tl_cmpts[context->config.cm_cmpt_idxs[cm_idx]].attr.name;
+}
+
+void ucp_context_get_mem_access_tls(ucp_context_h context,
+                                    ucs_memory_type_t mem_type,
+                                    ucp_tl_bitmap_t *tl_bitmap)
+{
+    const uct_md_attr_t *md_attr;
+    ucp_md_index_t md_index;
+    ucp_rsc_index_t tl_id;
+
+    UCS_BITMAP_CLEAR(tl_bitmap);
+    UCS_BITMAP_FOR_EACH_BIT(context->tl_bitmap, tl_id) {
+        md_index = context->tl_rscs[tl_id].md_index;
+        md_attr  = &context->tl_mds[md_index].attr;
+        if (md_attr->cap.access_mem_types & UCS_BIT(mem_type)) {
+            UCS_BITMAP_SET(*tl_bitmap, tl_id);
+        }
+    }
 }

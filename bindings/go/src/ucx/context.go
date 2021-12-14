@@ -31,7 +31,7 @@ func NewUcpContext(contextParams *UcpParams) (*UcpContext, error) {
 	var ucp_context C.ucp_context_h
 
 	if status := C.ucp_init(&contextParams.params, nil, &ucp_context); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	ctx := &UcpContext{
@@ -64,7 +64,7 @@ func (c *UcpContext) MemMap(memMapParams *UcpMmapParams) (*UcpMemory, error) {
 	var ucp_memh C.ucp_mem_h
 
 	if status := C.ucp_mem_map(c.context, &memMapParams.params, &ucp_memh); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	return &UcpMemory{
@@ -82,7 +82,7 @@ func (c *UcpContext) Query(attrs ...UcpContextAttr) (*C.ucp_context_attr_t, erro
 	}
 
 	if status := C.ucp_context_query(c.context, &ucp_attrs); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	return &ucp_attrs, nil
@@ -93,7 +93,7 @@ func (c *UcpContext) NewWorker(workerParams *UcpWorkerParams) (*UcpWorker, error
 	var ucp_worker C.ucp_worker_h
 
 	if status := C.ucp_worker_create(c.context, &workerParams.params, &ucp_worker); status != C.UCS_OK {
-		return nil, NewUcxError(status)
+		return nil, newUcxError(status)
 	}
 
 	return &UcpWorker{

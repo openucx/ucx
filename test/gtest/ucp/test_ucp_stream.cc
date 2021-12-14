@@ -341,8 +341,11 @@ void test_ucp_stream::do_send_exp_recv_test(ucp_datatype_t datatype)
 {
     const size_t dt_elem_size = UCP_DT_IS_CONTIG(datatype) ?
                                 ucp_contig_dt_elem_size(datatype) : 1;
-    const size_t msg_size = dt_elem_size * UCS_MBYTE;
-    const size_t n_msgs   = 10;
+    const size_t msg_size     = dt_elem_size *
+                                /* message size must be a multiple of
+                                 * dt_elem_size */
+                                (UCS_MBYTE / ucs::test_time_multiplier());
+    const size_t n_msgs       = ucs_max(2, 10 / ucs::test_time_multiplier());
 
     std::vector<std::vector<T> > rbufs(n_msgs,
                                        std::vector<T>(msg_size / dt_elem_size, 'r'));

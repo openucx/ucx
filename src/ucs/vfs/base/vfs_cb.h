@@ -70,7 +70,7 @@ void ucs_vfs_show_primitive(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
 
 /**
  * Callback function to fill a value of an unsigned long type to the string
- * buffer. The function handles 'auto' and 'infinty' values.
+ * buffer. The function handles 'auto' and 'infinity' values.
  *
  * @param [in]    obj      Pointer to the object.
  * @param [inout] strb     String buffer filled with the object's information.
@@ -83,7 +83,7 @@ void ucs_vfs_show_ulunits(void *obj, ucs_string_buffer_t *strb, void *arg_ptr,
 
 /**
  * Callback function to fill memory units to the string buffer. The function
- * handles 'auto' and 'infinty' values.
+ * handles 'auto' and 'infinity' values.
  *
  * @param [in]    obj      Pointer to the object.
  * @param [inout] strb     String buffer filled with the object's information.

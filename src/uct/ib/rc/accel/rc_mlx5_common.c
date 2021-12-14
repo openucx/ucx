@@ -42,7 +42,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
    UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_MP_SRQ_ENABLE", "try",
+  {"TM_MP_SRQ_ENABLE", "no",
    "Enable multi-packet SRQ support. Relevant for hardware tag-matching only.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.mp_enable),
    UCS_CONFIG_TYPE_TERNARY},
@@ -460,8 +460,9 @@ ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface
     iface->tm.head = &iface->tm.list[0];
     iface->tm.tail = &iface->tm.list[i];
 
-    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats, &uct_rc_mlx5_tag_stats_class,
-                                  iface->stats);
+    status = UCS_STATS_NODE_ALLOC(&iface->tm.stats,
+                                  &uct_rc_mlx5_tag_stats_class,
+                                  iface->stats, "");
     if (status != UCS_OK) {
         ucs_error("Failed to allocate tag stats: %s", ucs_status_string(status));
         goto err_cmd_wq_free;

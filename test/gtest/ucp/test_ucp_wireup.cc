@@ -26,12 +26,13 @@ public:
 
 protected:
     enum {
-        TEST_RMA     = UCS_BIT(0),
-        TEST_TAG     = UCS_BIT(1),
-        TEST_STREAM  = UCS_BIT(2),
-        UNIFIED_MODE = UCS_BIT(3),
-        TEST_AMO     = UCS_BIT(4),
-        NO_EP_MATCH  = UCS_BIT(5)
+        TEST_RMA       = UCS_BIT(0),
+        TEST_TAG       = UCS_BIT(1),
+        TEST_STREAM    = UCS_BIT(2),
+        UNIFIED_MODE   = UCS_BIT(3),
+        TEST_AMO       = UCS_BIT(4),
+        NO_EP_MATCH    = UCS_BIT(5),
+        WORKER_ADDR_V2 = UCS_BIT(6)
     };
 
     typedef uint64_t               elem_type;
@@ -121,6 +122,11 @@ void test_ucp_wireup::get_test_variants(std::vector<ucp_test_variant>& variants,
         add_variant_with_value(variants, UCP_FEATURE_TAG,
                                TEST_TAG | UNIFIED_MODE | NO_EP_MATCH,
                                "tag,unified,no_ep_match");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | WORKER_ADDR_V2, "tag,addr_v2");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | WORKER_ADDR_V2 | UNIFIED_MODE,
+                               "tag,unified,addr_v2");
     }
 
     if (features & UCP_FEATURE_STREAM) {
@@ -155,7 +161,11 @@ void test_ucp_wireup::unmap_memh(ucp_mem_h memh, ucp_context_h context)
 void test_ucp_wireup::init()
 {
     if (get_variant_value() & UNIFIED_MODE) {
-        modify_config("UNIFIED_MODE",  "y");
+        modify_config("UNIFIED_MODE", "y");
+    }
+
+    if (get_variant_value() & WORKER_ADDR_V2) {
+        modify_config("ADDRESS_VERSION", "v2");
     }
 
     ucp_test::init();
@@ -410,6 +420,11 @@ public:
         }
     }
 
+    ucp_object_version_t address_version() const {
+        return (get_variant_value() & WORKER_ADDR_V2) ?
+               UCP_OBJECT_VERSION_V2 : UCP_OBJECT_VERSION_V1;
+    }
+
     ucp_lane_index_t m_lanes2remote[UCP_MAX_LANES];
 };
 
@@ -421,13 +436,15 @@ UCS_TEST_P(test_ucp_wireup_1sided, address) {
     std::set<ucs_sys_device_t> packed_sys_devices, unpacked_sys_devices;
     ucp_rsc_index_t tl;
 
+    ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_max,
-                              UCP_ADDRESS_PACK_FLAGS_ALL, m_lanes2remote, &size,
-                              &buffer);
+                              UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
+                              m_lanes2remote, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
     EXPECT_LE(size, 2048ul); /* Expect a reasonable address size */
+    EXPECT_EQ(addr_v, sender().ucph()->config.ext.worker_addr_version);
 
     UCS_BITMAP_FOR_EACH_BIT(sender().worker()->context->tl_bitmap, tl) {
         const ucp_tl_resource_desc_t &rsc =
@@ -479,7 +496,8 @@ UCS_TEST_P(test_ucp_wireup_1sided, ep_address, "IB_NUM_PATHS?=2") {
 
     status = ucp_address_pack(sender().worker(), sender().ep(),
                               &ucp_tl_bitmap_max, UCP_ADDRESS_PACK_FLAGS_ALL,
-                              m_lanes2remote, &size, &buffer);
+                              UCP_OBJECT_VERSION_V1, m_lanes2remote, &size,
+                              &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
 
@@ -502,12 +520,14 @@ UCS_TEST_P(test_ucp_wireup_1sided, empty_address) {
     size_t size;
     void *buffer;
 
+    ucp_object_version_t addr_v = address_version();
     status = ucp_address_pack(sender().worker(), NULL, &ucp_tl_bitmap_min,
-                              UCP_ADDRESS_PACK_FLAGS_ALL, m_lanes2remote, &size,
-                              &buffer);
+                              UCP_ADDRESS_PACK_FLAGS_ALL, addr_v,
+                              m_lanes2remote, &size, &buffer);
     ASSERT_UCS_OK(status);
     ASSERT_TRUE(buffer != NULL);
     ASSERT_GT(size, 0ul);
+    EXPECT_EQ(addr_v, sender().ucph()->config.ext.worker_addr_version);
 
     ucp_unpacked_address unpacked_address;
 
@@ -1168,10 +1188,9 @@ UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
 
     // Set some big enough number of endpoints for DC to be more performance
     // efficient than RC. Now check that DC is selected over RC.
-    // TODO: enable test when keepalive feature is enabled for DC transport
-    //modify_config("NUM_EPS", "1000");
-    //entity *e = create_entity();
-    //check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
+    modify_config("NUM_EPS", "1000");
+    entity *e = create_entity();
+    check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
     EXPECT_FALSE(ep_iface_has_caps(sender(), "dc_mlx5",
                                    UCT_IFACE_FLAG_EP_CHECK));
 }
@@ -1551,3 +1570,94 @@ UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)
+
+class test_ucp_address_v2 : public test_ucp_wireup {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    {
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | WORKER_ADDR_V2, "tag");
+        add_variant_with_value(variants, UCP_FEATURE_TAG,
+                               TEST_TAG | WORKER_ADDR_V2 | UNIFIED_MODE,
+                               "tag,unified");
+    }
+
+    void check_fp_values(double unpacked, double original, double convert)
+    {
+        double max_error = original / pow(2, _UCS_FP8_MANTISSA_BITS);
+        EXPECT_NEAR(original, unpacked, max_error);
+    }
+};
+
+// On some systems TCP has very low BW and high latency, which would be
+// unpacked by min/max values of the corresponding fp8 types
+UCS_TEST_SKIP_COND_P(test_ucp_address_v2, pack_iface_attrs,
+                     has_transport("tcp")) {
+    ucs_status_t status;
+    size_t size;
+    void *buffer;
+
+    ucp_worker_h worker = sender().worker();
+
+    status = ucp_address_pack(worker, NULL, &ucp_tl_bitmap_max,
+                              UCP_ADDRESS_PACK_FLAGS_ALL, UCP_OBJECT_VERSION_V2,
+                              NULL, &size, &buffer);
+    ASSERT_UCS_OK(status);
+    ASSERT_TRUE(buffer != NULL);
+
+    ucp_unpacked_address unpacked_address;
+    status = ucp_address_unpack(worker, buffer, UCP_ADDRESS_PACK_FLAGS_ALL,
+                                &unpacked_address);
+    if (status != UCS_OK) {
+        ucs_free(buffer);
+        ASSERT_UCS_OK(status);
+    }
+
+    const ucp_address_entry_t *ae;
+    ucp_unpacked_address_for_each(ae, &unpacked_address) {
+        ucp_rsc_index_t rsc_idx = ae->iface_attr.dst_rsc_index;
+        uct_iface_attr_t *attr  = &ucp_worker_iface(worker, rsc_idx)->attr;
+
+        // Segment size is packed as a multiplicator of
+        // UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR, thus the unpacked value may be
+        // smaller than the original value by up to 64 bytes.
+        EXPECT_LT(ucp_address_iface_seg_size(attr) - ae->iface_attr.seg_size,
+                  UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR);
+        EXPECT_EQ(UCP_OBJECT_VERSION_V2, ae->iface_attr.addr_version);
+        check_fp_values(ae->iface_attr.overhead, attr->overhead,
+                        UCS_NSEC_PER_SEC);
+        check_fp_values(ae->iface_attr.lat_ovh,
+                        ucp_tl_iface_latency(worker->context, &attr->latency),
+                        UCS_NSEC_PER_SEC);
+        check_fp_values(
+                ae->iface_attr.bandwidth,
+                ucp_tl_iface_bandwidth(worker->context, &attr->bandwidth), 1);
+    }
+
+    ucs_free(unpacked_address.address_list);
+    ucs_free(buffer);
+}
+
+UCS_TEST_SKIP_COND_P(test_ucp_address_v2, diff_seg_sizes,
+                     get_variant_value() & UNIFIED_MODE,
+                     "RNDV_THRESH=inf") {
+    const unsigned size  = ucs_max(UCS_KBYTE, ucs::rand() % BUFFER_LENGTH);
+    std::string str_size = ucs::to_string(size);
+
+    UCS_TEST_MESSAGE << "seg_size " << size;
+
+    m_env.push_back(new ucs::scoped_setenv("UCX_IB_SEG_SIZE", str_size.c_str()));
+    m_env.push_back(new ucs::scoped_setenv("UCX_MM_SEG_SIZE", str_size.c_str()));
+    m_env.push_back(new ucs::scoped_setenv("UCX_SELF_SEG_SIZE", str_size.c_str()));
+    m_env.push_back(new ucs::scoped_setenv("UCX_SCOPY_SEG_SIZE", str_size.c_str()));
+
+    entity *e = create_entity(true);
+
+    e->connect(&receiver(), get_ep_params());
+    receiver().connect(e, get_ep_params());
+
+    send_recv(e->ep(), receiver().worker(), receiver().ep(), size, 1);
+    send_recv(receiver().ep(), e->worker(), e->ep(), size, 1);
+}
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_address_v2)

@@ -80,7 +80,7 @@ ucp_proto_request_zcopy_cleanup(ucp_request_t *req, unsigned dt_mask)
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_request_zcopy_complete(ucp_request_t *req, ucs_status_t status)
 {
-    ucp_proto_request_zcopy_cleanup(req, UCP_DT_MASK_ALL);
+    ucp_proto_request_zcopy_cleanup(req, UCP_DT_MASK_CONTIG_IOV);
     ucp_request_complete_send(req, status);
 }
 
@@ -89,6 +89,52 @@ ucp_proto_request_zcopy_complete_success(ucp_request_t *req)
 {
     ucp_proto_request_zcopy_complete(req, UCS_OK);
     return UCS_OK;
+}
+
+/**
+ * Add 'frag_size' to 'req->send.state.completed_size' and return nonzero if
+ * completed_size reached dt_iter.length
+ */
+static UCS_F_ALWAYS_INLINE int
+ucp_proto_common_frag_complete(ucp_request_t *req, size_t frag_size,
+                               const char *title)
+{
+    req->send.state.completed_size += frag_size;
+
+    ucp_trace_req(req, "%s completed %zu, overall %zu/%zu", title, frag_size,
+                  req->send.state.completed_size,
+                  req->send.state.dt_iter.length);
+
+    ucs_assertv(req->send.state.completed_size <=
+                        req->send.state.dt_iter.length,
+                "completed_size=%zu dt_iter.length=%zu",
+                req->send.state.completed_size, req->send.state.dt_iter.length);
+
+    return req->send.state.completed_size == req->send.state.dt_iter.length;
+}
+
+/* Adjust a zero-copy operation to a minimal fragment size, by overlapping with
+ * the previous or subsequent fragment, assuming it will not impact data
+ * delivery. For example, it's safe to do with one-sided operations.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_common_zcopy_adjust_min_frag(ucp_request_t *req, size_t min_frag,
+                                       size_t length, uct_iov_t *iov,
+                                       size_t iovcnt, size_t *offset_p)
+{
+    ssize_t min_frag_diff = min_frag - length;
+    if (ucs_likely(min_frag_diff < 0)) {
+        /* if length is already larger than min_frag - no need to adjust */
+        return;
+    }
+
+    /* Make sure increasing payload size would not exceed request data size */
+    ucs_assertv((length + min_frag_diff) <= req->send.state.dt_iter.length,
+                "req=%p length=%zu min_frag_diff=%zd dt_iter.length=%zu", req,
+                length, min_frag_diff, req->send.state.dt_iter.length);
+
+    ucp_proto_common_zcopy_adjust_min_frag_always(req, min_frag_diff, iov,
+                                                  iovcnt, offset_p);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -201,7 +247,8 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
     }
 
     ucp_request_set_send_callback_param(param, req, send);
-    ucs_trace_req("returning send request %p", req);
+    ucs_trace_req("returning send request %p: %s buffer %p count %zu",
+                  req, ucp_operation_names[op_id], buffer, count);
     return req + 1;
 }
 

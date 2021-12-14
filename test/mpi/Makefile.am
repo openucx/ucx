@@ -19,6 +19,7 @@ AM_CPPFLAGS           = \
     -DTEST_LIB_DIR="$(abs_builddir)/.libs"
 AM_CFLAGS             = $(BASE_CFLAGS)
 test_memhooks_SOURCES = test_memhooks.c
+test_memhooks_LDFLAGS = -ldl
 
 
 # A library we use for testing that memory hooks work in libraries loaded

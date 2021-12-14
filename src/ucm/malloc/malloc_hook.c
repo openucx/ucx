@@ -124,7 +124,7 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .free             = NULL,
     .heap_start       = (void*)-1,
     .heap_end         = (void*)-1,
-    .ptrs             = {0},
+    .ptrs             = KHASH_STATIC_INITIALIZER,
     .env_lock         = PTHREAD_MUTEX_INITIALIZER,
     .env_strs         = NULL,
     .num_env_strs     = 0
@@ -899,7 +899,7 @@ void ucm_malloc_state_reset(int default_mmap_thresh, int default_trim_thresh)
     ucm_malloc_set_env_mallopt();
 }
 
-UCS_STATIC_INIT {
+void ucm_init_malloc_hook()
+{
     ucs_recursive_spinlock_init(&ucm_malloc_hook_state.lock, 0);
-    kh_init_inplace(mmap_ptrs, &ucm_malloc_hook_state.ptrs);
 }

@@ -126,7 +126,7 @@ protected:
     static int remove_if_pred(const ucs_callbackq_elem_t *elem, void *arg)
     {
         callback_ctx *ctx = reinterpret_cast<callback_ctx*>(elem->arg);
-        int key = *reinterpret_cast<int*>(arg);
+        int key           = *reinterpret_cast<int*>(arg);
 
         /* remove callbacks with the given key */
         return (elem->cb == callback_proxy) && (ctx->key == key);

@@ -154,8 +154,8 @@ ucs_status_t ucm_bistro_patch_toc(void *func_ptr, void *hook,
     }
 
 #if defined(_CALL_ELF) && (_CALL_ELF == 2)
-    func += 8;
-    hook += 8;
+    func = UCS_PTR_BYTE_OFFSET(func, 8);
+    hook = UCS_PTR_BYTE_OFFSET(hook, 8);
 #endif
 
     ucm_bistro_fill_patch(&patch, R11, (uintptr_t)hook);

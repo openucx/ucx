@@ -435,8 +435,16 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
     /* By default, the performance is assumed to be the same for all operations */
 
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
-        perf_attr->overhead = iface_attr.overhead;
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        perf_attr->send_pre_overhead = iface_attr.overhead;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
+        perf_attr->send_post_overhead = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        perf_attr->recv_overhead = iface_attr.overhead;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
@@ -453,7 +461,7 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
@@ -499,6 +507,10 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     UCT_CB_FLAGS_CHECK((params->field_mask &
                         UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS) ?
                        params->err_handler_flags : 0);
+
+    ucs_assert(internal_ops->iface_estimate_perf != NULL);
+    ucs_assert(internal_ops->iface_vfs_refresh != NULL);
+    ucs_assert(internal_ops->ep_query != NULL);
 
     self->md                = md;
     self->internal_ops      = internal_ops;
@@ -667,8 +679,8 @@ UCS_CLASS_INIT_FUNC(uct_base_ep_t, uct_base_iface_t *iface)
 {
     UCS_CLASS_CALL_SUPER_INIT(uct_ep_t, &iface->super);
 
-    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class, iface->stats,
-                                "-%p", self);
+    return UCS_STATS_NODE_ALLOC(&self->stats, &uct_ep_stats_class,
+                                iface->stats, "-%p", self);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
@@ -719,8 +731,8 @@ ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 
     UCS_STATS_NODE_FREE(ep->stats);
 
-    status = UCS_STATS_NODE_ALLOC(&ep->stats, &uct_ep_stats_class, iface->stats,
-                                  "-%p", ep);
+    status = UCS_STATS_NODE_ALLOC(&ep->stats, &uct_ep_stats_class,
+                                  iface->stats, "-%p", ep);
 #ifdef ENABLE_STATS
     if (status != UCS_OK) {
         /* set the stats to NULL so that the UCS_STATS_NODE_FREE call on the

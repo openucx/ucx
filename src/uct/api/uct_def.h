@@ -180,7 +180,12 @@ enum uct_cm_ep_resolve_args_field {
     /**
      * Indicates that @ref uct_cm_ep_resolve_args::dev_name is valid.
      */
-    UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME       = UCS_BIT(0)
+    UCT_CM_EP_RESOLVE_ARGS_FIELD_DEV_NAME       = UCS_BIT(0),
+
+    /**
+     * Indicates that @ref uct_cm_ep_resolve_args::status is valid.
+     */
+    UCT_CM_EP_RESOLVE_ARGS_FIELD_STATUS         = UCS_BIT(1)
 };
 
 
@@ -222,13 +227,23 @@ typedef struct uct_cm_ep_resolve_args {
      */
     uint64_t                    field_mask;
 
-   /**
+    /**
      * Device name indicates the device that the endpoint was bound to during
      * address and route resolution. The device name that is passed to this
-     * callback, corresponds to @ref uct_tl_resource_desc_t::dev_name as
+     * callback corresponds to @ref uct_tl_resource_desc_t::dev_name as
      * returned from @ref uct_md_query_tl_resources.
      */
     char                        dev_name[UCT_DEVICE_NAME_MAX];
+
+    /**
+     * Indicates address resolution status:
+     * UCS_OK                   - address of the remote server was resolved
+     *                            successfully.
+     * UCS_ERR_UNREACHABLE      - the remote server is unreachable.
+     * Otherwise                - indicates an internal connection establishment
+     *                            error on the local (client) side.
+     */
+    ucs_status_t                status;
 } uct_cm_ep_resolve_args_t;
 
 
@@ -539,6 +554,9 @@ typedef ucs_status_t (*uct_pending_callback_t)(uct_pending_req_t *self);
 /**
  * @ingroup UCT_RESOURCE
  * @brief Callback to process peer failure.
+ *
+ * @note User should purge a pending queue and do not post any TX operations
+ * and cancel all possible outstanding operations prior closing a UCT endpoint.
  *
  * @param [in]  arg      User argument to be passed to the callback.
  * @param [in]  ep       Endpoint which has failed. Upon return from the callback,

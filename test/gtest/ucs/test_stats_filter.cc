@@ -67,12 +67,14 @@ public:
             "category", 0
         };
 
-        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node, &category_stats_class,
-                                                   ucs_stats_get_root());
+        ucs_status_t status = UCS_STATS_NODE_ALLOC(&cat_node,
+                                                   &category_stats_class,
+                                                   ucs_stats_get_root(), "");
         ASSERT_UCS_OK(status);
         for (unsigned i = 0; i < NUM_DATA_NODES; ++i) {
-            status = UCS_STATS_NODE_ALLOC(&data_nodes[i], m_data_stats_class,
-                                         cat_node, "-%d", i);
+            status = UCS_STATS_NODE_ALLOC(&data_nodes[i],
+                                          m_data_stats_class, cat_node,
+                                          "-%d", i);
             ASSERT_UCS_OK(status);
 
             UCS_STATS_UPDATE_COUNTER(data_nodes[i], 0, 10);

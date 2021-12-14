@@ -18,12 +18,20 @@ type UcpEp struct {
 
 var errorHandles = make(map[C.ucp_ep_h]UcpEpErrHandler)
 
-func setSendCallback(cb UcpCallback, params *C.ucp_request_param_t) uint64 {
-	cbId := register(cb)
-	params.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
-	cbAddr := (*C.ucp_send_nbx_callback_t)(unsafe.Pointer(&params.cb[0]))
-	*cbAddr = (C.ucp_send_nbx_callback_t)(C.ucxgo_completeGoSendRequest)
-	params.user_data = unsafe.Pointer(uintptr(cbId))
+func setSendParams(goRequestParams *UcpRequestParams, cRequestParams *C.ucp_request_param_t) uint64 {
+	var cbId uint64
+	if goRequestParams != nil {
+		if goRequestParams.Cb != nil {
+			cbId = register(goRequestParams.Cb)
+			cRequestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_CALLBACK | C.UCP_OP_ATTR_FIELD_USER_DATA
+			cbAddr := (*C.ucp_send_nbx_callback_t)(unsafe.Pointer(&cRequestParams.cb[0]))
+			*cbAddr = (C.ucp_send_nbx_callback_t)(C.ucxgo_completeGoSendRequest)
+			cRequestParams.user_data = unsafe.Pointer(uintptr(cbId))
+		}
+
+		cRequestParams.SetMemType(goRequestParams)
+	}
+
 	return cbId
 }
 
@@ -34,9 +42,7 @@ func (e *UcpEp) FlushNonBlocking(params *UcpRequestParams) (*UcpRequest, error) 
 	var requestParams C.ucp_request_param_t
 	var cbId uint64
 
-	if params != nil && params.Cb != nil {
-		cbId = setSendCallback(params.Cb, &requestParams)
-	}
+	setSendParams(params, &requestParams)
 
 	request := C.ucp_ep_flush_nbx(e.ep, &requestParams)
 	return NewRequest(request, cbId, nil)
@@ -48,9 +54,8 @@ func (e *UcpEp) CloseNonBlocking(mode C.uint, params *UcpRequestParams) (*UcpReq
 	requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_FLAGS
 	requestParams.flags = mode
 
-	if (params != nil) && (params.Cb != nil) {
-		cbId = setSendCallback(params.Cb, &requestParams)
-	}
+	setSendParams(params, &requestParams)
+
 	request := C.ucp_ep_close_nbx(e.ep, &requestParams)
 	delete(errorHandles, e.ep)
 	return NewRequest(request, cbId, nil)
@@ -79,17 +84,25 @@ func (e *UcpEp) SendTagNonBlocking(tag uint64, address unsafe.Pointer, size uint
 	var requestParams C.ucp_request_param_t
 	var cbId uint64
 
-	if params != nil {
-		if params.MemTypeSet {
-			requestParams.op_attr_mask = C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
-			requestParams.memory_type = C.ucs_memory_type_t(params.MemType)
-		}
-
-		if params.Cb != nil {
-			cbId = setSendCallback(params.Cb, &requestParams)
-		}
-	}
+	setSendParams(params, &requestParams)
 
 	request := C.ucp_tag_send_nbx(e.ep, address, C.size_t(size), C.ucp_tag_t(tag), &requestParams)
+	return NewRequest(request, cbId, nil)
+}
+
+// This routine sends an Active Message to an ep.
+// Sending only header without actual data is allowed and is recommended for transferring a latency-critical amount of data.
+// The maximum allowed header size can be obtained by querying worker attributes by the UcpWorker.Query() routine.
+func (e *UcpEp) SendAmNonBlocking(id uint, header unsafe.Pointer, headerSize uint64,
+	data unsafe.Pointer, dataSize uint64, flags UcpAmSendFlags, params *UcpRequestParams) (*UcpRequest, error) {
+	var requestParams C.ucp_request_param_t
+	var cbId uint64
+
+	setSendParams(params, &requestParams)
+
+	requestParams.op_attr_mask |= C.UCP_OP_ATTR_FIELD_FLAGS
+	requestParams.flags = C.uint(flags)
+
+	request := C.ucp_am_send_nbx(e.ep, C.uint(id), header, C.size_t(headerSize), data, C.size_t(dataSize), &requestParams)
 	return NewRequest(request, cbId, nil)
 }

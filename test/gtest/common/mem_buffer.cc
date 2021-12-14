@@ -24,7 +24,8 @@
     do { \
         cudaError_t cerr = _code; \
         if (cerr != cudaSuccess) { \
-            UCS_TEST_ABORT(#_code << " failed with code " << cerr << _details); \
+            UCS_TEST_ABORT(#_code << " failed with code " << cerr \
+                    << _details); \
         } \
     } while (0)
 
@@ -117,6 +118,10 @@ void mem_buffer::set_device_context()
 #if HAVE_CUDA
     if (is_cuda_supported()) {
         cudaSetDevice(0);
+        /* need to call free as context maybe lazily initialized when calling
+         * cudaSetDevice(0) but calling cudaFree(0) should guarantee context
+         * creation upon return */
+        cudaFree(0);
     }
 #endif
 
@@ -168,24 +173,30 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
 
 void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
 {
-    switch (mem_type) {
-    case UCS_MEMORY_TYPE_HOST:
-        free(ptr);
-        break;
+    try {
+        switch (mem_type) {
+        case UCS_MEMORY_TYPE_HOST:
+            free(ptr);
+            break;
 #if HAVE_CUDA
-    case UCS_MEMORY_TYPE_CUDA:
-    case UCS_MEMORY_TYPE_CUDA_MANAGED:
-        CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
-        break;
+        case UCS_MEMORY_TYPE_CUDA:
+        case UCS_MEMORY_TYPE_CUDA_MANAGED:
+            CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
+            break;
 #endif
 #if HAVE_ROCM
-    case UCS_MEMORY_TYPE_ROCM:
-    case UCS_MEMORY_TYPE_ROCM_MANAGED:
-        ROCM_CALL(hipFree(ptr));
-        break;
+        case UCS_MEMORY_TYPE_ROCM:
+        case UCS_MEMORY_TYPE_ROCM_MANAGED:
+            ROCM_CALL(hipFree(ptr));
+            break;
 #endif
-    default:
-        break;
+        default:
+            break;
+        }
+    } catch (const std::exception &e) {
+        UCS_TEST_MESSAGE << "got \"" << e.what() << "\" exception when"
+                << " destroying memory "
+                << mem_type_name(mem_type) << " buffer";
     }
 }
 
@@ -438,12 +449,12 @@ size_t mem_buffer::size() const {
     return m_size;
 }
 
-void mem_buffer::pattern_fill(uint64_t seed) {
-    pattern_fill(ptr(), size(), seed, mem_type());
+void mem_buffer::pattern_fill(uint64_t seed, size_t length) {
+    pattern_fill(ptr(), std::min(length, size()), seed, mem_type());
 }
 
-void mem_buffer::pattern_check(uint64_t seed) const {
-    pattern_check(ptr(), size(), seed, mem_type());
+void mem_buffer::pattern_check(uint64_t seed, size_t length) const {
+    pattern_check(ptr(), std::min(length, size()), seed, mem_type());
 }
 
 void mem_buffer::memset(int c) {

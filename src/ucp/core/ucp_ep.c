@@ -34,7 +34,6 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/sock.h>
-#include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
@@ -56,6 +55,19 @@ typedef struct ucp_ep_set_failed_arg {
     ucp_lane_index_t lane; /* UCP endpoint lane which is failed  */
     ucs_status_t     status; /* Failure status */
 } ucp_ep_set_failed_arg_t;
+
+
+/**
+ * Argument for discarding UCP endpoint's lanes
+ */
+typedef struct ucp_ep_discard_lanes_arg {
+    unsigned     counter; /* How many discarding operations on UCT lanes are
+                           * in-progress if purging of the UCP endpoint is
+                           * required */
+    ucs_status_t status; /* Completion status of operations after discarding is
+                          * done */
+    ucp_ep_h     ucp_ep; /* UCP endpoint which should be discarded */
+} ucp_ep_discard_lanes_arg_t;
 
 
 extern const ucp_request_send_proto_t ucp_stream_am_proto;
@@ -114,11 +126,6 @@ static uct_ep_t ucp_failed_tl_ep = {
     .iface = &ucp_failed_tl_iface
 };
 
-static const char *ucp_err_handling_mode_names[] = {
-    [UCP_ERR_HANDLING_MODE_NONE] = "none",
-    [UCP_ERR_HANDLING_MODE_PEER] = "peer"
-};
-
 
 int ucp_is_uct_ep_failed(uct_ep_h uct_ep)
 {
@@ -137,6 +144,7 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
         key->lanes[i].dst_sys_dev  = UCS_SYS_DEVICE_ID_UNKNOWN;
         key->lanes[i].path_index   = 0;
         key->lanes[i].lane_types   = 0;
+        key->lanes[i].seg_size     = 0;
     }
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_msg_lane  = UCP_NULL_LANE;
@@ -177,21 +185,23 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
         goto err_free_ep;
     }
 
-    ep->refcount                          = 1;
+    ep->refcount                          = 0;
     ep->cfg_index                         = UCP_WORKER_CFG_INDEX_NULL;
     ep->worker                            = worker;
     ep->am_lane                           = UCP_NULL_LANE;
     ep->flags                             = 0;
     ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
 #if UCS_ENABLE_ASSERT
-    ep->flush_iter_refcount               = 0;
-    ep->discard_refcount                  = 0;
+    ep->refcounts.create                  =
+    ep->refcounts.flush                   =
+    ep->refcounts.discard                 = 0;
 #endif
     ucp_ep_ext_gen(ep)->user_data         = NULL;
     ucp_ep_ext_control(ep)->cm_idx        = UCP_NULL_RESOURCE;
-    ucp_ep_ext_control(ep)->err_cb        = NULL;
     ucp_ep_ext_control(ep)->local_ep_id   = UCS_PTR_MAP_KEY_INVALID;
     ucp_ep_ext_control(ep)->remote_ep_id  = UCS_PTR_MAP_KEY_INVALID;
+    ucp_ep_ext_control(ep)->err_cb        = NULL;
+    ucp_ep_ext_control(ep)->close_req     = NULL;
 #if UCS_ENABLE_ASSERT
     ucp_ep_ext_control(ep)->ka_last_round = 0;
 #endif
@@ -223,6 +233,8 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
 
     /* Create endpoint VFS node on demand to avoid memory bloat */
     ucs_vfs_obj_set_dirty(worker, ucp_worker_vfs_refresh);
+
+    ucp_ep_refcount_add(ep, create);
 
     *ep_p = ep;
     ucs_debug("created ep %p to %s %s", ep, ucp_ep_peer_name(ep), message);
@@ -258,7 +270,7 @@ ucp_ep_local_disconnect_progress_remove_filter(const ucs_callbackq_elem_t *elem,
     ucs_assert(req->flags & UCP_REQUEST_FLAG_RELEASED);
     ucs_assert(req->send.uct.func == ucp_ep_flush_progress_pending);
 
-    ucp_request_complete_send(req, UCS_OK);
+    ucp_request_complete_send(req, req->status);
     return 1;
 }
 
@@ -303,11 +315,12 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
     return 0;
 }
 
-static void ucp_ep_destroy_base(ucp_ep_h ep)
+void ucp_ep_destroy_base(ucp_ep_h ep)
 {
-    ucs_assert(ep->refcount == 0);
-    ucs_assert(ep->flush_iter_refcount == 0);
-    ucs_assert(ep->discard_refcount == 0);
+    ucp_ep_refcount_field_assert(ep, refcount, ==, 0);
+    ucp_ep_refcount_assert(ep, create, ==, 0);
+    ucp_ep_refcount_assert(ep, flush, ==, 0);
+    ucp_ep_refcount_assert(ep, discard, ==, 0);
     ucs_assert(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
 
     ucs_vfs_obj_remove(ep);
@@ -316,24 +329,6 @@ static void ucp_ep_destroy_base(ucp_ep_h ep)
     UCS_STATS_NODE_FREE(ep->stats);
     ucs_free(ucp_ep_ext_control(ep));
     ucs_strided_alloc_put(&ep->worker->ep_alloc, ep);
-}
-
-void ucp_ep_add_ref(ucp_ep_h ep)
-{
-    ucs_assert(ep->refcount < UINT8_MAX);
-    ++ep->refcount;
-}
-
-/* Return 1 if the endpoint was destroyed, 0 if not */
-int ucp_ep_remove_ref(ucp_ep_h ep)
-{
-    ucs_assert(ep->refcount > 0);
-    if (--ep->refcount == 0) {
-        ucp_ep_destroy_base(ep);
-        return 1;
-    }
-
-    return 0;
 }
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
@@ -374,11 +369,14 @@ ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
         ++ep->worker->num_all_eps;
     }
 
+    ucp_ep_flush_state_reset(ep);
+
     *ep_p = ep;
     return UCS_OK;
 
 err_destroy_ep_base:
-    ucp_ep_remove_ref(ep);
+    ucp_ep_refcount_assert(ep, create, ==, 1);
+    ucp_ep_refcount_remove(ep, create);
 err:
     return status;
 }
@@ -393,7 +391,30 @@ void ucp_ep_delete(ucp_ep_h ep)
 
     ucp_ep_release_id(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
-    ucp_ep_remove_ref(ep);
+    ucp_ep_refcount_assert(ep, create, ==, 1);
+    ucp_ep_refcount_remove(ep, create);
+}
+
+void ucp_ep_flush_state_reset(ucp_ep_h ep)
+{
+    ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
+
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
+    ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
+               ((flush_state->send_sn == 0) &&
+                (flush_state->cmpl_sn == 0) &&
+                ucs_hlist_is_empty(&flush_state->reqs)));
+
+    flush_state->send_sn = 0;
+    flush_state->cmpl_sn = 0;
+    ucs_hlist_head_init(&flush_state->reqs);
+    ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
+}
+
+void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
+{
+    ucs_assert(ucs_hlist_is_empty(&ucp_ep_flush_state(ep)->reqs));
+    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
 }
 
 /* Since release function resets EP ID to @ref UCS_PTR_MAP_KEY_INVALID and PTR
@@ -504,19 +525,19 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
     ucs_status_t status;
     void *address_buffer;
     size_t address_length;
+    ucp_tl_bitmap_t mem_access_tls;
     char ep_name[UCP_WORKER_ADDRESS_NAME_MAX];
 
     ucs_memory_type_for_each(mem_type) {
+        ucp_context_get_mem_access_tls(context, mem_type, &mem_access_tls);
         if (UCP_MEM_IS_HOST(mem_type) ||
-            UCS_BITMAP_IS_ZERO_INPLACE(
-                    &context->mem_type_access_tls[mem_type])) {
+            UCS_BITMAP_IS_ZERO_INPLACE(&mem_access_tls)) {
             continue;
         }
 
-        status = ucp_address_pack(worker, NULL,
-                                  &context->mem_type_access_tls[mem_type],
-                                  pack_flags, NULL, &address_length,
-                                  &address_buffer);
+        status = ucp_address_pack(worker, NULL, &mem_access_tls, pack_flags,
+                                  context->config.ext.worker_addr_version, NULL,
+                                  &address_length, &address_buffer);
         if (status != UCS_OK) {
             goto err_cleanup_eps;
         }
@@ -544,7 +565,6 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
             goto err_free_address_list;
         }
 
-        ucp_ep_flush_state_reset(worker->mem_type_ep[mem_type]);
         UCS_ASYNC_UNBLOCK(&worker->async);
 
         ucs_free(local_address.address_list);
@@ -704,6 +724,11 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
         goto err_delete;
     }
 
+    if (UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0) &
+        UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID) {
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID;
+    }
+
     status = ucp_ep_adjust_params(ep, params);
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
@@ -713,8 +738,6 @@ static ucs_status_t ucp_ep_create_to_sock_addr(ucp_worker_h worker,
     if (status != UCS_OK) {
         goto err_cleanup_lanes;
     }
-
-    ucp_ep_flush_state_reset(ep);
 
     *ep_p = ep;
     return UCS_OK;
@@ -727,6 +750,59 @@ err:
     return status;
 }
 
+static ucs_status_t
+ucp_sa_data_v1_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
+                      unsigned *ep_init_flags_p,
+                      const void** worker_addr_p)
+{
+    const ucp_wireup_sockaddr_data_v1_t *sa_data_v1 =
+            ucs_derived_of(sa_data, ucp_wireup_sockaddr_data_v1_t);
+
+    if (sa_data_v1->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
+        ucs_error("sa_data_v1 contains unsupported address mode %u",
+                  sa_data_v1->addr_mode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    *ep_init_flags_p = (sa_data->header == UCP_ERR_HANDLING_MODE_PEER) ?
+                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    *worker_addr_p   = sa_data_v1 + 1;
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_sa_data_v2_unpack(const ucp_wireup_sockaddr_data_base_t *sa_data,
+                      unsigned *ep_init_flags_p,
+                      const void** worker_addr_p)
+{
+    *ep_init_flags_p = (sa_data->header & UCP_SA_DATA_FLAG_ERR_MODE_PEER) ?
+                       UCP_EP_INIT_ERR_MODE_PEER_FAILURE : 0;
+    *worker_addr_p   = sa_data + 1;
+    return UCS_OK;
+}
+
+static ucs_status_t
+ucp_conn_request_unpack_sa_data(const ucp_conn_request_h conn_request,
+                                unsigned *ep_init_flags_p,
+                                const void** worker_addr_p)
+{
+    const ucp_wireup_sockaddr_data_base_t *sa_data =
+            UCS_PTR_TYPE_OFFSET(conn_request, *conn_request);
+    uint8_t sa_data_version                        =
+            sa_data->header >> UCP_SA_DATA_HEADER_VERSION_SHIFT;
+
+    switch (sa_data_version) {
+    case UCP_OBJECT_VERSION_V1:
+        return ucp_sa_data_v1_unpack(sa_data, ep_init_flags_p, worker_addr_p);
+    case UCP_OBJECT_VERSION_V2:
+        return ucp_sa_data_v2_unpack(sa_data, ep_init_flags_p, worker_addr_p);
+    default:
+        ucs_error("conn_request %p: unsupported sa_data version: %u",
+                  conn_request, sa_data_version);
+        return UCS_ERR_UNSUPPORTED;
+    }
+}
+
 /**
  * Create an endpoint on the server side connected to the client endpoint.
  */
@@ -734,27 +810,28 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,
                                          ucp_ep_h *ep_p)
 {
-    const ucp_wireup_sockaddr_data_t *sa_data = &conn_request->sa_data;
-    unsigned ep_init_flags                    = 0;
-    ucp_unpacked_address_t           remote_addr;
-    uint64_t                         addr_flags;
-    unsigned                         i;
-    ucs_status_t                     status;
+    ucp_unpacked_address_t remote_addr;
+    unsigned ep_init_flags;
+    uint64_t addr_flags;
+    ucs_status_t status;
+    const void *worker_addr;
+    unsigned i;
 
-    if (sa_data->err_mode == UCP_ERR_HANDLING_MODE_PEER) {
-        ep_init_flags |= UCP_EP_INIT_ERR_MODE_PEER_FAILURE;
-    }
-
-    if (sa_data->addr_mode != UCP_WIREUP_SA_DATA_CM_ADDR) {
-        ucs_fatal("client sockaddr data contains invalid address mode %d",
-                  sa_data->addr_mode);
+    status = ucp_conn_request_unpack_sa_data(conn_request, &ep_init_flags,
+                                             &worker_addr);
+    if (status != UCS_OK) {
+        return status;
     }
 
     addr_flags = ucp_worker_common_address_pack_flags(worker) |
                  UCP_ADDRESS_PACK_FLAGS_CM_DEFAULT;
 
+    if (ucp_address_is_am_only(worker_addr)) {
+        ep_init_flags |= UCP_EP_INIT_CREATE_AM_LANE_ONLY;
+    }
+
     /* coverity[overrun-local] */
-    status = ucp_address_unpack(worker, sa_data + 1, addr_flags, &remote_addr);
+    status = ucp_address_unpack(worker, worker_addr, addr_flags, &remote_addr);
     if (status != UCS_OK) {
         ucp_listener_reject(conn_request->listener, conn_request);
         return status;
@@ -762,7 +839,8 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 
     for (i = 0; i < remote_addr.address_count; ++i) {
         remote_addr.address_list[i].dev_addr  = conn_request->remote_dev_addr;
-        remote_addr.address_list[i].dev_index = conn_request->sa_data.dev_index;
+        remote_addr.address_list[i].dev_index = 0; /* CM addr contains only 1
+                                                      device */
     }
 
     status = ucp_ep_cm_server_create_connected(worker, ep_init_flags,
@@ -839,10 +917,9 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     if (ep != NULL) {
         status = ucp_ep_adjust_params(ep, params);
         if (status != UCS_OK) {
-            ucp_ep_destroy_internal(ep);
+            goto err_destroy_ep;
         }
 
-        ucp_ep_flush_state_reset(ep);
         ucp_stream_ep_activate(ep);
         goto out_free_address;
     }
@@ -872,7 +949,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     if ((remote_address.uuid == worker->uuid) &&
         !(flags & UCP_EP_PARAMS_FLAGS_NO_LOOPBACK)) {
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
-        ucp_ep_flush_state_reset(ep);
     } else if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
                                     UCS_CONN_MATCH_QUEUE_EXP)) {
         if (worker->context->config.features & UCP_FEATURE_STREAM) {
@@ -881,7 +957,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
                       "connection matching and Stream API support", worker);
             goto err_destroy_ep;
         }
-        ucp_ep_flush_state_reset(ep);
     }
 
     /* if needed, send initial wireup message */
@@ -908,16 +983,35 @@ err_destroy_ep:
     goto out_free_address;
 }
 
+static void ucp_ep_params_check_err_handling(ucp_ep_h ep,
+                                             const ucp_ep_params_t *params)
+{
+    ucp_err_handling_mode_t err_mode =
+            UCP_PARAM_VALUE(EP, params, err_mode, ERR_HANDLING_MODE,
+                            UCP_ERR_HANDLING_MODE_NONE);
+
+    if (err_mode == UCP_ERR_HANDLING_MODE_NONE) {
+        return;
+    }
+
+    if (ucp_worker_keepalive_is_enabled(ep->worker) &&
+        ucp_ep_use_indirect_id(ep)) {
+        return;
+    }
+
+    ucs_diag("ep %p: creating endpoint with error handling but without "
+             "keepalive and indirect id", ep);
+}
+
 ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
                            ucp_ep_h *ep_p)
 {
+    ucp_ep_h ep    = NULL;
+    unsigned flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     ucs_status_t status;
-    unsigned flags;
-    ucp_ep_h ep = NULL;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
-    flags = UCP_PARAM_VALUE(EP, params, flags, FLAGS, 0);
     if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
         status = ucp_ep_create_to_sock_addr(worker, params, &ep);
     } else if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
@@ -939,9 +1033,13 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
         }
 #endif
 
+        ucp_ep_params_check_err_handling(ep, params);
         ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
         *ep_p = ep;
+    } else {
+        ++worker->counters.ep_creation_failures;
     }
+    ++worker->counters.ep_creations;
 
     UCS_ASYNC_UNBLOCK(&worker->async);
     return status;
@@ -1009,10 +1107,10 @@ void ucp_ep_destroy_internal(ucp_ep_h ep)
 static void ucp_ep_check_lanes(ucp_ep_h ep)
 {
 #if UCS_ENABLE_ASSERT
-    uint8_t num_inprog       = ep->discard_refcount + ep->flush_iter_refcount;
+    uint8_t num_inprog       = ep->refcounts.discard + ep->refcounts.flush +
+                               ep->refcounts.create;
     uint8_t num_failed_tl_ep = 0;
     ucp_lane_index_t lane;
-
 
     for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
         num_failed_tl_ep += ucp_is_uct_ep_failed(ep->uct_eps[lane]);
@@ -1020,17 +1118,7 @@ static void ucp_ep_check_lanes(ucp_ep_h ep)
 
     ucs_assert((num_failed_tl_ep == 0) ||
                (ucp_ep_num_lanes(ep) == num_failed_tl_ep));
-
-    if (num_failed_tl_ep != 0) {
-        /* EP reference count is the number of outstanding flush operations and
-         * discards, plus 1 if not destroyed yet */
-        ucs_assert((ep->refcount == num_inprog) ||
-                   (ep->refcount == (num_inprog + 1)));
-    } else {
-        /* EP is used, so reference count is the number of outstanding flush
-         * operations and discards plus 1 */
-        ucs_assert(ep->refcount == (num_inprog + 1));
-    }
+    ucp_ep_refcount_field_assert(ep, refcount, ==, num_inprog);
 #endif
 }
 
@@ -1053,6 +1141,77 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
          * lanes */
         ep->uct_eps[lane] = &ucp_failed_tl_ep;
     }
+}
+
+static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
+                                          void *user_data)
+{
+    ucp_ep_discard_lanes_arg_t *arg = (ucp_ep_discard_lanes_arg_t*)user_data;
+
+    ucs_assert(arg != NULL);
+    ucs_assert(arg->counter > 0);
+
+    if (--arg->counter > 0) {
+        return;
+    }
+
+    ucp_ep_reqs_purge(arg->ucp_ep, arg->status);
+    ucs_free(arg);
+}
+
+static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
+{
+    unsigned ep_flush_flags         = (ucp_ep_config(ep)->key.err_mode ==
+                                       UCP_ERR_HANDLING_MODE_NONE) ?
+                                      UCT_FLUSH_FLAG_LOCAL :
+                                      UCT_FLUSH_FLAG_CANCEL;
+    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
+    ucp_ep_discard_lanes_arg_t *discard_arg;
+    ucs_status_t status;
+    ucp_lane_index_t lane;
+    uct_ep_h uct_ep;
+
+    if (ep->flags & UCP_EP_FLAG_FAILED) {
+        /* Avoid calling ucp_ep_discard_lanes_callback() that will purge UCP
+         * endpoint's requests, if we already started discard and purge process
+         * this endpoint. Doing so could complete send requests before UCT lanes
+         * using them are flushed and destroyed. */
+        return;
+    }
+
+    discard_arg = ucs_malloc(sizeof(*discard_arg), "discard_lanes_arg");
+    if (discard_arg == NULL) {
+        ucs_error("ep %p: failed to allocate memory for discarding lanes"
+                  " argument", ep);
+        ucp_ep_cleanup_lanes(ep); /* Just close all UCT endpoints */
+        ucp_ep_reqs_purge(ep, discard_status);
+        return;
+    }
+
+    discard_arg->ucp_ep  = ep;
+    discard_arg->status  = discard_status;
+    discard_arg->counter = 1;
+
+    ucs_debug("ep %p: discarding lanes", ep);
+    ucp_ep_set_lanes_failed(ep, uct_eps);
+    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
+        uct_ep = uct_eps[lane];
+        if (uct_ep == NULL) {
+            continue;
+        }
+
+        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
+        status = ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
+                                           ucp_ep_err_pending_purge,
+                                           UCS_STATUS_PTR(discard_status),
+                                           ucp_ep_discard_lanes_callback,
+                                           discard_arg);
+        if (status == UCS_INPROGRESS) {
+            ++discard_arg->counter;
+        }
+    }
+
+    ucp_ep_discard_lanes_callback(NULL, UCS_OK, discard_arg);
 }
 
 ucs_status_t
@@ -1082,17 +1241,18 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status)
         return UCS_OK;
     }
 
+    ++ucp_ep->worker->counters.ep_failures;
+
     /* The EP can be closed from last completion callback */
     ucp_ep_discard_lanes(ucp_ep, status);
-    ucp_ep_reqs_purge(ucp_ep, status);
     ucp_stream_ep_cleanup(ucp_ep, status);
 
     if (ucp_ep->flags & UCP_EP_FLAG_USED) {
         if (ucp_ep->flags & UCP_EP_FLAG_CLOSED) {
-            if (ucp_ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID) {
+            if (ep_ext_control->close_req != NULL) {
                 /* Promote close operation to CANCEL in case of transport error,
-             * since the disconnect event may never arrive. */
-                close_req = ep_ext_control->close_req.req;
+                 * since the disconnect event may never arrive. */
+                close_req                        = ep_ext_control->close_req;
                 close_req->send.flush.uct_flags |= UCT_FLUSH_FLAG_CANCEL;
                 ucp_ep_local_disconnect_progress(close_req);
             }
@@ -1195,7 +1355,6 @@ void ucp_ep_disconnected(ucp_ep_h ep, int force)
 
     ucp_stream_ep_cleanup(ep, UCS_ERR_CANCELED);
     ucp_am_ep_cleanup(ep);
-    ucp_ep_reqs_purge(ep, UCS_ERR_CANCELED);
 
     ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_USED);
 
@@ -1237,11 +1396,10 @@ unsigned ucp_ep_local_disconnect_progress(void *arg)
 static void ucp_ep_set_close_request(ucp_ep_h ep, ucp_request_t *request,
                                      const char *debug_msg)
 {
+    ucs_assertv(ucp_ep_ext_control(ep)->close_req == NULL,
+                "ep=%p: close_req=%p", ep, ucp_ep_ext_control(ep)->close_req);
     ucs_trace("ep %p: setting close request %p, %s", ep, request, debug_msg);
-
-    ucp_ep_flush_state_invalidate(ep);
-    ucp_ep_ext_control(ep)->close_req.req = request;
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_CLOSE_REQ_VALID, 0);
+    ucp_ep_ext_control(ep)->close_req = request;
 }
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req)
@@ -1304,34 +1462,6 @@ ucs_status_ptr_t ucp_ep_close_nb(ucp_ep_h ep, unsigned mode)
     return ucp_ep_close_nbx(ep, &param);
 }
 
-void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t status)
-{
-    unsigned ep_flush_flags = (ucp_ep_config(ep)->key.err_mode ==
-                                       UCP_ERR_HANDLING_MODE_NONE) ?
-                              UCT_FLUSH_FLAG_LOCAL: UCT_FLUSH_FLAG_CANCEL;
-    uct_ep_h uct_eps[UCP_MAX_LANES] = { NULL };
-    ucp_lane_index_t lane;
-    uct_ep_h uct_ep;
-
-    ucs_debug("ep %p: discarding lanes", ep);
-
-    ucp_ep_set_lanes_failed(ep, uct_eps);
-
-    for (lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
-        uct_ep = uct_eps[lane];
-        if (uct_ep == NULL) {
-            continue;
-        }
-
-        ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
-        ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
-                                  ucp_ep_err_pending_purge,
-                                  UCS_STATUS_PTR(status),
-                                  (ucp_send_nbx_callback_t)ucs_empty_function,
-                                  NULL);
-    }
-}
-
 ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
 {
     ucp_worker_h  worker = ep->worker;
@@ -1378,6 +1508,8 @@ ucs_status_ptr_t ucp_ep_close_nbx(ucp_ep_h ep, const ucp_request_param_t *param)
             }
         }
     }
+
+    ++worker->counters.ep_closures;
 
 out:
     UCS_ASYNC_UNBLOCK(&worker->async);
@@ -1502,7 +1634,8 @@ static int ucp_ep_config_lane_is_equal(const ucp_ep_config_key_t *key1,
            (config_lane1->path_index == config_lane2->path_index) &&
            (config_lane1->dst_md_index == config_lane2->dst_md_index) &&
            (config_lane1->dst_sys_dev == config_lane2->dst_sys_dev) &&
-           (config_lane1->lane_types == config_lane2->lane_types);
+           (config_lane1->lane_types == config_lane2->lane_types) &&
+           (config_lane1->seg_size == config_lane2->seg_size);
 }
 
 int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
@@ -1719,12 +1852,6 @@ static void ucp_ep_config_set_am_rndv_thresh(
     ucs_assert(config->key.am_lane != UCP_NULL_LANE);
     ucs_assert(config->key.lanes[config->key.am_lane].rsc_index != UCP_NULL_RESOURCE);
 
-    if (!ucp_ep_config_test_rndv_support(config)) {
-        /* Disable RNDV */
-        ucs_trace("AM rendezvous protocol is not supported");
-        return;
-    }
-
     if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the AM rndv threshold on its own.*/
         rndv_thresh = ucp_ep_config_calc_rndv_thresh(worker, config,
@@ -1768,10 +1895,7 @@ ucp_ep_config_set_rndv_thresh(ucp_worker_t *worker, ucp_ep_config_t *config,
 
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
-    if (!ucp_ep_config_test_rndv_support(config)) {
-        /* Disable RNDV */
-        goto out_not_supported;
-    } else if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
+    if (context->config.ext.rndv_thresh == UCS_MEMUNITS_AUTO) {
         /* auto - Make UCX calculate the RMA (get_zcopy) rndv threshold on its own.*/
         rndv_thresh       = ucp_ep_config_calc_rndv_thresh(worker, config,
                                                            config->key.am_bw_lanes,
@@ -1924,7 +2048,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
                          ucp_ep_msg_config_t *config, size_t max_bcopy,
                          size_t max_zcopy, size_t max_iov, size_t max_hdr,
                          uint64_t bcopy_flag, uint64_t zcopy_flag,
-                         size_t adjust_min_val)
+                         size_t adjust_min_val, size_t max_seg_size)
 {
     ucp_context_t *context = worker->context;
     const uct_md_attr_t *md_attr;
@@ -1937,7 +2061,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
     iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
     if (iface_attr->cap.flags & bcopy_flag) {
-        config->max_bcopy = max_bcopy;
+        config->max_bcopy = ucs_min(max_bcopy, max_seg_size);
     } else {
         config->max_bcopy = SIZE_MAX;
     }
@@ -1949,7 +2073,7 @@ ucp_ep_config_init_attrs(ucp_worker_t *worker, ucp_rsc_index_t rsc_index,
         return;
     }
 
-    config->max_zcopy = max_zcopy;
+    config->max_zcopy = ucs_min(max_zcopy, max_seg_size);
     config->max_hdr   = max_hdr;
     config->max_iov   = ucs_min(UCP_MAX_IOV, max_iov);
 
@@ -2180,7 +2304,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.tag.eager.max_iov, 0,
                                      UCT_IFACE_FLAG_TAG_EAGER_BCOPY,
                                      UCT_IFACE_FLAG_TAG_EAGER_ZCOPY,
-                                     iface_attr->cap.tag.eager.max_bcopy);
+                                     iface_attr->cap.tag.eager.max_bcopy,
+                                     UINT_MAX);
 
             config->tag.offload.max_rndv_iov   = iface_attr->cap.tag.rndv.max_iov;
             config->tag.offload.max_rndv_zcopy = iface_attr->cap.tag.rndv.max_zcopy;
@@ -2192,8 +2317,11 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             min_rndv_thresh                    = ucp_ep_tag_offload_min_rndv_thresh(config);
             min_am_rndv_thresh                 = min_rndv_thresh;
 
-            ucs_assert_always(iface_attr->cap.tag.rndv.max_hdr >=
-                              sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
+            ucs_assertv_always(iface_attr->cap.tag.rndv.max_hdr >=
+                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t),
+                               "rndv.max_hdr %zu, offload_unexp_rndv_hdr %zu",
+                               iface_attr->cap.tag.rndv.max_hdr,
+                               sizeof(ucp_tag_offload_unexp_rndv_hdr_t));
 
             /* Must have active messages for using rendezvous */
             if (config->key.am_lane != UCP_NULL_LANE) {
@@ -2235,7 +2363,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                      iface_attr->cap.am.max_iov,
                                      iface_attr->cap.am.max_hdr,
                                      UCT_IFACE_FLAG_AM_BCOPY,
-                                     UCT_IFACE_FLAG_AM_ZCOPY, SIZE_MAX);
+                                     UCT_IFACE_FLAG_AM_ZCOPY, SIZE_MAX,
+                                     config->key.lanes[lane].seg_size);
 
             /* Configuration stored in config->am is used by TAG, UCP AM and
              * STREAM protocol implementations, do not adjust max_short value by
@@ -2278,7 +2407,9 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             /* All keys must fit in RNDV packet.
              * TODO remove some MDs if they don't
              */
-            ucs_assert_always(config->rndv.rkey_size <= config->am.max_bcopy);
+            ucs_assertv_always(config->rndv.rkey_size <= config->am.max_bcopy,
+                               "rkey_size %zu, am.max_bcopy %zu",
+                               config->rndv.rkey_size, config->am.max_bcopy);
 
             if (!ucp_ep_config_key_has_tag_lane(&config->key)) {
                 /* Tag offload is disabled, AM will be used for all
@@ -2411,73 +2542,88 @@ static int ucp_ep_is_short_lower_thresh(ssize_t max_short,
             (((size_t)max_short + 1) < thresh));
 }
 
-static void
-ucp_ep_config_print_proto(FILE *stream, const char *name,
-                          ssize_t max_eager_short, size_t zcopy_thresh,
-                          size_t rndv_rma_thresh, size_t rndv_am_thresh)
+static void ucp_ep_config_print_short(FILE *stream, const char *proto_name,
+                                      ssize_t max_config_short)
 {
-    size_t max_bcopy, min_rndv, max_short;
+    size_t max_short;
 
-    min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
-    max_bcopy = ucs_min(zcopy_thresh, min_rndv);
-
-    fprintf(stream, "# %23s: 0", name);
-
-    /* print eager short */
-    if (max_eager_short > 0) {
-        max_short = max_eager_short;
+    if (max_config_short > 0) {
+        max_short = max_config_short;
         ucs_assert(max_short <= SSIZE_MAX);
-        fprintf(stream, "..<egr/short>..%zu" , max_short + 1);
-    } else if (!max_eager_short) {
-        fprintf(stream, "..<egr/short>..%zu" , max_eager_short);
+        fprintf(stream, "..<%s>..%zu", proto_name, max_short + 1);
+    } else if (max_config_short == 0) {
+        fprintf(stream, "..<%s>..0", proto_name);
     }
+}
 
-    /* print eager bcopy */
-    if (ucp_ep_is_short_lower_thresh(max_eager_short, max_bcopy) && max_bcopy) {
-        fprintf(stream, "..<egr/bcopy>..");
-        if (max_bcopy < SIZE_MAX) {
-            fprintf(stream, "%zu", max_bcopy);
+static void ucp_ep_config_print_proto_middle(FILE *stream,
+                                             const char *proto_name,
+                                             ssize_t max_config_short,
+                                             size_t min_current_proto,
+                                             size_t min_next_proto)
+{
+    if (ucp_ep_is_short_lower_thresh(max_config_short, min_next_proto) &&
+        (min_current_proto < min_next_proto)) {
+        fprintf(stream, "..<%s>..", proto_name);
+        if (min_next_proto < SIZE_MAX) {
+            fprintf(stream, "%zu", min_next_proto);
         }
     }
+}
 
-    /* print eager zcopy */
-    if (ucp_ep_is_short_lower_thresh(max_eager_short, min_rndv) &&
-        (zcopy_thresh < min_rndv)) {
-        fprintf(stream, "..<egr/zcopy>..");
-        if (min_rndv < SIZE_MAX) {
-            fprintf(stream, "%zu", min_rndv);
-        }
-    }
-
-    /* print rendezvous */
-    if (min_rndv < SIZE_MAX) {
-        fprintf(stream, "..<rndv>..");
+static void ucp_ep_config_print_proto_last(FILE *stream, const char *name,
+                                           size_t min_proto)
+{
+    if (min_proto < SIZE_MAX) {
+        fprintf(stream, "..<%s>..", name);
     }
 
     fprintf(stream, "(inf)\n");
 }
 
+static void
+ucp_ep_config_print_proto(FILE *stream, const char *name,
+                          ssize_t max_eager_short, size_t zcopy_thresh,
+                          size_t rndv_rma_thresh, size_t rndv_am_thresh)
+{
+    size_t min_zcopy, min_rndv;
+
+    min_rndv  = ucs_min(rndv_rma_thresh, rndv_am_thresh);
+    min_zcopy = ucs_min(zcopy_thresh, min_rndv);
+
+    fprintf(stream, "# %23s: 0", name);
+
+    /* print eager short */
+    ucp_ep_config_print_short(stream, "egr/short", max_eager_short);
+
+    /* print eager bcopy */
+    ucp_ep_config_print_proto_middle(stream, "egr/bcopy", max_eager_short, 0,
+                                     min_zcopy);
+
+    /* print eager zcopy */
+    ucp_ep_config_print_proto_middle(stream, "egr/zcopy", max_eager_short,
+                                     min_zcopy, min_rndv);
+
+    /* print rendezvous */
+    ucp_ep_config_print_proto_last(stream, "rndv", min_rndv);
+}
+
 static void ucp_ep_config_print_rma_proto(FILE *stream, const char *name,
                                           ucp_lane_index_t lane,
-                                          size_t bcopy_thresh, size_t zcopy_thresh)
+                                          ssize_t max_rma_short,
+                                          size_t zcopy_thresh)
 {
     fprintf(stream, "# %20s[%d]: 0", name, lane);
-    if (bcopy_thresh > 0) {
-        fprintf(stream, "..<short>");
-    }
-    if (bcopy_thresh < zcopy_thresh) {
-        if (bcopy_thresh > 0) {
-            fprintf(stream, "..%zu", bcopy_thresh);
-        }
-        fprintf(stream, "..<bcopy>");
-    }
-    if (zcopy_thresh < SIZE_MAX) {
-        if (zcopy_thresh > 0) {
-            fprintf(stream, "..%zu", zcopy_thresh);
-        }
-        fprintf(stream, "..<zcopy>");
-    }
-    fprintf(stream, "..(inf)\n");
+
+    /* print short */
+    ucp_ep_config_print_short(stream, "short", max_rma_short);
+
+    /* print bcopy */
+    ucp_ep_config_print_proto_middle(stream, "bcopy", max_rma_short, 0,
+                                     zcopy_thresh);
+
+    /* print zcopy */
+    ucp_ep_config_print_proto_last(stream, "zcopy", zcopy_thresh);
 }
 
 int ucp_ep_config_get_multi_lane_prio(const ucp_lane_index_t *lanes,
@@ -2635,15 +2781,16 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                 continue;
             }
             ucp_ep_config_print_rma_proto(stream, "put", lane,
-                                          config->rma[lane].max_put_short + 1,
+                                          config->rma[lane].max_put_short,
                                           config->rma[lane].put_zcopy_thresh);
-            ucp_ep_config_print_rma_proto(stream, "get", lane, 0,
+            ucp_ep_config_print_rma_proto(stream, "get", lane,
+                                          config->rma[lane].max_get_short,
                                           config->rma[lane].get_zcopy_thresh);
         }
     }
 
     if (context->config.features &
-        (UCP_FEATURE_TAG|UCP_FEATURE_RMA|UCP_FEATURE_AM)) {
+        (UCP_FEATURE_TAG | UCP_FEATURE_RMA | UCP_FEATURE_AM)) {
         fprintf(stream, "#\n");
         fprintf(stream, "# %23s: mds ", "rma_bw");
         ucs_for_each_bit(md_index, config->key.rma_bw_md_map) {
@@ -2859,12 +3006,6 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     ucp_ep_ext_control(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
 }
 
-int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config)
-{
-    return (config->key.err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
-           (config->key.cm_lane  != UCP_NULL_LANE);
-}
-
 /* if we have ep2iface transport we need to send an active-message based
  * keepalive message to check the remote endpoint still exists */
 static UCS_F_ALWAYS_INLINE int
@@ -2987,8 +3128,10 @@ int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
 
 static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
 {
-    if ((status != UCS_OK) &&
-        (ucp_ep_config(req->send.ep)->key.err_mode !=
+    ucs_assertv(UCS_STATUS_IS_ERR(status), "req %p: status %s", req,
+                ucs_status_string(status));
+
+    if ((ucp_ep_config(req->send.ep)->key.err_mode !=
          UCP_ERR_HANDLING_MODE_NONE) &&
         (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
         ucp_request_dt_invalidate(req, status);
@@ -3082,9 +3225,8 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     }
 
     if (/* Flush state is already valid (i.e. EP doesn't exist on matching
-         * context) and not invalidated yet, also remote EP ID is already set */
-        !(ucp_ep->flags &
-          (UCP_EP_FLAG_ON_MATCH_CTX | UCP_EP_FLAG_CLOSE_REQ_VALID))) {
+         * context) and not invalidated yet */
+        !(ucp_ep->flags & UCP_EP_FLAG_ON_MATCH_CTX)) {
         flush_state = ucp_ep_flush_state(ucp_ep);
 
         /* Adjust 'comp_sn' value to a value stored in 'send_sn' by emulating
@@ -3100,36 +3242,7 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     }
 }
 
-static void ucp_ep_vfs_show_peer_name(void *obj, ucs_string_buffer_t *strb,
-                                      void *arg_ptr, uint64_t arg_u64)
-{
-    ucp_ep_h ep = obj;
-
-    ucs_string_buffer_appendf(strb, "%s\n", ucp_ep_peer_name(ep));
-}
-
-void ucp_ep_vfs_init(ucp_ep_h ep)
-{
-    ucp_err_handling_mode_t err_mode;
-
-#if ENABLE_DEBUG_DATA
-    ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%s", ep->name);
-    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_memory_address, NULL, 0,
-                            "memory_address");
-#else
-    ucs_vfs_obj_add_dir(ep->worker, ep, "ep/%p", ep);
-#endif
-
-    ucs_vfs_obj_add_ro_file(ep, ucp_ep_vfs_show_peer_name, NULL, 0,
-                            "peer_name");
-
-    err_mode = ucp_ep_config(ep)->key.err_mode;
-    ucs_vfs_obj_add_ro_file(ep, ucs_vfs_show_primitive,
-                            (void*)ucp_err_handling_mode_names[err_mode],
-                            UCS_VFS_TYPE_STRING, "error_mode");
-}
-
-static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
+ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
     uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
     uct_ep_attr_t uct_cm_ep_attr;
@@ -3155,7 +3268,7 @@ static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
         return status;
     }
 
-    if (uct_cm_ep_attr.field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
         status = ucs_sockaddr_copy((struct sockaddr*)&attr->local_sockaddr,
                                    (struct sockaddr*)&uct_cm_ep_attr.local_address);
         if (status != UCS_OK) {
@@ -3163,7 +3276,7 @@ static ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
         }
     }
 
-    if (uct_cm_ep_attr.field_mask & UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
         status = ucs_sockaddr_copy((struct sockaddr*)&attr->remote_sockaddr,
                                    (struct sockaddr*)&uct_cm_ep_attr.remote_address);
         if (status != UCS_OK) {
@@ -3191,4 +3304,3 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 
     return UCS_OK;
 }
-

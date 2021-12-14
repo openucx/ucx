@@ -224,6 +224,7 @@ static ucs_status_t uct_ud_verbs_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
     uct_ud_verbs_post_send(iface, ep, &iface->tx.wr_inl, IBV_SEND_INLINE,
                            iface->tx.wr_inl.num_sge);
 
+    uct_ud_iov_to_skb(skb, iov, iovcnt);
     uct_ud_iface_complete_tx_skb(&iface->super, &ep->super, skb);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, uct_iov_total_length(iov, iovcnt));
     uct_ud_leave(&iface->super);
@@ -557,8 +558,9 @@ static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_estimate_perf = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .arm_cq         = uct_ib_iface_arm_cq,

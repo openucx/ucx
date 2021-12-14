@@ -786,12 +786,19 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
 static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
                                            const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev    = uct_ib_iface_device(iface);
-    uint16_t pkey_tbl_len   = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
-    int pkey_found          = 0;
-    uint16_t lim_pkey       = UCT_IB_ADDRESS_INVALID_PKEY;
-    uint16_t lim_pkey_index = UINT16_MAX;
+    uct_ib_device_t *dev        = uct_ib_iface_device(iface);
+    uint16_t pkey_tbl_len       = uct_ib_iface_port_attr(iface)->pkey_tbl_len;
+    int UCS_V_UNUSED pkey_found = 0;
+    uint16_t lim_pkey           = UCT_IB_ADDRESS_INVALID_PKEY;
+    uint16_t lim_pkey_index     = UINT16_MAX;
     uint16_t pkey_index, port_pkey, pkey;
+
+    if (uct_ib_iface_is_roce(iface)) {
+        /* RoCE: use PKEY index 0, which contains the default PKEY: 0xffff */
+        iface->pkey_index = 0;
+        iface->pkey       = UCT_IB_PKEY_DEFAULT;
+        goto out_pkey_found;
+    }
 
     if ((config->pkey != UCS_HEXUNITS_AUTO) &&
         (config->pkey > UCT_IB_PKEY_PARTITION_MASK)) {
@@ -821,43 +828,42 @@ static ucs_status_t uct_ib_iface_init_pkey(uct_ib_iface_t *iface,
         if ((config->pkey == UCS_HEXUNITS_AUTO) ||
             /* take only the lower 15 bits for the comparison */
             ((pkey & UCT_IB_PKEY_PARTITION_MASK) == config->pkey)) {
-            if (!(pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) &&
+            if (pkey & UCT_IB_PKEY_MEMBERSHIP_MASK) {
+                iface->pkey_index = pkey_index;
+                iface->pkey       = pkey;
+                pkey_found        = 1;
+                goto out_pkey_found;
+            } else if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
                 /* limited PKEY has not yet been found */
-                (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY)) {
                 lim_pkey_index = pkey_index;
                 lim_pkey       = pkey;
-                continue;
             }
-
-            iface->pkey_index = pkey_index;
-            iface->pkey       = pkey;
-            pkey_found        = 1;
-            break;
         }
     }
 
-    if (!pkey_found) {
-        if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
-            /* PKEY neither with full nor with limited membership was found */
-            if (config->pkey == UCS_HEXUNITS_AUTO) {
-                ucs_error("there is no valid pkey to use on "
-                          UCT_IB_IFACE_FMT, UCT_IB_IFACE_ARG(iface));
-            } else {
-                ucs_error("unable to find specified pkey 0x%x on "UCT_IB_IFACE_FMT,
-                          config->pkey, UCT_IB_IFACE_ARG(iface));
-            }
+    ucs_assert(!pkey_found);
 
-            return UCS_ERR_NO_ELEM;
+    if (lim_pkey == UCT_IB_ADDRESS_INVALID_PKEY) {
+        /* PKEY neither with full nor with limited membership was found */
+        if (config->pkey == UCS_HEXUNITS_AUTO) {
+            ucs_error("there is no valid pkey to use on " UCT_IB_IFACE_FMT,
+                      UCT_IB_IFACE_ARG(iface));
         } else {
-            ucs_assert(lim_pkey_index != UINT16_MAX);
-            iface->pkey_index = lim_pkey_index;
-            iface->pkey       = lim_pkey;
+            ucs_error("unable to find specified pkey 0x%x on "UCT_IB_IFACE_FMT,
+                      config->pkey, UCT_IB_IFACE_ARG(iface));
         }
+
+        return UCS_ERR_NO_ELEM;
     }
 
+    ucs_assertv(lim_pkey_index < pkey_tbl_len, "lim_pkey_index=%u"
+                " pkey_tbl_len=%u", lim_pkey_index, pkey_tbl_len);
+    iface->pkey_index = lim_pkey_index;
+    iface->pkey       = lim_pkey;
+
+out_pkey_found:
     ucs_debug("using pkey[%d] 0x%x on "UCT_IB_IFACE_FMT, iface->pkey_index,
               iface->pkey, UCT_IB_IFACE_ARG(iface));
-
     return UCS_OK;
 }
 
@@ -1194,7 +1200,7 @@ uct_ib_iface_init_roce_mask_info(uct_ib_iface_t *iface, size_t md_config_index)
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
 
-    struct sockaddr_in mask;
+    struct sockaddr_storage mask;
     char ndev_name[IFNAMSIZ];
     ucs_status_t status;
     size_t addr_size;
@@ -1209,7 +1215,8 @@ uct_ib_iface_init_roce_mask_info(uct_ib_iface_t *iface, size_t md_config_index)
         goto mask_info_failed;
     }
 
-    status = ucs_sockaddr_get_ifmask(ndev_name, &mask);
+    status = ucs_netif_get_addr(ndev_name, AF_UNSPEC, NULL,
+                                (struct sockaddr*)&mask);
     if (status != UCS_OK) {
         goto mask_info_failed;
     }
@@ -1665,7 +1672,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         encoding              = 64.0/66.0;
         break;
     default:
-        ucs_error("Invalid active_speed on %s:%d: %d",
+        ucs_error("Invalid active_speed on " UCT_IB_IFACE_FMT ": %d",
                   UCT_IB_IFACE_ARG(iface), active_speed);
         return UCS_ERR_IO_ERROR;
     }
@@ -1698,6 +1705,60 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->bandwidth.shared    = ucs_min((wire_speed * mtu) / (mtu + extra_pkt_len), md->pci_bw);
     iface_attr->bandwidth.dedicated = 0;
     iface_attr->priority            = uct_ib_device_spec(dev)->priority;
+
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_ib_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
+{
+    uct_ep_operation_t op = UCT_ATTR_VALUE(PERF, perf_attr, operation,
+                                           OPERATION, UCT_EP_OP_LAST);
+    uct_iface_attr_t iface_attr;
+    double send_post_overhead_bcopy;
+    double send_post_overhead_zcopy;
+    double send_pre_overhead;
+    ucs_status_t status;
+
+    status = uct_iface_query(iface, &iface_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    switch (ucs_arch_get_cpu_vendor()) {
+    case UCS_CPU_VENDOR_FUJITSU_ARM:
+        send_pre_overhead        = 100e-9;
+        send_post_overhead_bcopy = 400e-9;
+        send_post_overhead_zcopy = 450e-9;
+        break;
+    default:
+        send_pre_overhead        = iface_attr.overhead;
+        send_post_overhead_bcopy = send_post_overhead_zcopy = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        perf_attr->send_pre_overhead = send_pre_overhead;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
+        if (uct_ep_op_is_zcopy(op)) {
+            perf_attr->send_post_overhead = send_post_overhead_zcopy;
+        } else {
+            perf_attr->send_post_overhead = send_post_overhead_bcopy;
+        }
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        perf_attr->recv_overhead = iface_attr.overhead;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
+        perf_attr->bandwidth = iface_attr.bandwidth;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LATENCY) {
+        perf_attr->latency = iface_attr.latency;
+    }
 
     return UCS_OK;
 }
@@ -1745,8 +1806,8 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface)
 
     /* avoid re-arming the interface if any events exists */
     if ((send_cq_count > 0) || (recv_cq_count > 0)) {
-        ucs_trace("arm_cq: got %d send and %d recv events, returning BUSY",
-                  send_cq_count, recv_cq_count);
+        ucs_trace_data("arm_cq: got %d send and %d recv events, returning BUSY",
+                       send_cq_count, recv_cq_count);
         return UCS_ERR_BUSY;
     }
 

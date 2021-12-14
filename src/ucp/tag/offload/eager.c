@@ -56,6 +56,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
                                             cap.tag.eager.max_short),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
+        .super.send_op       = UCT_EP_OP_EAGER_SHORT,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY,
@@ -64,9 +65,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
     };
 
     if (!ucp_proto_eager_check_op_id(init_params, UCP_OP_ID_TAG_SEND, 1) ||
-        /* short protocol requires contig/host */
-        (select_param->dt_class != UCP_DATATYPE_CONTIG) ||
-        !UCP_MEM_IS_HOST(select_param->mem_type)) {
+        !ucp_proto_is_short_supported(select_param)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -125,6 +124,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init_common(
                                             cap.tag.eager.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
+        .super.send_op       = UCT_EP_OP_EAGER_BCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY,
@@ -225,6 +225,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
                                             cap.tag.eager.max_zcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_tag_t),
+        .super.send_op       = UCT_EP_OP_EAGER_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY |
                                UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY |

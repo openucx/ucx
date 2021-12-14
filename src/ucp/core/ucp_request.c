@@ -328,7 +328,7 @@ static void ucp_request_mem_invalidate_completion(uct_completion_t *comp)
                                                   send.state.uct_comp);
     uct_worker_cb_id_t prog_id = UCS_CALLBACKQ_ID_NULL;
 
-    uct_worker_progress_register_safe(req->send.ep->worker->uct,
+    uct_worker_progress_register_safe(req->send.invalidate.worker->uct,
                                       ucp_request_dt_invalidate_progress,
                                       req, UCS_CALLBACKQ_FLAG_ONESHOT,
                                       &prog_id);
@@ -367,8 +367,9 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
         .flags      = UCT_MD_MEM_DEREG_FLAG_INVALIDATE,
         .comp       = &req->send.state.uct_comp
     };
-    ucp_context_t *context = req->send.ep->worker->context;
-    uct_mem_h *uct_memh    = req->send.state.dt.dt.contig.memh;
+    ucp_worker_h worker   = req->send.ep->worker;
+    ucp_context_h context = worker->context;
+    uct_mem_h *uct_memh   = req->send.state.dt.dt.contig.memh;
     ucp_md_map_t invalidate_map;
     unsigned md_index;
     unsigned memh_index;
@@ -378,11 +379,13 @@ void ucp_request_dt_invalidate(ucp_request_t *req, ucs_status_t status)
                UCP_ERR_HANDLING_MODE_NONE);
     ucs_assert(UCP_DT_IS_CONTIG(req->send.datatype));
 
+    invalidate_map                  = ucp_request_get_invalidation_map(req);
+    req->send.ep                    = NULL;
     req->send.state.uct_comp.count  = 1;
     req->send.state.uct_comp.func   = ucp_request_mem_invalidate_completion;
     req->send.state.uct_comp.status = UCS_OK;
+    req->send.invalidate.worker     = worker;
     req->status                     = status;
-    invalidate_map                  = ucp_request_get_invalidation_map(req);
 
     ucp_trace_req(req, "mem dereg buffer md_map 0x%"PRIx64, invalidate_map);
     /* dereg all lanes except for 'invalidate_map' */
@@ -630,6 +633,9 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     ucp_trace_req(req, "fast-forward with status %s",
                   ucs_status_string(status));
 
+    ucs_assertv(UCS_STATUS_IS_ERR(status), "status=%s",
+                ucs_status_string(status));
+
     /* Set REMOTE_COMPLETED flag to make sure that TAG/Sync operations will be
      * fully completed here */
     req->flags |= UCP_REQUEST_FLAG_SYNC_REMOTE_COMPLETED;
@@ -637,10 +643,28 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
 
     if (req->send.uct.func == ucp_proto_progress_am_single) {
         req->send.proto.comp_cb(req);
+    } else if (req->send.uct.func == ucp_wireup_msg_progress) {
+        /* Sending EP_REMOVED/EP_CHECK/ACK WIREUP_MSGs could be scheduled on
+         * UCT endpoint which is not a WIREUP_EP. Other WIREUP MSGs should not
+         * be returned from 'uct_ep_pending_purge()', since they are released
+         * by WIREUP endpoint's purge function
+         */
+        ucs_assertv((req->send.wireup.type == UCP_WIREUP_MSG_EP_REMOVED) ||
+                    (req->send.wireup.type == UCP_WIREUP_MSG_EP_CHECK) ||
+                    (req->send.wireup.type == UCP_WIREUP_MSG_ACK),
+                    "req %p ep %p: got %s message", req, req->send.ep,
+                    ucp_wireup_msg_str(req->send.wireup.type));
+        ucs_free(req->send.buffer);
+        ucp_request_mem_free(req);
     } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
     } else if (req->send.state.uct_comp.func ==
                ucp_worker_discard_uct_ep_flush_comp) {
+        /* Discard operations with flush(LOCAL) could be started (e.g. closing
+         * unneeded UCT EPs from intersection procedure), convert them to
+         * flush(CANCEL) to avoid flushing failed UCT EPs
+         */
+        req->send.discard_uct_ep.ep_flush_flags |= UCT_FLUSH_FLAG_CANCEL;
         ucp_worker_discard_uct_ep_progress(req);
     } else if (req->send.state.uct_comp.func != NULL) {
         /* Fast-forward the sending state to complete the operation when last

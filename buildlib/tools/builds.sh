@@ -87,10 +87,12 @@ build_release_pkg() {
 		echo "==== Build RPM ===="
 		echo "$PWD"
 		${WORKSPACE}/contrib/buildrpm.sh -s -b --nodeps --define "_topdir $PWD"
-		if rpm -qp ${PWD}/ls ucx-[0-9]*.rpm --requires | grep cuda; then
+		if rpm -qp ${PWD}/rpm-dist/ucx-[0-9]*.rpm --requires | grep cuda; then
 			azure_log_error "Release build depends on CUDA while it should not"
 			exit 1
 		fi
+		echo "==== Build debug RPM ===="
+		${WORKSPACE}/contrib/buildrpm.sh -s -b -d --nodeps --define "_topdir $PWD/debug"
 	fi
 
 	# check that UCX version is present in spec file
@@ -349,6 +351,27 @@ build_cmake_examples() {
 }
 
 #
+# Build with FUSE
+#
+build_fuse() {
+	if az_module_load $FUSE3_MODULE
+	then
+		echo "==== Build with FUSE (dynamic link) ===="
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-fuse3
+		$MAKEP
+		make_clean distclean
+
+		echo "==== Build with FUSE (static link) ===="
+		${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --with-fuse3-static
+		$MAKEP
+
+		az_module_unload $FUSE3_MODULE
+	else
+		azure_log_warning "cannot load FUSE module, skipping build with FUSE"
+	fi
+}
+
+#
 # Do a given task and update progress indicator
 #
 do_task() {
@@ -378,6 +401,7 @@ do_task "${prog}" build_cuda
 do_task "${prog}" build_no_verbs
 do_task "${prog}" build_release_pkg
 do_task "${prog}" build_cmake_examples
+do_task "${prog}" build_fuse
 
 if [ "${long_test}" = "yes" ]
 then

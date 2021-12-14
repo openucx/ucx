@@ -27,7 +27,6 @@ public class UcpListener extends UcxNativeStruct implements Closeable {
             throw new UcxException("Connection handler must be set");
         }
         this.connectionHandler = params.connectionHandler;
-        this.address = params.getSockAddr();
         setNativeId(createUcpListener(params, worker.getNativeId()));
     }
 
@@ -35,6 +34,9 @@ public class UcpListener extends UcxNativeStruct implements Closeable {
      * Returns a socket address of this listener.
      */
     public InetSocketAddress getAddress() {
+        if (address == null) {
+            address = queryAddressNative(getNativeId());
+        }
         return address;
     }
 
@@ -45,6 +47,8 @@ public class UcpListener extends UcxNativeStruct implements Closeable {
     }
 
     private native long createUcpListener(UcpListenerParams params, long workerId);
+
+    private static native InetSocketAddress queryAddressNative(long listenerId);
 
     private static native void destroyUcpListenerNative(long listenerId);
 }

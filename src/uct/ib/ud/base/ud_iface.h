@@ -287,13 +287,13 @@ and connection id.
 Connection id is essentially a counter of endpoints that are created by
 ep_create_connected(). The counter is per destination interface. Purpose of
 conn_sn is to ensure order between multiple CREQ packets and to handle
-simultanuous connection establishment. The case when both sides call
+simultaneous connection establishment. The case when both sides call
 ep_create_connected(). The rule is that connected endpoints must have
 same conn_sn.
 
 2: CREP (dest_ep_id)
 
-Connection reply. It includes id of destination endpoint and optinally ACK
+Connection reply. It includes id of destination endpoint and optionally ACK
 request flag. From this point reliability is handled by UD protocol as
 source and destination endpoint ids are known.
 
@@ -313,17 +313,18 @@ application calls ep_create_connected(). */
 
 void uct_ud_iface_cep_cleanup(uct_ud_iface_t *iface);
 
-uct_ud_ep_conn_sn_t
+ucs_status_t
 uct_ud_iface_cep_get_conn_sn(uct_ud_iface_t *iface,
                              const uct_ib_address_t *ib_addr,
                              const uct_ud_iface_addr_t *if_addr,
-                             int path_index);
+                             int path_index, uct_ud_ep_conn_sn_t *conn_sn_p);
 
-void uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
-                                const uct_ib_address_t *ib_addr,
-                                const uct_ud_iface_addr_t *if_addr,
-                                int path_index, uct_ud_ep_conn_sn_t conn_sn,
-                                uct_ud_ep_t *ep);
+ucs_status_t uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
+                                        const uct_ib_address_t *ib_addr,
+                                        const uct_ud_iface_addr_t *if_addr,
+                                        int path_index,
+                                        uct_ud_ep_conn_sn_t conn_sn,
+                                        uct_ud_ep_t *ep);
 
 uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *ib_addr,

@@ -21,9 +21,11 @@
 
 
 void print_progress(char **test_names, unsigned num_names,
-                    const ucx_perf_result_t *result, unsigned flags,
-                    int final, int is_server, int is_multi_thread)
+                    const ucx_perf_result_t *result, const char *extra_info,
+                    unsigned flags, int final, int is_server,
+                    int is_multi_thread)
 {
+    UCS_STRING_BUFFER_ONSTACK(test_name, 128);
     static const char *fmt_csv;
     static const char *fmt_numeric;
     static const char *fmt_plain;
@@ -41,19 +43,28 @@ void print_progress(char **test_names, unsigned num_names,
         }
     }
 
-#if _OPENMP
     if (!final) {
+#if _OPENMP
         printf("[thread %d]", omp_get_thread_num());
-    } else if ((flags & TEST_FLAG_PRINT_RESULTS) &&
-              !(flags & TEST_FLAG_PRINT_CSV)) {
-        printf("Final:    ");
-    }
 #endif
+    } else if ((flags & TEST_FLAG_PRINT_RESULTS) &&
+               !(flags & TEST_FLAG_PRINT_CSV)) {
+        if (flags & TEST_FLAG_PRINT_FINAL) {
+            /* Print test name in the final and only output line */
+            for (i = 0; i < num_names; ++i) {
+                ucs_string_buffer_appendf(&test_name, "%s/", test_names[i]);
+            }
+            ucs_string_buffer_rtrim(&test_name, "/");
+            printf("%10s", ucs_string_buffer_cstr(&test_name));
+        } else {
+            printf("Final:    ");
+        }
+    }
 
     if (is_multi_thread && final) {
-        fmt_csv     = "%4.0f,%.3f,%.2f,%.0f\n";
-        fmt_numeric = "%'18.0f %29.3f %22.2f %'24.0f\n";
-        fmt_plain   = "%18.0f %29.3f %22.2f %23.0f\n";
+        fmt_csv     = "%4.0f,%.3f,%.2f,%.0f";
+        fmt_numeric = "%'18.0f %29.3f %22.2f %'24.0f";
+        fmt_plain   = "%18.0f %29.3f %22.2f %23.0f";
 
         printf((flags & TEST_FLAG_PRINT_CSV)   ? fmt_csv :
                (flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric :
@@ -63,9 +74,9 @@ void print_progress(char **test_names, unsigned num_names,
                result->bandwidth.total_average / (1024.0 * 1024.0),
                result->msgrate.total_average);
     } else {
-        fmt_csv     = "%4.0f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f\n";
-        fmt_numeric = "%'18.0f %10.3f %9.3f %9.3f %11.2f %10.2f %'11.0f %'11.0f\n";
-        fmt_plain   = "%18.0f %10.3f %9.3f %9.3f %11.2f %10.2f %11.0f %11.0f\n";
+        fmt_csv     = "%4.0f,%.3f,%.3f,%.3f,%.2f,%.2f,%.0f,%.0f";
+        fmt_numeric = "%'18.0f %10.3f %9.3f %9.3f %11.2f %10.2f %'11.0f %'11.0f";
+        fmt_plain   = "%18.0f %10.3f %9.3f %9.3f %11.2f %10.2f %11.0f %11.0f";
 
         printf((flags & TEST_FLAG_PRINT_CSV)   ? fmt_csv :
                (flags & TEST_FLAG_NUMERIC_FMT) ? fmt_numeric :
@@ -80,6 +91,11 @@ void print_progress(char **test_names, unsigned num_names,
                result->msgrate.total_average);
     }
 
+    if ((flags & TEST_FLAG_PRINT_EXTRA_INFO) &&
+        !(flags & TEST_FLAG_PRINT_CSV)) {
+        printf("  %s", extra_info);
+    }
+    printf("\n");
     fflush(stdout);
 }
 
@@ -149,7 +165,9 @@ static void print_header(struct perftest_context *ctx)
             printf("+--------------+--------------+------------------------------+---------------------+-----------------------+\n");
             printf("|              |              |       %8s (usec)        |   bandwidth (MB/s)  |  message rate (msg/s) |\n", overhead_lat_str);
             printf("+--------------+--------------+----------+---------+---------+----------+----------+-----------+-----------+\n");
-            printf("|    Stage     | # iterations | %4.1f%%ile | average | overall |  average |  overall |  average  |  overall  |\n", ctx->params.super.percentile_rank);
+            printf("|    %5s     | # iterations | %4.1f%%ile | average | overall |  average |  overall |  average  |  overall  |\n",
+                   (ctx->flags & TEST_FLAG_PRINT_FINAL) ? "Test" : "Stage",
+                   ctx->params.super.percentile_rank);
             printf("+--------------+--------------+----------+---------+---------+----------+----------+-----------+-----------+\n");
         } else if (ctx->flags & TEST_FLAG_PRINT_TEST) {
             printf("+----------------------------------------------------------------------------------------------------------+\n");
@@ -162,7 +180,8 @@ static void print_test_name(struct perftest_context *ctx)
     char buf[200];
     unsigned i, pos;
 
-    if (!(ctx->flags & TEST_FLAG_PRINT_CSV) && (ctx->num_batch_files > 0)) {
+    if (!(ctx->flags & (TEST_FLAG_PRINT_CSV | TEST_FLAG_PRINT_FINAL)) &&
+        (ctx->num_batch_files > 0)) {
         strcpy(buf, "+--------------+--------------+----------+---------+---------+----------+----------+-----------+-----------+");
 
         pos = 1;

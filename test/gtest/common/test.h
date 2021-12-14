@@ -46,8 +46,6 @@ public:
     void set_num_threads(unsigned num_threads);
     unsigned num_threads() const;
 
-    void get_config(const std::string& name, std::string& value,
-                            size_t max);
     virtual void set_config(const std::string& config_str = "");
     virtual void modify_config(const std::string& name, const std::string& value,
                                modify_config_mode_t mode = FAIL_IF_NOT_EXIST);
@@ -83,6 +81,14 @@ protected:
     virtual void check_skip_test() = 0;
 
     virtual void test_body() = 0;
+
+    static ucs_log_func_rc_t
+    common_logger(ucs_log_level_t log_level_to_handle, bool print,
+                  std::vector<std::string> &messages_vec, size_t limit,
+                  const char *file, unsigned line, const char *function,
+                  ucs_log_level_t level,
+                  const ucs_log_component_config_t *comp_conf,
+                  const char *message, va_list ap);
 
     static ucs_log_func_rc_t
     count_warns_logger(const char *file, unsigned line, const char *function,
@@ -141,14 +147,6 @@ private:
     static void push_debug_message_with_limit(std::vector<std::string>& vec,
                                               const std::string& message,
                                               const size_t limit);
-
-    static ucs_log_func_rc_t
-    common_logger(ucs_log_level_t log_level_to_handle, bool print,
-                  std::vector<std::string> &messages_vec, size_t limit,
-                  const char *file, unsigned line, const char *function,
-                  ucs_log_level_t level,
-                  const ucs_log_component_config_t *comp_conf,
-                  const char *message, va_list ap);
 
     static void *thread_func(void *arg);
 

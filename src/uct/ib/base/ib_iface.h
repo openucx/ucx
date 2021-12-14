@@ -462,6 +462,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
                                 uct_iface_attr_t *iface_attr);
 
 
+ucs_status_t
+uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
+
+
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev);
 
 
@@ -549,9 +553,12 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
 
 
 #define UCT_IB_IFACE_FMT \
-    "%s:%d"
+    "%s:%d/%s"
 #define UCT_IB_IFACE_ARG(_iface) \
-    uct_ib_device_name(uct_ib_iface_device(_iface)), (_iface)->config.port_num
+    uct_ib_device_name(uct_ib_iface_device(_iface)), \
+    (_iface)->config.port_num, \
+    uct_ib_iface_is_roce(_iface) ? "RoCE" : "IB"
+    
 
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \

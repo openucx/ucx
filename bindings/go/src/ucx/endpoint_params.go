@@ -65,7 +65,9 @@ func (p *UcpEpParams) SetErrorHandler(errHandler UcpEpErrHandler) *UcpEpParams {
 
 // Tracing and analysis tools can identify the endpoint using this name.
 func (p *UcpEpParams) SetName(name string) *UcpEpParams {
+	freeParamsName(p)
 	p.params.name = C.CString(name)
+	runtime.SetFinalizer(p, func(f *UcpEpParams) { FreeNativeMemory(unsafe.Pointer(f.params.name)) })
 	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_NAME
 	return p
 }
@@ -78,6 +80,8 @@ func (p *UcpEpParams) SetSocketAddress(a *net.TCPAddr) (*UcpEpParams, error) {
 	if error != nil {
 		return nil, error
 	}
+
+	freeParamsAddress(p)
 
 	p.params.sockaddr = *sockAddr
 	runtime.SetFinalizer(p, func(f *UcpEpParams) { FreeNativeMemory(unsafe.Pointer(f.params.sockaddr.addr)) })
@@ -92,5 +96,13 @@ func (p *UcpEpParams) SetSocketAddress(a *net.TCPAddr) (*UcpEpParams, error) {
 func (p *UcpEpParams) SetConnRequest(c *UcpConnectionRequest) *UcpEpParams {
 	p.params.conn_request = c.connRequest
 	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_CONN_REQUEST
+	return p
+}
+
+// Send client id when connecting to remote socket address as part of the connection request payload.
+// On the remote side value can be obtained by calling UcpConnectionRequest.Query(UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID)
+func (p *UcpEpParams) SendClientId() *UcpEpParams {
+	p.params.flags |= C.UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID
+	p.params.field_mask |= C.UCP_EP_PARAM_FIELD_FLAGS
 	return p
 }

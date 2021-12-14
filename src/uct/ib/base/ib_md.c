@@ -519,7 +519,7 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access_flags, struct ibv_mr **mr_p,
                            int silent)
 {
-    ucs_time_t start_time = ucs_get_time();
+    ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
     struct ibv_mr *mr;
 #if HAVE_DECL_IBV_EXP_REG_MR
     struct ibv_exp_reg_mr_in in = {};
@@ -541,9 +541,8 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     *mr_p = mr;
 
     /* to prevent clang dead code */
-    (void)start_time;
-    ucs_trace("ibv_reg_mr(%p, %p, %zu) took %.3f msec", pd, addr, length,
-              ucs_time_to_msec(ucs_get_time() - start_time));
+    ucs_trace("ibv_reg_mr(pd=%p addr=%p length=%zu): mr=%p took %.3f msec", pd,
+              addr, length, mr, ucs_time_to_msec(ucs_get_time() - start_time));
     return UCS_OK;
 }
 
@@ -554,6 +553,9 @@ ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
     if (mr == NULL) {
         return UCS_OK;
     }
+
+    ucs_trace("ibv_dereg_mr(mr=%p addr=%p length=%zu)", mr, mr->addr,
+              mr->length);
 
     ret = UCS_PROFILE_CALL(ibv_dereg_mr, mr);
     if (ret != 0) {
@@ -779,7 +781,7 @@ static ucs_status_t uct_ib_mem_reg_internal(uct_md_h uct_md, void *address,
         memh->flags |= UCT_IB_MEM_FLAG_RELAXED_ORDERING;
     }
 
-    ucs_debug("registered memory %p..%p on %s lkey 0x%x rkey 0x%x "
+    ucs_trace("registered memory %p..%p on %s lkey 0x%x rkey 0x%x "
               "access 0x%lx flags 0x%x", address,
               UCS_PTR_BYTE_OFFSET(address, length),
               uct_ib_device_name(&md->dev), memh->lkey, memh->rkey,
@@ -1007,7 +1009,7 @@ static ucs_status_t uct_ib_mem_rcache_reg(uct_md_h uct_md, void *address,
     return UCS_OK;
 }
 
-static void ucs_ib_mem_region_invalidate_cb(void *arg)
+static void uct_ib_mem_region_invalidate_cb(void *arg)
 {
     uct_completion_t *comp = arg;
 
@@ -1027,7 +1029,7 @@ uct_ib_mem_rcache_dereg(uct_md_h uct_md,
     if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
         UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {
         ucs_rcache_region_invalidate(md->rcache, &region->super,
-                                     ucs_ib_mem_region_invalidate_cb,
+                                     uct_ib_mem_region_invalidate_cb,
                                      params->comp);
     }
 
@@ -1141,6 +1143,10 @@ uct_ib_mem_global_odp_dereg(uct_md_h uct_md,
 
     ib_memh = params->memh;
     status  = uct_ib_memh_dereg(md, ib_memh);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     uct_ib_memh_free(ib_memh);
     return status;
 }
@@ -1320,7 +1326,8 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
             }
 
             md->super.ops = &uct_ib_md_rcache_ops;
-            md->reg_cost  = ucs_linear_func_make(md_config->rcache.overhead, 0);
+            md->reg_cost  = ucs_linear_func_make(
+                    uct_md_rcache_overhead(&md_config->rcache), 0);
             ucs_debug("%s: using registration cache",
                       uct_ib_device_name(&md->dev));
             return UCS_OK;
@@ -1357,9 +1364,10 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
 static ucs_status_t
 uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
+    char *flags_str = NULL;
     uct_ib_device_spec_t *spec;
     ucs_status_t status;
-    char *flags_str, *p;
+    char *p;
     unsigned i, count;
     int nfields;
 
@@ -1391,6 +1399,9 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
         }
 
         if (nfields >= 4) {
+            /* Check that 'flags_str' is not NULL to suppress the Coverity warning */
+            ucs_assert(flags_str != NULL);
+
             for (p = flags_str; *p != 0; ++p) {
                 if (*p == '4') {
                     spec->flags |= UCT_IB_DEVICE_FLAG_MLX4_PRM;
@@ -1405,11 +1416,13 @@ uct_ib_md_parse_device_config(uct_ib_md_t *md, const uct_ib_md_config_t *md_conf
                 } else {
                     ucs_error("invalid device flag: '%c'", *p);
                     free(flags_str);
+                    flags_str = NULL;
                     status = UCS_ERR_INVALID_PARAM;
                     goto err_free;
                 }
             }
             free(flags_str);
+            flags_str = NULL;
         }
 
         ucs_trace("added device '%s' vendor_id 0x%x device_id %d flags %c%c prio %d",
@@ -1677,8 +1690,8 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     /* Create statistics */
     status = UCS_STATS_NODE_ALLOC(&md->stats, &uct_ib_md_stats_class,
-                                  ucs_stats_get_root(),
-                                  "%s-%p", ibv_get_device_name(ib_device), md);
+                                  ucs_stats_get_root(), "%s-%p",
+                                  ibv_get_device_name(ib_device), md);
     if (status != UCS_OK) {
         goto err;
     }

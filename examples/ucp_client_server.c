@@ -28,6 +28,7 @@
  */
 
 #include "hello_world_util.h"
+#include "ucp_util.h"
 
 #include <ucp/api/ucp.h>
 
@@ -49,6 +50,7 @@
 static long test_string_length = 16;
 static long iov_cnt            = 1;
 static uint16_t server_port    = DEFAULT_PORT;
+static sa_family_t ai_family   = AF_INET;
 static int num_iterations      = DEFAULT_NUM_ITERATIONS;
 
 
@@ -136,25 +138,33 @@ int fill_buffer(ucp_dt_iov_t *iov)
     return 0;
 }
 
+static void common_cb(void *user_data, const char *type_str)
+{
+    test_req_t *ctx;
+
+    if (user_data == NULL) {
+        fprintf(stderr, "user_data passed to %s mustn't be NULL\n", type_str);
+        return;
+    }
+
+    ctx           = user_data;
+    ctx->complete = 1;
+}
+
 static void tag_recv_cb(void *request, ucs_status_t status,
                         const ucp_tag_recv_info_t *info, void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "tag_recv_cb");
 }
 
 /**
  * The callback on the receiving side, which is invoked upon receiving the
  * stream message.
  */
-static void
-stream_recv_cb(void *request, ucs_status_t status, size_t length,
-               void *user_data)
+static void stream_recv_cb(void *request, ucs_status_t status, size_t length,
+                           void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "stream_recv_cb");
 }
 
 /**
@@ -164,9 +174,7 @@ stream_recv_cb(void *request, ucs_status_t status, size_t length,
 static void am_recv_cb(void *request, ucs_status_t status, size_t length,
                        void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "am_recv_cb");
 }
 
 /**
@@ -175,9 +183,7 @@ static void am_recv_cb(void *request, ucs_status_t status, size_t length,
  */
 static void send_cb(void *request, ucs_status_t status, void *user_data)
 {
-    test_req_t *ctx = user_data;
-
-    ctx->complete = 1;
+    common_cb(user_data, "send_cb");
 }
 
 /**
@@ -192,38 +198,53 @@ static void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status)
 /**
  * Set an address for the server to listen on - INADDR_ANY on a well known port.
  */
-void set_listen_addr(const char *address_str, struct sockaddr_in *listen_addr)
+void set_sock_addr(const char *address_str, struct sockaddr_storage *saddr)
 {
-    /* The server will listen on INADDR_ANY */
-    memset(listen_addr, 0, sizeof(struct sockaddr_in));
-    listen_addr->sin_family      = AF_INET;
-    listen_addr->sin_addr.s_addr = (address_str) ? inet_addr(address_str) : INADDR_ANY;
-    listen_addr->sin_port        = htons(server_port);
-}
+    struct sockaddr_in *sa_in;
+    struct sockaddr_in6 *sa_in6;
 
-/**
- * Set an address to connect to. A given IP address on a well known port.
- */
-void set_connect_addr(const char *address_str, struct sockaddr_in *connect_addr)
-{
-    memset(connect_addr, 0, sizeof(struct sockaddr_in));
-    connect_addr->sin_family      = AF_INET;
-    connect_addr->sin_addr.s_addr = inet_addr(address_str);
-    connect_addr->sin_port        = htons(server_port);
+    /* The server will listen on INADDR_ANY */
+    memset(saddr, 0, sizeof(*saddr));
+
+    switch (ai_family) {
+    case AF_INET:
+        sa_in = (struct sockaddr_in*)saddr;
+        if (address_str != NULL) {
+            inet_pton(AF_INET, address_str, &sa_in->sin_addr);
+        } else {
+            sa_in->sin_addr.s_addr = INADDR_ANY;
+        }
+        sa_in->sin_family = AF_INET;
+        sa_in->sin_port   = htons(server_port);
+        break;
+    case AF_INET6:
+        sa_in6 = (struct sockaddr_in6*)saddr;
+        if (address_str != NULL) {
+            inet_pton(AF_INET6, address_str, &sa_in6->sin6_addr);
+        } else {
+            sa_in6->sin6_addr = in6addr_any;
+        }
+        sa_in6->sin6_family = AF_INET6;
+        sa_in6->sin6_port   = htons(server_port);
+        break;
+    default:
+        fprintf(stderr, "Invalid address family");
+        break;
+    }
 }
 
 /**
  * Initialize the client side. Create an endpoint from the client side to be
  * connected to the remote server (to the given IP).
  */
-static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
-                                 ucp_ep_h *client_ep)
+static ucs_status_t start_client(ucp_worker_h ucp_worker,
+                                 const char *address_str, ucp_ep_h *client_ep)
 {
     ucp_ep_params_t ep_params;
-    struct sockaddr_in connect_addr;
+    struct sockaddr_storage connect_addr;
     ucs_status_t status;
 
-    set_connect_addr(ip, &connect_addr);
+    set_sock_addr(address_str, &connect_addr);
 
     /*
      * Endpoint field mask bits:
@@ -252,7 +273,8 @@ static ucs_status_t start_client(ucp_worker_h ucp_worker, const char *ip,
 
     status = ucp_ep_create(ucp_worker, &ep_params, client_ep);
     if (status != UCS_OK) {
-        fprintf(stderr, "failed to connect to %s (%s)\n", ip, ucs_status_string(status));
+        fprintf(stderr, "failed to connect to %s (%s)\n", address_str,
+                ucs_status_string(status));
     }
 
     return status;
@@ -552,33 +574,6 @@ static int send_recv_am(ucp_worker_h ucp_worker, ucp_ep_h ep, int is_server,
 }
 
 /**
- * Close the given endpoint.
- * Currently closing the endpoint with UCP_EP_CLOSE_MODE_FORCE since we currently
- * cannot rely on the client side to be present during the server's endpoint
- * closing process.
- */
-static void ep_close(ucp_worker_h ucp_worker, ucp_ep_h ep)
-{
-    ucp_request_param_t param;
-    ucs_status_t status;
-    void *close_req;
-
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-    param.flags        = UCP_EP_CLOSE_FLAG_FORCE;
-    close_req          = ucp_ep_close_nbx(ep, &param);
-    if (UCS_PTR_IS_PTR(close_req)) {
-        do {
-            ucp_worker_progress(ucp_worker);
-            status = ucp_request_check_status(close_req);
-        } while (status == UCS_INPROGRESS);
-
-        ucp_request_free(close_req);
-    } else if (UCS_PTR_STATUS(close_req) != UCS_OK) {
-        fprintf(stderr, "failed to close ep %p\n", (void*)ep);
-    }
-}
-
-/**
  * Print this application's usage help message.
  */
 static void usage()
@@ -620,7 +615,7 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
     int c = 0;
     int port;
 
-    while ((c = getopt(argc, argv, "a:l:p:c:i:s:v:m:h")) != -1) {
+    while ((c = getopt(argc, argv, "a:l:p:c:6i:s:v:m:h")) != -1) {
         switch (c) {
         case 'a':
             *server_addr = optarg;
@@ -648,6 +643,9 @@ static int parse_cmd(int argc, char *const argv[], char **server_addr,
                 return -1;
             }
             server_port = port;
+            break;
+        case '6':
+            ai_family = AF_INET6;
             break;
         case 'i':
             num_iterations = atoi(optarg);
@@ -839,18 +837,18 @@ static ucs_status_t server_create_ep(ucp_worker_h data_worker,
 /**
  * Initialize the server side. The server starts listening on the set address.
  */
-static ucs_status_t start_server(ucp_worker_h ucp_worker,
-                                 ucx_server_ctx_t *context,
-                                 ucp_listener_h *listener_p, const char *ip)
+static ucs_status_t
+start_server(ucp_worker_h ucp_worker, ucx_server_ctx_t *context,
+             ucp_listener_h *listener_p, const char *address_str)
 {
-    struct sockaddr_in listen_addr;
+    struct sockaddr_storage listen_addr;
     ucp_listener_params_t params;
     ucp_listener_attr_t attr;
     ucs_status_t status;
     char ip_str[IP_STRING_LEN];
     char port_str[PORT_STRING_LEN];
 
-    set_listen_addr(ip, &listen_addr);
+    set_sock_addr(address_str, &listen_addr);
 
     params.field_mask         = UCP_LISTENER_PARAM_FIELD_SOCK_ADDR |
                                 UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
@@ -981,7 +979,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
         }
 
         /* Close the endpoint to the client */
-        ep_close(ucp_data_worker, server_ep);
+        ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_MODE_FORCE);
 
         /* Reinitialize the server's context to be used for the next client */
         context.conn_request = NULL;
@@ -990,7 +988,7 @@ static int run_server(ucp_context_h ucp_context, ucp_worker_h ucp_worker,
     }
 
 err_ep:
-    ep_close(ucp_data_worker, server_ep);
+    ep_close(ucp_data_worker, server_ep, UCP_EP_CLOSE_MODE_FORCE);
 err_listener:
     ucp_listener_destroy(context.listener);
 err_worker:
@@ -1016,7 +1014,7 @@ static int run_client(ucp_worker_h ucp_worker, char *server_addr,
     ret = client_server_do_work(ucp_worker, client_ep, send_recv_type, 0);
 
     /* Close the endpoint to the server */
-    ep_close(ucp_worker, client_ep);
+    ep_close(ucp_worker, client_ep, UCP_EP_CLOSE_MODE_FORCE);
 
 out:
     return ret;

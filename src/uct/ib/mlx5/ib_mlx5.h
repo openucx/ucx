@@ -76,11 +76,13 @@
 #if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_BF
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC MLX5DV_UAR_ALLOC_TYPE_BF
 #else
-#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC 0
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_WC 0x0
 #endif
 
 #if HAVE_DECL_MLX5DV_UAR_ALLOC_TYPE_NC
 #  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC MLX5DV_UAR_ALLOC_TYPE_NC
+#else
+#  define UCT_IB_MLX5_UAR_ALLOC_TYPE_NC 0x1
 #endif
 
 #define UCT_IB_MLX5_OPMOD_EXT_ATOMIC(_log_arg_size) \
@@ -393,7 +395,7 @@ typedef struct uct_ib_mlx5_txwq {
     uint16_t                    bb_max;
     uint16_t                    sig_pi;     /* PI for last signaled WQE */
 #if UCS_ENABLE_ASSERT
-    uint16_t                    hw_ci;
+    uint16_t                    hw_ci; /* First BB index of last completed WQE */
     uint8_t                     flags; /* Debug flags */
 #endif
     uct_ib_fence_info_t         fi;
@@ -604,6 +606,16 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_mmio_mode_t mmio_mode);
 
 void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
+
+/**
+ * Check whether the interface uses AR.
+ */
+int uct_ib_mlx5_iface_has_ar(uct_ib_iface_t *iface);
+
+
+void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
+                                      int hw_ci_updated);
+
 
 /**
  * DEVX QP API

@@ -31,6 +31,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     ucp_lane_map_t lane_map;
     ucp_md_map_t reg_md_map;
     uint32_t weight_sum;
+    ucs_status_t status;
 
     ucs_assert(params->max_lanes >= 1);
     ucs_assert(params->max_lanes <= UCP_PROTO_MAX_LANES);
@@ -57,19 +58,26 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     for (i = 0; i < num_lanes; ++i) {
         lane      = lanes[i];
         lane_perf = &lanes_perf[lane];
-        ucp_proto_common_get_lane_perf(&params->super, lane, lane_perf);
+
+        status = ucp_proto_common_get_lane_perf(&params->super, lane,
+                                                lane_perf);
+        if (status != UCS_OK) {
+            return status;
+        }
 
         /* Calculate maximal bandwidth of all lanes, to skip slow lanes */
         max_bandwidth = ucs_max(max_bandwidth, lane_perf->bandwidth);
     }
 
     /* Select the lanes to use, and calculate their aggregate performance */
-    perf.bandwidth   = 0;
-    perf.overhead    = 0;
-    perf.latency     = 0;
-    perf.sys_latency = 0;
-    lane_map         = 0;
-    max_frag_ratio   = 0;
+    perf.bandwidth          = 0;
+    perf.send_pre_overhead  = 0;
+    perf.send_post_overhead = 0;
+    perf.recv_overhead      = 0;
+    perf.latency            = 0;
+    perf.sys_latency        = 0;
+    lane_map                = 0;
+    max_frag_ratio          = 0;
     for (i = 0; i < num_lanes; ++i) {
         lane      = lanes[i];
         lane_perf = &lanes_perf[lane];
@@ -79,9 +87,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
             continue;
         }
 
-        ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(overhead)
-                  UCP_PROTO_TIME_FMT(latency),
-                  lane, UCP_PROTO_TIME_ARG(lane_perf->overhead),
+        ucs_trace("lane[%d]" UCP_PROTO_TIME_FMT(send_pre_overhead)
+                  UCP_PROTO_TIME_FMT(send_post_overhead)
+                  UCP_PROTO_TIME_FMT(recv_overhead)
+                  UCP_PROTO_TIME_FMT(latency), lane,
+                  UCP_PROTO_TIME_ARG(lane_perf->send_pre_overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->send_post_overhead),
+                  UCP_PROTO_TIME_ARG(lane_perf->recv_overhead),
                   UCP_PROTO_TIME_ARG(lane_perf->latency));
 
         /* Calculate maximal bandwidth-to-fragment-size ratio, which is used to
@@ -91,11 +103,14 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                  lane_perf->bandwidth / lane_perf->max_frag);
 
         /* Update aggregated performance metric */
-        perf.bandwidth  += lane_perf->bandwidth;
-        perf.overhead   += lane_perf->overhead;
-        perf.latency     = ucs_max(perf.latency, lane_perf->latency);
-        perf.sys_latency = ucs_max(perf.sys_latency, lane_perf->sys_latency);
-        lane_map        |= UCS_BIT(lane);
+        perf.bandwidth          += lane_perf->bandwidth;
+        perf.send_pre_overhead  += lane_perf->send_pre_overhead;
+        perf.send_post_overhead += lane_perf->send_post_overhead;
+        perf.recv_overhead      += lane_perf->recv_overhead;
+        perf.latency             = ucs_max(perf.latency, lane_perf->latency);
+        perf.sys_latency         = ucs_max(perf.sys_latency,
+                                           lane_perf->sys_latency);
+        lane_map                |= UCS_BIT(lane);
     }
 
     /* Initialize multi-lane private data and relative weights */
@@ -103,6 +118,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     mpriv->reg_md_map   = reg_md_map | params->initial_reg_md_map;
     mpriv->lane_map     = lane_map;
     mpriv->num_lanes    = 0;
+    mpriv->min_frag     = 0;
     mpriv->max_frag_sum = 0;
     perf.max_frag       = SIZE_MAX;
     perf.min_length     = 0;
@@ -173,6 +189,7 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
         perf.min_length = ucs_max(perf.min_length, min_length);
 
         weight_sum          += lpriv->weight;
+        mpriv->min_frag      = ucs_max(mpriv->min_frag, lane_perf->min_length);
         mpriv->max_frag_sum += lpriv->max_frag;
         lpriv->weight_sum    = weight_sum;
         lpriv->max_frag_sum  = mpriv->max_frag_sum;

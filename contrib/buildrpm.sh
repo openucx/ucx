@@ -15,6 +15,7 @@ opt_binrpm=0
 opt_no_dist=0
 opt_no_deps=0
 opt_strict_ibverb_dep=0
+opt_dbgrpm=0
 defines=""
 
 while test "$1" != ""; do
@@ -22,6 +23,7 @@ while test "$1" != ""; do
         --tarball|-t) opt_tarball=1 ;;
         --srcrpm|-s)  opt_srcrpm=1 ;;
         --binrpm|-b)  opt_binrpm=1 ;;
+        --dbgrpm|-d)  opt_dbgrpm=1 ;;
         --no-dist)    opt_no_dist=1 ;;
         --nodeps)     opt_no_deps=1 ;;
         --noclean)    rpmopts="$rpmopts --noclean" ;;
@@ -36,6 +38,7 @@ Valid arguments:
 --tarball|-t        Create tarball
 --srcrpm|-s         Create src.rpm
 --binrpm|-b         Create bin.rpm
+--dbgrpm|-d         Create bin.rpm with debug function
 --no-dist           Undefine %{dist} tag
 --nodeps            Ignore build-time dependencies
 --define|-d <arg>   Add a define to rpmbuild
@@ -55,6 +58,10 @@ fi
 if [ $opt_strict_ibverb_dep -eq 1 ]; then
     libibverbs_ver=$(rpm -q libibverbs --qf '%{version}-%{release}')
     rpmmacros="${rpmmacros} --define='extra_deps libibverbs == ${libibverbs_ver}'"
+fi
+
+if [ $opt_dbgrpm -eq 1 ]; then
+    rpmmacros="--define 'debug 1' ${rpmmacros}"
 fi
 
 if [ $opt_no_deps -eq 1 ]; then

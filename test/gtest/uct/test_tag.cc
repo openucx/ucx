@@ -1073,6 +1073,11 @@ void test_tag_mp_xrq::send_rndv_zcopy(mapped_buffer *buf)
                                                      iovcnt, 0, &m_uct_comp);
     ASSERT_FALSE(UCS_PTR_IS_ERR(rndv_op));
 
+    // Check the returned status_ptr to suppress Coverity warning about
+    // passing the negative value to TAG RNDV cancel which expect that the
+    // value is always >= 0
+    ucs_assert_always(reinterpret_cast<int64_t>(rndv_op) >= 0);
+
     // There will be no real RNDV performed, cancel the op to avoid mpool
     // warning on exit
     ASSERT_UCS_OK(uct_ep_tag_rndv_cancel(sender().ep(0),rndv_op));

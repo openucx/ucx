@@ -48,10 +48,10 @@ typedef enum {
  * Profile file structure:
  *
  * < ucs_profile_header_t >
- * < ucs_profile_location_t > * ucs_profile_header_t::num_locaitons
+ * < ucs_profile_location_t > * ucs_profile_header_t::num_locations
  * [
  *    < ucs_profile_thread_header_t >
- *    < ucs_profile_thread_location_t > * ucs_profile_header_t::num_locaitons
+ *    < ucs_profile_thread_location_t > * ucs_profile_header_t::num_locations
  *    < ucs_profile_record_t > * ucs_profile_thread_header_t::num_records
  *
  * ] * ucs_profile_thread_header_t::num_threads

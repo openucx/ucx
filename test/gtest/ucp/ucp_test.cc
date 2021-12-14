@@ -6,6 +6,7 @@
 #include "ucp_test.h"
 #include <common/test_helpers.h>
 #include <ifaddrs.h>
+#include <sys/poll.h>
 
 extern "C" {
 #include <ucp/core/ucp_worker.inl>
@@ -65,7 +66,14 @@ ucp_test::~ucp_test() {
     for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
          iter != entities().end(); ++iter)
     {
-        (*iter)->warn_existing_eps();
+        try {
+            // suppress Coverity warning about throwing an exception from the
+            // function which is marked as noexcept
+            (*iter)->warn_existing_eps();
+        } catch (const std::exception &e) {
+            UCS_TEST_MESSAGE << "got \"" << e.what() << "\" exception when"
+                    << " checking existing endpoints";
+        }
     }
     ucp_config_release(m_ucp_config);
 }
@@ -152,15 +160,20 @@ ucp_ep_params_t ucp_test::get_ep_params() {
     return params;
 }
 
-unsigned ucp_test::progress(int worker_index) const {
+unsigned ucp_test::progress(const std::vector<entity*> &entities,
+                            int worker_index) const
+{
     unsigned count = 0;
-    for (ucs::ptr_vector<entity>::const_iterator iter = entities().begin();
-         iter != entities().end(); ++iter)
-    {
-        count += (*iter)->progress(worker_index);
+    for (auto e : entities) {
+        count += e->progress(worker_index);
         sched_yield();
     }
+
     return count;
+}
+
+unsigned ucp_test::progress(int worker_index) const {
+    return progress(entities(), worker_index);
 }
 
 void ucp_test::short_progress_loop(int worker_index) const {
@@ -230,7 +243,35 @@ ucp_tag_message_h ucp_test::message_wait(entity& e, ucp_tag_t tag,
     return message;
 }
 
-ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
+void ucp_test::check_events(const std::vector<entity*> &entities, bool wakeup,
+                            int worker_index)
+{
+    if (progress(entities, worker_index)) {
+        return;
+    }
+
+    if (wakeup) {
+        wait_for_wakeup(entities, -1, false, worker_index);
+    }
+}
+
+ucs_status_t
+ucp_test::request_progress(void *req, const std::vector<entity*> &entities,
+                           double timeout, int worker_index)
+{
+    ucs_time_t loop_end_limit = ucs_get_time() + ucs_time_from_sec(timeout);
+    ucs_status_t status;
+    do {
+        progress(entities, worker_index);
+        status = ucp_request_check_status(req);
+    } while ((status == UCS_INPROGRESS) &&
+             (ucs_get_time() < loop_end_limit));
+
+    return status;
+}
+
+ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait,
+                                       bool wakeup)
 {
     if (req == NULL) {
         return UCS_OK;
@@ -242,17 +283,14 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
         return UCS_PTR_STATUS(req);
     }
 
-    ucs_status_t status;
-    if (wait) {
-        ucs_time_t deadline = ucs::get_deadline();
-        do {
-            progress(worker_index);
-            status = ucp_request_check_status(req);
-        } while ((status == UCS_INPROGRESS) && (ucs_get_time() < deadline));
-    } else {
-        status = ucp_request_check_status(req);
+    ucs_time_t deadline = ucs::get_deadline();
+    while (wait &&
+           (ucp_request_check_status(req) == UCS_INPROGRESS) &&
+           (ucs_get_time() < deadline)) {
+        check_events(entities(), wakeup, worker_index);
     }
 
+    ucs_status_t status = ucp_request_check_status(req);
     if (status == UCS_INPROGRESS) {
         if (wait) {
             ucs_error("request %p did not complete on time", req);
@@ -267,9 +305,9 @@ ucs_status_t ucp_test::request_process(void *req, int worker_index, bool wait)
     return status;
 }
 
-ucs_status_t ucp_test::request_wait(void *req, int worker_index)
+ucs_status_t ucp_test::request_wait(void *req, int worker_index, bool wakeup)
 {
-    return request_process(req, worker_index, true);
+    return request_process(req, worker_index, true, wakeup);
 }
 
 ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
@@ -289,9 +327,62 @@ ucs_status_t ucp_test::requests_wait(std::vector<void*> &reqs,
     return ret_status;
 }
 
+ucs_status_t
+ucp_test::requests_wait(const std::initializer_list<void*> reqs_list,
+                        int worker_index)
+{
+    std::vector<void*> reqs(reqs_list);
+    return requests_wait(reqs, worker_index);
+}
+
 void ucp_test::request_release(void *req)
 {
     request_process(req, 0, false);
+}
+
+void ucp_test::request_cancel(entity &e, void *req)
+{
+    if (UCS_PTR_IS_PTR(req)) {
+        ucp_request_cancel(e.worker(), req);
+        ucp_request_free(req);
+    }
+}
+
+void ucp_test::wait_for_wakeup(const std::vector<entity*> &entities,
+                               int poll_timeout, bool drain, int worker_index)
+{
+    std::vector<int> efds;
+
+    for (auto e : entities) {
+        ucp_worker_h worker = e->worker(worker_index);
+        int efd;
+
+        ASSERT_UCS_OK(ucp_worker_get_efd(worker, &efd));
+        efds.push_back(efd);
+
+        ucs_status_t status = ucp_worker_arm(worker);
+        if (status == UCS_ERR_BUSY) {
+            return;
+        }
+        ASSERT_UCS_OK(status);
+    }
+
+    int ret;
+    do {
+        std::vector<struct pollfd> pfd;
+
+        for (int fd : efds) {
+            pfd.push_back({ fd, POLLIN });
+        }
+
+        ret = poll(&pfd[0], efds.size(), poll_timeout);
+    } while (((ret < 0) && (errno == EINTR)) || (drain && (ret > 0)));
+
+    if (ret < 0) {
+        UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
+    }
+
+    EXPECT_GE(ret, 1);
 }
 
 int ucp_test::max_connections() {
@@ -408,11 +499,10 @@ void ucp_test::add_variant_memtypes(std::vector<ucp_test_variant>& variants,
                                     get_variants_func_t generator,
                                     uint64_t mem_types_mask)
 {
-    std::vector<ucs_memory_type_t> mem_types = mem_buffer::supported_mem_types();
-    for (size_t i = 0; i < mem_types.size(); ++i) {
-        if (UCS_BIT(mem_types[i]) & mem_types_mask) {
-            add_variant_values(variants, generator, mem_types[i],
-                               ucs_memory_type_names[mem_types[i]]);
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
+        if (UCS_BIT(mem_type) & mem_types_mask) {
+            add_variant_values(variants, generator, mem_type,
+                               ucs_memory_type_names[mem_type]);
         }
     }
 }
@@ -450,13 +540,18 @@ void ucp_test::modify_config(const std::string& name, const std::string& value,
 {
     ucs_status_t status;
 
-    status = ucp_config_modify_internal(m_ucp_config, name.c_str(), value.c_str());
-    if (status == UCS_ERR_NO_ELEM) {
-        test_base::modify_config(name, value, mode);
-    } else if (status != UCS_OK) {
-        UCS_TEST_ABORT("Couldn't modify ucp config parameter: " <<
-                        name.c_str() << " to " << value.c_str() << ": " <<
-                        ucs_status_string(status));
+    if (mode == IGNORE_IF_NOT_EXIST) {
+        (void)ucp_config_modify(m_ucp_config, name.c_str(), value.c_str());
+    } else {
+        status = ucp_config_modify_internal(m_ucp_config, name.c_str(),
+                                            value.c_str());
+        if (status == UCS_ERR_NO_ELEM) {
+            test_base::modify_config(name, value, mode);
+        } else if (status != UCS_OK) {
+            UCS_TEST_ABORT("Couldn't modify ucp config parameter: "
+                           << name.c_str() << " to " << value.c_str() << ": "
+                           << ucs_status_string(status));
+        }
     }
 }
 
@@ -574,6 +669,9 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
 
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
+        /* We could have "invalid configuration" errors only when used
+           ucp_config_modify(), in which case we wanted to ignore them. */
+        scoped_log_handler slh(hide_config_warns_logger);
         UCS_TEST_CREATE_HANDLE(ucp_worker_h, m_workers[i].first,
                                ucp_worker_destroy, ucp_worker_create, m_ucph,
                                &local_worker_params);
@@ -699,6 +797,20 @@ void ucp_test_base::entity::set_ep(ucp_ep_h ep, int worker_index, int ep_index)
         m_workers[worker_index].second.push_back(
                         ucs::handle<ucp_ep_h, entity *>(ep, ucp_ep_destroy));
     }
+}
+
+ucs_log_func_rc_t ucp_test_base::entity::hide_config_warns_logger(
+        const char *file, unsigned line, const char *function,
+        ucs_log_level_t level, const ucs_log_component_config_t *comp_conf,
+        const char *message, va_list ap)
+{
+    if (strstr(message, "invalid configuration") == NULL) {
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    return common_logger(UCS_LOG_LEVEL_WARN, false, m_warnings,
+                         std::numeric_limits<size_t>::max(), file, line,
+                         function, level, comp_conf, message, ap);
 }
 
 void ucp_test_base::entity::empty_send_completion(void *r, ucs_status_t status) {
@@ -835,6 +947,7 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
                                            const struct sockaddr* saddr,
                                            socklen_t addrlen,
                                            const ucp_ep_params_t& ep_params,
+                                           ucp_listener_conn_handler_t* custom_cb,
                                            int worker_index)
 {
     ucp_listener_params_t params;
@@ -859,6 +972,11 @@ ucs_status_t ucp_test_base::entity::listen(listen_cb_type_t cb_type,
         params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
         params.conn_handler.cb    = reject_conn_cb;
         params.conn_handler.arg   = reinterpret_cast<void*>(this);
+        break;
+    case LISTEN_CB_CUSTOM:
+        params.field_mask        |= UCP_LISTENER_PARAM_FIELD_CONN_HANDLER;
+        params.conn_handler.cb    = custom_cb->cb;
+        params.conn_handler.arg   = custom_cb->arg;
         break;
     default:
         UCS_TEST_ABORT("invalid test parameter");
@@ -921,7 +1039,30 @@ unsigned ucp_test_base::entity::progress(int worker_index)
     return progress_count + ucp_worker_progress(ucp_worker);
 }
 
-int ucp_test_base::entity::get_num_workers() const {
+ucp_mem_h ucp_test_base::entity::mem_map(void *address, size_t length)
+{
+    ucp_mem_map_params_t params;
+
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                        UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.address    = address;
+    params.length     = length;
+
+    ucp_mem_h memh;
+    ucs_status_t status = ucp_mem_map(ucph(), &params, &memh);
+    ASSERT_UCS_OK(status);
+
+    return memh;
+}
+
+void ucp_test_base::entity::mem_unmap(ucp_mem_h memh)
+{
+    ucs_status_t status = ucp_mem_unmap(ucph(), memh);
+    ASSERT_UCS_OK(status);
+}
+
+int ucp_test_base::entity::get_num_workers() const
+{
     return m_workers.size();
 }
 
@@ -1074,7 +1215,10 @@ ucp_test::mapped_buffer::~mapped_buffer()
 {
     ucp_rkey_buffer_release(m_rkey_buffer);
     ucs_status_t status = ucp_mem_unmap(m_entity.ucph(), m_memh);
-    EXPECT_UCS_OK(status);
+    if (status != UCS_OK) {
+        ucs_warn("failed to unmap memh=%p: %s", m_memh,
+                 ucs_status_string(status));
+    }
 }
 
 ucs::handle<ucp_rkey_h> ucp_test::mapped_buffer::rkey(const entity& entity) const

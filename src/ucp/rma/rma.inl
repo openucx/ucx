@@ -42,6 +42,9 @@ ucp_rma_send_request(ucp_request_t *req, const ucp_request_param_t *param)
     ucp_request_send(req);
 
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        /* Coverity wrongly resolves completion callback function to
+         * 'ucp_cm_client_connect_progress' */
+        /* coverity[offset_free] */
         ucp_request_imm_cmpl_param(param, req, send);
     }
 
@@ -105,7 +108,7 @@ ucp_rma_sw_do_am_bcopy(ucp_request_t *req, uint8_t id, ucp_lane_index_t lane,
     ucp_ep_t *ep = req->send.ep;
     ssize_t packed_len;
 
-    /* make an asuumption here that EP was able to send the AM, since there
+    /* make an assumption here that EP was able to send the AM, since there
      * are transports (e.g. SELF - it does send-recv in the AM function) that is
      * able to complete the remote request operation inside uct_ep_am_bcopy()
      * and decrement the flush_ops_count before it was incremented */

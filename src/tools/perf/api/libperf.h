@@ -87,7 +87,8 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_FLUSH_EP         = UCS_BIT(9), /* Issue flush on endpoint instead of worker */
     UCX_PERF_TEST_FLAG_WAKEUP           = UCS_BIT(10), /* Create context with wakeup feature enabled */
     UCX_PERF_TEST_FLAG_ERR_HANDLING     = UCS_BIT(11), /* Create UCP eps with error handling support */
-    UCX_PERF_TEST_FLAG_LOOPBACK         = UCS_BIT(12)  /* Use loopback connection */
+    UCX_PERF_TEST_FLAG_LOOPBACK         = UCS_BIT(12), /* Use loopback connection */
+    UCX_PERF_TEST_FLAG_PREREG           = UCS_BIT(13) /* Pass pre-registered memory handle */
 };
 
 
@@ -141,8 +142,8 @@ typedef void (*ucx_perf_rte_recv_func_t)(void *rte_group, unsigned src,
 typedef void (*ucx_perf_rte_exchange_vec_func_t)(void *rte_group, void *req);
 typedef void (*ucx_perf_rte_report_func_t)(void *rte_group,
                                            const ucx_perf_result_t *result,
-                                           void *arg, int is_final,
-                                           int is_multi_thread);
+                                           void *arg, const char *extra_info,
+                                           int is_final, int is_multi_thread);
 
 /**
  * RTE used to bring-up the test

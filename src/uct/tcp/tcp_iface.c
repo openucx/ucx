@@ -124,7 +124,7 @@ static ucs_status_t uct_tcp_iface_get_device_address(uct_iface_h tl_iface,
     ucs_status_t status;
 
     dev_addr->flags     = 0;
-    dev_addr->sa_family = iface->config.ifaddr.sin_family;
+    dev_addr->sa_family = saddr->sa_family;
 
     if (ucs_sockaddr_is_inaddr_loopback(saddr)) {
         dev_addr->flags |= UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK;
@@ -167,8 +167,17 @@ uct_tcp_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *addr)
     uct_tcp_iface_t *iface           = ucs_derived_of(tl_iface,
                                                       uct_tcp_iface_t);
     uct_tcp_iface_addr_t *iface_addr = (uct_tcp_iface_addr_t*)addr;
+    ucs_status_t status;
+    uint16_t port;
 
-    iface_addr->port = iface->config.ifaddr.sin_port;
+    status = ucs_sockaddr_get_port((struct sockaddr*)&iface->config.ifaddr,
+                                   &port);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    iface_addr->port = htons(port);
+
     return UCS_OK;
 }
 
@@ -176,8 +185,21 @@ static int uct_tcp_iface_is_reachable(const uct_iface_h tl_iface,
                                       const uct_device_addr_t *dev_addr,
                                       const uct_iface_addr_t *iface_addr)
 {
+    uct_tcp_iface_t *iface              = ucs_derived_of(tl_iface,
+                                                         uct_tcp_iface_t);
     uct_tcp_device_addr_t *tcp_dev_addr = (uct_tcp_device_addr_t*)dev_addr;
     uct_iface_local_addr_ns_t *local_addr_ns;
+
+    if (iface->config.ifaddr.ss_family != tcp_dev_addr->sa_family) {
+        return 0;
+    }
+
+    /* Loopback can connect only to loopback */
+    if (!!(tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) !=
+        ucs_sockaddr_is_inaddr_loopback(
+                (const struct sockaddr*)&iface->config.ifaddr)) {
+        return 0;
+    }
 
     if (tcp_dev_addr->flags & UCT_TCP_DEVICE_ADDR_FLAG_LOOPBACK) {
         local_addr_ns = (uct_iface_local_addr_ns_t*)(tcp_dev_addr + 1);
@@ -339,7 +361,7 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
                               void *arg)
 {
     uct_tcp_iface_t *iface = arg;
-    struct sockaddr_in peer_addr;
+    struct sockaddr_storage peer_addr;
     socklen_t addrlen;
     ucs_status_t status;
     int fd;
@@ -358,7 +380,9 @@ uct_tcp_iface_connect_handler(int listen_fd, ucs_event_set_types_t events,
         }
         ucs_assert(fd != -1);
 
-        status = uct_tcp_cm_handle_incoming_conn(iface, &peer_addr, fd);
+        status = uct_tcp_cm_handle_incoming_conn(iface,
+                                                 (struct sockaddr*)&peer_addr,
+                                                 fd);
         if (status != UCS_OK) {
             ucs_close_fd(&fd);
             return;
@@ -425,10 +449,11 @@ static uct_iface_ops_t uct_tcp_iface_ops = {
 
 static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
 {
-    struct sockaddr_in bind_addr = iface->config.ifaddr;
-    unsigned port_range_start    = iface->port_range.first;
-    unsigned port_range_end      = iface->port_range.last;
+    struct sockaddr_storage bind_addr = iface->config.ifaddr;
+    unsigned port_range_start         = iface->port_range.first;
+    unsigned port_range_end           = iface->port_range.last;
     ucs_status_t status;
+    size_t addr_len;
     int port, retry;
 
     /* retry is 1 for a range of ports or when port value is zero.
@@ -445,14 +470,19 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
             port = 0;   /* let the operating system choose the port */
         }
 
-        status = ucs_sockaddr_set_port((struct sockaddr *)&bind_addr, port);
+        status = ucs_sockaddr_set_port((struct sockaddr*)&bind_addr, port);
         if (status != UCS_OK) {
             break;
         }
 
-        status = ucs_socket_server_init((struct sockaddr *)&bind_addr,
-                                        sizeof(bind_addr), ucs_socket_max_conn(),
-                                        retry, 0, &iface->listen_fd);
+        status = ucs_sockaddr_sizeof((struct sockaddr*)&bind_addr, &addr_len);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        status = ucs_socket_server_init((struct sockaddr*)&bind_addr, addr_len,
+                                        ucs_socket_max_conn(), retry, 0,
+                                        &iface->listen_fd);
     } while (retry && (status == UCS_ERR_BUSY));
 
     return status;
@@ -460,10 +490,11 @@ static ucs_status_t uct_tcp_iface_server_init(uct_tcp_iface_t *iface)
 
 static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
 {
-    struct sockaddr_in bind_addr = iface->config.ifaddr;
-    socklen_t socklen            = sizeof(bind_addr);
+    struct sockaddr_storage bind_addr = iface->config.ifaddr;
+    socklen_t socklen                 = sizeof(bind_addr);
     char ip_port_str[UCS_SOCKADDR_STRING_LEN];
     ucs_status_t status;
+    uint16_t port;
     int ret;
 
     status = uct_tcp_iface_server_init(iface);
@@ -472,14 +503,23 @@ static ucs_status_t uct_tcp_iface_listener_init(uct_tcp_iface_t *iface)
     }
 
     /* Get the port which was selected for the socket */
-    ret = getsockname(iface->listen_fd, (struct sockaddr *)&bind_addr, &socklen);
+    ret = getsockname(iface->listen_fd, (struct sockaddr*)&bind_addr, &socklen);
     if (ret < 0) {
         ucs_error("getsockname(fd=%d) failed: %m", iface->listen_fd);
         status = UCS_ERR_IO_ERROR;
         goto err_close_sock;
     }
 
-    iface->config.ifaddr.sin_port = bind_addr.sin_port;
+    status = ucs_sockaddr_get_port((struct sockaddr*)&bind_addr, &port);
+    if (status != UCS_OK) {
+        goto err_close_sock;
+    }
+
+    status = ucs_sockaddr_set_port((struct sockaddr*)&iface->config.ifaddr,
+                                   port);
+    if (status != UCS_OK) {
+        goto err_close_sock;
+    }
 
     /* Register event handler for incoming connections */
     status = ucs_async_set_event_handler(iface->super.worker->async->mode,
@@ -564,7 +604,9 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
 {
     uct_tcp_iface_config_t *config = ucs_derived_of(tl_config,
                                                     uct_tcp_iface_config_t);
+    uct_tcp_md_t *tcp_md           = ucs_derived_of(md, uct_tcp_md_t);
     ucs_status_t status;
+    int i;
 
     UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
                     "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
@@ -657,13 +699,6 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err;
     }
 
-    ucs_list_head_init(&self->ep_list);
-    ucs_conn_match_init(&self->conn_match_ctx,
-                        ucs_field_sizeof(uct_tcp_ep_t, peer_addr),
-                        UCT_TCP_CM_CONN_SN_MAX,  &uct_tcp_cm_conn_match_ops);
-    status = UCS_PTR_MAP_INIT(tcp_ep, &self->ep_ptr_map);
-    ucs_assert_always(status == UCS_OK);
-
     if (self->config.tx_seg_size > self->config.rx_seg_size) {
         ucs_error("RX segment size (%zu) must be >= TX segment size (%zu)",
                   self->config.rx_seg_size, self->config.tx_seg_size);
@@ -690,15 +725,31 @@ static UCS_CLASS_INIT_FUNC(uct_tcp_iface_t, uct_md_h md, uct_worker_h worker,
         goto err_cleanup_tx_mpool;
     }
 
-    status = ucs_sockaddr_get_ifaddr(self->if_name, &self->config.ifaddr);
+    for (i = 0; i < tcp_md->config.af_prio_count; i++) {
+        status = ucs_netif_get_addr(self->if_name,
+                                    tcp_md->config.af_prio_list[i],
+                                    (struct sockaddr*)&self->config.ifaddr,
+                                    (struct sockaddr*)&self->config.netmask);
+        if (status == UCS_OK) {
+            break;
+        }
+    }
+
     if (status != UCS_OK) {
         goto err_cleanup_rx_mpool;
     }
 
-    status = ucs_sockaddr_get_ifmask(self->if_name, &self->config.netmask);
+    status = ucs_sockaddr_sizeof((struct sockaddr*)&self->config.ifaddr,
+                                 &self->config.sockaddr_len);
     if (status != UCS_OK) {
-        goto err_cleanup_rx_mpool;
+        return status;
     }
+
+    ucs_list_head_init(&self->ep_list);
+    ucs_conn_match_init(&self->conn_match_ctx, self->config.sockaddr_len,
+                        UCT_TCP_CM_CONN_SN_MAX, &uct_tcp_cm_conn_match_ops);
+    status = UCS_PTR_MAP_INIT(tcp_ep, &self->ep_ptr_map);
+    ucs_assert_always(status == UCS_OK);
 
     status = ucs_event_set_create(&self->event_set);
     if (status != UCS_OK) {
@@ -753,12 +804,12 @@ void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep)
 }
 
 int uct_tcp_iface_is_self_addr(uct_tcp_iface_t *iface,
-                               const struct sockaddr_in *peer_addr)
+                               const struct sockaddr *peer_addr)
 {
     ucs_status_t status;
     int cmp;
 
-    cmp = ucs_sockaddr_cmp((const struct sockaddr*)peer_addr,
+    cmp = ucs_sockaddr_cmp(peer_addr,
                            (const struct sockaddr*)&iface->config.ifaddr,
                            &status);
     ucs_assert(status == UCS_OK);
@@ -800,10 +851,12 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,
                                    unsigned *num_devices_p)
 {
+    uct_tcp_md_t *tcp_md = ucs_derived_of(md, uct_tcp_md_t);
     uct_tl_device_resource_t *devices, *tmp;
     static const char *netdev_dir = "/sys/class/net";
     struct dirent *entry;
     unsigned num_devices;
+    int is_active, i;
     ucs_status_t status;
     DIR *dir;
 
@@ -839,7 +892,16 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
             continue;
         }
 
-        if (!ucs_netif_is_active(entry->d_name)) {
+        is_active = 0;
+        for (i = 0; i < tcp_md->config.af_prio_count; i++) {
+            if (ucs_netif_is_active(entry->d_name,
+                                    tcp_md->config.af_prio_list[i])) {
+                is_active = 1;
+                break;
+            }
+        }
+
+        if (!is_active) {
             continue;
         }
 

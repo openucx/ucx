@@ -51,6 +51,40 @@ typedef uint16_t                   ucp_ep_flags_t;
 #endif
 
 
+#define ucp_ep_refcount_add(_ep, _type) \
+({ \
+    ucs_assert((_ep)->refcount < UINT8_MAX); \
+    ++(_ep)->refcount; \
+    UCP_EP_ASSERT_COUNTER_INC(&(_ep)->refcounts._type); \
+})
+
+/* Return 1 if the endpoint was destroyed, 0 if not */
+#define ucp_ep_refcount_remove(_ep, _type) \
+({ \
+    int __ret = 0; \
+    \
+    UCP_EP_ASSERT_COUNTER_DEC(&(_ep)->refcounts._type); \
+    ucs_assert((_ep)->refcount > 0); \
+    if (--(_ep)->refcount == 0) { \
+        ucp_ep_destroy_base(_ep); \
+        __ret = 1; \
+    } \
+    \
+    (__ret); \
+})
+
+#define ucp_ep_refcount_field_assert(_ep, _refcount_field, _cmp, _val) \
+    ucs_assertv((_ep)->_refcount_field _cmp (_val), "ep=%p: %s=%u vs %u", \
+                (_ep), UCS_PP_MAKE_STRING(_refcount_field), \
+                (_ep)->_refcount_field, _val);
+
+#define ucp_ep_refcount_assert(_ep, _type_refcount, _cmp, _val) \
+    ucp_ep_refcount_field_assert(_ep, refcounts._type_refcount, _cmp, _val)
+
+
+#define UCP_SA_DATA_HEADER_VERSION_SHIFT 5
+
+
 /**
  * Endpoint flags
  */
@@ -69,8 +103,7 @@ enum {
     UCP_EP_FLAG_REMOTE_ID              = UCS_BIT(7), /* remote ID is valid */
     UCP_EP_FLAG_CONNECT_PRE_REQ_QUEUED = UCS_BIT(9), /* Pre-Connection request was queued */
     UCP_EP_FLAG_CLOSED                 = UCS_BIT(10),/* EP was closed */
-    UCP_EP_FLAG_CLOSE_REQ_VALID        = UCS_BIT(11),/* close protocol is started and
-                                                        close_req is valid */
+    /* 11 bit is vacant for a flag */
     UCP_EP_FLAG_ERR_HANDLER_INVOKED    = UCS_BIT(12),/* error handler was called */
     UCP_EP_FLAG_INTERNAL               = UCS_BIT(13),/* the internal EP which holds
                                                         temporary wireup configuration or
@@ -90,7 +123,9 @@ enum {
                                                         @uct_ep_disconnect was called for CM EP */
     UCP_EP_FLAG_CLIENT_CONNECT_CB      = UCS_BIT(23),/* DEBUG: Client connect callback invoked */
     UCP_EP_FLAG_SERVER_NOTIFY_CB       = UCS_BIT(24),/* DEBUG: Server notify callback invoked */
-    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25) /* DEBUG: Got disconnect notification */
+    UCP_EP_FLAG_DISCONNECT_CB_CALLED   = UCS_BIT(25),/* DEBUG: Got disconnect notification */
+    UCP_EP_FLAG_CONNECT_WAIT_PRE_REQ   = UCS_BIT(26) /* DEBUG: Connection pre-request needs to be
+                                                        received from a peer */
 };
 
 
@@ -139,6 +174,8 @@ typedef struct ucp_ep_config_key_lane {
     uint8_t              path_index; /* Device path index */
     ucp_lane_type_mask_t lane_types; /* Which types of operations this lane
                                         was selected for */
+    size_t               seg_size; /* Maximal fragment size which can be
+                                      received by the peer */
 } ucp_ep_config_key_lane_t;
 
 
@@ -392,12 +429,16 @@ typedef struct ucp_ep {
 #endif
 
 #if UCS_ENABLE_ASSERT
-    /* How many Worker flush operations are in-progress where the EP is the next
-     * EP for flushing */
-    unsigned                      flush_iter_refcount;
-    /* How many UCT EP discarding operations are in-progress scheduled for the
-     * EP */
-    unsigned                      discard_refcount;
+    struct {
+        /* How many times the EP create was done */
+        unsigned                      create;
+        /* How many Worker flush operations are in-progress where the EP is the
+         * next EP for flushing */
+        unsigned                      flush;
+        /* How many UCT EP discarding operations are in-progress scheduled for
+         * the EP */
+        unsigned                      discard;
+    } refcounts;
 #endif
 
     UCS_STATS_NODE_DECLARE(stats)
@@ -417,15 +458,6 @@ typedef struct {
 
 
 /**
- * Status of protocol-level remote completions
- */
-typedef struct {
-    ucp_request_t             *req;             /* Flush request which is
-                                                   used in close protocol */
-} ucp_ep_close_proto_req_t;
-
-
-/**
  * Endpoint extension for control data path
  */
 typedef struct {
@@ -433,7 +465,7 @@ typedef struct {
     ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
     ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
     ucp_err_handler_cb_t     err_cb; /* Error handler */
-    ucp_ep_close_proto_req_t close_req; /* Close protocol request */
+    ucp_request_t            *close_req; /* Close protocol request */
 #if UCS_ENABLE_ASSERT
     ucs_time_t               ka_last_round; /* Time of last KA round done */
 #endif
@@ -479,27 +511,60 @@ typedef struct {
 
 
 enum {
-    UCP_WIREUP_SA_DATA_CM_ADDR = 2      /* Sockaddr client data contains address
-                                           for CM based wireup: there is only
-                                           iface and ep address of transport
-                                           lanes, remote device address is
-                                           provided by CM and has to be added to
-                                           unpacked UCP address locally. */
+    UCP_WIREUP_SA_DATA_CM_ADDR   = UCS_BIT(1)  /* Sockaddr client data contains address
+                                                  for CM based wireup: there is only
+                                                  iface and ep address of transport
+                                                  lanes, remote device address is
+                                                  provided by CM and has to be added to
+                                                  unpacked UCP address locally. */
 };
 
 
-struct ucp_wireup_sockaddr_data {
-    uint64_t                  ep_id;         /**< Endpoint ID */
-    uint8_t                   err_mode;      /**< Error handling mode */
-    uint8_t                   addr_mode;     /**< The attached address format
-                                                  defined by
-                                                  UCP_WIREUP_SA_DATA_xx */
-    uint8_t                   dev_index;     /**< Device address index used to
-                                                  build remote address in
-                                                  UCP_WIREUP_SA_DATA_CM_ADDR
-                                                  mode */
+/* Sockaddr data flags that are packed to the header field in
+ * ucp_wireup_sockaddr_data_base_t structure.
+ */
+enum {
+    /* Indicates support of UCP_ERR_HANDLING_MODE_PEER error mode. */
+    UCP_SA_DATA_FLAG_ERR_MODE_PEER = UCS_BIT(0)
+};
+
+
+/* Basic sockaddr data. Version 1 uses some additional fields which are not
+ * really needed and removed in version 2.
+ */
+typedef struct ucp_wireup_sockaddr_data_base {
+    uint64_t                  ep_id; /**< Endpoint ID */
+
+    /* This field has different meaning for sa_data v1 and other versions:
+     * v1:           it is error handling mode
+     * v2 and newer: it is sa_data header with the following format:
+     *   +---+-----+
+     *   | 3 |  5  |
+     *   +---+-----+
+     *     v    |
+     * version  |
+     *          v
+     *        flags
+     *
+     * It is safe to keep version in 3 MSB, because it will always be zeros
+     * (i.e. UCP_OBJECT_VERSION_V1) in sa_data v1 (err_mode value is small).
+     */
+    uint8_t                   header;
+    /* packed worker address (or sa_data v1) follows */
+} UCS_S_PACKED ucp_wireup_sockaddr_data_base_t;
+
+
+typedef struct ucp_wireup_sockaddr_data_v1 {
+    ucp_wireup_sockaddr_data_base_t super;
+    uint8_t                         addr_mode; /**< The attached address format
+                                                    defined by
+                                                    UCP_WIREUP_SA_DATA_xx */
+    uint8_t                         dev_index; /**< Device address index used to
+                                                    build remote address in
+                                                    UCP_WIREUP_SA_DATA_CM_ADDR
+                                                    mode */
     /* packed worker address follows */
-} UCS_S_PACKED;
+} UCS_S_PACKED ucp_wireup_sockaddr_data_v1_t;
 
 
 typedef struct ucp_conn_request {
@@ -511,8 +576,7 @@ typedef struct ucp_conn_request {
     uct_device_addr_t           *remote_dev_addr;
     struct sockaddr_storage     client_address;
     ucp_ep_h                    ep; /* valid only if request is handled internally */
-    ucp_wireup_sockaddr_data_t  sa_data;
-    /* packed worker address follows */
+    /* sa_data and packed worker address follow */
 } ucp_conn_request_t;
 
 
@@ -533,18 +597,17 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  ucp_rsc_index_t aux_rsc_index,
                                  ucs_string_buffer_t *buf);
 
-ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
-                                const char *message, ucp_ep_h *ep_p);
-
-void ucp_ep_add_ref(ucp_ep_h ep);
-
-int ucp_ep_remove_ref(ucp_ep_h ep);
+void ucp_ep_destroy_base(ucp_ep_h ep);
 
 ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
                                   const char *peer_name, const char *message,
                                   ucp_ep_h *ep_p);
 
 void ucp_ep_delete(ucp_ep_h ep);
+
+void ucp_ep_flush_state_reset(ucp_ep_h ep);
+
+void ucp_ep_flush_state_invalidate(ucp_ep_h ep);
 
 void ucp_ep_release_id(ucp_ep_h ep);
 
@@ -567,11 +630,6 @@ ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
                                        ucp_request_t *worker_req,
                                        ucp_request_callback_t flushed_cb,
                                        const char *debug_name);
-
-ucs_status_t
-ucp_ep_create_sockaddr_aux(ucp_worker_h worker, unsigned ep_init_flags,
-                           const ucp_unpacked_address_t *remote_address,
-                           ucp_ep_h *ep_p);
 
 void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                                     unsigned ep_init_flags);
@@ -651,8 +709,6 @@ void ucp_ep_config_rndv_zcopy_commit(ucp_lane_index_t lanes_count,
 
 void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status);
 
-int ucp_ep_config_test_rndv_support(const ucp_ep_config_t *config);
-
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self);
 
 void ucp_ep_flush_completion(uct_completion_t *self);
@@ -662,8 +718,6 @@ void ucp_ep_flush_request_ff(ucp_request_t *req, ucs_status_t status);
 void
 ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
                    void *purge_arg);
-
-void ucp_ep_discard_lanes(ucp_ep_h ucp_ep, ucs_status_t status);
 
 void ucp_ep_register_disconnect_progress(ucp_request_t *req);
 
@@ -720,10 +774,14 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
 
 /**
- * @brief Create objects in VFS to represent endpoint and its features.
+ * @brief Query local and/or remote socket address of endpoint @a ucp_ep.
  *
- * @param [in] ep Endpoint object to be described.
+ * @param [in]     ucp_ep           Endpoint object to query.
+ * @param [inout]  attr             Filled with attributes containing socket
+ *                                  address of the endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
-void ucp_ep_vfs_init(ucp_ep_h ep);
+ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
 
 #endif

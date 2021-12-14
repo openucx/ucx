@@ -96,10 +96,16 @@ AC_CHECK_DECLS([ethtool_cmd_speed, SPEED_UNKNOWN], [], [],
 
 
 #
-# PowerPC query for TB frequency
+# PowerPC "sys/platform/ppc.h" header
 #
-AC_CHECK_DECLS([__ppc_get_timebase_freq], [], [], [#include <sys/platform/ppc.h>])
 AC_CHECK_HEADERS([sys/platform/ppc.h])
+
+
+#
+# PowerPC query for getting TB and frequency
+#
+AC_CHECK_DECLS([__ppc_get_timebase_freq, __ppc_get_timebase], [], [],
+               [[#include <sys/platform/ppc.h>]])
 
 
 #

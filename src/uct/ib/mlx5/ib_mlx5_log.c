@@ -71,16 +71,17 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
                                              uct_ib_mlx5_txwq_t *txwq,
                                              ucs_log_level_t log_level)
 {
-    ucs_status_t status = UCS_ERR_IO_ERROR;
-    char err_info[256]  = {};
-    char wqe_info[256]  = {};
-    char peer_info[128] = {};
-    uint16_t pi         = ntohs(ecqe->wqe_counter);
-    uint32_t qp_num     = ntohl(ecqe->s_wqe_opcode_qpn) &
-                          UCS_MASK(UCT_IB_QPN_ORDER);
+    ucs_status_t err_status = UCS_ERR_IO_ERROR;
+    char err_info[256]      = {};
+    char wqe_info[256]      = {};
+    char peer_info[128]     = {};
+    uint16_t pi             = ntohs(ecqe->wqe_counter);
+    uint32_t qp_num         = ntohl(ecqe->s_wqe_opcode_qpn) &
+                              UCS_MASK(UCT_IB_QPN_ORDER);
     void *wqe;
     struct ibv_ah_attr ah_attr;
     unsigned dest_qpn;
+    ucs_status_t status;
 
     switch (ecqe->syndrome) {
     case MLX5_CQE_SYNDROME_LOCAL_LENGTH_ERR:
@@ -95,8 +96,8 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     case MLX5_CQE_SYNDROME_WR_FLUSH_ERR:
         snprintf(err_info, sizeof(err_info),
                  "WR flushed because QP in error state");
-        log_level = UCS_LOG_LEVEL_TRACE;
-        status    = UCS_ERR_CANCELED;
+        log_level  = UCS_LOG_LEVEL_TRACE;
+        err_status = UCS_ERR_CANCELED;
         break;
     case MLX5_CQE_SYNDROME_MW_BIND_ERR:
         snprintf(err_info, sizeof(err_info), "Memory window bind");
@@ -112,23 +113,23 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
         break;
     case MLX5_CQE_SYNDROME_REMOTE_ACCESS_ERR:
         snprintf(err_info, sizeof(err_info), "Remote access");
-        status = UCS_ERR_CONNECTION_RESET;
+        err_status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_REMOTE_OP_ERR:
         snprintf(err_info, sizeof(err_info), "Remote OP");
-        status = UCS_ERR_CONNECTION_RESET;
+        err_status = UCS_ERR_CONNECTION_RESET;
         break;
     case MLX5_CQE_SYNDROME_TRANSPORT_RETRY_EXC_ERR:
         snprintf(err_info, sizeof(err_info), "Transport retry count exceeded");
-        status = UCS_ERR_ENDPOINT_TIMEOUT;
+        err_status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     case MLX5_CQE_SYNDROME_RNR_RETRY_EXC_ERR:
         snprintf(err_info, sizeof(err_info), "Receive-no-ready retry count exceeded");
-        status = UCS_ERR_ENDPOINT_TIMEOUT;
+        err_status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     case MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR:
         snprintf(err_info, sizeof(err_info), "Remote side aborted");
-        status = UCS_ERR_ENDPOINT_TIMEOUT;
+        err_status = UCS_ERR_ENDPOINT_TIMEOUT;
         break;
     default:
         snprintf(err_info, sizeof(err_info), "Generic");
@@ -160,17 +161,15 @@ ucs_status_t uct_ib_mlx5_completion_with_err(uct_ib_iface_t *iface,
     }
 
     ucs_log(log_level,
-            "%s on " UCT_IB_IFACE_FMT
-            "/%s (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
+            "%s on " UCT_IB_IFACE_FMT " (synd 0x%x vend 0x%x hw_synd %d/%d)\n"
             "%s QP 0x%x wqe[%d]: %s %s",
-            err_info, UCT_IB_IFACE_ARG(iface),
-            uct_ib_iface_is_roce(iface) ? "RoCE" : "IB", ecqe->syndrome,
+            err_info, UCT_IB_IFACE_ARG(iface), ecqe->syndrome,
             ecqe->vendor_err_synd, ecqe->hw_synd_type >> 4, ecqe->hw_err_synd,
             uct_ib_qp_type_str(iface->config.qp_type), qp_num, pi, wqe_info,
             peer_info);
 
 out:
-    return status;
+    return err_status;
 }
 
 static unsigned uct_ib_mlx5_parse_dseg(void **dseg_p, void *qstart, void *qend,

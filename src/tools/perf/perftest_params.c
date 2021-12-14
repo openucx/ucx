@@ -70,7 +70,8 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -w <iters>     number of warm-up iterations (%"PRIu64")\n",
                                 ctx->params.super.warmup_iter);
     printf("     -c <cpulist>   set affinity to this CPU list (separated by comma) (off)\n");
-    printf("     -O <count>     maximal number of uncompleted outstanding sends\n");
+    printf("     -O <count>     maximal number of uncompleted outstanding sends (%u)\n",
+                                ctx->params.super.max_outstanding);
     printf("     -i <offset>    distance between consecutive scatter-gather entries (%zu)\n",
                                 ctx->params.super.iov_stride);
     printf("     -l             use loopback connection\n");
@@ -84,6 +85,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -R <rank>      percentile rank of the percentile data in latency tests (%.1f)\n",
                                 ctx->params.super.percentile_rank);
     printf("     -p <port>      TCP port to use for data exchange (%d)\n", ctx->port);
+    printf("     -6             Use IPv6 address for in data exchange\n");
 #ifdef HAVE_MPI
     printf("     -P <0|1>       disable/enable MPI mode (%d)\n", ctx->mpi);
 #endif
@@ -93,6 +95,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("     -N             use numeric formatting (thousands separator)\n");
     printf("     -f             print only final numbers\n");
     printf("     -v             print CSV-formatted output\n");
+    printf("     -I             print extra information about the operation\n");
     printf("\n");
     printf("  UCT only:\n");
     printf("     -d <device>    device to use for testing\n");
@@ -134,6 +137,7 @@ static void usage(const struct perftest_context *ctx, const char *program)
     printf("                        sleep      : go to sleep after posting requests\n");
     printf("     -H <size>      active message header size (%zu), not included in message size\n",
                                 ctx->params.super.ucp.am_hdr_size);
+    printf("     -z             pass pre-registered memory handle\n");
     printf("\n");
     printf("   NOTE: When running UCP tests, transport and device should be specified by\n");
     printf("         environment variables: UCX_TLS and UCX_[SELF|SHM|NET]_DEVICES.\n");
@@ -144,6 +148,12 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
                                    ucs_memory_type_t *mem_type)
 {
     ucs_memory_type_t it;
+
+    if (opt_arg == NULL) {
+        ucs_error("memory type string is NULL");
+        return UCS_ERR_INVALID_PARAM;
+    }
+
     for (it = UCS_MEMORY_TYPE_HOST; it < UCS_MEMORY_TYPE_LAST; it++) {
         if(!strcmp(opt_arg, ucs_memory_type_names[it]) &&
            (ucx_perf_mem_type_allocators[it] != NULL)) {
@@ -151,7 +161,8 @@ static ucs_status_t parse_mem_type(const char *opt_arg,
             return UCS_OK;
         }
     }
-    ucs_error("Unsupported memory type: \"%s\"", opt_arg);
+
+    ucs_error("unsupported memory type: \"%s\"", opt_arg);
     return UCS_ERR_INVALID_PARAM;
 }
 
@@ -159,11 +170,13 @@ static ucs_status_t parse_mem_type_params(const char *opt_arg,
                                           ucs_memory_type_t *send_mem_type,
                                           ucs_memory_type_t *recv_mem_type)
 {
-    const char *delim = ",";
-    char *token       = strtok((char*)opt_arg, delim);
+    const char *delim   = ",";
+    char *token         = strtok((char*)opt_arg, delim);
+    ucs_status_t status;
 
-    if (UCS_OK != parse_mem_type(token, send_mem_type)) {
-        return UCS_ERR_INVALID_PARAM;
+    status = parse_mem_type(token, send_mem_type);
+    if (status != UCS_OK) {
+        return status;
     }
 
     token = strtok(NULL, delim);
@@ -404,6 +417,9 @@ ucs_status_t parse_test_params(perftest_params_t *params, char opt,
             return UCS_ERR_INVALID_PARAM;
         }
         return UCS_OK;
+    case 'z':
+        params->super.flags |= UCX_PERF_TEST_FLAG_PREREG;
+        return UCS_OK;
     default:
        return UCS_ERR_INVALID_PARAM;
     }
@@ -529,14 +545,18 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
     ctx->server_addr     = NULL;
     ctx->num_batch_files = 0;
     ctx->port            = 13337;
+    ctx->af              = AF_INET;
     ctx->flags           = 0;
     ctx->mpi             = mpi_initialized;
 
     optind = 1;
-    while ((c = getopt (argc, argv, "p:b:Nfvc:P:h" TEST_PARAMS_ARGS)) != -1) {
+    while ((c = getopt(argc, argv, "p:b:6NfvIc:P:h" TEST_PARAMS_ARGS)) != -1) {
         switch (c) {
         case 'p':
             ctx->port = atoi(optarg);
+            break;
+        case '6':
+            ctx->af = AF_INET6;
             break;
         case 'b':
             if (ctx->num_batch_files < MAX_BATCH_FILES) {
@@ -551,6 +571,9 @@ ucs_status_t parse_opts(struct perftest_context *ctx, int mpi_initialized,
             break;
         case 'v':
             ctx->flags |= TEST_FLAG_PRINT_CSV;
+            break;
+        case 'I':
+            ctx->flags |= TEST_FLAG_PRINT_EXTRA_INFO;
             break;
         case 'c':
             ctx->flags |= TEST_FLAG_SET_AFFINITY;

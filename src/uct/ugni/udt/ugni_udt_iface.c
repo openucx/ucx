@@ -131,7 +131,7 @@ static void *uct_ugni_udt_device_thread(void *arg)
             break;
         }
         iface->events_ready = 1;
-        ucs_trace("Recieved a new datagram");
+        ucs_trace("Received a new datagram");
         ucs_async_pipe_push(&iface->event_pipe);
     }
 

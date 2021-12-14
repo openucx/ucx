@@ -74,31 +74,59 @@
     } while (0)
 
 
+/**
+ * Checks whether a condition check with ucs_status_t is true or not.
+ *
+ * @param _condition Condition that should be checked.
+ * @param _expr      Expression which returns UCS status which needs to be
+ *                   checked.
+ */
+#define _ASSERT_UCS_STATUS(_condition, _expr, ...) \
+    do { \
+        ucs_status_t __status = (_expr); \
+        if (!(_condition)) { \
+            UCS_TEST_ABORT("Error: " \
+                    << ucs_status_string(__status)  __VA_ARGS__); \
+        } \
+    } while (0)
+
+
+/**
+ * Check equality of the status returned from the expression and the expected
+ * status.
+ *
+ * @param _exp_status Expected UCS status.
+ * @param _expr       Expression which returns UCS status which needs to be
+ *                    checked.
+ */
+#define ASSERT_UCS_STATUS_EQ(_exp_status, _expr, ...) \
+    _ASSERT_UCS_STATUS(((__status) == (_exp_status)), _expr, ## __VA_ARGS__)
+
+
+/**
+ * Check equality of the status returned from the expression to the one of the
+ * expected statuses.
+ *
+ * @param _exp_status1 First expected UCS status.
+ * @param _exp_status2 Second expected UCS status.
+ * @param _expr        Expression which returns UCS status which needs to be
+ *                     checked.
+ */
+#define ASSERT_UCS_STATUS_EQ2(_exp_status1, _exp_status2, _expr, ...) \
+    _ASSERT_UCS_STATUS((((__status) == (_exp_status1)) || \
+                       ((__status) == (_exp_status2))), _expr, ## __VA_ARGS__)
+
+
 #define ASSERT_UCS_OK(_expr, ...) \
-    do { \
-        ucs_status_t _status = (_expr); \
-        if ((_status) != UCS_OK) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)  __VA_ARGS__); \
-        } \
-    } while (0)
+    ASSERT_UCS_STATUS_EQ(UCS_OK, _expr, ## __VA_ARGS__)
 
 
-#define ASSERT_UCS_OK_OR_INPROGRESS(_expr) \
-    do { \
-        ucs_status_t _status = (_expr); \
-        if (((_status) != UCS_OK) && ((_status) != UCS_INPROGRESS)) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
-        } \
-    } while (0)
+#define ASSERT_UCS_OK_OR_INPROGRESS(_expr, ...) \
+    ASSERT_UCS_STATUS_EQ2(UCS_OK, UCS_INPROGRESS, _expr, ## __VA_ARGS__)
 
 
-#define ASSERT_UCS_OK_OR_BUSY(_expr) \
-    do { \
-        ucs_status_t _status = (_expr); \
-        if (((_status) != UCS_OK) && ((_status) != UCS_ERR_BUSY)) { \
-            UCS_TEST_ABORT("Error: " << ucs_status_string(_status)); \
-        } \
-    } while (0)
+#define ASSERT_UCS_OK_OR_BUSY(_expr, ...) \
+    ASSERT_UCS_STATUS_EQ2(UCS_OK, UCS_ERR_BUSY, _expr, ## __VA_ARGS__)
 
 
 #define ASSERT_UCS_PTR_OK(_expr) \
@@ -494,6 +522,11 @@ public:
 
     virtual ~ptr_vector_base() {
         clear();
+    }
+
+    operator const std::vector<T*>&() const
+    {
+        return m_vec;
     }
 
     /** Add and take ownership */
@@ -944,7 +977,7 @@ std::vector<std::vector<T> > make_pairs(const std::vector<T> &input_vec) {
     return result;
 }
 
-std::vector<std::vector<ucs_memory_type_t> > supported_mem_type_pairs();
+const std::vector<std::vector<ucs_memory_type_t> >& supported_mem_type_pairs();
 
 
 /**

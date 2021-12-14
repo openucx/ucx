@@ -850,7 +850,10 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA                  = UCS_BIT(14),
 
     /** Enables @ref uct_ep_params::private_data_length */
-    UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15)
+    UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
+
+    /** Enables @ref uct_ep_params::local_sockaddr */
+    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16)
 };
 
 
@@ -1172,6 +1175,14 @@ struct uct_ep_params {
     const ucs_sock_addr_t             *sockaddr;
 
     /**
+     * The sockaddr to bind locally. If set, @ref uct_ep_create
+     * will create an endpoint binding with this local sockaddr.
+     * @note The interface in this routine requires the
+     * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
+     */
+    const ucs_sock_addr_t             *local_sockaddr;
+
+    /**
      * @ref uct_cb_flags to indicate @ref uct_ep_params_t::sockaddr_pack_cb,
      * @ref uct_ep_params_t::sockaddr_cb_client,
      * @ref uct_ep_params_t::sockaddr_cb_server,
@@ -1235,9 +1246,6 @@ struct uct_ep_params {
      * This callback is invoked when the remote server address provided in field
      * @ref uct_ep_params_t::sockaddr is resolved to the local device to be used
      * for connection establishment.
-     * @note In the event of a connection error, this callback will not be
-     *       invoked; @ref uct_ep_params_t::sockaddr_cb_client with indicating
-     *       the error code will be invoked instead.
      * @note This field is mutually exclusive with
      *       @ref uct_ep_params::sockaddr_pack_cb.
      */
@@ -1617,6 +1625,7 @@ enum {
 
 
 extern const char *uct_alloc_method_names[];
+extern const char *uct_device_type_names[];
 
 
 /**

@@ -115,6 +115,9 @@ ucp_tag_send_req(ucp_request_t *req, size_t dt_count,
      */
     ucp_request_send(req);
     if (req->flags & UCP_REQUEST_FLAG_COMPLETED) {
+        /* Coverity wrongly resolves completion callback function to
+         * 'ucp_cm_client_connect_progress' */
+        /* coverity[offset_free] */
         ucp_request_imm_cmpl_param(param, req, send);
     }
 
@@ -261,9 +264,15 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
                                              contig_length, tag);
             ucp_request_send_check_status(status, ret, goto out);
         }
-    } else {
+    } else if (attr_mask == UCP_OP_ATTR_FLAG_NO_IMM_CMPL) {
         datatype      = ucp_dt_make_contig(1);
         contig_length = count;
+    } else {
+        /* UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL */
+        datatype = param->datatype;
+        if (UCP_DT_IS_CONTIG(datatype)) {
+            contig_length = ucp_contig_dt_length(datatype, count);
+        }
     }
 
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
@@ -301,10 +310,10 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 {
     ucp_worker_h worker  = ep->worker;
     size_t contig_length = 0;
+    uintptr_t datatype   = ucp_request_param_datatype(param);
     ucs_status_t status;
     ucp_request_t *req;
     ucs_status_ptr_t ret;
-    uintptr_t datatype;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return UCS_STATUS_PTR(
@@ -315,12 +324,6 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
 
     ucs_trace_req("send_sync_nbx buffer %p count %zu tag %"PRIx64" to %s",
                   buffer, count, tag, ucp_ep_peer_name(ep));
-
-    datatype = ucp_request_param_datatype(param);
-    if (!ucp_ep_config_test_rndv_support(ucp_ep_config(ep))) {
-        ret = UCS_STATUS_PTR(UCS_ERR_UNSUPPORTED);
-        goto out;
-    }
 
     status = ucp_ep_resolve_remote_id(ep, ucp_ep_config(ep)->tag.lane);
     if (status != UCS_OK) {

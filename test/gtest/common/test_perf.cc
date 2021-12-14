@@ -124,7 +124,8 @@ void test_perf::rte::exchange_vec(void *rte_group, void * req)
 }
 
 void test_perf::rte::report(void *rte_group, const ucx_perf_result_t *result,
-                            void *arg, int is_final, int is_multi_thread)
+                            void *arg, const char *extra_info, int is_final,
+                            int is_multi_thread)
 {
 }
 
@@ -202,8 +203,8 @@ void test_perf::test_params_init(const test_spec &test,
     params.uct.am_hdr_size = 8;
     params.alignment       = ucs_get_page_size();
     params.max_outstanding = test.max_outstanding;
-    params.send_mem_type   = UCS_MEMORY_TYPE_HOST;
-    params.recv_mem_type   = UCS_MEMORY_TYPE_HOST;
+    params.send_mem_type   = test.send_mem_type;
+    params.recv_mem_type   = test.recv_mem_type;
     params.percentile_rank = 50.0;
 
     memset(params.uct.md_name, 0, sizeof(params.uct.md_name));

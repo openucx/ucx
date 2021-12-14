@@ -59,26 +59,6 @@ static inline ucs_status_t ucx_perf_rocm_alloc(size_t length,
     return UCS_OK;
 }
 
-static ucs_status_t ucp_perf_rocm_alloc(const ucx_perf_context_t *perf, size_t length,
-                                        void **address_p, ucp_mem_h *memh_p,
-                                        int non_blk_flag)
-{
-    return ucx_perf_rocm_alloc(length, UCS_MEMORY_TYPE_ROCM, address_p);
-}
-
-static ucs_status_t ucp_perf_rocm_alloc_managed(const ucx_perf_context_t *perf,
-                                                size_t length, void **address_p,
-                                                ucp_mem_h *memh_p, int non_blk_flag)
-{
-    return ucx_perf_rocm_alloc(length, UCS_MEMORY_TYPE_ROCM_MANAGED, address_p);
-}
-
-static void ucp_perf_rocm_free(const ucx_perf_context_t *perf,
-                               void *address, ucp_mem_h memh)
-{
-    hipFree(address);
-}
-
 static inline ucs_status_t
 uct_perf_rocm_alloc_reg_mem(const ucx_perf_context_t *perf,
                             size_t length,
@@ -166,8 +146,6 @@ UCS_STATIC_INIT {
     static ucx_perf_allocator_t rocm_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_ROCM,
         .init      = ucx_perf_rocm_init,
-        .ucp_alloc = ucp_perf_rocm_alloc,
-        .ucp_free  = ucp_perf_rocm_free,
         .uct_alloc = uct_perf_rocm_alloc,
         .uct_free  = uct_perf_rocm_free,
         .memcpy    = ucx_perf_rocm_memcpy,
@@ -176,8 +154,6 @@ UCS_STATIC_INIT {
     static ucx_perf_allocator_t rocm_managed_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_ROCM_MANAGED,
         .init      = ucx_perf_rocm_init,
-        .ucp_alloc = ucp_perf_rocm_alloc_managed,
-        .ucp_free  = ucp_perf_rocm_free,
         .uct_alloc = uct_perf_rocm_managed_alloc,
         .uct_free  = uct_perf_rocm_free,
         .memcpy    = ucx_perf_rocm_memcpy,

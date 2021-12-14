@@ -8,9 +8,11 @@
 #define UCP_TYPES_H_
 
 #include <ucp/api/ucp.h>
+#include <ucs/type/float8.h>
 #include <uct/api/uct.h>
 #include <ucs/datastruct/bitmap.h>
 #include <ucs/sys/preprocessor.h>
+#include <ucs/sys/math.h>
 #include <stdint.h>
 
 
@@ -57,22 +59,21 @@ typedef uint8_t                      ucp_worker_cfg_index_t;
 
 
 /* Forward declarations */
-typedef struct ucp_request              ucp_request_t;
-typedef struct ucp_recv_desc            ucp_recv_desc_t;
-typedef struct ucp_address_iface_attr   ucp_address_iface_attr_t;
-typedef struct ucp_address_entry        ucp_address_entry_t;
-typedef struct ucp_unpacked_address     ucp_unpacked_address_t;
-typedef struct ucp_wireup_ep            ucp_wireup_ep_t;
-typedef struct ucp_request_send_proto   ucp_request_send_proto_t;
-typedef struct ucp_worker_iface         ucp_worker_iface_t;
-typedef struct ucp_worker_cm            ucp_worker_cm_t;
-typedef struct ucp_rma_proto            ucp_rma_proto_t;
-typedef struct ucp_amo_proto            ucp_amo_proto_t;
-typedef struct ucp_wireup_sockaddr_data ucp_wireup_sockaddr_data_t;
-typedef struct ucp_ep_config            ucp_ep_config_t;
-typedef struct ucp_ep_config_key        ucp_ep_config_key_t;
-typedef struct ucp_rkey_config_key      ucp_rkey_config_key_t;
-typedef struct ucp_proto                ucp_proto_t;
+typedef struct ucp_request            ucp_request_t;
+typedef struct ucp_recv_desc          ucp_recv_desc_t;
+typedef struct ucp_address_iface_attr ucp_address_iface_attr_t;
+typedef struct ucp_address_entry      ucp_address_entry_t;
+typedef struct ucp_unpacked_address   ucp_unpacked_address_t;
+typedef struct ucp_wireup_ep          ucp_wireup_ep_t;
+typedef struct ucp_request_send_proto ucp_request_send_proto_t;
+typedef struct ucp_worker_iface       ucp_worker_iface_t;
+typedef struct ucp_worker_cm          ucp_worker_cm_t;
+typedef struct ucp_rma_proto          ucp_rma_proto_t;
+typedef struct ucp_amo_proto          ucp_amo_proto_t;
+typedef struct ucp_ep_config          ucp_ep_config_t;
+typedef struct ucp_ep_config_key      ucp_ep_config_key_t;
+typedef struct ucp_rkey_config_key    ucp_rkey_config_key_t;
+typedef struct ucp_proto              ucp_proto_t;
 
 
 /**
@@ -112,12 +113,25 @@ extern const ucp_tl_bitmap_t ucp_tl_bitmap_min;
                    UCP_MAX_RESOURCES)
 
 
+/* Pack bandwidth as bytes/second, range: 512 MB/s to 4 TB/s */
+UCS_FP8_DECLARE_TYPE(BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+
+
+/* Pack latency as nanoseconds, range: 16 nsec to 131 usec */
+UCS_FP8_DECLARE_TYPE(LATENCY, UCS_BIT(4), UCS_BIT(17))
+
+
+/* Pack overhead as nanoseconds, range: 1 nsec to 4 usec */
+UCS_FP8_DECLARE_TYPE(OVERHEAD, UCS_BIT(0), UCS_BIT(12))
+
+
 /**
  * Operation for which protocol is selected
  */
 typedef enum {
     UCP_OP_ID_TAG_SEND,
     UCP_OP_ID_TAG_SEND_SYNC,
+    UCP_OP_ID_AM_SEND,
     UCP_OP_ID_PUT,
     UCP_OP_ID_GET,
     UCP_OP_ID_AMO_POST,
@@ -125,9 +139,14 @@ typedef enum {
     UCP_OP_ID_AMO_CSWAP,
     UCP_OP_ID_API_LAST,
 
-    UCP_OP_ID_RNDV_SEND = UCP_OP_ID_API_LAST,
+    /* Internal rendezvous operations */
+    UCP_OP_ID_RNDV_FIRST = UCP_OP_ID_API_LAST,
+    UCP_OP_ID_RNDV_SEND  = UCP_OP_ID_RNDV_FIRST,
     UCP_OP_ID_RNDV_RECV,
-    UCP_OP_ID_LAST
+    UCP_OP_ID_RNDV_RECV_DROP,
+    UCP_OP_ID_RNDV_LAST,
+
+    UCP_OP_ID_LAST = UCP_OP_ID_RNDV_LAST
 } ucp_operation_id_t;
 
 
@@ -198,6 +217,16 @@ typedef enum {
     UCP_RNDV_MODE_RKEY_PTR, /* Use rkey_ptr in RNDV protocol */
     UCP_RNDV_MODE_LAST
 } ucp_rndv_mode_t;
+
+
+/* Versions enumeration used for various UCP objects (e.g. ucp worker address,
+ * sockaddr data structure, etc).
+ */
+typedef enum {
+    UCP_OBJECT_VERSION_V1,
+    UCP_OBJECT_VERSION_V2,
+    UCP_OBJECT_VERSION_LAST
+} ucp_object_version_t;
 
 
 /**

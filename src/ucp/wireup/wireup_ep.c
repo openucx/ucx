@@ -566,6 +566,12 @@ err:
     return status;
 }
 
+int ucp_wireup_ep_has_next_ep(ucp_wireup_ep_t *wireup_ep)
+{
+    ucs_assert(wireup_ep != NULL);
+    return wireup_ep->super.uct_ep != NULL;
+}
+
 void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
@@ -600,7 +606,7 @@ void ucp_wireup_ep_destroy_next_ep(ucp_wireup_ep_t *wireup_ep)
     uct_ep_destroy(uct_ep);
 
     wireup_ep->flags &= ~UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    ucs_assert(wireup_ep->flags == 0);
+    ucs_assert((wireup_ep->flags & ~UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID) == 0);
 }
 
 void ucp_wireup_ep_remote_connected(uct_ep_h uct_ep, int ready)

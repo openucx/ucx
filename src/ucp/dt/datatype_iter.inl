@@ -117,10 +117,11 @@ ucp_datatype_iter_init(ucp_context_h context, void *buffer, size_t count,
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_datatype_iter_init_empty(ucp_datatype_iter_t *dt_iter, uint8_t *sg_count)
+ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
+                            uint8_t *sg_count)
 {
     dt_iter->dt_class               = UCP_DATATYPE_CONTIG;
-    dt_iter->length                 = 0;
+    dt_iter->length                 = length;
     dt_iter->offset                 = 0;
     dt_iter->type.contig.buffer     = NULL;
     dt_iter->type.contig.reg.md_map = 0;
@@ -222,9 +223,11 @@ ucp_datatype_iter_next_pack(const ucp_datatype_iter_t *dt_iter,
         length = ucs_min(dt_iter->length - dt_iter->offset, max_length);
         next_iter->type.iov.iov_index  = dt_iter->type.iov.iov_index;
         next_iter->type.iov.iov_offset = dt_iter->type.iov.iov_offset;
-        UCS_PROFILE_CALL_VOID(ucp_dt_iov_gather, dest, dt_iter->type.iov.iov,
-                              length, &next_iter->type.iov.iov_offset,
-                              &next_iter->type.iov.iov_index);
+        UCS_PROFILE_CALL_VOID(ucp_dt_iov_gather, worker, dest,
+                              dt_iter->type.iov.iov, length,
+                              &next_iter->type.iov.iov_offset,
+                              &next_iter->type.iov.iov_index,
+                              (ucs_memory_type_t)dt_iter->mem_info.type);
         break;
     case UCP_DATATYPE_GENERIC:
         if (max_length != 0) {
@@ -307,10 +310,11 @@ ucp_datatype_iter_unpack(ucp_datatype_iter_t *dt_iter, ucp_worker_h worker,
     case UCP_DATATYPE_IOV:
         ucp_datatype_iter_iov_seek(dt_iter, offset);
         unpacked_length = UCS_PROFILE_CALL(ucp_dt_iov_scatter,
-                                           dt_iter->type.iov.iov, SIZE_MAX, src,
+                                           worker, dt_iter->type.iov.iov, SIZE_MAX, src,
                                            length,
                                            &dt_iter->type.iov.iov_offset,
-                                           &dt_iter->type.iov.iov_index);
+                                           &dt_iter->type.iov.iov_index,
+                                           (ucs_memory_type_t)dt_iter->mem_info.type);
         ucs_assert(unpacked_length <= length);
         dt_iter->offset += unpacked_length;
         status           = UCS_OK;

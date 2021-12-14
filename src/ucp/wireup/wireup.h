@@ -39,11 +39,12 @@ enum {
 typedef struct {
     const char  *title;             /* Name of the criteria for debugging */
     uint64_t    local_md_flags;     /* Required local MD flags */
-    uint64_t    remote_md_flags;    /* Required remote MD flags */
     uint64_t    local_iface_flags;  /* Required local interface flags */
     uint64_t    remote_iface_flags; /* Required remote interface flags */
     uint64_t    local_event_flags;  /* Required local event flags */
     uint64_t    remote_event_flags; /* Required remote event flags */
+    uint64_t    alloc_mem_types;    /* Mandatory memory types for allocation */
+    uint64_t    reg_mem_types;      /* Mandatory memory types for registration */
 
     /**
      * Calculates score of a potential transport.
@@ -108,6 +109,8 @@ double ucp_wireup_amo_score_func(ucp_context_h context,
                                  const ucp_address_iface_attr_t *remote_iface_attr);
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg);
+
+const char* ucp_wireup_msg_str(uint8_t msg_type);
 
 ucs_status_t ucp_wireup_msg_progress(uct_pending_req_t *self);
 

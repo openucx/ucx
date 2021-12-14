@@ -40,7 +40,7 @@ uint16_t ucs_crc16_string(const char *s);
 /**
  * Calculate CRC32 of an arbitrary buffer.
  *
- * @param [in]  prev_crc   Intitial CRC value.
+ * @param [in]  prev_crc   Initial CRC value.
  * @param [in]  buffer     Buffer to compute crc for.
  * @param [in]  size       Buffer size.
  *

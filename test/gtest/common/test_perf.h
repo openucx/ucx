@@ -32,6 +32,8 @@ protected:
         double                 min; /* TODO remove this field */
         double                 max; /* TODO remove this field */
         unsigned               test_flags;
+        ucs_memory_type_t      send_mem_type;
+        ucs_memory_type_t      recv_mem_type;
     };
 
     static std::vector<int> get_affinity();
@@ -79,7 +81,8 @@ private:
         static void exchange_vec(void *rte_group, void * req);
 
         static void report(void *rte_group, const ucx_perf_result_t *result,
-                           void *arg, int is_final, int is_multi_thread);
+                           void *arg, const char *extra_info, int is_final,
+                           int is_multi_thread);
 
         static ucx_perf_rte_t test_rte;
 

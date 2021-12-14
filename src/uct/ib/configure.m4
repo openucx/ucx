@@ -218,17 +218,14 @@ AS_IF([test "x$with_ib" = "xyes"],
                        AC_CHECK_DECLS([ibv_alloc_td],
                                   [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
 
-              AC_CHECK_DECLS([ibv_alloc_td],
-                      [has_res_domain=yes], [], [[#include <infiniband/verbs.h>]])])
-
-       AS_IF([test "x$with_devx" != xno], [
-            AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
-                 AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
-                 have_devx=yes
-            ], [
-                 AS_IF([test "x$with_devx" != xcheck],
-                       [AC_MSG_ERROR([devx requested but not found])])
-            ], [[#include <infiniband/mlx5dv.h>]])])
+               AS_IF([test "x$with_devx" != xno], [
+                    AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
+                         AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
+                         have_devx=yes
+                    ], [
+                         AS_IF([test "x$with_devx" != xcheck],
+                               [AC_MSG_ERROR([devx requested but not found])])
+                    ], [[#include <infiniband/mlx5dv.h>]])])])
 
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
                with_mlx5_hw=no])
@@ -383,13 +380,14 @@ AS_IF([test "x$with_ib" = "xyes"],
            [AC_DEFINE([HAVE_TL_UD], 1, [UD transport support])])
 
        # XRQ with Tag Matching support
-       AS_IF([test "x$with_ib_hw_tm" != xno],
-           [AC_CHECK_HEADERS([infiniband/tm_types.h])
+       AS_IF([test "x$with_ib_hw_tm" != xno], [
             AC_CHECK_MEMBER([struct ibv_exp_tmh.tag], [with_ib_hw_tm=exp], [],
                             [[#include <infiniband/verbs_exp.h>]])
-            AC_CHECK_MEMBER([struct ibv_tmh.tag], [with_ib_hw_tm=upstream], [],
-                            [[#include <infiniband/tm_types.h>]])
-           ])
+            AS_IF([test "x$with_mlx5_dv" = "xyes"], [
+                AC_CHECK_HEADERS([infiniband/tm_types.h])
+                AC_CHECK_MEMBER([struct ibv_tmh.tag], [with_ib_hw_tm=upstream], [],
+                                [[#include <infiniband/tm_types.h>]])])])
+
        AS_IF([test "x$with_ib_hw_tm" = xexp],
            [AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params], [
             AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
@@ -451,4 +449,5 @@ AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av
 uct_ib_modules=""
 m4_include([src/uct/ib/rdmacm/configure.m4])
 AC_DEFINE_UNQUOTED([uct_ib_MODULES], ["${uct_ib_modules}"], [IB loadable modules])
-AC_CONFIG_FILES([src/uct/ib/Makefile])
+AC_CONFIG_FILES([src/uct/ib/Makefile
+                 src/uct/ib/ucx-ib.pc])

@@ -62,3 +62,41 @@ type UcpListenerAttribute uint32
 const (
 	UCP_LISTENER_ATTR_FIELD_SOCKADDR UcpListenerAttribute = C.UCP_LISTENER_ATTR_FIELD_SOCKADDR
 )
+
+type UcpAmSendFlags uint64
+
+const (
+	// Force relevant reply endpoint to be passed to the data callback on the receiver.
+	UCP_AM_SEND_FLAG_REPLY UcpAmSendFlags = C.UCP_AM_SEND_FLAG_REPLY
+	// Force UCP to use only eager protocol for AM sends.
+	UCP_AM_SEND_FLAG_EAGER UcpAmSendFlags = C.UCP_AM_SEND_FLAG_EAGER
+	// Force UCP to use only rendezvous protocol for AM sends.
+	UCP_AM_SEND_FLAG_RNDV UcpAmSendFlags = C.UCP_AM_SEND_FLAG_RNDV
+)
+
+type UcpAmRecvAttrs uint64
+
+const (
+	UCP_AM_RECV_ATTR_FIELD_REPLY_EP UcpAmRecvAttrs = C.UCP_AM_RECV_ATTR_FIELD_REPLY_EP
+	UCP_AM_RECV_ATTR_FLAG_DATA      UcpAmRecvAttrs = C.UCP_AM_RECV_ATTR_FLAG_DATA
+	UCP_AM_RECV_ATTR_FLAG_RNDV      UcpAmRecvAttrs = C.UCP_AM_RECV_ATTR_FLAG_RNDV
+)
+
+type UcpAmCbFlags uint64
+
+const (
+	// Indicates that the entire message will be handled in one callback.
+	UCP_AM_FLAG_WHOLE_MSG UcpAmCbFlags = C.UCP_AM_FLAG_WHOLE_MSG
+
+	// Guarantees that the specified callback, will always be called
+	// with UCP_AM_RECV_ATTR_FLAG_DATA flag set,so the data will be accessible outside the callback,
+	// until UcpAmData.Close() is called.
+	UCP_AM_FLAG_PERSISTENT_DATA UcpAmCbFlags = C.UCP_AM_FLAG_PERSISTENT_DATA
+)
+
+type UcpConnRequestAttribute uint32
+
+const (
+	UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR = C.UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR
+	UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID   = C.UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID
+)

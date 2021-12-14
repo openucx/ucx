@@ -39,7 +39,7 @@ jobs:
         ./autogen.sh
         mkdir build
         cd build
-        ../contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install \
+        ../contrib/configure-devel --prefix=$(Agent.TempDirectory)/ucx-$(Build.BuildId) \
           --with-go --enable-gtest=no --with-cuda=$have_cuda
         make -j`nproc`
         make install
@@ -52,3 +52,18 @@ jobs:
         az_module_load dev/go-latest
         make -C build/bindings/go test
       displayName: Run go tests
+    - bash: |
+        set -xeE
+        source buildlib/az-helpers.sh
+        az_init_modules
+        try_load_cuda_env
+        az_module_load dev/go-latest
+        go_port=$((30000 + $(AZP_AGENT_ID) * 100))
+        args="-p=$go_port"
+        if [ "${{ parameters.name }}" == "gpu" ]; then
+          args="-m=cuda"
+        fi
+        LD_LIBRARY_PATH=$(Agent.TempDirectory)/ucx-$(Build.BuildId)/lib/:$LD_LIBRARY_PATH $(Agent.TempDirectory)/ucx-$(Build.BuildId)/bin/goperftest $args &
+        sleep 5
+        LD_LIBRARY_PATH=$(Agent.TempDirectory)/ucx-$(Build.BuildId)/lib/:$LD_LIBRARY_PATH $(Agent.TempDirectory)/ucx-$(Build.BuildId)/bin/goperftest $args -i=localhost
+      displayName: Run go performance test

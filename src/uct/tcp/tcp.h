@@ -193,10 +193,11 @@ enum {
  * TCP connection request packet
  */
 typedef struct uct_tcp_cm_conn_req_pkt {
-    uct_tcp_cm_conn_event_t       event;      /* Connection event ID */
-    uint8_t                       flags;      /* Packet flags */
-    struct sockaddr_in            iface_addr; /* Socket address of UCT local iface */
-    uct_tcp_ep_cm_id_t            cm_id;      /* EP connection mananger ID */
+    uct_tcp_cm_conn_event_t event;         /* Connection event ID */
+    uint8_t                 flags;         /* Packet flags */
+    uct_tcp_ep_cm_id_t      cm_id;         /* EP connection mananger ID */
+    /* Socket address follows. The address size is according
+     * to the address family in use */
 } UCS_S_PACKED uct_tcp_cm_conn_req_pkt_t;
 
 
@@ -330,26 +331,26 @@ typedef struct uct_tcp_ep_addr {
  */
 struct uct_tcp_ep {
     uct_base_ep_t                 super;
-    uint8_t                       conn_retries;     /* Number of connection attempts done */
-    uint8_t                       conn_state;       /* State of connection with peer */
-    ucs_event_set_types_t         events;           /* Current notifications */
-    uint16_t                      flags;            /* Endpoint flags */
-    int                           fd;               /* Socket file descriptor */
-    int                           stale_fd;         /* Old file descriptor which should be
-                                                     * closed as soon as the EP is connected
-                                                     * using the new fd */
-    uct_tcp_ep_cm_id_t            cm_id;            /* EP connection mananger ID */
-    uct_tcp_ep_ctx_t              tx;               /* TX resources */
-    uct_tcp_ep_ctx_t              rx;               /* RX resources */
-    struct sockaddr_in            peer_addr;        /* Remote iface addr */
-    ucs_queue_head_t              pending_q;        /* Pending operations */
-    ucs_queue_head_t              put_comp_q;       /* Flush completions waiting for
-                                                     * outstanding PUTs acknowledgment */
+    uint8_t                       conn_retries; /* Number of connection attempts done */
+    uint8_t                       conn_state;   /* State of connection with peer */
+    ucs_event_set_types_t         events;       /* Current notifications */
+    uint16_t                      flags;        /* Endpoint flags */
+    int                           fd;           /* Socket file descriptor */
+    int                           stale_fd;     /* Old file descriptor which should be
+                                                 * closed as soon as the EP is connected
+                                                 * using the new fd */
+    uct_tcp_ep_cm_id_t            cm_id;        /* EP connection mananger ID */
+    uct_tcp_ep_ctx_t              tx;           /* TX resources */
+    uct_tcp_ep_ctx_t              rx;           /* RX resources */
+    ucs_queue_head_t              pending_q;    /* Pending operations */
+    ucs_queue_head_t              put_comp_q;   /* Flush completions waiting for
+                                                 * outstanding PUTs acknowledgment */
     union {
-        ucs_list_link_t           list;             /* List element to insert into TCP EP list */
-        ucs_conn_match_elem_t     elem;             /* Connection matching element, used by EPs
-                                                     * created with CONNECT_TO_IFACE method */
+        ucs_list_link_t           list;         /* List element to insert into TCP EP list */
+        ucs_conn_match_elem_t     elem;         /* Connection matching element, used by EPs
+                                                 * created with CONNECT_TO_IFACE method */
     };
+    char                          peer_addr[0]; /* Remote iface addr */
 };
 
 
@@ -392,8 +393,9 @@ typedef struct uct_tcp_iface {
             size_t                hdr_offset;        /* Offset in TX buffer to empty space that
                                                       * can be used for AM Zcopy header */
         } zcopy;
-        struct sockaddr_in        ifaddr;            /* Network address */
-        struct sockaddr_in        netmask;           /* Network address mask */
+        struct sockaddr_storage   ifaddr;            /* Network address */
+        struct sockaddr_storage   netmask;           /* Network address mask */
+        size_t                    sockaddr_len;      /* Network address length */
         int                       prefer_default;    /* Prefer default gateway */
         int                       put_enable;        /* Enable PUT Zcopy operation support */
         int                       conn_nb;           /* Use non-blocking connect() */
@@ -452,6 +454,27 @@ typedef struct uct_tcp_iface_config {
 } uct_tcp_iface_config_t;
 
 
+/**
+ * TCP memory domain
+ */
+typedef struct uct_tcp_md {
+    uct_md_t        super;
+    struct {
+        int         af_prio_count;
+        sa_family_t af_prio_list[2];
+    } config;
+} uct_tcp_md_t;
+
+
+/**
+ * TCP memory domain configuration.
+ */
+typedef struct uct_tcp_md_config {
+    uct_md_config_t                   super;
+    UCS_CONFIG_STRING_ARRAY_FIELD(af) af_prio;
+} uct_tcp_md_config_t;
+
+
 typedef struct uct_tcp_ep_pending_req {
     uct_pending_req_t           super;
     uct_tcp_ep_t                *ep;
@@ -496,13 +519,13 @@ void uct_tcp_iface_remove_ep(uct_tcp_ep_t *ep);
 int uct_tcp_cm_ep_accept_conn(uct_tcp_ep_t *ep);
 
 int uct_tcp_iface_is_self_addr(uct_tcp_iface_t *iface,
-                               const struct sockaddr_in *peer_addr);
+                               const struct sockaddr *peer_addr);
 
 ucs_status_t uct_tcp_ep_handle_io_err(uct_tcp_ep_t *ep, const char *op_str,
                                       ucs_status_t io_status);
 
 ucs_status_t uct_tcp_ep_init(uct_tcp_iface_t *iface, int fd,
-                             const struct sockaddr_in *dest_addr,
+                             const struct sockaddr *dest_addr,
                              uct_tcp_ep_t **ep_p);
 
 ucs_status_t uct_tcp_ep_set_dest_addr(const uct_device_addr_t *dev_addr,
@@ -604,21 +627,15 @@ void uct_tcp_cm_change_conn_state(uct_tcp_ep_t *ep,
 void uct_tcp_cm_ep_set_conn_sn(uct_tcp_ep_t *ep);
 
 uct_tcp_ep_t *uct_tcp_cm_get_ep(uct_tcp_iface_t *iface,
-                                const struct sockaddr_in *dest_address,
-                                ucs_conn_sn_t conn_sn,
-                                uint8_t with_ctx_cap);
-
-uct_tcp_ep_t *uct_tcp_cm_get_conn_to_ep(uct_tcp_iface_t *iface,
-                                        const struct sockaddr_in *dest_address,
-                                        ucs_conn_sn_t conn_sn,
-                                        uint8_t with_ctx_cap);
+                                const struct sockaddr *dest_address,
+                                ucs_conn_sn_t conn_sn, uint8_t with_ctx_cap);
 
 void uct_tcp_cm_insert_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 void uct_tcp_cm_remove_ep(uct_tcp_iface_t *iface, uct_tcp_ep_t *ep);
 
 ucs_status_t uct_tcp_cm_handle_incoming_conn(uct_tcp_iface_t *iface,
-                                             const struct sockaddr_in *peer_addr,
+                                             const struct sockaddr *peer_addr,
                                              int fd);
 
 ucs_status_t uct_tcp_cm_conn_start(uct_tcp_ep_t *ep);
@@ -645,8 +662,7 @@ static inline void uct_tcp_iface_outstanding_dec(uct_tcp_iface_t *iface)
 
 /**
  * Query for active network devices under /sys/class/net, as determined by
- * ucs_netif_is_active(). 'md' parameter is not used, and is added for
- * compatibility with uct_tl_t::query_devices definition.
+ * ucs_netif_is_active().
  */
 ucs_status_t uct_tcp_query_devices(uct_md_h md,
                                    uct_tl_device_resource_t **devices_p,

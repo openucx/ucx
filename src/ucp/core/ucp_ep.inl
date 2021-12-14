@@ -88,12 +88,16 @@ static inline uct_iface_attr_t *ucp_ep_get_iface_attr(ucp_ep_h ep, ucp_lane_inde
 
 static inline size_t ucp_ep_get_max_bcopy(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    return ucp_ep_get_iface_attr(ep, lane)->cap.am.max_bcopy;
+    size_t max_bcopy = ucp_ep_get_iface_attr(ep, lane)->cap.am.max_bcopy;
+
+    return ucs_min(ucp_ep_config(ep)->key.lanes[lane].seg_size, max_bcopy);
 }
 
 static inline size_t ucp_ep_get_max_zcopy(ucp_ep_h ep, ucp_lane_index_t lane)
 {
-    return ucp_ep_get_iface_attr(ep, lane)->cap.am.max_zcopy;
+    size_t max_zcopy = ucp_ep_get_iface_attr(ep, lane)->cap.am.max_zcopy;
+
+    return ucs_min(ucp_ep_config(ep)->key.lanes[lane].seg_size, max_zcopy);
 }
 
 static inline size_t ucp_ep_get_max_iov(ucp_ep_h ep, ucp_lane_index_t lane)
@@ -152,7 +156,6 @@ static UCS_F_ALWAYS_INLINE ucp_ep_flush_state_t* ucp_ep_flush_state(ucp_ep_h ep)
 {
     ucs_assert(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID);
     ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_CLOSE_REQ_VALID));
     return &ucp_ep_ext_gen(ep)->flush_state;
 }
 
@@ -227,28 +230,6 @@ static inline const char* ucp_ep_peer_name(ucp_ep_h ep)
 #else
     return UCP_WIREUP_EMPTY_PEER_NAME;
 #endif
-}
-
-static inline void ucp_ep_flush_state_reset(ucp_ep_h ep)
-{
-    ucp_ep_flush_state_t *flush_state = &ucp_ep_ext_gen(ep)->flush_state;
-
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_ON_MATCH_CTX));
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_FLUSH_STATE_VALID) ||
-               ((flush_state->send_sn == 0) &&
-                (flush_state->cmpl_sn == 0) &&
-                ucs_hlist_is_empty(&flush_state->reqs)));
-
-    flush_state->send_sn = 0;
-    flush_state->cmpl_sn = 0;
-    ucs_hlist_head_init(&flush_state->reqs);
-    ucp_ep_update_flags(ep, UCP_EP_FLAG_FLUSH_STATE_VALID, 0);
-}
-
-static inline void ucp_ep_flush_state_invalidate(ucp_ep_h ep)
-{
-    ucs_assert(ucs_hlist_is_empty(&ucp_ep_flush_state(ep)->reqs));
-    ucp_ep_update_flags(ep, 0, UCP_EP_FLAG_FLUSH_STATE_VALID);
 }
 
 /* get index of the local component which can reach a remote memory domain */

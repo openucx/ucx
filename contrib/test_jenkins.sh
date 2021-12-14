@@ -26,8 +26,8 @@
 
 WORKSPACE=${WORKSPACE:=$PWD}
 ucx_inst=${WORKSPACE}/install
-CUDA_MODULE="dev/cuda11.1.1"
-GDRCOPY_MODULE="dev/gdrcopy2.1_cuda11.1.1"
+CUDA_MODULE="dev/cuda11.4"
+GDRCOPY_MODULE="dev/gdrcopy2.3_cuda11.4"
 
 if [ -z "$BUILD_NUMBER" ]; then
 	echo "Running interactive"
@@ -470,6 +470,12 @@ run_client_server_app() {
 run_hello() {
 	api=$1
 	shift
+	if [[ $1 == "proto" ]]
+	then
+		export UCX_PROTO_ENABLE=y
+		shift
+	fi
+
 	test_args="$@"
 	test_name=${api}_hello_world
 
@@ -501,6 +507,7 @@ run_hello() {
 		unset UCX_RC_TIMEOUT
 		unset UCX_RC_RETRY_COUNT
 	fi
+	unset UCX_PROTO_ENABLE
 }
 
 #
@@ -527,7 +534,7 @@ run_ucp_hello() {
 	for tls in all tcp,cuda shm,cuda
 	do
 		export UCX_TLS=${tls}
-		for test_mode in -w -f -b -erecv -esend -ekeepalive
+		for test_mode in -w -f -b -erecv -esend -ekeepalive proto
 		do
 			for mem_type in $mem_types_list
 			do
@@ -645,6 +652,9 @@ run_io_demo() {
 
 		for server_ip in $server_rdma_addr $server_nonrdma_addr
 		do
+			export UCX_PROTO_ENABLE=y
+			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+			unset UCX_PROTO_ENABLE
 			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 		done
 
@@ -673,9 +683,10 @@ run_ucx_perftest() {
 
 	# hack for perftest, no way to override params used in batch
 	# todo: fix in perftest
-	sed -s 's,-n [0-9]*,-n 100,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
-	cat $ucx_inst_ptest/test_types_uct |                sort -R > $ucx_inst_ptest/test_types_short_uct
-	cat $ucx_inst_ptest/test_types_ucp | grep -v cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
+	sed -s 's,-n [0-9]*,-n 100,g' $ucx_inst_ptest/msg_pow2 | sort -R >  $ucx_inst_ptest/msg_pow2_short
+	cat $ucx_inst_ptest/test_types_uct                     | sort -R >  $ucx_inst_ptest/test_types_short_uct
+	cat $ucx_inst_ptest/test_types_ucp     | grep -v cuda  | sort -R >  $ucx_inst_ptest/test_types_short_ucp
+	cat $ucx_inst_ptest/test_types_ucp_rma | grep -v cuda  | sort -R >> $ucx_inst_ptest/test_types_short_ucp
 
 	ucx_perftest="$ucx_inst/bin/ucx_perftest"
 	uct_test_args="-b $ucx_inst_ptest/test_types_short_uct \
@@ -728,6 +739,9 @@ run_ucx_perftest() {
 			run_client_server_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}" \
 								"$(hostname)" 0 0
 
+			# Run UCT loopback performance test
+			run_loopback_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}"
+
 			# Run UCP performance test
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
 
@@ -760,7 +774,7 @@ run_ucx_perftest() {
 		cat $ucx_inst_ptest/test_types_ucp | grep cuda | sort -R > $ucx_inst_ptest/test_types_short_ucp
 		sed -s 's,-n [0-9]*,-n 10 -w 1,g' $ucx_inst_ptest/msg_pow2 | sort -R > $ucx_inst_ptest/msg_pow2_short
 
-		echo "==== Running ucx_perf with cuda memory===="
+		echo "==== Running ucx_perf with cuda memory ===="
 
 		for memtype_cache in y n
 		do
@@ -790,6 +804,15 @@ run_ucx_perftest() {
 			unset UCX_CUDA_IPC_CACHE
 			unset UCX_TLS
 		done
+
+		echo "==== Running ucx_perf with cuda memory and new protocols ===="
+
+		# Add RMA tests to the list of tests
+		cat $ucx_inst_ptest/test_types_ucp_rma | grep cuda | sort -R >> $ucx_inst_ptest/test_types_short_ucp
+
+		export UCX_PROTO_ENABLE=y
+		run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
+		unset UCX_PROTO_ENABLE
 
 		unset CUDA_VISIBLE_DEVICES
 	fi
@@ -937,6 +960,14 @@ test_ucp_dlopen() {
 	# Test module allow-list
 	UCX_MODULES=^ib,rdmacm ./src/tools/info/ucx_info -d |& tee ucx_info_noib.log
 	if grep -in "component:\s*ib$" ucx_info_noib.log
+	then
+		echo "IB module was loaded even though it was disabled"
+		exit 1
+	fi
+
+	# Test module allow-list passed through ucp_config_modify()
+	./test/apps/test_ucp_config -c "UCX_MODULES=^ib,rdmacm" |& tee ucx_config_noib.log
+	if grep -in "component:\s*ib$" ucx_config_noib.log
 	then
 		echo "IB module was loaded even though it was disabled"
 		exit 1

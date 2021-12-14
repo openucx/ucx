@@ -16,7 +16,9 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucm/util/reloc.h>
 #include <ucm/mmap/mmap.h>
+#include <ucm/malloc/malloc_hook.h>
 #include <ucs/type/init_once.h>
 #include <ucs/sys/math.h>
 #include <linux/mman.h>
@@ -160,7 +162,8 @@ void ucm_parse_proc_self_maps(ucm_proc_maps_cb_t cb, void *arg)
 
     maps_fd = open(UCM_PROC_SELF_MAPS, O_RDONLY);
     if (maps_fd < 0) {
-        ucm_fatal("cannot open %s for reading: %m", UCM_PROC_SELF_MAPS);
+        ucm_warn("cannot open %s for reading: %m", UCM_PROC_SELF_MAPS);
+        return;
     }
 
     /* read /proc/self/maps fully into the buffer */
@@ -308,7 +311,7 @@ void ucm_prevent_dl_unload()
         ret = dladdr(ucm_prevent_dl_unload, &info);
         if (ret == 0) {
             ucm_warn("could not find address of current library: %s", dlerror());
-            return;
+            continue;
         }
 
         /* Load the current library with NODELETE flag, to prevent it from being
@@ -319,7 +322,7 @@ void ucm_prevent_dl_unload()
         dl = dlopen(info.dli_fname, flags);
         if (dl == NULL) {
             ucm_warn("failed to load '%s': %s", info.dli_fname, dlerror());
-            return;
+            continue;
         }
 
         ucm_debug("loaded '%s' at %p with NODELETE flag", info.dli_fname, dl);
@@ -380,3 +383,10 @@ pid_t ucm_get_tid()
 {
     return syscall(SYS_gettid);
 }
+
+void UCS_F_CTOR ucm_init()
+{
+    ucm_init_log();
+    ucm_init_malloc_hook();
+}
+

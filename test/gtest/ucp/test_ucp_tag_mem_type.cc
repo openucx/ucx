@@ -28,8 +28,10 @@ public:
     };
 
     void init() {
-        int mem_type_pair_index = get_variant_value() % mem_type_pairs.size();
-        int varient_index       = get_variant_value() / mem_type_pairs.size();
+        int mem_type_pair_index =
+                get_variant_value() % m_mem_type_pairs.size();
+        int varient_index       =
+                get_variant_value() / m_mem_type_pairs.size();
 
         if (varient_index & VARIANT_GDR_OFF) {
             m_env.push_back(new ucs::scoped_setenv("UCX_IB_GPU_DIRECT_RDMA", "n"));
@@ -41,6 +43,8 @@ public:
             if (RUNNING_ON_VALGRIND) {
                 m_env.push_back(new ucs::scoped_setenv("UCX_RC_TM_SEG_SIZE",  "8k"));
                 m_env.push_back(new ucs::scoped_setenv("UCX_TCP_RX_SEG_SIZE", "8k"));
+                m_env.push_back(
+                        new ucs::scoped_setenv("UCX_RC_RX_QUEUE_LEN", "1024"));
             }
         }
 
@@ -48,8 +52,8 @@ public:
             modify_config("PROTO_ENABLE", "y");
         }
 
-        m_send_mem_type  = mem_type_pairs[mem_type_pair_index][0];
-        m_recv_mem_type  = mem_type_pairs[mem_type_pair_index][1];
+        m_send_mem_type = m_mem_type_pairs[mem_type_pair_index][0];
+        m_recv_mem_type = m_mem_type_pairs[mem_type_pair_index][1];
 
         modify_config("MAX_EAGER_LANES", "2");
         modify_config("MAX_RNDV_LANES",  "2");
@@ -64,11 +68,10 @@ public:
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
         int count = 0;
         for (int i = 0; i < VARIANT_MAX; i++) {
-            for (std::vector<std::vector<ucs_memory_type_t> >::const_iterator iter =
-                 mem_type_pairs.begin(); iter != mem_type_pairs.end(); ++iter) {
+            for (const auto& mem_type_pair : m_mem_type_pairs) {
                 std::string name =
-                        std::string(ucs_memory_type_names[(*iter)[0]]) + ":" +
-                        std::string(ucs_memory_type_names[(*iter)[1]]);
+                        std::string(ucs_memory_type_names[mem_type_pair[0]]) + ":" +
+                        std::string(ucs_memory_type_names[mem_type_pair[1]]);
                 if (i & VARIANT_GDR_OFF) {
                     name += ",nogdr";
                 }
@@ -84,14 +87,18 @@ public:
         }
     }
 
-    void do_basic_send(void *sbuf, void *rbuf, size_t length, ucp_datatype_t type,
-                       ucs_memory_type_t s_mem_type, ucs_memory_type_t r_mem_type)
+    void do_basic_xfer(mem_buffer &send_buffer, mem_buffer &recv_buffer,
+                       size_t length, ucs::detail::message_stream &ms)
     {
-        mem_buffer::pattern_fill(rbuf, length, 1, r_mem_type);
-        mem_buffer::pattern_fill(sbuf, length, 2, s_mem_type);
-        size_t recvd = do_xfer(sbuf, rbuf, length, type, type, true, false, false);
+        const ucp_datatype_t type = ucp_dt_make_contig(1);
+
+        ms << length << " " << std::flush;
+        recv_buffer.pattern_fill(1, length);
+        send_buffer.pattern_fill(2, length);
+        size_t recvd = do_xfer(send_buffer.ptr(), recv_buffer.ptr(), length,
+                               type, type, true, false, false);
         ASSERT_EQ(length, recvd);
-        mem_buffer::pattern_check(rbuf, length, 2, r_mem_type);
+        recv_buffer.pattern_check(2, length);
     }
 
     size_t max_test_length(unsigned exp) const
@@ -104,7 +111,8 @@ public:
         return (ucs::rand() % max_test_length(exp)) + 1;
     }
 
-    static std::vector<std::vector<ucs_memory_type_t> > mem_type_pairs;
+    static const
+    std::vector<std::vector<ucs_memory_type_t> >& m_mem_type_pairs;
 
 protected:
 
@@ -122,8 +130,8 @@ private:
     static const uint64_t RECV_TAG   = 0x1337;
 };
 
-std::vector<std::vector<ucs_memory_type_t> >
-test_ucp_tag_mem_type::mem_type_pairs = ucs::supported_mem_type_pairs();
+const std::vector<std::vector<ucs_memory_type_t> >&
+test_ucp_tag_mem_type::m_mem_type_pairs = ucs::supported_mem_type_pairs();
 
 size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
                                   size_t count, ucp_datatype_t send_dt,
@@ -173,35 +181,42 @@ size_t test_ucp_tag_mem_type::do_xfer(const void *sendbuf, void *recvbuf,
     return recvd;
 };
 
-UCS_TEST_P(test_ucp_tag_mem_type, basic)
+UCS_TEST_P(test_ucp_tag_mem_type, realloc_buffers)
 {
-    const size_t max_iter1       = RUNNING_ON_VALGRIND ? 3 : 7; 
-    const size_t iter_multiplier = RUNNING_ON_VALGRIND ? 2 : 1; 
-    const ucp_datatype_t type    = ucp_dt_make_contig(1);
-
-    for (unsigned i = 1; i <= max_iter1; ++i) {
-        size_t length = test_length(i * iter_multiplier);
-
-        mem_buffer m_recv_mem_buf(length, m_recv_mem_type);
-        mem_buffer m_send_mem_buf(length, m_send_mem_type);
-
-        do_basic_send(m_send_mem_buf.ptr(),m_recv_mem_buf.ptr(), length, type,
-                      m_send_mem_buf.mem_type(), m_recv_mem_buf.mem_type());
+    std::vector<size_t> sizes =
+            {0, 1, 16, 128, 1048512, 1011439, UCS_MBYTE + 4, 4194324};
+    const size_t max_iter     = RUNNING_ON_VALGRIND ? 3 : 7;
+    const size_t multiplier   = RUNNING_ON_VALGRIND ? 2 : 1;
+    for (unsigned i = 0; i < max_iter; ++i) {
+        sizes.push_back((i * multiplier));
     }
 
-    /*  test with re-using the buffers */
-    size_t max_length = max_test_length(7);
-    mem_buffer m_recv_mem_buf(max_length, m_recv_mem_type);
-    mem_buffer m_send_mem_buf(max_length, m_send_mem_type);
+    ucs::detail::message_stream ms("INFO");
+    for (auto length : sizes) {
+        mem_buffer recv_mem_buf(length, m_recv_mem_type);
+        mem_buffer send_mem_buf(length, m_send_mem_type);
+        do_basic_xfer(send_mem_buf, recv_mem_buf, length, ms);
+    }
+}
 
-    const size_t max_iter2 = RUNNING_ON_VALGRIND ? 1 : 2;
-    for (unsigned i = 0; i < max_iter2; ++i) {
-        size_t length = test_length(7);
+// Set NUM_PATHS to 2 to allow multi-rail
+UCS_TEST_P(test_ucp_tag_mem_type, reuse_buffers_mrail, "IB_NUM_PATHS?=2")
+{
+    const size_t max_length = max_test_length(7);
+    mem_buffer recv_mem_buf(max_length, m_recv_mem_type);
+    mem_buffer send_mem_buf(max_length, m_send_mem_type);
 
-        do_basic_send(m_send_mem_buf.ptr(),m_recv_mem_buf.ptr(), length, type,
-                      m_send_mem_buf.mem_type(), m_recv_mem_buf.mem_type());
+    // Test few specific sizes that expose corner cases, plush a few random ones
+    std::vector<size_t> sizes = {0, 1, 16, 128, 1048512, UCS_MBYTE + 4, 4194324};
+    const size_t max_iter     = RUNNING_ON_VALGRIND ? 1 : 4;
+    for (unsigned i = 0; i < max_iter; ++i) {
+        sizes.push_back(test_length(7));
     }
 
+    ucs::detail::message_stream ms("INFO");
+    for (auto length : sizes) {
+        do_basic_xfer(send_mem_buf, recv_mem_buf, length, ms);
+    }
 }
 
 UCS_TEST_P(test_ucp_tag_mem_type, rndv_4mb, "RNDV_THRESH=0")

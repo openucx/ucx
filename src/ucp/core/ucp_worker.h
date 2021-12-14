@@ -16,6 +16,7 @@
 #include <ucp/core/ucp_am.h>
 #include <ucp/tag/tag_match.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/datastruct/mpool_set.h>
 #include <ucs/datastruct/queue_types.h>
 #include <ucs/datastruct/strided_alloc.h>
 #include <ucs/datastruct/conn_match.h>
@@ -27,6 +28,10 @@
  * use for its own needs. This size does not include ucp_recv_desc_t length,
  * because it is common for all cases and protocols (TAG, STREAM). */
 #define UCP_WORKER_HEADROOM_PRIV_SIZE 32
+
+
+#define UCP_WORKER_HEADROOM_SIZE \
+    (sizeof(ucp_recv_desc_t) + UCP_WORKER_HEADROOM_PRIV_SIZE)
 
 
 #define UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(_worker) \
@@ -92,7 +97,11 @@ enum {
 
     /** Worker event fd is external */
     UCP_WORKER_FLAG_EXTERNAL_EVENT_FD =
-            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 3)
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 3),
+
+    /** Indicates that AM mpool was initialized on this worker */
+    UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED =
+            UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 4)
 };
 
 
@@ -197,6 +206,17 @@ KHASH_TYPE(ucp_worker_discard_uct_ep_hash, uct_ep_h, ucp_request_t*);
 typedef khash_t(ucp_worker_discard_uct_ep_hash) ucp_worker_discard_uct_ep_hash_t;
 
 
+typedef struct ucp_worker_mpool_key {
+    ucs_memory_type_t mem_type;  /* memory type of the buffer pool */
+    ucs_sys_device_t  sys_dev;   /* identifier for the device,
+                                    UINT_MAX for default device */
+} ucp_worker_mpool_key_t;
+
+
+/* Hash map to find mpool by mpool key */
+KHASH_TYPE(ucp_worker_mpool_hash, ucp_worker_mpool_key_t, ucs_mpool_t);
+typedef khash_t(ucp_worker_mpool_hash) ucp_worker_mpool_hash_t;
+
 /**
  * UCP worker iface, which encapsulates UCT iface, its attributes and
  * some auxiliary info needed for tag matching offloads.
@@ -241,6 +261,7 @@ typedef struct ucp_worker {
     ucs_async_context_t              async;               /* Async context for this worker */
     ucp_context_h                    context;             /* Back-reference to UCP context */
     uint64_t                         uuid;                /* Unique ID for wireup */
+    uint64_t                         client_id;           /* Worker client id for wireup */
     uct_worker_h                     uct;                 /* UCT worker handle */
     ucs_mpool_t                      req_mp;              /* Memory pool for requests */
     ucs_mpool_t                      rkey_mp;             /* Pool for small memory keys */
@@ -275,9 +296,9 @@ typedef struct ucp_worker {
     unsigned                         num_active_ifaces;   /* Number of activated ifaces  */
     ucp_tl_bitmap_t                  scalable_tl_bitmap;  /* Map of scalable tl resources */
     ucp_worker_cm_t                  *cms;                /* Array of CMs, one for each component */
-    ucs_mpool_t                      am_mp;               /* Memory pool for AM receives */
+    ucs_mpool_set_t                  am_mps;              /* Memory pool set for AM receives */
     ucs_mpool_t                      reg_mp;              /* Registered memory pool */
-    ucs_mpool_t                      rndv_frag_mp;        /* Memory pool for RNDV fragments */
+    ucp_worker_mpool_hash_t          mpool_hash;          /* Hash table of memory pools */
     ucs_queue_head_t                 rkey_ptr_reqs;       /* Queue of submitted RKEY PTR requests that
                                                            * are in-progress */
     uct_worker_cb_id_t               rkey_ptr_cb_id;      /* RKEY PTR worker callback queue ID */
@@ -306,17 +327,28 @@ typedef struct ucp_worker {
     ucp_rkey_config_t                rkey_config[UCP_WORKER_MAX_RKEY_CONFIG];
 
     struct {
+        int                          timerfd;             /* Timer needed to signal to user's fd when
+                                                           * the next keepalive round must be done */
         uct_worker_cb_id_t           cb_id;               /* Keepalive callback id */
         ucs_time_t                   last_round;          /* Last round timestamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
-        ucs_list_link_t              *iter_end;           /* Last EP processed keepalive in the
-                                                           * current round */
         ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
         unsigned                     ep_count;            /* Number of EPs processed in current time slot */
         unsigned                     iter_count;          /* Number of progress iterations to skip,
                                                            * used to minimize call of ucs_get_time */
         size_t                       round_count;         /* Number of rounds done */
     } keepalive;
+
+    struct {
+        /* Number of requests to create endpoint */
+        uint64_t                     ep_creations;
+        /* Number of failed requests to create endpoint */
+        uint64_t                     ep_creation_failures;
+        /* Number of endpoint closures */
+        uint64_t                     ep_closures;
+        /* Number of failed endpoints */
+        uint64_t                     ep_failures;
+    } counters;
 } ucp_worker_t;
 
 
@@ -356,12 +388,12 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep);
 int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
 /* must be called with async lock held */
-void ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                               unsigned ep_flush_flags,
-                               uct_pending_purge_callback_t purge_cb,
-                               void *purge_arg,
-                               ucp_send_nbx_callback_t discarded_cb,
-                               void *discarded_cb_arg);
+ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                       unsigned ep_flush_flags,
+                                       uct_pending_purge_callback_t purge_cb,
+                                       void *purge_arg,
+                                       ucp_send_nbx_callback_t discarded_cb,
+                                       void *discarded_cb_arg);
 
 char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                 ucp_context_h context,

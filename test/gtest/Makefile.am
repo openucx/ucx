@@ -43,6 +43,10 @@ VALGRIND_ARGS = \
 
 noinst_PROGRAMS = gtest
 
+EXTRA_DIST = \
+	ucs/ucx.conf \
+	ucs/ucx_test.conf
+
 gtestdir  = $(includedir)
 gtest_LDADD = \
 	$(top_builddir)/src/ucs/libucs.la \
@@ -165,9 +169,11 @@ gtest_SOURCES = \
 	ucs/test_math.cc \
 	ucs/test_mpmc.cc \
 	ucs/test_mpool.cc \
+	ucs/test_mpool_set.cc \
 	ucs/test_pgtable.cc \
 	ucs/test_profile.cc \
 	ucs/test_rcache.cc \
+	ucs/test_khash.cc \
 	ucs/test_memtype_cache.cc \
 	ucs/test_stats.cc \
 	ucs/test_strided_alloc.cc \

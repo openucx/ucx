@@ -36,6 +36,10 @@ static ucs_status_t ucx_perf_cuda_init(ucx_perf_context_t *perf)
         return UCS_ERR_NO_DEVICE;
     }
 
+    /* actually set device context as calling cudaSetDevice may result in
+     * context being initialized lazily */
+    cudaFree(0);
+
     return UCS_OK;
 }
 
@@ -57,26 +61,6 @@ static inline ucs_status_t ucx_perf_cuda_alloc(size_t length,
     }
 
     return UCS_OK;
-}
-
-static ucs_status_t ucp_perf_cuda_alloc(const ucx_perf_context_t *perf, size_t length,
-                                        void **address_p, ucp_mem_h *memh_p,
-                                        int non_blk_flag)
-{
-    return ucx_perf_cuda_alloc(length, UCS_MEMORY_TYPE_CUDA, address_p);
-}
-
-static ucs_status_t ucp_perf_cuda_alloc_managed(const ucx_perf_context_t *perf,
-                                                size_t length, void **address_p,
-                                                ucp_mem_h *memh_p, int non_blk_flag)
-{
-    return ucx_perf_cuda_alloc(length, UCS_MEMORY_TYPE_CUDA_MANAGED, address_p);
-}
-
-static void ucp_perf_cuda_free(const ucx_perf_context_t *perf,
-                               void *address, ucp_mem_h memh)
-{
-    cudaFree(address);
 }
 
 static inline ucs_status_t
@@ -148,6 +132,11 @@ static void ucx_perf_cuda_memcpy(void *dst, ucs_memory_type_t dst_mem_type,
     if (cerr != cudaSuccess) {
         ucs_error("failed to copy memory: %s", cudaGetErrorString(cerr));
     }
+
+    cerr = cudaDeviceSynchronize();
+    if (cerr != cudaSuccess) {
+        ucs_error("failed to sync device: %s", cudaGetErrorString(cerr));
+    }
 }
 
 static void* ucx_perf_cuda_memset(void *dst, int value, size_t count)
@@ -166,8 +155,6 @@ UCS_STATIC_INIT {
     static ucx_perf_allocator_t cuda_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_CUDA,
         .init      = ucx_perf_cuda_init,
-        .ucp_alloc = ucp_perf_cuda_alloc,
-        .ucp_free  = ucp_perf_cuda_free,
         .uct_alloc = uct_perf_cuda_alloc,
         .uct_free  = uct_perf_cuda_free,
         .memcpy    = ucx_perf_cuda_memcpy,
@@ -176,8 +163,6 @@ UCS_STATIC_INIT {
     static ucx_perf_allocator_t cuda_managed_allocator = {
         .mem_type  = UCS_MEMORY_TYPE_CUDA_MANAGED,
         .init      = ucx_perf_cuda_init,
-        .ucp_alloc = ucp_perf_cuda_alloc_managed,
-        .ucp_free  = ucp_perf_cuda_free,
         .uct_alloc = uct_perf_cuda_managed_alloc,
         .uct_free  = uct_perf_cuda_free,
         .memcpy    = ucx_perf_cuda_memcpy,

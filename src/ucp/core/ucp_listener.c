@@ -9,6 +9,7 @@
 #endif
 
 #include "ucp_listener.h"
+#include "ucp_vfs.h"
 #include "uct/base/uct_cm.h"
 
 #include <ucp/stream/stream.h>
@@ -18,6 +19,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sock.h>
+#include <ucs/type/serialize.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
 
@@ -34,6 +36,7 @@ static unsigned ucp_listener_accept_cb_progress(void *arg)
 
     ucp_ep_update_flags(ep, UCP_EP_FLAG_USED, 0);
     ucp_stream_ep_activate(ep);
+    ++ep->worker->counters.ep_creations;
 
     UCS_ASYNC_UNBLOCK(&ep->worker->async);
 
@@ -63,7 +66,10 @@ void ucp_listener_schedule_accept_cb(ucp_conn_request_h conn_request)
 ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
                                     ucp_conn_request_attr_t *attr)
 {
+    ucp_wireup_sockaddr_data_base_t *sa_data;
     ucs_status_t status;
+    uint8_t sa_data_ver;
+    void *ucp_addr;
 
     if (attr->field_mask & UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR) {
         if (conn_request->client_address.ss_family == 0) {
@@ -75,6 +81,15 @@ ucs_status_t ucp_conn_request_query(ucp_conn_request_h conn_request,
         if (status != UCS_OK) {
             return status;
         }
+    }
+
+    if (attr->field_mask & UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID) {
+        sa_data     = (ucp_wireup_sockaddr_data_base_t*)(conn_request + 1);
+        sa_data_ver = sa_data->header >> UCP_SA_DATA_HEADER_VERSION_SHIFT;
+        ucp_addr    = UCS_PTR_BYTE_OFFSET(sa_data,
+                                          ucp_cm_sa_data_length(sa_data_ver));
+         /* coverity[overrun-local] */
+        attr->client_id = ucp_address_get_client_id(ucp_addr);
     }
 
     return UCS_OK;
@@ -258,14 +273,8 @@ static void ucp_listener_vfs_show_ip(void *obj, ucs_string_buffer_t *strb,
 {
     ucp_listener_h listener   = obj;
     struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
-    char ip_str[UCS_SOCKADDR_STRING_LEN];
 
-    if (ucs_sockaddr_get_ipstr(sockaddr, ip_str, UCS_SOCKADDR_STRING_LEN) ==
-        UCS_OK) {
-        ucs_string_buffer_appendf(strb, "%s\n", ip_str);
-    } else {
-        ucs_string_buffer_appendf(strb, "<unable to get ip>\n");
-    }
+    ucp_vfs_read_ip(sockaddr, strb);
 }
 
 static void ucp_listener_vfs_show_port(void *obj, ucs_string_buffer_t *strb,
@@ -273,13 +282,8 @@ static void ucp_listener_vfs_show_port(void *obj, ucs_string_buffer_t *strb,
 {
     ucp_listener_h listener   = obj;
     struct sockaddr *sockaddr = (struct sockaddr*)&listener->sockaddr;
-    uint16_t port;
 
-    if (ucs_sockaddr_get_port(sockaddr, &port) == UCS_OK) {
-        ucs_string_buffer_appendf(strb, "%u\n", port);
-    } else {
-        ucs_string_buffer_appendf(strb, "<unable to get port>\n");
-    }
+    ucp_vfs_read_port(sockaddr, strb);
 }
 
 void ucp_listener_vfs_init(ucp_listener_h listener)
@@ -355,7 +359,7 @@ out:
 
 void ucp_listener_destroy(ucp_listener_h listener)
 {
-    ucs_trace("listener %p: destroying", listener);
+    ucs_debug("listener %p: destroying", listener);
 
     UCS_ASYNC_BLOCK(&listener->worker->async);
     ucs_vfs_obj_remove(listener);

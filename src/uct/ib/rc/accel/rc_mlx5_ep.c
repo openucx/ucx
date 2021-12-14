@@ -96,7 +96,7 @@ uct_rc_mlx5_ep_am_short_inline(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
                                  MLX5_WQE_CTRL_SOLICITED,
                                  INT_MAX);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(hdr) + length);
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
     return UCS_OK;
 }
 
@@ -111,7 +111,7 @@ static ucs_status_t UCS_F_ALWAYS_INLINE uct_rc_mlx5_ep_am_short_iov_inline(
                                      &ep->tx.wq, iov, iovcnt, iov_length, id,
                                      NULL, NULL, 0);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, iov_length);
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
 
     return UCS_OK;
 }
@@ -258,7 +258,6 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
 {
 #if HAVE_IBV_DM
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    uct_rc_iface_t *rc_iface = &iface->super;
     ucs_status_t status;
     uct_rc_mlx5_dm_copy_data_t cache;
 
@@ -286,7 +285,7 @@ uct_rc_mlx5_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t hdr,
     }
 
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, SHORT, sizeof(cache.am_hdr) + length);
-    UCT_RC_UPDATE_FC(rc_iface, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
     return UCS_OK;
 #endif
 }
@@ -319,7 +318,7 @@ ucs_status_t uct_rc_mlx5_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
         return status;
     }
 
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
 
     return UCS_OK;
 #endif
@@ -345,7 +344,7 @@ ssize_t uct_rc_mlx5_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                                        NULL, NULL, 0, MLX5_WQE_CTRL_SOLICITED,
                                        0, desc, desc + 1, NULL);
     UCT_TL_EP_STAT_OP(&ep->super.super, AM, BCOPY, length);
-    UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+    UCT_RC_UPDATE_FC(&ep->super, id);
 
     return length;
 }
@@ -372,7 +371,7 @@ ucs_status_t uct_rc_mlx5_ep_am_zcopy(uct_ep_h tl_ep, uint8_t id, const void *hea
     if (ucs_likely(status >= 0)) {
         UCT_TL_EP_STAT_OP(&ep->super.super, AM, ZCOPY,
                           header_length + uct_iov_total_length(iov, iovcnt));
-        UCT_RC_UPDATE_FC(&iface->super, &ep->super, id);
+        UCT_RC_UPDATE_FC(&ep->super, id);
     }
     return status;
 }
@@ -569,7 +568,6 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                           uct_ib_mlx5_md_t);
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
-    uint16_t sn;
 
     status = uct_rc_ep_flush(&ep->super, ep->tx.wq.bb_max, flags);
     if (status != UCS_INPROGRESS) {
@@ -577,7 +575,6 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (uct_rc_txqp_unsignaled(&ep->super.txqp) != 0) {
-        sn = ep->tx.wq.sw_pi;
         UCT_RC_CHECK_RES(&iface->super, &ep->super);
         uct_rc_mlx5_txqp_inline_post(iface, IBV_QPT_RC,
                                      &ep->super.txqp, &ep->tx.wq,
@@ -586,8 +583,6 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                      0, 0,
                                      NULL, NULL, 0, 0,
                                      INT_MAX);
-    } else {
-        sn = ep->tx.wq.sig_pi;
     }
 
     if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL) && !already_canceled)) {
@@ -595,10 +590,13 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
         if (status != UCS_OK) {
             return status;
         }
+
+        uct_ib_mlx5_txwq_update_flags(&ep->tx.wq, UCT_IB_MLX5_TXWQ_FLAG_FAILED,
+                                      0);
     }
 
     return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
-                                      &ep->super.txqp, comp, sn);
+                                      &ep->super.txqp, comp, ep->tx.wq.sig_pi);
 }
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,

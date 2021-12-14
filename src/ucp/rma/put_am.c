@@ -50,6 +50,7 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req                  = ucs_container_of(self, ucp_request_t,
                                                            send.uct);
+    /* coverity[tainted_data_downcast] */
     const ucp_proto_multi_priv_t *mpriv = req->send.proto_config->priv;
     ucs_status_t status;
 
@@ -67,7 +68,7 @@ static ucs_status_t ucp_proto_put_am_bcopy_progress(uct_pending_req_t *self)
     return ucp_proto_multi_progress(req, mpriv,
                                     ucp_proto_put_am_bcopy_send_func,
                                     ucp_proto_request_bcopy_complete_success,
-                                    UCS_BIT(UCP_DATATYPE_CONTIG));
+                                    UCP_DT_MASK_CONTIG_IOV);
 }
 
 static ucs_status_t
@@ -86,6 +87,7 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = sizeof(ucp_put_hdr_t),
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = 0,
         .max_lanes           = 1,

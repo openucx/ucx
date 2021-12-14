@@ -176,7 +176,7 @@ struct uct_component {
         ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config, &ucs_config_global_list); \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config, &ucs_config_global_list); \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config, &ucs_config_global_list);
 
 
 /**

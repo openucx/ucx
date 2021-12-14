@@ -404,6 +404,8 @@ static const double __ac_HASH_UPPER = 0.77;
 #define KHASH_IMPL(name, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal) \
 	__KHASH_IMPL(name, static kh_inline klib_unused, khkey_t, khval_t, kh_is_map, __hash_func, __hash_equal)
 
+#define KHASH_STATIC_INITIALIZER {0}
+
 /* --- BEGIN OF HASH FUNCTIONS --- */
 
 /*! @function
@@ -655,7 +657,7 @@ typedef enum ucs_kh_put {
 		code;												\
 	} }
 
-/* More conenient interfaces */
+/* More convenient interfaces */
 
 /*! @function
   @abstract     Instantiate a hash set containing integer keys

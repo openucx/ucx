@@ -18,7 +18,7 @@
  * The function avoids copying IOVs with zero length.
  *
  * @param [out]    _dst_iov              Pointer to the resulted array of IOVs.
- * @param [in/out] _dst_iov_cnt_p        Pointer to the varibale that holds the number
+ * @param [in/out] _dst_iov_cnt_p        Pointer to the variable that holds the number
  *                                       of the elements in the array of IOVs (input:
  *                                       initial, out: result).
  * @param [in]     _dst_iov_set_buffer_f Function that sets the buffer to the IOV element

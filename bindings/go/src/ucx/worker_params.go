@@ -13,7 +13,11 @@ package ucx
 // 	 UCS_CPU_SET(cpuId, cpu_mask);
 // }
 import "C"
-import "math/big"
+import (
+	"math/big"
+	"runtime"
+	"unsafe"
+)
 
 // Tuning parameters for the UCP worker.
 type UcpWorkerParams struct {
@@ -124,7 +128,9 @@ func (p *UcpWorkerParams) SetEventFD(fd uintptr) *UcpWorkerParams {
 
 // Tracing and analysis tools can identify the worker using this name.
 func (p *UcpWorkerParams) SetName(name string) *UcpWorkerParams {
+	freeParamsName(p)
 	p.params.name = C.CString(name)
+	runtime.SetFinalizer(p, func(f *UcpWorkerParams) { FreeNativeMemory(unsafe.Pointer(f.params.name)) })
 	p.params.field_mask |= C.UCP_WORKER_PARAM_FIELD_NAME
 	return p
 }
@@ -134,5 +140,14 @@ func (p *UcpWorkerParams) SetName(name string) *UcpWorkerParams {
 func (p *UcpWorkerParams) SetAmAlignment(alignment uint64) *UcpWorkerParams {
 	p.params.am_alignment = C.size_t(alignment)
 	p.params.field_mask |= C.UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT
+	return p
+}
+
+// Client id that is sent as part of the connection request payload when connecting to a remote socket address.
+// On the remote side, this value can be obtained by calling
+// UcpConnectionRequest.Query(UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID)
+func (p *UcpWorkerParams) SetClientId(clientId uint64) *UcpWorkerParams {
+	p.params.client_id = C.uint64_t(clientId)
+	p.params.field_mask |= C.UCP_WORKER_PARAM_FIELD_CLIENT_ID
 	return p
 }

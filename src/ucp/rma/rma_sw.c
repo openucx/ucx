@@ -180,15 +180,17 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rma_cmpl_handler, (arg, data, length, am_flag
 
 static size_t ucp_rma_sw_pack_get_reply(void *dest, void *arg)
 {
-    ucp_rma_rep_hdr_t *hdr = dest;
-    ucp_request_t *req    = arg;
+    ucp_request_data_hdr_t *hdr = dest;
+    ucp_request_t *req          = arg;
     size_t length;
 
     length      = ucs_min(req->send.length,
                           ucp_ep_config(req->send.ep)->am.max_bcopy -
                           sizeof(*hdr));
     hdr->req_id = req->send.get_reply.remote_req_id;
-    ucp_dt_contig_pack(req->send.ep->worker, hdr + 1, req->send.buffer, length,
+    hdr->offset = req->send.state.dt_iter.offset;
+    ucp_dt_contig_pack(req->send.ep->worker, hdr + 1,
+                       (char*)req->send.buffer + hdr->offset, length,
                        req->send.mem_type);
 
     return sizeof(*hdr) + length;
@@ -207,11 +209,11 @@ static ucs_status_t ucp_progress_get_reply(uct_pending_req_t *self)
         return (ucs_status_t)packed_len;
     }
 
-    payload_len = packed_len - sizeof(ucp_rma_rep_hdr_t);
+    payload_len = packed_len - sizeof(ucp_request_data_hdr_t);
     ucs_assert(payload_len >= 0);
 
-    req->send.buffer  = UCS_PTR_BYTE_OFFSET(req->send.buffer, payload_len);
-    req->send.length -= payload_len;
+    req->send.length               -= payload_len;
+    req->send.state.dt_iter.offset += payload_len;
 
     if (req->send.length == 0) {
         ucp_request_put(req);
@@ -245,6 +247,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
     req->send.buffer                  = (void*)getreqh->address;
     req->send.length                  = getreqh->length;
     req->send.get_reply.remote_req_id = getreqh->req.req_id;
+    req->send.state.dt_iter.offset    = 0;
     req->send.uct.func                = ucp_progress_get_reply;
     if (ep->worker->context->config.ext.proto_enable) {
         req->send.mem_type = getreqh->mem_type;
@@ -259,24 +262,20 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_get_req_handler, (arg, data, length, am_flags
 UCS_PROFILE_FUNC(ucs_status_t, ucp_get_rep_handler, (arg, data, length, am_flags),
                  void *arg, void *data, size_t length, unsigned am_flags)
 {
-    ucp_worker_h worker        = arg;
-    ucp_rma_rep_hdr_t *getreph = data;
-    size_t frag_length         = length - sizeof(*getreph);
+    ucp_worker_h worker             = arg;
+    ucp_request_data_hdr_t *getreph = data;
+    size_t frag_length              = length - sizeof(*getreph);
     ucp_request_t *req;
     ucp_ep_h ep;
-    void *ptr;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, getreph->req_id, 0, return UCS_OK,
                                "GET reply data %p", getreph);
     ep = req->send.ep;
     if (ep->worker->context->config.ext.proto_enable) {
-        // TODO use dt_iter.inl unpack
-        ptr = UCS_PTR_BYTE_OFFSET(req->send.state.dt_iter.type.contig.buffer,
-                                  req->send.state.dt_iter.offset);
-        ucp_dt_contig_unpack(ep->worker, ptr, getreph + 1, frag_length,
-                             req->send.state.dt_iter.mem_info.type);
-        req->send.state.dt_iter.offset += frag_length;
-        if (req->send.state.dt_iter.offset == req->send.state.dt_iter.length) {
+        ucp_datatype_iter_unpack(&req->send.state.dt_iter, worker, frag_length,
+                                 getreph->offset, getreph + 1);
+        req->send.state.completed_size += frag_length;
+        if (req->send.state.completed_size == req->send.length) {
             ucp_send_request_id_release(req);
             ucp_proto_request_bcopy_complete_success(req);
             ucp_ep_rma_remote_request_completed(ep);

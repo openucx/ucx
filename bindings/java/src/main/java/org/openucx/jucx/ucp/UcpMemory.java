@@ -63,7 +63,7 @@ public class UcpMemory extends UcxNativeStruct implements Closeable {
      * object can be "unpacked" on any platform supported by the
      * UCP library.
      * RKEYs for InfiniBand and Cray Aries networks typically includes
-     * InifiniBand and Aries key.
+     * InfiniBand and Aries key.
      * In order to enable remote direct memory access to the memory associated
      * with the memory handle the application is responsible for sharing the RKEY with
      * the peers that will initiate the access.

@@ -193,9 +193,9 @@ static unsigned ucp_ep_flush_resume_slow_path_callback(void *arg)
 
 ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 {
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+    ucp_request_t *req    = ucs_container_of(self, ucp_request_t, send.uct);
     ucp_lane_index_t lane = req->send.lane;
-    ucp_ep_h ep = req->send.ep;
+    ucp_ep_h ep           = req->send.ep;
     ucs_status_t status;
     int completed;
 
@@ -203,10 +203,12 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
 
     status = uct_ep_flush(ep->uct_eps[lane], req->send.flush.uct_flags,
                           &req->send.state.uct_comp);
-    ucs_trace("flushing ep %p lane[%d]: %s", ep, lane,
+    ucs_trace("flushing ep %p lane[%d]=%p: %s", ep, lane, ep->uct_eps[lane],
               ucs_status_string(status));
     if (status == UCS_OK) {
         --req->send.state.uct_comp.count; /* UCT endpoint is flushed */
+    } else if (UCS_STATUS_IS_ERR(status) && (status != UCS_ERR_NO_RESOURCE)) {
+        ucp_ep_flush_error(req, status);
     }
 
     /* since req->flush.pend.lane is still non-NULL, this function will not
@@ -225,18 +227,16 @@ ucs_status_t ucp_ep_flush_progress_pending(uct_pending_req_t *self)
                                           req, 0, &req->send.flush.prog_id);
     }
 
-    if ((status == UCS_OK) || (status == UCS_INPROGRESS)) {
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return UCS_ERR_NO_RESOURCE;
+    } else if (!UCS_STATUS_IS_ERR(status)) {
         /* flushed callback might release the request */
         if (!completed) {
             req->send.lane = UCP_NULL_LANE;
         }
-        return UCS_OK;
-    } else if (status == UCS_ERR_NO_RESOURCE) {
-        return UCS_ERR_NO_RESOURCE;
-    } else {
-        ucp_ep_flush_error(req, status);
-        return UCS_OK;
     }
+
+    return UCS_OK;
 }
 
 void ucp_ep_flush_completion(uct_completion_t *self)
@@ -248,6 +248,7 @@ void ucp_ep_flush_completion(uct_completion_t *self)
     ucp_trace_req(req, "flush completion status=%d", status);
 
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_COMPLETED));
+    ucs_assert(status != UCS_INPROGRESS);
 
     req->status = status;
 
@@ -427,8 +428,7 @@ ucp_worker_flush_req_set_next_ep(ucp_request_t *req, int is_current_ep_valid,
     if (next_ep_iter != &worker->all_eps) {
         /* Increment UCP EP reference counter to avoid destroying UCP EP while
          * it is being scheduled to be flushed */
-        ucp_ep_add_ref(next_ep);
-        UCP_EP_ASSERT_COUNTER_INC(&next_ep->flush_iter_refcount);
+        ucp_ep_refcount_add(next_ep, flush);
     }
 
     if (!is_current_ep_valid) {
@@ -438,9 +438,7 @@ ucp_worker_flush_req_set_next_ep(ucp_request_t *req, int is_current_ep_valid,
     ucs_assert(&current_ep_ext->ep_list != &worker->all_eps);
 
     current_ep = ucp_ep_from_ext_gen(current_ep_ext);
-    UCP_EP_ASSERT_COUNTER_DEC(&current_ep->flush_iter_refcount);
-
-    return ucp_ep_remove_ref(current_ep) ? NULL : current_ep;
+    return ucp_ep_refcount_remove(current_ep, flush) ? NULL : current_ep;
 }
 
 static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t status,
@@ -465,6 +463,9 @@ static void ucp_worker_flush_complete_one(ucp_request_t *req, ucs_status_t statu
             ucp_worker_flush_req_set_next_ep(req, 1, &worker->all_eps);
         }
 
+        /* Coverity wrongly resolves completion callback function to
+         * 'ucp_cm_server_conn_request_progress' */
+        /* coverity[offset_free] */
         ucp_request_complete(req, flush_worker.cb, status, req->user_data);
     }
 }

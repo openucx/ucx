@@ -369,6 +369,40 @@ UCS_TEST_P(test_ucp_tag_offload, sw_rndv_rx_generic, "RNDV_THRESH=0",
     ucp_dt_destroy(ucp_dt);
 }
 
+UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
+           "RNDV_THRESH=inf", "TM_THRESH=0")
+{
+    activate_offload(sender());
+
+    // TODO: Update length to bigger value so that multi-fragment eager is used
+    //       when multi-eager offload probe issue is fixed (like below).
+    // size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
+    size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
+    ucp_tag_t tag = 0x11;
+    std::vector<uint8_t> sendbuf(length);
+
+    ucs_status_ptr_t sreq = ucp_tag_send_nb(sender().ep(), sendbuf.data(),
+                                          sendbuf.size(), ucp_dt_make_contig(1),
+                                          tag, send_callback);
+
+    ucp_tag_recv_info_t info;
+    ucp_tag_message_h msg = NULL;
+    ucs_time_t deadline = ucs::get_deadline();
+    while ((msg == NULL) && (ucs_get_time() < deadline)) {
+        short_progress_loop();
+        msg = ucp_tag_probe_nb(receiver().worker(), tag, 0xffff, 1, &info);
+    }
+    EXPECT_EQ(length, info.length);
+
+    std::vector<uint8_t> recvbuf(length);
+    ucs_status_ptr_t rreq = ucp_tag_msg_recv_nb(receiver().worker(),
+                                                &recvbuf[0], length,
+                                                ucp_dt_make_contig(1),
+                                                msg, recv_callback);
+    request_wait(sreq);
+    request_wait(rreq);
+}
+
 UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload)
 
 

@@ -38,7 +38,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_rndv_ppln_priv_t *rpriv            = init_params->priv;
     ucp_proto_caps_t *caps                       = init_params->caps;
     const ucp_proto_select_param_t *select_param = init_params->select_param;
-    ucs_linear_func_t ack_perf[UCP_PROTO_PERF_TYPE_LAST];
     const ucp_proto_select_range_t *frag_range;
     const ucp_proto_select_elem_t *select_elem;
     size_t frag_min_length, frag_max_length;
@@ -49,7 +48,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     ucp_proto_perf_type_t perf_type;
     ucs_linear_func_t *ppln_perf;
     char frag_size_str[32];
-    ucs_status_t status;
 
     if ((select_param->dt_class != UCP_DATATYPE_CONTIG) ||
         ((select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
@@ -57,11 +55,6 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
         (init_params->select_param->op_flags &
          UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG)) {
         return UCS_ERR_UNSUPPORTED;
-    }
-
-    status = ucp_proto_rndv_ack_init(init_params, &rpriv->ack, ack_perf);
-    if (status != UCS_OK) {
-        return status;
     }
 
     /* Select a protocol for rndv recv */
@@ -113,16 +106,16 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     /* Add the single range of the pipeline protocol */
     ucp_proto_common_add_ppln_range(init_params, &frag_range->super, SIZE_MAX);
 
-    /* Add overheads: PPLN overhead and ack time */
+    /* Add overheads: PPLN overhead */
     ppln_overhead = ucs_linear_func_make(ppln_frag_overhead,
                                          ppln_frag_overhead / rpriv->frag_size);
     for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
         ppln_perf = &caps->ranges[0].perf[perf_type];
         ucs_linear_func_add_inplace(ppln_perf, ppln_overhead);
-        ucs_linear_func_add_inplace(ppln_perf, ack_perf[perf_type]);
     }
 
-    return UCS_OK;
+    /* Add overheads: ack time */
+    return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);
 }
 
 static void
@@ -132,7 +125,10 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack,
 {
     ucp_request_t *req = ucp_request_get_super(freq);
 
-    req->send.rndv.ppln.send_ack |= send_ack;
+    if (send_ack) {
+        req->send.rndv.ppln.ack_data_size += freq->send.state.dt_iter.length;
+    }
+
     if (!ucp_proto_rndv_frag_complete(req, freq, title)) {
         return;
     }
@@ -141,7 +137,7 @@ ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack,
         ucp_proto_rndv_rkey_destroy(req);
     }
 
-    if (req->send.rndv.ppln.send_ack) {
+    if (req->send.rndv.ppln.ack_data_size > 0) {
         ucp_proto_request_set_stage(req, UCP_PROTO_RNDV_PPLN_STAGE_ACK);
         ucp_request_send(req);
     } else {
@@ -176,9 +172,12 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     /* Nested pipeline is prevented during protocol selection */
     ucs_assert(!(req->flags & UCP_REQUEST_FLAG_RNDV_FRAG));
 
-    req->send.state.completed_size = 0;
-    req->send.rndv.ppln.send_ack   = 0;
-    rpriv                          = req->send.proto_config->priv;
+    /* Zero-length is not supported */
+    ucs_assert(req->send.state.dt_iter.length > 0);
+
+    req->send.state.completed_size    = 0;
+    req->send.rndv.ppln.ack_data_size = 0;
+    rpriv                             = req->send.proto_config->priv;
 
     while (!ucp_datatype_iter_is_end(&req->send.state.dt_iter)) {
         status = ucp_proto_rndv_frag_request_alloc(worker, req, &freq);
@@ -191,6 +190,9 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
         ucp_datatype_iter_next_slice(&req->send.state.dt_iter, rpriv->frag_size,
                                      &freq->send.state.dt_iter, &next_iter,
                                      &sg_count);
+
+        /* Empty fragments should not happen */
+        ucs_assert(freq->send.state.dt_iter.length > 0);
 
         /* Initialize rendezvous parameters */
         freq->send.rndv.remote_req_id  = req->send.rndv.remote_req_id;
@@ -210,6 +212,15 @@ static ucs_status_t ucp_proto_rndv_ppln_progress(uct_pending_req_t *uct_req)
     }
 
     return UCS_OK;
+}
+
+static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
+{
+    ucp_request_t *req = arg;
+
+    ucs_assert(req->send.rndv.ppln.ack_data_size > 0);
+    return ucp_proto_rndv_pack_ack(req, dest,
+                                   req->send.rndv.ppln.ack_data_size);
 }
 
 static void ucp_proto_rndv_ppln_config_str(size_t min_length, size_t max_length,
@@ -235,21 +246,15 @@ ucp_proto_rndv_send_ppln_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rndv_ppln_init(init_params);
 }
 
-static size_t ucp_proto_rndv_send_ppln_pack_atp(void *dest, void *arg)
-{
-    return ucp_proto_rndv_send_pack_atp(arg, dest, 1);
-}
-
 static ucs_status_t
 ucp_proto_rndv_send_ppln_atp_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_ppln_priv_t *rpriv = req->send.proto_config->priv;
 
-    return ucp_proto_am_bcopy_single_progress(
-            req, UCP_AM_ID_RNDV_ATP, rpriv->ack.lane,
-            ucp_proto_rndv_send_ppln_pack_atp, req, sizeof(ucp_rndv_atp_hdr_t),
-            ucp_proto_request_zcopy_complete_success);
+    return ucp_proto_rndv_ack_progress(req, &rpriv->ack, UCP_AM_ID_RNDV_ATP,
+                                       ucp_proto_rndv_ppln_pack_ack,
+                                       ucp_proto_request_zcopy_complete_success);
 }
 
 static ucp_proto_t ucp_rndv_send_ppln_proto = {
@@ -278,9 +283,11 @@ static ucs_status_t
 ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
-    const ucp_proto_rndv_ppln_priv_t *rpriv = req->send.proto_config->priv;
+    const ucp_proto_rndv_ppln_priv_t *rpriv;
 
+    rpriv = req->send.proto_config->priv;
     return ucp_proto_rndv_ack_progress(req, &rpriv->ack, UCP_AM_ID_RNDV_ATS,
+                                       ucp_proto_rndv_ppln_pack_ack,
                                        ucp_proto_rndv_recv_complete);
 }
 

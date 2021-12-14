@@ -197,6 +197,7 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
     perf->prev.bytes        = 0;
     perf->prev.iters        = 0;
     perf->timing_queue_head = 0;
+    perf->extra_info[0]     = '\0';
 
     for (i = 0; i < TIMING_QUEUE_SIZE; ++i) {
         perf->timing_queue[i] = 0;
@@ -207,16 +208,15 @@ void ucx_perf_test_prepare_new_run(ucx_perf_context_t *perf,
 static void ucx_perf_test_init(ucx_perf_context_t *perf,
                                const ucx_perf_params_t *params)
 {
-    unsigned group_index;
-
     perf->params = *params;
-    group_index  = rte_call(perf, group_index);
 
-    if (0 == group_index) {
-        perf->allocator = ucx_perf_mem_type_allocators[params->send_mem_type];
-    } else {
-        perf->allocator = ucx_perf_mem_type_allocators[params->recv_mem_type];
-    }
+    ucs_debug("set send allocator by send mem type %s",
+              ucs_memory_type_names[params->send_mem_type]);
+    perf->send_allocator = ucx_perf_mem_type_allocators[params->send_mem_type];
+
+    ucs_debug("set recv allocator by recv mem type %s",
+              ucs_memory_type_names[params->recv_mem_type]);
+    perf->recv_allocator = ucx_perf_mem_type_allocators[params->recv_mem_type];
 
     ucx_perf_test_prepare_new_run(perf, params);
 }
@@ -302,23 +302,6 @@ static ucs_status_t ucx_perf_test_check_params(ucx_perf_params_t *params)
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if ((params->api == UCX_PERF_API_UCP) &&
-        ((params->send_mem_type != UCS_MEMORY_TYPE_HOST) ||
-         (params->recv_mem_type != UCS_MEMORY_TYPE_HOST)) &&
-        ((params->command == UCX_PERF_CMD_PUT) ||
-         (params->command == UCX_PERF_CMD_GET) ||
-         (params->command == UCX_PERF_CMD_ADD) ||
-         (params->command == UCX_PERF_CMD_FADD) ||
-         (params->command == UCX_PERF_CMD_SWAP) ||
-         (params->command == UCX_PERF_CMD_CSWAP))) {
-        /* TODO: remove when support for non-HOST memory types will be added */
-        if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
-            ucs_error("UCP doesn't support RMA/AMO for \"%s\"<->\"%s\" memory types",
-                      ucs_memory_type_names[params->send_mem_type],
-                      ucs_memory_type_names[params->recv_mem_type]);
-        }
-        return UCS_ERR_INVALID_PARAM;
-    }
 
     if (params->max_outstanding < 1) {
         if (params->flags & UCX_PERF_TEST_FLAG_VERBOSE) {
@@ -649,6 +632,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     uct_iface_attr_t iface_attr;
     uct_md_attr_t md_attr;
     uct_ep_params_t ep_params;
+    unsigned peer_index;
     void *rkey_buffer;
     ucs_status_t status;
     struct iovec vec[5];
@@ -704,7 +688,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
         goto err_free;
     }
 
-    if (info.rkey_size > 0) {
+    if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
         memset(rkey_buffer, 0, info.rkey_size);
         status = uct_md_mkey_pack(perf->uct.md, perf->uct.recv_mem.memh, rkey_buffer);
         if (status != UCS_OK) {
@@ -715,6 +699,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
 
     group_size  = rte_call(perf, group_size);
     group_index = rte_call(perf, group_index);
+    peer_index  = rte_peer_index(group_size, group_index);
 
     perf->uct.peers = calloc(group_size, sizeof(*perf->uct.peers));
     if (perf->uct.peers == NULL) {
@@ -725,7 +710,8 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     ep_params.iface      = perf->uct.iface;
     if (iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP) {
         for (i = 0; i < group_size; ++i) {
-            if (i == group_index) {
+            if (i != peer_index) {
+                perf->uct.peers[i].ep = NULL;
                 continue;
             }
 
@@ -755,7 +741,9 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
     rte_call(perf, exchange_vec, req);
 
     for (i = 0; i < group_size; ++i) {
-        if (i == group_index) {
+        if (i != peer_index) {
+            perf->uct.peers[i].rkey.handle = NULL;
+            perf->uct.peers[i].rkey.rkey   = UCT_INVALID_RKEY;
             continue;
         }
 
@@ -776,7 +764,7 @@ static ucs_status_t uct_perf_test_setup_endpoints(ucx_perf_context_t *perf)
             goto err_destroy_eps;
         }
 
-        if (remote_info->rkey_size > 0) {
+        if (md_attr.cap.flags & (UCT_MD_FLAG_ALLOC|UCT_MD_FLAG_REG)) {
             status = uct_rkey_unpack(perf->uct.cmpt, rkey_buffer,
                                      &perf->uct.peers[i].rkey);
             if (status != UCS_OK) {
@@ -826,23 +814,20 @@ err:
 
 static void uct_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
 {
-    unsigned group_size, group_index, i;
+    unsigned group_size, i;
 
     uct_perf_barrier(perf);
 
     uct_iface_set_am_handler(perf->uct.iface, UCT_PERF_TEST_AM_ID, NULL, NULL, 0);
 
     group_size  = rte_call(perf, group_size);
-    group_index = rte_call(perf, group_index);
 
     for (i = 0; i < group_size; ++i) {
-        if (i != group_index) {
-            if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
-                uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
-            }
-            if (perf->uct.peers[i].ep) {
-                uct_ep_destroy(perf->uct.peers[i].ep);
-            }
+        if (perf->uct.peers[i].rkey.rkey != UCT_INVALID_RKEY) {
+            uct_rkey_release(perf->uct.cmpt, &perf->uct.peers[i].rkey);
+        }
+        if (perf->uct.peers[i].ep) {
+            uct_ep_destroy(perf->uct.peers[i].ep);
         }
     }
     free(perf->uct.peers);
@@ -1671,7 +1656,7 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
 
     ucx_perf_test_init(perf, params);
 
-    if (perf->allocator == NULL) {
+    if ((perf->send_allocator == NULL) || (perf->recv_allocator == NULL)) {
         ucs_error("Unsupported memory types %s<->%s",
                   ucs_memory_type_names[params->send_mem_type],
                   ucs_memory_type_names[params->recv_mem_type]);
@@ -1679,17 +1664,32 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
         goto out_free;
     }
 
-    if ((params->api == UCX_PERF_API_UCT) &&
-        (perf->allocator->mem_type != UCS_MEMORY_TYPE_HOST)) {
-        ucs_warn("UCT tests also copy 2-byte values from %s memory to "
-                 "%s memory, which may impact performance results",
-                 ucs_memory_type_names[perf->allocator->mem_type],
-                 ucs_memory_type_names[UCS_MEMORY_TYPE_HOST]);
+    if (params->api == UCX_PERF_API_UCT) {
+        if (perf->send_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {
+            ucs_diag("UCT tests also copy one-byte value from %s memory to "
+                     "%s send memory, which may impact performance results",
+                     ucs_memory_type_names[UCS_MEMORY_TYPE_HOST],
+                     ucs_memory_type_names[perf->send_allocator->mem_type]);
+        }
+
+        if (perf->recv_allocator->mem_type != UCS_MEMORY_TYPE_HOST) {
+            ucs_diag("UCT tests also copy one-byte value from %s recv memory "
+                     "to %s memory, which may impact performance results",
+                     ucs_memory_type_names[perf->recv_allocator->mem_type],
+                     ucs_memory_type_names[UCS_MEMORY_TYPE_HOST]);
+        }
     }
 
-    status = perf->allocator->init(perf);
+    status = perf->send_allocator->init(perf);
     if (status != UCS_OK) {
         goto out_free;
+    }
+
+    if (perf->send_allocator != perf->recv_allocator) {
+        status = perf->recv_allocator->init(perf);
+        if (status != UCS_OK) {
+            goto out_free;
+        }
     }
 
     status = ucx_perf_funcs[params->api].setup(perf);
@@ -1721,7 +1721,8 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
         ucx_perf_funcs[params->api].barrier(perf);
         if (status == UCS_OK) {
             ucx_perf_calc_result(perf, result);
-            rte_call(perf, report, result, perf->params.report_arg, 1, 0);
+            rte_call(perf, report, result, perf->params.report_arg,
+                     perf->extra_info, 1, 0);
         }
     } else {
         status = ucx_perf_thread_spawn(perf, result);
@@ -1755,4 +1756,14 @@ unsigned rte_peer_index(unsigned group_size, unsigned group_index)
 
     ucs_assert(group_index < group_size);
     return peer_index;
+}
+
+void ucx_perf_report(ucx_perf_context_t *perf)
+{
+    ucx_perf_result_t result;
+
+    ucx_perf_get_time(perf);
+    ucx_perf_calc_result(perf, &result);
+    rte_call(perf, report, &result, perf->params.report_arg, "", 0, 0);
+    perf->prev = perf->current;
 }

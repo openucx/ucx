@@ -60,6 +60,11 @@ Java_org_openucx_jucx_ucp_UcpWorker_createWorkerNative(JNIEnv *env, jobject jucx
         worker_params.event_fd = env->GetIntField(jucx_worker_params, field);
     }
 
+    if (worker_params.field_mask & UCP_WORKER_PARAM_FIELD_CLIENT_ID) {
+        field = env->GetFieldID(jucx_param_class, "clientId", "J");
+        worker_params.client_id = env->GetLongField(jucx_worker_params, field);
+    }
+
     ucs_status_t status = ucp_worker_create(ucp_context, &worker_params, &ucp_worker);
     if (status != UCS_OK) {
         JNU_ThrowExceptionByStatus(env, status);

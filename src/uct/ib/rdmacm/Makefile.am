@@ -26,6 +26,9 @@ libuct_rdmacm_la_SOURCES = \
 	rdmacm_listener.c \
 	rdmacm_cm_ep.c
 
+PKG_CONFIG_NAME=rdmacm
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif # HAVE_RDMACM

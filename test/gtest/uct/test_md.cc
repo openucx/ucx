@@ -86,8 +86,6 @@ test_md::test_md()
 
 void test_md::init()
 {
-    const std::vector<ucs_memory_type_t>
-        supported_mem_types = mem_buffer::supported_mem_types();
     ucs::test_base::init();
     UCS_TEST_CREATE_HANDLE(uct_md_h, m_md, uct_md_close, uct_md_open,
                            GetParam().component, GetParam().md_name.c_str(),
@@ -340,8 +338,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
                                       slice_length, &mem_attr);
             ASSERT_UCS_OK(status);
             EXPECT_EQ(alloc_mem_type, mem_attr.mem_type);
-            if ((alloc_mem_type == UCS_MEMORY_TYPE_CUDA) ||
-                (alloc_mem_type == UCS_MEMORY_TYPE_CUDA_MANAGED)) {
+            if (alloc_mem_type == UCS_MEMORY_TYPE_CUDA) {
                 EXPECT_EQ(buffer_size, mem_attr.alloc_length);
                 EXPECT_EQ(address, mem_attr.base_address);
             } else {
@@ -360,12 +357,13 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
         UCS_TEST_MESSAGE << ucs_memory_type_names[alloc_mem_type] << ": "
                          << "sys_dev[" << static_cast<int>(mem_attr.sys_dev)
                          << "] (" << dev_name << ")";
+
+        free_memory(address, static_cast<ucs_memory_type_t>(alloc_mem_type));
     }
 }
 
 UCS_TEST_P(test_md, mem_query) {
-    for (size_t i = 0; i < mem_buffer::supported_mem_types().size(); ++i) {
-        ucs_memory_type_t mem_type = mem_buffer::supported_mem_types()[i];
+    for (auto mem_type : mem_buffer::supported_mem_types()) {
         if (!(md_attr().cap.detect_mem_types & UCS_BIT(mem_type))) {
             continue;
         }
@@ -655,6 +653,10 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
     ucs_status_t status;
     uct_md_mem_dereg_params_t params;
 
+    if (GetParam().md_name == "cuda_ipc") {
+        UCS_TEST_SKIP_R("test not needed with cuda-ipc");
+    }
+
     params.field_mask  = UCT_MD_MEM_DEREG_FIELD_FLAGS |
                          UCT_MD_MEM_DEREG_FIELD_MEMH |
                          UCT_MD_MEM_DEREG_FIELD_COMPLETION;
@@ -697,7 +699,8 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
 }
 
 UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
-                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST))
+                     !check_reg_mem_type(UCS_MEMORY_TYPE_HOST) ||
+                     !ENABLE_PARAMS_CHECK)
 {
     static const size_t size = 1 * UCS_MBYTE;
     uct_mem_h memh;
@@ -722,24 +725,24 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
                             UCT_MD_MEM_DEREG_FIELD_FLAGS |
                             UCT_MD_MEM_DEREG_FIELD_MEMH;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_UNSUPPORTED, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_UNSUPPORTED, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH;
         status            = uct_md_mem_dereg_v2(md(), &params);
     } else {
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
-        EXPECT_EQ(UCS_ERR_INVALID_PARAM, status);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
 
         params.field_mask = UCT_MD_MEM_DEREG_FIELD_MEMH |
                             UCT_MD_MEM_DEREG_FIELD_COMPLETION |

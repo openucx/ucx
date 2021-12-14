@@ -170,8 +170,9 @@ enum ucp_worker_params_field {
                                                            descriptor */
     UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5), /**< Worker flags */
     UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6), /**< Worker name */
-    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7) /**< Alignment of active
-                                                          messages on the receiver */
+    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7), /**< Alignment of active
+                                                           messages on the receiver */
+    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8)  /**< Client id */
 };
 
 
@@ -248,7 +249,8 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_FLAGS             = UCS_BIT(5), /**< Endpoint flags */
     /**< Connection request field */
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
-    UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7) /**< Endpoint name */
+    UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
+    UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8)  /**< Local socket Address */
 };
 
 
@@ -268,7 +270,7 @@ enum ucp_ep_params_flags_field {
                                                            must be provided and
                                                            contain the address
                                                            of the remote peer */
-    UCP_EP_PARAMS_FLAGS_NO_LOOPBACK    = UCS_BIT(1)   /**< Avoid connecting the
+    UCP_EP_PARAMS_FLAGS_NO_LOOPBACK    = UCS_BIT(1),  /**< Avoid connecting the
                                                            endpoint to itself when
                                                            connecting the endpoint
                                                            to the same worker it
@@ -277,6 +279,14 @@ enum ucp_ep_params_flags_field {
                                                            send to a particular
                                                            remote endpoint, for
                                                            example stream */
+    UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID = UCS_BIT(2)   /**< Send client id
+                                                           when connecting to remote
+                                                           socket address as part of the
+                                                           connection request payload.
+                                                           On the remote side value
+                                                           can be obtained from
+                                                           @ref ucp_conn_request_h using
+                                                           @ref ucp_conn_request_query */
 };
 
 
@@ -479,7 +489,8 @@ enum ucp_listener_attr_field {
  * are present. It is used to enable backward compatibility support.
  */
 enum ucp_conn_request_attr_field {
-    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR = UCS_BIT(0) /**< Client's address */
+    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR = UCS_BIT(0), /**< Client's address */
+    UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID   = UCS_BIT(1)  /**< Remote client id */
 };
 
 
@@ -686,6 +697,7 @@ typedef enum {
     UCP_OP_ATTR_FIELD_REPLY_BUFFER  = UCS_BIT(5),  /**< reply_buffer field */
     UCP_OP_ATTR_FIELD_MEMORY_TYPE   = UCS_BIT(6),  /**< memory type field */
     UCP_OP_ATTR_FIELD_RECV_INFO     = UCS_BIT(7),  /**< recv_info field */
+    UCP_OP_ATTR_FIELD_MEMH          = UCS_BIT(8),  /**< memory handle field */
 
     UCP_OP_ATTR_FLAG_NO_IMM_CMPL    = UCS_BIT(16), /**< deny immediate completion */
     UCP_OP_ATTR_FLAG_FAST_CMPL      = UCS_BIT(17), /**< expedite local completion,
@@ -821,7 +833,8 @@ enum ucp_am_handler_param_field {
  * @brief Structure for scatter-gather I/O.
  *
  * This structure is used to specify a list of buffers which can be used
- * within a single data transfer function call.
+ * within a single data transfer function call. This list should remain valid
+ * until the data transfer request is completed.
  *
  * @note If @a length is zero, the memory pointed to by @a buffer
  *       will not be accessed. Otherwise, @a buffer must point to valid memory.
@@ -1289,6 +1302,14 @@ typedef struct ucp_worker_params {
      * @a ucp_am_recv_callback_t.
      */
     size_t                  am_alignment;
+
+    /**
+    * Client id that is sent as part of the connection request payload
+    * when connecting to a remote socket address. On the remote side,
+    * this value can be obtained from @ref ucp_conn_request_h
+    * using @ref ucp_conn_request_query.
+    */
+    uint64_t                client_id;
 } ucp_worker_params_t;
 
 
@@ -1407,6 +1428,12 @@ typedef struct ucp_conn_request_attr {
      * server.
      */
     struct sockaddr_storage client_address;
+
+    /**
+     * Remote client id if remote endpoint's flag
+     * @ref UCP_EP_PARAMS_FLAGS_SEND_CLIENT_ID is set.
+     */
+    uint64_t                client_id;
 } ucp_conn_request_attr_t;
 
 
@@ -1691,6 +1718,16 @@ typedef struct {
                                           Relevant for @a ucp_tag_recv_nbx
                                           function. */
     } recv_info;
+
+    /**
+     * Memory handle for pre-registered buffer.
+     * If the handle is provided, protocols that require registered memory can
+     * skip the registration step. As a result, the communication request
+     * overhead can be reduced and the request can be completed faster.
+     * The memory handle should be obtained by calling @ref ucp_mem_map.
+     */
+    ucp_mem_h memh;
+
 } ucp_request_param_t;
 
 

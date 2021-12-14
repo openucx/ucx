@@ -130,6 +130,10 @@ enum {
                     "UCT_EP_PARAM_FIELD_DEV_ADDR and UCT_EP_PARAM_FIELD_IFACE_ADDR are not defined")
 
 
+#define UCT_ATTR_VALUE(_obj, _attrs, _name, _flag, _default) \
+    UCS_PARAM_VALUE(UCS_PP_TOKENPASTE3(UCT_, _obj, _ATTR_FIELD), _attrs, \
+                    _name, _flag, _default)
+
 #define UCT_EP_PARAM_VALUE(_params, _name, _flag, _default) \
     UCS_PARAM_VALUE(UCT_EP_PARAM_FIELD, _params, _name, _flag, _default)
 
@@ -203,10 +207,6 @@ enum {
 #define UCT_EP_KEEPALIVE_CHECK_PARAM(_flags, _comp) \
     UCT_CHECK_PARAM((_comp) == NULL, "Unsupported completion on ep_check"); \
     UCT_CHECK_PARAM((_flags) == 0, "Unsupported flags: %x", (_flags));
-
-
-#define UCT_IFACE_PARAM_VALUE(_params, _name, _flag, _default) \
-    UCS_PARAM_VALUE(UCT_IFACE_PARAM_FIELD, _params, _name, _flag, _default)
 
 
 /**
@@ -860,5 +860,14 @@ void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface);
 
 void uct_iface_vfs_refresh(void *obj);
+
+
+static UCS_F_ALWAYS_INLINE int uct_ep_op_is_zcopy(uct_ep_operation_t op)
+{
+    return UCS_BIT(op) & (UCS_BIT(UCT_EP_OP_AM_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_PUT_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_GET_ZCOPY) |
+                          UCS_BIT(UCT_EP_OP_EAGER_ZCOPY));
+}
 
 #endif

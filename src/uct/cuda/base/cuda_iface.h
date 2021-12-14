@@ -62,7 +62,7 @@
         do {                                                    \
             nvmlReturn_t _err = (_func);                        \
             if (NVML_SUCCESS != _err) {                         \
-                ucs_log((_log_level), "%s() failed: %s",        \
+                ucs_log((_log_level), "%s failed: %s",          \
                         UCS_PP_MAKE_STRING(_func),              \
                         nvmlErrorString(_err));                 \
                 _status = UCS_ERR_IO_ERROR;                     \
@@ -99,24 +99,19 @@
     UCT_CUDADRV_FUNC(_func, UCS_LOG_LEVEL_ERROR)
 
 
-#define UCT_CUDADRV_CTX_ACTIVE(_state) \
-    { \
-        CUdevice _dev; \
-        CUcontext _ctx; \
-        int _flags; \
-        if (CUDA_SUCCESS == cuCtxGetDevice(&_dev)) { \
-            cuDevicePrimaryCtxGetState(_dev, &_flags, &_state); \
-            if (_state == 0) { \
-                /* need to retain for malloc purposes */ \
-                if (CUDA_SUCCESS != cuDevicePrimaryCtxRetain(&_ctx, _dev)) { \
-                    ucs_fatal("unable to retain ctx after detecting device"); \
-                } \
-            } \
-            _state = 1; \
-        } else { \
-            _state = 0; \
-        } \
-    }
+static UCS_F_ALWAYS_INLINE int uct_cuda_base_is_context_active()
+{
+    CUcontext ctx;
+
+    return (CUDA_SUCCESS == cuCtxGetCurrent(&ctx)) && (ctx != NULL);
+}
+
+
+static UCS_F_ALWAYS_INLINE int uct_cuda_base_context_match(CUcontext ctx1,
+                                                           CUcontext ctx2)
+{
+    return ((ctx1 != NULL) && (ctx1 == ctx2));
+}
 
 
 typedef enum uct_cuda_base_gen {

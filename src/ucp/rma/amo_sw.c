@@ -388,6 +388,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.hdr_size      = 0,
+        .super.send_op       = UCT_EP_OP_AM_BCOPY,
         .super.memtype_op    = UCT_EP_OP_GET_SHORT,
         .super.flags         = flags,
         .lane_type           = UCP_LANE_TYPE_AM,
@@ -406,6 +407,10 @@ static ucs_status_t
 ucp_proto_amo_sw_init_post(const ucp_proto_init_params_t *init_params)
 {
     UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_AMO_POST);
+
+    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
+        return UCS_ERR_UNSUPPORTED;
+    }
 
     return ucp_proto_amo_sw_init(init_params, 0);
 }

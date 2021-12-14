@@ -22,6 +22,7 @@
 #include <ucs/datastruct/bitmap.h>
 #include <ucs/datastruct/conn_match.h>
 #include <ucs/memory/memtype_cache.h>
+#include <ucs/memory/memory_type.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/sys/string.h>
 #include <ucs/type/param.h>
@@ -65,7 +66,9 @@ typedef struct ucp_context_config {
     /** Segment size in the worker pre-registered memory pool */
     size_t                                 seg_size;
     /** RNDV pipeline fragment size */
-    size_t                                 rndv_frag_size;
+    size_t                                 rndv_frag_size[UCS_MEMORY_TYPE_LAST];
+    /** Number of RNDV pipeline fragments per allocation */
+    size_t                                 rndv_num_frags[UCS_MEMORY_TYPE_LAST];
     /** RNDV pipeline send threshold */
     size_t                                 rndv_pipeline_send_thresh;
     /** Threshold for using tag matching offload capabilities. Smaller buffers
@@ -118,7 +121,19 @@ typedef struct ucp_context_config {
     unsigned                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
+    /** Maximum size of mem type direct rndv*/
+    size_t                                 rndv_memtype_direct_size;
+    /** UCP sockaddr private data format version */
+    ucp_object_version_t                   sa_client_min_hdr_version;
+    /** Remote keys with that many remote MDs or less would be allocated from a
+      * memory pool.*/
+    int                                    rkey_mpool_max_md;
+    /** Worker address format version */
+    ucp_object_version_t                   worker_addr_version;
 } ucp_context_config_t;
+
+
+typedef UCS_CONFIG_STRING_ARRAY_FIELD(names) ucp_context_config_names_t;
 
 
 struct ucp_config {
@@ -132,8 +147,10 @@ struct ucp_config {
     ucs_config_allow_list_t                protos;
     /** Array of memory allocation methods */
     UCS_CONFIG_STRING_ARRAY_FIELD(methods) alloc_prio;
-    /** Array of transports for partial worker address to pack */
-    UCS_CONFIG_STRING_ARRAY_FIELD(aux_tls) sockaddr_aux_tls;
+    /** Array of rendezvous fragment sizes */
+    ucp_context_config_names_t             rndv_frag_sizes;
+    /** Array of rendezvous fragment elems per allocation */
+    ucp_context_config_names_t             rndv_frag_elems;
     /** Array of transports for client-server transports and port selection */
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
@@ -146,6 +163,8 @@ struct ucp_config {
     ucp_context_config_t                   ctx;
     /** Save ucx configurations not listed in ucp_config_table **/
     ucs_list_link_t                        cached_key_list;
+    /** Array of worker memory pool sizes */
+    UCS_CONFIG_ARRAY_FIELD(size_t, memunits) mpool_sizes;
 };
 
 
@@ -217,10 +236,6 @@ typedef struct ucp_context {
                                                * Not all resources may be used if unified
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
-
-    /* Mask of memory type communication resources */
-    ucp_tl_bitmap_t               mem_type_access_tls[UCS_MEMORY_TYPE_LAST];
-
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
 
     struct {
@@ -267,6 +282,10 @@ typedef struct ucp_context {
 
         /* MD to compare for transport selection scores */
         char                      *selection_cmp;
+        struct {
+           unsigned               count;
+           size_t                 *sizes;
+        } am_mpools;
     } config;
 
     /* Configuration of multi-threading support */
@@ -480,25 +499,19 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
     }
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
-    if (status != UCS_ERR_NO_ELEM) {
-        if (ucs_likely(status != UCS_OK)) {
-            ucs_assert(status == UCS_ERR_NO_ELEM);
-            goto out_host_mem;
-        }
-
-        if ((mem_info->type != UCS_MEMORY_TYPE_UNKNOWN) &&
-            ((mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN))) {
-            return;
-        }
-
-        /* Fall thru to slow-path memory type and system device detection by UCT
-         * memory domains. In any case, the memory type cache is not expected to
-         * return HOST memory type.
-         */
-        ucs_assert(mem_info->type != UCS_MEMORY_TYPE_HOST);
+    if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        goto out_host_mem;
+    } else if ((status == UCS_ERR_UNSUPPORTED) ||
+               ((status == UCS_OK) &&
+                ((mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) ||
+                 (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)))) {
+        ucp_memory_detect_slowpath(context, address, length, mem_info);
+    } else {
+        ucs_assertv(status == UCS_OK, "%s (%d)", ucs_status_string(status),
+                    status);
     }
 
-    ucp_memory_detect_slowpath(context, address, length, mem_info);
+    /* Memory type and system device was detected successfully */
     return;
 
 out_host_mem:
@@ -542,5 +555,10 @@ ucp_config_modify_internal(ucp_config_t *config, const char *name,
 
 
 void ucp_apply_uct_config_list(ucp_context_h context, void *config);
+
+
+void ucp_context_get_mem_access_tls(ucp_context_h context,
+                                    ucs_memory_type_t mem_type,
+                                    ucp_tl_bitmap_t *tl_bitmap);
 
 #endif

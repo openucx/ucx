@@ -37,7 +37,9 @@ UCS_TEST_P(test_uct_query, query_perf)
                                    UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
                                    UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE |
-                                   UCT_PERF_ATTR_FIELD_OVERHEAD |
+                                   UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+                                   UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
+                                   UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
                                    UCT_PERF_ATTR_FIELD_BANDWIDTH;
     perf_attr.operation          = UCT_EP_OP_AM_SHORT;
     perf_attr.local_memory_type  = UCS_MEMORY_TYPE_HOST;

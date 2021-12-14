@@ -7,12 +7,14 @@ if HAVE_GO
 
 GOOBJDIR=$(abs_top_builddir)/bindings/go/$(objdir)
 GOPATH=$(abs_top_srcdir)/bindings/go/
-CGOCFLAGS=-I$(abs_top_builddir)/src -I$(top_srcdir)/src
+CGOCFLAGS=-I$(abs_top_builddir)/src -I$(abs_top_srcdir)/src
 CGOLDFLAGS=-L$(abs_top_builddir)/src/ucp/$(objdir) -lucp -L$(abs_top_builddir)/src/ucs/$(objdir) -lucs
 UCX_SOPATH=$(abs_top_builddir)/src/ucp/$(objdir):$(abs_top_builddir)/src/ucs/$(objdir):$(abs_top_builddir)/src/ucm/$(objdir):$(abs_top_builddir)/src/uct/$(objdir)
 GOTMPDIR=$(GOOBJDIR)/tmp
+GOCACHE=$(GOTMPDIR)
 
 export GOTMPDIR
+export GOCACHE
 export GOPATH
 export CGO_CFLAGS=$(CGOCFLAGS)
 export CGO_LDFLAGS=$(CGOLDFLAGS)
@@ -37,6 +39,20 @@ bench: $(GOTMPDIR)
 	$(GO) env -w GO111MODULE=off ; \
 	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} $(GO) test -v -bench=.
 
-all: build
+goperftest: $(GOTMPDIR)
+	$(GO) env -w GO111MODULE=off ; \
+	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
+	$(GO) build -o ${GOTMPDIR}/goperftest
+
+run-perftest:
+	cd $(abs_top_srcdir)/bindings/go/src/examples/perftest ;\
+	LD_LIBRARY_PATH=$(UCX_SOPATH):${LD_LIBRARY_PATH} ${GOTMPDIR}/goperftest ${ARGS}
+
+install-exec-hook:
+	$(INSTALL) ${GOTMPDIR}/goperftest $(DESTDIR)$(bindir)
+
+all: goperftest build
+
+.PHONY: all build run_perftest test bench
 
 endif

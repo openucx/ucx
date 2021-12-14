@@ -49,6 +49,7 @@ struct ibv_ravh {
 
 #define UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, _dci, _txqp, _txwq) \
     { \
+        ucs_assert(_dci != UCT_DC_MLX5_EP_NO_DCI); \
         _txqp = &(_iface)->tx.dcis[_dci].txqp; \
         _txwq = &(_iface)->tx.dcis[_dci].txwq; \
     }
@@ -137,9 +138,9 @@ typedef struct uct_dc_mlx5_iface_config {
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
-    int                                 dci_full_handshake;
-    int                                 dci_ka_full_handshake;
-    int                                 dct_full_handshake;
+    ucs_on_off_auto_value_t             dci_full_handshake;
+    ucs_on_off_auto_value_t             dci_ka_full_handshake;
+    ucs_on_off_auto_value_t             dct_full_handshake;
     unsigned                            quota;
     unsigned                            rand_seed;
     ucs_time_t                          fc_hard_req_timeout;

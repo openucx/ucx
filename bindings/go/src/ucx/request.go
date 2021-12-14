@@ -18,9 +18,27 @@ type UcpRequest struct {
 }
 
 type UcpRequestParams struct {
-	MemTypeSet bool
-	MemType    UcsMemoryType
+	memTypeSet bool
+	memType    UcsMemoryType
 	Cb         UcpCallback
+}
+
+func (p *UcpRequestParams) SetMemType(memType UcsMemoryType) *UcpRequestParams {
+	p.memTypeSet = true
+	p.memType = memType
+	return p
+}
+
+func (p *C.ucp_request_param_t) SetMemType(params *UcpRequestParams) {
+	if (params != nil) && params.memTypeSet {
+		p.op_attr_mask = C.UCP_OP_ATTR_FIELD_MEMORY_TYPE
+		p.memory_type = C.ucs_memory_type_t(params.memType)
+	}
+}
+
+func (p *UcpRequestParams) SetCallback(cb UcpCallback) *UcpRequestParams {
+	p.Cb = cb
+	return p
 }
 
 // Checks wether request is a pointer
@@ -38,14 +56,16 @@ func NewRequest(request C.ucs_status_ptr_t, callbackId uint64, immidiateInfo int
 	} else {
 		requestStatus := UcsStatus(int64(uintptr(request)))
 		if callback, found := deregister(callbackId); found {
-			switch callback.(type) {
+			switch callback := callback.(type) {
 			case UcpSendCallback:
-				callback.(UcpSendCallback)(ucpRequest, requestStatus)
+				callback(ucpRequest, requestStatus)
 			case UcpTagRecvCallback:
-				callback.(UcpTagRecvCallback)(ucpRequest, requestStatus, immidiateInfo.(*UcpTagRecvInfo))
+				callback(ucpRequest, requestStatus, immidiateInfo.(*UcpTagRecvInfo))
+			case UcpAmDataRecvCallback:
+				callback(ucpRequest, requestStatus, uint64(immidiateInfo.(C.size_t)))
 			}
 			if requestStatus != C.UCS_OK {
-				return ucpRequest, NewUcxError(C.ucs_status_t(requestStatus))
+				return ucpRequest, NewUcxError(requestStatus)
 			}
 		}
 	}
@@ -70,5 +90,6 @@ func (r *UcpRequest) GetStatus() UcsStatus {
 func (r *UcpRequest) Close() {
 	if r.request != nil {
 		C.ucp_request_free(r.request)
+		r.request = nil
 	}
 }

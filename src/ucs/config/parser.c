@@ -75,19 +75,6 @@ ucs_config_parser_set_value_internal(void *opts, ucs_config_field_t *fields,
                                      const char *name, const char *value,
                                      const char *table_prefix, int recurse);
 
-
-static int __find_string_in_list(const char *str, const char **list)
-{
-    int i;
-
-    for (i = 0; *list; ++list, ++i) {
-        if (strcasecmp(*list, str) == 0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 int ucs_config_sscanf_string(const char *buf, void *dest, const void *arg)
 {
     *((char**)dest) = ucs_strdup(buf, "config_sscanf_string");
@@ -275,10 +262,12 @@ int ucs_config_sprintf_ternary_auto(char *buf, size_t max,
 
 int ucs_config_sscanf_on_off(const char *buf, void *dest, const void *arg)
 {
-    if (!strcasecmp(buf, "on") || !strcmp(buf, "1")) {
+    if (!strcasecmp(buf, "on") || !strcmp(buf, "1") ||
+        !strcasecmp(buf, "yes") || !strcasecmp(buf, "y")) {
         *(int*)dest = UCS_CONFIG_ON;
         return 1;
-    } else if (!strcasecmp(buf, "off") || !strcmp(buf, "0")) {
+    } else if (!strcasecmp(buf, "off") || !strcmp(buf, "0") ||
+               !strcasecmp(buf, "no") || !strcasecmp(buf, "n")) {
         *(int*)dest = UCS_CONFIG_OFF;
         return 1;
     } else {
@@ -317,7 +306,7 @@ int ucs_config_sscanf_enum(const char *buf, void *dest, const void *arg)
 {
     int i;
 
-    i = __find_string_in_list(buf, (const char**)arg);
+    i = ucs_string_find_in_list(buf, (const char**)arg, 0);
     if (i < 0) {
         return 0;
     }
@@ -378,7 +367,7 @@ int ucs_config_sscanf_bitmap(const char *buf, void *dest, const void *arg)
     *((unsigned*)dest) = 0;
     p = strtok_r(str, ",", &saveptr);
     while (p != NULL) {
-        i = __find_string_in_list(p, (const char**)arg);
+        i = ucs_string_find_in_list(p, (const char**)arg, 0);
         if (i < 0) {
             ret = 0;
             break;
@@ -1568,7 +1557,7 @@ ucs_status_t ucs_config_parser_clone_opts(const void *src, void *dst,
                                     (char*)dst + field->offset,
                                     field->parser.arg);
         if (status != UCS_OK) {
-            ucs_error("Failed to clone the filed '%s': %s", field->name,
+            ucs_error("Failed to clone the field '%s': %s", field->name,
                       ucs_status_string(status));
             return status;
         }

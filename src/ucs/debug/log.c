@@ -454,6 +454,11 @@ void ucs_log_early_init()
     ucs_log_thread_count  = 0;
 }
 
+static void ucs_log_atfork_child()
+{
+    ucs_log_pid = getpid();
+}
+
 void ucs_log_init()
 {
     const char *next_token;
@@ -491,6 +496,8 @@ void ucs_log_init()
                                &ucs_log_file, &ucs_log_file_close,
                                &next_token, &ucs_log_file_base_name);
     }
+
+    pthread_atfork(NULL, NULL, ucs_log_atfork_child);
 }
 
 void ucs_log_cleanup()

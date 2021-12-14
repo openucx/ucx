@@ -73,20 +73,21 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      ucs_offsetof(uct_dc_mlx5_iface_config_t, tx_policy),
      UCS_CONFIG_TYPE_ENUM(uct_dc_tx_policy_names)},
 
-    {"DCI_FULL_HANDSHAKE", "n",
+    {"DCI_FULL_HANDSHAKE", "off",
      "Force full-handshake protocol for DC initiator. Enabling this mode\n"
-     "increases network latency, but is more resilient to packet drops.",
+     "increases network latency, but is more resilient to packet drops.\n"
+     "Setting it to \"auto\" applies full-handshake on AR SLs.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dci_full_handshake),
-     UCS_CONFIG_TYPE_BOOL},
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-    {"DCI_KA_FULL_HANDSHAKE", "n",
+    {"DCI_KA_FULL_HANDSHAKE", "off",
      "Force full-handshake protocol for DC keepalive initiator.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dci_ka_full_handshake),
-     UCS_CONFIG_TYPE_BOOL},
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-    {"DCT_FULL_HANDSHAKE", "n", "Force full-handshake protocol for DC target.",
+    {"DCT_FULL_HANDSHAKE", "off", "Force full-handshake protocol for DC target.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, dct_full_handshake),
-     UCS_CONFIG_TYPE_BOOL},
+     UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
     {"RAND_DCI_SEED", "0",
      "Seed for DCI allocation when \"rand\" dci policy is used (0 - use default).",
@@ -309,9 +310,6 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 
     ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
 
-    dci->pool_index = pool_index;
-    dci->path_index = path_index;
-
     uct_rc_mlx5_iface_fill_attr(&iface->super, &attr,
                                 iface->super.super.config.tx_qp_len,
                                 &iface->super.rx.srq);
@@ -390,6 +388,9 @@ init_qp:
     }
 
     uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
+    dci->pool_index = pool_index;
+    dci->path_index = path_index;
+
     return UCS_OK;
 
 err:
@@ -397,6 +398,16 @@ err:
 err_qp:
     uct_ib_mlx5_destroy_qp(md, &dci->txwq.super);
     return status;
+}
+
+static int UCS_F_ALWAYS_INLINE
+uct_dc_mlx5_force_full_handshake(uct_dc_mlx5_iface_t *iface, int full_handshake_config)
+{
+    if (full_handshake_config == UCS_CONFIG_AUTO) {
+        return uct_ib_mlx5_iface_has_ar(&iface->super.super.super);
+    } else {
+        return full_handshake_config == UCS_CONFIG_ON;
+    }
 }
 
 #if HAVE_DC_DV
@@ -479,8 +490,10 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
     int ret;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCT) {
-        return uct_dc_mlx5_iface_devx_create_dct(iface,
-                                                 config->dct_full_handshake);
+        return uct_dc_mlx5_iface_devx_create_dct(
+                iface,
+                uct_dc_mlx5_force_full_handshake(iface,
+                                                 config->dct_full_handshake));
     }
 
     init_attr.comp_mask             = IBV_QP_INIT_ATTR_PD;
@@ -826,9 +839,10 @@ uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
         ucs_arbiter_init(&dci_pool->arbiter);
 
         for (i = 0; i < iface->tx.ndci; ++i) {
-            status = uct_dc_mlx5_iface_create_dci(iface, pool_index, dci_index,
-                                                  pool_index % num_paths,
-                                                  config->dci_full_handshake);
+            status = uct_dc_mlx5_iface_create_dci(
+                    iface, pool_index, dci_index, pool_index % num_paths,
+                    uct_dc_mlx5_force_full_handshake(
+                            iface, config->dci_full_handshake));
             if (status != UCS_OK) {
                 goto err;
             }
@@ -1140,13 +1154,12 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
-        ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
+        uct_rc_fc_restore_wnd(rc_iface, &ep->fc);
 
         /* Remove entry for flush to complete */
         kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
 
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
-        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0 */
@@ -1209,8 +1222,9 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf = uct_base_iface_estimate_perf,
+            .iface_estimate_perf = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh   = uct_dc_mlx5_iface_vfs_refresh,
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
@@ -1349,7 +1363,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         self->flags           |= UCT_DC_MLX5_IFACE_FLAG_UIDX;
         self->tx.num_dci_pools = self->super.super.super.num_paths;
     }
-    if (config->dci_ka_full_handshake) {
+    if (uct_dc_mlx5_force_full_handshake(self, config->dci_ka_full_handshake)) {
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE_FULL_HANDSHAKE;
     }
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
@@ -1564,6 +1578,13 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
     uct_ib_iface_t *ib_iface = &iface->super.super.super;
     ucs_status_t status;
     ucs_log_level_t log_lvl;
+    ucs_arbiter_t *waitq;
+    ucs_arbiter_group_t *group;
+    uint8_t pool_index;
+
+    uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
+    ucs_arbiter_group_purge(waitq, group,
+                            uct_dc_mlx5_ep_arbiter_purge_internal_cb, ep);
 
     if (ep->flags & (UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED |
                      UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL)) {
@@ -1583,12 +1604,13 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
         return;
     }
 
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
+    uct_rc_fc_restore_wnd(&iface->super.super, &ep->fc);
+
     status  = uct_iface_handle_ep_err(&ib_iface->super.super,
                                       &ep->super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
     uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
                                     txwq, log_lvl);
-
-    ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
 }

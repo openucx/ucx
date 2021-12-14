@@ -15,7 +15,6 @@ extern "C" {
 #endif
 
 
-size_t test_uct_peer_failure::m_req_purge_count       = 0ul;
 const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT  |
                                                         UCT_IFACE_FLAG_PENDING   |
                                                         UCT_IFACE_FLAG_CB_SYNC   |
@@ -23,7 +22,8 @@ const uint64_t test_uct_peer_failure::m_required_caps = UCT_IFACE_FLAG_AM_SHORT 
 
 test_uct_peer_failure::test_uct_peer_failure() :
     m_sender(NULL), m_nreceivers(2), m_tx_window(100),
-    m_err_count(0), m_am_count(0)
+    m_err_count(0), m_am_count(0), m_req_purge_count(0),
+    m_req_pending_count(0)
 {
 }
 
@@ -49,10 +49,6 @@ void test_uct_peer_failure::init()
     for (size_t i = 0; i < 2; ++i) {
         new_receiver();
     }
-
-    m_err_count       = 0;
-    m_req_purge_count = 0;
-    m_am_count        = 0;
 }
 
 ucs_status_t test_uct_peer_failure::am_dummy_handler(void *arg, void *data,
@@ -84,7 +80,9 @@ ucs_status_t test_uct_peer_failure::pending_cb(uct_pending_req_t *self)
 
 void test_uct_peer_failure::purge_cb(uct_pending_req_t *self, void *arg)
 {
-    m_req_purge_count++;
+    test_uct_peer_failure *test =
+            reinterpret_cast<test_uct_peer_failure*>(arg);
+    test->m_req_purge_count++;
 }
 
 ucs_status_t test_uct_peer_failure::err_cb(void *arg, uct_ep_h ep,
@@ -94,6 +92,10 @@ ucs_status_t test_uct_peer_failure::err_cb(void *arg, uct_ep_h ep,
 
     self->m_err_count++;
     self->m_failed_eps.insert(std::make_pair(ep, status));
+
+    /* any new op is not determined */
+    uct_ep_pending_purge(ep, purge_cb, self);
+    EXPECT_EQ(self->m_req_pending_count, self->m_req_purge_count);
 
     switch (status) {
     case UCS_ERR_ENDPOINT_TIMEOUT:
@@ -210,6 +212,7 @@ ucs_status_t test_uct_peer_failure::flush_ep(size_t index,
 ucs_status_t test_uct_peer_failure::add_pending(uct_ep_h ep,
                                                 pending_send_request_t &req)
 {
+    ++m_req_pending_count;
     req.ep       = ep;
     req.uct.func = pending_cb;
     return uct_ep_pending_add(ep, &req.uct, 0);
@@ -306,12 +309,6 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
         flush();
     }
 
-    EXPECT_GE(m_err_count, 0ul);
-
-    /* any new op is not determined */
-
-    uct_ep_pending_purge(ep0(), purge_cb, NULL);
-    EXPECT_EQ(num_pend_sends, m_req_purge_count);
     EXPECT_GE(m_err_count, 0ul);
 }
 

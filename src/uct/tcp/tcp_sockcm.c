@@ -133,18 +133,24 @@ ucs_status_t uct_tcp_sockcm_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
 {
     uct_tcp_sockcm_ep_t *cep = ucs_derived_of(ep, uct_tcp_sockcm_ep_t);
     ucs_status_t status;
-    socklen_t local_addr_len;
-    socklen_t remote_addr_len;
+    socklen_t addr_len;
 
-    status = ucs_socket_getname(cep->fd, &ep_attr->local_address, &local_addr_len);
-    if (status != UCS_OK) {
-        return status;
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_LOCAL_SOCKADDR) {
+        status = ucs_socket_getname(cep->fd, &ep_attr->local_address,
+                                    &addr_len);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
-    /* get the device address of the remote peer associated with the connected fd */
-    status = ucs_socket_getpeername(cep->fd, &ep_attr->remote_address, &remote_addr_len);
-    if (status != UCS_OK) {
-        return status;
+    if (ep_attr->field_mask & UCT_EP_ATTR_FIELD_REMOTE_SOCKADDR) {
+        /* get the device address of the remote peer associated with the
+           connected fd */
+        status = ucs_socket_getpeername(cep->fd, &ep_attr->remote_address,
+                                        &addr_len);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;
@@ -188,7 +194,7 @@ static uct_iface_ops_t uct_tcp_sockcm_iface_ops = {
 };
 
 static uct_iface_internal_ops_t uct_tcp_sockcm_iface_internal_ops = {
-    .iface_estimate_perf = (uct_iface_estimate_perf_func_t)ucs_empty_function,
+    .iface_estimate_perf = (uct_iface_estimate_perf_func_t)ucs_empty_function_return_unsupported,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = uct_tcp_sockcm_ep_query,
 };

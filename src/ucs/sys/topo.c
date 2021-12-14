@@ -120,17 +120,12 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
     if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
         *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
-        ucs_debug("bus id 0x%"PRIx64" exists. sys_dev = %u", bus_id_bit_rep,
-                  *sys_dev);
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
                           UCS_TOPO_MAX_SYS_DEVICES);
         *sys_dev = ucs_topo_global_ctx.num_devices;
         ++ucs_topo_global_ctx.num_devices;
-
-        ucs_debug("bus id 0x%"PRIx64" doesn't exist. sys_dev = %u",
-                  bus_id_bit_rep, *sys_dev);
 
         kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
 
@@ -142,6 +137,8 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
         ucs_topo_global_ctx.devices[*sys_dev].bus_id = *bus_id;
         ucs_topo_global_ctx.devices[*sys_dev].name   = name;
+
+        ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -213,6 +210,7 @@ static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
     distance->latency = 500e-9;
     switch (ucs_arch_get_cpu_model()) {
     case UCS_CPU_MODEL_AMD_ROME:
+    case UCS_CPU_MODEL_AMD_MILAN:
         distance->bandwidth = 5100 * UCS_MBYTE;
         break;
     default:

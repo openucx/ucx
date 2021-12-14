@@ -17,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/string.h>
+#include <ucs/vfs/base/vfs_obj.h>
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
@@ -285,6 +286,28 @@ static UCS_F_ALWAYS_INLINE void ucs_memtrack_releasing_internal(void *ptr)
     ucs_memtrack_do_releasing(ptr);
 }
 
+static void ucs_memtrack_vfs_read(void *obj, ucs_string_buffer_t *strb,
+                                  void *arg_ptr, uint64_t arg_u64)
+{
+    char *buffer;
+    size_t size;
+    FILE *f;
+
+    f = open_memstream(&buffer, &size);
+    ucs_memtrack_dump(f);
+    fclose(f);
+
+    ucs_string_buffer_appendf(strb, "%s", buffer);
+    free(buffer);
+}
+
+static void ucs_memtrack_vfs_init()
+{
+    ucs_vfs_obj_add_dir(NULL, &ucs_memtrack_context, "ucs/memtrack");
+    ucs_vfs_obj_add_ro_file(&ucs_memtrack_context, ucs_memtrack_vfs_read, NULL,
+                            0, "all");
+}
+
 void *ucs_malloc(size_t size, const char *name)
 {
     void *ptr = malloc(size);
@@ -395,13 +418,15 @@ void ucs_memtrack_init()
 
     status = UCS_STATS_NODE_ALLOC(&ucs_memtrack_context.stats,
                                   &ucs_memtrack_stats_class,
-                                  ucs_stats_get_root());
+                                  ucs_stats_get_root(), "");
     if (status != UCS_OK) {
         return;
     }
 
     ucs_debug("memtrack enabled");
     ucs_memtrack_context.enabled = 1;
+
+    ucs_memtrack_vfs_init();
 }
 
 void ucs_memtrack_cleanup()
@@ -411,6 +436,8 @@ void ucs_memtrack_cleanup()
     if (!ucs_memtrack_context.enabled) {
         return;
     }
+
+    ucs_vfs_obj_remove(&ucs_memtrack_context);
 
     ucs_memtrack_generate_report();
 
