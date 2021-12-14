@@ -24,6 +24,9 @@ libuct_cuda_gdrcopy_la_SOURCES = \
 	gdr_copy_iface.c \
 	gdr_copy_ep.c
 
+PKG_CONFIG_NAME=gdrcopy
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif

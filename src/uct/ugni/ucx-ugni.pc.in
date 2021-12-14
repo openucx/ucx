@@ -1,0 +1,6 @@
+Name: @PACKAGE@-ugni
+Description: Unified Communication X Library UGNI module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:
+

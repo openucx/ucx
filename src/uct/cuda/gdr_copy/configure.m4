@@ -7,4 +7,5 @@
 UCX_CHECK_GDRCOPY
 
 AS_IF([test "x$gdrcopy_happy" = "xyes"], [uct_cuda_modules="${uct_cuda_modules}:gdrcopy"])
-AC_CONFIG_FILES([src/uct/cuda/gdr_copy/Makefile])
+AC_CONFIG_FILES([src/uct/cuda/gdr_copy/Makefile
+                 src/uct/cuda/gdr_copy/ucx-gdrcopy.pc])
