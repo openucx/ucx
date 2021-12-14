@@ -16,11 +16,11 @@ resources:
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:2
     - container: ubuntu16_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:3
     - container: ubuntu18_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:3
     - container: ubuntu20_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:2
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:3
 
 stages:
   - stage: Prepare
