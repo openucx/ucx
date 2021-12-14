@@ -1089,9 +1089,10 @@ public:
         test_ucp_am_nbx::init();
 
         // Create new sender() with different segment size
-        m_env.push_back(new ucs::scoped_setenv("UCX_IB_SEG_SIZE", str_size.c_str()));
-        m_env.push_back(new ucs::scoped_setenv("UCX_MM_SEG_SIZE", str_size.c_str()));
-        m_env.push_back(new ucs::scoped_setenv("UCX_SCOPY_SEG_SIZE", str_size.c_str()));
+        modify_config("IB_SEG_SIZE", str_size, IGNORE_IF_NOT_EXIST);
+        modify_config("MM_SEG_SIZE", str_size, IGNORE_IF_NOT_EXIST);
+        modify_config("SCOPY_SEG_SIZE", str_size, IGNORE_IF_NOT_EXIST);
+        modify_config("TCP_SEG_SIZE", str_size, IGNORE_IF_NOT_EXIST);
 
         entity *ent = create_entity(true);
         ent->connect(&receiver(), get_ep_params());

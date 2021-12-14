@@ -174,6 +174,12 @@ public:
         static void reject_conn_cb(ucp_conn_request_h conn_req, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
+
+        static ucs_log_func_rc_t
+        hide_config_warns_logger(const char *file, unsigned line,
+                                 const char *function, ucs_log_level_t level,
+                                 const ucs_log_component_config_t *comp_conf,
+                                 const char *message, va_list ap);
     };
 
     static bool is_request_completed(void *req);
