@@ -562,6 +562,7 @@ static ucs_mpool_ops_t uct_cuda_ipc_event_desc_mpool_ops = {
 static uct_iface_internal_ops_t uct_cuda_ipc_iface_internal_ops = {
     .iface_estimate_perf = uct_cuda_ipc_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worker,
