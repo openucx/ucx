@@ -321,16 +321,12 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
     uct_cuda_copy_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_copy_iface_t);
 
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
-        perf_attr->overhead = UCT_CUDA_COPY_IFACE_OVERHEAD;
-    }
-
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;
         if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE) &&
             (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE) &&
             (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE) &&
-            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE)) {
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE)) {
 
             if ((perf_attr->local_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN) &&
                 (perf_attr->remote_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
@@ -347,6 +343,7 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
                       (unsigned)perf_attr->remote_sys_device,
                       perf_attr->bandwidth.shared);
         }
+    }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
         perf_attr->send_pre_overhead = UCT_CUDA_COPY_IFACE_OVERHEAD;

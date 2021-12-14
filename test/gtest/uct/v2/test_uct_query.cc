@@ -36,7 +36,7 @@ UCS_TEST_P(test_uct_query, query_perf)
                                    UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
-                                   UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE |
+                                   UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE |
                                    UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
                                    UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
                                    UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
@@ -79,8 +79,7 @@ UCS_TEST_P(test_uct_query, query_perf)
                                        UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
                                        UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
                                        UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
-                                       UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE |
-                                       UCT_PERF_ATTR_FIELD_OVERHEAD |
+                                       UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE |
                                        UCT_PERF_ATTR_FIELD_BANDWIDTH;
 
             buffer = mem_buffer::allocate(buffer_size, UCS_MEMORY_TYPE_CUDA);

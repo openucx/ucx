@@ -485,8 +485,16 @@ uct_cuda_ipc_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     ucs_sys_bus_id_t remote_bus_id;
     uct_cuda_ipc_key_t *key;
 
-    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OVERHEAD) {
-        perf_attr->overhead = UCT_CUDA_IPC_IFACE_OVERHEAD;
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD) {
+        perf_attr->send_pre_overhead = UCT_CUDA_IPC_IFACE_OVERHEAD;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD) {
+        perf_attr->send_post_overhead = 0;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_RECV_OVERHEAD) {
+        perf_attr->recv_overhead = 0;
     }
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
