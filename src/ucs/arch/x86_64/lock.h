@@ -8,6 +8,7 @@
 #define UCS_X86_64_LOCK_H
 
 #include <ucs/sys/compiler_def.h>
+#include <ucs/arch/lock.h>
 
 BEGIN_C_DECLS
 
