@@ -1136,21 +1136,15 @@ static void uct_dc_mlx5_ep_fc_cleanup(uct_dc_mlx5_ep_t *ep)
     }
 }
 
-UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
+UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)    
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(self->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
-    khiter_t it;
 
     uct_dc_mlx5_ep_pending_purge(&self->super.super,
                                  uct_rc_ep_pending_purge_warn_cb, self);
     uct_dc_mlx5_ep_fc_cleanup(self);
     uct_dc_mlx5_ep_keepalive_cleanup(self);
-
-    it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)self);
-    if (it != kh_end(&iface->tx.fc_hash)) {
-        kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
-    }
 
     if ((self->dci == UCT_DC_MLX5_EP_NO_DCI) ||
         uct_dc_mlx5_iface_is_dci_rand(iface)) {
