@@ -122,8 +122,6 @@ static double uct_cuda_ipc_iface_get_bw()
     }
 }
 
-/* calls nvmlInit_v2 and nvmlShutdown which are expensive but
- * get_device_nvlinks should be outside critical path */
 static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
 {
     static int num_nvlinks = -1;
@@ -137,14 +135,9 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
         return num_nvlinks;
     }
 
-    status = UCT_NVML_FUNC_LOG_ERR(nvmlInit_v2());
-    if (status != UCS_OK) {
-        goto err;
-    }
-
     status = UCT_NVML_FUNC_LOG_ERR(nvmlDeviceGetHandleByIndex(ordinal, &device));
     if (status != UCS_OK) {
-        goto err_sd;
+        goto err;
     }
 
     value.fieldId = NVML_FI_DEV_NVLINK_LINK_COUNT;
@@ -163,15 +156,12 @@ static int uct_cuda_ipc_get_device_nvlinks(int ordinal)
                                UCS_LOG_LEVEL_DEBUG);
         if (status != UCS_OK) {
             ucs_debug("could not find remote end info for link %u", link);
-            goto err_sd;
+            goto err;
         }
     }
 
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
     return num_nvlinks;
 
-err_sd:
-    UCT_NVML_FUNC_LOG_ERR(nvmlShutdown());
 err:
     return 0;
 }
