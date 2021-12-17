@@ -447,6 +447,7 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
     uct_tcp_ep_t *ep       = ucs_derived_of(tl_ep, uct_tcp_ep_t);
     uct_tcp_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                             uct_tcp_iface_t);
+    ucs_status_t status;
 
     if (/* EPs that are connected as CONNECT_TO_EP have to be full duplex */
         !(ep->flags & UCT_TCP_EP_FLAG_CONNECT_TO_EP) &&
@@ -460,9 +461,14 @@ void uct_tcp_ep_destroy(uct_ep_h tl_ep)
         /* purge all outstanding operations (GET/PUT Zcopy, flush operations) */
         uct_tcp_ep_purge(ep, UCS_ERR_CANCELED);
         uct_tcp_cm_insert_ep(iface, ep);
-    } else {
-        uct_tcp_ep_destroy_internal(tl_ep);
+        /* notify the peer that nothing will be sent anymore */
+        status = uct_tcp_cm_send_event(ep, UCT_TCP_CM_CONN_FIN, 0);
+        if (status == UCS_OK) {
+            return;
+        }
     }
+
+    uct_tcp_ep_destroy_internal(tl_ep);
 }
 
 static unsigned uct_tcp_ep_destroy_progress(void *arg)
