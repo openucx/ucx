@@ -126,7 +126,7 @@ static void uct_cuda_ipc_cache_invalidate_regions(uct_cuda_ipc_cache_t *cache,
 
     ucs_list_head_init(&region_list);
     ucs_pgtable_search_range(&cache->pgtable, (ucs_pgt_addr_t)from,
-                             (ucs_pgt_addr_t)to,
+                             (ucs_pgt_addr_t)to - 1,
                              uct_cuda_ipc_cache_region_collect_callback,
                              &region_list);
     ucs_list_for_each_safe(region, tmp, &region_list, list) {
