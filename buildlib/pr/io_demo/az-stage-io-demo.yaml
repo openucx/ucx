@@ -72,7 +72,16 @@ steps:
   timeoutInMinutes: 15
 
 - bash: |
-    python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list $(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
+    set -eEx
+    analyzer="/hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py"
+    analyzer_args="-d $(workspace)/${{ parameters.name }}"
+    analyzer_args="$analyzer_args --duration ${{ parameters.duration }}"
+    analyzer_args="$analyzer_args -t 3"
+    pr_branch="$(System.PullRequest.TargetBranch)"
+    if [ -n "${pr_branch}" ]; then
+        analyzer_args="$analyzer_args --allow_list ${pr_branch}"
+    fi
+    python ${analyzer} ${analyzer_args}
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 1
 
