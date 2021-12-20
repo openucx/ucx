@@ -331,10 +331,17 @@ ucp_proto_rndv_put_zcopy_send_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
+    unsigned uct_mem_flags;
+
+    if (req->flags & UCP_REQUEST_FLAG_RNDV_FRAG) {
+        uct_mem_flags = UCT_MD_MEM_ACCESS_LOCAL_READ;
+    } else {
+        uct_mem_flags = 0;
+    }
 
     return ucp_proto_multi_zcopy_progress(
             req, &rpriv->bulk.mpriv, ucp_proto_rndv_put_common_request_init,
-            UCT_MD_MEM_ACCESS_LOCAL_READ, UCS_BIT(UCP_DATATYPE_CONTIG),
+            uct_mem_flags, UCS_BIT(UCP_DATATYPE_CONTIG),
             ucp_proto_rndv_put_zcopy_send_func,
             ucp_proto_rndv_put_common_data_sent, rpriv->put_comp_cb);
 }

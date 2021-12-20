@@ -153,7 +153,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
         packed_rkey_size      = ucp_rkey_pack_uct(
                 worker->context, sreq->send.state.dt.dt.contig.md_map,
                 sreq->send.state.dt.dt.contig.memh, &mem_info, 0, NULL,
-                rkey_buf);
+                rkey_buf, 1);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
                       ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -195,7 +195,7 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
                                              rreq->recv.state.dt.contig.md_map,
                                              rreq->recv.state.dt.contig.memh,
                                              &mem_info, 0, NULL,
-                                             rndv_rtr_hdr + 1);
+                                             rndv_rtr_hdr + 1, 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }
@@ -937,7 +937,7 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
 
         freq->send.lane                       = mem_type_rma_lane;
         freq->send.ep                         = mem_type_ep;
-        freq->send.state.dt.dt.contig.memh[0] = ucp_memh2uct(mdesc->memh, md_index);
+        freq->send.state.dt.dt.contig.memh[0] = mdesc->memh->uct[md_index];
         freq->send.state.dt.dt.contig.md_map  = UCS_BIT(md_index);
     }
 }
@@ -1271,7 +1271,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         ucs_for_each_bit(md_index,
                          (ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map &
                           mdesc->memh->md_map)) {
-            freq->recv.state.dt.contig.memh[memh_index++] = ucp_memh2uct(mdesc->memh, md_index);
+            freq->recv.state.dt.contig.memh[memh_index++] = mdesc->memh->uct[md_index];
             freq->recv.state.dt.contig.md_map            |= UCS_BIT(md_index);
         }
         ucs_assert(memh_index <= UCP_MAX_OP_MDS);

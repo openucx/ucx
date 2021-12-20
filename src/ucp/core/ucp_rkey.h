@@ -183,7 +183,8 @@ ssize_t
 ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                   const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
                   ucp_sys_dev_map_t sys_dev_map,
-                  const ucs_sys_dev_distance_t *sys_distance, void *buffer);
+                  const ucs_sys_dev_distance_t *sys_distance, void *buffer,
+                  int old_proto);
 
 
 ucs_status_t ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer,

@@ -14,6 +14,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/debug/log.h>
 #include <ucs/datastruct/mpool.h>
+#include <ucs/memory/rcache.h>
 
 #include <inttypes.h>
 
@@ -22,17 +23,24 @@
  * Memory handle.
  * Contains general information, and a list of UCT handles.
  * md_map specifies which MDs from the current context are present in the array.
- * The array itself contains only the MDs specified in md_map, without gaps.
+ * The array itself contains only the MDs specified in md_map.
  */
 typedef struct ucp_mem {
-    void                          *address;     /* Region start address */
-    size_t                        length;       /* Region length */
-    uct_alloc_method_t            alloc_method; /* Method used to allocate the memory */
-    ucs_memory_type_t             mem_type;     /* Type of allocated or registered memory */
-    uct_md_h                      alloc_md;     /* MD used to allocated the memory */
-    ucp_md_map_t                  md_map;       /* Which MDs have valid memory handles */
-    uct_mem_h                     uct[0];       /* Valid memory handles, as popcount(md_map) */
+    uct_alloc_method_t            alloc_method;   /* Method used to allocate the memory */
+    ucs_memory_type_t             mem_type;       /* Type of allocated or registered memory */
+    ucp_md_index_t                alloc_md_index; /* Index of MD used to allocated the memory */
+    ucp_md_map_t                  md_map;         /* Which MDs have valid memory handles */
+    uct_mem_h                     uct[0];         /* Sparse memory handles array num_mds in size */
 } ucp_mem_t;
+
+
+/**
+ * Memory handles in the registration cache.
+ */
+typedef struct ucp_mem_rcache_region {
+    ucs_rcache_region_t           super;
+    ucp_mem_t                     memh;
+} ucp_mem_rcache_region_t;
 
 
 /**
@@ -120,6 +128,16 @@ void ucp_mem_type_unreg_buffers(ucp_worker_h worker, ucs_memory_type_t mem_type,
                                 ucp_md_map_t *md_map,
                                 uct_rkey_bundle_t *rkey_bundle);
 
+ucs_status_t ucp_memh_get(ucp_context_h context, void *address, size_t length,
+                          unsigned uct_flags, ucs_memory_type_t mem_type,
+                          ucp_md_map_t reg_md_map, ucp_mem_h *memh_p);
+
+void ucp_memh_put(ucp_context_h context, ucp_mem_h memh);
+
+ucs_status_t ucp_mem_rcache_init(ucp_context_h context);
+
+int ucp_memh_zero_length(const ucp_mem_h memh);
+
 static UCS_F_ALWAYS_INLINE ucp_md_map_t
 ucp_rkey_packed_md_map(const void *rkey_buffer)
 {
@@ -142,10 +160,20 @@ ucp_memh_map2uct(const uct_mem_h *uct, ucp_md_map_t md_map, ucp_md_index_t md_id
     return uct[ucs_bitmap2idx(md_map, md_idx)];
 }
 
-static UCS_F_ALWAYS_INLINE uct_mem_h
-ucp_memh2uct(ucp_mem_h memh, ucp_md_index_t md_idx)
+static UCS_F_ALWAYS_INLINE void *ucp_memh_address(const ucp_mem_h memh)
 {
-    return ucp_memh_map2uct(memh->uct, memh->md_map, md_idx);
+    ucp_mem_rcache_region_t *region = ucs_container_of(memh,
+                                                       ucp_mem_rcache_region_t,
+                                                       memh);
+    return (void*)region->super.super.start;
+}
+
+static UCS_F_ALWAYS_INLINE size_t ucp_memh_length(const ucp_mem_h memh)
+{
+    ucp_mem_rcache_region_t *region = ucs_container_of(memh,
+                                                       ucp_mem_rcache_region_t,
+                                                       memh);
+    return region->super.super.end - region->super.super.start;
 }
 
 
