@@ -133,3 +133,5 @@ jobs:
           roce_iface: $(test_intefrafe)
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
+          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+            analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
