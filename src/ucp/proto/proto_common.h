@@ -164,7 +164,7 @@ typedef struct {
 /* Private data per lane */
 typedef struct {
     ucp_lane_index_t        lane;       /* Lane index in the endpoint */
-    ucp_rsc_index_t         memh_index; /* Index of UCT memory handle (for zero copy) */
+    ucp_rsc_index_t         md_index;   /* Index of UCT memory handle (for zero copy) */
     ucp_md_index_t          rkey_index; /* Remote key index (for remote access) */
     uint8_t                 max_iov;    /* Maximal number of IOVs on this lane */
 } ucp_proto_common_lane_priv_t;

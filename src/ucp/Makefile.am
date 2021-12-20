@@ -28,6 +28,7 @@ noinst_HEADERS = \
 	core/ucp_ep_vfs.h \
 	core/ucp_listener.h \
 	core/ucp_mm.h \
+	core/ucp_mm.inl \
 	core/ucp_proxy_ep.h \
 	core/ucp_request.h \
 	core/ucp_request.inl \

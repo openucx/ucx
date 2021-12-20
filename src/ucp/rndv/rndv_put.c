@@ -319,7 +319,7 @@ ucp_proto_rndv_put_zcopy_send_func(ucp_request_t *req,
 
     max_payload = ucp_proto_rndv_bulk_max_payload(req, &rpriv->bulk, lpriv);
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
-                               lpriv->super.memh_index,
+                               lpriv->super.md_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), next_iter, &iov,
                                1);
     return ucp_proto_rndv_put_common_send(req, lpriv, &iov,

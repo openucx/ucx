@@ -12,6 +12,7 @@
 #include "ucp_request.h"
 #include "ucp_ep.inl"
 
+#include <ucp/core/ucp_mm.inl>
 #include <ucp/rma/rma.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
@@ -114,13 +115,12 @@ ucp_rkey_unpack_distance(const ucp_rkey_packed_distance_t *packed_distance,
     distance->bandwidth = UCS_FP8_UNPACK(BANDWIDTH, packed_distance->bandwidth);
 }
 
-UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
-                 (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
-                  buffer),
-                 ucp_context_h context, ucp_md_map_t md_map,
-                 const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
-                 ucp_sys_dev_map_t sys_dev_map,
-                 const ucs_sys_dev_distance_t *sys_distance, void *buffer)
+static ssize_t
+ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
+                     const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
+                     ucp_sys_dev_map_t sys_dev_map,
+                     const ucs_sys_dev_distance_t *sys_distance, void *buffer,
+                     int sparse_memh)
 {
     void *p = buffer;
     unsigned md_index, uct_memh_index;
@@ -150,7 +150,10 @@ UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
 
         tl_rkey_buf = ucs_serialize_next_raw(&p, void, tl_rkey_size);
         status      = uct_md_mkey_pack(context->tl_mds[md_index].md,
-                                       memh[uct_memh_index], tl_rkey_buf);
+                                       memh[sparse_memh ?
+                                            md_index :
+                                            uct_memh_index],
+                                       tl_rkey_buf);
         if (status != UCS_OK) {
             result = status;
             goto out;
@@ -183,6 +186,30 @@ out:
     return result;
 }
 
+UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_uct,
+                 (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
+                  buffer),
+                 ucp_context_h context, ucp_md_map_t md_map,
+                 const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
+                 ucp_sys_dev_map_t sys_dev_map,
+                 const ucs_sys_dev_distance_t *sys_distance, void *buffer)
+{
+    return ucp_rkey_pack_common(context, md_map, memh, mem_info,
+                                sys_dev_map, sys_distance, buffer, 0);
+}
+
+UCS_PROFILE_FUNC(ssize_t, ucp_rkey_pack_memh,
+                 (context, md_map, memh, mem_info, sys_dev_map, sys_distance,
+                  buffer),
+                 ucp_context_h context, ucp_md_map_t md_map,
+                 const ucp_mem_h memh, const ucp_memory_info_t *mem_info,
+                 ucp_sys_dev_map_t sys_dev_map,
+                 const ucs_sys_dev_distance_t *sys_distance, void *buffer)
+{
+    return ucp_rkey_pack_common(context, md_map, memh->uct, mem_info,
+                                sys_dev_map, sys_distance, buffer, 1);
+}
+
 ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
                            void **rkey_buffer_p, size_t *size_p)
 {
@@ -196,9 +223,9 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     UCP_THREAD_CS_ENTER(&context->mt_lock);
 
     ucs_trace("packing rkeys for buffer %p memh %p md_map 0x%"PRIx64,
-              memh->address, memh, memh->md_map);
+              ucp_memh_address(memh), memh, memh->md_map);
 
-    if (memh->length == 0) {
+    if (ucp_memh_is_zero_length(memh)) {
         /* dummy memh, return dummy key */
         *rkey_buffer_p = &ucp_mem_dummy_buffer;
         *size_p        = sizeof(ucp_mem_dummy_buffer);
@@ -217,8 +244,8 @@ ucs_status_t ucp_rkey_pack(ucp_context_h context, ucp_mem_h memh,
     mem_info.type    = memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
 
-    packed_size = ucp_rkey_pack_uct(context, memh->md_map, memh->uct, &mem_info,
-                                    0, NULL, rkey_buffer);
+    packed_size = ucp_rkey_pack_memh(context, memh->md_map, memh, &mem_info,
+                                     0, NULL, rkey_buffer);
     if (packed_size < 0) {
         status = (ucs_status_t)packed_size;
         goto err_destroy;

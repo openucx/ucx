@@ -155,11 +155,11 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
     rpriv = req->send.proto_config->priv;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
-    ucs_assert(rpriv->super.md_map == dt_iter->type.contig.reg.md_map);
 
     ucp_proto_rndv_rtr_hdr_pack(req, rtr, dt_iter->type.contig.buffer);
 
-    rkey_size = ucp_proto_request_pack_rkey(req, rpriv->super.sys_dev_map,
+    rkey_size = ucp_proto_request_pack_rkey(req, rpriv->super.md_map,
+                                            rpriv->super.sys_dev_map,
                                             rpriv->super.sys_dev_distance,
                                             rtr + 1);
     ucs_assertv(rkey_size == rpriv->super.packed_rkey_size,
@@ -243,8 +243,6 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_md_map_t md_map                    = rpriv->super.md_map;
     ucp_mem_desc_t *mdesc                  = req->send.rndv.mdesc;
-    ucp_md_index_t md_index, memh_index;
-    uct_mem_h uct_memh[UCP_MAX_LANES];
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
 
@@ -252,16 +250,13 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ucp_proto_rndv_rtr_hdr_pack(req, rtr, mdesc->ptr);
 
     ucs_assert(ucs_test_all_flags(mdesc->memh->md_map, md_map));
-    memh_index = 0;
-    ucs_for_each_bit(md_index, md_map) {
-        uct_memh[memh_index++] = ucp_memh2uct(mdesc->memh, md_index);
-    }
 
     /* Pack remote key for the fragment */
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    packed_rkey_size = ucp_rkey_pack_uct(req->send.ep->worker->context, md_map,
-                                         uct_memh, &mem_info, 0, NULL, rtr + 1);
+    packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
+                                          mdesc->memh, &mem_info, 0, NULL,
+                                          rtr + 1);
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
                   ucs_status_string((ucs_status_t)packed_rkey_size));

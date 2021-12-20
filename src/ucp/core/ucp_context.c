@@ -414,6 +414,9 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.worker_addr_version),
    UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
 
+  {"RCACHE_ENABLE", "try", "Use user space memory registration cache.",
+   ucs_offsetof(ucp_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
+
    {NULL}
 };
 UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
@@ -1258,7 +1261,8 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
     unsigned md_index;
     uint64_t mem_type_mask;
     uint64_t mem_type_bitmap;
-
+    ucs_memory_type_t mem_type;
+    const uct_md_attr_t *md_attr;
 
     /* List memory domain resources */
     uct_component_attr.field_mask   = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
@@ -1300,6 +1304,16 @@ static ucs_status_t ucp_add_component_resources(ucp_context_h context,
                 ++context->num_mem_type_detect_mds;
                 mem_type_mask |= mem_type_bitmap;
             }
+
+            md_attr = &context->tl_mds[md_index].attr;
+            if (md_attr->cap.flags & UCT_MD_FLAG_REG) {
+                ucs_memory_type_for_each(mem_type) {
+                    if (md_attr->cap.reg_mem_types & UCS_BIT(mem_type)) {
+                        context->reg_md_map[mem_type] |= UCS_BIT(md_index);
+                    }
+                }
+            }
+
             ++context->num_mds;
         } else {
             ucs_debug("closing md %s because it has no selected transport resources",
@@ -1338,6 +1352,10 @@ static ucs_status_t ucp_fill_resources(ucp_context_h context,
     context->num_tls                  = 0;
     context->mem_type_mask            = 0;
     context->num_mem_type_detect_mds  = 0;
+
+    for (i = 0; i < UCS_MEMORY_TYPE_LAST; ++i) {
+        context->reg_md_map[i] = 0;
+    }
 
     ucs_string_set_init(&avail_tls);
     UCS_STATIC_ASSERT(UCT_DEVICE_TYPE_NET == 0);
@@ -1804,6 +1822,22 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_config;
     }
 
+    if (config->enable_rcache != UCS_NO) {
+        status = ucp_mem_rcache_init(context);
+        if (status != UCS_OK) {
+            if (config->enable_rcache == UCS_YES) {
+                ucs_error("could not create UCP registration cache: %s",
+                          ucs_status_string(status));
+                goto err_free_res;
+            } else {
+                ucs_diag("could not create UCP registration cache: %s",
+                         ucs_status_string(status));
+            }
+        }
+    } else {
+        context->rcache = NULL;
+    }
+
     if (dfl_config != NULL) {
         ucp_config_release(dfl_config);
     }
@@ -1818,6 +1852,8 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     *context_p = context;
     return UCS_OK;
 
+err_free_res:
+    ucp_free_resources(context);
 err_free_config:
     ucp_free_config(context);
 err_free_ctx:
@@ -1833,6 +1869,7 @@ err:
 void ucp_cleanup(ucp_context_h context)
 {
     ucs_vfs_obj_remove(context);
+    ucp_mem_rcache_cleanup(context);
     ucp_free_resources(context);
     ucp_free_config(context);
     UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);

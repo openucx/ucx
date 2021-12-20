@@ -25,6 +25,11 @@
     ((_prot) & PROT_READ)  ? 'r' : '-', \
     ((_prot) & PROT_WRITE) ? 'w' : '-'
 
+/*
+ * Minimal rcache alignment.
+ */
+#define UCS_RCACHE_MIN_ALIGNMENT UCS_PGT_ADDR_ALIGN
+
 
 typedef struct ucs_rcache         ucs_rcache_t;
 typedef struct ucs_rcache_ops     ucs_rcache_ops_t;

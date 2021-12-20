@@ -165,6 +165,8 @@ struct ucp_config {
     ucs_list_link_t                        cached_key_list;
     /** Array of worker memory pool sizes */
     UCS_CONFIG_ARRAY_FIELD(size_t, memunits) mpool_sizes;
+    /** Memory registration cache */
+    ucs_ternary_auto_value_t               enable_rcache;
 };
 
 
@@ -226,6 +228,10 @@ typedef struct ucp_context {
     int                           alloc_md_map_initialized;
     ucp_md_map_t                  alloc_md_map;
 
+    /* Map of MDs that provide registration for given memory type,
+       ucp_mem_map() will register memory for all those domains. */
+    ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
@@ -237,6 +243,9 @@ typedef struct ucp_context {
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
+
+    /* Mem handle registration cache */
+    ucs_rcache_t                  *rcache;
 
     struct {
 
