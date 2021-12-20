@@ -2902,11 +2902,15 @@ protected:
         send_buf.pattern_fill(3, size);
 
         /* Complete receive operations */
+        ucs::ptr_vector<mem_buffer> recv_bufs;
         for (size_t i = 0; i < num_sends; ++i) {
-            mem_buffer recv_buf(size, UCS_MEMORY_TYPE_HOST);
-            recv_buf.pattern_fill(2, size);
-            void *rreq = recv(receiver(), recv_buf.ptr(), size, messages[i],
-                              rtag_complete_check_data_cbx, recv_buf.ptr());
+            mem_buffer *recv_buf = new mem_buffer(size, UCS_MEMORY_TYPE_HOST);
+            recv_buf->pattern_fill(2, size);
+            recv_bufs.push_back(recv_buf);
+
+            void *rreq = recv(receiver(), recv_buf->ptr(), size, messages[i],
+                              rtag_complete_check_data_cbx,
+                              reinterpret_cast<void*>(recv_buf));
             reqs.push_back(rreq);
         }
         requests_wait(reqs);
