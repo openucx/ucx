@@ -281,11 +281,9 @@ uct_rdamcm_cm_ep_destroy_reserved_qpn(uct_rdmacm_cm_device_context_t *ctx,
 {
     uint32_t qpns_per_obj;
 
-    /* Reserved QP number is created on-demand when we send the private data */
-    if (!(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED)) {
-        return;
-    }
+    ucs_assert(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED);
 
+    /* Reserved QP number is created on-demand when we send the private data */
     ucs_debug("cm ep destroy reserved qpn 0x%x on rdmacm_id %p",
               cep->qpn, cep->id);
 
@@ -304,14 +302,13 @@ uct_rdamcm_cm_ep_destroy_reserved_qpn(uct_rdmacm_cm_device_context_t *ctx,
     return;
 }
 
-static void uct_rdmacm_cm_ep_destroy_dummy_qp(uct_rdmacm_cm_ep_t *cep)
+static void
+uct_rdmacm_cm_ep_destroy_dummy_qp(uct_rdmacm_cm_device_context_t *ctx,
+                                  uct_rdmacm_cm_ep_t *cep)
 {
     int ret;
 
-    if (!(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED)) {
-        return;
-    }
-
+    ucs_assert(cep->flags & UCT_RDMACM_CM_EP_QPN_CREATED);
     ucs_assert_always(cep->qp != NULL);
 
     ucs_debug("cm ep destroy dummy qp_num 0x%x on rdmacm_id %p",
@@ -323,34 +320,38 @@ static void uct_rdmacm_cm_ep_destroy_dummy_qp(uct_rdmacm_cm_ep_t *cep)
     }
 
     cep->qp = NULL;
+
+    ucs_assert(ctx->num_dummy_qps > 0);
+    --ctx->num_dummy_qps;
 }
 
-static ucs_status_t uct_rdmacm_cm_create_dummy_qp(struct rdma_cm_id *id,
-                                                  struct ibv_cq *cq,
-                                                  struct ibv_qp **qp_p)
+static ucs_status_t
+uct_rdmacm_cm_create_dummy_qp(uct_rdmacm_cm_device_context_t *ctx,
+                              uct_rdmacm_cm_ep_t *cep)
 {
     struct ibv_qp_init_attr qp_init_attr = {0};
     struct ibv_qp *qp;
 
     /* Create a dummy UD qp */
-    qp_init_attr.send_cq          = cq;
-    qp_init_attr.recv_cq          = cq;
+    qp_init_attr.send_cq          = ctx->cq;
+    qp_init_attr.recv_cq          = ctx->cq;
     qp_init_attr.qp_type          = IBV_QPT_UD;
     qp_init_attr.cap.max_send_wr  = 2;
     qp_init_attr.cap.max_recv_wr  = 2;
     qp_init_attr.cap.max_send_sge = 1;
     qp_init_attr.cap.max_recv_sge = 1;
 
-    qp = ibv_create_qp(id->pd, &qp_init_attr);
+    qp = ibv_create_qp(cep->id->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create a dummy ud qp. %m");
         return UCS_ERR_IO_ERROR;
     }
 
     ucs_debug("created ud QP %p with qp_num: 0x%x and cq %p on rdmacm_id %p",
-              qp, qp->qp_num, cq, id);
+              qp, qp->qp_num, ctx->cq, cep->id);
 
-    *qp_p = qp;
+    ++ctx->num_dummy_qps;
+    cep->qp = qp;
     return UCS_OK;
 }
 
@@ -366,7 +367,7 @@ uct_rdamcm_cm_ep_create_qpn(uct_rdmacm_cm_device_context_t *ctx,
         status = uct_rdamcm_cm_ep_create_reserved_qpn(cep, ctx);
     } else {
         /* create a dummy qp in order to get a unique qp_num to provide to librdmacm */
-        status = uct_rdmacm_cm_create_dummy_qp(cep->id, ctx->cq, &cep->qp);
+        status = uct_rdmacm_cm_create_dummy_qp(ctx, cep);
     }
     if (status != UCS_OK) {
         return status;
@@ -398,12 +399,12 @@ static void uct_rdamcm_cm_ep_destroy_qpn(uct_rdmacm_cm_ep_t *cep)
                                               cep->id->verbs, &ctx);
     if (status != UCS_OK) {
         return;
-    };
+    }
 
     if (ctx->use_reserved_qpn) {
         uct_rdamcm_cm_ep_destroy_reserved_qpn(ctx, cep);
     } else {
-        uct_rdmacm_cm_ep_destroy_dummy_qp(cep);
+        uct_rdmacm_cm_ep_destroy_dummy_qp(ctx, cep);
     }
 
     cep->flags &= ~UCT_RDMACM_CM_EP_QPN_CREATED;
@@ -665,7 +666,7 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
             uct_cm_ep_peer_error(&cep->super,
                                  "rdma_connect(on id=%p) failed: %m", cep->id);
             status = UCS_ERR_IO_ERROR;
-            goto err;
+            goto err_destroy_qpn;
         }
     } else {
         ucs_assert(cep->flags & UCT_RDMACM_CM_EP_ON_SERVER);
@@ -676,14 +677,15 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
             uct_cm_ep_peer_error(&cep->super,
                                  "rdma_accept(on id=%p) failed: %m", cep->id);
             status = UCS_ERR_CONNECTION_RESET;
-            goto err;
+            goto err_destroy_qpn;
         }
     }
 
     return UCS_OK;
 
-err:
+err_destroy_qpn:
     uct_rdamcm_cm_ep_destroy_qpn(cep);
+err:
     return status;
 }
 
