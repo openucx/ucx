@@ -66,7 +66,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(dctc, dctc, tclass,
                       iface->super.super.super.config.traffic_class);
 
-    if (uct_ib_iface_is_roce_v2(&iface->super.super.super, dev)) {
+    if (uct_ib_iface_is_roce_v2(&iface->super.super.super)) {
         /* RoCE V2 sets DSCP */
         UCT_IB_MLX5DV_SET(dctc, dctc, dscp,
                           uct_ib_iface_roce_dscp(&iface->super.super.super));

@@ -1171,7 +1171,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
     }
 }
 
-int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev)
+int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
 {
     return uct_ib_iface_is_roce(iface) &&
            (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
@@ -1404,7 +1404,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     if (config->traffic_class == UCS_ULUNITS_AUTO) {
-        self->config.traffic_class = uct_ib_iface_is_roce_v2(self, dev) ?
+        self->config.traffic_class = uct_ib_iface_is_roce_v2(self) ?
                                      UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
     } else {
         self->config.traffic_class = config->traffic_class;
