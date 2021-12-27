@@ -963,7 +963,7 @@ bool UcxConnection::recv_am_data(void *buffer, size_t length, ucp_mem_h memh,
 {
     assert(_ep != NULL);
 
-    if (!(data_desc._param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)) {
+    if (!_context.ucx_am_is_rndv(data_desc)) {
         (*callback)(UCS_OK);
         return true;
     }
