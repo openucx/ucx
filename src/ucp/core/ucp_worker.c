@@ -2344,10 +2344,11 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
 
 static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
 {
-    ucp_request_t *req  = (ucp_request_t*)arg;
-    uct_ep_h uct_ep     = req->send.discard_uct_ep.uct_ep;
-    ucp_ep_h ucp_ep     = req->send.ep;
-    ucp_worker_h worker = ucp_ep->worker;
+    ucp_request_t *req        = (ucp_request_t*)arg;
+    uct_ep_h uct_ep           = req->send.discard_uct_ep.uct_ep;
+    ucp_rsc_index_t rsc_index = req->send.discard_uct_ep.rsc_index;
+    ucp_ep_h ucp_ep           = req->send.ep;
+    ucp_worker_h worker       = ucp_ep->worker;
     khiter_t iter;
 
     ucp_trace_req(req, "destroy uct_ep=%p", uct_ep);
@@ -2362,6 +2363,7 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
                   uct_ep, worker);
     }
 
+    ucp_ep_unprogress_uct_ep(ucp_ep, uct_ep, rsc_index);
     uct_ep_destroy(uct_ep);
     ucp_worker_discard_uct_ep_complete(req);
 
@@ -2532,9 +2534,14 @@ void ucp_worker_destroy(ucp_worker_h worker)
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
-    ucp_worker_remove_am_handlers(worker);
     ucp_am_cleanup(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
+    /* Put ucp_worker_remove_am_handlers after ucp_worker_discard_uct_ep_cleanup
+     * to make sure iface->am[] always cleared.
+     * ucp_worker_discard_uct_ep_cleanup might trigger ucp_worker_iface_deactivate
+     * which further set iface->am[UCP_AM_ID_WIREUP].
+     */
+    ucp_worker_remove_am_handlers(worker);
 
     if (worker->flush_ops_count != 0) {
         ucs_warn("worker %p: %u pending operations were not flushed", worker,
@@ -3155,6 +3162,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
 static ucs_status_t
 ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                             ucp_rsc_index_t rsc_index,
                              unsigned ep_flush_flags,
                              ucp_send_nbx_callback_t discarded_cb,
                              void *discarded_cb_arg)
@@ -3200,6 +3208,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
     req->send.discard_uct_ep.cb_id          = UCS_CALLBACKQ_ID_NULL;
+    req->send.discard_uct_ep.rsc_index      = rsc_index;
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     ucp_worker_discard_uct_ep_progress(req);
@@ -3238,6 +3247,7 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
 }
 
 ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                       ucp_rsc_index_t rsc_index,
                                        unsigned ep_flush_flags,
                                        uct_pending_purge_callback_t purge_cb,
                                        void *purge_arg,
@@ -3258,7 +3268,7 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
         }
     }
 
-    return ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags,
+    return ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, rsc_index, ep_flush_flags,
                                         discarded_cb, discarded_cb_arg);
 }
 
