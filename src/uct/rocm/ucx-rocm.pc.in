@@ -1,0 +1,6 @@
+Name: @PACKAGE@-rocm
+Description: Unified Communication X Library ROCM module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:
+

@@ -1,0 +1,6 @@
+Name: @PACKAGE@-rocm-gdr
+Description: Unified Communication X Library ROCM GDR module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:
+

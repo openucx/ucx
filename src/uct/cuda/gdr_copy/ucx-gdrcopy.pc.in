@@ -1,0 +1,6 @@
+Name: @PACKAGE@-gdrcopy
+Description: Unified Communication X Library CUDA GDR COPY module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:
+

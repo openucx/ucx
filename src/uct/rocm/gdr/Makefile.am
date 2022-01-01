@@ -23,7 +23,10 @@ libuct_rocm_gdr_la_SOURCES = \
 	rocm_gdr_iface.c \
 	rocm_gdr_ep.c
 
+PKG_CONFIG_NAME=rocm-gdr
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif
 endif

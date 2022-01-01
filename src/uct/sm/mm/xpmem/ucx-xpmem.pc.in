@@ -1,0 +1,6 @@
+Name: @PACKAGE@-xpmem
+Description: Unified Communication X Library XPMEM module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:
+

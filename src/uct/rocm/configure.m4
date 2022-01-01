@@ -10,4 +10,5 @@ AS_IF([test "x$rocm_happy" = "xyes"], [uct_modules="${uct_modules}:rocm"])
 uct_rocm_modules=""
 m4_include([src/uct/rocm/gdr/configure.m4])
 AC_DEFINE_UNQUOTED([uct_rocm_MODULES], ["${uct_rocm_modules}"], [ROCM loadable modules])
-AC_CONFIG_FILES([src/uct/rocm/Makefile])
+AC_CONFIG_FILES([src/uct/rocm/Makefile
+                 src/uct/rocm/ucx-rocm.pc])

@@ -27,4 +27,5 @@ AS_IF([test "x$with_ugni" != "xno"],
 
 
 AM_CONDITIONAL([HAVE_CRAY_UGNI], [test "x$cray_ugni_supported" = xyes])
-AC_CONFIG_FILES([src/uct/ugni/Makefile])
+AC_CONFIG_FILES([src/uct/ugni/Makefile
+                 src/uct/ugni/ucx-ugni.pc])
