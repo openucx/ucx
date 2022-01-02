@@ -1309,12 +1309,8 @@ public:
         w->init(this, conn, msg->sn, msg->conn_id, iov,
                 &conn_stat.completions<IO_WRITE>());
         conn_stat.bytes<IO_WRITE>() += msg->data_size;
-        if (!ucx_am_is_rndv(data_desc)) {
-            conn->recv_am_data(NULL, 0, NULL, data_desc, w);
-        } else {
-            conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(),
-                               (*iov)[0].memh(), data_desc, w);
-        }
+        conn->recv_am_data((*iov)[0].buffer(), (*iov)[0].size(),
+                           (*iov)[0].memh(), data_desc, w);
     }
 
     virtual void dispatch_connection_accepted(UcxConnection* conn) {
@@ -1886,12 +1882,8 @@ public:
 
             r->init(this, server_index, msg->sn, conn->id(), opts().validate,
                     iov, 0);
-            if (!ucx_am_is_rndv(data_desc)) {
-                conn->recv_am_data(NULL, 0, NULL, data_desc, r);
-            } else {
-                conn->recv_am_data((*iov)[0].buffer(), msg->data_size,
-                                   (*iov)[0].memh(), data_desc, r);
-            }
+            conn->recv_am_data((*iov)[0].buffer(), msg->data_size,
+                               (*iov)[0].memh(), data_desc, r);
         }
     }
 
