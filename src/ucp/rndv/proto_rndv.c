@@ -11,6 +11,7 @@
 #include "proto_rndv.inl"
 
 #include <ucp/proto/proto_common.inl>
+#include <ucp/proto/proto_init.h>
 
 
 static void
@@ -173,11 +174,13 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
 {
     ucp_context_h context             = params->super.super.worker->context;
     ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
+    UCS_ARRAY_DEFINE_ONSTACK(list, ucp_proto_perf_envelope, 2);
     size_t min_length, max_length, range_max_length;
     const ucp_proto_select_param_t *select_param;
     const ucp_proto_select_range_t *remote_range;
     ucp_proto_select_param_t remote_select_param;
-    ucs_linear_func_t send_overhead[UCP_PROTO_PERF_TYPE_LAST], rndv_bias;
+    ucp_proto_perf_range_t send_perf;
+    ucs_linear_func_t rndv_bias;
     double send_time, receive_time;
     ucp_memory_info_t mem_info;
     ucs_status_t status;
@@ -244,8 +247,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ctrl_latency = send_time + receive_time + params->super.overhead * 2;
     ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
               UCP_PROTO_TIME_ARG(ctrl_latency));
-    send_overhead[UCP_PROTO_PERF_TYPE_SINGLE] =
-    send_overhead[UCP_PROTO_PERF_TYPE_MULTI]  = ucs_linear_func_add3(
+    send_perf.perf[UCP_PROTO_PERF_TYPE_SINGLE] =
+    send_perf.perf[UCP_PROTO_PERF_TYPE_MULTI]  = ucs_linear_func_add3(
             ucp_proto_common_memreg_time(&params->super, rpriv->md_map),
             ucs_linear_func_make(ctrl_latency, 0.0), params->unpack_time);
 
@@ -255,17 +258,26 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     /* Copy performance ranges from the remote protocol, and add overheads */
     remote_range = rpriv->remote_proto.perf_ranges;
     rndv_bias    = ucs_linear_func_make(0, 1.0 - params->perf_bias);
+
+    ucp_proto_perf_envelope_append(&list, "ctrl", &send_perf, SIZE_MAX,
+                                   rndv_bias);
     do {
         range_max_length = ucs_min(remote_range->super.max_length, max_length);
         if (range_max_length < params->super.super.caps->min_length) {
             continue;
         }
 
-        ucp_proto_common_add_perf_range(&params->super, range_max_length,
-                                        send_overhead,
-                                        /* no receive overhead  */
-                                        ucs_linear_func_make(0, 0),
-                                        remote_range->super.perf, rndv_bias);
+        ucp_proto_perf_envelope_append(&list, remote_range->super.name,
+                                       &remote_range->super, SIZE_MAX,
+                                       rndv_bias);
+        status = ucp_proto_common_add_perf_ranges(&params->super, min_length,
+                                                  range_max_length, &list);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        min_length = range_max_length - 1;
+        ucs_array_set_length(&list, 1);
     } while ((remote_range++)->super.max_length < max_length);
 
     return UCS_OK;

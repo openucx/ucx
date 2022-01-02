@@ -254,32 +254,6 @@ ucp_lane_index_t
 ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params);
 
 
-/**
- * Add a "pipelined performance" range, which represents the send time of
- * multiples fragments of 'frag_size' bytes.
- * 'frag_range' is the time to send a single fragment.
- */
-void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
-                                     const ucp_proto_perf_range_t *frag_range,
-                                     size_t max_length);
-
-
-void ucp_proto_common_init_base_caps(
-        const ucp_proto_common_init_params_t *params, size_t min_length);
-
-
-void ucp_proto_common_add_perf_range(
-        const ucp_proto_common_init_params_t *params, size_t max_length,
-        const ucs_linear_func_t *send_time, ucs_linear_func_t recv_overhead,
-        const ucs_linear_func_t *xfer_time, ucs_linear_func_t bias);
-
-
-ucs_status_t
-ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
-                           const ucp_proto_common_tl_perf_t *perf,
-                           ucp_md_map_t reg_md_map);
-
-
 void ucp_proto_request_zcopy_completion(uct_completion_t *self);
 
 
