@@ -42,16 +42,14 @@ static UCS_CLASS_INIT_FUNC(uct_cma_ep_t, const uct_ep_params_t *params)
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_scopy_ep_t, params);
 
-    self->remote_pid = *(const pid_t*)params->iface_addr &
-                       ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
-    self->keepalive  = NULL;
+    self->remote_pid           = *(const pid_t*)params->iface_addr &
+                                 ~UCT_CMA_IFACE_ADDR_FLAG_PID_NS;
 
-    return UCS_OK;
+    return uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_cma_ep_t)
 {
-    ucs_free(self->keepalive);
 }
 
 UCS_CLASS_DEFINE(uct_cma_ep_t, uct_scopy_ep_t)

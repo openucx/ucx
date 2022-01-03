@@ -48,7 +48,7 @@ typedef struct uct_mm_ep {
        the interface as long as one of the endpoints is unable to send */
     ucs_arbiter_elem_t         arb_elem;
 
-    uct_keepalive_info_t       *keepalive; /* keepalive info */
+    uct_keepalive_info_t       keepalive; /* keepalive info */
 } uct_mm_ep_t;
 
 
