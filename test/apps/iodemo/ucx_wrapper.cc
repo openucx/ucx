@@ -28,7 +28,6 @@ struct ucx_request {
     UcxCallback                  *callback;
     UcxConnection                *conn;
     ucs_status_t                 status;
-    bool                         completed;
     uint32_t                     conn_id;
     size_t                       recv_length;
     ucs_list_link_t              pos;
@@ -248,10 +247,9 @@ void UcxContext::request_init(void *request)
 
 void UcxContext::request_reset(ucx_request *r)
 {
-    r->completed   = false;
     r->callback    = NULL;
     r->conn        = NULL;
-    r->status      = UCS_OK;
+    r->status      = UCS_INPROGRESS;
     r->recv_length = 0;
     r->pos.next    = NULL;
     r->pos.prev    = NULL;
@@ -291,8 +289,10 @@ void UcxContext::connect_callback(ucp_conn_request_h conn_req, void *arg)
 void UcxContext::iomsg_recv_callback(void *request, ucs_status_t status,
                                      ucp_tag_recv_info *info)
 {
+    assert(status != UCS_INPROGRESS);
+
     ucx_request *r = reinterpret_cast<ucx_request*>(request);
-    r->completed   = true;
+    r->status      = status;
     r->conn_id     = (info->sender_tag & ~IOMSG_TAG) >> 32;
     r->recv_length = info->length;
 }
@@ -434,7 +434,7 @@ void UcxContext::progress_conn_requests()
 
 void UcxContext::progress_io_message()
 {
-    if (_use_am || !_iomsg_recv_request->completed) {
+    if (_use_am || (_iomsg_recv_request->status == UCS_INPROGRESS)) {
         return;
     }
 
@@ -1015,7 +1015,7 @@ void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
     ucx_request *r      = reinterpret_cast<ucx_request*>(request);
     UcxConnection *conn = r->conn;
 
-    assert(!r->completed);
+    assert(r->status == UCS_INPROGRESS);
     r->status = status;
 
     if (!conn->is_established()) {
@@ -1036,19 +1036,17 @@ void UcxConnection::stream_recv_callback(void *request, ucs_status_t status,
 
 void UcxConnection::common_request_callback(void *request, ucs_status_t status)
 {
+    assert(status != UCS_INPROGRESS);
+
     ucx_request *r = reinterpret_cast<ucx_request*>(request);
+    assert(r->status == UCS_INPROGRESS);
 
-    assert(!r->completed);
     r->status = status;
-
     if (r->callback) {
         // already processed by send/recv function
         (*r->callback)(status);
         r->conn->request_completed(r);
         UcxContext::request_release(r);
-    } else {
-        // not yet processed by "process_request"
-        r->completed = true;
     }
 }
 
@@ -1294,7 +1292,7 @@ bool UcxConnection::process_request(const char *what,
     } else {
         // pointer to request
         ucx_request *r = reinterpret_cast<ucx_request*>(ptr_status);
-        if (r->completed) {
+        if (r->status != UCS_INPROGRESS) {
             // already completed by callback
             assert(ucp_request_is_completed(r));
             status = r->status;
