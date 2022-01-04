@@ -716,7 +716,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
-        padding = ucs_padding((uintptr_t)(rdesc + 1), worker->am.alignment);
+        padding = ucs_padding((uintptr_t)(rdesc + 1), alignment);
         rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
         rdesc->release_desc_offset = padding;
 
