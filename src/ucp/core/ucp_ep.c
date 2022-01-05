@@ -2217,6 +2217,27 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         }
     }
 
+    /* Memory domains of lanes that require registration and support AM_ZCOPY */
+    for (i = 0; (i < config->key.num_lanes) &&
+                (config->key.am_bw_lanes[i] != UCP_NULL_LANE);
+         ++i) {
+        lane = config->key.am_bw_lanes[i];
+        if (config->md_index[lane] == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        md_attr = &context->tl_mds[config->md_index[lane]].attr;
+        if (!ucs_test_all_flags(md_attr->cap.flags,
+                                UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_MEMH)) {
+            continue;
+        }
+
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
+            config->am_bw_prereg_md_map |= UCS_BIT(config->md_index[lane]);
+        }
+    }
+
     /* configuration for rndv */
     get_zcopy_lane_count = put_zcopy_lane_count = 0;
 
@@ -2232,7 +2253,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             continue;
         }
 
-        md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+        md_attr    = &context->tl_mds[config->md_index[lane]].attr;
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
 
         /* GET Zcopy */
@@ -2255,7 +2276,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
 
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+            md_attr    = &context->tl_mds[config->md_index[lane]].attr;
 
             /* GET Zcopy */
             ucp_ep_config_rndv_zcopy_set(context, UCT_IFACE_FLAG_GET_ZCOPY,
@@ -2284,8 +2305,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     /* Rkey ptr */
     if (key->rkey_ptr_lane != UCP_NULL_LANE) {
         lane      = key->rkey_ptr_lane;
-        rsc_index = config->key.lanes[lane].rsc_index;
-        md_attr   = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+        md_attr   = &context->tl_mds[config->md_index[lane]].attr;
         ucs_assert_always(md_attr->cap.flags & UCT_MD_FLAG_RKEY_PTR);
 
         config->rndv.rkey_ptr_dst_mds =
@@ -2330,7 +2350,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
                                               min_rndv_thresh, max_rndv_thresh,
                                               &config->tag.rndv.rma_thresh);
 
-                md_attr = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+                md_attr = &context->tl_mds[config->md_index[lane]].attr;
                 ucp_ep_config_set_am_rndv_thresh(worker, iface_attr, md_attr,
                                                  config, min_am_rndv_thresh,
                                                  max_am_rndv_thresh,
@@ -2356,7 +2376,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
         rsc_index   = config->key.lanes[lane].rsc_index;
         if (rsc_index != UCP_NULL_RESOURCE) {
             iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-            md_attr    = &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
+            md_attr    = &context->tl_mds[config->md_index[lane]].attr;
             ucp_ep_config_init_attrs(worker, rsc_index, &config->am,
                                      iface_attr->cap.am.max_bcopy,
                                      iface_attr->cap.am.max_zcopy,
@@ -3133,7 +3153,8 @@ static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
 
     if ((ucp_ep_config(req->send.ep)->key.err_mode !=
          UCP_ERR_HANDLING_MODE_NONE) &&
-        (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE)) {
+        (req->flags & UCP_REQUEST_FLAG_RKEY_INUSE) &&
+        !(req->flags & UCP_REQUEST_FLAG_USER_MEMH)) {
         ucp_request_dt_invalidate(req, status);
         return;
     }
