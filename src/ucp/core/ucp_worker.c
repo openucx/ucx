@@ -1168,7 +1168,9 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     if (worker->am.alignment > 1) {
         iface_params->field_mask     |= UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT |
                                         UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET;
-        iface_params->am_align_offset = sizeof(ucp_am_hdr_t);
+        iface_params->am_align_offset = sizeof(ucp_am_hdr_t) +
+                                        (worker->am.align_offset %
+                                         worker->am.alignment);
         iface_params->am_alignment    = worker->am.alignment;
     }
 
@@ -2175,6 +2177,8 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
                                            NULL);
     worker->am.alignment = UCP_PARAM_VALUE(WORKER, params, am_alignment,
                                            AM_ALIGNMENT, 1);
+    worker->am.align_offset = UCP_PARAM_VALUE(WORKER, params, am_align_offset,
+                                              AM_ALIGN_OFFSET, 0);
     worker->client_id    = UCP_PARAM_VALUE(WORKER, params, client_id, CLIENT_ID, 0);
     if ((params->field_mask & UCP_WORKER_PARAM_FIELD_NAME) &&
         (params->name != NULL)) {

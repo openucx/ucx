@@ -1021,6 +1021,7 @@ public:
     test_ucp_am_nbx_align()
     {
         m_alignment = pow(2, ucs::rand() % 13);
+        m_align_offset = has_align_offset() ? ucs::rand() : 0;
     }
 
     virtual ucp_worker_params_t get_worker_params()
@@ -1028,14 +1029,31 @@ public:
         ucp_worker_params_t params = ucp_test::get_worker_params();
         params.field_mask         |= UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT;
         params.am_alignment        = m_alignment;
+
+        if (has_align_offset()) {
+            params.field_mask     |= UCP_WORKER_PARAM_FIELD_AM_ALIGN_OFFSET;
+            params.am_align_offset = m_align_offset;
+        }
+
         return params;
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    static void get_test_send_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
         add_variant_values(variants, test_ucp_am_base::get_test_variants,
                            UCP_AM_SEND_REPLY, "reply");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_test_send_variants, 0);
+        add_variant_values(variants, get_test_send_variants, 1, "align_offset");
+    }
+
+    virtual unsigned has_align_offset()
+    {
+        return get_variant_value(2);
     }
 
     virtual unsigned get_send_flag()
@@ -1051,8 +1069,8 @@ public:
                                          rx_param);
 
         if (rx_param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA) {
-            EXPECT_EQ(0u, (uintptr_t)data % m_alignment)
-                      << " data ptr " << data;
+            auto aligned_offset = (uintptr_t)data + m_align_offset;
+            EXPECT_EQ(0u, aligned_offset % m_alignment) << " data ptr " << data;
         }
 
         return UCS_OK;
@@ -1060,6 +1078,7 @@ public:
 
 private:
     size_t m_alignment;
+    size_t m_align_offset;
 };
 
 UCS_TEST_P(test_ucp_am_nbx_align, basic)
@@ -1071,6 +1090,8 @@ UCS_TEST_P(test_ucp_am_nbx_align, multi)
 {
     test_am_send_recv(fragment_size() * 5, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_align)
 
 class test_ucp_am_nbx_seg_size : public test_ucp_am_nbx {
 public:
