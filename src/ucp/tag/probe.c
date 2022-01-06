@@ -41,6 +41,9 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
         if (flags & UCP_RECV_DESC_FLAG_EAGER_ONLY) {
             info->length = rdesc->length - rdesc->payload_offset;
         } else if (flags & UCP_RECV_DESC_FLAG_EAGER) {
+            UCS_STATIC_ASSERT(
+                    ucs_offsetof(ucp_eager_first_hdr_t, total_len) ==
+                    ucs_offsetof(ucp_offload_first_desc_t, total_length));
             info->length = ((ucp_eager_first_hdr_t*)(rdesc + 1))->total_len;
         } else {
             ucs_assert(flags & UCP_RECV_DESC_FLAG_RNDV);

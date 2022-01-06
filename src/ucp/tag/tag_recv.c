@@ -23,9 +23,6 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
                                      ucp_recv_desc_t *rdesc)
 {
     ucp_eager_first_hdr_t *first_hdr;
-    ucp_offload_first_desc_t *offload_hdr;
-    size_t recv_len;
-    void *data;
     uint64_t msg_id;
     ucs_status_t status;
 
@@ -36,23 +33,10 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
     req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
 
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        offload_hdr      = (ucp_offload_first_desc_t*)(rdesc + 1);
-        req->recv.offset = 0;
-        recv_len         = rdesc->length - sizeof(*offload_hdr);
-        data             = UCS_PTR_BYTE_OFFSET(rdesc + 1, sizeof(*offload_hdr));
-
-        status = ucp_request_recv_offload_data(req, data, recv_len,
-                                               rdesc->flags);
-        if (status == UCS_INPROGRESS) {
-            ucp_tag_frag_list_process_common(
-                    req, ucs_unaligned_ptr(&offload_hdr->matchq), 1
-                    UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
-        }
-
-        /* No other fragments are expected, because first rdesc is added to
-         * unexpected queue only when all fragments arrived. Can release first
-         * rdesc now. */
-        ucp_recv_desc_release(rdesc);
+        ucp_request_recv_offload_first(
+               req, (ucp_offload_first_desc_t*)(rdesc + 1), rdesc->length,
+               rdesc->flags
+               UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
     } else {
         first_hdr           = (ucp_eager_first_hdr_t*)(rdesc + 1);
         req->recv.remaining = req->recv.tag.info.length = first_hdr->total_len;

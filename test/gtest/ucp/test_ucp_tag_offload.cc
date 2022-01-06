@@ -403,6 +403,42 @@ UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
     request_wait(rreq);
 }
 
+// Test that message is received correctly if the corresponging receive
+// operation was posted when the first (but not all) fragments arrived. This is
+// to ensure that the following sequence does not happen:
+// 1. First fragment arrives and is not added to the unexp queue
+// 2. Receive operation matching this messages is invoked and the message is not
+//    found in the unexp queue
+// 3. When all fragments arrive and the message is added to the unexp queue, it
+//    may be matched by another receive operation causing ordering issues.
+//    Or, if it is the only message to receive (like it is in this test), the
+//    receive operation (invoked at step 2) will never complete.
+UCS_TEST_P(test_ucp_tag_offload, eager_multi_recv,
+           "RNDV_THRESH=inf", "TM_THRESH=0")
+{
+    activate_offload(sender());
+
+    size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
+    const ucp_tag_t tag = 0x11;
+    std::vector<uint8_t> sendbuf(length);
+
+    ucp_request_param_t param = {};
+    ucs_status_ptr_t sreq     = ucp_tag_send_nbx(sender().ep(), sendbuf.data(),
+                                                 sendbuf.size(), tag, &param);
+
+    // Tweak progress several times to make sure the first fragment
+    // (but not all!) arrives
+    for (int i = 0; i < 3; ++i) {
+        progress();
+    }
+
+    std::vector<uint8_t> recvbuf(length);
+    ucs_status_ptr_t rreq = ucp_tag_recv_nbx(receiver().worker(), recvbuf.data(),
+                                             length, tag, 0xffff, &param);
+    request_wait(sreq);
+    request_wait(rreq);
+}
+
 UCP_INSTANTIATE_TAG_OFFLOAD_TEST_CASE(test_ucp_tag_offload)
 
 

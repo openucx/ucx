@@ -303,7 +303,6 @@ out:
     return req->status;
 }
 
-
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_tag_recv_request_process_rdesc(ucp_request_t *req, ucp_recv_desc_t *rdesc,
                                    size_t offset, int is_offload)
@@ -388,6 +387,45 @@ ucp_tag_frag_hash_init_exp(ucp_tag_frag_match_t *frag_list, ucp_request_t *req)
     frag_list->exp_req       = req;
     frag_list->unexp_q.ptail = NULL;
     ucs_assert(!ucp_tag_frag_match_is_unexp(frag_list));
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_tag_offload_release_first(ucp_offload_first_desc_t *first_hdr)
+{
+    ucp_recv_desc_t *first_rdesc = (ucp_recv_desc_t*)first_hdr - 1;
+
+    /* Release the first fragment rdesc. Since matchq is stored in its private
+     * data, it is kept until all fragments arrive and processed.
+     */
+    ucp_recv_desc_release(first_rdesc);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_request_recv_offload_first(ucp_request_t *req,
+                               ucp_offload_first_desc_t *first_hdr,
+                               size_t length, uint16_t flags
+                               UCS_STATS_ARG(int counter_idx))
+{
+    ucp_tag_frag_match_t *matchq;
+    ucs_status_t status;
+
+    req->recv.offset = 0ul;
+    status           = ucp_request_recv_offload_data(
+                           req, first_hdr + 1, length - sizeof(*first_hdr),
+                           flags);
+    if (status != UCS_INPROGRESS) {
+        return;
+    }
+
+    matchq = ucs_unaligned_ptr(&first_hdr->matchq);
+    status = ucp_tag_frag_list_process_common(req, matchq, 1
+                                              UCS_STATS_ARG(counter_idx));
+    if (status != UCS_INPROGRESS) {
+        ucp_tag_offload_release_first(first_hdr);
+        return;
+    }
+
+    ucp_tag_frag_hash_init_exp(matchq, req);
 }
 
 #endif
