@@ -89,6 +89,7 @@ typedef struct {
     unsigned                 progress_count;
     const char*              src_addr;
     bool                     prereg;
+    bool                     per_conn_info;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -2365,6 +2366,9 @@ private:
             server_info_t& server_info   = _server_info[server_index];
             long total_completed         = 0;
             size_t total_bytes_completed = 0;
+            UcxLog conn_log(server_info.conn->get_log_prefix(),
+                            opts().per_conn_info);
+
             for (int op = 0; op <= IO_OP_MAX; ++op) {
                 size_t bytes_completed;
                 long num_completed;
@@ -2399,6 +2403,17 @@ private:
                         std::max(num_completed, io_op_perf_info[op].max);
                 io_op_perf_info[op].total       += num_completed;
                 io_op_perf_info[op].total_bytes += bytes_completed;
+
+                if (opts().per_conn_info) {
+                    double mbs       = bytes_completed / (elapsed * UCS_MBYTE);
+                    long iops        = (long)(num_completed / elapsed);
+                    const char *name = (op == IO_OP_MAX) ?
+                                       "total" : io_op_names[op];
+                    const char *tail = (op == IO_OP_MAX) ? "" : " | ";
+
+                    conn_log << name << " " << mbs << "MBs " << "iops: "
+                             << iops << tail;
+                }
             }
         }
 
@@ -2635,9 +2650,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->progress_count        = 1;
     test_opts->src_addr              = NULL;
     test_opts->prereg                = false;
+    test_opts->per_conn_info         = false;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:z")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:zV")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2788,6 +2804,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'z':
             test_opts->prereg = true;
             break;
+        case 'V':
+            test_opts->per_conn_info = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -2830,6 +2849,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -L <progress_count>         Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
             std::cout << "  -I <src_addr>               Set source IP address to select network interface on client side" << std::endl;
             std::cout << "  -z                          Enable pre-register buffers for zero-copy" << std::endl;
+            std::cout << "  -V                          Print per-connection info" << std::endl;
             return -1;
         }
     }
