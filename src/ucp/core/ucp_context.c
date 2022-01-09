@@ -414,7 +414,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.worker_addr_version),
    UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
 
-  {"RCACHE", "n",
+  {"RCACHE", "y",
    "Use userspace memory registration cache.",
    ucs_offsetof(ucp_config_t, rcache), UCS_CONFIG_TYPE_BOOL},
 

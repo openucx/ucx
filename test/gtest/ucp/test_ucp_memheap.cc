@@ -89,15 +89,15 @@ void test_ucp_memheap::test_xfer(send_func_t send_func, size_t size,
         flush_worker(sender());
     }
 
+    ucp_rkey_destroy(rkey);
+
+    status = ucp_mem_unmap(receiver().ucph(), memh);
+    ASSERT_UCS_OK(status);
+
     /* Validate data */
     if (!mem_buffer::compare(UCS_PTR_BYTE_OFFSET(expected_data.ptr(), padding),
                              UCS_PTR_BYTE_OFFSET(memheap.ptr(), padding),
                              size * num_iters, send_mem_type, target_mem_type)) {
         ADD_FAILURE() << "data validation failed";
     }
-
-    ucp_rkey_destroy(rkey);
-
-    status = ucp_mem_unmap(receiver().ucph(), memh);
-    ASSERT_UCS_OK(status);
 }

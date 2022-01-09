@@ -636,14 +636,16 @@ ucp_request_is_user_memh_valid(ucp_request_t *req,
     }
 
     if (ENABLE_PARAMS_CHECK &&
-        ((param->memh == NULL) || (buffer < param->memh->address) ||
+        ((param->memh == NULL) || (buffer < ucp_memh_address(param->memh)) ||
          (UCS_PTR_BYTE_OFFSET(buffer, length) >
-          UCS_PTR_BYTE_OFFSET(param->memh->address, param->memh->length)) ||
+          UCS_PTR_BYTE_OFFSET(ucp_memh_address(param->memh),
+                              ucp_memh_length(param->memh))) ||
          (param->memh->mem_type != mem_type))) {
         ucs_error("req %p: mismatched memory handle [buffer %p length %zu %s]"
                   " memh %p [address %p length %zu %s]",
                   req, buffer, length, ucs_memory_type_names[mem_type],
-                  param->memh, param->memh->address, param->memh->length,
+                  param->memh, ucp_memh_address(param->memh),
+                  ucp_memh_length(param->memh),
                   ucs_memory_type_names[param->memh->mem_type]);
         *status_p = UCS_ERR_INVALID_PARAM;
         return 0;
