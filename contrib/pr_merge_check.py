@@ -4,7 +4,7 @@
 # example by a force-push or merge operation
 # Method:
 #    - Clone the repo to a temporary working directory.
-#    - Merge the pull request into the target branch - the approved version and
+#    - Merge the pull request into the base commit - the approved version and
 #      the current version.
 #    - Compare the merge result in both cases.
 #
@@ -12,10 +12,13 @@
 #    $ ./contrib/pr_app_check.py --pr 7689
 #    no differences found
 #
-from git import Repo # pip install gitutils
+# Deps:
+#    $ pip install GitPython requests ydiff
+#
+from git import Repo # pip install GitPython
 from optparse import OptionParser
 import subprocess
-import requests
+import requests # pip install requests
 import getpass
 import shutil
 import sys
@@ -54,18 +57,15 @@ class PRChecker(object):
         Set self.head_commit to the hash of the latest PR commit.
         """
         data = self.github_api_call(req="")
-        self.target_branch = data[u'base'][u'ref']
-        if not self.target_branch:
-            raise Exception("No target branch found")
-        pr_state = data[u'state']
-        if pr_state != u'open':
-            raise Exception("Pull request %s state is %s, expected: open" %
-                            (self.pr_num, pr_state))
+        self.base_commit = data[u'base'][u'sha']
+        if not self.base_commit:
+            raise Exception("No base commit found")
         self.head_commit = data[u'head'][u'sha']
         if not self.head_commit:
             raise Exception("No head commit found")
         if self.verbose:
-            print("github head commit: %s" % self.head_commit[:7])
+            print("github head commit: %s base commit: %s" %
+                  (self.head_commit[:7], self.base_commit[:7]))
 
     def get_approved_commit(self):
         """
@@ -91,7 +91,7 @@ class PRChecker(object):
 
     def init_repo(self):
         """
-        Initialize self.repo and self.branch_spec to the target branch.
+        Initialize self.repo and fetch self.base_commit
         """
         self.remove_temp_dir()
         self.repo = Repo.init(self.temp_dir)
@@ -99,23 +99,21 @@ class PRChecker(object):
             print("initialized empty repo at %s" % self.temp_dir)
         self.remote = self.repo.create_remote(
             self.remote_name, 'https://github.com/%s' % self.repo_path)
-        self.remote.fetch(self.target_branch, depth=self.depth)
-        self.branch_spec = '%s/%s' % (self.remote_name, self.target_branch)
+        self.remote.fetch(self.base_commit, depth=self.depth)
         if self.verbose:
-            print("fetched %s as %s" % (self.branch_spec,
-                  self.repo.git.rev_parse(self.branch_spec)[:7]))
+            print("fetched base commit %s" % self.base_commit[:7])
 
     def merge(self, commit):
         """
-        Merge the given commit with self.branch_spec and return the hash of the
+        Merge the given commit with self.base_commit and return the hash of the
         resulting commit.
         """
         self.remote.fetch(commit, depth=self.depth)
         self.repo.git.checkout(commit)
-        self.repo.git.merge(self.branch_spec, m='Merge %s' % commit)
+        self.repo.git.merge(self.base_commit, m='Merge %s' % commit)
         if self.verbose:
             print(" - merge of %s to %s is %s" %
-                  (commit[:7], self.branch_spec, str(self.repo.head.commit)[:7]))
+                  (commit[:7], self.base_commit, str(self.repo.head.commit)[:7]))
         return self.repo.head.commit
 
     def parse_args(self, argv):
