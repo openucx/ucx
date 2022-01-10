@@ -372,6 +372,7 @@ AC_CONFIG_FILES([
                  src/tools/info/Makefile
                  src/tools/profile/Makefile
                  test/apps/Makefile
+                 test/apps/file_transfer_demo/Makefile
                  test/apps/iodemo/Makefile
                  test/apps/sockaddr/Makefile
                  test/apps/profiling/Makefile
