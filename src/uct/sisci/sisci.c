@@ -153,7 +153,6 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
         printf("%s\n", SCIGetErrorString(error));
     } 
 
-
     SCITerminate();
 
     return status;
@@ -235,6 +234,7 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
     return UCS_OK;
 }
 
+
 static void uct_sisci_md_close() {
     printf("uct_sisci_md_close: teehee\n");
     
@@ -279,6 +279,13 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     return UCS_OK;
 }
 
+/*
+static uct_sisci_md_t uct_sisci_md(){
+    //empty struct
+    //sci_error_t errors;
+    //sci_desc_t sc_descriptor;
+
+}*/
 
 ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
