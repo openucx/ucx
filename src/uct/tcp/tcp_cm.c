@@ -115,34 +115,30 @@ static void uct_tcp_cm_trace_conn_pkt(const uct_tcp_ep_t *ep,
                                       const char *fmt_str,
                                       uct_tcp_cm_conn_event_t event)
 {
-    char event_str[64] = { 0 };
-    char str_addr[UCS_SOCKADDR_STRING_LEN], msg[128], *p;
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    char str_addr[UCS_SOCKADDR_STRING_LEN];
 
-    p = event_str;
-    if (event & UCT_TCP_CM_CONN_REQ) {
-        ucs_snprintf_zero(event_str, sizeof(event_str), "%s",
-                          UCS_PP_MAKE_STRING(UCT_TCP_CM_CONN_REQ));
-        p += strlen(event_str);
-    }
-
-    if (event & UCT_TCP_CM_CONN_ACK) {
-        if (p != event_str) {
-            ucs_snprintf_zero(p, sizeof(event_str) - (p - event_str), " | ");
-            p += strlen(p);
+    if (event == UCT_TCP_CM_CONN_FIN) {
+        ucs_string_buffer_appendf(&strb, "%s",
+                                  UCS_PP_MAKE_STRING(UCT_TCP_CM_CONN_FIN));
+    } else if ((event & ~(UCT_TCP_CM_CONN_REQ | UCT_TCP_CM_CONN_ACK)) == 0) {
+        ucs_string_buffer_appendf(&strb, "UNKNOWN (%d)", event);
+    } else {
+        if (event & UCT_TCP_CM_CONN_REQ) {
+            ucs_string_buffer_appendf(&strb, "%s",
+                                      UCS_PP_MAKE_STRING(UCT_TCP_CM_CONN_REQ));
         }
-        ucs_snprintf_zero(p, sizeof(event_str) - (p - event_str), "%s",
-                          UCS_PP_MAKE_STRING(UCT_TCP_CM_CONN_ACK));
-        p += strlen(event_str);
+
+        if (event & UCT_TCP_CM_CONN_ACK) {
+            ucs_string_buffer_appendf(&strb, "%s%s",
+                                      ucs_string_buffer_length(&strb) ?
+                                      " | " : "",
+                                      UCS_PP_MAKE_STRING(UCT_TCP_CM_CONN_ACK));
+        }
     }
 
-    if (event_str == p) {
-        ucs_snprintf_zero(event_str, sizeof(event_str), "UNKNOWN (%d)", event);
-        log_level = UCS_LOG_LEVEL_ERROR;
-    }
-
-    ucs_snprintf_zero(msg, sizeof(msg), fmt_str, event_str);
-
-    ucs_log(log_level, "tcp_ep %p: %s [%s]:%"PRIu64, ep, msg,
+    ucs_log(log_level, "tcp_ep %p: %s [%s]:%"PRIu64, ep,
+            ucs_string_buffer_cstr(&strb),
             ucs_sockaddr_str((const struct sockaddr*)&ep->peer_addr,
                              str_addr, UCS_SOCKADDR_STRING_LEN),
             uct_tcp_ep_get_cm_id(ep));
@@ -152,14 +148,11 @@ ucs_status_t uct_tcp_cm_send_event_pending_cb(uct_pending_req_t *self)
 {
     uct_tcp_ep_pending_req_t *req =
             ucs_derived_of(self, uct_tcp_ep_pending_req_t);
-    ucs_status_t status;
+    ucs_status_t UCS_V_UNUSED status;
 
     status = uct_tcp_cm_send_event(req->ep, req->cm.event, req->cm.log_error);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        return status;
-    }
+    ucs_assert((status != UCS_INPROGRESS) && (status != UCS_ERR_NO_RESOURCE));
 
-    ucs_assert(status != UCS_INPROGRESS);
     ucs_free(req);
     return UCS_OK;
 }
@@ -203,7 +196,8 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
     ucs_status_t status;
 
     ucs_assertv(!(event & ~(UCT_TCP_CM_CONN_REQ |
-                            UCT_TCP_CM_CONN_ACK)),
+                            UCT_TCP_CM_CONN_ACK |
+                            UCT_TCP_CM_CONN_FIN)),
                 "ep=%p", ep);
 
     if (!uct_tcp_ep_ctx_buf_empty(&ep->tx)) {
@@ -651,8 +645,9 @@ out_destroy_ep:
     return progress_count;
 }
 
-void uct_tcp_cm_handle_conn_ack(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t cm_event,
-                                uct_tcp_ep_conn_state_t new_conn_state)
+static void uct_tcp_cm_handle_conn_ack(uct_tcp_ep_t *ep,
+                                       uct_tcp_cm_conn_event_t cm_event,
+                                       uct_tcp_ep_conn_state_t new_conn_state)
 {
     uct_tcp_cm_trace_conn_pkt(ep, UCS_LOG_LEVEL_TRACE,
                               "%s received from", cm_event);
@@ -660,6 +655,18 @@ void uct_tcp_cm_handle_conn_ack(uct_tcp_ep_t *ep, uct_tcp_cm_conn_event_t cm_eve
     ucs_close_fd(&ep->stale_fd);
     if (ep->conn_state != new_conn_state) {
         uct_tcp_cm_change_conn_state(ep, new_conn_state);
+    }
+}
+
+static void uct_tcp_cm_handle_conn_fin(uct_tcp_ep_t **ep_p)
+{
+    uct_tcp_ep_t *ep = *ep_p;
+
+    if ((ep->flags & UCT_TCP_EP_CTX_CAPS) == UCT_TCP_EP_FLAG_CTX_TYPE_RX) {
+        uct_tcp_ep_destroy_internal(&ep->super.super);
+        *ep_p = NULL;
+    } else {
+        uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
     }
 }
 
@@ -689,6 +696,9 @@ unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep_p, void *pkt, uint32_t len
     case UCT_TCP_CM_CONN_ACK:
         uct_tcp_cm_handle_conn_ack(*ep_p, cm_event,
                                    UCT_TCP_EP_CONN_STATE_CONNECTED);
+        return 0;
+    case UCT_TCP_CM_CONN_FIN:
+        uct_tcp_cm_handle_conn_fin(ep_p);
         return 0;
     }
 
