@@ -412,6 +412,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 {
     printf("UCT_sisci_iface_query\n");
 
+    //TODO: insert necessarry lies to make ucx want us.
     //taken from uct_iface.c sets default attributes to zero.
     memset(attr, 0, sizeof(*attr));
 
