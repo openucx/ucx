@@ -404,7 +404,11 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     printf("UCT_sisci_iface_query\n");
-    
+
+    //taken from uct_iface.c sets default attributes to zero.
+    memset(attr, 0, sizeof(*attr));
+
+
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
