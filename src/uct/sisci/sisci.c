@@ -163,8 +163,6 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
         printf("%s\n", SCIGetErrorString(error));
     } 
 
-    sci_error = 0;
-
     uct_sci_open();
 
     SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
