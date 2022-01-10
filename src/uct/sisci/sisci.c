@@ -31,6 +31,12 @@ static ucs_config_field_t uct_sisci_md_config_table[] = {
 };
 
 int sci_opened = 0;
+
+/*
+    The linux version initialization of the sisci api doesnt do much except for comparing the api version against the adapter version, and setting up some ref handles
+    So we dont really need handle anything special except for the initialization faliing :). 
+    Since the api doesn't have any good way to check if the driver is initialized we have to keep track of it ourselves. 
+*/
 static unsigned int uct_sci_open(){
     sci_error_t sci_error = 0;
     if (sci_opened == 0)
@@ -47,6 +53,10 @@ static unsigned int uct_sci_open(){
     return 1;
 }
 
+
+/*
+    Closing the api is even more hands off than 
+*/
 static unsigned int uct_sci_close(){
     if (sci_opened == 1)
     {
