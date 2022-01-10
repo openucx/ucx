@@ -30,6 +30,33 @@ static ucs_config_field_t uct_sisci_md_config_table[] = {
     NULL
 };
 
+int sci_opened = 0;
+static unsigned int uct_sci_open(){
+    sci_error_t sci_error = 0;
+    if (sci_opened == 0)
+    {
+        SCIInitialize(0,&sci_error);
+        if (sci_error != SCI_ERR_OK)
+        {
+            printf("sci_init error: %s/n", SCIGetErrorString(sci_error));
+            return 0;
+        }
+        sci_opened = 1;
+
+    }
+    return 1;
+}
+
+static unsigned int uct_sci_close(){
+    if (sci_opened == 1)
+    {
+        SCITerminate();
+        sci_opened = 0;
+    }
+    return 1;    
+}
+
+
 void sisci_testing() {
     printf("Linking is correct to some degree :) \n");
 }
@@ -492,6 +519,8 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_get_address        = uct_sisci_iface_get_address, // bap
     .iface_is_reachable       = uct_sisci_iface_is_reachable // bap
 };
+
+
 
 
 /*
