@@ -123,9 +123,6 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
                                               uct_md_resource_desc_t **resources_p,
                                               unsigned int *num_resources_p)
 {
-    sci_error_t sci_error;
-
-    
     unsigned int local_node_id; 
     sci_query_adapter_t query; 
     sci_error_t error; 
@@ -266,7 +263,6 @@ static void uct_sisci_md_close() {
     
     
     uct_sci_close();
-    return UCS_OK;
 }
 
 static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md_name,
