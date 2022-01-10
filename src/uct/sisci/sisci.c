@@ -175,9 +175,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     } 
 
     uct_sci_close();
-
     return status;
-
 }
 
 
