@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.12.0 RC1 (December 2, 2021)
+## 1.12.0 (January 12, 2022)
 ### Features:
 #### Core
 * Added beta-level support for Go language bindings
@@ -40,6 +40,7 @@
 * Adjusted knem and cma overhead cost
 * Increased built-in TCP keep-alive interval to 2 seconds
 #### RDMA CORE (IB, ROCE, etc.)
+* Added detection of IB NDR devices
 * Added check for CQ overrun in assert mode
 * Added bitmap usage for releasing detached DCIs
 * Added configuration for requests ack frequency with DevX
