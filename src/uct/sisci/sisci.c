@@ -167,9 +167,8 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     } 
 
     sci_error = 0;
-    SCIInitialize(0, &sci_error);
-    
-    printf("after first open %d\n" , sci_error);
+
+    uct_sci_open();
 
     SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
     
@@ -180,7 +179,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
         printf("%s\n", SCIGetErrorString(error));
     } 
 
-    SCITerminate();
+    uct_sci_close();
 
     return status;
 
@@ -266,8 +265,8 @@ static void uct_sisci_md_close() {
     printf("uct_sisci_md_close: teehee\n");
     
     
-    SCITerminate();
-    //return UCS_OK;
+    uct_sci_close();
+    return UCS_OK;
 }
 
 static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md_name,
