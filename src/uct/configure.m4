@@ -12,7 +12,8 @@ m4_include([src/uct/ugni/configure.m4])
 
 AC_DEFINE_UNQUOTED([uct_MODULES], ["${uct_modules}"], [UCT loadable modules])
 
-AC_CONFIG_FILES([src/uct/Makefile])
+AC_CONFIG_FILES([src/uct/Makefile
+                 src/uct/ucx-uct.pc])
 
 #
 # TCP flags

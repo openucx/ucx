@@ -1,6 +1,12 @@
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
 Name: @PACKAGE@-cuda
 Description: Unified Communication X Library CUDA module
-Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Version: @VERSION@
 Libs:
 Libs.private:
 

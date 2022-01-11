@@ -10,10 +10,9 @@ bindir = @exec_prefix@/bin
 libdir = @libdir@
 includedir = @includedir@
 
-Name: @PACKAGE@
-Description: Unified Communication X Library
+Name: @PACKAGE@-ucm
+Description: Unified Communication X Library UCM module
 Version: @VERSION@
 Cflags: -I${includedir}
-Libs: -L${libdir} -lucp
-Libs.private: -Wl,--undefined=ucp_global_init
-Requires: @PACKAGE@-uct, @PACKAGE@-ucs, @PACKAGE@-ucm
+Libs: -L${libdir} -lucm
+Libs.private: -Wl,--undefined=ucm_init
