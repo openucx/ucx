@@ -420,7 +420,8 @@ static ucp_proto_t ucp_get_amo_post_proto = {
     .flags      = 0,
     .init       = ucp_proto_amo_sw_init_post,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_amo_sw_progress_post}
+    .progress   = {ucp_proto_amo_sw_progress_post},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_get_amo_post_proto);
 
@@ -447,6 +448,7 @@ static ucp_proto_t ucp_get_amo_fetch_proto = {
     .flags      = 0,
     .init       = ucp_proto_amo_sw_init_fetch,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_amo_sw_progress_fetch}
+    .progress   = {ucp_proto_amo_sw_progress_fetch},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_get_amo_fetch_proto);

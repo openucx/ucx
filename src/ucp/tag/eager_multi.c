@@ -167,7 +167,8 @@ static ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_bcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_bcopy_multi_progress}
+    .progress   = {ucp_proto_eager_bcopy_multi_progress},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_multi_proto);
 
@@ -242,7 +243,8 @@ static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_sync_bcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_sync_bcopy_multi_progress}
+    .progress   = {ucp_proto_eager_sync_bcopy_multi_progress},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_multi_proto);
 
@@ -323,6 +325,7 @@ static ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_zcopy_multi_init,
     .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_zcopy_multi_progress}
+    .progress   = {ucp_proto_eager_zcopy_multi_progress},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);

@@ -196,6 +196,16 @@ typedef void (*ucp_proto_config_str_func_t)(size_t min_length,
 
 
 /**
+ * Abort UCP request at any stage with error status.
+ *
+ * @param [in]  request Request to abort.
+ * @param [in]  status  Error completion status.
+ */
+typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
+                                         ucs_status_t status);
+
+
+/**
  * UCP base protocol definition
  */
 struct ucp_proto {
@@ -208,6 +218,13 @@ struct ucp_proto {
      * request lifetime to implement different stages
      */
     uct_pending_callback_t          progress[UCP_PROTO_STAGE_LAST];
+
+    /*
+     * Abort a request (which is currently not scheduled to a pending queue).
+     * The method should wait for UCT completions and release associated
+     * resources, such as memory handles, remote keys, request ID, etc.
+     */
+    ucp_request_abort_func_t        abort;
 };
 
 

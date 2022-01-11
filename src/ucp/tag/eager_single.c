@@ -80,7 +80,8 @@ static ucp_proto_t ucp_eager_short_proto = {
     .flags      = UCP_PROTO_FLAG_AM_SHORT,
     .init       = ucp_proto_eager_short_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_short_progress}
+    .progress   = {ucp_eager_short_progress},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_short_proto);
 
@@ -146,7 +147,8 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_bcopy_single_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_bcopy_single_progress}
+    .progress   = {ucp_eager_bcopy_single_progress},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
@@ -213,6 +215,7 @@ static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_zcopy_single_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_eager_zcopy_single_progress}
+    .progress   = {ucp_proto_eager_zcopy_single_progress},
+    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);

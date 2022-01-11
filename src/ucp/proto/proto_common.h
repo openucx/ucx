@@ -279,6 +279,7 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
+void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status);
 
 ucs_linear_func_t
 ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,

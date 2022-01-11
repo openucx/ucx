@@ -105,7 +105,8 @@ static ucp_proto_t ucp_eager_short_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_short_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_short_progress}
+    .progress   = {ucp_eager_short_progress},
+    .abort      = ucp_proto_request_bcopy_abort
 };
 UCP_PROTO_REGISTER(&ucp_eager_short_proto);
 
@@ -212,6 +213,7 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .flags      = 0,
     .init       = ucp_proto_eager_bcopy_single_init,
     .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_bcopy_single_progress}
+    .progress   = {ucp_eager_bcopy_single_progress},
+    .abort      = ucp_request_complete_send
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);

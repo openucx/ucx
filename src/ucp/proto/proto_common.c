@@ -670,14 +670,16 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucs_assert(UCS_STATUS_IS_ERR(status));
-    /*
-     * TODO add a method to ucp_proto_t to abort a request (which is currently
-     * not scheduled to a pending queue). The method should wait for UCT
-     * completions and release associated resources, such as memory handles,
-     * remote keys, request ID, etc.
-     */
-    ucs_fatal("abort request %p proto %s status %s: unimplemented", req,
+    ucs_debug("abort request %p proto %s status %s", req,
               req->send.proto_config->proto->name, ucs_status_string(status));
+
+    req->send.proto_config->proto->abort(req, status);
+}
+
+void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status)
+{
+    ucp_datatype_iter_cleanup(&request->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_request_complete_send(request, status);
 }
 
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)
