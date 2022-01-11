@@ -122,6 +122,7 @@
 * Reduced default value of keep-alive interval to 20 seconds
 * Fixes in tag_send datatype processing
 #### UCT
+* Fixed keep-alive protocol for intra-node transports (sm, cuda)
 * Fixed deadlock in TCP
 * Suppressed EHOSTUNREACH error in TCP sockcm
 * Restricted connecting loop-back to other devices in TCP

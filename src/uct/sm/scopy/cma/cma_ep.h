@@ -15,7 +15,7 @@
 typedef struct uct_cma_ep {
     uct_scopy_ep_t       super;
     pid_t                remote_pid;
-    uct_keepalive_info_t *keepalive;
+    uct_keepalive_info_t keepalive;
 } uct_cma_ep_t;
 
 
