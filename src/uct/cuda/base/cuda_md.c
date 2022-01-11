@@ -18,7 +18,6 @@
 #include <ucs/profile/profile.h>
 #include <ucs/debug/log.h>
 #include <uct/cuda/cuda_copy/cuda_copy_md.h>
-#include <cuda_runtime.h>
 #include <cuda.h>
 
 #define UCT_CUDA_DEV_NAME_MAX_LEN 64
@@ -272,13 +271,13 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 {
     ucs_sys_device_t sys_dev;
     CUdevice cuda_device;
-    cudaError_t cudaErr;
+    CUresult cudaErr;
     ucs_status_t status;
     char device_name[10];
     int num_gpus;
 
-    cudaErr = cudaGetDeviceCount(&num_gpus);
-    if ((cudaErr != cudaSuccess) || (num_gpus == 0)) {
+    cudaErr = cuDeviceGetCount(&num_gpus);
+    if ((cudaErr != CUDA_SUCCESS) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
