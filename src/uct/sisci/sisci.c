@@ -118,7 +118,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 
     //UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
 
-
+    
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -162,6 +162,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     query.subcommand = SCI_Q_ADAPTER_NODEID; 
     query.localAdapterNo = ADAPTER_NO; 
     query.data = &local_node_id; 
+    
     
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
