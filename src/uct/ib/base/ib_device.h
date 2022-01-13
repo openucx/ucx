@@ -115,7 +115,12 @@ enum {
     /* Used for IB link layer. */
     UCT_IB_ADDRESS_FLAG_SUBNET64       = UCS_BIT(5),
     /* Used for IB link layer. */
-    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6)
+    UCT_IB_ADDRESS_FLAG_IF_ID          = UCS_BIT(6),
+
+    /* If set - UCT_IB_ADDRESS_V1, uct_ib_address_t flag header is 16 bits */
+    UCT_IB_ADDRESS_FLAG_EXT            = UCS_BIT(7)
+
+    /* Below ones are for uct_ib_address_t::flags_ext */
 };
 
 

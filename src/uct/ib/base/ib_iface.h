@@ -78,12 +78,14 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX = UCS_BIT(2),
     UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3),
     UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4),
-    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
+    UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5),
+    UCT_IB_ADDRESS_PACK_FLAG_EXT           = UCS_BIT(63)
 };
 
 
 typedef struct uct_ib_address_pack_params {
-    /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
+    /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx.
+     * 1st msb is pack info extenstion bit */
     uint64_t                          flags;
     /* GID address to pack/unpack. */
     union ibv_gid                     gid;
@@ -101,6 +103,8 @@ typedef struct uct_ib_address_pack_params {
     /* PKEY value,
        must be valid if @ref UCT_IB_ADDRESS_PACK_FLAG_PKEY is set. */
     uint16_t                          pkey;
+
+    /* Below info is extended */
 } uct_ib_address_pack_params_t;
 
 

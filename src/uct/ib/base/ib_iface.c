@@ -307,6 +307,11 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
 {
     size_t size = sizeof(uct_ib_address_t);
 
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_EXT) {
+        /* uct_ib_address_t::flags_ext */
+        size += sizeof(uint8_t);
+    }
+
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
         /* Ethernet: address contains only raw GID */
         size += sizeof(union ibv_gid);
@@ -353,18 +358,29 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
 void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
                          uct_ib_address_t *ib_addr)
 {
-    void *ptr = ib_addr + 1;
+    void *ptr              = ib_addr;
+    uint8_t *ib_addr_flags = ptr;
+    uct_ib_addr_obj_ver_t ib_addr_ver;
+    uint8_t flags;
     union ibv_gid *gid;
+
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_EXT) {
+        ib_addr_ver = UCT_IB_ADDRESS_V1;
+        ptr = UCS_PTR_BYTE_OFFSET(ptr, 2);
+    } else {
+        ib_addr_ver = UCT_IB_ADDRESS_V0;
+        ptr = UCS_PTR_BYTE_OFFSET(ptr, 1);
+    }
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_ETH) {
         /* RoCE, in this case we don't use the lid, we pack the gid, the RoCE
          * version, address family and set the ETH flag */
-        ib_addr->flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
-                         (params->roce_info.ver <<
-                          ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
+        flags = UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH |
+                (params->roce_info.ver <<
+                 ucs_ilog2(UCT_IB_ADDRESS_FLAG_ETH_LAST));
 
         if (params->roce_info.addr_family == AF_INET6) {
-            ib_addr->flags |= UCT_IB_ADDRESS_FLAG_ROCE_IPV6;
+            flags |= UCT_IB_ADDRESS_FLAG_ROCE_IPV6;
         }
 
         /* uint8_t raw[16]; */
@@ -372,12 +388,12 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
         memcpy(gid->raw, params->gid.raw, sizeof(params->gid.raw));
     } else {
         /* IB, LID */
-        ib_addr->flags                      = 0;
+        flags                               = 0;
         *ucs_serialize_next(&ptr, uint16_t) = params->lid;
 
         if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_INTERFACE_ID) {
             /* Pack GUID */
-            ib_addr->flags               |= UCT_IB_ADDRESS_FLAG_IF_ID;
+            flags                        |= UCT_IB_ADDRESS_FLAG_IF_ID;
             *ucs_serialize_next(&ptr,
                                 uint64_t) = params->gid.global.interface_id;
         }
@@ -386,12 +402,12 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
             if ((params->gid.global.subnet_prefix & UCT_IB_SITE_LOCAL_MASK) ==
                                                     UCT_IB_SITE_LOCAL_PREFIX) {
                 /* Site-local */
-                ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
+                flags |= UCT_IB_ADDRESS_FLAG_SUBNET16;
                 *ucs_serialize_next(&ptr, uint16_t) =
                         params->gid.global.subnet_prefix >> 48;
             } else if (params->gid.global.subnet_prefix != UCT_IB_LINK_LOCAL_PREFIX) {
                 /* Global */
-                ib_addr->flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
+                flags |= UCT_IB_ADDRESS_FLAG_SUBNET64;
                 *ucs_serialize_next(&ptr, uint64_t) =
                         params->gid.global.subnet_prefix;
             }
@@ -400,25 +416,43 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU) {
         ucs_assert((int)params->path_mtu < UINT8_MAX);
-        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PATH_MTU;
+        flags |= UCT_IB_ADDRESS_FLAG_PATH_MTU;
         *ucs_serialize_next(&ptr, uint8_t) = params->path_mtu;
     }
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX) {
-        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_GID_INDEX;
+        flags |= UCT_IB_ADDRESS_FLAG_GID_INDEX;
         *ucs_serialize_next(&ptr, uint8_t) = params->gid_index;
     }
 
     if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_PKEY) {
         ucs_assert(params->pkey != UCT_IB_ADDRESS_DEFAULT_PKEY);
-        ib_addr->flags |= UCT_IB_ADDRESS_FLAG_PKEY;
+        flags |= UCT_IB_ADDRESS_FLAG_PKEY;
         *ucs_serialize_next(&ptr, uint16_t) = params->pkey;
     }
+
+    if (ib_addr_ver == UCT_IB_ADDRESS_V0) {
+        *ib_addr_flags = flags;
+
+        /* ignore other info, such as ECE */
+        return;
+    }
+
+    flags         |= UCT_IB_ADDRESS_FLAG_EXT;
+    *ib_addr_flags = flags;
+    ib_addr_flags  = UCS_PTR_TYPE_OFFSET(ib_addr_flags, uint8_t);
+
+    flags          = 0;
+    *ib_addr_flags = flags;
 }
 
 uint64_t uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
 {
     uint64_t pack_flags = 0;
+
+    if (iface->config.addr_ver == UCT_IB_ADDRESS_V1) {
+       pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_EXT;
+    }
 
     if (iface->pkey != UCT_IB_ADDRESS_DEFAULT_PKEY) {
         pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
@@ -471,9 +505,13 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
 void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
                            uct_ib_address_pack_params_t *params_p)
 {
-    const void *ptr                     = ib_addr + 1;
+    const void *ptr                     = ib_addr;
+    const uint8_t *ib_addr_flags        = ptr;
     /* silence cppcheck warning */
     uct_ib_address_pack_params_t params = {0};
+    uct_ib_addr_obj_ver_t ib_addr_ver;
+    uint8_t flags;
+
     uint64_t site_local_subnet;
     const union ibv_gid *gid;
 
@@ -481,16 +519,27 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
     params.path_mtu  = UCT_IB_ADDRESS_INVALID_PATH_MTU;
     params.pkey      = UCT_IB_ADDRESS_DEFAULT_PKEY;
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
+    flags = ib_addr->flags;
+    if (flags & UCT_IB_ADDRESS_FLAG_EXT) {
+        ib_addr_ver   = UCT_IB_ADDRESS_V1;
+        ptr           = UCS_PTR_BYTE_OFFSET(ptr, 2);
+        flags        &= ~UCT_IB_ADDRESS_FLAG_EXT;
+        params.flags |= UCT_IB_ADDRESS_PACK_FLAG_EXT;
+    } else {
+        ib_addr_ver   = UCT_IB_ADDRESS_V0;
+        ptr           = UCS_PTR_BYTE_OFFSET(ptr, 1);
+    }
+
+    if (flags & UCT_IB_ADDRESS_FLAG_LINK_LAYER_ETH) {
         /* uint8_t raw[16]; */
         gid = ucs_serialize_next(&ptr, const union ibv_gid);
         memcpy(params.gid.raw, gid->raw, sizeof(params.gid.raw));
         params.flags |= UCT_IB_ADDRESS_PACK_FLAG_ETH;
 
         params.roce_info.addr_family =
-            uct_ib_address_flags_get_roce_af(ib_addr->flags);
+            uct_ib_address_flags_get_roce_af(flags);
         params.roce_info.ver         =
-            uct_ib_address_flags_get_roce_version(ib_addr->flags);
+            uct_ib_address_flags_get_roce_version(flags);
     } else {
         /* Default prefix */
         params.gid.global.subnet_prefix = UCT_IB_LINK_LOCAL_PREFIX;
@@ -502,41 +551,49 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
          * must be present */
         params.lid = *ucs_serialize_next(&ptr, const uint16_t);
 
-        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
+        if (flags & UCT_IB_ADDRESS_FLAG_IF_ID) {
             params.gid.global.interface_id =
                     *ucs_serialize_next(&ptr, const uint64_t);
         }
 
-        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
+        if (flags & UCT_IB_ADDRESS_FLAG_SUBNET16) {
             site_local_subnet = *ucs_serialize_next(&ptr, const uint16_t);
             params.gid.global.subnet_prefix = UCT_IB_SITE_LOCAL_PREFIX |
                                               (site_local_subnet << 48);
             ucs_assert(!(ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64));
         }
 
-        if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
+        if (flags & UCT_IB_ADDRESS_FLAG_SUBNET64) {
             params.gid.global.subnet_prefix =
                     *ucs_serialize_next(&ptr, const uint64_t);
             params.flags |= UCT_IB_ADDRESS_PACK_FLAG_SUBNET_PREFIX;
         }
     }
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PATH_MTU) {
+    if (flags & UCT_IB_ADDRESS_FLAG_PATH_MTU) {
         params.path_mtu = (enum ibv_mtu) *
                           ucs_serialize_next(&ptr, const uint8_t);
         params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     }
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_GID_INDEX) {
+    if (flags & UCT_IB_ADDRESS_FLAG_GID_INDEX) {
         params.gid_index = *ucs_serialize_next(&ptr, const uint8_t);
         params.flags    |= UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX;
     }
 
-    if (ib_addr->flags & UCT_IB_ADDRESS_FLAG_PKEY) {
+    if (flags & UCT_IB_ADDRESS_FLAG_PKEY) {
         params.pkey = *ucs_serialize_next(&ptr, const uint16_t);
     }
     /* PKEY is always in params */
     params.flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
+
+    if (ib_addr_ver == UCT_IB_ADDRESS_V0) {
+        *params_p = params;
+        return;
+    }
+
+    ib_addr_flags = UCS_PTR_TYPE_OFFSET(ib_addr_flags, uint8_t);
+    flags         = *ib_addr_flags;
 
     *params_p = params;
 }
