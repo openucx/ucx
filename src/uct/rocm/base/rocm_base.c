@@ -220,6 +220,11 @@ ucs_status_t uct_rocm_base_mem_query(uct_md_h md, const void *addr,
         mem_attr_p->alloc_length = length;
     }
 
+    if (mem_attr_p->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
+        /* unsupported */
+        mem_attr_p->dmabuf_fd = -1;
+    }
+
     return UCS_OK;
 }
 

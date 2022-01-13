@@ -1412,6 +1412,8 @@ typedef enum uct_md_mem_attr_field {
     UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3)  /**< Request the whole length of the
                                                           allocation to which the buffer
                                                           belongs. */
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD    = UCS_BIT(4)  /**< Request dmabuf file descriptor
+                                                          associated with the buffer. */
 } uct_md_mem_attr_field_t;
 
 
@@ -1457,6 +1459,14 @@ typedef struct uct_md_mem_attr {
      * to uct_md_mem_query is returned as is.
      */
     size_t            alloc_length;
+
+    /**
+     * fd object for the provided buffer region.
+     * If the md does not support querying fd object associated with the region,
+     * then -1 is returned. It is responsibility of the user to close returned
+     * fd once used.
+     */
+    int               dmabuf_fd;
 } uct_md_mem_attr_t;
 
 
