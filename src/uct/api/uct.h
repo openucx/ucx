@@ -1409,7 +1409,7 @@ typedef enum uct_md_mem_attr_field {
     UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS = UCS_BIT(2), /**< Request base address of the
                                                           allocation to which the buffer
                                                           belongs. */
-    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3)  /**< Request the whole length of the
+    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3), /**< Request the whole length of the
                                                           allocation to which the buffer
                                                           belongs. */
     UCT_MD_MEM_ATTR_FIELD_DMABUF_FD    = UCS_BIT(4)  /**< Request dmabuf file descriptor
