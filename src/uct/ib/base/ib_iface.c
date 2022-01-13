@@ -61,6 +61,12 @@ static const char *uct_ib_iface_addr_types[] = {
    [UCT_IB_IFACE_ADDRESS_TYPE_LAST] = NULL
 };
 
+static const char *uct_ib_addr_vers[] = {
+   [UCT_IB_ADDRESS_V0]  = "v0",
+   [UCT_IB_ADDRESS_V1]  = "v1",
+   [UCT_IB_ADDRESS_MAX] = NULL
+};
+
 ucs_config_field_t uct_ib_iface_config_table[] = {
   {"", "", NULL,
    ucs_offsetof(uct_ib_iface_config_t, super), UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
@@ -140,6 +146,11 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
 
   UCT_IFACE_MPOOL_CONFIG_FIELDS("RX_", -1, 0, "receive",
                                 ucs_offsetof(uct_ib_iface_config_t, rx.mp), ""),
+
+  {"ADDR_VERSION", "v0",
+   "Set the ib_addr_version.",
+   ucs_offsetof(uct_ib_iface_config_t, addr_ver),
+   UCS_CONFIG_TYPE_ENUM(uct_ib_addr_vers)},
 
   {"ADDR_TYPE", "auto",
    "Set the interface address type. \"auto\" mode detects the type according to\n"
@@ -1379,6 +1390,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.rx_max_batch       = ucs_min(config->rx.max_batch,
                                               config->rx.queue_len / 4);
     self->config.port_num           = port_num;
+    self->config.addr_ver           = config->addr_ver;
     /* initialize to invalid value */
     self->config.sl                 = UCT_IB_SL_NUM;
     self->config.hop_limit          = config->hop_limit;

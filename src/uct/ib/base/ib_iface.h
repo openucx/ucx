@@ -136,6 +136,9 @@ struct uct_ib_iface_config {
     /* Inline space to reserve in CQ */
     size_t                  inl[UCT_IB_DIR_NUM];
 
+    /* extend flags header in uct_ib_address_t */
+    unsigned                addr_ver;
+
     /* Change the address type */
     int                     addr_type;
 
@@ -270,6 +273,7 @@ struct uct_ib_iface {
         unsigned              roce_path_factor;
         uint8_t               max_inl_cqe[UCT_IB_DIR_NUM];
         uint8_t               port_num;
+        uct_ib_addr_obj_ver_t addr_ver;
         uint8_t               sl;
         uint8_t               traffic_class;
         uint8_t               hop_limit;
