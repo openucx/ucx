@@ -120,6 +120,16 @@ enum {
 
 
 /**
+ * IB address version
+ */
+typedef enum {
+    UCT_IB_ADDRESS_V0,
+    UCT_IB_ADDRESS_V1,
+    UCT_IB_ADDRESS_MAX
+} uct_ib_addr_obj_ver_t;
+
+
+/**
  * IB network address
  */
 typedef struct uct_ib_address {
@@ -129,6 +139,8 @@ typedef struct uct_ib_address {
      * the ib address) */
     uint8_t            flags;
     /* Following fields appear in this order (if specified by flags).
+     * if msb of flags is set:
+     * - uint8_t flags_ext;
      * The full gid always appears last:
      * - uint16_t lid
      * - uint64_t if_id
