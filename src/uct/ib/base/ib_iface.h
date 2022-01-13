@@ -79,6 +79,7 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU      = UCS_BIT(3),
     UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX     = UCS_BIT(4),
     UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5),
+    UCT_IB_ADDRESS_PACK_FLAG_EXT_ECE       = UCS_BIT(6),
     UCT_IB_ADDRESS_PACK_FLAG_EXT           = UCS_BIT(63)
 };
 
@@ -105,6 +106,9 @@ typedef struct uct_ib_address_pack_params {
     uint16_t                          pkey;
 
     /* Below info is extended */
+
+    /* RC ECE value. */
+    uint32_t                          ece;
 } uct_ib_address_pack_params_t;
 
 
@@ -262,6 +266,8 @@ struct uct_ib_iface {
     unsigned                  num_paths;
     uint16_t                  pkey_index;
     uint16_t                  pkey;
+    uint32_t                  dev_addr_ext_ece;
+    uint32_t                  ece;
     uint8_t                   addr_size;
     uint8_t                   addr_prefix_bits;
     uct_ib_device_gid_info_t  gid_info;
