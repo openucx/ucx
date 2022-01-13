@@ -352,6 +352,10 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params)
         size += sizeof(uint16_t);
     }
 
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_EXT_ECE) {
+        size += sizeof(uint32_t);
+    }
+
     return size;
 }
 
@@ -443,6 +447,11 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
     ib_addr_flags  = UCS_PTR_TYPE_OFFSET(ib_addr_flags, uint8_t);
 
     flags          = 0;
+    if (params->flags & UCT_IB_ADDRESS_PACK_FLAG_EXT_ECE) {
+        flags |= UCT_IB_ADDRESS_FLAG_EXT_ECE;
+        *ucs_serialize_next(&ptr, uint32_t) = params->ece;
+    }
+
     *ib_addr_flags = flags;
 }
 
@@ -456,6 +465,10 @@ uint64_t uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
 
     if (iface->pkey != UCT_IB_ADDRESS_DEFAULT_PKEY) {
         pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
+    }
+
+    if (iface->dev_addr_ext_ece && iface->ece) {
+        pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_EXT_ECE;
     }
 
     if (uct_ib_iface_is_roce(iface)) {
@@ -499,6 +512,7 @@ void uct_ib_iface_address_pack(uct_ib_iface_t *iface, uct_ib_address_t *ib_addr)
     /* to suppress gcc 4.3.4 warning */
     params.gid_index = UCT_IB_ADDRESS_INVALID_GID_INDEX;
     params.pkey      = iface->pkey;
+    params.ece       = iface->ece;
     uct_ib_address_pack(&params, ib_addr);
 }
 
@@ -594,6 +608,11 @@ void uct_ib_address_unpack(const uct_ib_address_t *ib_addr,
 
     ib_addr_flags = UCS_PTR_TYPE_OFFSET(ib_addr_flags, uint8_t);
     flags         = *ib_addr_flags;
+
+    if (flags & UCT_IB_ADDRESS_FLAG_EXT_ECE) {
+        params.ece    = *ucs_serialize_next(&ptr, const uint32_t);
+        params.flags |= UCT_IB_ADDRESS_PACK_FLAG_EXT_ECE;
+    }
 
     *params_p = params;
 }
