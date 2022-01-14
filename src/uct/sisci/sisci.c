@@ -276,7 +276,7 @@ static void uct_sisci_md_close(uct_md_h md) {
     uct_sisci_md_t * sci_md = (uct_sisci_md_t* ) &md;
     printf("uct_sisci_md_close: teehee\n");
 
-    SCIClose(&sci_md.sisci_virtual_device);
+    SCIClose(sci_md->sisci_virtual_device);
 
     
     uct_sci_close();
