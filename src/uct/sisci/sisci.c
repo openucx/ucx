@@ -273,7 +273,6 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
 static void uct_sisci_md_close() {
     printf("uct_sisci_md_close: teehee\n");
     
-    saads 
     
     uct_sci_close();
 }
