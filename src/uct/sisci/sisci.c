@@ -273,7 +273,7 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
 
 
 static void uct_sisci_md_close(uct_md_h md) {
-    uct_sici_md_t sci_md = ucs_derived_of(&md, uct_sisci_md_t);
+    uct_sisci_md_t sci_md = ucs_derived_of(&md, uct_sisci_md_t);
     printf("uct_sisci_md_close: teehee\n");
 
     SCIClose(&sci_md.sisci_virtual_device);
