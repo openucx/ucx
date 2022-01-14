@@ -459,6 +459,11 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     memset(attr, 0, sizeof(*attr));
 
 
+    /*  Start of lies  */
+    attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_EP;
+    
+
+
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
