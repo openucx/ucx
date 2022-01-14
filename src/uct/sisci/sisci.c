@@ -327,7 +327,9 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     md.super.component = &uct_sisci_component;
     md.num_devices     = md_config->num_devices;
     md.segment_id = 11;
-    *md_p = &md.super;
+    
+    
+    *md_p = &md;
 
     //uct_md_h = sisci_md;
 
