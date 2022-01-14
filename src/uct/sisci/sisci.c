@@ -329,7 +329,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     md.segment_id = 11;
     
     
-    *md_p = md.super;
+    *md_p = &md.super;
 
     //uct_md_h = sisci_md;
 
