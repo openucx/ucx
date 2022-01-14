@@ -992,6 +992,7 @@ struct uct_iface_attr {
     size_t                   device_addr_len;/**< Size of device address */
     size_t                   iface_addr_len; /**< Size of interface address */
     uint32_t                 device_addr_ext;
+    uint32_t                 ece;
     size_t                   ep_addr_len;    /**< Size of endpoint address */
     size_t                   max_conn_priv;  /**< Max size of the iface's private data.
                                                   used for connection
