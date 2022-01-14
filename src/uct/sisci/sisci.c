@@ -309,8 +309,8 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     static uct_sisci_md_t md;
     sci_error_t errors;
     SCIOpen(&md.sisci_virtual_device, 0, &errors);
-    uct_sci_close();
     SCIClose(md.sisci_virtual_device, 0 , &errors);
+    uct_sci_close();
 
     md.super.ops       = &md_ops;
     md.super.component = &uct_sisci_component;
