@@ -16,9 +16,6 @@
 #include <ucs/time/time.h>
 
 
-#define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
-    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, (_ep)->dci, _txqp, _txwq)
-
 static UCS_F_ALWAYS_INLINE void
 uct_dc_mlx5_iface_bcopy_post(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep,
                             unsigned opcode, unsigned length,
@@ -593,9 +590,6 @@ uct_dc_mlx5_ep_flush_cancel(uct_dc_mlx5_ep_t *ep)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
-    uct_ib_mlx5_md_t *md       =
-            ucs_derived_of(iface->super.super.super.super.md,
-                           uct_ib_mlx5_md_t);
     ucs_status_t status;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
@@ -626,23 +620,14 @@ uct_dc_mlx5_ep_flush_cancel(uct_dc_mlx5_ep_t *ep)
         return UCS_INPROGRESS;
     }
 
-    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
-    status = uct_ib_mlx5_modify_qp_state(md, &txwq->super, IBV_QPS_ERR);
+    status = uct_dc_mlx5_ep_qp_to_err(ep);
     if (status != UCS_OK) {
         return status;
     }
 
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
     uct_ib_mlx5_txwq_update_flags(txwq, UCT_IB_MLX5_TXWQ_FLAG_FAILED, 0);
     ep->flags |= UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL;
-
-    /* Post NOP on the DCI to avoid releasing it from dci_put while it's in
-     * error state. We could check its state when it's released, but it would
-     * add another branch on the fast path. */ 
-    uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI, txqp, txwq,
-                                 MLX5_OPCODE_NOP, NULL, 0, 0, 0, 0, 0, 0,
-                                 &ep->av, uct_dc_mlx5_ep_get_grh(ep),
-                                 uct_ib_mlx5_wqe_av_size(&ep->av), 0, INT_MAX);
-
     return UCS_INPROGRESS;
 }
 
@@ -689,6 +674,46 @@ out:
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
     return uct_rc_txqp_add_flush_comp(&iface->super.super, &ep->super, txqp,
                                       comp, txwq->sig_pi);
+}
+
+ucs_status_t uct_dc_mlx5_ep_qp_to_err(uct_dc_mlx5_ep_t *ep)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
+    ucs_status_t status;
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
+
+    UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
+
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super.super,
+                                         &txwq->super, IBV_QPS_ERR);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    /* post NOP operation which will complete with error, to trigger DCI
+     * reset. Otherwise, DCI could be returned to poll in error state */
+    uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
+                                 txqp, txwq,
+                                 MLX5_OPCODE_NOP, NULL, 0,
+                                 0, 0, 0,
+                                 0, 0,
+                                 &ep->av, uct_dc_mlx5_ep_get_grh(ep),
+                                 uct_ib_mlx5_wqe_av_size(&ep->av),
+                                 0, INT_MAX);
+    return UCS_OK;
+}
+
+ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+{
+    uct_dc_mlx5_ep_t *ep = ucs_derived_of(tl_ep, uct_dc_mlx5_ep_t);
+
+    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
+        ep->flags |= UCT_DC_MLX5_EP_FLAG_INVALIDATED;
+        return UCS_OK;
+    }
+
+    return uct_dc_mlx5_ep_qp_to_err(ep);
 }
 
 #if IBV_HW_TM
