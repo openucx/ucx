@@ -1719,6 +1719,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     iface_attr->device_addr_len = iface->addr_size;
     iface_attr->dev_num_paths   = iface->num_paths;
+    iface_attr->ece             = iface->ece;
 
     switch (active_speed) {
     default:
