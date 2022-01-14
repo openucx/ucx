@@ -1695,6 +1695,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
 
     uct_base_iface_query(&iface->super, iface_attr);
 
+    if (iface->dev_addr_ext_ece && iface->ece) {
+        iface_attr->device_addr_ext = 1;
+    }
+
     active_width = uct_ib_iface_port_attr(iface)->active_width;
     active_speed = uct_ib_iface_port_attr(iface)->active_speed;
     active_mtu   = uct_ib_iface_port_attr(iface)->active_mtu;
