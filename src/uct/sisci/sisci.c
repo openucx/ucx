@@ -122,6 +122,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 
     //UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
     //make a segment for sisci
+
+    uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
     
 
     return UCS_ERR_NOT_IMPLEMENTED;

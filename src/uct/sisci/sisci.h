@@ -76,6 +76,7 @@ typedef struct uct_sisci_md_config {
     size_t          num_devices; /* Number of devices to create */
     size_t          segment_size;
     size_t          segment_id;
+    
 } uct_sisci_md_config_t;
 
 
