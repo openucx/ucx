@@ -279,7 +279,7 @@ static void uct_sisci_md_close(uct_md_h md) {
     sci_error_t sci_error;
     printf("uct_sisci_md_close: teehee\n");
 
-    SCIClose(&sci_md->sisci_virtual_device, 0 , &sci_error);
+    SCIClose(&(sci_md->sisci_virtual_device), 0 , &sci_error);
 
     if (sci_error != SCI_ERR_OK)
         {
