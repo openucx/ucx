@@ -277,9 +277,9 @@ static void uct_sisci_md_close(uct_md_h md) {
     
     uct_sisci_md_t * sci_md = (uct_sisci_md_t* ) &md;
     sci_error_t sci_error;
-    printf("uct_sisci_md_close: teehee\n");
+    printf("uct_sisci_md_close: teehee %d\n", sci_md->segment_id);
 
-    SCIClose(&(sci_md->sisci_virtual_device), 0 , &sci_error);
+    SCIClose(sci_md->sisci_virtual_device, 0 , &sci_error);
 
     if (sci_error != SCI_ERR_OK)
         {
@@ -326,7 +326,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     md.super.ops       = &md_ops;
     md.super.component = &uct_sisci_component;
     md.num_devices     = md_config->num_devices;
-
+    md.segment_id = 11;
     *md_p = &md.super;
 
     //uct_md_h = sisci_md;
