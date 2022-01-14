@@ -463,7 +463,8 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
     /*  Start of lies  */
     attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_EP;
-    
+    attr->dev_num_paths = 1;
+
 
 
     return UCS_OK;
