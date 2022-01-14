@@ -275,7 +275,7 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
 static void uct_sisci_md_close(uct_md_h md) {
     //TODO: Maybe free up all segments or something lmao
     
-    uct_sisci_md_t * sci_md = (uct_sisci_md_t* ) &md;
+    uct_sisci_md_t * sci_md = ucs_derived_of(&md, uct_sisci_md_t);
     sci_error_t sci_error;
     printf("uct_sisci_md_close: teehee %d\n", sci_md->segment_id);
 
