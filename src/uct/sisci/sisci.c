@@ -123,7 +123,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
     //make a segment for sisci
 
-    uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    //uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
     
 
     return UCS_ERR_NOT_IMPLEMENTED;
@@ -420,7 +420,13 @@ ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              unsigned flags)
 {
     //TODO
-    return 0;
+    return -8;
+}
+
+ucs_status_t uct_sisci_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header, unsigned header_length, 
+                            const uct_iov_t *iov, size_t iovcnt, unsigned flags, uct_completion_t *comp) 
+{
+    return UCS_ERR_NOT_IMPLEMENTED;    
 }
 
 int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
@@ -507,6 +513,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .ep_am_short              = uct_sisci_ep_am_short,      // bap
     .ep_am_short_iov          = uct_sisci_ep_am_short_iov,  // bap
     .ep_am_bcopy              = uct_sisci_ep_am_bcopy,      // bap
+    .ep_am_zcopy              = uct_sisci_ep_am_zcopy,
     .ep_atomic_cswap64        = uct_sisci_ep_atomic_cswap64,// bap
     .ep_atomic64_post         = uct_sisci_ep_atomic64_post, // bap
     .ep_atomic64_fetch        = uct_sisci_ep_atomic64_fetch,// bap
