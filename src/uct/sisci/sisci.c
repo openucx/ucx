@@ -313,7 +313,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
 
     if (errors != SCI_ERR_OK)
         {
-            printf("md_open error: %s/n", SCIGetErrorString(sci_error));
+            printf("md_open error: %s/n", SCIGetErrorString(errors));
             return UCS_ERR_NO_RESOURCE;
         }
     
