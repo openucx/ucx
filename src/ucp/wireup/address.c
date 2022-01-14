@@ -367,7 +367,9 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
         }
 
         if (flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) {
-            dev->dev_addr_len = iface_attr->device_addr_len;
+            if (iface_attr->device_addr_len > dev->dev_addr_len) {
+                dev->dev_addr_len = iface_attr->device_addr_len;
+            }
         } else {
             dev->dev_addr_len = 0;
         }
