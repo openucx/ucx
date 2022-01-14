@@ -1319,6 +1319,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len *
                                       UCT_IB_MLX5_MAX_BB *
                                       (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
+
+    self->super.super.super.dev_addr_ext_ece = 0;
+    self->super.super.super.ece              = 0;
+
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,

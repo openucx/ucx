@@ -290,6 +290,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.cq_len[UCT_IB_DIR_TX]  = config->super.tx_cq_len;
     init_attr.seg_size               = ib_config->seg_size;
 
+    self->super.super.dev_addr_ext_ece = 1;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
                               &config->super.super, &init_attr);
