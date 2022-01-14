@@ -38,8 +38,9 @@ int sci_opened = 0;
     Since the api doesn't have any good way to check if the driver is initialized we have to keep track of it ourselves. 
 */
 static unsigned int uct_sci_open(){
+    sci_error_t sci_error = 0;
+    
     printf("sci_open(%d)\n", sci_opened);
-    sci_error_t sci_error;
     if (sci_opened == 0)
     {
         SCIInitialize(0,&sci_error);
