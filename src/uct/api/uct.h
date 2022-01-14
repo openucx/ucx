@@ -1419,11 +1419,11 @@ typedef enum uct_md_mem_attr_field {
 
 /**
  * @ingroup UCT_MD
- * @brief  Memory domain attributes.
+ * @brief  Memory region attributes.
  *
- * This structure defines the attributes of a memory pointer which may
- * include the memory type of the pointer, and the system device that backs
- * the pointer depending on the bit fields populated in field_mask.
+ * This structure defines the attributes of a memory region which may include
+ * the memory type of the pointer, the system device that backs the region,
+ * and other attributes depending on the bit fields populated in field_mask.
  */
 typedef struct uct_md_mem_attr {
     /**
@@ -1461,7 +1461,8 @@ typedef struct uct_md_mem_attr {
     size_t            alloc_length;
 
     /**
-     * fd object for the provided buffer region.
+     * dmabuf file descriptor for the provided buffer region. Refer
+     * (https://01.org/linuxgraphics/gfx-docs/drm/driver-api/dma-buf.html).
      * If the md does not support querying fd object associated with the region,
      * then -1 is returned. It is responsibility of the user to close returned
      * fd once used.
