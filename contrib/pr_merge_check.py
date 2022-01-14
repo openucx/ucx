@@ -113,7 +113,8 @@ class PRChecker(object):
         self.repo.git.merge(self.base_commit, m='Merge %s' % commit)
         if self.verbose:
             print(" - merge of %s to %s is %s" %
-                  (commit[:7], self.base_commit, str(self.repo.head.commit)[:7]))
+                  (commit[:7], self.base_commit[:7],
+                   str(self.repo.head.commit)[:7]))
         return self.repo.head.commit
 
     def parse_args(self, argv):
@@ -171,7 +172,8 @@ class PRChecker(object):
 
         if self.verbose:
             print("comparing %s and %s when merged to %s" %
-                  (self.approved_commit[:7], self.head_commit[:7], self.target_branch))
+                  (self.approved_commit[:7], self.head_commit[:7],
+                   self.base_commit[:7]))
 
         merge_approved = self.merge(self.approved_commit)
         merge_head = self.merge(self.head_commit)
@@ -182,9 +184,10 @@ class PRChecker(object):
             return 0
 
         self.print_diff(diff)
+        self.remove_temp_dir()
         return 1
 
 
 if __name__ == "__main__":
-    checker = PRChecker()
-    sys.exit(checker.main(sys.argv))
+    rc = PRChecker().main(sys.argv)
+    sys.exit(rc)
