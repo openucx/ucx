@@ -274,9 +274,10 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
 
 static void uct_sisci_md_close(uct_md_h md) {
     uct_sisci_md_t * sci_md = (uct_sisci_md_t* ) &md;
+    sci_error_t sci_error;
     printf("uct_sisci_md_close: teehee\n");
 
-    SCIClose(sci_md->sisci_virtual_device);
+    SCIClose(sci_md->sisci_virtual_device, 0 , &sci_error);
 
     
     uct_sci_close();
