@@ -272,9 +272,12 @@ static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
 }
 
 
-static void uct_sisci_md_close() {
+static void uct_sisci_md_close(uct_md_h md) {
+    uct_sici_md_t sci_md = ucs_derived_of(&md, uct_sisci_md_t);
     printf("uct_sisci_md_close: teehee\n");
-    
+
+    SCIClose(&sci_md.sisci_virtual_device);
+
     
     uct_sci_close();
 }
@@ -283,8 +286,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
     /*This seems like the most reasonable place to call SCI_INIT, not sure when the memory domain is closed though : )*/
-    uct_sisci_md_config_t *md_config = ucs_derived_of(config,
-                                                     uct_sisci_md_config_t);
+    uct_sisci_md_config_t *md_config = ucs_derived_of(config, uct_sisci_md_config_t);
 
     static uct_md_ops_t md_ops = {
         .close              = uct_sisci_md_close, //ucs_empty_function
