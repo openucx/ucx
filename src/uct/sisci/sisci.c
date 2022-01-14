@@ -39,7 +39,7 @@ int sci_opened = 0;
 */
 static unsigned int uct_sci_open(){
     printf("sci_open(%d)\n", sci_opened);
-    sci_error_t sci_error = 0;
+    sci_error_t sci_error;
     if (sci_opened == 0)
     {
         SCIInitialize(0,&sci_error);
@@ -307,7 +307,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     //md_name = "sisci";
 
 
-    printf("number of devices : %d \n", md.num_devices);
+    printf("number of devices : %ld \n", md.num_devices);
     printf("UCT_SISCI_MD_OPEN\n");
     return UCS_OK;
 }
