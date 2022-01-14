@@ -478,6 +478,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     init_attr->seg_size    = ucs_min(mtu, config->super.seg_size);
     init_attr->qp_type     = IBV_QPT_UD;
 
+    self->super.dev_addr_ext_ece = 0;
+    self->super.ece              = 0;
+
     UCS_CLASS_CALL_SUPER_INIT(uct_ib_iface_t, tl_ops, &ops->super, md, worker,
                               params, &config->super, init_attr);
 
