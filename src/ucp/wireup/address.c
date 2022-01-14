@@ -317,7 +317,7 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
     ucp_address_packed_device_t *dev, *devices;
     uct_iface_attr_t *iface_attr;
     ucp_rsc_index_t num_devices;
-    ucp_rsc_index_t rsc_index;
+    ucp_rsc_index_t rsc_index, dev_rsc_index;
     ucp_lane_index_t lane;
 
     devices = ucs_calloc(context->num_tls, sizeof(*devices), "packed_devices");
@@ -389,6 +389,15 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
 
         dev->rsc_index  = rsc_index;
         UCS_BITMAP_SET(dev->tl_bitmap, rsc_index);
+        UCS_BITMAP_FOR_EACH_BIT(dev->tl_bitmap, dev_rsc_index) {
+            if (ucp_worker_iface_get_attr(worker,
+                                          dev_rsc_index)->device_addr_ext >
+                ucp_worker_iface_get_attr(worker,
+                                          dev->rsc_index)->device_addr_ext) {
+                dev->rsc_index = dev_rsc_index;
+            }
+        }
+
         dev->num_paths  = iface_attr->dev_num_paths;
     }
 
