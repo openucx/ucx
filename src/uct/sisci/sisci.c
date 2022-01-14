@@ -306,7 +306,7 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     //md_name = "sisci";
 
 
-
+    printf("number of devices : %d \n", md.num_devices);
     printf("UCT_SISCI_MD_OPEN\n");
     return UCS_OK;
 }
