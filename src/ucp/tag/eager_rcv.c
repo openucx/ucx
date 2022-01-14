@@ -363,6 +363,7 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
     ucp_tag_frag_match_t *matchq       = ucs_unaligned_ptr(&priv_hdr->matchq);
     ucp_recv_desc_t *rdesc             = NULL;
     ucp_offload_ssend_hdr_t *sync_hdr;
+    ucp_recv_desc_t *first_rdesc;
     void *hdr;
     size_t hdr_length;
     ucs_status_t status;
@@ -374,7 +375,9 @@ ucp_tag_offload_eager_middle_handler(ucp_worker_h worker, void *data,
     priv_hdr->total_length += length;
 
     if (!(tl_flags & UCT_CB_PARAM_FLAG_MORE)) {
-        flags |= UCP_RECV_DESC_FLAG_EAGER_LAST;
+        first_rdesc         = (ucp_recv_desc_t*)priv_hdr - 1;
+        flags              |= UCP_RECV_DESC_FLAG_EAGER_LAST;
+        first_rdesc->flags &= ~UCP_RECV_DESC_FLAG_RECV_STARTED;
     }
 
     /* Last fragment may contain immediate data, indicating that it is
@@ -456,9 +459,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_offload_unexp_eager,
 
     if (tl_flags & UCT_CB_PARAM_FLAG_MORE) {
         /* First part of the fragmented message */
-        return ucp_tag_offload_eager_first_handler(worker, data, length,
-                                                   tl_flags, stag, flags,
-                                                   context);
+        return ucp_tag_offload_eager_first_handler(
+                   worker, data, length, tl_flags, stag,
+                   flags | UCP_RECV_DESC_FLAG_RECV_STARTED, context);
     }
 
     /* Sync eager only packet */
