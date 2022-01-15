@@ -431,6 +431,8 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
                                              safely */
     unsigned ep_init_flags        = 0;
     ucp_tl_bitmap_t tl_bitmap;
+    ucp_rsc_index_t rsc_index;
+    uct_iface_attr_t *iface_attr;
     uct_ep_connect_params_t params;
     void *priv_data;
     size_t priv_data_length;
@@ -492,6 +494,14 @@ initial_config_retry:
                                  UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH;
     params.private_data        = priv_data;
     params.private_data_length = priv_data_length;
+    UCS_BITMAP_FOR_EACH_BIT(tl_bitmap, rsc_index) {
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (iface_attr->device_addr_ext && iface_attr->ece) {
+            params.field_mask |= UCT_EP_CONNECT_PARAM_FIELD_ECE;
+            params.ece         = iface_attr->ece;
+            break;
+        }
+    }
     status                     = uct_ep_connect(ucp_ep_get_cm_uct_ep(ep),
                                                 &params);
     ucs_free(priv_data);
@@ -1368,12 +1378,17 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
 {
     ucp_worker_h worker   = ep->worker;
     ucp_lane_index_t lane = ucp_ep_get_cm_lane(ep);
+    ucp_tl_bitmap_t tl_bitmap;
+    ucp_rsc_index_t rsc_index;
+    uct_iface_attr_t *iface_attr;
     uct_ep_params_t uct_ep_params;
     uct_ep_h uct_ep;
     ucs_status_t status;
 
     ucs_assert(lane != UCP_NULL_LANE);
     ucs_assert(ep->uct_eps[lane] == NULL);
+
+    ucp_context_dev_tl_bitmap(worker->context, dev_name, &tl_bitmap);
 
     /* TODO: split CM and wireup lanes */
     status = ucp_wireup_ep_create(ep, &ep->uct_eps[lane]);
@@ -1411,6 +1426,15 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                           ep_init_flags, sa_data_version);
     if (status != UCS_OK) {
         goto err;
+    }
+
+    UCS_BITMAP_FOR_EACH_BIT(tl_bitmap, rsc_index) {
+        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
+        if (iface_attr->device_addr_ext && iface_attr->ece) {
+            uct_ep_params.field_mask |= UCT_EP_PARAM_FIELD_ECE;
+            uct_ep_params.ece         = iface_attr->ece;
+            break;
+        }
     }
 
     status = uct_ep_create(&uct_ep_params, &uct_ep);
