@@ -402,6 +402,25 @@ out:
     }
 }
 
+static void uct_rdmacm_get_remote_ece(struct rdma_cm_id *cm_id, uint32_t *ece)
+{
+    uint32_t remote_ece = 0;
+
+#if HAVE_RDMACM_ECE
+    uct_ibv_ece_t recv_ece;
+    if (rdma_get_remote_ece(cm_id, &recv_ece) != 0 || recv_ece.options == 0) {
+        ucs_debug("cm_id %p: fail recv remote ece or peer not send ece",
+                   cm_id);
+    } else {
+        remote_ece = recv_ece.options;
+    }
+#else
+    ucs_debug("rdma_get_remote_ece API isn't supported");
+#endif
+
+    *ece = remote_ece;
+}
+
 static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
                                                  struct rdma_cm_id *cm_id,
                                                  uct_device_addr_t **dev_addr_p,
@@ -484,6 +503,13 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
     }
 
     params.lid  = qp_attr.ah_attr.dlid;
+
+    uct_rdmacm_get_remote_ece(cm_id, &params.ece);
+    if (params.ece) {
+        params.flags |= UCT_IB_ADDRESS_PACK_FLAG_EXT;
+        params.flags |= UCT_IB_ADDRESS_PACK_FLAG_EXT_ECE;
+    }
+
     addr_length = uct_ib_address_size(&params);
     dev_addr    = ucs_malloc(addr_length, "IB device address");
     if (dev_addr == NULL) {
