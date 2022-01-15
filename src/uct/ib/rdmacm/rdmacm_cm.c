@@ -392,7 +392,7 @@ static void uct_rdmacm_cm_handle_event_route_resolved(struct rdma_cm_event *even
         goto out;
     }
 
-    status = uct_rdmacm_cm_ep_send_priv_data(cep, pack_priv_data,
+    status = uct_rdmacm_cm_ep_send_priv_data(cep, 0, pack_priv_data,
                                              pack_priv_data_length);
 
 out:

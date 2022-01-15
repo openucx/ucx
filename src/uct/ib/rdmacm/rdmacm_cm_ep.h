@@ -65,7 +65,8 @@ UCS_CLASS_DECLARE_NEW_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t, const uct_ep_params_t *
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rdmacm_cm_ep_t, uct_ep_t);
 
 ucs_status_t
-uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
+uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, uint32_t ece,
+                                const void *priv_data,
                                 size_t priv_data_length);
 
 ucs_status_t uct_rdmacm_cm_ep_connect(uct_ep_h ep,

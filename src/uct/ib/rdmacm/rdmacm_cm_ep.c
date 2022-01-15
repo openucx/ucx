@@ -534,7 +534,10 @@ uct_rdamcm_cm_ep_server_send_priv_data(uct_rdmacm_cm_ep_t *cep,
     size_t pack_priv_data_length;
     const void *priv_data;
     size_t priv_data_length;
+    uint32_t ece;
     ucs_status_t status;
+
+    ece = params->field_mask & UCT_EP_PARAM_FIELD_ECE ? params->ece : 0;
 
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
 
@@ -563,7 +566,8 @@ uct_rdamcm_cm_ep_server_send_priv_data(uct_rdmacm_cm_ep_t *cep,
         priv_data_length = 0;
     }
 
-    status = uct_rdmacm_cm_ep_send_priv_data(cep, priv_data, priv_data_length);
+    status = uct_rdmacm_cm_ep_send_priv_data(cep, ece,
+                                             priv_data, priv_data_length);
     if (status == UCS_OK) {
         goto out;
     }
@@ -629,9 +633,31 @@ err_destroy_id:
     return status;
 }
 
+static void uct_rdmacm_send_local_ece(uct_rdmacm_cm_ep_t *cep, uint32_t ece)
+{
+#if HAVE_RDMACM_ECE
+    uct_ibv_ece_t send_ece = {0, ece, 0};
+    char ep_str[UCT_RDMACM_EP_STRING_LEN];
+    uct_rdmacm_cm_device_context_t *ctx;
+
+    if (uct_rdmacm_cm_get_device_context(uct_rdmacm_cm_ep_get_cm(cep),
+                                         cep->id->verbs, &ctx) == UCS_OK) {
+        send_ece.vendor_id = ctx->vendor;
+    }
+    if (rdma_set_local_ece(cep->id, &send_ece) != 0) {
+        /* peer get ECE is 0 when send failed */
+        ucs_debug("%s: fail send local ece : 0x%x on cm_id %p, vendor : 0x%x",
+                  uct_rdmacm_cm_ep_str(cep, ep_str, UCT_RDMACM_EP_STRING_LEN),
+                  ece, cep->id, send_ece.vendor_id);
+    }
+#else
+    ucs_debug("rdma_set_loal_ece API isn't supported");
+#endif
+}
+
 ucs_status_t
-uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
-                                size_t priv_data_length)
+uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, uint32_t ece,
+                                const void *priv_data, size_t priv_data_length)
 {
     struct rdma_conn_param conn_param = {0};
     uct_rdmacm_priv_data_hdr_t *hdr;
@@ -657,6 +683,8 @@ uct_rdmacm_cm_ep_send_priv_data(uct_rdmacm_cm_ep_t *cep, const void *priv_data,
     if (priv_data != NULL) {
         memcpy(hdr + 1, priv_data, priv_data_length);
     }
+
+    uct_rdmacm_send_local_ece(cep, ece);
 
     if (cep->flags & UCT_RDMACM_CM_EP_ON_CLIENT) {
         ucs_trace("%s rdma_connect on cm_id %p",
@@ -693,13 +721,18 @@ ucs_status_t
 uct_rdmacm_cm_ep_connect(uct_ep_h ep, const uct_ep_connect_params_t *params)
 {
     uct_rdmacm_cm_ep_t *cep = ucs_derived_of(ep, uct_rdmacm_cm_ep_t);
+    uint32_t ece;
     const void *priv_data;
     size_t priv_data_length;
     ucs_status_t status;
 
+    ece = params->field_mask & UCT_EP_CONNECT_PARAM_FIELD_ECE ?
+          params->ece : 0;
+
     uct_ep_connect_params_get(params, &priv_data, &priv_data_length);
     UCS_ASYNC_BLOCK(uct_rdmacm_cm_ep_get_async(cep));
-    status = uct_rdmacm_cm_ep_send_priv_data(cep, priv_data, priv_data_length);
+    status = uct_rdmacm_cm_ep_send_priv_data(cep, ece,
+                                             priv_data, priv_data_length);
     UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_ep_get_async(cep));
     return status;
 }
