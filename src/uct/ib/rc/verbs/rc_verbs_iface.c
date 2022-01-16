@@ -278,6 +278,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_ib_iface_config_t *ib_config    = &config->super.super.super;
     uct_ib_iface_init_attr_t init_attr  = {};
     uct_ib_qp_attr_t attr               = {};
+    uct_ibv_ece_t ece                   = {};
     const char *dev_name;
     ucs_status_t status;
     struct ibv_qp *qp;
@@ -291,6 +292,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     init_attr.seg_size               = ib_config->seg_size;
 
     self->super.super.dev_addr_ext_ece = 1;
+    self->super.super.ece              = ece.options;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
@@ -366,6 +368,22 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     if (status != UCS_OK) {
         goto err_common_cleanup;
     }
+
+    self->super.super.dev_addr_ext_ece = 0;
+    self->super.super.ece              = 0;
+#if HAVE_RDMACM_ECE
+    if (uct_ib_iface_device(&self->super.super)->flags &
+        UCT_IB_DEVICE_FLAG_ECE) {
+        ucs_assert(ibv_query_ece(qp, &ece) == 0);
+
+        if (ece.options) {
+            self->super.super.dev_addr_ext_ece = 1;
+            self->super.super.ece              = ece.options;
+        }
+    }
+#endif
+    self->super.super.addr_size = uct_ib_iface_address_size(&self->super.super);
+
     uct_ib_destroy_qp(qp);
 
     self->config.max_inline   = attr.cap.max_inline_data;
