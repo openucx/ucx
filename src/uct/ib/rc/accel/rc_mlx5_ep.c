@@ -698,7 +698,7 @@ uct_rc_mlx5_ep_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                                         path_index);
     } else {
         return uct_rc_iface_qp_connect(&iface->super, qp->verbs.qp, qp_num,
-                                       ah_attr, path_mtu);
+                                       ah_attr, path_mtu, qp->remote_ece);
     }
 }
 
@@ -724,6 +724,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         /* For HW TM we need 2 QPs, one of which will be used by the device for
          * RNDV offload (for issuing RDMA reads and sending RNDV ACK). No WQEs
          * should be posted to the send side of the QP which is owned by device. */
+        ep->tm_qp.remote_ece = remote_ece;
         status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tm_qp,
                                            uct_ib_unpack_uint24(rc_addr->qp_num),
                                            &ah_attr, path_mtu,
@@ -739,6 +740,7 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
         qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
     }
 
+    ep->tx.wq.super.remote_ece = remote_ece;
     status = uct_rc_mlx5_ep_connect_qp(iface, &ep->tx.wq.super, qp_num,
                                        &ah_attr, path_mtu,
                                        ep->super.path_index);

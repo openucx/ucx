@@ -806,18 +806,31 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
                                      struct ibv_ah_attr *ah_attr,
-                                     enum ibv_mtu path_mtu)
+                                     enum ibv_mtu path_mtu,
+                                     uint32_t remote_ece)
 {
+    uct_ib_device_t UCS_V_UNUSED *dev;
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
-    uct_ib_device_t *dev;
 #else
     struct ibv_qp_attr qp_attr;
 #endif
     long qp_attr_mask;
+    uct_ibv_ece_t UCS_V_UNUSED ece;
     int ret;
 
     ucs_assert(path_mtu != 0);
+
+    dev = uct_ib_iface_device(&iface->super);
+#if HAVE_RDMACM_ECE
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        ece.vendor_id = dev->pci_id.vendor;
+        ece.options   = remote_ece;
+        ece.comp_mask = 0;
+        /* Make coverity happy */
+        (void)ibv_set_ece(qp, &ece);
+    }
+#endif
 
     memset(&qp_attr, 0, sizeof(qp_attr));
 
@@ -837,7 +850,6 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                     IBV_QP_MIN_RNR_TIMER;
 
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-    dev = uct_ib_iface_device(&iface->super);
     if (iface->config.ooo_rw && UCX_IB_DEV_IS_OOO_SUPPORTED(dev, rc)) {
         ucs_debug("enabling out-of-order on RC QP %x dev %s",
                   qp->qp_num, uct_ib_device_name(dev));
@@ -851,6 +863,14 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
         ucs_error("error modifying QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
     }
+
+#if HAVE_RDMACM_ECE
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        /* Make coverity happy */
+        (void)ibv_query_ece(qp, &ece);
+        ucs_debug("rc verbs under rtr with ece : 0x%x", ece.options);
+    }
+#endif
 
     qp_attr.qp_state              = IBV_QPS_RTS;
     qp_attr.sq_psn                = 0;
