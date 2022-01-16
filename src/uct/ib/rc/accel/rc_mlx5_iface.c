@@ -13,6 +13,7 @@
 #include <uct/ib/mlx5/ib_mlx5_log.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 #include <uct/ib/mlx5/dv/ib_mlx5_ifc.h>
+#include <uct/ib/mlx5/exp/ib_exp.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
@@ -288,6 +289,35 @@ static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
 
     uct_base_iface_progress_enable_cb(&iface->super.super.super,
                                       iface->super.progress, flags);
+}
+
+void uct_rc_mlx5_iface_query_max_ece(uct_rc_mlx5_iface_common_t *iface,
+                                     uct_ib_mlx5_qp_t *qp)
+{
+    uct_ib_iface_t *ib_iface = &iface->super.super;
+    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md,
+                                              uct_ib_mlx5_md_t);
+    uct_ib_device_t *dev     = &md->super.dev;
+    uct_ibv_ece_t UCS_V_UNUSED ece;
+
+    ib_iface->ece = 0;
+
+    if (!(dev->flags & UCT_IB_DEVICE_FLAG_ECE)) {
+        return;
+    }
+
+#if HAVE_DECL_MLX5DV_CREATE_QP
+    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
+        ib_iface->ece = uct_ib_mlx5_devx_query_qp_max_ece(qp);
+        return;
+    }
+#endif
+
+#if HAVE_RDMACM_ECE
+    if (0 == ibv_query_ece(qp->verbs.qp, &ece)) {
+        ib_iface->ece = ece.options;
+    }
+#endif
 }
 
 ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
@@ -661,6 +691,51 @@ int uct_rc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
     return uct_ib_iface_is_reachable(tl_iface, dev_addr, iface_addr);
 }
 
+static
+ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface)
+{
+    uct_ib_iface_t *ib_iface   = &iface->super.super;
+    uct_ib_mlx5_md_t *md       = ucs_derived_of(ib_iface->super.md,
+                                                uct_ib_mlx5_md_t);
+    uct_rc_mlx5_ep_t ep        = {};
+    uct_ib_mlx5_qp_attr_t attr = {};
+    ucs_status_t status        = UCS_OK;
+
+    ib_iface->dev_addr_ext_ece = 0;
+    ib_iface->ece              = 0;
+    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE)) {
+        ib_iface->ece = 0;
+        return status;
+    }
+
+    uct_rc_mlx5_iface_fill_attr(iface, &attr, iface->super.config.tx_qp_len,
+                                &iface->rx.srq);
+    uct_ib_exp_qp_fill_attr(ib_iface, &attr.super);
+
+    status = uct_rc_mlx5_iface_create_qp(iface, &ep.tx.wq.super, &ep.tx.wq,
+                                         &attr);
+    if (status != UCS_OK) {
+        ib_iface->ece = 0;
+        return status;
+    }
+
+    uct_rc_mlx5_iface_query_max_ece(iface, &ep.tx.wq.super);
+    ib_iface->addr_size = uct_ib_iface_address_size(ib_iface);
+    if (ib_iface->ece != 0) {
+        ib_iface->dev_addr_ext_ece = 1;
+    }
+
+    if (ep.tx.wq.super.type == UCT_IB_MLX5_OBJ_TYPE_VERBS) {
+        /* Make coverity happy [FORWARD_NULL] */
+        ucs_assert(ep.tx.wq.reg != NULL);
+    }
+
+    uct_ib_mlx5_qp_mmio_cleanup(&ep.tx.wq.super, ep.tx.wq.reg);
+    uct_ib_mlx5_destroy_qp(md, &ep.tx.wq.super);
+
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_common_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h tl_md,
                     uct_worker_h worker, const uct_iface_params_t *params,
@@ -848,6 +923,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     }
 
     self->super.super.super.dev_addr_ext_ece = 1;
+    self->super.super.super.ece              = 0;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_rc_mlx5_iface_tl_ops, &uct_rc_mlx5_iface_ops,
@@ -864,7 +940,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
         return status;
     }
 
-    return UCS_OK;
+    status = uct_rc_mlx5_init_ece(&self->super);
+    return status;
 }
 
 static UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_iface_t)
