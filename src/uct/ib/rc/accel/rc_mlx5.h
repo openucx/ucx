@@ -139,6 +139,9 @@ ucs_status_t uct_rc_mlx5_ep_invalidate(uct_ep_h tl_ep, unsigned flags);
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                     uct_rc_pending_req_t *req);
 
+void uct_rc_mlx5_iface_query_max_ece(uct_rc_mlx5_iface_common_t *iface,
+                                     uct_ib_mlx5_qp_t *qp);
+
 ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_txwq_t *txwq,
