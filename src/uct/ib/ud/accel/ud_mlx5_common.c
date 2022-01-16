@@ -46,7 +46,7 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
     enum ibv_mtu        path_mtu;
 
     uct_ib_iface_fill_ah_attr_from_addr(iface, ib_addr, path_index, &ah_attr,
-                                        &path_mtu);
+                                        &path_mtu, NULL);
     status = uct_ib_iface_create_ah(iface, &ah_attr, usage, &ah);
     if (status != UCS_OK) {
         return status;

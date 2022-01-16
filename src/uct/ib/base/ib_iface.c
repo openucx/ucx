@@ -843,7 +843,8 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
                                          const uct_ib_address_t *ib_addr,
                                          unsigned path_index,
                                          struct ibv_ah_attr *ah_attr,
-                                         enum ibv_mtu *path_mtu)
+                                         enum ibv_mtu *path_mtu,
+                                         uint32_t *ece)
 {
     uct_ib_address_pack_params_t params;
 
@@ -863,6 +864,14 @@ void uct_ib_iface_fill_ah_attr_from_addr(uct_ib_iface_t *iface,
         ucs_assert(params.gid_index != UCT_IB_ADDRESS_INVALID_GID_INDEX);
     } else {
         params.gid_index = iface->gid_info.gid_index;
+    }
+
+    if (ece != NULL) {
+        if (params.flags & UCT_IB_ADDRESS_PACK_FLAG_EXT_ECE) {
+            *ece = params.ece;
+        } else {
+            *ece = 0;
+        }
     }
 
     uct_ib_iface_fill_ah_attr_from_gid_lid(iface, params.lid, &params.gid,
