@@ -712,11 +712,12 @@ ucs_status_t uct_rc_mlx5_ep_connect_to_ep(uct_ep_h tl_ep,
     uint32_t qp_num;
     struct ibv_ah_attr ah_attr;
     enum ibv_mtu path_mtu;
+    uint32_t remote_ece;
     ucs_status_t status;
 
     uct_ib_iface_fill_ah_attr_from_addr(&iface->super.super, ib_addr,
                                         ep->super.path_index, &ah_attr,
-                                        &path_mtu);
+                                        &path_mtu, &remote_ece);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
