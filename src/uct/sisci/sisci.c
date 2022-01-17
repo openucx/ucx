@@ -121,8 +121,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sisci_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 {
-    uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
-    uct_sisci_md_t md = ucs_derived_of(iface.super.md, uct_sisci_md_t);
+    //uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    //uct_sisci_md_t md = ucs_derived_of(iface.super.md, uct_sisci_md_t);
 
     //make a segment;
 
