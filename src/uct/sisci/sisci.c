@@ -469,11 +469,11 @@ int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
 
 ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *addr) {
     uct_sisci_iface_t* sisci_iface = ucs_derived_of(iface, uct_sisci_iface_t);
-    uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super.md, uct_sisci_md_t);  
+    uct_sisci_md_t* md =  ucs_derived_of(&sisci_iface->super.md, uct_sisci_md_t);  
 
 
 
-    printf("sisci_get_device_address() %ld\n", md->num_devices);
+    printf("sisci_get_device_address() %ld\n", md->segment_id);
 
     return UCS_ERR_NOT_IMPLEMENTED;
 }
