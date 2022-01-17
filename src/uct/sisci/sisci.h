@@ -17,7 +17,9 @@ typedef struct uct_sisci_iface_addr {
     unsigned int segment_id; /* Listening port of iface */
 } UCS_S_PACKED uct_sisci_iface_addr_t;
 
-
+typedef struct uct_sisci_device_addr {
+    unsigned int node_id;
+} UCS_S_PACKED uct_sisci_device_addr_t;
 
 
 void sisci_testing();
