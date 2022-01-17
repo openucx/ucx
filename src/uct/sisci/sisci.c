@@ -472,8 +472,9 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 {
     //TODO: Don't lie, but get iface_addr from config.
     
-    printf("uct_iface_get_address()\n");
     uct_sisci_iface_addr_t* iface_addr = (uct_sisci_iface_addr_t *) addr;
+    
+    printf("uct_iface_get_address()\n");
     iface_addr->segment_id = 13337;
     
     return UCS_OK;
