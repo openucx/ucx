@@ -470,13 +470,13 @@ int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
 ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
                                                uct_iface_addr_t *addr)
 {
-    //TODO
-    //const uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
-    //*(uct_self_iface_addr_t*)addr = iface->id;
-    printf("uct_iface_get_address()\n");
-
+    //TODO: Don't lie, but get iface_addr from config.
     
-    return UCS_ERR_NOT_IMPLEMENTED;
+    printf("uct_iface_get_address()\n");
+    uct_sisci_iface_addr_t* iface_addr = (uct_sisci_iface *) addr;
+    iface_addr->segment_id = 13337;
+    
+    return UCS_OK;
 }
 
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
