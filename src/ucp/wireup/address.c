@@ -394,6 +394,11 @@ ucp_address_gather_devices(ucp_worker_h worker, ucp_ep_h ep,
                                           dev_rsc_index)->device_addr_ext >
                 ucp_worker_iface_get_attr(worker,
                                           dev->rsc_index)->device_addr_ext) {
+                ucs_trace("update device rsc_index to : 0x%x, "
+                          "tl_name : %s, dev_name : %s",
+                          (uint32_t)(dev_rsc_index),
+                          context->tl_rscs[dev_rsc_index].tl_rsc.tl_name,
+                          context->tl_rscs[dev_rsc_index].tl_rsc.dev_name);
                 dev->rsc_index = dev_rsc_index;
             }
         }
@@ -1220,6 +1225,9 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         /* Device address */
         if (pack_flags & UCP_ADDRESS_PACK_FLAG_DEVICE_ADDR) {
             wiface = ucp_worker_iface(worker, dev->rsc_index);
+            ucs_trace("get device address, tl_name : %s, dev_name : %s",
+                      context->tl_rscs[dev->rsc_index].tl_rsc.tl_name,
+                      context->tl_rscs[dev->rsc_index].tl_rsc.dev_name);
             status = uct_iface_get_device_address(wiface->iface,
                                                   (uct_device_addr_t*)ptr);
             if (status != UCS_OK) {
