@@ -84,6 +84,12 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+
+    unsigned int nodeID;
+    unsigned int adapterID = 0;
+    unsigned int flags = 0;
+    sci_error_t sci_error;
+
     printf("UCS_SISCI_CLASS_INIT_FUNC() hm\n");
 
     UCS_CLASS_CALL_SUPER_INIT(
@@ -94,7 +100,15 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                             params->stats_root :
                             NULL) UCS_STATS_ARG(UCT_SISCI_NAME));
     
-    self->device_addr = 4;
+
+    //---------- IFACE SISCI --------------------------
+    SCIGetLocalNodeId(adapterID, &nodeID, flags, &sci_error);
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_IFACE_INIT: %s\n", SCIGetErrorString(error));
+    } 
+    
+    self->device_addr = nodeID;
     self->id = 13337;
 
     return UCS_OK;
@@ -484,12 +498,14 @@ ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *
     
     uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super.md, uct_sisci_md_t);  
 
+    uct_sisci_device_addr_t* sci_addr = (uct_sisci_device_addr_t *) addr;
 
-
-    printf("iface_data = %d\n", sisci_iface->id);
+    printf("iface_data = %d %d\n", sisci_iface->id, sisci_iface->device_addr);
     printf("sisci_get_device_address() %d\n", md->segment_id);
 
-    return UCS_ERR_NOT_IMPLEMENTED;
+    sci_addr->node_id = sisci_iface->device_addr;
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
