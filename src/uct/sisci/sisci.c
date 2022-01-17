@@ -96,7 +96,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                             NULL) UCS_STATS_ARG(UCT_SISCI_NAME));
     
     self->device_addr = 4;
-    self->id 13337;
+    self->id = 13337;
 
     return UCS_OK;
 }
