@@ -118,12 +118,20 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sisci_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 {
-    //uct_self_iface_t *iface = ucs_derived_of(params->iface, uct_self_iface_t);
+    uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    uct_sisci_md_t md = ucs_derived_of(iface.super.md, uct_sisci_md_t);
 
-    //UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super)
-    //make a segment for sisci
+    //make a segment;
 
-    //uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    //sd : sci virtual device       md.sci_virtual_device
+    //segment: local segment
+    //segment id            
+    //size                          md.segment_size
+    //callback  
+    //callbackarg   
+    //flags                         0
+    //error                         sci_error_t
+
     
 
     return UCS_ERR_NOT_IMPLEMENTED;
