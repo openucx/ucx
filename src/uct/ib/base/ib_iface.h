@@ -402,7 +402,7 @@ size_t uct_ib_address_size(const uct_ib_address_pack_params_t *params);
 /**
  * @return IB address packing flags of the given iface.
  */
-unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
+uint64_t uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface);
 
 
 /**

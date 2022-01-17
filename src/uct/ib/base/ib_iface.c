@@ -416,9 +416,9 @@ void uct_ib_address_pack(const uct_ib_address_pack_params_t *params,
     }
 }
 
-unsigned uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
+uint64_t uct_ib_iface_address_pack_flags(uct_ib_iface_t *iface)
 {
-    unsigned pack_flags = 0;
+    uint64_t pack_flags = 0;
 
     if (iface->pkey != UCT_IB_ADDRESS_DEFAULT_PKEY) {
         pack_flags |= UCT_IB_ADDRESS_PACK_FLAG_PKEY;
