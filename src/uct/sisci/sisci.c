@@ -176,9 +176,6 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 
     resources = ucs_malloc(sizeof(*resources), "SCI resources");
 
-    printf("sizeof(*resources): %zd\n", sizeof(*resources));
-
-    printf("component name: %s\n", component->name);
 
     if(resources == NULL) {
         //TODO Handle memory errors.
@@ -188,38 +185,11 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 
     status = UCS_OK;
 
-    ucs_snprintf_zero(resources->md_name, UCT_MD_NAME_MAX, "%s", component->name);
+    //ucs_snprintf_zero(resources->md_name, UCT_MD_NAME_MAX, "%s", component->name);
 
-    *resources_p = resources;
-    *num_resources_p = num_resources;
-
-    query.subcommand = SCI_Q_ADAPTER_NODEID; 
-    query.localAdapterNo = ADAPTER_NO; 
-    query.data = &local_node_id; 
-    
-    
+   
     printf("SISCI: UCT_SICI_QUERY_MD_RESOURCES\n");
     
-    SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
-
-    if (error == SCI_ERR_OK) { 
-        printf("local node id %d\n", local_node_id);
-    } else { 
-        printf("%s\n", SCIGetErrorString(error));
-    } 
-
-    uct_sci_open();
-
-    SCIQuery(SCI_Q_ADAPTER, &query, NO_FLAGS, &error);
-    
-    
-    if (error == SCI_ERR_OK) { 
-        printf("local node id %d\n", local_node_id);
-    } else { 
-        printf("%s\n", SCIGetErrorString(error));
-    } 
-
-    uct_sci_close();
     return status;
 }
 
