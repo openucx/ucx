@@ -132,6 +132,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //flags                         0
     //error                         sci_error_t
 
+    //sci_remote_segment_t remote_segment
+
     
 
     return UCS_ERR_NOT_IMPLEMENTED;
