@@ -105,7 +105,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     SCIGetLocalNodeId(adapterID, &nodeID, flags, &sci_error);
 
     if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_IFACE_INIT: %s\n", SCIGetErrorString(error));
+        printf("SCI_IFACE_INIT: %s\n", SCIGetErrorString(sci_error));
     } 
     
     self->device_addr = nodeID;
