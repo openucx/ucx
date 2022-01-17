@@ -135,8 +135,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sisci_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 {
-    //uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
-    //uct_sisci_md_t md = ucs_derived_of(iface.super.md, uct_sisci_md_t);
+    uct_sisci_iface_t *iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    uct_sisci_md_t *md = ucs_derived_of(iface.super.md, uct_sisci_md_t);
 
     //make a segment;
 
@@ -149,9 +149,14 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //flags                         0
     //error                         sci_error_t
 
-    //sci_remote_segment_t remote_segment
-
+    sci_remote_segment_t remote_segment;
+    unsigned int segment_id = params->iface_addr;
+    unsigned int node_id = params->dev_addr;
     
+    self->remote_segment_id = segment_id;
+    self->remote_node_id = node_id;
+
+        
 
     return UCS_ERR_NOT_IMPLEMENTED;
 }
