@@ -1,5 +1,4 @@
 
-#include <uct/base/uct_md.h>
 #include <ucs/type/class.h>
 #include <ucs/type/status.h>
 #include <ucs/sys/string.h>
@@ -85,7 +84,14 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
+
+    unsigned int nodeID;
+    unsigned int adapterID = 0;
+    unsigned int flags = 0;
+    sci_error_t sci_error;
+
     printf("UCS_SISCI_CLASS_INIT_FUNC() hm\n");
+
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sisci_iface_ops,
             &uct_base_iface_internal_ops, md, worker, params,
@@ -94,6 +100,17 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                             params->stats_root :
                             NULL) UCS_STATS_ARG(UCT_SISCI_NAME));
     
+
+    //---------- IFACE SISCI --------------------------
+    SCIGetLocalNodeId(adapterID, &nodeID, flags, &sci_error);
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_IFACE_INIT: %s\n", SCIGetErrorString(sci_error));
+    } 
+    
+    self->device_addr = nodeID;
+    self->id = 13337;
+
     return UCS_OK;
 }
 
@@ -118,8 +135,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sisci_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 {
-    uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
-    uct_sisci_md_t md = ucs_derived_of(iface.super.md, uct_sisci_md_t);
+    //uct_sisci_iface_t iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    //uct_sisci_md_t md = ucs_derived_of(iface.super.md, uct_sisci_md_t);
 
     //make a segment;
 
@@ -248,7 +265,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
 static ucs_status_t uct_sisci_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    
+    //TODO: we have never looked into this 
     
     attr->cap.flags            = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY; // TODO ignore rkey in rma/amo ops 
@@ -483,10 +500,14 @@ ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *
     
     uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super.md, uct_sisci_md_t);  
 
-    printf("iface_data = %d", sisci_iface->id.segment_id);
+    uct_sisci_device_addr_t* sci_addr = (uct_sisci_device_addr_t *) addr;
+
+    printf("iface_data = %d %d\n", sisci_iface->id, sisci_iface->device_addr);
     printf("sisci_get_device_address() %d\n", md->segment_id);
 
-    return UCS_ERR_NOT_IMPLEMENTED;
+    sci_addr->node_id = sisci_iface->device_addr;
+
+    return UCS_OK;
 }
 
 ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
@@ -494,10 +515,12 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 {
     //TODO: Don't lie, but get iface_addr from config.
     
+    uct_sisci_iface_t* iface = ucs_derived_of(tl_iface, uct_sisci_iface_t);
+
     uct_sisci_iface_addr_t* iface_addr = (uct_sisci_iface_addr_t *) addr;
     
     printf("uct_iface_get_address()\n");
-    iface_addr->segment_id = 13337;
+    iface_addr->segment_id = iface->id;
     
     return UCS_OK;
 }
