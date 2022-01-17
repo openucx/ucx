@@ -36,6 +36,7 @@ typedef struct uct_sisci_iface_config {
 
 typedef struct uct_sisci_iface {
     uct_base_iface_t      super;
+    uct_sisci_md_t        md;           /*memory domain */
     uct_sisci_iface_addr_t id;           /* Unique identifier for the instance */
     size_t                send_size;    /* Maximum size for payload */
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
