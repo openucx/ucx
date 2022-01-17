@@ -473,6 +473,7 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
     //TODO
     //const uct_self_iface_t *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
     //*(uct_self_iface_addr_t*)addr = iface->id;
+    printf("uct_iface_get_address()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
