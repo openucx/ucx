@@ -86,6 +86,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_config_t *tl_config)
 {
     printf("UCS_SISCI_CLASS_INIT_FUNC() hm\n");
+
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sisci_iface_ops,
             &uct_base_iface_internal_ops, md, worker, params,
@@ -94,6 +95,9 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                             params->stats_root :
                             NULL) UCS_STATS_ARG(UCT_SISCI_NAME));
     
+    self->device_addr = 4;
+    self->id 13337;
+
     return UCS_OK;
 }
 
@@ -246,7 +250,7 @@ static ucs_status_t uct_sisci_query_devices(uct_md_h md,
 static ucs_status_t uct_sisci_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
-    
+    //TODO: we have never looked into this 
     
     attr->cap.flags            = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY; // TODO ignore rkey in rma/amo ops 
@@ -482,8 +486,8 @@ ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *
     uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super.md, uct_sisci_md_t);  
 
 
-    
-    printf("iface_data = %d\n", sisci_iface->id.segment_id);
+
+    printf("iface_data = %d\n", sisci_iface->id);
     printf("sisci_get_device_address() %d\n", md->segment_id);
 
     return UCS_ERR_NOT_IMPLEMENTED;
