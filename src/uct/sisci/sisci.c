@@ -178,6 +178,7 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
 {
     
     uct_md_resource_desc_t  *resources;
+    int num_resources = 1;
     ucs_status_t status;
 
     resources = ucs_malloc(sizeof(*resources), "SCI resources");
