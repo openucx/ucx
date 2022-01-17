@@ -8,7 +8,9 @@
 #  include "config.h"
 #endif
 
+#include "proto_debug.h"
 #include "proto_common.inl"
+
 #include <uct/api/v2/uct_v2.h>
 
 
