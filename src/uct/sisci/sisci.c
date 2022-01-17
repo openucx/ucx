@@ -473,7 +473,9 @@ ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *
     
     uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super.md, uct_sisci_md_t);  
 
-    printf("iface_data = %d", sisci_iface->id.segment_id);
+
+    
+    printf("iface_data = %d\n", sisci_iface->id.segment_id);
     printf("sisci_get_device_address() %d\n", md->segment_id);
 
     return UCS_ERR_NOT_IMPLEMENTED;
