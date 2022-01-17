@@ -149,16 +149,17 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //flags                         0
     //error                         sci_error_t
 
-    sci_remote_segment_t remote_segment;
-    unsigned int segment_id = params->iface_addr;
-    unsigned int node_id = params->dev_addr;
+    unsigned int segment_id = (unsigned int) params->iface_addr;
+    unsigned int node_id = (unsigned int) params->dev_addr;
     
+
+    printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id)
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
         
-
-    return UCS_ERR_NOT_IMPLEMENTED;
+    
+    return UCS_OK;
 }
 
 UCS_CLASS_DEFINE(uct_sisci_ep_t, uct_base_ep_t);
