@@ -471,7 +471,7 @@ ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *
     
     uct_sisci_iface_t* sisci_iface = ucs_derived_of(iface, uct_sisci_iface_t);
     
-    uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super->md, uct_sisci_md_t);  
+    uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super.md, uct_sisci_md_t);  
 
     printf("iface_data = %d", sisci_iface->id);
     printf("sisci_get_device_address() %d\n", md->segment_id);
