@@ -58,7 +58,7 @@ UCS_CLASS_DECLARE(uct_sisci_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*
                   const uct_iface_config_t*);
 */
 
-typedef
+
 
 /**
  * @brief self device MD descriptor
