@@ -467,6 +467,17 @@ int uct_sisci_iface_is_reachable(const uct_iface_h tl_iface,
     return 1;
 }
 
+ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *addr) {
+    uct_sisci_iface_t* sisci_iface = ucs_derived_of(iface, uct_sisci_iface_t);
+    uct_sisci_md_t* md =  ucs_derived_of(sisci_iface->super.md, uct_sisci_md_t);  
+
+
+
+    printf("sisci_get_device_address() %d\n", md->num_devices);
+
+    return UCS_ERR_NOT_IMPLEMENTED;
+}
+
 ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
                                                uct_iface_addr_t *addr)
 {
@@ -568,7 +579,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_progress           = ucs_empty_function_return_zero, //covered
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped more makro hell
     .iface_query              = uct_sisci_iface_query,       //bap
-    .iface_get_device_address = ucs_empty_function_return_success, //covered
+    .iface_get_device_address = uct_sisci_get_device_address, //covered
     .iface_get_address        = uct_sisci_iface_get_address, // bap
     .iface_is_reachable       = uct_sisci_iface_is_reachable // bap
 };
