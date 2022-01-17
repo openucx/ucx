@@ -135,8 +135,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sisci_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 {
-    //uct_sisci_iface_t *iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
-    //uct_sisci_md_t *md = ucs_derived_of(iface->super.md, uct_sisci_md_t);
+    //uct_sisci_iface_t *iface = ucs_derived_of(params->iface, uct_sisci_iface_t); //unused
+    //uct_sisci_md_t *md = ucs_derived_of(iface->super.md, uct_sisci_md_t); //unused
 
     //make a segment;
 
@@ -183,11 +183,15 @@ static ucs_status_t uct_sisci_query_md_resources(uct_component_t *component,
     resources = ucs_malloc(sizeof(*resources), "SCI resources");
 
 
+
     if(resources == NULL) {
         //TODO Handle memory errors.
         status = UCS_ERR_NO_MEMORY;
         printf("NO MEMORY\n");
     }
+
+    *resources_p = resources;
+    *num_resources_p = num_resources;
 
     status = UCS_OK;
 
