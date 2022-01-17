@@ -9,7 +9,15 @@
 #define UCT_SISCI_CONFIG_PREFIX "SISCI_"
 
 
-typedef uint64_t uct_sisci_iface_addr_t;
+//typedef uint64_t uct_sisci_iface_addr_t;
+
+
+
+typedef struct uct_sisci_iface_addr {
+    unsigned int segment_id; /* Listening port of iface */
+} UCS_S_PACKED uct_sisci_iface_addr_t;
+
+
 
 
 void sisci_testing();
@@ -50,6 +58,7 @@ UCS_CLASS_DECLARE(uct_sisci_iface_t, uct_iface_ops_t*, uct_iface_internal_ops_t*
                   const uct_iface_config_t*);
 */
 
+typedef
 
 /**
  * @brief self device MD descriptor
