@@ -121,6 +121,9 @@ typedef struct {
     /* statistics format options */
     ucs_stats_formats_t        stats_format;
 
+    /* Topology detection modules to use */
+    ucs_config_names_array_t   topo_prio;
+
     /* Enable VFS monitoring */
     int                        vfs_enable;
 

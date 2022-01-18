@@ -22,7 +22,7 @@
 #include <ucs/async/async.h>
 #include <ucs/sys/lib.h>
 #include <ucs/sys/sys.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/sys/math.h>
 
 

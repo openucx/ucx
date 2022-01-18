@@ -18,7 +18,7 @@
 #include <ucs/type/float8.h>
 #include <ucs/type/serialize.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <inttypes.h>
 
 

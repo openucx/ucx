@@ -49,6 +49,7 @@ ucs_global_opts_t ucs_global_opts = {
     .profile_file          = "",
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
+    .topo_prio             = { NULL, 0 },
     .vfs_enable            = 1,
     .vfs_thread_affinity   = 0,
     .rcache_check_pfn      = 0,
@@ -184,6 +185,11 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   " *     - load all modules\n"
   " ^cu*  - do not load modules that begin with 'cu'",
   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
+
+ {"TOPO_PRIO", "sysfs,default",
+  "Comma-separated list of methods of detecting system topology.\n"
+  "The list order decides the priority of methods used.",
+  ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
  {NULL}
 };

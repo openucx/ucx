@@ -11,7 +11,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/memory/memory_type.h>
 #include <uct/api/uct.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 
 #include <stdint.h>
 

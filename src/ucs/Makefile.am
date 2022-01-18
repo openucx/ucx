@@ -62,7 +62,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/preprocessor.h \
 	sys/string.h \
 	sys/sock.h \
-	sys/topo.h \
+	sys/topo/base/topo.h \
 	sys/stubs.h \
 	sys/uid.h \
 	time/time_def.h \
@@ -181,7 +181,7 @@ libucs_la_SOURCES = \
 	sys/iovec.c \
 	sys/lib.c \
 	sys/sock.c \
-	sys/topo.c \
+	sys/topo/base/topo.c \
 	sys/stubs.c \
 	sys/uid.c \
 	time/time.c \

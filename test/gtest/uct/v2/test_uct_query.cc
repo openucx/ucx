@@ -8,7 +8,7 @@
 #include <gtest/uct/uct_p2p_test.h>
 
 extern "C" {
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 }
