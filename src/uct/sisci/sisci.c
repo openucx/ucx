@@ -544,6 +544,15 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
 
 
+    /* AM flags */
+    attr->cap.am.max_short = 64;
+    attr->cap.am.max_bcopy 64;
+    attr->cap.am.min_zcopy = 64;
+    attr->cap.am.max_zcopy 1024;
+    
+
+
+
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
