@@ -238,7 +238,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
 
     printf("ucp_hello_world: before ucp_ep_create\n");
     status = ucp_ep_create(ucp_worker, &ep_params, &server_ep);
-    printf("ucp_ep_status: %d", status);
+    printf("ucp_ep_status: %d\n", status);
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
 
     msg_len = sizeof(*msg) + local_addr_len;

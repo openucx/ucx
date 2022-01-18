@@ -817,6 +817,9 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     unsigned flags;
     ucp_ep_h ep;
 
+    printf("ucp_ep_create_api....\n");
+
+
     if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
         status = UCS_ERR_INVALID_PARAM;
         ucs_error("remote worker address is missing");
