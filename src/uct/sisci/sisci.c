@@ -540,7 +540,8 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     bandwidth.dedicated = 1000;
     bandwidth.shared = 1000;
     attr->bandwidth = bandwidth; 
-    attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_IFACE & UCT_IFACE_FLAG_CONNECT_TO_EP & UCT_IFACE_FLAG_AM_BCOPY & UCT_IFACE_FLAG_AM_SHORT & UCT_IFACE_FLAG_AM_ZCOPY;
+    attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_CONNECT_TO_EP |
+     UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_ZCOPY;
 
 
     //TODO: sane numbers, no lies.
