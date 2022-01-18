@@ -1354,11 +1354,12 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
         iface->tx.dci_pool_release_bitmap &= ~UCS_BIT(pool_index);
 
         /* coverity[overrun-local] */
-        ucs_assert(pool_index < iface->tx.num_dci_pools);
+        ucs_assert(pool_index < iface->tx.num_dci_pools * iface->gp);
         dci_pool = &iface->tx.dci_pool[pool_index];
         while (dci_pool->release_stack_top >= 0) {
             dci = dci_pool->stack[dci_pool->release_stack_top--];
-            ucs_assert(dci < iface->tx.ndci * iface->tx.num_dci_pools);
+            ucs_assert(dci <
+                       iface->tx.ndci * iface->tx.num_dci_pools *iface->gp);
             ucs_assert(!uct_dc_mlx5_iface_is_dci_keepalive(iface, dci));
             uct_dc_mlx5_iface_dci_release(iface, dci);
         }
