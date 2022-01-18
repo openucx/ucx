@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2022 Nvidia Corporation. All Rights Reserved.
+# Copyright (C) 2022 NVIDIA CORPORATION & AFFILIATES. All Rights Reserved.
 # See file LICENSE for terms.
 #
 
@@ -141,7 +141,7 @@ AC_DEFUN([_CHECK_MODULE_HEADER],
              AS_IF([test "x$2" != "x"], [CPPFLAGS="$2 $CPPFLAGS"])
 
              m4_foreach([header], [$1],
-                 [ dnl have to clean check header cache to allov multiple checks
+                 [ dnl have to clean check header cache to allow multiple checks
                   AS_VAR_PUSHDEF([header_cache], [ac_cv_header_[]header])dnl
                   unset header_cache
                   mod_header_name=header
@@ -161,7 +161,7 @@ AC_DEFUN([_CHECK_MODULE_HEADER],
 AC_DEFUN([_CHECK_MODULE_DECLS],
          [
              m4_foreach([decl], [$1],
-                 [ dnl have to clean declaration cache to allov multiple checks
+                 [ dnl have to clean declaration cache to allow multiple checks
                   AS_VAR_PUSHDEF([decl_cache], [ac_cv_have_decl_[]decl])dnl
                   unset decl_cache
                   AS_VAR_POPDEF([decl_cache])])dnl
@@ -193,7 +193,7 @@ AC_DEFUN([_CHECK_MODULE_LIBS],
              LDFLAGS="$LDFLAGS"
 
              m4_foreach([func], [$3],
-                 [ dnl have to clean func check cache to allov multiple checks
+                 [ dnl have to clean func check cache to allow multiple checks
                   AS_VAR_PUSHDEF([func_cache], [ac_cv_search_[]func])dnl
                   unset func_cache
                   mod_func_name=func
