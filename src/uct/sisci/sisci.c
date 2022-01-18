@@ -266,6 +266,8 @@ static ucs_status_t uct_sisci_md_query(uct_md_h md, uct_md_attr_t *attr)
 static ucs_status_t uct_sisci_mem_reg(uct_md_h md, void *address, size_t length,
                                      unsigned flags, uct_mem_h *memh_p)
 {
+    printf("uct_sisci_mem_reg()");
+
     /* We have to emulate memory registration. Return dummy pointer */
     *memh_p = (void *) 0xdeadbeef;
     return UCS_OK;
@@ -274,6 +276,7 @@ static ucs_status_t uct_sisci_mem_reg(uct_md_h md, void *address, size_t length,
 static ucs_status_t uct_sisci_mem_dereg(uct_md_h uct_md,
                                        const uct_md_mem_dereg_params_t *params)
 {
+    printf("uct_sisci_mem_dereg()");
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     ucs_assert(params->memh == (void*)0xdeadbeef);
@@ -364,6 +367,7 @@ ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  uct_rkey_t rkey)
 {
     //TODO
+    printf("uct_sisci_ep_put_short()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -371,6 +375,7 @@ ssize_t uct_sisci_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                             void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
+    printf("uct_sisci_ep_put_bcopy()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -380,6 +385,7 @@ ucs_status_t uct_sisci_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack
                                  uct_completion_t *comp)
 {
     //TODO
+    printf("uct_sisci_ep_get_bcopy()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -387,6 +393,7 @@ ucs_status_t uct_sisci_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t v
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
+    printf("uct_sisci_ep_atomic32_post()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -394,6 +401,7 @@ ucs_status_t uct_sisci_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t v
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
+    printf("uct_sisci_ep_atomic64_post()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -403,6 +411,7 @@ ucs_status_t uct_sisci_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
+    printf("uct_sisci_ep_atomic64_fetch()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -412,6 +421,7 @@ ucs_status_t uct_sisci_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
+    printf("uct_sisci_ep_atomic32_fetch()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -421,6 +431,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
+    printf("uct_sisci_ep_atomic_cswap64()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -430,6 +441,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
+    printf("uct_sisci_ep_atomic_cswap32()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -439,6 +451,7 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
     //TODO
+    printf("uct_sisci_ep_am_short()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -446,6 +459,7 @@ ucs_status_t uct_sisci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
                                       const uct_iov_t *iov, size_t iovcnt)
 {
     //TODO
+    printf("uct_sisci_ep_am_short_iov()");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -454,6 +468,7 @@ ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              unsigned flags)
 {
     //TODO
+    printf("uct_sisci_ep_am_bcopy()");
     return -8;
 }
 
@@ -542,6 +557,7 @@ static ucs_status_t uct_sisci_md_rkey_unpack(uct_component_t *component,
      * Pseudo stub function for the key unpacking
      * Need rkey == 0 due to work with same process to reuse uct_base_[put|get|atomic]*
      */
+    printf("uct_sisci_md_rkey_unpack()");
     *rkey_p   = 0;
     *handle_p = NULL;
     return UCS_OK;
