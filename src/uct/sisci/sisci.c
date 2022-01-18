@@ -525,6 +525,8 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
+    uct_ppn_bandwidth_t bandwidth;
+    
     printf("UCT_sisci_iface_query\n");
 
     //TODO: insert necessarry lies to make ucx want us.
@@ -535,6 +537,9 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     /*  Start of lies  */
     attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_EP;
     attr->dev_num_paths = 1;
+    bandwidth.dedicated = 1000;
+    bandwidth.shared = 1000;
+    attr->bandwidth = bandwidth; 
 
 
 

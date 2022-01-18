@@ -825,7 +825,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out;
     }
 
-    printf("ucp_ep_create_api....\n");
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
     status = ucp_address_unpack(worker, params->address,
@@ -835,6 +834,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out;
     }
 
+    printf("ucp_ep_create_api....\n");
     /* Check if there is already an unconnected internal endpoint to the same
      * destination address.
      * In case of loopback connection, search the hash table for an endpoint with
