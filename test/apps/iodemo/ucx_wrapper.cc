@@ -945,7 +945,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
                          UCP_OP_ATTR_FIELD_FLAGS;
     param.cb.send      = common_request_callback_nbx;
-    param.flags        = UCP_AM_SEND_REPLY;
+    param.flags        = UCP_AM_SEND_FLAG_REPLY;
     param.datatype     = 0; // make coverity happy
     if (memh) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
