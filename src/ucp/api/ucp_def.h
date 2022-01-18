@@ -591,7 +591,7 @@ typedef enum ucp_wakeup_event_types {
  *                       to be freed with @ref ucp_am_data_release.
  * @param [in]  length   Length of data.
  * @param [in]  reply_ep If the Active Message is sent with the
- *                       UCP_AM_SEND_REPLY flag, the sending ep
+ *                       UCP_AM_SEND_FLAG_REPLY flag, the sending ep
  *                       will be passed in. If not, NULL will be passed.
  * @param [in]  flags    If this flag is set to UCP_CB_PARAM_FLAG_DATA,
  *                       the callback can return UCS_INPROGRESS and

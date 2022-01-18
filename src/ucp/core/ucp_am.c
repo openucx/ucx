@@ -941,7 +941,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
 
     if (ucp_proto_is_inline(ep, max_eager_short, header_length + length)) {
         return ucp_am_send_short(ep, id, flags, header, header_length, buffer,
-                                 length, flags & UCP_AM_SEND_REPLY);
+                                 length, flags & UCP_AM_SEND_FLAG_REPLY);
     }
 
     return UCS_ERR_NO_RESOURCE;
@@ -974,7 +974,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     attr_mask = param->op_attr_mask &
                 (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
 
-    if (flags & UCP_AM_SEND_REPLY) {
+    if (flags & UCP_AM_SEND_FLAG_REPLY) {
         max_short = &ucp_ep_config(ep)->am_u.max_reply_eager_short;
         proto     = ucp_ep_config(ep)->am_u.reply_proto;
     } else {
@@ -1363,7 +1363,7 @@ static UCS_F_ALWAYS_INLINE uint64_t
 ucp_am_hdr_reply_ep(ucp_worker_h worker, uint16_t flags, ucp_ep_h ep,
                     ucp_ep_h *reply_ep_p)
 {
-    if (flags & UCP_AM_SEND_REPLY) {
+    if (flags & UCP_AM_SEND_FLAG_REPLY) {
         *reply_ep_p = ep;
         return UCP_AM_RECV_ATTR_FIELD_REPLY_EP;
     }
