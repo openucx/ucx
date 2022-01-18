@@ -948,7 +948,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
     ucs_status_t status;
 
     UCS_ASYNC_BLOCK(&worker->async);
-    printf("ucp_ep_create: %d %d %d\n", flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER, params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST, params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS);
+    printf("ucp_ep_create: %ld %ld %ld\n", flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER, params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST, params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS);
     if (flags & UCP_EP_PARAMS_FLAGS_CLIENT_SERVER) {
         status = ucp_ep_create_to_sock_addr(worker, params, &ep);
     } else if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
