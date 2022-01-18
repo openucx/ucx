@@ -525,6 +525,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     bandwidth.dedicated = 1000;
     bandwidth.shared = 1000;
     attr->bandwidth = bandwidth; 
+    attr->cap.flags = 0 - 1;
 
 
 
