@@ -520,7 +520,7 @@ out:
     }
 
     if (!found) {
-        printf("no %s transport to %s: %s", criteria->title,
+        printf("no %s transport to %s: %s\n", criteria->title,
                       address->name, tls_info);
         if (show_error) {
             ucs_error("no %s transport to %s: %s", criteria->title,
