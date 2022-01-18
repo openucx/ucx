@@ -44,11 +44,11 @@ m4_define([_CHECK_MODULE_UNDEFVAR],
 m4_define([_CHECK_MODULE_INIT_PROGRESS],
           [
             _CHECK_MODULE_IS_YNG([$1],
-                                 [$2=yes],   dnl yes
-                                 [$2=skip],  dnl no
-                                 [$2=guess], dnl guess
-                                 [$2=skip],  dnl empty
-                                 [$2=dir     dnl DIR
+                                 [$2=yes],   # yes
+                                 [$2=skip],  # no
+                                 [$2=guess], # guess
+                                 [$2=skip],  # empty
+                                 [$2=dir     # DIR
                                   _CHECK_MODULE_SET_DIR([$1], [$3], [$4], [$5],
                                                         [$6], [$7])])
           ])
@@ -62,7 +62,8 @@ m4_define([_CHECK_MODULE_SET_DIR],
           [
              $2=$1/include
              $3=-I$1/include
-             m4_pushdef([dir_lib], [$4]) dnl use macro unwind
+             # use macro unwind
+             m4_pushdef([dir_lib], [$4])
              _CHECK_MODULE_FIXUP_LIB([$1], [$4], [$5=-L$dir_lib], [$6])
              m4_popdef([dir_lib])
           ])
@@ -141,7 +142,8 @@ AC_DEFUN([_CHECK_MODULE_HEADER],
              AS_IF([test "x$2" != "x"], [CPPFLAGS="$2 $CPPFLAGS"])
 
              m4_foreach([header], [$1],
-                 [ dnl have to clean check header cache to allow multiple checks
+                 [
+                  # have to clean check header cache to allow multiple checks
                   AS_VAR_PUSHDEF([header_cache], [ac_cv_header_[]header])dnl
                   unset header_cache
                   mod_header_name=header
@@ -161,7 +163,8 @@ AC_DEFUN([_CHECK_MODULE_HEADER],
 AC_DEFUN([_CHECK_MODULE_DECLS],
          [
              m4_foreach([decl], [$1],
-                 [ dnl have to clean declaration cache to allow multiple checks
+                 [
+                  # have to clean declaration cache to allow multiple checks
                   AS_VAR_PUSHDEF([decl_cache], [ac_cv_have_decl_[]decl])dnl
                   unset decl_cache
                   AS_VAR_POPDEF([decl_cache])])dnl
@@ -175,7 +178,7 @@ AC_DEFUN([_CHECK_MODULE_DECLS],
 
              CPPFLAGS=$mod_decls_saved_CPPFLAGS
 
-             dnl in case if decls is empty list - then assume that test is successfull
+             # in case if decls is empty list - then assume that test is successfull
              AS_IF([test $mod_decls_happy = yes -o "x$1" = "x"], [$3], [$4])
          ])
 
@@ -187,19 +190,21 @@ AC_DEFUN([_CHECK_MODULE_DECLS],
 AC_DEFUN([_CHECK_MODULE_LIBS],
          [
              mod_libs_saved_LDFLAGS=$LDFLAGS
+             mod_libs_saved_LIBS=$LIBS # save it because AC_SEARCH_LIBS breaks LIBS var
              mod_libs_happy=yes
 
              AS_IF([test "x$2" != "x"], [LDFLAGS="$2 $LDFLAGS"])
-             LDFLAGS="$LDFLAGS"
 
              m4_foreach([func], [$3],
-                 [ dnl have to clean func check cache to allow multiple checks
+                 [
+                  # have to clean func check cache to allow multiple checks
                   AS_VAR_PUSHDEF([func_cache], [ac_cv_search_[]func])dnl
                   unset func_cache
                   mod_func_name=func
                   AC_SEARCH_LIBS([$mod_func_name], [$1], [], [mod_libs_happy=no], [$6])
                   AS_VAR_POPDEF([func_cache])])dnl
 
+             LIBS=$mod_libs_saved_LIBS
              LDFLAGS=$mod_libs_saved_LDFLAGS
 
              AS_IF([test $mod_libs_happy = yes], [$4], [$5])
@@ -284,7 +289,8 @@ AC_DEFUN([_CHECK_MODULE_PACKAGE],
 # Usage: UCX_CHECK_MODULE([id], [name], [prefix], [pkgname],
 #                         [[doc], [doc-lib], [doc-static or '-' to skip], [doc-failed]],
 #                         [action-if-found], [action-if-not-found],
-#                         [[headers], [decls], [includes], [libs - space separated], [funcs], [otherlibs]])
+#                         [[headers], [decls], [includes], [libs - space separated], [funcs], [otherlibs]],
+#                         [alt-dirs])
 #
 # Example:
 # m4_define([t1_arg], [[ucp/api/ucp.h, ucs/config/global_opts.h],
@@ -299,8 +305,8 @@ AC_DEFUN([_CHECK_MODULE_PACKAGE],
 #
 AC_DEFUN([UCX_CHECK_MODULE],
          [
-             dnl AS_VAR_PUSHDEF doesn't work here due to processed in autoconf.
-             dnl use m4_pushdef instead to instantiate id
+             # AS_VAR_PUSHDEF doesn't work here due to processed in autoconf.
+             # use m4_pushdef instead to instantiate id
              m4_pushdef([mod_hlp], [$5])
              AC_ARG_WITH([$1],
                          [AS_HELP_STRING([--with-$1=(DIR)],
@@ -318,10 +324,11 @@ AC_DEFUN([UCX_CHECK_MODULE],
                                              _CHECK_MODULE_MAKE_HELP_STRING([3], [mod_hlp], [ (default is no).]))],
                              [], [with_$1_static=no])])
 
-             dnl define 'local' variables
+             # define 'local' variables
              AS_VAR_PUSHDEF([mod_name], [$2])
              AS_VAR_PUSHDEF([mod_prefix], [$3])
              AS_VAR_PUSHDEF([mod_pkg], [$4])
+             m4_pushdef([mod_alt_dir], [$9])
 
              _CHECK_MODULE_DEFVAR([$8])
 
@@ -364,15 +371,17 @@ AC_DEFUN([UCX_CHECK_MODULE],
                                            [mod_progress=success], [], [$8])
                      ])
 
-             _CHECK_MODULE_RUN([$mod_progress], [yes, dir], [mod_progress=fatal])dnl test is failed
-             _CHECK_MODULE_RUN([$mod_progress], [guess, skip], [mod_progress=start])dnl test is failed or skipped but can continue
+             # test is failed
+             _CHECK_MODULE_RUN([$mod_progress], [yes, dir], [mod_progress=fatal])
+             # test is failed or skipped but can continue
+             _CHECK_MODULE_RUN([$mod_progress], [guess, skip], [mod_progress=start])
 
              _CHECK_MODULE_RUN([$mod_progress], [start],
                      [
                          _CHECK_MODULE_INIT_PROGRESS([$mod_with], [mod_progress],
                              [mod_dir_inc], [mod_dir_inc_flag], [mod_dir_lib], [mod_dir_flag], [])
-                         dnl do not 'fatal' here because lib dir may be missed
-                         dnl will check directories later
+                         # do not 'fatal' here because lib dir may be missed
+                         # will check directories later
                      ])
 
              _CHECK_MODULE_RUN([$mod_progress], [yes, guess, dir],
@@ -401,10 +410,47 @@ AC_DEFUN([UCX_CHECK_MODULE],
                                                [mod_progress=complete], [], [$8])
                      ])
 
+             # try to search in alternative directories
+             _CHECK_MODULE_RUN([$mod_progress], [yes, guess],
+                     [
+                         alt_progress=start
+
+                         m4_foreach([alt_dir_m], [mod_alt_dir],
+                             [
+                                 alt_dir=alt_dir_m
+                                 _CHECK_MODULE_RUN([$alt_progress], [start, skip, dir],
+                                         [
+                                             _CHECK_MODULE_INIT_PROGRESS([$alt_dir], [alt_progress],
+                                                 [mod_dir_inc], [mod_dir_inc_flag], [mod_dir_lib], [mod_dir_flag],
+                                                 [alt_progress=skip])
+                                         ])
+
+                                 _CHECK_MODULE_RUN([$alt_progress], [dir],
+                                         [
+                                             _CHECK_MODULE_IS_DIR([$alt_dir, $mod_dir_inc, $mod_dir_lib],
+                                                                  [], [alt_progress=skip])
+                                         ])
+
+                                 _CHECK_MODULE_RUN([$alt_progress], [dir],
+                                         [
+                                             _CHECK_MODULE_API($mod_dir_inc_flag, $mod_dir_flag,
+                                                               [alt_progress=success
+                                                                mod_progress=success], [], [$8])
+                                         ])
+
+                                 _CHECK_MODULE_RUN([$alt_progress], [dir],
+                                         [
+                                             _CHECK_MODULE_PACKAGE([mod_pkg], [$3], [$mod_dir_lib], [],
+                                                                   [alt_progress=complete
+                                                                    mod_progress=complete], [], [$8])
+                                         ])
+                             ])
+                     ])
+
              _CHECK_MODULE_RUN([$mod_progress], [success],
                      [
                          mod_prefix[]_CFLAGS=$mod_dir_inc_flag
-                         dnl add -l prefix to libs
+                         # add -l prefix to libs
                          mod_prefix[]_LIBS="$mod_dir_flag m4_map_args_w(mod_libs, [ -l])"
                          mod_progress=complete
                      ])
@@ -422,16 +468,17 @@ AC_DEFUN([UCX_CHECK_MODULE],
              AS_VAR_POPDEF([mod_dir_lib])dnl
              AS_VAR_POPDEF([mod_dir_inc_flag])dnl
              AS_VAR_POPDEF([mod_dir_inc])dnl
-             AS_VAR_POPDEF([mod_with_libdir])
-             AS_VAR_POPDEF([mod_with_static])
+             AS_VAR_POPDEF([mod_with_libdir])dnl
+             AS_VAR_POPDEF([mod_with_static])dnl
              AS_VAR_POPDEF([mod_with])dnl
 
              _CHECK_MODULE_UNDEFVAR
 
+             m4_popdef([mod_alt_dir])dnl
              AS_VAR_POPDEF([mod_pkg])dnl
              AS_VAR_POPDEF([mod_prefix])dnl
              AS_VAR_POPDEF([mod_name])dnl
 
-             m4_popdef([mod_hlp])
+             m4_popdef([mod_hlp])dnl
          ])
 
