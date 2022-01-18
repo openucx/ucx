@@ -220,7 +220,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     ucp_tag_recv_info_t info_tag;
     ucp_tag_message_h msg_tag;
     ucs_status_t status;
-    ucp_ep_h server_ep;
+    ucp_ep_h server_ep ;
     ucp_ep_params_t ep_params;
     struct ucx_context *request;
     char *str;
@@ -236,6 +236,7 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
     ep_params.err_handler.arg = NULL;
     ep_params.user_data       = &ep_status;
 
+    printf("ucp_hello_world: before ucp_ep_create\n");
     status = ucp_ep_create(ucp_worker, &ep_params, &server_ep);
     CHKERR_JUMP(status != UCS_OK, "ucp_ep_create\n", err);
 
