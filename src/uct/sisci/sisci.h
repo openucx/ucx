@@ -25,7 +25,7 @@ typedef struct uct_sisci_device_addr {
 typedef struct uct_sicsci_ep_addr{
     uct_sisci_device_addr_t device_addr;
     uct_sisci_iface_addr_t iface_addr;
-}  UCS_S_PACKED uct_sicsci_ep_addr_t
+}  UCS_S_PACKED uct_sicsci_ep_addr_t;
 
 void sisci_testing();
 
