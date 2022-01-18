@@ -270,7 +270,7 @@ AC_DEFUN([_CHECK_MODULE_PACKAGE],
          ])
 
 # Check if module available
-# Result: set variables prefix_CPPFLAGS and prefix_LIBS
+# Result: set variables prefix_CFLAGS and prefix_LIBS
 #
 # Algo:
 #     - if set static lib 
@@ -403,7 +403,7 @@ AC_DEFUN([UCX_CHECK_MODULE],
 
              _CHECK_MODULE_RUN([$mod_progress], [success],
                      [
-                         mod_prefix[]_CPPFLAGS=$mod_dir_inc_flag
+                         mod_prefix[]_CFLAGS=$mod_dir_inc_flag
                          dnl add -l prefix to libs
                          mod_prefix[]_LIBS="$mod_dir_flag m4_map_args_w(mod_libs, [ -l])"
                          mod_progress=complete
