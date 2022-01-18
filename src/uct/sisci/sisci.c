@@ -110,6 +110,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     
     self->device_addr = nodeID;
     self->id = 13337;
+    self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
+
 
     return UCS_OK;
 }
