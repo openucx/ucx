@@ -540,11 +540,11 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     bandwidth.dedicated = 1000;
     bandwidth.shared = 1000;
     attr->bandwidth = bandwidth; 
-    attr->cap.flags = 0 - 1;
+    attr->cap.flags = UCT_IFACE_FLAG_AM_BCOPY & UCT_IFACE_FLAG_AM_SHORT & UCT_IFACE_FLAG_AM_ZCOPY;
 
 
-
-    /* AM flags */
+    //TODO: sane numbers, no lies.
+    /* AM flags - TODO: these might need to be fine tuned at a later stage */
     attr->cap.am.max_short = 64;
     attr->cap.am.max_bcopy = 64;
     attr->cap.am.min_zcopy = 64;
