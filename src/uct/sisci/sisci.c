@@ -535,10 +535,9 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
 
     /*  Start of lies  */
-    attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_EP;
     attr->dev_num_paths = 1;
-    bandwidth.dedicated = 1000;
-    bandwidth.shared = 1000;
+    bandwidth.dedicated = 1;
+    bandwidth.shared = 1;
     attr->bandwidth = bandwidth; 
     attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_CONNECT_TO_EP |
      UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_ZCOPY;
@@ -553,7 +552,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
 
 
-    printf("iface->attr->cap.flags: %ld", attr->cap.flags);
+    printf("iface->attr->cap.flags: %ld\n", attr->cap.flags);
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
