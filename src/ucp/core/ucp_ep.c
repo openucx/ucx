@@ -817,7 +817,6 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     unsigned flags;
     ucp_ep_h ep;
 
-    printf("ucp_ep_create_api....\n");
 
 
     if (!(params->field_mask & UCP_EP_PARAM_FIELD_REMOTE_ADDRESS)) {
@@ -826,6 +825,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         goto out;
     }
 
+    printf("ucp_ep_create_api....\n");
     UCP_CHECK_PARAM_NON_NULL(params->address, status, goto out);
 
     status = ucp_address_unpack(worker, params->address,
