@@ -215,6 +215,8 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
     uct_ud_ctl_desc_t *cdesc;
     ucs_queue_iter_t iter;
 
+    ucs_trace_func("ep=%p", ep);
+
     ucs_queue_for_each_safe(cdesc, iter, &iface->tx.outstanding_q, queue) {
         if (cdesc->ep == ep) {
             ucs_queue_del_iter(&iface->tx.outstanding_q, iter);
@@ -229,6 +231,8 @@ static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
+
+    ucs_trace_func("ep=%p", ep);
 
     uct_ud_iface_dispatch_async_comps(iface, ep);
 
@@ -1111,6 +1115,8 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
                                            uct_ud_iface_t);
     ucs_status_t status;
 
+    ucs_trace_func("ep=%p", ep);
+
     uct_ud_enter(iface);
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
@@ -1673,6 +1679,8 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
     uct_ud_iface_t *iface    = ucs_derived_of(ep->super.super.iface,
                                               uct_ud_iface_t);
     uct_purge_cb_args_t args = {cb, arg};
+
+    ucs_trace_func("ep=%p", ep);
 
     uct_ud_enter(iface);
     ucs_arbiter_group_purge(&iface->tx.pending_q, &ep->tx.pending.group,
