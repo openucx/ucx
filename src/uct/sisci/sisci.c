@@ -477,7 +477,7 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
     //TODO
-    printf("uct_sisci_ep_am_short()\n");
+    printf("uct_sisci_ep_am_short() %d %ld %d \n", id, header, length);
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -584,7 +584,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     /* AM flags - TODO: these might need to be fine tuned at a later stage */
     attr->cap.am.max_short = 128;
     attr->cap.am.max_bcopy = 128;
-    attr->cap.am.min_zcopy = 64;
+    attr->cap.am.min_zcopy = 256;
     attr->cap.am.max_zcopy = 1024;
 
 
