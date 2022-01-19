@@ -46,6 +46,9 @@ typedef struct uct_sisci_iface {
     unsigned int device_addr; //nodeID
     size_t                send_size;    /* Maximum size for payload */
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
+
+    sci_local_segment_t     local_segment;
+    sci_map_t               local_map;
 } uct_sisci_iface_t;
 
 ucs_status_t

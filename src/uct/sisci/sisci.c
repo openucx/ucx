@@ -99,6 +99,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     sci_error_t sci_error;
     ucs_status_t status;
 
+    uct_sisci_md_t sci_md = ucs_derived_of(md, uct_sisci_md_t);
+
     printf("UCS_SISCI_CLASS_INIT_FUNC() hm\n");
 
     UCS_CLASS_CALL_SUPER_INIT(
@@ -117,10 +119,14 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
         printf("SCI_IFACE_INIT: %s\n", SCIGetErrorString(sci_error));
     } 
     
+
+
     self->send_size = 1024;
     self->device_addr = nodeID;
     self->id = 13337;
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
+
+    SCICreateSegment(sci_md.sisci_virtual_device, self->local_segment, self->id, self->send_size, NULL, NULL, 0, sci_error);
 
     /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
     status = uct_iface_param_am_alignment(params, self->send_size, 0, 0,
@@ -175,7 +181,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //error                         sci_error_t
 
 
-
+    
     uct_sisci_iface_addr_t* iface_addr =  (uct_sisci_iface_addr_t*) params->iface_addr;
     uct_sisci_device_addr_t* dev_addr = (uct_sisci_device_addr_t*) params->dev_addr;
 
@@ -564,15 +570,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->dev_num_paths = 1;
     attr->max_num_eps = 32;    
     
-<<<<<<< HEAD
-    attr->cap.flags =           UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
-                                UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                                UCT_IFACE_FLAG_AM_BCOPY         | 
-                                UCT_IFACE_FLAG_AM_SHORT         | 
-                                UCT_IFACE_FLAG_AM_ZCOPY;
-    attr->cap.event_flags  =    UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                UCT_IFACE_FLAG_EVENT_RECV;
-=======
+
     attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
                         UCT_IFACE_FLAG_CONNECT_TO_EP    |
                         UCT_IFACE_FLAG_AM_SHORT         |
@@ -580,18 +578,9 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
                         UCT_IFACE_FLAG_AM_BCOPY         | 
                         UCT_IFACE_FLAG_AM_ZCOPY;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
-<<<<<<< HEAD
-                             UCT_IFACE_FLAG_EVENT_RECV;
->>>>>>> 42697b26573c87265e773f902ccf8d6dbb966b13
-=======
                              UCT_IFACE_FLAG_EVENT_RECV      |
-<<<<<<< HEAD
-                             UCT_IFACE_FLAG_EVENT_ASYNC_CB;
->>>>>>> 15e028b5baca0f5bdc21a443ea7755f9e376cb29
-=======
                              UCT_IFACE_FLAG_EVENT_ASYNC_CB  |
                              UCT_IFACE_FLAG_EVENT_RECV_SIG;
->>>>>>> f2b001f1f685e361fcf53744da91289262da29ec
 
     attr->device_addr_len  = sizeof(uct_sisci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
