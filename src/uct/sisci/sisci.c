@@ -560,13 +560,13 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->dev_num_paths = 1;
     attr->max_num_eps = 32;    
     
-    attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
-                        UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                        UCT_IFACE_FLAG_AM_BCOPY         | 
-                        UCT_IFACE_FLAG_AM_SHORT         | 
-                        UCT_IFACE_FLAG_AM_ZCOPY;
-    attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                             UCT_IFACE_FLAG_EVENT_RECV;
+    attr->cap.flags =           UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
+                                UCT_IFACE_FLAG_CONNECT_TO_EP    |
+                                UCT_IFACE_FLAG_AM_BCOPY         | 
+                                UCT_IFACE_FLAG_AM_SHORT         | 
+                                UCT_IFACE_FLAG_AM_ZCOPY;
+    attr->cap.event_flags  =    UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                UCT_IFACE_FLAG_EVENT_RECV;
 
     attr->device_addr_len  = sizeof(uct_sisci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
@@ -657,7 +657,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .ep_pending_add           = ucs_empty_function_return_busy,     //covered
     .ep_pending_purge         = ucs_empty_function,                 //covered
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_sisci_ep_t),            //bapped? is makro hell
-    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_ep_t),         
+    .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_ep_t),         //more makro hell
     .iface_flush              = uct_base_iface_flush,           //covered av uct base
     .iface_fence              = uct_base_iface_fence,           //covered av uct base
     .iface_progress_enable    = ucs_empty_function,             //covered
