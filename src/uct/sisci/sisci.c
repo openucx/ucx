@@ -175,7 +175,6 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //error                         sci_error_t
 
 
-    self->super.super.iface = params->iface;
 
     uct_sisci_iface_addr_t* iface_addr =  (uct_sisci_iface_addr_t*) params->iface_addr;
     uct_sisci_device_addr_t* dev_addr = (uct_sisci_device_addr_t*) params->dev_addr;
@@ -185,6 +184,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     
 
     printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id);
+    self->super.super.iface = params->iface;
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
