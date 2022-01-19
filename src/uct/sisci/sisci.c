@@ -595,7 +595,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
 
 
-    printf("iface->attr->cap.flags: %ld\n", attr->cap.flags);
+    printf("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
