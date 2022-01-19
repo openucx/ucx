@@ -127,6 +127,13 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
     SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
+    
+    //TODO: 
+    if(sci_error == SCI_ERR_SEGMENTID_USED) {
+        self->id += 1;
+        SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
+    }
+    
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
         return UCS_ERR_NO_RESOURCE;
@@ -402,14 +409,6 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     printf("UCT_SISCI_MD_OPEN\n");
     return UCS_OK;
 }
-
-/*
-static uct_sisci_md_t uct_sisci_md(){
-    //empty struct
-    //sci_error_t errors;
-    //sci_desc_t sc_descriptor;
-
-}*/
 
 ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
