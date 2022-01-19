@@ -18,7 +18,13 @@ static uct_iface_ops_t uct_sisci_iface_ops;
 static uct_component_t uct_sisci_component;
 
 
-
+static ucs_mpool_ops_t uct_sisci_mpool_ops = {
+    .chunk_alloc   = ucs_mpool_chunk_malloc,
+    .chunk_release = ucs_mpool_chunk_free,
+    .obj_init      = NULL,
+    .obj_cleanup   = NULL,
+    .obj_str       = NULL
+};
 
 static ucs_config_field_t uct_sisci_iface_config_table[] = {
     NULL
@@ -88,6 +94,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     unsigned int nodeID;
     unsigned int adapterID = 0;
     unsigned int flags = 0;
+    size_t alignment;
+    size_t align_offset;
     sci_error_t sci_error;
 
     printf("UCS_SISCI_CLASS_INIT_FUNC() hm\n");
@@ -108,10 +116,23 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
         printf("SCI_IFACE_INIT: %s\n", SCIGetErrorString(sci_error));
     } 
     
+    self->send_size = 1024;
     self->device_addr = nodeID;
     self->id = 13337;
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
+    /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
+    status = uct_iface_param_am_alignment(params, self->send_size, 0, 0,
+                                          &alignment, &align_offset);
+    if (status != UCS_OK) {
+        printf("failed to init sisci mpool\n");
+        return status;
+    }
+
+    status = ucs_mpool_init(
+            &self->msg_mp, 0, self->send_size, align_offset, alignment,
+            10, /* 2 elements are enough for most of communications */
+            UINT_MAX, &uct_sisci_mpool_ops, "sisci_msg_desc");
 
     return UCS_OK;
 }
@@ -122,7 +143,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sisci_iface_t)
         TODO: Add proper cleanup for iface, i.e free resources that were allocated on init. 
     */
     printf("UCS_CLASS_CLEANUP_FUNC: SISCI_IFACE\n");
-    //ucs_mpool_cleanup(&self->msg_mp, 1);
+    ucs_mpool_cleanup(&self->msg_mp, 1);
+
 }
 
 UCS_CLASS_DEFINE(uct_sisci_iface_t, uct_base_iface_t);
@@ -536,12 +558,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
     /*  Start of lies  */
     attr->dev_num_paths = 1;
-    attr->max_num_eps = 32;
-
-    bandwidth.dedicated = 1;
-    bandwidth.shared = 1;
-    attr->bandwidth = bandwidth; 
-    
+    attr->max_num_eps = 32;    
     
     attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
                         UCT_IFACE_FLAG_CONNECT_TO_EP    |
@@ -560,6 +577,14 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->cap.am.max_bcopy = 64;
     attr->cap.am.min_zcopy = 64;
     attr->cap.am.max_zcopy = 1024;
+
+
+
+    attr->latency                 = ucs_linear_func_make(0, 0);
+    attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
+    attr->bandwidth.shared        = 0;
+    attr->overhead                = 10e-9;
+    attr->priority                = 0;
 
 
 
