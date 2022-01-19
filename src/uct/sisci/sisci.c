@@ -390,7 +390,7 @@ ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_put_short()");
+    printf("uct_sisci_ep_put_short()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -398,7 +398,7 @@ ssize_t uct_sisci_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                             void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_put_bcopy()");
+    printf("uct_sisci_ep_put_bcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -408,7 +408,7 @@ ucs_status_t uct_sisci_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack
                                  uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_get_bcopy()");
+    printf("uct_sisci_ep_get_bcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -416,7 +416,7 @@ ucs_status_t uct_sisci_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t v
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_atomic32_post()");
+    printf("uct_sisci_ep_atomic32_post()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -424,7 +424,7 @@ ucs_status_t uct_sisci_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t v
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_atomic64_post()");
+    printf("uct_sisci_ep_atomic64_post()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -434,7 +434,7 @@ ucs_status_t uct_sisci_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic64_fetch()");
+    printf("uct_sisci_ep_atomic64_fetch()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -444,7 +444,7 @@ ucs_status_t uct_sisci_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic32_fetch()");
+    printf("uct_sisci_ep_atomic32_fetch()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -454,7 +454,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic_cswap64()");
+    printf("uct_sisci_ep_atomic_cswap64()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -464,7 +464,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic_cswap32()");
+    printf("uct_sisci_ep_atomic_cswap32()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -474,7 +474,7 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
     //TODO
-    printf("uct_sisci_ep_am_short()");
+    printf("uct_sisci_ep_am_short()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -482,7 +482,7 @@ ucs_status_t uct_sisci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
                                       const uct_iov_t *iov, size_t iovcnt)
 {
     //TODO
-    printf("uct_sisci_ep_am_short_iov()");
+    printf("uct_sisci_ep_am_short_iov()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -491,13 +491,14 @@ ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              unsigned flags)
 {
     //TODO
-    printf("uct_sisci_ep_am_bcopy()");
+    printf("uct_sisci_ep_am_bcopy()\n");
     return -8;
 }
 
 ucs_status_t uct_sisci_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header, unsigned header_length, 
                             const uct_iov_t *iov, size_t iovcnt, unsigned flags, uct_completion_t *comp) 
 {
+    printf("uct_sisci_ep_am_zcopy()\n")
     return UCS_ERR_NOT_IMPLEMENTED;    
 }
 
