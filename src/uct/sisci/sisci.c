@@ -97,6 +97,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     size_t alignment;
     size_t align_offset;
     sci_error_t sci_error;
+    ucs_status_t status;
 
     printf("UCS_SISCI_CLASS_INIT_FUNC() hm\n");
 
