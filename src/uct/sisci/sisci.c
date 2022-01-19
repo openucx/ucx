@@ -547,7 +547,6 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
-    uct_ppn_bandwidth_t bandwidth;
     
     printf("UCT_sisci_iface_query\n");
 
