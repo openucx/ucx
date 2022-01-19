@@ -536,15 +536,24 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
     /*  Start of lies  */
     attr->dev_num_paths = 1;
+    attr->max_num_eps = 32;
+
     bandwidth.dedicated = 1;
     bandwidth.shared = 1;
     attr->bandwidth = bandwidth; 
-    attr->cap.flags = UCT_IFACE_FLAG_CONNECT_TO_IFACE | UCT_IFACE_FLAG_CONNECT_TO_EP |
-     UCT_IFACE_FLAG_AM_BCOPY | UCT_IFACE_FLAG_AM_SHORT | UCT_IFACE_FLAG_AM_ZCOPY;
+    
+    
+    attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
+                        UCT_IFACE_FLAG_CONNECT_TO_EP    |
+                        UCT_IFACE_FLAG_AM_BCOPY         | 
+                        UCT_IFACE_FLAG_AM_SHORT         | 
+                        UCT_IFACE_FLAG_AM_ZCOPY;
 
     attr->device_addr_len  = sizeof(uct_sisci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_sisci_iface_addr_t);
+    
+    
     //TODO: sane numbers, no lies.
     /* AM flags - TODO: these might need to be fine tuned at a later stage */
     attr->cap.am.max_short = 64;

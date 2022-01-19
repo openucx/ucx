@@ -377,6 +377,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     }
 
     if (UCS_BITMAP_IS_ZERO_INPLACE(&addr_index_map)) {
+        printf("ucs_bitmap_is_zero_inplace\n");
          snprintf(p, endp - p, "%s  ", ucs_status_string(UCS_ERR_UNSUPPORTED));
          p += strlen(p);
          goto out;
@@ -514,6 +515,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             p += strlen(p);
         }
     }
+    printf("select.c: reached out, but found nothing\n");
 
 out:
     if (p >= tls_info + 2) {
