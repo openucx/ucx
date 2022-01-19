@@ -127,6 +127,19 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
     SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+    }
+
+    SCIPrepareSegment(&self->local_segment, 0, 0 &sci_error);
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_PREPARE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+    }
+
+    SCISetAvailable(&self->local_segment, 0, 0 &sci_error);
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_SET_AVAILABLE: %s\n", SCIGetErrorString(sci_error));
+    }
 
     /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
     status = uct_iface_param_am_alignment(params, self->send_size, 0, 0,
