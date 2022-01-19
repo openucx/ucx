@@ -227,6 +227,11 @@ static ucs_status_t uct_rc_verbs_iface_query(uct_iface_h tl_iface, uct_iface_att
         return status;
     }
 
+    if (iface_attr->device_addr_ext) {
+        iface_attr->device_addr_ext |= UCT_IFACE_FLAG_RC_DEV_ADDR_EXT |
+                                       UCT_IFACE_FLAG_VERB_DEV_ADDR_EXT;
+    }
+
     iface_attr->cap.flags |= UCT_IFACE_FLAG_EP_CHECK;
     iface_attr->latency.m += 1e-9;  /* 1 ns per each extra QP */
     iface_attr->overhead   = 75e-9; /* Software overhead */
