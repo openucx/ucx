@@ -355,12 +355,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                       criteria->remote_event_flags));
 
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
-            printf("addr[%d] %s: no %s\n", addr_index,
+            printf("1: addr[%d] %s: no %s\n", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
                                                        criteria->remote_iface_flags,
                                                        ucp_wireup_peer_flags));
-            ucs_trace("addr[%d] %s: no %s", addr_index,
+            ucs_trace("2: addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
                                                        criteria->remote_iface_flags,
@@ -369,12 +369,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         }
 
         if (!ucs_test_all_flags(ae->iface_attr.event_flags, criteria->remote_event_flags)) {
-            printf("addr[%d] %s: no %s\n", addr_index,
+            printf("3: addr[%d] %s: no %s\n", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.event_flags,
                                                        criteria->remote_event_flags,
                                                        ucp_wireup_event_flags));
-            ucs_trace("addr[%d] %s: no %s", addr_index,
+            ucs_trace("4: addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.event_flags,
                                                        criteria->remote_event_flags,
