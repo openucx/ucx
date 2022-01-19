@@ -580,8 +580,13 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
                         //UCT_IFACE_FLAG_AM_BCOPY         | 
                         //UCT_IFACE_FLAG_AM_ZCOPY         |
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+<<<<<<< HEAD
                              UCT_IFACE_FLAG_EVENT_RECV;
 >>>>>>> 42697b26573c87265e773f902ccf8d6dbb966b13
+=======
+                             UCT_IFACE_FLAG_EVENT_RECV      |
+                             UCT_IFACE_FLAG_EVENT_ASYNC_CB;
+>>>>>>> 15e028b5baca0f5bdc21a443ea7755f9e376cb29
 
     attr->device_addr_len  = sizeof(uct_sisci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
@@ -594,7 +599,6 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->cap.am.max_bcopy = 128;
     attr->cap.am.min_zcopy = 64;
     attr->cap.am.max_zcopy = 1024;
-
 
 
     attr->latency                 = ucs_linear_func_make(0, 0);
