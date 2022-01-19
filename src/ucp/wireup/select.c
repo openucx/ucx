@@ -353,7 +353,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
          * ucp packed address */
         ucs_assert(ucs_test_all_flags(UCP_ADDRESS_IFACE_EVENT_FLAGS,
                                       criteria->remote_event_flags));
-
+        print("cap_flags %ld, crit_flags %ld\n",ae->iface_attr.cap_flags,  criteria->remote_iface_flags);
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
             printf("3: addr[%d] %s: no %s\n", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
