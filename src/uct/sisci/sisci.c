@@ -565,6 +565,8 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
                         UCT_IFACE_FLAG_AM_BCOPY         | 
                         UCT_IFACE_FLAG_AM_SHORT         | 
                         UCT_IFACE_FLAG_AM_ZCOPY;
+    attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                             UCT_IFACE_FLAG_EVENT_RECV;
 
     attr->device_addr_len  = sizeof(uct_sisci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
