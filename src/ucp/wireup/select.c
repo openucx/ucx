@@ -335,14 +335,14 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     ucp_unpacked_address_for_each(ae, address) {
         addr_index = ucp_unpacked_address_index(address, ae);
         if (!(remote_dev_bitmap & UCS_BIT(ae->dev_index))) {
-            printf("addr[%d]: not in use, because on device[%d]\n",
+            printf("1: addr[%d]: not in use, because on device[%d]\n",
                       addr_index, ae->dev_index);
             ucs_trace("addr[%d]: not in use, because on device[%d]",
                       addr_index, ae->dev_index);
             continue;
         } else if ((ae->md_index != UCP_NULL_RESOURCE) &&
                    !(remote_md_map & UCS_BIT(ae->md_index))) {
-            printf("addr[%d]: not in use, because on md[%d]\n", addr_index,
+            printf("2: addr[%d]: not in use, because on md[%d]\n", addr_index,
                       ae->md_index);
             ucs_trace("addr[%d]: not in use, because on md[%d]", addr_index,
                       ae->md_index);
@@ -355,12 +355,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                       criteria->remote_event_flags));
 
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
-            printf("1: addr[%d] %s: no %s\n", addr_index,
+            printf("3: addr[%d] %s: no %s\n", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
                                                        criteria->remote_iface_flags,
                                                        ucp_wireup_peer_flags));
-            ucs_trace("2: addr[%d] %s: no %s", addr_index,
+            ucs_trace("addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.cap_flags,
                                                        criteria->remote_iface_flags,
@@ -369,12 +369,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
         }
 
         if (!ucs_test_all_flags(ae->iface_attr.event_flags, criteria->remote_event_flags)) {
-            printf("3: addr[%d] %s: no %s\n", addr_index,
+            printf("4: addr[%d] %s: no %s\n", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.event_flags,
                                                        criteria->remote_event_flags,
                                                        ucp_wireup_event_flags));
-            ucs_trace("4: addr[%d] %s: no %s", addr_index,
+            ucs_trace("addr[%d] %s: no %s", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
                       ucp_wireup_get_missing_flag_desc(ae->iface_attr.event_flags,
                                                        criteria->remote_event_flags,
