@@ -152,7 +152,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    SCIMapLocalSegment(self->local_segment, &self->recv_buffers, 0, self->send_size, NULL,0, &sci_error);
+    SCIMapLocalSegment(self->local_segment, &self->recv_buffer, 0, self->send_size, NULL,0, &sci_error);
    
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_LOCAL_SEG: %s\n", SCIGetErrorString(sci_error));
