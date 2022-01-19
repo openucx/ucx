@@ -662,6 +662,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_fence              = uct_base_iface_fence,           //covered av uct base
     .iface_progress_enable    = ucs_empty_function,             //covered
     .iface_progress_disable   = ucs_empty_function,             //covered
+    .iface_event_arm          = ucs_empty_function_return_success,
     .iface_progress           = ucs_empty_function_return_zero, //covered
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped more makro hell
     .iface_query              = uct_sisci_iface_query,       //bap
