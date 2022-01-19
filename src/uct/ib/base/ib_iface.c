@@ -1696,7 +1696,7 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     uct_base_iface_query(&iface->super, iface_attr);
 
     if (iface->dev_addr_ext_ece && iface->ece) {
-        iface_attr->device_addr_ext = 1;
+        iface_attr->device_addr_ext = UCT_IFACE_FLAG_DEV_ADDR_EXT_ENABLE;
     }
 
     active_width = uct_ib_iface_port_attr(iface)->active_width;

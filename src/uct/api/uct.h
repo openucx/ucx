@@ -1022,6 +1022,24 @@ struct uct_iface_attr {
 
 
 /**
+ * @defgroup UCT_IFACE_DEVICE_ADDRESS_EXTENSION Get dev addr from which iface
+ * @ingroup UCT_RESOURCE
+ *
+ * @brief priority to get device address from which iface
+ * @{
+ */
+#define UCT_IFACE_FLAG_DEV_ADDR_EXT_ENABLE UCS_BIT(31)
+
+#define UCT_IFACE_FLAG_RC_DEV_ADDR_EXT     UCS_BIT(2)
+
+#define UCT_IFACE_FLAG_MLX5_DEV_ADDR_EXT   UCS_BIT(1)
+#define UCT_IFACE_FLAG_VERB_DEV_ADDR_EXT   UCS_BIT(0)
+/**
+ * @}
+ */
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Parameters used for interface creation.
  *
