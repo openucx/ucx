@@ -136,7 +136,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
         printf("SCI_PREPARE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
 
-    SCISetAvailable(self->local_segment, 0, 0, &sci_error);
+    SCISetSegmentAvailable(self->local_segment, 0, 0, &sci_error);
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_SET_AVAILABLE: %s\n", SCIGetErrorString(sci_error));
     }
