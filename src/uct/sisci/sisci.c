@@ -477,7 +477,7 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
     //TODO
-    printf("uct_sisci_ep_am_short()\n");
+    printf("uct_sisci_ep_am_short() %d %ld %d \n", id, header, length);
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -576,17 +576,22 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
                         UCT_IFACE_FLAG_CONNECT_TO_EP    |
                         UCT_IFACE_FLAG_AM_SHORT         |
-                        UCT_IFACE_FLAG_CB_SYNC;
-                        //UCT_IFACE_FLAG_AM_BCOPY         | 
-                        //UCT_IFACE_FLAG_AM_ZCOPY         |
+                        UCT_IFACE_FLAG_CB_SYNC          |
+                        UCT_IFACE_FLAG_AM_BCOPY         | 
+                        UCT_IFACE_FLAG_AM_ZCOPY;
     attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
 <<<<<<< HEAD
                              UCT_IFACE_FLAG_EVENT_RECV;
 >>>>>>> 42697b26573c87265e773f902ccf8d6dbb966b13
 =======
                              UCT_IFACE_FLAG_EVENT_RECV      |
+<<<<<<< HEAD
                              UCT_IFACE_FLAG_EVENT_ASYNC_CB;
 >>>>>>> 15e028b5baca0f5bdc21a443ea7755f9e376cb29
+=======
+                             UCT_IFACE_FLAG_EVENT_ASYNC_CB  |
+                             UCT_IFACE_FLAG_EVENT_RECV_SIG;
+>>>>>>> f2b001f1f685e361fcf53744da91289262da29ec
 
     attr->device_addr_len  = sizeof(uct_sisci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
@@ -597,7 +602,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     /* AM flags - TODO: these might need to be fine tuned at a later stage */
     attr->cap.am.max_short = 128;
     attr->cap.am.max_bcopy = 128;
-    attr->cap.am.min_zcopy = 64;
+    attr->cap.am.min_zcopy = 256;
     attr->cap.am.max_zcopy = 1024;
 
 
@@ -609,7 +614,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
 
 
 
-    printf("iface->attr->cap.flags: %ld\n", attr->cap.flags);
+    printf("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
