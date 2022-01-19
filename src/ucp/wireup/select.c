@@ -198,8 +198,8 @@ static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
 {
     const char *missing_flag_desc;
 
+    printf("flags %ld required_flags %ld\n", flags, required_flags);
     if (ucs_test_all_flags(flags, required_flags)) {
-        printf("flags %ld required_flags %ld\n", flags, required_flags);
         return 1;
     }
 
