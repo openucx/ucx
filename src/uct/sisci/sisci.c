@@ -566,7 +566,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     
     attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
                         UCT_IFACE_FLAG_CONNECT_TO_EP    |
-                        UCT_IFACE_FLAG_AM_BCOPY         | 
+                        //UCT_IFACE_FLAG_AM_BCOPY         | 
                         UCT_IFACE_FLAG_AM_SHORT         |
                         //UCT_IFACE_FLAG_AM_ZCOPY         |
                         UCT_IFACE_FLAG_CB_SYNC;
