@@ -498,7 +498,7 @@ ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 ucs_status_t uct_sisci_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header, unsigned header_length, 
                             const uct_iov_t *iov, size_t iovcnt, unsigned flags, uct_completion_t *comp) 
 {
-    printf("uct_sisci_ep_am_zcopy()\n")
+    printf("uct_sisci_ep_am_zcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;    
 }
 
