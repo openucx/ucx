@@ -129,16 +129,20 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
     }
 
     SCIPrepareSegment(self->local_segment, 0, 0, &sci_error);
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_PREPARE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+
     }
 
     SCISetSegmentAvailable(self->local_segment, 0, 0, &sci_error);
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_SET_AVAILABLE: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
     }
 
     /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
