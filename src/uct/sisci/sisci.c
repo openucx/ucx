@@ -174,6 +174,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //flags                         0
     //error                         sci_error_t
 
+
+
     uct_sisci_iface_addr_t* iface_addr =  (uct_sisci_iface_addr_t*) params->iface_addr;
     uct_sisci_device_addr_t* dev_addr = (uct_sisci_device_addr_t*) params->dev_addr;
 
@@ -182,6 +184,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     
 
     printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id);
+    self->super.super.iface = params->iface;
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
@@ -390,7 +393,7 @@ ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_put_short()");
+    printf("uct_sisci_ep_put_short()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -398,7 +401,7 @@ ssize_t uct_sisci_ep_put_bcopy(uct_ep_h tl_ep, uct_pack_callback_t pack_cb,
                             void *arg, uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_put_bcopy()");
+    printf("uct_sisci_ep_put_bcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -408,7 +411,7 @@ ucs_status_t uct_sisci_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack
                                  uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_get_bcopy()");
+    printf("uct_sisci_ep_get_bcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -416,7 +419,7 @@ ucs_status_t uct_sisci_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t v
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_atomic32_post()");
+    printf("uct_sisci_ep_atomic32_post()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -424,7 +427,7 @@ ucs_status_t uct_sisci_ep_atomic64_post(uct_ep_h ep, unsigned opcode, uint64_t v
                                      uint64_t remote_addr, uct_rkey_t rkey)
 {
     //TODO
-    printf("uct_sisci_ep_atomic64_post()");
+    printf("uct_sisci_ep_atomic64_post()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -434,7 +437,7 @@ ucs_status_t uct_sisci_ep_atomic64_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic64_fetch()");
+    printf("uct_sisci_ep_atomic64_fetch()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -444,7 +447,7 @@ ucs_status_t uct_sisci_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic32_fetch()");
+    printf("uct_sisci_ep_atomic32_fetch()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -454,7 +457,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap64(uct_ep_h tl_ep, uint64_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic_cswap64()");
+    printf("uct_sisci_ep_atomic_cswap64()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -464,7 +467,7 @@ ucs_status_t uct_sisci_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
                                       uct_completion_t *comp)
 {
     //TODO
-    printf("uct_sisci_ep_atomic_cswap32()");
+    printf("uct_sisci_ep_atomic_cswap32()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -474,7 +477,7 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
     //TODO
-    printf("uct_sisci_ep_am_short()");
+    printf("uct_sisci_ep_am_short()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -482,7 +485,7 @@ ucs_status_t uct_sisci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
                                       const uct_iov_t *iov, size_t iovcnt)
 {
     //TODO
-    printf("uct_sisci_ep_am_short_iov()");
+    printf("uct_sisci_ep_am_short_iov()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -491,13 +494,14 @@ ssize_t uct_sisci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              unsigned flags)
 {
     //TODO
-    printf("uct_sisci_ep_am_bcopy()");
+    printf("uct_sisci_ep_am_bcopy()\n");
     return -8;
 }
 
 ucs_status_t uct_sisci_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header, unsigned header_length, 
                             const uct_iov_t *iov, size_t iovcnt, unsigned flags, uct_completion_t *comp) 
 {
+    printf("uct_sisci_ep_am_zcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;    
 }
 
@@ -560,6 +564,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->dev_num_paths = 1;
     attr->max_num_eps = 32;    
     
+<<<<<<< HEAD
     attr->cap.flags =           UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
                                 UCT_IFACE_FLAG_CONNECT_TO_EP    |
                                 UCT_IFACE_FLAG_AM_BCOPY         | 
@@ -567,6 +572,16 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
                                 UCT_IFACE_FLAG_AM_ZCOPY;
     attr->cap.event_flags  =    UCT_IFACE_FLAG_EVENT_SEND_COMP |
                                 UCT_IFACE_FLAG_EVENT_RECV;
+=======
+    attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
+                        UCT_IFACE_FLAG_CONNECT_TO_EP    |
+                        UCT_IFACE_FLAG_AM_SHORT         |
+                        UCT_IFACE_FLAG_CB_SYNC;
+                        //UCT_IFACE_FLAG_AM_BCOPY         | 
+                        //UCT_IFACE_FLAG_AM_ZCOPY         |
+    attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                             UCT_IFACE_FLAG_EVENT_RECV;
+>>>>>>> 42697b26573c87265e773f902ccf8d6dbb966b13
 
     attr->device_addr_len  = sizeof(uct_sisci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
@@ -575,8 +590,8 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     
     //TODO: sane numbers, no lies.
     /* AM flags - TODO: these might need to be fine tuned at a later stage */
-    attr->cap.am.max_short = 64;
-    attr->cap.am.max_bcopy = 64;
+    attr->cap.am.max_short = 128;
+    attr->cap.am.max_bcopy = 128;
     attr->cap.am.min_zcopy = 64;
     attr->cap.am.max_zcopy = 1024;
 
@@ -662,6 +677,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .iface_fence              = uct_base_iface_fence,           //covered av uct base
     .iface_progress_enable    = ucs_empty_function,             //covered
     .iface_progress_disable   = ucs_empty_function,             //covered
+    .iface_event_arm          = ucs_empty_function_return_success,
     .iface_progress           = ucs_empty_function_return_zero, //covered
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_iface_t),      //bapped more makro hell
     .iface_query              = uct_sisci_iface_query,       //bap
