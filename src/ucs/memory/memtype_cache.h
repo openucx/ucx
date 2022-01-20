@@ -50,6 +50,10 @@ struct ucs_memtype_cache {
 };
 
 
+void ucs_memtype_cache_global_init();
+void ucs_memtype_cache_cleanup();
+
+
 /**
  * Find if address range is in memtype cache.
  *

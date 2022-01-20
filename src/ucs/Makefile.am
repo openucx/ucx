@@ -89,6 +89,7 @@ noinst_HEADERS = \
 	arch/ppc64/cpu.h \
 	arch/x86_64/cpu.h \
 	arch/cpu.h \
+	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
 	datastruct/frag_list.h \

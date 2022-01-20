@@ -469,17 +469,19 @@ int ucm_madvise(void *addr, size_t length, int advice)
     return event.madvise.result;
 }
 
-void ucm_library_init(const ucm_global_config_t *ucm_opts)
+void ucm_library_init()
 {
     UCS_INIT_ONCE(&ucm_library_init_once) {
-        if (ucm_opts != NULL) {
-            ucm_global_opts = *ucm_opts;
-        }
-
         pthread_spin_init(&ucm_kh_lock, PTHREAD_PROCESS_PRIVATE);
         kh_init_inplace(ucm_ptr_size, &ucm_shmat_ptrs);
         ucm_mmap_init();
     }
+}
+
+void ucm_set_global_opts(const ucm_global_config_t *ucm_opts)
+{
+    ucm_global_opts = *ucm_opts;
+    ucm_library_init();
 }
 
 void ucm_event_handler_add(ucm_event_handler_t *handler)
@@ -572,7 +574,7 @@ ucs_status_t ucm_set_event_handler(int events, int priority,
         return UCS_ERR_UNSUPPORTED;
     }
 
-    ucm_library_init(NULL);
+    ucm_library_init();
 
     /* separate event flags from real events */
     flags   = events & (UCM_EVENT_FLAG_NO_INSTALL |
@@ -650,13 +652,13 @@ void ucm_unset_event_handler(int events, ucm_event_callback_t cb, void *arg)
 
 ucs_status_t ucm_test_events(int events)
 {
-    ucm_library_init(NULL);
+    ucm_library_init();
     return ucm_mmap_test_installed_events(events);
 }
 
 ucs_status_t ucm_test_external_events(int events)
 {
-    ucm_library_init(NULL);
+    ucm_library_init();
     return ucm_mmap_test_events(events & ucm_external_events, "external");
 }
 

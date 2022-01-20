@@ -23,7 +23,7 @@
 #include <ucm/api/ucm.h>
 
 
-ucs_spinlock_t ucs_memtype_cache_global_instance_lock;
+static ucs_spinlock_t ucs_memtype_cache_global_instance_lock;
 ucs_memtype_cache_t *ucs_memtype_cache_global_instance = NULL;
 
 
@@ -402,11 +402,13 @@ static UCS_CLASS_CLEANUP_FUNC(ucs_memtype_cache_t)
     pthread_rwlock_destroy(&self->lock);
 }
 
-UCS_STATIC_INIT {
+void ucs_memtype_cache_global_init()
+{
     ucs_spinlock_init(&ucs_memtype_cache_global_instance_lock, 0);
 }
 
-UCS_STATIC_CLEANUP {
+void ucs_memtype_cache_cleanup()
+{
     ucs_spinlock_destroy(&ucs_memtype_cache_global_instance_lock);
 
     if (ucs_memtype_cache_global_instance) {

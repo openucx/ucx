@@ -116,13 +116,22 @@ static ucs_config_field_t ucm_global_config_table[] = {
   {NULL}
 };
 
-UCS_CONFIG_REGISTER_TABLE(ucm_global_config_table, "UCM", UCM_CONFIG_PREFIX,
-                          ucm_global_config_t, &ucs_config_global_list)
+UCS_CONFIG_DECLARE_TABLE(ucm_global_config_table, "UCM", UCM_CONFIG_PREFIX,
+                         ucm_global_config_t)
 
-UCS_STATIC_INIT {
+void ucs_init_ucm_opts()
+{
     ucm_global_config_t ucm_opts;
+
+    UCS_CONFIG_ADD_TABLE(ucm_global_config_table, &ucs_config_global_list);
+
     (void)ucs_config_parser_fill_opts(&ucm_opts, ucm_global_config_table,
                                       UCS_DEFAULT_ENV_PREFIX, UCM_CONFIG_PREFIX,
                                       0);
-    ucm_library_init(&ucm_opts);
+    ucm_set_global_opts(&ucm_opts);
+}
+
+void ucs_opts_cleanup()
+{
+    UCS_CONFIG_REMOVE_TABLE(ucm_global_config_table);
 }
