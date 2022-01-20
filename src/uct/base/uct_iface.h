@@ -397,6 +397,75 @@ typedef struct uct_iface_local_addr_ns {
 
 
 /**
+ * Register component and TL
+ *
+ * @param [in] _name   Component and TL name
+ * @param [in] _scope  Scope for functions (e.g 'static inline')
+ */
+#define UCT_TL_INIT(_name) \
+    static void uct_component_tl_##_name##_ctor(void); \
+    void UCS_F_CTOR uct_##_name##_init(void) { \
+        uct_component_tl_##_name##_ctor(); \
+        uct_component_##_name##_ctor(); \
+        uct_tl_##_name##_ctor(); \
+    } \
+    void uct_component_tl_##_name##_ctor(void)
+
+
+/**
+ * Unregister component and TL
+ *
+ * @param [in] _name   Component and TL name
+ * @param [in] _scope  Scope for functions (e.g 'static inline')
+ */
+#define UCT_TL_CLEANUP(_name) \
+    static void uct_component_tl_##_name##_dtor(void); \
+    void UCS_F_DTOR uct_##_name##_cleanup(void) { \
+        uct_tl_##_name##_dtor(); \
+        uct_component_##_name##_dtor(); \
+        uct_component_tl_##_name##_dtor(); \
+    } \
+    void uct_component_tl_##_name##_dtor(void)
+
+
+/**
+ * Transport registration routines
+ *
+ * @param _component      Component to add the transport to
+ * @param _name           Name of the transport (should be a token, not a string)
+ * @param _query_devices  Function to query the list of available devices
+ * @param _iface_class    Struct type defining the uct_iface class
+ * @param _cfg_prefix     Prefix for configuration variables
+ * @param _cfg_table      Transport configuration table
+ * @param _cfg_struct     Struct type defining transport configuration
+ */
+#define UCT_TL_REGISTER_DEF(_component, _name, _query_devices, _iface_class, \
+                            _cfg_prefix, _cfg_table, _cfg_struct) \
+    \
+    static uct_tl_t uct_##_name##_tl = { \
+        .name               = #_name, \
+        .query_devices      = _query_devices, \
+        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
+        .config = { \
+            .name           = #_name" transport", \
+            .prefix         = _cfg_prefix, \
+            .table          = _cfg_table, \
+            .size           = sizeof(_cfg_struct), \
+         } \
+    }; \
+    static void uct_tl_##_name##_ctor(void) \
+    { \
+        ucs_list_add_tail(&ucs_config_global_list, &(uct_##_name##_tl).config.list); \
+        ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
+    } \
+    static void uct_tl_##_name##_dtor(void) \
+    { \
+        ucs_list_del(&(uct_##_name##_tl).config.list); \
+        /* TODO: add list_del from ucs_config_global_list */ \
+    }
+
+
+/**
  * "Base" structure which defines interface configuration options.
  * Specific transport extend this structure.
  */

@@ -59,7 +59,7 @@ static ucs_init_once_t uct_xpmem_global_seg_init_once = UCS_INIT_ONCE_INITIALIZE
 static xpmem_segid_t   uct_xpmem_global_xsegid        = -1;
 
 /* Hash of remote regions */
-static khash_t(xpmem_remote_mem) uct_xpmem_remote_mem_hash;
+static khash_t(xpmem_remote_mem) uct_xpmem_remote_mem_hash = KHASH_STATIC_INITIALIZER;
 static ucs_recursive_spinlock_t  uct_xpmem_remote_mem_lock;
 
 static ucs_config_field_t uct_xpmem_md_config_table[] = {
@@ -75,32 +75,6 @@ static ucs_config_field_t uct_xpmem_iface_config_table[] = {
 
   {NULL}
 };
-
-UCS_STATIC_INIT {
-    ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
-    kh_init_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
-}
-
-UCS_STATIC_CLEANUP {
-    unsigned long num_leaked_segments;
-    uct_xpmem_remote_mem_t *rmem;
-
-    num_leaked_segments = 0;
-    kh_foreach_value(&uct_xpmem_remote_mem_hash, rmem, {
-        ucs_debug("remote segment id %lx apid %lx is not released, refcount %d",
-                  (unsigned long)rmem->xsegid, (unsigned long)rmem->apid,
-                  rmem->refcount);
-        ++num_leaked_segments;
-    })
-    kh_destroy_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
-
-    if (num_leaked_segments > 0) {
-        ucs_diag("%lu xpmem remote segments were not released at exit",
-                 num_leaked_segments);
-    }
-
-    ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
-}
 
 static ucs_status_t uct_xpmem_query(int *attach_shm_file_p)
 {
@@ -572,4 +546,33 @@ static uct_mm_md_mapper_ops_t uct_xpmem_md_ops = {
 };
 
 UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
-                 uct_xpmem_rkey_release, "XPMEM_", uct_xpmem_iface_config_table)
+                 uct_xpmem_rkey_release, "XPMEM_",
+                 uct_xpmem_iface_config_table);
+
+UCT_TL_INIT(xpmem)
+{
+    ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
+}
+
+UCT_TL_CLEANUP(xpmem)
+{
+    unsigned long num_leaked_segments;
+    uct_xpmem_remote_mem_t *rmem;
+
+    num_leaked_segments = 0;
+    kh_foreach_value(&uct_xpmem_remote_mem_hash, rmem, {
+        ucs_debug("remote segment id %lx apid %lx is not released, refcount %d",
+                  (unsigned long)rmem->xsegid, (unsigned long)rmem->apid,
+                  rmem->refcount);
+        ++num_leaked_segments;
+    })
+    kh_destroy_inplace(xpmem_remote_mem, &uct_xpmem_remote_mem_hash);
+
+    if (num_leaked_segments > 0) {
+        ucs_diag("%lu xpmem remote segments were not released at exit",
+                 num_leaked_segments);
+    }
+
+    ucs_recursive_spinlock_destroy(&uct_xpmem_remote_mem_lock);
+}
+

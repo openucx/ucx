@@ -209,4 +209,14 @@ static uct_mm_md_mapper_ops_t uct_sysv_md_ops = {
 };
 
 UCT_MM_TL_DEFINE(sysv, &uct_sysv_md_ops, uct_sysv_rkey_unpack,
-                 uct_sysv_rkey_release, "SYSV_", uct_sysv_iface_config_table)
+                 uct_sysv_rkey_release, "SYSV_",
+                 uct_sysv_iface_config_table);
+
+UCT_TL_INIT(sysv)
+{
+}
+
+UCT_TL_CLEANUP(sysv)
+{
+}
+
