@@ -37,12 +37,8 @@ struct ibv_ravh {
 #  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
-#define UCT_DC_MLX5_IFACE_MAX_USER_DCIS 15
 #define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
 #define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 8
-#define UCT_DC_MLX5_IFACE_MAX_DCIS      ((UCT_DC_MLX5_IFACE_MAX_USER_DCIS * \
-                                          UCT_DC_MLX5_IFACE_MAX_DCI_POOLS) + \
-                                          UCT_DC_MLX5_KEEPALIVE_NUM_DCIS)
 
 #define UCT_DC_MLX5_IFACE_ADDR_TM_ENABLED(_addr) \
     (!!((_addr)->flags & UCT_DC_MLX5_IFACE_ADDR_HW_TM))
@@ -216,13 +212,12 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
  * ndci and these stacks are not intersected
  */
 typedef struct {
-    int8_t        stack_top;                               /* dci stack top */
-    uint8_t       stack[UCT_DC_MLX5_IFACE_MAX_USER_DCIS];  /* LIFO of indexes of available dcis */
-    ucs_arbiter_t arbiter;                                 /* queue of requests
-                                                              waiting for DCI */
-    int8_t        release_stack_top;                       /* releasing dci's stack,
-                                                              points to last DCI to release
-                                                              or -1 if no DCI's to release */
+    int8_t        stack_top;         /* dci stack top */
+    uint8_t       *stack;            /* LIFO of indexes of available dcis */
+    ucs_arbiter_t arbiter;           /* queue of requests waiting for DCI */
+    int8_t        release_stack_top; /* releasing dci's stack,
+                                        points to last DCI to release
+                                        or -1 if no DCI's to release */
 } uct_dc_mlx5_dci_pool_t;
 
 
@@ -230,7 +225,7 @@ struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t    super;
     struct {
         /* Array of dcis */
-        uct_dc_dci_t              dcis[UCT_DC_MLX5_IFACE_MAX_DCIS];
+        uct_dc_dci_t              *dcis;
 
         uint8_t                   ndci;                        /* Number of DCIs */
 
