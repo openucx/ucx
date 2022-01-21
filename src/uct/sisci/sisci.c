@@ -123,15 +123,15 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->send_size = 1024;
     self->device_addr = nodeID;
-    self->id = 13337;
+    self->segment_id = 13337;
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
-    SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
+    SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
     
     //TODO: 
     if(sci_error == SCI_ERR_SEGMENTID_USED) {
-        self->id = ucs_generate_uuid(trash);
-        SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
+        self->segment_id = ucs_generate_uuid(trash);
+        SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
     }
     
     if (sci_error != SCI_ERR_OK) { 
@@ -175,7 +175,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
             UINT_MAX, &uct_sisci_mpool_ops, "sisci_msg_desc");
 
 
-    printf("iface_init iface_addr: %d dev_addr: %d \n", self->id, self->device_addr);
+    printf("iface_init iface_addr: %d dev_addr: %d \n", self->segment_id, self->device_addr);
     return UCS_OK;
 }
 
@@ -560,7 +560,7 @@ ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *
 
     uct_sisci_device_addr_t* sci_addr = (uct_sisci_device_addr_t *) addr;
 
-    printf("iface_data = %d %d\n", sisci_iface->id, sisci_iface->device_addr);
+    printf("iface_data = %d %d\n", sisci_iface->segment_id, sisci_iface->device_addr);
     printf("sisci_get_device_address() %d\n", md->segment_id);
 
     sci_addr->node_id = sisci_iface->device_addr;
@@ -578,7 +578,7 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
     uct_sisci_iface_addr_t* iface_addr = (uct_sisci_iface_addr_t *) addr;
     
     printf("uct_iface_get_address()\n");
-    iface_addr->segment_id = iface->id;
+    iface_addr->segment_id = iface->segment_id;
     
     return UCS_OK;
 }
