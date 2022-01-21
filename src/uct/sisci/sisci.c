@@ -237,7 +237,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     printf("waiting to connect\n");
   } while (sci_error != SCI_ERR_OK);
     
-    self->send_buffer = SCIMapLocalSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
+    self->send_buffer = SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
 
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
@@ -527,7 +527,7 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     printf("uct_sisci_ep_am_short() %d %ld %d \n", id, header, length);
 
 
-
+    
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
