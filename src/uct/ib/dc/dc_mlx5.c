@@ -187,6 +187,11 @@ static ucs_status_t uct_dc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
         return status;
     }
 
+    if (iface_attr->device_addr_ext) {
+        iface_attr->device_addr_ext |= UCT_IFACE_FLAG_DC_DEV_ADDR_EXT |
+                                       UCT_IFACE_FLAG_MLX5_DEV_ADDR_EXT;
+    }
+
     /* fixup flags and address lengths */
     iface_attr->cap.flags     &= ~UCT_IFACE_FLAG_CONNECT_TO_EP;
     iface_attr->cap.flags     |= UCT_IFACE_FLAG_CONNECT_TO_IFACE;
