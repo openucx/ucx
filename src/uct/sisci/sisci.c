@@ -164,7 +164,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
 
     }
 
-    SCISetSegment Available(self->local_segment, 0, 0, &sci_error);
+    SCISetSegmentAvailable(self->local_segment, 0, 0, &sci_error);
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_SET_AVAILABLE: %s\n", SCIGetErrorString(sci_error));
         return UCS_ERR_NO_RESOURCE;
@@ -234,17 +234,6 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     self->super.super.iface = params->iface;
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
-
-<<<<<<< HEAD
-    //SCIConnectSegment();
-
-
-    SCIMapRemoteSegment();
-
-        
-=======
->>>>>>> 5da35420ace7b786946af460b0ae502166d6887b
-
 
     do {
     SCIConnectSegment(md->sisci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
