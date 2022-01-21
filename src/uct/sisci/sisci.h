@@ -104,10 +104,12 @@ typedef struct uct_sisci_md_config {
 
 
 typedef struct uct_sisci_ep {
-    uct_base_ep_t         super;
-    sci_remote_segment_t    remote_segment;
-    unsigned int remote_node_id;
-    unsigned int remote_segment_id;
+    uct_base_ep_t        super;
+    sci_remote_segment_t remote_segment;
+    sci_remote_map_t*    send_buffer;
+    unsigned int         remote_node_id;
+    unsigned int         remote_segment_id;
+
 } uct_sisci_ep_t;
 
 
