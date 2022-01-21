@@ -27,6 +27,11 @@ typedef struct uct_sicsci_ep_addr{
     uct_sisci_iface_addr_t iface_addr;
 }  UCS_S_PACKED uct_sicsci_ep_addr_t;
 
+
+typedef struct sci_map_holder {
+    volatile unsigned int* mapped;
+} sci_map_holder_t;
+
 void sisci_testing();
 
 // iface file contents
@@ -103,6 +108,8 @@ typedef struct uct_sisci_md_config {
 
 
 
+
+
 typedef struct uct_sisci_ep {
     uct_base_ep_t           super;
     sci_remote_segment_t    remote_segment;
@@ -110,7 +117,7 @@ typedef struct uct_sisci_ep {
     //volatile unsigned int*  send_buffer;             
     unsigned int            remote_node_id;
     unsigned int            remote_segment_id;
-    unsigned int*           temp_buffer;
+    sci_map_holder_t        map_holder;
 
 } uct_sisci_ep_t;
 
