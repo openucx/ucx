@@ -85,7 +85,7 @@ void sisci_testing() {
 static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
 {
     sci_error_t sci_error;
-    printf("UCS_SICSCI_EP_CLEANUP_FUNC()\n");
+    printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
 
 
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
