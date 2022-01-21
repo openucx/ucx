@@ -27,6 +27,11 @@ typedef struct uct_sicsci_ep_addr{
     uct_sisci_iface_addr_t iface_addr;
 }  UCS_S_PACKED uct_sicsci_ep_addr_t;
 
+
+typedef struct sci_map_holder {
+    volatile unsigned int* mapped;
+} sci_map_holder_t;
+
 void sisci_testing();
 
 // iface file contents
@@ -42,13 +47,13 @@ typedef struct uct_sisci_iface_config {
 typedef struct uct_sisci_iface {
     uct_base_iface_t      super;
     //uct_sisci_md_t        md;           /*memory domain */
-    unsigned int id;           /* Unique identifier for the instance */
+    unsigned int segment_id;           /* Unique identifier for the instance */
     unsigned int device_addr; //nodeID
     size_t                send_size;    /* Maximum size for payload */
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
 
     sci_local_segment_t     local_segment;
-    sci_map_t               local_map;
+    sci_map_t               recv_buffer;
 } uct_sisci_iface_t;
 
 ucs_status_t
@@ -103,13 +108,16 @@ typedef struct uct_sisci_md_config {
 
 
 
-typedef struct uct_sisci_ep {
-    uct_base_ep_t         super;
-    sci_remote_segment_t    remote_segment;
-    sci_map_t             send_buffer;
-    unsigned int remote_node_id;
-    unsigned int remote_segment_id;
 
+
+typedef struct uct_sisci_ep {
+    uct_base_ep_t           super;
+    sci_remote_segment_t    remote_segment;
+    sci_map_t               remote_map;
+    //volatile unsigned int*  send_buffer;             
+    unsigned int            remote_node_id;
+    unsigned int            remote_segment_id;
+    //sci_map_holder_t        map_holder;
 
 } uct_sisci_ep_t;
 

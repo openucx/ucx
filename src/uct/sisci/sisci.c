@@ -36,6 +36,7 @@ static ucs_config_field_t uct_sisci_md_config_table[] = {
 };
 
 int sci_opened = 0;
+int iface_query_printed = 0;
 
 /*
     The linux version initialization of the sisci api doesnt do much except for comparing the api version against the adapter version, and setting up some ref handles
@@ -82,15 +83,32 @@ void sisci_testing() {
 //various "class" funcitons, don't really know how they work yet, but seems to be some sort of glue code. 
 //also known as "macro hell"
 static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
-{
-    printf("UCS_SICSCI_EP_CLEANUP_FUNC()\n");
+{   
+    sci_error_t sci_error;
+    printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
+
+    SCIUnmapSegment(self->remote_map, 0, &sci_error);
+    
+    //self->send_buffer = NULL;
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+    }
+
+    SCIDisconnectSegment(self->remote_segment, 0, &sci_error);
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_DISCONNECT_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+    }
+    
+    printf("EP_DELETED : )\n");
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-
+    unsigned int trash = 3;
     unsigned int nodeID;
     unsigned int adapterID = 0;
     unsigned int flags = 0;
@@ -123,22 +141,40 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->send_size = 1024;
     self->device_addr = nodeID;
-    self->id = 13337;
+    self->segment_id = 13337;
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
-    SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
+    SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
+    
+    //TODO: 
+    if(sci_error == SCI_ERR_SEGMENTID_USED) {
+        self->segment_id = ucs_generate_uuid(trash);
+        SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
+    }
+    
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
     }
 
     SCIPrepareSegment(self->local_segment, 0, 0, &sci_error);
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_PREPARE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+
     }
 
     SCISetSegment Available(self->local_segment, 0, 0, &sci_error);
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_SET_AVAILABLE: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    SCIMapLocalSegment(self->local_segment, &self->recv_buffer, 0, self->send_size, NULL,0, &sci_error);
+   
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_MAP_LOCAL_SEG: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
     }
 
 
@@ -150,11 +186,15 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
+
+
     status = ucs_mpool_init(
             &self->msg_mp, 0, self->send_size, align_offset, alignment,
             10, /* 2 elements are enough for most of communications */
             UINT_MAX, &uct_sisci_mpool_ops, "sisci_msg_desc");
 
+
+    printf("iface_init iface_addr: %d dev_addr: %d \n", self->segment_id, self->device_addr);
     return UCS_OK;
 }
 
@@ -194,27 +234,46 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //flags                         0
     //error                         sci_error_t
 
-
-    
+    sci_error_t sci_error;
     uct_sisci_iface_addr_t* iface_addr =  (uct_sisci_iface_addr_t*) params->iface_addr;
     uct_sisci_device_addr_t* dev_addr = (uct_sisci_device_addr_t*) params->dev_addr;
 
     unsigned int segment_id = (unsigned int) iface_addr->segment_id;
     unsigned int node_id = (unsigned int) dev_addr->node_id;
-    
+    uct_sisci_iface_t* iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    uct_sisci_md_t* md = ucs_derived_of(iface->super.md, uct_sisci_md_t);
 
     printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id);
     self->super.super.iface = params->iface;
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
+<<<<<<< HEAD
     //SCIConnectSegment();
 
 
     SCIMapRemoteSegment();
 
         
+=======
+>>>>>>> 5da35420ace7b786946af460b0ae502166d6887b
 
+
+  do {
+    SCIConnectSegment(md->sisci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
+                ADAPTER_NO, NULL, NULL, 0, 0, &sci_error);
+
+    printf("waiting to connect\n");
+  } while (sci_error != SCI_ERR_OK);
+    
+    SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    }
+    
+    printf("EP connected to %d %d\n", self->remote_node_id, self->remote_segment_id);
     return UCS_OK;
 }
 
@@ -405,14 +464,6 @@ static ucs_status_t uct_sisci_md_open(uct_component_t *component, const char *md
     return UCS_OK;
 }
 
-/*
-static uct_sisci_md_t uct_sisci_md(){
-    //empty struct
-    //sci_error_t errors;
-    //sci_desc_t sc_descriptor;
-
-}*/
-
 ucs_status_t uct_sisci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
                                  uct_rkey_t rkey)
@@ -503,6 +554,9 @@ ucs_status_t uct_sisci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 {
     //TODO
     printf("uct_sisci_ep_am_short() %d %ld %d \n", id, header, length);
+
+
+    
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
@@ -552,7 +606,7 @@ ucs_status_t uct_sisci_get_device_address(uct_iface_h iface, uct_device_addr_t *
 
     uct_sisci_device_addr_t* sci_addr = (uct_sisci_device_addr_t *) addr;
 
-    printf("iface_data = %d %d\n", sisci_iface->id, sisci_iface->device_addr);
+    printf("iface_data = %d %d\n", sisci_iface->segment_id, sisci_iface->device_addr);
     printf("sisci_get_device_address() %d\n", md->segment_id);
 
     sci_addr->node_id = sisci_iface->device_addr;
@@ -570,7 +624,7 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
     uct_sisci_iface_addr_t* iface_addr = (uct_sisci_iface_addr_t *) addr;
     
     printf("uct_iface_get_address()\n");
-    iface_addr->segment_id = iface->id;
+    iface_addr->segment_id = iface->segment_id;
     
     return UCS_OK;
 }
@@ -578,7 +632,11 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     
-    printf("UCT_sisci_iface_query\n");
+
+    //TODO: find out why we need this
+    if (!iface_query_printed) {
+        printf("UCT_sisci_iface_query\n");
+    }
 
     //TODO: insert necessarry lies to make ucx want us.
     //taken from uct_iface.c sets default attributes to zero.
@@ -589,7 +647,7 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->dev_num_paths = 1;
     attr->max_num_eps = 32;    
     
-
+    
     attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
                         UCT_IFACE_FLAG_CONNECT_TO_EP    |
                         UCT_IFACE_FLAG_AM_SHORT         |
@@ -621,8 +679,10 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->priority                = 0;
 
 
-
-    printf("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
+    if(!iface_query_printed) {
+        printf("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
+        iface_query_printed = 1;
+    }
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
