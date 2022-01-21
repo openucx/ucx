@@ -90,7 +90,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-
+    unsigned int trash;
     unsigned int nodeID;
     unsigned int adapterID = 0;
     unsigned int flags = 0;
@@ -130,7 +130,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
     
     //TODO: 
     if(sci_error == SCI_ERR_SEGMENTID_USED) {
-        self->id += 1;
+        self->id = ucs_generate_uuid(trash);
         SCICreateSegment(sci_md->sisci_virtual_device, &self->local_segment, self->id, self->send_size, NULL, NULL, 0, &sci_error);
     }
     
@@ -174,6 +174,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
             10, /* 2 elements are enough for most of communications */
             UINT_MAX, &uct_sisci_mpool_ops, "sisci_msg_desc");
 
+
+    print("iface_init iface_addr: %d dev_addr: %d \n", self->id, self->device_addr);
     return UCS_OK;
 }
 
