@@ -219,19 +219,6 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sisci_iface_t, uct_iface_t, uct_md_h,
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 {
-    //uct_sisci_iface_t *iface = ucs_derived_of(params->iface, uct_sisci_iface_t); //unused
-    //uct_sisci_md_t *md = ucs_derived_of(iface->super.md, uct_sisci_md_t); //unused
-
-    //make a segment;
-
-    //sd : sci virtual device       md.sci_virtual_device
-    //segment: local segment
-    //segment id            
-    //size                          md.segment_size
-    //callback  
-    //callbackarg   
-    //flags                         0
-    //error                         sci_error_t
 
     sci_error_t sci_error;
     uct_sisci_iface_addr_t* iface_addr =  (uct_sisci_iface_addr_t*) params->iface_addr;
@@ -249,7 +236,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 
 
 
-  do {
+    do {
     SCIConnectSegment(md->sisci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
                 ADAPTER_NO, NULL, NULL, 0, 0, &sci_error);
 
@@ -619,6 +606,10 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+void uct_sisci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
+    printf("uct_sisci_iface_progress_enable_func_t\n");
+}
+
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     
@@ -742,7 +733,7 @@ static uct_iface_ops_t uct_sisci_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_sisci_ep_t),         //more makro hell
     .iface_flush              = uct_base_iface_flush,           //covered av uct base
     .iface_fence              = uct_base_iface_fence,           //covered av uct base
-    .iface_progress_enable    = ucs_empty_function,             //covered
+    .iface_progress_enable    = uct_sisci_iface_progress_enable,             //covered
     .iface_progress_disable   = ucs_empty_function,             //covered
     .iface_event_arm          = ucs_empty_function_return_success,
     .iface_progress           = ucs_empty_function_return_zero, //covered
