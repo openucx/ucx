@@ -89,7 +89,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
 
 
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
-    self->send_buffer = NULL;
+    //self->send_buffer = NULL;
 
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
@@ -244,6 +244,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     self->super.super.iface = params->iface;
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
+
 
   do {
     SCIConnectSegment(md->sisci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
