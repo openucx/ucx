@@ -100,6 +100,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_DISCONNECT_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
+
+    printf("EP_DELETED : )\n");
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
