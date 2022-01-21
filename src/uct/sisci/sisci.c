@@ -232,8 +232,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //callbackarg   
     //flags                         0
     //error                         sci_error_t
-   // sci_error_t sci_error;
 
+    sci_error_t sci_error;
     uct_sisci_iface_addr_t* iface_addr =  (uct_sisci_iface_addr_t*) params->iface_addr;
     uct_sisci_device_addr_t* dev_addr = (uct_sisci_device_addr_t*) params->dev_addr;
 
