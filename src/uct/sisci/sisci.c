@@ -244,7 +244,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
         return UCS_ERR_NO_RESOURCE;
     }
     
-
+    printf("EP connected to %d %d\n", self->remote_node_id, self->remote_segment_id);
     return UCS_OK;
 }
 
