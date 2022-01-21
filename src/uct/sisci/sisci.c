@@ -84,7 +84,22 @@ void sisci_testing() {
 //also known as "macro hell"
 static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
 {
+    sci_error_t sci_error;
     printf("UCS_SICSCI_EP_CLEANUP_FUNC()\n");
+
+
+    SCIUnmapSegment(self->remote_map, 0, &sci_error);
+    self->send_buffer = NULL;
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+    }
+
+    SCIDisconnectSegment(self->remote_segment, 0, &sci_error);
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_DISCONNECT_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+    }
 }
 
 static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
