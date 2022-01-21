@@ -83,12 +83,12 @@ void sisci_testing() {
 //various "class" funcitons, don't really know how they work yet, but seems to be some sort of glue code. 
 //also known as "macro hell"
 static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
-{   /*
+{   
     sci_error_t sci_error;
     printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
 
-
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
+    
     //self->send_buffer = NULL;
 
     if (sci_error != SCI_ERR_OK) { 
@@ -100,7 +100,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_DISCONNECT_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
-    */
+    
     printf("EP_DELETED : )\n");
 }
 
@@ -247,7 +247,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
-/*
+
 
   do {
     SCIConnectSegment(md->sisci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
@@ -256,12 +256,12 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     printf("waiting to connect\n");
   } while (sci_error != SCI_ERR_OK);
     
-    self->send_buffer = SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
+    SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
 
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
         return UCS_ERR_NO_RESOURCE;
-    }*/
+    }
     
     printf("EP connected to %d %d\n", self->remote_node_id, self->remote_segment_id);
     return UCS_OK;
