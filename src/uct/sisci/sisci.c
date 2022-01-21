@@ -90,7 +90,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    unsigned int trash;
+    unsigned int trash = 3;
     unsigned int nodeID;
     unsigned int adapterID = 0;
     unsigned int flags = 0;
