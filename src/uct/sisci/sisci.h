@@ -107,7 +107,7 @@ typedef struct uct_sisci_ep {
     uct_base_ep_t        super;
     sci_remote_segment_t remote_segment;
     sci_map_t            remote_map;
-                         
+    volatile void*       send_buffer;             
     unsigned int         remote_node_id;
     unsigned int         remote_segment_id;
 
