@@ -83,7 +83,7 @@ void sisci_testing() {
 //various "class" funcitons, don't really know how they work yet, but seems to be some sort of glue code. 
 //also known as "macro hell"
 static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
-{
+{   /*
     sci_error_t sci_error;
     printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
 
@@ -100,7 +100,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sisci_ep_t)
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_DISCONNECT_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
-
+    */
     printf("EP_DELETED : )\n");
 }
 
@@ -232,7 +232,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     //callbackarg   
     //flags                         0
     //error                         sci_error_t
-    sci_error_t sci_error;
+   // sci_error_t sci_error;
 
     uct_sisci_iface_addr_t* iface_addr =  (uct_sisci_iface_addr_t*) params->iface_addr;
     uct_sisci_device_addr_t* dev_addr = (uct_sisci_device_addr_t*) params->dev_addr;
@@ -247,6 +247,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
+/*
 
   do {
     SCIConnectSegment(md->sisci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
@@ -260,7 +261,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
         return UCS_ERR_NO_RESOURCE;
-    }
+    }*/
     
     printf("EP connected to %d %d\n", self->remote_node_id, self->remote_segment_id);
     return UCS_OK;
