@@ -36,6 +36,7 @@ static ucs_config_field_t uct_sisci_md_config_table[] = {
 };
 
 int sci_opened = 0;
+int iface_query_printed = 0;
 
 /*
     The linux version initialization of the sisci api doesnt do much except for comparing the api version against the adapter version, and setting up some ref handles
@@ -586,7 +587,11 @@ ucs_status_t uct_sisci_iface_get_address(uct_iface_h tl_iface,
 static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     
-    printf("UCT_sisci_iface_query\n");
+
+    //TODO: find out why we need this
+    if (!iface_query_printed) {
+        printf("UCT_sisci_iface_query\n");
+    }
 
     //TODO: insert necessarry lies to make ucx want us.
     //taken from uct_iface.c sets default attributes to zero.
@@ -629,8 +634,10 @@ static ucs_status_t uct_sisci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t
     attr->priority                = 0;
 
 
-
-    printf("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
+    if(!iface_query_printed) {
+        printf("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
+        iface_query_printed = 1;
+    }
     return UCS_OK;
     //return UCS_ERR_NOT_IMPLEMENTED;
 }
