@@ -110,6 +110,7 @@ typedef struct uct_sisci_ep {
     //volatile unsigned int*  send_buffer;             
     unsigned int            remote_node_id;
     unsigned int            remote_segment_id;
+    unsigned int*           temp_buffer;
 
 } uct_sisci_ep_t;
 
