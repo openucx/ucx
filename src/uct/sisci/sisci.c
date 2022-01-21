@@ -175,7 +175,7 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_iface_t, uct_md_h md, uct_worker_h worker,
             UINT_MAX, &uct_sisci_mpool_ops, "sisci_msg_desc");
 
 
-    print("iface_init iface_addr: %d dev_addr: %d \n", self->id, self->device_addr);
+    printf("iface_init iface_addr: %d dev_addr: %d \n", self->id, self->device_addr);
     return UCS_OK;
 }
 
