@@ -239,8 +239,8 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 
     unsigned int segment_id = (unsigned int) iface_addr->segment_id;
     unsigned int node_id = (unsigned int) dev_addr->node_id;
-    //uct_sisci_iface_t* iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
-    //uct_sisci_md_t* md = ucs_derived_of(iface->super.md, uct_sisci_md_t);
+    uct_sisci_iface_t* iface = ucs_derived_of(params->iface, uct_sisci_iface_t);
+    uct_sisci_md_t* md = ucs_derived_of(iface->super.md, uct_sisci_md_t);
 
     printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id);
     self->super.super.iface = params->iface;
