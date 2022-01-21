@@ -236,7 +236,14 @@ static UCS_CLASS_INIT_FUNC(uct_sisci_ep_t, const uct_ep_params_t *params)
 
     printf("waiting to connect\n");
   } while (sci_error != SCI_ERR_OK);
-        
+    
+    SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0 &sci_error);
+
+    if (sci_error != SCI_ERR_OK) { 
+        printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    }
+    
 
     return UCS_OK;
 }
