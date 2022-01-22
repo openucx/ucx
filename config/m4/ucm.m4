@@ -46,6 +46,13 @@ AC_CHECK_DECLS([MADV_FREE,
                [#include <sys/mman.h>])
 
 
+#
+# getauxval()
+#
+AC_CHECK_DECLS([getauxval], [], [],
+               [#include <sys/auxv.h>])
+
+
 # BISTRO hooks infrastructure
 #
 # SYS_xxx macro

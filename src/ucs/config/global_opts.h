@@ -80,7 +80,7 @@ typedef struct {
     unsigned                   async_max_events;
 
     /** Memtype cache */
-    int                        enable_memtype_cache;
+    ucs_ternary_auto_value_t   enable_memtype_cache;
 
     /* Destination for statistics: udp:host:port / file:path / stdout
      */
