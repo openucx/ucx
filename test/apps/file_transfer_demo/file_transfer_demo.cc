@@ -36,6 +36,7 @@ typedef struct {
     bool          random_access;
     int           mmap_protocol;
     unsigned      num_outstanding;
+    bool          use_wakeup;
 } options_t;
 
 enum register_type {
@@ -142,6 +143,7 @@ private:
     bool is_client();
     void end_iteration();
     void fetch_blocks(unsigned *block_ids);
+    void progress();
     void close();
 
     static void error_handler(void *arg, ucp_ep_h ep, ucs_status_t status);
@@ -188,6 +190,10 @@ void Ucx::init_context() {
 
     params.field_mask = UCP_PARAM_FIELD_FEATURES;
     params.features   = UCP_FEATURE_AM;
+
+    if (test_opts->use_wakeup) {
+        params.features |= UCP_FEATURE_WAKEUP;
+    }
 
     ucs_status_t status = ucp_init(&params, NULL, &this->context);
 
@@ -236,6 +242,11 @@ void Ucx::init_memory() {
 
 void Ucx::init_worker() {
     ucp_worker_params_t params = {0};
+
+    if (test_opts->use_wakeup) {
+        params.field_mask = UCP_WORKER_PARAM_FIELD_EVENTS;
+        params.events     = UCP_WAKEUP_EDGE | UCP_WAKEUP_RX | UCP_WAKEUP_TX;
+    }
 
     ucs_status_t status = ucp_worker_create(this->context, &params, &this->worker);
     if (status != UCS_OK) {
@@ -413,7 +424,7 @@ void Ucx::prepare_client() {
     params.id         = 1;
     params.cb         = client_am_handle;
     params.arg        = this;
-    params.flags      git = UCP_AM_FLAG_WHOLE_MSG;
+    params.flags      = UCP_AM_FLAG_WHOLE_MSG;
 
     ucp_worker_set_am_recv_handler(this->worker, &params);
 }
@@ -470,6 +481,14 @@ void Ucx::end_iteration()
     }
 }
 
+void Ucx::progress()
+{
+    unsigned int num_events = ucp_worker_progress(this->worker);
+    if (test_opts->use_wakeup && (num_events == 0)) {
+        ucp_worker_wait(this->worker);
+    }
+}
+
 void Ucx::run_benchmark()
 {
     if (is_client()) {
@@ -492,7 +511,7 @@ void Ucx::run_benchmark()
                 }
                 fetch_blocks(block_ids);
                 while ((completed_requests < test_opts -> num_outstanding) && keep_running) {
-                        ucp_worker_progress(this->worker);
+                        progress();
                 }
             }
             size_t total_size = test_opts->block_size * received_blocks;
@@ -504,7 +523,7 @@ void Ucx::run_benchmark()
         }
     } else {
         while(keep_running) {
-            ucp_worker_progress(this->worker);
+            progress();
         }
     }
 }
@@ -575,8 +594,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->mmap_protocol   = READ;
     test_opts->num_blocks      = 1;
     test_opts->num_outstanding = 1;
+    test_opts->use_wakeup      = false;
 
-    while ((c = getopt(argc, argv, "p:f:s:n:a:i:o:rum:h")) != -1) {
+    while ((c = getopt(argc, argv, "p:f:s:n:a:i:o:rwum:h")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -602,6 +622,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'r':
             test_opts->random_access = true;
             break;
+        case 'w':
+            test_opts->use_wakeup = true;
+            break;
         case 'm':
             if (std::string(optarg).compare("mmap") == 0) {
                 test_opts->mmap_protocol = MMAP;
@@ -622,6 +645,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -m <map_protocol>           What map protocol to use (read (default), mmap, register)." << std::endl;
             std::cout << "  -o <num_outstanding>        Number of outstanding operations. (default: 1)" << std::endl;
             std::cout << "  -r                          Access blocks in random order" << std::endl;
+            std::cout << "  -w                          Use wakeup feature" << std::endl;
             return -1;
         }
     }
