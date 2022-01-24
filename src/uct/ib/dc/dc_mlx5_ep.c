@@ -1129,7 +1129,8 @@ static void uct_dc_mlx5_ep_keepalive_cleanup(uct_dc_mlx5_ep_t *ep)
 
 UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
                     const uct_dc_mlx5_iface_addr_t *if_addr,
-                    uct_ib_mlx5_base_av_t *av, uint8_t path_index)
+                    uct_ib_mlx5_base_av_t *av, uint8_t path_index,
+                    uint32_t remote_ece)
 {
     uint32_t remote_dctn;
 
@@ -1195,17 +1196,18 @@ UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_ep_t)
 UCS_CLASS_DEFINE(uct_dc_mlx5_ep_t, uct_base_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
                           const uct_dc_mlx5_iface_addr_t *,
-                          uct_ib_mlx5_base_av_t *, uint8_t);
+                          uct_ib_mlx5_base_av_t *, uint8_t, uint32_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_dc_mlx5_ep_t, uct_ep_t);
 
 UCS_CLASS_INIT_FUNC(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *iface,
                     const uct_dc_mlx5_iface_addr_t *if_addr,
                     uct_ib_mlx5_base_av_t *av, uint8_t path_index,
-                    struct mlx5_grh_av *grh_av)
+                    struct mlx5_grh_av *grh_av, uint32_t remote_ece)
 {
     ucs_trace_func("");
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_dc_mlx5_ep_t, iface, if_addr, av, path_index);
+    UCS_CLASS_CALL_SUPER_INIT(uct_dc_mlx5_ep_t, iface, if_addr, av, path_index,
+                              remote_ece);
 
     self->super.flags |= UCT_DC_MLX5_EP_FLAG_GRH;
     memcpy(&self->grh_av, grh_av, sizeof(*grh_av));
@@ -1221,7 +1223,7 @@ UCS_CLASS_DEFINE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_grh_ep_t, uct_ep_t, uct_dc_mlx5_iface_t *,
                           const uct_dc_mlx5_iface_addr_t *,
                           uct_ib_mlx5_base_av_t *, uint8_t,
-                          struct mlx5_grh_av *);
+                          struct mlx5_grh_av *, uint32_t);
 
 /* TODO:
    currently pending code supports only dcs policy

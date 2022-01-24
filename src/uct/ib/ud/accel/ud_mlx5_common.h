@@ -44,6 +44,7 @@ uct_ud_mlx5_iface_get_av(uct_ib_iface_t *iface,
                          uct_ud_mlx5_iface_common_t *ud_common_iface,
                          const uct_ib_address_t *ib_addr, unsigned path_index,
                          const char *usage, uct_ib_mlx5_base_av_t *base_av,
-                         struct mlx5_grh_av *grh_av, int *is_global);
+                         struct mlx5_grh_av *grh_av, int *is_global,
+                         uint32_t *ece);
 
 #endif
