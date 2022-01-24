@@ -1133,6 +1133,7 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
                     uint32_t remote_ece)
 {
     uint32_t remote_dctn;
+    uint32_t UCS_V_UNUSED remote_dctn_ece;
 
     ucs_trace_func("");
 
@@ -1140,6 +1141,12 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
 
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
     remote_dctn            = uct_ib_unpack_uint24(if_addr->qp_num);
+
+    if (if_addr->flags & UCT_DC_MLX5_IFACE_ADDR_DC_DCTN_ECE) {
+        remote_dctn_ece = uct_ib_unpack_uint24(if_addr->qp_num_ece);
+    } else {
+        remote_dctn_ece = 0;
+    }
 
     memcpy(&self->av, av, sizeof(*av));
     self->av.dqp_dct |= htonl(remote_dctn);
