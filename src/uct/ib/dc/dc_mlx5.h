@@ -55,11 +55,12 @@ typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
 
 
 typedef enum {
-    UCT_DC_MLX5_IFACE_ADDR_HW_TM   = UCS_BIT(0),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V1   = UCS_BIT(1),
-    UCT_DC_MLX5_IFACE_ADDR_DC_V2   = UCS_BIT(2),
-    UCT_DC_MLX5_IFACE_ADDR_DC_VERS = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
-                                     UCT_DC_MLX5_IFACE_ADDR_DC_V2
+    UCT_DC_MLX5_IFACE_ADDR_HW_TM       = UCS_BIT(0),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V1       = UCS_BIT(1),
+    UCT_DC_MLX5_IFACE_ADDR_DC_V2       = UCS_BIT(2),
+    UCT_DC_MLX5_IFACE_ADDR_DC_VERS     = UCT_DC_MLX5_IFACE_ADDR_DC_V1 |
+                                         UCT_DC_MLX5_IFACE_ADDR_DC_V2,
+    UCT_DC_MLX5_IFACE_ADDR_DC_DCTN_ECE = UCS_BIT(3)
 } uct_dc_mlx5_iface_addr_flags_t;
 
 
@@ -85,6 +86,7 @@ typedef struct uct_dc_mlx5_iface_addr {
     uct_ib_uint24_t   qp_num;
     uint8_t           atomic_mr_id;
     uint8_t           flags;
+    uct_ib_uint24_t   qp_num_ece;
 } UCS_S_PACKED uct_dc_mlx5_iface_addr_t;
 
 
