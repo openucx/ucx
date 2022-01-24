@@ -47,6 +47,12 @@ parameters:
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_cx6_dc
+      "active messages on CX6/DC with data validation":
+        args: "-A -q"
+        duration: 600
+        interface: $(roce_iface_cx6)
+        tls: "dc_x"
+        test_name: am_validate_cx6_dc
 
 jobs:
   - job: io_build
