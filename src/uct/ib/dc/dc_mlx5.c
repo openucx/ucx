@@ -1320,7 +1320,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
                                       UCT_IB_MLX5_MAX_BB *
                                       (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
 
-    self->super.super.super.dev_addr_ext_ece = 0;
+    self->super.super.super.dev_addr_ext_ece = 1;
     self->super.super.super.ece              = 0;
 
     /* TODO check caps instead */
