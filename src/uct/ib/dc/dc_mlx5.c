@@ -136,6 +136,7 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
     uct_ib_mlx5_base_av_t av;
     struct mlx5_grh_av grh_av;
     unsigned path_index;
+    uint32_t remote_ece;
 
     ucs_trace_func("");
 
@@ -146,17 +147,18 @@ uct_dc_mlx5_ep_create_connected(const uct_ep_params_t *params, uct_ep_h* ep_p)
 
     status = uct_ud_mlx5_iface_get_av(&iface->super.super.super,
                                       &iface->ud_common, ib_addr, path_index,
-                                      "DC ep create", &av, &grh_av, &is_global);
+                                      "DC ep create", &av, &grh_av, &is_global,
+                                      &remote_ece);
     if (status != UCS_OK) {
         return UCS_ERR_INVALID_ADDR;
     }
 
     if (is_global) {
         return UCS_CLASS_NEW(uct_dc_mlx5_grh_ep_t, ep_p, iface, if_addr, &av,
-                             path_index, &grh_av);
+                             path_index, &grh_av, remote_ece);
     } else {
         return UCS_CLASS_NEW(uct_dc_mlx5_ep_t, ep_p, iface, if_addr, &av,
-                             path_index);
+                             path_index, remote_ece);
     }
 }
 

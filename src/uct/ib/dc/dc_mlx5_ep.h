@@ -88,11 +88,12 @@ typedef struct {
 
 
 UCS_CLASS_DECLARE(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *, const uct_dc_mlx5_iface_addr_t *,
-                  uct_ib_mlx5_base_av_t *, uint8_t);
+                  uct_ib_mlx5_base_av_t *, uint8_t, uint32_t);
 
 UCS_CLASS_DECLARE(uct_dc_mlx5_grh_ep_t, uct_dc_mlx5_iface_t *,
                   const uct_dc_mlx5_iface_addr_t *,
-                  uct_ib_mlx5_base_av_t *, uint8_t, struct mlx5_grh_av *);
+                  uct_ib_mlx5_base_av_t *, uint8_t, struct mlx5_grh_av *,
+                  uint32_t);
 
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_dc_mlx5_ep_t, uct_ep_t);
 
