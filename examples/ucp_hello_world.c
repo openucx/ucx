@@ -380,7 +380,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     /* Receive client UCX address */
     do {
 
-        printf("probing wrobring\n");
+        //printf("probing wrobring\n");
         /* Progressing before probe to update the state */
         ucp_worker_progress(ucp_worker);
 
