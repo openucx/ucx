@@ -549,12 +549,12 @@ UCT_MM_TL_DEFINE(xpmem, &uct_xpmem_md_ops, uct_xpmem_rkey_unpack,
                  uct_xpmem_rkey_release, "XPMEM_",
                  uct_xpmem_iface_config_table);
 
-UCT_TL_INIT(xpmem)
+UCS_F_CTOR UCT_TL_INIT(xpmem)
 {
     ucs_recursive_spinlock_init(&uct_xpmem_remote_mem_lock, 0);
 }
 
-UCT_TL_CLEANUP(xpmem)
+UCS_F_DTOR UCT_TL_CLEANUP(xpmem)
 {
     unsigned long num_leaked_segments;
     uct_xpmem_remote_mem_t *rmem;
