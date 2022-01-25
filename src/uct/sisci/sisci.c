@@ -535,7 +535,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
 
     
-    return UCS_ERR_NOT_IMPLEMENTED;
+    return UCS_OK;
 }
 
 ucs_status_t uct_sci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
