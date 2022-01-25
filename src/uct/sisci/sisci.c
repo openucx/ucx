@@ -617,6 +617,15 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
     printf("uct_sci_iface_progress_enable_func_t\n");
 }
 
+
+unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
+    uct_sci_iface_t iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
+
+
+    printf("uct_sci_iface_progress\n");
+    return 0;
+}
+
 static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
 {
     
@@ -742,8 +751,8 @@ static uct_iface_ops_t uct_sci_iface_ops = {
     .iface_fence              = uct_base_iface_fence,           //covered av uct base
     .iface_progress_enable    = uct_sci_iface_progress_enable,             //covered
     .iface_progress_disable   = ucs_empty_function,             //covered
+    .iface_progress           = uct_sci_iface_progress, //covered
     .iface_event_arm          = ucs_empty_function_return_success,
-    .iface_progress           = ucs_empty_function_return_zero, //covered
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sci_iface_t),      //bapped more makro hell
     .iface_query              = uct_sci_iface_query,       //bap
     .iface_get_device_address = uct_sci_get_device_address, //covered
