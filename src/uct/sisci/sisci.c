@@ -601,9 +601,9 @@ ucs_status_t uct_sci_iface_get_address(uct_iface_h tl_iface,
     
     uct_sci_iface_addr_t* iface_addr = (uct_sci_iface_addr_t *) addr;
     
-    printf("uct_iface_get_address()\n");
     iface_addr->segment_id = iface->segment_id;
     
+    printf("uct_iface_get_address()\n");
     return UCS_OK;
 }
 
