@@ -623,7 +623,7 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
 
 
     printf("uct_sci_iface_progress %d\n", iface->device_addr);
-    return 0;
+    return -1;
 }
 
 static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
