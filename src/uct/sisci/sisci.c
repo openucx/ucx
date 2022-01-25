@@ -5,8 +5,8 @@
 
 #include "stdio.h"
 
-#include "sci.h"
-#include "sci_iface.h" //TODO, is this needed?
+#include "sisci.h"
+#include "sisci_iface.h" //TODO, is this needed?
 //#include "sci_iface.c"
 
 
