@@ -611,6 +611,8 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
     printf("uct_sci_iface_progress_enable_func_t\n");
 
     uct_sci_iface_t* sci_iface = ucs_derived_of(iface, uct_sci_iface_t);
+    
+    
     sci_iface->super.progress_flags = flags;
     
 }
