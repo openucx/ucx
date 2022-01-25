@@ -2,7 +2,7 @@
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
 #include <sisci_error.h> //TODO
-#include <sisci_api.h>
+#include <sci_api.h>
 
 
 #define UCT_sci_NAME "sci"
