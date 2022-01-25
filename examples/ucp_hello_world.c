@@ -269,6 +269,8 @@ static int run_ucx_client(ucp_worker_h ucp_worker)
         raise(SIGKILL);
     }
 
+    printf("waiting for test string from server\n");
+
     /* Receive test string from server */
     for (;;) {
         CHKERR_JUMP(ep_status != UCS_OK, "receive data: EP disconnected\n", err_ep);
