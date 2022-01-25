@@ -379,6 +379,8 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ucp_ep_params_t ep_params;
     int ret;
 
+    printf("receive client UCX address somehow?\n");
+
     /* Receive client UCX address */
     do {
 
