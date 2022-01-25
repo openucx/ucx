@@ -608,13 +608,13 @@ ucs_status_t uct_sci_iface_get_address(uct_iface_h tl_iface,
 }
 
 void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
-    printf("uct_sci_iface_progress_enable_func_t\n");
 
     uct_sci_iface_t* sci_iface = ucs_derived_of(iface, uct_sci_iface_t);
     
     
     sci_iface->super.progress_flags = flags;
     
+    printf("uct_sci_iface_progress_enable_func_t\n");
 }
 
 static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)
