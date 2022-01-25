@@ -142,6 +142,9 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 typedef void (*uct_component_md_vfs_init_func_t)(uct_md_h md);
 
 
+extern ucs_list_link_t uct_components_list;
+
+
 /**
  * Defines a UCT component
  */
@@ -164,6 +167,9 @@ struct uct_component {
 };
 
 
+#define UCT_COMPONENT_NAME(_name) uct_##_name##_component
+
+
 /**
  * Register a component for usage, so it will be returned from
  * @ref uct_query_components.
@@ -171,35 +177,11 @@ struct uct_component {
  * @param [in] _component  Pointer to a global component structure to register.
  */
 #define UCT_COMPONENT_REGISTER(_component) \
-    extern ucs_list_link_t uct_components_list; \
     UCS_STATIC_INIT { \
         ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->md_config, &ucs_config_global_list); \
     UCS_CONFIG_REGISTER_TABLE_ENTRY(&(_component)->cm_config, &ucs_config_global_list);
-
-
-/**
- * Component registration routines.
- * @ref uct_query_components.
- *
- * @param [in] _component  Pointer to a global component structure to register.
- * @param [in] _name       Component name used to generate ctors/dtors.
- */
-#define UCT_COMPONENT_REGISTER_DEF(_component, _name) \
-    extern ucs_list_link_t uct_components_list; \
-    static void uct_component_##_name##_ctor(void) \
-    { \
-        ucs_list_add_tail(&uct_components_list, &(_component)->list); \
-        ucs_list_add_tail(&ucs_config_global_list, &(_component)->md_config.list); \
-        ucs_list_add_tail(&ucs_config_global_list, &(_component)->cm_config.list); \
-    } \
-    static void uct_component_##_name##_dtor(void) \
-    { \
-        /* TODO: add ucs_list_del(uct_components_list) */ \
-        ucs_list_del(&(_component)->md_config.list); \
-        ucs_list_del(&(_component)->cm_config.list); \
-    }
 
 
 /**
@@ -213,5 +195,9 @@ ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
                              ucs_config_field_t *config_table,
                              size_t config_size, const char *env_prefix,
                              const char *cfg_prefix);
+
+void uct_component_register(uct_component_t *component);
+
+void uct_component_unregister(uct_component_t *component);
 
 #endif

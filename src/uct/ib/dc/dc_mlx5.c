@@ -1476,9 +1476,9 @@ uct_dc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
                                      num_tl_devices_p);
 }
 
-UCT_TL_DEFINE(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
-              uct_dc_mlx5_iface_t, "DC_MLX5_", uct_dc_mlx5_iface_config_table,
-              uct_dc_mlx5_iface_config_t);
+UCT_TL_DEFINE_ENTRY(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
+                    uct_dc_mlx5_iface_t, "DC_MLX5_",
+                    uct_dc_mlx5_iface_config_table, uct_dc_mlx5_iface_config_t);
 
 static void
 uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,

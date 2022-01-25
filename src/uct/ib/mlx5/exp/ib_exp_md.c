@@ -749,5 +749,5 @@ static uct_ib_md_ops_t uct_ib_mlx5_md_ops = {
     .get_atomic_mr_id    = uct_ib_mlx5_md_get_atomic_mr_id,
 };
 
-UCT_IB_MD_OPS(uct_ib_mlx5_md_ops, 1);
+UCT_IB_MD_DEFINE_ENTRY(exp, uct_ib_mlx5_md_ops);
 

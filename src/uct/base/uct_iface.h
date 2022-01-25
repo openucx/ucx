@@ -406,36 +406,50 @@ typedef struct uct_iface_local_addr_ns {
     void uct_##_name##_cleanup(void);
 
 
-/**
- * Register component and TL
- *
- * @param [in] _name   Component and TL name
- */
-#define UCT_TL_INIT(_name) \
-    void uct_##_name##_init(void); \
-    static void uct_component_tl_##_name##_ctor(void); \
-    void uct_##_name##_init(void) { \
-        uct_component_tl_##_name##_ctor(); \
-        uct_component_##_name##_ctor(); \
-        uct_tl_##_name##_ctor(); \
-    } \
-    void uct_component_tl_##_name##_ctor(void)
+/* Helper macro to provide ctor/dtor scope */
+#define _UCT_IFACE_CTOR_
+#define _UCT_IFACE_DTOR_
+#define _UCT_IFACE_CTOR_ctor UCS_F_CTOR
+#define _UCT_IFACE_DTOR_ctor UCS_F_DTOR
 
 
 /**
- * Unregister component and TL
+ * Register/unregister TL
  *
- * @param [in] _name   Component and TL name
+ * @param [in] _name          Component and TL name
+ * @param [in] _scope         Scope for functions, must be ctor or empty
+ * @param [in] _init_code     Initialization code
+ * @param [in] _cleanup_code  Cleanup code
  */
-#define UCT_TL_CLEANUP(_name) \
-    void uct_##_name##_cleanup(void); \
-    static void uct_component_tl_##_name##_dtor(void); \
-    void uct_##_name##_cleanup(void) { \
-        uct_tl_##_name##_dtor(); \
-        uct_component_##_name##_dtor(); \
-        uct_component_tl_##_name##_dtor(); \
+#define UCT_TL_INIT(_component, _name, _scope, _init_code, _cleanup_code) \
+    UCS_PP_EXPAND(_UCT_IFACE_CTOR_##_scope) void uct_##_name##_init(void) \
+    { \
+        _init_code; \
+        uct_tl_register(_component, &UCT_TL_NAME(_name)); \
     } \
-    void uct_component_tl_##_name##_dtor(void)
+    UCS_PP_EXPAND(_UCT_IFACE_DTOR_##_scope) void uct_##_name##_cleanup(void) \
+    { \
+        uct_tl_unregister(&UCT_TL_NAME(_name)); \
+        _cleanup_code; \
+    }
+
+
+/**
+ * Register/unregister component and TL
+ *
+ * @param [in] _name          Component and TL name
+ * @param [in] _scope         Scope for functions, must be ctor or empty
+ * @param [in] _init_code     Initialization code
+ * @param [in] _cleanup_code  Cleanup code
+ */
+#define UCT_SINGLE_TL_INIT(_component, _name, _scope, _init_code, \
+                           _cleanup_code) \
+    UCT_TL_INIT(_component, _name, _scope, \
+                {_init_code; uct_component_register(_component);}, \
+                {uct_component_unregister(_component); _cleanup_code;})
+
+
+#define UCT_TL_NAME(_name) uct_##_name##_tl
 
 
 /**
@@ -449,10 +463,10 @@ typedef struct uct_iface_local_addr_ns {
  * @param _cfg_table      Transport configuration table
  * @param _cfg_struct     Struct type defining transport configuration
  */
-#define UCT_TL_REGISTER_DEF(_component, _name, _query_devices, _iface_class, \
+#define UCT_TL_DEFINE_ENTRY(_component, _name, _query_devices, _iface_class, \
                             _cfg_prefix, _cfg_table, _cfg_struct) \
     \
-    static uct_tl_t uct_##_name##_tl = { \
+    uct_tl_t UCT_TL_NAME(_name) = { \
         .name               = #_name, \
         .query_devices      = _query_devices, \
         .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
@@ -462,17 +476,7 @@ typedef struct uct_iface_local_addr_ns {
             .table          = _cfg_table, \
             .size           = sizeof(_cfg_struct), \
          } \
-    }; \
-    static void uct_tl_##_name##_ctor(void) \
-    { \
-        ucs_list_add_tail(&ucs_config_global_list, &(uct_##_name##_tl).config.list); \
-        ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
-    } \
-    static void uct_tl_##_name##_dtor(void) \
-    { \
-        ucs_list_del(&(uct_##_name##_tl).config.list); \
-        /* TODO: add list_del from ucs_config_global_list */ \
-    }
+    };
 
 
 /**
@@ -944,6 +948,10 @@ ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 void uct_iface_vfs_refresh(void *obj);
 
 ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
+
+void uct_tl_register(uct_component_t *component, uct_tl_t *tl);
+
+void uct_tl_unregister(uct_tl_t *tl);
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_zcopy(uct_ep_operation_t op)
 {

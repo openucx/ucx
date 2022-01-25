@@ -196,6 +196,49 @@ static ucs_stats_class_t uct_ib_md_stats_class = {
 };
 #endif
 
+
+extern uct_tl_t UCT_TL_NAME(dc_mlx5);
+extern uct_tl_t UCT_TL_NAME(rc_verbs);
+extern uct_tl_t UCT_TL_NAME(rc_mlx5);
+extern uct_tl_t UCT_TL_NAME(ud_verbs);
+extern uct_tl_t UCT_TL_NAME(ud_mlx5);
+
+static uct_tl_t *uct_ib_tls[] = {
+#ifdef HAVE_TL_DC
+    &UCT_TL_NAME(dc_mlx5),
+#endif
+#ifdef HAVE_TL_RC
+    &UCT_TL_NAME(rc_verbs),
+#endif
+#if defined (HAVE_TL_RC) && defined (HAVE_MLX5_HW)
+    &UCT_TL_NAME(rc_mlx5),
+#endif
+#ifdef HAVE_TL_UD
+    &UCT_TL_NAME(ud_verbs),
+#endif
+#if defined (HAVE_TL_UD) && defined (HAVE_MLX5_HW_UD)
+    &UCT_TL_NAME(ud_mlx5)
+#endif
+};
+
+extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
+extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
+extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(exp);
+static uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(verbs);
+
+static uct_ib_md_ops_entry_t *uct_ib_ops[] = {
+#if defined (HAVE_MLX5_DV) && defined (HAVE_DEVX)
+    &UCT_IB_MD_OPS_NAME(devx),
+#endif
+#if defined (HAVE_MLX5_DV)
+    &UCT_IB_MD_OPS_NAME(dv),
+#endif
+#if defined (HAVE_MLX5_HW) && defined (HAVE_VERBS_EXP_H)
+    &UCT_IB_MD_OPS_NAME(exp),
+#endif
+    &UCT_IB_MD_OPS_NAME(verbs)
+};
+
 UCS_LIST_HEAD(uct_ib_md_ops_list);
 
 typedef struct uct_ib_verbs_mem {
@@ -1427,7 +1470,6 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     ucs_status_t status = UCS_ERR_UNSUPPORTED;
     uct_ib_md_t *md = NULL;
     struct ibv_device **ib_device_list, *ib_device;
-    uct_ib_md_ops_entry_t *md_ops_entry;
     int i, num_devices, ret, fork_init = 0;
 
     ucs_trace("opening IB device %s", md_name);
@@ -1479,18 +1521,18 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
         uct_ib_fork_warn_enable();
     }
 
-    ucs_list_for_each(md_ops_entry, &uct_ib_md_ops_list, list) {
-        status = md_ops_entry->ops->open(ib_device, md_config, &md);
+    for (i = 0; i < ucs_static_array_size(uct_ib_ops); i++) {
+        status = uct_ib_ops[i]->ops->open(ib_device, md_config, &md);
         if (status == UCS_OK) {
             ucs_debug("%s: md open by '%s' is successful", md_name,
-                      md_ops_entry->name);
-            md->ops = md_ops_entry->ops;
+                      uct_ib_ops[i]->name);
+            md->ops = uct_ib_ops[i]->ops;
             break;
         } else if (status != UCS_ERR_UNSUPPORTED) {
             goto out_free_dev_list;
         }
         ucs_debug("%s: md open by '%s' failed, trying next", md_name,
-                  md_ops_entry->name);
+                  uct_ib_ops[i]->name);
     }
 
     if (status != UCS_OK) {
@@ -1746,7 +1788,7 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .get_atomic_mr_id    = (uct_ib_md_get_atomic_mr_id_func_t)ucs_empty_function_return_unsupported,
 };
 
-UCT_IB_MD_OPS(uct_ib_verbs_md_ops, 0);
+static UCT_IB_MD_DEFINE_ENTRY(verbs, uct_ib_verbs_md_ops);
 
 uct_component_t uct_ib_component = {
     .query_md_resources = uct_ib_query_md_resources,
@@ -1767,4 +1809,25 @@ uct_component_t uct_ib_component = {
     .flags              = 0,
     .md_vfs_init        = uct_ib_md_vfs_init
 };
-UCT_COMPONENT_REGISTER(&uct_ib_component);
+
+void UCS_F_CTOR uct_ib_init()
+{
+    int i;
+
+    uct_component_register(&uct_ib_component);
+
+    for (i = 0; i < ucs_static_array_size(uct_ib_tls); i++) {
+        uct_tl_register(&uct_ib_component, uct_ib_tls[i]);
+    }
+}
+
+void UCS_F_DTOR uct_ib_cleanup()
+{
+    int i;
+
+    for (i = ucs_static_array_size(uct_ib_tls) - 1; i >= 0; i--) {
+        uct_tl_unregister(uct_ib_tls[i]);
+    }
+
+    uct_component_unregister(&uct_ib_component);
+}

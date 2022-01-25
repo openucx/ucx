@@ -743,6 +743,6 @@ uct_ud_verbs_query_tl_devices(uct_md_h md,
                                      num_tl_devices_p);
 }
 
-UCT_TL_DEFINE(&uct_ib_component, ud_verbs, uct_ud_verbs_query_tl_devices,
-              uct_ud_verbs_iface_t,  "UD_VERBS_",
-              uct_ud_verbs_iface_config_table, uct_ud_iface_config_t);
+UCT_TL_DEFINE_ENTRY(&uct_ib_component, ud_verbs, uct_ud_verbs_query_tl_devices,
+                    uct_ud_verbs_iface_t, "UD_VERBS_",
+                    uct_ud_verbs_iface_config_table, uct_ud_iface_config_t);

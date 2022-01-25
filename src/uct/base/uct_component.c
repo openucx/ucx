@@ -169,3 +169,17 @@ err_free_bundle:
 err:
     return status;
 }
+
+void uct_component_register(uct_component_t *component)
+{
+    ucs_list_add_tail(&uct_components_list, &component->list);
+    ucs_list_add_tail(&ucs_config_global_list, &component->md_config.list);
+    ucs_list_add_tail(&ucs_config_global_list, &component->cm_config.list);
+}
+
+void uct_component_unregister(uct_component_t *component)
+{
+    /* TODO: add ucs_list_del(uct_components_list) */
+    ucs_list_del(&component->md_config.list);
+    ucs_list_del(&component->cm_config.list);
+}

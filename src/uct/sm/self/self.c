@@ -470,15 +470,9 @@ static uct_component_t uct_self_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER_DEF(&uct_self_component, self);
 
-UCT_TL_REGISTER_DEF(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
-                    "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
+UCT_TL_DEFINE_ENTRY(&uct_self_component, self, uct_self_query_tl_devices,
+                    uct_self_iface_t, "SELF_", uct_self_iface_config_table,
+                    uct_self_iface_config_t);
 
-UCT_TL_INIT(self)
-{
-}
-
-UCT_TL_CLEANUP(self)
-{
-}
+UCT_SINGLE_TL_INIT(&uct_self_component, self,,,)
