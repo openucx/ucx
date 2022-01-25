@@ -188,12 +188,12 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
-
+    printf("");
 
     status = ucs_mpool_init(
             &self->msg_mp, 0, self->send_size, align_offset, alignment,
             10, /* 2 elements are enough for most of communications */
-            UINT_MAX, &uct_sci_mpool_ops, "sci_msg_desc");
+            10, &uct_sci_mpool_ops, "sci_msg_desc");
 
 
     printf("iface_init iface_addr: %d dev_addr: %d \n", self->segment_id, self->device_addr);
