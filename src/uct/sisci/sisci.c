@@ -636,10 +636,8 @@ ucs_status_t uct_sci_iface_get_address(uct_iface_h tl_iface,
 
 void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 
-    uct_sci_iface_t* sci_iface = ucs_derived_of(iface, uct_sci_iface_t);
-    
-    sci_iface->super.progress_flags = flags;
-    
+    uct_base_iface_progress_enable(iface, flags);
+
     printf("uct_sci_iface_progress_enable_func_t\n");
 }
 
@@ -776,7 +774,7 @@ static uct_iface_ops_t uct_sci_iface_ops = {
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_sci_ep_t),         //more makro hell
     .iface_flush              = uct_base_iface_flush,           //covered av uct base
     .iface_fence              = uct_base_iface_fence,           //covered av uct base
-    .iface_progress_enable    = uct_base_iface_progress_enable,             //covered
+    .iface_progress_enable    = uct_sci_iface_progress_enable,             //covered
     .iface_progress_disable   = uct_base_iface_progress_disable,             //covered
     .iface_progress           = uct_sci_iface_progress, //covered
     .iface_event_arm          = ucs_empty_function_return_success,
