@@ -46,14 +46,13 @@ typedef struct uct_sci_iface_config {
 
 typedef struct uct_sci_iface {
     uct_base_iface_t      super;
-    //uct_sci_md_t        md;           /*memory domain */
-    unsigned int segment_id;           /* Unique identifier for the instance */
-    unsigned int device_addr; //nodeID
+    unsigned int          segment_id;           /* Unique identifier for the instance */
+    unsigned int          device_addr; //nodeID
     size_t                send_size;    /* Maximum size for payload */
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
-    //void*                 recv_buf;
+    void*                 recv_buffer;
     sci_local_segment_t   local_segment;
-    sci_map_t             recv_buffer;
+    sci_map_t             local_map;
 
 
 } uct_sci_iface_t;
