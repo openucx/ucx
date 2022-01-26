@@ -245,7 +245,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
 
     do {
