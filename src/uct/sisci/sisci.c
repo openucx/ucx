@@ -172,7 +172,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_RESOURCE;
     }
 
-    SCIMapLocalSegment(self->local_segment, &self->recv_buffer, 0, self->send_size, NULL,0, &sci_error);
+    self->recv_buf = (void*) SCIMapLocalSegment(self->local_segment, &self->recv_buffer, 0, self->send_size, NULL,0, &sci_error);
    
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_LOCAL_SEG: %s\n", SCIGetErrorString(sci_error));
@@ -583,6 +583,8 @@ int uct_sci_iface_is_reachable(const uct_iface_h tl_iface,
     printf("UCT_sci_iface_is reachable\n");
     return 1;
 }
+
+
 
 ucs_status_t uct_sci_get_device_address(uct_iface_h iface, uct_device_addr_t *addr) {
     

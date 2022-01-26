@@ -51,9 +51,11 @@ typedef struct uct_sci_iface {
     unsigned int device_addr; //nodeID
     size_t                send_size;    /* Maximum size for payload */
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
+    void*                 recv_buf;
+    sci_local_segment_t   local_segment;
+    sci_map_t             recv_buffer;
 
-    sci_local_segment_t     local_segment;
-    sci_map_t               recv_buffer;
+
 } uct_sci_iface_t;
 
 ucs_status_t
