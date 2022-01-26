@@ -244,7 +244,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     printf("waiting to connect\n");
   } while (sci_error != SCI_ERR_OK);
     
-    SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
+    buf = (void *) SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
 
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
@@ -628,11 +628,11 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 
 unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
-
+    int count = 0;
 
     printf("uct_sci_iface_progress %d\n", iface->device_addr);
     sleep(1);
-    return 1;
+    return count;
 }
 
 static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *attr)

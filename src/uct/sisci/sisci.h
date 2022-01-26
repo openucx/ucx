@@ -107,7 +107,8 @@ typedef struct uct_sci_ep {
     uct_base_ep_t           super;
     sci_remote_segment_t    remote_segment;
     sci_map_t               remote_map;
-    //volatile unsigned int*  send_buffer;             
+    //volatile unsigned int*  send_buffer;
+    void *                  buf;             
     unsigned int            remote_node_id;
     unsigned int            remote_segment_id;
     //sci_map_holder_t        map_holder;
