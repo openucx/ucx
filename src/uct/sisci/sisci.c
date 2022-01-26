@@ -99,7 +99,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
         printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
 
-    self->buf = NULL;
+    ucs_free(self->buf);
     
 
 
@@ -252,7 +252,10 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     printf("waiting to connect\n");
   } while (sci_error != SCI_ERR_OK);
     
-    self->buf = (void *) SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
+
+    self->buf = ucs_malloc(iface->send_size, "ep_send_buffer");
+
+    SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
 
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
