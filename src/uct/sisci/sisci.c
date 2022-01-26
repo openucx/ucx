@@ -89,8 +89,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
     printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
     
 
-    //TODO: Find out why this code causes a segfault... 
-    /*
+    //TODO: Find out why this code causes a segfault... When in running in devel mode. Something with how allocates the maps.
+    
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
     
     //self->send_buffer = NULL;
@@ -100,7 +100,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
     }
 
     self->buf = NULL;
-    */
+    
 
 
     SCIDisconnectSegment(self->remote_segment, 0, &sci_error);
