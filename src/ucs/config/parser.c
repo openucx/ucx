@@ -1415,27 +1415,29 @@ static ucs_status_t ucs_config_parser_get_sub_prefix(const char *env_prefix,
 
 void ucs_config_parse_config_files()
 {
-    const char *dir_path;
+    const char *path_p;
+    char path[PATH_MAX];
 
     /* System-wide configuration file */
     ucs_config_parse_config_file(UCX_CONFIG_DIR, UCX_CONFIG_FILE_NAME, 1);
 
     /* Library dir */
-    dir_path = ucs_sys_get_lib_path();
-    if (dir_path != NULL) {
-        ucs_config_parse_config_file(dir_path, "../etc/" UCX_CONFIG_FILE_NAME, 1);
+    path_p = ucs_sys_get_lib_path();
+    if (path_p != NULL) {
+        ucs_strncpy_safe(path, path_p, PATH_MAX);
+        ucs_config_parse_config_file(dirname(path), "../etc/" UCX_CONFIG_FILE_NAME, 1);
     }
 
     /* User home dir */
-    dir_path = getenv("HOME");
-    if (dir_path != NULL) {
-        ucs_config_parse_config_file(dir_path, UCX_CONFIG_FILE_NAME, 1);
+    path_p = getenv("HOME");
+    if (path_p != NULL) {
+        ucs_config_parse_config_file(path_p, UCX_CONFIG_FILE_NAME, 1);
     }
 
     /* Custom directory for UCX configuration */
-    dir_path = getenv("UCX_CONFIG_DIR");
-    if (dir_path != NULL) {
-        ucs_config_parse_config_file(dir_path, UCX_CONFIG_FILE_NAME, 1);
+    path_p = getenv("UCX_CONFIG_DIR");
+    if (path_p != NULL) {
+        ucs_config_parse_config_file(path_p, UCX_CONFIG_FILE_NAME, 1);
     }
 
     /* Current working dir */
