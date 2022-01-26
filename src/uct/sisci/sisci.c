@@ -234,10 +234,16 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     uct_sci_iface_addr_t* iface_addr =  (uct_sci_iface_addr_t*) params->iface_addr;
     uct_sci_device_addr_t* dev_addr = (uct_sci_device_addr_t*) params->dev_addr;
 
-    unsigned int segment_id = (unsigned int) iface_addr->segment_id;
-    unsigned int node_id = (unsigned int) dev_addr->node_id;
+    unsigned int segment_id = 0; //(unsigned int) params->segment_id;
+    unsigned int node_id = 0; //(unsigned int) params->node_id;
     uct_sci_iface_t* iface = ucs_derived_of(params->iface, uct_sci_iface_t);
     uct_sci_md_t* md = ucs_derived_of(iface->super.md, uct_sci_md_t);
+
+
+    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
+
+    segment_id = (unsigned int) iface_addr->segment_id;
+    node_id = (unsigned int) dev_addr->node_id;
 
     printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id);
     self->super.super.iface = params->iface;
@@ -774,7 +780,7 @@ static uct_iface_ops_t uct_sci_iface_ops = {
     .iface_progress_enable    = uct_base_iface_progress_enable,             //covered
     .iface_progress_disable   = uct_base_iface_progress_disable,             //covered
     .iface_progress           = uct_sci_iface_progress, //covered
-    .iface_event_arm          = ucs_empty_function_return_success,
+    //.iface_event_arm          = ucs_empty_function_return_success,
     .iface_close              = UCS_CLASS_DELETE_FUNC_NAME(uct_sci_iface_t),      //bapped more makro hell
     .iface_query              = uct_sci_iface_query,       //bap
     .iface_get_device_address = uct_sci_get_device_address, //covered
