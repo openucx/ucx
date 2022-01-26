@@ -82,7 +82,6 @@ void sci_testing() {
     printf("Linking is correct to some degree :) \n");
 }
 
-//various "class" funcitons, don't really know how they work yet, but seems to be some sort of glue code. 
 //also known as "macro hell"
 static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
 {   
@@ -543,7 +542,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     
 
     
-    return UCS_OK;
+    return UCS_ERR_NOT_IMPLEMENTED;
 }
 
 ucs_status_t uct_sci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
