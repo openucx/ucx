@@ -643,7 +643,7 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     int count = 0;
 
-    printf("uct_sci_iface_progress %d\n", iface->device_addr);
+    printf("uct_sci_iface_progress %d\n", iface->recv_buffer[0]);
     sleep(1);
     return count;
 }
