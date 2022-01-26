@@ -11,7 +11,7 @@
 
 
 #define ADAPTER_NO 0
-#define NO_FLAGS 0
+#define SCI_NO_FLAGS 0
 
 /* Forward declarations */
 static uct_iface_ops_t uct_sci_iface_ops;
@@ -537,7 +537,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
 
     memccpy(map, payload, lenght, 1);
-    SCIFlush();    
+    SCIFlush(NULL, SCI_NO_FLAGS);    
     
     printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
     
