@@ -128,11 +128,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sci_iface_ops,
-            &uct_base_iface_internal_ops, md, worker, params,
-            tl_config UCS_STATS_ARG(
-                    (params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
-                            params->stats_root :
-                            NULL) UCS_STATS_ARG(UCT_sci_NAME));
+            &uct_base_iface_internal_ops, md, worker, params,tl_config);
     
 
     //---------- IFACE sci --------------------------
