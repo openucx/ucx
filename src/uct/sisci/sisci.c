@@ -531,8 +531,16 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
     //TODO
-    printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
+    uct_sci_ep_t* ep = ucs_derived_of(tl_ep, uct_sci_ep_t);
+    volatile void * map = SCIGetMapPointer(ep->remote_map);
 
+
+
+    memccpy(map, payload, lenght, 1);
+    SCIFlush();    
+    
+    printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
+    
 
     
     return UCS_OK;
