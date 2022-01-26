@@ -27,6 +27,9 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
     uint16_t flags;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
+                                    printf("probe.c returns NULL at start of function\n"));
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     return NULL);
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
