@@ -87,7 +87,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
 {   
     sci_error_t sci_error;
     printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
+    
 
+    //TODO: Find out why this code causes a segfault... 
+    /*
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
     
     //self->send_buffer = NULL;
@@ -95,6 +98,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
+
+    */
 
     self->buf = NULL;
 
@@ -128,7 +133,11 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sci_iface_ops,
-            &uct_base_iface_internal_ops, md, worker, params,tl_config);
+            &uct_base_iface_internal_ops, md, worker, params,
+            tl_config UCS_STATS_ARG(
+                    (params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
+                            params->stats_root :
+                            NULL) UCS_STATS_ARG(UCT_sci_NAME));
     
 
     //---------- IFACE sci --------------------------
