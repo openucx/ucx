@@ -93,13 +93,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
     
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
     
-    //self->send_buffer = NULL;
+    self->buf = NULL;
 
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
 
-    ucs_free(self->buf);
     
 
 
@@ -245,7 +244,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super); //segfaults without this line, probably has something to do with the stats member...
 
 
     do {
@@ -256,9 +255,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
   } while (sci_error != SCI_ERR_OK);
     
 
-    self->buf = ucs_malloc(iface->send_size, "ep_send_buffer");
-
-    SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
+    self->buf = (void *) SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
 
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
