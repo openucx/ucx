@@ -26,6 +26,8 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
     ucp_recv_desc_t *rdesc;
     uint16_t flags;
 
+    printf("probe.c start\n");
+
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_TAG,
                                     printf("probe.c returns NULL at start of function\n"));
 
@@ -52,6 +54,8 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
     }
 
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
+
+    printf("probe.c end\n");
 
     return rdesc;
 }
