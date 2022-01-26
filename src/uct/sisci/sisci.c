@@ -99,9 +99,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
         printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
 
+    self->buf = NULL;
     */
 
-    self->buf = NULL;
 
     SCIDisconnectSegment(self->remote_segment, 0, &sci_error);
 
