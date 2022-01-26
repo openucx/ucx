@@ -99,7 +99,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
         printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
 
-    //ucs_free(self->buf);
+    ucs_free(self->buf);
     
 
 
