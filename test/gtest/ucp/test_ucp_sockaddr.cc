@@ -10,7 +10,6 @@
 
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
-#include <ifaddrs.h>
 #include <atomic>
 #include <memory>
 
@@ -183,21 +182,16 @@ public:
         ASSERT_EQ(ret, 0);
 
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-            if (ucs_netif_flags_is_active(ifa->ifa_flags) &&
-                ucs::is_inet_addr(ifa->ifa_addr))
-            {
-                if (is_skip_interface(ifa)) {
-                    continue;
-                }
-
-                saddrs.push_back(ucs::sock_addr_storage());
-                status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
-                ASSERT_UCS_OK(status);
-                saddrs.back().set_sock_addr(*ifa->ifa_addr, size,
-                                            ucs::is_rdmacm_netdev(
-                                                    ifa->ifa_name));
-                saddrs.back().set_port(0); /* listen on any port then update */
+            if (is_skip_interface(ifa) || !ucs::is_interface_usable(ifa)) {
+                continue;
             }
+
+            saddrs.push_back(ucs::sock_addr_storage());
+            status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
+            ASSERT_UCS_OK(status);
+            saddrs.back().set_sock_addr(*ifa->ifa_addr, size,
+                                        ucs::is_rdmacm_netdev(ifa->ifa_name));
+            saddrs.back().set_port(0); /* listen on any port then update */
         }
 
         freeifaddrs(ifaddrs);
