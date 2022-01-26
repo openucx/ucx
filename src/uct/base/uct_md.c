@@ -74,7 +74,7 @@ ucs_status_t uct_md_open(uct_component_h component, const char *md_name,
     uct_md_vfs_init(component, md, md_name);
     *md_p = md;
 
-    printf("henlo %s \n", md_name);
+    printf("henlo %s \n", component->name);
     //ucs_assert_always(md->component == component);
     return UCS_OK;
 }

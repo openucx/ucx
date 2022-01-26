@@ -440,9 +440,9 @@ static ucs_status_t uct_sci_md_open(uct_component_t *component, const char *md_n
     
     //SCIClose(md.sci_virtual_device, 0 , &errors);
     //uct_sci_close();
-
     md.super.ops       = &md_ops;
     md.super.component = &uct_sci_component;
+    //md.super.component->name = "sci"
     md.num_devices     = md_config->num_devices;
     md.segment_id = 11;
     
@@ -674,7 +674,6 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     
     
     attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
-                        UCT_IFACE_FLAG_CONNECT_TO_EP    |
                         UCT_IFACE_FLAG_AM_SHORT         |
                         UCT_IFACE_FLAG_CB_SYNC          |
                         UCT_IFACE_FLAG_AM_BCOPY         | 
