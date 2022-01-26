@@ -292,6 +292,22 @@ uct_ib_mlx5_devx_query_dct(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
     return UCS_OK;
 }
 
+uint32_t uct_ib_mlx5_devx_query_dct_max_ece(uct_ib_mlx5_qp_t *qp)
+{
+    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_dct_in)]   = {};
+    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_dct_out)] = {};
+    void *dctc;
+    ucs_status_t status;
+
+    status = uct_ib_mlx5_devx_query_dct(qp, in, sizeof(in), out, sizeof(out));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    dctc   = UCT_IB_MLX5DV_ADDR_OF(query_dct_out, out, dct_context_entry);
+    return UCT_IB_MLX5DV_GET(dctc, dctc, ece);
+}
+
 static ucs_status_t
 uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
                           void *out, size_t outlen)
