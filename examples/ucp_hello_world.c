@@ -384,12 +384,13 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     /* Receive client UCX address */
     do {
 
-        //printf("probing wrobring\n");
+        printf("probing wrobring\n");
         /* Progressing before probe to update the state */
         ucp_worker_progress(ucp_worker);
 
         /* Probing incoming events in non-block mode */
         msg_tag = ucp_tag_probe_nb(ucp_worker, tag, tag_mask, 1, &info_tag);
+        sleep(1);
     } while (msg_tag == NULL);
 
     msg = malloc(info_tag.length);
