@@ -1254,8 +1254,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_handler_common(
          * provided in UCT descriptor, allocate new aligned data buffer from UCP
          * AM mpool instead of using UCT descriptor directly.
          */
-        if (ucs_unlikely(((uintptr_t)data + worker->am.align_offset) %
-                         worker->am.alignment)) {
+        if (ucs_unlikely((uintptr_t)data % worker->am.alignment)) {
             am_flags &= ~UCT_CB_PARAM_FLAG_DESC;
         }
 
@@ -1457,7 +1456,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     ucp_ep_h ep;
     size_t total_length, padding;
     uint64_t recv_flags;
-    void *user_hdr, *first_rdesc_data;
+    void *user_hdr;
 
     first_ftr = UCS_PTR_BYTE_OFFSET(am_data, am_length - sizeof(*first_ftr));
 
@@ -1504,10 +1503,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
         return UCS_OK; /* release UCT desc */
     }
 
-    first_rdesc_data = UCS_PTR_BYTE_OFFSET(first_rdesc + 1,
-                                           UCP_AM_FIRST_FRAG_META_LEN +
-                                                   worker->am.align_offset);
-    padding = ucs_padding((uintptr_t)first_rdesc_data, worker->am.alignment);
+    padding = ucs_padding((uintptr_t)UCS_PTR_BYTE_OFFSET(
+                                  first_rdesc + 1, UCP_AM_FIRST_FRAG_META_LEN),
+                          worker->am.alignment);
 
     first_rdesc->payload_offset     = UCP_AM_FIRST_FRAG_META_LEN + padding;
     first_rdesc->am_first.remaining = first_ftr->total_size;

@@ -799,7 +799,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
                    const char *name, ucp_recv_desc_t **rdesc_p)
 {
     ucp_recv_desc_t *rdesc;
-    void *data_hdr, *rdesc_data;
+    void *data_hdr;
     ucs_status_t status;
     size_t padding;
 
@@ -819,10 +819,8 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
             return UCS_ERR_NO_MEMORY;
         }
 
-        rdesc_data = UCS_PTR_BYTE_OFFSET(rdesc + 1, worker->am.align_offset);
-        padding    = ucs_padding((uintptr_t)rdesc_data, alignment);
-        rdesc      = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
-
+        padding = ucs_padding((uintptr_t)(rdesc + 1), alignment);
+        rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
         rdesc->release_desc_offset = padding;
 
         /* No need to initialize rdesc->priv_length here, because it is only
