@@ -168,6 +168,7 @@ libucs_la_SOURCES = \
 	memory/memtype_cache.c \
 	memory/numa.c \
 	memory/rcache.c \
+	memory/rcache_vfs.c \
 	profile/profile.c \
 	stats/stats.c \
 	sys/event_set.c \

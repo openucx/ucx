@@ -141,6 +141,12 @@ typedef struct {
 
     /* Enable affinity for virtual monitoring filesystem service thread */
     int                        vfs_thread_affinity;
+
+    /* Boundary thresholds for the size distribution of registered cache
+       regions. Intermediate thresholds are power-of-2 numbers between these
+       values. */
+    size_t                     rcache_stat_min;
+    size_t                     rcache_stat_max;
 } ucs_global_opts_t;
 
 
