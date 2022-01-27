@@ -15,7 +15,6 @@
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
-#include <ifaddrs.h>
 
 
 std::string resource::name() const {
@@ -292,8 +291,7 @@ void uct_test::set_interface_rscs(uct_component_h cmpt, const char *cmpt_name,
 }
 
 bool uct_test::is_interface_usable(struct ifaddrs *ifa, const char *name) {
-    if (!(ucs_netif_flags_is_active(ifa->ifa_flags)) ||
-        !(ucs::is_inet_addr(ifa->ifa_addr))) {
+    if (!ucs::is_interface_usable(ifa)) {
         return false;
     }
 

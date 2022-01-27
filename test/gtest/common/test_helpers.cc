@@ -438,6 +438,24 @@ bool is_inet_addr(const struct sockaddr* ifa_addr) {
            (ifa_addr->sa_family == AF_INET6);
 }
 
+static bool netif_has_sysfs_file(const char *ifa_name, const char *file_name)
+{
+    char path[PATH_MAX];
+    ucs_snprintf_safe(path, sizeof(path), "/sys/class/net/%s/%s", ifa_name,
+                      file_name);
+
+    struct stat st;
+    return stat(path, &st) >= 0;
+}
+
+bool is_interface_usable(struct ifaddrs *ifa)
+{
+    return ucs_netif_flags_is_active(ifa->ifa_flags) &&
+           ucs::is_inet_addr(ifa->ifa_addr) &&
+           !netif_has_sysfs_file(ifa->ifa_name, "bridge") &&
+           !netif_has_sysfs_file(ifa->ifa_name, "brport");
+}
+
 static std::vector<std::string> read_dir(const std::string& path)
 {
     std::vector<std::string> result;
