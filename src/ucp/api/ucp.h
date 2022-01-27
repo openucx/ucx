@@ -162,17 +162,18 @@ enum ucp_feature {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_params_field {
-    UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
-    UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2), /**< Worker's events bitmap */
-    UCP_WORKER_PARAM_FIELD_USER_DATA    = UCS_BIT(3), /**< User data */
-    UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4), /**< External event file
-                                                           descriptor */
-    UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5), /**< Worker flags */
-    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6), /**< Worker name */
-    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7), /**< Alignment of active
-                                                           messages on the receiver */
-    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8)  /**< Client id */
+    UCP_WORKER_PARAM_FIELD_THREAD_MODE     = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_PARAM_FIELD_CPU_MASK        = UCS_BIT(1), /**< Worker's CPU bitmap */
+    UCP_WORKER_PARAM_FIELD_EVENTS          = UCS_BIT(2), /**< Worker's events bitmap */
+    UCP_WORKER_PARAM_FIELD_USER_DATA       = UCS_BIT(3), /**< User data */
+    UCP_WORKER_PARAM_FIELD_EVENT_FD        = UCS_BIT(4), /**< External event file
+                                                              descriptor */
+    UCP_WORKER_PARAM_FIELD_FLAGS           = UCS_BIT(5), /**< Worker flags */
+    UCP_WORKER_PARAM_FIELD_NAME            = UCS_BIT(6), /**< Worker name */
+    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT    = UCS_BIT(7), /**< Alignment of active
+                                                              messages on the receiver */
+    UCP_WORKER_PARAM_FIELD_CLIENT_ID       = UCS_BIT(8), /**< Client id */
+    UCP_WORKER_PARAM_FIELD_AM_ALIGN_OFFSET = UCS_BIT(9)  /**< Alignment offset */
 };
 
 
@@ -1310,6 +1311,14 @@ typedef struct ucp_worker_params {
     * using @ref ucp_conn_request_query.
     */
     uint64_t                client_id;
+
+    /**
+     * Align the active message data with this bytes offset. For example,
+     * specifying a value of 16 means offset 16 in the active message payload
+     * will be aligned to @ref am_alignment boundary.
+     * The default value is 0 (align the payload start address).
+     */
+    size_t                  am_align_offset;
 } ucp_worker_params_t;
 
 

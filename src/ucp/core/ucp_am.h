@@ -47,6 +47,7 @@ UCS_ARRAY_DECLARE_TYPE(ucp_am_cbs, unsigned, ucp_am_entry_t)
 
 typedef struct ucp_am_info {
     size_t                   alignment;
+    size_t                   align_offset;
     ucs_array_t(ucp_am_cbs)  cbs;
 } ucp_am_info_t;
 
