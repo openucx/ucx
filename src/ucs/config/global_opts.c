@@ -55,7 +55,9 @@ ucs_global_opts_t ucs_global_opts = {
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
     .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
-    .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER
+    .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER,
+    .rcache_stat_min       = 0,
+    .rcache_stat_max       = 0
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -284,6 +286,18 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {"PROFILE_LOG_SIZE", "4m",
   "Maximal size of profiling log. New records will replace old records.",
   ucs_offsetof(ucs_global_opts_t, profile_log_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+ {"RCACHE_STAT_MIN", "4k",
+  "Registration cache minimum region size, for power-of-2 size distribution "
+  "statistics.\nStatistics about smaller regions will be attributed to this "
+  "specified minimal size.\nRounded up to the next power-of-2 value.",
+  ucs_offsetof(ucs_global_opts_t, rcache_stat_min), UCS_CONFIG_TYPE_MEMUNITS},
+
+ {"RCACHE_STAT_MAX", "1m",
+  "Registration cache maximum region size, for power-of-2 size distribution "
+  "statistics.\nStatistics about larger regions will be attributed to 'max' "
+  "bucket.\nRounded up to the next power-of-2 value.",
+  ucs_offsetof(ucs_global_opts_t, rcache_stat_max), UCS_CONFIG_TYPE_MEMUNITS},
 
  {"", "", NULL,
   ucs_offsetof(ucs_global_opts_t, arch),
