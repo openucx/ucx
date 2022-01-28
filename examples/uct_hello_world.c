@@ -703,7 +703,7 @@ int main(int argc, char **argv)
         res = generate_test_string(str, cmd_args.test_strlen);
         CHKERR_ACTION(res < 0, "generate test string",
                       status = UCS_ERR_NO_MEMORY; goto out_free_ep);
-
+        printf("the test string: %s\n", res);
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
             status = do_am_short(&if_info, ep, id, &cmd_args, str);
