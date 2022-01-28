@@ -549,15 +549,19 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 {
     //TODO
     uct_sci_ep_t* ep = ucs_derived_of(tl_ep, uct_sci_ep_t);
+    sisci_packet_t* packet = ep->buf; 
     uint* tmp = (uint* ) ep->buf;
     //void * map = (void *) SCIGetMapPointer(ep->remote_map);
 
 
     printf("sizeof unsigned %zd size of uint %zd size of void %zd\n",sizeof(length), sizeof(uint), sizeof(void));
-    uct_am_short_fill_data(ep->buf + 3, header, payload, length);
-    //memccpy(ep->buf, payload, length, 1);
+    //uct_am_short_fill_data(ep->buf + 3, header, payload, length);
+    packet->am_id = id;
+    packet->length = length;
+    memcpy(packet->data, payload, length);
     SCIFlush(NULL, SCI_NO_FLAGS);    
-    tmp[0] =  1;
+    packet->status = 1;
+    //memccpy(ep->buf, payload, length, 1);
     SCIFlush(NULL, SCI_NO_FLAGS);
 
     printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
