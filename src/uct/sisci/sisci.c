@@ -553,9 +553,8 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     //void * map = (void *) SCIGetMapPointer(ep->remote_map);
 
 
-    
-    printf("size of uint %zd size of void %zd\n", sizeof(uint), sizeof(void));
-    uct_am_short_fill_data(ep->buf + 1, header, payload, length);
+    printf("sizeof unsigned %zd size of uint %zd size of void %zd\n",sizeof(length) sizeof(uint), sizeof(void));
+    uct_am_short_fill_data(ep->buf + , header, payload, length);
     //memccpy(ep->buf, payload, length, 1);
     SCIFlush(NULL, SCI_NO_FLAGS);    
     tmp[0] =  1;
@@ -657,10 +656,12 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     int count = 0;
     uint* buf = (uint*) iface->recv_buffer;
 
-
-    if (buf[0] == 1)
+    sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer; 
+    
+    if (packet->status == 1)
     {
-        //printf("recieved data!\n");
+
+        printf("AMID %d, Length %d!\n", packet->am_id, packet->length);
         uct_sci_process_recv(tl_iface);
     }
     

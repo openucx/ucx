@@ -43,6 +43,15 @@ typedef struct uct_sci_iface_config {
     size_t                seg_size;      /* Maximal send size */
 } uct_sci_iface_config_t;
 
+#define SISCI_STATUS_WRITING_DONE 1
+
+
+typedef struct sisci_packet {
+    uint8_t     status;
+    uint8_t     am_id;
+    uint64_t    length;
+    void*       data;
+} sisci_packet_t
 
 typedef struct uct_sci_iface {
     uct_base_iface_t      super;
