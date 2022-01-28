@@ -658,8 +658,9 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer;
     ucs_status_t status;
     status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buffer + sizeof(sisci_packet_t), packet->length,0);
-
+    
     printf("what we recieved %s\n", (char *) iface->recv_buffer + sizeof(sisci_packet_t));
+    printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uin8_t)*2);
 
     if(status == UCS_INPROGRESS) {
         printf("UCS_IN_PROGRESS\n");
@@ -668,7 +669,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     if(status == UCS_OK) {
         packet->am_id = 0;
         packet->status = 0;
-        memset(iface->recv_buffer, packet->length, sizeof(void*));
+       //memset(iface->recv_buffer, packet->length, sizeof(void*));
         packet->length = 0;
     }
 
