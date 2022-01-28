@@ -51,7 +51,7 @@ typedef struct sisci_packet {
     uint8_t     am_id;
     uint64_t    length;
     void*       data;
-} sisci_packet_t
+} sisci_packet_t;
 
 typedef struct uct_sci_iface {
     uct_base_iface_t      super;
