@@ -549,11 +549,12 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 {
     //TODO
     uct_sci_ep_t* ep = ucs_derived_of(tl_ep, uct_sci_ep_t);
+    uint* tmp = (uint* ) ep->buf;
     //void * map = (void *) SCIGetMapPointer(ep->remote_map);
 
-    printf("size of uint %zd size of void %zd\n", sizeof(uint), sizeof(void));
 
-    uint* tmp = (uint* ) ep->buf;
+    
+    printf("size of uint %zd size of void %zd\n", sizeof(uint), sizeof(void));
     uct_am_short_fill_data(ep->buf + 1, header, payload, length);
     //memccpy(ep->buf, payload, length, 1);
     SCIFlush(NULL, SCI_NO_FLAGS);    
