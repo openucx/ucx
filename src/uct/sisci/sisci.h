@@ -50,7 +50,7 @@ typedef struct sisci_packet {
     uint8_t     status;
     uint8_t     am_id;
     unsigned    length;
-    void*       data;
+    //void*       data;
 } sisci_packet_t;
 
 typedef struct uct_sci_iface {

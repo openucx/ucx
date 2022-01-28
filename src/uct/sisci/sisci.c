@@ -559,10 +559,10 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     //uct_am_short_fill_data(ep->buf + 3, header, payload, length);
     packet->am_id = id;
     packet->length = length;
-    memcpy(packet->data, payload, length);
+    //memcpy(packet->data, payload, length);
+    memcpy(ep->buf + sizeof(sisci_packet_t), payload, length);
     SCIFlush(NULL, SCI_NO_FLAGS);    
     packet->status = 1;
-    //memccpy(ep->buf, payload, length, 1);
     SCIFlush(NULL, SCI_NO_FLAGS);
 
     printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
