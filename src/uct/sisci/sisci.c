@@ -647,7 +647,13 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     int count = 0;
-    int* buf = (int*) iface->recv_buffer;
+    uint* buf = (uint*) iface->recv_buffer;
+
+    if (buf[0] == 1)
+    {
+        printf("recieved data!\n");
+    }
+    
 
     printf("uct_sci_iface_progress %d\n", buf[0]);
     sleep(1);
