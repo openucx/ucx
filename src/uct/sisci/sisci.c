@@ -657,7 +657,6 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     int count = 0;
     uint* buf = (uint*) iface->recv_buffer;
 
-    iface->super.worker.
 
     if (buf[0] == 1)
     {
