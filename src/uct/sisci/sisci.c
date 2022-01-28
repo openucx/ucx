@@ -554,7 +554,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
 
     printf("sizeof unsigned %zd size of uint %zd size of void %zd\n",sizeof(length), sizeof(uint), sizeof(void));
-    uct_am_short_fill_data(ep->buf + , header, payload, length);
+    uct_am_short_fill_data(ep->buf + 3, header, payload, length);
     //memccpy(ep->buf, payload, length, 1);
     SCIFlush(NULL, SCI_NO_FLAGS);    
     tmp[0] =  1;
