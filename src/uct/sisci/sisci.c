@@ -676,9 +676,9 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
                         UCT_IFACE_FLAG_CB_SYNC          |
                         UCT_IFACE_FLAG_AM_BCOPY         | 
                         UCT_IFACE_FLAG_AM_ZCOPY;
-    attr->cap.event_flags  = UCT_IFACE_FLAG_EVENT_SEND_COMP |
+    attr->cap.event_flags  = 0;//UCT_IFACE_FLAG_EVENT_SEND_COMP |
                              //UCT_IFACE_FLAG_EVENT_RECV      |
-                             UCT_IFACE_FLAG_EVENT_ASYNC_CB ;
+                             //UCT_IFACE_FLAG_EVENT_ASYNC_CB ;
                              //UCT_IFACE_FLAG_EVENT_RECV_SIG;
 
     attr->device_addr_len  = sizeof(uct_sci_device_addr_t);
