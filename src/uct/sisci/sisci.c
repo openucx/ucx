@@ -648,7 +648,7 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 
 
 static void uct_sci_process_recv(uct_iface_t tl_iface) {
-    uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sisci_iface_t);
+    uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     printf("iface %d\n", iface->segment_id);
 }
 
