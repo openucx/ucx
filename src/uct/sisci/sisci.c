@@ -660,7 +660,8 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
 
     if (buf[0] == 1)
     {
-        printf("recieved data!\n");
+        //printf("recieved data!\n");
+        uct_sci_process_recv(tl_iface);
     }
     
 
