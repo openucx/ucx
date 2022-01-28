@@ -659,7 +659,6 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
 unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     int count = 0;
-    uint* buf = (uint*) iface->recv_buffer;
 
     sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer; 
     
@@ -670,8 +669,6 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
         uct_sci_process_recv(tl_iface);
     }
     
-
-    printf("uct_sci_iface_progress %d\n", buf[0]);
     sleep(1);
     return count;
 }
