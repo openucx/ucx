@@ -551,6 +551,8 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     uct_sci_ep_t* ep = ucs_derived_of(tl_ep, uct_sci_ep_t);
     //void * map = (void *) SCIGetMapPointer(ep->remote_map);
 
+    printf("size of uint %zd size of void %zd\n", sizeof(uint), sizeof(void));
+
     uint* tmp = (uint* ) ep->buf;
     uct_am_short_fill_data(ep->buf + 1, header, payload, length);
     //memccpy(ep->buf, payload, length, 1);
@@ -644,10 +646,17 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 }
 
 
+static void uct_sci_process_recv(uct_iface_t tl_iface) {
+    uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sisci_iface_t);
+    printf("iface %d\n", iface->segment_id);
+}
+
 unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     int count = 0;
     uint* buf = (uint*) iface->recv_buffer;
+
+    iface->super.worker.
 
     if (buf[0] == 1)
     {
