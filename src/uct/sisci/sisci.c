@@ -448,10 +448,10 @@ static ucs_status_t uct_sci_md_open(uct_component_t *component, const char *md_n
     
     
     *md_p = &md.super;
+    md_name = "sci";
 
     //uct_md_h = sci_md;
 
-    //md_name = "sci";
 
 
     printf("number of devices : %ld \n", md.num_devices);
