@@ -659,6 +659,11 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     ucs_status_t status;
     status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buffer + sizeof(sisci_packet_t), packet->length,0);
 
+
+    if(status == UCS_INPROGRESS) {
+        printf("UCS_IN_PROGRESS\n");
+    }
+
     if(status == UCS_OK) {
         packet->am_id = 0;
         packet->status = 0;
