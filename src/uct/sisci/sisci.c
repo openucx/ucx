@@ -566,7 +566,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     packet->status = 1;
     SCIFlush(NULL, SCI_NO_FLAGS);
 
-    printf("what we are sending: %s\n", test);
+    printf("what we are sending: %s\n", ep->buf + sizeof(sisci_packet_t));
     printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
     
 
