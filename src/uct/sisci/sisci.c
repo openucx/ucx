@@ -550,7 +550,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     //TODO
     uct_sci_ep_t* ep = ucs_derived_of(tl_ep, uct_sci_ep_t);
     sisci_packet_t* packet = ep->buf; 
-    char* test = (char*) payload;
+    //char* test = (char*) payload;
     
     //uint* tmp = (uint* ) ep->buf;
     //void * map = (void *) SCIGetMapPointer(ep->remote_map);
