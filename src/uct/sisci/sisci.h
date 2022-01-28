@@ -49,7 +49,7 @@ typedef struct uct_sci_iface_config {
 typedef struct sisci_packet {
     uint8_t     status;
     uint8_t     am_id;
-    uint64_t    length;
+    unsigned    length;
     void*       data;
 } sisci_packet_t;
 
