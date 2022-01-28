@@ -565,6 +565,8 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     packet->status = 1;
     SCIFlush(NULL, SCI_NO_FLAGS);
 
+    char* test = (char*) payload;
+    printf("what we are sending: %s\n", test);
     printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
     
 
@@ -660,7 +662,8 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     if(status == UCS_OK) {
         packet->am_id = 0;
         packet->status = 0;
-        
+        memset(iface->recv_buffer, packet->length, sizeof(void*));
+        packet->length = 0;
     }
 
     printf("invoke staus %d\n", status);
