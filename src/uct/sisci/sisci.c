@@ -681,7 +681,7 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
         uct_sci_process_recv(tl_iface);
     }
     
-    sleep(1);
+    //sleep(1);
     return count;
 }
 
@@ -717,6 +717,7 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->device_addr_len  = sizeof(uct_sci_device_addr_t);
     attr->ep_addr_len      = sizeof(uct_sicsci_ep_addr_t);
     attr->iface_addr_len   = sizeof(uct_sci_iface_addr_t);
+    
     
     
     //TODO: sane numbers, no lies.
