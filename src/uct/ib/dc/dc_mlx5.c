@@ -1114,6 +1114,7 @@ ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface)
         goto err_free;
     }
 
+    // No UCT_DC_MLX5_EP_FLAG_ECE
     ep->flags = 0;
     status    = uct_dc_mlx5_ep_basic_init(iface, ep);
     if (status != UCS_OK) {
