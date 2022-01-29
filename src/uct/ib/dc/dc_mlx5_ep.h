@@ -48,10 +48,11 @@ enum uct_dc_mlx5_ep_flags {
     UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(7),
 #if UCS_ENABLE_ASSERT
     /* EP was invalidated without DCI */
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(8)
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(8),
 #else
-    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0,
 #endif
+    UCT_DC_MLX5_EP_FLAG_ECE                 = UCS_BIT(9)
 };
 
 
