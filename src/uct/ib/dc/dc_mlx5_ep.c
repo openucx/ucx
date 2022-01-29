@@ -861,6 +861,7 @@ ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
                                  sizeof(struct ibv_ravh);
     struct ibv_ravh ravh;
     uint32_t op_index;
+    uint32_t dct_idx;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     UCT_RC_MLX5_CHECK_RNDV_PARAMS(iovcnt, header_length, tm_hdr_len,
@@ -871,8 +872,8 @@ ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     op_index = uct_rc_mlx5_tag_get_op_id(&iface->super, comp);
 
-    // TODO: deal with tag offload
-    uct_dc_mlx5_iface_fill_ravh(&ravh, iface->rx.dct[0].qp_num);
+    dct_idx  = !!(ep->flags & UCT_DC_MLX5_EP_FLAG_ECE);
+    uct_dc_mlx5_iface_fill_ravh(&ravh, iface->rx.dct[dct_idx].qp_num);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
@@ -1070,6 +1071,7 @@ uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
+    uint32_t fc_ep_dct_idx     = 0;
     uint32_t imm_inval_pkey;
     uct_dc_fc_sender_data_t sender;
 
@@ -1083,8 +1085,8 @@ uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
     sender.payload.gid       = ib_iface->gid_info.gid;
     sender.payload.is_global = ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
 
-    // TODO: deal with fc_hard_req_send
-    imm_inval_pkey           = iface->rx.dct[0].qp_num;
+    // grant msg is sent by fc_ep(DCI without ECE), use number of DCT wihout ECE
+    imm_inval_pkey           = iface->rx.dct[fc_ep_dct_idx].qp_num;
 
     UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1);
 
@@ -1155,9 +1157,14 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
         remote_dctn_ece = 0;
     }
 
+    // TODO: check local ece with remote ece to set UCT_DC_MLX5_EP_FLAG_ECE
+    self->flags      = 0;
+
     memcpy(&self->av, av, sizeof(*av));
     self->av.dqp_dct |= htonl(remote_dctn);
-    self->flags       = path_index % iface->tx.num_dci_pools;
+    self->flags      |= path_index % iface->tx.num_dci_pools +
+                        !!(self->flags & UCT_DC_MLX5_EP_FLAG_ECE) *
+                        iface->tx.num_dci_pools;
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }
