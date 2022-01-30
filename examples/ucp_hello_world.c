@@ -377,6 +377,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ucs_status_t status;
     ucp_ep_h client_ep;
     ucp_ep_params_t ep_params;
+    unsigned* test;
     int ret;
 
     printf("receive client UCX address somehow?\n");
@@ -436,7 +437,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ep_params.err_handler.arg = NULL;
     ep_params.user_data       = &ep_status;
 
-    unsigned* test = (unsigned*) msg + 1; 
+    test = (unsigned*) msg + 1; 
 
     printf("RECV: SEGMENT_ID: %d NODE_ID: %d \n", (int) test, (int) test + 1);
 
