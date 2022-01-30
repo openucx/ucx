@@ -560,7 +560,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     packet->am_id = id;
     packet->length = length;
     //memcpy(packet->data, payload, length);
-    uct_am_short_fill_data(ep->buf + 1, header, payload, length);
+    uct_am_short_fill_data(ep->buf + sizeof(sisci_packet_t), header, payload, length);
     //memcpy(ep->buf + sizeof(sisci_packet_t), payload, length);
     SCIFlush(NULL, SCI_NO_FLAGS);    
     packet->status = 1;
@@ -658,7 +658,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer;
     ucs_status_t status;
-    status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buffer + 1, packet->length,0);
+    status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buffer + sizeof(sisci_packet_t), packet->length,0);
     
     printf("length: %d what we recieved %s\n", packet->length, (char *) iface->recv_buffer + sizeof(sisci_packet_t));
     printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
