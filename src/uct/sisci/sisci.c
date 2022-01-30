@@ -738,11 +738,11 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->cap.am.max_zcopy = 1024;
 
 
-    attr->latency                 = ucs_linear_func_make(0, 0);
-    attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
+    attr->latency                 = ucs_linear_func_make(20, 40);
+    attr->bandwidth.dedicated     = 10 * UCS_MBYTE;
     attr->bandwidth.shared        = 0;
     attr->overhead                = 10e-9;
-    attr->priority                = 0;
+    attr->priority                = 5;
 
 
     if(!iface_query_printed) {
