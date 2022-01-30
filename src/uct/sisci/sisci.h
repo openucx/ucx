@@ -51,7 +51,7 @@ typedef struct sisci_packet {
     uint8_t     am_id;
     uint16_t    padding;
     unsigned    length;
-    void       data[];
+    void*       data;
 } UCS_S_PACKED sisci_packet_t;
 
 typedef struct uct_sci_iface {
