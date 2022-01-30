@@ -558,7 +558,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     printf("sizeof adress %zd sizeof unsigned %zd size of uint %zd size of void %zd\n", sizeof(uct_sicsci_ep_addr_t),sizeof(length), sizeof(uint), sizeof(void*));
     packet->am_id = id;
-    packet->length = length;
+    packet->length = length + sizeof(header);
     //memcpy(packet->data, payload, length);
     uct_am_short_fill_data(ep->buf + sizeof(sisci_packet_t), header, payload, length);
     //memcpy(ep->buf + sizeof(sisci_packet_t), payload, length);
