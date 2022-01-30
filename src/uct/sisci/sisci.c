@@ -592,7 +592,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header, un
                             const uct_iov_t *iov, size_t iovcnt, unsigned flags, uct_completion_t *comp) 
 {
     printf("uct_sci_ep_am_zcopy()\n");
-    return UCS_OK;;    
+    return UCS_ERR_NOT_IMPLEMENTED;;    
 }
 
 int uct_sci_iface_is_reachable(const uct_iface_h tl_iface,

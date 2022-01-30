@@ -49,7 +49,6 @@ typedef struct uct_sci_iface_config {
 typedef struct sisci_packet {
     uint8_t     status;
     uint8_t     am_id;
-    uint16_t    padding;
     unsigned    length;
     //void        data;
 } UCS_S_PACKED sisci_packet_t;
