@@ -215,6 +215,10 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_iface_t)
     printf("UCS_CLASS_CLEANUP_FUNC: sci_IFACE\n");
     ucs_mpool_cleanup(&self->msg_mp, 1);
 
+    uct_base_iface_progress_disable(&self->super.super,
+                                    UCT_PROGRESS_SEND |
+                                    UCT_PROGRESS_RECV);
+
 }
 
 UCS_CLASS_DEFINE(uct_sci_iface_t, uct_base_iface_t);
