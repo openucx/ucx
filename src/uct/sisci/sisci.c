@@ -658,7 +658,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer;
     ucs_status_t status;
-    status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->buf + sizeof(sisci_packet_t), packet->length,0);
+    status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buf + sizeof(sisci_packet_t), packet->length,0);
     
     printf("length: %d what we recieved %s\n", packet->length, (char *) iface->recv_buffer + sizeof(sisci_packet_t));
     printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
