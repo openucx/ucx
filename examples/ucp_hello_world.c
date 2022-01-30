@@ -436,6 +436,10 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
     ep_params.err_handler.arg = NULL;
     ep_params.user_data       = &ep_status;
 
+    unsigned* test = (unsigned*) msg + 1; 
+
+    printf("RECV: SEGMENT_ID: %d NODE_ID: %d \n", test, test + 1);
+
     status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
     /* If peer failure testing was requested, it could be possible that UCP EP
      * couldn't be created; in this case set `ret = 0` to report success */
