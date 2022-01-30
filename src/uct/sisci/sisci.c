@@ -560,7 +560,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     packet->am_id = id;
     packet->length = length;
     //memcpy(packet->data, payload, length);
-    uct_am_short_fill_data(iface->buf + sizeof(sisci_packet_t), header, payload, length);
+    uct_am_short_fill_data(ep->buf + sizeof(sisci_packet_t), header, payload, length);
     //memcpy(ep->buf + sizeof(sisci_packet_t), payload, length);
     SCIFlush(NULL, SCI_NO_FLAGS);    
     packet->status = 1;
