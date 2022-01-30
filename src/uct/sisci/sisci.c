@@ -691,7 +691,7 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
         uct_sci_process_recv(tl_iface);
     }
     
-    //sleep(1);
+    usleep(5000);
     return count;
 }
 
