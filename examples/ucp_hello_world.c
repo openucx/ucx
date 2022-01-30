@@ -438,7 +438,7 @@ static int run_ucx_server(ucp_worker_h ucp_worker)
 
     unsigned* test = (unsigned*) msg + 1; 
 
-    printf("RECV: SEGMENT_ID: %d NODE_ID: %d \n", test, test + 1);
+    printf("RECV: SEGMENT_ID: %d NODE_ID: %d \n", (int) test, (int) test + 1);
 
     status = ucp_ep_create(ucp_worker, &ep_params, &client_ep);
     /* If peer failure testing was requested, it could be possible that UCP EP
