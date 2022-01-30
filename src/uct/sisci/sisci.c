@@ -645,6 +645,7 @@ ucs_status_t uct_sci_iface_get_address(uct_iface_h tl_iface,
     return UCS_OK;
 }
 
+
 void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 
     uct_base_iface_progress_enable(iface, flags);
