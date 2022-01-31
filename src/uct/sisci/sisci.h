@@ -1,4 +1,5 @@
-
+#ifndef UCT_SISCI_H
+#define UCT_SISCI_H
 
 
 
@@ -115,3 +116,4 @@ typedef struct uct_sci_md_config {
 
 
 
+#endif
