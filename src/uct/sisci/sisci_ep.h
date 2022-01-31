@@ -1,3 +1,6 @@
+#ifndef UCT_SISCI_EP_H
+#define UCT_SISCI_EP_H
+
 #include <stdio.h>
 
 #include <uct/base/uct_iface.h>
@@ -50,3 +53,5 @@ ucs_status_t uct_sci_ep_atomic32_fetch(uct_ep_h ep, uct_atomic_op_t opcode,
                                       uint32_t value, uint32_t *result,
                                       uint64_t remote_addr, uct_rkey_t rkey,
                                       uct_completion_t *comp);
+
+#endif
