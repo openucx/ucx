@@ -4,8 +4,7 @@
 #include <stdio.h>
 
 #include <uct/base/uct_iface.h>
-#include <sisci_error.h> //TODO
-#include <sisci_api.h>
+#include "sisci.h"
 
 
 
