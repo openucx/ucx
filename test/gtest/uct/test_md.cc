@@ -323,7 +323,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
                               UCT_MD_MEM_ATTR_FIELD_SYS_DEV      |
                               UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
                               UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH |
-                              UCT_MD_MEM_ATTR_FIELD_DMABUF_FD;
+                              UCT_MD_MEM_ATTR_FIELD_FD;
 
         for (unsigned i = 0; i < 300; i++) {
             slice_offset = ucs::rand() % buffer_size;
@@ -342,7 +342,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
             if (alloc_mem_type == UCS_MEMORY_TYPE_CUDA) {
                 EXPECT_EQ(buffer_size, mem_attr.alloc_length);
                 EXPECT_EQ(address, mem_attr.base_address);
-                EXPECT_EQ(-1, mem_attr.dmabuf_fd);
+                EXPECT_EQ(-1, mem_attr.fd);
             } else {
                 EXPECT_EQ(slice_length, mem_attr.alloc_length);
                 EXPECT_EQ(UCS_PTR_BYTE_OFFSET(address, slice_offset),

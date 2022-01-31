@@ -1392,6 +1392,11 @@ struct uct_md_attr {
 };
 
 
+
+#define UCT_FD_INVALID -1 /**< File descriptor is unusable for sharing memory regions
+                               across devices */
+
+
 /**
  * @ingroup UCT_MD
  * @brief UCT MD memory attributes field mask
@@ -1412,8 +1417,10 @@ typedef enum uct_md_mem_attr_field {
     UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3), /**< Request the whole length of the
                                                           allocation to which the buffer
                                                           belongs. */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD    = UCS_BIT(4)  /**< Request dmabuf file descriptor
-                                                          associated with the buffer. */
+    UCT_MD_MEM_ATTR_FIELD_FD           = UCS_BIT(4)  /**< Request a cross-device file descriptor
+                                                          that represents a memory region, and
+                                                          can be used to register the region on
+                                                          another memory domain */
 } uct_md_mem_attr_field_t;
 
 
@@ -1461,13 +1468,14 @@ typedef struct uct_md_mem_attr {
     size_t            alloc_length;
 
     /**
-     * dmabuf file descriptor for the provided buffer region. Refer
+     * A file descriptor to expose memory regions across devices. One example
+     * could be a dmabuf file descriptor for the provided buffer region. Refer
      * (https://01.org/linuxgraphics/gfx-docs/drm/driver-api/dma-buf.html).
      * If the md does not support querying fd object associated with the region,
-     * then -1 is returned. It is responsibility of the user to close returned
-     * fd once used.
+     * then UCT_FD_INVALID is returned. It is responsibility of the user to
+     * close returned fd once used.
      */
-    int               dmabuf_fd;
+    int               fd;
 } uct_md_mem_attr_t;
 
 
