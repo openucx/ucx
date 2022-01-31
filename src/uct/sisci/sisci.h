@@ -12,12 +12,8 @@
 #define UCT_sci_NAME "sci"
 #define UCT_sci_CONFIG_PREFIX "sci_"
 
-
-
 #define ADAPTER_NO 0
 #define SCI_NO_FLAGS 0
-
-
 
 typedef struct uct_sci_iface_addr {
     unsigned int segment_id; /* Listening port of iface */
@@ -26,8 +22,6 @@ typedef struct uct_sci_iface_addr {
 typedef struct uct_sci_device_addr {
     unsigned int node_id;
 } UCS_S_PACKED uct_sci_device_addr_t;
-
-
 
 
 typedef struct sci_map_holder {

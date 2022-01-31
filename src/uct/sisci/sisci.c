@@ -59,7 +59,6 @@ static unsigned int uct_sci_open(){
     return 1;
 }
 
-
 /*
     Closing the api is even more hands off than 
 */
@@ -74,7 +73,6 @@ static unsigned int uct_sci_close(){
 }
 
 //also known as "macro hell"
-
 
 static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
@@ -110,8 +108,6 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     } 
     
 
-
-    self->send_size = 1024;
     self->device_addr = nodeID;
     self->segment_id = 13337;
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
@@ -205,8 +201,6 @@ static ucs_status_t uct_sci_query_md_resources(uct_component_t *component,
 
     resources = ucs_malloc(sizeof(*resources), "SCI resources");
 
-
-
     if(resources == NULL) {
         //TODO Handle memory errors.
         status = UCS_ERR_NO_MEMORY;
@@ -218,7 +212,7 @@ static ucs_status_t uct_sci_query_md_resources(uct_component_t *component,
 
     status = UCS_OK;
 
-    //ucs_snprintf_zero(resources->md_name, UCT_MD_NAME_MAX, "%s", component->name);
+    ucs_snprintf_zero(resources->md_name, UCT_MD_NAME_MAX, "%s", component->name);
 
    
     printf("sci: UCT_SICI_QUERY_MD_RESOURCES\n");
@@ -614,34 +608,3 @@ static uct_iface_ops_t uct_sci_iface_ops = {
 */
 UCT_TL_DEFINE(&uct_sci_component, sci, uct_sci_query_devices, uct_sci_iface_t,
               UCT_sci_CONFIG_PREFIX, uct_sci_iface_config_table, uct_sci_iface_config_t);
-
-
-/* 
-static uct_component_t uct_self_component = {
-    .query_md_resources = uct_md_query_single_md_resource,
-    .md_open            = uct_self_md_open,
-    .cm_open            = ucs_empty_function_return_unsupported,
-    .rkey_unpack        = uct_self_md_rkey_unpack,
-    .rkey_ptr           = ucs_empty_function_return_unsupported,
-    .rkey_release       = ucs_empty_function_return_success,
-    .name               = UCT_SELF_NAME,
-    .md_config          = {
-        .name           = "Self memory domain",
-        .prefix         = "SELF_",
-        .table          = uct_self_md_config_table,
-        .size           = sizeof(uct_self_md_config_t),
-    },
-    .cm_config          = UCS_CONFIG_EMPTY_GLOBAL_LIST_ENTRY,
-    .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_self_component),
-    .flags              = 0,
-    .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
-};
-UCT_COMPONENT_REGISTER(&uct_self_component);
-
-
-
-UCT_TL_DEFINE(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
-              "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
-*/
-
-
