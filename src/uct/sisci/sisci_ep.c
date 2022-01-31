@@ -80,6 +80,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
 }
 
 UCS_CLASS_DEFINE(uct_sci_ep_t, uct_base_ep_t);
+
 UCS_CLASS_DEFINE_NEW_FUNC(uct_sci_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_sci_ep_t, uct_ep_t);
 
