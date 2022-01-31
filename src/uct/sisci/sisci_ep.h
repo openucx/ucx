@@ -26,6 +26,17 @@ typedef struct uct_sci_ep {
 } uct_sci_ep_t;
 
 
+ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
+                                  const void *payload, unsigned length);
+
+ssize_t uct_sci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
+                             uct_pack_callback_t pack_cb, void *arg,
+                             unsigned flags);
+
+ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header, unsigned header_length, 
+                            const uct_iov_t *iov, size_t iovcnt, unsigned flags, uct_completion_t *comp);                                  
+
+
 ucs_status_t uct_sci_ep_put_short(uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
                                  uct_rkey_t rkey);
