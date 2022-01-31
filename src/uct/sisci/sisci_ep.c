@@ -1,6 +1,8 @@
 
 
 #include "sisci_ep.h"
+#include "sisci_iface.h"
+
 
 void sisci_test() {
     int a = 1;
