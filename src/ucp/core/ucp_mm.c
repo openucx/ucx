@@ -40,6 +40,7 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
     uct_mem_h *prev_uct_memh;
     ucp_md_map_t new_md_map;
     const uct_md_attr_t *md_attr;
+    void *end_address UCS_V_UNUSED;
     unsigned prev_num_memh;
     unsigned md_index;
     ucs_status_t status;
@@ -119,13 +120,23 @@ ucs_status_t ucp_mem_rereg_mds(ucp_context_h context, ucp_md_map_t reg_md_map,
                 continue;
             }
 
-            base_address = address;
-            reg_length   = length;
-
             if (context->config.ext.reg_whole_alloc_bitmap & UCS_BIT(mem_type)) {
                 ucp_memory_detect_internal(context, address, length, &mem_info);
                 base_address = mem_info.base_address;
                 reg_length   = mem_info.alloc_length;
+                end_address  = UCS_PTR_BYTE_OFFSET(base_address, reg_length);
+                ucs_trace("extending %p..%p to %p..%p", address,
+                          UCS_PTR_BYTE_OFFSET(address, length), base_address,
+                          end_address);
+                ucs_assertv(base_address <= address,
+                            "base_address=%p address=%p", base_address,
+                            address);
+                ucs_assertv(end_address >= UCS_PTR_BYTE_OFFSET(address, length),
+                            "end_address=%p address+length=%p", end_address,
+                            UCS_PTR_BYTE_OFFSET(address, length));
+            } else {
+                base_address = address;
+                reg_length   = length;
             }
 
             /* MD supports registration, register new memh on it */

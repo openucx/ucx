@@ -29,19 +29,11 @@ extern ucs_memtype_cache_t *ucs_memtype_cache_global_instance;
 
 /* Memory information record */
 typedef struct ucs_memory_info {
-    ucs_memory_type_t type;          /**< Memory type, use uint8 for compact size */
+    ucs_memory_type_t type;          /**< Memory type */
     ucs_sys_device_t  sys_dev;       /**< System device index */
     void              *base_address; /**< Base address of the underlying allocation */
     size_t            alloc_length;  /**< Whole length of the underlying allocation */
 } ucs_memory_info_t;
-
-
-struct ucs_memtype_cache_region {
-    ucs_pgt_region_t    super;    /**< Base class - page table region */
-    ucs_list_link_t     list;     /**< List element */
-    ucs_memory_info_t   mem_info; /**< Memory type and system device the address
-                                       belongs to */
-};
 
 
 struct ucs_memtype_cache {
@@ -73,11 +65,14 @@ ucs_status_t ucs_memtype_cache_lookup(const void *address, size_t size,
  *
  * @param [in]  address         Start address to update.
  * @param [in]  size            Size of the memory to update.
- * @param [in]  mem_info        Set the memory info of the address range to this
+ * @param [in]  mem_type        Set the memory type of the address range to this
  *                              value.
+ * @param [in]  sys_dev         Set the system device of the address range to
+ *                              this value.
  */
 void ucs_memtype_cache_update(const void *address, size_t size,
-                              const ucs_memory_info_t *mem_info);
+                              ucs_memory_type_t mem_type,
+                              ucs_sys_device_t sys_dev);
 
 
 /**
@@ -90,14 +85,6 @@ void ucs_memtype_cache_remove(const void *address, size_t size);
 
 
 /**
- * Helper function to set memory info structure to host memory type.
- *
- * @param [out] mem_info        Pointer to memory info structure.
- */
-void ucs_memory_info_set_host(ucs_memory_info_t *mem_info);
-
-
-/**
  * Find if global memtype_cache is empty.
  *
  * @return 1 if empty 0 if otherwise.
@@ -106,6 +93,21 @@ static UCS_F_ALWAYS_INLINE int ucs_memtype_cache_is_empty()
 {
     return (ucs_memtype_cache_global_instance != NULL) &&
            (ucs_memtype_cache_global_instance->pgtable.num_regions == 0);
+}
+
+
+/**
+ * Helper function to set memory info structure to host memory type.
+ *
+ * @param [out] mem_info        Pointer to memory info structure.
+ */
+static UCS_F_ALWAYS_INLINE void
+ucs_memory_info_set_host(ucs_memory_info_t *mem_info)
+{
+    mem_info->type         = UCS_MEMORY_TYPE_HOST;
+    mem_info->sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
+    mem_info->base_address = NULL;
+    mem_info->alloc_length = -1;
 }
 
 END_C_DECLS
