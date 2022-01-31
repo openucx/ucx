@@ -1,7 +1,6 @@
 #include <stdio.h>
 
 #include <uct/base/uct_iface.h>
-#include "sisci.h" 
 
 
 typedef struct uct_sci_ep {
