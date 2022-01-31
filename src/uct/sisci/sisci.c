@@ -6,6 +6,7 @@
 #include "stdio.h"
 
 #include "sisci.h"
+#include "sisci_ep.h"
 #include "sisci_iface.h" //TODO, is this needed?
 //#include "sci_iface.c"
 
