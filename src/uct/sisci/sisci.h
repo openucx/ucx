@@ -68,8 +68,7 @@ typedef struct uct_sci_iface {
 
 } uct_sci_iface_t;
 
-ucs_status_t
-uct_sci_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
+ucs_status_t uct_sci_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
                              unsigned *num_tl_devices_p);
 
 int uct_sci_iface_is_reachable(const uct_iface_h tl_iface, const uct_device_addr_t *dev_addr,

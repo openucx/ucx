@@ -60,8 +60,6 @@ static unsigned int uct_sci_open(){
 }
 
 
-
-
 /*
     Closing the api is even more hands off than 
 */
@@ -75,41 +73,8 @@ static unsigned int uct_sci_close(){
     return 1;    
 }
 
-
-void sci_testing() {
-    printf("Linking is correct to some degree :) \n");
-}
-
 //also known as "macro hell"
-static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
-{   
-    sci_error_t sci_error;
-    printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
-    
 
-    //TODO: Find out why this code causes a segfault... When in running in devel mode. Something with how allocates the maps.
-    
-    SCIUnmapSegment(self->remote_map, 0, &sci_error);
-    
-    self->buf = NULL;
-
-    if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
-    }
-
-    
-
-
-    SCIDisconnectSegment(self->remote_segment, 0, &sci_error);
-
-    if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_DISCONNECT_SEGMENT: %s\n", SCIGetErrorString(sci_error));
-    }
-
-
-    
-    printf("EP_DELETED : )\n");
-}
 
 static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
                            const uct_iface_params_t *params,
@@ -226,58 +191,6 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_sci_iface_t, uct_iface_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_sci_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
                                  const uct_iface_config_t*);
-
-
-
-static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
-{
-
-    sci_error_t sci_error;
-    uct_sci_iface_addr_t* iface_addr =  (uct_sci_iface_addr_t*) params->iface_addr;
-    uct_sci_device_addr_t* dev_addr = (uct_sci_device_addr_t*) params->dev_addr;
-
-    unsigned int segment_id = 0; //(unsigned int) params->segment_id;
-    unsigned int node_id = 0; //(unsigned int) params->node_id;
-    uct_sci_iface_t* iface = ucs_derived_of(params->iface, uct_sci_iface_t);
-    uct_sci_md_t* md = ucs_derived_of(iface->super.md, uct_sci_md_t);
-
-
-    UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
-
-    segment_id = (unsigned int) iface_addr->segment_id;
-    node_id = (unsigned int) dev_addr->node_id;
-
-    printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id);
-    self->super.super.iface = params->iface;
-    self->remote_segment_id = segment_id;
-    self->remote_node_id = node_id;
-
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super); //segfaults without this line, probably has something to do with the stats member...
-
-
-    do {
-    SCIConnectSegment(md->sci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
-                ADAPTER_NO, NULL, NULL, 0, 0, &sci_error);
-
-    printf("waiting to connect\n");
-  } while (sci_error != SCI_ERR_OK);
-    
-
-    self->buf = (void *) SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
-
-    if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_MAP_REM_SEG: %s\n", SCIGetErrorString(sci_error));
-        return UCS_ERR_NO_RESOURCE;
-    }
-    
-    printf("EP connected to %d %d\n", self->remote_node_id, self->remote_segment_id);
-    return UCS_OK;
-}
-
-UCS_CLASS_DEFINE(uct_sci_ep_t, uct_base_ep_t);
-UCS_CLASS_DEFINE_NEW_FUNC(uct_sci_ep_t, uct_ep_t, const uct_ep_params_t *);
-UCS_CLASS_DEFINE_DELETE_FUNC(uct_sci_ep_t, uct_ep_t);
-
 
 
 
