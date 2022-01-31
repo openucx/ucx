@@ -15,6 +15,16 @@
 BEGIN_C_DECLS
 
 
+typedef enum ucs_sys_common_ancestor {
+    UCS_SYS_TOPO_COMMON_DEVICE,
+    UCS_SYS_TOPO_COMMON_PCIE_SWITCH,
+    UCS_SYS_TOPO_COMMON_PCIE_SWITCH_HIERARCHY,
+    UCS_SYS_TOPO_COMMON_HOST_BRIDGE,
+    UCS_SYS_TOPO_COMMON_NUMA_NODE,
+    UCS_SYS_TOPO_COMMON_SYSTEM
+} ucs_sys_common_ancestor_t;
+
+
 /* Upper limit on system device id */
 #define UCS_SYS_DEVICE_ID_MAX UINT8_MAX
 

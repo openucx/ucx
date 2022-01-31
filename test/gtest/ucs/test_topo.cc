@@ -39,6 +39,14 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_EQ(bus_id1.slot, dummy_bus_id.slot);
     EXPECT_EQ(bus_id1.function, dummy_bus_id.function);
 
+    status = ucs_topo_get_device_bus_id(dev1, &bus_id1);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(bus_id1.domain, dummy_bus_id.domain);
+    EXPECT_EQ(bus_id1.bus, dummy_bus_id.bus);
+    EXPECT_EQ(bus_id1.slot, dummy_bus_id.slot);
+    EXPECT_EQ(bus_id1.function, dummy_bus_id.function);
+
     dummy_bus_id.function = 2;
 
     status = ucs_topo_find_device_by_bus_id(&dummy_bus_id, &dev2);
@@ -47,6 +55,14 @@ UCS_TEST_F(test_topo, find_device_by_bus_id) {
     EXPECT_LT(dev2, UCS_SYS_DEVICE_ID_MAX);
     status = ucs_topo_sys_device_set_name(dev2, "test_bus_id_2");
     ASSERT_UCS_OK(status);
+
+    status = ucs_topo_get_device_bus_id(dev2, &bus_id2);
+    ASSERT_UCS_OK(status);
+
+    EXPECT_EQ(bus_id2.domain, dummy_bus_id.domain);
+    EXPECT_EQ(bus_id2.bus, dummy_bus_id.bus);
+    EXPECT_EQ(bus_id2.slot, dummy_bus_id.slot);
+    EXPECT_EQ(bus_id2.function, dummy_bus_id.function);
 
     status = ucs_topo_get_device_bus_id(dev2, &bus_id2);
     ASSERT_UCS_OK(status);

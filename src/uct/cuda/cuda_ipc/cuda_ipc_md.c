@@ -50,11 +50,24 @@ static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
 {
     uct_cuda_ipc_key_t *packed   = (uct_cuda_ipc_key_t *) rkey_buffer;
     uct_cuda_ipc_key_t *mem_hndl = (uct_cuda_ipc_key_t *) memh;
+    CUdevice cu_device;
+    ucs_status_t status;
 
     *packed          = *mem_hndl;
 
-    return UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&packed->uuid,
-                                                    mem_hndl->dev_num));
+    UCT_CUDA_IPC_GET_DEVICE(cu_device);
+    status = 
+        UCT_CUDADRV_FUNC(cuDeviceGetAttribute(&packed->bus_id,
+                                              CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
+                                              cu_device),
+                         UCS_LOG_LEVEL_ERROR);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    status = UCT_CUDADRV_FUNC(cuDeviceGetUuid(&packed->uuid, mem_hndl->dev_num),
+                              UCS_LOG_LEVEL_ERROR);
+    return status;
 }
 
 static inline int uct_cuda_ipc_uuid_equals(const CUuuid* a, const CUuuid* b)

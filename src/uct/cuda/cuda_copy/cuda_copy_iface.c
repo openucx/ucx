@@ -323,26 +323,25 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;
-        if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
-            perf_attr->bandwidth.shared = iface->config.bandwidth;
-        } else {
-            switch (perf_attr->operation) {
-            case UCT_EP_OP_GET_SHORT:
-                perf_attr->bandwidth.shared = 9320.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_GET_ZCOPY:
-                perf_attr->bandwidth.shared = 11660.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_SHORT:
-                perf_attr->bandwidth.shared = 8110.0 * UCS_MBYTE;
-                break;
-            case UCT_EP_OP_PUT_ZCOPY:
-                perf_attr->bandwidth.shared = 9980.0 * UCS_MBYTE;
-                break;
-            default:
+        if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE) &&
+            (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE)) {
+
+            if ((perf_attr->local_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN) &&
+                (perf_attr->remote_sys_device == UCS_SYS_DEVICE_ID_UNKNOWN)) {
                 perf_attr->bandwidth.shared = iface->config.bandwidth;
-                break;
+                return UCS_OK;
             }
+
+            perf_attr->bandwidth.shared =
+                uct_cuda_base_get_bw(perf_attr->local_sys_device,
+                                     perf_attr->remote_sys_device);
+
+            ucs_trace("bw for local sys %u remote sys %u = %lf",
+                      (unsigned)perf_attr->local_sys_device,
+                      (unsigned)perf_attr->remote_sys_device,
+                      perf_attr->bandwidth.shared);
         }
     }
 

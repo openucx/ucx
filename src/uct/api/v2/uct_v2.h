@@ -90,7 +90,10 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
 
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9)
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
+
+    /** Enables @ref uct_perf_attr_t::rkey */
+    UCT_PERF_ATTR_FIELD_REMOTE_KEY         = UCS_BIT(10)
 };
 
 
@@ -174,6 +177,12 @@ typedef struct {
      * This field is set by the UCT layer.
      */
     ucs_linear_func_t   latency;
+
+    /**
+     * Remote details embedded in the remote key to help estimate performance.
+     * This field may be initialized by the caller.
+     */
+    uct_rkey_t          rkey;
 } uct_perf_attr_t;
 
 
