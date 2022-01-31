@@ -6,7 +6,7 @@
 # helper macro
 m4_define([_CHECK_MODULE_MAKE_HELP_STRING],
           [m4_default(m4_argn($1, $2), [$3])])
-    
+
 m4_ifndef([PKG_CHECK_MODULES_STATIC],
           [AC_DEFUN([PKG_CHECK_MODULES_STATIC],
                     [AC_REQUIRE([PKG_PROG_PKG_CONFIG])
@@ -52,19 +52,19 @@ m4_define([_CHECK_MODULE_INIT_PROGRESS],
                   ["xguess"], [$2=guess],
                   ["x"],      [$2=skip],
                               [$2=dir
-                               _CHECK_MODULE_SET_DIR([$1], [$3], [$4], [$5], 
+                               _CHECK_MODULE_SET_DIR([$1], [$3], [$4], [$5],
                                                      [$6], [$7])])
          ])
 
 #
 # Configure module directories:
-#     inc=$mod-dir/include
-#     incflag=-I$mod-dir/include
-#     lib=$mod-dir/lib64 or $mod-dir/lib
-#     libflag=-L$lib (from previous step)
-#     if any of directories is missing - call if-failed macro
+#     MOD_INC_DIR=$MOD_DIR/include
+#     MOD_CFLAGS=-I$MOD_DIR/include
+#     MOD_LIB_DIR=$MOD_DIR/lib64 or $MOD_DIR/MOD_LIB_DIR
+#     MOD_LDFLAGS=-L$MOD_LIB_DIR (from previous step)
+#     if any of directories is missing - call action_if_failed macro
 #
-# Usage: _CHECK_MODULE_SET_DIR([mod-dir], [inc], [incflag], [lib], [libflag], [if-failed])
+# Usage: _CHECK_MODULE_SET_DIR([MOD_DIR], [MOD_INC_DIR], [MOD_CFLAGS], [MOD_LIB_DIR], [MOD_LDFLAGS], [action_if_failed])
 #
 m4_define([_CHECK_MODULE_SET_DIR],
           [
@@ -110,7 +110,7 @@ AC_DEFUN([_CHECK_MODULE_IS_DIR],
 # Fixup for lib path: check if $lib/lib64 exists, then set dest_var to $lib/lib64,
 #                     if not - check if $lib/lib exists, then set dest_var to
 #                     $lib/lib value. If one of directories exists call
-#                     if-success macro and call if-not macro in all other cases
+#                     if-success macro, otherwise call call if-not macro.
 #
 # Usage: _CHECK_MODULE_FIXUP_LIB([lib], [dest_var], [if-success], [if-not])
 #
@@ -246,31 +246,29 @@ AC_DEFUN([_CHECK_MODULE_PACKAGE],
              AS_IF([test -z "$1"], [mod_package_happy=no])
 
              AS_IF([test -n "$3"],
-                   [
-                       _CHECK_MODULE_IS_DIR([$3/pkgconfig],
-                                            [export PKG_CONFIG_PATH="$3/pkgconfig:$PKG_CONFIG_PATH"],
-                                            [mod_package_happy=no])
-                   ])
+                   [_CHECK_MODULE_IS_DIR([$3/pkgconfig],
+                                         [export PKG_CONFIG_PATH="$3/pkgconfig:$PKG_CONFIG_PATH"],
+                                         [mod_package_happy=no])])
 
              AS_IF([test $mod_package_happy = yes],
-                   [PKG_CHECK_MODULES$4([$2], [$1], [], [mod_package_happy=no])])
+                   [AS_IF([test "$4" = "static"],
+                          [PKG_CHECK_MODULES_STATIC([$2], [$1], [], [mod_package_happy=no])],
+                          [PKG_CHECK_MODULES([$2], [$1], [], [mod_package_happy=no])])])
 
              export PKG_CONFIG_PATH="$mod_pkg_saved_PKG_CONFIG_PATH"
 
              AS_IF([test $mod_package_happy = yes],
-                   [
-                       _CHECK_MODULE_API([$[$2_CFLAGS]], [$[$2_LIBS]],
-                                         [], [mod_package_happy=no], [$7])
-                   ])
-             
+                   [_CHECK_MODULE_API([$[$2_CFLAGS]], [$[$2_LIBS]],
+                                      [], [mod_package_happy=no], [$7])])
+
              AS_IF([test $mod_package_happy = yes], [$5], [$6])
          ])
 
 # Check if module available
-# Result: set variables prefix_CFLAGS and prefix_LIBS
+# Result: set and substitute variables prefix_CFLAGS and prefix_LIBS
 #
 # Algo:
-#     - if set static lib 
+#     - if set static lib
 #       1. check it using package configuration (--static) and try to
 #          detect whole set of dependencies
 #       2. check it using includes/ldflags provided by user
@@ -280,34 +278,34 @@ AC_DEFUN([_CHECK_MODULE_PACKAGE],
 #
 # Usage: UCX_CHECK_MODULE([id], [name], [prefix], [pkgname],
 #                         [[help], [help-lib], [help-static], [fail-msg]],
-#                         [if-found], [if-not-found],
+#                         [action-if-found], [action-if-not-found],
 #                         [[headers], [decls], [includes], [libs], [funcs], [otherlibs]],
 #                         [alt-dirs])
 #
 # Parameters:
-#   id           - module ID, used to generate runtime configuration parameters --with-id
-#   name         - readable module name
-#   prefix       - variable prefix, in success variables prefix_CFLAGS and
-#                  prefix_LIBS will store module specific flags
-#   pkgname      - package name used to lookup module using pkg-config tool, optional
-#   help         - help string for module or empty argument to generate it automatically
-#   help-lib     - help string for module library dir or empty argument to generate
-#                  it automatically
-#   help-static  - help string for static module library or empty argument to
-#                  generate it automatically, if static link is not needed set it
-#                  to '-' value (see usage example)
-#   if-found     - macro called if module configuration found
-#   if-not-found - macro called if module configuration not found or user disabled module
-#   headers      - list of header files to check, coma-separated, optional
-#   decls        - declarations to check, coma-separated, optional
-#   includes     - additional include directives to check headers and declarations, optional
-#   libs         - list of libraries to check, whitespace-separated
-#   funcs        - list of the symbols to look for in the libraries, coma-separated
-#   otherlibs    - extra libraries (including '-l' prefix) and linker flags to
-#                  check libraries, optional
-#   alt-dirs     - alternative directories to lookup: in case if user didn't
-#                  specify exact path to module then script will use this list of
-#                  directories, optional
+#   id                 - module ID, used to generate runtime configuration parameters --with-id
+#   name               - readable module name
+#   prefix             - variable prefix, in success variables prefix_CFLAGS and
+#                        prefix_LIBS will store module specific flags
+#   pkgname            - package name used to lookup module using pkg-config tool, optional
+#   help               - help string for module or empty argument to generate it automatically
+#   help-lib           - help string for module library dir or empty argument to generate
+#                        it automatically
+#   help-static        - help string for static module library or empty argument to
+#                        generate it automatically, if static link is not needed set it
+#                        to '-' value (see usage example)
+#   action-if-found    - macro called if module configuration found
+#   action-if-notfound - macro called if module configuration not found or user disabled module
+#   headers            - list of header files to check, coma-separated, optional
+#   decls              - declarations to check, coma-separated, optional
+#   includes           - additional include directives to check headers and declarations, optional
+#   libs               - list of libraries to check, whitespace-separated
+#   funcs              - list of the symbols to look for in the libraries, coma-separated
+#   otherlibs          - extra libraries (including '-l' prefix) and linker flags to
+#                        check libraries, optional
+#   alt-dirs           - alternative directories to lookup: in case if user didn't
+#                        specify exact path to module then script will use this list of
+#                        directories, optional
 #
 # Example:
 # UCX_CHECK_MODULE([xpmem], [XPMEM], [XPMEM], [xpmem],
@@ -375,7 +373,7 @@ AC_DEFUN([UCX_CHECK_MODULE],
 
              _CHECK_MODULE_RUN([$mod_progress], [yes, guess, dir],
                      [
-                         _CHECK_MODULE_PACKAGE([mod_pkg], [$3], [$mod_dir_lib], [_STATIC],
+                         _CHECK_MODULE_PACKAGE([mod_pkg], [$3], [$mod_dir_lib], [static],
                                                [mod_progress=complete], [], [$8])
                      ])
 
@@ -474,6 +472,8 @@ AC_DEFUN([UCX_CHECK_MODULE],
              _CHECK_MODULE_RUN([$mod_progress], [skip], [$7], [AC_MSG_CHECKING(mod_name)])
              _CHECK_MODULE_RUN([$mod_progress], [complete],
                                [AC_MSG_RESULT(yes)
+                                AC_SUBST(mod_prefix[]_LIBS)
+                                AC_SUBST(mod_prefix[]_CFLAGS)
                                 $6])
              _CHECK_MODULE_RUN([$mod_progress], [guess],
                                [AC_MSG_RESULT(no)

@@ -14,7 +14,5 @@ UCX_CHECK_MODULE([xpmem], [XPMEM], [XPMEM], [xpmem],
                   [/opt/xpmem, /usr/local, /usr/local/xpmem])
 
 AM_CONDITIONAL([HAVE_XPMEM], [$have_xpmem])
-AC_SUBST(XPMEM_CFLAGS)
-AC_SUBST(XPMEM_LIBS)
 AC_CONFIG_FILES([src/uct/sm/mm/xpmem/Makefile
                  src/uct/sm/mm/xpmem/ucx-xpmem.pc])
