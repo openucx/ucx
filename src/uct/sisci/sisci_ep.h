@@ -8,6 +8,10 @@
 
 
 
+typedef struct uct_sicsci_ep_addr{
+    uct_sci_device_addr_t device_addr;
+    uct_sci_iface_addr_t iface_addr;
+}  UCS_S_PACKED uct_sicsci_ep_addr_t;
 
 typedef struct uct_sci_ep {
     uct_base_ep_t           super;

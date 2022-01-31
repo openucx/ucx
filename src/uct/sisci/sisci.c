@@ -11,9 +11,6 @@
 //#include "sci_iface.c"
 
 
-#define ADAPTER_NO 0
-#define SCI_NO_FLAGS 0
-
 /* Forward declarations */
 static uct_iface_ops_t uct_sci_iface_ops;
 static uct_component_t uct_sci_component;

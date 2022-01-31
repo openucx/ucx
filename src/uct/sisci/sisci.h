@@ -13,7 +13,9 @@
 #define UCT_sci_CONFIG_PREFIX "sci_"
 
 
-//typedef uint64_t uct_sci_iface_addr_t;
+
+#define ADAPTER_NO 0
+#define SCI_NO_FLAGS 0
 
 
 
@@ -26,10 +28,6 @@ typedef struct uct_sci_device_addr {
 } UCS_S_PACKED uct_sci_device_addr_t;
 
 
-typedef struct uct_sicsci_ep_addr{
-    uct_sci_device_addr_t device_addr;
-    uct_sci_iface_addr_t iface_addr;
-}  UCS_S_PACKED uct_sicsci_ep_addr_t;
 
 
 typedef struct sci_map_holder {
