@@ -15,7 +15,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
         [
          cuda_happy=no
          cudart_happy=no
-         have_cuda_static=no
+         have_cudart_static=no
         ],
         [
          save_CPPFLAGS="$CPPFLAGS"
@@ -83,11 +83,11 @@ AS_IF([test "x$cuda_checked" != "xyes"],
          LDFLAGS="$save_LDFLAGS"
 
          # Check for cuda static library
-         have_cuda_static="no"
+         have_cudart_static="no"
          AS_IF([test "x$cudart_happy" = "xyes"],
                [AC_CHECK_LIB([cudart_static], [cudaGetDeviceCount],
                              [CUDART_STATIC_LIBS="$CUDART_STATIC_LIBS -lcudart_static"
-                              have_cuda_static="yes"],
+                              have_cudart_static="yes"],
                              [], [-ldl -lrt -lpthread])])
 
          CPPFLAGS="$save_CPPFLAGS"
@@ -118,7 +118,7 @@ AS_IF([test "x$cuda_checked" != "xyes"],
         cuda_checked=yes
         AM_CONDITIONAL([HAVE_CUDA], [test "x$cuda_happy" != xno])
         AM_CONDITIONAL([HAVE_CUDART], [test "x$cudart_happy" != xno])
-        AM_CONDITIONAL([HAVE_CUDART_STATIC], [test "X$have_cuda_static" = "Xyes"])
+        AM_CONDITIONAL([HAVE_CUDART_STATIC], [test "X$have_cudart_static" = "Xyes"])
 
    ]) # "x$cuda_checked" != "xyes"
 
