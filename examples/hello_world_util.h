@@ -17,8 +17,7 @@
 #include <unistd.h>
 #include <netdb.h>
 
-#ifdef HAVE_CUDA
-#  include <cuda.h>
+#ifdef HAVE_CUDART
 #  include <cuda_runtime.h>
 #endif
 

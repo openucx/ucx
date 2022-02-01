@@ -75,15 +75,23 @@ test_cuda_hook_dynamic_LDADD    = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
                                   $(CUDA_LIBS)
 
-if HAVE_CUDA_STATIC
+if HAVE_CUDART
+test_cuda_hook_dynamic_CPPFLAGS += $(CUDART_CPPFLAGS)
+test_cuda_hook_dynamic_LDFLAGS  += $(CUDART_LDFLAGS)
+test_cuda_hook_dynamic_LDADD    += $(CUDART_LIBS)
+
+if HAVE_CUDART_STATIC
 noinst_PROGRAMS                += test_cuda_hook_static
 test_cuda_hook_static_SOURCES   = test_cuda_hook.c
-test_cuda_hook_static_CPPFLAGS  = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS)
+test_cuda_hook_static_CPPFLAGS  = $(BASE_CPPFLAGS) $(CUDA_CPPFLAGS) $(CUDART_CPPFLAGS)
 test_cuda_hook_static_CFLAGS    = $(BASE_CFLAGS)
-test_cuda_hook_static_LDFLAGS   = $(CUDA_LDFLAGS)
+test_cuda_hook_static_LDFLAGS   = $(CUDA_LDFLAGS) $(CUDART_LDFLAGS)
 test_cuda_hook_static_LDADD     = $(top_builddir)/src/ucp/libucp.la \
                                   $(top_builddir)/src/ucm/libucm.la \
-                                  $(CUDA_STATIC_LIBS) -lcuda -lrt -ldl -lpthread
+                                  $(CUDART_STATIC_LIBS) $(CUDA_LIBS) -lrt -ldl -lpthread
+
+endif
+
 endif
 
 endif

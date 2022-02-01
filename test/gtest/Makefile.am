@@ -240,6 +240,16 @@ gtest_LDFLAGS += \
 gtest_LDADD += \
 	$(CUDA_LIBS) \
 	$(top_builddir)/src/uct/cuda/libuct_cuda.la
+
+if HAVE_CUDART
+gtest_CPPFLAGS += \
+	$(CUDART_CPPFLAGS)
+gtest_LDFLAGS += \
+	$(CUDART_LDFLAGS)
+gtest_LDADD += \
+	$(CUDART_LIBS) \
+	$(top_builddir)/src/uct/cuda/libuct_cuda.la
+endif
 endif
 
 if HAVE_HIP
