@@ -1088,9 +1088,11 @@ uint64_t ucp_address_get_client_id(const void *address)
 
 uint8_t ucp_address_is_am_only(const void *address)
 {
-    const uint8_t address_header = *(const uint8_t *)address;
+    uint8_t addr_flags;
+    ucp_object_version_t addr_version;
 
-    return address_header & UCP_ADDRESS_HEADER_FLAG_AM_ONLY;
+    ucp_address_unpack_header(address, &addr_version, &addr_flags);
+    return addr_flags & UCP_ADDRESS_HEADER_FLAG_AM_ONLY;
 }
 
 static ucs_status_t
