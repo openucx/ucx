@@ -180,7 +180,8 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     uct_sci_ep_t* ep = ucs_derived_of(tl_ep, uct_sci_ep_t);
     sisci_packet_t* packet = ep->buf; 
 
-    printf("sizeof adress %zd sizeof unsigned %zd size of uint %zd size of void %zd\n", sizeof(uct_sicsci_ep_addr_t),sizeof(length), sizeof(uint), sizeof(void*));
+    //printf("sizeof adress %zd sizeof unsigned %zd size of uint %zd size of void %zd\n", sizeof(uct_sicsci_ep_addr_t),sizeof(length), sizeof(uint), sizeof(void*));
+    
     packet->am_id = id;
     packet->length = length + sizeof(header);
     uct_am_short_fill_data(ep->buf + sizeof(sisci_packet_t), header, payload, length);
@@ -188,7 +189,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     packet->status = 1;
     SCIFlush(NULL, SCI_NO_FLAGS);
 
-    printf("uct_sci_ep_am_short() %d %ld %d \n", id, header, length);
+    DEBUG_PRINT("EP_SEG %d EP_NOD %d AM_ID %d size %d \n", ep->remote_segment_id, ep->remote_node_id, id, length);
     
     return UCS_OK;
 }

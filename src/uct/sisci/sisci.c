@@ -154,8 +154,6 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return status;
     }
 
-    printf("");
-
     status = ucs_mpool_init(
             &self->msg_mp, 0, self->send_size, align_offset, alignment,
             10, /* 2 elements are enough for most of communications */
@@ -172,7 +170,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_iface_t)
     /* 
         TODO: Add proper cleanup for iface, i.e free resources that were allocated on init. 
     */
-    printf("UCS_CLASS_CLEANUP_FUNC: sci_IFACE\n");
+    DEBUG_PRINT("closed iface\n");
     ucs_mpool_cleanup(&self->msg_mp, 1);
 
     uct_base_iface_progress_disable(&self->super.super,
@@ -216,7 +214,7 @@ static ucs_status_t uct_sci_query_md_resources(uct_component_t *component,
     ucs_snprintf_zero(resources->md_name, UCT_MD_NAME_MAX, "%s", component->name);
 
    
-    printf("sci: UCT_SICI_QUERY_MD_RESOURCES\n");
+    DEBUG_PRINT("query md\n");
     
     return status;
 }
@@ -250,11 +248,7 @@ static ucs_status_t uct_sci_query_devices(uct_md_h md,
                                       UCS_SYS_DEVICE_ID_UNKNOWN, devices_p,
                                       num_devices_p);
     
-    printf("query_devices_status: %d\n", status);
     return status; 
-
-    //return UCS_ERR_NO_DEVICE;
-    //return UCS_OK;
 }
 
 
@@ -281,7 +275,7 @@ static ucs_status_t uct_sci_md_query(uct_md_h md, uct_md_attr_t *attr)
 static ucs_status_t uct_sci_mem_reg(uct_md_h md, void *address, size_t length,
                                      unsigned flags, uct_mem_h *memh_p)
 {
-    printf("uct_sci_mem_reg()");
+    DEBUG_PRINT("Empty func\n");
 
     /* We have to emulate memory registration. Return dummy pointer */
     *memh_p = (void *) 0xdeadbeef;
@@ -291,7 +285,7 @@ static ucs_status_t uct_sci_mem_reg(uct_md_h md, void *address, size_t length,
 static ucs_status_t uct_sci_mem_dereg(uct_md_h uct_md,
                                        const uct_md_mem_dereg_params_t *params)
 {
-    printf("uct_sci_mem_dereg()");
+    DEBUG_PRINT("Empty func\n");
     UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
 
     ucs_assert(params->memh == (void*)0xdeadbeef);
@@ -311,7 +305,7 @@ static void uct_sci_md_close(uct_md_h md) {
 
     if (sci_error != SCI_ERR_OK)
         {
-            printf("sci_init error: %s/n", SCIGetErrorString(sci_error));
+            printf("Error closing Virtual_Device error: %s \n", SCIGetErrorString(sci_error));
         }
     
     uct_sci_close();
@@ -364,8 +358,7 @@ static ucs_status_t uct_sci_md_open(uct_component_t *component, const char *md_n
 
 
 
-    printf("number of devices : %ld \n", md.num_devices);
-    printf("UCT_sci_MD_OPEN\n");
+    DEBUG_PRINT("md opened \n");
     return UCS_OK;
 }
 
@@ -394,8 +387,7 @@ ucs_status_t uct_sci_get_device_address(uct_iface_h iface, uct_device_addr_t *ad
 
     uct_sci_device_addr_t* sci_addr = (uct_sci_device_addr_t *) addr;
 
-    printf("iface_data = %d %d\n", sci_iface->segment_id, sci_iface->device_addr);
-    printf("sci_get_device_address() %d\n", md->segment_id);
+    DEBUG_PRINT("segment_id %d node_id %d\n", sci_iface->segment_id, sci_iface->device_addr);
 
     sci_addr->node_id = sci_iface->device_addr;
 
@@ -421,7 +413,7 @@ ucs_status_t uct_sci_iface_get_address(uct_iface_h tl_iface,
 void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 
     uct_base_iface_progress_enable(iface, flags);
-    DEBUG_PRINT("Progress Enabled");
+    DEBUG_PRINT("Progress Enabled\n");
 }
 
 
@@ -432,7 +424,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buffer + sizeof(sisci_packet_t), packet->length,0);
     
     DEBUG_PRINT("length: %d what we recieved %s\n", packet->length, (char *) iface->recv_buffer + sizeof(sisci_packet_t));
-    printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
+    //printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
 
     if(status == UCS_INPROGRESS) {
         DEBUG_PRINT("UCS_IN_PROGRESS\n");
@@ -441,7 +433,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     if(status == UCS_OK) {
         packet->am_id = 0;
         packet->status = 0;
-       //memset(iface->recv_buffer, packet->length, sizeof(void*));
+        memset(iface->recv_buffer, packet->length, sizeof(void*));
         packet->length = 0;
     }
 
@@ -458,7 +450,7 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
     if (packet->status == 1)
     {
 
-        printf("AMID %d, Length %d!\n", packet->am_id, packet->length);
+        DEBUG_PRINT("recv: AMID %d, Length %d!\n", packet->am_id, packet->length);
         uct_sci_process_recv(tl_iface);
     }
     
