@@ -3062,9 +3062,9 @@ ucp_worker_keepalive_complete(ucp_worker_h worker, ucs_time_t now)
     worker->keepalive.round_count++;
 }
 
-static UCS_F_NOINLINE unsigned ucp_worker_do_keepalive_progress(void *arg)
+static UCS_F_NOINLINE unsigned
+ucp_worker_do_keepalive_progress(ucp_worker_h worker)
 {
-    ucp_worker_h worker     = (ucp_worker_h)arg;
     unsigned progress_count = 0;
     unsigned max_ep_count   = worker->context->config.ext.keepalive_num_eps;
     ucs_time_t now;
