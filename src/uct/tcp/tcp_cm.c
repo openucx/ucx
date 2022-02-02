@@ -251,7 +251,7 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
         status = uct_tcp_ep_handle_io_err(ep, "send", status);
         uct_tcp_cm_trace_conn_pkt(ep,
                                   (log_error && (status != UCS_ERR_CANCELED)) ?
-                                  UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR,
+                                  UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG,
                                   "unable to send %s to", event);
     }
 
