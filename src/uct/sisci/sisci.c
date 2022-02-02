@@ -237,8 +237,8 @@ static ucs_status_t uct_sci_query_devices(uct_md_h md,
     The reasoning for this is the rather "limited" scope of our master thesis,  
     */
 
-    printf("UCT_sci_QUERY_DEVICES\n");
-
+    //printf("UCT_sci_QUERY_DEVICES\n");
+    DEBUG_PRINT()
     /* 
         Taken from self.c, 
     */
@@ -379,7 +379,7 @@ int uct_sci_iface_is_reachable(const uct_iface_h tl_iface,
     //const uct_self_iface_addr_t *addr = (const uct_self_iface_addr_t*)iface_addr;
 
     //return (addr != NULL) && (iface->id == *addr);
-    printf("UCT_sci_iface_is reachable\n");
+    DEBUG_PRINT("iface is reachable\n");
     return 1;
 }
 
@@ -412,7 +412,7 @@ ucs_status_t uct_sci_iface_get_address(uct_iface_h tl_iface,
     
     iface_addr->segment_id = iface->segment_id;
     
-    printf("uct_iface_get_address()\n");
+    DEBUG_PRINT("uct_iface_get_address()\n");
     return UCS_OK;
 }
 
@@ -420,8 +420,7 @@ ucs_status_t uct_sci_iface_get_address(uct_iface_h tl_iface,
 void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 
     uct_base_iface_progress_enable(iface, flags);
-
-    printf("uct_sci_iface_progress_enable_func_t\n");
+    DEBUG_PRINT("Progress Enabled");
 }
 
 
@@ -431,11 +430,11 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     ucs_status_t status;
     status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buffer + sizeof(sisci_packet_t), packet->length,0);
     
-    printf("length: %d what we recieved %s\n", packet->length, (char *) iface->recv_buffer + sizeof(sisci_packet_t));
+    DEBUG_PRINT("length: %d what we recieved %s\n", packet->length, (char *) iface->recv_buffer + sizeof(sisci_packet_t));
     printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
 
     if(status == UCS_INPROGRESS) {
-        printf("UCS_IN_PROGRESS\n");
+        DEBUG_PRINT("UCS_IN_PROGRESS\n");
     }
 
     if(status == UCS_OK) {
@@ -445,7 +444,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
         packet->length = 0;
     }
 
-    printf("invoke staus %d\n", status);
+    //printf("invoke staus %d\n", status);
 
 }
 
@@ -472,7 +471,7 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     //TODO: find out why we need this
     if (!iface_query_printed) {
-        DEBUG_PRINT("UCT_sci_iface_query\n");
+        DEBUG_PRINT("iface querried\n");
     }
 
     //TODO: insert necessarry lies to make ucx want us.
@@ -517,7 +516,7 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
 
     if(!iface_query_printed) {
-        printf("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
+        DEBUG_PRINT("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
         iface_query_printed = 1;
     }
     return UCS_OK;
@@ -533,7 +532,7 @@ static ucs_status_t uct_sci_md_rkey_unpack(uct_component_t *component,
      * Pseudo stub function for the key unpacking
      * Need rkey == 0 due to work with same process to reuse uct_base_[put|get|atomic]*
      */
-    printf("uct_sci_md_rkey_unpack()");
+    DEBUG_PRINT("uct_sci_md_rkey_unpack()");
     *rkey_p   = 0;
     *handle_p = NULL;
     return UCS_OK;
