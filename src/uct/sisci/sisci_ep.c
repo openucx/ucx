@@ -8,8 +8,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
     sci_error_t sci_error;
     printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
     
-
-    //TODO: Find out why this code causes a segfault... When in running in devel mode. Something with how allocates the maps.
     
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
     
@@ -18,9 +16,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_UNMAP_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
-
-    
-
 
     SCIDisconnectSegment(self->remote_segment, 0, &sci_error);
 
@@ -84,6 +79,8 @@ UCS_CLASS_DEFINE(uct_sci_ep_t, uct_base_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_sci_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_sci_ep_t, uct_ep_t);
 
+
+/* //SECTION RDMA*/
 ucs_status_t uct_sci_ep_put_short (uct_ep_h tl_ep, const void *buffer,
                                  unsigned length, uint64_t remote_addr,
                                  uct_rkey_t rkey)
@@ -110,6 +107,11 @@ ucs_status_t uct_sci_ep_get_bcopy(uct_ep_h tl_ep, uct_unpack_callback_t unpack_c
     printf("uct_sci_ep_get_bcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
+
+
+/*//!SECTION*/
+
+/* //SECTION ATOMICS*/
 
 ucs_status_t uct_sci_ep_atomic32_post(uct_ep_h ep, unsigned opcode, uint32_t value,
                                      uint64_t remote_addr, uct_rkey_t rkey)
@@ -167,26 +169,21 @@ ucs_status_t uct_sci_ep_atomic_cswap32(uct_ep_h tl_ep, uint32_t compare,
     return UCS_ERR_NOT_IMPLEMENTED;
 }
 
-//from sm self.c
+/* //!SECTION */
+
+/*  // SECTION Active messages */
 
 ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
                                   const void *payload, unsigned length)
 {
-    //TODO
+    //TODO Implement the fifo queue shenanigans for am_short
     uct_sci_ep_t* ep = ucs_derived_of(tl_ep, uct_sci_ep_t);
     sisci_packet_t* packet = ep->buf; 
-    //char* test = (char*) payload;
-    
-    //uint* tmp = (uint* ) ep->buf;
-    //void * map = (void *) SCIGetMapPointer(ep->remote_map);
-
 
     printf("sizeof adress %zd sizeof unsigned %zd size of uint %zd size of void %zd\n", sizeof(uct_sicsci_ep_addr_t),sizeof(length), sizeof(uint), sizeof(void*));
     packet->am_id = id;
     packet->length = length + sizeof(header);
-    //memcpy(packet->data, payload, length);
     uct_am_short_fill_data(ep->buf + sizeof(sisci_packet_t), header, payload, length);
-    //memcpy(ep->buf + sizeof(sisci_packet_t), payload, length);
     SCIFlush(NULL, SCI_NO_FLAGS);    
     packet->status = 1;
     SCIFlush(NULL, SCI_NO_FLAGS);
@@ -199,7 +196,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 ucs_status_t uct_sci_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
                                       const uct_iov_t *iov, size_t iovcnt)
 {
-    //TODO
+    //TODO short_iov
     printf("uct_sci_ep_am_short_iov()\n");
     return UCS_ERR_NOT_IMPLEMENTED;
 }
@@ -208,7 +205,7 @@ ssize_t uct_sci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
                              uct_pack_callback_t pack_cb, void *arg,
                              unsigned flags)
 {
-    //TODO
+    //TODO bcopy
     printf("uct_sci_ep_am_bcopy()\n");
     return -8;
 }
@@ -216,8 +213,10 @@ ssize_t uct_sci_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id,
 ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h ep, uint8_t id, const void *header, unsigned header_length, 
                             const uct_iov_t *iov, size_t iovcnt, unsigned flags, uct_completion_t *comp) 
 {
+    //TODO zcopy
     printf("uct_sci_ep_am_zcopy()\n");
     return UCS_ERR_NOT_IMPLEMENTED;;    
 }
 
+/* //!SECTION*/
 

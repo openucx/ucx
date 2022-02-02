@@ -105,7 +105,4 @@ typedef struct uct_sci_md_config {
 
 
 
-
-
-
 #endif
