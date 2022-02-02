@@ -238,7 +238,7 @@ static ucs_status_t uct_sci_query_devices(uct_md_h md,
     */
 
     //printf("UCT_sci_QUERY_DEVICES\n");
-    DEBUG_PRINT()
+    DEBUG_PRINT();
     /* 
         Taken from self.c, 
     */
