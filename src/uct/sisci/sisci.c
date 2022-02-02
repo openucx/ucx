@@ -299,7 +299,7 @@ static void uct_sci_md_close(uct_md_h md) {
     
     uct_sci_md_t * sci_md = ucs_derived_of(md, uct_sci_md_t);
     sci_error_t sci_error;
-    printf("uct_sci_md_close: teehee %d\n", sci_md->segment_id);
+    DEBUG_PRINT("md closed\n");
 
     SCIClose(sci_md->sci_virtual_device, 0 , &sci_error);
 

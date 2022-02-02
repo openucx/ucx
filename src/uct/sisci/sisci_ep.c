@@ -6,7 +6,7 @@
 static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
 {   
     sci_error_t sci_error;
-    printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
+    //printf("UCS_SICSCI_EP_CLEANUP_FUNC() %d \n", self->remote_segment_id);
     
     
     SCIUnmapSegment(self->remote_map, 0, &sci_error);
@@ -22,10 +22,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_DISCONNECT_SEGMENT: %s\n", SCIGetErrorString(sci_error));
     }
-
-
     
-    printf("EP_DELETED : )\n");
+    DEBUG_PRINT("ep deleted segment_id %d node_id %d\n", self->remote_segment_id, self->remote_node_id);
 }
 
 
@@ -47,7 +45,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     segment_id = (unsigned int) iface_addr->segment_id;
     node_id = (unsigned int) dev_addr->node_id;
 
-    printf("create_ep: nodeID: %d segID: %d\n", segment_id, node_id);
+    DEBUG_PRINT("EP created segment_id %d node_id %d\n", segment_id, node_id);
     self->super.super.iface = params->iface;
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
@@ -59,7 +57,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     SCIConnectSegment(md->sci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
                 ADAPTER_NO, NULL, NULL, 0, 0, &sci_error);
 
-    printf("waiting to connect\n");
+    DEBUG_PRINT("waiting to connect\n");
   } while (sci_error != SCI_ERR_OK);
     
 
@@ -70,7 +68,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
         return UCS_ERR_NO_RESOURCE;
     }
     
-    printf("EP connected to %d %d\n", self->remote_node_id, self->remote_segment_id);
+    DEBUG_PRINT("EP connected to segment %d at node %d\n",  self->remote_segment_id, self->remote_node_id);
     return UCS_OK;
 }
 
@@ -189,7 +187,7 @@ ucs_status_t uct_sci_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
     packet->status = 1;
     SCIFlush(NULL, SCI_NO_FLAGS);
 
-    DEBUG_PRINT("EP_SEG %d EP_NOD %d AM_ID %d size %d \n", ep->remote_segment_id, ep->remote_node_id, id, length);
+    DEBUG_PRINT("EP_SEG %d EP_NOD %d AM_ID %d size %d \n", ep->remote_segment_id, ep->remote_node_id, id, packet->length);
     
     return UCS_OK;
 }
