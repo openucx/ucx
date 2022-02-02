@@ -15,6 +15,17 @@
 #define ADAPTER_NO 0
 #define SCI_NO_FLAGS 0
 
+
+// https://stackoverflow.com/questions/1941307/debug-print-macro-in-c by Tom Kuschel
+#define DEBUG 3
+
+#if defined(DEBUG) && DEBUG > 0
+ #define DEBUG_PRINT(fmt, args...) fprintf(stderr, "DEBUG: %s:%d:%s(): " fmt, \
+    __FILE__, __LINE__, __func__, ##args)
+#else
+ #define DEBUG_PRINT(fmt, args...) /* Don't do anything in release builds */
+#endif
+
 typedef struct uct_sci_iface_addr {
     unsigned int segment_id; /* Listening port of iface */
 } UCS_S_PACKED uct_sci_iface_addr_t;

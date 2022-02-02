@@ -472,7 +472,7 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     //TODO: find out why we need this
     if (!iface_query_printed) {
-        printf("UCT_sci_iface_query\n");
+        DEBUG_PRINT("UCT_sci_iface_query\n");
     }
 
     //TODO: insert necessarry lies to make ucx want us.
