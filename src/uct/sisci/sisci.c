@@ -383,7 +383,7 @@ ucs_status_t uct_sci_get_device_address(uct_iface_h iface, uct_device_addr_t *ad
     
     uct_sci_iface_t* sci_iface = ucs_derived_of(iface, uct_sci_iface_t);
     
-    uct_sci_md_t* md =  ucs_derived_of(sci_iface->super.md, uct_sci_md_t);  
+    //uct_sci_md_t* md =  ucs_derived_of(sci_iface->super.md, uct_sci_md_t);  UNUSED
 
     uct_sci_device_addr_t* sci_addr = (uct_sci_device_addr_t *) addr;
 
