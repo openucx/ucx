@@ -67,7 +67,7 @@ void *mem_type_malloc(size_t length)
     case UCS_MEMORY_TYPE_HOST:
         ptr = malloc(length);
         break;
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
     case UCS_MEMORY_TYPE_CUDA:
         CUDA_FUNC(cudaMalloc(&ptr, length));
         break;
@@ -90,7 +90,7 @@ void mem_type_free(void *address)
     case UCS_MEMORY_TYPE_HOST:
         free(address);
         break;
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_FUNC(cudaFree(address));
@@ -108,7 +108,7 @@ void *mem_type_memcpy(void *dst, const void *src, size_t count)
     case UCS_MEMORY_TYPE_HOST:
         memcpy(dst, src, count);
         break;
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_FUNC(cudaMemcpy(dst, src, count, cudaMemcpyDefault));
@@ -128,7 +128,7 @@ void *mem_type_memset(void *dst, int value, size_t count)
     case UCS_MEMORY_TYPE_HOST:
         memset(dst, value, count);
         break;
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_FUNC(cudaMemset(dst, value, count));
@@ -149,7 +149,7 @@ int check_mem_type_support(ucs_memory_type_t mem_type)
         return 1;
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
         return 1;
 #else
         return 0;
