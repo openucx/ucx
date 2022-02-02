@@ -312,7 +312,7 @@ public:
     static void fill_commit(void *buffer, void *fill_buffer, size_t size,
                             ucs_memory_type_t memory_type)
     {
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
         if (memory_type == UCS_MEMORY_TYPE_CUDA) {
             cudaMemcpy(buffer, fill_buffer, size, cudaMemcpyDefault);
         }
@@ -337,7 +337,7 @@ public:
     static const void *get_host_validate_buffer(const void *buffer, size_t size,
                                                 ucs_memory_type_t memory_type)
     {
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
         static std::vector<uint8_t> _buffer;
 
         if (memory_type == UCS_MEMORY_TYPE_CUDA) {
@@ -487,14 +487,14 @@ protected:
                                 ucs_memory_type_t memory_type,
                                 UcxContext *map_context)
         {
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
             cudaError_t cerr;
 #endif
             ucp_mem_h memh;
             void *buffer;
 
             switch (memory_type) {
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
             case UCS_MEMORY_TYPE_CUDA:
                 cerr = cudaMalloc(&buffer, size);
                 if (cerr != cudaSuccess) {
@@ -540,7 +540,7 @@ protected:
                 LOG << "WARNING: Failed to unmap buffer" << _buffer;
             }
             switch (_memory_type) {
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
             case UCS_MEMORY_TYPE_CUDA:
             case UCS_MEMORY_TYPE_CUDA_MANAGED:
                 cudaFree(_buffer);
@@ -2769,7 +2769,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'm':
             if (!strcmp(optarg, "host")) {
                 test_opts->memory_type = UCS_MEMORY_TYPE_HOST;
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
             } else if (!strcmp(optarg, "cuda")) {
                 test_opts->memory_type = UCS_MEMORY_TYPE_CUDA;
             } else if (!strcmp(optarg, "cuda-managed")) {
@@ -2822,7 +2822,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -P <interval>               Set report printing interval"  << std::endl;
             std::cout << "" << std::endl;
             std::cout << "  -m <memory_type>            Memory type to use. Possible values: host"
-#ifdef HAVE_CUDA
+#ifdef HAVE_CUDART
                       << ", cuda, cuda-managed"
 #endif
                       << std::endl;
