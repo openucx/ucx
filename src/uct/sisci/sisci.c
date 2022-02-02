@@ -44,7 +44,7 @@ int iface_query_printed = 0;
 static unsigned int uct_sci_open(){
     sci_error_t sci_error = 0;
 
-    printf("sci_open(%d)\n", sci_opened);
+    DEBUG_PRINT("sci_open(%d)\n", sci_opened);
     if (sci_opened == 0)
     {
         SCIInitialize(0,&sci_error);
@@ -63,7 +63,7 @@ static unsigned int uct_sci_open(){
     Closing the api is even more hands off than 
 */
 static unsigned int uct_sci_close(){
-    printf("sci_close(%d)\n", sci_opened);
+    DEBUG_PRINT("sci_close(%d)\n", sci_opened);
     if (sci_opened == 1)
     {
         SCITerminate();
@@ -89,7 +89,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
     uct_sci_md_t * sci_md = ucs_derived_of(md, uct_sci_md_t);
 
-    printf("UCS_sci_CLASS_INIT_FUNC() hm\n");
+    DEBUG_PRINT("\n");
 
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sci_iface_ops,
@@ -162,7 +162,8 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
             10, &uct_sci_mpool_ops, "sci_msg_desc");
 
 
-    printf("iface_init iface_addr: %d dev_addr: %d \n", self->segment_id, self->device_addr);
+
+    DEBUG_PRINT("iface_addr: %d dev_addr: %d \n", self->segment_id, self->device_addr);
     return UCS_OK;
 }
 
@@ -238,7 +239,7 @@ static ucs_status_t uct_sci_query_devices(uct_md_h md,
     */
 
     //printf("UCT_sci_QUERY_DEVICES\n");
-    DEBUG_PRINT();
+    DEBUG_PRINT("\n");
     /* 
         Taken from self.c, 
     */
