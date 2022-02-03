@@ -12,12 +12,20 @@
 
 #include <ucs/config/parser.h>
 #include <ucs/config/global_opts.h>
+#include <ucs/sys/string.h>
 #include <ucm/api/ucm.h>
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 
+
+const char *proc_placement_names[] = {
+    [PROCESS_PLACEMENT_SELF]  = "self",
+    [PROCESS_PLACEMENT_INTRA] = "intra",
+    [PROCESS_PLACEMENT_INTER] = "inter",
+    [PROCESS_PLACEMENT_LAST]  = NULL
+};
 
 static void usage() {
     printf("Usage: ucx_info [options]\n");
@@ -198,15 +206,9 @@ int main(int argc, char **argv)
             }
             break;
         case 'P':
-            if (!strcasecmp(optarg, "intra")) {
-                /* Only Network and SHM devices are allowed for processes on the
-                 * same node */
-                proc_placement = PROCESS_PLACEMENT_INTRA;
-            } else if (!strcasecmp(optarg, "inter")) {
-                /* Only Network devices are allowed for processes on the
-                 * different node */
-                proc_placement = PROCESS_PLACEMENT_INTER;
-            } else if (strcasecmp(optarg, "self")) {
+            proc_placement = ucs_string_find_in_list(optarg,
+                                                     proc_placement_names, 0);
+            if (proc_placement == -1) {
                 usage();
                 return -1;
             }

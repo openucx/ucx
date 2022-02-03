@@ -229,6 +229,9 @@ struct ucp_ep_config_key {
 
     /* Error handling mode */
     ucp_err_handling_mode_t  err_mode;
+
+    /* User-defined endpoint scope name, or ucp_ep_default_scope_name */
+    char                     *scope_name;
 };
 
 
@@ -621,11 +624,12 @@ ucs_status_t
 ucp_ep_create_to_worker_addr(ucp_worker_h worker,
                              const ucp_tl_bitmap_t *local_tl_bitmap,
                              const ucp_unpacked_address_t *remote_address,
-                             unsigned ep_init_flags, const char *message,
-                             ucp_ep_h *ep_p);
+                             unsigned ep_init_flags, const char *scope_name,
+                             const char *message, ucp_ep_h *ep_p);
 
 ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
                                          const ucp_conn_request_h conn_request,
+                                         const char *scope_name,
                                          ucp_ep_h *ep_p);
 
 ucs_status_ptr_t ucp_ep_flush_internal(ucp_ep_h ep, unsigned req_flags,
@@ -786,5 +790,9 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
  * @return Error code as defined by @ref ucs_status_t
  */
 ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
+
+
+/* Default endpoint scope name */
+extern char ucp_ep_scope_default[];
 
 #endif

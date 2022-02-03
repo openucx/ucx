@@ -352,9 +352,10 @@ typedef struct ucp_worker {
 } ucp_worker_t;
 
 
-ucs_status_t
-ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
-                         int print_cfg, ucp_worker_cfg_index_t *cfg_index_p);
+ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
+                                      const ucp_ep_config_key_t *key,
+                                      unsigned ep_init_flags,
+                                      ucp_worker_cfg_index_t *cfg_index_p);
 
 ucs_status_t
 ucp_worker_add_rkey_config(ucp_worker_h worker,
@@ -405,6 +406,9 @@ void ucp_worker_vfs_refresh(void *obj);
 void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self);
 
 unsigned ucp_worker_discard_uct_ep_progress(void *arg);
+
+const char *ucp_worker_ep_config_scope_name(ucp_worker_h worker,
+                                            ucp_worker_cfg_index_t cfg_index);
 
 static UCS_F_ALWAYS_INLINE void
 ucp_worker_flush_ops_count_inc(ucp_worker_h worker)

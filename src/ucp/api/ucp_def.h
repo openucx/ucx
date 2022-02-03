@@ -628,7 +628,7 @@ typedef ucs_status_t (*ucp_am_callback_t)(void *arg, void *data, size_t length,
  * @param [in]  header        User defined active message header.
  *                            If @a header_length is 0, this value is undefined
  *                            and must not be accessed.
- * @param [in]  header_length Active message header length in bytes. 
+ * @param [in]  header_length Active message header length in bytes.
  * @param [in]  data          Points to the received data if @a
  *                            UCP_AM_RECV_ATTR_FLAG_RNDV flag is not set in
  *                            @ref ucp_am_recv_param_t.recv_attr. Otherwise
@@ -760,6 +760,14 @@ typedef struct ucp_ep_params {
      * UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR bit in the field mask must be set.
      */
     ucs_sock_addr_t         local_sockaddr;
+
+    /**
+     * Endpoint scope name. if set, debug information about endpoint's
+     * transports and protocols configuration will be aggregated according to
+     * the scope name string.
+     * For example: "inter-node", "intra-node", "intra-process", etc.
+     */
+    const char              *scope_name;
 
 } ucp_ep_params_t;
 

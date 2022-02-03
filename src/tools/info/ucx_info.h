@@ -32,9 +32,12 @@ enum {
 typedef enum {
     PROCESS_PLACEMENT_SELF,
     PROCESS_PLACEMENT_INTRA,
-    PROCESS_PLACEMENT_INTER
+    PROCESS_PLACEMENT_INTER,
+    PROCESS_PLACEMENT_LAST
 } process_placement_t;
 
+
+extern const char *proc_placement_names[];
 
 void print_version();
 

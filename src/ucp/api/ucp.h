@@ -250,7 +250,8 @@ enum ucp_ep_params_field {
     /**< Connection request field */
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
     UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
-    UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8)  /**< Local socket Address */
+    UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8), /**< Local socket address */
+    UCP_EP_PARAM_FIELD_SCOPE_NAME        = UCS_BIT(9)  /**< Endpoint scope name */
 };
 
 

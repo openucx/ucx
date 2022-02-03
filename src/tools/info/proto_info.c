@@ -115,8 +115,10 @@ static void conn_handler_callback(ucp_conn_request_h conn_req, void *arg)
     ucp_ep_h ep;
     ucs_status_t status;
 
-    ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST;
+    ep_params.field_mask  |= UCP_EP_PARAM_FIELD_CONN_REQUEST |
+                             UCP_EP_PARAM_FIELD_SCOPE_NAME;
     ep_params.conn_request = conn_req;
+    ep_params.scope_name   = "server-ep";
 
     status = ucp_ep_create(worker, &ep_params, &ep);
     if (status != UCS_OK) {
@@ -241,14 +243,14 @@ print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
     ucp_ep_h server_ep             = NULL;
     ucp_ep_params_t ep_params      = *base_ep_params;
     ucp_worker_attr_t worker_attrs = {};
-    conn_handler_arg_t conn_handler_arg;
-    ucs_status_t status;
-    ucs_status_ptr_t status_ptr;
     struct sockaddr_storage connect_saddr;
-    uint16_t listen_port;
-    ucp_ep_h ep;
-    char ep_name[64];
+    conn_handler_arg_t conn_handler_arg;
     ucp_request_param_t request_param;
+    ucs_status_ptr_t status_ptr;
+    uint16_t listen_port;
+    ucs_status_t status;
+    char ep_scope[64];
+    ucp_ep_h ep;
 
     if (ip_addr != NULL) {
         conn_handler_arg.in.worker    = worker;
@@ -261,7 +263,8 @@ print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
             return status;
         }
 
-        ucs_strncpy_zero(ep_name, "client", sizeof(ep_name));
+        ucs_snprintf_safe(ep_scope, sizeof(ep_scope), "client-ep (%s)",
+                          proc_placement_names[proc_placement]);
 
         set_saddr(ip_addr, listen_port, af, &connect_saddr);
 
@@ -283,11 +286,15 @@ print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
             return status;
         }
 
-        ucs_strncpy_zero(ep_name, "connected to UCP worker", sizeof(ep_name));
+        ucs_snprintf_safe(ep_scope, sizeof(ep_scope), "connect-to-worker (%s)",
+                          proc_placement_names[proc_placement]);
 
         ep_params.field_mask |= UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address     = worker_attrs.address;
     }
+
+    ep_params.field_mask |= UCP_EP_PARAM_FIELD_SCOPE_NAME;
+    ep_params.scope_name  = ep_scope;
 
     status = ucp_ep_create(worker, &ep_params, &ep);
     if (status != UCS_OK) {
@@ -308,13 +315,13 @@ print_ucp_ep_info(ucp_worker_h worker, ucp_worker_h peer_worker,
     ucp_ep_print_info(ep, stdout);
 
 out_close_eps:
-    ep_close(worker, peer_worker, ep, 0, ep_name);
+    ep_close(worker, peer_worker, ep, 0, ep_scope);
 
     if (server_ep != NULL) {
         ucs_assert(ip_addr != NULL); /* server EP is created only for sockaddr
                                       * connection flow */
         ep_close(worker, peer_worker, server_ep, UCP_EP_CLOSE_FLAG_FORCE,
-                 "server");
+                 "server-ep");
     }
 
 out:
@@ -353,10 +360,12 @@ print_ucp_info(int print_opts, ucs_config_print_flags_t print_flags,
     memset(&params, 0, sizeof(params));
     params.field_mask        = UCP_PARAM_FIELD_FEATURES |
                                UCP_PARAM_FIELD_ESTIMATED_NUM_EPS |
-                               UCP_PARAM_FIELD_ESTIMATED_NUM_PPN;
+                               UCP_PARAM_FIELD_ESTIMATED_NUM_PPN |
+                               UCP_PARAM_FIELD_NAME;
     params.features          = ctx_features;
     params.estimated_num_eps = estimated_num_eps;
     params.estimated_num_ppn = estimated_num_ppn;
+    params.name              = "";
 
     get_resource_usage(&usage);
 

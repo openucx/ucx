@@ -274,4 +274,9 @@ static UCS_F_ALWAYS_INLINE int ucp_ep_use_indirect_id(ucp_ep_h ep)
     return ep->flags & UCP_EP_FLAG_INDIRECT_ID;
 }
 
+static UCS_F_ALWAYS_INLINE const char *ucp_ep_scope_name(ucp_ep_h ep)
+{
+    return ucp_worker_ep_config_scope_name(ep->worker, ep->cfg_index);
+}
+
 #endif

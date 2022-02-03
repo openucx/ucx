@@ -128,6 +128,7 @@ int ucp_wireup_is_reachable(ucp_ep_h ep, unsigned ep_init_flags,
                             const ucp_address_entry_t *ae);
 
 ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
+                                   const char *scope_name,
                                    const ucp_tl_bitmap_t *local_tl_bitmap,
                                    const ucp_unpacked_address_t *remote_address,
                                    unsigned *addr_indices);

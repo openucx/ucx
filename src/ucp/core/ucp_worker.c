@@ -1590,7 +1590,16 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     p    = info;
     endp = p + max;
 
-    snprintf(p, endp - p,  "ep_cfg[%d]: ", config_idx);
+    if (!ucs_string_is_empty(context->name)) {
+        snprintf(p, endp - p, "%s ", context->name);
+        p += strlen(p);
+    }
+
+    if (ucs_string_is_empty(key->scope_name)) {
+        snprintf(p, endp - p, "ep_cfg[%d]: ", config_idx);
+    } else {
+        snprintf(p, endp - p, "%s: ", key->scope_name);
+    }
     p += strlen(p);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
@@ -1788,7 +1797,8 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
 }
 
 static void
-ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
+ucp_worker_ep_config_short_init(ucp_worker_h worker, unsigned ep_init_flags,
+                                ucp_ep_config_t *ep_config,
                                 ucp_worker_cfg_index_t ep_cfg_index,
                                 unsigned feature_flag, ucp_operation_id_t op_id,
                                 unsigned proto_flags, ucp_lane_index_t exp_lane,
@@ -1796,7 +1806,8 @@ ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
 {
     ucp_proto_select_short_t proto_short;
 
-    if (worker->context->config.features & feature_flag) {
+    if ((worker->context->config.features & feature_flag) &&
+        !(ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL)) {
         ucp_proto_select_short_init(worker, &ep_config->proto_select,
                                     ep_cfg_index, UCP_WORKER_CFG_INDEX_NULL,
                                     op_id, 0, proto_flags, &proto_short);
@@ -1820,9 +1831,10 @@ ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
  * A 'key' identifies an entry in the ep_config array. An entry holds the key and
  * additional configuration parameters and thresholds.
  */
-ucs_status_t
-ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
-                         int print_cfg, ucp_worker_cfg_index_t *cfg_index_p)
+ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
+                                      const ucp_ep_config_key_t *key,
+                                      unsigned ep_init_flags,
+                                      ucp_worker_cfg_index_t *cfg_index_p)
 {
     ucp_context_h context = worker->context;
     ucp_worker_cfg_index_t ep_cfg_index;
@@ -1871,22 +1883,21 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
             tag_exp_lane    = key->am_lane;
         }
 
-        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
-                                        UCP_FEATURE_TAG, UCP_OP_ID_TAG_SEND,
-                                        tag_proto_flags, tag_exp_lane,
-                                        tag_max_short);
+        ucp_worker_ep_config_short_init(worker, ep_init_flags, ep_config,
+                                        ep_cfg_index, UCP_FEATURE_TAG,
+                                        UCP_OP_ID_TAG_SEND, tag_proto_flags,
+                                        tag_exp_lane, tag_max_short);
 
-        ucp_worker_ep_config_short_init(worker, ep_config, ep_cfg_index,
-                                        UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
+        ucp_worker_ep_config_short_init(worker, ep_init_flags, ep_config,
+                                        ep_cfg_index, UCP_FEATURE_AM,
+                                        UCP_OP_ID_AM_SEND,
                                         UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
                                         &ep_config->am_u.max_eager_short);
-    }
 
-    if (print_cfg) {
+    } else if (!(ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL)) {
         ucs_info("%s", ucp_worker_print_used_tls(key, context, ep_cfg_index,
                                                  tl_info, sizeof(tl_info)));
     }
-
 
 out:
     *cfg_index_p = ep_cfg_index;
@@ -3325,4 +3336,12 @@ static void ucp_am_mpool_obj_str(ucs_mpool_t *mp, void *obj,
 #if ENABLE_DEBUG_DATA
     ucs_string_buffer_appendf(strb, " name:%s", rdesc->name);
 #endif
+}
+
+const char *ucp_worker_ep_config_scope_name(ucp_worker_h worker,
+                                            ucp_worker_cfg_index_t cfg_index)
+{
+    return (cfg_index == UCP_WORKER_CFG_INDEX_NULL) ?
+                   ucp_ep_scope_default :
+                   worker->ep_config[cfg_index].key.scope_name;
 }

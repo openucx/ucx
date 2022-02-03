@@ -24,6 +24,11 @@ protected:
     }
 };
 
+UCS_TEST_F(test_string, is_empty) {
+    EXPECT_TRUE(ucs_string_is_empty(""));
+    EXPECT_FALSE(ucs_string_is_empty("aaa"));
+}
+
 UCS_TEST_F(test_string, count_char) {
     static const char *str1 = "/foo";
     static const char *str2 = "/foo/bar";
