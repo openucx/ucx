@@ -724,6 +724,7 @@ int main(int argc, char **argv)
         mem_type_free(str);
 
         //message sent, now wait for response
+        printf("message sent, now we receive\n");
 
         recv_desc_t *rdesc;
         while (desc_holder == NULL) {
@@ -731,7 +732,7 @@ int main(int argc, char **argv)
             uct_worker_progress(if_info.worker);
         }
 
-
+        printf("free rdesc\n");
 
         if (rdesc->is_uct_desc) {
             /* Release descriptor because callback returns UCS_INPROGRESS */
