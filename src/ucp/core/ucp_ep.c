@@ -22,7 +22,7 @@
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
 #include <ucp/proto/proto_common.h>
-#include <ucp/proto/proto_select.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>

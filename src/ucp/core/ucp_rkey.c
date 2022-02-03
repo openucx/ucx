@@ -13,6 +13,7 @@
 #include "ucp_ep.inl"
 
 #include <ucp/rma/rma.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
 #include <ucs/type/float8.h>

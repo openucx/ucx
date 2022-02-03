@@ -10,6 +10,7 @@
 #include "proto_rndv.inl"
 
 #include <ucp/core/ucp_request.inl>
+#include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_multi.inl>
 #include <ucp/proto/proto_init.h>
 

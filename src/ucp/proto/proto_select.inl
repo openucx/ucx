@@ -134,4 +134,15 @@ ucp_proto_select_is_short(ucp_ep_h ep,
             ucs_memtype_cache_is_empty());
 }
 
+static UCS_F_ALWAYS_INLINE ucp_proto_perf_type_t
+ucp_proto_select_param_perf_type(const ucp_proto_select_param_t *select_param)
+{
+    if (ucp_proto_select_op_attr_from_flags(select_param->op_flags) &
+        UCP_OP_ATTR_FLAG_MULTI_SEND) {
+        return UCP_PROTO_PERF_TYPE_MULTI;
+    } else {
+        return UCP_PROTO_PERF_TYPE_SINGLE;
+    }
+}
+
 #endif

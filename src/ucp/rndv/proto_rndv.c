@@ -10,8 +10,9 @@
 
 #include "proto_rndv.inl"
 
-#include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_init.h>
+#include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_common.inl>
 
 
 static void

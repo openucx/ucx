@@ -14,7 +14,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/proto/proto_am.h>
-#include <ucp/proto/proto_select.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucp/tag/tag_rndv.h>
 
 #include <ucs/datastruct/mpool.inl>
