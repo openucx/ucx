@@ -237,6 +237,37 @@ void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
  */
 char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb);
 
+
+/**
+ * Get the next token from the string. This operation can overwrite some of the
+ * string with '\0' characters, to separate the tokens.
+ *
+ * @param [in]  strb        String buffer to get next token from.
+ * @param [in]  token       Pointer to the current token, or NULL to start
+ *                          from the beginning.
+ * @param [in]  delimiters  Set of characters that separate between tokens.
+ *
+ * @return Pointer to the next token, after the given @a token, or NULL if no
+ *         more tokens are found.
+ */
+char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
+                                   const char *delimiters);
+
+
+/**
+ * Split the string to tokens and iterate over them. This operation can
+ * overwrite some of the string with '\0' characters.
+ *
+ * @param _tok    A variable of type 'char *' which will be assigned to the
+ *                current token.
+ * @param _strb   String to iterate over.
+ * @param _delim  Set of characters that separate between tokens.
+ */
+#define ucs_string_buffer_for_each_token(_tok, _strb, _delim) \
+    for (_tok = ucs_string_buffer_next_token(_strb, NULL, _delim); \
+         _tok != NULL; \
+         _tok = ucs_string_buffer_next_token(_strb, _tok, _delim))
+
 END_C_DECLS
 
 #endif
