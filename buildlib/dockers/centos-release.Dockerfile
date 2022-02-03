@@ -49,9 +49,8 @@ RUN wget --no-verbose http://content.mellanox.com/ofed/${MOFED_SITE_PLACE}/${MOF
     && rm -rf ${MOFED_DIR} && rm -rf *.tgz
 
 ENV CPATH /usr/local/cuda/include:${CPATH}
-ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LD_LIBRARY_PATH}
-ENV LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LIBRARY_PATH}
-ENV PATH /usr/local/cuda/compat:${PATH}
+ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV LIBRARY_PATH /usr/local/cuda/lib64:${LIBRARY_PATH}
 
 RUN cd /usr/lib64 && \
     ln -s libudev.so.1 libudev.so && \
