@@ -275,6 +275,7 @@ static ucs_status_t uct_sci_md_query(uct_md_h md, uct_md_attr_t *attr)
 static ucs_status_t uct_sci_mem_reg(uct_md_h md, void *address, size_t length,
                                      unsigned flags, uct_mem_h *memh_p)
 {
+
     DEBUG_PRINT("Empty func\n");
 
     /* We have to emulate memory registration. Return dummy pointer */
@@ -305,6 +306,7 @@ static void uct_sci_md_close(uct_md_h md) {
 
     if (sci_error != SCI_ERR_OK)
         {
+            /*NOTE*/
             printf("Error closing Virtual_Device error: %s \n", SCIGetErrorString(sci_error));
         }
     
@@ -314,11 +316,11 @@ static void uct_sci_md_close(uct_md_h md) {
 static ucs_status_t uct_sci_md_open(uct_component_t *component, const char *md_name,
                                      const uct_md_config_t *config, uct_md_h *md_p)
 {
-    /*This seems like the most reasonable place to call SCI_INIT, not sure when the memory domain is closed though : )*/
+    /* NOTE   */
     uct_sci_md_config_t *md_config = ucs_derived_of(config, uct_sci_md_config_t);
 
     static uct_md_ops_t md_ops = {
-        .close              = uct_sci_md_close, //ucs_empty_function
+        .close              = uct_sci_md_close, 
         .query              = uct_sci_md_query,
         .mkey_pack          = ucs_empty_function_return_success,
         .mem_reg            = uct_sci_mem_reg,
@@ -327,7 +329,7 @@ static ucs_status_t uct_sci_md_open(uct_component_t *component, const char *md_n
     };
 
     //create sci memory domain struct
-    //TODO, make it not full of poo poo
+    //TODO, make it not full lies
     static uct_sci_md_t md;
     sci_error_t errors;
 
@@ -356,8 +358,6 @@ static ucs_status_t uct_sci_md_open(uct_component_t *component, const char *md_n
 
     //uct_md_h = sci_md;
 
-
-
     DEBUG_PRINT("md opened \n");
     return UCS_OK;
 }
@@ -367,13 +367,7 @@ int uct_sci_iface_is_reachable(const uct_iface_h tl_iface,
                                        const uct_device_addr_t *dev_addr,
                                        const uct_iface_addr_t *iface_addr)
 {
-    //TODO make not die
-    
-    //const uct_self_iface_t     *iface = ucs_derived_of(tl_iface, uct_self_iface_t);
-    //const uct_self_iface_addr_t *addr = (const uct_self_iface_addr_t*)iface_addr;
-
-    //return (addr != NULL) && (iface->id == *addr);
-    DEBUG_PRINT("iface is reachable\n");
+   /*NOTE We have no good way to actually check if given address is reachable, so we just return 1*/
     return 1;
 }
 
