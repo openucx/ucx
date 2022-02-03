@@ -275,7 +275,7 @@ static ucs_status_t uct_sci_md_query(uct_md_h md, uct_md_attr_t *attr)
 static ucs_status_t uct_sci_mem_reg(uct_md_h md, void *address, size_t length,
                                      unsigned flags, uct_mem_h *memh_p)
 {
-    
+
     DEBUG_PRINT("Empty func\n");
 
     /* We have to emulate memory registration. Return dummy pointer */
@@ -368,7 +368,7 @@ int uct_sci_iface_is_reachable(const uct_iface_h tl_iface,
                                        const uct_iface_addr_t *iface_addr)
 {
    /*NOTE We have no good way to actualyl check if given address is reachable, so we just return 1*/
-    DEBUG_PRINT("segment %d node %d is reachable\n", *iface_addr, dev_addr);
+    DEBUG_PRINT("segment %d node %d is reachable\n", iface_addr, dev_addr);
     return 1;
 }
 
