@@ -367,8 +367,15 @@ int uct_sci_iface_is_reachable(const uct_iface_h tl_iface,
                                        const uct_device_addr_t *dev_addr,
                                        const uct_iface_addr_t *iface_addr)
 {
-   /*NOTE We have no good way to actualyl check if given address is reachable, so we just return 1*/
-    DEBUG_PRINT("segment %d node %d is reachable\n", iface_addr, dev_addr);
+   /*NOTE We have no good way to actually check if given address is reachable, so we just return 1*/
+
+
+    #ifdef DEBUG
+        uct_sci_iface_addr_t* segment_id = ucs_derived_of(iface_addr, uct_sci_iface_addr_t);
+        uct_sci_device_addr_t* node_id   = ucs_derived_of(dev_addr, uct_sci_device_addr_t):
+        DEBUG_PRINT("segment %d node %d is reachable\n", segment_id->segment_id, node_id->node_id);
+    #endif
+    
     return 1;
 }
 
