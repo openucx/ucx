@@ -133,6 +133,7 @@ uct_cuda_base_query_devices(
 
 ucs_status_t
 uct_cuda_base_get_sys_dev(CUdevice cuda_device,
-                          ucs_sys_device_t *sys_dev_p);
+                          ucs_sys_device_t *sys_dev_p,
+                          ucs_sys_bus_id_t *bus_id);
 
 #endif

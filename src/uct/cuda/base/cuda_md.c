@@ -13,6 +13,7 @@
 
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/topo.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/profile/profile.h>
@@ -21,16 +22,14 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
 
-#define UCT_CUDA_DEV_NAME_MAX_LEN 64
-#define UCT_CUDA_MAX_DEVICES      32
-
 ucs_spinlock_t uct_cuda_base_lock;
+uct_cuda_base_sys_dev_map_t uct_cuda_sys_dev_bus_id_map;
 
 
 ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
-                                       ucs_sys_device_t *sys_dev_p)
+                                       ucs_sys_device_t *sys_dev_p,
+                                       ucs_sys_bus_id_t *bus_id)
 {
-    ucs_sys_bus_id_t bus_id;
     CUresult cu_err;
     int attrib;
 
@@ -40,7 +39,7 @@ ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
     if (cu_err != CUDA_SUCCESS) {
          return UCS_ERR_IO_ERROR;
     }
-    bus_id.domain = (uint16_t)attrib;
+    bus_id->domain = (uint16_t)attrib;
 
     /* PCI bus id */
     cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
@@ -48,7 +47,7 @@ ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
     if (cu_err != CUDA_SUCCESS) {
          return UCS_ERR_IO_ERROR;
     }
-    bus_id.bus = (uint8_t)attrib;
+    bus_id->bus = (uint8_t)attrib;
 
     /* PCI slot id */
     cu_err = cuDeviceGetAttribute(&attrib, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID,
@@ -56,12 +55,12 @@ ucs_status_t uct_cuda_base_get_sys_dev(CUdevice cuda_device,
     if (cu_err != CUDA_SUCCESS) {
          return UCS_ERR_IO_ERROR;
     }
-    bus_id.slot = (uint8_t)attrib;
+    bus_id->slot = (uint8_t)attrib;
 
     /* Function - always 0 */
-    bus_id.function = 0;
+    bus_id->function = 0;
 
-    return ucs_topo_find_device_by_bus_id(&bus_id, sys_dev_p);
+    return ucs_topo_find_device_by_bus_id(bus_id, sys_dev_p);
 }
 
 static size_t
@@ -121,6 +120,7 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
     ucs_status_t status;
     size_t total_bytes;
     CUresult cu_err;
+    ucs_sys_bus_id_t bus_id;
 
     attr_type[0] = CU_POINTER_ATTRIBUTE_MEMORY_TYPE;
     attr_data[0] = &cuda_mem_mype;
@@ -136,7 +136,8 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_INVALID_ADDR;
     }
 
-    status = uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev);
+    status = uct_cuda_base_get_sys_dev(cuda_device, &mem_info->sys_dev,
+                                       &bus_id);
     if (status != UCS_OK) {
         return status;
     }
@@ -280,21 +281,34 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
     ucs_status_t status;
     char device_name[10];
     int num_gpus;
+    ucs_sys_bus_id_t bus_id;
 
     cudaErr = cudaGetDeviceCount(&num_gpus);
     if ((cudaErr != cudaSuccess) || (num_gpus == 0)) {
         return uct_md_query_empty_md_resource(resources_p, num_resources_p);
     }
 
-    for (cuda_device = 0; cuda_device < num_gpus; ++cuda_device) {
-        status = uct_cuda_base_get_sys_dev(cuda_device, &sys_dev);
-        if (status == UCS_OK) {
-            ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
-                              cuda_device);
-            status = ucs_topo_sys_device_set_name(sys_dev, device_name);
-            ucs_assert_always(status == UCS_OK);
+    ucs_spin_lock(&uct_cuda_base_lock);
+
+    if (uct_cuda_sys_dev_bus_id_map.count == 0) {
+        uct_cuda_sys_dev_bus_id_map.count = (uint8_t)num_gpus;
+
+        for (cuda_device = 0; cuda_device < num_gpus; ++cuda_device) {
+            status = uct_cuda_base_get_sys_dev(cuda_device, &sys_dev, &bus_id);
+            if (status == UCS_OK) {
+                ucs_snprintf_safe(device_name, sizeof(device_name), "GPU%d",
+                                  cuda_device);
+                status = ucs_topo_sys_device_set_name(sys_dev, device_name);
+                ucs_assert_always(status == UCS_OK);
+
+                /* populate sys_dev -> bus_id map */
+                uct_cuda_sys_dev_bus_id_map.sys_dev[cuda_device] = sys_dev;
+                uct_cuda_sys_dev_bus_id_map.bus_id[cuda_device]  = bus_id.bus;
+            }
         }
     }
+
+    ucs_spin_unlock(&uct_cuda_base_lock);
 
     return uct_md_query_single_md_resource(component, resources_p,
                                            num_resources_p);
@@ -302,6 +316,7 @@ uct_cuda_base_query_md_resources(uct_component_t *component,
 
 UCS_STATIC_INIT {
     ucs_spinlock_init(&uct_cuda_base_lock, 0);
+    uct_cuda_sys_dev_bus_id_map.count = 0;
 }
 
 UCS_STATIC_CLEANUP {
