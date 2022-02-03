@@ -732,6 +732,10 @@ int main(int argc, char **argv)
             uct_worker_progress(if_info.worker);
         }
 
+        rdesc = desc_holder;
+        print_strings("main", func_am_t_str(cmd_args.func_am_type),
+                      (char *)(rdesc + 1), cmd_args.test_strlen);
+
         printf("free rdesc\n");
 
         if (rdesc->is_uct_desc) {
