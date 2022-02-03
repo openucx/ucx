@@ -371,11 +371,11 @@ int uct_sci_iface_is_reachable(const uct_iface_h tl_iface,
 
 
     #ifdef DEBUG
-        uct_sci_iface_addr_t* segment_id = ucs_derived_of(iface_addr, uct_sci_iface_addr_t);
-        uct_sci_device_addr_t* node_id   = ucs_derived_of(dev_addr, uct_sci_device_addr_t):
+        uct_sci_iface_addr_t* segment_id = (uct_sci_iface_addr_t*) iface_addr;
+        uct_sci_device_addr_t* node_id   = (uct_sci_device_addr_t*) dev_addr:
         DEBUG_PRINT("segment %d node %d is reachable\n", segment_id->segment_id, node_id->node_id);
     #endif
-    
+
     return 1;
 }
 
