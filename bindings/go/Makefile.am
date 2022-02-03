@@ -13,6 +13,12 @@ UCX_SOPATH=$(abs_top_builddir)/src/ucp/$(objdir):$(abs_top_builddir)/src/ucs/$(o
 GOTMPDIR=$(GOOBJDIR)/tmp
 GOCACHE=$(GOTMPDIR)
 
+if HAVE_CUDART
+CGOCFLAGS=$(CGOCFLAGS) $(CUDART_CPPFLAGS)
+CGOLDFLAGS=$(CGOLDFLAGS) $(CUDART_LDFLAGS)
+UCX_SOPATH=$(UCX_SOPATH):$(CUDART_LIBS)
+endif
+
 export GOTMPDIR
 export GOCACHE
 export GOPATH
