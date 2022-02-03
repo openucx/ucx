@@ -489,10 +489,10 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     
     //TODO: sane numbers, no lies.
     /* AM flags - TODO: these might need to be fine tuned at a later stage */
-    attr->cap.am.max_short = 1023;
-    attr->cap.am.max_bcopy = 1023;
-    attr->cap.am.min_zcopy = 1024;
-    attr->cap.am.max_zcopy = 1024;
+    attr->cap.am.max_short = 8192;
+    attr->cap.am.max_bcopy = 0;
+    attr->cap.am.min_zcopy = 10000;
+    attr->cap.am.max_zcopy = 10000;
 
 
     attr->latency                 = ucs_linear_func_make(20, 40);
