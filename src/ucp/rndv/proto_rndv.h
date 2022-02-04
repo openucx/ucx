@@ -93,21 +93,12 @@ ucs_status_t
 ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params);
 
 
-void ucp_proto_rndv_ctrl_config_str(size_t min_length, size_t max_length,
-                                    const void *priv,
-                                    ucs_string_buffer_t *strb);
-
-
 ucs_status_t
 ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params);
 
 
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
                                      ucp_proto_rndv_ack_priv_t *apriv);
-
-
-void ucp_proto_rndv_ack_config_str(size_t min_length, size_t max_length,
-                                   const void *priv, ucs_string_buffer_t *strb);
 
 
 ucs_status_t
@@ -119,9 +110,8 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
 ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req);
 
 
-void ucp_proto_rndv_bulk_config_str(size_t min_length, size_t max_length,
-                                    const void *priv,
-                                    ucs_string_buffer_t *strb);
+void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr);
 
 
 void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,

@@ -150,15 +150,15 @@ ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
 }
 
 static ucp_proto_t ucp_rndv_rkey_ptr_proto = {
-    .name       = "rndv/rkey_ptr",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_rkey_ptr_init,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {
+    .name     = "rndv/rkey_ptr",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_rkey_ptr_init,
+    .query    = ucp_proto_default_query,
+    .progress = {
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_FETCH] = ucp_proto_rndv_rkey_ptr_fetch_progress,
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rkey_ptr_proto);
 

@@ -226,13 +226,21 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
     return UCS_OK;
 }
 
+static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
+                                     ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+
+    ucp_proto_select_elem_query(&rpriv->remote_proto, params->msg_length, attr);
+}
+
 static ucp_proto_t ucp_rndv_rtr_proto = {
-    .name       = "rndv/rtr",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_rtr_init,
-    .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = {ucp_proto_rndv_rtr_progress},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .name     = "rndv/rtr",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_rtr_init,
+    .query    = ucp_proto_rndv_rtr_query,
+    .progress = {ucp_proto_rndv_rtr_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rtr_proto);
 
@@ -365,13 +373,22 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     return UCS_OK;
 }
 
+static void
+ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+
+    ucp_proto_select_elem_query(&rpriv->remote_proto, params->msg_length, attr);
+}
+
 static ucp_proto_t ucp_rndv_rtr_mtype_proto = {
-    .name       = "rndv/rtr/mtype",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_rtr_mtype_init,
-    .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = {ucp_proto_rndv_rtr_mtype_progress},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .name     = "rndv/rtr/mtype",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_rtr_mtype_init,
+    .query    = ucp_proto_rndv_rtr_mtype_query,
+    .progress = {ucp_proto_rndv_rtr_mtype_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rtr_mtype_proto);
 

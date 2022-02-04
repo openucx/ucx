@@ -119,7 +119,11 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
                                   size_t *priv_size_p);
 
 
-void ucp_proto_multi_config_str(size_t min_length, size_t max_length,
-                                const void *priv, ucs_string_buffer_t *strb);
+void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
+                                  ucp_proto_query_attr_t *attr);
+
+
+void ucp_proto_multi_query(const ucp_proto_query_params_t *params,
+                           ucp_proto_query_attr_t *attr);
 
 #endif

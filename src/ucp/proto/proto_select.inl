@@ -28,10 +28,12 @@ KHASH_IMPL(ucp_proto_select_hash, khint64_t, ucp_proto_select_elem_t, 1,
            kh_int64_hash_func, kh_int64_hash_equal)
 
 
-static UCS_F_ALWAYS_INLINE const ucp_proto_threshold_elem_t*
-ucp_proto_thresholds_search(const ucp_proto_threshold_elem_t *thresholds,
-                            size_t msg_length)
+static UCS_F_ALWAYS_INLINE const ucp_proto_threshold_elem_t *
+ucp_proto_select_thresholds_search(const ucp_proto_select_elem_t *select_elem,
+                                   size_t msg_length)
 {
+    const ucp_proto_threshold_elem_t *thresholds = select_elem->thresholds;
+
 #define UCP_PROTO_THRESHOLDS_CHECK(_arg, _i) \
     if (ucs_likely(msg_length <= thresholds[_i].max_msg_length)) { \
         return &thresholds[_i]; \
@@ -93,7 +95,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
         proto_select->cache.value = select_elem;
     }
 
-    return ucp_proto_thresholds_search(select_elem->thresholds, msg_length);
+    return ucp_proto_select_thresholds_search(select_elem, msg_length);
 }
 
 /*

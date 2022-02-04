@@ -308,6 +308,19 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     return UCS_OK;
 }
 
+static void
+ucp_proto_rndv_put_common_query(const ucp_proto_query_params_t *params,
+                                ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_put_priv_t *rpriv     = params->priv;
+    ucp_proto_query_params_t bulk_query_params = {
+        .priv       = &rpriv->bulk,
+        .msg_length = params->msg_length
+    };
+
+    ucp_proto_rndv_bulk_query(&bulk_query_params, attr);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_put_zcopy_send_func(ucp_request_t *req,
                                    const ucp_proto_multi_lane_priv_t *lpriv,
@@ -358,35 +371,18 @@ ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
                                           0);
 }
 
-static void ucp_proto_rndv_put_config_str(size_t min_length, size_t max_length,
-                                          const void *priv,
-                                          ucs_string_buffer_t *strb)
-{
-    const ucp_proto_rndv_put_priv_t *rpriv = priv;
-
-    ucp_proto_rndv_bulk_config_str(min_length, max_length, &rpriv->bulk, strb);
-    if (rpriv->flush_map != 0) {
-        ucs_string_buffer_appendf(strb, " flush:");
-        ucs_string_buffer_append_flags(strb, rpriv->flush_map, NULL);
-    }
-    if (rpriv->atp_map != 0) {
-        ucs_string_buffer_appendf(strb, " atp:");
-        ucs_string_buffer_append_flags(strb, rpriv->atp_map, NULL);
-    }
-}
-
 static ucp_proto_t ucp_rndv_put_zcopy_proto = {
-    .name        = "rndv/put/zcopy",
-    .flags       = 0,
-    .init        = ucp_proto_rndv_put_zcopy_init,
-    .config_str  = ucp_proto_rndv_put_config_str,
-    .progress    = {
+    .name     = "rndv/put/zcopy",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_put_zcopy_init,
+    .query    = ucp_proto_rndv_put_common_query,
+    .progress = {
         [UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND] = ucp_proto_rndv_put_zcopy_send_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FLUSH]      = ucp_proto_rndv_put_common_flush_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_put_zcopy_proto);
 
@@ -501,17 +497,17 @@ ucp_proto_rndv_put_mtype_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_rndv_put_mtype_proto = {
-    .name        = "rndv/put/mtype",
-    .flags       = 0,
-    .init        = ucp_proto_rndv_put_mtype_init,
-    .config_str  = ucp_proto_rndv_put_config_str,
-    .progress    = {
+    .name     = "rndv/put/mtype",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_put_mtype_init,
+    .query    = ucp_proto_rndv_put_common_query,
+    .progress = {
         [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY] = ucp_proto_rndv_put_mtype_copy_progress,
         [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND] = ucp_proto_rndv_put_mtype_send_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FLUSH]      = ucp_proto_rndv_put_common_flush_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_ATP]        = ucp_proto_rndv_put_common_atp_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FENCED_ATP] = ucp_proto_rndv_put_common_fenced_atp_progress,
     },
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_put_mtype_proto);

@@ -724,3 +724,25 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
         return &worker->rkey_config[*new_rkey_cfg_index].proto_select;
     }
 }
+
+void ucp_proto_config_query(const ucp_proto_config_t *proto_config,
+                            size_t msg_length,
+                            ucp_proto_query_attr_t *proto_attr)
+{
+    ucp_proto_query_params_t params = {
+        .priv       = proto_config->priv,
+        .msg_length = msg_length
+    };
+
+    proto_config->proto->query(&params, proto_attr);
+}
+
+void ucp_proto_select_elem_query(const ucp_proto_select_elem_t *select_elem,
+                                 size_t msg_length,
+                                 ucp_proto_query_attr_t *proto_attr)
+{
+    const ucp_proto_threshold_elem_t *thresh_elem =
+            ucp_proto_select_thresholds_search(select_elem, msg_length);
+
+    ucp_proto_config_query(&thresh_elem->proto_config, msg_length, proto_attr);
+}
