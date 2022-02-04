@@ -714,7 +714,7 @@ int main(int argc, char **argv)
         //is client
 
         //clock_t t_start = clock();
-        struct timeval stop, start;
+        struct timeval stop, mid, start;
         gettimeofday(&start, NULL);
 
         //printf("the test string: %s\n", str);
@@ -727,6 +727,7 @@ int main(int argc, char **argv)
             status = do_am_zcopy(&if_info, ep, id, &cmd_args, str);
         }
 
+        gettimeofday(&mid, NULL);
 
         //message sent, now wait for response
         //printf("message sent, now we receive\n");
@@ -751,7 +752,8 @@ int main(int argc, char **argv)
         
         //clock_t t_stop = clock();
 
-        printf("time: %ld\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec); //https://stackoverflow.com/questions/10192903/time-in-milliseconds-in-c
+        printf("time: %ld", (mid.tv_sec - start.tv_sec) * 1000000 + mid.tv_usec - start.tv_usec); //https://stackoverflow.com/questions/10192903/time-in-milliseconds-in-c
+        printf("   end: %ld\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec); //https://stackoverflow.com/questions/10192903/time-in-milliseconds-in-c
 
 
         CHKERR_JUMP(UCS_OK != status, "send active msg", out_free_ep);
