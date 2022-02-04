@@ -444,8 +444,8 @@ out:
     return status;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
-                 ucp_ep_h ep, const void *rkey_buffer, ucp_rkey_h *rkey_p)
+ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
+                                ucp_rkey_h *rkey_p)
 {
     ucs_status_t status;
 

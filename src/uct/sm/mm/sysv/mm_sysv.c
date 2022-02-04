@@ -13,6 +13,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
+#include <ucs/profile/profile.h>
 
 
 #define UCT_MM_SYSV_PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
@@ -163,9 +164,10 @@ static void uct_sysv_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rseg
     ucs_sysv_free(rseg->address);
 }
 
-static ucs_status_t
-uct_sysv_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
-                     uct_rkey_t *rkey_p, void **handle_p)
+UCS_PROFILE_FUNC(ucs_status_t, uct_sysv_rkey_unpack,
+                 (component, rkey_buffer, rkey_p, handle_p),
+                 uct_component_t *component, const void *rkey_buffer,
+                 uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_sysv_packed_rkey_t *packed_rkey = rkey_buffer;
     ucs_status_t status;
@@ -181,8 +183,8 @@ uct_sysv_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_sysv_rkey_release(uct_component_t *component, uct_rkey_t rkey, void *handle)
+UCS_PROFILE_FUNC(ucs_status_t, uct_sysv_rkey_release, (component, rkey, handle),
+                 uct_component_t *component, uct_rkey_t rkey, void *handle)
 {
     return ucs_sysv_free(handle);
 }
