@@ -217,7 +217,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     uct_sci_ep_t* ep = ucs_derived_of(uct_ep, uct_sci_ep_t);
     uct_sci_iface_t* iface = ucs_derived_of(uct_ep->iface, uct_sci_iface_t);
     uct_sci_ep_zcopy_tx_t* tx = NULL
-    size_t iov_total_len      = uct_iov_total_length(iov, iovcnt)
+    size_t iov_total_len      = uct_iov_total_length(iov, iovcnt);
     size_t bytes_copied;
     ucs_iov_iter_t uct_iov_iter;
 
@@ -229,7 +229,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, (void*) tx, iface->send_size);
 
 
-    printf("uct_sci_ep_am_zcopy()\n");
+    printf("uct_sci_ep_am_zcopy() %d\n", ep->remote_node_id);
     
     ucs_free(tx);
     return UCS_ERR_NOT_IMPLEMENTED;;    
