@@ -291,6 +291,14 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_last_ack_received(uct_ud_ep_t *ep)
     return UCT_UD_PSN_COMPARE(ep->tx.acked_psn, ==, ep->tx.psn - 1);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_ud_ep_assert_tx_window_nonempty(uct_ud_ep_t *ep)
+{
+    ucs_assertv(!ucs_queue_is_empty(&ep->tx.window),
+                "ep %p: acked_psn=%u current_psn=%u", ep, ep->tx.acked_psn,
+                ep->tx.psn);
+}
+
 static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
@@ -325,7 +333,7 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         return;
     }
 
-    ucs_assert(!ucs_queue_is_empty(&ep->tx.window));
+    uct_ud_ep_assert_tx_window_nonempty(ep);
 
     now  = ucs_twheel_get_time(&iface->tx.timer);
     diff = now - ep->tx.send_time;
@@ -664,6 +672,9 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     }
 
     ep->tx.acked_psn = ack_psn;
+    ucs_assertv(UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->tx.psn),
+                "ep %p: acked_psn=%u must be smaller than current_psn=%u", ep,
+                ep->tx.acked_psn, ep->tx.psn);
 
     uct_ud_ep_window_release_inline(iface, ep, ack_psn, UCS_OK, is_async, 0);
     uct_ud_ep_ca_ack(ep);
@@ -1044,7 +1055,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     if (uct_ud_ep_is_last_ack_received(ep)) {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
     } else {
-        ucs_assert(!ucs_queue_is_empty(&ep->tx.window));
+        uct_ud_ep_assert_tx_window_nonempty(ep);
         skb = ucs_queue_tail_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t,
                                             queue);
         if (!(skb->flags & UCT_UD_SEND_SKB_FLAG_ACK_REQ)) {
