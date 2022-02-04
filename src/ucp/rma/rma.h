@@ -14,6 +14,9 @@
 #include <ucs/datastruct/ptr_map.h>
 
 
+#define UCP_PROTO_RMA_EMULATION_DESC "software emulation"
+
+
 /**
  * Defines functions for RMA protocol
  */

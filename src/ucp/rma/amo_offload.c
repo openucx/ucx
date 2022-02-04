@@ -198,6 +198,7 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
     \
     static ucp_proto_t ucp_amo_proto_##_id = { \
         .name     = "amo" #_bits "/" #_id "/" #_sub_id, \
+        .desc     = #_sub_id, \
         .init     = ucp_amo_init_##_id, \
         .query    = ucp_proto_single_query, \
         .progress = {ucp_amo_progress_##_id} \

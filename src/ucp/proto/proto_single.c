@@ -12,8 +12,9 @@
 #include "proto_common.h"
 #include "proto_init.h"
 
+#include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
-#include <ucs/sys/string.h>
+#include <ucs/sys/math.h>
 
 
 ucs_status_t
@@ -69,9 +70,9 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
 void ucp_proto_single_query(const ucp_proto_query_params_t *params,
                             ucp_proto_query_attr_t *attr)
 {
+    UCS_STRING_BUFFER_FIXED(config_strb, attr->config, sizeof(attr->config));
     const ucp_proto_single_priv_t *spriv = params->priv;
 
     ucp_proto_default_query(params, attr);
-    ucs_snprintf_safe(attr->config, sizeof(attr->config), "lane[%d]",
-                      spriv->super.lane);
+    ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
 }

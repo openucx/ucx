@@ -153,8 +153,17 @@ static void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
                                      ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+    ucp_proto_query_attr_t remote_attr;
 
-    ucp_proto_select_elem_query(&rpriv->remote_proto, params->msg_length, attr);
+    ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
+                                params->msg_length, &remote_attr);
+
+    attr->is_estimation  = 1;
+    attr->max_msg_length = SIZE_MAX;
+
+    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
+                      remote_attr.desc);
+    ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
 }
 
 static void ucp_tag_rndv_proto_abort(ucp_request_t *request,
@@ -172,6 +181,7 @@ static void ucp_tag_rndv_proto_abort(ucp_request_t *request,
 
 static ucp_proto_t ucp_tag_rndv_proto = {
     .name     = "tag/rndv",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_rts_init,
     .query    = ucp_proto_rndv_rts_query,

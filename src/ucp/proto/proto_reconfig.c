@@ -90,6 +90,7 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_reconfig_proto = {
     .name     = "reconfig",
+    .desc     = "stub protocol",
     .flags    = UCP_PROTO_FLAG_INVALID,
     .init     = ucp_proto_reconfig_init,
     .query    = ucp_proto_default_query,

@@ -422,10 +422,16 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
 {
     const ucp_proto_rndv_bulk_priv_t *rpriv     = params->priv;
     ucp_proto_query_params_t multi_query_params = {
-        .priv       = &rpriv->mpriv,
-        .msg_length = params->msg_length
+        .proto         = params->proto,
+        .priv          = &rpriv->mpriv,
+        .worker        = params->worker,
+        .select_param  = params->select_param,
+        .ep_config_key = params->ep_config_key,
+        .msg_length    = params->msg_length
     };
 
+    attr->max_msg_length = SIZE_MAX;
+    attr->is_estimation  = 0;
     ucp_proto_multi_query_config(&multi_query_params, attr);
 }
 

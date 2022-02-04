@@ -417,6 +417,7 @@ ucp_proto_amo_sw_init_post(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_get_amo_post_proto = {
     .name     = "amo/post/sw",
+    .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
     .init     = ucp_proto_amo_sw_init_post,
     .query    = ucp_proto_single_query,
@@ -445,6 +446,7 @@ ucp_proto_amo_sw_init_fetch(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_get_amo_fetch_proto = {
     .name     = "amo/fetch/sw",
+    .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
     .init     = ucp_proto_amo_sw_init_fetch,
     .query    = ucp_proto_single_query,

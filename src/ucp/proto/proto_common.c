@@ -14,7 +14,7 @@
 #include <uct/api/v2/uct_v2.h>
 
 
-static ucp_rsc_index_t
+ucp_rsc_index_t
 ucp_proto_common_get_rsc_index(const ucp_proto_init_params_t *params,
                                ucp_lane_index_t lane)
 {
@@ -61,6 +61,34 @@ void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *param
     /* Final max_iov is limited both by UCP and UCT, so it can be uint8_t */
     UCS_STATIC_ASSERT(UCP_MAX_IOV <= UINT8_MAX);
     lane_priv->max_iov = ucs_min(uct_max_iov, UCP_MAX_IOV);
+}
+
+void ucp_proto_common_lane_priv_str(const ucp_proto_query_params_t *params,
+                                    const ucp_proto_common_lane_priv_t *lpriv,
+                                    int show_rsc, int show_path,
+                                    ucs_string_buffer_t *strb)
+{
+    ucp_context_h context = params->worker->context;
+    const ucp_ep_config_key_lane_t *ep_lane_cfg;
+    const uct_iface_attr_t *iface_attr;
+    const ucp_tl_resource_desc_t *rsc;
+
+    ucs_assert(lpriv->lane < UCP_MAX_LANES);
+    ep_lane_cfg = &params->ep_config_key->lanes[lpriv->lane];
+    if (show_rsc) {
+        rsc = &context->tl_rscs[ep_lane_cfg->rsc_index];
+        ucs_string_buffer_appendf(strb, UCT_TL_RESOURCE_DESC_FMT,
+                                  UCT_TL_RESOURCE_DESC_ARG(&rsc->tl_rsc));
+    }
+
+    iface_attr = ucp_worker_iface_get_attr(params->worker,
+                                           ep_lane_cfg->rsc_index);
+    if (show_path && (iface_attr->dev_num_paths > 1)) {
+        if (show_rsc) {
+            ucs_string_buffer_appendf(strb, "/");
+        }
+        ucs_string_buffer_appendf(strb, "path%d", ep_lane_cfg->path_index);
+    }
 }
 
 ucp_md_index_t
@@ -606,7 +634,8 @@ void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)
     const ucp_proto_config_t *proto_config = req->send.proto_config;
 
     ucp_proto_select_param_str(&proto_config->select_param, &sel_param_strb);
-    ucp_proto_config_str(proto_config, msg_length, &proto_config_strb);
+    ucp_proto_config_str(req->send.ep->worker, proto_config, msg_length,
+                         &proto_config_strb);
     ucp_trace_req(req, "%s length %zu using %s{%s}",
                   ucs_string_buffer_cstr(&sel_param_strb), msg_length,
                   proto_config->proto->name,

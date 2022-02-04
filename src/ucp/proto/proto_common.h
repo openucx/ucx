@@ -17,6 +17,13 @@
 #define UCP_PROTO_COMMON_OFFSET_INVALID PTRDIFF_MAX
 
 
+/* Common protocol description strings */
+#define UCP_PROTO_SHORT_DESC    "short"
+#define UCP_PROTO_COPY_IN_DESC  "copy-in"
+#define UCP_PROTO_COPY_OUT_DESC "copy-out"
+#define UCP_PROTO_ZCOPY_DESC    "zero-copy"
+
+
 typedef enum {
     /* Send buffer is used by zero-copy operations */
     UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY    = UCS_BIT(0),
@@ -161,6 +168,12 @@ typedef ucs_status_t (*ucp_proto_complete_cb_t)(ucp_request_t *req);
 void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *params,
                                      ucp_md_map_t md_map, ucp_lane_index_t lane,
                                      ucp_proto_common_lane_priv_t *lane_priv);
+
+
+void ucp_proto_common_lane_priv_str(const ucp_proto_query_params_t *params,
+                                    const ucp_proto_common_lane_priv_t *lpriv,
+                                    int show_rsc, int show_path,
+                                    ucs_string_buffer_t *strb);
 
 
 ucp_rsc_index_t
