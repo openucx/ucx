@@ -700,21 +700,23 @@ int main(int argc, char **argv)
         goto out_free_ep;
     }
 
+
+    char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
+    recv_desc_t *rdesc;
+    CHKERR_ACTION(str == NULL, "allocate memory",
+                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
+    res = generate_test_string(str, cmd_args.test_strlen);
+    CHKERR_ACTION(res < 0, "generate test string",
+                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
+
     if (cmd_args.server_name) {
 
         //is client
-        char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
 
         //clock_t t_start = clock();
         struct timeval stop, start;
         gettimeofday(&start, NULL);
 
-
-        CHKERR_ACTION(str == NULL, "allocate memory",
-                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
-        res = generate_test_string(str, cmd_args.test_strlen);
-        CHKERR_ACTION(res < 0, "generate test string",
-                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
         //printf("the test string: %s\n", str);
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
@@ -737,23 +739,16 @@ int main(int argc, char **argv)
 
         gettimeofday(&stop, NULL);
 
-        rdesc = desc_holder;
         //print_strings("main", func_am_t_str(cmd_args.func_am_type),
         //              (char *)(rdesc + 1), cmd_args.test_strlen);
 
         //printf("free rdesc\n");
 
-        if (rdesc->is_uct_desc) {
-            /* Release descriptor because callback returns UCS_INPROGRESS */
-            uct_iface_release_desc(rdesc);
-        } else {
-            free(rdesc);
-        }
 
         //received return
 
         
-        mem_type_free(str);
+        
         //clock_t t_stop = clock();
 
         printf("time: %ld\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec); //https://stackoverflow.com/questions/10192903/time-in-milliseconds-in-c
@@ -763,9 +758,9 @@ int main(int argc, char **argv)
     } else {
 
         //is server
-        char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
 
-        recv_desc_t *rdesc;
+
+
 
         while (desc_holder == NULL) {
             /* Explicitly progress any outstanding active message requests */
@@ -776,7 +771,6 @@ int main(int argc, char **argv)
 
         //printf("escaped wait");
 
-        rdesc = desc_holder;
         //print_strings("main", func_am_t_str(cmd_args.func_am_type),
         //              (char *)(rdesc + 1), cmd_args.test_strlen);
 
@@ -784,11 +778,6 @@ int main(int argc, char **argv)
 
         //time to send things back
 
-        CHKERR_ACTION(str == NULL, "allocate memory",
-                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
-        res = generate_test_string(str, cmd_args.test_strlen);
-        CHKERR_ACTION(res < 0, "generate test string",
-                      status = UCS_ERR_NO_MEMORY; goto out_free_ep);
         //printf("the test string: %s\n", str);
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
@@ -799,19 +788,20 @@ int main(int argc, char **argv)
             status = do_am_zcopy(&if_info, ep, id, &cmd_args, str);
         }
 
-        if (rdesc->is_uct_desc) {
-            /* Release descriptor because callback returns UCS_INPROGRESS */
-            uct_iface_release_desc(rdesc);
-        } else {
-            free(rdesc);
-        }
-        mem_type_free(str);
 
         //should have sent back
 
 
 
     }
+    rdesc = desc_holder;
+    if (rdesc->is_uct_desc) {
+        /* Release descriptor because callback returns UCS_INPROGRESS */
+        uct_iface_release_desc(rdesc);
+    } else {
+        free(rdesc);
+    }
+    mem_type_free(str);
 
     if (barrier(oob_sock, progress_worker, if_info.worker)) {
         status = UCS_ERR_IO_ERROR;
