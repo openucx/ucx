@@ -12,6 +12,8 @@
 #include <assert.h>
 #include <inttypes.h>
 
+#include <sys/time.h>
+
 
 typedef enum {
     FUNC_AM_SHORT,
@@ -702,7 +704,9 @@ int main(int argc, char **argv)
 
         //is client
 
-        clock_t t_start = clock();
+        //clock_t t_start = clock();
+        struct timeval stop, start;
+        gettimeofday(&start, NULL);
 
 
         char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
@@ -747,9 +751,11 @@ int main(int argc, char **argv)
 
         //received return
 
-        clock_t t_stop = clock();
+        gettimeofday(&stop, NULL);
+        
+        //clock_t t_stop = clock();
 
-        printf("time: %ld\n", t_stop - t_start);
+        printf("time: %ld\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec)); //https://stackoverflow.com/questions/10192903/time-in-milliseconds-in-c
 
 
         CHKERR_JUMP(UCS_OK != status, "send active msg", out_free_ep);
