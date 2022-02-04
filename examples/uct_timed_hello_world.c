@@ -222,6 +222,7 @@ static ucs_status_t hello_world(void *arg, void *data, size_t length,
 {
     struct timeval stop, mid, start;
     gettimeofday(&start, NULL);
+
     func_am_t func_am_type = *(func_am_t *)arg;
     recv_desc_t *rdesc;
 
@@ -245,7 +246,7 @@ static ucs_status_t hello_world(void *arg, void *data, size_t length,
     return UCS_OK;
     gettimeofday(&stop, NULL);
     printf("time: %ld", (mid.tv_sec - start.tv_sec) * 1000000 + mid.tv_usec - start.tv_usec); //https://stackoverflow.com/questions/10192903/time-in-milliseconds-in-c
-
+}
 /* Init the transport by its name */
 static ucs_status_t init_iface(char *dev_name, char *tl_name,
                                func_am_t func_am_type,
