@@ -116,7 +116,7 @@ ucs_status_t do_am_short(iface_info_t *if_info, uct_ep_h ep, uint8_t id,
 
     do {
         /* Send active message to remote endpoint */
-        printf("uhw lenght %ld header %ld payload: %s\n", send_args.len, send_args.header, send_args.payload);
+        //printf("uhw lenght %ld header %ld payload: %s\n", send_args.len, send_args.header, send_args.payload);
         status = uct_ep_am_short(ep, id, send_args.header, send_args.payload,
                                  send_args.len);
         uct_worker_progress(if_info->worker);
@@ -728,7 +728,7 @@ int main(int argc, char **argv)
         mem_type_free(str);
 
         //message sent, now wait for response
-        printf("message sent, now we receive\n");
+        //printf("message sent, now we receive\n");
 
         recv_desc_t *rdesc;
         while (desc_holder == NULL) {
