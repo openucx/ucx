@@ -219,7 +219,7 @@ int server_connect(uint16_t server_port)
     ret = listen(lsock, 0);
     CHKERR_JUMP(ret < 0, "listen server", err_sock);
 
-    fprintf(stdout, "Waiting for connection...\n");
+    //fprintf(stdout, "Waiting for connection...\n");
 
     /* Accept next connection */
     dsock = accept(lsock, NULL, NULL);

@@ -703,13 +703,13 @@ int main(int argc, char **argv)
     if (cmd_args.server_name) {
 
         //is client
+        char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
 
         //clock_t t_start = clock();
         struct timeval stop, start;
         gettimeofday(&start, NULL);
 
 
-        char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
         CHKERR_ACTION(str == NULL, "allocate memory",
                       status = UCS_ERR_NO_MEMORY; goto out_free_ep);
         res = generate_test_string(str, cmd_args.test_strlen);
@@ -725,7 +725,6 @@ int main(int argc, char **argv)
             status = do_am_zcopy(&if_info, ep, id, &cmd_args, str);
         }
 
-        mem_type_free(str);
 
         //message sent, now wait for response
         //printf("message sent, now we receive\n");
@@ -735,6 +734,8 @@ int main(int argc, char **argv)
             /* Explicitly progress any outstanding active message requests */
             uct_worker_progress(if_info.worker);
         }
+        
+        gettimeofday(&stop, NULL);
 
         rdesc = desc_holder;
         //print_strings("main", func_am_t_str(cmd_args.func_am_type),
@@ -751,8 +752,8 @@ int main(int argc, char **argv)
 
         //received return
 
-        gettimeofday(&stop, NULL);
         
+        mem_type_free(str);
         //clock_t t_stop = clock();
 
         printf("time: %ld\n", (stop.tv_sec - start.tv_sec) * 1000000 + stop.tv_usec - start.tv_usec); //https://stackoverflow.com/questions/10192903/time-in-milliseconds-in-c
@@ -762,6 +763,7 @@ int main(int argc, char **argv)
     } else {
 
         //is server
+        char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
 
         recv_desc_t *rdesc;
 
@@ -779,16 +781,9 @@ int main(int argc, char **argv)
         //              (char *)(rdesc + 1), cmd_args.test_strlen);
 
 
-        if (rdesc->is_uct_desc) {
-            /* Release descriptor because callback returns UCS_INPROGRESS */
-            uct_iface_release_desc(rdesc);
-        } else {
-            free(rdesc);
-        }
 
         //time to send things back
 
-        char *str = (char *)mem_type_malloc(cmd_args.test_strlen);
         CHKERR_ACTION(str == NULL, "allocate memory",
                       status = UCS_ERR_NO_MEMORY; goto out_free_ep);
         res = generate_test_string(str, cmd_args.test_strlen);
@@ -797,13 +792,19 @@ int main(int argc, char **argv)
         //printf("the test string: %s\n", str);
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
-            status = do_am_short(&if_info, ep, id, &cmd_args, str);
+            status = do_am_short(&if_info, ep, id, &cmd_args, str);w
         } else if (cmd_args.func_am_type == FUNC_AM_BCOPY) {
             status = do_am_bcopy(&if_info, ep, id, &cmd_args, str);
         } else if (cmd_args.func_am_type == FUNC_AM_ZCOPY) {
             status = do_am_zcopy(&if_info, ep, id, &cmd_args, str);
         }
 
+        if (rdesc->is_uct_desc) {
+            /* Release descriptor because callback returns UCS_INPROGRESS */
+            uct_iface_release_desc(rdesc);
+        } else {
+            free(rdesc);
+        }
         mem_type_free(str);
 
         //should have sent back
