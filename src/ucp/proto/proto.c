@@ -75,6 +75,36 @@ const char *ucp_proto_perf_types[] = {
     [UCP_PROTO_PERF_TYPE_MULTI]  = "multi"
 };
 
+const char *ucp_operation_names[] = {
+    [UCP_OP_ID_TAG_SEND]       = "tag_send",
+    [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
+    [UCP_OP_ID_AM_SEND]        = "am_send",
+    [UCP_OP_ID_PUT]            = "put",
+    [UCP_OP_ID_GET]            = "get",
+    [UCP_OP_ID_AMO_POST]       = "amo_post",
+    [UCP_OP_ID_AMO_FETCH]      = "amo_fetch",
+    [UCP_OP_ID_AMO_CSWAP]      = "amo_cswap",
+    [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
+    [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
+    [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
+    [UCP_OP_ID_LAST]           = NULL
+};
+
+const char *ucp_operation_descs[] = {
+    [UCP_OP_ID_TAG_SEND]       = "tagged message by ucp_tag_send*",
+    [UCP_OP_ID_TAG_SEND_SYNC]  = "synchronous tagged message by ucp_tag_send_sync*",
+    [UCP_OP_ID_AM_SEND]        = "active message by ucp_am_send*",
+    [UCP_OP_ID_PUT]            = "remote memory write by ucp_put*",
+    [UCP_OP_ID_GET]            = "remote memory read by ucp_get*",
+    [UCP_OP_ID_AMO_POST]       = "posted atomic by ucp_atomic_op*",
+    [UCP_OP_ID_AMO_FETCH]      = "fetching atomic by ucp_atomic_op*",
+    [UCP_OP_ID_AMO_CSWAP]      = "atomic compare-and-swap by ucp_atomic_op*",
+    [UCP_OP_ID_RNDV_SEND]      = "rendezvous data send",
+    [UCP_OP_ID_RNDV_RECV]      = "rendezvous data fetch",
+    [UCP_OP_ID_RNDV_RECV_DROP] = "rendezvous data drop",
+    [UCP_OP_ID_LAST]           = NULL
+};
+
 unsigned ucp_protocols_count(void)
 {
     UCS_STATIC_ASSERT(ucs_static_array_size(ucp_protocols) <

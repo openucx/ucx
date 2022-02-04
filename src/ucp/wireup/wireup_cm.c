@@ -454,7 +454,8 @@ initial_config_retry:
         goto try_fallback;
     }
 
-    status = ucp_worker_get_ep_config(worker, &key, 0, &ep->cfg_index);
+    status = ucp_worker_get_ep_config(worker, &key, ep_init_flags,
+                                      &ep->cfg_index);
     if (status != UCS_OK) {
         goto err;
     }

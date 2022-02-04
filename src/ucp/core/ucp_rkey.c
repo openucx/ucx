@@ -707,9 +707,11 @@ void ucp_rkey_resolve_inner(ucp_rkey_h rkey, ucp_ep_h ep)
 void ucp_rkey_config_dump_brief(const ucp_rkey_config_key_t *rkey_config_key,
                                 ucs_string_buffer_t *strb)
 {
-    ucs_string_buffer_appendf(strb, "%s md_map 0x%" PRIx64,
-                              ucs_memory_type_names[rkey_config_key->mem_type],
-                              rkey_config_key->md_map);
+    ucs_string_buffer_appendf(strb, "%s",
+                              ucs_memory_type_names[rkey_config_key->mem_type]);
+    if (rkey_config_key->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN) {
+        ucs_string_buffer_appendf(strb, "/dev[%d]", rkey_config_key->sys_dev);
+    }
 }
 
 void ucp_rkey_proto_select_dump(ucp_worker_h worker,
@@ -719,6 +721,6 @@ void ucp_rkey_proto_select_dump(ucp_worker_h worker,
     const ucp_rkey_config_t *rkey_config = &worker->rkey_config[rkey_cfg_index];
 
     ucp_proto_select_dump_short(&rkey_config->put_short, "put_short", strb);
-    ucp_proto_select_dump(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
+    ucp_proto_select_info(worker, rkey_config->key.ep_cfg_index, rkey_cfg_index,
                           &rkey_config->proto_select, strb);
 }

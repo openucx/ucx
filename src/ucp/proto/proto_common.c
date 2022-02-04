@@ -286,11 +286,9 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         return 0;
     }
 
-    ucp_proto_select_param_str(select_param, &sel_param_strb);
-    if (rkey_config_key != NULL) {
-        ucs_string_buffer_appendf(&sel_param_strb, "->");
-        ucp_rkey_config_dump_brief(rkey_config_key, &sel_param_strb);
-    }
+    ucp_proto_select_info_str(params->worker, params->rkey_cfg_index,
+                              params->select_param, ucp_operation_names,
+                              &sel_param_strb);
 
     num_lanes = 0;
     ucs_trace("selecting up to %d/%d lanes for %s %s", max_lanes,
@@ -637,17 +635,11 @@ void ucp_proto_request_zcopy_completion(uct_completion_t *self)
 
 void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)
 {
-    UCS_STRING_BUFFER_ONSTACK(sel_param_strb, UCP_PROTO_SELECT_PARAM_STR_MAX);
-    UCS_STRING_BUFFER_ONSTACK(proto_config_strb, UCP_PROTO_CONFIG_STR_MAX);
-    const ucp_proto_config_t *proto_config = req->send.proto_config;
+    UCS_STRING_BUFFER_ONSTACK(strb, UCP_PROTO_CONFIG_STR_MAX);
 
-    ucp_proto_select_param_str(&proto_config->select_param, &sel_param_strb);
-    ucp_proto_config_str(req->send.ep->worker, proto_config, msg_length,
-                         &proto_config_strb);
-    ucp_trace_req(req, "%s length %zu using %s{%s}",
-                  ucs_string_buffer_cstr(&sel_param_strb), msg_length,
-                  proto_config->proto->name,
-                  ucs_string_buffer_cstr(&proto_config_strb));
+    ucp_proto_config_info_str(req->send.ep->worker, req->send.proto_config,
+                              msg_length, &strb);
+    ucp_trace_req(req, "%s", ucs_string_buffer_cstr(&strb));
 }
 
 void ucp_proto_request_select_error(ucp_request_t *req,
@@ -660,8 +652,8 @@ void ucp_proto_request_select_error(ucp_request_t *req,
     UCS_STRING_BUFFER_ONSTACK(proto_select_strb, UCP_PROTO_CONFIG_STR_MAX);
     ucp_ep_h ep = req->send.ep;
 
-    ucp_proto_select_param_str(sel_param, &sel_param_strb);
-    ucp_proto_select_dump(ep->worker, ep->cfg_index, rkey_cfg_index,
+    ucp_proto_select_param_str(sel_param, ucp_operation_names, &sel_param_strb);
+    ucp_proto_select_info(ep->worker, ep->cfg_index, rkey_cfg_index,
                           proto_select, &proto_select_strb);
     ucs_fatal("req %p on ep %p to %s: could not find a protocol for %s "
               "length %zu\navailable protocols:\n%s\n",
