@@ -711,7 +711,7 @@ int main(int argc, char **argv)
         res = generate_test_string(str, cmd_args.test_strlen);
         CHKERR_ACTION(res < 0, "generate test string",
                       status = UCS_ERR_NO_MEMORY; goto out_free_ep);
-        printf("the test string: %s\n", str);
+        //printf("the test string: %s\n", str);
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
             status = do_am_short(&if_info, ep, id, &cmd_args, str);
@@ -733,10 +733,10 @@ int main(int argc, char **argv)
         }
 
         rdesc = desc_holder;
-        print_strings("main", func_am_t_str(cmd_args.func_am_type),
-                      (char *)(rdesc + 1), cmd_args.test_strlen);
+        //print_strings("main", func_am_t_str(cmd_args.func_am_type),
+        //              (char *)(rdesc + 1), cmd_args.test_strlen);
 
-        printf("free rdesc\n");
+        //printf("free rdesc\n");
 
         if (rdesc->is_uct_desc) {
             /* Release descriptor because callback returns UCS_INPROGRESS */
@@ -766,11 +766,11 @@ int main(int argc, char **argv)
 
         //escaped wait
 
-        printf("escaped wait");
+        //printf("escaped wait");
 
         rdesc = desc_holder;
-        print_strings("main", func_am_t_str(cmd_args.func_am_type),
-                      (char *)(rdesc + 1), cmd_args.test_strlen);
+        //print_strings("main", func_am_t_str(cmd_args.func_am_type),
+        //              (char *)(rdesc + 1), cmd_args.test_strlen);
 
 
         if (rdesc->is_uct_desc) {
@@ -788,7 +788,7 @@ int main(int argc, char **argv)
         res = generate_test_string(str, cmd_args.test_strlen);
         CHKERR_ACTION(res < 0, "generate test string",
                       status = UCS_ERR_NO_MEMORY; goto out_free_ep);
-        printf("the test string: %s\n", str);
+        //printf("the test string: %s\n", str);
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
             status = do_am_short(&if_info, ep, id, &cmd_args, str);
