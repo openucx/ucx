@@ -225,7 +225,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     UCT_CHECK_AM_ID(id);
 
     tx = (uct_sci_ep_zcopy_tx_t*) ucs_malloc(header_length + iov_total_len + sizeof(sisci_packet_t), "am_zcopy tx");
-
+    ucs_iov_iter_init(&uct_iov_iter);
     bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, (void*) tx, iface->send_size);
 
 
