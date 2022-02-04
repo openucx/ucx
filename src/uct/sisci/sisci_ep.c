@@ -216,7 +216,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     uct_sci_ep_t* ep = ucs_derived_of(uct_ep, uct_sci_ep_t);
     uct_sci_iface_t* iface = ucs_derived_of(uct_ep->iface, uct_sci_iface_t);
-    uct_sci_ep_zcopy_tx_t* tx = NULL
+    uct_sci_ep_zcopy_tx_t* tx = NULL;
     size_t iov_total_len      = uct_iov_total_length(iov, iovcnt);
     size_t bytes_copied;
     ucs_iov_iter_t uct_iov_iter;
@@ -224,7 +224,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     UCT_CHECK_LENGTH(header_length + iov_total_len + sizeof(sisci_packet_t), 0 , iface->send_size, "am_zcopy");
     UCT_CHECK_AM_ID(id);
 
-    tx = (uct_sci_ep_zcopy_tx_t*) ucs_malloc(header_length + iov_total_len + sizeof(sisci_packet_t));
+    tx = (uct_sci_ep_zcopy_tx_t*) ucs_malloc(header_length + iov_total_len + sizeof(sisci_packet_t), "am_zcopy tx");
 
     bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, (void*) tx, iface->send_size);
 
