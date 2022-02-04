@@ -734,7 +734,7 @@ int main(int argc, char **argv)
             /* Explicitly progress any outstanding active message requests */
             uct_worker_progress(if_info.worker);
         }
-        
+
         gettimeofday(&stop, NULL);
 
         rdesc = desc_holder;
@@ -792,7 +792,7 @@ int main(int argc, char **argv)
         //printf("the test string: %s\n", str);
         /* Send active message to remote endpoint */
         if (cmd_args.func_am_type == FUNC_AM_SHORT) {
-            status = do_am_short(&if_info, ep, id, &cmd_args, str);w
+            status = do_am_short(&if_info, ep, id, &cmd_args, str);
         } else if (cmd_args.func_am_type == FUNC_AM_BCOPY) {
             status = do_am_bcopy(&if_info, ep, id, &cmd_args, str);
         } else if (cmd_args.func_am_type == FUNC_AM_ZCOPY) {
