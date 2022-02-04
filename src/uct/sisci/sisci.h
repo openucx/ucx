@@ -55,14 +55,6 @@ typedef struct uct_sci_iface_config {
 } uct_sci_iface_config_t;
 
 
-typedef struct uct_tcp_ep_zcopy_tx {
-    uct_tcp_am_hdr_t              super;     /* UCT TCP AM header */
-    uct_completion_t              *comp;     /* Local UCT completion object */
-    size_t                        iov_index; /* Current IOV index */
-    size_t                        iov_cnt;   /* Number of IOVs that should be sent */
-    struct iovec                  iov[0];    /* IOVs that should be sent */
-} uct_tcp_ep_zcopy_tx_t;
-
 typedef struct sisci_packet {
     uint8_t     status;
     uint8_t     am_id;
