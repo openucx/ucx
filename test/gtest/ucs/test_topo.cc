@@ -6,7 +6,7 @@
 
 #include <common/test.h>
 extern "C" {
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 }
 
 class test_topo : public ucs::test {

@@ -23,7 +23,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/sys/compiler_def.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
