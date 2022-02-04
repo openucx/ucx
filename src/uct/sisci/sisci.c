@@ -494,12 +494,18 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->cap.am.min_zcopy = 10000;
     attr->cap.am.max_zcopy = 10000;
 
+    /*TODO Sane numbers, and not guesses for fun.*/
+    attr->cap.am.max_iov   = 10;
+    attr->cap.am.max_hdr   = 100;
+
 
     attr->latency                 = ucs_linear_func_make(20, 40);
     attr->bandwidth.dedicated     = 10 * UCS_MBYTE;
     attr->bandwidth.shared        = 0;
     attr->overhead                = 10e-9;
     attr->priority                = 5;
+
+    
 
 
     if(!iface_query_printed) {

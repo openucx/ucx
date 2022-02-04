@@ -5,6 +5,9 @@
 
 #include <uct/base/uct_iface.h>
 #include <uct/base/uct_md.h>
+#include <ucs/sys/iovec.h>
+#include <uct/base/uct_iov.inl>
+
 
 #include <sisci_error.h> //TODO
 #include <sisci_api.h>
@@ -14,6 +17,7 @@
 
 #define ADAPTER_NO 0
 #define SCI_NO_FLAGS 0
+#define SISCI_STATUS_WRITING_DONE 1
 
 
 // https://stackoverflow.com/questions/1941307/debug-print-macro-in-c by Tom Kuschel
@@ -50,8 +54,14 @@ typedef struct uct_sci_iface_config {
     size_t                seg_size;      /* Maximal send size */
 } uct_sci_iface_config_t;
 
-#define SISCI_STATUS_WRITING_DONE 1
 
+typedef struct uct_tcp_ep_zcopy_tx {
+    uct_tcp_am_hdr_t              super;     /* UCT TCP AM header */
+    uct_completion_t              *comp;     /* Local UCT completion object */
+    size_t                        iov_index; /* Current IOV index */
+    size_t                        iov_cnt;   /* Number of IOVs that should be sent */
+    struct iovec                  iov[0];    /* IOVs that should be sent */
+} uct_tcp_ep_zcopy_tx_t;
 
 typedef struct sisci_packet {
     uint8_t     status;
@@ -59,6 +69,14 @@ typedef struct sisci_packet {
     unsigned    length;
     //void        data;
 } UCS_S_PACKED sisci_packet_t;
+
+typedef struct uct_sci_ep_zcopy_tx {
+    sisci_packet_t                super;     /* UCT TCP AM header */
+    uct_completion_t              *comp;     /* Local UCT completion object */
+    size_t                        iov_index; /* Current IOV index */
+    size_t                        iov_cnt;   /* Number of IOVs that should be sent */
+    struct iovec                  iov[0];    /* IOVs that should be sent */
+} uct_sci_ep_zcopy_tx_t;
 
 typedef struct uct_sci_iface {
     uct_base_iface_t      super;
