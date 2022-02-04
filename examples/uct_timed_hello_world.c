@@ -223,7 +223,7 @@ static ucs_status_t hello_world(void *arg, void *data, size_t length,
     func_am_t func_am_type = *(func_am_t *)arg;
     recv_desc_t *rdesc;
 
-    print_strings("callback", func_am_t_str(func_am_type), data, length);
+    //print_strings("callback", func_am_t_str(func_am_type), data, length);
 
     if (flags & UCT_CB_PARAM_FLAG_DESC) {
         rdesc = (recv_desc_t *)data - 1;
