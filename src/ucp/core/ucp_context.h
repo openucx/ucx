@@ -500,15 +500,24 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
     if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        ucs_trace_req("address %p length %zu: not found in memtype cache, "
+                      "assuming host memory",
+                      address, length);
         goto out_host_mem;
-    } else if ((status == UCS_ERR_UNSUPPORTED) ||
-               ((status == UCS_OK) &&
-                ((mem_info->type == UCS_MEMORY_TYPE_UNKNOWN) ||
-                 (mem_info->sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN)))) {
-        ucp_memory_detect_slowpath(context, address, length, mem_info);
+    } else if (ucs_likely(status == UCS_OK)) {
+        if (ucs_unlikely(mem_info->type == UCS_MEMORY_TYPE_UNKNOWN)) {
+            ucs_trace_req(
+                    "address %p length %zu: memtype cache returned 'unknown'",
+                    address, length);
+            ucp_memory_detect_slowpath(context, address, length, mem_info);
+        } else {
+            ucs_trace_req(
+                    "address %p length %zu: memtype cache returned '%s' %s",
+                    address, length, ucs_memory_type_names[mem_info->type],
+                    ucs_topo_sys_device_get_name(mem_info->sys_dev));
+        }
     } else {
-        ucs_assertv(status == UCS_OK, "%s (%d)", ucs_status_string(status),
-                    status);
+        ucp_memory_detect_slowpath(context, address, length, mem_info);
     }
 
     /* Memory type and system device was detected successfully */
