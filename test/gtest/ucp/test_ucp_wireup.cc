@@ -1196,7 +1196,7 @@ public:
             EXPECT_TRUE(worker_has_tls(worker, better_tl, i)) <<
                 " transport " << better_tl << " should not be closed";
             EXPECT_FALSE(worker_has_tls(worker, tl, i)) <<
-                " transport " << better_tl << " should be closed";
+                " transport " << tl << " should be closed";
         }
     }
 };
