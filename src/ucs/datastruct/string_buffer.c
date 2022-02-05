@@ -146,7 +146,12 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
 {
     char *ptr = ucs_array_end(&strb->str);
 
-    while (ucs_array_length(&strb->str) > 0) {
+    if (ucs_array_is_empty(&strb->str)) {
+        /* If the string is empty, do not write '\0' terminator */
+        return;
+    }
+
+    do {
         --ptr;
         if (((charset == NULL) && !isspace(*ptr)) ||
             ((charset != NULL) && (strchr(charset, *ptr) == NULL))) {
@@ -155,7 +160,7 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
         }
 
         ucs_array_set_length(&strb->str, ucs_array_length(&strb->str) - 1);
-    }
+    } while (!ucs_array_is_empty(&strb->str));
 
     /* mark the new end of string */
     *(ptr + 1) = '\0';
