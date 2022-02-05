@@ -387,7 +387,9 @@ void ucp_ep_delete(ucp_ep_h ep)
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucs_assert(ep->worker->num_all_eps > 0);
         --ep->worker->num_all_eps;
-        ucp_worker_keepalive_remove_ep(ep);
+        if (ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
+            ucp_worker_keepalive_remove_ep(ep);
+        }
     }
 
     ucp_ep_release_id(ep);

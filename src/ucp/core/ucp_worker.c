@@ -3147,10 +3147,11 @@ void ucp_worker_keepalive_add_ep(ucp_ep_h ep)
 
     if ((ep->flags & UCP_EP_FLAG_INTERNAL) ||
         (ucp_ep_config(ep)->key.ep_check_map == 0) ||
-        !ucp_worker_keepalive_is_enabled(worker)) {
+        !ucp_worker_keepalive_is_enabled(worker) ||
+        (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE)) {
         ucs_trace("ep %p flags 0x%x cfg_index %d: not using keepalive, "
-                  "err_mode %d ep_check_map 0x%x",
-                  ep, ep->flags, ep->cfg_index, ucp_ep_config(ep)->key.err_mode,
+                  "err_mode %d ep_check_map 0x%x", ep, ep->flags,
+                  ep->cfg_index, ucp_ep_config(ep)->key.err_mode,
                   ucp_ep_config(ep)->key.ep_check_map);
         return;
     }
@@ -3170,8 +3171,10 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
     ucp_worker_h worker = ep->worker;
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
+    ucs_assert(ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL);
 
-    if (!ucp_worker_keepalive_is_enabled(worker)) {
+    if (!ucp_worker_keepalive_is_enabled(worker) ||
+        (ucp_ep_config(ep)->key.err_mode == UCP_ERR_HANDLING_MODE_NONE)) {
         ucs_assert(worker->keepalive.iter == &worker->all_eps);
         return;
     }
