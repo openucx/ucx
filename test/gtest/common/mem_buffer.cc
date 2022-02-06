@@ -16,8 +16,7 @@
 #include <ucs/debug/assert.h>
 #include <common/test_helpers.h>
 
-#if HAVE_CUDA
-#  include <cuda.h>
+#if HAVE_CUDART
 #  include <cuda_runtime.h>
 
 #define CUDA_CALL(_code, _details) \
@@ -47,7 +46,7 @@
 
 bool mem_buffer::is_cuda_supported()
 {
-#if HAVE_CUDA
+#if HAVE_CUDART
     int num_gpus        = 0;
     cudaError_t cudaErr = cudaGetDeviceCount(&num_gpus);
     return (cudaErr == cudaSuccess) && (num_gpus > 0);
@@ -115,7 +114,7 @@ void mem_buffer::set_device_context()
         return;
     }
 
-#if HAVE_CUDA
+#if HAVE_CUDART
     if (is_cuda_supported()) {
         cudaSetDevice(0);
         /* need to call free as context maybe lazily initialized when calling
@@ -149,7 +148,7 @@ void *mem_buffer::allocate(size_t size, ucs_memory_type_t mem_type)
             UCS_TEST_ABORT("malloc(size=" << size << ") failed");
         }
         return ptr;
-#if HAVE_CUDA
+#if HAVE_CUDART
     case UCS_MEMORY_TYPE_CUDA:
         CUDA_CALL(cudaMalloc(&ptr, size), ": size=" << size);
         return ptr;
@@ -178,7 +177,7 @@ void mem_buffer::release(void *ptr, ucs_memory_type_t mem_type)
         case UCS_MEMORY_TYPE_HOST:
             free(ptr);
             break;
-#if HAVE_CUDA
+#if HAVE_CUDART
         case UCS_MEMORY_TYPE_CUDA:
         case UCS_MEMORY_TYPE_CUDA_MANAGED:
             CUDA_CALL(cudaFree(ptr), ": ptr=" << ptr);
@@ -301,7 +300,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
     case UCS_MEMORY_TYPE_ROCM_MANAGED:
         ::memset(buffer, c, length);
         break;
-#if HAVE_CUDA
+#if HAVE_CUDART
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMemset(buffer, c, length),
@@ -346,7 +345,7 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
                               ucs_memory_type_t src_mem_type)
 {
     const uint64_t host_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-#if HAVE_CUDA
+#if HAVE_CUDART
     const uint64_t cuda_mem_types = host_mem_types |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
@@ -359,7 +358,7 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
 
     if (check_mem_types(dst_mem_type, src_mem_type, host_mem_types)) {
         memcpy(dst, src, length);
-#if HAVE_CUDA
+#if HAVE_CUDART
     } else if (check_mem_types(dst_mem_type, src_mem_type, cuda_mem_types)) {
         CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDefault),
                   ": dst=" << dst << " src=" << src << "length=" << length);
