@@ -703,13 +703,19 @@ static UCS_F_NOINLINE void
 ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
-    /* Request a peer failure detection support from a reply EP to be able to do
-     * discarding of lanes when destroying all UCP EPs in UCP worker destroy.
-     * Also, create UCP EP with CONNECT_TO_IFACE connection mode to not do
-     * WIREUP_MSG phase between peers which require a direct EP ID */
+    /* 1. Request a peer failure detection support from a reply EP to be able
+     *    to do discarding of lanes when destroying all UCP EPs in UCP worker
+     *    destroy.
+     * 2. Create UCP EP with CONNECT_TO_IFACE connection mode to not do
+     *    WIREUP_MSG phase between peers which require a direct EP ID.
+     * 3. Create UCP EP with AM lane only, because WIREUP_MSGs are sent using
+     *    AM lane.
+     */
     unsigned ep_init_flags = UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
                              UCP_EP_INIT_FLAG_INTERNAL |
-                             UCP_EP_INIT_CONNECT_TO_IFACE_ONLY;
+                             UCP_EP_INIT_CONNECT_TO_IFACE_ONLY |
+                             UCP_EP_INIT_CREATE_AM_LANE |
+                             UCP_EP_INIT_CREATE_AM_LANE_ONLY;
     ucs_status_t status;
     ucp_ep_h reply_ep;
     unsigned addr_indices[UCP_MAX_LANES];
