@@ -1,5 +1,4 @@
 /**
-* Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -12,7 +11,7 @@
     static inline void ucs_atomic_add##wordsize(volatile uint##wordsize##_t *ptr, \
                                                 uint##wordsize##_t value) { \
         asm volatile ( \
-              "amoadd.w.aq.rl %1, %0" \
+              "amoadd.w.aqrl %1, %0" \
               : "+m"(*ptr) \
               : "ir" (value)); \
     }
@@ -21,7 +20,7 @@
     static inline uint##wordsize##_t ucs_atomic_fadd##wordsize(volatile uint##wordsize##_t *ptr, \
                                                                uint##wordsize##_t value) { \
         asm volatile ( \
-              "amoadd.d.aq.rl %0, %1" \
+              "amoadd.d.aqrl %0, %1" \
               : "+r" (value), "+m" (*ptr) \
               : : "memory"); \
         return value; \
@@ -31,7 +30,7 @@
     static inline uint##wordsize##_t ucs_atomic_swap##wordsize(volatile uint##wordsize##_t *ptr, \
                                                                uint##wordsize##_t value) { \
         asm volatile ( \
-              "amoswap.w.aq.rl %0, %1" \
+              "amoswap.w.aqrl %0, %1" \
               : "+r" (value), "+m" (*ptr) \
               : : "memory", "cc"); \
         return value; \
