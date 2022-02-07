@@ -28,10 +28,10 @@ extern "C" {
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm, "shm") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,ud_v,ud_x,mm") \
-        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "dc_x,mm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_no_ud_ud_x, "dc_mlx5,mm") \
         /* dc_ud case is for testing handling of a large worker address on
          * UCT_IFACE_FLAG_CONNECT_TO_IFACE transports (dc_x) */
-        /* no_ud_ud_x case is for testing handling a large worker address
+        /* dc_no_ud_ud_x case is for testing handling a large worker address
          * but with the lack of ud/ud_x transports, which would return an error
          * and skipped */
 
@@ -200,7 +200,7 @@ public:
             UCS_TEST_SKIP_R("No interface for testing");
         }
 
-        static const std::string dc_tls[] = { "dc", "dc_x", "ib" };
+        static const std::string dc_tls[] = { "dc", "dc_x", "dc_mlx5", "ib" };
 
         bool has_dc = has_any_transport(
             std::vector<std::string>(dc_tls,
@@ -1924,7 +1924,7 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_check_lanes)
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
 public:
     test_ucp_sockaddr_destroy_ep_on_err() {
-        set_tl_small_timeouts();
+        configure_peer_failure_settings();
     }
 
     virtual ucp_ep_params_t get_server_ep_params() {
@@ -2769,7 +2769,7 @@ public:
 
 protected:
     test_ucp_sockaddr_protocols_err() {
-        set_tl_small_timeouts();
+        configure_peer_failure_settings();
     }
 
     void test_tag_send_recv(size_t size, bool is_exp,
@@ -2841,6 +2841,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_put_scheme,
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sockaddr_protocols_err,
+                                        rc_no_ud, "rc_mlx5,rc_verbs")
+
 
 class test_ucp_sockaddr_protocols_err_sender
       : public test_ucp_sockaddr_protocols {
@@ -2859,7 +2862,7 @@ protected:
     }
 
     test_ucp_sockaddr_protocols_err_sender() {
-        set_tl_small_timeouts();
+        configure_peer_failure_settings();
         m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
                                                "rcache,odp,direct"));
     }
@@ -2996,3 +2999,5 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sockaddr_protocols_err_sender,
+                                        rc_no_ud, "rc_mlx5,rc_verbs")

@@ -78,13 +78,15 @@ protected:
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
+// DC without UD auxiliary
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure, dc_mlx5, "dc_mlx5")
 
 
 test_ucp_peer_failure::test_ucp_peer_failure() :
     m_am_rx_count(0), m_err_count(0), m_err_status(UCS_OK)
 {
     ucs::fill_random(m_sbuf);
-    set_tl_small_timeouts();
+    configure_peer_failure_settings();
 }
 
 void test_ucp_peer_failure::get_test_variants(
@@ -345,7 +347,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     /* Since UCT/UD EP has a SW implementation of reliablity on which peer
      * failure mechanism is based, we should set small UCT/UD EP timeout
      * for UCT/UD EPs for sender's UCP EP to reduce testing time */
-    double prev_ib_ud_timeout = sender().set_ib_ud_timeout(3.);
+    double prev_ib_ud_peer_timeout = sender().set_ib_ud_peer_timeout(3.);
 
     {
         scoped_log_handler slh(wrap_errors_logger);
@@ -410,7 +412,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     /* Since we won't test peer failure anymore, reset UCT/UD EP timeout to the
      * default value to avoid possible UD EP timeout errors under high load */
-    sender().set_ib_ud_timeout(prev_ib_ud_timeout);
+    sender().set_ib_ud_peer_timeout(prev_ib_ud_peer_timeout);
 
     /* Check workability of stable pair */
     smoke_test(true);
@@ -514,12 +516,13 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     smoke_test(true); /* allow wireup to complete */
     smoke_test(false);
 
-    if (ucp_ep_config(stable_sender())->key.ep_check_map == 0) {
+    if (ucp_ep_config(stable_sender())->key.keepalive_lane == UCP_NULL_LANE) {
         UCS_TEST_SKIP_R("Unsupported");
     }
 
     /* ensure both pair have ep_check map */
-    ASSERT_NE(0, ucp_ep_config(failing_sender())->key.ep_check_map);
+    ASSERT_NE(UCP_NULL_LANE,
+              ucp_ep_config(failing_sender())->key.keepalive_lane);
 
     /* aux (ud) transport doesn't support keepalive feature and
      * we are assuming that wireup/connect procedure is done */

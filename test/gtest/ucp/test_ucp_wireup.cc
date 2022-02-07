@@ -1221,7 +1221,7 @@ UCS_TEST_P(test_ucp_wireup_unified, select_best_ifaces)
     entity *e = create_entity();
     check_unified_ifaces(e, "dc_mlx5", "rc_mlx5");
     EXPECT_FALSE(ep_iface_has_caps(sender(), "dc_mlx5",
-                                   UCT_IFACE_FLAG_EP_CHECK));
+                 UCT_IFACE_FLAG_EP_CHECK));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_wireup_unified, rc, "rc")
@@ -1595,7 +1595,7 @@ UCS_TEST_P(test_ucp_wireup_keepalive, attr) {
     }
 
     ucp_ep_config_t *ep_config = ucp_ep_config(sender().ep());
-    EXPECT_NE(0, ep_config->key.ep_check_map);
+    EXPECT_NE(UCP_NULL_LANE, ep_config->key.keepalive_lane);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_keepalive)

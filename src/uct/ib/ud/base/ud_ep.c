@@ -143,10 +143,10 @@ static ucs_status_t uct_ud_ep_free_by_timeout(uct_ud_ep_t *ep,
     ucs_time_t         diff;
 
     diff = ucs_twheel_get_time(&iface->tx.timer) - ep->close_time;
-    if (diff > iface->config.peer_timeout) {
+    if (diff > iface->config.linger_timeout) {
         ucs_debug("ud_ep %p is destroyed after %fs with timeout %fs\n",
                   ep, ucs_time_to_sec(diff),
-                  ucs_time_to_sec(iface->config.peer_timeout));
+                  ucs_time_to_sec(iface->config.linger_timeout));
         ops = ucs_derived_of(iface->super.ops, uct_ud_iface_ops_t);
         ops->ep_free(&ep->super.super);
         return UCS_OK;
@@ -327,23 +327,13 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
             status = uct_ud_ep_free_by_timeout(ep, iface);
             if (status == UCS_INPROGRESS) {
-                uct_ud_ep_timer_backoff(ep);
+                goto timer_backoff;
             }
         }
         return;
     }
 
     uct_ud_ep_assert_tx_window_nonempty(ep);
-
-    now  = ucs_twheel_get_time(&iface->tx.timer);
-    diff = now - ep->tx.send_time;
-    if (diff > iface->config.peer_timeout) {
-        ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
-                  ep, ucs_time_to_sec(diff),
-                  ucs_time_to_sec(iface->config.peer_timeout));
-        uct_ud_ep_handle_timeout(ep);
-        return;
-    }
 
     /* If we are already resending, do not consider this timeout as packet drop.
      * It just means the sender is slow.
@@ -352,11 +342,11 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         (ep->tx.resend_count > 0)) {
         ucs_trace("ep %p: resend still in progress, ops 0x%x tx_count %d",
                   ep, ep->tx.pending.ops, ep->tx.resend_count);
-        uct_ud_ep_timer_backoff(ep);
-        return;
+        goto timer_backoff;
     }
 
     last_send = ucs_max(ep->tx.send_time, ep->tx.resend_time);
+    now       = ucs_twheel_get_time(&iface->tx.timer);
     diff      = now - last_send;
     if (diff > iface->tx.tick) {
         if (diff > 3 * iface->tx.tick) {
@@ -372,6 +362,16 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         }
     }
 
+    diff = now - ep->tx.send_time;
+    if (diff > iface->config.peer_timeout) {
+        ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
+                  ep, ucs_time_to_sec(diff),
+                  ucs_time_to_sec(iface->config.peer_timeout));
+        uct_ud_ep_handle_timeout(ep);
+        return;
+    }
+
+timer_backoff:
     uct_ud_ep_timer_backoff(ep);
 }
 

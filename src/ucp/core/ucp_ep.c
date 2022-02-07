@@ -150,12 +150,12 @@ void ucp_ep_config_key_reset(ucp_ep_config_key_t *key)
     key->am_lane          = UCP_NULL_LANE;
     key->wireup_msg_lane  = UCP_NULL_LANE;
     key->cm_lane          = UCP_NULL_LANE;
+    key->keepalive_lane   = UCP_NULL_LANE;
     key->rkey_ptr_lane    = UCP_NULL_LANE;
     key->tag_lane         = UCP_NULL_LANE;
     key->rma_bw_md_map    = 0;
     key->reachable_md_map = 0;
     key->dst_md_cmpts     = NULL;
-    key->ep_check_map     = 0;
     key->err_mode         = UCP_ERR_HANDLING_MODE_NONE;
     memset(key->am_bw_lanes,  UCP_NULL_LANE, sizeof(key->am_bw_lanes));
     memset(key->rma_lanes,    UCP_NULL_LANE, sizeof(key->rma_lanes));
@@ -384,9 +384,9 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
         ucs_assert(ep->worker->num_all_eps > 0);
         --ep->worker->num_all_eps;
-        ucp_worker_keepalive_remove_ep(ep);
     }
 
+    ucp_worker_keepalive_remove_ep(ep);
     ucp_ep_release_id(ep);
     ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
 
@@ -641,15 +641,15 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_reset(&key);
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
-    key.num_lanes           = 1;
+    key.num_lanes = 1;
     /* all operations will use the first lane, which is a stub endpoint before
      * reconfiguration */
-    key.am_lane             = 0;
+    key.am_lane = 0;
     if (ucp_ep_init_flags_has_cm(ep_init_flags)) {
-        key.cm_lane         = 0;
+        key.cm_lane = 0;
         /* Send keepalive on wireup_ep (which will send on aux_ep) */
         if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
-            key.ep_check_map |= UCS_BIT(key.cm_lane);
+            key.keepalive_lane = 0;
         }
     } else {
         key.wireup_msg_lane = 0;
@@ -1721,8 +1721,8 @@ int ucp_ep_config_is_equal(const ucp_ep_config_key_t *key1,
         (key1->tag_lane != key2->tag_lane) ||
         (key1->wireup_msg_lane != key2->wireup_msg_lane) ||
         (key1->cm_lane != key2->cm_lane) ||
+        (key1->keepalive_lane != key2->keepalive_lane) ||
         (key1->rkey_ptr_lane != key2->rkey_ptr_lane) ||
-        (key1->ep_check_map != key2->ep_check_map) ||
         (key1->err_mode != key2->err_mode)) {
         return 0;
     }
@@ -2870,6 +2870,10 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
         ucs_string_buffer_appendf(strbuf, " tag_offload");
     }
 
+    if (key->keepalive_lane == lane) {
+        ucs_string_buffer_appendf(strbuf, " keepalive");
+    }
+
     if (key->wireup_msg_lane == lane) {
         ucs_string_buffer_appendf(strbuf, " wireup");
         if (aux_rsc_index != UCP_NULL_RESOURCE) {
@@ -3163,21 +3167,19 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     ucp_ep_ext_control(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
 }
 
-/* if we have ep2iface transport we need to send an active-message based
- * keepalive message to check the remote endpoint still exists */
 static UCS_F_ALWAYS_INLINE int
-ucp_ep_is_am_keepalive(ucp_ep_h ucp_ep, ucp_rsc_index_t rsc_idx)
+ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_idx)
 {
     ucp_worker_iface_t *wiface;
 
-    if (!(ucp_ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
+    if (!(ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
         (rsc_idx == UCP_NULL_RESOURCE)) {
         /* if remote ID isn't defined or rsc index is NULL (i.e. it is CM lane),
          * don't do AM keepalive */
         return 0;
     }
 
-    wiface = ucp_worker_iface(ucp_ep->worker, rsc_idx);
+    wiface = ucp_worker_iface(ep->worker, rsc_idx);
     return ucs_test_all_flags(wiface->attr.cap.flags,
                               UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                               UCT_IFACE_FLAG_AM_BCOPY);
@@ -3194,16 +3196,10 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucp_wireup_msg_t wireup_msg;
 
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
-    ucs_assert((rsc_idx == UCP_NULL_RESOURCE) ||
-               (ucp_worker_iface(ucp_ep->worker, rsc_idx)->attr.cap.flags &
-                UCT_IFACE_FLAG_EP_CHECK));
 
     if (!ucp_ep_is_am_keepalive(ucp_ep, rsc_idx)) {
         return uct_ep_check(uct_ep, flags, comp);
     }
-
-    ucs_assert(ucp_worker_iface(ucp_ep->worker, rsc_idx)->attr.cap.flags &
-               UCT_IFACE_FLAG_AM_BCOPY);
 
     UCS_BITMAP_SET(tl_bitmap, rsc_idx);
 
@@ -3223,65 +3219,6 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                  UCT_SEND_FLAG_PEER_CHECK);
     ucs_free(wireup_msg_iov[1].iov_base);
     return (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
-}
-
-int ucp_ep_do_keepalive(ucp_ep_h ep, ucs_time_t now)
-{
-    ucp_worker_h worker = ep->worker;
-    ucp_lane_index_t lane;
-    ucs_status_t status;
-    ucp_rsc_index_t rsc_index;
-
-    UCP_WORKER_THREAD_CS_CHECK_IS_BLOCKED(ep->worker);
-
-    ucs_assert(!(ep->flags & UCP_EP_FLAG_FAILED));
-    ucs_assert(worker->keepalive.lane_map != 0);
-
-    ucs_for_each_bit(lane, worker->keepalive.lane_map) {
-        ucs_assert(lane < UCP_MAX_LANES);
-        rsc_index = ucp_ep_get_rsc_index(ep, lane);
-        ucs_assert((rsc_index != UCP_NULL_RESOURCE) ||
-                   (lane == ucp_ep_get_cm_lane(ep)));
-
-        ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep, lane,
-                  ep->uct_eps[lane], ep->flags);
-
-        status = ucp_ep_do_uct_ep_keepalive(ep, ep->uct_eps[lane], rsc_index, 0,
-                                            NULL);
-        if (status == UCS_ERR_NO_RESOURCE) {
-            continue;
-        } else if (status != UCS_OK) {
-            ucs_diag("unexpected return status from doing keepalive(ep=%p, "
-                     "lane[%d]=%p): %s",
-                     ep, lane, ep->uct_eps[lane], ucs_status_string(status));
-        }
-
-        worker->keepalive.lane_map &= ~UCS_BIT(lane);
-    }
-
-    /* Keepalive round is still not finished for this ep - skip ka_last_round
-     * update */
-    if (worker->keepalive.lane_map != 0) {
-        return 0;
-    }
-
-    ucs_trace("worker %p: keepalive done on ep %p, now: <%lf sec>", worker, ep,
-              ucs_time_to_sec(now));
-
-#if UCS_ENABLE_ASSERT
-    ucs_assertv((now - ucp_ep_ext_control(ep)->ka_last_round) >=
-                        worker->context->config.ext.keepalive_interval,
-                "ep %p: now=<%lf sec> ka_last_round=<%lf sec>"
-                "(diff=<%lf sec>) ka_interval=<%lf sec>",
-                ep, ucs_time_to_sec(now),
-                ucs_time_to_sec(ucp_ep_ext_control(ep)->ka_last_round),
-                ucs_time_to_sec(now - ucp_ep_ext_control(ep)->ka_last_round),
-                ucs_time_to_sec(
-                        worker->context->config.ext.keepalive_interval));
-    ucp_ep_ext_control(ep)->ka_last_round = now;
-#endif
-
-    return 1;
 }
 
 static void ucp_ep_req_purge_send(ucp_request_t *req, ucs_status_t status)
