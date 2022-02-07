@@ -29,9 +29,10 @@ static ucs_config_field_t uct_sci_iface_config_table[] = {
 };
 
 
-static ucs_config_field_t uct_sci_md_config_table[] = {
+/*Forward declaration of the md config table*/
+/*static ucs_config_field_t uct_sci_md_config_table[] = {
     NULL
-};
+};*/
 
 int sci_opened = 0;
 int iface_query_printed = 0;
