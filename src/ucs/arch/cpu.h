@@ -65,7 +65,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_GENERIC_PPC,
     UCS_CPU_VENDOR_FUJITSU_ARM,
     UCS_CPU_VENDOR_ZHAOXIN,
-    UCS_CPU_VENDOR_RISCV,
+    UCS_CPU_VENDOR_RISCV64,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
