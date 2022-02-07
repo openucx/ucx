@@ -6,7 +6,7 @@ resources:
   containers:
     - container: centos7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:4
-      options: --cpuset-cpus=variables['cpu_affinity'] $(DOCKER_OPT_VOLUMES)
+      options: --cpuset-cpus=$(Agent.BuildDirectory) $(DOCKER_OPT_VOLUMES)
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
       options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
