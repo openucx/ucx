@@ -412,7 +412,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, iface->super.config.min_rnr_timer);
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.config.enable_ece) {
         ucs_debug("init2rtr_qp_in with ece : 0x%x", qp->remote_ece);
         UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, qp->remote_ece);
     }
@@ -425,7 +426,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
         return status;
     }
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.config.enable_ece) {
         qp->local_ece = UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece);
         ucs_debug("rc devx under rtr with ece : 0x%x", qp->local_ece);
     }

@@ -467,7 +467,8 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     dev = uct_ib_iface_device(&iface->super.super.super);
 #if HAVE_RDMACM_ECE
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         ece.vendor_id = dev->pci_id.vendor;
         ece.options   = dci->txwq.super.remote_ece;
         ece.comp_mask = 0;
@@ -494,7 +495,8 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
     }
 
 #if HAVE_RDMACM_ECE
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         if (ibv_query_ece(dci->txwq.super.verbs.qp, &ece) == 0) {
             dci->txwq.super.local_ece = ece.options;
         } else {
@@ -591,7 +593,8 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *dct,
     ibv_ece.vendor_id = dev->pci_id.vendor;
     ibv_ece.options   = dct->remote_ece;
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         ibv_set_ece(dct->verbs.qp, &ibv_ece);
     }
 #endif
@@ -616,7 +619,8 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *dct,
 
     dct->local_ece = 0;
 #if HAVE_RDMACM_ECE
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         if (ibv_query_ece(dct->verbs.qp, &ibv_ece) == 0) {
             dct->local_ece = ibv_ece.options;
         } else {
@@ -1016,7 +1020,8 @@ ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
 
     ib_iface->dev_addr_ext_ece = 0;
     ib_iface->ece              = 0;
-    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE)) {
+    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE) ||
+        !ib_iface->config.enable_ece) {
         return UCS_OK;
     }
 

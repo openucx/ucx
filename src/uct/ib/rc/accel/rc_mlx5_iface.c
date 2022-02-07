@@ -703,8 +703,8 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface)
 
     ib_iface->dev_addr_ext_ece = 0;
     ib_iface->ece              = 0;
-    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE)) {
-        ib_iface->ece = 0;
+    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE) ||
+        !ib_iface->config.enable_ece) {
         return status;
     }
 

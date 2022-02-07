@@ -78,7 +78,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, iface->super.super.super.gid_info.gid_index);
     UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         UCT_IB_MLX5DV_SET(dctc, dctc, ece, ece);
     }
     dct->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
@@ -89,7 +90,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         dct->local_ece = UCT_IB_MLX5DV_GET(create_dct_out, out, ece);
     } else {
         dct->local_ece = 0;
@@ -139,7 +141,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode, UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         ucs_debug("init2rtr dci with ece : 0x%x", qp->remote_ece);
         UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, qp->remote_ece);
     }
@@ -167,7 +170,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
         return status;
     }
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.super.config.enable_ece) {
         qp->local_ece = UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece);
         ucs_debug("dci devx under rtr with ece : 0x%x", qp->local_ece);
     }
