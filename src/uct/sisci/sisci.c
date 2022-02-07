@@ -259,13 +259,12 @@ static ucs_status_t uct_sci_md_query(uct_md_h md, uct_md_attr_t *attr)
     /* Dummy memory registration provided. No real memory handling exists */
     //TODO: we have never looked into this 
     
-    attr->cap.flags            = UCT_MD_FLAG_ALLOC|
-                                 UCT_MD_FLAG_REG |
+    attr->cap.flags            = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY; // TODO ignore rkey in rma/amo ops 
     attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.detect_mem_types = 0;
     attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
-    attr->cap.max_alloc        = ULONG_MAX;
+    attr->cap.max_alloc        = 0;
     attr->cap.max_reg          = ULONG_MAX;
     attr->rkey_packed_size     = 0;
     attr->reg_cost             = ucs_linear_func_make(0, 0);
@@ -543,12 +542,13 @@ static uct_component_t uct_sci_component = {
     .rkey_ptr           = ucs_empty_function_return_unsupported, //change me 
     .rkey_release       = ucs_empty_function_return_success, //change me
     .name               = UCT_sci_NAME, //change me
-    .md_config          = {
+    .md_config          = UCT_MD_DEFAULT_CONFIG_INITIALIZER,
+    /*.md_config          = {
         .name           = "Self memory domain",
         .prefix         = "sci_",
         .table          = uct_sci_md_config_table,
         .size           = sizeof(uct_sci_md_config_t),
-    },
+    },*/
     .tl_list            = UCT_COMPONENT_TL_LIST_INITIALIZER(&uct_sci_component),
     .flags              = 0, //UCT_COMPONENT_FLAG_CM,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
