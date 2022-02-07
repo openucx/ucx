@@ -823,7 +823,8 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
 
     dev = uct_ib_iface_device(&iface->super);
 #if HAVE_RDMACM_ECE
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.config.enable_ece) {
         ece.vendor_id = dev->pci_id.vendor;
         ece.options   = remote_ece;
         ece.comp_mask = 0;
@@ -865,7 +866,8 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
     }
 
 #if HAVE_RDMACM_ECE
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.config.enable_ece) {
         /* Make coverity happy */
         (void)ibv_query_ece(qp, &ece);
         ucs_debug("rc verbs under rtr with ece : 0x%x", ece.options);

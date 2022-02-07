@@ -373,7 +373,8 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     self->super.super.ece              = 0;
 #if HAVE_RDMACM_ECE
     if (uct_ib_iface_device(&self->super.super)->flags &
-        UCT_IB_DEVICE_FLAG_ECE) {
+        UCT_IB_DEVICE_FLAG_ECE &&
+        self->super.super.config.enable_ece) {
         ucs_assert(ibv_query_ece(qp, &ece) == 0);
 
         if (ece.options) {
