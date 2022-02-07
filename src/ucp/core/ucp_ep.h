@@ -53,7 +53,7 @@ typedef uint16_t                   ucp_ep_flags_t;
 
 #define ucp_ep_refcount_add(_ep, _type) \
 ({ \
-    ucs_assert((_ep)->refcount < UINT8_MAX); \
+    ucs_assertv((_ep)->refcount < UINT8_MAX, "ep=%p", _ep); \
     ++(_ep)->refcount; \
     UCP_EP_ASSERT_COUNTER_INC(&(_ep)->refcounts._type); \
 })
@@ -64,7 +64,7 @@ typedef uint16_t                   ucp_ep_flags_t;
     int __ret = 0; \
     \
     UCP_EP_ASSERT_COUNTER_DEC(&(_ep)->refcounts._type); \
-    ucs_assert((_ep)->refcount > 0); \
+    ucs_assertv((_ep)->refcount > 0, "ep=%p", _ep); \
     if (--(_ep)->refcount == 0) { \
         ucp_ep_destroy_base(_ep); \
         __ret = 1; \
