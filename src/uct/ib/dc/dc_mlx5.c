@@ -507,6 +507,7 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *dct,
     struct mlx5dv_qp_init_attr dv_init_attr = {};
     struct ibv_qp_init_attr_ex init_attr = {};
     struct ibv_qp_attr attr = {};
+    uct_ibv_ece_t UCS_V_UNUSED ibv_ece;
     int ret;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCT) {
@@ -555,6 +556,16 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *dct,
          goto err;
     }
 
+#if HAVE_RDMACM_ECE
+    memset(&ibv_ece, 0, sizeof(ibv_ece));
+    ibv_ece.vendor_id = dev->pci_id.vendor;
+    ibv_ece.options   = dct->remote_ece;
+
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        ibv_set_ece(dct->verbs.qp, &ibv_ece);
+    }
+#endif
+
     attr.qp_state                  = IBV_QPS_RTR;
     attr.path_mtu                  = iface->super.super.super.config.path_mtu;
     attr.min_rnr_timer             = iface->super.super.config.min_rnr_timer;
@@ -572,6 +583,20 @@ uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *dct,
          ucs_error("error modifying DCT to RTR: %m");
          goto err;
     }
+
+    dct->local_ece = 0;
+#if HAVE_RDMACM_ECE
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        if (ibv_query_ece(dct->verbs.qp, &ibv_ece) == 0) {
+            dct->local_ece = ibv_ece.options;
+        } else {
+            dct->local_ece = 0;
+            ucs_error("failed to query ECE under DCT");
+            goto err;
+        }
+    }
+    ucs_debug("mlx5 verbs dct under rtr with ECE : 0x%x", dct->local_ece);
+#endif
 
     dct->type   = UCT_IB_MLX5_OBJ_TYPE_VERBS;
     dct->qp_num = dct->verbs.qp->qp_num;
@@ -845,8 +870,12 @@ uct_dc_mlx5_iface_create_dcts(uct_dc_mlx5_iface_t *iface,
 {
     ucs_status_t status;
 
-    iface->rx.dct[0].qp_num = 0;
-    iface->rx.dct[1].qp_num = 0;
+    iface->rx.dct[0].qp_num     = 0;
+    iface->rx.dct[0].local_ece  = 0;
+    iface->rx.dct[0].remote_ece = 0;
+    iface->rx.dct[1].qp_num     = 0;
+    iface->rx.dct[0].local_ece  = iface->super.super.super.ece;
+    iface->rx.dct[1].remote_ece = iface->super.super.super.ece;
 
     status = uct_dc_mlx5_iface_create_dct(iface, &iface->rx.dct[0], config);
     if (status != UCS_OK || iface->gp == 1) {
@@ -943,6 +972,39 @@ uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
 
 err:
     uct_dc_mlx5_iface_dcis_destroy(iface, dci_index);
+    return status;
+}
+
+static
+ucs_status_t uct_dc_mlx5_init_ece(uct_dc_mlx5_iface_t *iface,
+                                  const uct_dc_mlx5_iface_config_t *config)
+{
+    uct_ib_iface_t *ib_iface = &iface->super.super.super;
+    uct_ib_mlx5_md_t *md = ucs_derived_of(ib_iface->super.md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_qp_t dct;
+    ucs_status_t status;
+
+    ib_iface->dev_addr_ext_ece = 0;
+    ib_iface->ece              = 0;
+    if (!(md->super.dev.flags & UCT_IB_DEVICE_FLAG_ECE)) {
+        return UCS_OK;
+    }
+
+    dct.local_ece  = UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
+    dct.remote_ece = UCT_IB_MLX5_DEVX_ECE_TRIG_RESP;
+    status = uct_dc_mlx5_iface_create_dct(iface, &dct, config);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ib_iface->ece = dct.local_ece;
+    uct_dc_mlx5_destroy_dct(&dct);
+
+    ib_iface->addr_size = uct_ib_iface_address_size(ib_iface);
+    if (ib_iface->ece != 0) {
+        ib_iface->dev_addr_ext_ece = 1;
+        iface->gp                  = 2;
+    }
     return status;
 }
 
@@ -1467,6 +1529,12 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     if (uct_dc_mlx5_force_full_handshake(self, config->dci_ka_full_handshake)) {
         self->flags |= UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE_FULL_HANDSHAKE;
     }
+
+    status = uct_dc_mlx5_init_ece(self, config);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     ucs_assert(self->tx.num_dci_pools <=
                UCT_DC_MLX5_IFACE_MAX_DCI_POOLS / self->gp);
 

@@ -26,6 +26,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_out)] = {};
     int dvflags;
+    uint32_t ece = dct->local_ece;
     void *dctc;
 
     dvflags   = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
@@ -78,7 +79,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
 
     if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
-        UCT_IB_MLX5DV_SET(dctc, dctc, ece, UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
+        UCT_IB_MLX5DV_SET(dctc, dctc, ece, ece);
     }
     dct->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                            out, sizeof(out));
@@ -87,6 +88,14 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
                   UCT_IB_MLX5DV_GET(create_dct_out, out, syndrome));
         return UCS_ERR_INVALID_PARAM;
     }
+
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        dct->local_ece = UCT_IB_MLX5DV_GET(create_dct_out, out, ece);
+    } else {
+        dct->local_ece = 0;
+    }
+    ucs_debug("mlx5dv_devx_object_create(DCT) under rtr with ece : 0x%x.",
+               dct->local_ece);
 
     dct->type   = UCT_IB_MLX5_OBJ_TYPE_DEVX;
     dct->qp_num = UCT_IB_MLX5DV_GET(create_dct_out, out, dctn);
