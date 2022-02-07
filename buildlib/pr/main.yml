@@ -1,5 +1,5 @@
 variables:
-  DOCKER_OPT_VOLUMES: --cpuset-cpus=$(cpu_affinity) -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+  DOCKER_OPT_VOLUMES: --cpuset-cpus=$[cpu_affinity] -h ${{cpu_affinity}} -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
   DOCKER_OPT_GPU: --gpus all --ulimit memlock=-1:-1 --device=/dev/infiniband/
 
 resources:
@@ -140,14 +140,20 @@ resources:
       options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
 
 stages:
-  - stage: Codestyle
-    jobs:
-    - template: codestyle.yml
+  - stage: Distro
 
-  - stage: Static_check
-    dependsOn: [Codestyle]
     jobs:
-    - template: static_checks.yml
+    - template: distro.yml
+
+   - stage: Codestyle
+     dependsOn: [Distro]
+     jobs:
+     - template: codestyle.yml
+
+   - stage: Static_check
+     dependsOn: [Codestyle]
+     jobs:
+     - template: static_checks.yml
 
   - stage: Build
     dependsOn: [Static_check]
@@ -196,10 +202,10 @@ stages:
               BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
               long_test: $(long_test)
 
-  - stage: Distro
-    dependsOn: [Static_check]
-    jobs:
-    - template: distro.yml
+  #- stage: Distro
+  #  dependsOn: [Static_check]
+  #  jobs:
+  #  - template: distro.yml
 
   - stage: Coverity
     dependsOn: [Static_check]
