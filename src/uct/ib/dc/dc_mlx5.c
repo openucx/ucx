@@ -1648,6 +1648,7 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
         return UCS_OK;
     }
 
+    // Note: keepalive dci doesn't use ECE since performance is irrelevant here.
     dci_index = uct_dc_mlx5_iface_total_ndci(iface);
     dci       = &iface->tx.dcis[dci_index];
     uct_dc_mlx5_iface_pre_create_dci(iface, dci, &attr,

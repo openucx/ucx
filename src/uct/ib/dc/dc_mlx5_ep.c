@@ -1691,6 +1691,7 @@ uct_dc_mlx5_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
     uct_rc_iface_send_op_set_name(op, "dc_mlx5_ep_check");
     op->ep = tl_ep;
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, iface->keepalive_dci, txqp, txwq);
+    // Note: Keepalive DCI write 0 data payload, ECE is irrelevant here
     uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
                                  txqp, txwq, MLX5_OPCODE_RDMA_WRITE,
                                  &dummy, 0, 0, 0, 0, 0, 0,
