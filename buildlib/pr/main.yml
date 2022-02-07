@@ -1,6 +1,6 @@
 variables:
   TEST_OPT: -1 $(Agent.Name) -2  --cpuset-cpus=variables['Agent.Name'] variables['Build.Reason'] $[variables.cpu_affinity]
-  TEST_OPT1: $[variables]
+
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
   DOCKER_OPT_GPU: --gpus all --ulimit memlock=-1:-1 --device=/dev/infiniband/
 
@@ -8,7 +8,7 @@ resources:
   containers:
     - container: centos7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:4
-      options: $(TEST_OPT) $(DOCKER_OPT_VOLUMES)
+      options:  $(TEST_OPT) $(DOCKER_OPT_VOLUMES)
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
       options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
@@ -145,37 +145,7 @@ stages:
   - stage: Distro_test
 
     jobs:
-    - job: Distros
-      displayName: Build for distros
-      workspace:
-        clean: all
-      pool:
-        name: MLNX
-        demands:
-        - ucx_docker -equals yes
-      strategy:
-        matrix:
-          centos7:
-            CONTAINER: centos7
-            CONFIGURE_OPTS:
-      container: $[ variables['CONTAINER'] ]
-      steps:
-        - bash: |
-            set -eE
-            echo $(TEST_OPT1)
-    - job: Distros2
-      displayName: Build for distros
-      workspace:
-        clean: all
-      pool:
-        name: MLNX
-        demands:
-        - ucx_docker -equals yes
-      container: fedora
-      steps:
-        - bash: |
-            set -eE
-            echo $(TEST_OPT1)
+    - template: distro.yml
 
   - stage: Codestyle
     dependsOn: [Distro_test]
