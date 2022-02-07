@@ -219,6 +219,10 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    ucs_offsetof(uct_ib_iface_config_t, path_mtu),
                 UCS_CONFIG_TYPE_ENUM(uct_ib_mtu_values)},
 
+  {"ECE_ON", "n",
+   "Enable end to end connection (ECE) negotiation if it's available.",
+   ucs_offsetof(uct_ib_iface_config_t, enable_ece), UCS_CONFIG_TYPE_BOOL},
+
   {NULL}
 };
 
@@ -1482,6 +1486,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->release_desc.cb           = uct_ib_iface_release_desc;
     self->config.enable_res_domain  = config->enable_res_domain;
     self->config.qp_type            = init_attr->qp_type;
+    self->config.enable_ece         = config->enable_ece;
     uct_ib_iface_set_path_mtu(self, config);
 
     if (ucs_derived_of(worker, uct_priv_worker_t)->thread_mode == UCS_THREAD_MODE_MULTI) {
