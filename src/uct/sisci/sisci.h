@@ -51,7 +51,7 @@ void sci_testing();
 
 typedef struct uct_sci_iface_config {
     uct_iface_config_t    super;
-    size_t                seg_size;      /* Maximal send size */
+    size_t                send_size;      /* Maximal send size */
 } uct_sci_iface_config_t;
 
 

@@ -25,7 +25,15 @@ static ucs_mpool_ops_t uct_sci_mpool_ops = {
 };
 
 static ucs_config_field_t uct_sci_iface_config_table[] = {
-    NULL
+    {"", "", NULL,
+     ucs_offsetof(uct_sci_iface_config_t, super),
+     UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
+
+    {"SEND_SIZE", "8k",
+     "Size of copy-out buffer",
+     ucs_offsetof(uct_sci_iface_config_t, send_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+    {NULL}
 };
 
 
@@ -99,10 +107,9 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_UNSUPPORTED;
     }
 
-
     UCS_CLASS_CALL_SUPER_INIT(
-            uct_base_iface_t, &uct_sci_iface_ops,
-            &uct_base_iface_internal_ops, md, worker, params,
+            uct_base_iface_t, &uct_sci_iface_ops, &uct_base_iface_internal_ops,
+            md, worker, params,
             tl_config UCS_STATS_ARG(
                     (params->field_mask & UCT_IFACE_PARAM_FIELD_STATS_ROOT) ?
                             params->stats_root :
