@@ -388,6 +388,11 @@ init_qp:
 
     dci->pool_index = pool_index;
     dci->path_index = path_index;
+    if (pool_index < iface->tx.num_dci_pools) {
+        dci->txwq.super.remote_ece = 0;
+    } else {
+        dci->txwq.super.remote_ece = iface->super.super.super.ece;
+    }
 
     status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {
@@ -438,6 +443,8 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                           uct_ib_mlx5_md_t);
     struct ibv_qp_attr attr;
     long attr_mask;
+    uct_ibv_ece_t UCS_V_UNUSED ece;
+    uct_ib_device_t UCS_V_UNUSED *dev;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX) {
         return uct_dc_mlx5_iface_devx_dci_connect(iface, &dci->txwq.super,
@@ -458,6 +465,17 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
         return UCS_ERR_IO_ERROR;
     }
 
+    dev = uct_ib_iface_device(&iface->super.super.super);
+#if HAVE_RDMACM_ECE
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        ece.vendor_id = dev->pci_id.vendor;
+        ece.options   = dci->txwq.super.remote_ece;
+        ece.comp_mask = 0;
+        /* Make coverity happy */
+        (void)ibv_set_ece(dci->txwq.super.verbs.qp, &ece);
+    }
+#endif
+
     /* Move QP to the RTR state */
     memset(&attr, 0, sizeof(attr));
     attr.qp_state                   = IBV_QPS_RTR;
@@ -474,6 +492,18 @@ ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
         ucs_error("ibv_modify_qp(DCI, RTR) failed : %m");
         return UCS_ERR_IO_ERROR;
     }
+
+#if HAVE_RDMACM_ECE
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        if (ibv_query_ece(dci->txwq.super.verbs.qp, &ece) == 0) {
+            dci->txwq.super.local_ece = ece.options;
+        } else {
+            dci->txwq.super.local_ece = 0;
+            ucs_error("failed to query ECE under verbs DCI");
+        }
+    }
+    ucs_debug("dci under rtr with ECE : 0x%x", dci->txwq.super.local_ece);
+#endif
 
     /* Move QP to the RTS state */
     memset(&attr, 0, sizeof(attr));

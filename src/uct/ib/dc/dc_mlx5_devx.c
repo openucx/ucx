@@ -115,6 +115,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]     = {};
     char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]   = {};
     uint32_t opt_param_mask = UCT_IB_MLX5_QP_OPTPAR_RAE;
+    uct_ib_device_t *dev    = uct_ib_iface_device(&iface->super.super.super);
     ucs_status_t status;
     void *qpc;
 
@@ -138,6 +139,11 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode, UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
 
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        ucs_debug("init2rtr dci with ece : 0x%x", qp->remote_ece);
+        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, qp->remote_ece);
+    }
+
     qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.super.super.config.path_mtu);
@@ -159,6 +165,11 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
                                         out_2rtr, sizeof(out_2rtr));
     if (status != UCS_OK) {
         return status;
+    }
+
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
+        qp->local_ece = UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece);
+        ucs_debug("dci devx under rtr with ece : 0x%x", qp->local_ece);
     }
 
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
