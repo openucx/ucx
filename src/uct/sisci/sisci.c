@@ -92,6 +92,14 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
     DEBUG_PRINT("\n");
 
+    UCT_CHECK_PARAM(params->field_mask & UCT_IFACE_PARAM_FIELD_OPEN_MODE,
+                    "UCT_IFACE_PARAM_FIELD_OPEN_MODE is not defined");
+    if (!(params->open_mode & UCT_IFACE_OPEN_MODE_DEVICE)) {
+        ucs_error("only UCT_IFACE_OPEN_MODE_DEVICE is supported");
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sci_iface_ops,
             &uct_base_iface_internal_ops, md, worker, params,
@@ -502,7 +510,7 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     attr->bandwidth.dedicated     = 10 * UCS_MBYTE;
     attr->bandwidth.shared        = 0;
     attr->overhead                = 10e-9;
-    attr->priority                = 5;
+    attr->priority                = 0;
 
     
 
