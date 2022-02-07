@@ -65,6 +65,7 @@ typedef enum ucs_cpu_vendor {
     UCS_CPU_VENDOR_GENERIC_PPC,
     UCS_CPU_VENDOR_FUJITSU_ARM,
     UCS_CPU_VENDOR_ZHAOXIN,
+    UCS_CPU_VENDOR_RISCV,
     UCS_CPU_VENDOR_LAST
 } ucs_cpu_vendor_t;
 
@@ -98,6 +99,8 @@ typedef struct ucs_cpu_builtin_memcpy {
 #  include "ppc64/cpu.h"
 #elif defined(__aarch64__)
 #  include "aarch64/cpu.h"
+#elif defined(__aarch64__)
+#  include "riscv/cpu.h"
 #else
 #  error "Unsupported architecture"
 #endif
