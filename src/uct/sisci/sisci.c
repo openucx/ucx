@@ -535,7 +535,7 @@ static ucs_status_t uct_sci_md_rkey_unpack(uct_component_t *component,
     TODO: Figure out what to change the commented lines to : )
 */
 static uct_component_t uct_sci_component = {
-    .query_md_resources = uct_sci_query_md_resources, 
+    .query_md_resources = uct_md_query_single_md_resource, 
     .md_open            = uct_sci_md_open,
     .cm_open            = ucs_empty_function_return_unsupported, //UCS_CLASS_NEW_FUNC_NAME(uct_tcp_sockcm_t), //change me
     .rkey_unpack        = uct_sci_md_rkey_unpack, //change me
