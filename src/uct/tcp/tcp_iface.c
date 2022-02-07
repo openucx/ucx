@@ -863,6 +863,7 @@ ucs_status_t uct_tcp_query_devices(uct_md_h md,
     }
 
     *num_devices_p = num_devices;
+    printf("TCP NUM DEVICES %d\n", num_devices);
     *devices_p     = devices;
     status         = UCS_OK;
 
