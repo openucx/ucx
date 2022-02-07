@@ -1157,14 +1157,21 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
         remote_dctn_ece = 0;
     }
 
-    // TODO: check local ece with remote ece to set UCT_DC_MLX5_EP_FLAG_ECE
-    self->flags      = 0;
+    self->flags         = 0;
+    if (iface->gp == 2 && remote_dctn_ece != 0 && remote_ece == iface->super.super.super.ece) {
+        self->flags     |= UCT_DC_MLX5_EP_FLAG_ECE;
+    }
 
     memcpy(&self->av, av, sizeof(*av));
-    self->av.dqp_dct |= htonl(remote_dctn);
-    self->flags      |= path_index % iface->tx.num_dci_pools +
-                        !!(self->flags & UCT_DC_MLX5_EP_FLAG_ECE) *
-                        iface->tx.num_dci_pools;
+    self->flags         |= path_index % iface->tx.num_dci_pools +
+                           !!(self->flags & UCT_DC_MLX5_EP_FLAG_ECE) *
+                           iface->tx.num_dci_pools;
+
+    if (self->flags & UCT_DC_MLX5_EP_FLAG_ECE) {
+        self->av.dqp_dct |= htonl(remote_dctn_ece);
+    } else {
+        self->av.dqp_dct |= htonl(remote_dctn);
+    }
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }
