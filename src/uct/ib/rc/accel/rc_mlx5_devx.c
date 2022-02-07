@@ -426,8 +426,8 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     }
 
     if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
-        ucs_debug("rc devx under rtr with ece : 0x%x",
-                   UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece));
+        qp->local_ece = UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece);
+        ucs_debug("rc devx under rtr with ece : 0x%x", qp->local_ece);
     }
 
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode,
