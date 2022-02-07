@@ -1,5 +1,5 @@
 variables:
-  DOCKER_OPT_VOLUMES: --cpuset-cpus=$[cpu_affinity] -h ${{cpu_affinity}} -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+  DOCKER_OPT_VOLUMES: --cpuset-cpus=${{cpu_affinity}} -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
   DOCKER_OPT_GPU: --gpus all --ulimit memlock=-1:-1 --device=/dev/infiniband/
 
 resources:
