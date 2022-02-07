@@ -330,7 +330,6 @@ static ucs_status_t uct_sci_md_open(uct_component_t *component, const char *md_n
     };
 
     //create sci memory domain struct
-    //TODO, make it not full lies
     static uct_sci_md_t md;
     sci_error_t errors;
 
