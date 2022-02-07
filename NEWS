@@ -7,12 +7,23 @@
 ##
 #
 
-## 1.12.1 (TBD)
+## 1.12.1-rc1 (February 8, 2022)
 ### Bugfixes
 * Fixed memory hooks for Cuda 11.5
 * Fixed memory type cache merge
 * Fixed continuously triggering wakeup fd when keepalive is used
 * Fixed memtype cache fallback when memory hooks are not installed
+### Important changes
+* If Cuda memory hooks on driver API cannot be installed, memory type cache and
+  memory registration cache will be disabled. This may lead to lower performance
+  of some applications on setups with NVIDIA GPUs, even if Cuda memory is not
+  being used. Prior to this change, failing to install driver API hooks could
+  lead to runtime errors or data corruption when Cuda memory is used and linked
+  statically with cuda runtime.
+  In order to revert to previous behavior (when the application is linked
+  dynamically with cuda runtime), can set UCX_MEM_CUDA_HOOK_MODE=reloc.
+  See more info in https://github.com/openucx/ucx/pull/7865.
+
 
 ## 1.12.0 (January 12, 2022)
 ### Features:
