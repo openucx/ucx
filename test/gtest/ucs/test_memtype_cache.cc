@@ -43,13 +43,13 @@ protected:
         if (!expect_found || (expected_type == UCS_MEMORY_TYPE_HOST)) {
             /* memory type should be not found or unknown */
             if (status != UCS_ERR_NO_ELEM) {
-                ASSERT_UCS_OK(status, << "ptr=" << ptr << " size=" << size);
+                ASSERT_UCS_OK(status, << " ptr=" << ptr << " size=" << size);
                 EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, mem_info.type)
                         << "ptr=" << ptr << " size=" << size
                         << mem_buffer::mem_type_name(mem_info.type);
             }
         } else {
-            ASSERT_UCS_OK(status, << "ptr=" << ptr << " size=" << size);
+            ASSERT_UCS_OK(status, << " ptr=" << ptr << " size=" << size);
             EXPECT_TRUE((UCS_MEMORY_TYPE_UNKNOWN == mem_info.type) ||
                         (expected_type == mem_info.type))
                     << "ptr=" << ptr << " size=" << size

@@ -39,6 +39,13 @@ ucs_status_t ucm_mmap_test_installed_events(int events);
 ucs_status_t ucm_mmap_test_events(int events, const char *event_type);
 void ucm_mmap_init();
 
+
+/**
+ * Memory hooks mode names.
+ */
+extern const char *ucm_mmap_hook_modes[];
+
+
 static UCS_F_ALWAYS_INLINE ucm_mmap_hook_mode_t ucm_mmap_hook_mode(void)
 {
     return ucm_get_hook_mode(ucm_global_opts.mmap_hook_mode);

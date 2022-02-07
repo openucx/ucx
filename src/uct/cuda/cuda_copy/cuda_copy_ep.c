@@ -81,8 +81,12 @@ uct_cuda_copy_get_mem_type(uct_md_h md, void *address, size_t length)
     ucs_status_t status;
 
     status = ucs_memtype_cache_lookup(address, length, &mem_info);
-    if ((status == UCS_ERR_NO_ELEM) ||
-        ((mem_info.type == UCS_MEMORY_TYPE_UNKNOWN))) {
+    if (status == UCS_ERR_NO_ELEM) {
+        return UCS_MEMORY_TYPE_HOST;
+    }
+
+    if ((status == UCS_ERR_UNSUPPORTED) ||
+        (mem_info.type == UCS_MEMORY_TYPE_UNKNOWN)) {
         status = uct_cuda_base_detect_memory_type(md, address, length,
                                                   &mem_info.type);
         if (status != UCS_OK) {

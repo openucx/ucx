@@ -1288,6 +1288,8 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     status = ucm_set_event_handler(params->ucm_events, params->ucm_event_priority,
                                    ucs_rcache_unmapped_callback, self);
     if (status != UCS_OK) {
+        ucs_diag("rcache failed to install UCM event handler: %s",
+                 ucs_status_string(status));
         goto err_remove_vfs;
     }
 
