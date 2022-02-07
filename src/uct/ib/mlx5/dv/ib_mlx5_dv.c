@@ -259,57 +259,6 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 }
 
 static ucs_status_t
-uct_ib_mlx5_devx_query_dct(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
-                           void *out, size_t outlen)
-{
-    int ret;
-
-    UCT_IB_MLX5DV_SET(query_dct_in, in, opcode, UCT_IB_MLX5_CMD_OP_QUERY_DCT);
-    UCT_IB_MLX5DV_SET(query_dct_in, in, dctn, qp->qp_num);
-
-    switch (qp->type) {
-    case UCT_IB_MLX5_OBJ_TYPE_VERBS:
-        ret = mlx5dv_devx_qp_query(qp->verbs.qp, in, inlen, out, outlen);
-        if (ret) {
-            ucs_error("mlx5dv_devx_qp_query(%x) failed, syndrome %x: %m",
-                       UCT_IB_MLX5_CMD_OP_QUERY_DCT,
-                       UCT_IB_MLX5DV_GET(query_dct_out, out, syndrome));
-            return UCS_ERR_IO_ERROR;
-        }
-        break;
-    case UCT_IB_MLX5_OBJ_TYPE_DEVX:
-        ret = mlx5dv_devx_obj_query(qp->devx.obj, in, inlen, out, outlen);
-        if (ret) {
-            ucs_error("mlx5dv_devx_obj_query(%x) failed, syndrome %x: %m",
-                      UCT_IB_MLX5_CMD_OP_QUERY_DCT,
-                      UCT_IB_MLX5DV_GET(query_dct_out, out, syndrome));
-            return UCS_ERR_IO_ERROR;
-        }
-        break;
-    case UCT_IB_MLX5_OBJ_TYPE_LAST:
-        return UCS_ERR_UNSUPPORTED;
-    }
-
-    return UCS_OK;
-}
-
-uint32_t uct_ib_mlx5_devx_query_dct_max_ece(uct_ib_mlx5_qp_t *qp)
-{
-    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_dct_in)]   = {};
-    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_dct_out)] = {};
-    void *dctc;
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_devx_query_dct(qp, in, sizeof(in), out, sizeof(out));
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    dctc   = UCT_IB_MLX5DV_ADDR_OF(query_dct_out, out, dct_context_entry);
-    return UCT_IB_MLX5DV_GET(dctc, dctc, ece);
-}
-
-static ucs_status_t
 uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
                           void *out, size_t outlen)
 {

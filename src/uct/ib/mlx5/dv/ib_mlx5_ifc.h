@@ -74,7 +74,6 @@ enum {
     UCT_IB_MLX5_CMD_OP_CREATE_RMP              = 0x90c,
     UCT_IB_MLX5_CMD_OP_CREATE_DCT              = 0x710,
     UCT_IB_MLX5_CMD_OP_DRAIN_DCT               = 0x712,
-    UCT_IB_MLX5_CMD_OP_QUERY_DCT               = 0x713,
     UCT_IB_MLX5_CMD_OP_CREATE_XRQ              = 0x717,
     UCT_IB_MLX5_CMD_OP_SET_XRQ_DC_PARAMS_ENTRY = 0x726,
     UCT_IB_MLX5_CMD_OP_QUERY_HCA_VPORT_CONTEXT = 0x762,
@@ -859,30 +858,6 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         ece[0x20];
 
     uint8_t         reserved_at_220[0x160];
-};
-
-struct uct_ib_mlx5_query_dct_in_bits {
-    uint8_t        opcode[0x10];
-    uint8_t        uid[0x10];
-
-    uint8_t        reserved_at_20[0x10];
-    uint8_t        op_mod[0x10];
-
-    uint8_t        reserved_at_40[0x8];
-    uint8_t        dctn[0x18];
-
-    uint8_t        reserved_at_60[0x20];
-};
-
-struct uct_ib_mlx5_query_dct_out_bits {
-    uint8_t         status[0x8];
-    uint8_t         reserved_at_8[0x18];
-
-    uint8_t         syndrome[0x20];
-
-    uint8_t         reserved_at_40[0x40];
-
-    struct uct_ib_mlx5_dctc_bits dct_context_entry;
 };
 
 struct uct_ib_mlx5_create_dct_out_bits {
