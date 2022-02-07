@@ -189,7 +189,7 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_sci_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t*);
 
 
-
+/*
 static ucs_status_t uct_sci_query_md_resources(uct_component_t *component,
                                               uct_md_resource_desc_t **resources_p,
                                               unsigned int *num_resources_p)
@@ -218,39 +218,39 @@ static ucs_status_t uct_sci_query_md_resources(uct_component_t *component,
     DEBUG_PRINT("query md\n");
     
     return status;
+}*/
+
+
+static ucs_status_t uct_sci_query_devices(uct_md_h md,
+                                   uct_tl_device_resource_t **devices_p,
+                                   unsigned *num_devices_p)
+{
+    ucs_status_t status = -1;
+    /*
+        At this point its not clear if the memory domain has been opened yet.
+        The memory domain is most likely opened.
+    */
+
+
+    /*
+    Currently we are hard coding in the amount of devices and its properties.
+    The reasoning for this is the rather "limited" scope of our master thesis,  
+    */
+
+    //printf("UCT_sci_QUERY_DEVICES\n");
+    DEBUG_PRINT("\n");
+    /* 
+        Taken from self.c, 
+    */
+
+    
+    status = uct_single_device_resource(md, UCT_sci_NAME,
+                                      UCT_DEVICE_TYPE_SHM,
+                                      UCS_SYS_DEVICE_ID_UNKNOWN, devices_p,
+                                      num_devices_p);
+    
+    return status; 
 }
-
-
-// static ucs_status_t uct_sci_query_devices(uct_md_h md,
-//                                    uct_tl_device_resource_t **devices_p,
-//                                    unsigned *num_devices_p)
-// {
-//     ucs_status_t status = -1;
-//     /*
-//         At this point its not clear if the memory domain has been opened yet.
-//         The memory domain is most likely opened.
-//     */
-
-
-//     /*
-//     Currently we are hard coding in the amount of devices and its properties.
-//     The reasoning for this is the rather "limited" scope of our master thesis,  
-//     */
-
-//     //printf("UCT_sci_QUERY_DEVICES\n");
-//     DEBUG_PRINT("\n");
-//     /* 
-//         Taken from self.c, 
-//     */
-
-    
-//     status = uct_single_device_resource(md, UCT_sci_NAME,
-//                                       UCT_DEVICE_TYPE_SHM,
-//                                       UCS_SYS_DEVICE_ID_UNKNOWN, devices_p,
-//                                       num_devices_p);
-    
-//     return status; 
-// }
 
 
 
