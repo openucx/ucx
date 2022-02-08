@@ -229,7 +229,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     if (header_length != 0)
     {
-        total_header_len = header_length + sizeof(header_length);
+        total_header_len = header_length;
     } else {
         total_header_len = 0;
     }
@@ -247,11 +247,11 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     {
         memcpy(tx + sizeof(sisci_packet_t), (void*) &header_length, sizeof(header_length));
         memcpy(tx + sizeof(sisci_packet_t) + sizeof(header_length), header, header_length);
-        printf("ZCOPY header_length NON-ZERO %d", header_length);
+        printf("ZCOPY header_length NON-ZERO %d\n", header_length);
     }
     
 
-    memcpy(ep->buf, tx, tx_pack->length + sizeof(sisci_packet_t) + total_header_len);
+    memcpy(ep->buf, tx, tx_pack->length + sizeof(sisci_packet_t));
 
     SCIFlush(NULL, SCI_NO_FLAGS);
 
@@ -259,6 +259,8 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     ((sisci_packet_t*)ep->buf)->status = 1;
     
+    SCIFlush(NULL, SCI_NO_FLAGS);
+
     ucs_free(tx);
     return UCS_OK;    
 }
