@@ -254,7 +254,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     }
     
 
-    memcpy(ep->buf, tx, tx_pack->length);
+    memcpy(ep->buf, tx, tx_pack->length + sizeof(sisci_packet_t) + total_header_len);
 
     SCIFlush(NULL, SCI_NO_FLAGS);
 
