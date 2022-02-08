@@ -457,7 +457,6 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 {
     ucp_ep_h ucp_ep     = self->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
-    ucs_queue_head_t tmp_pending_queue;
 
     ucs_assert(ucs_queue_is_empty(&self->pending_q));
     ucs_assert(self->pending_count == 0);
@@ -465,28 +464,23 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     ucs_debug("ep %p: destroy wireup ep %p", ucp_ep, self);
 
     uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
+
     if (self->aux_ep != NULL) {
-        ucs_queue_head_init(&tmp_pending_queue);
-        /* Discard AUX UCT EP to purge all outstanding/pending operations.
-         * Normally, WIREUP EP should complete all outstanding operations prior
-         * destroying WIREUP EP - so, doing flush(CANCEL) won't take any affect,
-         * but it will make sure that no completions will be received if some
-         * error was detected */
-        ucp_wireup_ep_discard_aux_ep(self, UCT_FLUSH_FLAG_CANCEL,
-                                     ucp_request_purge_enqueue_cb,
-                                     &tmp_pending_queue);
+        /* No pending operations should be scheduled */
+        uct_ep_pending_purge(self->aux_ep, ucp_destroyed_ep_pending_purge,
+                             ucp_ep);
+        ucp_ep_unprogress_uct_ep(ucp_ep, self->aux_ep, self->aux_rsc_index);
+        uct_ep_destroy(self->aux_ep);
         self->aux_ep = NULL;
-        ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
     }
 
     if (self->super.is_owner && (self->super.uct_ep != NULL)) {
-        ucp_worker_discard_uct_ep(self->super.ucp_ep, self->super.uct_ep,
-                                  self->super.rsc_index,
-                                  UCT_FLUSH_FLAG_CANCEL,
-                                  ucp_destroyed_ep_pending_purge,
-                                  self->super.ucp_ep,
-                                  (ucp_send_nbx_callback_t)ucs_empty_function,
-                                  NULL);
+        /* No pending operations should be scheduled */
+        uct_ep_pending_purge(self->super.uct_ep,
+                             ucp_destroyed_ep_pending_purge, ucp_ep);
+        ucp_ep_unprogress_uct_ep(ucp_ep, self->super.uct_ep,
+                                 self->super.rsc_index);
+        uct_ep_destroy(self->super.uct_ep);
         ucp_proxy_ep_set_uct_ep(&self->super, NULL, 0, UCP_NULL_RESOURCE);
     }
 

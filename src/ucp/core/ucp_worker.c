@@ -2532,10 +2532,10 @@ void ucp_worker_destroy(ucp_worker_h worker)
 
     UCS_ASYNC_BLOCK(&worker->async);
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
+    ucp_worker_discard_uct_ep_cleanup(worker);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
     ucp_am_cleanup(worker);
-    ucp_worker_discard_uct_ep_cleanup(worker);
     /* Put ucp_worker_remove_am_handlers after ucp_worker_discard_uct_ep_cleanup
      * to make sure iface->am[] always cleared.
      * ucp_worker_discard_uct_ep_cleanup might trigger ucp_worker_iface_deactivate

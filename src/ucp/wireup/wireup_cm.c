@@ -358,26 +358,21 @@ static void
 ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
 {
     ucp_lane_index_t lane_idx;
-    uct_ep_h uct_ep;
 
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ucp_ep); ++lane_idx) {
         if (lane_idx == ucp_ep_get_cm_lane(ucp_ep)) {
             continue;
         }
 
-        /* Transfer the pending queues content from the previously configured
-         * UCP EP to a temporary queue for further replaying */
-        uct_ep_pending_purge(ucp_ep->uct_eps[lane_idx],
-                             ucp_request_purge_enqueue_cb, &queue);
-
-        if (ucp_ep_config(ucp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
-            uct_ep = ucp_wireup_extract_lane(ucp_ep, lane_idx);
-            /* Destroy the transport ep */
-            uct_ep_destroy(uct_ep);
-        }
-
-        /* Destroy the wireup ep */
-        uct_ep_destroy(ucp_ep->uct_eps[lane_idx]);
+        /* During discarding transfer the pending queues content from the
+         * previously configured UCP EP to a temporary queue for further
+         * replaying */
+        ucp_worker_discard_uct_ep(ucp_ep, ucp_ep->uct_eps[lane_idx],
+                                  ucp_ep_get_rsc_index(ucp_ep, lane_idx),
+                                  UCT_FLUSH_FLAG_CANCEL,
+                                  ucp_request_purge_enqueue_cb, &queue,
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
         ucp_ep->uct_eps[lane_idx] = NULL;
     }
 }
