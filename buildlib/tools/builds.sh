@@ -378,6 +378,38 @@ build_fuse() {
 }
 
 #
+# Build with static library
+#
+build_static() {
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
+	$MAKEP
+	$MAKEP install
+
+	# Build test applications
+	SAVE_PKG_CONFIG_PATH=$PKG_CONFIG_PATH
+	export PKG_CONFIG_PATH=$ucx_inst/lib/pkgconfig:$PKG_CONFIG_PATH
+
+	$MAKE -C test/apps/uct_info
+
+	export PKG_CONFIG_PATH=$SAVE_PKG_CONFIG_PATH
+
+	# Run test applications and check script
+	SAVE_LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+	export LD_LIBRARY_PATH=$ucx_inst/lib:$LD_LIBRARY_PATH
+
+	cd ./test/apps/uct_info
+
+	./uct_info
+	./uct_info_static
+
+	${WORKSPACE}/buildlib/tools/check_tls.sh $EXTRA_TLS
+
+	cd -
+
+	export LD_LIBRARY_PATH=$SAVE_LD_LIBRARY_PATH
+}
+
+#
 # Do a given task and update progress indicator
 #
 do_task() {
@@ -419,4 +451,9 @@ then
 	do_task 10 build_gcc_debug_opt
 	do_task 10 build_clang
 	do_task 10 build_armclang
+fi
+
+if [ "${test_static}" = "yes" ]
+then
+	do_task "${prog}" build_static
 fi

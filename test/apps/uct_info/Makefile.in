@@ -1,0 +1,22 @@
+#
+# Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+all: uct_info uct_info_static
+
+clean:
+	rm -rf uct_info uct_info_static
+
+UCX_CFLAGS = $(CFLAGS) $(shell pkg-config ucx-uct --cflags)
+
+UCX_LDFLAGS = $(LDFLAGS) $(shell pkg-config ucx-uct --libs)
+
+UCX_STATIC_LDFLAGS = -static $(shell pkg-config --libs --static $(EXTRA_MODULES) ucx-uct)
+
+uct_info: @abs_srcdir@/uct_info.c
+	$(CC) -o $@ $? $(UCX_CFLAGS) $(UCX_LDFLAGS)
+
+uct_info_static: @abs_srcdir@/uct_info.c
+	$(CC) -o $@ $? $(UCX_CFLAGS) $(UCX_STATIC_LDFLAGS)

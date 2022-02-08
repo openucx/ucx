@@ -172,8 +172,10 @@ stages:
             ubuntu2004:
               CONTAINER: ubuntu2004
               long_test: yes
+              test_static: yes
             ubuntu1804:
               CONTAINER: ubuntu1804
+              test_static: yes
             sles15sp2:
               CONTAINER: sles15sp2
             rhel82:
@@ -195,6 +197,7 @@ stages:
             env:
               BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
               long_test: $(long_test)
+              test_static: $(test_static)
 
   - stage: Distro
     dependsOn: [Static_check]
