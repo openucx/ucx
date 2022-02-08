@@ -2,6 +2,7 @@
 # Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
 # Copyright (C) UT-Battelle, LLC. 2015. ALL RIGHTS RESERVED.
 # Copyright (C) ARM, Ltd. 2016. ALL RIGHTS RESERVED.
+# Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 # See file LICENSE for terms.
 #
 
@@ -229,7 +230,7 @@ AC_ARG_WITH([cache-line-size],
         [AC_HELP_STRING([--with-cache-line-size=SIZE],
             [Build UCX with cache line size defined by user. This parameter
              overwrites default cache line sizes defines in
-             UCX (x86-64: 64, Power: 128, ARMv8: 64/128). The supported values are: 64, 128])],
+             UCX (x86-64: 64, Power: 128, ARMv8: 64/128, RISCV: 64). The supported values are: 64, 128])],
         [],
         [with_cache_line_size=no])
 

@@ -20,7 +20,7 @@
     static inline uint##wordsize##_t ucs_atomic_fadd##wordsize(volatile uint##wordsize##_t *ptr, \
                                                                uint##wordsize##_t value) { \
         asm volatile ( \
-              "amoadd.d.aqrl %0, %1" \
+              "amoadd.w.aqrl %0, %1" \
               : "+r" (value), "+m" (*ptr) \
               : : "memory"); \
         return value; \
