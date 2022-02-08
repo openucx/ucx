@@ -233,7 +233,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     tx_pack->length = iov_total_len + sizeof(sisci_packet_t) + header_length + sizeof(header_length);
 
     //replace memcpy with dma transfer.
-    memcpy(tx + size_of(sisci_packet_t), (void*) &header_length, sizeof(header_length));
+    memcpy(tx + sizeof(sisci_packet_t), (void*) &header_length, sizeof(header_length));
 
     if (header_length != 0)
     {
