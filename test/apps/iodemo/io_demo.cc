@@ -1472,6 +1472,9 @@ public:
         long           num_completed[IO_OP_MAX];   /* Number of completed operations */
         size_t         bytes_sent[IO_OP_MAX];      /* Number of bytes sent */
         size_t         bytes_completed[IO_OP_MAX]; /* Number of bytes completed */
+        double         ts_sent;                    /* Timestamp of sending */
+        float          max_lat[IO_OP_MAX];         /* Max latency */
+        float          tot_lat[IO_OP_MAX];         /* Total latency */
     } server_info_t;
 
 private:
@@ -1651,6 +1654,10 @@ public:
         ++server_info.num_sent[op];
         ++_num_sent;
 
+        if (opts().per_conn_info && (opts().window_size == 1)) {
+            server_info.ts_sent = get_time();
+        }
+
         ASSERTV(server_info.bytes_completed[op] <= server_info.bytes_sent[op])
                 << "op=" << io_op_names[op] << " bytes_completed="
                 << server_info.bytes_completed[op] << " bytes_sent="
@@ -1685,6 +1692,14 @@ public:
         server_info.bytes_completed[op] += data_size;
         ++_num_completed;
         ++server_info.num_completed[op];
+
+        if (opts().per_conn_info && (opts().window_size == 1)) {
+            float elapsed = get_time() - server_info.ts_sent;
+
+            server_info.max_lat[op]  = std::max(server_info.max_lat[op],
+                                                elapsed);
+            server_info.tot_lat[op] += elapsed;
+        }
 
         if (get_num_uncompleted(server_info, op) == 0) {
             ASSERTV(server_info.bytes_completed[op] ==
@@ -1942,6 +1957,8 @@ public:
             server_info.num_completed[op]   = 0;
             server_info.bytes_sent[op]      = 0;
             server_info.bytes_completed[op] = 0;
+            server_info.max_lat[op]         = 0;
+            server_info.tot_lat[op]         = 0;
         }
     }
 
@@ -2389,17 +2406,23 @@ private:
             server_info_t& server_info   = _server_info[server_index];
             long total_completed         = 0;
             size_t total_bytes_completed = 0;
+            float  total_max_lat         = 0;
+            float  total_tot_lat         = 0;
             UcxLog conn_log(server_info.conn->get_log_prefix(),
                             opts().per_conn_info);
 
             for (int op = 0; op <= IO_OP_MAX; ++op) {
                 size_t bytes_completed;
                 long num_completed;
+                float max_lat;
+                float tot_lat;
                 if (op != IO_OP_MAX) {
                     assert(server_info.bytes_sent[op] ==
                                    server_info.bytes_completed[op]);
                     bytes_completed = server_info.bytes_completed[op];
                     num_completed   = server_info.num_completed[op];
+                    max_lat         = server_info.max_lat[op];
+                    tot_lat         = server_info.tot_lat[op];
 
                     size_t min_index = io_op_perf_info[op].min_index;
                     if ((num_completed < io_op_perf_info[op].min) ||
@@ -2411,13 +2434,20 @@ private:
 
                     total_bytes_completed          += bytes_completed;
                     total_completed                += num_completed;
+                    total_max_lat                   = std::max(total_max_lat,
+                                                               max_lat);
+                    total_tot_lat                  += tot_lat;
                     server_info.num_sent[op]        = 0;
                     server_info.num_completed[op]   = 0;
                     server_info.bytes_sent[op]      = 0;
                     server_info.bytes_completed[op] = 0;
+                    server_info.max_lat[op]         = 0;
+                    server_info.tot_lat[op]         = 0;
                 } else {
                     bytes_completed = total_bytes_completed;
                     num_completed   = total_completed;
+                    max_lat         = total_max_lat;
+                    tot_lat         = total_tot_lat;
                 }
 
                 io_op_perf_info[op].min          =
@@ -2435,7 +2465,13 @@ private:
                     const char *tail = (op == IO_OP_MAX) ? "" : " | ";
 
                     conn_log << name << " " << mbs << "MBs " << "iops: "
-                             << iops << tail;
+                             << iops;
+                    if (opts().window_size == 1) {
+                        conn_log << " max-lat: " << max_lat * 1e6 << "us"
+                                 << " avg-lat: "
+                                 << (tot_lat / num_completed) * 1e6 << "us";
+                    }
+                    conn_log << tail;
                 }
             }
         }
