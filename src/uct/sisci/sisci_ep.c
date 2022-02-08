@@ -245,7 +245,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     SCIFlush(NULL, SCI_NO_FLAGS);
 
-    printf("uct_sci_ep_am_zcopy() %d %zd\n", ep->remote_node_id, bytes_copied);
+    printf("uct_sci_ep_am_zcopy() %d %zd %d %d \n", ep->remote_node_id, bytes_copied, iov_total_len, header_length);
 
     ((sisci_packet_t*)ep->buf)->status = 1;
     
