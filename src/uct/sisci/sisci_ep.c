@@ -224,9 +224,6 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     size_t total_header_len = 0; /* header_length + sizeof(header_length) */
 
 
-    
-
-
     UCT_CHECK_LENGTH(header_length + iov_total_len + sizeof(sisci_packet_t), 0 , iface->send_size, "am_zcopy");
     UCT_CHECK_AM_ID(id);
 
@@ -237,7 +234,6 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
         total_header_len = 0;
     }
     
-
     tx = (void*) ucs_malloc(total_header_len + iov_total_len + sizeof(sisci_packet_t), "am_zcopy tx");
     tx_pack = (sisci_packet_t*) tx;
     ucs_iov_iter_init(&uct_iov_iter);
