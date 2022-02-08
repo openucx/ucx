@@ -216,7 +216,8 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     uct_sci_ep_t* ep = ucs_derived_of(uct_ep, uct_sci_ep_t);
     uct_sci_iface_t* iface = ucs_derived_of(uct_ep->iface, uct_sci_iface_t);
-    uct_sci_ep_zcopy_tx_t* tx = NULL;
+    void* tx = NULL;
+    sisci_packet_t* tx_pack = NULL;
     size_t iov_total_len      = uct_iov_total_length(iov, iovcnt);
     size_t bytes_copied;
     ucs_iov_iter_t uct_iov_iter;
@@ -224,12 +225,20 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     UCT_CHECK_LENGTH(header_length + iov_total_len + sizeof(sisci_packet_t), 0 , iface->send_size, "am_zcopy");
     UCT_CHECK_AM_ID(id);
 
-    tx = (uct_sci_ep_zcopy_tx_t*) ucs_malloc(header_length + iov_total_len + sizeof(sisci_packet_t), "am_zcopy tx");
+    tx = (void*) ucs_malloc(header_length + sizeof(header_length) + iov_total_len + sizeof(sisci_packet_t), "am_zcopy tx");
+    tx_pack = (sisci_packet_t)* tx;
     ucs_iov_iter_init(&uct_iov_iter);
-    bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, (void*) tx, iface->send_size);
+    bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, tx + sizeof(sisci_packet_t) + header_length + sizeof(header_length), iface->send_size);
+    tx_pack->am_id = id;
+    tx_pack->length = iov_total_len + sizeof(sisci_packet_t) + header_length + sizeof(header_length);
 
+    memcpy(ep->buf, tx, tx_pack->length);
+
+    SCIFlush(NULL, SCI_NO_FLAGS);
 
     printf("uct_sci_ep_am_zcopy() %d %zd\n", ep->remote_node_id, bytes_copied);
+
+    ((sisci_packet_t*)ep->buf)->status = 1;
     
     ucs_free(tx);
     return UCS_OK;    
