@@ -230,7 +230,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     ucs_iov_iter_init(&uct_iov_iter);
     bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, tx + sizeof(sisci_packet_t) + header_length + sizeof(header_length), iface->send_size);
     tx_pack->am_id = id;
-    tx_pack->length = iov_total_len + sizeof(sisci_packet_t) + header_length + sizeof(header_length);
+    tx_pack->length = iov_total_len + header_length + sizeof(header_length);
 
     //replace memcpy with dma transfer.
     memcpy(tx + sizeof(sisci_packet_t), (void*) &header_length, sizeof(header_length));
