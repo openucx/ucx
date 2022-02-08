@@ -232,7 +232,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     if (header_length != 0)
     {
-        printf("")
+        
     } else {
         total_header_len = 0;
     }
