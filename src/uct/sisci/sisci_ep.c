@@ -232,7 +232,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     printf("uct_sci_ep_am_zcopy() %d %zd\n", ep->remote_node_id, bytes_copied);
     
     ucs_free(tx);
-    return UCS_ERR_NOT_IMPLEMENTED;;    
+    return UCS_OK;    
 }
 
 /* //!SECTION*/
