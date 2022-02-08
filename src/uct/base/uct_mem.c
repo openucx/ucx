@@ -106,9 +106,7 @@ ucs_status_t uct_mem_alloc(size_t length, const uct_alloc_method_t *methods,
               ucs_memory_type_names[mem_type], alloc_length, flags);
     ucs_log_indent(1);
 
-    printf("uct_mem.c before for loop\n");
     for (method = methods; method < methods + num_methods; ++method) {
-        printf("inside for loop\n ");
         ucs_trace("trying allocation method %s", uct_alloc_method_names[*method]);
 
         switch (*method) {
