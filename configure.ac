@@ -218,9 +218,11 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_AARCH64_HI1620], [false])
      AM_CONDITIONAL([HAVE_FUSE3], [false])
      AM_CONDITIONAL([IODEMO_CUDA], [false])
+     AM_CONDITIONAL([ENABLE_STATIC], [false])
     ],
     [
      AM_CONDITIONAL([DOCS_ONLY], [false])
+     AM_CONDITIONAL([ENABLE_STATIC], [test "$enable_static" = "yes" -o "$enable_static" = ""])
      m4_include([config/m4/compiler.m4])
      m4_include([config/m4/sysdep.m4])
      m4_include([config/m4/ucm.m4])
@@ -379,6 +381,7 @@ AC_CONFIG_FILES([
                  test/apps/iodemo/Makefile
                  test/apps/sockaddr/Makefile
                  test/apps/profiling/Makefile
+                 test/apps/uct_info/Makefile
                  test/mpi/Makefile
                  bindings/go/Makefile
                  bindings/java/Makefile
