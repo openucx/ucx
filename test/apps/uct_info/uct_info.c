@@ -12,12 +12,13 @@
 
 #include <uct/api/uct.h>
 #include <ucs/sys/string.h>
+#include <ucs/sys/compiler_def.h>
 #include <ucs/async/async.h>
 
 
 #define CALL(_action, _err) \
     do { \
-        ucs_status_t _status; \
+        ucs_status_t UCS_V_UNUSED _status; \
         if ((_status = _action) != UCS_OK) { \
             _err; \
         } \
