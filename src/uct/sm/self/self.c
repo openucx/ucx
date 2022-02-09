@@ -379,15 +379,13 @@ static uct_iface_ops_t uct_self_iface_ops = {
     .iface_is_reachable       = uct_self_iface_is_reachable
 };
 
-UCT_TL_DEFINE(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
-              "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
-
 static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
     attr->cap.flags            = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
     attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
+    attr->cap.alloc_mem_types  = 0;
     attr->cap.detect_mem_types = 0;
     attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.max_alloc        = 0;
@@ -472,4 +470,15 @@ static uct_component_t uct_self_component = {
     .flags              = 0,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_self_component);
+UCT_COMPONENT_REGISTER_DEF(&uct_self_component, self);
+
+UCT_TL_REGISTER_DEF(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
+                    "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
+
+UCT_TL_INIT(self)
+{
+}
+
+UCT_TL_CLEANUP(self)
+{
+}

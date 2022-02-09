@@ -397,14 +397,24 @@ typedef struct uct_iface_local_addr_ns {
 
 
 /**
+ * Declare TL constructor and destructor
+ *
+ * @param [in] _name   TL name
+ */
+#define UCT_TL_DECL(_name) \
+    void uct_##_name##_init(void); \
+    void uct_##_name##_cleanup(void);
+
+
+/**
  * Register component and TL
  *
  * @param [in] _name   Component and TL name
- * @param [in] _scope  Scope for functions (e.g 'static inline')
  */
 #define UCT_TL_INIT(_name) \
+    void uct_##_name##_init(void); \
     static void uct_component_tl_##_name##_ctor(void); \
-    void UCS_F_CTOR uct_##_name##_init(void) { \
+    void uct_##_name##_init(void) { \
         uct_component_tl_##_name##_ctor(); \
         uct_component_##_name##_ctor(); \
         uct_tl_##_name##_ctor(); \
@@ -416,11 +426,11 @@ typedef struct uct_iface_local_addr_ns {
  * Unregister component and TL
  *
  * @param [in] _name   Component and TL name
- * @param [in] _scope  Scope for functions (e.g 'static inline')
  */
 #define UCT_TL_CLEANUP(_name) \
+    void uct_##_name##_cleanup(void); \
     static void uct_component_tl_##_name##_dtor(void); \
-    void UCS_F_DTOR uct_##_name##_cleanup(void) { \
+    void uct_##_name##_cleanup(void) { \
         uct_tl_##_name##_dtor(); \
         uct_component_##_name##_dtor(); \
         uct_component_tl_##_name##_dtor(); \
