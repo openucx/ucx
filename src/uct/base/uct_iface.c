@@ -458,6 +458,33 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
     return UCS_OK;
 }
 
+static ucs_status_t uct_base_iface_set_usr_alloc_params(const uct_iface_params_t *params, uct_base_iface_t *iface) {
+    
+    if ((params->field_mask & UCT_IFACE_PARAM_FIELD_USR_ALLOC)) {
+        
+        iface->user_allocator.md_index = params->user_allocator.md_index;
+
+        if (params->user_allocator.ops.init_usr_mem_allocator == NULL) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        if (params->user_allocator.ops.get_desc_from_usr_callback == NULL) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        iface->user_allocator.ops.init_usr_mem_allocator = params->user_allocator.ops.init_usr_mem_allocator;
+        iface->user_allocator.ops.get_desc_from_usr_callback = params->user_allocator.ops.get_desc_from_usr_callback;
+
+    } else {
+
+        iface->user_allocator.md_index = 0; //TODO - set proper default val
+        iface->user_allocator.ops.init_usr_mem_allocator = NULL; //TODO - set proper default val
+        iface->user_allocator.ops.get_desc_from_usr_callback = NULL; //TODO - set proper default val
+    }
+
+    return UCS_OK;
+}
+
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
@@ -479,7 +506,7 @@ UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
     ucs_assert_always(ops->iface_query              != NULL);
     ucs_assert_always(ops->iface_get_device_address != NULL);
     ucs_assert_always(ops->iface_is_reachable       != NULL);
-
+    // ucs_log_print_backtrace(UCS_LOG_LEVEL_WARN);
     self->ops = *ops;
     return UCS_OK;
 }
@@ -526,6 +553,9 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     self->err_handler_arg   = UCT_IFACE_PARAM_VALUE(params, err_handler_arg,
                                                     ERR_HANDLER_ARG, NULL);
     self->progress_flags    = 0;
+
+    uct_base_iface_set_usr_alloc_params(params, self);
+
     uct_worker_progress_init(&self->prog);
 
     for (id = 0; id < UCT_AM_ID_MAX; ++id) {

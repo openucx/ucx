@@ -894,5 +894,40 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
  */
 typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
 
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief User allocation indentifier 
+ *
+ * Opaque object representing memory allocation instance implmented by the suer
+ */
+typedef struct uct_usr_mem_allocator *uct_usr_mem_allocator_h;
+
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief User allocated descriptor
+ *
+ * Opaque object representing memory allocation instance implmented by the suer
+ */
+typedef struct uct_usr_desc *uct_usr_desc_h;
+
+typedef int (*uct_iface_init_usr_allocator_func_t)(size_t seg_size, uct_usr_mem_allocator_h* usr_allocator);
+
+typedef int (*uct_iface_get_desc_from_usr_func_t)(unsigned md_index, uct_usr_mem_allocator_h usr_allocator, uct_usr_desc_h *desc, uct_mem_h *memh);
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief Interface for allocating descriptors based on user defined implementation 
+ */
+typedef struct user_allocator_props {
+    unsigned md_index;
+    struct {
+        /*Init user defined memory allocator*/
+        uct_iface_init_usr_allocator_func_t init_usr_mem_allocator;   
+        /*Get memory descriptor from user*/
+        uct_iface_get_desc_from_usr_func_t  get_desc_from_usr_callback;   
+    } ops;
+} user_allocator_props_t;
+
 
 #endif

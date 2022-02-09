@@ -4652,6 +4652,32 @@ typedef struct ucp_ep_attr {
  */
 ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr);
 
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Initilize the user allocator
+ *
+ * The user defined routine that initilize the user allocator
+ *
+ * @param [in]  seg_size      Descriptor size in bytes include header for lkey
+ * @param [out] usr_allocator Opaque object representing a memory allocatoer.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+/*ucs_status_t (*ucp_user_allocator_init_func_t)(size_t seg_size, void **usr_allocator);*/
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Return descriptor allocated by the user and memory handle
+ *
+ * The user defined routine that return mapped descriptor and memory handle
+ *
+ * @param [in]  usr_allocator Opaque object representing a memory allocatoer.
+ * @param [out] desc          Allocated and mapped descriptor
+ * @param [out] memh          mem handle of the mapped block.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+/*ucs_status_t (*ucp_user_allocator_func_t) (void *usr_allocator, void** desc, ucp_mem_h *memh);*/
 
 /**
  * @example ucp_hello_world.c

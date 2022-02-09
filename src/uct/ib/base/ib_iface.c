@@ -1515,6 +1515,15 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 {
     uct_ib_iface_recv_desc_t *desc;
     unsigned count;
+    unsigned md_index = 0;
+    uct_usr_mem_allocator_h usr_allocator = NULL;
+    uct_usr_desc_h usr_desc = NULL;
+    uct_mem_h memh = NULL;
+    uct_iface_get_desc_from_usr_func_t ucp_get_rx_desc_callback = iface->super.user_allocator.ops.get_desc_from_usr_callback;
+    
+    if (ucp_get_rx_desc_callback) {
+        ucp_get_rx_desc_callback(md_index, usr_allocator, &usr_desc, &memh);
+    }
 
     count = 0;
     while (count < n) {

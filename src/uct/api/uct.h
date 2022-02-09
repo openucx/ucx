@@ -654,7 +654,10 @@ enum uct_iface_params_field {
     UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT       = UCS_BIT(16),
 
     /** Enables @ref uct_iface_params_t::am_align_offset */
-    UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17)
+    UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17),
+    
+    /** Enables @ref uct_iface_params_t::user_allocator */
+    UCT_IFACE_PARAM_FIELD_USR_ALLOC     = UCS_BIT(18)
 };
 
 /**
@@ -1125,6 +1128,9 @@ struct uct_iface_params {
      * +-------------------+
      */
     size_t                                       am_align_offset;
+
+    /*User defined memory allocator interface props*/
+    user_allocator_props_t user_allocator;
 };
 
 

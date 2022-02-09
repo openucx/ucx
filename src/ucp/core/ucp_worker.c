@@ -1082,6 +1082,59 @@ ucp_worker_get_sys_device_distance(ucp_context_h context,
     return UCS_ERR_NO_RESOURCE;
 }
 
+ucs_status_t dummyUserInitAllocator(size_t seg_size, void **usr_allocator) {
+    ucs_status_t status = UCS_OK;
+
+    // Call to user init allocator
+
+    return status;
+}
+
+ucs_status_t dummyUserGetDesc(void *usr_allocator, void** desc, ucp_mem_h *memh) {
+    // ucp_context_t context;
+    // ucp_mem_map_params_t params;
+    ucs_status_t status = UCS_OK;
+//     void *address;
+//     size_t length;
+
+//     //Determine the right length, maybe pass it to function?
+//     length = 1024;
+//     //use malloc for example to allocate descriptor
+//     address = ucs_malloc(length, "Dummy user allocation");
+//     if (address == NULL) {
+//         status = UCS_ERR_NO_MEMORY;
+//         goto err;
+//     }
+
+//     params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+//                         UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+//     params.address    = address;
+//     params.length     = length;
+//     status = ucp_mem_map(&context, &params, memh);
+
+// err:
+    return status;
+}
+
+int ucp_worker_init_usr_allocator(size_t seg_size, uct_usr_mem_allocator_h* usr_allocator) {
+    return UCS_OK;
+}
+
+int ucp_worker_get_desc_from_usr(unsigned md_index, uct_usr_mem_allocator_h usr_allocator, uct_usr_desc_h* desc, uct_mem_h *memh) {
+    
+    ucp_mem_h ucp_memh;
+    dummyUserGetDesc((void*) usr_allocator, (void**)desc, &ucp_memh);
+
+    // User function call for ucp_mem_map and return ucp_mem_h
+    // This function need to return the ucp_mem_h with lkey
+
+    // memh = dummyUserGetDesc();
+    //need to find lkey here
+    printf("Dummy get descriptor callback\n");
+
+    return UCS_OK;
+}
+
 ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                    uct_iface_params_t *iface_params,
                                    ucp_worker_iface_t **wiface_p)
@@ -1136,13 +1189,17 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
-                                      UCT_IFACE_PARAM_FIELD_CPU_MASK;
+                                      UCT_IFACE_PARAM_FIELD_CPU_MASK          |
+                                      UCT_IFACE_PARAM_FIELD_USR_ALLOC;
     iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
     iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
     iface_params->err_handler_arg   = worker;
     iface_params->err_handler       = ucp_worker_iface_error_handler;
     iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
     iface_params->cpu_mask          = worker->cpu_mask;
+    iface_params->user_allocator.md_index = 0;
+    iface_params->user_allocator.ops.init_usr_mem_allocator = ucp_worker_init_usr_allocator;
+    iface_params->user_allocator.ops.get_desc_from_usr_callback = ucp_worker_get_desc_from_usr;
 
     if (context->config.features & UCP_FEATURE_TAG) {
         iface_params->eager_arg     = iface_params->rndv_arg = wiface;
