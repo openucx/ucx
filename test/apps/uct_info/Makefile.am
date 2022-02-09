@@ -22,18 +22,32 @@ uct_info_LDADD = $(top_builddir)/src/ucs/libucs.la \
                  $(top_builddir)/src/uct/libuct.la
 
 uct_info_static_LDFLAGS = \
-	-Wl,--undefined=uct_cma_init -l:libuct_cma.a -L$(top_builddir)/src/uct/sm/scopy/cma/.libs \
-	-Wl,--undefined=uct_knem_init -l:libuct_knem.a -L$(top_builddir)/src/uct/sm/scopy/knem/.libs
+	-L$(top_builddir)/src/uct/.libs \
+	-L$(top_builddir)/src/ucs/.libs \
+	-L$(top_builddir)/src/ucm/.libs
+
+if HAVE_CMA
+uct_info_static_LDFLAGS += \
+	-Wl,--undefined=uct_cma_init -l:libuct_cma.a \
+	-L$(top_builddir)/src/uct/sm/scopy/cma/.libs
+endif
+
+if HAVE_KNEM
+uct_info_static_LDFLAGS += \
+	-Wl,--undefined=uct_knem_init -l:libuct_knem.a \
+	-L$(top_builddir)/src/uct/sm/scopy/knem/.libs
+endif
 
 if HAVE_XPMEM
 uct_info_static_LDFLAGS += \
-	-Wl,--undefined=uct_xpmem_init -l:libuct_xpmem.a -L$(top_builddir)/src/uct/sm/mm/xpmem/.libs $(XPMEM_LIBS)
+	-Wl,--undefined=uct_xpmem_init -l:libuct_xpmem.a \
+	-L$(top_builddir)/src/uct/sm/mm/xpmem/.libs $(XPMEM_LIBS)
 endif # HAVE_XPMEM
 
 uct_info_static_LDFLAGS += \
-	-Wl,--undefined=uct_init -L$(top_builddir)/src/uct/.libs -l:libuct.a \
-	-Wl,--undefined=ucs_init -L$(top_builddir)/src/ucs/.libs -l:libucs.a \
-	-Wl,--undefined=ucm_init -L$(top_builddir)/src/ucm/.libs -l:libucm.a \
+	-Wl,--undefined=uct_init -l:libuct.a \
+	-Wl,--undefined=ucs_init -l:libucs.a \
+	-Wl,--undefined=ucm_init -l:libucm.a \
     $(BFD_LIBS) $(BFD_LDFLAGS)
 
 endif
