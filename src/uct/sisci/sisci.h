@@ -79,6 +79,7 @@ typedef struct uct_sci_iface {
     void*                 recv_buffer;
     sci_local_segment_t   local_segment;
     sci_map_t             local_map;
+    sci_dma_queue_t       dma_queue;
 
 
 } uct_sci_iface_t;

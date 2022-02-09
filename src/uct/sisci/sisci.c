@@ -161,6 +161,14 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_RESOURCE;
     }
 
+    /*TODO: add a reasonable number of max entries for SCICreateDMAQueue instead of 5.*/
+    SCICreateDMAQueue(sci_md->sci_virtual_device, &self->dma_queue, 0, 5, SCI_NO_FLAGS, &sci_error);
+
+    if(sci_error != SCI_ERR_OK) {
+        printf("CreateDMAQueue: %s \n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    } 
+
 
     /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
     status = uct_iface_param_am_alignment(params, self->send_size, 0, 0,
@@ -186,7 +194,17 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_iface_t)
     /* 
         TODO: Add proper cleanup for iface, i.e free resources that were allocated on init. 
     */
+    sci_error_t sci_error;
+    
     DEBUG_PRINT("closed iface\n");
+
+    SCIRemoveDMAQueue(self->dma_queue, SCI_NO_FLAGS, &sci_error);
+
+    if(sci_error != SCI_ERR_OK) {
+        printf("IFACE CLOSE, Failed to remove dma queue: %s\n", SCIGetErrorString(sci_error));
+    }
+
+
     ucs_mpool_cleanup(&self->msg_mp, 1);
 
     uct_base_iface_progress_disable(&self->super.super,
