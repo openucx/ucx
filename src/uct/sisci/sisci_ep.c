@@ -235,7 +235,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
         total_header_len = 0;
     }
     
-    tx = (void*) ucs_malloc(total_header_len + iov_total_len + sizeof(sisci_packet_t), "am_zcopy tx");
+    tx = (void*) iface->tx_map;
     tx_pack = (sisci_packet_t*) tx;
     ucs_iov_iter_init(&uct_iov_iter);
     bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, tx + sizeof(sisci_packet_t) + total_header_len, iface->send_size);
@@ -272,7 +272,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     
     SCIFlush(NULL, SCI_NO_FLAGS);
 
-    ucs_free(tx);
+    //ucs_free(tx);
     return UCS_OK;    
 }
 
