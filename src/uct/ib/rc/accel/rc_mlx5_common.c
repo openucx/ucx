@@ -297,6 +297,10 @@ uct_rc_mlx5_devx_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     ah_attr.grh.dgid      = iface->super.super.gid_info.gid;
     ah_attr.dlid          = uct_ib_device_port_attr(dev, attr.super.port)->lid;
     ah_attr.port_num      = dev->first_port;
+
+    //TLM QP is self-connected to operate XRQ, no need ECE
+    iface->tm.cmd_wq.super.super.remote_ece = 0;
+
     status = uct_rc_mlx5_iface_common_devx_connect_qp(
             iface, &iface->tm.cmd_wq.super.super,
             iface->tm.cmd_wq.super.super.qp_num, &ah_attr,
