@@ -77,9 +77,12 @@ typedef struct uct_sci_iface {
     size_t                send_size;    /* Maximum size for payload */
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
     void*                 recv_buffer;
-    sci_local_segment_t   local_segment;
+    sci_local_segment_t   local_segment; 
     sci_map_t             local_map;
     sci_dma_queue_t       dma_queue;
+    sci_local_segment_t   dma_segment;
+    sci_map_t             dma_map;
+    void*                 tx_map;
 
 
 } uct_sci_iface_t;

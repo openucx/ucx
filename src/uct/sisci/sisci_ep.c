@@ -251,18 +251,11 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
         printf("ZCOPY header_length NON-ZERO %d\n", header_length);
     }
     
-
-    /*SCIStartDmaTransferMem 	(sci_dma_queue_t dq, void *	localAddress,
-		sci_remote_segment_t  	remoteSegment,
-		size_t  	size,
-		size_t  	remoteOffset,
-		sci_cb_dma_t  	callback,
-		void *  	callbackArg,
-		unsigned int  	flags,
-		sci_error_t *  	error 
-	) 	*/
-
-    SCIStartDmaTransferMem(iface->dma_queue, tx, ep->remote_segment, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0, 0, NULL, SCI_NO_FLAGS, &sci_error);
+    SCIStartDmaTransfer(iface->dma_queue, iface->dma_segment, ep->remote_segment, 
+                        0, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0,
+                        NO_CALLBACK, NULL, SCI_NO_FLAGS);
+    
+    //SCIStartDmaTransferMem(iface->dma_queue, tx, ep->remote_segment, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0, NO_CALLBACK, NULL, SCI_NO_FLAGS, &sci_error);
 
     if(sci_error != SCI_ERR_OK) {
         printf("DMA Transfer Error: %s\n", SCIGetErrorString(sci_error));

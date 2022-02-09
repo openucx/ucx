@@ -95,6 +95,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     size_t align_offset;
     sci_error_t sci_error;
     ucs_status_t status;
+    unsigned dma_seg_id;
 
     uct_sci_md_t * sci_md = ucs_derived_of(md, uct_sci_md_t);
 
@@ -128,6 +129,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     self->segment_id = 13337;
     self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
+
     SCICreateSegment(sci_md->sci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
     
     //TODO: 
@@ -135,6 +137,9 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         self->segment_id = ucs_generate_uuid(trash);
         SCICreateSegment(sci_md->sci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
     }
+
+
+
     
     if (sci_error != SCI_ERR_OK) { 
         printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
@@ -161,6 +166,8 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_RESOURCE;
     }
 
+
+    /*----------------- DMA starts here ---------------*/
     /*TODO: add a reasonable number of max entries for SCICreateDMAQueue instead of 5.*/
     SCICreateDMAQueue(sci_md->sci_virtual_device, &self->dma_queue, 0, 5, SCI_NO_FLAGS, &sci_error);
 
@@ -169,6 +176,26 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_RESOURCE;
     } 
 
+    SCICreateSegment(md->sci_virtial_device, self->dma_segment, ucs_generate_uuid(trash), self->send_size, NULL, NULL, SCI_NO_FLAGS, &sci_error);
+
+    if(sci_error != SCI_ERR_OK) {
+        printf("DMA create segment: %s \n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    } 
+
+    SCIPrepareSegment(self->dma_segment, 0, SCI_NO_FLAGS, &sci_error);
+
+    if(sci_error != SCI_ERR_OK) {
+        printf("DMA prepare segment: %s \n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    } 
+
+    self->tx_map = SCIMapLocalSegment(self->dma_segment, &sefl->tx_map, 0, self->send_size, NULL, SCI_NO_FLAGS, &sci_error);
+
+    if(sci_error != SCI_ERR_OK) {
+        printf("DMA map segment: %s \n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    } 
 
     /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
     status = uct_iface_param_am_alignment(params, self->send_size, 0, 0,
