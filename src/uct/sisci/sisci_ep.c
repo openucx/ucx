@@ -268,14 +268,11 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     printf("uct_sci_ep_am_zcopy() %d %d %zd %zd %zd \n",id, ep->remote_node_id, bytes_copied, iov_total_len, total_header_len);
 
-
-
     ((sisci_packet_t*)ep->buf)->status = 1;
     
     SCIFlush(NULL, SCI_NO_FLAGS);
-    
 
-    memset(iface->tx_map, 0, iface->send_size);
+    memset(iface->tx_map + SCI_PACKET_SIZE, 0, iface->send_size);
     //ucs_free(tx);
     return UCS_OK;    
 }
