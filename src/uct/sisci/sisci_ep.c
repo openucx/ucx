@@ -253,7 +253,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     
     SCIStartDmaTransfer(iface->dma_queue, iface->dma_segment, ep->remote_segment, 
                         0, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0,
-                        NO_CALLBACK, NULL, SCI_NO_FLAGS);
+                        SCI_NO_CALLBACK, NULL, SCI_NO_FLAGS, &sci_error);
     
     //SCIStartDmaTransferMem(iface->dma_queue, tx, ep->remote_segment, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0, NO_CALLBACK, NULL, SCI_NO_FLAGS, &sci_error);
 
