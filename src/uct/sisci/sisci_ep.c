@@ -222,6 +222,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     size_t bytes_copied;
     ucs_iov_iter_t uct_iov_iter;
     size_t total_header_len = 0; /* header_length + sizeof(header_length) */
+    sci_error_t sci_error;
 
 
     UCT_CHECK_LENGTH(header_length + iov_total_len + sizeof(sisci_packet_t), 0 , iface->send_size, "am_zcopy");
@@ -251,9 +252,17 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     }
     
 
-    memcpy(ep->buf, tx, tx_pack->length + sizeof(sisci_packet_t));
 
-    SCIFlush(NULL, SCI_NO_FLAGS);
+    SCIStartDmaTransferMem(iface->dma_queue, tx, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0, NULL, NULL, SCI_NO_FLAGS, &sci_error);
+
+    if(sci_error != SCI_ERR_OK) {
+        printf("DMA Transfer Error: %s\n", SCIGetErrorString(sci_error));
+    }
+
+    SCIWaitForDMAQueue(self->dma_queue, SCI_INFINITE_TIMEOUT, SCI_NO_FLAGS, &sci_error);
+
+    //memcpy(ep->buf, tx, tx_pack->length + sizeof(sisci_packet_t));
+    //SCIFlush(NULL, SCI_NO_FLAGS);
 
     printf("uct_sci_ep_am_zcopy() %d %zd %zd %zd \n", ep->remote_node_id, bytes_copied, iov_total_len, total_header_len);
 
