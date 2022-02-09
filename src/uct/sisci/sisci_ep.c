@@ -272,7 +272,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     
     SCIFlush(NULL, SCI_NO_FLAGS);
 
-    memset(iface->tx_map + SCI_PACKET_SIZE, 0, iface->send_size);
+    //memset(iface->tx_map + SCI_PACKET_SIZE, 0, iface->send_size);
     //ucs_free(tx);
     return UCS_OK;    
 }
