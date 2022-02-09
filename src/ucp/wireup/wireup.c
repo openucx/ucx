@@ -875,7 +875,8 @@ ucp_wireup_ep_lane_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
 {
     ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p", ep, lane,
               ep->uct_eps[lane], uct_ep);
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep,
+                              ucp_ep_get_rsc_index(ep, lane));
 }
 
 static ucs_status_t
@@ -1257,7 +1258,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
             if (ep->uct_eps[lane] != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
                 ucp_worker_discard_uct_ep(
-                        ep, ep->uct_eps[lane], UCT_FLUSH_FLAG_LOCAL,
+                        ep, ep->uct_eps[lane],
+                        UCP_NULL_RESOURCE, UCT_FLUSH_FLAG_LOCAL,
                         ucp_request_purge_enqueue_cb, replay_pending_queue,
                         (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
                 ep->uct_eps[lane] = NULL;
@@ -1491,7 +1493,8 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb, &tmp_q);
 
     /* the wireup ep should use the existing [am_lane] as next_ep */
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep,
+                              ucp_ep_get_rsc_index(ep, lane));
 
     if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
         status = ucp_wireup_send_request(ep);

@@ -271,6 +271,8 @@ static void ucs_callbackq_disable_proxy(ucs_callbackq_t *cbq)
 
     ucs_trace_func("cbq=%p slow_proxy_id=%d", cbq, priv->slow_proxy_id);
 
+    ucs_assert(priv->fast_remove_mask == 0);
+
     if (priv->slow_proxy_id == UCS_CALLBACKQ_ID_NULL) {
         return;
     }
@@ -455,8 +457,8 @@ void ucs_callbackq_cleanup(ucs_callbackq_t *cbq)
 {
     ucs_callbackq_priv_t *priv = ucs_callbackq_priv(cbq);
 
-    ucs_callbackq_disable_proxy(cbq);
     ucs_callbackq_purge_fast(cbq);
+    ucs_callbackq_disable_proxy(cbq);
     ucs_callbackq_purge_slow(cbq);
 
     if ((priv->num_fast_elems) > 0 || (priv->num_slow_elems > 0)) {

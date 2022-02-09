@@ -240,10 +240,11 @@ void ucp_proxy_ep_replace(ucp_proxy_ep_t *proxy_ep)
 }
 
 void ucp_proxy_ep_set_uct_ep(ucp_proxy_ep_t *proxy_ep, uct_ep_h uct_ep,
-                             int is_owner)
+                             int is_owner, ucp_rsc_index_t rsc_index)
 {
-    proxy_ep->uct_ep   = uct_ep;
-    proxy_ep->is_owner = is_owner;
+    proxy_ep->uct_ep    = uct_ep;
+    proxy_ep->is_owner  = is_owner;
+    proxy_ep->rsc_index = rsc_index;
 }
 
 UCS_CLASS_DEFINE(ucp_proxy_ep_t, void);

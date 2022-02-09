@@ -389,6 +389,7 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep);
 
 /* must be called with async lock held */
 ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                       ucp_rsc_index_t rsc_index,
                                        unsigned ep_flush_flags,
                                        uct_pending_purge_callback_t purge_cb,
                                        void *purge_arg,
