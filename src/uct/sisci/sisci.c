@@ -177,7 +177,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     } 
 
     dma_seg_id = ucs_generate_uuid(trash);
-    SCICreateSegment(md->sci_virtual_device, &self->dma_segment, dma_seg_id, self->send_size, NULL, NULL, SCI_NO_FLAGS, &sci_error);
+    SCICreateSegment(sci_md->sci_virtual_device, &self->dma_segment, dma_seg_id, self->send_size, NULL, NULL, SCI_NO_FLAGS, &sci_error);
 
     if(sci_error != SCI_ERR_OK) {
         printf("DMA create segment: %s \n", SCIGetErrorString(sci_error));
