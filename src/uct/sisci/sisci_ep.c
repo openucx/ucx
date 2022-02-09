@@ -248,7 +248,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     {
         //memcpy(tx + sizeof(sisci_packet_t), (void*) &header_length, sizeof(header_length));
         memcpy(tx + sizeof(sisci_packet_t), header, header_length);
-        printf("ZCOPY header_length NON-ZERO %d\n", header_length);
+        //printf("ZCOPY header_length NON-ZERO %d\n", header_length);
     }
     
     SCIStartDmaTransfer(iface->dma_queue, iface->dma_segment, ep->remote_segment, 
@@ -266,7 +266,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     //memcpy(ep->buf, tx, tx_pack->length + sizeof(sisci_packet_t));
     //SCIFlush(NULL, SCI_NO_FLAGS);
 
-    printf("uct_sci_ep_am_zcopy() %d %d %zd %zd %zd \n",id, ep->remote_node_id, bytes_copied, iov_total_len, total_header_len);
+    //printf("uct_sci_ep_am_zcopy() %d %d %zd %zd %zd \n",id, ep->remote_node_id, bytes_copied, iov_total_len, total_header_len);
 
     ((sisci_packet_t*)ep->buf)->status = 1;
     
