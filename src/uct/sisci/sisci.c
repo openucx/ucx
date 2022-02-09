@@ -189,7 +189,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_NO_RESOURCE;
     } 
 
-    self->tx_map = SCIMapLocalSegment(self->dma_segment, self->dma_map, 0, self->send_size, NULL, SCI_NO_FLAGS, &sci_error);
+    self->tx_map = SCIMapLocalSegment(self->dma_segment, &self->dma_map, 0, self->send_size, NULL, SCI_NO_FLAGS, &sci_error);
 
     if(sci_error != SCI_ERR_OK) {
         printf("DMA map segment: %s \n", SCIGetErrorString(sci_error));
