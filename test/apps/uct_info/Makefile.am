@@ -48,6 +48,6 @@ uct_info_static_LDFLAGS += \
 	-Wl,--undefined=uct_init -l:libuct.a \
 	-Wl,--undefined=ucs_init -l:libucs.a \
 	-Wl,--undefined=ucm_init -l:libucm.a \
-    $(BFD_LIBS) $(BFD_LDFLAGS)
+	$(BFD_LIBS) $(BFD_LDFLAGS)
 
 endif
