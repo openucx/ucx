@@ -244,6 +244,10 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     //replace memcpy with dma transfer.
 
+    if(bytes_copied != iov_total_len) {
+        printf("PANIK\n");
+    }
+
     if (header_length != 0)
     {
         //memcpy(tx + sizeof(sisci_packet_t), (void*) &header_length, sizeof(header_length));
