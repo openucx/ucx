@@ -262,7 +262,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 		sci_error_t *  	error 
 	) 	*/
 
-    SCIStartDmaTransferMem(iface->dma_queue, tx, ep->remote_segment_id, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0, 0, NULL, SCI_NO_FLAGS, &sci_error);
+    SCIStartDmaTransferMem(iface->dma_queue, tx, ep->remote_segment, iov_total_len + total_header_len + SCI_PACKET_SIZE, 0, 0, NULL, SCI_NO_FLAGS, &sci_error);
 
     if(sci_error != SCI_ERR_OK) {
         printf("DMA Transfer Error: %s\n", SCIGetErrorString(sci_error));
