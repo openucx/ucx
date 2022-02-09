@@ -245,8 +245,8 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     if (header_length != 0)
     {
-        memcpy(tx + sizeof(sisci_packet_t), (void*) &header_length, sizeof(header_length));
-        memcpy(tx + sizeof(sisci_packet_t) + sizeof(header_length), header, header_length);
+        //memcpy(tx + sizeof(sisci_packet_t), (void*) &header_length, sizeof(header_length));
+        memcpy(tx + sizeof(sisci_packet_t), header, header_length);
         printf("ZCOPY header_length NON-ZERO %d\n", header_length);
     }
     

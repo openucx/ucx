@@ -18,7 +18,7 @@
 #define ADAPTER_NO 0
 #define SCI_NO_FLAGS 0
 #define SISCI_STATUS_WRITING_DONE 1
-
+#define SCI_PACKET_SIZE sizeof(sisci_packet_t)
 
 // https://stackoverflow.com/questions/1941307/debug-print-macro-in-c by Tom Kuschel
 #define DEBUG 0
