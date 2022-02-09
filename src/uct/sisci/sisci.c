@@ -433,7 +433,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     
 
     DEBUG_PRINT("invoke status %d\n", status);
-    DEBUG_PRINT("length: %d what we recieved %s\n", packet->length, (char *) iface->recv_buffer + sizeof(sisci_packet_t));
+    DEBUG_PRINT("length: %d from %d\n", packet->length,  ((sisci_packet_t*) iface->recv_buffer)->am_id );
     //printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
 
     if(status == UCS_INPROGRESS) {
