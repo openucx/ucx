@@ -372,6 +372,28 @@ build_fuse() {
 }
 
 #
+# Build with static library
+#
+build_static() {
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
+	$MAKEP
+	$MAKEP install
+
+	cd test/apps/uct_info
+	$MAKEP
+
+	if ./uct_info && ./uct_info_static
+	then
+		echo "Check successful "
+	else
+		azure_log_error "Static link test failed."
+		exit 1
+	fi
+	cd -
+
+}
+
+#
 # Do a given task and update progress indicator
 #
 do_task() {
@@ -390,8 +412,9 @@ do_task() {
 az_init_modules
 prepare_build
 
-[ "${long_test}" = "yes" ] && prog=5 || prog=12
+[ "${long_test}" = "yes" ] && prog=4 || prog=9
 
+do_task "${prog}" build_static
 do_task "${prog}" build_docs
 do_task "${prog}" build_debug
 do_task "${prog}" build_prof
