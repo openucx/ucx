@@ -22,30 +22,25 @@ uct_info_SOURCES = \
 uct_info_static_SOURCES = \
 	uct_info.c
 
-uct_info_LDADD = $(top_builddir)/src/ucs/libucs.la \
-                 $(top_builddir)/src/uct/libuct.la
+uct_info_LDADD = -lucs -luct
 
-uct_info_static_LDFLAGS = \
-	-L$(top_builddir)/src/uct/.libs \
-	-L$(top_builddir)/src/ucs/.libs \
-	-L$(top_builddir)/src/ucm/.libs
+uct_info_LDFLAGS = -L$(libdir) -L$(libdir)/ucx
+
+uct_info_static_LDFLAGS = -L$(libdir) -L$(libdir)/ucx
 
 if HAVE_CMA
 uct_info_static_LDFLAGS += \
-	-Wl,--undefined=uct_cma_init -Wl,-Bstatic,-luct_cma,-Bdynamic \
-	-L$(top_builddir)/src/uct/sm/scopy/cma/.libs
+	-Wl,--undefined=uct_cma_init -Wl,-Bstatic,-luct_cma,-Bdynamic
 endif
 
 if HAVE_KNEM
 uct_info_static_LDFLAGS += \
-	-Wl,--undefined=uct_knem_init -Wl,-Bstatic,-luct_knem,-Bdynamic \
-	-L$(top_builddir)/src/uct/sm/scopy/knem/.libs
+	-Wl,--undefined=uct_knem_init -Wl,-Bstatic,-luct_knem,-Bdynamic
 endif
 
 if HAVE_XPMEM
 uct_info_static_LDFLAGS += \
-	-Wl,--undefined=uct_xpmem_init -Wl,-Bstatic,-luct_xpmem,-Bdynamic \
-	-L$(top_builddir)/src/uct/sm/mm/xpmem/.libs $(XPMEM_LIBS)
+	-Wl,--undefined=uct_xpmem_init -Wl,-Bstatic,-luct_xpmem,-Bdynamic
 endif # HAVE_XPMEM
 
 uct_info_static_LDFLAGS += \
