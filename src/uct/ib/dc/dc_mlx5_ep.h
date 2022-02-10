@@ -15,6 +15,16 @@
 
 #define UCT_DC_MLX5_EP_NO_DCI ((uint8_t)-1)
 
+
+#define UCT_DC_MLX5_TXQP_DECL(_txqp, _txwq) \
+    uct_rc_txqp_t UCS_V_UNUSED *_txqp; \
+    uct_ib_mlx5_txwq_t UCS_V_UNUSED *_txwq;
+
+
+#define UCT_DC_MLX5_IFACE_TXQP_GET(_iface, _ep, _txqp, _txwq) \
+    UCT_DC_MLX5_IFACE_TXQP_DCI_GET(_iface, (_ep)->dci, _txqp, _txwq)
+
+
 enum uct_dc_mlx5_ep_flags {
     /* DCI pool EP assigned to according to it's lag port */
     UCT_DC_MLX5_EP_FLAG_POOL_INDEX_MASK     = UCS_MASK(3),
@@ -36,6 +46,12 @@ enum uct_dc_mlx5_ep_flags {
 
     /* Error handler already called or flush(CANCEL) disabled it */
     UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED = UCS_BIT(7),
+#if UCS_ENABLE_ASSERT
+    /* EP was invalidated without DCI */
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = UCS_BIT(8)
+#else
+    UCT_DC_MLX5_EP_FLAG_INVALIDATED         = 0
+#endif
 };
 
 
@@ -54,7 +70,7 @@ struct uct_dc_mlx5_ep {
     };
 
     uint8_t                       dci;
-    uint8_t                       flags;
+    uint16_t                      flags;
     uint16_t                      atomic_mr_offset;
     uct_rc_fc_t                   fc;
     uct_ib_mlx5_base_av_t         av;
@@ -181,6 +197,10 @@ ucs_status_t uct_dc_mlx5_iface_tag_recv_cancel(uct_iface_h tl_iface,
 ucs_status_t uct_dc_mlx5_ep_fence(uct_ep_h tl_ep, unsigned flags);
 
 ucs_status_t uct_dc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
+ucs_status_t uct_dc_mlx5_ep_qp_to_err(uct_dc_mlx5_ep_t *ep);
+
+ucs_status_t uct_dc_mlx5_ep_invalidate(uct_ep_h tl_ep, unsigned flags);
 
 ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
                                                uct_rc_iface_send_op_t *send_op);
@@ -389,6 +409,9 @@ uct_dc_mlx5_iface_dci_release(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
     uint8_t pool_index           = uct_dc_mlx5_iface_dci_pool_index(iface,
                                                                     dci_index);
     uct_dc_mlx5_dci_pool_t *pool = &iface->tx.dci_pool[pool_index];
+    uct_dc_mlx5_ep_t *ep         = uct_dc_mlx5_ep_from_dci(iface, dci_index);
+
+    ucs_debug("iface %p: release dci %d from ep %p", iface, dci_index, ep);
 
     pool->stack_top--;
     ucs_assert(pool->release_stack_top < pool->stack_top);
@@ -472,6 +495,11 @@ static inline void uct_dc_mlx5_iface_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_d
     ucs_assert(uct_dc_mlx5_ep_from_dci(iface, ep->dci) == NULL);
     iface->tx.dcis[ep->dci].ep = ep;
     pool->stack_top++;
+    if (ep->flags & UCT_DC_MLX5_EP_FLAG_INVALIDATED) {
+        (void)uct_dc_mlx5_ep_qp_to_err(ep);
+    }
+
+    ucs_debug("iface %p: allocate dci %d for ep %p", iface, ep->dci, ep);
 }
 
 static UCS_F_ALWAYS_INLINE int
@@ -597,11 +625,6 @@ static inline struct mlx5_grh_av *uct_dc_mlx5_ep_get_grh(uct_dc_mlx5_ep_t *ep)
    return (ep->flags & UCT_DC_MLX5_EP_FLAG_GRH) ?
           &(ucs_derived_of(ep, uct_dc_mlx5_grh_ep_t)->grh_av) : NULL;
 }
-
-
-#define UCT_DC_MLX5_TXQP_DECL(_txqp, _txwq) \
-    uct_rc_txqp_t UCS_V_UNUSED *_txqp; \
-    uct_ib_mlx5_txwq_t UCS_V_UNUSED *_txwq;
 
 
 #define UCT_DC_MLX5_CHECK_DCI_RES(_iface, _ep) \

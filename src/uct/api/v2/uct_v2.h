@@ -11,7 +11,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/memory/memory_type.h>
 #include <uct/api/uct.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 
 #include <stdint.h>
 
@@ -75,7 +75,7 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE   = UCS_BIT(3),
 
     /** Enables @ref uct_perf_attr_t::remote_sys_device */
-    UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE  = UCS_BIT(4),
+    UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE  = UCS_BIT(4),
 
     /** Enables @ref uct_perf_attr_t::send_pre_overhead */
     UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD  = UCS_BIT(5),

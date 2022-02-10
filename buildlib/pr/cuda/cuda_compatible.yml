@@ -24,7 +24,7 @@ jobs:
           cd pkg-build
           make -s -j `nproc`
           make install
-          cp ../buildlib/pr/perftest_msg_pow2 $(Build.Repository.LocalPath)/install
+          cp ../buildlib/pr/cuda/perftest_msg_pow2 $(Build.Repository.LocalPath)/install
           tar czf $(Build.ArtifactStagingDirectory)/ucx_bin_$(Build.BuildId).tar.gz -C $(Build.Repository.LocalPath)/install .
         displayName: Build package
       - task: PublishBuildArtifacts@1

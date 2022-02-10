@@ -546,6 +546,7 @@ static uct_iface_internal_ops_t uct_mm_iface_internal_ops = {
     .iface_estimate_perf = uct_mm_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = (uct_ep_query_func_t)ucs_empty_function,
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
 };
 
 static void uct_mm_iface_recv_desc_init(uct_iface_h tl_iface, void *obj,

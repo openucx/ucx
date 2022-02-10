@@ -259,9 +259,8 @@ protected:
                                    int worker_index = 0);
     void request_release(void *req);
     void request_cancel(entity &e, void *req);
-    void wait_for_wakeup(const std::vector<entity*> &entities,
-                         int poll_timeout = -1, bool drain = false,
-                         int worker_index = 0);
+    int wait_for_wakeup(const std::vector<entity*> &entities,
+                        int poll_timeout = -1, int worker_index = 0);
     int max_connections();
     void set_tl_small_timeouts();
 

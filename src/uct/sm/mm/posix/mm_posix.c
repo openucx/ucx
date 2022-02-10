@@ -14,8 +14,9 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
-#include <sys/mman.h>
+#include <ucs/profile/profile.h>
 #include <ucs/sys/sys.h>
+#include <sys/mman.h>
 #include <sys/statvfs.h>
 
 
@@ -636,9 +637,10 @@ static void uct_posix_mem_detach(uct_mm_md_t *md, const uct_mm_remote_seg_t *rse
     uct_posix_mem_detach_common(rseg);
 }
 
-static ucs_status_t
-uct_posix_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
-                      uct_rkey_t *rkey_p, void **handle_p)
+UCS_PROFILE_FUNC(ucs_status_t, uct_posix_rkey_unpack,
+                 (component, rkey_buffer, rkey_p, handle_p),
+                 uct_component_t *component, const void *rkey_buffer,
+                 uct_rkey_t *rkey_p, void **handle_p)
 {
     const uct_posix_packed_rkey_t *packed_rkey = rkey_buffer;
     uct_mm_remote_seg_t *rseg;
@@ -663,8 +665,8 @@ uct_posix_rkey_unpack(uct_component_t *component, const void *rkey_buffer,
     return UCS_OK;
 }
 
-static ucs_status_t
-uct_posix_rkey_release(uct_component_t *component, uct_rkey_t rkey, void *handle)
+UCS_PROFILE_FUNC(ucs_status_t, uct_posix_rkey_release,(component, rkey, handle),
+                 uct_component_t *component, uct_rkey_t rkey, void *handle)
 {
     uct_mm_remote_seg_t *rseg = handle;
     ucs_status_t status;
@@ -700,4 +702,14 @@ static uct_mm_md_mapper_ops_t uct_posix_md_ops = {
 };
 
 UCT_MM_TL_DEFINE(posix, &uct_posix_md_ops, uct_posix_rkey_unpack,
-                 uct_posix_rkey_release, "POSIX_", uct_posix_iface_config_table)
+                 uct_posix_rkey_release, "POSIX_",
+                 uct_posix_iface_config_table);
+
+UCT_TL_INIT(posix)
+{
+}
+
+UCT_TL_CLEANUP(posix)
+{
+}
+

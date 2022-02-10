@@ -8,9 +8,11 @@
 #
 AC_PREREQ([2.63])
 
-define([ucx_ver_major], 1)
-define([ucx_ver_minor], 13)
-define([ucx_ver_patch], 0)
+define([ucx_ver_major], 1)  # Major version. Usually does not change.
+define([ucx_ver_minor], 13) # Minor version. Increased for each release.
+define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
+define([ucx_ver_extra], "") # Extra version string. Empty for a general release.
+
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 
 # This is the API version (see libtool library versioning)
@@ -60,11 +62,13 @@ AC_SUBST(top_top_srcdir)
 MAJOR_VERSION=ucx_ver_major
 MINOR_VERSION=ucx_ver_minor
 PATCH_VERSION=ucx_ver_patch
-VERSION=$MAJOR_VERSION.$MINOR_VERSION.$PATCH_VERSION
+EXTRA_VERSION=ucx_ver_extra
+VERSION=$MAJOR_VERSION.$MINOR_VERSION.$PATCH_VERSION$EXTRA_VERSION
 SOVERSION=libucx_so_version
 AC_SUBST(MAJOR_VERSION)
 AC_SUBST(MINOR_VERSION)
 AC_SUBST(PATCH_VERSION)
+AC_SUBST(EXTRA_VERSION)
 AC_SUBST(SCM_VERSION)
 AC_SUBST(SOVERSION)
 

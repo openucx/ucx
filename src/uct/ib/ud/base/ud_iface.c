@@ -852,19 +852,23 @@ unsigned
 uct_ud_iface_dispatch_async_comps_do(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     unsigned count = 0;
-    uct_ud_send_skb_t *skb;
     uct_ud_comp_desc_t *cdesc;
+    uct_ud_send_skb_t *skb;
+    ucs_queue_iter_t iter;
 
-    ucs_queue_for_each_extract(skb, &iface->tx.async_comp_q, queue, 1) {
+    ucs_trace_func("ep=%p", ep);
+
+    ucs_queue_for_each_safe(skb, iter, &iface->tx.async_comp_q, queue) {
         ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_RESENDING));
         cdesc = uct_ud_comp_desc(skb);
         ucs_assert(cdesc->ep != NULL);
-
         if ((ep == NULL) || (ep == cdesc->ep)) {
+            ucs_trace("ep %p: dispatch async comp %p", ep, cdesc->comp);
+            ucs_queue_del_iter(&iface->tx.async_comp_q, iter);
             uct_ud_iface_dispatch_comp(iface, cdesc->comp);
             uct_ud_skb_release(skb, 0);
+            ++count;
         }
-        ++count;
     }
 
     return count;

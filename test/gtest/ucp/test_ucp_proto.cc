@@ -13,7 +13,7 @@ extern "C" {
 #include <ucp/core/ucp_rkey.h>
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto.h>
-#include <ucp/proto/proto_select.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
 }

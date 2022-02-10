@@ -1629,6 +1629,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->dev_num_paths   = iface->num_paths;
 
     switch (active_speed) {
+    default:
+        ucs_diag("unknown active_speed on " UCT_IB_IFACE_FMT ": %d, fallback to SDR",
+                 UCT_IB_IFACE_ARG(iface), active_speed);
+        /* Fall through */
     case 1: /* SDR */
         iface_attr->latency.c = 5000e-9;
         signal_rate           = 2.5e9;
@@ -1672,14 +1676,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         encoding              = 64.0/66.0;
         break;
     case 128: /* NDR */
-        iface_attr->latency.c = 600e-9; /* TODO t.b.d. */
+        iface_attr->latency.c = 600e-9;
         signal_rate           = 100e9;
         encoding              = 64.0/66.0;
         break;
-    default:
-        ucs_error("Invalid active_speed on " UCT_IB_IFACE_FMT ": %d",
-                  UCT_IB_IFACE_ARG(iface), active_speed);
-        return UCS_ERR_IO_ERROR;
     }
 
     status = uct_ib_iface_get_numa_latency(iface, &numa_latency);

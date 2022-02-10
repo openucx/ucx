@@ -625,17 +625,17 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
     ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
     /* go through a linked list of available interfaces */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ucs::is_inet_addr(ifa->ifa_addr) &&
-            ucs_netif_flags_is_active(ifa->ifa_flags)) {
-            sock_addr.addr = ifa->ifa_addr;
-
-            UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with "
-                             << ucs::sockaddr_to_str(ifa->ifa_addr);
-            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                       UCT_SOCKADDR_ACC_LOCAL));
-            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                       UCT_SOCKADDR_ACC_REMOTE));
+        if (!ucs::is_interface_usable(ifa)) {
+            continue;
         }
+
+        sock_addr.addr = ifa->ifa_addr;
+        UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with "
+                         << ucs::sockaddr_to_str(ifa->ifa_addr);
+        ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                   UCT_SOCKADDR_ACC_LOCAL));
+        ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                   UCT_SOCKADDR_ACC_REMOTE));
     }
     freeifaddrs(ifaddr);
 }

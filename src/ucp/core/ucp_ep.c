@@ -21,7 +21,8 @@
 #include <ucp/wireup/wireup_cm.h>
 #include <ucp/tag/eager.h>
 #include <ucp/tag/offload.h>
-#include <ucp/proto/proto_select.h>
+#include <ucp/proto/proto_common.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucp/rndv/rndv.h>
 #include <ucp/stream/stream.h>
 #include <ucp/core/ucp_listener.h>
@@ -1070,7 +1071,13 @@ void ucp_ep_err_pending_purge(uct_pending_req_t *self, void *arg)
     ucp_request_t *req      = ucs_container_of(self, ucp_request_t, send.uct);
     ucs_status_t  status    = UCS_PTR_STATUS(arg);
 
-    ucp_request_send_state_ff(req, status);
+    /* TODO: check for context->config.ext.proto_enable when all protocols are
+     *       implemented, such as flush, AM/RNDV, etc */
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
+        ucp_proto_request_abort(req, status);
+    } else {
+        ucp_request_send_state_ff(req, status);
+    }
 }
 
 void ucp_destroyed_ep_pending_purge(uct_pending_req_t *self, void *arg)
@@ -1143,6 +1150,27 @@ static void ucp_ep_set_lanes_failed(ucp_ep_h ep, uct_ep_h *uct_eps)
     }
 }
 
+void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
+                              ucp_rsc_index_t rsc_index)
+{
+    ucp_worker_iface_t *wiface;
+
+    if ((rsc_index == UCP_NULL_RESOURCE) ||
+        !ep->worker->context->config.ext.adaptive_progress ||
+        /* Do not unprogress an already failed lane */
+        ucp_is_uct_ep_failed(uct_ep) ||
+        ucp_wireup_ep_test(uct_ep)) {
+        return;
+    }
+
+    wiface = ucp_worker_iface(ep->worker, rsc_index);
+    ucs_debug("ep %p: unprogress iface %p " UCT_TL_RESOURCE_DESC_FMT,
+              ep, wiface->iface,
+              UCT_TL_RESOURCE_DESC_ARG(
+              &(ep->worker->context->tl_rscs[rsc_index].tl_rsc)));
+    ucp_worker_iface_unprogress_ep(wiface);
+}
+
 static void ucp_ep_discard_lanes_callback(void *request, ucs_status_t status,
                                           void *user_data)
 {
@@ -1201,7 +1229,9 @@ static void ucp_ep_discard_lanes(ucp_ep_h ep, ucs_status_t discard_status)
         }
 
         ucs_debug("ep %p: discard uct_ep[%d]=%p", ep, lane, uct_ep);
-        status = ucp_worker_discard_uct_ep(ep, uct_ep, ep_flush_flags,
+        status = ucp_worker_discard_uct_ep(ep, uct_ep,
+                                           ucp_ep_get_rsc_index(ep, lane),
+                                           ep_flush_flags,
                                            ucp_ep_err_pending_purge,
                                            UCS_STATUS_PTR(discard_status),
                                            ucp_ep_discard_lanes_callback,
@@ -1338,6 +1368,8 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
 
         ucs_debug("ep %p: pending & destroy uct_ep[%d]=%p", ep, lane, uct_ep);
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
+        ucp_ep_unprogress_uct_ep(ep, uct_ep, ucp_ep_get_rsc_index(ep, lane));
+
         /* coverity wrongly resolves ucp_failed_tl_ep's no-op EP destroy
          * function to 'ucp_proxy_ep_destroy' */
         /* coverity[incorrect_free] */
@@ -3242,7 +3274,11 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
 
     while (!ucs_hlist_is_empty(proto_reqs)) {
         req = ucs_hlist_head_elem(proto_reqs, ucp_request_t, send.list);
-        ucp_ep_req_purge(ucp_ep, req, status, 0);
+        if (ucp_ep->worker->context->config.ext.proto_enable) {
+            ucp_proto_request_abort(req, status);
+        } else {
+            ucp_ep_req_purge(ucp_ep, req, status, 0);
+        }
     }
 
     if (/* Flush state is already valid (i.e. EP doesn't exist on matching

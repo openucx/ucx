@@ -9,6 +9,7 @@
 #endif
 
 #include "proto_init.h"
+#include "proto_debug.h"
 #include "proto_select.inl"
 
 #include <ucs/datastruct/array.inl>
@@ -198,7 +199,7 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_envelope_t *list,
         new_elem->range.super.max_length  = midpoint;
         for (tmp_perf_type = 0; tmp_perf_type < UCP_PROTO_PERF_TYPE_LAST;
              tmp_perf_type++) {
-            new_elem->range.super.perf[tmp_perf_type] 
+            new_elem->range.super.perf[tmp_perf_type]
                 = best.elem->range.super.perf[tmp_perf_type];
         }
 

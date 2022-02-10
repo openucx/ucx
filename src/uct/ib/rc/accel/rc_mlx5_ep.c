@@ -564,8 +564,6 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
                                   uct_completion_t *comp)
 {
     UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
-    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.md,
-                                          uct_ib_mlx5_md_t);
     int already_canceled = ep->super.flags & UCT_RC_EP_FLAG_FLUSH_CANCEL;
     ucs_status_t status;
 
@@ -586,7 +584,8 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
     }
 
     if (ucs_unlikely((flags & UCT_FLUSH_FLAG_CANCEL) && !already_canceled)) {
-        status = uct_ib_mlx5_modify_qp_state(md, &ep->tx.wq.super, IBV_QPS_ERR);
+        status = uct_ib_mlx5_modify_qp_state(&iface->super.super,
+                                             &ep->tx.wq.super, IBV_QPS_ERR);
         if (status != UCS_OK) {
             return status;
         }
@@ -597,6 +596,14 @@ ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags,
 
     return uct_rc_txqp_add_flush_comp(&iface->super, &ep->super.super,
                                       &ep->super.txqp, comp, ep->tx.wq.sig_pi);
+}
+
+ucs_status_t uct_rc_mlx5_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+{
+    UCT_RC_MLX5_EP_DECL(tl_ep, iface, ep);
+
+    return uct_ib_mlx5_modify_qp_state(&iface->super.super, &ep->tx.wq.super,
+                                       IBV_QPS_ERR);
 }
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
@@ -987,8 +994,6 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 {
     uct_rc_mlx5_iface_common_t *iface = ucs_derived_of(self->super.super.super.iface,
                                                        uct_rc_mlx5_iface_common_t);
-    uct_ib_mlx5_md_t *md              = ucs_derived_of(iface->super.super.super.md,
-                                                       uct_ib_mlx5_md_t);
     uct_rc_mlx5_iface_qp_cleanup_ctx_t *cleanup_ctx;
     uint16_t outstanding, wqe_count;
 
@@ -1007,7 +1012,8 @@ UCS_CLASS_CLEANUP_FUNC(uct_rc_mlx5_ep_t)
 #endif
 
     ucs_assert(self->mp.free == 1);
-    (void)uct_ib_mlx5_modify_qp_state(md, &self->tx.wq.super, IBV_QPS_ERR);
+    (void)uct_ib_mlx5_modify_qp_state(&iface->super.super, &self->tx.wq.super,
+                                      IBV_QPS_ERR);
 
     /* Keep only one unreleased CQ credit per WQE, so we will not have CQ
        overflow. These CQ credits will be released by error CQE handler. */

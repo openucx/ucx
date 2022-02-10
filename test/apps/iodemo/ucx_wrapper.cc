@@ -113,7 +113,7 @@ void UcxContext::UcxDisconnectCallback::operator()(ucs_status_t status)
 UcxContext::UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
                        bool use_epoll) :
     _context(NULL), _worker(NULL), _listener(NULL), _iomsg_recv_request(NULL),
-    _iomsg_buffer(iomsg_size, '\0'), _connect_timeout(connect_timeout),
+    _iomsg_buffer(iomsg_size), _connect_timeout(connect_timeout),
     _use_am(use_am), _worker_fd(-1), _epoll_fd(-1)
 {
     if (use_epoll) {
@@ -444,15 +444,15 @@ void UcxContext::progress_io_message()
         UCX_LOG << "could not find connection with id " << conn_id;
     } else {
         UcxConnection *conn = iter->second;
-        if (!conn->is_established()) {
-            // tag-recv request can be completed before stream-recv callback has
-            // been invoked, go to another progress round and handle this io-msg
-            return;
-        }
-
         if (conn->ucx_status() == UCS_OK) {
             dispatch_io_message(conn, &_iomsg_buffer[0],
                                 _iomsg_recv_request->recv_length);
+        } else if (!conn->is_established()) {
+            // tag-recv request can be completed before stream-recv callback
+            // has been invoked, defer the processing of io message to the
+            // point when connection is established
+            conn->iomsg_recv_defer(_iomsg_buffer,
+                                   _iomsg_recv_request->recv_length);
         }
     }
     request_release(_iomsg_recv_request);
@@ -945,7 +945,7 @@ bool UcxConnection::send_am(const void *meta, size_t meta_length,
     param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK  |
                          UCP_OP_ATTR_FIELD_FLAGS;
     param.cb.send      = common_request_callback_nbx;
-    param.flags        = UCP_AM_SEND_REPLY;
+    param.flags        = UCP_AM_SEND_FLAG_REPLY;
     param.datatype     = 0; // make coverity happy
     if (memh) {
         param.op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
@@ -981,6 +981,12 @@ bool UcxConnection::recv_am_data(void *buffer, size_t length, ucp_mem_h memh,
                                                data_desc._data, buffer, length,
                                                &param);
     return process_request("ucp_am_recv_data_nbx", sp, callback);
+}
+
+void UcxConnection::iomsg_recv_defer(const UcxContext::iomsg_buffer_t &iomsg,
+                                     size_t iomsg_length)
+{
+    _iomsg_recv_backlog.push(iomsg);
 }
 
 void UcxConnection::cancel_all()
@@ -1195,6 +1201,15 @@ void UcxConnection::established(ucs_status_t status)
 
     _context.remove_connection_inprogress(this);
     invoke_callback(_establish_cb, status);
+
+    if (status == UCS_OK) {
+        while (!_iomsg_recv_backlog.empty()) {
+            const UcxContext::iomsg_buffer_t &iomsg =
+                    _iomsg_recv_backlog.front();
+            _context.dispatch_io_message(this, &iomsg[0], iomsg.size());
+            _iomsg_recv_backlog.pop();
+        }
+    }
 }
 
 bool UcxConnection::send_common(const void *buffer, size_t length,

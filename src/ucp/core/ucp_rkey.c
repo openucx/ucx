@@ -14,12 +14,13 @@
 
 #include <ucp/core/ucp_mm.inl>
 #include <ucp/rma/rma.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucs/datastruct/mpool.inl>
 #include <ucs/profile/profile.h>
 #include <ucs/type/float8.h>
 #include <ucs/type/serialize.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <inttypes.h>
 
 
@@ -470,8 +471,8 @@ out:
     return status;
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack, (ep, rkey_buffer, rkey_p),
-                 ucp_ep_h ep, const void *rkey_buffer, ucp_rkey_h *rkey_p)
+ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
+                                ucp_rkey_h *rkey_p)
 {
     ucs_status_t status;
 

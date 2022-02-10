@@ -367,6 +367,9 @@ init_qp:
         goto err_qp;
     }
 
+    dci->pool_index = pool_index;
+    dci->path_index = path_index;
+
     status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {
         goto err;
@@ -388,8 +391,6 @@ init_qp:
     }
 
     uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
-    dci->pool_index = pool_index;
-    dci->path_index = path_index;
 
     return UCS_OK;
 
@@ -1224,7 +1225,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
         .super = {
             .iface_estimate_perf = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh   = uct_dc_mlx5_iface_vfs_refresh,
-            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate       = uct_dc_mlx5_ep_invalidate
         },
         .create_cq      = uct_ib_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
@@ -1529,8 +1531,6 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
 
 void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 {
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.super.md,
-                                              uct_ib_mlx5_md_t);
     uct_ib_mlx5_txwq_t *txwq = &iface->tx.dcis[dci_index].txwq;
     ucs_status_t status;
 
@@ -1544,7 +1544,8 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(&iface->super,
                                            &iface->super.super.super);
-    status = uct_ib_mlx5_modify_qp_state(md, &txwq->super, IBV_QPS_RESET);
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super.super,
+                                         &txwq->super, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->super,
                                          &iface->super.super.super);
 
@@ -1597,10 +1598,6 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
         /* Do not report errors on flow control endpoint */
         ucs_debug("got error on DC flow-control endpoint, iface %p: %s", iface,
                   ucs_status_string(ep_status));
-        return;
-    }
-
-    if (ep_status == UCS_ERR_CANCELED) {
         return;
     }
 

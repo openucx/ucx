@@ -145,15 +145,54 @@ ucp_proto_rndv_get_zcopy_fetch_progress(uct_pending_req_t *uct_req)
             ucp_proto_rndv_get_zcopy_fetch_completion);
 }
 
+static void
+ucp_proto_rndv_get_zcopy_fetch_err_completion(uct_completion_t *uct_comp)
+{
+    ucp_request_t *req  = ucs_container_of(uct_comp, ucp_request_t,
+                                          send.state.uct_comp);
+
+    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
+                                &req->send.state.dt_iter,
+                                UCS_BIT(UCP_DATATYPE_CONTIG));
+    ucp_proto_rndv_rkey_destroy(req);
+    ucp_proto_rndv_recv_complete_status(req, uct_comp->status);
+}
+
+static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
+                                           ucs_status_t status)
+{
+    ucp_request_t *rreq UCS_V_UNUSED;
+
+    switch (request->send.proto_stage) {
+    case UCP_PROTO_RNDV_GET_STAGE_FETCH:
+        /* The error completion handler is not sending ATS */
+        request->send.state.uct_comp.func =
+                ucp_proto_rndv_get_zcopy_fetch_err_completion;
+        ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
+        break;
+    case UCP_PROTO_RNDV_GET_STAGE_ATS:
+        rreq = ucp_request_get_super(request);
+        /* Locally the data is received, can complete with OK */
+        ucs_assert(rreq->recv.length == rreq->recv.tag.info.length);
+        ucp_proto_rndv_recv_complete(request);
+        break;
+    default:
+        ucs_fatal("req %p: %s has invalid stage %d", request,
+                  request->send.proto_config->proto->name,
+                  request->send.proto_stage);
+    }
+}
+
 static ucp_proto_t ucp_rndv_get_zcopy_proto = {
-    .name       = "rndv/get/zcopy",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_get_zcopy_init,
-    .config_str = ucp_proto_rndv_bulk_config_str,
-    .progress   = {
+    .name     = "rndv/get/zcopy",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_get_zcopy_init,
+    .query    = ucp_proto_rndv_bulk_query,
+    .progress = {
          [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_zcopy_fetch_progress,
          [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
-    }
+    },
+    .abort    = ucp_rndv_get_zcopy_proto_abort
 };
 UCP_PROTO_REGISTER(&ucp_rndv_get_zcopy_proto);
 
@@ -248,14 +287,15 @@ ucp_proto_rndv_get_mtype_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_rndv_get_mtype_proto = {
-    .name       = "rndv/get/mtype",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_get_mtype_init,
-    .config_str = ucp_proto_rndv_bulk_config_str,
-    .progress   = {
+    .name     = "rndv/get/mtype",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_get_mtype_init,
+    .query    = ucp_proto_rndv_bulk_query,
+    .progress = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress,
-    }
+    },
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_get_mtype_proto);
 
@@ -303,10 +343,11 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
 }
 
 static ucp_proto_t ucp_rndv_ats_proto = {
-    .name       = "rndv/ats",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_ats_init,
-    .config_str = ucp_proto_rndv_ack_config_str,
-    .progress   = {ucp_proto_rndv_ats_progress}
+    .name     = "rndv/ats",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_ats_init,
+    .query    = ucp_proto_default_query,
+    .progress = {ucp_proto_rndv_ats_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_ats_proto);

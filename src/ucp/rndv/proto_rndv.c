@@ -10,8 +10,9 @@
 
 #include "proto_rndv.inl"
 
-#include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_init.h>
+#include <ucp/proto/proto_debug.h>
+#include <ucp/proto/proto_common.inl>
 
 
 static void
@@ -283,25 +284,6 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     return UCS_OK;
 }
 
-void ucp_proto_rndv_ctrl_config_str(size_t min_length, size_t max_length,
-                                    const void *priv, ucs_string_buffer_t *strb)
-{
-    const ucp_proto_rndv_ctrl_priv_t *rpriv = priv;
-    ucp_md_index_t md_index;
-
-    /* Print message lane and memory domains list */
-    ucs_string_buffer_appendf(strb, "ln:%d md:", rpriv->lane);
-    ucs_for_each_bit(md_index, rpriv->md_map) {
-        ucs_string_buffer_appendf(strb, "%d,", md_index);
-    }
-    ucs_string_buffer_rtrim(strb, ",");
-    ucs_string_buffer_appendf(strb, " ");
-
-    /* Print estimated remote protocols for each message size */
-    ucp_proto_threshold_elem_str(rpriv->remote_proto.thresholds, min_length,
-                                 max_length, strb);
-}
-
 ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_h context                    = init_params->worker->context;
@@ -395,16 +377,6 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
     return UCS_OK;
 }
 
-void ucp_proto_rndv_ack_config_str(size_t min_length, size_t max_length,
-                                   const void *priv, ucs_string_buffer_t *strb)
-{
-    const ucp_proto_rndv_ack_priv_t *apriv = priv;
-
-    if (apriv->lane != UCP_NULL_LANE) {
-        ucs_string_buffer_appendf(strb, "aln:%d", apriv->lane);
-    }
-}
-
 ucs_status_t
 ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
                          ucp_proto_rndv_bulk_priv_t *rpriv, size_t *priv_size_p)
@@ -445,17 +417,16 @@ ucs_status_t ucp_proto_rndv_ats_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_rndv_recv_complete);
 }
 
-void ucp_proto_rndv_bulk_config_str(size_t min_length, size_t max_length,
-                                    const void *priv, ucs_string_buffer_t *strb)
+void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
 {
-    const ucp_proto_rndv_bulk_priv_t *rpriv = priv;
+    const ucp_proto_rndv_bulk_priv_t *rpriv     = params->priv;
+    ucp_proto_query_params_t multi_query_params = {
+        .priv       = &rpriv->mpriv,
+        .msg_length = params->msg_length
+    };
 
-    ucp_proto_multi_config_str(min_length, max_length, &rpriv->mpriv, strb);
-    if (rpriv->super.lane != UCP_NULL_LANE) {
-        ucs_string_buffer_appendf(strb, " ");
-        ucp_proto_rndv_ack_config_str(min_length, max_length, &rpriv->super,
-                                      strb);
-    }
+    ucp_proto_multi_query_config(&multi_query_params, attr);
 }
 
 static ucs_status_t

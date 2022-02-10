@@ -488,6 +488,21 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_WAKEUP,
                                TEST_AM | WAKEUP, "am_wakeup");
     }
+
+    void wakeup_drain_check_no_events(const std::vector<entity*> &entities)
+    {
+        ucs_time_t deadline = ucs::get_deadline();
+        int ret;
+
+        /* Read all possible wakeup events to make sure that no more events
+         * arrive */
+        do {
+            progress(entities);
+            ret = wait_for_wakeup(entities, 0);
+        } while ((ret > 0) && (ucs_get_time() < deadline));
+
+        EXPECT_EQ(ret, 0);
+    }
 };
 
 UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
@@ -517,14 +532,16 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     /* flush all outstanding ops to allow keepalive to run */
     flush_worker(sender());
     if (get_variant_value() & WAKEUP) {
-        wait_for_wakeup({ &sender(), &failing_receiver() },
-                        100, true);
+        check_events({ &sender(), &failing_receiver() }, true);
+
+        /* make sure no remaining events are returned from poll() */
+        wakeup_drain_check_no_events({ &sender(), &failing_receiver() });
     }
 
     /* kill EPs & ifaces */
     failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
     if (get_variant_value() & WAKEUP) {
-        wait_for_wakeup({ &sender() });
+        wakeup_drain_check_no_events({ &sender() });
     }
     wait_for_flag(&m_err_count);
 
@@ -535,6 +552,15 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     }
 
     EXPECT_NE(0, m_err_count);
+
+    ucp_ep_h ep = sender().revoke_ep(0, FAILING_EP_INDEX);
+    void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
+    request_wait(creq);
+
+    /* make sure no remaining events are returned from poll() */
+    if (get_variant_value() & WAKEUP) {
+        wakeup_drain_check_no_events({ &sender() });
+    }
 
     /* check if stable receiver is still works */
     m_err_count = 0;

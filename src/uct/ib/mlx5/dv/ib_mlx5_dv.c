@@ -267,7 +267,7 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
         if (ret) {
             ucs_error("mlx5dv_devx_qp_query(%x) failed, syndrome %x: %m",
                       UCT_IB_MLX5_CMD_OP_QUERY_QP,
-                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+                      UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
             return UCS_ERR_IO_ERROR;
         }
         break;
@@ -276,7 +276,7 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
         if (ret) {
             ucs_error("mlx5dv_devx_obj_query(%x) failed, syndrome %x: %m",
                       UCT_IB_MLX5_CMD_OP_QUERY_QP,
-                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+                      UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
             return UCS_ERR_IO_ERROR;
         }
         break;

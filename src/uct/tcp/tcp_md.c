@@ -152,4 +152,3 @@ uct_component_t uct_tcp_component = {
     .flags              = UCT_COMPONENT_FLAG_CM,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_tcp_component)

@@ -251,7 +251,8 @@ void ucp_test::check_events(const std::vector<entity*> &entities, bool wakeup,
     }
 
     if (wakeup) {
-        wait_for_wakeup(entities, -1, false, worker_index);
+        int ret = wait_for_wakeup(entities, -1, worker_index);
+        EXPECT_GE(ret, 1);
     }
 }
 
@@ -348,9 +349,10 @@ void ucp_test::request_cancel(entity &e, void *req)
     }
 }
 
-void ucp_test::wait_for_wakeup(const std::vector<entity*> &entities,
-                               int poll_timeout, bool drain, int worker_index)
+int ucp_test::wait_for_wakeup(const std::vector<entity*> &entities,
+                              int poll_timeout, int worker_index)
 {
+    int total_ret = 0, ret;
     std::vector<int> efds;
 
     for (auto e : entities) {
@@ -362,27 +364,33 @@ void ucp_test::wait_for_wakeup(const std::vector<entity*> &entities,
 
         ucs_status_t status = ucp_worker_arm(worker);
         if (status == UCS_ERR_BUSY) {
-            return;
+            ++total_ret;
+        } else {
+            ASSERT_UCS_OK(status);
         }
-        ASSERT_UCS_OK(status);
     }
 
-    int ret;
+    if (total_ret > 0) {
+        return total_ret;
+    }
+
+    std::vector<struct pollfd> pfd;
+    for (int fd : efds) {
+        pfd.push_back({ fd, POLLIN });
+    }
+
     do {
-        std::vector<struct pollfd> pfd;
-
-        for (int fd : efds) {
-            pfd.push_back({ fd, POLLIN });
-        }
-
         ret = poll(&pfd[0], efds.size(), poll_timeout);
-    } while (((ret < 0) && (errno == EINTR)) || (drain && (ret > 0)));
+        if (ret > 0) {
+            total_ret += ret;
+        }
+    } while ((ret < 0) && (errno == EINTR));
 
     if (ret < 0) {
         UCS_TEST_MESSAGE << "poll() failed: " << strerror(errno);
     }
 
-    EXPECT_GE(ret, 1);
+    return total_ret;
 }
 
 int ucp_test::max_connections() {

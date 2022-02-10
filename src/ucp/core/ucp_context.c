@@ -2012,8 +2012,8 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
 {
     uct_md_mem_attr_t mem_attr;
     ucs_status_t status;
+    ucp_tl_md_t *tl_md;
     ucp_md_index_t i;
-    uct_md_h md;
 
     mem_attr.field_mask = UCT_MD_MEM_ATTR_FIELD_MEM_TYPE |
                           UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS |
@@ -2021,18 +2021,27 @@ void ucp_memory_detect_slowpath(ucp_context_h context, const void *address,
                           UCT_MD_MEM_ATTR_FIELD_SYS_DEV;
 
     for (i = 0; i < context->num_mem_type_detect_mds; ++i) {
-        md     = context->tl_mds[context->mem_type_detect_mds[i]].md;
-        status = uct_md_mem_query(md, address, length, &mem_attr);
-        if (status == UCS_OK) {
-            mem_info->type         = mem_attr.mem_type;
-            mem_info->sys_dev      = mem_attr.sys_dev;
-            mem_info->base_address = mem_attr.base_address;
-            mem_info->alloc_length = mem_attr.alloc_length;
-            return;
+        tl_md  = &context->tl_mds[context->mem_type_detect_mds[i]];
+        status = uct_md_mem_query(tl_md->md, address, length, &mem_attr);
+        if (status != UCS_OK) {
+            continue;
         }
+
+        ucs_trace_req("address %p length %zu: md %s detected as type '%s' %s",
+                      address, length, tl_md->rsc.md_name,
+                      ucs_memory_type_names[mem_attr.mem_type],
+                      ucs_topo_sys_device_get_name(mem_attr.sys_dev));
+        mem_info->type         = mem_attr.mem_type;
+        mem_info->sys_dev      = mem_attr.sys_dev;
+        mem_info->base_address = mem_attr.base_address;
+        mem_info->alloc_length = mem_attr.alloc_length;
+        return;
     }
 
     /* Memory type not detected by any memtype MD - assume it is host memory */
+    ucs_trace_req("address %p length %zu: not detected by any md (have: %d), "
+                  "assuming host memory",
+                  address, length, context->num_mem_type_detect_mds);
     ucs_memory_info_set_host(mem_info);
 }
 

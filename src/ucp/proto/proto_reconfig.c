@@ -89,10 +89,11 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_reconfig_proto = {
-    .name       = "reconfig",
-    .flags      = UCP_PROTO_FLAG_INVALID,
-    .init       = ucp_proto_reconfig_init,
-    .config_str = (ucp_proto_config_str_func_t)ucs_empty_function,
-    .progress   = {ucp_proto_reconfig_progress}
+    .name     = "reconfig",
+    .flags    = UCP_PROTO_FLAG_INVALID,
+    .init     = ucp_proto_reconfig_init,
+    .query    = ucp_proto_default_query,
+    .progress = {ucp_proto_reconfig_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_reconfig_proto);

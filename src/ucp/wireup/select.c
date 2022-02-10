@@ -1616,7 +1616,7 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
     }
 
     /* User should not create endpoints unless requested communication features */
-    if (select_ctx->num_lanes == 0) {
+    if (select_params->show_error && (select_ctx->num_lanes == 0)) {
         ucs_error("No transports selected to %s (features: 0x%"PRIx64")",
                   select_params->address->name,
                   ucp_ep_get_context_features(select_params->ep));

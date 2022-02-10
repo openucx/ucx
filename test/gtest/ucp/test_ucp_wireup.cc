@@ -58,9 +58,9 @@ protected:
     void send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker, ucp_ep_h recv_ep,
                    size_t vecsize, int repeat);
 
-    void disconnect(ucp_ep_h ep);
+    void disconnect(ucp_ep_h ep, bool force = false);
 
-    void disconnect(ucp_test::entity &e);
+    void disconnect(ucp_test::entity &e, bool force = false);
 
     static void close_completion(void *request, ucs_status_t status,
                                  void *user_data);
@@ -375,16 +375,20 @@ void test_ucp_wireup::send_recv(ucp_ep_h send_ep, ucp_worker_h recv_worker,
     m_rkeys.clear();
 }
 
-void test_ucp_wireup::disconnect(ucp_ep_h ep) {
-    void *req = ucp_disconnect_nb(ep);
+void test_ucp_wireup::disconnect(ucp_ep_h ep, bool force) {
+    ucp_request_param_t param;
+    param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
+    param.flags        = (force) ? UCP_EP_CLOSE_FLAG_FORCE : 0;
+
+    void *req = ucp_ep_close_nbx(ep, &param);
     if (!UCS_PTR_IS_PTR(req)) {
         ASSERT_UCS_OK(UCS_PTR_STATUS(req));
     }
     request_wait(req);
 }
 
-void test_ucp_wireup::disconnect(ucp_test::entity &e) {
-    disconnect(e.revoke_ep());
+void test_ucp_wireup::disconnect(ucp_test::entity &e, bool force) {
+    disconnect(e.revoke_ep(), force);
 }
 
 bool test_ucp_wireup::ep_iface_has_caps(const entity& e, const std::string& tl,
@@ -945,6 +949,31 @@ UCS_TEST_P(test_ucp_wireup_errh_peer, msg_before_ep_create) {
     flush_worker(receiver());
 }
 
+UCS_TEST_P(test_ucp_wireup_errh_peer, stress_connect_force_disconnect) {
+    int max_count = (int)ucs_max(10,
+                                 (1000.0 / (ucs::test_time_multiplier() *
+                                            ucs::test_time_multiplier())));
+    int count     = (get_variant_value() & NO_EP_MATCH) ?
+                    ucs_min(max_count, max_connections() / 2) : max_count;
+
+    for (int i = 0; i < count; ++i) {
+        sender().connect(&receiver(), get_ep_params());
+        send_recv(sender().ep(), receiver().worker(), receiver().ep(), 1, 1);
+        if (!is_loopback()) {
+            receiver().connect(&sender(), get_ep_params());
+            send_recv(receiver().ep(), sender().worker(), sender().ep(), 1, 1);
+        }
+
+        flush_worker(sender());
+        flush_worker(receiver());
+
+        disconnect(sender(), true);
+        if (!is_loopback()) {
+            disconnect(receiver(), true);
+        }
+    }
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_wireup_errh_peer)
 
 class test_ucp_wireup_fallback : public test_ucp_wireup {
@@ -1167,7 +1196,7 @@ public:
             EXPECT_TRUE(worker_has_tls(worker, better_tl, i)) <<
                 " transport " << better_tl << " should not be closed";
             EXPECT_FALSE(worker_has_tls(worker, tl, i)) <<
-                " transport " << better_tl << " should be closed";
+                " transport " << tl << " should be closed";
         }
     }
 };

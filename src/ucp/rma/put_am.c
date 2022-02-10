@@ -104,11 +104,12 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_put_am_bcopy_proto = {
-    .name       = "put/am/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_put_am_bcopy_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_put_am_bcopy_progress}
+    .name     = "put/am/bcopy",
+    .flags    = 0,
+    .init     = ucp_proto_put_am_bcopy_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_put_am_bcopy_progress},
+    .abort    = ucp_proto_request_bcopy_abort
 };
 UCP_PROTO_REGISTER(&ucp_put_am_bcopy_proto);
 

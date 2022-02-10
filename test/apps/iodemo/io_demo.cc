@@ -89,6 +89,7 @@ typedef struct {
     unsigned                 progress_count;
     const char*              src_addr;
     bool                     prereg;
+    bool                     per_conn_info;
 } options_t;
 
 #define LOG_PREFIX  "[DEMO]"
@@ -245,7 +246,7 @@ public:
 
     virtual BufferType *construct()
     {
-        return BufferType::allocate(this->buffer_size(), *this, _memory_type,
+        return BufferType::allocate(this->buffer_size(), this, _memory_type,
                                     _context);
     }
 
@@ -471,20 +472,18 @@ protected:
 
     class Buffer {
     public:
-        Buffer(void *buffer, size_t size, BufferMemoryPool<Buffer> &pool,
-               ucs_memory_type_t memory_type, UcxContext *map_context,
-               ucp_mem_h memh) :
-            _capacity(size),
-            _buffer(buffer),
+        Buffer() :
+            _capacity(0),
+            _buffer(NULL),
             _size(0),
-            _pool(pool),
-            _memory_type(memory_type),
-            _map_context(map_context),
-            _memh(memh)
+            _pool(NULL),
+            _memory_type(UCS_MEMORY_TYPE_LAST),
+            _map_context(NULL),
+            _memh(NULL)
         {
         }
 
-        static Buffer *allocate(size_t size, BufferMemoryPool<Buffer> &pool,
+        static Buffer *allocate(size_t size, BufferMemoryPool<Buffer> *pool,
                                 ucs_memory_type_t memory_type,
                                 UcxContext *map_context)
         {
@@ -511,7 +510,7 @@ protected:
 #endif
             case UCS_MEMORY_TYPE_HOST:
                 buffer = UcxContext::memalign(ALIGNMENT, size,
-                                              pool.name().c_str());
+                                              pool->name().c_str());
                 break;
             default:
                 LOG << "ERROR: Unsupported memory type requested: "
@@ -537,6 +536,10 @@ protected:
 
         ~Buffer()
         {
+            if (_buffer == NULL) {
+                return; /* Dummy buffer */
+            }
+
             if ((_memh != NULL) && !_map_context->unmap_buffer(_memh)) {
                 LOG << "WARNING: Failed to unmap buffer" << _buffer;
             }
@@ -563,7 +566,7 @@ protected:
 
         void release()
         {
-            _pool.put(this);
+            _pool->put(this);
         }
 
         inline void *buffer(size_t offset = 0) const
@@ -587,13 +590,27 @@ protected:
             return _size;
         }
 
+    private:
+        Buffer(void *buffer, size_t size, BufferMemoryPool<Buffer> *pool,
+               ucs_memory_type_t memory_type, UcxContext *map_context,
+               ucp_mem_h memh) :
+            _capacity(size),
+            _buffer(buffer),
+            _size(0),
+            _pool(pool),
+            _memory_type(memory_type),
+            _map_context(map_context),
+            _memh(memh)
+        {
+        }
+
     public:
         const size_t             _capacity;
 
     private:
         void                     *_buffer;
         size_t                   _size;
-        BufferMemoryPool<Buffer> &_pool;
+        BufferMemoryPool<Buffer> *_pool;
         ucs_memory_type_t        _memory_type;
         UcxContext               *_map_context;
         ucp_mem_h                _memh;
@@ -650,7 +667,7 @@ protected:
             }
         }
 
-        void init(size_t data_size, void *ext_buf)
+        void init(size_t data_size, void *ext_buf, bool validate)
         {
             assert(ext_buf != NULL);
             assert(_iov.empty());
@@ -658,11 +675,18 @@ protected:
 
             _data_size = data_size;
             _extra_buf = ext_buf;
+            _validate  = validate;
         }
 
         inline Buffer &operator[](size_t i) const
         {
-            return *_iov[i];
+            if (i < _iov.size()) {
+                return *_iov[i];
+            } else {
+                static Buffer dummy;
+                assert(_extra_buf);
+                return dummy;
+            }
         }
 
         void release() {
@@ -1015,7 +1039,7 @@ protected:
 
         if (!ucx_am_is_rndv(data_desc)) {
             iov = _data_buffers_pool.get();
-            iov->init(data_size, ucx_am_get_data(data_desc));
+            iov->init(data_size, ucx_am_get_data(data_desc), opts().validate);
         } else {
             iov = prepare_recv_data_iov(data_size);
         }
@@ -2365,6 +2389,9 @@ private:
             server_info_t& server_info   = _server_info[server_index];
             long total_completed         = 0;
             size_t total_bytes_completed = 0;
+            UcxLog conn_log(server_info.conn->get_log_prefix(),
+                            opts().per_conn_info);
+
             for (int op = 0; op <= IO_OP_MAX; ++op) {
                 size_t bytes_completed;
                 long num_completed;
@@ -2399,6 +2426,17 @@ private:
                         std::max(num_completed, io_op_perf_info[op].max);
                 io_op_perf_info[op].total       += num_completed;
                 io_op_perf_info[op].total_bytes += bytes_completed;
+
+                if (opts().per_conn_info) {
+                    double mbs       = bytes_completed / (elapsed * UCS_MBYTE);
+                    long iops        = (long)(num_completed / elapsed);
+                    const char *name = (op == IO_OP_MAX) ?
+                                       "total" : io_op_names[op];
+                    const char *tail = (op == IO_OP_MAX) ? "" : " | ";
+
+                    conn_log << name << " " << mbs << "MBs " << "iops: "
+                             << iops << tail;
+                }
             }
         }
 
@@ -2635,9 +2673,10 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->progress_count        = 1;
     test_opts->src_addr              = NULL;
     test_opts->prereg                = false;
+    test_opts->per_conn_info         = false;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:z")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:zV")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2788,6 +2827,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
         case 'z':
             test_opts->prereg = true;
             break;
+        case 'V':
+            test_opts->per_conn_info = true;
+            break;
         case 'h':
         default:
             std::cout << "Usage: io_demo [options] [server_address]" << std::endl;
@@ -2830,6 +2872,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             std::cout << "  -L <progress_count>         Maximal number of consecutive ucp_worker_progress invocations" << std::endl;
             std::cout << "  -I <src_addr>               Set source IP address to select network interface on client side" << std::endl;
             std::cout << "  -z                          Enable pre-register buffers for zero-copy" << std::endl;
+            std::cout << "  -V                          Print per-connection info" << std::endl;
             return -1;
         }
     }

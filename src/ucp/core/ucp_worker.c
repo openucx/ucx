@@ -2344,10 +2344,11 @@ static void ucp_worker_discard_uct_ep_complete(ucp_request_t *req)
 
 static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
 {
-    ucp_request_t *req  = (ucp_request_t*)arg;
-    uct_ep_h uct_ep     = req->send.discard_uct_ep.uct_ep;
-    ucp_ep_h ucp_ep     = req->send.ep;
-    ucp_worker_h worker = ucp_ep->worker;
+    ucp_request_t *req        = (ucp_request_t*)arg;
+    uct_ep_h uct_ep           = req->send.discard_uct_ep.uct_ep;
+    ucp_rsc_index_t rsc_index = req->send.discard_uct_ep.rsc_index;
+    ucp_ep_h ucp_ep           = req->send.ep;
+    ucp_worker_h worker       = ucp_ep->worker;
     khiter_t iter;
 
     ucp_trace_req(req, "destroy uct_ep=%p", uct_ep);
@@ -2362,6 +2363,7 @@ static unsigned ucp_worker_discard_uct_ep_destroy_progress(void *arg)
                   uct_ep, worker);
     }
 
+    ucp_ep_unprogress_uct_ep(ucp_ep, uct_ep, rsc_index);
     uct_ep_destroy(uct_ep);
     ucp_worker_discard_uct_ep_complete(req);
 
@@ -2532,9 +2534,14 @@ void ucp_worker_destroy(ucp_worker_h worker)
     uct_worker_progress_unregister_safe(worker->uct, &worker->keepalive.cb_id);
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
-    ucp_worker_remove_am_handlers(worker);
     ucp_am_cleanup(worker);
     ucp_worker_discard_uct_ep_cleanup(worker);
+    /* Put ucp_worker_remove_am_handlers after ucp_worker_discard_uct_ep_cleanup
+     * to make sure iface->am[] always cleared.
+     * ucp_worker_discard_uct_ep_cleanup might trigger ucp_worker_iface_deactivate
+     * which further set iface->am[UCP_AM_ID_WIREUP].
+     */
+    ucp_worker_remove_am_handlers(worker);
 
     if (worker->flush_ops_count != 0) {
         ucs_warn("worker %p: %u pending operations were not flushed", worker,
@@ -2717,32 +2724,26 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd)
     return status;
 }
 
-ucs_status_t ucp_worker_arm(ucp_worker_h worker)
+static ucs_status_t
+ucp_worker_fd_read(ucp_worker_h worker, int fd, const char *fd_name)
 {
-    ucp_worker_iface_t *wiface;
     ucs_status_t status;
     uint64_t dummy;
     int ret;
 
-    ucs_trace_func("worker=%p", worker);
-
-    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
-                                    return UCS_ERR_INVALID_PARAM);
-
-    /* Read from event pipe. If some events are found, return BUSY,
-     * Otherwise, continue to arm the transport interfaces.
-     */
     do {
-        ret = read(worker->eventfd, &dummy, sizeof(dummy));
+        ret = read(fd, &dummy, sizeof(dummy));
         if (ret == sizeof(dummy)) {
-            ucs_trace("worker %p: extracted queued event", worker);
+            ucs_trace_poll("worker %p: extracted queued event for fd=%d (%s)",
+                           worker, fd, fd_name);
             status = UCS_ERR_BUSY;
             goto out;
         } else if (ret == -1) {
             if (errno == EAGAIN) {
                 break; /* No more events */
             } else if (errno != EINTR) {
-                ucs_error("read from internal event fd failed: %m");
+                ucs_error("worker %p: read from fd=%d (%s) failed: %m",
+                          worker, fd, fd_name);
                 status = UCS_ERR_IO_ERROR;
                 goto out;
             }
@@ -2750,6 +2751,50 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
             ucs_assert(ret == 0);
         }
     } while (ret != 0);
+
+    status = UCS_OK;
+
+out:
+    return status;
+}
+
+ucs_status_t ucp_worker_arm(ucp_worker_h worker)
+{
+    ucp_worker_iface_t *wiface;
+    ucs_status_t status;
+
+    ucs_trace_func("worker=%p", worker);
+
+    UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_WAKEUP,
+                                    return UCS_ERR_INVALID_PARAM);
+
+    /* Read from event pipe. If some events are found, return BUSY, otherwise -
+     * continue to arm the transport interfaces.
+     */
+    status = ucp_worker_fd_read(worker, worker->eventfd, "internal event fd");
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (worker->keepalive.timerfd >= 0) {
+        /* Do read() of 8-byte unsigned integer containing the number of
+         * expirations that have occured to make sure no events will be
+         * triggered again until timer isn't expired again.
+         */
+        status = ucp_worker_fd_read(worker, worker->keepalive.timerfd,
+                                    "keepalive fd");
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        /* Make sure not missing keepalive rounds after a long time without
+         * calling UCP worker progress.
+         */
+        UCS_STATIC_ASSERT(ucs_is_pow2_or_zero(UCP_WORKER_KEEPALIVE_ITER_SKIP));
+        worker->keepalive.iter_count =
+                ucs_align_up_pow2(worker->keepalive.iter_count,
+                                  UCP_WORKER_KEEPALIVE_ITER_SKIP);
+    }
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
@@ -2760,15 +2805,11 @@ ucs_status_t ucp_worker_arm(ucp_worker_h worker)
         ucs_trace_data("arm iface %p returned %s", wiface->iface,
                        ucs_status_string(status));
         if (status != UCS_OK) {
-            goto out_unlock;
+            break;
         }
     }
 
-    status = UCS_OK;
-
-out_unlock:
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(worker);
-out:
     return status;
 }
 
@@ -2978,13 +3019,12 @@ ucp_worker_keepalive_timerfd_init(ucp_worker_h worker)
     struct timespec ts;
     int ret;
 
-
     if (!(worker->context->config.features & UCP_FEATURE_WAKEUP) ||
         (worker->keepalive.timerfd >= 0)) {
         return;
     }
 
-    worker->keepalive.timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    worker->keepalive.timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (worker->keepalive.timerfd < 0) {
         ucs_warn("worker %p: failed to create keepalive timer fd: %m",
                  worker);
@@ -3002,10 +3042,16 @@ ucp_worker_keepalive_timerfd_init(ucp_worker_h worker)
                  "(fd=%d interval=%lu.%06lu) failed: %m", worker,
                  worker->keepalive.timerfd, ts.tv_sec,
                  ts.tv_nsec * UCS_NSEC_PER_USEC);
+        goto err_close_timerfd;
     }
 
     ucp_worker_wakeup_ctl_fd(worker, UCP_WORKER_EPFD_OP_ADD,
                              worker->keepalive.timerfd);
+
+    return;
+
+err_close_timerfd:
+    close(worker->keepalive.timerfd);
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -3155,6 +3201,7 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
 static ucs_status_t
 ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                             ucp_rsc_index_t rsc_index,
                              unsigned ep_flush_flags,
                              ucp_send_nbx_callback_t discarded_cb,
                              void *discarded_cb_arg)
@@ -3200,6 +3247,7 @@ ucp_worker_discard_tl_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     req->send.discard_uct_ep.uct_ep         = uct_ep;
     req->send.discard_uct_ep.ep_flush_flags = ep_flush_flags;
     req->send.discard_uct_ep.cb_id          = UCS_CALLBACKQ_ID_NULL;
+    req->send.discard_uct_ep.rsc_index      = rsc_index;
     ucp_request_set_user_callback(req, send.cb, discarded_cb, discarded_cb_arg);
 
     ucp_worker_discard_uct_ep_progress(req);
@@ -3238,6 +3286,7 @@ int ucp_worker_is_uct_ep_discarding(ucp_worker_h worker, uct_ep_h uct_ep)
 }
 
 ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                       ucp_rsc_index_t rsc_index,
                                        unsigned ep_flush_flags,
                                        uct_pending_purge_callback_t purge_cb,
                                        void *purge_arg,
@@ -3258,7 +3307,7 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
         }
     }
 
-    return ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, ep_flush_flags,
+    return ucp_worker_discard_tl_uct_ep(ucp_ep, uct_ep, rsc_index, ep_flush_flags,
                                         discarded_cb, discarded_cb_arg);
 }
 

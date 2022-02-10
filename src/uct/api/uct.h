@@ -23,7 +23,7 @@
 #include <ucs/type/cpu_set.h>
 #include <ucs/stats/stats_fwd.h>
 #include <ucs/sys/compiler_def.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 
 #include <sys/socket.h>
 #include <stdio.h>
@@ -1175,14 +1175,6 @@ struct uct_ep_params {
     const ucs_sock_addr_t             *sockaddr;
 
     /**
-     * The sockaddr to bind locally. If set, @ref uct_ep_create
-     * will create an endpoint binding with this local sockaddr.
-     * @note The interface in this routine requires the
-     * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
-     */
-    const ucs_sock_addr_t             *local_sockaddr;
-
-    /**
      * @ref uct_cb_flags to indicate @ref uct_ep_params_t::sockaddr_pack_cb,
      * @ref uct_ep_params_t::sockaddr_cb_client,
      * @ref uct_ep_params_t::sockaddr_cb_server,
@@ -1264,6 +1256,14 @@ struct uct_ep_params {
      * indicated by the @ref uct_cm_attr::max_conn_priv.
      */
     size_t                              private_data_length;
+
+    /**
+     * The sockaddr to bind locally. If set, @ref uct_ep_create
+     * will create an endpoint binding to this local sockaddr.
+     * @note The interface in this routine requires the
+     * @ref UCT_IFACE_FLAG_CONNECT_TO_SOCKADDR capability.
+     */
+    const ucs_sock_addr_t             *local_sockaddr;
 };
 
 

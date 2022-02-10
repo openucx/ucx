@@ -8,9 +8,10 @@
 #  include "config.h"
 #endif
 
+#include "proto_init.h"
+#include "proto_debug.h"
 #include "proto_common.inl"
 #include "proto_multi.inl"
-#include "proto_init.h"
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -203,13 +204,13 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     return ucp_proto_common_init_caps(&params->super, &perf, reg_md_map);
 }
 
-void ucp_proto_multi_config_str(size_t min_length, size_t max_length,
-                                const void *priv, ucs_string_buffer_t *strb)
+void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
+                                  ucp_proto_query_attr_t *attr)
 {
-    const ucp_proto_multi_priv_t *mpriv = priv;
+    UCS_STRING_BUFFER_FIXED(strb, attr->config, sizeof(attr->config));
+    const ucp_proto_multi_priv_t *mpriv = params->priv;
     const ucp_proto_multi_lane_priv_t *lpriv;
     size_t percent, remaining;
-    char frag_size_buf[64];
     ucp_lane_index_t i;
 
     ucs_assert(mpriv->num_lanes <= UCP_MAX_LANES);
@@ -222,21 +223,18 @@ void ucp_proto_multi_config_str(size_t min_length, size_t max_length,
         remaining -= percent;
 
         if (percent != 100) {
-            ucs_string_buffer_appendf(strb, "%zu%%*", percent);
+            ucs_string_buffer_appendf(&strb, "%zu%% on ", percent);
         }
 
-        ucp_proto_common_lane_priv_str(&lpriv->super, strb);
-
-        /* Print fragment size if it's small enough. For large fragments we can
-           skip the print because it has little effect on performance */
-        if (lpriv->max_frag < (64 * UCS_KBYTE)) {
-            ucs_memunits_to_str(lpriv->max_frag, frag_size_buf,
-                                sizeof(frag_size_buf));
-            ucs_string_buffer_appendf(strb, "<=%s", frag_size_buf);
-        }
-
-        if ((i + 1) < mpriv->num_lanes) {
-            ucs_string_buffer_appendf(strb, "|");
-        }
+        ucs_string_buffer_appendf(&strb, "lane[%d] ", lpriv->super.lane);
     }
+
+    ucs_string_buffer_rtrim(&strb, NULL);
+}
+
+void ucp_proto_multi_query(const ucp_proto_query_params_t *params,
+                           ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_default_query(params, attr);
+    ucp_proto_multi_query_config(params, attr);
 }

@@ -703,13 +703,19 @@ static UCS_F_NOINLINE void
 ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                            const ucp_unpacked_address_t *remote_address)
 {
-    /* Request a peer failure detection support from a reply EP to be able to do
-     * discarding of lanes when destroying all UCP EPs in UCP worker destroy.
-     * Also, create UCP EP with CONNECT_TO_IFACE connection mode to not do
-     * WIREUP_MSG phase between peers which require a direct EP ID */
+    /* 1. Request a peer failure detection support from a reply EP to be able
+     *    to do discarding of lanes when destroying all UCP EPs in UCP worker
+     *    destroy.
+     * 2. Create UCP EP with CONNECT_TO_IFACE connection mode to not do
+     *    WIREUP_MSG phase between peers which require a direct EP ID.
+     * 3. Create UCP EP with AM lane only, because WIREUP_MSGs are sent using
+     *    AM lane.
+     */
     unsigned ep_init_flags = UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
                              UCP_EP_INIT_FLAG_INTERNAL |
-                             UCP_EP_INIT_CONNECT_TO_IFACE_ONLY;
+                             UCP_EP_INIT_CONNECT_TO_IFACE_ONLY |
+                             UCP_EP_INIT_CREATE_AM_LANE |
+                             UCP_EP_INIT_CREATE_AM_LANE_ONLY;
     ucs_status_t status;
     ucp_ep_h reply_ep;
     unsigned addr_indices[UCP_MAX_LANES];
@@ -869,7 +875,8 @@ ucp_wireup_ep_lane_set_next_ep(ucp_ep_h ep, ucp_lane_index_t lane,
 {
     ucs_trace("ep %p: wireup uct_ep[%d]=%p next set to %p", ep, lane,
               ep->uct_eps[lane], uct_ep);
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep,
+                              ucp_ep_get_rsc_index(ep, lane));
 }
 
 static ucs_status_t
@@ -1251,7 +1258,8 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
             if (ep->uct_eps[lane] != NULL) {
                 ucs_assert(lane != ucp_ep_get_cm_lane(ep));
                 ucp_worker_discard_uct_ep(
-                        ep, ep->uct_eps[lane], UCT_FLUSH_FLAG_LOCAL,
+                        ep, ep->uct_eps[lane],
+                        UCP_NULL_RESOURCE, UCT_FLUSH_FLAG_LOCAL,
                         ucp_request_purge_enqueue_cb, replay_pending_queue,
                         (ucp_send_nbx_callback_t)ucs_empty_function, NULL);
                 ep->uct_eps[lane] = NULL;
@@ -1485,7 +1493,8 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
     uct_ep_pending_purge(uct_ep, ucp_request_purge_enqueue_cb, &tmp_q);
 
     /* the wireup ep should use the existing [am_lane] as next_ep */
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep,
+                              ucp_ep_get_rsc_index(ep, lane));
 
     if (!(ep->flags & UCP_EP_FLAG_CONNECT_REQ_QUEUED)) {
         status = ucp_wireup_send_request(ep);

@@ -117,10 +117,11 @@ ucp_proto_rdnv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_rndv_am_bcopy_proto = {
-    .name       = "rndv/am/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_rdnv_am_bcopy_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_rndv_am_bcopy_progress}
+    .name     = "rndv/am/bcopy",
+    .flags    = 0,
+    .init     = ucp_proto_rdnv_am_bcopy_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_rndv_am_bcopy_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_am_bcopy_proto);

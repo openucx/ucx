@@ -908,7 +908,7 @@ UCS_TEST_SKIP_COND_P(test_rc_keepalive, pending,
     status = uct_ep_check(ep0(), 0, NULL);
     ASSERT_UCS_OK(status);
 
-    kill_receiver();
+    inject_error();
 
     enable_entity(m_sender);
 

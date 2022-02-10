@@ -8,7 +8,9 @@
 #  include "config.h"
 #endif
 
+#include "proto_debug.h"
 #include "proto_common.inl"
+
 #include <uct/api/v2/uct_v2.h>
 
 
@@ -59,18 +61,6 @@ void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *param
     /* Final max_iov is limited both by UCP and UCT, so it can be uint8_t */
     UCS_STATIC_ASSERT(UCP_MAX_IOV <= UINT8_MAX);
     lane_priv->max_iov = ucs_min(uct_max_iov, UCP_MAX_IOV);
-}
-
-void ucp_proto_common_lane_priv_str(const ucp_proto_common_lane_priv_t *lpriv,
-                                    ucs_string_buffer_t *strb)
-{
-    ucs_string_buffer_appendf(strb, "ln:%d", lpriv->lane);
-    if (lpriv->md_index != UCP_NULL_RESOURCE) {
-        ucs_string_buffer_appendf(strb, ",mh%d", lpriv->md_index);
-    }
-    if (lpriv->rkey_index != UCP_NULL_RESOURCE) {
-        ucs_string_buffer_appendf(strb, ",rk%d", lpriv->rkey_index);
-    }
 }
 
 ucp_md_index_t
@@ -616,8 +606,7 @@ void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)
     const ucp_proto_config_t *proto_config = req->send.proto_config;
 
     ucp_proto_select_param_str(&proto_config->select_param, &sel_param_strb);
-    proto_config->proto->config_str(msg_length, msg_length, proto_config->priv,
-                                    &proto_config_strb);
+    ucp_proto_config_str(proto_config, msg_length, &proto_config_strb);
     ucp_trace_req(req, "%s length %zu using %s{%s}",
                   ucs_string_buffer_cstr(&sel_param_strb), msg_length,
                   proto_config->proto->name,
@@ -670,14 +659,16 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status)
 {
     ucs_assert(UCS_STATUS_IS_ERR(status));
-    /*
-     * TODO add a method to ucp_proto_t to abort a request (which is currently
-     * not scheduled to a pending queue). The method should wait for UCT
-     * completions and release associated resources, such as memory handles,
-     * remote keys, request ID, etc.
-     */
-    ucs_fatal("abort request %p proto %s status %s: unimplemented", req,
+    ucs_debug("abort request %p proto %s status %s", req,
               req->send.proto_config->proto->name, ucs_status_string(status));
+
+    req->send.proto_config->proto->abort(req, status);
+}
+
+void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status)
+{
+    ucp_datatype_iter_cleanup(&request->send.state.dt_iter, UCP_DT_MASK_ALL);
+    ucp_request_complete_send(request, status);
 }
 
 int ucp_proto_is_short_supported(const ucp_proto_select_param_t *select_param)

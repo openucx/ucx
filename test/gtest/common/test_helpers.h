@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <dirent.h>
 #include <stdint.h>
+#include <ifaddrs.h>
 
 
 #ifndef UINT16_MAX
@@ -304,9 +305,15 @@ void safe_usleep(double usec);
 
 
 /**
- * Check if the given interface has an IPv4 or an IPv6 address.
+ * Check if the given network interface has an IPv4 or an IPv6 address.
  */
 bool is_inet_addr(const struct sockaddr* ifa_addr);
+
+
+/**
+ * Check if the given network interface should be used for testing.
+ */
+bool is_interface_usable(struct ifaddrs *ifa);
 
 
 /**

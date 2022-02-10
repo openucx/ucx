@@ -222,7 +222,7 @@ typedef struct ucm_global_config {
 
 /*
  * Global UCM configuration to be set externally.
- * @deprecated replaced by @ref ucm_library_init.
+ * @deprecated replaced by @ref ucm_set_global_opts.
  */
 extern ucm_global_config_t ucm_global_opts;
 
@@ -266,14 +266,11 @@ typedef void (*ucm_event_callback_t)(ucm_event_type_t event_type,
 
 
 /**
- * Initialize UCM library and set its configuration.
+ * Set UCM library configuration.
  *
- * @param [in]  ucm_opts   UCM library global configuration. If NULL, default
- *                         configuration is applied.
- *
- * @note Calling this function more than once in the same process has no effect.
+ * @param [in]  ucm_opts   UCM library global configuration.
  */
-void ucm_library_init(const ucm_global_config_t *ucm_opts);
+void ucm_set_global_opts(const ucm_global_config_t *ucm_opts);
 
 
 /**

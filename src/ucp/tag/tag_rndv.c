@@ -149,11 +149,33 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
                             NULL);
 }
 
+static void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
+                                     ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+
+    ucp_proto_select_elem_query(&rpriv->remote_proto, params->msg_length, attr);
+}
+
+static void ucp_tag_rndv_proto_abort(ucp_request_t *request,
+                                     ucs_status_t status)
+{
+    if (request->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_send_request_id_release(request);
+        ucp_datatype_iter_mem_dereg(request->send.ep->worker->context,
+                                    &request->send.state.dt_iter,
+                                    UCP_DT_MASK_ALL);
+    }
+
+    ucp_request_complete_send(request, status);
+}
+
 static ucp_proto_t ucp_tag_rndv_proto = {
-    .name       = "tag/rndv",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_rts_init,
-    .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = {ucp_tag_rndv_rts_progress}
+    .name     = "tag/rndv",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_rts_init,
+    .query    = ucp_proto_rndv_rts_query,
+    .progress = {ucp_tag_rndv_rts_progress},
+    .abort    = ucp_tag_rndv_proto_abort
 };
 UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);
