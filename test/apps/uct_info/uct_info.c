@@ -41,7 +41,6 @@ static ucs_status_t uct_info_iface_info(uct_worker_h worker, uct_md_h md,
     };
     ucs_status_t status = UCS_OK;
     uct_iface_config_t *iface_config;
-    uct_iface_attr_t iface_attr;
     uct_iface_h iface;
 
     UCT(uct_md_iface_config_read(md, resource->tl_name, NULL, NULL, &iface_config), return _status);
