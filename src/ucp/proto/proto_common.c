@@ -63,18 +63,6 @@ void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *param
     lane_priv->max_iov = ucs_min(uct_max_iov, UCP_MAX_IOV);
 }
 
-void ucp_proto_common_lane_priv_str(const ucp_proto_common_lane_priv_t *lpriv,
-                                    ucs_string_buffer_t *strb)
-{
-    ucs_string_buffer_appendf(strb, "ln:%d", lpriv->lane);
-    if (lpriv->memh_index != UCP_NULL_RESOURCE) {
-        ucs_string_buffer_appendf(strb, ",mh%d", lpriv->memh_index);
-    }
-    if (lpriv->rkey_index != UCP_NULL_RESOURCE) {
-        ucs_string_buffer_appendf(strb, ",rk%d", lpriv->rkey_index);
-    }
-}
-
 ucp_md_index_t
 ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
                               ucp_lane_index_t lane)
@@ -618,8 +606,7 @@ void ucp_proto_trace_selected(ucp_request_t *req, size_t msg_length)
     const ucp_proto_config_t *proto_config = req->send.proto_config;
 
     ucp_proto_select_param_str(&proto_config->select_param, &sel_param_strb);
-    proto_config->proto->config_str(msg_length, msg_length, proto_config->priv,
-                                    &proto_config_strb);
+    ucp_proto_config_str(proto_config, msg_length, &proto_config_strb);
     ucp_trace_req(req, "%s length %zu using %s{%s}",
                   ucs_string_buffer_cstr(&sel_param_strb), msg_length,
                   proto_config->proto->name,

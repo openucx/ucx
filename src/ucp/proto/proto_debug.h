@@ -79,4 +79,8 @@ void ucp_proto_select_config_str(ucp_worker_h worker,
                                  const ucp_proto_config_t *proto_config,
                                  size_t msg_length, ucs_string_buffer_t *strb);
 
+
+void ucp_proto_config_str(const ucp_proto_config_t *proto_config,
+                          size_t msg_length, ucs_string_buffer_t *strb);
+
 #endif

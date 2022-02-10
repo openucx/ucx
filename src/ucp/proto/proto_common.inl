@@ -176,7 +176,7 @@ ucp_proto_request_select_proto(ucp_request_t *req,
                                size_t msg_length)
 {
     const ucp_proto_threshold_elem_t *thresh_elem =
-            ucp_proto_thresholds_search(select_elem->thresholds, msg_length);
+            ucp_proto_select_thresholds_search(select_elem, msg_length);
     ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
 }
 

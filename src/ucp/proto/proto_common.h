@@ -163,10 +163,6 @@ void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *param
                                      ucp_proto_common_lane_priv_t *lane_priv);
 
 
-void ucp_proto_common_lane_priv_str(const ucp_proto_common_lane_priv_t *lpriv,
-                                    ucs_string_buffer_t *strb);
-
-
 ucp_rsc_index_t
 ucp_proto_common_get_md_index(const ucp_proto_init_params_t *params,
                               ucp_lane_index_t lane);

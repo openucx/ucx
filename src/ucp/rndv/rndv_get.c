@@ -184,15 +184,15 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
 }
 
 static ucp_proto_t ucp_rndv_get_zcopy_proto = {
-    .name       = "rndv/get/zcopy",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_get_zcopy_init,
-    .config_str = ucp_proto_rndv_bulk_config_str,
-    .progress   = {
+    .name     = "rndv/get/zcopy",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_get_zcopy_init,
+    .query    = ucp_proto_rndv_bulk_query,
+    .progress = {
          [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_zcopy_fetch_progress,
          [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
-    .abort      = ucp_rndv_get_zcopy_proto_abort
+    .abort    = ucp_rndv_get_zcopy_proto_abort
 };
 UCP_PROTO_REGISTER(&ucp_rndv_get_zcopy_proto);
 
@@ -287,15 +287,15 @@ ucp_proto_rndv_get_mtype_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_rndv_get_mtype_proto = {
-    .name       = "rndv/get/mtype",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_get_mtype_init,
-    .config_str = ucp_proto_rndv_bulk_config_str,
-    .progress   = {
+    .name     = "rndv/get/mtype",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_get_mtype_init,
+    .query    = ucp_proto_rndv_bulk_query,
+    .progress = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress,
     },
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_get_mtype_proto);
 
@@ -343,11 +343,11 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
 }
 
 static ucp_proto_t ucp_rndv_ats_proto = {
-    .name       = "rndv/ats",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_ats_init,
-    .config_str = ucp_proto_rndv_ack_config_str,
-    .progress   = {ucp_proto_rndv_ats_progress},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .name     = "rndv/ats",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_ats_init,
+    .query    = ucp_proto_default_query,
+    .progress = {ucp_proto_rndv_ats_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_ats_proto);

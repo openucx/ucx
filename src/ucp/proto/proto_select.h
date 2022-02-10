@@ -159,4 +159,14 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
                      ucp_worker_cfg_index_t rkey_cfg_index,
                      ucp_worker_cfg_index_t *new_rkey_cfg_index);
 
+
+void ucp_proto_config_query(const ucp_proto_config_t *proto_config,
+                            size_t msg_length,
+                            ucp_proto_query_attr_t *proto_attr);
+
+
+void ucp_proto_select_elem_query(const ucp_proto_select_elem_t *select_elem,
+                                 size_t msg_length,
+                                 ucp_proto_query_attr_t *proto_attr);
+
 #endif

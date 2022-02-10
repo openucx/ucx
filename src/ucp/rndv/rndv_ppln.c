@@ -120,6 +120,14 @@ ucp_proto_rndv_ppln_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);
 }
 
+static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
+                                      ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ppln_priv_t *rpriv = params->priv;
+
+    ucp_proto_select_elem_query(&rpriv->frag_proto, params->msg_length, attr);
+}
+
 static void
 ucp_proto_rndv_ppln_frag_complete(ucp_request_t *freq, int send_ack,
                                   ucp_proto_complete_cb_t complete_func,
@@ -225,19 +233,6 @@ static size_t ucp_proto_rndv_ppln_pack_ack(void *dest, void *arg)
                                    req->send.rndv.ppln.ack_data_size);
 }
 
-static void ucp_proto_rndv_ppln_config_str(size_t min_length, size_t max_length,
-                                           const void *priv,
-                                           ucs_string_buffer_t *strb)
-{
-    const ucp_proto_rndv_ppln_priv_t *rpriv = priv;
-    char str[128];
-
-    ucs_memunits_to_str(rpriv->frag_size, str, sizeof(str));
-    ucs_string_buffer_appendf(strb, "fr:%s ", str);
-    ucp_proto_threshold_elem_str(rpriv->frag_proto.thresholds, rpriv->frag_size,
-                                 rpriv->frag_size, strb);
-}
-
 static ucs_status_t
 ucp_proto_rndv_send_ppln_init(const ucp_proto_init_params_t *init_params)
 {
@@ -260,15 +255,15 @@ ucp_proto_rndv_send_ppln_atp_progress(uct_pending_req_t *uct_req)
 }
 
 static ucp_proto_t ucp_rndv_send_ppln_proto = {
-    .name       = "rndv/send/ppln",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_send_ppln_init,
-    .config_str = ucp_proto_rndv_ppln_config_str,
-    .progress   = {
+    .name     = "rndv/send/ppln",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_send_ppln_init,
+    .query    = ucp_proto_rndv_ppln_query,
+    .progress = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_send_ppln_atp_progress,
     },
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_send_ppln_proto);
 
@@ -295,14 +290,14 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
 }
 
 static ucp_proto_t ucp_rndv_recv_ppln_proto = {
-    .name       = "rndv/recv/ppln",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_recv_ppln_init,
-    .config_str = ucp_proto_rndv_ppln_config_str,
-    .progress   = {
+    .name     = "rndv/recv/ppln",
+    .flags    = 0,
+    .init     = ucp_proto_rndv_recv_ppln_init,
+    .query    = ucp_proto_rndv_ppln_query,
+    .progress = {
         [UCP_PROTO_RNDV_PPLN_STAGE_SEND] = ucp_proto_rndv_ppln_progress,
         [UCP_PROTO_RNDV_PPLN_STAGE_ACK]  = ucp_proto_rndv_recv_ppln_ats_progress,
     },
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_recv_ppln_proto);

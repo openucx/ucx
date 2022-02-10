@@ -163,12 +163,12 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
 }
 
 static ucp_proto_t ucp_eager_bcopy_multi_proto = {
-    .name       = "egr/multi/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_bcopy_multi_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_bcopy_multi_progress},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .name     = "egr/multi/bcopy",
+    .flags    = 0,
+    .init     = ucp_proto_eager_bcopy_multi_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_eager_bcopy_multi_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_multi_proto);
 
@@ -239,12 +239,12 @@ ucp_proto_eager_sync_bcopy_multi_progress(uct_pending_req_t *uct_req)
 }
 
 static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
-    .name       = "egrsnc/multi/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_sync_bcopy_multi_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_sync_bcopy_multi_progress},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .name     = "egrsnc/multi/bcopy",
+    .flags    = 0,
+    .init     = ucp_proto_eager_sync_bcopy_multi_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_eager_sync_bcopy_multi_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_multi_proto);
 
@@ -321,11 +321,11 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
 }
 
 static ucp_proto_t ucp_eager_zcopy_multi_proto = {
-    .name       = "egr/multi/zcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_zcopy_multi_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_zcopy_multi_progress},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+    .name     = "egr/multi/zcopy",
+    .flags    = 0,
+    .init     = ucp_proto_eager_zcopy_multi_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_eager_zcopy_multi_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);
