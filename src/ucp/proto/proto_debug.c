@@ -169,12 +169,10 @@ void ucp_proto_select_dump(ucp_worker_h worker,
 {
     ucp_proto_select_elem_t select_elem;
     ucp_proto_select_key_t key;
-    char info[256];
 
+    ucs_string_buffer_appendf(strb, "\nProtocol selection for ");
     ucp_worker_print_used_tls(&worker->ep_config[ep_cfg_index].key,
-                              worker->context, ep_cfg_index, info,
-                              sizeof(info));
-    ucs_string_buffer_appendf(strb, "\nProtocol selection for %s", info);
+                              worker->context, ep_cfg_index, strb);
 
     if (rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
         ucs_string_buffer_appendf(strb, "rkey_cfg[%d]: ", rkey_cfg_index);

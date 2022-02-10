@@ -396,10 +396,10 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
                                        ucp_send_nbx_callback_t discarded_cb,
                                        void *discarded_cb_arg);
 
-char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
-                                ucp_context_h context,
-                                ucp_worker_cfg_index_t config_idx, char *info,
-                                size_t max);
+const char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
+                                      ucp_context_h context,
+                                      ucp_worker_cfg_index_t config_idx,
+                                      ucs_string_buffer_t *strb);
 
 void ucp_worker_vfs_refresh(void *obj);
 
