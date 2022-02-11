@@ -1,3 +1,4 @@
+#SISCI
 sisci_8        -t am_lat -D short  -d sci -x sci   8  -s       8 -n 100000
 sisci_16       -t am_lat -D short  -d sci -x sci   16 -s      16 -n 100000
 sisci_32       -t am_lat -D short  -d sci -x sci   32 -s      32 -n 100000
@@ -9,3 +10,16 @@ sisci_1024     -t am_lat -D short  -d sci -x sci 1024 -s    1024 -n 100000
 sisci_2048     -t am_lat -D short  -d sci -x sci 2048 -s    2048 -n 100000
 sisci_4096     -t am_lat -D short  -d sci -x sci 4096 -s    4096 -n 100000
 sisci_8192     -t am_lat -D short  -d sci -x sci 8192 -s    8192 -n 100000
+#TCP
+tcp_8        -t am_lat -D short  -d enp9s0 -x tcp   8  -s       8 -n 10000
+tcp_16       -t am_lat -D short  -d enp9s0 -x tcp   16 -s      16 -n 10000
+tcp_32       -t am_lat -D short  -d enp9s0 -x tcp   32 -s      32 -n 10000
+tcp_64       -t am_lat -D short  -d enp9s0 -x tcp   64 -s      64 -n 10000
+tcp_128      -t am_lat -D short  -d enp9s0 -x tcp  128 -s     128 -n 10000
+tcp_256      -t am_lat -D short  -d enp9s0 -x tcp  256 -s     256 -n 10000
+tcp_512      -t am_lat -D short  -d enp9s0 -x tcp  512 -s     512 -n 10000
+tcp_1024     -t am_lat -D short  -d enp9s0 -x tcp 1024 -s    1024 -n 10000
+tcp_2048     -t am_lat -D short  -d enp9s0 -x tcp 2048 -s    2048 -n 10000
+tcp_4096     -t am_lat -D short  -d enp9s0 -x tcp 4096 -s    4096 -n 10000
+tcp_8192     -t am_lat -D short  -d enp9s0 -x tcp 8192 -s    8192 -n 10000
+
