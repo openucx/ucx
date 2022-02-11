@@ -2264,6 +2264,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             continue;
         }
 
+        rsc_index  = config->key.lanes[lane].rsc_index;
         iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
         if (iface_attr->cap.flags & UCT_IFACE_FLAG_AM_ZCOPY) {
             config->am_bw_prereg_md_map |= UCS_BIT(config->md_index[lane]);
