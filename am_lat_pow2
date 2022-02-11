@@ -21,9 +21,9 @@ tcp_128      -t am_lat -D short  -d enp9s0 -x tcp   -s     128 -n 10000
 tcp_256      -t am_lat -D short  -d enp9s0 -x tcp   -s     256 -n 10000
 tcp_512      -t am_lat -D short  -d enp9s0 -x tcp   -s     512 -n 10000
 tcp_1024     -t am_lat -D short  -d enp9s0 -x tcp   -s    1024 -n 10000
-tcp_2048     -t am_lat -D short  -d enp9s0 -x tcp   -s    2048 -n 10000
-tcp_4096     -t am_lat -D short  -d enp9s0 -x tcp   -s    4096 -n 10000
-tcp_8192     -t am_lat -D short  -d enp9s0 -x tcp   -s    8192 -n 10000
+tcp_2048     -t am_lat -D short  -d enp9s0 -x tcp   -s    2048 -n 50000
+tcp_4096     -t am_lat -D short  -d enp9s0 -x tcp   -s    4096 -n 50000
+tcp_8192     -t am_lat -D short  -d enp9s0 -x tcp   -s    8192 -n 50000
 #SISCI ZCOPY
 ZCOPY_sisci_16384    -t am_lat -D zcopy  -d sci -x sci   16384 -s   16384 -n 40000
 ZCOPY_sisci_32768    -t am_lat -D zcopy  -d sci -x sci   32768 -s   32768 -n 20000
