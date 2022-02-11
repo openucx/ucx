@@ -7,9 +7,9 @@ sisci_128      -t am_lat -D short  -d sci -x sci  128 -s     128 -n 1000000
 sisci_256      -t am_lat -D short  -d sci -x sci  256 -s     256 -n 1000000
 sisci_512      -t am_lat -D short  -d sci -x sci  512 -s     512 -n 1000000
 sisci_1024     -t am_lat -D short  -d sci -x sci 1024 -s    1024 -n 1000000
-sisci_2048     -t am_lat -D short  -d sci -x sci 2048 -s    2048 -n 1000000
-sisci_4096     -t am_lat -D short  -d sci -x sci 4096 -s    4096 -n 1000000
-sisci_8192     -t am_lat -D short  -d sci -x sci 8192 -s    8192 -n 1000000
+sisci_2048     -t am_lat -D short  -d sci -x sci 2048 -s    2048 -n 100000
+sisci_4096     -t am_lat -D short  -d sci -x sci 4096 -s    4096 -n 100000
+sisci_8192     -t am_lat -D short  -d sci -x sci 8192 -s    8192 -n 100000
 sisci_16384    -t am_lat -D short  -d sci -x sci   16384 -s   16384 -n 40000
 sisci_32768    -t am_lat -D short  -d sci -x sci   32768 -s   32768 -n 20000
 sisci_65536    -t am_lat -D short  -d sci -x sci   65536 -s   65536 -n 10000
