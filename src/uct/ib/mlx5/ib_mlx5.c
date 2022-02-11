@@ -87,7 +87,14 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (!cq) {
-        ucs_error("mlx5dv_create_cq(cqe=%d) failed: %m", cq_attr.cqe);
+        UCS_STRING_BUFFER_ONSTACK(msg, 256);
+        ucs_string_buffer_appendf(&msg,
+                                  "mlx5dv_create_cq(cqe=%d) failed: %m",
+                                  cq_attr.cqe);
+        if (errno == ENOMEM) {
+            ucs_log_check_memlock_limit_append_msg(&msg);
+        }
+        ucs_error("%s", ucs_string_buffer_cstr(&msg));
         return UCS_ERR_IO_ERROR;
     }
 

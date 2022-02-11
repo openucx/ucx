@@ -502,7 +502,12 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     srq_init_attr.srq_context    = iface;
     srq                          = ibv_create_srq(pd, &srq_init_attr);
     if (srq == NULL) {
-        ucs_error("ibv_create_srq() failed: %m");
+        UCS_STRING_BUFFER_ONSTACK(msg, 256);
+        ucs_string_buffer_appendf(&msg, "ibv_create_srq() failed: %m");
+        if (errno == ENOMEM) {
+            ucs_log_check_memlock_limit_append_msg(&msg);
+        }
+        ucs_error("%s", ucs_string_buffer_cstr(&msg));
         return UCS_ERR_IO_ERROR;
     }
     iface->rx.srq.quota          = srq_init_attr.attr.max_wr;

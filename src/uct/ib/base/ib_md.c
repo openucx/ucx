@@ -317,24 +317,15 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     UCS_STRING_BUFFER_ONSTACK(msg, 256);
-    struct rlimit limit_info;
     size_t page_size;
     size_t unused;
 
     ucs_string_buffer_appendf(&msg,
                               "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
                               ibv_reg_mr_func_name, address, length, access_flags);
-    if (err == ENOMEM) {
-        /* Check the value of the max locked memory which is set on the system
-        * (ulimit -l) */
-        if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
-            (limit_info.rlim_cur != RLIM_INFINITY)) {
-            ucs_string_buffer_appendf(&msg,
-                                      ". Please set max locked memory "
-                                      "(ulimit -l) to 'unlimited' "
-                                      "(current: %llu kbytes)",
-                                      limit_info.rlim_cur / UCS_KBYTE);
-        }
+
+    if (errno == ENOMEM) {
+            ucs_log_check_memlock_limit_append_msg(&msg);
     } else if (err == EINVAL) {
         /* Check if huge page is used */
         ucs_get_mem_page_size(address, length, &unused, &page_size);
@@ -1557,6 +1548,22 @@ static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
     return uct_ib_md_read_pci_bw(ib_device);
 }
 
+void static check_locked_memory_limit() {
+    struct rlimit limit_info = {};
+    UCS_STRING_BUFFER_ONSTACK(msg, 256);
+
+    ucs_trace("checking the locked memory limit");
+
+    if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
+        limit_info.rlim_cur != RLIM_INFINITY &&
+        limit_info.rlim_cur <= 500 * UCS_MBYTE) {
+        ucs_string_buffer_appendf(&msg, "the locked memory limit is "
+                                  "too low, rdma may be broken");
+        ucs_log_check_memlock_limit_append_msg(&msg);
+        ucs_warn("%s", ucs_string_buffer_cstr(&msg));
+    }
+}
+
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
@@ -1566,6 +1573,8 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     struct ibv_device **ib_device_list, *ib_device;
     uct_ib_md_ops_entry_t *md_ops_entry;
     int i, num_devices, ret, fork_init = 0;
+
+    check_locked_memory_limit();
 
     ucs_trace("opening IB device %s", md_name);
 

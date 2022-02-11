@@ -21,6 +21,7 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/config/parser.h>
 #include <fnmatch.h>
+#include <sys/resource.h>
 
 
 #define UCS_MAX_LOG_HANDLERS    32
@@ -550,4 +551,20 @@ void ucs_log_set_thread_name(const char *format, ...)
     memset(ucs_log_thread_name, 0, sizeof(ucs_log_thread_name));
     vsnprintf(ucs_log_thread_name, sizeof(ucs_log_thread_name) - 1, format, ap);
     va_end(ap);
+}
+
+void ucs_log_check_memlock_limit_append_msg(ucs_string_buffer_t *msg)
+{
+    struct rlimit limit_info;
+
+    /* Check the value of the max locked memory which is set on the system
+    * (ulimit -l) */
+    if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
+        (limit_info.rlim_cur != RLIM_INFINITY)) {
+        ucs_string_buffer_appendf(msg,
+                                  ". Please set max locked memory "
+                                  "(ulimit -l) to 'unlimited' "
+                                  "(current: %llu kbytes)",
+                                  limit_info.rlim_cur / UCS_KBYTE);
+    }
 }
