@@ -127,7 +127,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->device_addr = nodeID;
     self->segment_id = 13337;
-    self->send_size = 65536; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
+    self->send_size = 2097152; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
 
     SCICreateSegment(sci_md->sci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
