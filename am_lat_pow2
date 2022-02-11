@@ -1,15 +1,15 @@
 #SISCI
-sisci_8        -t am_lat -D short  -d sci -x sci   8  -s       8 -n 100000
-sisci_16       -t am_lat -D short  -d sci -x sci   16 -s      16 -n 100000
-sisci_32       -t am_lat -D short  -d sci -x sci   32 -s      32 -n 100000
-sisci_64       -t am_lat -D short  -d sci -x sci   64 -s      64 -n 100000
-sisci_128      -t am_lat -D short  -d sci -x sci  128 -s     128 -n 100000
-sisci_256      -t am_lat -D short  -d sci -x sci  256 -s     256 -n 100000
-sisci_512      -t am_lat -D short  -d sci -x sci  512 -s     512 -n 100000
-sisci_1024     -t am_lat -D short  -d sci -x sci 1024 -s    1024 -n 100000
-sisci_2048     -t am_lat -D short  -d sci -x sci 2048 -s    2048 -n 100000
-sisci_4096     -t am_lat -D short  -d sci -x sci 4096 -s    4096 -n 100000
-sisci_8192     -t am_lat -D short  -d sci -x sci 8192 -s    8192 -n 100000
+sisci_8        -t am_lat -D short  -d sci -x sci   8  -s       8 -n 1000000
+sisci_16       -t am_lat -D short  -d sci -x sci   16 -s      16 -n 1000000
+sisci_32       -t am_lat -D short  -d sci -x sci   32 -s      32 -n 1000000
+sisci_64       -t am_lat -D short  -d sci -x sci   64 -s      64 -n 1000000
+sisci_128      -t am_lat -D short  -d sci -x sci  128 -s     128 -n 1000000
+sisci_256      -t am_lat -D short  -d sci -x sci  256 -s     256 -n 1000000
+sisci_512      -t am_lat -D short  -d sci -x sci  512 -s     512 -n 1000000
+sisci_1024     -t am_lat -D short  -d sci -x sci 1024 -s    1024 -n 1000000
+sisci_2048     -t am_lat -D short  -d sci -x sci 2048 -s    2048 -n 1000000
+sisci_4096     -t am_lat -D short  -d sci -x sci 4096 -s    4096 -n 1000000
+sisci_8192     -t am_lat -D short  -d sci -x sci 8192 -s    8192 -n 1000000
 #TCP
 tcp_8        -t am_lat -D short  -d enp9s0 -x tcp   8  -s       8 -n 10000
 tcp_16       -t am_lat -D short  -d enp9s0 -x tcp   16 -s      16 -n 10000
