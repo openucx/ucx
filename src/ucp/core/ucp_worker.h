@@ -403,7 +403,7 @@ char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
 
 void ucp_worker_vfs_refresh(void *obj);
 
-void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self);
+ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self);
 
 unsigned ucp_worker_discard_uct_ep_progress(void *arg);
 
