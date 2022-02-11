@@ -325,7 +325,7 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
                               ibv_reg_mr_func_name, address, length, access_flags);
 
     if (errno == ENOMEM) {
-            ucs_log_check_memlock_limit_append_msg(&msg);
+        ucs_log_check_memlock_limit_append_msg(&msg);
     } else if (err == EINVAL) {
         /* Check if huge page is used */
         ucs_get_mem_page_size(address, length, &unused, &page_size);
@@ -1548,7 +1548,8 @@ static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
     return uct_ib_md_read_pci_bw(ib_device);
 }
 
-void static check_locked_memory_limit() {
+void static check_locked_memory_limit()
+{
     struct rlimit limit_info = {};
     UCS_STRING_BUFFER_ONSTACK(msg, 256);
 
@@ -1558,7 +1559,7 @@ void static check_locked_memory_limit() {
         limit_info.rlim_cur != RLIM_INFINITY &&
         limit_info.rlim_cur <= 500 * UCS_MBYTE) {
         ucs_string_buffer_appendf(&msg, "the locked memory limit is "
-                                  "too low, rdma may be broken");
+                                        "too low, rdma may be broken");
         ucs_log_check_memlock_limit_append_msg(&msg);
         ucs_warn("%s", ucs_string_buffer_cstr(&msg));
     }
