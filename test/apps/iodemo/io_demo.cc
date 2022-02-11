@@ -87,7 +87,7 @@ typedef struct {
     bool                     use_epoll;
     ucs_memory_type_t        memory_type;
     unsigned                 progress_count;
-    const char*              src_addr;
+    std::vector<const char*> src_addrs;
     bool                     prereg;
     bool                     per_conn_info;
 } options_t;
@@ -2053,6 +2053,7 @@ public:
         const char *server = opts().servers[server_index];
         struct sockaddr_storage *src_addr_p = NULL;
         struct sockaddr_storage dst_addr, src_addr;
+        uint32_t addr_index;
         std::string server_addr;
         int port_num;
         bool ret;
@@ -2074,8 +2075,11 @@ public:
             abort();
         }
 
-        if (opts().src_addr != NULL) {
-            ret = set_sockaddr(opts().src_addr, 0, (struct sockaddr*)&src_addr);
+        if (!opts().src_addrs.empty()) {
+            addr_index = IoDemoRandom::rand(0U,
+                               (uint32_t)(opts().src_addrs.size() - 1));
+            ret = set_sockaddr(opts().src_addrs[addr_index], 0,
+                               (struct sockaddr*)&src_addr);
             if (ret != true) {
                 abort();
             }
@@ -2671,7 +2675,6 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->use_epoll             = false;
     test_opts->memory_type           = UCS_MEMORY_TYPE_HOST;
     test_opts->progress_count        = 1;
-    test_opts->src_addr              = NULL;
     test_opts->prereg                = false;
     test_opts->per_conn_info         = false;
 
@@ -2822,7 +2825,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             }
             break;
         case 'I':
-            test_opts->src_addr = optarg;
+            test_opts->src_addrs.push_back(optarg);
             break;
         case 'z':
             test_opts->prereg = true;
