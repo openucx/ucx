@@ -10,6 +10,14 @@ sisci_1024     -t am_lat -D short  -d sci -x sci 1024 -s    1024 -n 1000000
 sisci_2048     -t am_lat -D short  -d sci -x sci 2048 -s    2048 -n 1000000
 sisci_4096     -t am_lat -D short  -d sci -x sci 4096 -s    4096 -n 1000000
 sisci_8192     -t am_lat -D short  -d sci -x sci 8192 -s    8192 -n 1000000
+sisci_16384    -t am_lat -D short  -d sci -x sci   16384 -s   16384 -n 40000
+sisci_32768    -t am_lat -D short  -d sci -x sci   32768 -s   32768 -n 20000
+sisci_65536    -t am_lat -D short  -d sci -x sci   65536 -s   65536 -n 10000
+sisci_131072   -t am_lat -D short  -d sci -x sci   131072 -s  131072 -n 5000
+sisci_262144   -t am_lat -D short  -d sci -x sci   262144 -s  262144 -n 2500
+sisci_524288   -t am_lat -D short  -d sci -x sci   524288 -s  524288 -n 1200
+sisci_1048576  -t am_lat -D short  -d sci -x sci   1048576 -s 1048576 -n 600
+sisci_2097152  -t am_lat -D short  -d sci -x sci   2097152 -s 2097152 -n 300
 #TCP
 tcp_8        -t am_lat -D short  -d enp9s0 -x tcp   8  -s       8 -n 10000
 tcp_16       -t am_lat -D short  -d enp9s0 -x tcp   16 -s      16 -n 10000
