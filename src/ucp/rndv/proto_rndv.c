@@ -455,8 +455,8 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
 
     if (rkey_length > 0) {
         ucs_assert(rkey_buffer != NULL);
-        status = ucp_ep_rkey_unpack_internal(ep, rkey_buffer, rkey_length,
-                                             &rkey);
+        status = ucp_ep_rkey_unpack_reachable(ep, rkey_buffer, rkey_length,
+                                              &rkey);
         if (status != UCS_OK) {
             goto err;
         }

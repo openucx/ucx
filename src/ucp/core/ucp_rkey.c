@@ -351,8 +351,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_rkey_proto_resolve,
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
-                 (ep, buffer, length, rkey_p), ucp_ep_h ep, const void *buffer,
-                 size_t length, ucp_rkey_h *rkey_p)
+                 (ep, buffer, length, unpack_md_map, rkey_p), ucp_ep_h ep,
+                 const void *buffer, size_t length, ucp_md_map_t unpack_md_map,
+                 ucp_rkey_h *rkey_p)
 {
     ucp_worker_h worker              = ep->worker;
     const ucp_ep_config_t *ep_config = ucp_ep_config(ep);
@@ -379,7 +380,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_ep_rkey_unpack_internal,
 
     /* MD map for the unpacked rkey */
     remote_md_map = *ucs_serialize_next(&p, const ucp_md_map_t);
-    md_map        = remote_md_map & ucp_ep_config(ep)->key.reachable_md_map;
+    md_map        = remote_md_map & unpack_md_map;
     md_count      = ucs_popcount(md_map);
 
     /* Allocate rkey handle which holds UCT rkeys for all remote MDs. Small key
@@ -477,7 +478,7 @@ ucs_status_t ucp_ep_rkey_unpack(ucp_ep_h ep, const void *rkey_buffer,
     ucs_status_t status;
 
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(ep->worker);
-    status = ucp_ep_rkey_unpack_internal(ep, rkey_buffer, 0, rkey_p);
+    status = ucp_ep_rkey_unpack_reachable(ep, rkey_buffer, 0, rkey_p);
     UCP_WORKER_THREAD_CS_EXIT_CONDITIONAL(ep->worker);
 
     return status;
@@ -550,8 +551,6 @@ void ucp_rkey_destroy(ucp_rkey_h rkey)
 {
     unsigned remote_md_index, rkey_index;
     ucp_worker_h UCS_V_UNUSED worker;
-
-    ucs_trace("destroying rkey %p", rkey);
 
     rkey_index = 0;
     ucs_for_each_bit(remote_md_index, rkey->md_map) {

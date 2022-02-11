@@ -55,8 +55,9 @@ public:
         m_send_mem_type = m_mem_type_pairs[mem_type_pair_index][0];
         m_recv_mem_type = m_mem_type_pairs[mem_type_pair_index][1];
 
-        modify_config("MAX_EAGER_LANES", "2");
-        modify_config("MAX_RNDV_LANES",  "2");
+        modify_config("MAX_EAGER_LANES",          "2");
+        modify_config("MAX_RNDV_LANES",           "2");
+        modify_config("RNDV_PIPELINE_SHM_ENABLE", "y");
 
         test_ucp_tag::init();
     }

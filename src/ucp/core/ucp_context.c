@@ -365,6 +365,10 @@ static ucs_config_field_t ucp_config_table[] = {
    "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_config_t, ctx.rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
+  {"RNDV_PIPELINE_SHM_ENABLE", "y",
+   "Use two stage pipeline rendezvous protocol for intra-node GPU to GPU transfers",
+   ucs_offsetof(ucp_config_t, ctx.rndv_shm_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
   {"FLUSH_WORKER_EPS", "y",
    "Enable flushing the worker by flushing its endpoints. Allows completing\n"
    "the flush operation in a bounded time even if there are new requests on\n"

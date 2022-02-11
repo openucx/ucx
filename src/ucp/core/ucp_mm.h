@@ -39,10 +39,10 @@ typedef struct ucp_mem {
  * Memory descriptor.
  * Contains a memory handle of the chunk it belongs to.
  */
-typedef struct ucp_mem_desc {
+struct ucp_mem_desc {
     ucp_mem_h           memh;
     void                *ptr;
-} ucp_mem_desc_t;
+};
 
 
 /**

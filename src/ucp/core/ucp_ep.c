@@ -38,6 +38,9 @@
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
 
+__KHASH_IMPL(ucp_ep_peer_mem_hash, kh_inline, uint64_t,
+             ucp_ep_peer_mem_data_t, 1,
+             kh_int64_hash_func, kh_int64_hash_equal);
 
 typedef struct {
     double reg_growth;
@@ -210,6 +213,8 @@ static ucp_ep_h ucp_ep_allocate(ucp_worker_h worker, const char *peer_name)
 #if UCS_ENABLE_ASSERT
     ucp_ep_ext_control(ep)->ka_last_round = 0;
 #endif
+    ucp_ep_ext_control(ep)->peer_mem      = NULL;
+
     UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen(ep)->ep_match) >=
                       sizeof(ucp_ep_ext_gen(ep)->flush_state));
     memset(&ucp_ep_ext_gen(ep)->ep_match, 0,
@@ -248,6 +253,55 @@ static int ucp_ep_shall_use_indirect_id(ucp_context_h context,
            ((context->config.ext.proto_indirect_id == UCS_CONFIG_ON) ||
             ((context->config.ext.proto_indirect_id == UCS_CONFIG_AUTO) &&
              (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE)));
+}
+
+void ucp_ep_peer_mem_destroy(ucp_context_h context,
+                             ucp_ep_peer_mem_data_t *ppln_data)
+{
+    ucp_md_map_t md_map;
+    ucs_status_t UCS_V_UNUSED status;
+
+    md_map = (ppln_data->md_index == UCP_NULL_RESOURCE) ?
+             0 : UCS_BIT(ppln_data->md_index);
+    status = ucp_mem_rereg_mds(context, 0, NULL, 0, 0, NULL,
+                               UCS_MEMORY_TYPE_UNKNOWN, NULL,
+                               &ppln_data->uct_memh, &md_map);
+    ucs_assertv(status == UCS_OK, "%s", ucs_status_string(status));
+
+    ucp_rkey_destroy(ppln_data->rkey);
+}
+
+ucp_ep_peer_mem_data_t*
+ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
+                    size_t size, void *rkey_buf, ucp_md_index_t md_index)
+{
+    khash_t(ucp_ep_peer_mem_hash) *peer_mem = ucp_ep_ext_control(ep)->peer_mem;
+    ucp_ep_peer_mem_data_t *data;
+    khiter_t iter;
+    int ret;
+
+    if (ucs_unlikely(peer_mem == NULL)) {
+        ucp_ep_ext_control(ep)->peer_mem =
+        peer_mem                         = kh_init(ucp_ep_peer_mem_hash);
+    }
+
+    iter = kh_put(ucp_ep_peer_mem_hash, peer_mem, address, &ret);
+    ucs_assert_always(ret != UCS_KH_PUT_FAILED);
+    data = &kh_val(ucp_ep_ext_control(ep)->peer_mem, iter);
+
+    if (ucs_likely(ret == UCS_KH_PUT_KEY_PRESENT)) {
+        if (ucs_likely(size <= data->size)) {
+            return data;
+        }
+
+        ucp_ep_peer_mem_destroy(context, data);
+    }
+
+    data->size     = size;
+    data->uct_memh = NULL;
+    ucp_ep_rkey_unpack_internal(ep, rkey_buf, 0, UCS_BIT(md_index),
+                                &data->rkey);
+    return data;
 }
 
 ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
@@ -375,6 +429,7 @@ static int ucp_ep_remove_filter(const ucs_callbackq_elem_t *elem, void *arg)
 
 void ucp_ep_destroy_base(ucp_ep_h ep)
 {
+    ucp_ep_peer_mem_data_t data;
     ucp_ep_refcount_field_assert(ep, refcount, ==, 0);
     ucp_ep_refcount_assert(ep, create, ==, 0);
     ucp_ep_refcount_assert(ep, flush, ==, 0);
@@ -393,6 +448,14 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucs_vfs_obj_remove(ep);
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q, ucp_ep_remove_filter,
                             ep);
+    UCS_STATS_NODE_FREE(ep->stats);
+    if (ucp_ep_ext_control(ep)->peer_mem != NULL) {
+        kh_foreach_value(ucp_ep_ext_control(ep)->peer_mem, data, {
+            ucp_ep_peer_mem_destroy(ep->worker->context, &data);
+        });
+
+        kh_destroy(ucp_ep_peer_mem_hash, ucp_ep_ext_control(ep)->peer_mem);
+    }
     ucp_ep_deallocate(ep);
 }
 

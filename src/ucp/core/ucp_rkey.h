@@ -192,8 +192,9 @@ ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
                    const ucs_sys_dev_distance_t *sys_distance, void *buffer);
 
 
-ucs_status_t ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer,
-                                         size_t length, ucp_rkey_h *rkey_p);
+ucs_status_t
+ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
+                            ucp_md_map_t unpack_md_map, ucp_rkey_h *rkey_p);
 
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,
