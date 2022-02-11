@@ -1,12 +1,12 @@
 #SISCI
-sisci_8        -t am_lat -D short  -d sci -x sci   8  -s       8 -n 1000000
-sisci_16       -t am_lat -D short  -d sci -x sci   16 -s      16 -n 1000000
-sisci_32       -t am_lat -D short  -d sci -x sci   32 -s      32 -n 1000000
-sisci_64       -t am_lat -D short  -d sci -x sci   64 -s      64 -n 1000000
-sisci_128      -t am_lat -D short  -d sci -x sci  128 -s     128 -n 1000000
-sisci_256      -t am_lat -D short  -d sci -x sci  256 -s     256 -n 1000000
-sisci_512      -t am_lat -D short  -d sci -x sci  512 -s     512 -n 1000000
-sisci_1024     -t am_lat -D short  -d sci -x sci 1024 -s    1024 -n 1000000
+sisci_8        -t am_lat -D short  -d sci -x sci   8  -s       8 -n 100000
+sisci_16       -t am_lat -D short  -d sci -x sci   16 -s      16 -n 100000
+sisci_32       -t am_lat -D short  -d sci -x sci   32 -s      32 -n 100000
+sisci_64       -t am_lat -D short  -d sci -x sci   64 -s      64 -n 100000
+sisci_128      -t am_lat -D short  -d sci -x sci  128 -s     128 -n 100000
+sisci_256      -t am_lat -D short  -d sci -x sci  256 -s     256 -n 100000
+sisci_512      -t am_lat -D short  -d sci -x sci  512 -s     512 -n 100000
+sisci_1024     -t am_lat -D short  -d sci -x sci 1024 -s    1024 -n 100000
 sisci_2048     -t am_lat -D short  -d sci -x sci 2048 -s    2048 -n 100000
 sisci_4096     -t am_lat -D short  -d sci -x sci 4096 -s    4096 -n 100000
 sisci_8192     -t am_lat -D short  -d sci -x sci 8192 -s    8192 -n 100000
@@ -17,17 +17,23 @@ sisci_131072   -t am_lat -D short  -d sci -x sci   131072 -s  131072 -n 5000
 sisci_262144   -t am_lat -D short  -d sci -x sci   262144 -s  262144 -n 2500
 sisci_524288   -t am_lat -D short  -d sci -x sci   524288 -s  524288 -n 1200
 sisci_1048576  -t am_lat -D short  -d sci -x sci   1048576 -s 1048576 -n 600
-sisci_2097152  -t am_lat -D short  -d sci -x sci   2097152 -s 2097152 -n 300
+#sisci_2097152  -t am_lat -D short  -d sci -x sci   2097152 -s 2097152 -n 300
 #TCP
-tcp_8        -t am_lat -D short  -d enp9s0 -x tcp   8  -s       8 -n 10000
-tcp_16       -t am_lat -D short  -d enp9s0 -x tcp   16 -s      16 -n 10000
-tcp_32       -t am_lat -D short  -d enp9s0 -x tcp   32 -s      32 -n 10000
-tcp_64       -t am_lat -D short  -d enp9s0 -x tcp   64 -s      64 -n 10000
-tcp_128      -t am_lat -D short  -d enp9s0 -x tcp  128 -s     128 -n 10000
-tcp_256      -t am_lat -D short  -d enp9s0 -x tcp  256 -s     256 -n 10000
-tcp_512      -t am_lat -D short  -d enp9s0 -x tcp  512 -s     512 -n 10000
-tcp_1024     -t am_lat -D short  -d enp9s0 -x tcp 1024 -s    1024 -n 10000
-tcp_2048     -t am_lat -D short  -d enp9s0 -x tcp 2048 -s    2048 -n 10000
-tcp_4096     -t am_lat -D short  -d enp9s0 -x tcp 4096 -s    4096 -n 10000
-tcp_8192     -t am_lat -D short  -d enp9s0 -x tcp 8192 -s    8192 -n 10000
-
+tcp_8        -t am_lat -D short  -d enp9s0 -x tcp   -s       8 -n 10000
+tcp_16       -t am_lat -D short  -d enp9s0 -x tcp   -s      16 -n 10000
+tcp_32       -t am_lat -D short  -d enp9s0 -x tcp   -s      32 -n 10000
+tcp_64       -t am_lat -D short  -d enp9s0 -x tcp   -s      64 -n 10000
+tcp_128      -t am_lat -D short  -d enp9s0 -x tcp   -s     128 -n 10000
+tcp_256      -t am_lat -D short  -d enp9s0 -x tcp   -s     256 -n 10000
+tcp_512      -t am_lat -D short  -d enp9s0 -x tcp   -s     512 -n 10000
+tcp_1024     -t am_lat -D short  -d enp9s0 -x tcp   -s    1024 -n 10000
+tcp_2048     -t am_lat -D short  -d enp9s0 -x tcp   -s    2048 -n 10000
+tcp_4096     -t am_lat -D short  -d enp9s0 -x tcp   -s    4096 -n 10000
+tcp_8192     -t am_lat -D short  -d enp9s0 -x tcp   -s    8192 -n 10000
+tcp_16384    -t am_lat -D short  -d enp9s0 -x tcp   -s   16384 -n 40000
+tcp_32768    -t am_lat -D short  -d enp9s0 -x tcp   -s   32768 -n 20000
+tcp_65536    -t am_lat -D short  -d enp9s0 -x tcp   -s   65536 -n 10000
+tcp_131072   -t am_lat -D short  -d enp9s0 -x tcp   -s  131072 -n 5000
+tcp_262144   -t am_lat -D short  -d enp9s0 -x tcp   -s  262144 -n 2500
+tcp_524288   -t am_lat -D short  -d enp9s0 -x tcp   -s  524288 -n 1200
+tcp_1048576  -t am_lat -D short  -d enp9s0 -x tcp   -s 1048576 -n 600
