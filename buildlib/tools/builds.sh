@@ -244,6 +244,8 @@ build_clang() {
 # Build with gcc-latest module
 #
 build_gcc() {
+	cflags=$1
+
 	#If the glibc version on the host is older than 2.14, don't run
 	#check the glibc version with the ldd version since it comes with glibc
 	#see https://www.linuxquestions.org/questions/linux-software-2/how-to-check-glibc-version-263103/
@@ -260,7 +262,7 @@ build_gcc() {
 		if az_module_load $GCC_MODULE
 		then
 			echo "==== Build with GCC compiler ($(gcc --version|head -1)) ===="
-			${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
+			${WORKSPACE}/contrib/configure-devel CFLAGS="$cflags" CXXFLAGS="$cflags" --prefix=$ucx_inst
 			$MAKEP
 			$MAKEP install
 			az_module_unload $GCC_MODULE
@@ -268,6 +270,10 @@ build_gcc() {
 	else
 		azure_log_warning "Not building with gcc compiler, glibc version is too old ($ldd_ver)"
 	fi
+}
+
+build_gcc_debug_opt() {
+	build_gcc "-Og"
 }
 
 #
@@ -410,6 +416,7 @@ then
 	do_task 10 build_icc
 	do_task 10 build_pgi
 	do_task 10 build_gcc
+	do_task 10 build_gcc_debug_opt
 	do_task 10 build_clang
 	do_task 10 build_armclang
 fi

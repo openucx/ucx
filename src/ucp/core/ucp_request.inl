@@ -815,6 +815,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         rdesc = (ucp_recv_desc_t*)ucs_mpool_set_get_inline(&worker->am_mps,
                                                            length);
         if (rdesc == NULL) {
+            *rdesc_p = NULL; /* To suppress compiler warning */
             ucs_error("ucp recv descriptor is not allocated");
             return UCS_ERR_NO_MEMORY;
         }
@@ -1054,6 +1055,7 @@ ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 
     status = UCS_PTR_MAP_GET(request, &worker->request_map, id, extract, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
+        *req_p = NULL; /* To suppress compiler warning */
         return status;
     }
 

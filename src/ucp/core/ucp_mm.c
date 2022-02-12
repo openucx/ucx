@@ -724,13 +724,12 @@ ucp_mem_advise(ucp_context_h context, ucp_mem_h memh,
 static inline ucs_status_t
 ucp_mpool_malloc(ucp_worker_h worker, ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
 {
+    /* Need to get default flags from ucp_mem_map_params2uct_flags() */
+    ucp_mem_map_params_t mem_params = {};
     ucp_mem_desc_t *chunk_hdr;
     ucp_mem_h memh;
     ucs_status_t status;
-    ucp_mem_map_params_t mem_params;
 
-    /* Need to get default flags from ucp_mem_map_params2uct_flags() */
-    mem_params.field_mask = 0;
     status = ucp_memh_alloc(worker->context, NULL,
                             *size_p + sizeof(*chunk_hdr), UCS_MEMORY_TYPE_HOST,
                             ucp_mem_map_params2uct_flags(&mem_params),
