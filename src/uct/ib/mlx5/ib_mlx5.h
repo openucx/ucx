@@ -692,7 +692,7 @@ err_dofork:
     }
 err_free:
     ucs_free(buf);
-
+    *buf_p = NULL; /* To suppress compiler warning */
     return status;
 }
 

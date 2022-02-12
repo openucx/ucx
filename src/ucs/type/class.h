@@ -154,9 +154,11 @@ struct ucs_class {
                 *(_obj) = (ucs_typeof(*(_obj)))obj; /* Success - assign pointer */ \
             } else { \
                 ucs_class_free(obj); /* Initialization failure */ \
+                *(_obj) = NULL; /* To suppress compiler warning */ \
             } \
         } else { \
             _status = UCS_ERR_NO_MEMORY; /* Allocation failure */ \
+            *(_obj) = NULL; /* To suppress compiler warning */ \
         } \
         \
         (_status); \
