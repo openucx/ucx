@@ -41,18 +41,26 @@ parameters:
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: tag_cx6_dc
-      "active messages on CX6/DC":
-        args: "-A"
-        duration: 600
-        interface: $(roce_iface_cx6)
-        tls: "dc_x"
-        test_name: am_cx6_dc
       "active messages on CX6/DC with data validation":
         args: "-A -q"
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_validate_cx6_dc
+      "tag match on CX4 with user memh":
+        args: "-z"
+        initial_delay: 9999 # No interference
+        duration: 120
+        interface: $(roce_iface_cx4)
+        tls: "rc_x"
+        test_name: tag_umemh_cx4_rc
+      "active messages on CX6/DC with user memh":
+        args: "-A -z"
+        initial_delay: 9999 # No interference
+        duration: 120
+        interface: $(roce_iface_cx6)
+        tls: "dc_x"
+        test_name: am_umemh_cx6_dc
 
 jobs:
   - job: io_build
