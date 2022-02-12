@@ -7,6 +7,10 @@
 ##
 #
 
+## 1.12.1-rc2 (TBD)
+### Bugfixes
+* Fixed parsing header flags of worker address
+
 ## 1.12.1-rc1 (February 9, 2022)
 ### Bugfixes
 * Fixed memory hooks for Cuda 11.5
