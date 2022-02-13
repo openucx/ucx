@@ -11,6 +11,7 @@
 #include "dt_generic.h"
 
 #include <ucp/api/ucp.h>
+#include <ucp/core/ucp_mm.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/datastruct/string_buffer.h>
 
@@ -40,7 +41,7 @@ typedef struct {
     union {
         struct {
             void                  *buffer;    /* Contiguous buffer pointer */
-            ucp_dt_reg_t          reg;        /* Memory registration state */
+            ucp_mem_h             memh;       /* Memory registration handle */
         } contig;
         struct {
             ucp_dt_generic_t      *dt_gen;    /* Generic datatype handle */
@@ -53,7 +54,7 @@ typedef struct {
 #endif
             size_t                iov_index;  /* Index of current IOV item */
             size_t                iov_offset; /* Offset in the current IOV item */
-            ucp_dt_reg_t          *reg;
+            ucp_mem_h             *memh;
             /* TODO support memory registration with IOV */
             /* TODO duplicate the iov array, and save the "start offset" instead
              * of "iov_length" in each element, this way we don't need to keep
@@ -64,17 +65,6 @@ typedef struct {
         } iov;
     } type;
 } ucp_datatype_iter_t;
-
-
-ucs_status_t
-ucp_datatype_iter_mem_reg_internal(ucp_context_h context, void *address,
-                                   size_t length, unsigned uct_flags,
-                                   ucs_memory_type_t mem_type,
-                                   ucp_md_map_t md_map, ucp_dt_reg_t *dt_reg);
-
-
-void ucp_datatype_iter_mem_dereg_internal(ucp_context_h context,
-                                          ucp_dt_reg_t *dt_reg);
 
 
 ucs_status_t ucp_datatype_iter_iov_mem_reg(ucp_context_h context,

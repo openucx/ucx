@@ -127,7 +127,7 @@ ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
-                               lpriv->super.memh_index, UCP_DT_MASK_CONTIG_IOV,
+                               lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
 
     mpriv = req->send.proto_config->priv;

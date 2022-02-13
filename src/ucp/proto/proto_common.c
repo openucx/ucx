@@ -38,9 +38,9 @@ void ucp_proto_common_lane_priv_init(const ucp_proto_common_init_params_t *param
 
     /* Local key index */
     if (md_map & UCS_BIT(md_index)) {
-        lane_priv->memh_index = ucs_bitmap2idx(md_map, md_index);
+        lane_priv->md_index = md_index;
     } else {
-        lane_priv->memh_index = UCP_NULL_RESOURCE;
+        lane_priv->md_index = UCP_NULL_RESOURCE;
     }
 
     /* Remote key index */

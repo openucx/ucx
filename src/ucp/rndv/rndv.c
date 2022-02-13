@@ -937,7 +937,7 @@ ucp_rndv_init_mem_type_frag_req(ucp_worker_h worker, ucp_request_t *freq, int rn
 
         freq->send.lane                       = mem_type_rma_lane;
         freq->send.ep                         = mem_type_ep;
-        freq->send.state.dt.dt.contig.memh[0] = ucp_memh2uct(mdesc->memh, md_index);
+        freq->send.state.dt.dt.contig.memh[0] = mdesc->memh->uct[md_index];
         freq->send.state.dt.dt.contig.md_map  = UCS_BIT(md_index);
     }
 }
@@ -1271,7 +1271,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         ucs_for_each_bit(md_index,
                          (ucp_ep_config(rndv_req->send.ep)->key.rma_bw_md_map &
                           mdesc->memh->md_map)) {
-            freq->recv.state.dt.contig.memh[memh_index++] = ucp_memh2uct(mdesc->memh, md_index);
+            freq->recv.state.dt.contig.memh[memh_index++] = mdesc->memh->uct[md_index];
             freq->recv.state.dt.contig.md_map            |= UCS_BIT(md_index);
         }
         ucs_assert(memh_index <= UCP_MAX_OP_MDS);

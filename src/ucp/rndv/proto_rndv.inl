@@ -95,16 +95,15 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     rts->sreq.req_id = ucp_send_request_get_id(req);
     rts->sreq.ep_id  = ucp_send_request_get_ep_remote_id(req);
     rts->size        = req->send.state.dt_iter.length;
+    rpriv            = req->send.proto_config->priv;
 
-    if ((rts->size == 0) ||
-        (req->send.state.dt_iter.type.contig.reg.md_map == 0)) {
+    if ((rts->size == 0) || (rpriv->md_map == 0)) {
         rts->address = 0;
         rkey_size    = 0;
     } else {
-        rpriv        = req->send.proto_config->priv;
         rts->address = (uintptr_t)req->send.state.dt_iter.type.contig.buffer;
         rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey, req,
-                                        rpriv->sys_dev_map,
+                                        rpriv->md_map, rpriv->sys_dev_map,
                                         rpriv->sys_dev_distance, rkey_buffer);
     }
 

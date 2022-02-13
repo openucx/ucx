@@ -142,7 +142,7 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
                                     ...)
 {
     char message[128];
-    char region_desc[64];
+    char region_desc[128];
     va_list ap;
 
     va_start(ap, fmt);
@@ -1213,12 +1213,13 @@ static UCS_CLASS_INIT_FUNC(ucs_rcache_t, const ucs_rcache_params_t *params,
     }
 
     if (!ucs_is_pow2(params->alignment) ||
-        (params->alignment < UCS_PGT_ADDR_ALIGN) ||
+        (params->alignment < UCS_RCACHE_MIN_ALIGNMENT) ||
         (params->alignment > params->max_alignment))
     {
         ucs_error("invalid regcache alignment (%zu): must be a power of 2 "
                   "between %zu and %zu",
-                  params->alignment, UCS_PGT_ADDR_ALIGN, params->max_alignment);
+                  params->alignment, UCS_RCACHE_MIN_ALIGNMENT,
+                  params->max_alignment);
         status = UCS_ERR_INVALID_PARAM;
         goto err;
     }

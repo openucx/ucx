@@ -299,7 +299,7 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
 
     max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
     iov_count   = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                                             max_payload, lpriv->super.memh_index,
+                                             max_payload, lpriv->super.md_index,
                                              UCP_DT_MASK_CONTIG_IOV, next_iter,
                                              iov, lpriv->super.max_iov);
     return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,

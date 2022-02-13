@@ -626,6 +626,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         /* RTR covers the whole send request - use the send request directly */
         ucs_assert(rtr->offset == 0);
 
+        ucp_datatype_iter_mem_dereg(worker->context, &req->send.state.dt_iter,
+                                    UCS_BIT(UCP_DATATYPE_CONTIG));
         ucp_send_request_id_release(req);
         req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 

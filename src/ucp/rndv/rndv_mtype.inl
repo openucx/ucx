@@ -55,7 +55,7 @@ ucp_proto_rndv_mtype_get_memh(ucp_mem_desc_t *mdesc, ucp_rsc_index_t memh_index)
         return UCT_MEM_HANDLE_NULL;
     }
 
-    ucs_assertv(memh_index < ucs_popcount(mdesc->memh->md_map),
+    ucs_assertv(UCS_BIT(memh_index) & mdesc->memh->md_map,
                 "memh_index=%d md_map=0x%" PRIx64, memh_index,
                 mdesc->memh->md_map);
     return mdesc->memh->uct[memh_index];
@@ -87,7 +87,7 @@ ucp_proto_rndv_mtype_next_iov(ucp_request_t *req,
                                                 max_payload, next_iter);
 
     ucp_proto_rndv_mtype_iov_init(req, length, req->send.state.dt_iter.offset,
-                                  lpriv->super.memh_index, iov);
+                                  lpriv->super.md_index, iov);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
@@ -115,8 +115,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
 
     /* Set up IOV pointing to the mdesc */
     ucp_proto_rndv_mtype_iov_init(req, req->send.state.dt_iter.length, 0,
-                                  ucs_bitmap2idx(mdesc->memh->md_map, md_index),
-                                  &iov);
+                                  md_index, &iov);
 
     /* Copy from mdesc to user buffer */
     ucs_assert(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG);
