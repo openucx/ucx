@@ -7,16 +7,13 @@
 ##
 #
 
-## 1.12.1-rc2 (TBD)
-### Bugfixes
-* Fixed parsing header flags of worker address
-
-## 1.12.1-rc1 (February 9, 2022)
+## 1.12.1-rc2 (February 14, 2022)
 ### Bugfixes
 * Fixed memory hooks for Cuda 11.5
 * Fixed memory type cache merge
 * Fixed continuously triggering wakeup fd when keepalive is used
 * Fixed memtype cache fallback when memory hooks are not installed
+* Fixed parsing header flags of worker address
 ### Important changes
 * If Cuda memory hooks on driver API cannot be installed, memory type cache and
   memory registration cache will be disabled. This may lead to lower performance
