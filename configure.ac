@@ -237,6 +237,7 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([src/uct/configure.m4])
      m4_include([src/tools/perf/configure.m4])
      m4_include([test/gtest/configure.m4])
+     m4_include([test/apps/iodemo/configure.m4])
 
 
      #
