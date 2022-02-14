@@ -324,6 +324,15 @@ void ucp_ep_destroy_base(ucp_ep_h ep)
     ucp_ep_refcount_assert(ep, discard, ==, 0);
     ucs_assert(ucs_hlist_is_empty(&ucp_ep_ext_gen(ep)->proto_reqs));
 
+    if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
+        ucs_assert(ep->worker->num_all_eps > 0);
+        --ep->worker->num_all_eps;
+        ucp_worker_keepalive_remove_ep(ep);
+    }
+
+    ucp_ep_release_id(ep);
+    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
+
     ucs_vfs_obj_remove(ep);
     ucs_callbackq_remove_if(&ep->worker->uct->progress_q, ucp_ep_remove_filter,
                             ep);
@@ -384,14 +393,6 @@ err:
 
 void ucp_ep_delete(ucp_ep_h ep)
 {
-    if (!(ep->flags & UCP_EP_FLAG_INTERNAL)) {
-        ucs_assert(ep->worker->num_all_eps > 0);
-        --ep->worker->num_all_eps;
-        ucp_worker_keepalive_remove_ep(ep);
-    }
-
-    ucp_ep_release_id(ep);
-    ucs_list_del(&ucp_ep_ext_gen(ep)->ep_list);
     ucp_ep_refcount_assert(ep, create, ==, 1);
     ucp_ep_refcount_remove(ep, create);
 }
