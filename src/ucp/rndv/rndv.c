@@ -116,10 +116,15 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
 
 static UCS_F_ALWAYS_INLINE int
 ucp_rndv_is_put_pipeline_needed(uintptr_t remote_address, size_t length,
+                                const void *rkey_buf,
                                 const ucp_ep_rndv_zcopy_config_t *get_zcopy,
                                 const ucp_ep_rndv_zcopy_config_t *put_zcopy,
                                 int is_get_zcopy_failed)
 {
+    if (ucp_rkey_packed_mem_type(rkey_buf) == UCS_MEMORY_TYPE_HOST) {
+        return 0;
+    }
+
     /* Fallback to PUT pipeline if: */
     return /* Remote mem type is non-HOST memory OR can't do GET ZCOPY */
            ((remote_address == 0) || (get_zcopy->max == 0) ||
@@ -1527,8 +1532,8 @@ UCS_PROFILE_FUNC_VOID(ucp_rndv_receive, (worker, rreq, rndv_rts_hdr, rkey_buf),
             put_zcopy = &ep_config->rndv.put_zcopy;
             ucp_rndv_recv_data_init(rreq, rndv_rts_hdr->size);
             if (ucp_rndv_is_put_pipeline_needed(rndv_rts_hdr->address,
-                                                rndv_rts_hdr->size, get_zcopy,
-                                                put_zcopy,
+                                                rndv_rts_hdr->size, rkey_buf,
+                                                get_zcopy, put_zcopy,
                                                 is_get_zcopy_failed)) {
                 /* send FRAG RTR for sender to PUT the fragment. */
                 ucp_rndv_send_frag_rtr(worker, rndv_req, rreq, rndv_rts_hdr);
