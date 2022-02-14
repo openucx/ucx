@@ -14,6 +14,7 @@
 * Fixed continuously triggering wakeup fd when keepalive is used
 * Fixed memtype cache fallback when memory hooks are not installed
 * Fixed parsing header flags of worker address
+* Fixed pipeline protocol when sending from host memory to GPU memory
 ### Important changes
 * If Cuda memory hooks on driver API cannot be installed, memory type cache and
   memory registration cache will be disabled. This may lead to lower performance
