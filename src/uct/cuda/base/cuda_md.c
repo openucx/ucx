@@ -13,7 +13,7 @@
 
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <ucs/memory/memtype_cache.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/profile/profile.h>
