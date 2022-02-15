@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/param.h>
+#include <sys/resource.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
 #include <arpa/inet.h>
@@ -627,6 +628,13 @@ long ucs_sys_get_num_cpus();
  * @return The time the process started after system boot or 0 in case of error.
  */
 unsigned long ucs_sys_get_proc_create_time(pid_t pid);
+
+/*
+ * Get the current max locked memory limit.
+ *
+ * @param [out] rlim_t         If successful, set to the current limit value.
+ */
+ucs_status_t ucs_sys_get_memlock_rlimit(rlim_t *rlimit_value);
 
 END_C_DECLS
 

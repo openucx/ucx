@@ -1183,6 +1183,22 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
+    rlim_t memlock_limit;
+
+    status = ucs_sys_get_memlock_rlimit(&memlock_limit);
+    if ((status == UCS_OK) &&
+        (memlock_limit != RLIM_INFINITY) &&
+        (memlock_limit <= (500 * UCS_MBYTE))) {
+        /* Disable the RDMA devices because of too strong locked memory limit*/
+        ucs_warn("RDMA transports are disabled because max locked memory limit "
+                 "(%llu kbytes) is too low. Please set max locked memory "
+                 "(ulimit -l) to 'unlimited'",
+                 (memlock_limit / UCS_KBYTE));
+
+        *resources_p     = NULL;
+        *num_resources_p = 0;
+        return UCS_OK;
+    }
 
     UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 
@@ -1548,23 +1564,6 @@ static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
     return uct_ib_md_read_pci_bw(ib_device);
 }
 
-void static check_locked_memory_limit()
-{
-    struct rlimit limit_info = {};
-    UCS_STRING_BUFFER_ONSTACK(msg, 256);
-
-    ucs_trace("checking the locked memory limit");
-
-    if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
-        limit_info.rlim_cur != RLIM_INFINITY &&
-        limit_info.rlim_cur <= 500 * UCS_MBYTE) {
-        ucs_string_buffer_appendf(&msg, "the locked memory limit is "
-                                        "too low, rdma may be broken");
-        ucs_log_check_memlock_limit_append_msg(&msg);
-        ucs_warn("%s", ucs_string_buffer_cstr(&msg));
-    }
-}
-
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p)
 {
@@ -1574,8 +1573,6 @@ ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
     struct ibv_device **ib_device_list, *ib_device;
     uct_ib_md_ops_entry_t *md_ops_entry;
     int i, num_devices, ret, fork_init = 0;
-
-    check_locked_memory_limit();
 
     ucs_trace("opening IB device %s", md_name);
 

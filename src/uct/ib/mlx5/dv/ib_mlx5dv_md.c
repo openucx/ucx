@@ -865,6 +865,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 {
     ucs_status_t status = UCS_OK;
 #if HAVE_DC_DV
+    UCS_STRING_BUFFER_ONSTACK(msg, 256);
     struct ibv_srq_init_attr srq_attr = {};
     struct ibv_context *ctx = dev->ibv_context;
     struct ibv_qp_init_attr_ex qp_attr = {};
@@ -886,11 +887,11 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        UCS_STRING_BUFFER_ONSTACK(msg, 256);
         ucs_string_buffer_appendf(&msg, "ibv_create_cq() failed: %m");
         if (errno == ENOMEM) {
             ucs_log_check_memlock_limit_append_msg(&msg);
         }
+
         ucs_error("%s", ucs_string_buffer_cstr(&msg));
         status = UCS_ERR_IO_ERROR;
         goto err_cq;

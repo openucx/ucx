@@ -492,6 +492,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
                                   const uct_rc_iface_common_config_t *config,
                                   struct ibv_srq **srq_p)
 {
+    UCS_STRING_BUFFER_ONSTACK(msg, 256);
     struct ibv_srq_init_attr srq_init_attr;
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
     struct ibv_srq *srq;
@@ -502,7 +503,6 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     srq_init_attr.srq_context    = iface;
     srq                          = ibv_create_srq(pd, &srq_init_attr);
     if (srq == NULL) {
-        UCS_STRING_BUFFER_ONSTACK(msg, 256);
         ucs_string_buffer_appendf(&msg, "ibv_create_srq() failed: %m");
         if (errno == ENOMEM) {
             ucs_log_check_memlock_limit_append_msg(&msg);
