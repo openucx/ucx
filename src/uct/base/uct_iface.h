@@ -459,6 +459,27 @@ typedef struct uct_iface_mpool_config {
     }
 
 
+#define UCT_TL_EXPAND_USR_MEM_ALLOCATOR(_user_allocator_props) \
+    user_allocator_props_t *user_allocator_props = _user_allocator_props; \
+    uct_mem_h user_allocator_memh; \
+    uct_iface_get_desc_from_usr_func_t user_allocator_get_desc_from_usr = user_allocator_props->ops.get_desc_from_usr_callback; \
+    uct_usr_mem_allocator_h user_allocator_instance = user_allocator_props->usr_allocator; \
+    unsigned user_allocator_md_index = user_allocator_props->md_index; \
+    int user_allocator_exists = (user_allocator_instance != NULL);
+
+
+#define UCT_TL_IFACE_GET_RX_DESC_FROM_USER(_get_desc_from_usr, _usr_allocator, md_index, _desc, _memh, _failure) \
+    { \
+        _get_desc_from_usr(md_index, _usr_allocator, (void**)&_desc, &_memh); \
+        if (ucs_unlikely((_desc) == NULL)) { \
+            _failure; \
+        } \
+        ucs_assert(_memh != UCT_MEM_HANDLE_NULL); \
+        _desc->lkey = ((uct_ib_mem_t*)_memh)->lkey; \
+        \
+        VALGRIND_MAKE_MEM_DEFINED(_desc, sizeof(*(_desc))); \
+    }
+
 #define UCT_TL_IFACE_GET_RX_DESC(_iface, _mp, _desc, _failure) \
     { \
         _desc = ucs_mpool_get_inline(_mp); \

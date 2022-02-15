@@ -93,12 +93,16 @@ uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
     uint64_t desc_map;
     void *hdr;
     int i;
+    UCT_TL_EXPAND_USR_MEM_ALLOCATOR(&iface->super.super.super.user_allocator);
 
     desc_map = ~seg->srq.ptr_mask & UCS_MASK(iface->tm.mp.num_strides);
     ucs_for_each_bit(i, desc_map) {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
-                                 desc, return UCS_ERR_NO_MEMORY);
-
+        if (user_allocator_exists) {
+            UCT_TL_IFACE_GET_RX_DESC_FROM_USER(user_allocator_get_desc_from_usr, user_allocator_instance, user_allocator_md_index, desc, user_allocator_memh, break);
+        } else {
+            UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
+                                     desc, return UCS_ERR_NO_MEMORY);
+        }
         /* Set receive data segment pointer. Length is pre-initialized. */
         hdr                = uct_ib_iface_recv_desc_hdr(&iface->super.super,
                                                         desc);

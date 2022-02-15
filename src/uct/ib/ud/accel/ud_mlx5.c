@@ -176,6 +176,7 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
     struct mlx5_wqe_data_seg *rx_wqes;
     uint16_t pi, next_pi, count;
     uct_ib_iface_recv_desc_t *desc;
+    UCT_TL_EXPAND_USR_MEM_ALLOCATOR(&iface->super.super.super.user_allocator);
 
     rx_wqes = iface->rx.wq.wqes;
     pi      = iface->rx.wq.rq_wqe_counter & iface->rx.wq.mask;
@@ -183,8 +184,13 @@ uct_ud_mlx5_iface_post_recv(uct_ud_mlx5_iface_t *iface)
     for (count = 0; count < batch; count ++) {
         next_pi = (pi + 1) &  iface->rx.wq.mask;
         ucs_prefetch(rx_wqes + next_pi);
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
+        if (user_allocator_exists) {
+            UCT_TL_IFACE_GET_RX_DESC_FROM_USER(user_allocator_get_desc_from_usr, user_allocator_instance, user_allocator_md_index, desc, user_allocator_memh, break);
+        } else {
+            UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,
                                  desc, break);
+        }
+        
         rx_wqes[pi].lkey = htonl(desc->lkey);
         rx_wqes[pi].addr = htobe64((uintptr_t)uct_ib_iface_recv_desc_hdr(&iface->super.super, desc));
         pi = next_pi;

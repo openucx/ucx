@@ -261,11 +261,18 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
         return status;
     }
 
-    return uct_iface_mpool_init(&iface->super, mp,
-                                iface->config.rx_payload_offset +
-                                        iface->config.seg_size,
-                                align_offset, alignment, &config->rx.mp, grow,
-                                uct_ib_iface_recv_desc_init, name);
+    if (iface->super.user_allocator.ops.init_usr_mem_allocator) {
+        
+        return iface->super.user_allocator.ops.init_usr_mem_allocator(iface->config.seg_size, sizeof(uct_ib_iface_recv_desc_t), &iface->super.user_allocator.usr_allocator);
+
+    } else {
+
+        return uct_iface_mpool_init(&iface->super, mp,
+                                    iface->config.rx_payload_offset +
+                                            iface->config.seg_size,
+                                    align_offset, alignment, &config->rx.mp, grow,
+                                    uct_ib_iface_recv_desc_init, name);
+    }
 }
 
 void uct_ib_iface_release_desc(uct_recv_desc_t *self, void *desc)
@@ -1515,19 +1522,17 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
 {
     uct_ib_iface_recv_desc_t *desc;
     unsigned count;
-    unsigned md_index = 0;
-    uct_usr_mem_allocator_h usr_allocator = NULL;
-    uct_usr_desc_h usr_desc = NULL;
-    uct_mem_h memh = NULL;
-    uct_iface_get_desc_from_usr_func_t ucp_get_rx_desc_callback = iface->super.user_allocator.ops.get_desc_from_usr_callback;
-    
-    if (ucp_get_rx_desc_callback) {
-        ucp_get_rx_desc_callback(md_index, usr_allocator, &usr_desc, &memh);
-    }
+    UCT_TL_EXPAND_USR_MEM_ALLOCATOR(&iface->super.user_allocator);
 
     count = 0;
     while (count < n) {
-        UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
+
+        if (user_allocator_exists) {
+            UCT_TL_IFACE_GET_RX_DESC_FROM_USER(user_allocator_get_desc_from_usr, user_allocator_instance, user_allocator_md_index, desc, user_allocator_memh, break);
+        } else {
+            UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
+        }
+        
         wrs[count].sg.addr   = (uintptr_t)uct_ib_iface_recv_desc_hdr(iface, desc);
         wrs[count].sg.length = iface->config.rx_payload_offset + iface->config.seg_size;
         wrs[count].sg.lkey   = desc->lkey;

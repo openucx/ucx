@@ -902,18 +902,9 @@ typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
  */
 typedef struct uct_usr_mem_allocator *uct_usr_mem_allocator_h;
 
+typedef ucs_status_t (*uct_iface_init_usr_allocator_func_t)(size_t seg_size, size_t data_offset, uct_usr_mem_allocator_h* usr_allocator);
 
-/**
- * @ingroup UCT_RESOURCE
- * @brief User allocated descriptor
- *
- * Opaque object representing memory allocation instance implmented by the suer
- */
-typedef struct uct_usr_desc *uct_usr_desc_h;
-
-typedef int (*uct_iface_init_usr_allocator_func_t)(size_t seg_size, uct_usr_mem_allocator_h* usr_allocator);
-
-typedef int (*uct_iface_get_desc_from_usr_func_t)(unsigned md_index, uct_usr_mem_allocator_h usr_allocator, uct_usr_desc_h *desc, uct_mem_h *memh);
+typedef ucs_status_t (*uct_iface_get_desc_from_usr_func_t)(unsigned md_index, uct_usr_mem_allocator_h usr_allocator, void **desc, uct_mem_h *memh);
 
 /**
  * @ingroup UCT_RESOURCE
@@ -921,6 +912,7 @@ typedef int (*uct_iface_get_desc_from_usr_func_t)(unsigned md_index, uct_usr_mem
  */
 typedef struct user_allocator_props {
     unsigned md_index;
+    uct_usr_mem_allocator_h usr_allocator;
     struct {
         /*Init user defined memory allocator*/
         uct_iface_init_usr_allocator_func_t init_usr_mem_allocator;   
