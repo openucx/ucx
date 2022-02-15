@@ -104,7 +104,6 @@ static uct_iface_ops_t uct_rocm_gdr_iface_ops = {
     .ep_flush                 = uct_base_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_create                = UCS_CLASS_NEW_FUNC_NAME(uct_rocm_gdr_ep_t),
-    .ep_invalidate            = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     .ep_destroy               = UCS_CLASS_DELETE_FUNC_NAME(uct_rocm_gdr_ep_t),
     .iface_flush              = uct_base_iface_flush,
     .iface_fence              = uct_base_iface_fence,
@@ -122,7 +121,8 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_gdr_iface_t, uct_md_h md, uct_worker_h worke
                            const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
 {
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_gdr_iface_ops, NULL,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_gdr_iface_ops, 
+		    	      &uct_base_iface_internal_ops,
                               md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_GDR_TL_NAME));
