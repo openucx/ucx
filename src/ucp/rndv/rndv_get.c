@@ -11,6 +11,7 @@
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
 
+#define UCP_PROTO_RNDV_GET_DESC "read from remote"
 
 enum {
     UCP_PROTO_RNDV_GET_STAGE_FETCH = UCP_PROTO_STAGE_START,
@@ -104,6 +105,14 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
                                           0, 0);
 }
 
+static void
+ucp_proto_rndv_get_zcopy_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_default_query(params, attr);
+    ucp_proto_rndv_bulk_query(params, attr);
+}
+
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_rndv_get_zcopy_send_func(ucp_request_t *req,
                                    const ucp_proto_multi_lane_priv_t *lpriv,
@@ -185,9 +194,10 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
 
 static ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
+    .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
     .flags    = 0,
     .init     = ucp_proto_rndv_get_zcopy_init,
-    .query    = ucp_proto_rndv_bulk_query,
+    .query    = ucp_proto_rndv_get_zcopy_query,
     .progress = {
          [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_zcopy_fetch_progress,
          [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
@@ -286,11 +296,20 @@ ucp_proto_rndv_get_mtype_init(const ucp_proto_init_params_t *init_params)
                                           mdesc_md_map, 1);
 }
 
+static void
+ucp_proto_rndv_get_mtype_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_rndv_bulk_query(params, attr);
+    ucp_proto_rndv_mtype_query_desc(params, attr, UCP_PROTO_RNDV_GET_DESC);
+}
+
 static ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_get_mtype_init,
-    .query    = ucp_proto_rndv_bulk_query,
+    .query    = ucp_proto_rndv_get_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress,
@@ -344,6 +363,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
 
 static ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
+    .desc     = "no data fetch",
     .flags    = 0,
     .init     = ucp_proto_rndv_ats_init,
     .query    = ucp_proto_default_query,

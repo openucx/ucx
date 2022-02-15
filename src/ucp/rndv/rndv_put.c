@@ -17,6 +17,9 @@
 #include <ucp/proto/proto_single.inl>
 
 
+#define UCP_PROTO_RNDV_PUT_DESC "write to remote"
+
+
 enum {
     /* Initial stage for put zcopy is sending the data */
     UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND = UCP_PROTO_STAGE_START,
@@ -308,23 +311,34 @@ ucp_proto_rndv_put_common_init(const ucp_proto_init_params_t *init_params,
     return UCS_OK;
 }
 
-static void
+static const char *
 ucp_proto_rndv_put_common_query(const ucp_proto_query_params_t *params,
                                 ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_rndv_put_priv_t *rpriv     = params->priv;
     ucp_proto_query_params_t bulk_query_params = {
-        .priv       = &rpriv->bulk,
-        .msg_length = params->msg_length
+        .proto         = params->proto,
+        .priv          = &rpriv->bulk,
+        .worker        = params->worker,
+        .select_param  = params->select_param,
+        .ep_config_key = params->ep_config_key,
+        .msg_length    = params->msg_length
     };
 
     ucp_proto_rndv_bulk_query(&bulk_query_params, attr);
+
+    if (rpriv->atp_map == 0) {
+        return UCP_PROTO_RNDV_PUT_DESC;
+    } else if (rpriv->flush_map != 0) {
+        return "flushed " UCP_PROTO_RNDV_PUT_DESC;
+    } else {
+        return "fenced " UCP_PROTO_RNDV_PUT_DESC;
+    }
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_rndv_put_zcopy_send_func(ucp_request_t *req,
-                                   const ucp_proto_multi_lane_priv_t *lpriv,
-                                   ucp_datatype_iter_t *next_iter)
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_put_zcopy_send_func(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter)
 {
     const ucp_proto_rndv_put_priv_t *rpriv = req->send.proto_config->priv;
     size_t max_payload;
@@ -371,11 +385,23 @@ ucp_proto_rndv_put_zcopy_init(const ucp_proto_init_params_t *init_params)
                                           0);
 }
 
+static void
+ucp_proto_rndv_put_zcopy_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    const char *put_desc;
+
+    put_desc = ucp_proto_rndv_put_common_query(params, attr);
+    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "%s %s",
+                      UCP_PROTO_ZCOPY_DESC, put_desc);
+}
+
 static ucp_proto_t ucp_rndv_put_zcopy_proto = {
     .name     = "rndv/put/zcopy",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_put_zcopy_init,
-    .query    = ucp_proto_rndv_put_common_query,
+    .query    = ucp_proto_rndv_put_zcopy_query,
     .progress = {
         [UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND] = ucp_proto_rndv_put_zcopy_send_progress,
         [UCP_PROTO_RNDV_PUT_STAGE_FLUSH]      = ucp_proto_rndv_put_common_flush_progress,
@@ -496,11 +522,22 @@ ucp_proto_rndv_put_mtype_init(const ucp_proto_init_params_t *init_params)
                                           mdesc_md_map, comp_cb, 1);
 }
 
+static void
+ucp_proto_rndv_put_mtype_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    const char *put_desc;
+
+    put_desc = ucp_proto_rndv_put_common_query(params, attr);
+    ucp_proto_rndv_mtype_query_desc(params, attr, put_desc);
+}
+
 static ucp_proto_t ucp_rndv_put_mtype_proto = {
     .name     = "rndv/put/mtype",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_put_mtype_init,
-    .query    = ucp_proto_rndv_put_common_query,
+    .query    = ucp_proto_rndv_put_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_COPY] = ucp_proto_rndv_put_mtype_copy_progress,
         [UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND] = ucp_proto_rndv_put_mtype_send_progress,

@@ -24,5 +24,10 @@ const char *ucp_proto_perf_types[] = {
 void ucp_proto_default_query(const ucp_proto_query_params_t *params,
                              ucp_proto_query_attr_t *attr)
 {
+    ucs_assert(params->proto->desc != NULL);
+
+    attr->max_msg_length = SIZE_MAX;
+    attr->is_estimation  = 0;
+    ucs_strncpy_safe(attr->desc, params->proto->desc, sizeof(attr->desc));
     ucs_strncpy_safe(attr->config, "", sizeof(attr->config));
 }

@@ -106,6 +106,7 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_get_offload_bcopy_proto = {
     .name     = "get/bcopy",
+    .desc     = UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
     .init     = ucp_proto_get_offload_bcopy_init,
     .query    = ucp_proto_multi_query,
@@ -191,6 +192,7 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_get_offload_zcopy_proto = {
     .name     = "get/zcopy",
+    .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_get_offload_zcopy_init,
     .query    = ucp_proto_multi_query,

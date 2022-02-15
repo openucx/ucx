@@ -102,6 +102,7 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_eager_short_proto = {
     .name     = "egr/am/short",
+    .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_short_init,
     .query    = ucp_proto_single_query,
@@ -210,6 +211,7 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .name     = "egr/am/single/bcopy",
+    .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_bcopy_single_init,
     .query    = ucp_proto_single_query,

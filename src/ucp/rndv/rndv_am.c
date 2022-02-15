@@ -118,6 +118,7 @@ ucp_proto_rdnv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .name     = "rndv/am/bcopy",
+    .desc     = "fragmented " UCP_PROTO_COPY_IN_DESC " " UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
     .init     = ucp_proto_rdnv_am_bcopy_init,
     .query    = ucp_proto_multi_query,

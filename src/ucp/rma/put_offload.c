@@ -81,6 +81,7 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_put_offload_short_proto = {
     .name     = "put/offload/short",
+    .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_PUT_SHORT,
     .init     = ucp_proto_put_offload_short_init,
     .query    = ucp_proto_single_query,
@@ -176,6 +177,7 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_put_offload_bcopy_proto = {
     .name     = "put/offload/bcopy",
+    .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
     .init     = ucp_proto_put_offload_bcopy_init,
     .query    = ucp_proto_multi_query,
@@ -262,6 +264,7 @@ static void ucp_put_offload_zcopy_abort(ucp_request_t *request,
 
 static ucp_proto_t ucp_put_offload_zcopy_proto = {
     .name     = "put/offload/zcopy",
+    .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_put_offload_zcopy_init,
     .query    = ucp_proto_multi_query,

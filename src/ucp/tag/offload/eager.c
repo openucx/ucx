@@ -12,6 +12,8 @@
 #include <ucp/tag/proto_eager.inl>
 #include <ucp/proto/proto_single.inl>
 
+#define UCP_PROTO_EAGER_OFFLOAD_DESC "eager offloaded"
+
 
 static ucs_status_t
 ucp_proto_eager_tag_offload_short_progress(uct_pending_req_t *self)
@@ -74,6 +76,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
 
 static ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .name     = "egr/offload/short",
+    .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_TAG_SHORT,
     .init     = ucp_proto_eager_tag_offload_short_init,
     .query    = ucp_proto_single_query,
@@ -165,6 +168,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init(
 
 static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .name     = "egr/offload/bcopy",
+    .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_tag_offload_bcopy_init,
     .query    = ucp_proto_single_query,
@@ -203,6 +207,7 @@ static ucs_status_t ucp_proto_eager_sync_tag_offload_bcopy_init(
 
 static ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .name     = "egrsnc/offload/bcopy",
+    .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_sync_tag_offload_bcopy_init,
     .query    = ucp_proto_single_query,
@@ -277,6 +282,7 @@ ucp_proto_eager_tag_offload_zcopy_progress(uct_pending_req_t *self)
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .name     = "egr/offload/zcopy",
+    .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_tag_offload_zcopy_init,
     .query    = ucp_proto_single_query,
@@ -334,6 +340,7 @@ ucp_proto_eager_sync_tag_offload_zcopy_progress(uct_pending_req_t *self)
 
 static ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .name     = "egrsnc/offload/zcopy",
+    .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_sync_tag_offload_zcopy_init,
     .query    = ucp_proto_single_query,

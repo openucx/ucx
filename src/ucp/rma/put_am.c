@@ -105,6 +105,7 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
 
 static ucp_proto_t ucp_put_am_bcopy_proto = {
     .name     = "put/am/bcopy",
+    .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
     .init     = ucp_proto_put_am_bcopy_init,
     .query    = ucp_proto_multi_query,
