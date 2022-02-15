@@ -194,6 +194,7 @@ typedef struct ucx_perf_params {
     size_t                 alignment;       /* Message buffer alignment */
     unsigned               max_outstanding; /* Maximal number of outstanding sends */
     ucx_perf_counter_t     warmup_iter;     /* Number of warm-up iterations */
+    double                 warmup_time;     /* Approximately how long to warm-up */
     ucx_perf_counter_t     max_iter;        /* Iterations limit, 0 - unlimited */
     double                 max_time;        /* Time limit (seconds), 0 - unlimited */
     double                 report_interval; /* Interval at which to call the report callback */
