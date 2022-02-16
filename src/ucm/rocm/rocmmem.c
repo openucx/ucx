@@ -14,8 +14,11 @@
 #include <ucm/util/reloc.h>
 #include <ucm/util/replace.h>
 #include <ucs/debug/assert.h>
+#include <ucm/util/sys.h>
 #include <ucs/sys/compiler.h>
 #include <ucs/sys/preprocessor.h>
+
+#include <sys/mman.h>
 
 #include <unistd.h>
 #include <pthread.h>
@@ -176,8 +179,36 @@ out:
     return status;
 }
 
+static int ucm_rocm_scan_regions_cb(void *arg, void *addr, size_t length,
+                                    int prot, const char *path)
+{
+    static const char *rocm_path_pattern = "/dev/dri";
+    ucm_event_handler_t *handler = arg;
+    ucm_event_t event;
+
+    if ((prot & (PROT_READ | PROT_WRITE | PROT_EXEC)) &&
+        strncmp(path, rocm_path_pattern, strlen(rocm_path_pattern))) {
+        return 0;
+    }
+    ucm_debug("dispatching initial memtype allocation for %p..%p %s", addr,
+              UCS_PTR_BYTE_OFFSET(addr, length), path);
+
+    event.mem_type.address  = addr;
+    event.mem_type.size     = length;
+    event.mem_type.mem_type = UCS_MEMORY_TYPE_LAST; /* unknown memory type */
+
+    ucm_event_enter();
+    handler->cb(UCM_EVENT_MEM_TYPE_ALLOC, &event, handler->arg);
+    ucm_event_leave();
+
+    return 0;
+}
+
 static void ucm_rocmmem_get_existing_alloc(ucm_event_handler_t *handler)
 {
+    if (handler->events & UCM_EVENT_MEM_TYPE_ALLOC) {
+        ucm_parse_proc_self_maps(ucm_rocm_scan_regions_cb, handler);
+    }
 }
 
 static ucm_event_installer_t ucm_rocm_initializer = {
