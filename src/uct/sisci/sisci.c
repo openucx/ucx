@@ -485,7 +485,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
         DEBUG_PRINT("UCS_IN_PROGRESS\n");
     }
 
-    usleep(500000);
+    //usleep(500000);
     
     if(status == UCS_OK) {
         packet->am_id = 0;
