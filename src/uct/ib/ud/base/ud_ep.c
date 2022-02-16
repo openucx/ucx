@@ -1005,7 +1005,9 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     return;
 
 out:
-    ucs_mpool_put(skb);
+    if (!iface->super.super.user_allocator.active) {
+        ucs_mpool_put(skb);
+    }
 }
 
 ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,

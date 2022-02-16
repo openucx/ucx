@@ -97,7 +97,7 @@ uct_rc_mlx5_iface_srq_set_seg(uct_rc_mlx5_iface_common_t *iface,
 
     desc_map = ~seg->srq.ptr_mask & UCS_MASK(iface->tm.mp.num_strides);
     ucs_for_each_bit(i, desc_map) {
-        if (user_allocator_exists) {
+        if (user_allocator_active) {
             UCT_TL_IFACE_GET_RX_DESC_FROM_USER(user_allocator_get_desc_from_usr, user_allocator_instance, user_allocator_md_index, desc, user_allocator_memh, break);
         } else {
             UCT_TL_IFACE_GET_RX_DESC(&iface->super.super.super, &iface->super.rx.mp,

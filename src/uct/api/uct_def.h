@@ -911,6 +911,7 @@ typedef ucs_status_t (*uct_iface_get_desc_from_usr_func_t)(unsigned md_index, uc
  * @brief Interface for allocating descriptors based on user defined implementation 
  */
 typedef struct user_allocator_props {
+    int active;
     unsigned md_index;
     uct_usr_mem_allocator_h usr_allocator;
     struct {

@@ -261,8 +261,8 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
         return status;
     }
 
-    if (iface->super.user_allocator.ops.init_usr_mem_allocator) {
-        
+    if (iface->super.user_allocator.active) {
+
         return iface->super.user_allocator.ops.init_usr_mem_allocator(iface->config.seg_size, sizeof(uct_ib_iface_recv_desc_t), &iface->super.user_allocator.usr_allocator);
 
     } else {
@@ -1527,7 +1527,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     count = 0;
     while (count < n) {
 
-        if (user_allocator_exists) {
+        if (user_allocator_active) {
             UCT_TL_IFACE_GET_RX_DESC_FROM_USER(user_allocator_get_desc_from_usr, user_allocator_instance, user_allocator_md_index, desc, user_allocator_memh, break);
         } else {
             UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);

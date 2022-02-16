@@ -460,8 +460,15 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
 static ucs_status_t uct_base_iface_set_usr_alloc_params(const uct_iface_params_t *params, uct_base_iface_t *iface) {
     
+    //Default initialization 
+    iface->user_allocator.active = 0;
+    iface->user_allocator.usr_allocator = NULL;
+    iface->user_allocator.md_index = 0; //TODO - set proper default val
+    iface->user_allocator.ops.init_usr_mem_allocator = NULL; //TODO - set proper default val
+    iface->user_allocator.ops.get_desc_from_usr_callback = NULL; //TODO - set proper default val
+    
     if ((params->field_mask & UCT_IFACE_PARAM_FIELD_USR_ALLOC)) {
-        
+
         iface->user_allocator.md_index = params->user_allocator.md_index;
 
         if (params->user_allocator.ops.init_usr_mem_allocator == NULL) {
@@ -474,12 +481,7 @@ static ucs_status_t uct_base_iface_set_usr_alloc_params(const uct_iface_params_t
 
         iface->user_allocator.ops.init_usr_mem_allocator = params->user_allocator.ops.init_usr_mem_allocator;
         iface->user_allocator.ops.get_desc_from_usr_callback = params->user_allocator.ops.get_desc_from_usr_callback;
-
-    } else {
-
-        iface->user_allocator.md_index = 0; //TODO - set proper default val
-        iface->user_allocator.ops.init_usr_mem_allocator = NULL; //TODO - set proper default val
-        iface->user_allocator.ops.get_desc_from_usr_callback = NULL; //TODO - set proper default val
+        iface->user_allocator.active = 1;
     }
 
     return UCS_OK;

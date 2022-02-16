@@ -560,7 +560,9 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     self->rx.available = ucs_min(config->ud_common.rx_queue_len_init,
                                  config->super.rx.queue_len);
     self->rx.quota     = config->super.rx.queue_len - self->rx.available;
-    ucs_mpool_grow(&self->rx.mp, self->rx.available);
+    if (!self->super.super.user_allocator.active) {
+        ucs_mpool_grow(&self->rx.mp, self->rx.available);
+    }
 
     data_size = sizeof(uct_ud_ctl_hdr_t) + self->super.addr_size;
     data_size = ucs_max(data_size, self->super.config.seg_size);
@@ -604,7 +606,9 @@ err_release_stats:
 err_tx_mpool:
     ucs_mpool_cleanup(&self->tx.mp, 1);
 err_rx_mpool:
-    ucs_mpool_cleanup(&self->rx.mp, 1);
+    if (!self->super.super.user_allocator.active) {
+        ucs_mpool_cleanup(&self->rx.mp, 1);
+    }
 err_qp:
     uct_ud_iface_destroy_qp(self);
 err_eps_array:
@@ -640,7 +644,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
-    ucs_mpool_cleanup(&self->rx.mp, 0);
+    if (!self->super.super.user_allocator.active) {
+        ucs_mpool_cleanup(&self->rx.mp, 0);
+    }
     uct_ud_iface_destroy_qp(self);
     ucs_debug("iface(%p): ptr_array cleanup", self);
     ucs_ptr_array_cleanup(&self->eps, 1);

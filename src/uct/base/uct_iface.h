@@ -465,7 +465,7 @@ typedef struct uct_iface_mpool_config {
     uct_iface_get_desc_from_usr_func_t user_allocator_get_desc_from_usr = user_allocator_props->ops.get_desc_from_usr_callback; \
     uct_usr_mem_allocator_h user_allocator_instance = user_allocator_props->usr_allocator; \
     unsigned user_allocator_md_index = user_allocator_props->md_index; \
-    int user_allocator_exists = (user_allocator_instance != NULL);
+    int user_allocator_active = user_allocator_props->active;
 
 
 #define UCT_TL_IFACE_GET_RX_DESC_FROM_USER(_get_desc_from_usr, _usr_allocator, md_index, _desc, _memh, _failure) \
