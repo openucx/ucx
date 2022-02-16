@@ -505,7 +505,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     if (srq == NULL) {
         ucs_string_buffer_appendf(&msg, "ibv_create_srq() failed: %m");
         if (errno == ENOMEM) {
-            ucs_log_check_memlock_limit_append_msg(&msg);
+            ucs_sys_check_memlock_limit_append_msg(&msg);
         }
         ucs_error("%s", ucs_string_buffer_cstr(&msg));
         return UCS_ERR_IO_ERROR;

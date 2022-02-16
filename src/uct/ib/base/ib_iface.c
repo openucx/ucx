@@ -1036,7 +1036,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
         ucs_string_buffer_appendf(&msg, "ibv_create_cq(cqe=%d) failed: %m",
                                   cq_size);
         if (errno == ENOMEM) {
-            ucs_log_check_memlock_limit_append_msg(&msg);
+            ucs_sys_check_memlock_limit_append_msg(&msg);
         }
         ucs_error("%s", ucs_string_buffer_cstr(&msg));
         return UCS_ERR_IO_ERROR;

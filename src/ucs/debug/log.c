@@ -551,20 +551,3 @@ void ucs_log_set_thread_name(const char *format, ...)
     vsnprintf(ucs_log_thread_name, sizeof(ucs_log_thread_name) - 1, format, ap);
     va_end(ap);
 }
-
-void ucs_log_check_memlock_limit_append_msg(ucs_string_buffer_t *msg)
-{
-    rlim_t memlock_limit;
-    ucs_status_t status;
-
-    /* Check the value of the max locked memory which is set on the system
-     * (ulimit -l) */
-    status = ucs_sys_get_memlock_rlimit(&memlock_limit);
-    if ((status == UCS_OK) && (memlock_limit != RLIM_INFINITY)) {
-        ucs_string_buffer_appendf(msg,
-                                  ". Please set max locked memory "
-                                  "(ulimit -l) to 'unlimited' "
-                                  "(current: %llu kbytes)",
-                                  memlock_limit / UCS_KBYTE);
-    }
-}

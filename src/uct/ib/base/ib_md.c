@@ -325,7 +325,7 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
                               ibv_reg_mr_func_name, address, length, access_flags);
 
     if (errno == ENOMEM) {
-        ucs_log_check_memlock_limit_append_msg(&msg);
+        ucs_sys_check_memlock_limit_append_msg(&msg);
     } else if (err == EINVAL) {
         /* Check if huge page is used */
         ucs_get_mem_page_size(address, length, &unused, &page_size);
@@ -1189,7 +1189,7 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     if ((status == UCS_OK) &&
         (memlock_limit != RLIM_INFINITY) &&
         (memlock_limit <= (500 * UCS_MBYTE))) {
-        /* Disable the RDMA devices because of too strong locked memory limit*/
+        /* Disable the RDMA devices because of too strict locked memory limit*/
         ucs_warn("RDMA transports are disabled because max locked memory limit "
                  "(%llu kbytes) is too low. Please set max locked memory "
                  "(ulimit -l) to 'unlimited'",

@@ -1564,3 +1564,20 @@ ucs_status_t ucs_sys_get_memlock_rlimit(rlim_t *rlimit_value)
         return UCS_ERR_IO_ERROR;
     }
 }
+
+void ucs_sys_check_memlock_limit_append_msg(ucs_string_buffer_t *msg)
+{
+    rlim_t memlock_limit;
+    ucs_status_t status;
+
+    /* Check the value of the max locked memory which is set on the system
+     * (ulimit -l) */
+    status = ucs_sys_get_memlock_rlimit(&memlock_limit);
+    if ((status == UCS_OK) && (memlock_limit != RLIM_INFINITY)) {
+        ucs_string_buffer_appendf(msg,
+                                  ". Please set max locked memory "
+                                  "(ulimit -l) to 'unlimited' "
+                                  "(current: %llu kbytes)",
+                                  memlock_limit / UCS_KBYTE);
+    }
+}

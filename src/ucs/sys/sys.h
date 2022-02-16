@@ -17,6 +17,7 @@
 #include <ucs/type/status.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/time/time_def.h>
+#include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/config/types.h>
 #include <ucs/config/parser.h>
@@ -632,9 +633,16 @@ unsigned long ucs_sys_get_proc_create_time(pid_t pid);
 /*
  * Get the current max locked memory limit.
  *
- * @param [out] rlim_t         If successful, set to the current limit value.
+ * @param [out] rlimit_value If successful, set to the current limit value.
  */
 ucs_status_t ucs_sys_get_memlock_rlimit(rlim_t *rlimit_value);
+
+/**
+ * Check the max locked memory limit and append the message if the limit is finite
+ *
+ * @param [out] msg Message that will be appended
+ */
+void ucs_sys_check_memlock_limit_append_msg(ucs_string_buffer_t *msg);
 
 END_C_DECLS
 
