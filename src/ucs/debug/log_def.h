@@ -202,7 +202,7 @@ void ucs_log_print_backtrace(ucs_log_level_t level);
 void ucs_log_set_thread_name(const char *format, ...) UCS_F_PRINTF(1, 2);
 
 /**
- * Check the max locked memory limit and append the message if the limit exists
+ * Check the max locked memory limit and append the message if the limit is finite
  *
  * @param [out] msg            Message that will be appended
  */
