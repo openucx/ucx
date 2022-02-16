@@ -90,6 +90,12 @@ AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
 
 
 #
+# Define SHARED_LIB preprocessor macro when building a shared library
+#
+lt_prog_compiler_pic="$lt_prog_compiler_pic -DUCX_SHARED_LIB"
+
+
+#
 # Force link_all_deplibs=yes for libtool, otherwise it will not
 # link against dependency libs
 #

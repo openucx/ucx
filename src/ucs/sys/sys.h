@@ -628,6 +628,14 @@ long ucs_sys_get_num_cpus();
  */
 unsigned long ucs_sys_get_proc_create_time(pid_t pid);
 
+
+/*
+ * Check if library is built dynamically (.so module)
+ *
+ * @return 1 if built dynamically, 0 if statically.
+ */
+int ucs_sys_is_dynamic_lib(void);
+
 END_C_DECLS
 
 #endif
