@@ -20,7 +20,7 @@ steps:
     $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
   displayName: Restore port state
   condition: always()
-  timeoutInMinutes: 2
+  timeoutInMinutes: 10
 
 - bash: |
     set -eEx
@@ -82,7 +82,7 @@ steps:
     analyzer_args="$analyzer_args ${{ parameters.analyzer_allow_list_args }}"
     python ${analyzer} ${analyzer_args}
   displayName: Analyze for ${{ parameters.name }}
-  timeoutInMinutes: 1
+  timeoutInMinutes: 2
 
 - bash: |
     set -eEx
@@ -104,4 +104,4 @@ steps:
     $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
   displayName: Restore port state
   condition: always()
-  timeoutInMinutes: 2
+  timeoutInMinutes: 10
