@@ -262,9 +262,9 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
         mem_attr->alloc_length = addr_mem_info.alloc_length;
     }
 
-    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_FD) {
+    if (mem_attr->field_mask & UCT_MD_MEM_ATTR_FIELD_DMABUF_FD) {
         /* unsupported */
-        mem_attr->fd = UCT_FD_INVALID;
+        mem_attr->dmabuf_fd = UCT_DMABUF_FD_INVALID;
     }
 
     return UCS_OK;
