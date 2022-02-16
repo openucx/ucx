@@ -673,7 +673,7 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
 
     /* allocate endpoint */
     status = ucp_ep_create_base(worker, ep_init_flags, remote_address->name,
-                                  message, &ep);
+                                message, &ep);
     if (status != UCS_OK) {
         goto err;
     }
