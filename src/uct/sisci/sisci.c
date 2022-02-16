@@ -524,8 +524,14 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     //TODO: insert necessarry lies to make ucx want us.
     //taken from uct_iface.c sets default attributes to zero.
+    
     memset(attr, 0, sizeof(*attr));
 
+
+    /*  
+        https://github.com/openucx/ucx/issues/6879
+        According to this, we should call uct_base_iface_query() for some reason 
+    */
 
     /*  Start of lies  */
     attr->dev_num_paths = 1;
@@ -568,7 +574,9 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
 
     
 
-
+    /*
+        Iface gets queried multiple times so we had to disallow more than one debug print : )
+    */
     if(!iface_query_printed) {
         DEBUG_PRINT("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
         iface_query_printed = 1;

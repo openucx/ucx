@@ -24,20 +24,3 @@ tcp_1024     -t am_lat -D short  -d enp9s0 -x tcp   -s    1024 -n 10000
 tcp_2048     -t am_lat -D short  -d enp9s0 -x tcp   -s    2048 -n 5000
 tcp_4096     -t am_lat -D short  -d enp9s0 -x tcp   -s    4096 -n 5000
 tcp_8192     -t am_lat -D short  -d enp9s0 -x tcp   -s    8192 -n 5000
-#SISCI ZCOPY
-ZCOPY_sisci_16384    -t am_lat -D zcopy  -d sci -x sci   16384 -s   16384 -n 40000
-ZCOPY_sisci_32768    -t am_lat -D zcopy  -d sci -x sci   32768 -s   32768 -n 20000
-ZCOPY_sisci_65536    -t am_lat -D zcopy  -d sci -x sci   65536 -s   65536 -n 10000
-ZCOPY_sisci_131072   -t am_lat -D zcopy  -d sci -x sci   131072 -s  131072 -n 5000
-ZCOPY_sisci_262144   -t am_lat -D zcopy  -d sci -x sci   262144 -s  262144 -n 2500
-ZCOPY_sisci_524288   -t am_lat -D zcopy  -d sci -x sci   524288 -s  524288 -n 1200
-ZCOPY_sisci_1048576  -t am_lat -D zcopy  -d sci -x sci   1048576 -s 1048576 -n 600
-#TCP ZCOPY
-ZCOPY_tcp_16384    -t am_lat -D zcopy  -d enp9s0 -x tcp   -s   16384 -n 40000
-ZCOPY_tcp_32768    -t am_lat -D zcopy  -d enp9s0 -x tcp   -s   32768 -n 20000
-ZCOPY_tcp_65536    -t am_lat -D zcopy  -d enp9s0 -x tcp   -s   65536 -n 10000
-ZCOPY_tcp_131072   -t am_lat -D zcopy  -d enp9s0 -x tcp   -s  131072 -n 5000
-ZCOPY_tcp_262144   -t am_lat -D zcopy  -d enp9s0 -x tcp   -s  262144 -n 2500
-ZCOPY_tcp_524288   -t am_lat -D zcopy  -d enp9s0 -x tcp   -s  524288 -n 1200
-ZCOPY_tcp_1048576  -t am_lat -D zcopy  -d enp9s0 -x tcp   -s 1048576 -n 600
-
