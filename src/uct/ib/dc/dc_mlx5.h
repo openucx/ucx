@@ -37,17 +37,6 @@ struct ibv_ravh {
 #  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
-/**
- * If ECE is supported:
- * 1. For DCT:
- *    1) The 1st DCT is created without ECE feature
- *    2) The 2nd DCT is created with ECE feature
- * 2. For DCI:
- *    1) The 1st pool(total: num_dci_pools) is created without ECE
- *    2) The 2nd pool(total: num_dci_pools) is created with ECE
- */
-#define UCT_DC_MLX5_IFACE_MAX_GP        2
-
 #define UCT_DC_MLX5_IFACE_MAX_USER_DCIS 15
 #define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
 #define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 8
@@ -236,8 +225,6 @@ typedef struct {
     int8_t        release_stack_top;                       /* releasing dci's stack,
                                                               points to last DCI to release
                                                               or -1 if no DCI's to release */
-    /* dci ECE configurations */
-    union ece_t   local_ece;
 } uct_dc_mlx5_dci_pool_t;
 
 

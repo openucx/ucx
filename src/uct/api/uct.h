@@ -850,10 +850,7 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA                  = UCS_BIT(14),
 
     /** Enables @ref uct_ep_params::private_data_length */
-    UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
-
-    /** Enable @ref uct_ep_params::ece */
-    UCT_EP_PARAM_FIELD_ECE                        = UCS_BIT(16)
+    UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15)
 };
 
 
