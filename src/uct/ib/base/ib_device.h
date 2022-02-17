@@ -282,6 +282,12 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags);
 
 
+/**
+ * Get device ids, such as vendor and device id
+ */
+void uct_ib_device_get_ids(uct_ib_device_t *dev);
+
+
 /*
  * Helper function to list IB transport resources.
  *
