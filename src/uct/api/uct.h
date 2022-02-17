@@ -1478,9 +1478,10 @@ typedef struct uct_md_mem_attr {
 
     /**
      * Offset of given address from the start of the memory object (identified
-     * by dmabuf_fd) backing the memory region being queried.
+     * by dmabuf_fd) backing the memory region being queried. This offset may
+     * not be used if UCT_DMABUF_FD_INVALID is retured as dmabuf_fd.
      */
-    int               dmabuf_offset;
+    uint64_t          dmabuf_offset;
 } uct_md_mem_attr_t;
 
 
