@@ -526,7 +526,7 @@ static ucs_status_t uct_ib_device_get_ids_from_path(const char *path,
     return UCS_OK;
 }
 
-static void uct_ib_device_get_ids(uct_ib_device_t *dev)
+void uct_ib_device_get_ids(uct_ib_device_t *dev)
 {
     char *ids_path;
     char path_buffer[PATH_MAX];
