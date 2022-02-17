@@ -28,6 +28,8 @@ static jfieldID sender_tag_field;
 static jfieldID request_callback;
 static jfieldID request_status;
 static jfieldID request_iov_vec;
+static jfieldID request_params_mem_type;
+static jfieldID request_params_memh;
 
 static jmethodID jucx_request_constructor;
 static jmethodID jucx_endpoint_constructor;
@@ -55,6 +57,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     jclass jucx_endpoint_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpEndpoint");
     jclass jucx_am_data_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpAmData");
     jclass jucx_am_recv_callback_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpAmRecvCallback");
+    jclass ucp_request_params_cls_local = env->FindClass("org/openucx/jucx/ucp/UcpRequestParams");
 
     jucx_request_cls = (jclass) env->NewGlobalRef(jucx_request_cls_local);
     ucp_rkey_cls = (jclass) env->NewGlobalRef(ucp_rkey_cls_local);
@@ -68,6 +71,8 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void* reserved) {
     recv_size_field = env->GetFieldID(jucx_request_cls, "recvSize", "J");
     request_iov_vec = env->GetFieldID(jucx_request_cls, "iovVector", "J");
     sender_tag_field = env->GetFieldID(jucx_request_cls, "senderTag", "J");
+    request_params_mem_type = env->GetFieldID(ucp_request_params_cls_local, "memType", "I");
+    request_params_memh = env->GetFieldID(ucp_request_params_cls_local, "memHandle", "J");
 
     jucx_set_native_id = env->GetMethodID(jucx_request_cls, "setNativeId", "(J)V");
     on_success = env->GetMethodID(jucx_callback_cls, "onSuccess",
@@ -352,8 +357,16 @@ ucs_status_t am_recv_callback(void *arg, const void *header, size_t header_lengt
 }
 
 jobject jucx_request_allocate(JNIEnv *env, const jobject callback,
-                              ucp_request_param_t *param, jint memory_type)
+                              ucp_request_param_t *param, jobject requestParams)
 {
+    jint memory_type = UCS_MEMORY_TYPE_UNKNOWN;
+    jlong memory_handle = 0;
+
+    if (requestParams != NULL) {
+        memory_type = env->GetIntField(requestParams, request_params_mem_type);
+        memory_handle = env->GetLongField(requestParams, request_params_memh);
+    }
+
     jobject jucx_request = env->NewObject(jucx_request_cls, jucx_request_constructor);
 
     param->op_attr_mask = UCP_OP_ATTR_FIELD_USER_DATA |
@@ -361,6 +374,11 @@ jobject jucx_request_allocate(JNIEnv *env, const jobject callback,
                           UCP_OP_ATTR_FIELD_MEMORY_TYPE;
     param->user_data    = env->NewGlobalRef(jucx_request);
     param->memory_type  = static_cast<ucs_memory_type_t>(memory_type);
+
+    if (memory_handle != 0) {
+        param->op_attr_mask |= UCP_OP_ATTR_FIELD_MEMH;
+        param->memh          = reinterpret_cast<ucp_mem_h>(memory_handle);
+    }
 
     if (callback != NULL) {
          env->SetObjectField(jucx_request, request_callback, callback);
