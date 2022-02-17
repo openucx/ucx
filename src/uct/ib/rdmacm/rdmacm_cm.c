@@ -75,6 +75,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
                                   struct ibv_context *verbs)
 {
     const char *dev_name = ibv_get_device_name(verbs->device);
+    uct_ib_device_t dev;
 
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_hca_cap_out)] = {};
@@ -87,6 +88,10 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
 #endif
 
     ctx->num_dummy_qps = 0;
+
+    dev.ibv_context    = verbs;
+    uct_ib_device_get_ids(&dev);
+    ctx->vendor        = dev.pci_id.vendor;
 
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
     if (cm->config.reserved_qpn == UCS_NO) {
