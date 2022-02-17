@@ -103,7 +103,7 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_single_init(&params);
 }
 
-static ucp_proto_t ucp_eager_short_proto = {
+ucp_proto_t ucp_am_eager_short_proto = {
     .name     = "egr/am/short",
     .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = 0,
@@ -112,7 +112,6 @@ static ucp_proto_t ucp_eager_short_proto = {
     .progress = {ucp_eager_short_progress},
     .abort    = ucp_proto_request_bcopy_abort
 };
-UCP_PROTO_REGISTER(&ucp_eager_short_proto);
 
 static UCS_F_ALWAYS_INLINE void
 ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
@@ -213,7 +212,7 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_single_init(&params);
 }
 
-static ucp_proto_t ucp_eager_bcopy_single_proto = {
+ucp_proto_t ucp_am_eager_bcopy_single_proto = {
     .name     = "egr/am/single/bcopy",
     .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
@@ -222,7 +221,6 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .progress = {ucp_eager_bcopy_single_progress},
     .abort    = ucp_request_complete_send
 };
-UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
 static ucs_status_t
 ucp_proto_eager_am_zcopy_single_init(const ucp_proto_init_params_t *init_params)
@@ -353,7 +351,7 @@ ucp_proto_eager_am_zcopy_single_progress(uct_pending_req_t *self)
             ucp_proto_request_eager_am_zcopy_single_init);
 }
 
-static ucp_proto_t ucp_eager_am_zcopy_single_proto = {
+ucp_proto_t ucp_eager_am_zcopy_single_proto = {
     .name     = "egr/am/single/zcopy",
     .flags    = 0,
     .init     = ucp_proto_eager_am_zcopy_single_init,
@@ -361,4 +359,3 @@ static ucp_proto_t ucp_eager_am_zcopy_single_proto = {
     .progress = {ucp_proto_eager_am_zcopy_single_progress},
     .abort    = ucp_proto_request_bcopy_abort
 };
-UCP_PROTO_REGISTER(&ucp_eager_am_zcopy_single_proto);

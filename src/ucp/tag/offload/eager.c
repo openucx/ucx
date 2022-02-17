@@ -75,7 +75,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_short_init(
     return ucp_proto_single_init(&params);
 }
 
-static ucp_proto_t ucp_eager_tag_offload_short_proto = {
+ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .name     = "egr/offload/short",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_SHORT_DESC,
     .flags    = UCP_PROTO_FLAG_TAG_SHORT,
@@ -84,7 +84,6 @@ static ucp_proto_t ucp_eager_tag_offload_short_proto = {
     .progress = {ucp_proto_eager_tag_offload_short_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_tag_offload_short_proto);
 
 static size_t ucp_eager_tag_offload_pack(void *dest, void *arg)
 {
@@ -168,7 +167,7 @@ static ucs_status_t ucp_proto_eager_tag_offload_bcopy_init(
                                                          UCP_OP_ID_TAG_SEND);
 }
 
-static ucp_proto_t ucp_eager_bcopy_single_proto = {
+ucp_proto_t ucp_tag_offload_eager_bcopy_single_proto = {
     .name     = "egr/offload/bcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
@@ -177,7 +176,6 @@ static ucp_proto_t ucp_eager_bcopy_single_proto = {
     .progress = {ucp_proto_eager_tag_offload_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_eager_sync_tag_offload_bcopy_posted(ucp_request_t *req)
@@ -207,7 +205,7 @@ static ucs_status_t ucp_proto_eager_sync_tag_offload_bcopy_init(
             init_params, UCP_OP_ID_TAG_SEND_SYNC);
 }
 
-static ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
+ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .name     = "egrsnc/offload/bcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
@@ -216,7 +214,6 @@ static ucp_proto_t ucp_eager_sync_bcopy_single_proto = {
     .progress = {ucp_proto_eager_sync_tag_offload_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_single_proto);
 
 static ucs_status_t ucp_proto_eager_tag_offload_zcopy_init_common(
         const ucp_proto_init_params_t *init_params, ucp_proto_id_t op_id)
@@ -284,7 +281,7 @@ ucp_proto_eager_tag_offload_zcopy_progress(uct_pending_req_t *self)
             ucp_proto_request_zcopy_completion, ucp_proto_request_zcopy_init);
 }
 
-static ucp_proto_t ucp_eager_zcopy_single_proto = {
+ucp_proto_t ucp_tag_offload_eager_zcopy_single_proto = {
     .name     = "egr/offload/zcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
@@ -293,7 +290,6 @@ static ucp_proto_t ucp_eager_zcopy_single_proto = {
     .progress = {ucp_proto_eager_tag_offload_zcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);
 
 static ucs_status_t ucp_proto_eager_sync_tag_offload_zcopy_init(
         const ucp_proto_init_params_t *init_params)
@@ -343,7 +339,7 @@ ucp_proto_eager_sync_tag_offload_zcopy_progress(uct_pending_req_t *self)
             ucp_proto_request_zcopy_init);
 }
 
-static ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
+ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .name     = "egrsnc/offload/zcopy",
     .desc     = UCP_PROTO_EAGER_OFFLOAD_DESC " " UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
@@ -352,4 +348,3 @@ static ucp_proto_t ucp_eager_sync_zcopy_single_proto = {
     .progress = {ucp_proto_eager_sync_tag_offload_zcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_sync_zcopy_single_proto);

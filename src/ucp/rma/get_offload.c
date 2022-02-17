@@ -105,7 +105,7 @@ ucp_proto_get_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
                                 init_params->priv_size);
 }
 
-static ucp_proto_t ucp_get_offload_bcopy_proto = {
+ucp_proto_t ucp_get_offload_bcopy_proto = {
     .name     = "get/bcopy",
     .desc     = UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
@@ -114,7 +114,6 @@ static ucp_proto_t ucp_get_offload_bcopy_proto = {
     .progress = {ucp_proto_get_offload_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_get_offload_bcopy_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_get_offload_zcopy_send_func(ucp_request_t *req,
@@ -192,7 +191,7 @@ ucp_proto_get_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
                                 init_params->priv_size);
 }
 
-static ucp_proto_t ucp_get_offload_zcopy_proto = {
+ucp_proto_t ucp_get_offload_zcopy_proto = {
     .name     = "get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
@@ -201,4 +200,3 @@ static ucp_proto_t ucp_get_offload_zcopy_proto = {
     .progress = {ucp_proto_get_offload_zcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_get_offload_zcopy_proto);

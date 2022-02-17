@@ -104,7 +104,7 @@ ucp_proto_put_am_bcopy_init(const ucp_proto_init_params_t *init_params)
                                 init_params->priv_size);
 }
 
-static ucp_proto_t ucp_put_am_bcopy_proto = {
+ucp_proto_t ucp_put_am_bcopy_proto = {
     .name     = "put/am/bcopy",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
@@ -113,5 +113,4 @@ static ucp_proto_t ucp_put_am_bcopy_proto = {
     .progress = {ucp_proto_put_am_bcopy_progress},
     .abort    = ucp_proto_request_bcopy_abort
 };
-UCP_PROTO_REGISTER(&ucp_put_am_bcopy_proto);
 
