@@ -12,7 +12,6 @@ resources:
       options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
-      options: $(DOCKER_OPT_LIMITS)
     - container: fedora34
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora34:2
       options: $(DOCKER_OPT_VOLUMES)
