@@ -1549,4 +1549,12 @@ err:
     return 0ul;
 }
 
+int ucs_sys_is_dynamic_lib(void)
+{
+#ifdef UCX_SHARED_LIB
+    return 1;
+#else
+    return 0;
+#endif
+}
 
