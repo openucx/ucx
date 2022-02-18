@@ -25,7 +25,7 @@ static ucs_mpool_ops_t uct_sci_mpool_ops = {
 };
 
 static ucs_config_field_t uct_sci_iface_config_table[] = {
-    {"", "", NULL,
+    {"", "MAX_NUM_EPS=32", NULL,
      ucs_offsetof(uct_sci_iface_config_t, super),
      UCS_CONFIG_TYPE_TABLE(uct_iface_config_table)},
 
