@@ -37,6 +37,18 @@ struct ibv_ravh {
 #  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
+
+/**
+ * If ECE is supported:
+ * 1. For DCT:
+ *    1) The 1st DCT is created without ECE feature
+ *    2) The 2nd DCT is created with ECE feature
+ * 2. For DCI:
+ *    1) The 1st group pool(total: num_dci_pools) is created without ECE
+ *    2) The 2nd group pool(total: num_dci_pools) is created with ECE
+ */
+#define UCT_DC_MLX5_IFACE_MAX_GP        2
+
 #define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
 #define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 8
 
@@ -225,11 +237,16 @@ typedef struct {
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t    super;
+
+    /* Group number of tx/rx */
+    uint8_t                       gp;
+
     struct {
         /* Array of dcis */
         uct_dc_dci_t              *dcis;
 
-        uint8_t                   ndci;                        /* Number of DCIs */
+        /* Number of DCIs in one pool */
+        uint8_t                   ndci;
 
         /* LIFO is only relevant for dcs allocation policy */
         uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];
@@ -264,7 +281,7 @@ struct uct_dc_mlx5_iface {
     } tx;
 
     struct {
-        uct_ib_mlx5_qp_t          dct;
+        uct_ib_mlx5_qp_t          dct[UCT_DC_MLX5_IFACE_MAX_GP];
     } rx;
 
     uint8_t                       version_flag;
@@ -281,8 +298,8 @@ struct uct_dc_mlx5_iface {
 extern ucs_config_field_t uct_dc_mlx5_iface_config_table[];
 
 ucs_status_t
-uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
-                             const uct_dc_mlx5_iface_config_t *config);
+uct_dc_mlx5_iface_create_dcts(uct_dc_mlx5_iface_t *iface,
+                              const uct_dc_mlx5_iface_config_t *config);
 
 int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
@@ -302,7 +319,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                                           uct_rc_hdr_t *hdr, unsigned length,
                                           uint32_t imm_data, uint16_t lid, unsigned flags);
 
-void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
+void uct_dc_mlx5_destroy_dcts(uct_dc_mlx5_iface_t *iface, uint32_t dct_max);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
@@ -328,6 +345,7 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 #if HAVE_DEVX
 
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
+                                               uct_ib_mlx5_qp_t *dct,
                                                int full_handshake);
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface);
@@ -339,7 +357,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 #else
 
 static UCS_F_MAYBE_UNUSED ucs_status_t uct_dc_mlx5_iface_devx_create_dct(
-        uct_dc_mlx5_iface_t *iface, int full_handshake)
+        uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *dct, int full_handshake)
 {
     return UCS_ERR_UNSUPPORTED;
 }
