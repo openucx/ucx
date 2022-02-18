@@ -315,6 +315,8 @@ struct ucp_request {
                     /* Progress ID, if it's UCS_CALLBACKQ_ID_NULL, no operations
                      * are in-progress */
                     uct_worker_cb_id_t cb_id;
+                    /* Index of UCT EP to be flushed and destroyed */
+                    ucp_rsc_index_t    rsc_index;
                 } discard_uct_ep;
 
                 struct {

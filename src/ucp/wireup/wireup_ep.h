@@ -105,7 +105,8 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   uct_pending_purge_callback_t purge_cb,
                                   void *purge_arg);
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
+                               ucp_rsc_index_t rsc_index);
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 

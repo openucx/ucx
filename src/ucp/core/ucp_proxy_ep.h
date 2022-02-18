@@ -24,11 +24,12 @@
  * TODO make sure it works with err handling and print_ucp_info
  */
 typedef struct ucp_proxy_ep {
-    uct_ep_t                  super;    /**< Derived from uct_ep */
-    uct_iface_t               iface;    /**< Embedded stub interface */
-    ucp_ep_h                  ucp_ep;   /**< Pointer to UCP endpoint */
-    uct_ep_h                  uct_ep;   /**< Underlying transport endpoint */
-    int                       is_owner; /**< Is uct_ep owned by this proxy ep */
+    uct_ep_t        super;     /**< Derived from uct_ep */
+    uct_iface_t     iface;     /**< Embedded stub interface */
+    ucp_ep_h        ucp_ep;    /**< Pointer to UCP endpoint */
+    uct_ep_h        uct_ep;    /**< Underlying transport endpoint */
+    int             is_owner;  /**< Is uct_ep owned by this proxy ep */
+    ucp_rsc_index_t rsc_index; /**< Resource index of underlying transport endpoint */
 } ucp_proxy_ep_t;
 
 
@@ -47,6 +48,6 @@ int ucp_proxy_ep_test(uct_ep_h ep);
 uct_ep_h ucp_proxy_ep_extract(uct_ep_h ep);
 
 void ucp_proxy_ep_set_uct_ep(ucp_proxy_ep_t *proxy_ep, uct_ep_h uct_ep,
-                             int is_owner);
+                             int is_owner, ucp_rsc_index_t rsc_index);
 
 #endif
