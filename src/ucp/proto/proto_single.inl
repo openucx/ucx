@@ -86,21 +86,22 @@ static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
                                 ucp_proto_send_single_cb_t send_func,
                                 ucp_proto_complete_cb_t complete_func,
-                                uct_completion_callback_t uct_comp_cb)
+                                uct_completion_callback_t uct_comp_cb,
+                                ucp_proto_request_zcopy_init_cb_t zcopy_init)
 {
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
     ucp_datatype_iter_t next_iter;
     ucs_status_t status;
     ucp_md_map_t md_map;
-    uct_iov_t iov;
+    /* The second iov of the array is reserved for the message footer. */
+    uct_iov_t iov[2];
 
     ucs_assert(req->send.state.dt_iter.offset == 0);
 
     if (!(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED)) {
         md_map = (spriv->reg_md == UCP_NULL_RESOURCE) ? 0 : UCS_BIT(spriv->reg_md);
-        status = ucp_proto_request_zcopy_init(req, md_map, uct_comp_cb,
-                                              uct_mem_flags,
-                                              UCS_BIT(UCP_DATATYPE_CONTIG));
+        status = zcopy_init(req, md_map, uct_comp_cb, uct_mem_flags,
+                            UCS_BIT(UCP_DATATYPE_CONTIG));
         if (status != UCS_OK) {
             ucp_proto_request_abort(req, status);
             return UCS_OK; /* remove from pending after request is completed */
@@ -111,10 +112,10 @@ ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, SIZE_MAX,
                                spriv->super.md_index,
-                               UCS_BIT(UCP_DATATYPE_CONTIG), &next_iter, &iov,
+                               UCS_BIT(UCP_DATATYPE_CONTIG), &next_iter, iov,
                                1);
 
-    status = send_func(req, spriv, &iov);
+    status = send_func(req, spriv, iov);
     return ucp_proto_single_status_handle(req, 1, complete_func,
                                           spriv->super.lane, status);
 }

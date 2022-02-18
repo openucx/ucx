@@ -438,7 +438,11 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
         return ucp_datatype_iter_iov_next_iov(dt_iter, max_length, memh_index,
                                               next_iter, iov, max_iov);
     } else {
-        next_iter->offset = dt_iter->offset; /* Silence compiler warning */
+        /* Silence compiler warning */
+        next_iter->offset = dt_iter->offset;
+        iov[0].length     = 0;
+        iov[0].buffer     = NULL;
+        iov[0].memh       = UCT_MEM_HANDLE_NULL;
         ucs_bug("unsupported datatype %s",
                 ucp_datatype_class_names[dt_iter->dt_class]);
         return 0;

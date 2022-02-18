@@ -55,6 +55,7 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 0,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_short),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -123,6 +124,7 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 20,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -164,9 +166,10 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 30,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 1,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
-        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
         .super.hdr_size      = sizeof(ucp_tag_hdr_t),
         .super.send_op       = UCT_EP_OP_AM_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
@@ -188,7 +191,7 @@ ucp_proto_eager_zcopy_single_init(const ucp_proto_init_params_t *init_params)
 static ucs_status_t
 ucp_proto_eager_zcopy_send_func(ucp_request_t *req,
                                 const ucp_proto_single_priv_t *spriv,
-                                const uct_iov_t *iov)
+                                uct_iov_t *iov)
 {
     ucp_eager_hdr_t hdr = {
         .super.tag = req->send.msg_proto.tag
@@ -207,7 +210,7 @@ ucp_proto_eager_zcopy_single_progress(uct_pending_req_t *self)
     return ucp_proto_zcopy_single_progress(
             req, UCT_MD_MEM_ACCESS_LOCAL_READ, ucp_proto_eager_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_proto_request_zcopy_completion);
+            ucp_proto_request_zcopy_completion, ucp_proto_request_zcopy_init);
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {

@@ -70,6 +70,9 @@ typedef struct {
     /* Maximal payload size */
     size_t                  max_length;
 
+    /* Minimal number of iov */
+    size_t                  min_iov;
+
     /* Offset in uct_iface_attr_t structure of the field which specifies the
      * minimal fragment size for the UCT operation used by this protocol */
     ptrdiff_t               min_frag_offs;
