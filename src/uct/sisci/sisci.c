@@ -211,7 +211,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
 
 
-    DEBUG_PRINT("iface_addr: %d dev_addr: %d \n", self->segment_id, self->device_addr);
+    DEBUG_PRINT("iface_addr: %d dev_addr: %d segment_size %zd\n", self->segment_id, self->device_addr, self->send_size);
     return UCS_OK;
 }
 
