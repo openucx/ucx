@@ -530,13 +530,12 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     //taken from uct_iface.c sets default attributes to zero.
     
 
-
     /*  
         https://github.com/openucx/ucx/issues/6879
         According to this, we should call uct_base_iface_query() for some reason 
     */
 
-    uct_base_iface_query(&tl_iface->super, attr);
+    uct_base_iface_query(ucs_derived_of(tl_iface, uct_base_iface_t), attr);
 
     /*  Start of lies  
     attr->dev_num_paths = 1;
