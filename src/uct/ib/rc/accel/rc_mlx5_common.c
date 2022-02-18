@@ -431,6 +431,9 @@ ucs_status_t uct_rc_mlx5_iface_common_tag_init(uct_rc_mlx5_iface_common_t *iface
 
     if (!UCT_RC_MLX5_TM_ENABLED(iface)) {
         return UCS_OK;
+    } else if (iface->super.super.config.enable_ece) {
+        ucs_debug("No ECE function when using tag matching offload");
+        iface->super.super.config.enable_ece = 0;
     }
 
     status = uct_rc_mlx5_get_cmd_qp(iface);
