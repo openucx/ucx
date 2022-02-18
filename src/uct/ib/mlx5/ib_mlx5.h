@@ -160,8 +160,6 @@ struct mlx5_grh_av {
 #define UCT_IB_MLX5_DEVX_EVENT_TYPE_MASK  0xffff
 #define UCT_IB_MLX5_DEVX_EVENT_DATA_SHIFT 16
 
-#define UCT_IB_MLX5_DEVX_ECE_TRIG_RESP 0x10000000
-
 enum {
     /* Device supports KSM */
     UCT_IB_MLX5_MD_FLAG_KSM              = UCS_BIT(0),
@@ -363,8 +361,6 @@ typedef struct uct_ib_mlx5_qp_attr {
 typedef struct uct_ib_mlx5_qp {
     uct_ib_mlx5_obj_type_t             type;
     uint32_t                           qp_num;
-    union ece_t                        local_ece;
-    union ece_t                        remote_ece;
     union {
         struct {
             union {

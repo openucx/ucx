@@ -486,8 +486,7 @@ void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
     memcpy(new_ep, old_ep, sizeof(uct_ud_ep_t));
 }
 
-ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
-                                   uint32_t *ece)
+ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
@@ -629,8 +628,7 @@ err_ep_destroy:
 
 ucs_status_t uct_ud_ep_connect_to_ep(uct_ep_h tl_ep,
                                      const uct_device_addr_t *dev_addr,
-                                     const uct_ep_addr_t *uct_ep_addr,
-                                     const uint32_t *ece)
+                                     const uct_ep_addr_t *uct_ep_addr)
 {
     uct_ud_ep_t *ep                   = ucs_derived_of(tl_ep, uct_ud_ep_t);
     uct_ud_iface_t *iface             = ucs_derived_of(ep->super.super.iface,
@@ -716,7 +714,7 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface, uct_ud_ctl_h
     ep = ucs_derived_of(ep_h, uct_ud_ep_t);
 
     status = uct_ep_connect_to_ep(ep_h, (void*)uct_ud_creq_ib_addr(ctl),
-                                  (void*)&ctl->conn_req.ep_addr, NULL);
+                                  (void*)&ctl->conn_req.ep_addr);
     if (status != UCS_OK) {
         goto err_ep_destroy;
     }
@@ -908,8 +906,7 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
     creq->conn_req.path_index = ep->path_index;
 
     status = uct_ud_ep_get_address(&ep->super.super,
-                                   (void*)&creq->conn_req.ep_addr,
-                                   NULL);
+                                   (void*)&creq->conn_req.ep_addr);
     if (status != UCS_OK) {
         return NULL;
     }

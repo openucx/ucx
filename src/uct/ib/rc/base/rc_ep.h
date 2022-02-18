@@ -211,8 +211,6 @@ typedef struct uct_rc_fc {
 struct uct_rc_ep {
     uct_base_ep_t       super;
     uct_rc_txqp_t       txqp;
-    union ece_t         local_ece;
-    union ece_t         remote_ece;
     ucs_list_link_t     list;
     ucs_arbiter_group_t arb_group;
     uct_rc_fc_t         fc;

@@ -871,7 +871,7 @@ ucs_status_ptr_t uct_dc_mlx5_ep_tag_rndv_zcopy(uct_ep_h tl_ep, uct_tag_t tag,
 
     op_index = uct_rc_mlx5_tag_get_op_id(&iface->super, comp);
 
-    uct_dc_mlx5_iface_fill_ravh(&ravh, iface->rx.dct[ep->gp_idx].qp_num);
+    uct_dc_mlx5_iface_fill_ravh(&ravh, iface->rx.dct.qp_num);
 
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
@@ -948,7 +948,6 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     uct_ib_mlx5_base_av_t av;
     struct mlx5_wqe_av mlx5_av;
     struct ibv_ah *ah;
-    uint32_t remote_dctn;
     ucs_status_t status;
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -956,7 +955,6 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
     ucs_assert((sizeof(uint8_t) + sizeof(sender_ep)) <=
                UCT_IB_MLX5_AV_FULL_SIZE);
 
-    remote_dctn = fc_req->dct_num & 0xffffff;
     UCT_DC_MLX5_CHECK_DCI_RES(iface, ep);
     UCT_DC_MLX5_IFACE_TXQP_GET(iface, ep, txqp, txwq);
 
@@ -998,7 +996,7 @@ ucs_status_t uct_dc_mlx5_ep_fc_pure_grant_send(uct_dc_mlx5_ep_t *ep,
         av.rlid = fc_req->lid | htons(ib_iface->path_bits[0]);
     }
 
-    av.dqp_dct = htonl(remote_dctn);
+    av.dqp_dct = htonl(fc_req->dct_num);
 
     if (!iface->ud_common.config.compact_av || ah_attr.is_global) {
         av.dqp_dct |= UCT_IB_MLX5_EXTENDED_UD_AV;
@@ -1029,8 +1027,7 @@ void uct_dc_mlx5_ep_do_pending_fc(uct_dc_mlx5_ep_t *fc_ep,
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(fc_ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
 
-    ucs_assert((&iface->tx.fc_ep[0] == fc_ep) ||
-               ((iface->gp != 1) && (&iface->tx.fc_ep[1] == fc_ep)));
+    ucs_assert(iface->tx.fc_ep == fc_ep);
     uct_dc_mlx5_ep_pending_common(iface, fc_ep, &fc_req->super.super, 0, 1,
                                   !(iface->flags &
                                     UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED));
@@ -1070,7 +1067,6 @@ uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                                 uct_dc_mlx5_iface_t);
     uct_ib_iface_t *ib_iface   = &iface->super.super.super;
-    uint32_t imm_inval_pkey;
     uct_dc_fc_sender_data_t sender;
 
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
@@ -1083,15 +1079,13 @@ uct_dc_mlx5_ep_fc_hard_req_send(uct_dc_mlx5_ep_t *ep, uint64_t seq)
     sender.payload.gid       = ib_iface->gid_info.gid;
     sender.payload.is_global = ep->flags & UCT_DC_MLX5_EP_FLAG_GRH;
 
-    imm_inval_pkey = (ep->gp_idx << 24) | (iface->rx.dct[ep->gp_idx].qp_num);
-
     UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_TX_HARD_REQ, 1);
 
     uct_rc_mlx5_txqp_inline_post(&iface->super, UCT_IB_QPT_DCI,
                                  txqp, txwq, MLX5_OPCODE_SEND_IMM,
                                  &sender.payload, sizeof(sender.payload),
                                  UCT_RC_EP_FLAG_FC_HARD_REQ, sender.ep,
-                                 imm_inval_pkey, 0, 0, &ep->av,
+                                 iface->rx.dct.qp_num, 0, 0, &ep->av,
                                  uct_dc_mlx5_ep_get_grh(ep),
                                  uct_ib_mlx5_wqe_av_size(&ep->av),
                                  MLX5_WQE_CTRL_SOLICITED, INT_MAX);
@@ -1138,28 +1132,17 @@ UCS_CLASS_INIT_FUNC(uct_dc_mlx5_ep_t, uct_dc_mlx5_iface_t *iface,
                     uct_ib_mlx5_base_av_t *av, uint8_t path_index)
 {
     uint32_t remote_dctn;
-    uint32_t local_ece, remote_ece;
 
     ucs_trace_func("");
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super.super.super.super);
 
-    remote_ece             = if_addr->ece & 0x0fffffff;
-    local_ece              = iface->super.super.super.config.ece_cfg.ece.val &
-                             0x0fffffff;
     self->atomic_mr_offset = uct_ib_md_atomic_offset(if_addr->atomic_mr_id);
-    if (iface->gp == 2 && remote_ece && remote_ece == local_ece) {
-        remote_dctn        = uct_ib_unpack_uint24(if_addr->qp_num_ece);
-        self->gp_idx       = 1;
-    } else {
-        remote_dctn        = uct_ib_unpack_uint24(if_addr->qp_num);
-        self->gp_idx       = 0;
-    }
+    remote_dctn            = uct_ib_unpack_uint24(if_addr->qp_num);
 
     memcpy(&self->av, av, sizeof(*av));
     self->av.dqp_dct |= htonl(remote_dctn);
-    self->flags       = path_index % iface->tx.num_dci_pools +
-                        self->gp_idx * iface->tx.num_dci_pools;
+    self->flags       = path_index % iface->tx.num_dci_pools;
 
     return uct_dc_mlx5_ep_basic_init(iface, self);
 }
@@ -1355,12 +1338,11 @@ unsigned uct_dc_mlx5_ep_dci_release_progress(void *arg)
         iface->tx.dci_pool_release_bitmap &= ~UCS_BIT(pool_index);
 
         /* coverity[overrun-local] */
-        ucs_assert(pool_index < iface->tx.num_dci_pools * iface->gp);
+        ucs_assert(pool_index < iface->tx.num_dci_pools);
         dci_pool = &iface->tx.dci_pool[pool_index];
         while (dci_pool->release_stack_top >= 0) {
             dci = dci_pool->stack[dci_pool->release_stack_top--];
-            ucs_assert(dci <
-                       iface->tx.ndci * iface->tx.num_dci_pools * iface->gp);
+            ucs_assert(dci < iface->tx.ndci * iface->tx.num_dci_pools);
             ucs_assert(!uct_dc_mlx5_iface_is_dci_keepalive(iface, dci));
             uct_dc_mlx5_iface_dci_release(iface, dci);
         }
@@ -1627,8 +1609,7 @@ void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
          * DCI */
         uct_dc_mlx5_iface_reset_dci(iface, dci_index);
 
-        if ((ep == &iface->tx.fc_ep[0]) ||
-            ((iface->gp != 1) && (ep == &iface->tx.fc_ep[1]))) {
+        if (ep == iface->tx.fc_ep) {
             iface->flags &= ~UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED;
 
             /* Since DCI isn't assigned for the FC endpoint, schedule DCI

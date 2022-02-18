@@ -165,12 +165,10 @@ void uct_rc_verbs_ep_vfs_populate(uct_rc_ep_t *rc_ep);
 ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                      uct_rc_pending_req_t *req);
 
-ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
-                                         uint32_t *ece);
+ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
 
 ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                            const uct_device_addr_t *dev_addr,
-                                           const uct_ep_addr_t *ep_addr,
-                                           const uint32_t *ece);
+                                           const uct_ep_addr_t *ep_addr);
 
 #endif

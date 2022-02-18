@@ -703,8 +703,6 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
     if (status != UCS_OK) {
         goto err_free;
-    } else {
-        uct_ib_device_ece_check(dev, dev->ibv_context, md->super.pd);
     }
 
     status = uct_ib_mlx5_exp_md_umr_qp_create(md);

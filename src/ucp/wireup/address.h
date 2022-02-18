@@ -157,7 +157,6 @@ struct ucp_address_entry {
  */
 struct ucp_unpacked_address {
     uint64_t                    uuid;           /* Remote worker UUID */
-    uint32_t                    ece;            /* Remote ECE */
     /* Remote worker address name */
     char                        name[UCP_WORKER_ADDRESS_NAME_MAX];
     unsigned                    address_count;  /* Length of address list */

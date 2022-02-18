@@ -244,14 +244,6 @@ AS_IF([test "x$with_ib" = "xyes"],
                        ibv_create_srq_ex],
                       [], [], [[#include <infiniband/verbs.h>]])
 
-       # Check ECE operation APIs are supported by rdma-core package
-       AC_CHECK_DECL(rdma_get_remote_ece, [
-       AC_TRY_COMPILE([#include <rdma/rdma_cma.h>],
-                      [rdma_get_remote_ece(NULL, NULL)],
-                      [AC_DEFINE([HAVE_RDMACM_ECE], 1,
-                          [have upstream ECE APIs])])],
-                          [], [[#include <rdma/rdma_cma.h>]])
-
        # We shouldn't confuse upstream ibv_query_device_ex with
        # legacy MOFED one, distinguish by arguments number
        AC_CHECK_DECL(ibv_query_device_ex, [

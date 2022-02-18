@@ -669,7 +669,7 @@ int main(int argc, char **argv)
         CHKERR_JUMP(UCS_OK != status, "create endpoint", out_free_ep_addrs);
 
         /* Get endpoint address */
-        status = uct_ep_get_address(ep, own_ep, NULL);
+        status = uct_ep_get_address(ep, own_ep);
         CHKERR_JUMP(UCS_OK != status, "get endpoint address", out_free_ep);
 
         status = (ucs_status_t)sendrecv(oob_sock, own_ep, if_info.iface_attr.ep_addr_len,
@@ -677,7 +677,7 @@ int main(int argc, char **argv)
         CHKERR_JUMP(0 != status, "EPs exchange", out_free_ep);
 
         /* Connect endpoint to a remote endpoint */
-        status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep, NULL);
+        status = uct_ep_connect_to_ep(ep, peer_dev, peer_ep);
         if (barrier(oob_sock, progress_worker, if_info.worker)) {
             status = UCS_ERR_IO_ERROR;
             goto out_free_ep;

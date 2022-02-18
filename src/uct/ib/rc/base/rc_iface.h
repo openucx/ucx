@@ -150,7 +150,6 @@ typedef struct uct_rc_iface_common_config {
     unsigned                 max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
-    mlx5_ece_cfg_t           conn_ece;
 
     struct {
         double               timeout;
@@ -411,7 +410,7 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp);
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t qp_num,
                                      struct ibv_ah_attr *ah_attr,
-                                     enum ibv_mtu path_mtu, uint32_t ece);
+                                     enum ibv_mtu path_mtu);
 
 ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
                                      uct_rc_hdr_t *hdr, unsigned length,

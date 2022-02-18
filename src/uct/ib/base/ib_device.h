@@ -22,7 +22,6 @@
 #include <endian.h>
 #include <linux/ip.h>
 
-#define UCT_IB_VENDOR_ID_MLNX             0x15b3
 
 #define UCT_IB_QPN_ORDER                  24  /* How many bits can be an IB QP number */
 #define UCT_IB_UIDX_SHIFT                 8   /* BE uidx shift */
@@ -89,7 +88,6 @@ enum {
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
     UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9),
-    UCT_IB_DEVICE_FLAG_ECE          = UCS_BIT(10),          /* Device supports ECE */
 };
 
 
@@ -262,13 +260,6 @@ extern const double uct_ib_qp_rnr_time_ms[];
  */
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags);
-
-
-/**
- * Check if device has ECE capibility
- */
-void uct_ib_device_ece_check(uct_ib_device_t *dev,
-                             struct ibv_context *ctx, struct ibv_pd *pd);
 
 
 /*

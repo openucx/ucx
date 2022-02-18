@@ -25,14 +25,6 @@
 #include <ucs/type/status.h>
 #include <ucs/debug/log.h>
 
-#if HAVE_RDMACM_ECE
-typedef struct ibv_ece uct_ibv_ece_t;
-#else
-typedef struct {
-    void *placeholder;
-} uct_ibv_ece_t;
-#endif
-
 #ifndef HAVE_VERBS_EXP_H
 #  define IBV_EXP_SEND_INLINE              IBV_SEND_INLINE
 #  define IBV_EXP_SEND_SIGNALED            IBV_SEND_SIGNALED

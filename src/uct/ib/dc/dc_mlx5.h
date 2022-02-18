@@ -37,18 +37,6 @@ struct ibv_ravh {
 #  define UCT_DC_RNDV_HDR_LEN   0
 #endif
 
-
-/**
- * If ECE is supported:
- * 1. For DCT:
- *    1) The 1st DCT is created without ECE feature
- *    2) The 2nd DCT is created with ECE feature
- * 2. For DCI:
- *    1) The 1st pool(total: num_dci_pools) is created without ECE
- *    2) The 2nd pool(total: num_dci_pools) is created with ECE
- */
-#define UCT_DC_MLX5_IFACE_MAX_GP        2
-
 #define UCT_DC_MLX5_KEEPALIVE_NUM_DCIS  1
 #define UCT_DC_MLX5_IFACE_MAX_DCI_POOLS 8
 
@@ -94,9 +82,7 @@ typedef enum {
 
 
 typedef struct uct_dc_mlx5_iface_addr {
-    uint32_t          ece;
     uct_ib_uint24_t   qp_num;
-    uct_ib_uint24_t   qp_num_ece;
     uint8_t           atomic_mr_id;
     uint8_t           flags;
 } UCS_S_PACKED uct_dc_mlx5_iface_addr_t;
@@ -179,7 +165,6 @@ typedef struct uct_dc_dci {
     };
     uint8_t                       pool_index; /* DCI pool index. */
     uint8_t                       path_index; /* Path index */
-    union ece_t                   local_ece;
 } uct_dc_dci_t;
 
 
@@ -213,7 +198,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
 
 
 /* DCI pool
- * same array is used to store DCIs to allocate and DCIs to release:
+ * same array is used to store DCI's to allocate and DCI's to release:
  * 
  * +--------------+-----+-------------+
  * | to release   |     | to allocate |
@@ -223,7 +208,7 @@ KHASH_MAP_INIT_INT64(uct_dc_mlx5_fc_hash, uct_dc_mlx5_ep_fc_entry_t);
  * 0        release     stack      ndci
  *              top     top
  * 
- * Overall count of DCIs to release and allocated DCIs could not be more than
+ * Overall count of DCI's to relase and allocated DCI's could not be more than
  * ndci and these stacks are not intersected
  */
 typedef struct {
@@ -233,23 +218,16 @@ typedef struct {
     int8_t        release_stack_top; /* releasing dci's stack,
                                         points to last DCI to release
                                         or -1 if no DCI's to release */
-    /* dci ECE configurations */
-    union ece_t   local_ece;
 } uct_dc_mlx5_dci_pool_t;
 
 
 struct uct_dc_mlx5_iface {
     uct_rc_mlx5_iface_common_t    super;
-
-    /* Number of tx/rx groups */
-    uint8_t                       gp;
-
     struct {
         /* Array of dcis */
         uct_dc_dci_t              *dcis;
 
-        /* Number of DCIs in one pool */
-        uint8_t                   ndci;
+        uint8_t                   ndci;                        /* Number of DCIs */
 
         /* LIFO is only relevant for dcs allocation policy */
         uct_dc_mlx5_dci_pool_t    dci_pool[UCT_DC_MLX5_IFACE_MAX_DCI_POOLS];
@@ -284,7 +262,7 @@ struct uct_dc_mlx5_iface {
     } tx;
 
     struct {
-        uct_ib_mlx5_qp_t          dct[UCT_DC_MLX5_IFACE_MAX_GP];
+        uct_ib_mlx5_qp_t          dct;
     } rx;
 
     uint8_t                       version_flag;
@@ -301,8 +279,8 @@ struct uct_dc_mlx5_iface {
 extern ucs_config_field_t uct_dc_mlx5_iface_config_table[];
 
 ucs_status_t
-uct_dc_mlx5_iface_create_dcts(uct_dc_mlx5_iface_t *iface,
-                              const uct_dc_mlx5_iface_config_t *config);
+uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
+                             const uct_dc_mlx5_iface_config_t *config);
 
 int uct_dc_mlx5_iface_is_reachable(const uct_iface_h tl_iface,
                                    const uct_device_addr_t *dev_addr,
@@ -314,7 +292,7 @@ ucs_status_t uct_dc_mlx5_iface_flush(uct_iface_h tl_iface, unsigned flags, uct_c
 
 void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_config_t *config);
 
-ucs_status_t uct_dc_mlx5_iface_create_fc_eps(uct_dc_mlx5_iface_t *iface);
+ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self);
 
@@ -322,7 +300,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
                                           uct_rc_hdr_t *hdr, unsigned length,
                                           uint32_t imm_data, uint16_t lid, unsigned flags);
 
-void uct_dc_mlx5_destroy_dcts(uct_dc_mlx5_iface_t *iface, uint32_t dct_max);
+void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 
@@ -348,7 +326,6 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 #if HAVE_DEVX
 
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
-                                               uct_ib_mlx5_qp_t *dct,
                                                int full_handshake);
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface);
@@ -360,7 +337,7 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 #else
 
 static UCS_F_MAYBE_UNUSED ucs_status_t uct_dc_mlx5_iface_devx_create_dct(
-        uct_dc_mlx5_iface_t *iface, uct_ib_mlx5_qp_t *dct, int full_handshake)
+        uct_dc_mlx5_iface_t *iface, int full_handshake)
 {
     return UCS_ERR_UNSUPPORTED;
 }
@@ -392,7 +369,7 @@ uct_dc_mlx5_iface_fill_ravh(struct ibv_ravh *ravh, uint32_t dct_num)
 static UCS_F_ALWAYS_INLINE uint8_t
 uct_dc_mlx5_iface_total_ndci(uct_dc_mlx5_iface_t *iface)
 {
-    return (iface->tx.ndci * iface->tx.num_dci_pools * iface->gp) +
+    return (iface->tx.ndci * iface->tx.num_dci_pools) +
         ((iface->flags & UCT_DC_MLX5_IFACE_FLAG_KEEPALIVE) ?
          UCT_DC_MLX5_KEEPALIVE_NUM_DCIS : 0);
 }

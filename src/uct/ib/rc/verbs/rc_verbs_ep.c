@@ -535,14 +535,12 @@ ucs_status_t uct_rc_verbs_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
     return UCS_OK;
 }
 
-ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
-                                         uint32_t *ece)
+ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_rc_verbs_iface_t *iface        = ucs_derived_of(tl_ep->iface,
                                                        uct_rc_verbs_iface_t);
     uct_rc_verbs_ep_t *ep              = ucs_derived_of(tl_ep, uct_rc_verbs_ep_t);
     uct_ib_md_t *md                    = uct_ib_iface_md(&iface->super.super);
-    uct_ib_device_t *dev               = &md->dev;
     uct_rc_verbs_ep_address_t *rc_addr = (uct_rc_verbs_ep_address_t*)addr;
     uint8_t mr_id;
 
@@ -553,30 +551,17 @@ ucs_status_t uct_rc_verbs_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
         rc_addr->flags          |= UCT_RC_VERBS_ADDR_HAS_ATOMIC_MR;
         *(uint8_t*)(rc_addr + 1) = mr_id;
     }
-
-    if (ece!= NULL) {
-        if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
-            (iface->super.super.config.ece_cfg.enable == 0)) {
-            *ece = 0;
-        } else {
-            *ece = ece_intersect(*ece, ep->super.local_ece.val);
-        }
-    }
-
     return UCS_OK;
 }
 
 ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                            const uct_device_addr_t *dev_addr,
-                                           const uct_ep_addr_t *ep_addr,
-                                           const uint32_t *ece)
+                                           const uct_ep_addr_t *ep_addr)
 {
     uct_rc_verbs_ep_t *ep                    = ucs_derived_of(tl_ep,
                                                               uct_rc_verbs_ep_t);
     uct_rc_iface_t *iface                    = ucs_derived_of(tl_ep->iface,
                                                               uct_rc_iface_t);
-    uct_ib_device_t *dev                     =
-                                    &uct_ib_iface_md(&iface->super)->dev;
     const uct_ib_address_t *ib_addr          = (const uct_ib_address_t *)dev_addr;
     const uct_rc_verbs_ep_address_t *rc_addr =
                                     (const uct_rc_verbs_ep_address_t*)ep_addr;
@@ -590,16 +575,8 @@ ucs_status_t uct_rc_verbs_ep_connect_to_ep(uct_ep_h tl_ep,
                                         &path_mtu);
     ucs_assert(path_mtu != UCT_IB_ADDRESS_INVALID_PATH_MTU);
 
-    if (((dev->flags & UCT_IB_DEVICE_FLAG_ECE) == 0) ||
-        (iface->super.config.ece_cfg.enable == 0)) {
-        ep->super.remote_ece.val = 0;
-    } else {
-        ep->super.remote_ece.val = *ece;
-    }
-
     qp_num = uct_ib_unpack_uint24(rc_addr->qp_num);
-    status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu,
-                                     ep->super.remote_ece.val);
+    status = uct_rc_iface_qp_connect(iface, ep->qp, qp_num, &ah_attr, path_mtu);
     if (status != UCS_OK) {
         return status;
     }
@@ -619,7 +596,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     uct_rc_verbs_iface_t *iface = ucs_derived_of(params->iface, uct_rc_verbs_iface_t);
     uct_ib_md_t *md             = uct_ib_iface_md(&iface->super.super);
     uct_ib_qp_attr_t attr = {};
-    uct_ibv_ece_t UCS_V_UNUSED ece = {};
     ucs_status_t status;
 
     status = uct_rc_iface_qp_create(&iface->super, &self->qp, &attr,
@@ -642,22 +618,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_verbs_ep_t, const uct_ep_params_t *params)
     if (status != UCS_OK) {
         goto err_qp_cleanup;
     }
-
-#if HAVE_RDMACM_ECE
-    if (iface->super.super.config.ece_cfg.enable) {
-        if (0 != ibv_query_ece(self->qp, &ece)) {
-            ucs_error("failed to query ece");
-            status = UCS_ERR_IO_ERROR;
-            goto err_qp_cleanup;
-        }
-        self->super.local_ece.val = ece.options;
-    } else {
-#endif
-        self->super.local_ece.val = 0;
-#if HAVE_RDMACM_ECE
-    }
-#endif
-    self->super.remote_ece.val = 0;
 
     uct_rc_iface_add_qp(&iface->super, &self->super, self->qp->qp_num);
     uct_rc_txqp_available_set(&self->super.txqp, iface->config.tx_max_wr);

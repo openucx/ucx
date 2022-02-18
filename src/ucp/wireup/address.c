@@ -1104,7 +1104,6 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
 {
     ucp_context_h context       = worker->context;
     uint64_t md_flags_pack_mask = (UCT_MD_FLAG_REG | UCT_MD_FLAG_ALLOC);
-    uint32_t ece                = 0xffffffff;
     const ucp_address_packed_device_t *dev;
     uint8_t *address_header_p;
     uct_iface_attr_t *iface_attr;
@@ -1290,8 +1289,8 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
                                                      ep_addr_len, addr_version,
                                                      0);
 
-                    /* pack ep address, ece is both input and output */
-                    status = uct_ep_get_address(ep->uct_eps[lane], ptr, &ece);
+                    /* pack ep address */
+                    status = uct_ep_get_address(ep->uct_eps[lane], ptr);
                     if (status != UCS_OK) {
                         return status;
                     }
@@ -1366,14 +1365,6 @@ ucp_address_do_pack(ucp_worker_h worker, ucp_ep_h ep, void *buffer, size_t size,
         } else {
             /* cppcheck-suppress internalAstError */
             ucs_assert(UCS_BITMAP_IS_ZERO_INPLACE(&dev_tl_bitmap));
-        }
-    }
-
-    if ((ep != NULL) && (ep->flags & UCP_EP_FLAG_ECE)) {
-        if (ece == 0xffffffff || ece == 0) {
-            ep->flags &= ~UCP_EP_FLAG_ECE;
-        } else {
-            ep->local_ece = ece;
         }
     }
 

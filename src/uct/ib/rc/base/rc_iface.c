@@ -98,35 +98,6 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "Otherwise poll TX completions only if no RX completions found.",
    ucs_offsetof(uct_rc_iface_common_config_t, tx.poll_always), UCS_CONFIG_TYPE_BOOL},
 
-   {"ECE_ENABLE", "auto",
-    "Enable Enhanced Connection Establishment\n"
-    " auto - Let runtime decide whether ECE should be used.\n"
-    " on   - Force using ECE. Note: Device may not support ECE and abort.\n"
-    " off  - Do not use ECE.",
-    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.enable),
-    UCS_CONFIG_TYPE_ON_OFF_AUTO},
-
-   {"ECE_CC", "255",
-    "Set congestion control algorithm\n"
-    " 255 - Let run time decide which CC algo should be used.\n"
-    " 0   - default DCQCN cc algo\n"
-    " 1   - use 1st CC algo\n"
-    " 2   - use 2nd CC algo\n"
-    " 4   - use 3rd CC algo\n"
-    "...\n"
-    " 128 - use 8th CC algo",
-    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.cc),
-    UCS_CONFIG_TYPE_ULONG},
-
-   {"ECE_SR", "auto",
-    "Enable ECE select repeative\n"
-    " auto - Let runtime decide whether ECE/SR should be used.\n"
-    " on   - Force using ECE/SR. Note: Only effective when ECE_ENABLE is on. "
-    "Device may not support ECE/SR and abort.\n"
-    " off  - Do not use ECE/SR. Note: Only effecitve when ECE_ENABLE is on",
-    ucs_offsetof(uct_rc_iface_common_config_t, conn_ece.sr),
-    UCS_CONFIG_TYPE_ON_OFF_AUTO},
-
   {NULL}
 };
 
@@ -810,33 +781,6 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
     struct ibv_qp_attr qp_attr;
     int ret;
 
-#if HAVE_RDMACM_ECE
-    uct_ibv_ece_t ece;
-    uct_ib_md_t *md;
-
-    md = uct_ib_iface_md(&iface->super);
-
-    memset(&ece, 0, sizeof(ece));
-    ece.vendor_id = md->dev.pci_id.vendor;
-
-    if ((md->dev.flags & UCT_IB_DEVICE_FLAG_ECE) &&
-        iface->super.config.ece_cfg.enable) {
-        ece.options = iface->super.config.ece_cfg.ece.val;
-
-        if (ibv_set_ece(qp, &ece)) {
-            ucs_error("error set ece with 0x%x", ece.options);
-            return UCS_ERR_IO_ERROR;
-        }
-    } else if (md->dev.flags & UCT_IB_DEVICE_FLAG_ECE) {
-        ece.options = 0;
-
-        if (ibv_set_ece(qp, &ece)) {
-            ucs_error("error set ece with 0x%x", ece.options);
-            return UCS_ERR_IO_ERROR;
-        }
-    }
-#endif
-
     memset(&qp_attr, 0, sizeof(qp_attr));
 
     qp_attr.qp_state              = IBV_QPS_INIT;
@@ -862,31 +806,18 @@ ucs_status_t uct_rc_iface_qp_init(uct_rc_iface_t *iface, struct ibv_qp *qp)
 ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      const uint32_t dest_qp_num,
                                      struct ibv_ah_attr *ah_attr,
-                                     enum ibv_mtu path_mtu, uint32_t ece)
+                                     enum ibv_mtu path_mtu)
 {
-    uct_ib_device_t UCS_V_UNUSED *dev;
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
     struct ibv_exp_qp_attr qp_attr;
+    uct_ib_device_t *dev;
 #else
     struct ibv_qp_attr qp_attr;
 #endif
     long qp_attr_mask;
-    uct_ibv_ece_t UCS_V_UNUSED ibv_ece;
     int ret;
 
     ucs_assert(path_mtu != 0);
-
-    dev = uct_ib_iface_device(&iface->super);
-#if HAVE_RDMACM_ECE
-    if ((dev->flags & UCT_IB_DEVICE_FLAG_ECE) &&
-        (iface->super.config.ece_cfg.enable)) {
-        ibv_ece.vendor_id = UCT_IB_VENDOR_ID_MLNX;
-        ibv_ece.options = ece;
-        ibv_ece.comp_mask = 0;
-        /* Make coverity happy */
-        (void)ibv_set_ece(qp, &ibv_ece);
-    }
-#endif
 
     memset(&qp_attr, 0, sizeof(qp_attr));
 
@@ -906,6 +837,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                     IBV_QP_MIN_RNR_TIMER;
 
 #if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
+    dev = uct_ib_iface_device(&iface->super);
     if (iface->config.ooo_rw && UCX_IB_DEV_IS_OOO_SUPPORTED(dev, rc)) {
         ucs_debug("enabling out-of-order on RC QP %x dev %s",
                   qp->qp_num, uct_ib_device_name(dev));
@@ -942,14 +874,6 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;
     }
-
-#if HAVE_RDMACM_ECE
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
-        /* Make coverity happy */
-        (void)ibv_query_ece(qp, &ibv_ece);
-        ucs_debug("rc verbs under rst with ece 0x%x", ibv_ece.options);
-    }
-#endif
 
     ucs_debug("connected rc qp 0x%x on "UCT_IB_IFACE_FMT" to lid %d(+%d) sl %d "
               "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d",

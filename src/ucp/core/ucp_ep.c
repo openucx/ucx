@@ -191,8 +191,6 @@ ucs_status_t ucp_ep_create_base(ucp_worker_h worker, const char *peer_name,
     ep->worker                            = worker;
     ep->am_lane                           = UCP_NULL_LANE;
     ep->flags                             = 0;
-    ep->local_ece                         = 0;
-    ep->remote_ece                        = 0;
     ep->conn_sn                           = UCP_EP_MATCH_CONN_SN_MAX;
 #if UCS_ENABLE_ASSERT
     ep->refcounts.create                  =
@@ -676,9 +674,8 @@ ucp_ep_create_to_worker_addr(ucp_worker_h worker,
     }
 
     /* initialize transport endpoints */
-    ep->flags |= UCP_EP_FLAG_ECE;
-    status     = ucp_wireup_init_lanes(ep, ep_init_flags, local_tl_bitmap,
-                                       remote_address, addr_indices);
+    status = ucp_wireup_init_lanes(ep, ep_init_flags, local_tl_bitmap,
+                                   remote_address, addr_indices);
     if (status != UCS_OK) {
         goto err_delete;
     }
@@ -842,7 +839,6 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
         return status;
     }
 
-    remote_addr.ece = conn_request->ece;
     for (i = 0; i < remote_addr.address_count; ++i) {
         remote_addr.address_list[i].dev_addr  = conn_request->remote_dev_addr;
         remote_addr.address_list[i].dev_index = 0; /* CM addr contains only 1

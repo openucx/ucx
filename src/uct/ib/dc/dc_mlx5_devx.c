@@ -16,24 +16,21 @@
 
 
 ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
-                                               uct_ib_mlx5_qp_t *dct,
                                                int full_handshake)
 {
-    uct_ib_iface_t *ib_iface = &iface->super.super.super;
-    uct_ib_device_t *dev     = uct_ib_iface_device(ib_iface);
-    struct mlx5dv_pd dvpd    = {};
-    struct mlx5dv_cq dvcq    = {};
-    struct mlx5dv_obj dv     = {};
+    uct_ib_device_t *dev  = uct_ib_iface_device(&iface->super.super.super);
+    struct mlx5dv_pd dvpd = {};
+    struct mlx5dv_cq dvcq = {};
+    struct mlx5dv_obj dv  = {};
     char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_in)]   = {};
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_dct_out)] = {};
     int dvflags;
-    uint32_t ece = dct->local_ece.val;
     void *dctc;
 
     dvflags   = MLX5DV_OBJ_PD | MLX5DV_OBJ_CQ;
-    dv.pd.in  = uct_ib_iface_md(ib_iface)->pd;
+    dv.pd.in  = uct_ib_iface_md(&iface->super.super.super)->pd;
     dv.pd.out = &dvpd;
-    dv.cq.in  = ib_iface->cq[UCT_IB_DIR_RX];
+    dv.cq.in  = iface->super.super.super.cq[UCT_IB_DIR_RX];
     dv.cq.out = &dvcq;
     mlx5dv_init_obj(&dv, dvflags);
 
@@ -53,63 +50,42 @@ ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
     UCT_IB_MLX5DV_SET(dctc, dctc, rae, true);
     UCT_IB_MLX5DV_SET(dctc, dctc, force_full_handshake, !!full_handshake);
     UCT_IB_MLX5DV_SET(dctc, dctc, cs_res, uct_ib_mlx5_qpc_cs_res(
-                      ib_iface->config.max_inl_cqe[UCT_IB_DIR_RX], 1));
+                      iface->super.super.super.config.max_inl_cqe[UCT_IB_DIR_RX], 1));
     UCT_IB_MLX5DV_SET(dctc, dctc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(dctc, dctc, pkey_index,
-                          ib_iface->pkey_index);
+                          iface->super.super.super.pkey_index);
     }
-    UCT_IB_MLX5DV_SET(dctc, dctc, port, ib_iface->config.port_num);
+    UCT_IB_MLX5DV_SET(dctc, dctc, port, iface->super.super.super.config.port_num);
 
     UCT_IB_MLX5DV_SET(dctc, dctc, min_rnr_nak, iface->super.super.config.min_rnr_timer);
 
     /* Infiniband and RoCE v1 set traffic class.
      * Also set it for RoCE v2, because some old FW versions rely on tclass
      * even for RoCE v2. */
-    UCT_IB_MLX5DV_SET(dctc, dctc, tclass, ib_iface->config.traffic_class);
+    UCT_IB_MLX5DV_SET(dctc, dctc, tclass,
+                      iface->super.super.super.config.traffic_class);
 
     if (uct_ib_iface_is_roce_v2(&iface->super.super.super)) {
         /* RoCE V2 sets DSCP */
-        UCT_IB_MLX5DV_SET(dctc, dctc, dscp, uct_ib_iface_roce_dscp(ib_iface));
+        UCT_IB_MLX5DV_SET(dctc, dctc, dscp,
+                          uct_ib_iface_roce_dscp(&iface->super.super.super));
     }
 
-    UCT_IB_MLX5DV_SET(dctc, dctc, mtu, ib_iface->config.path_mtu);
-    UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, ib_iface->gid_info.gid_index);
-    UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, ib_iface->config.hop_limit);
+    UCT_IB_MLX5DV_SET(dctc, dctc, mtu, iface->super.super.super.config.path_mtu);
+    UCT_IB_MLX5DV_SET(dctc, dctc, my_addr_index, iface->super.super.super.gid_info.gid_index);
+    UCT_IB_MLX5DV_SET(dctc, dctc, hop_limit, iface->super.super.super.config.hop_limit);
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
-        ib_iface->config.ece_cfg.enable) {
-        UCT_IB_MLX5DV_SET(dctc, dctc, ece, ece);
-    }
-
-    dct->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
-                                           out, sizeof(out));
-    if (dct->devx.obj == NULL) {
+    iface->rx.dct.devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
+                                                    out, sizeof(out));
+    if (iface->rx.dct.devx.obj == NULL) {
         ucs_error("mlx5dv_devx_obj_create(DCT) failed, syndrome %x: %m",
                   UCT_IB_MLX5DV_GET(create_dct_out, out, syndrome));
         return UCS_ERR_INVALID_PARAM;
     }
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
-        if (ece == UCT_IB_MLX5_DEVX_ECE_TRIG_RESP) {
-            dct->local_ece.val = UCT_IB_MLX5DV_GET(create_dct_out, out, ece);
-        } else {
-            ece = UCT_IB_MLX5DV_GET(create_dct_out, out, ece);
-            if (dct->local_ece.val != ece) {
-                ucs_error("mlx5dv_devx_obj_create(DCT) ece failed, "
-                          "ece req : %x, rst : %x.", dct->local_ece.val, ece);
-                return UCS_ERR_INVALID_PARAM;
-            }
-        }
-        ucs_debug("mlx5dv_devx_obj_create(DCT) with ece : %x.",
-                  dct->local_ece.val);
-    } else {
-        dct->local_ece.val = 0;
-        ucs_debug("mlx5dv_devx_obj_create(DCT) with no ece");
-    }
-
-    dct->type   = UCT_IB_MLX5_OBJ_TYPE_DEVX;
-    dct->qp_num = UCT_IB_MLX5DV_GET(create_dct_out, out, dctn);
+    iface->rx.dct.type   = UCT_IB_MLX5_OBJ_TYPE_DEVX;
+    iface->rx.dct.qp_num = UCT_IB_MLX5DV_GET(create_dct_out, out, dctn);
     return UCS_OK;
 }
 
@@ -117,10 +93,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
                                                 uct_ib_mlx5_qp_t *qp,
                                                 uint8_t path_index)
 {
-    uct_ib_iface_t *ib_iface = &iface->super.super.super;
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md,
-                                              uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev     = uct_ib_iface_device(ib_iface);
+    uct_ib_mlx5_md_t *md = ucs_derived_of(iface->super.super.super.super.md,
+                                          uct_ib_mlx5_md_t);
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
     char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
     char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]    = {};
@@ -136,11 +110,10 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
-    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num,
-                      ib_iface->config.port_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, iface->super.super.super.config.port_num);
     if (!uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
-                          ib_iface->pkey_index);
+                          iface->super.super.super.pkey_index);
     }
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2init, sizeof(in_2init),
@@ -154,39 +127,25 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
     qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
-    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, ib_iface->config.path_mtu);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, iface->super.super.super.config.path_mtu);
     UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
     UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
-    if (uct_ib_iface_is_roce(ib_iface)) {
+    if (uct_ib_iface_is_roce(&iface->super.super.super)) {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio,
-                          ib_iface->config.sl);
+                          iface->super.super.super.config.sl);
         uct_ib_mlx5_devx_set_qpc_port_affinity(md, path_index, qpc,
                                                &opt_param_mask);
     } else {
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl,
-                          ib_iface->config.sl);
-    }
-
-    if ((dev->flags & UCT_IB_DEVICE_FLAG_ECE) &&
-        ib_iface->config.ece_cfg.enable) {
-        ucs_debug("init2rtr_qp_in with ece 0x%x", qp->remote_ece.val);
-        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, qp->remote_ece.val);
+                          iface->super.super.super.config.sl);
     }
 
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
-
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
                                         out_2rtr, sizeof(out_2rtr));
     if (status != UCS_OK) {
         return status;
-    }
-
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE) {
-        qp->local_ece.val = UCT_IB_MLX5DV_GET(init2rtr_qp_out, out_2rtr, ece);
-        ucs_debug("rc devx under rtr with ece 0x%x", qp->local_ece.val);
-    } else {
-        qp->local_ece.val = 0;
     }
 
     UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode, UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);

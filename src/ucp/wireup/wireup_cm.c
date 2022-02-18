@@ -443,9 +443,6 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 
     ucs_queue_head_init(&tmp_pending_queue);
 
-    ep->local_ece  = 0;
-    ep->remote_ece = 0;
-
 initial_config_retry:
     /* Cleanup the previously created UCP EP. The one that was created on the
      * previous call to this client's resolve_cb */
@@ -474,7 +471,6 @@ initial_config_retry:
 
     can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
                    (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
-    ep->flags   |= UCP_EP_FLAG_ECE;
     status       = ucp_cm_ep_priv_data_pack(
                       ep, &tl_bitmap, can_fallback,
                       context->config.ext.sa_client_min_hdr_version,
@@ -496,11 +492,6 @@ initial_config_retry:
                                  UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH;
     params.private_data        = priv_data;
     params.private_data_length = priv_data_length;
-    if (ep->flags & UCP_EP_FLAG_ECE) {
-        params.field_mask |= UCT_EP_CONNECT_PARAM_FIELD_ECE;
-        params.ece         = ep->local_ece;
-    }
-
     status                     = uct_ep_connect(ucp_ep_get_cm_uct_ep(ep),
                                                 &params);
     ucs_free(priv_data);
@@ -520,8 +511,6 @@ try_fallback:
     }
 
 err:
-    ep->flags    &= ~UCP_EP_FLAG_ECE;
-    ep->local_ece = 0;
     ucp_ep_set_failed(ep, ucp_ep_get_cm_lane(ep), status);
 out:
     ucs_free(ucp_addr);
@@ -803,12 +792,6 @@ static void ucp_cm_client_connect_cb(uct_ep_h uct_cm_ep, void *arg,
            remote_data->dev_addr_length);
     memcpy(progress_arg->sa_data, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
-
-    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_ECE) {
-        ucp_ep->remote_ece = remote_data->ece;
-    } else {
-        ucp_ep->remote_ece = 0;
-    }
 
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_client_connect_progress,
@@ -1174,11 +1157,6 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
            remote_data->dev_addr_length);
     memcpy(ucp_conn_request + 1, remote_data->conn_priv_data,
            remote_data->conn_priv_data_length);
-    if (remote_data->field_mask & UCT_CM_REMOTE_DATA_FIELD_ECE) {
-        ucp_conn_request->ece = remote_data->ece;
-    } else {
-        ucp_conn_request->ece = 0;
-    }
 
     uct_worker_progress_register_safe(worker->uct,
                                       ucp_cm_server_conn_request_progress,
@@ -1244,7 +1222,6 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
         goto out_free_request;
     }
 
-    ep->remote_ece = remote_addr->ece;
     status = ucp_wireup_connect_local(ep, remote_addr, NULL);
     if (status != UCS_OK) {
         ucs_warn("server ep %p failed to connect to remote address on "
@@ -1434,13 +1411,6 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
                                           ep_init_flags, sa_data_version);
     if (status != UCS_OK) {
         goto err;
-    }
-
-    if (ep->flags & UCP_EP_FLAG_ECE) {
-        uct_ep_params.field_mask |= UCT_EP_PARAM_FIELD_ECE;
-        uct_ep_params.ece         = ep->local_ece;
-    } else {
-        uct_ep_params.ece         = 0;
     }
 
     status = uct_ep_create(&uct_ep_params, &uct_ep);

@@ -711,12 +711,6 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         dev->flags |= UCT_IB_DEVICE_FLAG_AV;
     }
 
-#if HAVE_RDMACM_ECE
-    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ece)) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_ECE;
-    }
-#endif
-
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
@@ -876,7 +870,6 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     struct ibv_qp_init_attr_ex qp_attr = {};
     struct mlx5dv_qp_init_attr dv_attr = {};
     struct ibv_qp_attr attr = {};
-    uct_ibv_ece_t UCS_V_UNUSED ece = {};
     struct ibv_srq *srq;
     struct ibv_pd *pd;
     struct ibv_cq *cq;
@@ -939,14 +932,6 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
                   uct_ib_device_name(dev));
         goto err;
     }
-
-#if HAVE_RDMACM_ECE
-    /* ibv_set_ece check whether ECE is supported */
-    if ((ibv_query_ece(qp, &ece) == 0) && (ibv_set_ece(qp, &ece) == 0) &&
-        (ece.vendor_id = dev->pci_id.vendor)) {
-        dev->flags |= UCT_IB_DEVICE_FLAG_ECE;
-    }
-#endif
 
     /* always set global address parameters, in case the port is RoCE or SRIOV */
     attr.qp_state                  = IBV_QPS_RTR;

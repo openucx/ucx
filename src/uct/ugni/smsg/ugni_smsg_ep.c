@@ -127,8 +127,7 @@ UCS_CLASS_DEFINE(uct_ugni_smsg_ep_t, uct_ugni_ep_t);
 UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_smsg_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ugni_smsg_ep_t, uct_ep_t);
 
-ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
-                                          uint32_t *ece) {
+ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr) {
 
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_sockaddr_smsg_ugni_t *ep_addr = (uct_sockaddr_smsg_ugni_t*)addr;
@@ -149,8 +148,7 @@ ucs_status_t uct_ugni_smsg_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr,
 
 ucs_status_t uct_ugni_smsg_ep_connect_to_ep(uct_ep_h tl_ep,
                                             const uct_device_addr_t *dev_addr,
-                                            const uct_ep_addr_t *ep_addr,
-                                            const uint32_t *ece)
+                                            const uct_ep_addr_t *ep_addr)
 {
     uct_ugni_smsg_ep_t *ep = ucs_derived_of(tl_ep, uct_ugni_smsg_ep_t);
     uct_ugni_iface_t *iface = ucs_derived_of(tl_ep->iface, uct_ugni_iface_t);

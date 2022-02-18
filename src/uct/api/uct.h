@@ -853,10 +853,7 @@ enum uct_ep_params_field {
     UCT_EP_PARAM_FIELD_PRIV_DATA_LENGTH           = UCS_BIT(15),
 
     /** Enables @ref uct_ep_params::local_sockaddr */
-    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16),
-
-    /** Enables @ref uct_ep_params::ece */
-    UCT_EP_PARAM_FIELD_ECE                        = UCS_BIT(17)
+    UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR             = UCS_BIT(16)
 };
 
 
@@ -872,10 +869,7 @@ enum uct_ep_connect_params_field {
     UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA         = UCS_BIT(0),
 
     /** Enables @ref uct_ep_connect_params::private_data_length */
-    UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH  = UCS_BIT(1),
-
-    /** Enables @ref uct_ep_connect_params::ece */
-    UCT_EP_CONNECT_PARAM_FIELD_ECE                  = UCS_BIT(2)
+    UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH  = UCS_BIT(1)
 };
 
 
@@ -1249,9 +1243,6 @@ struct uct_ep_params {
      */
     uct_cm_ep_resolve_callback_t        cm_resolve_cb;
 
-    /** ECE to be passed from server to client */
-    uint32_t                             ece;
-
     /**
      * Private data to be passed from server to client. Can be used only along
      * with @ref uct_ep_params::conn_request.
@@ -1298,9 +1289,6 @@ struct uct_ep_connect_params {
      * value is indicated by the @ref uct_cm_attr::max_conn_priv.
      */
     size_t                              private_data_length;
-
-    /** ECE to be passed from client to server */
-    uint32_t                             ece;
 };
 
 /**
@@ -2251,10 +2239,8 @@ void uct_ep_destroy(uct_ep_h ep);
  * @param [in]  ep       Endpoint to query.
  * @param [out] addr     Filled with endpoint address. The size of the buffer
  *                       provided must be at least @ref uct_iface_attr_t::ep_addr_len.
- * @param [out] ece      filled with reduced ECE
  */
-ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr,
-                                uint32_t *ece);
+ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr);
 
 
 /**
@@ -2266,11 +2252,9 @@ ucs_status_t uct_ep_get_address(uct_ep_h ep, uct_ep_addr_t *addr,
  * @param [in] ep           Endpoint to connect.
  * @param [in] dev_addr     Remote device address.
  * @param [in] ep_addr      Remote endpoint address.
- * @param [in] ece          Remote endpoint ECE
  */
 ucs_status_t uct_ep_connect_to_ep(uct_ep_h ep, const uct_device_addr_t *dev_addr,
-                                  const uct_ep_addr_t *ep_addr,
-                                  const uint32_t *ece);
+                                  const uct_ep_addr_t *ep_addr);
 
 
 /**
