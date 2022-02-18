@@ -583,7 +583,7 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         Iface gets queried multiple times so we had to disallow more than one debug print : )
     */
     if(!iface_query_printed) {
-        DEBUG_PRINT("max_eps: %d iface->attr->cap.flags: %ld event_flags-> %ld\n",attr->max_num_eps, attr->cap.flags, attr->cap.event_flags);
+        DEBUG_PRINT("max_eps: %zd iface->attr->cap.flags: %ld event_flags-> %ld\n",attr->max_num_eps, attr->cap.flags, attr->cap.event_flags);
         iface_query_printed = 1;
     }
     return UCS_OK;
