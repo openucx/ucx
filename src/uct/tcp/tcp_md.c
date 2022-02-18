@@ -35,7 +35,7 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->cap.detect_mem_types    = 0;
     attr->cap.max_reg             = ULONG_MAX;
     attr->rkey_packed_size        = 0;
-    attr->reg_cost                = ucs_linear_func_make(0, 0);
+    attr->reg_cost                = UCS_LINEAR_FUNC_ZERO;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }

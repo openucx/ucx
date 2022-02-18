@@ -119,7 +119,7 @@ static ucs_status_t uct_self_iface_query(uct_iface_h tl_iface, uct_iface_attr_t 
     attr->cap.am.max_hdr          = 0;
     attr->cap.am.max_iov          = SIZE_MAX;
 
-    attr->latency                 = ucs_linear_func_make(0, 0);
+    attr->latency                 = UCS_LINEAR_FUNC_ZERO;
     attr->bandwidth.dedicated     = 6911.0 * UCS_MBYTE;
     attr->bandwidth.shared        = 0;
     attr->overhead                = 10e-9;
@@ -396,7 +396,7 @@ static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->cap.max_alloc        = 0;
     attr->cap.max_reg          = ULONG_MAX;
     attr->rkey_packed_size     = 0;
-    attr->reg_cost             = ucs_linear_func_make(0, 0);
+    attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
