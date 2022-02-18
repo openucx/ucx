@@ -231,6 +231,9 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     sci_error_t sci_error;
 
 
+    tx = (void*) iface->tx_map;
+    tx_pack = (sisci_packet_t*) tx;
+
     if(tx_pack->status != 0) {
         //printf("Error sending to %d: recv buffer not empty\n", id);
         return UCS_ERR_NO_RESOURCE;
@@ -246,8 +249,9 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
         total_header_len = 0;
     }
     
-    tx = (void*) iface->tx_map;
-    tx_pack = (sisci_packet_t*) tx;
+    
+
+
     ucs_iov_iter_init(&uct_iov_iter);
     bytes_copied = uct_iov_to_buffer(iov, iovcnt, &uct_iov_iter, tx + sizeof(sisci_packet_t) + total_header_len, iface->send_size);
     tx_pack->am_id = id;
