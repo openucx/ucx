@@ -495,7 +495,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
 
         packet->am_id = 0;
         packet->status = 0;
-        memset(iface->recv_buffer + SCI_PACKET_SIZE, 0 ,packet->length);
+        memset(iface->recv_buffer, 0 ,packet->length + SCI_PACKET_SIZE);
         packet->length = 0;
     }
 
