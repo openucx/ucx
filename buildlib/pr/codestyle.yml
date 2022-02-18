@@ -53,8 +53,9 @@ jobs:
           set -x
           git log -1 HEAD
           git log -1 HEAD^
-          BASE_SOURCEVERSION=$(git rev-parse HEAD^)
-          echo "Checking code format on diff ${BASE_SOURCEVERSION}..${BUILD_SOURCEVERSION}"
+          CURRENT_BRANCH=$(git symbolic-ref --short HEAD)
+          BASE_SOURCEVERSION=$(git merge-base ${CURRENT_BRANCH} master)
+          echo "Checking code format on diff with ${BASE_SOURCEVERSION}"
           git-clang-format --diff ${BASE_SOURCEVERSION} ${BUILD_SOURCEVERSION} > format.patch
           echo "Generated patch file:"
           cat format.patch
