@@ -490,13 +490,16 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     //usleep(500000);
     
     if(status == UCS_OK) {
+
+        DEBUG_PRINT("status == UCS_OK, clear buffers\n");
+
         packet->am_id = 0;
         packet->status = 0;
         memset(iface->recv_buffer + SCI_PACKET_SIZE, 0 ,packet->length);
         packet->length = 0;
     }
 
-    //printf("invoke staus %d\n", status);
+    printf("invoke staus %d\n", status);
 
 }
 
