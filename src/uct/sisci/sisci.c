@@ -511,6 +511,8 @@ unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
 
         DEBUG_PRINT("recv: AMID %d, Length %d!\n", packet->am_id, packet->length);
         uct_sci_process_recv(tl_iface);
+        DEBUG_PRINT("after recv: AMID %d length %d\n", packet->am_id, packet->length);
+
     }
     
     //usleep(500000);

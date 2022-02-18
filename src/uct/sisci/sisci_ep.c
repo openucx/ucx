@@ -46,6 +46,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     node_id = (unsigned int) dev_addr->node_id;
 
     DEBUG_PRINT("EP created segment_id %d node_id %d\n", segment_id, node_id);
+
     self->super.super.iface = params->iface;
     self->remote_segment_id = segment_id;
     self->remote_node_id = node_id;
