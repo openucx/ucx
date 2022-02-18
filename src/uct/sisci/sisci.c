@@ -529,7 +529,6 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
     //TODO: insert necessarry lies to make ucx want us.
     //taken from uct_iface.c sets default attributes to zero.
     
-    memset(attr, 0, sizeof(*attr));
 
 
     /*  
@@ -537,10 +536,12 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         According to this, we should call uct_base_iface_query() for some reason 
     */
 
-    /*  Start of lies  */
+    uct_base_iface_query(tl_iface, attr);
+
+    /*  Start of lies  
     attr->dev_num_paths = 1;
     attr->max_num_eps = 32;    
-    
+    */
     
     attr->cap.flags =   UCT_IFACE_FLAG_CONNECT_TO_IFACE | 
                         UCT_IFACE_FLAG_AM_SHORT         |
@@ -582,7 +583,7 @@ static ucs_status_t uct_sci_iface_query(uct_iface_h tl_iface, uct_iface_attr_t *
         Iface gets queried multiple times so we had to disallow more than one debug print : )
     */
     if(!iface_query_printed) {
-        DEBUG_PRINT("iface->attr->cap.flags: %ld event_flags-> %ld\n", attr->cap.flags, attr->cap.event_flags);
+        DEBUG_PRINT("max_eps: %d iface->attr->cap.flags: %ld event_flags-> %ld\n",attr->max_num_eps, attr->cap.flags, attr->cap.event_flags);
         iface_query_printed = 1;
     }
     return UCS_OK;
