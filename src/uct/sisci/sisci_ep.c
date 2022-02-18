@@ -231,6 +231,11 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     sci_error_t sci_error;
 
 
+    if(tx_pack->status != 0) {
+        //printf("Error sending to %d: recv buffer not empty\n", id);
+        return UCS_ERR_NO_RESOURCE;
+    }
+
     UCT_CHECK_LENGTH(header_length + iov_total_len + sizeof(sisci_packet_t), 0 , iface->send_size, "am_zcopy");
     UCT_CHECK_AM_ID(id);
 
