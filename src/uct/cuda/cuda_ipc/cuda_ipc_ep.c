@@ -25,13 +25,41 @@
 
 static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_ep_t, const uct_ep_params_t *params)
 {
-    uct_cuda_ipc_iface_t *iface = ucs_derived_of(params->iface,
-                                                 uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_iface_t *iface         = ucs_derived_of(params->iface,
+                                                         uct_cuda_ipc_iface_t);
+    uct_cuda_base_sys_dev_map_t *remote = (uct_cuda_base_sys_dev_map_t*)
+                                          params->iface_addr;
+    uct_cuda_base_sys_dev_map_t *hash;
+    khiter_t khiter;
+    int khret;
+    int i;
+
+    ucs_recursive_spin_lock(&iface->rem_iface_addr_lock);
+
+    khiter = kh_put(cuda_ipc_rem_iface_addr, &iface->rem_iface_addr_hash,
+                    remote->pid, &khret);
+    if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+        (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
+        hash        = &kh_val(&iface->rem_iface_addr_hash, khiter);
+        hash->count = remote->count;
+        hash->pid   = remote->pid;
+
+        for (i = 0; i < remote->count; i++) {
+            hash->sys_dev[i] = remote->sys_dev[i];
+            hash->bus_id[i]  = remote->bus_id[i];
+            ucs_trace("peer pid %ld sys_dev %u bus_id %u",
+                      (long)hash->pid, (unsigned)hash->sys_dev[i],
+                      (unsigned)hash->bus_id[i]);
+        }
+    } else if (khret != UCS_KH_PUT_KEY_PRESENT) {
+        ucs_error("unable to use cuda_ipc remote_iface_addr hash");
+    }
+    ucs_recursive_spin_unlock(&iface->rem_iface_addr_lock);
 
     UCT_EP_PARAMS_CHECK_DEV_IFACE_ADDRS(params);
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super);
 
-    self->remote_pid = *(const pid_t*)params->iface_addr;
+    self->remote_pid = remote->pid;
 
     return uct_ep_keepalive_init(&self->keepalive, self->remote_pid);
 }

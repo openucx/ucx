@@ -13,6 +13,7 @@
 #include "cuda_ipc_ep.h"
 
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/cuda/base/cuda_md.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/debug/assert.h>
@@ -74,7 +75,17 @@ ucs_status_t uct_cuda_ipc_iface_get_device_address(uct_iface_t *tl_iface,
 static ucs_status_t uct_cuda_ipc_iface_get_address(uct_iface_h tl_iface,
                                                    uct_iface_addr_t *iface_addr)
 {
-    *(pid_t*)iface_addr = getpid();
+    uct_cuda_base_sys_dev_map_t *local = (uct_cuda_base_sys_dev_map_t*)iface_addr;
+    int i;
+
+    local->pid = getpid();
+    local->count = uct_cuda_sys_dev_bus_id_map.count;
+
+    for (i = 0; i < local->count; i++) {
+        local->sys_dev[i] = uct_cuda_sys_dev_bus_id_map.sys_dev[i];
+        local->bus_id[i]  = uct_cuda_sys_dev_bus_id_map.bus_id[i];
+    }
+
     return UCS_OK;
 }
 
@@ -82,10 +93,11 @@ static int uct_cuda_ipc_iface_is_reachable(const uct_iface_h tl_iface,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_iface_addr_t *iface_addr)
 {
-    uct_cuda_ipc_iface_t  *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
+    uct_cuda_ipc_iface_t *iface = ucs_derived_of(tl_iface, uct_cuda_ipc_iface_t);
 
     return ((uct_cuda_ipc_iface_node_guid(&iface->super) ==
-             *((const uint64_t *)dev_addr)) && ((getpid() != *(pid_t *)iface_addr)));
+             *((const uint64_t *)dev_addr)) &&
+            ((getpid() != ((uct_cuda_base_sys_dev_map_t*)iface_addr)->pid)));
 }
 
 static double uct_cuda_ipc_iface_get_bw()
@@ -198,7 +210,7 @@ static ucs_status_t uct_cuda_ipc_iface_query(uct_iface_h tl_iface,
 
     uct_base_iface_query(&iface->super, iface_attr);
 
-    iface_attr->iface_addr_len          = sizeof(pid_t);
+    iface_attr->iface_addr_len          = sizeof(uct_cuda_base_sys_dev_map_t);
     iface_attr->device_addr_len         = sizeof(uint64_t);
     iface_attr->ep_addr_len             = 0;
     iface_attr->max_conn_priv           = 0;
@@ -530,6 +542,9 @@ static UCS_CLASS_INIT_FUNC(uct_cuda_ipc_iface_t, uct_md_h md, uct_worker_h worke
     self->cuda_context        = 0;
     ucs_queue_head_init(&self->outstanding_d2d_event_q);
 
+    ucs_recursive_spinlock_init(&self->rem_iface_addr_lock, 0);
+    kh_init_inplace(cuda_ipc_rem_iface_addr, &self->rem_iface_addr_hash);
+
     return UCS_OK;
 }
 
@@ -560,6 +575,9 @@ static UCS_CLASS_CLEANUP_FUNC(uct_cuda_ipc_iface_t)
     if (self->eventfd != -1) {
         close(self->eventfd);
     }
+
+    kh_destroy_inplace(cuda_ipc_rem_iface_addr, &self->rem_iface_addr_hash);
+    ucs_recursive_spinlock_destroy(&self->rem_iface_addr_lock);
 }
 
 ucs_status_t
