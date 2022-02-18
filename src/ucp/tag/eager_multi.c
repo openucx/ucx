@@ -163,11 +163,13 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
 }
 
 static ucp_proto_t ucp_eager_bcopy_multi_proto = {
-    .name       = "egr/multi/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_bcopy_multi_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_bcopy_multi_progress}
+    .name     = "egr/multi/bcopy",
+    .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_eager_bcopy_multi_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_eager_bcopy_multi_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_multi_proto);
 
@@ -238,11 +240,13 @@ ucp_proto_eager_sync_bcopy_multi_progress(uct_pending_req_t *uct_req)
 }
 
 static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
-    .name       = "egrsnc/multi/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_sync_bcopy_multi_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_sync_bcopy_multi_progress}
+    .name     = "egrsnc/multi/bcopy",
+    .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_eager_sync_bcopy_multi_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_eager_sync_bcopy_multi_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_multi_proto);
 
@@ -297,7 +301,7 @@ ucp_proto_eager_zcopy_multi_send_func(ucp_request_t *req,
 
     max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
     iov_count   = ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
-                                             max_payload, lpriv->super.memh_index,
+                                             max_payload, lpriv->super.md_index,
                                              UCP_DT_MASK_CONTIG_IOV, next_iter,
                                              iov, lpriv->super.max_iov);
     return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,
@@ -319,10 +323,12 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
 }
 
 static ucp_proto_t ucp_eager_zcopy_multi_proto = {
-    .name       = "egr/multi/zcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_zcopy_multi_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_eager_zcopy_multi_progress}
+    .name     = "egr/multi/zcopy",
+    .desc     = UCP_PROTO_EAGER_ZCOPY_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_eager_zcopy_multi_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_eager_zcopy_multi_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);

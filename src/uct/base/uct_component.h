@@ -180,6 +180,29 @@ struct uct_component {
 
 
 /**
+ * Component registration routines.
+ * @ref uct_query_components.
+ *
+ * @param [in] _component  Pointer to a global component structure to register.
+ * @param [in] _name       Component name used to generate ctors/dtors.
+ */
+#define UCT_COMPONENT_REGISTER_DEF(_component, _name) \
+    extern ucs_list_link_t uct_components_list; \
+    static void uct_component_##_name##_ctor(void) \
+    { \
+        ucs_list_add_tail(&uct_components_list, &(_component)->list); \
+        ucs_list_add_tail(&ucs_config_global_list, &(_component)->md_config.list); \
+        ucs_list_add_tail(&ucs_config_global_list, &(_component)->cm_config.list); \
+    } \
+    static void uct_component_##_name##_dtor(void) \
+    { \
+        /* TODO: add ucs_list_del(uct_components_list) */ \
+        ucs_list_del(&(_component)->md_config.list); \
+        ucs_list_del(&(_component)->cm_config.list); \
+    }
+
+
+/**
  * Helper macro to initialize component's transport list head.
  */
 #define UCT_COMPONENT_TL_LIST_INITIALIZER(_component) \

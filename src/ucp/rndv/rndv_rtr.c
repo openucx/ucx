@@ -155,11 +155,11 @@ static size_t ucp_proto_rndv_rtr_pack_with_rkey(void *dest, void *arg)
     rpriv = req->send.proto_config->priv;
 
     ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
-    ucs_assert(rpriv->super.md_map == dt_iter->type.contig.reg.md_map);
 
     ucp_proto_rndv_rtr_hdr_pack(req, rtr, dt_iter->type.contig.buffer);
 
-    rkey_size = ucp_proto_request_pack_rkey(req, rpriv->super.sys_dev_map,
+    rkey_size = ucp_proto_request_pack_rkey(req, rpriv->super.md_map,
+                                            rpriv->super.sys_dev_map,
                                             rpriv->super.sys_dev_distance,
                                             rtr + 1);
     ucs_assertv(rkey_size == rpriv->super.packed_rkey_size,
@@ -226,12 +226,24 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
     return UCS_OK;
 }
 
+static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
+                                     ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+
+    ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
+                                params->msg_length, attr);
+    attr->is_estimation = 1;
+}
+
 static ucp_proto_t ucp_rndv_rtr_proto = {
-    .name       = "rndv/rtr",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_rtr_init,
-    .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = {ucp_proto_rndv_rtr_progress}
+    .name     = "rndv/rtr",
+    .desc     = NULL,
+    .flags    = 0,
+    .init     = ucp_proto_rndv_rtr_init,
+    .query    = ucp_proto_rndv_rtr_query,
+    .progress = {ucp_proto_rndv_rtr_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rtr_proto);
 
@@ -243,8 +255,6 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     const ucp_proto_rndv_rtr_priv_t *rpriv = req->send.proto_config->priv;
     ucp_md_map_t md_map                    = rpriv->super.md_map;
     ucp_mem_desc_t *mdesc                  = req->send.rndv.mdesc;
-    ucp_md_index_t md_index, memh_index;
-    uct_mem_h uct_memh[UCP_MAX_LANES];
     ucp_memory_info_t mem_info;
     ssize_t packed_rkey_size;
 
@@ -252,16 +262,13 @@ static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
     ucp_proto_rndv_rtr_hdr_pack(req, rtr, mdesc->ptr);
 
     ucs_assert(ucs_test_all_flags(mdesc->memh->md_map, md_map));
-    memh_index = 0;
-    ucs_for_each_bit(md_index, md_map) {
-        uct_memh[memh_index++] = ucp_memh2uct(mdesc->memh, md_index);
-    }
 
     /* Pack remote key for the fragment */
     mem_info.type    = mdesc->memh->mem_type;
     mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-    packed_rkey_size = ucp_rkey_pack_uct(req->send.ep->worker->context, md_map,
-                                         uct_memh, &mem_info, 0, NULL, rtr + 1);
+    packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
+                                          mdesc->memh, &mem_info, 0, NULL,
+                                          rtr + 1);
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
                   ucs_status_string((ucs_status_t)packed_rkey_size));
@@ -364,12 +371,30 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     return UCS_OK;
 }
 
+static void
+ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+    ucp_proto_query_attr_t remote_attr;
+
+    ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
+                                params->msg_length, &remote_attr);
+
+    attr->is_estimation  = 1;
+    attr->max_msg_length = remote_attr.max_msg_length;
+    ucp_proto_rndv_mtype_query_desc(params, attr, remote_attr.desc);
+    ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
+}
+
 static ucp_proto_t ucp_rndv_rtr_mtype_proto = {
-    .name       = "rndv/rtr/mtype",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_rtr_mtype_init,
-    .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = {ucp_proto_rndv_rtr_mtype_progress}
+    .name     = "rndv/rtr/mtype",
+    .desc     = NULL,
+    .flags    = 0,
+    .init     = ucp_proto_rndv_rtr_mtype_init,
+    .query    = ucp_proto_rndv_rtr_mtype_query,
+    .progress = {ucp_proto_rndv_rtr_mtype_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_rndv_rtr_mtype_proto);
 

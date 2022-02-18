@@ -213,8 +213,9 @@ static inline void ucp_ep_update_remote_id(ucp_ep_h ep,
 {
     if (ep->flags & UCP_EP_FLAG_REMOTE_ID) {
         ucs_assertv(remote_id == ucp_ep_ext_control(ep)->remote_ep_id,
-                    "ep=%p rkey=0x%" PRIxPTR " ep->remote_id=0x%" PRIxPTR,
-                    ep, remote_id, ucp_ep_ext_control(ep)->remote_ep_id);
+                    "ep=%p flags=0x%" PRIx32 " rkey=0x%" PRIxPTR
+                    " ep->remote_id=0x%" PRIxPTR, ep, ep->flags, remote_id,
+                    ucp_ep_ext_control(ep)->remote_ep_id);
     }
 
     ucs_assert(remote_id != UCS_PTR_MAP_KEY_INVALID);

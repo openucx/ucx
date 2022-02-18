@@ -11,6 +11,8 @@ pr:
     exclude:
     - .gitignore
     - .readthedocs.yaml
+    - contrib/pr_merge_check.py
+    - contrib/check_qps.sh
     - docs/source
     - docs/CodeStyle.md
     - docs/LoggingStyle.md

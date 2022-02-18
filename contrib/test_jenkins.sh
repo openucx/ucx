@@ -470,6 +470,12 @@ run_client_server_app() {
 run_hello() {
 	api=$1
 	shift
+	if [[ $1 == "proto" ]]
+	then
+		export UCX_PROTO_ENABLE=y
+		shift
+	fi
+
 	test_args="$@"
 	test_name=${api}_hello_world
 
@@ -501,6 +507,7 @@ run_hello() {
 		unset UCX_RC_TIMEOUT
 		unset UCX_RC_RETRY_COUNT
 	fi
+	unset UCX_PROTO_ENABLE
 }
 
 #
@@ -527,7 +534,7 @@ run_ucp_hello() {
 	for tls in all tcp,cuda shm,cuda
 	do
 		export UCX_TLS=${tls}
-		for test_mode in -w -f -b -erecv -esend -ekeepalive
+		for test_mode in -w -f -b -erecv -esend -ekeepalive proto
 		do
 			for mem_type in $mem_types_list
 			do
@@ -645,6 +652,9 @@ run_io_demo() {
 
 		for server_ip in $server_rdma_addr $server_nonrdma_addr
 		do
+			export UCX_PROTO_ENABLE=y
+			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
+			unset UCX_PROTO_ENABLE
 			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "${server_ip}" 1 0
 		done
 
@@ -728,6 +738,9 @@ run_ucx_perftest() {
 			# Run UCT performance test
 			run_client_server_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}" \
 								"$(hostname)" 0 0
+
+			# Run UCT loopback performance test
+			run_loopback_app "$ucx_perftest" "$uct_test_args -d ${ucx_dev} ${opt_transports}"
 
 			# Run UCP performance test
 			run_client_server_app "$ucx_perftest" "$ucp_test_args" "$(hostname)" 0 0
@@ -1040,47 +1053,6 @@ test_malloc_hook() {
 	if [ -x ./test/apps/test_tcmalloc ]
 	then
 		./test/apps/test_tcmalloc
-	fi
-
-	if [ "X$have_cuda" == "Xyes" ]
-	then
-		cuda_dynamic_exe=./test/apps/test_cuda_hook_dynamic
-		cuda_static_exe=./test/apps/test_cuda_hook_static
-
-		for mode in reloc bistro
-		do
-			export UCX_MEM_CUDA_HOOK_MODE=${mode}
-
-			# Run cuda memory hooks with dynamic link
-			${cuda_dynamic_exe}
-
-			# Run cuda memory hooks with static link, if exists. If the static
-			# library 'libcudart_static.a' is not present, static test will not
-			# be built.
-			if [ -x ${cuda_static_exe} ]
-			then
-				${cuda_static_exe} && status="pass" || status="fail"
-				[ ${mode} == "bistro" ] && exp_status="pass" || exp_status="fail"
-				if [ ${status} == ${exp_status} ]
-				then
-					echo "Static link with cuda ${status}, as expected"
-				else
-					echo "Static link with cuda is expected to ${exp_status}, actual: ${status}"
-					exit 1
-				fi
-			fi
-
-			# Test that driver API hooks work in both reloc and bistro modes,
-			# since we call them directly from the test
-			${cuda_dynamic_exe} -d
-			[ -x ${cuda_static_exe} ] && ${cuda_static_exe} -d
-
-			# Test hooks in gtest
-			UCX_MEM_LOG_LEVEL=diag \
-				./test/gtest/gtest --gtest_filter='cuda_hooks.*'
-
-			unset UCX_MEM_CUDA_HOOK_MODE
-		done
 	fi
 }
 

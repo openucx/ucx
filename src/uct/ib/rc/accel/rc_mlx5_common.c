@@ -42,7 +42,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
    UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_MP_SRQ_ENABLE", "no",
+  {"TM_MP_SRQ_ENABLE", "try",
    "Enable multi-packet SRQ support. Relevant for hardware tag-matching only.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.mp_enable),
    UCS_CONFIG_TYPE_TERNARY},
@@ -973,8 +973,7 @@ static void uct_rc_mlx5_tag_query(uct_rc_mlx5_iface_common_t *iface,
     iface_attr->cap.tag.rndv.max_iov         = 1;
     iface_attr->cap.tag.recv.max_zcopy       = port_attr->max_msg_sz;
     iface_attr->cap.tag.recv.max_iov         = 1;
-    iface_attr->cap.tag.recv.min_recv        =
-                       iface->super.super.config.max_inl_cqe[UCT_IB_DIR_RX] + 1;
+    iface_attr->cap.tag.recv.min_recv        = 0;
     iface_attr->cap.tag.recv.max_outstanding = iface->tm.num_tags;
     iface_attr->cap.tag.eager.max_iov        = max_tag_eager_iov;
     iface_attr->cap.tag.eager.max_bcopy      = iface->tm.max_bcopy - eager_hdr_size;

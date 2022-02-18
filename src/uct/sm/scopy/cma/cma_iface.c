@@ -116,7 +116,8 @@ static uct_scopy_iface_ops_t uct_cma_iface_ops = {
     .super = {
         .iface_estimate_perf = uct_base_iface_estimate_perf,
         .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-        .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+        .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+        .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported,
     },
     .ep_tx = uct_cma_ep_tx,
 };
@@ -144,6 +145,17 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_cma_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cma_iface_t, uct_iface_t);
 
-UCT_TL_DEFINE(&uct_cma_component, cma, uct_sm_base_query_tl_devices,
-              uct_cma_iface_t, "CMA_", uct_cma_iface_config_table,
-              uct_cma_iface_config_t);
+UCT_COMPONENT_REGISTER_DEF(&uct_cma_component, cma);
+
+UCT_TL_REGISTER_DEF(&uct_cma_component, cma, uct_sm_base_query_tl_devices,
+                    uct_cma_iface_t, "CMA_", uct_cma_iface_config_table,
+                    uct_cma_iface_config_t);
+
+UCS_F_CTOR UCT_TL_INIT(cma)
+{
+}
+
+UCS_F_DTOR UCT_TL_CLEANUP(cma)
+{
+}
+

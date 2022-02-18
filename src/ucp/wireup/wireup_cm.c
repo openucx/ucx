@@ -81,7 +81,10 @@ unsigned ucp_cm_client_try_next_cm_progress(void *arg)
 
     cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ucp_ep);
     ucs_assert_always(cm_wireup_ep != NULL);
-    ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
+    if (ucp_wireup_ep_has_next_ep(cm_wireup_ep)) {
+        /* If we failed to create CM ep, next_ep is not initialized */
+        ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
+    }
 
     ucs_debug("client switching from %s to %s in attempt to connect to the"
               " server",
@@ -355,26 +358,21 @@ static void
 ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
 {
     ucp_lane_index_t lane_idx;
-    uct_ep_h uct_ep;
 
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ucp_ep); ++lane_idx) {
         if (lane_idx == ucp_ep_get_cm_lane(ucp_ep)) {
             continue;
         }
 
-        /* Transfer the pending queues content from the previously configured
-         * UCP EP to a temporary queue for further replaying */
-        uct_ep_pending_purge(ucp_ep->uct_eps[lane_idx],
-                             ucp_request_purge_enqueue_cb, &queue);
-
-        if (ucp_ep_config(ucp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
-            uct_ep = ucp_wireup_extract_lane(ucp_ep, lane_idx);
-            /* Destroy the transport ep */
-            uct_ep_destroy(uct_ep);
-        }
-
-        /* Destroy the wireup ep */
-        uct_ep_destroy(ucp_ep->uct_eps[lane_idx]);
+        /* During discarding transfer the pending queues content from the
+         * previously configured UCP EP to a temporary queue for further
+         * replaying */
+        ucp_worker_discard_uct_ep(ucp_ep, ucp_ep->uct_eps[lane_idx],
+                                  ucp_ep_get_rsc_index(ucp_ep, lane_idx),
+                                  UCT_FLUSH_FLAG_CANCEL,
+                                  ucp_request_purge_enqueue_cb, &queue,
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
         ucp_ep->uct_eps[lane_idx] = NULL;
     }
 }
@@ -951,7 +949,7 @@ ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep)
     ucp_rsc_index_t cm_idx     = ucp_ep_ext_control(ucp_ep)->cm_idx;
     ucp_worker_h worker        = ucp_ep->worker;
     uct_ep_params_t cm_lane_params;
-    ucs_sock_addr_t remote_addr;
+    ucs_sock_addr_t remote_addr, local_addr;
     size_t sockaddr_size;
     ucs_status_t status;
     uct_ep_h cm_ep;
@@ -981,13 +979,27 @@ ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep)
     cm_lane_params.disconnect_cb      = ucp_cm_disconnect_cb;
     cm_lane_params.cm                 = worker->cms[cm_idx].cm;
 
+    if (wireup_ep->cm_local_sockaddr.ss_family != 0) {
+        /* user specifed local address */
+        status = ucs_sockaddr_sizeof((const struct sockaddr*)&wireup_ep->cm_local_sockaddr,
+                                     &sockaddr_size);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        local_addr.addrlen            = sockaddr_size;
+        local_addr.addr               = (struct sockaddr*)&wireup_ep->cm_local_sockaddr;
+        cm_lane_params.field_mask    |= UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR;
+        cm_lane_params.local_sockaddr = &local_addr;
+    }
+
     status = uct_ep_create(&cm_lane_params, &cm_ep);
     if (status != UCS_OK) {
         /* coverity[leaked_storage] */
         return status;
     }
 
-    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep);
+    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep, UCP_NULL_RESOURCE);
     ucs_trace("created cm_ep %p, wireup_ep %p, uct_ep %p, wireup_ep_from_uct_ep %p",
               cm_ep, wireup_ep, &wireup_ep->super.super, ucp_wireup_ep(&wireup_ep->super.super));
     return status;
@@ -1012,9 +1024,20 @@ ucs_status_t ucp_ep_client_cm_connect_start(ucp_ep_h ucp_ep,
         return status;
     }
 
+    if (params->field_mask & UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR) {
+        /* save local address from the ep_params on the wireup_ep */
+        status = ucs_sockaddr_copy((struct sockaddr*)&wireup_ep->cm_local_sockaddr,
+                                   params->local_sockaddr.addr);
+        if (status != UCS_OK) {
+            return status;
+        }
+    } else {
+        memset(&wireup_ep->cm_local_sockaddr, 0, sizeof(wireup_ep->cm_local_sockaddr));
+    }
+
     status = ucp_ep_client_cm_create_uct_ep(ucp_ep);
-    if (status != UCS_OK) {
-        return status;
+    if ((status != UCS_OK) && !ucp_cm_client_try_fallback_cms(ucp_ep)) {
+        ucp_ep_set_failed_schedule(ucp_ep, ucp_ep_get_cm_lane(ucp_ep), status);
     }
 
     return UCS_OK;
@@ -1426,7 +1449,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         goto err;
     }
 
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, UCP_NULL_RESOURCE);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     return UCS_OK;
 

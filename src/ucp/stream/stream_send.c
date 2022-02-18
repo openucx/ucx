@@ -67,7 +67,7 @@ ucp_stream_send_req(ucp_request_t *req, size_t count,
     ucs_status_t status = ucp_request_send_start(req, max_short, zcopy_thresh,
                                                  SIZE_MAX, count, 0,
                                                  req->send.length, msg_config,
-                                                 proto);
+                                                 proto, param);
     if (status != UCS_OK) {
         return UCS_STATUS_PTR(status);
     }

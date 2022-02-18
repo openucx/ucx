@@ -1,0 +1,5 @@
+Name: @PACKAGE@-fuse
+Description: Unified Communication X Library FUSE module
+Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Libs:
+Libs.private:

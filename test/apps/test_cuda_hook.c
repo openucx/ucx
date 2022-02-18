@@ -11,6 +11,7 @@
 #include <ucp/api/ucp.h>
 #include <ucm/api/ucm.h>
 #include <cuda_runtime.h>
+#include <sys/mman.h>
 #include <getopt.h>
 #include <cuda.h>
 
@@ -81,11 +82,13 @@ int main(int argc, char **argv)
 {
     static const ucm_event_type_t memtype_events = UCM_EVENT_MEM_TYPE_ALLOC |
                                                    UCM_EVENT_MEM_TYPE_FREE;
+    static const size_t dummy_va_size            = 4 * (1ul << 30); /* 4 GB */
     static const int num_expected_events         = 2;
     ucp_context_h context;
     ucs_status_t status;
     ucp_params_t params;
     int use_driver_api;
+    void *dummy_ptr;
     int num_events;
     int c;
 
@@ -103,6 +106,18 @@ int main(int argc, char **argv)
             return -1;
         }
     }
+
+    /* In order to test long jumps in bistro hooks code, increase address space
+     * separation by allocaing a large VA space segment.
+     */
+    dummy_ptr = mmap(NULL, dummy_va_size, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (dummy_ptr == MAP_FAILED) {
+        printf("failed to allocate dummy VA space: %m\n");
+        return -1;
+    }
+
+    printf("allocated dummy VA space at %p\n", dummy_ptr);
 
     params.field_mask = UCP_PARAM_FIELD_FEATURES;
     params.features   = UCP_FEATURE_TAG | UCP_FEATURE_STREAM;
@@ -126,5 +141,6 @@ int main(int argc, char **argv)
 
     ucp_cleanup(context);
 
+    munmap(dummy_ptr, dummy_va_size);
     return (num_events >= num_expected_events) ? 0 : -1;
 }

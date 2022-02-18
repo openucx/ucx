@@ -84,6 +84,7 @@ ucp_worker_get_ep_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
     ucs_assert(id != UCS_PTR_MAP_KEY_INVALID);
     status = UCS_PTR_MAP_GET(ep, &worker->ep_map, id, 0, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
+        *ep_p = NULL; /* To supress compiler warning */
         return status;
     }
 

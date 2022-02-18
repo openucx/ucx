@@ -10,6 +10,7 @@
 
 #include "proto_single.h"
 #include "proto_common.h"
+#include "proto_init.h"
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -66,9 +67,12 @@ ucs_status_t ucp_proto_single_init(const ucp_proto_single_init_params_t *params)
     return UCS_OK;
 }
 
-void ucp_proto_single_config_str(size_t min_length, size_t max_length,
-                                 const void *priv, ucs_string_buffer_t *strb)
+void ucp_proto_single_query(const ucp_proto_query_params_t *params,
+                            ucp_proto_query_attr_t *attr)
 {
-    const ucp_proto_single_priv_t *spriv = priv;
-    ucp_proto_common_lane_priv_str(&spriv->super, strb);
+    UCS_STRING_BUFFER_FIXED(config_strb, attr->config, sizeof(attr->config));
+    const ucp_proto_single_priv_t *spriv = params->priv;
+
+    ucp_proto_default_query(params, attr);
+    ucp_proto_common_lane_priv_str(params, &spriv->super, 1, 1, &config_strb);
 }

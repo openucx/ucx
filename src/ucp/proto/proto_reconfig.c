@@ -80,6 +80,7 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
     init_params->caps->min_length           = 0;
     init_params->caps->num_ranges           = 1;
     init_params->caps->ranges[0].max_length = SIZE_MAX;
+    init_params->caps->ranges[0].name       = "reconfig";
     for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
         init_params->caps->ranges[0].perf[perf_type] =
                 ucs_linear_func_make(INFINITY, 0);
@@ -88,10 +89,12 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_reconfig_proto = {
-    .name       = "reconfig",
-    .flags      = UCP_PROTO_FLAG_INVALID,
-    .init       = ucp_proto_reconfig_init,
-    .config_str = (ucp_proto_config_str_func_t)ucs_empty_function,
-    .progress   = {ucp_proto_reconfig_progress}
+    .name     = "reconfig",
+    .desc     = "stub protocol",
+    .flags    = UCP_PROTO_FLAG_INVALID,
+    .init     = ucp_proto_reconfig_init,
+    .query    = ucp_proto_default_query,
+    .progress = {ucp_proto_reconfig_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_reconfig_proto);

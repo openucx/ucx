@@ -1171,7 +1171,7 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
     }
 }
 
-int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev)
+int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
 {
     return uct_ib_iface_is_roce(iface) &&
            (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
@@ -1404,7 +1404,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     }
 
     if (config->traffic_class == UCS_ULUNITS_AUTO) {
-        self->config.traffic_class = uct_ib_iface_is_roce_v2(self, dev) ?
+        self->config.traffic_class = uct_ib_iface_is_roce_v2(self) ?
                                      UCT_IB_DEFAULT_ROCEV2_DSCP : 0;
     } else {
         self->config.traffic_class = config->traffic_class;
@@ -1629,6 +1629,10 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
     iface_attr->dev_num_paths   = iface->num_paths;
 
     switch (active_speed) {
+    default:
+        ucs_diag("unknown active_speed on " UCT_IB_IFACE_FMT ": %d, fallback to SDR",
+                 UCT_IB_IFACE_ARG(iface), active_speed);
+        /* Fall through */
     case 1: /* SDR */
         iface_attr->latency.c = 5000e-9;
         signal_rate           = 2.5e9;
@@ -1671,10 +1675,11 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         signal_rate           = 25.78125e9 * 2;
         encoding              = 64.0/66.0;
         break;
-    default:
-        ucs_error("Invalid active_speed on " UCT_IB_IFACE_FMT ": %d",
-                  UCT_IB_IFACE_ARG(iface), active_speed);
-        return UCS_ERR_IO_ERROR;
+    case 128: /* NDR */
+        iface_attr->latency.c = 600e-9;
+        signal_rate           = 100e9;
+        encoding              = 64.0/66.0;
+        break;
     }
 
     status = uct_ib_iface_get_numa_latency(iface, &numa_latency);
@@ -1806,8 +1811,8 @@ ucs_status_t uct_ib_iface_pre_arm(uct_ib_iface_t *iface)
 
     /* avoid re-arming the interface if any events exists */
     if ((send_cq_count > 0) || (recv_cq_count > 0)) {
-        ucs_trace("arm_cq: got %d send and %d recv events, returning BUSY",
-                  send_cq_count, recv_cq_count);
+        ucs_trace_data("arm_cq: got %d send and %d recv events, returning BUSY",
+                       send_cq_count, recv_cq_count);
         return UCS_ERR_BUSY;
     }
 

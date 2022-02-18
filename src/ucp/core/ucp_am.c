@@ -778,7 +778,8 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_proto_progress_am_rndv_rts, (self),
                                      sreq->send.msg_proto.am.header_length);
 }
 
-static ucs_status_t ucp_am_send_start_rndv(ucp_request_t *sreq)
+static ucs_status_t
+ucp_am_send_start_rndv(ucp_request_t *sreq, const ucp_request_param_t *param)
 {
     ucp_trace_req(sreq, "AM start_rndv to %s buffer %p length %zu",
                   ucp_ep_peer_name(sreq->send.ep), sreq->send.buffer,
@@ -791,7 +792,7 @@ static ucs_status_t ucp_am_send_start_rndv(ucp_request_t *sreq)
      * was done in ucp_am_send_nbx
      */
     sreq->send.uct.func = ucp_proto_progress_am_rndv_rts;
-    return ucp_rndv_reg_send_buffer(sreq);
+    return ucp_rndv_reg_send_buffer(sreq, param);
 }
 
 static void ucp_am_send_req_init(ucp_request_t *req, ucp_ep_h ep,
@@ -888,8 +889,8 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
 
     status = ucp_request_send_start(req, max_short, zcopy_thresh, rndv_thresh,
                                     count, !!user_header_length,
-                                    ucp_am_send_req_total_size(req),
-                                    msg_config, proto);
+                                    ucp_am_send_req_total_size(req), msg_config,
+                                    proto, param);
     if (status != UCS_OK) {
         if (ucs_unlikely(status != UCS_ERR_NO_PROGRESS)) {
             return UCS_STATUS_PTR(status);
@@ -897,7 +898,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
 
         ucs_assert(ucp_am_send_req_total_size(req) >= rndv_thresh);
 
-        status = ucp_am_send_start_rndv(req);
+        status = ucp_am_send_start_rndv(req, param);
         if (status != UCS_OK) {
             return UCS_STATUS_PTR(status);
         }
@@ -940,7 +941,7 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
 
     if (ucp_proto_is_inline(ep, max_eager_short, header_length + length)) {
         return ucp_am_send_short(ep, id, flags, header, header_length, buffer,
-                                 length, flags & UCP_AM_SEND_REPLY);
+                                 length, flags & UCP_AM_SEND_FLAG_REPLY);
     }
 
     return UCS_ERR_NO_RESOURCE;
@@ -973,7 +974,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     attr_mask = param->op_attr_mask &
                 (UCP_OP_ATTR_FIELD_DATATYPE | UCP_OP_ATTR_FLAG_NO_IMM_CMPL);
 
-    if (flags & UCP_AM_SEND_REPLY) {
+    if (flags & UCP_AM_SEND_FLAG_REPLY) {
         max_short = &ucp_ep_config(ep)->am_u.max_reply_eager_short;
         proto     = ucp_ep_config(ep)->am_u.reply_proto;
     } else {
@@ -1127,6 +1128,13 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
 #if ENABLE_DEBUG_DATA
         req->recv.proto_rndv_config = NULL;
 #endif
+
+        status = ucp_recv_request_set_user_memh(req, param);
+        if (status != UCS_OK) {
+            ucp_request_put_param(param, req);
+            ret = UCS_STATUS_PTR(status);
+            goto out;
+        }
 
         ucp_request_set_callback_param(param, recv_am, req, recv.am);
 
@@ -1355,7 +1363,7 @@ static UCS_F_ALWAYS_INLINE uint64_t
 ucp_am_hdr_reply_ep(ucp_worker_h worker, uint16_t flags, ucp_ep_h ep,
                     ucp_ep_h *reply_ep_p)
 {
-    if (flags & UCP_AM_SEND_REPLY) {
+    if (flags & UCP_AM_SEND_FLAG_REPLY) {
         *reply_ep_p = ep;
         return UCP_AM_RECV_ATTR_FIELD_REPLY_EP;
     }

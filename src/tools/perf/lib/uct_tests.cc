@@ -3,6 +3,7 @@
 * Copyright (C) The University of Tennessee and The University
 *               of Tennessee Research Foundation. 2016. ALL RIGHTS RESERVED.
 * Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
+# Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -11,7 +12,9 @@
 #  include "config.h"
 #endif
 
+#ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS /* For PRIu64 */
+#endif
 
 #include "libperf_int.h"
 
@@ -126,29 +129,30 @@ public:
         return length;
     }
 
-    inline void set_sn(void *dst_sn,
-                       ucs_memory_type_t dst_mem_type,
-                       const void *src_sn) const {
-        if (ucs_likely(m_perf.allocator->mem_type == UCS_MEMORY_TYPE_HOST)) {
+    inline void set_sn(void *dst_sn, ucs_memory_type_t dst_mem_type,
+                       const void *src_sn,
+                       const ucx_perf_allocator_t *allocator) const
+    {
+        if (ucs_likely(allocator->mem_type == UCS_MEMORY_TYPE_HOST)) {
             ucs_assert(dst_mem_type == UCS_MEMORY_TYPE_HOST);
             *reinterpret_cast<psn_t*>(dst_sn) = *reinterpret_cast<const psn_t*>(src_sn);
         }
 
-        m_perf.allocator->memcpy(dst_sn, dst_mem_type,
-                                 src_sn, UCS_MEMORY_TYPE_HOST,
-                                 sizeof(psn_t));
+        allocator->memcpy(dst_sn, dst_mem_type, src_sn, UCS_MEMORY_TYPE_HOST,
+                          sizeof(psn_t));
     }
 
     inline psn_t get_sn(const volatile void *sn,
-                        ucs_memory_type_t mem_type) const {
+                        ucs_memory_type_t mem_type,
+                        const ucx_perf_allocator_t *allocator) const {
         if (ucs_likely(mem_type == UCS_MEMORY_TYPE_HOST)) {
             return *reinterpret_cast<const volatile psn_t*>(sn);
         }
 
         psn_t host_sn;
-        m_perf.allocator->memcpy(&host_sn, UCS_MEMORY_TYPE_HOST,
-                                 const_cast<const void*>(sn),
-                                 mem_type, sizeof(psn_t));
+        allocator->memcpy(&host_sn, UCS_MEMORY_TYPE_HOST,
+                          const_cast<const void*>(sn), mem_type,
+                          sizeof(psn_t));
         return host_sn;
     }
 
@@ -159,18 +163,19 @@ public:
             ucs_assert(&m_last_recvd_sn == recv_sn);
             *(psn_t*)recv_sn = *(const psn_t*)src_sn;
         } else {
-            set_sn(recv_sn, recv_mem_type, src_sn);
+            set_sn(recv_sn, recv_mem_type, src_sn, m_perf.recv_allocator);
         }
     }
 
     inline psn_t get_recv_sn(const volatile void *recv_sn,
-                             ucs_memory_type_t recv_mem_type) const {
+                             ucs_memory_type_t recv_mem_type,
+                             const ucx_perf_allocator_t *recv_allocator) const {
         if (CMD == UCX_PERF_CMD_AM) {
             /* it has to be updated after AM completion */
             ucs_assert(&m_last_recvd_sn == recv_sn);
             return m_last_recvd_sn;
         } else {
-            return get_sn(recv_sn, recv_mem_type);
+            return get_sn(recv_sn, recv_mem_type, recv_allocator);
         }
     }
 
@@ -205,12 +210,12 @@ public:
         uct_perf_test_runner *self = (uct_perf_test_runner *)arg;
         size_t length = ucx_perf_get_message_size(&self->m_perf.params);
 
-        self->m_perf.allocator->memcpy(/* we always assume that buffers
-                                        * provided by TLs are host memory */
-                                       dest, UCS_MEMORY_TYPE_HOST,
-                                       self->m_perf.send_buffer,
-                                       self->m_perf.uct.send_mem.mem_type,
-                                       length);
+        self->m_perf.send_allocator->memcpy(/* we always assume that buffers
+                                             * provided by TLs are host memory */
+                                            dest, UCS_MEMORY_TYPE_HOST,
+                                            self->m_perf.send_buffer,
+                                            self->m_perf.uct.send_mem.mem_type,
+                                            length);
 
         return length;
     }
@@ -219,12 +224,11 @@ public:
     {
         uct_perf_test_runner *self = (uct_perf_test_runner *)arg;
 
-        self->m_perf.allocator->memcpy(self->m_perf.send_buffer,
-                                       self->m_perf.uct.send_mem.mem_type,
-                                       /* we always assume that buffers
-                                        * provided by TLs are host memory */
-                                       data, UCS_MEMORY_TYPE_HOST,
-                                       length);
+        self->m_perf.send_allocator->memcpy(self->m_perf.send_buffer,
+                                            self->m_perf.uct.send_mem.mem_type,
+                                            /* we always assume that buffers
+                                             * provided by TLs are host memory */
+                                            data, UCS_MEMORY_TYPE_HOST, length);
     }
 
     ucs_status_t UCS_F_ALWAYS_INLINE
@@ -246,16 +250,19 @@ public:
                                        (char*)buffer + sizeof(am_short_hdr),
                                        length - sizeof(am_short_hdr));
             case UCT_PERF_DATA_LAYOUT_SHORT_IOV:
-                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn);
+                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn,
+                       m_perf.send_allocator);
                 return uct_ep_am_short_iov(ep, UCT_PERF_TEST_AM_ID, m_perf.uct.iov,
                                            m_perf.params.msg_size_cnt);
             case UCT_PERF_DATA_LAYOUT_BCOPY:
-                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn);
+                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn,
+                       m_perf.send_allocator);
                 packed_len = uct_ep_am_bcopy(ep, UCT_PERF_TEST_AM_ID, pack_cb,
                                              (void*)this, 0);
                 return (packed_len >= 0) ? UCS_OK : (ucs_status_t)packed_len;
             case UCT_PERF_DATA_LAYOUT_ZCOPY:
-                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn);
+                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn,
+                       m_perf.send_allocator);
                 header_size = m_perf.params.uct.am_hdr_size;
                 return uct_ep_am_zcopy(ep, UCT_PERF_TEST_AM_ID, buffer, header_size,
                                        m_perf.uct.iov, m_perf.params.msg_size_cnt,
@@ -267,9 +274,11 @@ public:
             if ((TYPE == UCX_PERF_TEST_TYPE_PINGPONG) ||
                 (TYPE == UCX_PERF_TEST_TYPE_PINGPONG_WAIT_MEM)) {
                 /* Put the control word at the latest byte of the IOV message */
-                set_sn(UCS_PTR_BYTE_OFFSET(buffer,
-                                           uct_perf_get_buffer_extent(&m_perf.params) - 1),
-                       m_perf.uct.send_mem.mem_type, &sn);
+                set_sn(UCS_PTR_BYTE_OFFSET(buffer, uct_perf_get_buffer_extent(
+                                                           &m_perf.params) -
+                                                           1),
+                       m_perf.uct.send_mem.mem_type, &sn,
+                       m_perf.send_allocator);
             }
             /* coverity[switch_selector_expr_is_constant] */
             switch (DATA) {
@@ -384,6 +393,10 @@ public:
         uct_rkey_t rkey;
         void *buffer;
         size_t length;
+        unsigned group_size;
+        unsigned peer_index;
+
+        group_size = rte_call(&m_perf, group_size);
 
         length = ucx_perf_get_message_size(&m_perf.params);
         ucs_assert(length >= sizeof(psn_t));
@@ -412,14 +425,15 @@ public:
 
         uct_perf_barrier(&m_perf);
 
-        my_index = rte_call(&m_perf, group_index);
+        my_index   = rte_call(&m_perf, group_index);
+        peer_index = rte_peer_index(group_size, my_index);
 
         ucx_perf_test_start_clock(&m_perf);
 
         buffer      = m_perf.send_buffer;
-        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr;
-        rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
-        ep          = m_perf.uct.peers[1 - my_index].ep;
+        remote_addr = m_perf.uct.peers[peer_index].remote_addr;
+        rkey        = m_perf.uct.peers[peer_index].rkey.rkey;
+        ep          = m_perf.uct.peers[peer_index].ep;
 
         send_sn = 0;
         if (my_index == 0) {
@@ -430,7 +444,8 @@ public:
 
                 do {
                     progress_responder();
-                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
+                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type,
+                                     m_perf.recv_allocator);
                 } while (sn != send_sn);
 
                 ++send_sn;
@@ -439,7 +454,8 @@ public:
             UCX_PERF_TEST_FOREACH(&m_perf) {
                 do {
                     progress_responder();
-                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
+                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type,
+                                     m_perf.recv_allocator);
                 } while (sn != send_sn);
 
                 send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
@@ -449,164 +465,227 @@ public:
             }
         }
 
-        flush(1 - my_index);
+        flush(peer_index);
         ucx_perf_get_time(&m_perf);
         return UCS_OK;
+    }
+
+    void send_stream_req_uni(bool flow_control, bool send_window,
+                             bool direction_to_responder,
+                             volatile psn_t *recv_sn,
+                             ucs_memory_type_t recv_mem_type,
+                             const ucx_perf_allocator_t *recv_allocator,
+                             unsigned length, unsigned peer_index)
+    {
+        unsigned long remote_addr;
+        psn_t sn, send_sn;
+        uct_rkey_t rkey;
+        void *buffer;
+        unsigned fc_window;
+        uct_ep_h ep;
+
+        ep          = m_perf.uct.peers[peer_index].ep;
+        buffer      = m_perf.send_buffer;
+        remote_addr = m_perf.uct.peers[peer_index].remote_addr;
+        rkey        = m_perf.uct.peers[peer_index].rkey.rkey;
+        fc_window   = m_perf.params.uct.fc_window;
+
+        /* send_sn is the next SN to send */
+        if (flow_control) {
+            send_sn = 1;
+        } else {
+            send_sn = 0; /* Remote buffer will remain 0 throughout the test */
+        }
+
+        set_sn(buffer, m_perf.uct.send_mem.mem_type, &send_sn,
+               m_perf.send_allocator);
+
+        UCX_PERF_TEST_FOREACH(&m_perf) {
+            if (flow_control) {
+                /* Wait until getting ACK from responder */
+                sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
+                ucs_assertv(UCS_CIRCULAR_COMPARE8(send_sn - 1, >=, sn),
+                            "recv_sn=%d iters=%" PRIu64, sn,
+                            m_perf.current.iters);
+
+                while (UCS_CIRCULAR_COMPARE8(send_sn, >, sn + fc_window)) {
+                    progress_responder();
+                    sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
+                }
+            }
+
+            /* Wait until we have enough sends completed, then take
+             * the next completion handle in the window. */
+            wait_for_window(send_window);
+
+            if (flow_control) {
+                send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
+                       rkey, &m_completion);
+                ++send_sn;
+            } else {
+                send_b(ep, send_sn, send_sn, buffer, length, remote_addr, rkey,
+                       &m_completion);
+            }
+
+            ucx_perf_update(&m_perf, 1, length);
+        }
+
+        if (!flow_control) {
+            sn = 2;
+            /* Send "sentinel" value */
+            if (direction_to_responder) {
+                wait_for_window(send_window);
+                set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn,
+                       m_perf.send_allocator);
+                send_b(ep, 2, send_sn, buffer, length, remote_addr, rkey,
+                       &m_completion);
+            } else {
+                set_sn(m_perf.recv_buffer, m_perf.uct.recv_mem.mem_type, &sn,
+                       m_perf.recv_allocator);
+            }
+        } else {
+            /* Wait for last ACK, to make sure no more messages will arrive. */
+            ucs_assert(direction_to_responder);
+
+            do {
+                progress_responder();
+                sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
+            } while (UCS_CIRCULAR_COMPARE8((psn_t)(send_sn - 1), >, sn));
+        }
+    }
+
+    void recv_stream_req_uni(bool flow_control, bool send_window,
+                             bool direction_to_responder,
+                             volatile psn_t *recv_sn,
+                             ucs_memory_type_t recv_mem_type,
+                             const ucx_perf_allocator_t *recv_allocator,
+                             unsigned length, unsigned peer_index)
+    {
+        unsigned long remote_addr;
+        psn_t sn, send_sn;
+        uct_rkey_t rkey;
+        void *buffer;
+        unsigned fc_window;
+        uct_ep_h ep;
+
+        ep          = m_perf.uct.peers[peer_index].ep;
+        buffer      = m_perf.send_buffer;
+        remote_addr = m_perf.uct.peers[peer_index].remote_addr;
+        rkey        = m_perf.uct.peers[peer_index].rkey.rkey;
+        fc_window   = m_perf.params.uct.fc_window;
+
+        if (flow_control) {
+            /* Since we're doing flow control, we can count exactly how
+             * many packets were received.
+             */
+            send_sn = (psn_t)-1; /* Last SN we have sent (as acknowledgment) */
+            ucs_assert(direction_to_responder);
+            UCX_PERF_TEST_FOREACH(&m_perf) {
+                progress_responder();
+                sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
+
+                if (UCS_CIRCULAR_COMPARE8(sn, >,
+                                          (psn_t)(send_sn + (fc_window / 2)))) {
+                    /* Send ACK every half-window */
+                    wait_for_window(send_window);
+                    send_b(ep, sn, send_sn, buffer, length, remote_addr, rkey,
+                           &m_completion);
+                    send_sn = sn;
+                }
+
+                /* Calculate number of iterations */
+                m_perf.current.iters += (psn_t)(sn -
+                                                (psn_t)m_perf.current.iters);
+            }
+
+            /* Send ACK for last packet */
+            sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
+            if (UCS_CIRCULAR_COMPARE8(sn, >, send_sn)) {
+                wait_for_window(send_window);
+                sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
+                send_b(ep, sn, send_sn, buffer, length, remote_addr, rkey,
+                       &m_completion);
+            }
+        } else {
+            /* Wait for "sentinel" value */
+            ucs_time_t poll_time = ucs_get_time();
+
+            do {
+                progress_responder();
+                sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
+                if (!direction_to_responder) {
+                    if (ucs_get_time() > poll_time + ucs_time_from_msec(1.0)) {
+                        wait_for_window(send_window);
+                        send_b(ep, 0, 0, buffer, length, remote_addr, rkey,
+                               &m_completion);
+                        poll_time = ucs_get_time();
+                    }
+                }
+            } while (sn != 2);
+        }
     }
 
     ucs_status_t run_stream_req_uni(bool flow_control, bool send_window,
                                     bool direction_to_responder)
     {
-        unsigned long remote_addr;
+        const ucx_perf_allocator_t *recv_allocator;
+        ucs_memory_type_t recv_mem_type;
         volatile psn_t *recv_sn;
-        psn_t sn, send_sn;
-        uct_rkey_t rkey;
-        void *buffer;
-        unsigned fc_window;
         unsigned my_index;
         unsigned length;
-        uct_ep_h ep;
+        unsigned group_size;
+        unsigned peer_index;
+
+        group_size = rte_call(&m_perf, group_size);
 
         length = ucx_perf_get_message_size(&m_perf.params);
         ucs_assert(length >= sizeof(psn_t));
         ucs_assert(m_perf.params.uct.fc_window <= ((psn_t)-1) / 2);
 
-        m_perf.allocator->memset(m_perf.send_buffer, 0, length);
-        m_perf.allocator->memset(m_perf.recv_buffer, 0, length);
+        m_perf.send_allocator->memset(m_perf.send_buffer, 0, length);
+        m_perf.recv_allocator->memset(m_perf.recv_buffer, 0, length);
 
         uct_perf_test_prepare_iov_buffer();
 
-        recv_sn  = (direction_to_responder ?
-                    ((CMD == UCX_PERF_CMD_AM) ?
-                     &m_last_recvd_sn :
-                     (psn_t*)m_perf.recv_buffer) :
-                    (psn_t*)m_perf.send_buffer);
-        my_index = rte_call(&m_perf, group_index);
+        if ((CMD == UCX_PERF_CMD_AM) && direction_to_responder) {
+            recv_mem_type  = UCS_MEMORY_TYPE_HOST;
+            recv_sn        = &m_last_recvd_sn;
+            recv_allocator = NULL;
+        } else if (direction_to_responder) {
+            recv_mem_type  = m_perf.uct.recv_mem.mem_type;
+            recv_sn        = (psn_t*)m_perf.recv_buffer;
+            recv_allocator = m_perf.recv_allocator;
+        } else {
+            recv_mem_type  = m_perf.uct.send_mem.mem_type;
+            recv_sn        = (psn_t*)m_perf.send_buffer;
+            recv_allocator = m_perf.send_allocator;
+        }
+
+        my_index   = rte_call(&m_perf, group_index);
+        peer_index = rte_peer_index(group_size, my_index);
 
         uct_perf_barrier(&m_perf);
 
         ucx_perf_test_start_clock(&m_perf);
 
-        ep          = m_perf.uct.peers[1 - my_index].ep;
-        buffer      = m_perf.send_buffer;
-        remote_addr = m_perf.uct.peers[1 - my_index].remote_addr;
-        rkey        = m_perf.uct.peers[1 - my_index].rkey.rkey;
-        fc_window   = m_perf.params.uct.fc_window;
-
-        if (my_index == 1) {
-            /* send_sn is the next SN to send */
-            if (flow_control) {
-                send_sn     = 1;
-            } else{
-                send_sn     = 0; /* Remote buffer will remain 0 throughout the test */
-            }
-
-            set_sn(buffer, m_perf.uct.send_mem.mem_type, &send_sn);
-
-            UCX_PERF_TEST_FOREACH(&m_perf) {
-                if (flow_control) {
-                    /* Wait until getting ACK from responder */
-                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
-                    ucs_assertv(UCS_CIRCULAR_COMPARE8(send_sn - 1, >=, sn),
-                                "recv_sn=%d iters=%" PRIu64, sn,
-                                m_perf.current.iters);
-
-                    while (UCS_CIRCULAR_COMPARE8(send_sn, >, sn + fc_window)) {
-                        progress_responder();
-                        sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
-                    }
-                }
-
-                /* Wait until we have enough sends completed, then take
-                 * the next completion handle in the window. */
-                wait_for_window(send_window);
-
-                if (flow_control) {
-                    send_b(ep, send_sn, send_sn - 1, buffer, length, remote_addr,
-                           rkey, &m_completion);
-                    ++send_sn;
-                } else {
-                    send_b(ep, send_sn, send_sn, buffer, length, remote_addr,
-                           rkey, &m_completion);
-                }
-
-                ucx_perf_update(&m_perf, 1, length);
-            }
-
-            if (!flow_control) {
-                sn = 2;
-                /* Send "sentinel" value */
-                if (direction_to_responder) {
-                    wait_for_window(send_window);
-                    set_sn(buffer, m_perf.uct.send_mem.mem_type, &sn);
-                    send_b(ep, 2, send_sn, buffer, length, remote_addr, rkey,
-                           &m_completion);
-                } else {
-                    set_sn(m_perf.recv_buffer,
-                           m_perf.uct.recv_mem.mem_type,
-                           &sn);
-                }
-            } else {
-                /* Wait for last ACK, to make sure no more messages will arrive. */
-                ucs_assert(direction_to_responder);
-
-                do {
-                    progress_responder();
-                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
-                } while (UCS_CIRCULAR_COMPARE8((psn_t)(send_sn - 1), >, sn));
-            }
+        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
+            send_stream_req_uni(flow_control, send_window,
+                                direction_to_responder, recv_sn, recv_mem_type,
+                                recv_allocator, length, peer_index);
+            recv_stream_req_uni(flow_control, send_window,
+                                direction_to_responder, recv_sn, recv_mem_type,
+                                recv_allocator, length, peer_index);
+        } else if (my_index == 1) {
+            send_stream_req_uni(flow_control, send_window,
+                                direction_to_responder, recv_sn, recv_mem_type,
+                                recv_allocator, length, peer_index);
         } else if (my_index == 0) {
-            if (flow_control) {
-                /* Since we're doing flow control, we can count exactly how
-                 * many packets were received.
-                 */
-                send_sn = (psn_t)-1; /* Last SN we have sent (as acknowledgment) */
-                ucs_assert(direction_to_responder);
-                UCX_PERF_TEST_FOREACH(&m_perf) {
-                    progress_responder();
-                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
-
-                    if (UCS_CIRCULAR_COMPARE8(sn, >, (psn_t)(send_sn + (fc_window / 2)))) {
-                        /* Send ACK every half-window */
-                        wait_for_window(send_window);
-                        send_b(ep, sn, send_sn, buffer, length, remote_addr,
-                               rkey, &m_completion);
-                        send_sn = sn;
-                    }
-
-                    /* Calculate number of iterations */
-                    m_perf.current.iters +=
-                                    (psn_t)(sn - (psn_t)m_perf.current.iters);
-                }
-
-                /* Send ACK for last packet */
-                sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
-                if (UCS_CIRCULAR_COMPARE8(sn, >, send_sn)) {
-                    wait_for_window(send_window);
-                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
-                    send_b(ep, sn, send_sn, buffer, length, remote_addr,
-                           rkey, &m_completion);
-                }
-            } else {
-                /* Wait for "sentinel" value */
-                ucs_time_t poll_time = ucs_get_time();
-
-                do {
-                    progress_responder();
-                    sn = get_recv_sn(recv_sn, m_perf.uct.recv_mem.mem_type);
-                    if (!direction_to_responder) {
-                        if (ucs_get_time() > poll_time + ucs_time_from_msec(1.0)) {
-                            wait_for_window(send_window);
-                            send_b(ep, 0, 0, buffer, length, remote_addr, rkey,
-                                   &m_completion);
-                            poll_time = ucs_get_time();
-                        }
-                    }
-                } while (sn != 2);
-            }
+            recv_stream_req_uni(flow_control, send_window,
+                                direction_to_responder, recv_sn, recv_mem_type,
+                                recv_allocator, length, peer_index);
         }
 
-        flush(1 - my_index);
+        flush(peer_index);
         ucx_perf_get_time(&m_perf);
         ucs_assert(outstanding() == 0);
         if (my_index == 1) {

@@ -34,8 +34,12 @@
 #define UCP_PROTO_ID_INVALID        ((ucp_proto_id_t)-1)
 
 
-/** Maximal length of ucp_proto_config_str_func_t output */
-#define UCP_PROTO_CONFIG_STR_MAX 128
+/* Maximal length of protocol description string */
+#define UCP_PROTO_DESC_STR_MAX      64
+
+
+/* Maximal length of protocol configuration string */
+#define UCP_PROTO_CONFIG_STR_MAX    128
 
 
 /* Protocol identifier */
@@ -114,6 +118,9 @@ typedef enum {
  * Performance estimation for a range of message sizes.
  */
 typedef struct {
+    /* Protocol name */
+    const char        *name;
+
     /* Maximal payload size for this range */
     size_t            max_length;
 
@@ -175,36 +182,88 @@ typedef ucs_status_t
 (*ucp_proto_init_func_t)(const ucp_proto_init_params_t *params);
 
 
+typedef struct {
+    /* Protocol definition */
+    const ucp_proto_t              *proto;
+
+    /* Protocol private configuration area */
+    const void                     *priv;
+
+    /* Worker on which the protocol was initialized */
+    ucp_worker_h                   worker;
+
+    /* Protocol selection parameters */
+    const ucp_proto_select_param_t *select_param;
+
+    /* Endpoint configuration */
+    const ucp_ep_config_key_t      *ep_config_key;
+
+    /* Get information about this message length */
+    size_t                         msg_length;
+} ucp_proto_query_params_t;
+
+
+typedef struct {
+    /* Maximal message size of the range started from 'msg_length' for
+       which the description and configuration information is relevant.
+       It must be > msg_length. */
+    size_t max_msg_length;
+
+    /* Whether the reported information is not definitive, and the actual used
+       protocol depends on remote side decision as well. */
+    int    is_estimation;
+
+    /* High-level description of what the protocol is doing in this range */
+    char   desc[UCP_PROTO_DESC_STR_MAX];
+
+    /* Protocol configuration in the range, such as devices and transports */
+    char   config[UCP_PROTO_CONFIG_STR_MAX];
+} ucp_proto_query_attr_t;
+
+
 /**
- * Dump protocol-specific configuration.
+ * Query protocol-specific information.
  *
- * @param [in]  min_length  Return information starting from this message length.
- * @param [in]  max_length  Return information up to this message length (inclusive).
- * @param [in]  priv        Protocol private data, which was previously filled by
- *                          @ref ucp_proto_init_func_t.
- * @param [out] strb        Protocol configuration text should be written to this
- *                          string buffer. This function should only **append**
- *                          data to the buffer, and should not initialize, release
- *                          or erase any data already in the buffer.
+ * @param [in]  params  Protocol information query parameters.
+ * @param [out] attr    Protocol information query output.
+ *
+ * @return Maximal message size for which the returned information is relevant.
  */
-typedef void (*ucp_proto_config_str_func_t)(size_t min_length,
-                                            size_t max_length, const void *priv,
-                                            ucs_string_buffer_t *strb);
+typedef void (*ucp_proto_query_func_t)(const ucp_proto_query_params_t *params,
+                                       ucp_proto_query_attr_t *attr);
+
+
+/**
+ * Abort UCP request at any stage with error status.
+ *
+ * @param [in]  request Request to abort.
+ * @param [in]  status  Error completion status.
+ */
+typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
+                                         ucs_status_t status);
 
 
 /**
  * UCP base protocol definition
  */
 struct ucp_proto {
-    const char                      *name;      /* Protocol name */
-    unsigned                        flags;      /* Protocol flags for special handling */
-    ucp_proto_init_func_t           init;       /* Initialization function */
-    ucp_proto_config_str_func_t     config_str; /* Configuration dump function */
+    const char               *name; /* Protocol name */
+    const char               *desc; /* Protocol description */
+    unsigned                 flags; /* Protocol flags for special handling */
+    ucp_proto_init_func_t    init;  /* Initialization function */
+    ucp_proto_query_func_t   query; /* Query protocol information */
 
     /* Initial UCT progress function, can be changed during the protocol
      * request lifetime to implement different stages
      */
-    uct_pending_callback_t          progress[UCP_PROTO_STAGE_LAST];
+    uct_pending_callback_t   progress[UCP_PROTO_STAGE_LAST];
+
+    /*
+     * Abort a request (which is currently not scheduled to a pending queue).
+     * The method should wait for UCT completions and release associated
+     * resources, such as memory handles, remote keys, request ID, etc.
+     */
+    ucp_request_abort_func_t abort;
 };
 
 
@@ -240,5 +299,11 @@ extern unsigned ucp_protocols_count;
 
 /* Performance types names */
 extern const char *ucp_proto_perf_types[];
+
+
+/* Default protocol query function: set max_msg_length to SIZE_MAX, take
+   description from proto->desc, and set config to an empty string. */
+void ucp_proto_default_query(const ucp_proto_query_params_t *params,
+                             ucp_proto_query_attr_t *attr);
 
 #endif

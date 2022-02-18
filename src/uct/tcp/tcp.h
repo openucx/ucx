@@ -175,7 +175,8 @@ typedef enum uct_tcp_cm_conn_event {
      * `UCT_TCP_CM_CONN_REQ` wasn't sent yet) and want to have RX capability
      * on a peer's EP in order to send AM data. */
     UCT_TCP_CM_CONN_ACK_WITH_REQ      = (UCT_TCP_CM_CONN_REQ |
-                                         UCT_TCP_CM_CONN_ACK)
+                                         UCT_TCP_CM_CONN_ACK),
+    UCT_TCP_CM_CONN_FIN               = UCS_BIT(2)
 } uct_tcp_cm_conn_event_t;
 
 

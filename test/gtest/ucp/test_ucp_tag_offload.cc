@@ -374,9 +374,6 @@ UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
 {
     activate_offload(sender());
 
-    // TODO: Update length to bigger value so that multi-fragment eager is used
-    //       when multi-eager offload probe issue is fixed (like below).
-    // size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
     size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
     ucp_tag_t tag = 0x11;
     std::vector<uint8_t> sendbuf(length);
@@ -389,7 +386,7 @@ UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
     ucp_tag_message_h msg = NULL;
     ucs_time_t deadline = ucs::get_deadline();
     while ((msg == NULL) && (ucs_get_time() < deadline)) {
-        short_progress_loop();
+        progress();
         msg = ucp_tag_probe_nb(receiver().worker(), tag, 0xffff, 1, &info);
     }
     EXPECT_EQ(length, info.length);
@@ -399,6 +396,42 @@ UCS_TEST_P(test_ucp_tag_offload, eager_multi_probe,
                                                 &recvbuf[0], length,
                                                 ucp_dt_make_contig(1),
                                                 msg, recv_callback);
+    request_wait(sreq);
+    request_wait(rreq);
+}
+
+// Test that message is received correctly if the corresponging receive
+// operation was posted when the first (but not all) fragments arrived. This is
+// to ensure that the following sequence does not happen:
+// 1. First fragment arrives and is not added to the unexp queue
+// 2. Receive operation matching this messages is invoked and the message is not
+//    found in the unexp queue
+// 3. When all fragments arrive and the message is added to the unexp queue, it
+//    may be matched by another receive operation causing ordering issues.
+//    Or, if it is the only message to receive (like it is in this test), the
+//    receive operation (invoked at step 2) will never complete.
+UCS_TEST_P(test_ucp_tag_offload, eager_multi_recv,
+           "RNDV_THRESH=inf", "TM_THRESH=0")
+{
+    activate_offload(sender());
+
+    size_t length = ucp_ep_config(sender().ep())->tag.rndv.am_thresh.remote - 1;
+    const ucp_tag_t tag = 0x11;
+    std::vector<uint8_t> sendbuf(length);
+
+    ucp_request_param_t param = {};
+    ucs_status_ptr_t sreq     = ucp_tag_send_nbx(sender().ep(), sendbuf.data(),
+                                                 sendbuf.size(), tag, &param);
+
+    // Tweak progress several times to make sure the first fragment
+    // (but not all!) arrives
+    for (int i = 0; i < 3; ++i) {
+        progress();
+    }
+
+    std::vector<uint8_t> recvbuf(length);
+    ucs_status_ptr_t rreq = ucp_tag_recv_nbx(receiver().worker(), recvbuf.data(),
+                                             length, tag, 0xffff, &param);
     request_wait(sreq);
     request_wait(rreq);
 }
@@ -758,14 +791,14 @@ public:
     }
 };
 
-UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=128")
+UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=1")
 {
     uint64_t tag = 0x11;
-    std::vector<char> dummy(256, 0);
+    uint64_t dummy;
 
     activate_offload(sender());
 
-    request *rreq = recv_nb(dummy.data(), dummy.size(), DATATYPE, tag,
+    request *rreq = recv_nb(&dummy, sizeof(dummy), DATATYPE, tag,
                             UCP_TAG_MASK_FULL);
 
     wait_counter(worker_offload_stats(receiver()),
@@ -777,10 +810,10 @@ UCS_TEST_P(test_ucp_tag_offload_stats, post, "TM_THRESH=128")
                  UCP_WORKER_STAT_TAG_OFFLOAD_CANCELED);
 }
 
-UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=128")
+UCS_TEST_P(test_ucp_tag_offload_stats, block, "TM_THRESH=1")
 {
     uint64_t tag = 0x11;
-    std::vector<char> buf(256, 0);
+    std::vector<char> buf(64, 0);
 
     activate_offload(sender());
 
@@ -883,7 +916,7 @@ protected:
 };
 
 UCS_TEST_P(test_ucp_tag_offload_stats_gpu, block_gpu_no_gpu_direct,
-           "TM_THRESH=128")
+           "TM_THRESH=1")
 {
     activate_offload(sender());
 

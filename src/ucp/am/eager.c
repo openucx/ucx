@@ -101,11 +101,13 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_eager_short_proto = {
-    .name       = "egr/am/short",
-    .flags      = 0,
-    .init       = ucp_proto_eager_short_init,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_short_progress}
+    .name     = "egr/am/short",
+    .desc     = UCP_PROTO_SHORT_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_eager_short_init,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_eager_short_progress},
+    .abort    = ucp_proto_request_bcopy_abort
 };
 UCP_PROTO_REGISTER(&ucp_eager_short_proto);
 
@@ -208,10 +210,12 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_eager_bcopy_single_proto = {
-    .name       = "egr/am/single/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_bcopy_single_init,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_bcopy_single_progress}
+    .name     = "egr/am/single/bcopy",
+    .desc     = UCP_PROTO_COPY_IN_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_eager_bcopy_single_init,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_eager_bcopy_single_progress},
+    .abort    = ucp_request_complete_send
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);

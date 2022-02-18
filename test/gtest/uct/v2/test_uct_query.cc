@@ -8,7 +8,7 @@
 #include <gtest/uct/uct_p2p_test.h>
 
 extern "C" {
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 #include <uct/api/uct.h>
 #include <uct/api/v2/uct_v2.h>
 }
@@ -30,7 +30,7 @@ UCS_TEST_P(test_uct_query, query_perf)
                                    UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE |
                                    UCT_PERF_ATTR_FIELD_LOCAL_SYS_DEVICE |
-                                   UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEIVCE |
+                                   UCT_PERF_ATTR_FIELD_REMOTE_SYS_DEVICE |
                                    UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
                                    UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
                                    UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |

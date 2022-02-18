@@ -65,7 +65,7 @@ ucp_proto_request_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
     }
 
     ucp_trace_req(req, "registered md_map 0x%"PRIx64"/0x%"PRIx64,
-                  req->send.state.dt_iter.type.contig.reg.md_map, md_map);
+                  req->send.state.dt_iter.type.contig.memh->md_map, md_map);
     return UCS_OK;
 }
 
@@ -176,7 +176,7 @@ ucp_proto_request_select_proto(ucp_request_t *req,
                                size_t msg_length)
 {
     const ucp_proto_threshold_elem_t *thresh_elem =
-            ucp_proto_thresholds_search(select_elem->thresholds, msg_length);
+            ucp_proto_select_thresholds_search(select_elem, msg_length);
     ucp_proto_request_set_proto(req, &thresh_elem->proto_config, msg_length);
 }
 
@@ -253,23 +253,24 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 }
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_proto_request_pack_rkey(ucp_request_t *req, uint64_t distance_dev_map,
+ucp_proto_request_pack_rkey(ucp_request_t *req, ucp_md_map_t md_map,
+                            uint64_t distance_dev_map,
                             const ucs_sys_dev_distance_t *dev_distance,
                             void *rkey_buffer)
 {
+    const ucp_datatype_iter_t *dt_iter = &req->send.state.dt_iter;
     ssize_t packed_rkey_size;
 
     /* For contiguous buffer, pack one rkey
      * TODO to support IOV datatype write N [address+length] records,
      */
-    ucs_assert(req->send.state.dt_iter.dt_class == UCP_DATATYPE_CONTIG);
+    ucs_assert(dt_iter->dt_class == UCP_DATATYPE_CONTIG);
+    ucs_assert(ucs_test_all_flags(dt_iter->type.contig.memh->md_map, md_map));
 
-    packed_rkey_size =
-            ucp_rkey_pack_uct(req->send.ep->worker->context,
-                              req->send.state.dt_iter.type.contig.reg.md_map,
-                              req->send.state.dt_iter.type.contig.reg.memh,
-                              &req->send.state.dt_iter.mem_info,
-                              distance_dev_map, dev_distance, rkey_buffer);
+    packed_rkey_size = ucp_rkey_pack_memh(req->send.ep->worker->context, md_map,
+                                          dt_iter->type.contig.memh,
+                                          &dt_iter->mem_info, distance_dev_map,
+                                          dev_distance, rkey_buffer);
     if (packed_rkey_size < 0) {
         ucs_error("failed to pack remote key: %s",
                   ucs_status_string((ucs_status_t)packed_rkey_size));

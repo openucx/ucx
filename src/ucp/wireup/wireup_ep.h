@@ -45,6 +45,9 @@ struct ucp_wireup_ep {
     struct sockaddr_storage   cm_remote_sockaddr;  /**< sockaddr of the remote peer -
                                                         used only on the client side
                                                         in a client-server flow */
+    struct sockaddr_storage   cm_local_sockaddr;   /**< local sockaddr
+                                                        used only on the client side
+                                                        in a client-server flow */
     ucp_rsc_index_t           aux_rsc_index; /**< Index of auxiliary transport */
     volatile uint32_t         pending_count; /**< Number of pending wireup operations */
     volatile uint32_t         flags;         /**< Connection state flags */
@@ -105,7 +108,10 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   uct_pending_purge_callback_t purge_cb,
                                   void *purge_arg);
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
+int ucp_wireup_ep_has_next_ep(ucp_wireup_ep_t *wireup_ep);
+
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
+                               ucp_rsc_index_t rsc_index);
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 

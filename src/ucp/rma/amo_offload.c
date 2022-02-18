@@ -184,25 +184,27 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
 }
 
 #define UCP_PROTO_AMO_REGISTER(_id, _op_id, _bits, _memtype_op, _sub_id) \
-static ucs_status_t \
-ucp_amo_progress_##_id(uct_pending_req_t *self) { \
-    return ucp_proto_amo_progress_##_sub_id(self, (_op_id), (_bits) / 8); \
-} \
-\
-static ucs_status_t \
-ucp_amo_init_##_id(const ucp_proto_init_params_t *init_params) { \
-    return ucp_proto_amo_init(init_params, (_op_id), (_bits) / 8, \
-                              (_memtype_op)); \
-} \
-\
-static ucp_proto_t ucp_amo_proto_##_id = { \
-    .name       = "amo" #_bits "/" #_id "/" #_sub_id, \
-    .init       = ucp_amo_init_##_id, \
-    .config_str = ucp_proto_single_config_str, \
-    .progress   = {ucp_amo_progress_##_id} \
-}; \
-\
-UCP_PROTO_REGISTER(&ucp_amo_proto_##_id)
+    static ucs_status_t ucp_amo_progress_##_id(uct_pending_req_t *self) \
+    { \
+        return ucp_proto_amo_progress_##_sub_id(self, (_op_id), (_bits) / 8); \
+    } \
+    \
+    static ucs_status_t ucp_amo_init_##_id( \
+            const ucp_proto_init_params_t *init_params) \
+    { \
+        return ucp_proto_amo_init(init_params, (_op_id), (_bits) / 8, \
+                                  (_memtype_op)); \
+    } \
+    \
+    static ucp_proto_t ucp_amo_proto_##_id = { \
+        .name     = "amo" #_bits "/" #_id "/" #_sub_id, \
+        .desc     = #_sub_id, \
+        .init     = ucp_amo_init_##_id, \
+        .query    = ucp_proto_single_query, \
+        .progress = {ucp_amo_progress_##_id} \
+    }; \
+    \
+    UCP_PROTO_REGISTER(&ucp_amo_proto_##_id)
 
 #define UCP_PROTO_AMO_REGISTER_MTYPE(_id, _op_id, _bits) \
     UCP_PROTO_AMO_REGISTER(_id,         _op_id, _bits, UCT_EP_OP_LAST,      offload) \

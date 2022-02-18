@@ -37,6 +37,9 @@ libuct_cuda_la_SOURCES = \
 	cuda_ipc/cuda_ipc_ep.c \
 	cuda_ipc/cuda_ipc_cache.c
 
+PKG_CONFIG_NAME=cuda
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif

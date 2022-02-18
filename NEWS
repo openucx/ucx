@@ -9,11 +9,188 @@
 
 ## Current
 ### Features:
-#### UCP
-* Added API for querying UCP library attributes
-#### UCS
-* Added API to Read boot ID value or use machine_guid
 ### Bugfixes:
+
+## 1.12.0 (January 12, 2022)
+### Features:
+#### Core
+* Added beta-level support for Go language bindings
+* Added new objects to VFS (md, component, log_level, etc.)
+* Added configuration variable to specify which loadable modules are allowed
+* Added build-time configuration to disable sigaction overriding
+#### UCP
+* Added client_id to ucp_worker_create() and ucp_conn_request_query() APIs
+* Added ucp_worker_address_query() API
+* Updated ucp_ep_query() API for getting local and remote addresses
+* Added address versioning to correctly preserve wire compatibility starting from version 1.11.0
+* Added new client/server connection establishment packet header format
+* Enabled rendezvous and tag sync protocols when error handling is enabled on the endpoint
+* Added iov zcopy support to RMA operations
+* Reduced memory usage of unexpected messages by fitting receive buffer size to packet size
+* Added support for modifying UCT and UCS configs by ucp_config_modify() API
+* Optimized unpacked rkeys memory consumption
+* Added request flag to influence latency vs. bandwidth protocol
+* Reduced memory management overhead with new protocols
+* Improved performance calculations for new protocols
+* Added AMO support with GPU memory target using new protocols
+* Added put_zcopy, get_zcopy and pipeline based rendezvous in new protocols
+* Added support for user-defined alignment in Active Messages
+* Added support for offload tag sync in new protocols
+* Updated ucp_atomic_post() to use NBX flow
+#### UCT
+* Added API - uct_iface_is_reachable_v2()
+* Added IPv6 address support in TCP
+* Added latency estimation to uct_iface_estimate_perf()
+* Adjusted knem and cma overhead cost
+* Increased built-in TCP keep-alive interval to 2 seconds
+#### RDMA CORE (IB, ROCE, etc.)
+* Added detection of IB NDR devices
+* Added check for CQ overrun in assert mode
+* Added bitmap usage for releasing detached DCIs
+* Added configuration for requests ack frequency with DevX
+* Added remote QP info to tx error CQE traces
+#### UCS
+* Added API for a per-process aggregate-sum statistics report
+* Added memory pool set data structure
+* Added new ptr_array API for bulk allocation
+* Added ucs_string_buffer_append_flags() for string buffer
+* Added ucs_ffs32()
+* Added ucs_vsnprintf_safe() which always adds '\0'
+* Added thread-safe put to ptr_map
+* Improved accuracy of the topology distance estimation
+* Added prints of leaked callbacks from the callback queue
+* Removed a diagnostic message when fuse thread is stopped
+* Added configurable limit for the memory consumed by rcache
+* Added configuration for VFS(FUSE) thread affinity
+* Added memory limit support to memtrack
+#### CUDA
+* Added global memtype cache to allow UCT transports to query memory attributes
+* Auto-register CUDA whole allocations to avoid repeated registration costs
+* Added capability to select CUDA stream based on source and destination memory type
+  (required for device memory based pipelining)
+* Added selection of CUDA-IPC capabilities based on NVLINK topology
+  (to prefer writes vs. reads for specific platforms using NVML)
+* Added option to set cuda_copy bandwidth
+* Added profiling of CUDA runtime function calls
+* Added option to limit GPUDirectRDMA size in rendezvous protocol
+#### Java
+* Added ucp_listener_reject functionality
+* Added support for setting worker id and querying it from the connection request
+* Added support to bind on a free port in UcpListener
+#### Packaging
+* Added cmake config files for better integration with external cmake based projects
+#### Tests
+* Removed memcpy from AM eager flow in io_demo
+* Added check_qps.sh script to detected stuck QPs
+* Improved diagnostic in test_init_mt
+* Added iov support in ucp_client_server
+* Added option to use epoll in io_demo
+* Added registration of memory allocated by io_demo in memtrack
+* Extended statistics in io_demo
+* Improved logging in io_demo
+* Replaced rand by urand in io_demo
+* More improvements in io_demo
+* Generalized median calculation to support any percentile in ucx_perftest
+#### Tools
+* Added loop-back transport support in ucx_perftest
+* Split ucx_perftest into separate modules
+* Added process placement option for ucx_info
+* Extended parameters correctness check in ucx_perftest
+* Added support for GPU memory RMA and atomics in ucx_perftest
+#### CI
+* Updated gtest 1.7 to 1.10
+* Increased uptime in network corrupter (used for io_demo)
+* Enabled set of gtests for new protocols
+* Added running CI in docker containers
+* Increased thresholds for test_ucp_wait_mem
+* Added test for ucx binary compatibility between OS versions
+* Increased test job timeout to 6 hours
+* Reduced testing time under valgrind
+* Added suppressions for glibc and libnl leaks
+* Relaxed performance requirements in perf test
+
+### Bugfixes
+#### Core
+* Fixed invalid remote memory access after connection error
+* Fixed creating more than 64K endpoints between the same peers
+* Fixed simultaneous endpoint close with ucp_hello_world
+#### UCP
+* Fixes and improvements in new protocols infrastructure
+* Fixes in AM flows
+* Fixed tag short threshold selection
+* Multiple fixes in keep-alive protocol
+* Multiple fixes in wire-up protocol
+* Fixes in error flow during rendezvous protocol
+* Multiple fixes in general error flow
+* Fixed fallback to PUT pipeline in rendezvous protocol
+* Reduced default value of keep-alive interval to 20 seconds
+* Fixes in tag_send datatype processing
+#### UCT
+* Fixed keep-alive protocol for intra-node transports (sm, cuda)
+* Fixed deadlock in TCP
+* Suppressed EHOSTUNREACH error in TCP sockcm
+* Restricted connecting loop-back to other devices in TCP
+#### RDMA CORE (IB, ROCE, etc.)
+* Fixed pkey_index initialization when creating RC QP with DEVX
+* Disabled MP_SRQ by default
+* Fixed TX WQ overflow check
+* Fixed dci->pool_index initialization when HAVE_DC_DV is false
+* Fixed syndrome value for creating rdmacm reserved qpn
+* Fixed error code on rdma_establish failure
+* Fixed uct_ep_am_short_iov for UD verbs
+* Fixed handling of error CQE after rc_ep is destroyed
+* Fixes in flow control when error CQE is polled
+* Multiple fixes in RC and DC error flows
+* Fixed deadlock between DCIs and RDMA_READ credits
+* Removed AM handler invocation for PURE_GRANT messages
+* Fixed endpoint arbiter_group leak in DC
+* Fixed resource check in flush for DC
+#### UCS
+* Fixed segmentation fault for ucs_stats_parser
+* Fixed potential crash on cleanup when use UCX profiling
+* Fixed read_profile print of new request
+* Fixed uninitialized variable access in VFS
+* Changed log level of inotify_init failure to diag
+* Fixed integer overflow in mpool chunk allocation
+#### Packaging
+* Fixed with-fuse arg for RPM build
+#### Documentation
+* Fixes in UCP, UCT, UCS, FAQ and README documentation
+#### Tests
+* Multiple fixes in io_demo
+#### CI
+* Fixed snapshot docker name
+* Fixed hipMallocManaged hook gtest
+* Fixes in Azure release pipeline
+* Fixes in Coverity CI
+* Fixed test_uct_query gtest for ROCm
+* Fixes in jenkins test script
+* Fixed release commit title check
+
+## 1.11.2 (September 30, 2021)
+### Bugfixes
+* Fixes in Java release pipeline
+* Fixes in handling large number of devices
+* Fixes in UD out-of-order processing
+* Fixes in switching transports during client/server connection setup
+* Fixes in transport-level error reporting
+
+## 1.11.1 (August 31, 2021)
+### Features:
+#### UCS
+* Added API to read boot ID value or use machine_guid
+
+### Bugfixes:
+* Fixes in Cuda memory hooks
+* Fixes in setting traffic class for DCT RoCE transport
+* Fixes in TCP endpoint flush
+* Fixes in TCP pending operations progress
+* Fixes in release pipelines
+* Fixes in error handling flow
+* Fixes in multi-threaded tag probe
+* Fixes in TCP disconnect flow
+* Fixes in RPM post-install script
+* Fixes in UCT common keepalive
 
 ## 1.11.0 (July 26, 2021)
 ### Features:

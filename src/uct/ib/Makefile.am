@@ -146,6 +146,9 @@ endif # HAVE_MLX5_HW_UD
 
 endif # HAVE_TL_UD
 
+PKG_CONFIG_NAME=ib
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif # HAVE_IB

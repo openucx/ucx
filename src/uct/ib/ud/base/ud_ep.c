@@ -215,6 +215,8 @@ static void uct_ud_ep_purge_outstanding(uct_ud_ep_t *ep)
     uct_ud_ctl_desc_t *cdesc;
     ucs_queue_iter_t iter;
 
+    ucs_trace_func("ep=%p", ep);
+
     ucs_queue_for_each_safe(cdesc, iter, &iface->tx.outstanding_q, queue) {
         if (cdesc->ep == ep) {
             ucs_queue_del_iter(&iface->tx.outstanding_q, iter);
@@ -229,6 +231,8 @@ static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
+
+    ucs_trace_func("ep=%p", ep);
 
     uct_ud_iface_dispatch_async_comps(iface, ep);
 
@@ -287,6 +291,28 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_last_ack_received(uct_ud_ep_t *ep)
     return UCT_UD_PSN_COMPARE(ep->tx.acked_psn, ==, ep->tx.psn - 1);
 }
 
+static UCS_F_ALWAYS_INLINE void
+uct_ud_ep_assert_tx_window_nonempty(uct_ud_ep_t *ep)
+{
+    ucs_assertv(!ucs_queue_is_empty(&ep->tx.window),
+                "ep %p: acked_psn=%u current_psn=%u", ep, ep->tx.acked_psn,
+                ep->tx.psn);
+}
+
+static void uct_ud_ep_handle_timeout(uct_ud_ep_t *ep)
+{
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_ud_iface_t);
+
+    ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
+                           uct_ud_ep_deferred_timeout_handler, ep,
+                           UCS_CALLBACKQ_FLAG_ONESHOT);
+    if (iface->async.event_cb != NULL) {
+        /* notify user */
+        iface->async.event_cb(iface->async.event_arg, 0);
+    }
+}
+
 static void uct_ud_ep_timer(ucs_wtimer_t *self)
 {
     uct_ud_ep_t    *ep    = ucs_container_of(self, uct_ud_ep_t, timer);
@@ -307,7 +333,7 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         return;
     }
 
-    ucs_assert(!ucs_queue_is_empty(&ep->tx.window));
+    uct_ud_ep_assert_tx_window_nonempty(ep);
 
     now  = ucs_twheel_get_time(&iface->tx.timer);
     diff = now - ep->tx.send_time;
@@ -315,13 +341,7 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
                   ep, ucs_time_to_sec(diff),
                   ucs_time_to_sec(iface->config.peer_timeout));
-        ucs_callbackq_add_safe(&iface->super.super.worker->super.progress_q,
-                               uct_ud_ep_deferred_timeout_handler, ep,
-                               UCS_CALLBACKQ_FLAG_ONESHOT);
-        if (iface->async.event_cb != NULL) {
-            /* notify user */
-            iface->async.event_cb(iface->async.event_arg, 0);
-        }
+        uct_ud_ep_handle_timeout(ep);
         return;
     }
 
@@ -654,6 +674,9 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     }
 
     ep->tx.acked_psn = ack_psn;
+    ucs_assertv(UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->tx.psn),
+                "ep %p: acked_psn=%u must be smaller than current_psn=%u", ep,
+                ep->tx.acked_psn, ep->tx.psn);
 
     uct_ud_ep_window_release_inline(iface, ep, ack_psn, UCS_OK, is_async, 0);
     uct_ud_ep_ca_ack(ep);
@@ -1035,7 +1058,7 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     if (uct_ud_ep_is_last_ack_received(ep)) {
         uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
     } else {
-        ucs_assert(!ucs_queue_is_empty(&ep->tx.window));
+        uct_ud_ep_assert_tx_window_nonempty(ep);
         skb = ucs_queue_tail_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t,
                                             queue);
         if (!(skb->flags & UCT_UD_SEND_SKB_FLAG_ACK_REQ)) {
@@ -1106,10 +1129,11 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
                                            uct_ud_iface_t);
     ucs_status_t status;
 
+    ucs_trace_func("ep=%p", ep);
+
     uct_ud_enter(iface);
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        uct_ep_pending_purge(ep_h, NULL, 0);
         uct_ud_iface_dispatch_async_comps(iface, ep);
         uct_ud_ep_purge(ep, UCS_ERR_CANCELED);
         /* FIXME make flush(CANCEL) operation truly non-blocking and wait until
@@ -1670,6 +1694,8 @@ void uct_ud_ep_pending_purge(uct_ep_h ep_h, uct_pending_purge_callback_t cb,
                                               uct_ud_iface_t);
     uct_purge_cb_args_t args = {cb, arg};
 
+    ucs_trace_func("ep=%p", ep);
+
     uct_ud_enter(iface);
     ucs_arbiter_group_purge(&iface->tx.pending_q, &ep->tx.pending.group,
                             uct_ud_ep_pending_purge_cb, &args);
@@ -1706,4 +1732,16 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
                    UCT_UD_SLOW_TIMER_MAX_TICK(iface));
 
     uct_ud_leave(iface);
+}
+
+ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags)
+{
+    uct_ud_ep_t *ep       = ucs_derived_of(tl_ep, uct_ud_ep_t);
+    uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                           uct_ud_iface_t);
+
+    uct_ud_enter(iface);
+    uct_ud_ep_handle_timeout(ep);
+    uct_ud_leave(iface);
+    return UCS_OK;
 }

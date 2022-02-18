@@ -127,6 +127,10 @@ public:
 
         unsigned progress(int worker_index = 0);
 
+        ucp_mem_h mem_map(void *address, size_t length);
+
+        void mem_unmap(ucp_mem_h memh);
+
         int get_num_workers() const;
 
         int get_num_eps(int worker_index = 0) const;
@@ -170,6 +174,12 @@ public:
         static void reject_conn_cb(ucp_conn_request_h conn_req, void *arg);
 
         void set_ep(ucp_ep_h ep, int worker_index, int ep_index);
+
+        static ucs_log_func_rc_t
+        hide_config_warns_logger(const char *file, unsigned line,
+                                 const char *function, ucs_log_level_t level,
+                                 const ucs_log_component_config_t *comp_conf,
+                                 const char *message, va_list ap);
     };
 
     static bool is_request_completed(void *req);
@@ -249,9 +259,8 @@ protected:
                                    int worker_index = 0);
     void request_release(void *req);
     void request_cancel(entity &e, void *req);
-    void wait_for_wakeup(const std::vector<entity*> &entities,
-                         int poll_timeout = -1, bool drain = false,
-                         int worker_index = 0);
+    int wait_for_wakeup(const std::vector<entity*> &entities,
+                        int poll_timeout = -1, int worker_index = 0);
     int max_connections();
     void set_tl_small_timeouts();
 

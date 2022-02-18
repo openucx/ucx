@@ -388,8 +388,8 @@ ucp_request_send_state_init(ucp_request_t *req, ucp_datatype_t datatype,
 
     VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.uct_comp,
                                 sizeof(req->send.state.uct_comp));
-    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.dt.offset,
-                                sizeof(req->send.state.dt.offset));
+    VALGRIND_MAKE_MEM_UNDEFINED(&req->send.state.dt_iter.offset,
+                                sizeof(req->send.state.dt_iter.offset));
 
     req->send.state.uct_comp.func = NULL;
 
@@ -592,6 +592,109 @@ static UCS_F_ALWAYS_INLINE void ucp_request_recv_buffer_dereg(ucp_request_t *req
                              &req->recv.state, req);
 }
 
+/* Copy UCT memory handles from memh to state->contig, according to md_map,
+   and up to UCP_MAX_OP_MDS */
+static UCS_F_ALWAYS_INLINE void
+ucp_request_init_dt_reg_from_memh(ucp_request_t *req, ucp_md_map_t md_map,
+                                  ucp_mem_h memh, ucp_dt_reg_t *dt_reg)
+{
+    ucp_md_index_t md_index, memh_index;
+
+    ucs_assertv(dt_reg->md_map == 0, "md_map=0x%" PRIx64, dt_reg->md_map);
+    ucs_assert((dt_reg == &req->send.state.dt.dt.contig) ||
+               (dt_reg == &req->recv.state.dt.contig));
+
+    req->flags |= UCP_REQUEST_FLAG_USER_MEMH;
+    memh_index  = 0;
+    ucs_for_each_bit(md_index, memh->md_map) {
+        if (md_map & UCS_BIT(md_index)) {
+            dt_reg->memh[memh_index++] = memh->uct[md_index];
+            dt_reg->md_map            |= UCS_BIT(md_index);
+            if (memh_index >= UCP_MAX_OP_MDS) {
+                break;
+            }
+        }
+    }
+}
+
+/* Returns whether user-provided memory handle can be used. If the result is 0,
+   *status_p is set to the error code. */
+static UCS_F_ALWAYS_INLINE int
+ucp_request_is_user_memh_valid(ucp_request_t *req,
+                               const ucp_request_param_t *param, void *buffer,
+                               size_t length, ucp_datatype_t datatype,
+                               ucs_memory_type_t mem_type,
+                               ucs_status_t *status_p)
+{
+    /* User-provided memh supported only on contig type with proto_v1 */
+    if (!(param->op_attr_mask & UCP_OP_ATTR_FIELD_MEMH) ||
+        !UCP_DT_IS_CONTIG(datatype)) {
+        *status_p = UCS_OK;
+        return 0;
+    }
+
+    if (ENABLE_PARAMS_CHECK &&
+        ((param->memh == NULL) || (buffer < ucp_memh_address(param->memh)) ||
+         (UCS_PTR_BYTE_OFFSET(buffer, length) >
+          UCS_PTR_BYTE_OFFSET(ucp_memh_address(param->memh),
+                              ucp_memh_length(param->memh))) ||
+         (param->memh->mem_type != mem_type))) {
+        ucs_error("req %p: mismatched memory handle [buffer %p length %zu %s]"
+                  " memh %p [address %p length %zu %s]",
+                  req, buffer, length, ucs_memory_type_names[mem_type],
+                  param->memh, ucp_memh_address(param->memh),
+                  ucp_memh_length(param->memh),
+                  ucs_memory_type_names[param->memh->mem_type]);
+        *status_p = UCS_ERR_INVALID_PARAM;
+        return 0;
+    }
+
+    ucs_assert(param->memh != NULL); /* For Coverity */
+    return 1;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_send_request_set_user_memh(ucp_request_t *req, ucp_md_map_t md_map,
+                               const ucp_request_param_t *param)
+{
+    ucs_status_t status;
+
+    if (!ucp_request_is_user_memh_valid(req, param, req->send.buffer,
+                                        req->send.length, req->send.datatype,
+                                        (ucs_memory_type_t)req->send.mem_type,
+                                        &status)) {
+        return status;
+    }
+
+    /* req->send.state.dt should not be used with protov2 */
+    ucs_assert(!req->send.ep->worker->context->config.ext.proto_enable);
+
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_USER_MEMH));
+    ucp_request_init_dt_reg_from_memh(req, md_map, param->memh,
+                                      &req->send.state.dt.dt.contig);
+    return UCS_OK;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_recv_request_set_user_memh(ucp_request_t *req,
+                               const ucp_request_param_t *param)
+{
+    ucs_status_t status;
+
+    if (!ucp_request_is_user_memh_valid(req, param, req->recv.buffer,
+                                        req->recv.length, req->recv.datatype,
+                                        req->recv.mem_type, &status)) {
+        return status;
+    }
+
+    ucs_assert(!(req->flags & UCP_REQUEST_FLAG_USER_MEMH));
+    req->flags         |= UCP_REQUEST_FLAG_USER_MEMH;
+    req->recv.user_memh = param->memh;
+    /* dt_reg will be updated later if the protocol needs it */
+
+    return UCS_OK;
+}
+
 static UCS_F_ALWAYS_INLINE void
 ucp_request_wait_uct_comp(ucp_request_t *req)
 {
@@ -712,11 +815,12 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         rdesc = (ucp_recv_desc_t*)ucs_mpool_set_get_inline(&worker->am_mps,
                                                            length);
         if (rdesc == NULL) {
+            *rdesc_p = NULL; /* To suppress compiler warning */
             ucs_error("ucp recv descriptor is not allocated");
             return UCS_ERR_NO_MEMORY;
         }
 
-        padding = ucs_padding((uintptr_t)(rdesc + 1), worker->am.alignment);
+        padding = ucs_padding((uintptr_t)(rdesc + 1), alignment);
         rdesc   = (ucp_recv_desc_t*)UCS_PTR_BYTE_OFFSET(rdesc, padding);
         rdesc->release_desc_offset = padding;
 
@@ -951,6 +1055,7 @@ ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 
     status = UCS_PTR_MAP_GET(request, &worker->request_map, id, extract, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
+        *req_p = NULL; /* To suppress compiler warning */
         return status;
     }
 

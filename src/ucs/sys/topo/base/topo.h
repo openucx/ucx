@@ -8,6 +8,7 @@
 #define UCS_TOPO_H
 
 #include <ucs/type/status.h>
+#include <ucs/datastruct/list.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -54,6 +55,35 @@ typedef struct ucs_sys_dev_distance {
 
 
 extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
+
+
+/*
+ * Function pointer used to refer to specific implementations of
+ * ucs_topo_get_distance function by topology modules
+ */
+typedef ucs_status_t
+(*ucs_topo_get_distance_func_t)(ucs_sys_device_t device1,
+                                ucs_sys_device_t device2,
+                                ucs_sys_dev_distance_t *distance);
+
+
+/*
+ * Structure needed to define a topology module implementation
+ */
+typedef struct {
+
+    /* Name of the topology module */
+    const char                   *name;
+
+    /* Points to the module's ucs_topo_get_distance implementation */
+    ucs_topo_get_distance_func_t get_distance;
+
+    ucs_list_link_t              list;
+} ucs_sys_topo_method_t;
+
+
+/* Global list of topology detection methods */
+extern ucs_list_link_t ucs_sys_topo_methods_list;
 
 
 /**

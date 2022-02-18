@@ -34,4 +34,5 @@ AS_IF([test "x$with_knem" != xno],
 )
 
 AM_CONDITIONAL([HAVE_KNEM], [test "x$knem_happy" != xno])
-AC_CONFIG_FILES([src/uct/sm/scopy/knem/Makefile])
+AC_CONFIG_FILES([src/uct/sm/scopy/knem/Makefile
+                 src/uct/sm/scopy/knem/ucx-knem.pc])

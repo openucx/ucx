@@ -10,9 +10,12 @@
 
 #define UCT_VERNO_MAJOR            @MAJOR_VERSION@
 #define UCT_VERNO_MINOR            @MINOR_VERSION@
+#define UCT_VERNO_PATCH            @PATCH_VERSION@
+#define UCT_VERNO_EXTRA            "@EXTRA_VERSION@"
 #define UCT_VERNO_STRING           "@VERSION@"
 #define UCT_SCM_VERSION            "@SCM_VERSION@"
-                                   
+#define UCT_SCM_BRANCH             "@SCM_BRANCH@"
+
 #define UCT_MINOR_BIT              (16UL)
 #define UCT_MAJOR_BIT              (24UL)
 #define UCT_API                    ((@MAJOR_VERSION@L<<UCT_MAJOR_BIT)|(@MINOR_VERSION@L << UCT_MINOR_BIT))

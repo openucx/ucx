@@ -152,11 +152,10 @@ private:
         }
 
         void to_err() {
-            uct_ib_mlx5_md_t *md = (uct_ib_mlx5_md_t *)m_e.md();
-            uct_rc_mlx5_ep_t *ep = (uct_rc_mlx5_ep_t *)m_e.ep(0);
-            uct_ib_mlx5_qp_t *qp = &ep->tx.wq.super;
+            uct_ib_iface_t   *iface = (uct_ib_iface_t *)m_e.iface();
+            uct_rc_mlx5_ep_t *ep    = (uct_rc_mlx5_ep_t *)m_e.ep(0);
 
-            uct_ib_mlx5_modify_qp_state(md, qp, IBV_QPS_ERR);
+            uct_ib_mlx5_modify_qp_state(iface, &ep->tx.wq.super, IBV_QPS_ERR);
         }
     };
 #endif
@@ -372,7 +371,8 @@ private:
         }
 
         void to_err() {
-            uct_ib_mlx5_modify_qp_state(m_md, &m_txwq.super, IBV_QPS_ERR);
+            uct_ib_mlx5_modify_qp_state(&m_iface->super.super, &m_txwq.super,
+                                        IBV_QPS_ERR);
         }
 
     private:

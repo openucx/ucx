@@ -299,7 +299,6 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
                              UCT_MD_FLAG_NEED_RKEY |
                              UCT_MD_FLAG_ADVISE    |
                              UCT_MD_FLAG_INVALIDATE;
-    md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
@@ -519,7 +518,7 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
                            uint64_t access_flags, struct ibv_mr **mr_p,
                            int silent)
 {
-    ucs_time_t start_time = ucs_get_time();
+    ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
     struct ibv_mr *mr;
 #if HAVE_DECL_IBV_EXP_REG_MR
     struct ibv_exp_reg_mr_in in = {};
@@ -541,9 +540,8 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
     *mr_p = mr;
 
     /* to prevent clang dead code */
-    (void)start_time;
-    ucs_trace("ibv_reg_mr(%p, %p, %zu) took %.3f msec", pd, addr, length,
-              ucs_time_to_msec(ucs_get_time() - start_time));
+    ucs_trace("ibv_reg_mr(pd=%p addr=%p length=%zu): mr=%p took %.3f msec", pd,
+              addr, length, mr, ucs_time_to_msec(ucs_get_time() - start_time));
     return UCS_OK;
 }
 
@@ -554,6 +552,9 @@ ucs_status_t uct_ib_dereg_mr(struct ibv_mr *mr)
     if (mr == NULL) {
         return UCS_OK;
     }
+
+    ucs_trace("ibv_dereg_mr(mr=%p addr=%p length=%zu)", mr, mr->addr,
+              mr->length);
 
     ret = UCS_PROFILE_CALL(ibv_dereg_mr, mr);
     if (ret != 0) {

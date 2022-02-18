@@ -21,7 +21,7 @@
 #include <string.h>
 
 
-static const char* cpu_model_names[] = {
+static const char *cpu_model_names[] = {
     [UCS_CPU_MODEL_UNKNOWN]            = "unknown",
     [UCS_CPU_MODEL_INTEL_IVYBRIDGE]    = "IvyBridge",
     [UCS_CPU_MODEL_INTEL_SANDYBRIDGE]  = "SandyBridge",
@@ -33,6 +33,7 @@ static const char* cpu_model_names[] = {
     [UCS_CPU_MODEL_ARM_AARCH64]        = "ARM 64-bit",
     [UCS_CPU_MODEL_AMD_NAPLES]         = "Naples",
     [UCS_CPU_MODEL_AMD_ROME]           = "Rome",
+    [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
     [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
     [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
     [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui"

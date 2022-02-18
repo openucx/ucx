@@ -261,6 +261,8 @@ func TestUcpEpAm(t *testing.T) {
 			}
 		}
 
+		for len(requests) != cap(requests) {
+		}
 		close(requests)
 		for req := range requests {
 			for req.GetStatus() == UCS_INPROGRESS {

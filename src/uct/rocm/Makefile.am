@@ -45,6 +45,9 @@ libuct_rocm_la_SOURCES += \
     ipc/rocm_ipc_ep.c \
     ipc/rocm_ipc_cache.c
 
+PKG_CONFIG_NAME=rocm
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif

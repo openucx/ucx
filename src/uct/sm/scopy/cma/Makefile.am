@@ -22,6 +22,9 @@ libuct_cma_la_SOURCES = \
 	cma_ep.c \
 	cma_md.c
 
+PKG_CONFIG_NAME=cma
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif

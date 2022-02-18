@@ -148,15 +148,12 @@ enum {
     } \
 
 
-#define UCT_RC_UPDATE_FC_WND(_iface, _fc) \
+#define UCT_RC_UPDATE_FC_WND(_fc) \
     { \
         /* For performance reasons, prefer to update fc_wnd unconditionally */ \
         (_fc)->fc_wnd--; \
-        \
-        if ((_iface)->config.fc_enabled) { \
-            UCS_STATS_SET_COUNTER((_fc)->stats, UCT_RC_FC_STAT_FC_WND, \
-                                  (_fc)->fc_wnd); \
-        } \
+        UCS_STATS_SET_COUNTER((_fc)->stats, UCT_RC_FC_STAT_FC_WND, \
+                              (_fc)->fc_wnd); \
     }
 
 #define UCT_RC_CHECK_FC(_iface, _ep, _am_id) \
@@ -173,7 +170,7 @@ enum {
         (_am_id) |= uct_rc_fc_get_fc_hdr((_ep)->flags); /* take grant bit */ \
     }
 
-#define UCT_RC_UPDATE_FC(_iface, _ep, _fc_hdr) \
+#define UCT_RC_UPDATE_FC(_ep, _fc_hdr) \
     { \
         if ((_fc_hdr) & UCT_RC_EP_FLAG_FC_GRANT) { \
             UCS_STATS_UPDATE_COUNTER((_ep)->fc.stats, UCT_RC_FC_STAT_TX_GRANT, 1); \
@@ -186,7 +183,7 @@ enum {
         \
         (_ep)->flags &= ~UCT_RC_EP_FC_MASK; \
         \
-        UCT_RC_UPDATE_FC_WND(_iface, &(_ep)->fc) \
+        UCT_RC_UPDATE_FC_WND(&(_ep)->fc) \
     }
 
 #define UCT_RC_CHECK_RES_AND_FC(_iface, _ep, _am_id) \
@@ -265,7 +262,7 @@ ucs_arbiter_cb_result_t uct_rc_ep_arbiter_purge_cb(ucs_arbiter_t *arbiter,
 void uct_rc_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
                              void*arg);
 
-ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, int16_t winsize
+ucs_status_t uct_rc_fc_init(uct_rc_fc_t *fc, uct_rc_iface_t *iface
                             UCS_STATS_ARG(ucs_stats_node_t* stats_parent));
 void uct_rc_fc_cleanup(uct_rc_fc_t *fc);
 
@@ -327,6 +324,13 @@ int uct_rc_fc_has_resources(uct_rc_iface_t *iface, uct_rc_fc_t *fc)
     /* When FC is disabled, fc_wnd may still become 0 because it's decremented
      * unconditionally (for performance reasons) */
     return (fc->fc_wnd > 0) || !iface->config.fc_enabled;
+}
+
+static UCS_F_ALWAYS_INLINE void uct_rc_fc_restore_wnd(uct_rc_iface_t *iface,
+                                                      uct_rc_fc_t *fc)
+{
+    fc->fc_wnd = iface->config.fc_wnd_size;
+    UCS_STATS_SET_COUNTER(fc->stats, UCT_RC_FC_STAT_FC_WND, fc->fc_wnd);
 }
 
 static UCS_F_ALWAYS_INLINE int uct_rc_ep_has_tx_resources(uct_rc_ep_t *ep)

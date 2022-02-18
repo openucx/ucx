@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2014.  ALL RIGHTS RESERVED.
+# Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -13,7 +14,10 @@
 #include <stdint.h>
 #endif
 
+#ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS 1
+#endif
+
 #include <inttypes.h>
 
 #include "test_helpers.h"
@@ -83,6 +87,14 @@ protected:
     virtual void test_body() = 0;
 
     static ucs_log_func_rc_t
+    common_logger(ucs_log_level_t log_level_to_handle, bool print,
+                  std::vector<std::string> &messages_vec, size_t limit,
+                  const char *file, unsigned line, const char *function,
+                  ucs_log_level_t level,
+                  const ucs_log_component_config_t *comp_conf,
+                  const char *message, va_list ap);
+
+    static ucs_log_func_rc_t
     count_warns_logger(const char *file, unsigned line, const char *function,
                        ucs_log_level_t level,
                        const ucs_log_component_config_t *comp_conf,
@@ -139,14 +151,6 @@ private:
     static void push_debug_message_with_limit(std::vector<std::string>& vec,
                                               const std::string& message,
                                               const size_t limit);
-
-    static ucs_log_func_rc_t
-    common_logger(ucs_log_level_t log_level_to_handle, bool print,
-                  std::vector<std::string> &messages_vec, size_t limit,
-                  const char *file, unsigned line, const char *function,
-                  ucs_log_level_t level,
-                  const ucs_log_component_config_t *comp_conf,
-                  const char *message, va_list ap);
 
     static void *thread_func(void *arg);
 

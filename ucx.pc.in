@@ -5,7 +5,7 @@ libdir = @libdir@
 includedir = @includedir@
 
 Name: @PACKAGE@
-Description:  Unified Communication X Library
-Version: @MAJOR_VERSION@.@MINOR_VERSION@
-Cflags: -I${includedir} 
+Description: Unified Communication X Library
+Version: @VERSION@
+Cflags: -I${includedir}
 Libs: -L${libdir} -lucs -luct -lucp

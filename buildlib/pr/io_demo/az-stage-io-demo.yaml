@@ -11,6 +11,8 @@ parameters:
   default: $(roce_iface)
 - name: initial_delay
   default: 20
+- name: analyzer_allow_list_args
+  default: ''
 
 steps:
 - bash: |
@@ -18,7 +20,7 @@ steps:
     $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
   displayName: Restore port state
   condition: always()
-  timeoutInMinutes: 2
+  timeoutInMinutes: 10
 
 - bash: |
     set -eEx
@@ -72,9 +74,15 @@ steps:
   timeoutInMinutes: 15
 
 - bash: |
-    python /hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py --allow_list $(System.PullRequest.TargetBranch) -d $(workspace)/${{ parameters.name }} --duration ${{ parameters.duration }} -t 3
+    set -eEx
+    analyzer="/hpc/noarch/git_projects/hpc-mtt-conf/scripts/iodemo_analyzer.py"
+    analyzer_args="-d $(workspace)/${{ parameters.name }}"
+    analyzer_args="$analyzer_args --duration ${{ parameters.duration }}"
+    analyzer_args="$analyzer_args -t 3"
+    analyzer_args="$analyzer_args ${{ parameters.analyzer_allow_list_args }}"
+    python ${analyzer} ${analyzer_args}
   displayName: Analyze for ${{ parameters.name }}
-  timeoutInMinutes: 1
+  timeoutInMinutes: 2
 
 - bash: |
     set -eEx
@@ -96,4 +104,4 @@ steps:
     $(workspace)/buildlib/az-network-corrupter.sh reset=yes interface=${{ parameters.roce_iface }}
   displayName: Restore port state
   condition: always()
-  timeoutInMinutes: 2
+  timeoutInMinutes: 10

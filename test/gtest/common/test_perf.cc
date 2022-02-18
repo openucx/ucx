@@ -203,8 +203,8 @@ void test_perf::test_params_init(const test_spec &test,
     params.uct.am_hdr_size = 8;
     params.alignment       = ucs_get_page_size();
     params.max_outstanding = test.max_outstanding;
-    params.send_mem_type   = UCS_MEMORY_TYPE_HOST;
-    params.recv_mem_type   = UCS_MEMORY_TYPE_HOST;
+    params.send_mem_type   = test.send_mem_type;
+    params.recv_mem_type   = test.recv_mem_type;
     params.percentile_rank = 50.0;
 
     memset(params.uct.md_name, 0, sizeof(params.uct.md_name));
@@ -219,6 +219,7 @@ void test_perf::test_params_init(const test_spec &test,
                                           ucs::test_time_multiplier());
     }
 
+    params.warmup_time     = 100e-3;
     params.max_time        = 0.0;
     params.report_interval = 1.0;
     params.rte_group       = NULL;

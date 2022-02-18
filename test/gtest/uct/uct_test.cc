@@ -15,7 +15,6 @@
 #ifdef HAVE_MALLOC_H
 #include <malloc.h>
 #endif
-#include <ifaddrs.h>
 
 
 std::string resource::name() const {
@@ -292,8 +291,7 @@ void uct_test::set_interface_rscs(uct_component_h cmpt, const char *cmpt_name,
 }
 
 bool uct_test::is_interface_usable(struct ifaddrs *ifa, const char *name) {
-    if (!(ucs_netif_flags_is_active(ifa->ifa_flags)) ||
-        !(ucs::is_inet_addr(ifa->ifa_addr))) {
+    if (!ucs::is_interface_usable(ifa)) {
         return false;
     }
 
@@ -1203,12 +1201,14 @@ void uct_test::entity::destroy_eps() {
 void
 uct_test::entity::connect_to_sockaddr(unsigned index,
                                       const ucs::sock_addr_storage &remote_addr,
+                                      const ucs::sock_addr_storage *local_addr,
                                       uct_cm_ep_resolve_callback_t resolve_cb,
                                       uct_cm_ep_client_connect_callback_t connect_cb,
                                       uct_ep_disconnect_cb_t disconnect_cb,
                                       void *user_data)
 {
     ucs_sock_addr_t ucs_remote_addr = remote_addr.to_ucs_sock_addr();
+    ucs_sock_addr_t ucs_local_addr;
     uct_ep_params_t params;
     uct_ep_h ep;
     ucs_status_t status;
@@ -1224,6 +1224,12 @@ uct_test::entity::connect_to_sockaddr(unsigned index,
                         UCT_EP_PARAM_FIELD_CM_RESOLVE_CB              |
                         UCT_EP_PARAM_FIELD_SOCKADDR_CONNECT_CB_CLIENT |
                         UCT_EP_PARAM_FIELD_SOCKADDR_DISCONNECT_CB;
+
+    if (local_addr != NULL) {
+        ucs_local_addr          = local_addr->to_ucs_sock_addr();
+        params.field_mask      |= UCT_EP_PARAM_FIELD_LOCAL_SOCKADDR;
+        params.local_sockaddr   = &ucs_local_addr;
+    }
 
     params.user_data            = user_data;
     params.cm                   = m_cm;

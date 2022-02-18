@@ -314,7 +314,7 @@ ucp_tag_offload_do_post(ucp_request_t *req)
             return UCS_ERR_NO_MEMORY;
         }
 
-        iov.memh            = ucp_memh2uct(rdesc->memh, mdi);
+        iov.memh            = rdesc->memh->uct[mdi];
         iov.buffer          = rdesc + 1;
         req->recv.tag.rdesc = rdesc;
     }
@@ -633,7 +633,8 @@ void ucp_tag_offload_cancel_rndv(ucp_request_t *req)
     req->flags &= ~UCP_REQUEST_FLAG_OFFLOADED;
 }
 
-ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
+ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq,
+                                        const ucp_request_param_t *param)
 {
     ucp_ep_t      *ep      = sreq->send.ep;
     ucp_context_t *context = ep->worker->context;
@@ -665,7 +666,7 @@ ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq)
 
         /* RNDV will be performed by the SW - can register with SW RNDV lanes
          * to get multirail benefits */
-        status = ucp_rndv_reg_send_buffer(sreq);
+        status = ucp_rndv_reg_send_buffer(sreq, param);
         if (status != UCS_OK) {
             return status;
         }

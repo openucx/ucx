@@ -53,7 +53,7 @@ typedef uint16_t                   ucp_ep_flags_t;
 
 #define ucp_ep_refcount_add(_ep, _type) \
 ({ \
-    ucs_assert((_ep)->refcount < UINT8_MAX); \
+    ucs_assertv((_ep)->refcount < UINT8_MAX, "ep=%p", _ep); \
     ++(_ep)->refcount; \
     UCP_EP_ASSERT_COUNTER_INC(&(_ep)->refcounts._type); \
 })
@@ -64,7 +64,7 @@ typedef uint16_t                   ucp_ep_flags_t;
     int __ret = 0; \
     \
     UCP_EP_ASSERT_COUNTER_DEC(&(_ep)->refcounts._type); \
-    ucs_assert((_ep)->refcount > 0); \
+    ucs_assertv((_ep)->refcount > 0, "ep=%p", _ep); \
     if (--(_ep)->refcount == 0) { \
         ucp_ep_destroy_base(_ep); \
         __ret = 1; \
@@ -405,6 +405,9 @@ struct ucp_ep_config {
 
     /* Protocol selection data */
     ucp_proto_select_t            proto_select;
+
+    /* Bitmap of preregistration for am_bw lanes */
+    ucp_md_map_t                  am_bw_prereg_md_map;
 };
 
 
@@ -654,6 +657,9 @@ ucp_ep_set_failed(ucp_ep_h ucp_ep, ucp_lane_index_t lane, ucs_status_t status);
 void ucp_ep_set_failed_schedule(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
                                 ucs_status_t status);
 
+void ucp_ep_unprogress_uct_ep(ucp_ep_h ep, uct_ep_h uct_ep,
+                              ucp_rsc_index_t rsc_index);
+
 void ucp_ep_cleanup_lanes(ucp_ep_h ep);
 
 ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
@@ -780,10 +786,14 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status);
 
 
 /**
- * @brief Create objects in VFS to represent endpoint and its features.
+ * @brief Query local and/or remote socket address of endpoint @a ucp_ep.
  *
- * @param [in] ep Endpoint object to be described.
+ * @param [in]     ucp_ep           Endpoint object to query.
+ * @param [inout]  attr             Filled with attributes containing socket
+ *                                  address of the endpoint.
+ *
+ * @return Error code as defined by @ref ucs_status_t
  */
-void ucp_ep_vfs_init(ucp_ep_h ep);
+ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ucp_ep, ucp_ep_attr_t *attr);
 
 #endif

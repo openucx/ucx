@@ -121,6 +121,8 @@ typedef struct ucp_context_config {
     unsigned                               reg_whole_alloc_bitmap;
     /** Always use flush operation in rendezvous put */
     int                                    rndv_put_force_flush;
+    /** Maximum size of mem type direct rndv*/
+    size_t                                 rndv_memtype_direct_size;
     /** UCP sockaddr private data format version */
     ucp_object_version_t                   sa_client_min_hdr_version;
     /** Remote keys with that many remote MDs or less would be allocated from a
@@ -163,6 +165,8 @@ struct ucp_config {
     ucs_list_link_t                        cached_key_list;
     /** Array of worker memory pool sizes */
     UCS_CONFIG_ARRAY_FIELD(size_t, memunits) mpool_sizes;
+    /** Memory registration cache */
+    ucs_ternary_auto_value_t               enable_rcache;
 };
 
 
@@ -224,6 +228,10 @@ typedef struct ucp_context {
     int                           alloc_md_map_initialized;
     ucp_md_map_t                  alloc_md_map;
 
+    /* Map of MDs that provide registration for given memory type,
+       ucp_mem_map() will register memory for all those domains. */
+    ucp_md_map_t                  reg_md_map[UCS_MEMORY_TYPE_LAST];
+
     /* List of MDs that detect non host memory type */
     ucp_md_index_t                mem_type_detect_mds[UCS_MEMORY_TYPE_LAST];
     ucp_md_index_t                num_mem_type_detect_mds;  /* Number of mem type MDs */
@@ -235,6 +243,9 @@ typedef struct ucp_context {
                                                * mode is enabled. */
     ucp_rsc_index_t               num_tls;    /* Number of resources in the array */
     ucp_proto_id_mask_t           proto_bitmap;  /* Enabled protocols */
+
+    /* Mem handle registration cache */
+    ucs_rcache_t                  *rcache;
 
     struct {
 
@@ -497,25 +508,28 @@ ucp_memory_detect_internal(ucp_context_h context, const void *address,
     }
 
     status = ucs_memtype_cache_lookup(address, length, mem_info);
-    if (status != UCS_ERR_NO_ELEM) {
-        if (ucs_likely(status != UCS_OK)) {
-            ucs_assert(status == UCS_ERR_NO_ELEM);
-            goto out_host_mem;
+    if (ucs_likely(status == UCS_ERR_NO_ELEM)) {
+        ucs_trace_req("address %p length %zu: not found in memtype cache, "
+                      "assuming host memory",
+                      address, length);
+        goto out_host_mem;
+    } else if (ucs_likely(status == UCS_OK)) {
+        if (ucs_unlikely(mem_info->type == UCS_MEMORY_TYPE_UNKNOWN)) {
+            ucs_trace_req(
+                    "address %p length %zu: memtype cache returned 'unknown'",
+                    address, length);
+            ucp_memory_detect_slowpath(context, address, length, mem_info);
+        } else {
+            ucs_trace_req(
+                    "address %p length %zu: memtype cache returned '%s' %s",
+                    address, length, ucs_memory_type_names[mem_info->type],
+                    ucs_topo_sys_device_get_name(mem_info->sys_dev));
         }
-
-        if ((mem_info->type != UCS_MEMORY_TYPE_UNKNOWN) &&
-            ((mem_info->sys_dev != UCS_SYS_DEVICE_ID_UNKNOWN))) {
-            return;
-        }
-
-        /* Fall thru to slow-path memory type and system device detection by UCT
-         * memory domains. In any case, the memory type cache is not expected to
-         * return HOST memory type.
-         */
-        ucs_assert(mem_info->type != UCS_MEMORY_TYPE_HOST);
+    } else {
+        ucp_memory_detect_slowpath(context, address, length, mem_info);
     }
 
-    ucp_memory_detect_slowpath(context, address, length, mem_info);
+    /* Memory type and system device was detected successfully */
     return;
 
 out_host_mem:

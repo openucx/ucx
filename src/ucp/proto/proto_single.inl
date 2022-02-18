@@ -110,7 +110,7 @@ ucp_proto_zcopy_single_progress(ucp_request_t *req, unsigned uct_mem_flags,
     }
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter, SIZE_MAX,
-                               spriv->super.memh_index,
+                               spriv->super.md_index,
                                UCS_BIT(UCP_DATATYPE_CONTIG), &next_iter, &iov,
                                1);
 

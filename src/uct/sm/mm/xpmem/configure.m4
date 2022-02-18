@@ -53,4 +53,5 @@ AS_IF([test "x$xpmem_happy" = "xno" -a -d "$with_xpmem"],
 
 AS_IF([test "x$xpmem_happy" = "xyes"], [uct_modules="${uct_modules}:xpmem"])
 AM_CONDITIONAL([HAVE_XPMEM], [test "x$xpmem_happy" != "xno"])
-AC_CONFIG_FILES([src/uct/sm/mm/xpmem/Makefile])
+AC_CONFIG_FILES([src/uct/sm/mm/xpmem/Makefile
+                 src/uct/sm/mm/xpmem/ucx-xpmem.pc])

@@ -260,6 +260,7 @@ uct_rc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface, void *arg,
     }
 
     ep->super.flags |= UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED;
+    uct_rc_fc_restore_wnd(iface, &ep->super.fc);
 
     status  = uct_iface_handle_ep_err(&iface->super.super.super,
                                       &ep->super.super.super, ep_status);
@@ -1022,7 +1023,8 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
         .super = {
             .iface_estimate_perf = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh   = uct_rc_iface_vfs_refresh,
-            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate       = uct_rc_mlx5_ep_invalidate
         },
         .create_cq      = uct_ib_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,

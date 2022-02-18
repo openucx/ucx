@@ -156,7 +156,6 @@ protected:
     void check_extract_mem(ucs_string_buffer_t *strb);
 };
 
-
 UCS_TEST_F(test_string_buffer, appendf) {
     ucs_string_buffer_t strb;
 
@@ -199,6 +198,11 @@ UCS_TEST_F(test_string_buffer, append_long) {
 UCS_TEST_F(test_string_buffer, rtrim) {
     static const char *test_string = "wabbalubbadabdab";
     ucs_string_buffer_t strb;
+
+    ucs_string_buffer_init(&strb);
+    ucs_string_buffer_rtrim(&strb, "x");
+    EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
+    ucs_string_buffer_cleanup(&strb);
 
     ucs_string_buffer_init(&strb);
     ucs_string_buffer_appendf(&strb, "%s%s", test_string, ",,");
@@ -276,6 +280,21 @@ UCS_TEST_F(test_string_buffer, dump) {
     ucs_string_buffer_appendf(&strb, "for\n");
     ucs_string_buffer_appendf(&strb, "apples\n");
     ucs_string_buffer_dump(&strb, "[ TEST     ] ", stdout);
+}
+
+UCS_TEST_F(test_string_buffer, tokenize) {
+    UCS_STRING_BUFFER_ONSTACK(strb, 128);
+    ucs_string_buffer_appendf(&strb, "nova&noob|crocubot+ants&&rails");
+
+    std::vector<std::string> names;
+    char *name;
+    ucs_string_buffer_for_each_token(name, &strb, "&|+") {
+        names.push_back(name);
+    }
+
+    EXPECT_EQ(std::vector<std::string>(
+                      {"nova", "noob", "crocubot", "ants", "", "rails"}),
+              names);
 }
 
 void test_string_buffer::check_extract_mem(ucs_string_buffer_t *strb)

@@ -62,7 +62,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/preprocessor.h \
 	sys/string.h \
 	sys/sock.h \
-	sys/topo.h \
+	sys/topo/base/topo.h \
 	sys/stubs.h \
 	sys/uid.h \
 	time/time_def.h \
@@ -89,6 +89,7 @@ noinst_HEADERS = \
 	arch/ppc64/cpu.h \
 	arch/x86_64/cpu.h \
 	arch/cpu.h \
+	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
 	datastruct/frag_list.h \
@@ -168,6 +169,7 @@ libucs_la_SOURCES = \
 	memory/memtype_cache.c \
 	memory/numa.c \
 	memory/rcache.c \
+	memory/rcache_vfs.c \
 	profile/profile.c \
 	stats/stats.c \
 	sys/event_set.c \
@@ -179,7 +181,7 @@ libucs_la_SOURCES = \
 	sys/iovec.c \
 	sys/lib.c \
 	sys/sock.c \
-	sys/topo.c \
+	sys/topo/base/topo.c \
 	sys/stubs.c \
 	sys/uid.c \
 	time/time.c \

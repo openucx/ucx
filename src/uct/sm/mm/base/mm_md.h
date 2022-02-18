@@ -186,7 +186,7 @@ typedef struct uct_mm_component {
        }, \
        .md_ops                  = (_md_ops) \
     }; \
-    UCT_COMPONENT_REGISTER(&(_var).super); \
+    UCT_COMPONENT_REGISTER_DEF(&(_var).super, _name); \
 
 
 extern ucs_config_field_t uct_mm_md_config_table[];

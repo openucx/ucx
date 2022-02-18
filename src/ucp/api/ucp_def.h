@@ -321,11 +321,12 @@ typedef void (*ucp_send_callback_t)(void *request, ucs_status_t status);
 
  /**
  * @ingroup UCP_COMM
- * @brief Completion callback for non-blocking sends ucp_tag_send_nbx call.
+ * @brief Completion callback for non-blocking sends.
  *
- * This callback routine is invoked whenever the @ref ucp_tag_send_nbx
- * "send operation" is completed. It is important to note that the call-back is
- * only invoked in a case when the operation cannot be completed in place.
+ * This callback routine is invoked whenever the @ref ucp_tag_send_nbx,
+ * @ref ucp_am_send_nbx, @ref ucp_stream_send_nbx, @ref ucp_put_nbx,
+ * @ref ucp_get_nbx, @ref ucp_atomic_op_nbx or any other "send operation" is
+ * completed.
  *
  * @param [in]  request   The completed send request.
  * @param [in]  status    Completion status. If the send operation was completed
@@ -590,7 +591,7 @@ typedef enum ucp_wakeup_event_types {
  *                       to be freed with @ref ucp_am_data_release.
  * @param [in]  length   Length of data.
  * @param [in]  reply_ep If the Active Message is sent with the
- *                       UCP_AM_SEND_REPLY flag, the sending ep
+ *                       UCP_AM_SEND_FLAG_REPLY flag, the sending ep
  *                       will be passed in. If not, NULL will be passed.
  * @param [in]  flags    If this flag is set to UCP_CB_PARAM_FLAG_DATA,
  *                       the callback can return UCS_INPROGRESS and
@@ -750,6 +751,16 @@ typedef struct ucp_ep_params {
      * unique name will be created for you.
      */
     const char              *name;
+
+    /**
+     * The sockaddr to bind locally. Specifies the associated network device
+     * to bind locally to establish new connections.
+     * To retrieve the endpoint's local_sockaddr, use @ref ucp_ep_query.
+     * This setting is optional. To enable it, the corresponding - @ref
+     * UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR bit in the field mask must be set.
+     */
+    ucs_sock_addr_t         local_sockaddr;
+
 } ucp_ep_params_t;
 
 

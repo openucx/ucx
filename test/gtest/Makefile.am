@@ -5,6 +5,7 @@
 # Copyright (C) Los Alamos National Security, LLC. 2018 ALL RIGHTS RESERVED.
 # Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
 # Copyright (C) ARM Ltd. 2020.  ALL RIGHTS RESERVED.
+# Copyright (C) NextSilicon Ltd. 2021.  ALL RIGHTS RESERVED.
 #
 # See file LICENSE for terms.
 #
@@ -70,7 +71,7 @@ gtest_CPPFLAGS = \
 	$(GTEST_CPPFLAGS) \
 	$(OPENMP_CFLAGS)
 
-gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install -Wl,-dynamic-list-data
+gtest_LDFLAGS  = $(GTEST_LDFLAGS) -no-install $(LDFLAGS_DYNAMIC_LIST_DATA)
 gtest_CFLAGS   = $(BASE_CFLAGS)
 gtest_CXXFLAGS = \
 	$(BASE_CXXFLAGS) $(GTEST_CXXFLAGS) -std=c++11 \
@@ -173,6 +174,7 @@ gtest_SOURCES = \
 	ucs/test_pgtable.cc \
 	ucs/test_profile.cc \
 	ucs/test_rcache.cc \
+	ucs/test_khash.cc \
 	ucs/test_memtype_cache.cc \
 	ucs/test_stats.cc \
 	ucs/test_strided_alloc.cc \

@@ -91,14 +91,6 @@ typedef enum {
 } ucs_sys_vma_info_flags_t;
 
 
-/* file time information */
-typedef enum {
-    UCS_SYS_FILE_TIME_CTIME, /**< create time */
-    UCS_SYS_FILE_TIME_ATIME, /**< access time */
-    UCS_SYS_FILE_TIME_MTIME  /**< modification time */
-} ucs_sys_file_time_t;
-
-
 /* information about virtual memory area */
 typedef struct {
     unsigned long start;
@@ -597,19 +589,6 @@ ucs_status_t ucs_sys_enum_threads(ucs_sys_enum_threads_cb_t cb, void *ctx);
 
 
 /**
- * Get file time
- *
- * @param [in]  name  File name
- * @param [in]  type  Type of file time information
- * @param [out] ts    File time information
- *
- * @return UCS_OK if file is found and got information.
- */
-ucs_status_t ucs_sys_get_file_time(const char *name, ucs_sys_file_time_t type,
-                                   struct timespec *ts);
-
-
-/**
  * Check the per-process limit on the number of open file descriptors.
  *
  * @return UCS_OK if the limit has not been reached. UCS_ERR_EXCEEDS_LIMIT,
@@ -638,6 +617,16 @@ ucs_status_t ucs_pthread_create(pthread_t *thread_id_p,
  * @return number of CPUs, or -1 in case of error.
  */
 long ucs_sys_get_num_cpus();
+
+
+/*
+ * Get process creation time.
+ *
+ * @param [in] pid             Process id to get start time.
+ *
+ * @return The time the process started after system boot or 0 in case of error.
+ */
+unsigned long ucs_sys_get_proc_create_time(pid_t pid);
 
 END_C_DECLS
 

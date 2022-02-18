@@ -21,6 +21,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <queue>
 #include <sys/epoll.h>
 
 #define MAX_LOG_PREFIX_SIZE   64
@@ -109,6 +110,8 @@ protected:
     };
 
 public:
+    typedef std::vector<uint8_t> iomsg_buffer_t;
+
     UcxContext(size_t iomsg_size, double connect_timeout, bool use_am,
                bool use_epoll = false);
 
@@ -130,6 +133,10 @@ public:
     static void *memalign(size_t alignment, size_t size, const char *name);
 
     static void free(void *ptr);
+
+    bool map_buffer(size_t length, void *address, ucp_mem_h *memh);
+
+    bool unmap_buffer(ucp_mem_h memh);
 
 protected:
 
@@ -260,7 +267,7 @@ private:
     std::deque<UcxConnection *> _failed_conns;
     std::list<UcxConnection *>  _disconnecting_conns;
     ucx_request                 *_iomsg_recv_request;
-    std::string                 _iomsg_buffer;
+    iomsg_buffer_t              _iomsg_buffer;
     double                      _connect_timeout;
     bool                        _use_am;
     int                         _worker_fd;
@@ -274,7 +281,9 @@ public:
 
     ~UcxConnection();
 
-    void connect(const struct sockaddr *saddr, socklen_t addrlen,
+    void connect(const struct sockaddr *src_saddr,
+                 const struct sockaddr *dst_saddr,
+                 socklen_t addrlen,
                  UcxCallback *callback);
 
     void accept(ucp_conn_request_h conn_req, UcxCallback *callback);
@@ -289,18 +298,22 @@ public:
     bool send_io_message(const void *buffer, size_t length,
                          UcxCallback* callback = EmptyCallback::get());
 
-    bool send_data(const void *buffer, size_t length, uint32_t sn,
-                   UcxCallback* callback = EmptyCallback::get());
+    bool send_data(const void *buffer, size_t length, ucp_mem_h memh,
+                   uint32_t sn, UcxCallback *callback = EmptyCallback::get());
 
-    bool recv_data(void *buffer, size_t length, uint32_t sn,
-                   UcxCallback* callback = EmptyCallback::get());
+    bool recv_data(void *buffer, size_t length, ucp_mem_h memh, uint32_t sn,
+                   UcxCallback *callback = EmptyCallback::get());
 
-    bool send_am(const void *meta, size_t meta_length,
-                 const void *buffer, size_t length,
-                 UcxCallback* callback = EmptyCallback::get());
+    bool send_am(const void *meta, size_t meta_length, const void *buffer,
+                 size_t length, ucp_mem_h memh,
+                 UcxCallback *callback = EmptyCallback::get());
 
-    bool recv_am_data(void *buffer, size_t length, const UcxAmDesc &data_desc,
-                      UcxCallback* callback = EmptyCallback::get());
+    bool recv_am_data(void *buffer, size_t length, ucp_mem_h memh,
+                      const UcxAmDesc &data_desc,
+                      UcxCallback *callback = EmptyCallback::get());
+
+    void iomsg_recv_defer(const UcxContext::iomsg_buffer_t &iomsg,
+                          size_t iomsg_length);
 
     void cancel_all();
 
@@ -369,8 +382,8 @@ private:
 
     void established(ucs_status_t status);
 
-    bool send_common(const void *buffer, size_t length, ucp_tag_t tag,
-                     UcxCallback* callback);
+    bool send_common(const void *buffer, size_t length, ucp_mem_h memh,
+                     ucp_tag_t tag, UcxCallback *callback);
 
     void request_started(ucx_request *r);
 
@@ -385,18 +398,19 @@ private:
 
     static unsigned _num_instances;
 
-    UcxContext      &_context;
-    UcxCallback     *_establish_cb;
-    UcxCallback     *_disconnect_cb;
-    uint64_t        _conn_id;
-    uint64_t        _remote_conn_id;
-    char            _log_prefix[MAX_LOG_PREFIX_SIZE];
-    ucp_ep_h        _ep;
-    std::string     _remote_address;
-    void            *_close_request;
-    ucs_list_link_t _all_requests;
-    ucs_status_t    _ucx_status;
-    bool            _use_am;
+    UcxContext                             &_context;
+    UcxCallback                            *_establish_cb;
+    UcxCallback                            *_disconnect_cb;
+    uint64_t                               _conn_id;
+    uint64_t                               _remote_conn_id;
+    char                                   _log_prefix[MAX_LOG_PREFIX_SIZE];
+    ucp_ep_h                               _ep;
+    std::string                            _remote_address;
+    void                                   *_close_request;
+    ucs_list_link_t                        _all_requests;
+    ucs_status_t                           _ucx_status;
+    bool                                   _use_am;
+    std::queue<UcxContext::iomsg_buffer_t> _iomsg_recv_backlog;
 };
 
 #endif

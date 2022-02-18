@@ -323,9 +323,15 @@ double ucs_arch_get_clocks_per_sec()
 
 ucs_cpu_model_t ucs_arch_get_cpu_model()
 {
-    ucs_x86_cpu_version_t version = {}; /* Silence static checker */
+    static ucs_cpu_model_t cpu_model = UCS_CPU_MODEL_LAST;
+    ucs_x86_cpu_version_t version    = {}; /* Silence static checker */
     uint32_t _ebx, _ecx, _edx;
     uint32_t model, family;
+
+    if (cpu_model != UCS_CPU_MODEL_LAST) {
+        /* Return cached value */
+        return cpu_model;
+    }
 
     /* Get CPU model/family */
     ucs_x86_cpuid(X86_CPUID_GET_MODEL, ucs_unaligned_ptr(&version.reg), &_ebx, &_ecx, &_edx);
@@ -341,69 +347,94 @@ ucs_cpu_model_t ucs_arch_get_cpu_model()
         model = (version.ext_model << 4) | model;
     }
 
+    cpu_model = UCS_CPU_MODEL_UNKNOWN;
+
     if (ucs_arch_get_cpu_vendor() == UCS_CPU_VENDOR_ZHAOXIN) {
         if (family == 0x06) {
             switch (model) {
             case 0x0f:
-                return UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG;
+                cpu_model = UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG;
+                break;
             }
         }
 
         if (family == 0x07) {
             switch (model) {
             case 0x1b:
-                return UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU;
+                cpu_model = UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU;
+                break;
             case 0x3b:
-                return UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI;
+                cpu_model = UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI;
+                break;
             }
         }
     } else {
-        /* Check known CPUs */
-        if (family == 0x06) {
+        switch (family) {
+        /* Intel */
+        case 0x06:
             switch (model) {
             case 0x3a:
             case 0x3e:
-                return UCS_CPU_MODEL_INTEL_IVYBRIDGE;
+                cpu_model = UCS_CPU_MODEL_INTEL_IVYBRIDGE;
+                break;
             case 0x2a:
             case 0x2d:
-                return UCS_CPU_MODEL_INTEL_SANDYBRIDGE;
+                cpu_model = UCS_CPU_MODEL_INTEL_SANDYBRIDGE;
+                break;
             case 0x1a:
             case 0x1e:
             case 0x1f:
             case 0x2e:
-                return UCS_CPU_MODEL_INTEL_NEHALEM;
+                cpu_model = UCS_CPU_MODEL_INTEL_NEHALEM;
+                break;
             case 0x25:
             case 0x2c:
             case 0x2f:
-                return UCS_CPU_MODEL_INTEL_WESTMERE;
+                cpu_model = UCS_CPU_MODEL_INTEL_WESTMERE;
+                break;
             case 0x3c:
             case 0x3f:
             case 0x45:
             case 0x46:
-                return UCS_CPU_MODEL_INTEL_HASWELL;
+                cpu_model = UCS_CPU_MODEL_INTEL_HASWELL;
+                break;
             case 0x3d:
             case 0x47:
             case 0x4f:
             case 0x56:
-                return UCS_CPU_MODEL_INTEL_BROADWELL;
+                cpu_model = UCS_CPU_MODEL_INTEL_BROADWELL;
+                break;
             case 0x5e:
             case 0x4e:
             case 0x55:
-                return UCS_CPU_MODEL_INTEL_SKYLAKE;
+                cpu_model = UCS_CPU_MODEL_INTEL_SKYLAKE;
+                break;
             }
-        }
-
-        if (family == 0x17) {
+            break;
+        /* AMD Zen2 */
+        case 0x17:
             switch (model) {
             case 0x29:
-                return UCS_CPU_MODEL_AMD_NAPLES;
+                cpu_model = UCS_CPU_MODEL_AMD_NAPLES;
+                break;
             case 0x31:
-                return UCS_CPU_MODEL_AMD_ROME;
+                cpu_model = UCS_CPU_MODEL_AMD_ROME;
+                break;
             }
+            break;
+        /* AMD Zen3 */
+        case 0x19:
+            switch (model) {
+            case 0x00:
+            case 0x01:
+                cpu_model = UCS_CPU_MODEL_AMD_MILAN;
+                break;
+            }
+            break;
         }
     }
 
-    return UCS_CPU_MODEL_UNKNOWN;
+    return cpu_model;
 }
 
 

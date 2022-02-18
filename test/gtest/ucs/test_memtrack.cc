@@ -29,6 +29,7 @@ protected:
         push_config();
         modify_config("MEMTRACK_DEST", "/dev/null");
         ucs_memtrack_init();
+        init_count_size();
     }
 
     void cleanup() {
@@ -37,29 +38,48 @@ protected:
         ucs_memtrack_init();
     }
 
-    void test_total(size_t peak_count, size_t peak_size) {
+    void test_total(unsigned count, size_t size)
+    {
         ucs_memtrack_entry_t total;
 
         ucs_memtrack_total(&total);
-        EXPECT_EQ(0lu, total.count);
-        EXPECT_EQ(peak_count, total.peak_count);
-        EXPECT_EQ(peak_size,  total.peak_size);
+        EXPECT_EQ(m_count, total.count);
+        EXPECT_EQ(m_count + count, total.peak_count);
+        EXPECT_EQ(m_size + size, total.peak_size);
     }
 
-    void test_total_memalign_realloc(size_t peak_count, size_t peak_size) {
+    void test_total_memalign_realloc(unsigned count, size_t size)
+    {
         /* ucs_posix_memalign_realloc() call may hold two buffers
            for a short time if malloc() returned an unaligned pointer */
         ucs_memtrack_entry_t total;
 
         ucs_memtrack_total(&total);
-        EXPECT_EQ(0lu, total.count);
-        EXPECT_EQ(total.peak_count % peak_count, 0);
-        EXPECT_EQ(total.peak_size  % peak_size,  0);
-        EXPECT_GT(total.peak_count / peak_count, 0);
-        EXPECT_GT(total.peak_size  / peak_size,  0);
-        EXPECT_LT(total.peak_count / peak_count, 3);
-        EXPECT_LT(total.peak_size  / peak_size,  3);
+        EXPECT_EQ(m_count, total.count);
+
+        unsigned peak_count = total.peak_count - m_count;
+        size_t peak_size    = total.peak_size - m_size;
+
+        EXPECT_EQ(peak_count % count, 0);
+        EXPECT_EQ(peak_size % size, 0);
+        EXPECT_GT(peak_count / count, 0);
+        EXPECT_GT(peak_size / size, 0);
+        EXPECT_LT(peak_count / count, 3);
+        EXPECT_LT(peak_size / size, 3);
     }
+
+private:
+    void init_count_size()
+    {
+        ucs_memtrack_entry_t entry;
+
+        ucs_memtrack_total(&entry);
+        m_count = entry.count;
+        m_size  = entry.size;
+    }
+
+    unsigned m_count{0};
+    size_t m_size{0};
 };
 
 const char test_memtrack::ALLOC_NAME[] = "memtrack_test";
@@ -86,9 +106,9 @@ UCS_TEST_F(test_memtrack, sanity) {
 
     b = ucs_malloc(4, ALLOC_NAME);
     ucs_free(b);
-    ucs_memtrack_total( &entry);
+    ucs_memtrack_total(&entry);
     if (ucs_memtrack_is_enabled()) {
-        EXPECT_EQ((size_t)1, entry.count);
+        EXPECT_EQ((size_t)(i + 1), entry.count);
     }
     ucs_free(a);
 

@@ -12,20 +12,12 @@
 
 #include <ucm/api/ucm.h>
 #include <ucm/util/log.h>
+#include <ucm/util/sys.h>
 #include <ucm/mmap/mmap.h>
 #include <ucs/sys/compiler.h>
 
 
 #define UCM_CONFIG_PREFIX   "MEM_"
-
-static const char *ucm_mmap_hook_modes[] = {
-    [UCM_MMAP_HOOK_NONE]   = "none",
-    [UCM_MMAP_HOOK_RELOC]  = UCM_MMAP_HOOK_RELOC_STR,
-#if UCM_BISTRO_HOOKS
-    [UCM_MMAP_HOOK_BISTRO] = UCM_MMAP_HOOK_BISTRO_STR,
-#endif
-    [UCM_MMAP_HOOK_LAST]   = NULL
-};
 
 static const char *ucm_module_unload_prevent_modes[] = {
     [UCM_UNLOAD_PREVENT_MODE_LAZY] = "lazy",
@@ -71,9 +63,10 @@ static ucs_config_field_t ucm_global_config_table[] = {
 
   {"CUDA_HOOK_MODE",
 #if UCM_BISTRO_HOOKS
-    UCM_MMAP_HOOK_BISTRO_STR ","
-#endif
+   UCM_MMAP_HOOK_BISTRO_STR,
+#else
    UCM_MMAP_HOOK_RELOC_STR,
+#endif
    "Cuda memory hook modes. A combination of:\n"
    " none   - Don't set Cuda hooks.\n"
    " reloc  - Use ELF relocation table to set hooks. In this mode, if any\n"
@@ -116,13 +109,22 @@ static ucs_config_field_t ucm_global_config_table[] = {
   {NULL}
 };
 
-UCS_CONFIG_REGISTER_TABLE(ucm_global_config_table, "UCM", UCM_CONFIG_PREFIX,
-                          ucm_global_config_t, &ucs_config_global_list)
+UCS_CONFIG_DECLARE_TABLE(ucm_global_config_table, "UCM", UCM_CONFIG_PREFIX,
+                         ucm_global_config_t)
 
-UCS_STATIC_INIT {
+void ucs_init_ucm_opts()
+{
     ucm_global_config_t ucm_opts;
+
+    UCS_CONFIG_ADD_TABLE(ucm_global_config_table, &ucs_config_global_list);
+
     (void)ucs_config_parser_fill_opts(&ucm_opts, ucm_global_config_table,
                                       UCS_DEFAULT_ENV_PREFIX, UCM_CONFIG_PREFIX,
                                       0);
-    ucm_library_init(&ucm_opts);
+    ucm_set_global_opts(&ucm_opts);
+}
+
+void ucs_opts_cleanup()
+{
+    UCS_CONFIG_REMOVE_TABLE(ucm_global_config_table);
 }

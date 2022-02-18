@@ -45,3 +45,5 @@ ENV CPATH /usr/local/cuda/include:${CPATH}
 ENV LD_LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LD_LIBRARY_PATH}
 ENV LIBRARY_PATH /usr/local/cuda/lib64:/usr/local/cuda/compat:${LIBRARY_PATH}
 ENV PATH /usr/local/cuda/compat:${PATH}
+
+RUN ml_stub=$(find /usr -name libnvidia-ml.so) && ln -s $ml_stub /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1

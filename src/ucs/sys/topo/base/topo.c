@@ -1,5 +1,5 @@
 /**
-* Copyright (C) NVIDIA Corporation. 2019.  ALL RIGHTS RESERVED.
+* Copyright (C) NVIDIA Corporation. 2019-2022.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -8,10 +8,11 @@
 #  include "config.h"
 #endif
 
-#include "topo.h"
-#include "string.h"
-#include "sys.h"
+#include <ucs/sys/topo/base/topo.h>
+#include <ucs/sys/string.h>
+#include <ucs/sys/sys.h>
 
+#include <ucs/config/global_opts.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/debug/assert.h>
@@ -51,6 +52,58 @@ const ucs_sys_dev_distance_t ucs_topo_default_distance = {
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
 
 
+/* Global list of topology detectors */
+UCS_LIST_HEAD(ucs_sys_topo_methods_list);
+
+
+static ucs_sys_topo_method_t *ucs_sys_topo_get_method()
+{
+    static ucs_sys_topo_method_t *method = NULL;
+    ucs_sys_topo_method_t *list_method;
+    unsigned i;
+
+    if (method != NULL) {
+        return method;
+    }
+
+    for (i = 0; i < ucs_global_opts.topo_prio.count; ++i) {
+
+        ucs_list_for_each(list_method, &ucs_sys_topo_methods_list, list) {
+            if (!strcmp(ucs_global_opts.topo_prio.names[i],
+                        list_method->name)) {
+                method = list_method;
+                return method;
+            }
+        }
+    }
+
+    return method;
+}
+
+static ucs_status_t
+ucs_topo_get_distance_default(ucs_sys_device_t device1,
+                              ucs_sys_device_t device2,
+                              ucs_sys_dev_distance_t *distance)
+{
+    *distance = ucs_topo_default_distance;
+
+    return UCS_OK;
+}
+
+static ucs_sys_topo_method_t ucs_sys_topo_default_method = {
+    .name         = "default",
+    .get_distance = ucs_topo_get_distance_default,
+};
+
+ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
+                                   ucs_sys_device_t device2,
+                                   ucs_sys_dev_distance_t *distance)
+{
+    ucs_sys_topo_method_t *method = ucs_sys_topo_get_method();
+
+    return method->get_distance(device1, device2, distance);
+}
+
 static ucs_bus_id_bit_rep_t
 ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
 {
@@ -58,25 +111,6 @@ ucs_topo_get_bus_id_bit_repr(const ucs_sys_bus_id_t *bus_id)
             ((uint64_t)bus_id->bus << 16)    |
             ((uint64_t)bus_id->slot << 8)    |
             (bus_id->function));
-}
-
-void ucs_topo_init()
-{
-    ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
-    kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
-    ucs_topo_global_ctx.num_devices = 0;
-}
-
-void ucs_topo_cleanup()
-{
-    ucs_topo_sys_device_info_t *device;
-    while (ucs_topo_global_ctx.num_devices-- > 0) {
-        device = &ucs_topo_global_ctx.devices[ucs_topo_global_ctx.num_devices];
-        ucs_free(device->name);
-    }
-    kh_destroy_inplace(bus_to_sys_dev,
-                       &ucs_topo_global_ctx.bus_to_sys_dev_hash);
-    ucs_spinlock_destroy(&ucs_topo_global_ctx.lock);
 }
 
 unsigned ucs_topo_num_devices()
@@ -120,17 +154,12 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
     if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
         *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
-        ucs_debug("bus id 0x%"PRIx64" exists. sys_dev = %u", bus_id_bit_rep,
-                  *sys_dev);
     } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
                           UCS_TOPO_MAX_SYS_DEVICES);
         *sys_dev = ucs_topo_global_ctx.num_devices;
         ++ucs_topo_global_ctx.num_devices;
-
-        ucs_debug("bus id 0x%"PRIx64" doesn't exist. sys_dev = %u",
-                  bus_id_bit_rep, *sys_dev);
 
         kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
 
@@ -142,6 +171,8 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
 
         ucs_topo_global_ctx.devices[*sys_dev].bus_id = *bus_id;
         ucs_topo_global_ctx.devices[*sys_dev].name   = name;
+
+        ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
@@ -213,6 +244,7 @@ static void ucs_topo_sys_root_distance(ucs_sys_dev_distance_t *distance)
     distance->latency = 500e-9;
     switch (ucs_arch_get_cpu_model()) {
     case UCS_CPU_MODEL_AMD_ROME:
+    case UCS_CPU_MODEL_AMD_MILAN:
         distance->bandwidth = 5100 * UCS_MBYTE;
         break;
     default:
@@ -236,9 +268,10 @@ static void ucs_topo_pci_root_distance(const char *path1, const char *path2,
                                   (19200.0 * UCS_MBYTE) / path_distance);
 }
 
-ucs_status_t ucs_topo_get_distance(ucs_sys_device_t device1,
-                                   ucs_sys_device_t device2,
-                                   ucs_sys_dev_distance_t *distance)
+static ucs_status_t
+ucs_topo_get_distance_sysfs(ucs_sys_device_t device1,
+                            ucs_sys_device_t device2,
+                            ucs_sys_dev_distance_t *distance)
 {
     char path1[PATH_MAX], path2[PATH_MAX], common_path[PATH_MAX];
     ucs_status_t status;
@@ -384,4 +417,37 @@ void ucs_topo_print_info(FILE *stream)
                                              sizeof(bdf_name)),
                 ucs_topo_global_ctx.devices[sys_dev].name);
     }
+}
+
+static ucs_sys_topo_method_t ucs_sys_topo_sysfs_method = {
+    .name         = "sysfs",
+    .get_distance = ucs_topo_get_distance_sysfs,
+};
+
+void ucs_topo_init()
+{
+    ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
+    kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
+    ucs_topo_global_ctx.num_devices = 0;
+    ucs_list_add_tail(&ucs_sys_topo_methods_list,
+                      &ucs_sys_topo_default_method.list);
+    ucs_list_add_tail(&ucs_sys_topo_methods_list,
+                      &ucs_sys_topo_sysfs_method.list);
+}
+
+void ucs_topo_cleanup()
+{
+    ucs_topo_sys_device_info_t *device;
+
+    ucs_list_del(&ucs_sys_topo_sysfs_method.list);
+    ucs_list_del(&ucs_sys_topo_default_method.list);
+
+    while (ucs_topo_global_ctx.num_devices-- > 0) {
+        device = &ucs_topo_global_ctx.devices[ucs_topo_global_ctx.num_devices];
+        ucs_free(device->name);
+    }
+
+    kh_destroy_inplace(bus_to_sys_dev,
+                       &ucs_topo_global_ctx.bus_to_sys_dev_hash);
+    ucs_spinlock_destroy(&ucs_topo_global_ctx.lock);
 }

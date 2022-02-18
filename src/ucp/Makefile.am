@@ -25,8 +25,10 @@ noinst_HEADERS = \
 	core/ucp_context.h \
 	core/ucp_ep.h \
 	core/ucp_ep.inl \
+	core/ucp_ep_vfs.h \
 	core/ucp_listener.h \
 	core/ucp_mm.h \
+	core/ucp_mm.inl \
 	core/ucp_proxy_ep.h \
 	core/ucp_request.h \
 	core/ucp_request.inl \
@@ -36,6 +38,7 @@ noinst_HEADERS = \
 	core/ucp_worker.inl \
 	core/ucp_thread.h \
 	core/ucp_types.h \
+	core/ucp_vfs.h \
 	dt/datatype_iter.h \
 	dt/datatype_iter.inl \
 	dt/dt.h \
@@ -46,8 +49,10 @@ noinst_HEADERS = \
 	proto/lane_type.h \
 	proto/proto_am.h \
 	proto/proto_am.inl \
+	proto/proto_init.h \
 	proto/proto_common.h \
 	proto/proto_common.inl \
+	proto/proto_debug.h \
 	proto/proto_multi.h \
 	proto/proto_multi.inl \
 	proto/proto_select.h \
@@ -93,12 +98,14 @@ libucp_la_SOURCES = \
 	core/ucp_context.c \
 	core/ucp_am.c \
 	core/ucp_ep.c \
+	core/ucp_ep_vfs.c \
 	core/ucp_listener.c \
 	core/ucp_mm.c \
 	core/ucp_proxy_ep.c \
 	core/ucp_request.c \
 	core/ucp_rkey.c \
 	core/ucp_version.c \
+	core/ucp_vfs.c \
 	core/ucp_worker.c \
 	dt/datatype_iter.c \
 	dt/dt_contig.c \
@@ -107,7 +114,9 @@ libucp_la_SOURCES = \
 	dt/dt.c \
 	proto/lane_type.c \
 	proto/proto_am.c \
+	proto/proto_init.c \
 	proto/proto_common.c \
+	proto/proto_debug.c \
 	proto/proto_reconfig.c \
 	proto/proto_multi.c \
 	proto/proto_select.c \

@@ -11,7 +11,7 @@
 #include "dt.inl"
 
 #include <ucp/core/ucp_context.h>
-#include <ucp/core/ucp_mm.h>
+#include <ucp/core/ucp_mm.inl>
 #include <ucs/profile/profile.h>
 
 
@@ -38,7 +38,7 @@ ucp_datatype_contig_iter_init(ucp_context_h context, void *buffer, size_t length
     ucp_memory_detect(context, buffer, length, &dt_iter->mem_info);
     dt_iter->length                 = length;
     dt_iter->type.contig.buffer     = buffer;
-    dt_iter->type.contig.reg.md_map = 0;
+    dt_iter->type.contig.memh       = NULL;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -55,6 +55,7 @@ ucp_datatype_iov_iter_init(ucp_context_h context, void *buffer, size_t count,
 #endif
     dt_iter->type.iov.iov_index  = 0;
     dt_iter->type.iov.iov_offset = 0;
+    dt_iter->type.iov.memh       = NULL;
 
     if (ucs_likely(count > 0)) {
         *sg_count = ucs_min(count, (size_t)UINT8_MAX);
@@ -124,7 +125,7 @@ ucp_datatype_iter_init_null(ucp_datatype_iter_t *dt_iter, size_t length,
     dt_iter->length                 = length;
     dt_iter->offset                 = 0;
     dt_iter->type.contig.buffer     = NULL;
-    dt_iter->type.contig.reg.md_map = 0;
+    dt_iter->type.contig.memh       = NULL;
     *sg_count                       = 1;
     ucp_memory_info_set_host(&dt_iter->mem_info);
 }
@@ -172,7 +173,7 @@ ucp_datatype_iter_slice(const ucp_datatype_iter_t *dt_iter, size_t offset,
     sliced_dt_iter->type.contig.buffer     = UCS_PTR_BYTE_OFFSET(
                                                     dt_iter->type.contig.buffer,
                                                     offset);
-    sliced_dt_iter->type.contig.reg.md_map = 0;
+    sliced_dt_iter->type.contig.memh       = NULL;
     *sg_count                              = 1;
 }
 
@@ -390,15 +391,16 @@ ucp_datatype_iter_next_slice(const ucp_datatype_iter_t *dt_iter,
 }
 
 static UCS_F_ALWAYS_INLINE uct_mem_h
-ucp_datatype_iter_uct_memh(const ucp_dt_reg_t *dt_reg, ucp_rsc_index_t memh_index)
+ucp_datatype_iter_uct_memh(const ucp_mem_h memh, ucp_rsc_index_t memh_index)
 {
     if (memh_index == UCP_NULL_RESOURCE) {
         return UCT_MEM_HANDLE_NULL;
     }
 
-    ucs_assertv(memh_index < ucs_popcount(dt_reg->md_map),
-                "memh_index=%d md_map=0x%" PRIx64, memh_index, dt_reg->md_map);
-    return dt_reg->memh[memh_index];
+    ucs_assertv((UCS_BIT(memh_index) & memh->md_map) ||
+                ucp_memh_is_zero_length(memh),
+                "memh_index=%d md_map=0x%" PRIx64, memh_index, memh->md_map);
+    return memh->uct[memh_index];
 }
 
 /*
@@ -427,7 +429,7 @@ ucp_datatype_iter_next_iov(const ucp_datatype_iter_t *dt_iter,
 #endif
         iov[0].length = ucp_datatype_iter_next_ptr(dt_iter, max_length,
                                                    next_iter, &iov[0].buffer);
-        iov[0].memh   = ucp_datatype_iter_uct_memh(&dt_iter->type.contig.reg,
+        iov[0].memh   = ucp_datatype_iter_uct_memh(dt_iter->type.contig.memh,
                                                    memh_index);
         iov[0].stride = 0;
         iov[0].count  = 1;
@@ -491,14 +493,11 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
                           unsigned dt_mask)
 {
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
-        if (md_map == dt_iter->type.contig.reg.md_map) {
-            return UCS_OK;
-        }
-
-        return ucp_datatype_iter_mem_reg_internal(
-                context, dt_iter->type.contig.buffer, dt_iter->length,
-                uct_flags, (ucs_memory_type_t)dt_iter->mem_info.type, md_map,
-                &dt_iter->type.contig.reg);
+        ucs_assert(dt_iter->type.contig.memh == NULL);
+        return ucp_memh_get(context, dt_iter->type.contig.buffer,
+                            dt_iter->length,
+                            (ucs_memory_type_t)dt_iter->mem_info.type, md_map,
+                            uct_flags, &dt_iter->type.contig.memh);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map, uct_flags);
     } else {
@@ -516,8 +515,10 @@ ucp_datatype_iter_mem_dereg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
                             unsigned dt_mask)
 {
     if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_CONTIG, dt_mask)) {
-        ucp_datatype_iter_mem_dereg_internal(context,
-                                             &dt_iter->type.contig.reg);
+        if (dt_iter->type.contig.memh != NULL) {
+            ucp_memh_put(context, dt_iter->type.contig.memh, 0);
+            dt_iter->type.contig.memh = NULL;
+        }
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
         ucp_datatype_iter_iov_mem_dereg(context, dt_iter);
     }

@@ -68,7 +68,8 @@ ucs_status_t ucp_tag_offload_sw_rndv(uct_pending_req_t *self);
 
 void ucp_tag_offload_cancel_rndv(ucp_request_t *req);
 
-ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq);
+ucs_status_t ucp_tag_offload_start_rndv(ucp_request_t *sreq,
+                                        const ucp_request_param_t *param);
 
 ucs_status_t ucp_tag_offload_unexp_eager(void *arg, void *data, size_t length,
                                          unsigned flags, uct_tag_t stag,

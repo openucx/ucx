@@ -22,6 +22,8 @@ protected:
 
     virtual void init() {
         ucs::test_with_param<ucs_memory_type_t>::init();
+        // Trigger on-demand create of the global memtype cache instance
+        test_lookup_notfound(NULL, ucs_get_page_size());
     }
 
     virtual void cleanup() {
@@ -43,13 +45,13 @@ protected:
         if (!expect_found || (expected_type == UCS_MEMORY_TYPE_HOST)) {
             /* memory type should be not found or unknown */
             if (status != UCS_ERR_NO_ELEM) {
-                ASSERT_UCS_OK(status, << "ptr=" << ptr << " size=" << size);
+                ASSERT_UCS_OK(status, << " ptr=" << ptr << " size=" << size);
                 EXPECT_EQ(UCS_MEMORY_TYPE_UNKNOWN, mem_info.type)
                         << "ptr=" << ptr << " size=" << size
                         << mem_buffer::mem_type_name(mem_info.type);
             }
         } else {
-            ASSERT_UCS_OK(status, << "ptr=" << ptr << " size=" << size);
+            ASSERT_UCS_OK(status, << " ptr=" << ptr << " size=" << size);
             EXPECT_TRUE((UCS_MEMORY_TYPE_UNKNOWN == mem_info.type) ||
                         (expected_type == mem_info.type))
                     << "ptr=" << ptr << " size=" << size
@@ -276,10 +278,8 @@ protected:
             return;
         }
 
-        ucs_memory_info_t mem_info;
-        mem_info.type    = mem_type;
-        mem_info.sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
-        ucs_memtype_cache_update(ptr, size, &mem_info);
+        ucs_memtype_cache_update(ptr, size, mem_type,
+                                 UCS_SYS_DEVICE_ID_UNKNOWN);
     }
 
     void memtype_cache_update(const mem_buffer &b) {

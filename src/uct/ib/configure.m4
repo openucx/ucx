@@ -457,4 +457,5 @@ AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av
 uct_ib_modules=""
 m4_include([src/uct/ib/rdmacm/configure.m4])
 AC_DEFINE_UNQUOTED([uct_ib_MODULES], ["${uct_ib_modules}"], [IB loadable modules])
-AC_CONFIG_FILES([src/uct/ib/Makefile])
+AC_CONFIG_FILES([src/uct/ib/Makefile
+                 src/uct/ib/ucx-ib.pc])

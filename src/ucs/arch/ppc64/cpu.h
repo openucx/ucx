@@ -41,7 +41,7 @@ BEGIN_C_DECLS
 
 static inline uint64_t ucs_arch_read_hres_clock()
 {
-#ifdef HAVE___PPC_GET_TIMEBASE
+#if HAVE_DECL___PPC_GET_TIMEBASE
     return __ppc_get_timebase();
 #else
     uint64_t tb;

@@ -14,6 +14,9 @@ libuct_xpmem_la_LIBADD   = $(top_builddir)/src/ucs/libucs.la \
 libuct_xpmem_la_LDFLAGS  = $(XPMEM_LIBS) -version-info $(SOVERSION)
 libuct_xpmem_la_SOURCES  = mm_xpmem.c
 
+PKG_CONFIG_NAME=xpmem
+
 include $(top_srcdir)/config/module.am
+include $(top_srcdir)/config/module-pkg-config.am
 
 endif

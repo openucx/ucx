@@ -468,7 +468,7 @@ ucs_status_t
 uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
 
-int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface, uct_ib_device_t *dev);
+int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
 
 
 /**

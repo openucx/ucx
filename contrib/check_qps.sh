@@ -26,7 +26,7 @@ usage()
     echo "  "$0" [ options ]"
     echo " Options:"
     echo "  -a           Print all QPs"
-    echo "  -p <path>    Path to UCX CFS mount point (/tmp/ucx)"
+    echo "  -p <path>    Path to UCX VFS mount point (default: ${VFS_UCX_PATH})"
     echo "  -i <seconds> Interval to check QP state"
     exit 1
 }

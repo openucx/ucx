@@ -32,7 +32,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_iface_common_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-  {"MAX_RD_ATOMIC", "4",
+  {"MAX_RD_ATOMIC", "16",
    "Maximal number of outstanding read or atomic replies",
    ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic), UCS_CONFIG_TYPE_UINT},
 
@@ -388,8 +388,10 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
 
     ucs_assert(iface->config.fc_enabled);
 
-    if ((ep == NULL) || (ep->flags & UCT_RC_EP_FLAG_FLUSH_CANCEL)) {
-        /* We get fc for ep which is being removed or cancelled, so should ignore it */
+    if ((ep == NULL) || (ep->flags & (UCT_RC_EP_FLAG_FLUSH_CANCEL |
+                                      UCT_RC_EP_FLAG_ERR_HANDLER_INVOKED))) {
+        /* We get fc for ep which is being removed/cancelled/failed, so should
+         * ignore it */
         if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
             return UCS_OK;
         }
@@ -403,8 +405,7 @@ ucs_status_t uct_rc_iface_fc_handler(uct_rc_iface_t *iface, unsigned qp_num,
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
-        ep->fc.fc_wnd = iface->config.fc_wnd_size;
-        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
+        uct_rc_fc_restore_wnd(iface, &ep->fc);
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0

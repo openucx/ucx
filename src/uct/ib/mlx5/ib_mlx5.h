@@ -508,7 +508,7 @@ ucs_status_t uct_ib_mlx5_iface_create_qp(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_qp_attr_t *attr);
 
-ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_mlx5_md_t *md,
+ucs_status_t uct_ib_mlx5_modify_qp_state(uct_ib_iface_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          enum ibv_qp_state state);
 
@@ -696,7 +696,7 @@ err_dofork:
     }
 err_free:
     ucs_free(buf);
-
+    *buf_p = NULL; /* To suppress compiler warning */
     return status;
 }
 

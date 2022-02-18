@@ -7,9 +7,11 @@
 #ifndef UCS_REG_CACHE_INT_H_
 #define UCS_REG_CACHE_INT_H_
 
-#include <ucs/datastruct/list.h>
-#include <ucs/type/spinlock.h>
+#include "rcache.h"
 
+#include <ucs/datastruct/list.h>
+#include <ucs/stats/stats.h>
+#include <ucs/type/spinlock.h>
 
 /* Names of rcache stats counters */
 enum {
@@ -27,6 +29,14 @@ enum {
     UCS_RCACHE_STAT_LAST
 };
 
+
+/* The structure represents a group in regestration cache regions distribution.
+   Regions are distributed by thier size.
+ */
+typedef struct ucs_rcache_distribution {
+    size_t count; /**< Number of regions in the group */
+    size_t total_size; /**< Total size of regions in the group */
+} ucs_rcache_distribution_t;
 
 struct ucs_rcache {
     ucs_rcache_params_t params;          /**< rcache parameters (immutable) */
@@ -63,14 +73,37 @@ struct ucs_rcache {
                                               The head of the list is the least
                                               recently used region, and the tail
                                               is the most recently used region. */
-        unsigned long   count;           /**< Number of regions on list */
     } lru;
     
     char                *name;           /**< Name of the cache, for debug purpose */
 
     UCS_STATS_NODE_DECLARE(stats)
 
-    ucs_list_link_t          list;       /**< list entry in global ucs_rcache list */
+    ucs_list_link_t           list; /**< List entry in global ucs_rcache list */
+    ucs_rcache_distribution_t *distribution; /**< Distribution of registration
+                                                  cache regions by size */
 };
+
+
+/**
+ * @brief Create objects in VFS to represent registration cache and its
+ *        features.
+ *
+ * @param [in] rcache Registration cache object to be described.
+ */
+void ucs_rcache_vfs_init(ucs_rcache_t *rcache);
+
+
+/**
+ * @brief Get number of bins in the distribution of registration cache region
+ *        sizes.
+ *
+ * @return Number of bins.
+ */
+size_t ucs_rcache_distribution_get_num_bins();
+
+
+#define UCS_RCACHE_STAT_MIN_POW2 \
+    ucs_roundup_pow2(ucs_global_opts.rcache_stat_min)
 
 #endif

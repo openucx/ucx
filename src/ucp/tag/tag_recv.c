@@ -23,9 +23,6 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
                                      ucp_recv_desc_t *rdesc)
 {
     ucp_eager_first_hdr_t *first_hdr;
-    ucp_offload_first_desc_t *offload_hdr;
-    size_t recv_len;
-    void *data;
     uint64_t msg_id;
     ucs_status_t status;
 
@@ -36,23 +33,10 @@ static void ucp_tag_recv_eager_multi(ucp_worker_h worker, ucp_request_t *req,
     req->recv.tag.info.sender_tag = ucp_rdesc_get_tag(rdesc);
 
     if (rdesc->flags & UCP_RECV_DESC_FLAG_EAGER_OFFLOAD) {
-        offload_hdr      = (ucp_offload_first_desc_t*)(rdesc + 1);
-        req->recv.offset = 0;
-        recv_len         = rdesc->length - sizeof(*offload_hdr);
-        data             = UCS_PTR_BYTE_OFFSET(rdesc + 1, sizeof(*offload_hdr));
-
-        status = ucp_request_recv_offload_data(req, data, recv_len,
-                                               rdesc->flags);
-        if (status == UCS_INPROGRESS) {
-            ucp_tag_frag_list_process_common(
-                    req, ucs_unaligned_ptr(&offload_hdr->matchq), 1
-                    UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
-        }
-
-        /* No other fragments are expected, because first rdesc is added to
-         * unexpected queue only when all fragments arrived. Can release first
-         * rdesc now. */
-        ucp_recv_desc_release(rdesc);
+        ucp_request_recv_offload_first(
+               req, (ucp_offload_first_desc_t*)(rdesc + 1), rdesc->length,
+               rdesc->flags
+               UCS_STATS_ARG(UCP_WORKER_STAT_TAG_RX_EAGER_CHUNK_UNEXP));
     } else {
         first_hdr           = (ucp_eager_first_hdr_t*)(rdesc + 1);
         req->recv.remaining = req->recv.tag.info.length = first_hdr->total_len;
@@ -127,8 +111,8 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     /* TODO: allocate request only in case if flag
      * UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL is not set */
     if (ucs_unlikely(param->op_attr_mask & UCP_OP_ATTR_FLAG_FORCE_IMM_CMPL)) {
-        ucp_request_put_param(param, req);
-        return UCS_STATUS_PTR(UCS_ERR_NO_RESOURCE);
+        status = UCS_ERR_NO_RESOURCE;
+        goto err;
     }
 
     /* Initialize receive request */
@@ -165,6 +149,11 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
         req->recv.tag.info.sender_tag = 0;
     }
 
+    status = ucp_recv_request_set_user_memh(req, param);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
     if (ucs_unlikely(rdesc == NULL)) {
         /* If not found on unexpected, wait until it arrives.
          * If was found but need this receive request for later completion, save it */
@@ -192,6 +181,10 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
     }
 
     return req + 1;
+
+err:
+    ucp_request_put_param(param, req);
+    return UCS_STATUS_PTR(status);
 }
 
 UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_recv_nbr,

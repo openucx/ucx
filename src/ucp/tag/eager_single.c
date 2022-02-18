@@ -76,11 +76,13 @@ ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_eager_short_proto = {
-    .name       = "egr/short",
-    .flags      = UCP_PROTO_FLAG_AM_SHORT,
-    .init       = ucp_proto_eager_short_init,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_short_progress}
+    .name     = "egr/short",
+    .desc     = "eager " UCP_PROTO_SHORT_DESC,
+    .flags    = UCP_PROTO_FLAG_AM_SHORT,
+    .init     = ucp_proto_eager_short_init,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_eager_short_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_short_proto);
 
@@ -142,11 +144,13 @@ ucp_proto_eager_bcopy_single_init(const ucp_proto_init_params_t *init_params)
 }
 
 static ucp_proto_t ucp_eager_bcopy_single_proto = {
-    .name       = "egr/single/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_bcopy_single_init,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_eager_bcopy_single_progress}
+    .name     = "egr/single/bcopy",
+    .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_eager_bcopy_single_init,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_eager_bcopy_single_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_bcopy_single_proto);
 
@@ -209,10 +213,12 @@ ucp_proto_eager_zcopy_single_progress(uct_pending_req_t *self)
 }
 
 static ucp_proto_t ucp_eager_zcopy_single_proto = {
-    .name       = "egr/single/zcopy",
-    .flags      = 0,
-    .init       = ucp_proto_eager_zcopy_single_init,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_eager_zcopy_single_progress}
+    .name     = "egr/single/zcopy",
+    .desc     = UCP_PROTO_EAGER_ZCOPY_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_eager_zcopy_single_init,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_proto_eager_zcopy_single_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
 UCP_PROTO_REGISTER(&ucp_eager_zcopy_single_proto);

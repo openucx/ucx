@@ -53,8 +53,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
     {"NUM_DCI", "8",
-     "Number of DC initiator QPs (DCI) used by the interface "
-     "(up to " UCS_PP_MAKE_STRING(UCT_DC_MLX5_IFACE_MAX_USER_DCIS) ").",
+     "Number of DC initiator QPs (DCI) used by the interface.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
     {"TX_POLICY", "dcs_quota",
@@ -383,6 +382,9 @@ init_qp:
         goto err_qp;
     }
 
+    dci->pool_index = pool_index;
+    dci->path_index = path_index;
+
     status = uct_dc_mlx5_iface_dci_connect(iface, dci);
     if (status != UCS_OK) {
         goto err;
@@ -418,8 +420,6 @@ init_qp:
     }
 
     uct_rc_txqp_available_set(&dci->txqp, dci->txwq.bb_max);
-    dci->pool_index = pool_index;
-    dci->path_index = path_index;
 
     return UCS_OK;
 
@@ -985,6 +985,8 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
         uct_rc_txqp_cleanup(&iface->super.super, &iface->tx.dcis[i].txqp);
         uct_ib_mlx5_destroy_qp(md, &iface->tx.dcis[i].txwq.super);
     }
+
+    ucs_free(iface->tx.dcis);
 }
 
 static ucs_status_t
@@ -1549,13 +1551,12 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         cur_wnd = ep->fc.fc_wnd;
 
         /* Peer granted resources, so update wnd */
-        ep->fc.fc_wnd = rc_iface->config.fc_wnd_size;
+        uct_rc_fc_restore_wnd(rc_iface, &ep->fc);
 
         /* Remove entry for flush to complete */
         kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
 
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
-        UCS_STATS_SET_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_FC_WND, ep->fc.fc_wnd);
 
         /* To preserve ordering we have to dispatch all pending
          * operations if current fc_wnd is <= 0 */
@@ -1620,7 +1621,8 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
         .super = {
             .iface_estimate_perf = uct_ib_iface_estimate_perf,
             .iface_vfs_refresh   = uct_dc_mlx5_iface_vfs_refresh,
-            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate       = uct_dc_mlx5_ep_invalidate
         },
         .create_cq      = uct_ib_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
@@ -1690,18 +1692,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
     unsigned tx_cq_size;
+    int pool_index;
 
     ucs_trace_func("");
 
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (config->ndci > UCT_DC_MLX5_IFACE_MAX_USER_DCIS) {
-        ucs_error("dc interface can have at most %d dcis (requested: %d)",
-                  UCT_DC_MLX5_IFACE_MAX_USER_DCIS, config->ndci);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1771,10 +1768,30 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     ucs_assert(self->tx.num_dci_pools <=
                UCT_DC_MLX5_IFACE_MAX_DCI_POOLS / self->gp);
 
+    /* allocate dcis arrays and stack */
+    self->tx.dcis = ucs_calloc((self->tx.ndci * self->tx.num_dci_pools) +
+                               UCT_DC_MLX5_KEEPALIVE_NUM_DCIS,
+                               sizeof(*self->tx.dcis),
+                               "dcis");
+    if (self->tx.dcis == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    for (pool_index = 0; pool_index < self->tx.num_dci_pools; pool_index++) {
+        self->tx.dci_pool[pool_index].stack = ucs_calloc(self->tx.ndci,
+                                                         sizeof(uint8_t),
+                                                         "dci pool stack");
+        if (self->tx.dci_pool[pool_index].stack == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_free_pools;
+        }
+    }
+
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dcts(self, config);
     if (status != UCS_OK) {
-        goto err;
+        goto err_free_pools;
     }
 
     /* create DC initiators */
@@ -1809,6 +1826,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
 err_destroy_dct:
     uct_dc_mlx5_destroy_dct(self);
+err_free_pools:
+    while (pool_index-- > 0) {
+        ucs_free(self->tx.dci_pool[pool_index].stack);
+    }
+    ucs_free(self->tx.dcis);
 err:
     return status;
 }
@@ -1833,6 +1855,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     for (pool_index = 0; pool_index < self->tx.num_dci_pools * self->gp;
          pool_index++) {
         ucs_arbiter_cleanup(&self->tx.dci_pool[pool_index].arbiter);
+        ucs_free(self->tx.dci_pool[pool_index].stack);
     }
 }
 
@@ -1943,8 +1966,6 @@ ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface)
 
 void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
 {
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(iface->super.super.super.super.md,
-                                              uct_ib_mlx5_md_t);
     uct_ib_mlx5_txwq_t *txwq = &iface->tx.dcis[dci_index].txwq;
     ucs_status_t status;
 
@@ -1958,7 +1979,8 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index)
      */
     uct_rc_mlx5_iface_common_update_cqs_ci(&iface->super,
                                            &iface->super.super.super);
-    status = uct_ib_mlx5_modify_qp_state(md, &txwq->super, IBV_QPS_RESET);
+    status = uct_ib_mlx5_modify_qp_state(&iface->super.super.super,
+                                         &txwq->super, IBV_QPS_RESET);
     uct_rc_mlx5_iface_common_sync_cqs_ci(&iface->super,
                                          &iface->super.super.super);
 
@@ -2015,9 +2037,8 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
         return;
     }
 
-    if (ep_status == UCS_ERR_CANCELED) {
-        return;
-    }
+    ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
+    uct_rc_fc_restore_wnd(&iface->super.super, &ep->fc);
 
     status  = uct_iface_handle_ep_err(&ib_iface->super.super,
                                       &ep->super.super, ep_status);
@@ -2025,6 +2046,4 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                                ep_status);
     uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
                                     txwq, log_lvl);
-
-    ep->flags |= UCT_DC_MLX5_EP_FLAG_ERR_HANDLER_INVOKED;
 }

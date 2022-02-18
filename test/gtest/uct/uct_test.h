@@ -190,6 +190,7 @@ protected:
                            unsigned other_index);
         void connect_to_sockaddr(unsigned index,
                                  const ucs::sock_addr_storage &remote_addr,
+                                 const ucs::sock_addr_storage *local_addr,
                                  uct_cm_ep_resolve_callback_t resolve_cb,
                                  uct_cm_ep_client_connect_callback_t connect_cb,
                                  uct_ep_disconnect_cb_t disconnect_cb,
@@ -468,11 +469,14 @@ protected:
 #define UCT_TEST_ROCM_MEM_TYPE_TLS \
     rocm_copy
 
-#define UCT_TEST_TLS      \
+#define UCT_TEST_NO_GPU_MEM_TYPE_TLS \
     UCT_TEST_NO_SELF_TLS, \
-    UCT_TEST_CUDA_MEM_TYPE_TLS, \
-    UCT_TEST_ROCM_MEM_TYPE_TLS, \
     self
+
+#define UCT_TEST_TLS \
+    UCT_TEST_NO_GPU_MEM_TYPE_TLS, \
+    UCT_TEST_ROCM_MEM_TYPE_TLS, \
+    UCT_TEST_CUDA_MEM_TYPE_TLS
 
 /**
  * Instantiate the parametrized test case for all transports.
@@ -494,6 +498,7 @@ protected:
 #define UCT_INSTANTIATE_IB_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_IB_TLS)
 
+
 /**
  * Instantiate the parametrized test case for all transports excluding SELF.
  *
@@ -501,6 +506,24 @@ protected:
  */
 #define UCT_INSTANTIATE_NO_SELF_TEST_CASE(_test_case) \
     UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_SELF_TLS)
+
+
+/**
+ * Instantiate the parametrized test case for all transports excluding GPU.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_NO_GPU_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_NO_GPU_MEM_TYPE_TLS)
+
+
+/**
+ * Instantiate the parametrized test case for CUDA.
+ *
+ * @param _test_case  Test case class, derived from uct_test.
+ */
+#define UCT_INSTANTIATE_CUDA_TEST_CASE(_test_case) \
+    UCS_PP_FOREACH(_UCT_INSTANTIATE_TEST_CASE, _test_case, UCT_TEST_CUDA_MEM_TYPE_TLS)
 
 
 /**

@@ -10,7 +10,6 @@
 
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
-#include <ifaddrs.h>
 #include <atomic>
 #include <memory>
 
@@ -183,21 +182,16 @@ public:
         ASSERT_EQ(ret, 0);
 
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-            if (ucs_netif_flags_is_active(ifa->ifa_flags) &&
-                ucs::is_inet_addr(ifa->ifa_addr))
-            {
-                if (is_skip_interface(ifa)) {
-                    continue;
-                }
-
-                saddrs.push_back(ucs::sock_addr_storage());
-                status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
-                ASSERT_UCS_OK(status);
-                saddrs.back().set_sock_addr(*ifa->ifa_addr, size,
-                                            ucs::is_rdmacm_netdev(
-                                                    ifa->ifa_name));
-                saddrs.back().set_port(0); /* listen on any port then update */
+            if (is_skip_interface(ifa) || !ucs::is_interface_usable(ifa)) {
+                continue;
             }
+
+            saddrs.push_back(ucs::sock_addr_storage());
+            status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
+            ASSERT_UCS_OK(status);
+            saddrs.back().set_sock_addr(*ifa->ifa_addr, size,
+                                        ucs::is_rdmacm_netdev(ifa->ifa_name));
+            saddrs.back().set_port(0); /* listen on any port then update */
         }
 
         freeifaddrs(ifaddrs);
@@ -468,13 +462,25 @@ public:
     }
 
     struct rx_am_msg_arg {
+        entity &receiver;
         bool received;
         void *hdr;
         void *buf;
+        void *rreq;
 
-        rx_am_msg_arg(void *_hdr, void *_buf) :
-                received(false), hdr(_hdr), buf(_buf) { }
+        rx_am_msg_arg(entity &_receiver, void *_hdr, void *_buf) :
+                receiver(_receiver), received(false), hdr(_hdr), buf(_buf),
+                rreq(NULL) { }
     };
+
+    static void rx_am_msg_data_recv_cb(void *request, ucs_status_t status,
+                                       size_t length, void *user_data)
+    {
+        EXPECT_UCS_OK(status);
+        volatile rx_am_msg_arg *rx_arg =
+                reinterpret_cast<volatile rx_am_msg_arg*>(user_data);
+        rx_arg->received = true;
+    }
 
     static ucs_status_t rx_am_msg_cb(void *arg, const void *header,
                                      size_t header_length, void *data,
@@ -486,7 +492,22 @@ public:
         EXPECT_FALSE(rx_arg->received);
 
         memcpy(rx_arg->hdr, header, header_length);
-        memcpy(rx_arg->buf, data, length);
+        if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV) {
+            ucp_request_param_t recv_param;
+            recv_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
+                                      UCP_OP_ATTR_FIELD_USER_DATA;
+            recv_param.cb.recv_am   = rx_am_msg_data_recv_cb;
+            recv_param.user_data    = const_cast<rx_am_msg_arg*>(rx_arg);
+
+            void *rreq = ucp_am_recv_data_nbx(rx_arg->receiver.worker(), data,
+                                              rx_arg->buf, length, &recv_param);
+            if (UCS_PTR_IS_PTR(rreq)) {
+                rx_arg->rreq = rreq;
+                return UCS_OK;
+            }
+        } else {
+            memcpy(rx_arg->buf, data, length);
+        }
 
         rx_arg->received = true;
         return UCS_OK;
@@ -514,7 +535,7 @@ public:
     {
         const uint64_t send_data = ucs_generate_uuid(0);
         uint64_t recv_data       = 0;
-        rx_am_msg_arg am_rx_arg(NULL, &recv_data);
+        rx_am_msg_arg am_rx_arg(to, NULL, &recv_data);
         ucs_status_t send_status;
 
         if (send_recv_type == SEND_RECV_AM) {
@@ -546,6 +567,7 @@ public:
         }
 
         if (send_recv_type == SEND_RECV_AM) {
+            request_wait(am_rx_arg.rreq);
             wait_for_flag(&am_rx_arg.received);
             set_am_data_handler(to, 0, NULL, NULL);
         } else {
@@ -597,9 +619,12 @@ public:
     }
 
     void client_ep_connect_basic(const ucp_ep_params_t &base_ep_params,
-                                 size_t ep_index = 0)
+                                 size_t ep_index = 0,
+                                 bool specify_src_addr = false)
     {
         ucp_ep_params_t ep_params = base_ep_params;
+        ucs::sock_addr_storage src_addr(m_test_addr.to_ucs_sock_addr());
+        src_addr.set_port(0);
 
         ep_params.field_mask      |= UCP_EP_PARAM_FIELD_FLAGS |
                                      UCP_EP_PARAM_FIELD_SOCK_ADDR |
@@ -609,19 +634,26 @@ public:
         ep_params.sockaddr.addrlen = m_test_addr.get_addr_size();
         ep_params.user_data        = &sender();
 
+        if (specify_src_addr) {
+            ep_params.field_mask            |= UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR;
+            ep_params.local_sockaddr.addr    = src_addr.get_sock_addr_ptr();
+            ep_params.local_sockaddr.addrlen = src_addr.get_addr_size();
+        }
+
         sender().connect(&receiver(), ep_params, ep_index);
     }
 
-    void client_ep_connect(size_t ep_index = 0)
+    void client_ep_connect(size_t ep_index = 0, bool specify_src_addr = false)
     {
-        client_ep_connect_basic(get_ep_params(), ep_index);
+        client_ep_connect_basic(get_ep_params(), ep_index, specify_src_addr);
     }
 
-    void connect_and_send_recv(bool wakeup, uint64_t flags)
+    void connect_and_send_recv(bool wakeup, uint64_t flags,
+                               bool specify_src_addr = false)
     {
         {
             scoped_log_handler slh(detect_error_logger);
-            client_ep_connect();
+            client_ep_connect(specify_src_addr);
             if (!wait_for_server_ep(wakeup)) {
                 UCS_TEST_SKIP_R("cannot connect to server");
             }
@@ -657,10 +689,11 @@ public:
         start_listener(cb_type);
     }
 
-    void listen_and_communicate(bool wakeup, uint64_t flags)
+    void listen_and_communicate(bool wakeup, uint64_t flags,
+                                bool specify_src_addr = false)
     {
         listen(cb_type());
-        connect_and_send_recv(wakeup, flags);
+        connect_and_send_recv(wakeup, flags, specify_src_addr);
     }
 
     void listen_and_reject(bool wakeup)
@@ -963,6 +996,12 @@ UCS_TEST_P(test_ucp_sockaddr, listen_bidi) {
 
 UCS_TEST_P(test_ucp_sockaddr, ep_query) {
     listen_and_communicate(false, 0);
+    ep_query();
+}
+
+UCS_TEST_P(test_ucp_sockaddr, set_local_sockaddr)
+{
+    listen_and_communicate(false, 0, true);
     ep_query();
 }
 
@@ -2387,7 +2426,7 @@ protected:
             std::string shdr(hdr_size, 'x');
             std::string rhdr(hdr_size, 'y');
 
-            rx_am_msg_arg arg(&rhdr[0], &rb[0]);
+            rx_am_msg_arg arg(receiver(), &rhdr[0], &rb[0]);
             set_am_data_handler(receiver(), 0, rx_am_msg_cb, &arg);
 
             ucp_request_param_t param = {};
@@ -2396,6 +2435,9 @@ protected:
                                                         &sb[0], size, &param);
             request_wait(sreq);
             wait_for_flag(&arg.received);
+            // wait for receive request completion after 'received' flag set to
+            // make sure AM receive handler was invoked and 'rreq' was posted
+            request_wait(arg.rreq);
             EXPECT_TRUE(arg.received);
 
             compare_buffers(sb, rb);
@@ -2591,6 +2633,11 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_1k,
 
 UCS_TEST_P(test_ucp_sockaddr_protocols, am_zcopy_64k,
            "ZCOPY_THRESH=512", "RNDV_THRESH=inf")
+{
+    test_am_send_recv(64 * UCS_KBYTE);
+}
+
+UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_64k, "RNDV_THRESH=0")
 {
     test_am_send_recv(64 * UCS_KBYTE);
 }
@@ -2885,11 +2932,15 @@ protected:
         send_buf.pattern_fill(3, size);
 
         /* Complete receive operations */
+        ucs::ptr_vector<mem_buffer> recv_bufs;
         for (size_t i = 0; i < num_sends; ++i) {
-            mem_buffer recv_buf(size, UCS_MEMORY_TYPE_HOST);
-            recv_buf.pattern_fill(2, size);
-            void *rreq = recv(receiver(), recv_buf.ptr(), size, messages[i],
-                              rtag_complete_check_data_cbx, recv_buf.ptr());
+            mem_buffer *recv_buf = new mem_buffer(size, UCS_MEMORY_TYPE_HOST);
+            recv_buf->pattern_fill(2, size);
+            recv_bufs.push_back(recv_buf);
+
+            void *rreq = recv(receiver(), recv_buf->ptr(), size, messages[i],
+                              rtag_complete_check_data_cbx,
+                              reinterpret_cast<void*>(recv_buf));
             reqs.push_back(rreq);
         }
         requests_wait(reqs);
