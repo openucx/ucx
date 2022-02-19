@@ -360,20 +360,17 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
         EXPECT_NE(UCS_OK, m_err_status);
 
         if (UCS_PTR_IS_PTR(sreq)) {
-            /* The request may either succeed or fail, even though the data is
-             * not * delivered - depends on when the error is detected on sender
-             * side and if zcopy/bcopy protocol is used. In any case, the
-             * request must complete, and all resources have to be released.
-             */
-            ucs_status_t status = ucp_request_check_status(sreq);
-            EXPECT_NE(UCS_INPROGRESS, status);
+            ucs_status_t status;
+            /* If rendezvous protocol is used, the m_err_count is increased
+             * on the receiver side, so the send request may not complete
+             * immediately */
+            status = request_wait(sreq);
             if (request_must_fail) {
                 EXPECT_TRUE((m_err_status == status) ||
                             (UCS_ERR_CANCELED == status));
             } else {
                 EXPECT_TRUE((m_err_status == status) || (UCS_OK == status));
             }
-            ucp_request_release(sreq);
         }
 
         /* Additional sends must fail */
