@@ -126,7 +126,8 @@ protected:
                 ASSERT_UCS_OK(status);
 
                 wireup_eps.push_back(discard_ep);
-                ucp_wireup_ep_set_next_ep(discard_ep, &eps[i]);
+                ucp_wireup_ep_set_next_ep(discard_ep, &eps[i],
+                                          UCP_NULL_RESOURCE);
 
                 ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(discard_ep);
 
@@ -177,6 +178,7 @@ protected:
             UCS_ASYNC_BLOCK(&sender().worker()->async);
             ucp_worker_iface_progress_ep(wiface);
             ucp_worker_discard_uct_ep(m_ucp_ep, discard_ep, UCT_FLUSH_FLAG_LOCAL,
+                                      UCP_NULL_RESOURCE,
                                       ep_pending_purge_count_reqs_cb,
                                       &purged_reqs_count, discarded_cb,
                                       static_cast<void*>(&discarded_count));
