@@ -148,9 +148,11 @@ int main() {
 #include <assert.h>
 #define kassert(...)              assert(__VA_ARGS__)
 #define kmemset_analyzer(P, Z, N) kmemset(P, Z, N)
+#define kset(x) 0
 #else
 #define kassert(...)
 #define kmemset_analyzer(P, Z, N)
+#define kset(x) x
 #endif
 
 /* compiler specific configuration */
@@ -342,29 +344,31 @@ typedef khint_t khiter_t;
 	} \
 	SCOPE khint_t kh_put_##name(kh_##name##_t *h, khkey_t key, int *ret) \
 	{ \
-		khint_t x; \
+		khint_t x, buckets = h->n_buckets; \
 		if (h->n_occupied >= h->upper_bound) { /* update the hash table */ \
-			if (h->n_buckets > (h->size<<1)) { \
-				if (kh_resize_##name(h, h->n_buckets - 1) < 0) { /* clear "deleted" elements */ \
+			if (buckets > (h->size<<1)) { \
+				if (kh_resize_##name(h, buckets - 1) < 0) { /* clear "deleted" elements */ \
 					*ret = -1; return h->n_buckets; \
 				} \
-			} else if (kh_resize_##name(h, h->n_buckets + 1) < 0) { /* expand the hash table */ \
+			} else if (kh_resize_##name(h, buckets + 1) < 0) { /* expand the hash table */ \
 				*ret = -1; return h->n_buckets; \
 			} \
+			buckets = h->n_buckets; \
 		} /* TODO: to implement automatically shrinking; resize() already support shrinking */ \
 		{ \
-			khint_t k, i, site, last, mask = h->n_buckets - 1, step = 0; \
-			x = site = h->n_buckets; k = __hash_func(key); i = k & mask; \
+			khint_t i, site = buckets, last, mask = buckets - 1, step = 0; \
+			i = kset(__hash_func(key) & mask); \
 			if (__ac_isempty(h->flags, i)) x = i; /* for speed up */ \
 			else { \
 				last = i; \
-				while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !__hash_equal(h->keys[i], key))) { \
+				x = site; \
+				while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || !kset(__hash_equal(h->keys[i], key)))) { \
 					if (__ac_isdel(h->flags, i)) site = i; \
 					i = (i + (++step)) & mask; \
 					if (i == last) { x = site; break; } \
 				} \
-				if (x == h->n_buckets) { \
-					if (__ac_isempty(h->flags, i) && site != h->n_buckets) x = site; \
+				if (x == buckets) { \
+					if (__ac_isempty(h->flags, i) && site != buckets) x = site; \
 					else x = i; \
 				} \
 			} \
