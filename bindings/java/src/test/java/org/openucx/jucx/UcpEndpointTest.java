@@ -98,9 +98,11 @@ public class UcpEndpointTest extends UcxTest {
 
         // Submit 2 get requests
         UcpRequest request1 = endpoint.getNonBlocking(memory1.getAddress(), rkey1,
-            dst1.getMemory().getAddress(), dst1.getMemory().getLength(), callback);
+            dst1.getMemory().getAddress(), dst1.getMemory().getLength(), callback,
+            new UcpRequestParams().setMemoryHandle(memory1).setMemoryType(memType));
         UcpRequest request2 = endpoint.getNonBlocking(memory2.getAddress(), rkey2,
-            dst2.getMemory().getAddress(), dst2.getMemory().getLength(), callback);
+            dst2.getMemory().getAddress(), dst2.getMemory().getLength(), callback,
+            new UcpRequestParams().setMemoryHandle(memory2).setMemoryType(memType));
 
         // Wait for 2 get operations to complete
         while (numCompletedRequests.get() != 2) {
@@ -175,7 +177,7 @@ public class UcpEndpointTest extends UcxTest {
                 public void onSuccess(UcpRequest request) {
                     receivedMessages.incrementAndGet();
                 }
-            });
+            }, new UcpRequestParams().setMemoryType(memType).setMemoryHandle(dst1.getMemory()));
 
         worker2.recvTaggedNonBlocking(dst2.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE,
             1, tagSender, new UcxCallback() {
@@ -183,13 +185,15 @@ public class UcpEndpointTest extends UcxTest {
                 public void onSuccess(UcpRequest request) {
                     receivedMessages.incrementAndGet();
                 }
-            });
+            }, new UcpRequestParams().setMemoryType(memType).setMemoryHandle(dst2.getMemory()));
 
         UcpEndpoint ep = worker1.newEndpoint(new UcpEndpointParams().setName("testSendRecv")
             .setUcpAddress(worker2.getAddress()));
 
-        ep.sendTaggedNonBlocking(src1.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE, 0, null);
-        ep.sendTaggedNonBlocking(src2.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE, 1, null);
+        ep.sendTaggedNonBlocking(src1.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE, 0, null,
+            new UcpRequestParams().setMemoryType(memType).setMemoryHandle(src1.getMemory()));
+        ep.sendTaggedNonBlocking(src2.getMemory().getAddress(), UcpMemoryTest.MEM_SIZE, 1, null,
+            new UcpRequestParams().setMemoryType(memType).setMemoryHandle(src2.getMemory()));
 
         while (receivedMessages.get() != 2) {
             worker1.progress();
@@ -712,16 +716,20 @@ public class UcpEndpointTest extends UcxTest {
                 public void onSuccess(UcpRequest request) {
                     assertTrue(request.isCompleted());
                 }
-            });
+            }, new UcpRequestParams().setMemoryType(memType)
+                .setMemoryHandle(sendData.getMemory()));
 
         requests[1] = worker2.recvTaggedNonBlocking(recvHeader, null);
         requests[4] = ep.sendAmNonBlocking(1, 0L, 0L,
             sendData.getMemory().getAddress(), dataSize,
-            UcpConstants.UCP_AM_SEND_FLAG_REPLY | UcpConstants.UCP_AM_SEND_FLAG_EAGER, null);
+            UcpConstants.UCP_AM_SEND_FLAG_REPLY | UcpConstants.UCP_AM_SEND_FLAG_EAGER, null,
+            new UcpRequestParams().setMemoryType(memType)
+                .setMemoryHandle(sendData.getMemory()));
 
         // Persistence data flow
         requests[5] = ep.sendAmNonBlocking(2, 0L, 0L,
-            sendData.getMemory().getAddress(), 2L, UcpConstants.UCP_AM_FLAG_PERSISTENT_DATA, null);
+            sendData.getMemory().getAddress(), 2L, UcpConstants.UCP_AM_FLAG_PERSISTENT_DATA, null,
+            new UcpRequestParams().setMemoryType(memType).setMemoryHandle(sendData.getMemory()));
 
         while (!Arrays.stream(requests).allMatch(r -> (r != null) && r.isCompleted())) {
             worker1.progress();
