@@ -38,6 +38,12 @@ void ucp_proto_single_query(const ucp_proto_query_params_t *params,
 
 typedef ucs_status_t (*ucp_proto_send_single_cb_t)(
         ucp_request_t *req, const ucp_proto_single_priv_t *spriv,
-        const uct_iov_t *iov);
+        uct_iov_t *iov);
+
+
+typedef ucs_status_t (*ucp_proto_request_zcopy_init_cb_t)(
+        ucp_request_t *req, ucp_md_map_t md_map,
+        uct_completion_callback_t comp_func, unsigned uct_reg_flags,
+        unsigned dt_mask);
 
 #endif

@@ -263,7 +263,8 @@ ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
 
 static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
         const ucp_proto_init_params_t *params, uct_ep_operation_t memtype_op,
-        unsigned flags, ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
+        unsigned flags, ptrdiff_t max_iov_offs, size_t min_iov,
+        ucp_lane_type_t lane_type, uint64_t tl_cap_flags,
         ucp_lane_index_t max_lanes, ucp_lane_map_t exclude_map,
         ucp_lane_index_t *lanes)
 {
@@ -279,6 +280,7 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
     ucp_md_index_t md_index;
     ucp_lane_map_t lane_map;
     char lane_desc[64];
+    size_t max_iov;
 
     if (max_lanes == 0) {
         return 0;
@@ -402,6 +404,12 @@ static ucp_lane_index_t ucp_proto_common_find_lanes_internal(
             }
         }
 
+        max_iov = ucp_proto_common_get_iface_attr_field(iface_attr,
+                                                        max_iov_offs, SIZE_MAX);
+        if (max_iov < min_iov) {
+            continue;
+        }
+
         ucs_trace("%s: added as lane %d", lane_desc, lane);
         lanes[num_lanes++] = lane;
     }
@@ -456,11 +464,10 @@ ucp_proto_common_find_lanes(const ucp_proto_common_init_params_t *params,
     const uct_iface_attr_t *iface_attr;
     size_t tl_min_frag, tl_max_frag;
 
-    num_lanes = ucp_proto_common_find_lanes_internal(&params->super,
-                                                     params->memtype_op,
-                                                     params->flags, lane_type,
-                                                     tl_cap_flags, max_lanes,
-                                                     exclude_map, lanes);
+    num_lanes = ucp_proto_common_find_lanes_internal(
+            &params->super, params->memtype_op, params->flags,
+            params->max_iov_offs, params->min_iov, lane_type, tl_cap_flags,
+            max_lanes, exclude_map, lanes);
 
     num_valid_lanes = 0;
     for (lane_index = 0; lane_index < num_lanes; ++lane_index) {
@@ -504,7 +511,8 @@ ucp_proto_common_find_am_bcopy_hdr_lane(const ucp_proto_init_params_t *params)
 
     num_lanes = ucp_proto_common_find_lanes_internal(
             params, UCT_EP_OP_LAST, UCP_PROTO_COMMON_INIT_FLAG_HDR_ONLY,
-            UCP_LANE_TYPE_AM, UCT_IFACE_FLAG_AM_BCOPY, 1, 0, &lane);
+            UCP_PROTO_COMMON_OFFSET_INVALID, 1, UCP_LANE_TYPE_AM,
+            UCT_IFACE_FLAG_AM_BCOPY, 1, 0, &lane);
     if (num_lanes == 0) {
         ucs_debug("no active message lane for %s", params->proto_name);
         return UCP_NULL_LANE;

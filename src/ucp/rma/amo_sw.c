@@ -384,6 +384,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.cfg_priority  = 20,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
