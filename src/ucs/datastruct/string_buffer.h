@@ -80,8 +80,9 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
 
 
 #define UCS_STRING_BUFFER_ONSTACK(_var, _capacity) \
-    UCS_STRING_BUFFER_FIXED(_var, UCS_ARRAY_ALLOC_ONSTACK(string_buffer, _capacity), \
-                            _capacity) \
+    UCS_STRING_BUFFER_FIXED(_var, \
+                            UCS_ARRAY_ALLOC_ONSTACK(string_buffer, _capacity), \
+                            _capacity)
 
 
 /**
