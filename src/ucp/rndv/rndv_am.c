@@ -117,7 +117,7 @@ ucp_proto_rdnv_am_bcopy_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_rdnv_am_init_common(&params);
 }
 
-static ucp_proto_t ucp_rndv_am_bcopy_proto = {
+ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .name     = "rndv/am/bcopy",
     .desc     = "fragmented " UCP_PROTO_COPY_IN_DESC " " UCP_PROTO_COPY_OUT_DESC,
     .flags    = 0,
@@ -126,4 +126,3 @@ static ucp_proto_t ucp_rndv_am_bcopy_proto = {
     .progress = {ucp_proto_rndv_am_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_am_bcopy_proto);

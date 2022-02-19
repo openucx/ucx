@@ -162,7 +162,7 @@ ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
     return UCS_OK;
 }
 
-static ucp_proto_t ucp_rndv_rkey_ptr_proto = {
+ucp_proto_t ucp_rndv_rkey_ptr_proto = {
     .name     = "rndv/rkey_ptr",
     .desc     = "copy from mapped remote memory",
     .flags    = 0,
@@ -174,5 +174,4 @@ static ucp_proto_t ucp_rndv_rkey_ptr_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_rkey_ptr_proto);
 

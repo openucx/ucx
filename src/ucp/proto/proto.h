@@ -268,16 +268,6 @@ struct ucp_proto {
 
 
 /**
- * Register a protocol definition.
- */
-#define UCP_PROTO_REGISTER(_proto) \
-    UCS_STATIC_INIT { \
-        ucs_assert_always(ucp_protocols_count < UCP_PROTO_MAX_COUNT); \
-        ucp_protocols[ucp_protocols_count++] = (_proto); \
-    }
-
-
-/**
  * Retrieve a protocol field by protocol id.
  */
 #define ucp_proto_id_field(_proto_id, _field) \
@@ -292,13 +282,14 @@ struct ucp_proto {
 
 
 /* Global array of all registered protocols */
-extern const ucp_proto_t *ucp_protocols[UCP_PROTO_MAX_COUNT];
-
-/* Number of globally registered protocols */
-extern unsigned ucp_protocols_count;
+extern const ucp_proto_t *ucp_protocols[];
 
 /* Performance types names */
 extern const char *ucp_proto_perf_types[];
+
+
+/* Get number of globally registered protocols */
+unsigned ucp_protocols_count(void);
 
 
 /* Default protocol query function: set max_msg_length to SIZE_MAX, take

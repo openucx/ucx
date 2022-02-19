@@ -163,7 +163,7 @@ ucp_proto_eager_bcopy_multi_progress(uct_pending_req_t *uct_req)
             ucp_proto_request_bcopy_complete_success);
 }
 
-static ucp_proto_t ucp_eager_bcopy_multi_proto = {
+ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .name     = "egr/multi/bcopy",
     .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
@@ -172,7 +172,6 @@ static ucp_proto_t ucp_eager_bcopy_multi_proto = {
     .progress = {ucp_proto_eager_bcopy_multi_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_bcopy_multi_proto);
 
 static ucs_status_t
 ucp_proto_eager_sync_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
@@ -240,7 +239,7 @@ ucp_proto_eager_sync_bcopy_multi_progress(uct_pending_req_t *uct_req)
             ucp_proto_eager_sync_bcopy_send_completed);
 }
 
-static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
+ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .name     = "egrsnc/multi/bcopy",
     .desc     = UCP_PROTO_EAGER_BCOPY_DESC,
     .flags    = 0,
@@ -249,7 +248,6 @@ static ucp_proto_t ucp_eager_sync_bcopy_multi_proto = {
     .progress = {ucp_proto_eager_sync_bcopy_multi_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_sync_bcopy_multi_proto);
 
 static ucs_status_t
 ucp_proto_eager_zcopy_multi_init(const ucp_proto_init_params_t *init_params)
@@ -324,7 +322,7 @@ static ucs_status_t ucp_proto_eager_zcopy_multi_progress(uct_pending_req_t *self
             ucp_proto_request_zcopy_completion);
 }
 
-static ucp_proto_t ucp_eager_zcopy_multi_proto = {
+ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .name     = "egr/multi/zcopy",
     .desc     = UCP_PROTO_EAGER_ZCOPY_DESC,
     .flags    = 0,
@@ -333,4 +331,3 @@ static ucp_proto_t ucp_eager_zcopy_multi_proto = {
     .progress = {ucp_proto_eager_zcopy_multi_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_eager_zcopy_multi_proto);

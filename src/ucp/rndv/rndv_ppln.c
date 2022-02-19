@@ -270,7 +270,7 @@ ucp_proto_rndv_send_ppln_atp_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_request_zcopy_complete_success);
 }
 
-static ucp_proto_t ucp_rndv_send_ppln_proto = {
+ucp_proto_t ucp_rndv_send_ppln_proto = {
     .name     = "rndv/send/ppln",
     .desc     = NULL,
     .flags    = 0,
@@ -282,7 +282,6 @@ static ucp_proto_t ucp_rndv_send_ppln_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_send_ppln_proto);
 
 static ucs_status_t
 ucp_proto_rndv_recv_ppln_init(const ucp_proto_init_params_t *init_params)
@@ -306,7 +305,7 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_rndv_recv_complete);
 }
 
-static ucp_proto_t ucp_rndv_recv_ppln_proto = {
+ucp_proto_t ucp_rndv_recv_ppln_proto = {
     .name     = "rndv/recv/ppln",
     .desc     = NULL,
     .flags    = 0,
@@ -318,4 +317,3 @@ static ucp_proto_t ucp_rndv_recv_ppln_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_recv_ppln_proto);

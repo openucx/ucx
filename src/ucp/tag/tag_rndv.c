@@ -179,7 +179,7 @@ static void ucp_tag_rndv_proto_abort(ucp_request_t *request,
     ucp_request_complete_send(request, status);
 }
 
-static ucp_proto_t ucp_tag_rndv_proto = {
+ucp_proto_t ucp_tag_rndv_proto = {
     .name     = "tag/rndv",
     .desc     = NULL,
     .flags    = 0,
@@ -188,4 +188,3 @@ static ucp_proto_t ucp_tag_rndv_proto = {
     .progress = {ucp_tag_rndv_rts_progress},
     .abort    = ucp_tag_rndv_proto_abort
 };
-UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);

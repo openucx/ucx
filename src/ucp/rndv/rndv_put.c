@@ -397,7 +397,7 @@ ucp_proto_rndv_put_zcopy_query(const ucp_proto_query_params_t *params,
                       UCP_PROTO_ZCOPY_DESC, put_desc);
 }
 
-static ucp_proto_t ucp_rndv_put_zcopy_proto = {
+ucp_proto_t ucp_rndv_put_zcopy_proto = {
     .name     = "rndv/put/zcopy",
     .desc     = NULL,
     .flags    = 0,
@@ -411,7 +411,6 @@ static ucp_proto_t ucp_rndv_put_zcopy_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_put_zcopy_proto);
 
 
 static void ucp_proto_rndv_put_mtype_pack_completion(uct_completion_t *uct_comp)
@@ -533,7 +532,7 @@ ucp_proto_rndv_put_mtype_query(const ucp_proto_query_params_t *params,
     ucp_proto_rndv_mtype_query_desc(params, attr, put_desc);
 }
 
-static ucp_proto_t ucp_rndv_put_mtype_proto = {
+ucp_proto_t ucp_rndv_put_mtype_proto = {
     .name     = "rndv/put/mtype",
     .desc     = NULL,
     .flags    = 0,
@@ -548,4 +547,3 @@ static ucp_proto_t ucp_rndv_put_mtype_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_put_mtype_proto);

@@ -193,7 +193,7 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
     }
 }
 
-static ucp_proto_t ucp_rndv_get_zcopy_proto = {
+ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
     .flags    = 0,
@@ -205,7 +205,6 @@ static ucp_proto_t ucp_rndv_get_zcopy_proto = {
     },
     .abort    = ucp_rndv_get_zcopy_proto_abort
 };
-UCP_PROTO_REGISTER(&ucp_rndv_get_zcopy_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
@@ -305,7 +304,7 @@ ucp_proto_rndv_get_mtype_query(const ucp_proto_query_params_t *params,
     ucp_proto_rndv_mtype_query_desc(params, attr, UCP_PROTO_RNDV_GET_DESC);
 }
 
-static ucp_proto_t ucp_rndv_get_mtype_proto = {
+ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
     .desc     = NULL,
     .flags    = 0,
@@ -317,7 +316,6 @@ static ucp_proto_t ucp_rndv_get_mtype_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_get_mtype_proto);
 
 
 static ucs_status_t
@@ -362,7 +360,7 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     return ucp_proto_rndv_ack_init(params, params->priv);
 }
 
-static ucp_proto_t ucp_rndv_ats_proto = {
+ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
     .desc     = "no data fetch",
     .flags    = 0,
@@ -371,4 +369,3 @@ static ucp_proto_t ucp_rndv_ats_proto = {
     .progress = {ucp_proto_rndv_ats_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_ats_proto);

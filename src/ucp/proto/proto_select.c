@@ -160,6 +160,8 @@ static ucs_status_t ucp_proto_thresholds_select_next(
 
         ucs_assert(max_prio_proto_id != UCP_PROTO_ID_INVALID);
         disabled_proto_mask |= UCS_BIT(proto_id);
+        ucs_assert(proto_id < ucp_protocols_count());
+        /* coverity[overrun-local] */
         ucs_trace("disable %s with priority %u: prefer %s with priority %u",
                   ucp_proto_id_field(proto_id, name),
                   proto_caps[proto_id].cfg_priority,
@@ -253,7 +255,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     proto_init->mask         = 0;
 
     /* Initialize protocols and get their capabilities */
-    proto_init->priv_buf = ucs_malloc(ucp_protocols_count * UCP_PROTO_PRIV_MAX,
+    proto_init->priv_buf = ucs_malloc(ucp_protocols_count() * UCP_PROTO_PRIV_MAX,
                                       "ucp_proto_priv");
     if (proto_init->priv_buf == NULL) {
         status = UCS_ERR_NO_MEMORY;
@@ -262,11 +264,13 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
 
     offset = 0;
     ucs_for_each_bit(proto_id, worker->context->proto_bitmap) {
+        ucs_assert(proto_id < ucp_protocols_count());
         proto_caps             = &proto_init->caps[proto_id];
         init_params.priv       = UCS_PTR_BYTE_OFFSET(proto_init->priv_buf,
                                                      offset);
         init_params.priv_size  = &priv_size;
         init_params.caps       = proto_caps;
+        /* coverity[overrun-local] */
         init_params.proto_name = ucp_proto_id_field(proto_id, name);
 
         ucs_trace("trying %s", ucp_proto_id_field(proto_id, name));

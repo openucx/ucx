@@ -99,7 +99,7 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_single_init(&params);
 }
 
-static ucp_proto_t ucp_get_am_bcopy_proto = {
+ucp_proto_t ucp_get_am_bcopy_proto = {
     .name     = "get/am/bcopy",
     .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
@@ -108,4 +108,3 @@ static ucp_proto_t ucp_get_am_bcopy_proto = {
     .progress = {ucp_proto_get_am_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_get_am_bcopy_proto);
