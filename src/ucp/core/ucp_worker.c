@@ -2370,7 +2370,7 @@ static void ucp_worker_discard_uct_ep_progress_register(ucp_request_t *req,
                                       &req->send.discard_uct_ep.cb_id);
 }
 
-void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
+static void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -2384,8 +2384,7 @@ void ucp_worker_discard_uct_ep_flush_comp(uct_completion_t *self)
             req, ucp_worker_discard_uct_ep_destroy_progress);
 }
 
-static ucs_status_t
-ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
+ucs_status_t ucp_worker_discard_uct_ep_pending_cb(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     uct_ep_h uct_ep    = req->send.discard_uct_ep.uct_ep;

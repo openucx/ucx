@@ -691,8 +691,7 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
         ucp_request_mem_free(req);
     } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
-    } else if (req->send.state.uct_comp.func ==
-               ucp_worker_discard_uct_ep_flush_comp) {
+    } else if (req->send.uct.func == ucp_worker_discard_uct_ep_pending_cb) {
         /* Discard operations with flush(LOCAL) could be started (e.g. closing
          * unneeded UCT EPs from intersection procedure), convert them to
          * flush(CANCEL) to avoid flushing failed UCT EPs

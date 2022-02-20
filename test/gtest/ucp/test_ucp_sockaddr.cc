@@ -889,6 +889,17 @@ protected:
         return false;
     }
 
+    static ucs_status_t ep_pending_add(uct_ep_h ep, uct_pending_req_t *req,
+                                       unsigned flags)
+    {
+        if (req->func == ucp_worker_discard_uct_ep_pending_cb) {
+            return UCS_ERR_BUSY;
+        }
+
+        auto ops = m_sender_uct_ops.find(ep->iface);
+        return ops->second.ep_pending_add(ep, req, flags);
+    }
+
     void do_force_close_during_rndv(bool fail_send_ep)
     {
         constexpr size_t length = 4 * UCS_KBYTE;
@@ -911,8 +922,6 @@ protected:
         ASSERT_NE((void*)NULL, message);
         ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
 
-        std::map<uct_iface_h, uct_iface_ops_t> sender_uct_ops;
-
         // Prevent destroying UCT endpoints from discarding to not detect error
         // by the receiver earlier than data could invalidate by the sender
         for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -921,14 +930,13 @@ protected:
             }
 
             uct_iface_h uct_iface = ep->uct_eps[lane]->iface;
-            auto res = sender_uct_ops.emplace(uct_iface, uct_iface->ops);
+            auto res              = m_sender_uct_ops.emplace(uct_iface,
+                                                             uct_iface->ops);
             if (res.second) {
-                uct_iface->ops.ep_flush =
+                uct_iface->ops.ep_flush       =
                         reinterpret_cast<uct_ep_flush_func_t>(
                                 ucs_empty_function_return_no_resource);
-                uct_iface->ops.ep_pending_add =
-                        reinterpret_cast<uct_ep_pending_add_func_t>(
-                                ucs_empty_function_return_busy);
+                uct_iface->ops.ep_pending_add = ep_pending_add;
             }
         }
 
@@ -944,11 +952,13 @@ protected:
         request_progress(sreq, { &sender() }, 0.5);
 
         // Restore UCT endpoint's flush function to the original one to allow
-        // complation of descarding
-        for (auto &elem : sender_uct_ops) {
+        // completion of discarding
+        for (auto &elem : m_sender_uct_ops) {
             elem.first->ops.ep_flush       = elem.second.ep_flush;
             elem.first->ops.ep_pending_add = elem.second.ep_pending_add;
         }
+
+        m_sender_uct_ops.clear();
 
         mem_buffer recv_buffer(length, UCS_MEMORY_TYPE_HOST);
         recv_buffer.pattern_fill(2, length);
@@ -974,9 +984,12 @@ protected:
 
 protected:
     static unsigned m_err_count;
+    static std::map<uct_iface_h, uct_iface_ops_t> m_sender_uct_ops;
 };
 
-unsigned test_ucp_sockaddr::m_err_count = 0;
+unsigned test_ucp_sockaddr::m_err_count                                    = 0;
+std::map<uct_iface_h, uct_iface_ops_t> test_ucp_sockaddr::m_sender_uct_ops = {};
+
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
     listen_and_communicate(false, 0);
