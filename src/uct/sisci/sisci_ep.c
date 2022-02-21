@@ -223,7 +223,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     uct_sci_ep_t* ep            = ucs_derived_of(uct_ep, uct_sci_ep_t);
     uct_sci_iface_t* iface      = ucs_derived_of(uct_ep->iface, uct_sci_iface_t);
     sisci_packet_t* sci_header  = ep->buf; 
-    void* tx                    = (void*) iface->tx_map;;
+    void* tx                    = (void*) iface->tx_map;
     sisci_packet_t* tx_pack     = (sisci_packet_t*) tx;
     size_t iov_total_len        = uct_iov_total_length(iov, iovcnt);
     size_t bytes_copied;
