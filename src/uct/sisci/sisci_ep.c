@@ -291,7 +291,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     SCIFlush(NULL, SCI_NO_FLAGS);
 
 
-    DEBUG_PRINT("EP_SEG %d EP_NOD %d AM_ID %d size %d \n", ep->remote_segment_id, ep->remote_node_id, id, packet->length);
+    DEBUG_PRINT("EP_SEG %d EP_NOD %d AM_ID %d size %d \n", ep->remote_segment_id, ep->remote_node_id, id, sci_header->length);
 
     //memset(iface->tx_map + SCI_PACKET_SIZE, 0, iface->send_size);
     //ucs_free(tx);
