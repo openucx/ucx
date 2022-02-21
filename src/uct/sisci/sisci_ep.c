@@ -272,7 +272,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     DEBUG_PRINT("EP_SEG %d EP_NOD %d AM_ID %d size %d \n", ep->remote_segment_id, ep->remote_node_id, id, sci_header->length);
 
-    memset(iface->tx_map, 0, iov_total_len + total_header_len + SCI_PACKET_SIZE);
+    memset(iface->tx_map, 0, iov_total_len + header_length + SCI_PACKET_SIZE);
     //ucs_free(tx);
     return UCS_OK;    
 }
