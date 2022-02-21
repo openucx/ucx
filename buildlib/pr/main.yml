@@ -1,12 +1,13 @@
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
+  DOCKER_OPT_IB: --ulimit memlock=-1:-1
   DOCKER_OPT_IB_GPU: --gpus all --ulimit memlock=-1:-1 --device=/dev/infiniband/
 
 resources:
   containers:
     - container: centos7
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:4
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
       options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
