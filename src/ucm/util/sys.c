@@ -291,6 +291,7 @@ void ucm_strerror(int eno, char *buf, size_t max)
 
 void ucm_prevent_dl_unload()
 {
+#ifdef UCX_SHARED_LIB
     static ucs_init_once_t init_once = UCS_INIT_ONCE_INITIALIZER;
     int flags                        = RTLD_LOCAL | RTLD_NODELETE;
     Dl_info info;
@@ -330,6 +331,7 @@ void ucm_prevent_dl_unload()
         /* coverity[overwrite_var] */
         dl = NULL;
     }
+#endif /* UCX_SHARED_LIB */
 }
 
 char *ucm_concat_path(char *buffer, size_t max, const char *dir, const char *file)
