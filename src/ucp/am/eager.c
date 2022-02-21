@@ -353,6 +353,7 @@ ucp_proto_eager_am_zcopy_single_progress(uct_pending_req_t *self)
 
 ucp_proto_t ucp_eager_am_zcopy_single_proto = {
     .name     = "egr/am/single/zcopy",
+    .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
     .init     = ucp_proto_eager_am_zcopy_single_init,
     .query    = ucp_proto_single_query,
