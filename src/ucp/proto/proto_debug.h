@@ -34,7 +34,7 @@
 /* Format string to display a protocol performance estimations
  * of different types. See ucp_proto_perf_type_t */
 #define UCP_PROTO_PERF_FUNC_TYPES_FMT \
-    UCP_PROTO_PERF_FUNC_FMT(sigle) \
+    UCP_PROTO_PERF_FUNC_FMT(single) \
     UCP_PROTO_PERF_FUNC_FMT(multi)
 #define UCP_PROTO_PERF_FUNC_TYPES_ARG(_perf_func) \
     UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_SINGLE])), \
