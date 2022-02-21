@@ -53,8 +53,7 @@ ucs_config_field_t uct_dc_mlx5_iface_config_sub_table[] = {
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
     {"NUM_DCI", "8",
-     "Number of DC initiator QPs (DCI) used by the interface "
-     "(up to " UCS_PP_MAKE_STRING(UCT_DC_MLX5_IFACE_MAX_USER_DCIS) ").",
+     "Number of DC initiator QPs (DCI) used by the interface.",
      ucs_offsetof(uct_dc_mlx5_iface_config_t, ndci), UCS_CONFIG_TYPE_UINT},
 
     {"TX_POLICY", "dcs_quota",
@@ -819,6 +818,8 @@ void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max)
         uct_rc_txqp_cleanup(&iface->super.super, &iface->tx.dcis[i].txqp);
         uct_ib_mlx5_destroy_qp(md, &iface->tx.dcis[i].txwq.super);
     }
+
+    ucs_free(iface->tx.dcis);
 }
 
 ucs_status_t
@@ -1296,18 +1297,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
     unsigned tx_cq_size;
+    int pool_index;
 
     ucs_trace_func("");
 
     if (config->ndci < 1) {
         ucs_error("dc interface must have at least 1 dci (requested: %d)",
                   config->ndci);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    if (config->ndci > UCT_DC_MLX5_IFACE_MAX_USER_DCIS) {
-        ucs_error("dc interface can have at most %d dcis (requested: %d)",
-                  UCT_DC_MLX5_IFACE_MAX_USER_DCIS, config->ndci);
         return UCS_ERR_INVALID_PARAM;
     }
 
@@ -1370,10 +1366,30 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
     ucs_assert(self->tx.num_dci_pools <= UCT_DC_MLX5_IFACE_MAX_DCI_POOLS);
 
+    /* allocate dcis arrays and stack */
+    self->tx.dcis = ucs_calloc((self->tx.ndci * self->tx.num_dci_pools) +
+                               UCT_DC_MLX5_KEEPALIVE_NUM_DCIS,
+                               sizeof(*self->tx.dcis),
+                               "dcis");
+    if (self->tx.dcis == NULL) {
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    }
+
+    for (pool_index = 0; pool_index < self->tx.num_dci_pools; pool_index++) {
+        self->tx.dci_pool[pool_index].stack = ucs_calloc(self->tx.ndci,
+                                                         sizeof(uint8_t),
+                                                         "dci pool stack");
+        if (self->tx.dci_pool[pool_index].stack == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            goto err_free_pools;
+        }
+    }
+
     /* create DC target */
     status = uct_dc_mlx5_iface_create_dct(self, config);
     if (status != UCS_OK) {
-        goto err;
+        goto err_free_pools;
     }
 
     /* create DC initiators */
@@ -1407,6 +1423,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 
 err_destroy_dct:
     uct_dc_mlx5_destroy_dct(self);
+err_free_pools:
+    while (pool_index-- > 0) {
+        ucs_free(self->tx.dci_pool[pool_index].stack);
+    }
+    ucs_free(self->tx.dcis);
 err:
     return status;
 }
@@ -1430,6 +1451,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
 
     for (pool_index = 0; pool_index < self->tx.num_dci_pools; pool_index++) {
         ucs_arbiter_cleanup(&self->tx.dci_pool[pool_index].arbiter);
+        ucs_free(self->tx.dci_pool[pool_index].stack);
     }
 }
 

@@ -20,6 +20,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
 #include <string.h>
 #include <limits.h>
 #include <dlfcn.h>
@@ -270,6 +271,10 @@ void ucs_load_modules(const char *framework, const char *modules,
     ucs_module_loader_init_paths();
 
     UCS_INIT_ONCE(init_once) {
+        if (!ucs_sys_is_dynamic_lib()) {
+            continue; /* do NOT break or return here */
+        }
+
         ucs_module_debug("loading modules for %s", framework);
         modules_str = ucs_strdup(modules, "modules_list");
         if (modules_str != NULL) {

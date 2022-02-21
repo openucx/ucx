@@ -940,8 +940,8 @@ static void ucp_perf_test_destroy_eps(ucx_perf_context_t* perf)
     }
 }
 
-static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
-                                                  ucs_status_t status)
+static ucs_status_t
+ucx_perf_test_exchange_status(ucx_perf_context_t *perf, ucs_status_t status)
 {
     unsigned group_size  = rte_call(perf, group_size);
     ucs_status_t collective_status = status;
@@ -961,6 +961,7 @@ static ucs_status_t ucp_perf_test_exchange_status(ucx_perf_context_t *perf,
             collective_status = status;
         }
     }
+
     return collective_status;
 }
 
@@ -1231,7 +1232,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
     }
 
     /* sync status across all processes */
-    status = ucp_perf_test_exchange_status(perf, UCS_OK);
+    status = ucx_perf_test_exchange_status(perf, UCS_OK);
     if (status != UCS_OK) {
         goto err_destroy_eps;
     }
@@ -1250,7 +1251,7 @@ static ucs_status_t ucp_perf_test_setup_endpoints(ucx_perf_context_t *perf,
 err_destroy_eps:
     ucp_perf_test_destroy_eps(perf);
 err:
-    (void)ucp_perf_test_exchange_status(perf, status);
+    (void)ucx_perf_test_exchange_status(perf, status);
     return status;
 }
 
@@ -1271,12 +1272,44 @@ static void ucp_perf_test_destroy_workers(ucx_perf_context_t *perf)
     }
 }
 
-void ucx_perf_set_warmup(ucx_perf_context_t* perf,
-                         const ucx_perf_params_t* params)
+ucs_status_t
+ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
 {
-    perf->max_iter = ucs_min(params->warmup_iter,
-                             ucs_div_round_up(params->max_iter, 10));
-    perf->report_interval = ULONG_MAX;
+    ucs_time_t deadline = ucs_get_time() +
+                          ucs_time_from_sec(params->warmup_time);
+    ucx_perf_counter_t warmup_iter, total_warmup_iter;
+    ucs_status_t status, stop_status;
+
+    /* Perform no more than 'params->warmup_iter' iterations but try to not
+       exceed 'params->warmup_time' */
+    warmup_iter       = 1;
+    total_warmup_iter = 0;
+    while (total_warmup_iter < params->warmup_iter) {
+        perf->max_iter        = warmup_iter;
+        perf->report_interval = ULONG_MAX;
+
+        status = ucx_perf_funcs[params->api].run(perf);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        ucx_perf_funcs[params->api].barrier(perf);
+        ucx_perf_test_prepare_new_run(perf, params);
+
+        /* Stop when reaching the deadline */
+        stop_status = (ucs_get_time() > deadline) ? UCS_OK : UCS_INPROGRESS;
+
+        /* Synchronize on whether to continue or stop the warmup phase */
+        status = ucx_perf_test_exchange_status(perf, stop_status);
+        if (status != UCS_INPROGRESS) {
+            return status;
+        }
+
+        total_warmup_iter += warmup_iter;
+        warmup_iter       *= 2;
+    }
+
+    return UCS_OK;
 }
 
 static ucs_status_t uct_perf_create_md(ucx_perf_context_t *perf)
@@ -1443,7 +1476,7 @@ static ucs_status_t uct_perf_setup(ucx_perf_context_t *perf)
     status = uct_perf_test_check_capabilities(params, perf->uct.iface,
                                               perf->uct.md);
 
-    status = ucp_perf_test_exchange_status(perf, status);
+    status = ucx_perf_test_exchange_status(perf, status);
     if (status != UCS_OK) {
         goto out_iface_close;
     }
@@ -1705,15 +1738,9 @@ ucs_status_t ucx_perf_run(const ucx_perf_params_t *params,
             perf->ucp.rkey        = perf->ucp.tctx[0].perf.ucp.rkey;
         }
 
-        if (params->warmup_iter > 0) {
-            ucx_perf_set_warmup(perf, params);
-            status = ucx_perf_funcs[params->api].run(perf);
-            if (status != UCS_OK) {
-                goto out_cleanup;
-            }
-
-            ucx_perf_funcs[params->api].barrier(perf);
-            ucx_perf_test_prepare_new_run(perf, params);
+        status = ucx_perf_do_warmup(perf, params);
+        if (status != UCS_OK) {
+            goto out_cleanup;
         }
 
         /* Run test */

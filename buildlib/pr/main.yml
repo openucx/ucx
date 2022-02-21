@@ -182,7 +182,7 @@ stages:
               CONTAINER: fedora34
               long_test: yes
         container: $[ variables['CONTAINER'] ]
-        timeoutInMinutes: 240
+        timeoutInMinutes: 340
 
         steps:
           - checkout: self

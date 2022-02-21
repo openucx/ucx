@@ -1581,3 +1581,13 @@ void ucs_sys_check_memlock_limit_append_msg(ucs_string_buffer_t *msg)
                                   memlock_limit / UCS_KBYTE);
     }
 }
+
+int ucs_sys_is_dynamic_lib(void)
+{
+#ifdef UCX_SHARED_LIB
+    return 1;
+#else
+    return 0;
+#endif
+}
+

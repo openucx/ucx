@@ -25,6 +25,11 @@ ucp_proto_rndv_mtype_init(const ucp_proto_init_params_t *init_params,
         return UCS_ERR_UNSUPPORTED;
     }
 
+    if ((init_params->select_param->op_id != UCP_OP_ID_RNDV_SEND) &&
+        (init_params->select_param->op_id != UCP_OP_ID_RNDV_RECV)) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
     status = ucp_mm_get_alloc_md_map(worker->context, mdesc_md_map_p);
     if (status != UCS_OK) {
         return status;
@@ -131,6 +136,30 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_mtype_copy(
     }
 
     return status;
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_proto_rndv_mtype_query_desc(const ucp_proto_query_params_t *params,
+                                ucp_proto_query_attr_t *attr,
+                                const char *xfer_desc)
+{
+    UCS_STRING_BUFFER_FIXED(strb, attr->desc, sizeof(attr->desc));
+    ucp_context_h context      = params->worker->context;
+    ucs_memory_type_t mem_type = params->select_param->mem_type;
+    ucp_ep_h mtype_ep          = params->worker->mem_type_ep[mem_type];
+    ucp_lane_index_t lane      = ucp_ep_config(mtype_ep)->key.rma_bw_lanes[0];
+    ucp_rsc_index_t rsc_index  = ucp_ep_get_rsc_index(mtype_ep, lane);
+    const char *tl_name        = context->tl_rscs[rsc_index].tl_rsc.tl_name;
+
+    if (params->select_param->op_id == UCP_OP_ID_RNDV_SEND) {
+        ucs_string_buffer_appendf(&strb, "%s, ", tl_name);
+    }
+
+    ucs_string_buffer_appendf(&strb, "%s", xfer_desc);
+
+    if (params->select_param->op_id == UCP_OP_ID_RNDV_RECV) {
+        ucs_string_buffer_appendf(&strb, ", %s", tl_name);
+    }
 }
 
 #endif

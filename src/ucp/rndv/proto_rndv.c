@@ -295,6 +295,7 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 60,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -422,10 +423,16 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
 {
     const ucp_proto_rndv_bulk_priv_t *rpriv     = params->priv;
     ucp_proto_query_params_t multi_query_params = {
-        .priv       = &rpriv->mpriv,
-        .msg_length = params->msg_length
+        .proto         = params->proto,
+        .priv          = &rpriv->mpriv,
+        .worker        = params->worker,
+        .select_param  = params->select_param,
+        .ep_config_key = params->ep_config_key,
+        .msg_length    = params->msg_length
     };
 
+    attr->max_msg_length = SIZE_MAX;
+    attr->is_estimation  = 0;
     ucp_proto_multi_query_config(&multi_query_params, attr);
 }
 

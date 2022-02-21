@@ -156,6 +156,7 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
         .super.cfg_priority  = 20,
         .super.min_length    = length,
         .super.max_length    = length,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -196,14 +197,13 @@ ucp_proto_amo_init(const ucp_proto_init_params_t *init_params,
                                   (_memtype_op)); \
     } \
     \
-    static ucp_proto_t ucp_amo_proto_##_id = { \
+    ucp_proto_t ucp_amo_proto_##_id = { \
         .name     = "amo" #_bits "/" #_id "/" #_sub_id, \
+        .desc     = #_sub_id, \
         .init     = ucp_amo_init_##_id, \
         .query    = ucp_proto_single_query, \
         .progress = {ucp_amo_progress_##_id} \
-    }; \
-    \
-    UCP_PROTO_REGISTER(&ucp_amo_proto_##_id)
+    };
 
 #define UCP_PROTO_AMO_REGISTER_MTYPE(_id, _op_id, _bits) \
     UCP_PROTO_AMO_REGISTER(_id,         _op_id, _bits, UCT_EP_OP_LAST,      offload) \

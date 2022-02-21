@@ -219,6 +219,7 @@ void test_perf::test_params_init(const test_spec &test,
                                           ucs::test_time_multiplier());
     }
 
+    params.warmup_time     = 100e-3;
     params.max_time        = 0.0;
     params.report_interval = 1.0;
     params.rte_group       = NULL;

@@ -47,6 +47,7 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
         .super.latency       = 0,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -73,6 +74,18 @@ ucp_proto_rndv_rkey_ptr_init(const ucp_proto_init_params_t *init_params)
 
     *init_params->priv_size = sizeof(*rpriv);
     return ucp_proto_rndv_ack_init(init_params, &rpriv->ack);
+}
+
+static void
+ucp_proto_rndv_rkey_ptr_query(const ucp_proto_query_params_t *params,
+                              ucp_proto_query_attr_t *attr)
+{
+    UCS_STRING_BUFFER_FIXED(config_strb, attr->config, sizeof(attr->config));
+    const ucp_proto_rndv_rkey_ptr_priv_t *rpriv = params->priv;
+
+    ucp_proto_default_query(params, attr);
+    ucp_proto_common_lane_priv_str(params, &rpriv->spriv.super, 1, 0,
+                                   &config_strb);
 }
 
 static unsigned ucp_proto_rndv_progress_rkey_ptr(void *arg)
@@ -149,16 +162,16 @@ ucp_proto_rndv_rkey_ptr_fetch_progress(uct_pending_req_t *uct_req)
     return UCS_OK;
 }
 
-static ucp_proto_t ucp_rndv_rkey_ptr_proto = {
+ucp_proto_t ucp_rndv_rkey_ptr_proto = {
     .name     = "rndv/rkey_ptr",
+    .desc     = "copy from mapped remote memory",
     .flags    = 0,
     .init     = ucp_proto_rndv_rkey_ptr_init,
-    .query    = ucp_proto_default_query,
+    .query    = ucp_proto_rndv_rkey_ptr_query,
     .progress = {
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_FETCH] = ucp_proto_rndv_rkey_ptr_fetch_progress,
          [UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_rkey_ptr_proto);
 

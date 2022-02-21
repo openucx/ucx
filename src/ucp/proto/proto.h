@@ -34,6 +34,10 @@
 #define UCP_PROTO_ID_INVALID        ((ucp_proto_id_t)-1)
 
 
+/* Maximal length of protocol description string */
+#define UCP_PROTO_DESC_STR_MAX      64
+
+
 /* Maximal length of protocol configuration string */
 #define UCP_PROTO_CONFIG_STR_MAX    128
 
@@ -178,24 +182,42 @@ typedef ucs_status_t
 (*ucp_proto_init_func_t)(const ucp_proto_init_params_t *params);
 
 
-/**
- * Protocol query input parameters
- */
 typedef struct {
+    /* Protocol definition */
+    const ucp_proto_t              *proto;
+
     /* Protocol private configuration area */
-    const void *priv;
+    const void                     *priv;
+
+    /* Worker on which the protocol was initialized */
+    ucp_worker_h                   worker;
+
+    /* Protocol selection parameters */
+    const ucp_proto_select_param_t *select_param;
+
+    /* Endpoint configuration */
+    const ucp_ep_config_key_t      *ep_config_key;
 
     /* Get information about this message length */
-    size_t     msg_length;
+    size_t                         msg_length;
 } ucp_proto_query_params_t;
 
 
-/**
- * Protocol query output
- */
 typedef struct {
+    /* Maximal message size of the range started from 'msg_length' for
+       which the description and configuration information is relevant.
+       It must be > msg_length. */
+    size_t max_msg_length;
+
+    /* Whether the reported information is not definitive, and the actual used
+       protocol depends on remote side decision as well. */
+    int    is_estimation;
+
+    /* High-level description of what the protocol is doing in this range */
+    char   desc[UCP_PROTO_DESC_STR_MAX];
+
     /* Protocol configuration in the range, such as devices and transports */
-    char config[UCP_PROTO_CONFIG_STR_MAX];
+    char   config[UCP_PROTO_CONFIG_STR_MAX];
 } ucp_proto_query_attr_t;
 
 
@@ -226,6 +248,7 @@ typedef void (*ucp_request_abort_func_t)(ucp_request_t *request,
  */
 struct ucp_proto {
     const char               *name; /* Protocol name */
+    const char               *desc; /* Protocol description */
     unsigned                 flags; /* Protocol flags for special handling */
     ucp_proto_init_func_t    init;  /* Initialization function */
     ucp_proto_query_func_t   query; /* Query protocol information */
@@ -245,16 +268,6 @@ struct ucp_proto {
 
 
 /**
- * Register a protocol definition.
- */
-#define UCP_PROTO_REGISTER(_proto) \
-    UCS_STATIC_INIT { \
-        ucs_assert_always(ucp_protocols_count < UCP_PROTO_MAX_COUNT); \
-        ucp_protocols[ucp_protocols_count++] = (_proto); \
-    }
-
-
-/**
  * Retrieve a protocol field by protocol id.
  */
 #define ucp_proto_id_field(_proto_id, _field) \
@@ -269,13 +282,14 @@ struct ucp_proto {
 
 
 /* Global array of all registered protocols */
-extern const ucp_proto_t *ucp_protocols[UCP_PROTO_MAX_COUNT];
-
-/* Number of globally registered protocols */
-extern unsigned ucp_protocols_count;
+extern const ucp_proto_t *ucp_protocols[];
 
 /* Performance types names */
 extern const char *ucp_proto_perf_types[];
+
+
+/* Get number of globally registered protocols */
+unsigned ucp_protocols_count(void);
 
 
 /* Default protocol query function: set max_msg_length to SIZE_MAX, take

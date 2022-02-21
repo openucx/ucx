@@ -231,18 +231,20 @@ static void ucp_proto_rndv_rtr_query(const ucp_proto_query_params_t *params,
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
 
-    ucp_proto_select_elem_query(&rpriv->remote_proto, params->msg_length, attr);
+    ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
+                                params->msg_length, attr);
+    attr->is_estimation = 1;
 }
 
-static ucp_proto_t ucp_rndv_rtr_proto = {
+ucp_proto_t ucp_rndv_rtr_proto = {
     .name     = "rndv/rtr",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_rtr_init,
     .query    = ucp_proto_rndv_rtr_query,
     .progress = {ucp_proto_rndv_rtr_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_rtr_proto);
 
 
 static size_t ucp_proto_rndv_rtr_mtype_pack(void *dest, void *arg)
@@ -373,19 +375,26 @@ ucp_proto_rndv_rtr_mtype_query(const ucp_proto_query_params_t *params,
                                ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+    ucp_proto_query_attr_t remote_attr;
 
-    ucp_proto_select_elem_query(&rpriv->remote_proto, params->msg_length, attr);
+    ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
+                                params->msg_length, &remote_attr);
+
+    attr->is_estimation  = 1;
+    attr->max_msg_length = remote_attr.max_msg_length;
+    ucp_proto_rndv_mtype_query_desc(params, attr, remote_attr.desc);
+    ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
 }
 
-static ucp_proto_t ucp_rndv_rtr_mtype_proto = {
+ucp_proto_t ucp_rndv_rtr_mtype_proto = {
     .name     = "rndv/rtr/mtype",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_rtr_mtype_init,
     .query    = ucp_proto_rndv_rtr_mtype_query,
     .progress = {ucp_proto_rndv_rtr_mtype_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_rtr_mtype_proto);
 
 ucs_status_t ucp_proto_rndv_rtr_handle_atp(void *arg, void *data, size_t length,
                                            unsigned flags)

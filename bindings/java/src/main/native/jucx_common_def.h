@@ -94,7 +94,7 @@ ucs_status_t am_recv_callback(void *arg, const void *header, size_t header_lengt
  * @brief Utility to allocate jucx request and set appropriate java callback in it.
  */
 jobject jucx_request_allocate(JNIEnv *env, jobject callback, ucp_request_param_t *param,
-                              jint memory_type);
+                              jobject request_params);
 
 /**
  * @ingroup JUCX_REQ

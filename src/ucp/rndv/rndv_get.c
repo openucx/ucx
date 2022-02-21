@@ -11,6 +11,7 @@
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
 
+#define UCP_PROTO_RNDV_GET_DESC "read from remote"
 
 enum {
     UCP_PROTO_RNDV_GET_STAGE_FETCH = UCP_PROTO_STAGE_START,
@@ -33,11 +34,12 @@ ucp_proto_rndv_get_common_init(const ucp_proto_init_params_t *init_params,
         .super.latency       = 0,
         .super.min_length    = 0,
         .super.max_length    = max_length,
+        .super.min_iov       = 1,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.get.max_zcopy),
-        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.get.max_iov),
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_GET_ZCOPY,
         .super.memtype_op    = memtype_op,
@@ -102,6 +104,14 @@ ucp_proto_rndv_get_zcopy_init(const ucp_proto_init_params_t *init_params)
                                           SIZE_MAX, UCT_EP_OP_LAST,
                                           UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
                                           0, 0);
+}
+
+static void
+ucp_proto_rndv_get_zcopy_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_default_query(params, attr);
+    ucp_proto_rndv_bulk_query(params, attr);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
@@ -183,18 +193,18 @@ static void ucp_rndv_get_zcopy_proto_abort(ucp_request_t *request,
     }
 }
 
-static ucp_proto_t ucp_rndv_get_zcopy_proto = {
+ucp_proto_t ucp_rndv_get_zcopy_proto = {
     .name     = "rndv/get/zcopy",
+    .desc     = UCP_PROTO_ZCOPY_DESC " " UCP_PROTO_RNDV_GET_DESC,
     .flags    = 0,
     .init     = ucp_proto_rndv_get_zcopy_init,
-    .query    = ucp_proto_rndv_bulk_query,
+    .query    = ucp_proto_rndv_get_zcopy_query,
     .progress = {
          [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_zcopy_fetch_progress,
          [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress
     },
     .abort    = ucp_rndv_get_zcopy_proto_abort
 };
-UCP_PROTO_REGISTER(&ucp_rndv_get_zcopy_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_rndv_get_mtype_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
@@ -286,18 +296,26 @@ ucp_proto_rndv_get_mtype_init(const ucp_proto_init_params_t *init_params)
                                           mdesc_md_map, 1);
 }
 
-static ucp_proto_t ucp_rndv_get_mtype_proto = {
+static void
+ucp_proto_rndv_get_mtype_query(const ucp_proto_query_params_t *params,
+                               ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_rndv_bulk_query(params, attr);
+    ucp_proto_rndv_mtype_query_desc(params, attr, UCP_PROTO_RNDV_GET_DESC);
+}
+
+ucp_proto_t ucp_rndv_get_mtype_proto = {
     .name     = "rndv/get/mtype",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_get_mtype_init,
-    .query    = ucp_proto_rndv_bulk_query,
+    .query    = ucp_proto_rndv_get_mtype_query,
     .progress = {
         [UCP_PROTO_RNDV_GET_STAGE_FETCH] = ucp_proto_rndv_get_mtype_fetch_progress,
         [UCP_PROTO_RNDV_GET_STAGE_ATS]   = ucp_proto_rndv_ats_progress,
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_get_mtype_proto);
 
 
 static ucs_status_t
@@ -342,12 +360,12 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     return ucp_proto_rndv_ack_init(params, params->priv);
 }
 
-static ucp_proto_t ucp_rndv_ats_proto = {
+ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
+    .desc     = "no data fetch",
     .flags    = 0,
     .init     = ucp_proto_rndv_ats_init,
     .query    = ucp_proto_default_query,
     .progress = {ucp_proto_rndv_ats_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_ats_proto);

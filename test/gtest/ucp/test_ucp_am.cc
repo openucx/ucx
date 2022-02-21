@@ -1004,7 +1004,12 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, short)
     test_data_release(1);
 }
 
-UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single)
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single_bcopy, "ZCOPY_THRESH=inf")
+{
+    test_data_release(fragment_size() / 2);
+}
+
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single_zcopy, "ZCOPY_THRESH=0")
 {
     test_data_release(fragment_size() / 2);
 }

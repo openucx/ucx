@@ -637,12 +637,19 @@ unsigned long ucs_sys_get_proc_create_time(pid_t pid);
  */
 ucs_status_t ucs_sys_get_memlock_rlimit(rlim_t *rlimit_value);
 
-/**
+/*
  * Check the max locked memory limit and append the message if the limit is finite
  *
  * @param [out] msg Message that will be appended
  */
 void ucs_sys_check_memlock_limit_append_msg(ucs_string_buffer_t *msg);
+
+/*
+ * Check if library is built dynamically (.so module)
+ *
+ * @return 1 if built dynamically, 0 if statically.
+ */
+int ucs_sys_is_dynamic_lib(void);
 
 END_C_DECLS
 

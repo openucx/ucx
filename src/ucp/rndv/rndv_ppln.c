@@ -124,8 +124,24 @@ static void ucp_proto_rndv_ppln_query(const ucp_proto_query_params_t *params,
                                       ucp_proto_query_attr_t *attr)
 {
     const ucp_proto_rndv_ppln_priv_t *rpriv = params->priv;
+    ucp_proto_query_attr_t frag_attr;
 
-    ucp_proto_select_elem_query(&rpriv->frag_proto, params->msg_length, attr);
+    if (params->msg_length <= rpriv->frag_size) {
+        /* Message is smaller than fragment size */
+        ucp_proto_select_elem_query(params->worker, &rpriv->frag_proto,
+                                    params->msg_length, attr);
+        attr->max_msg_length = rpriv->frag_size;
+    } else {
+        /* Message is large and fragmented to frag_size */
+        ucp_proto_select_elem_query(params->worker, &rpriv->frag_proto,
+                                    rpriv->frag_size, &frag_attr);
+
+        attr->max_msg_length = SIZE_MAX;
+        attr->is_estimation  = 0;
+        ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "pipeline %s",
+                          frag_attr.desc);
+        ucs_strncpy_safe(attr->config, frag_attr.config, sizeof(attr->config));
+    }
 }
 
 static void
@@ -254,8 +270,9 @@ ucp_proto_rndv_send_ppln_atp_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_request_zcopy_complete_success);
 }
 
-static ucp_proto_t ucp_rndv_send_ppln_proto = {
+ucp_proto_t ucp_rndv_send_ppln_proto = {
     .name     = "rndv/send/ppln",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_send_ppln_init,
     .query    = ucp_proto_rndv_ppln_query,
@@ -265,7 +282,6 @@ static ucp_proto_t ucp_rndv_send_ppln_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_send_ppln_proto);
 
 static ucs_status_t
 ucp_proto_rndv_recv_ppln_init(const ucp_proto_init_params_t *init_params)
@@ -289,8 +305,9 @@ ucp_proto_rndv_recv_ppln_ats_progress(uct_pending_req_t *uct_req)
                                        ucp_proto_rndv_recv_complete);
 }
 
-static ucp_proto_t ucp_rndv_recv_ppln_proto = {
+ucp_proto_t ucp_rndv_recv_ppln_proto = {
     .name     = "rndv/recv/ppln",
+    .desc     = NULL,
     .flags    = 0,
     .init     = ucp_proto_rndv_recv_ppln_init,
     .query    = ucp_proto_rndv_ppln_query,
@@ -300,4 +317,3 @@ static ucp_proto_t ucp_rndv_recv_ppln_proto = {
     },
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_rndv_recv_ppln_proto);

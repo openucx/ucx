@@ -59,8 +59,9 @@ void ucp_proto_select_init_trace_caps(
     ucs_log_indent(-1);
 }
 
-void ucp_proto_select_dump_thresholds(
-        const ucp_proto_select_elem_t *select_elem, ucs_string_buffer_t *strb)
+void ucp_proto_select_dump_thresholds(ucp_worker_h worker,
+                                      const ucp_proto_select_elem_t *select_elem,
+                                      ucs_string_buffer_t *strb)
 {
     static const char *proto_info_fmt = "    %-18s %-18s %s\n";
     const ucp_proto_threshold_elem_t *thresh_elem;
@@ -75,7 +76,7 @@ void ucp_proto_select_dump_thresholds(
     do {
         ucs_string_buffer_init(&proto_config_strb);
 
-        ucp_proto_config_str(&thresh_elem->proto_config, range_start,
+        ucp_proto_config_str(worker, &thresh_elem->proto_config, range_start,
                              &proto_config_strb);
         range_end = thresh_elem->max_msg_length;
 
@@ -146,7 +147,7 @@ ucp_proto_select_elem_dump(ucp_worker_h worker,
     ucs_string_buffer_appendf(strb, "\n");
 
     ucs_string_buffer_appendf(strb, "\n  Selected protocols:\n");
-    ucp_proto_select_dump_thresholds(select_elem, strb);
+    ucp_proto_select_dump_thresholds(worker, select_elem, strb);
 
     ucs_string_buffer_appendf(strb, "\n  Performance estimation:\n");
     ucp_proto_select_dump_perf(select_elem,
@@ -244,7 +245,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
     ucs_string_buffer_appendf(strb, ")");
 }
 
-void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
+void ucp_proto_threshold_elem_str(ucp_worker_h worker,
+                                  const ucp_proto_threshold_elem_t *thresh_elem,
                                   size_t min_length, size_t max_length,
                                   ucs_string_buffer_t *strb)
 {
@@ -260,7 +262,7 @@ void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
         if ((range_end >= min_length) && (range_start <= max_length)) {
             proto = thresh_elem->proto_config.proto;
             ucs_string_buffer_appendf(strb, "%s(", proto->name);
-            ucp_proto_config_str(&thresh_elem->proto_config,
+            ucp_proto_config_str(worker, &thresh_elem->proto_config,
                                  ucs_max(range_start, min_length), strb);
             ucs_string_buffer_appendf(strb, ")");
 
@@ -294,7 +296,7 @@ void ucp_proto_select_config_str(ucp_worker_h worker,
     /* Print selection parameters */
     ucp_proto_select_param_str(&proto_config->select_param, strb);
     ucs_string_buffer_appendf(strb, ": %s ", proto_config->proto->name);
-    ucp_proto_config_str(proto_config, msg_length, strb);
+    ucp_proto_config_str(worker, proto_config, msg_length, strb);
 
     /* Find protocol selection root */
     proto_select = ucp_proto_select_get(worker, proto_config->ep_cfg_index,
@@ -327,11 +329,13 @@ void ucp_proto_select_config_str(ucp_worker_h worker,
                               send_time * UCS_USEC_PER_SEC);
 }
 
-void ucp_proto_config_str(const ucp_proto_config_t *proto_config,
+void ucp_proto_config_str(ucp_worker_h worker,
+                          const ucp_proto_config_t *proto_config,
                           size_t msg_length, ucs_string_buffer_t *strb)
 {
     ucp_proto_query_attr_t proto_attr;
 
-    ucp_proto_config_query(proto_config, msg_length, &proto_attr);
-    ucs_string_buffer_appendf(strb, "%s", proto_attr.config);
+    ucp_proto_config_query(worker, proto_config, msg_length, &proto_attr);
+    ucs_string_buffer_appendf(strb, "%s (%s)", proto_attr.desc,
+                              proto_attr.config);
 }

@@ -82,6 +82,7 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 20,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_bcopy),
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -98,12 +99,12 @@ ucp_proto_get_am_bcopy_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_single_init(&params);
 }
 
-static ucp_proto_t ucp_get_am_bcopy_proto = {
+ucp_proto_t ucp_get_am_bcopy_proto = {
     .name     = "get/am/bcopy",
+    .desc     = UCP_PROTO_RMA_EMULATION_DESC,
     .flags    = 0,
     .init     = ucp_proto_get_am_bcopy_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_proto_get_am_bcopy_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_get_am_bcopy_proto);

@@ -171,6 +171,7 @@ ucs_status_t init_test_params(perftest_params_t *params)
     params->super.wait_mode         = UCX_PERF_WAIT_MODE_LAST;
     params->super.max_outstanding   = 0;
     params->super.warmup_iter       = 10000;
+    params->super.warmup_time       = 100e-3;
     params->super.alignment         = ucs_get_page_size();
     params->super.max_iter          = 1000000l;
     params->super.max_time          = 0.0;

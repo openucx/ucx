@@ -50,8 +50,9 @@ void ucp_proto_select_init_trace_caps(
         ucp_proto_id_t proto_id, const ucp_proto_init_params_t *init_params);
 
 
-void ucp_proto_select_dump_thresholds(
-        const ucp_proto_select_elem_t *select_elem, ucs_string_buffer_t *strb);
+void ucp_proto_select_dump_thresholds(ucp_worker_h worker,
+                                      const ucp_proto_select_elem_t *select_elem,
+                                      ucs_string_buffer_t *strb);
 
 
 void ucp_proto_select_dump(ucp_worker_h worker,
@@ -69,7 +70,8 @@ void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
                                 ucs_string_buffer_t *strb);
 
 
-void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
+void ucp_proto_threshold_elem_str(ucp_worker_h worker,
+                                  const ucp_proto_threshold_elem_t *thresh_elem,
                                   size_t min_length, size_t max_length,
                                   ucs_string_buffer_t *strb);
 
@@ -80,7 +82,8 @@ void ucp_proto_select_config_str(ucp_worker_h worker,
                                  size_t msg_length, ucs_string_buffer_t *strb);
 
 
-void ucp_proto_config_str(const ucp_proto_config_t *proto_config,
+void ucp_proto_config_str(ucp_worker_h worker,
+                          const ucp_proto_config_t *proto_config,
                           size_t msg_length, ucs_string_buffer_t *strb);
 
 #endif

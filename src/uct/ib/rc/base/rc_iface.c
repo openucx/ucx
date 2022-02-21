@@ -32,7 +32,7 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_iface_common_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-  {"MAX_RD_ATOMIC", "4",
+  {"MAX_RD_ATOMIC", "16",
    "Maximal number of outstanding read or atomic replies",
    ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic), UCS_CONFIG_TYPE_UINT},
 
