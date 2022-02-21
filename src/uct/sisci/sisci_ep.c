@@ -229,7 +229,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     ucs_iov_iter_t uct_iov_iter;
     size_t total_header_len = 0; /* header_length + sizeof(header_length) */
     sci_error_t sci_error;
-
+    sisci_packet_t* sci_header = ep->buf; 
 
     tx = (void*) iface->tx_map;
     tx_pack = (sisci_packet_t*) tx;
@@ -248,7 +248,6 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
     } else {
         total_header_len = 0;
     }
-    
     
 
 
@@ -287,7 +286,7 @@ ucs_status_t uct_sci_ep_am_zcopy(uct_ep_h uct_ep, uint8_t id, const void *header
 
     //printf("uct_sci_ep_am_zcopy() %d %d %zd %zd %zd \n",id, ep->remote_node_id, bytes_copied, iov_total_len, total_header_len);
 
-    ((sisci_packet_t*)ep->buf)->status = 1;
+    sci_header->status = 1;
     
     SCIFlush(NULL, SCI_NO_FLAGS);
 

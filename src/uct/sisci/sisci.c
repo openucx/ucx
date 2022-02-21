@@ -493,10 +493,10 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
 
         DEBUG_PRINT("status == UCS_OK, clear buffers\n");
 
-        packet->am_id = 0;
+        /*packet->am_id = 0;
         packet->status = 0;
+        packet->length = 0;*/
         memset(iface->recv_buffer, 0 ,packet->length + SCI_PACKET_SIZE);
-        packet->length = 0;
     }
 
 
