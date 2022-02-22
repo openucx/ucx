@@ -1528,7 +1528,7 @@ int uct_ib_iface_prepare_rx_wrs(uct_ib_iface_t *iface, ucs_mpool_t *mp,
     while (count < n) {
 
         if (user_allocator_active) {
-            UCT_TL_IFACE_GET_RX_DESC_FROM_USER(user_allocator_get_desc_from_usr, user_allocator_instance, user_allocator_md_index, desc, user_allocator_memh, break);
+            UCT_TL_IFACE_GET_RX_DESC_FROM_USER(get_desc_from_user_allocator_cb, get_desc_from_user_allocator, user_allocator_instance, user_allocator_md_index, desc, user_allocator_memh, break);
         } else {
             UCT_TL_IFACE_GET_RX_DESC(&iface->super, mp, desc, break);
         }

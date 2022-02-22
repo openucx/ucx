@@ -349,6 +349,8 @@ typedef struct ucp_worker {
         /* Number of failed endpoints */
         uint64_t                     ep_failures;
     } counters;
+
+    user_allocator_props_t user_allocator;
 } ucp_worker_t;
 
 

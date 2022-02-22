@@ -462,20 +462,26 @@ typedef struct uct_iface_mpool_config {
 #define UCT_TL_EXPAND_USR_MEM_ALLOCATOR(_user_allocator_props) \
     user_allocator_props_t *user_allocator_props = _user_allocator_props; \
     uct_mem_h user_allocator_memh; \
-    uct_iface_get_desc_from_usr_func_t user_allocator_get_desc_from_usr = user_allocator_props->ops.get_desc_from_usr_callback; \
+    void *ucp_memh = NULL; \
+    uct_iface_get_desc_from_usr_cb_func_t get_desc_from_user_allocator_cb = user_allocator_props->get_desc_from_usr_cb; \
+    uct_iface_get_desc_from_usr_func_t get_desc_from_user_allocator = user_allocator_props->ops.get_desc_from_usr; \
     uct_usr_mem_allocator_h user_allocator_instance = user_allocator_props->usr_allocator; \
     unsigned user_allocator_md_index = user_allocator_props->md_index; \
     int user_allocator_active = user_allocator_props->active;
 
 
-#define UCT_TL_IFACE_GET_RX_DESC_FROM_USER(_get_desc_from_usr, _usr_allocator, md_index, _desc, _memh, _failure) \
+#define UCT_TL_IFACE_GET_RX_DESC_FROM_USER(_get_desc_from_usr_cb, _get_desc_from_usr, _usr_allocator, _md_index, _desc, _uct_memh, _failure) \
     { \
-        _get_desc_from_usr(md_index, _usr_allocator, (void**)&_desc, &_memh); \
+        _get_desc_from_usr(_usr_allocator, (void**)&_desc, &ucp_memh); \
         if (ucs_unlikely((_desc) == NULL)) { \
             _failure; \
         } \
-        ucs_assert(_memh != UCT_MEM_HANDLE_NULL); \
-        _desc->lkey = ((uct_ib_mem_t*)_memh)->lkey; \
+        _get_desc_from_usr_cb(ucp_memh, _md_index, &_uct_memh); \
+        ucs_assert(_uct_memh != UCT_MEM_HANDLE_NULL); \
+        if (ucs_unlikely((_uct_memh) == NULL)) { \
+            _failure; \
+        } \
+        _desc->lkey = ((uct_ib_mem_t*)_uct_memh)->lkey; \
         \
         VALGRIND_MAKE_MEM_DEFINED(_desc, sizeof(*(_desc))); \
     }

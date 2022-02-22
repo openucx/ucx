@@ -1157,27 +1157,19 @@ ucs_status_t mockUserGetDesc(void *usr_allocator, void** desc, ucp_mem_h *memh) 
     return status;
 }
 
-static ucs_status_t ucp_worker_call_init_usr_allocator(size_t seg_size, size_t data_offset, uct_usr_mem_allocator_h* usr_allocator) {
-    ucs_status_t status;
-
-    status = mockUserInitAllocator(seg_size, data_offset, (void**)usr_allocator);
-    return status;
-}
-
-static ucs_status_t ucp_worker_get_desc_from_usr(unsigned md_index, uct_usr_mem_allocator_h usr_allocator, void** desc, uct_mem_h *memh) {
+static ucs_status_t ucp_worker_get_desc_from_usr_cb(void* ucp_memh_p, unsigned md_index, uct_mem_h *memh) {
     ucs_status_t status = UCS_OK;
     static unsigned uct_memh_idx_mem[UCP_MD_INDEX_BITS] = {0};
-    ucp_mem_h ucp_memh;
     unsigned md_bit_idx;
     ucp_md_map_t md_map_p;
     unsigned uct_memh_idx = 0;
+    ucp_mem_h ucp_memh = ucp_memh_p;
 
     if (md_index >= UCP_MD_INDEX_BITS) {
         status = UCS_ERR_NO_DEVICE;
         return status;
     }
 
-    mockUserGetDesc((void*) usr_allocator, desc, &ucp_memh);
     md_map_p = ucp_memh->md_map;
     if (!(md_map_p & UCS_BIT(md_index))) {
         status = UCS_ERR_NO_RESOURCE;
@@ -1256,16 +1248,16 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
                                       UCT_IFACE_PARAM_FIELD_CPU_MASK          ;
-                                    //   UCT_IFACE_PARAM_FIELD_USR_ALLOC;
+                                      
     iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
     iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
     iface_params->err_handler_arg   = worker;
     iface_params->err_handler       = ucp_worker_iface_error_handler;
     iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
     iface_params->cpu_mask          = worker->cpu_mask;
+
+    memcpy(&iface_params->user_allocator, &worker->user_allocator, sizeof(user_allocator_props_t));
     iface_params->user_allocator.md_index = resource->md_index;
-    iface_params->user_allocator.ops.init_usr_mem_allocator = ucp_worker_call_init_usr_allocator;
-    iface_params->user_allocator.ops.get_desc_from_usr_callback = ucp_worker_get_desc_from_usr;
 
     if (context->config.features & UCP_FEATURE_TAG) {
         iface_params->eager_arg     = iface_params->rndv_arg = wiface;
@@ -2293,6 +2285,20 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);
     } else {
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 2);
+    }
+
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC) {
+        worker->user_allocator.active = 1;
+        worker->user_allocator.ops.init_usr_mem_allocator = (uct_iface_init_usr_allocator_func_t)params->user_mem_allocator_init;
+        worker->user_allocator.ops.get_desc_from_usr = (uct_iface_get_desc_from_usr_func_t)params->user_get_descriptor;
+        worker->user_allocator.get_desc_from_usr_cb = ucp_worker_get_desc_from_usr_cb;
+        worker->user_allocator.usr_allocator = NULL;
+    } else {
+        worker->user_allocator.active = 0;
+        worker->user_allocator.ops.init_usr_mem_allocator = NULL;
+        worker->user_allocator.ops.get_desc_from_usr = NULL;
+        worker->user_allocator.get_desc_from_usr_cb = NULL;
+        worker->user_allocator.usr_allocator = NULL;  
     }
 
     worker->user_data    = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,

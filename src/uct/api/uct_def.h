@@ -904,7 +904,8 @@ typedef struct uct_usr_mem_allocator *uct_usr_mem_allocator_h;
 
 typedef ucs_status_t (*uct_iface_init_usr_allocator_func_t)(size_t seg_size, size_t data_offset, uct_usr_mem_allocator_h* usr_allocator);
 
-typedef ucs_status_t (*uct_iface_get_desc_from_usr_func_t)(unsigned md_index, uct_usr_mem_allocator_h usr_allocator, void **desc, uct_mem_h *memh);
+typedef ucs_status_t (*uct_iface_get_desc_from_usr_func_t)(uct_usr_mem_allocator_h usr_allocator, void **desc, void **ucp_memh);
+typedef ucs_status_t (*uct_iface_get_desc_from_usr_cb_func_t)(void* ucp_memh, unsigned md_index, uct_mem_h *memh);
 
 /**
  * @ingroup UCT_RESOURCE
@@ -914,11 +915,12 @@ typedef struct user_allocator_props {
     int active;
     unsigned md_index;
     uct_usr_mem_allocator_h usr_allocator;
+    uct_iface_get_desc_from_usr_cb_func_t get_desc_from_usr_cb;
     struct {
         /*Init user defined memory allocator*/
         uct_iface_init_usr_allocator_func_t init_usr_mem_allocator;   
         /*Get memory descriptor from user*/
-        uct_iface_get_desc_from_usr_func_t  get_desc_from_usr_callback;   
+        uct_iface_get_desc_from_usr_func_t  get_desc_from_usr;   
     } ops;
 } user_allocator_props_t;
 

@@ -162,17 +162,18 @@ enum ucp_feature {
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_worker_params_field {
-    UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
-    UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
-    UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2), /**< Worker's events bitmap */
-    UCP_WORKER_PARAM_FIELD_USER_DATA    = UCS_BIT(3), /**< User data */
-    UCP_WORKER_PARAM_FIELD_EVENT_FD     = UCS_BIT(4), /**< External event file
+    UCP_WORKER_PARAM_FIELD_THREAD_MODE    = UCS_BIT(0), /**< UCP thread mode */
+    UCP_WORKER_PARAM_FIELD_CPU_MASK       = UCS_BIT(1), /**< Worker's CPU bitmap */
+    UCP_WORKER_PARAM_FIELD_EVENTS         = UCS_BIT(2), /**< Worker's events bitmap */
+    UCP_WORKER_PARAM_FIELD_USER_DATA      = UCS_BIT(3), /**< User data */
+    UCP_WORKER_PARAM_FIELD_EVENT_FD       = UCS_BIT(4), /**< External event file
                                                            descriptor */
-    UCP_WORKER_PARAM_FIELD_FLAGS        = UCS_BIT(5), /**< Worker flags */
-    UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6), /**< Worker name */
-    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7), /**< Alignment of active
+    UCP_WORKER_PARAM_FIELD_FLAGS          = UCS_BIT(5), /**< Worker flags */
+    UCP_WORKER_PARAM_FIELD_NAME           = UCS_BIT(6), /**< Worker name */
+    UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT   = UCS_BIT(7), /**< Alignment of active
                                                            messages on the receiver */
-    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8)  /**< Client id */
+    UCP_WORKER_PARAM_FIELD_CLIENT_ID      = UCS_BIT(8),  /**< Client id */
+    UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC  = UCS_BIT(9)  /**< User Memory Allocator */
 };
 
 
@@ -1205,6 +1206,34 @@ typedef struct ucp_worker_attr {
     size_t                max_debug_string;
 } ucp_worker_attr_t;
 
+/**
+* @ingroup UCP_WORKER
+* @brief User defined memory allocation instance constructor. 
+*
+* @param [in]  seg_size       Descriptors size to allocate
+*                             by this memory allocator instance.
+* @param [in]  data_offset    Data offset.
+*
+* @param [out] usr_allocator  Opaque object representing memory allocation instance implmented by the user
+*
+* @return Error code as defined by @ref ucs_status_t
+*/
+typedef ucs_status_t (*ucp_user_mem_allocator_init_func_t)(size_t seg_size, size_t data_offset, void **usr_allocator);
+
+/**
+* @ingroup UCP_WORKER
+* @brief Get descriptor from user defined memory allocation instance 
+*
+* @param [in]   usr_allocator  Opaque object representing memory allocation instance implmented by the user
+* 
+* @param [out]  desc           Allocated descriptor.
+*
+* @param [out]  ucp_mem_h      UCP Memory handle 
+*
+* @return Error code as defined by @ref ucs_status_t
+*/
+typedef ucs_status_t (*ucp_user_get_descriptor_func_t)(void *usr_allocator, void** desc, ucp_mem_h *memh);
+
 
 /**
  * @ingroup UCP_WORKER
@@ -1310,6 +1339,16 @@ typedef struct ucp_worker_params {
     * using @ref ucp_conn_request_query.
     */
     uint64_t                client_id;
+
+    /**
+    * User defined memory allocation instance constructor. 
+    */
+    ucp_user_mem_allocator_init_func_t user_mem_allocator_init;
+    
+    /**
+    * Get descriptor from user memory allocation instance
+    */
+    ucp_user_get_descriptor_func_t user_get_descriptor;
 } ucp_worker_params_t;
 
 
