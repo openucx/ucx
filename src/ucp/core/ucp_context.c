@@ -29,7 +29,43 @@
 
 #define UCP_RSC_CONFIG_ALL    "all"
 
-ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
+#define UCP_AM_HANDLER_FOREACH(_macro) \
+    _macro(UCP_AM_ID_WIREUP) \
+    _macro(UCP_AM_ID_EAGER_ONLY) \
+    _macro(UCP_AM_ID_EAGER_FIRST) \
+    _macro(UCP_AM_ID_EAGER_MIDDLE) \
+    _macro(UCP_AM_ID_EAGER_SYNC_ONLY) \
+    _macro(UCP_AM_ID_EAGER_SYNC_FIRST) \
+    _macro(UCP_AM_ID_EAGER_SYNC_ACK) \
+    _macro(UCP_AM_ID_RNDV_RTS) \
+    _macro(UCP_AM_ID_RNDV_ATS) \
+    _macro(UCP_AM_ID_RNDV_RTR) \
+    _macro(UCP_AM_ID_RNDV_DATA) \
+    _macro(UCP_AM_ID_OFFLOAD_SYNC_ACK) \
+    _macro(UCP_AM_ID_STREAM_DATA) \
+    _macro(UCP_AM_ID_RNDV_ATP) \
+    _macro(UCP_AM_ID_PUT) \
+    _macro(UCP_AM_ID_GET_REQ) \
+    _macro(UCP_AM_ID_GET_REP) \
+    _macro(UCP_AM_ID_ATOMIC_REQ) \
+    _macro(UCP_AM_ID_ATOMIC_REP) \
+    _macro(UCP_AM_ID_CMPL) \
+    _macro(UCP_AM_ID_AM_SINGLE) \
+    _macro(UCP_AM_ID_AM_FIRST) \
+    _macro(UCP_AM_ID_AM_MIDDLE) \
+    _macro(UCP_AM_ID_AM_SINGLE_REPLY)
+
+#define UCP_AM_HANDLER_DECL(_id) extern ucp_am_handler_t ucp_am_handler_##_id;
+
+#define UCP_AM_HANDLER_ENTRY(_id) [_id] = &ucp_am_handler_##_id,
+
+
+/* Declare all am handlers */
+UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_DECL)
+
+ucp_am_handler_t *ucp_am_handlers[UCP_AM_ID_LAST] = {
+    UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_ENTRY)
+};
 
 static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_CPU]    = "cpu",
@@ -407,8 +443,7 @@ static ucs_config_field_t ucp_config_table[] = {
 
    {NULL}
 };
-UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
-                          &ucs_config_global_list)
+UCS_CONFIG_DECLARE_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
@@ -2093,4 +2128,14 @@ void ucp_context_get_mem_access_tls(ucp_context_h context,
             UCS_BITMAP_SET(*tl_bitmap, tl_id);
         }
     }
+}
+
+UCS_F_CTOR void ucp_global_init(void)
+{
+    UCS_CONFIG_ADD_TABLE(ucp_config_table, &ucs_config_global_list);
+}
+
+UCS_F_DTOR static void ucp_global_cleanup(void)
+{
+    UCS_CONFIG_REMOVE_TABLE(ucp_config_table);
 }

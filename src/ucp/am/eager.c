@@ -55,7 +55,7 @@ static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
     }
 
     status = uct_ep_am_short_iov(req->send.ep->uct_eps[spriv->super.lane],
-                                 UCP_AM_ID_SINGLE, iov, iov_cnt);
+                                 UCP_AM_ID_AM_SINGLE, iov, iov_cnt);
     if (ucs_unlikely(status == UCS_ERR_NO_RESOURCE)) {
         req->send.lane = spriv->super.lane; /* for pending add */
         return status;
@@ -177,7 +177,7 @@ static ucs_status_t ucp_eager_bcopy_single_progress(uct_pending_req_t *self)
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
 
     return ucp_proto_am_bcopy_single_progress(
-            req, UCP_AM_ID_SINGLE, spriv->super.lane, ucp_eager_single_pack,
+            req, UCP_AM_ID_AM_SINGLE, spriv->super.lane, ucp_eager_single_pack,
             req, SIZE_MAX, ucp_proto_request_bcopy_complete_success);
 }
 
@@ -287,8 +287,8 @@ ucp_proto_eager_am_zcopy_single_send_func(ucp_request_t *req,
     ucp_proto_eager_am_zcopy_add_footer(req, spriv->super.lane, iov, &iovcnt);
 
     return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],
-                           UCP_AM_ID_SINGLE, &hdr, sizeof(hdr), iov, iovcnt, 0,
-                           &req->send.state.uct_comp);
+                           UCP_AM_ID_AM_SINGLE, &hdr, sizeof(hdr), iov, iovcnt,
+                           0, &req->send.state.uct_comp);
 }
 
 void ucp_proto_request_eager_am_zcopy_single_completion(uct_completion_t *self)

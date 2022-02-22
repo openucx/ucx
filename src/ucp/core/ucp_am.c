@@ -569,12 +569,12 @@ ucp_am_send_short(ucp_ep_h ep, uint16_t id, uint16_t flags, const void *header,
             return status;
         }
 
-        am_id     = UCP_AM_ID_SINGLE_REPLY;
+        am_id     = UCP_AM_ID_AM_SINGLE_REPLY;
         ftr.ep_id = ucp_ep_remote_id(ep);
         ucp_add_uct_iov_elem(iov, &ftr, sizeof(ftr), UCT_MEM_HANDLE_NULL,
                              &iov_cnt);
     } else {
-        am_id = UCP_AM_ID_SINGLE;
+        am_id = UCP_AM_ID_AM_SINGLE;
     }
 
     return uct_ep_am_short_iov(ucp_ep_get_am_uct_ep(ep), am_id, iov, iov_cnt);
@@ -612,7 +612,7 @@ static ucs_status_t ucp_am_contig_short_reply(uct_pending_req_t *self)
 
 static ucs_status_t ucp_am_bcopy_single(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE,
+    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE,
                                                  ucp_am_bcopy_pack_args_single);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
@@ -620,7 +620,7 @@ static ucs_status_t ucp_am_bcopy_single(uct_pending_req_t *self)
 
 static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_SINGLE_REPLY,
+    ucs_status_t status = ucp_do_am_bcopy_single(self, UCP_AM_ID_AM_SINGLE_REPLY,
                                                  ucp_am_bcopy_pack_args_single_reply);
 
     return ucp_am_bcopy_handle_status_from_pending(self, 0, 0, status);
@@ -628,8 +628,8 @@ static ucs_status_t ucp_am_bcopy_single_reply(uct_pending_req_t *self)
 
 static ucs_status_t ucp_am_bcopy_multi(uct_pending_req_t *self)
 {
-    ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_FIRST,
-                                                UCP_AM_ID_MIDDLE,
+    ucs_status_t status = ucp_do_am_bcopy_multi(self, UCP_AM_ID_AM_FIRST,
+                                                UCP_AM_ID_AM_MIDDLE,
                                                 ucp_am_bcopy_pack_args_first,
                                                 ucp_am_bcopy_pack_args_mid, 1);
 
@@ -682,7 +682,7 @@ static ucs_status_t ucp_am_zcopy_single(uct_pending_req_t *self)
 
     ucp_am_fill_header(&hdr, req);
 
-    return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE, &hdr, sizeof(hdr),
+    return ucp_do_am_zcopy_single(self, UCP_AM_ID_AM_SINGLE, &hdr, sizeof(hdr),
                                   req->send.msg_proto.am.reg_desc,
                                   req->send.msg_proto.am.header_length,
                                   ucp_am_zcopy_req_complete);
@@ -701,7 +701,7 @@ static ucs_status_t ucp_am_zcopy_single_reply(uct_pending_req_t *self)
                                      req->send.msg_proto.am.header_length);
     ftr->ep_id = ucp_send_request_get_ep_remote_id(req);
 
-    return ucp_do_am_zcopy_single(self, UCP_AM_ID_SINGLE_REPLY, &hdr,
+    return ucp_do_am_zcopy_single(self, UCP_AM_ID_AM_SINGLE_REPLY, &hdr,
                                   sizeof(hdr), req->send.msg_proto.am.reg_desc,
                                   req->send.msg_proto.am.header_length +
                                           sizeof(*ftr),
@@ -725,8 +725,9 @@ static ucs_status_t ucp_am_zcopy_multi(uct_pending_req_t *self)
 
     if (req->send.state.dt.offset != 0) {
         ucp_am_fill_middle_header(&mid_hdr, req);
-        return ucp_do_am_zcopy_multi(self, UCP_AM_ID_FIRST, UCP_AM_ID_MIDDLE,
-                                     NULL, 0ul, &mid_hdr, sizeof(mid_hdr),
+        return ucp_do_am_zcopy_multi(self, UCP_AM_ID_AM_FIRST,
+                                     UCP_AM_ID_AM_MIDDLE, NULL, 0ul, &mid_hdr,
+                                     sizeof(mid_hdr),
                                      req->send.msg_proto.am.reg_desc,
                                      sizeof(first_ftr->super), user_hdr_length,
                                      ucp_am_zcopy_req_complete, 1);
@@ -734,8 +735,8 @@ static ucs_status_t ucp_am_zcopy_multi(uct_pending_req_t *self)
 
     ucp_am_fill_header(&hdr, req);
 
-    return ucp_do_am_zcopy_multi(self, UCP_AM_ID_FIRST, UCP_AM_ID_MIDDLE, &hdr,
-                                 sizeof(hdr), NULL, 0ul,
+    return ucp_do_am_zcopy_multi(self, UCP_AM_ID_AM_FIRST, UCP_AM_ID_AM_MIDDLE,
+                                 &hdr, sizeof(hdr), NULL, 0ul,
                                  req->send.msg_proto.am.reg_desc,
                                  user_hdr_length + sizeof(*first_ftr), 0ul,
                                  ucp_am_zcopy_req_complete, 1);
@@ -1698,13 +1699,13 @@ out:
     return UCS_OK;
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE,
               ucp_am_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_FIRST,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_FIRST,
               ucp_am_long_first_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_MIDDLE,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_MIDDLE,
               ucp_am_long_middle_handler, NULL, 0);
-UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_SINGLE_REPLY,
+UCP_DEFINE_AM(UCP_FEATURE_AM, UCP_AM_ID_AM_SINGLE_REPLY,
               ucp_am_handler_reply, NULL, 0);
 
 const ucp_request_send_proto_t ucp_am_proto = {
