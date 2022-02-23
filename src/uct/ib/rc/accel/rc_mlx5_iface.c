@@ -329,10 +329,12 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     ucs_status_t status;
     uct_ib_mlx5_md_t *md               = ucs_derived_of(ib_iface->super.md,
                                                         uct_ib_mlx5_md_t);
+    uct_ibv_ece_t ece                  = {};
 #if HAVE_DECL_MLX5DV_CREATE_QP
     uct_ib_device_t *dev               = &md->super.dev;
     struct mlx5dv_qp_init_attr dv_attr = {};
 
+    qp->local_ece = ece.options;
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
         attr->uidx      = 0xffffff;
         status = uct_ib_mlx5_devx_create_qp(ib_iface, qp, txwq, attr);
@@ -372,6 +374,16 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     status = uct_ib_mlx5_iface_create_qp(ib_iface, qp, attr);
     if (status != UCS_OK) {
         goto err;
+    }
+#endif
+
+    qp->local_ece = ece.options;
+#if HAVE_RDMACM_ECE
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
+        iface->super.super.config.enable_ece) {
+        if (0 == ibv_query_ece(qp->verbs.qp, &ece)) {
+            qp->local_ece = ece.options;
+        }
     }
 #endif
 
