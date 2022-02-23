@@ -189,6 +189,13 @@ UCS_TEST_P(test_uct_ib_addr, address_pack) {
     test_address_pack(0xdeadfeedbeefa880ul);
 }
 
+UCS_TEST_P(test_uct_ib_addr, address_pack_ece, "IB_ECE_ON=y", "IB_ADDR_VERSION=v1")
+{
+    test_address_pack(UCT_IB_LINK_LOCAL_PREFIX);
+    test_address_pack(UCT_IB_SITE_LOCAL_PREFIX | htobe64(0x7200));
+    test_address_pack(0xdeadfeedbeefa880ul);
+}
+
 UCS_TEST_P(test_uct_ib_addr, address_pack_path_mtu, "IB_PATH_MTU=2048")
 {
     uct_ib_iface_t *iface = ucs_derived_of(m_entities.front()->iface(),
