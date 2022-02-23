@@ -731,7 +731,7 @@ ucs_status_t uct_rc_mlx5_init_ece(uct_rc_mlx5_iface_common_t *iface)
         return status;
     }
 
-    uct_rc_mlx5_iface_query_max_ece(iface, &ep.tx.wq.super);
+    ib_iface->ece       = ep.tx.wq.super.local_ece;
     ib_iface->addr_size = uct_ib_iface_address_size(ib_iface);
     if (ib_iface->ece != 0) {
         ib_iface->dev_addr_ext_ece = 1;
