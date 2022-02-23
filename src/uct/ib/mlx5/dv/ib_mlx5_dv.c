@@ -169,6 +169,11 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     }
 
     qp->qp_num = UCT_IB_MLX5DV_GET(create_qp_out, out, qpn);
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE && iface->config.enable_ece) {
+        qp->local_ece = UCT_IB_MLX5DV_GET(create_qp_out, out, ece);
+    } else {
+        qp->local_ece = 0;
+    }
 
     if (attr->super.qp_type == IBV_QPT_RC) {
         qpc = UCT_IB_MLX5DV_ADDR_OF(rst2init_qp_in, in_2init, qpc);

@@ -339,6 +339,7 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
 
     ucs_assert(iface->super.super.super.config.qp_type == UCT_IB_QPT_DCI);
 
+    dci->txwq.super.local_ece = 0;
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_DCI) {
         status = uct_ib_mlx5_devx_create_qp(ib_iface, &dci->txwq.super,
                                             &dci->txwq, attr);
