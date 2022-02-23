@@ -154,8 +154,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem.mem->umem_id);
     }
 
-    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE &&
-        iface->config.enable_ece) {
+    if (dev->flags & UCT_IB_DEVICE_FLAG_ECE && iface->config.enable_ece) {
         UCT_IB_MLX5DV_SET(create_qp_in, in, ece,
                           UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
     }
