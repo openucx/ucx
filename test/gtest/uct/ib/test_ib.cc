@@ -102,6 +102,7 @@ public:
         pack_params.path_mtu  = iface->config.path_mtu;
         pack_params.gid_index = std::numeric_limits<uint8_t>::max();
         pack_params.pkey      = iface->pkey;
+        pack_params.ece       = iface->ece;
         address_size          = uct_ib_address_size(&pack_params);
         ib_addr               = (uct_ib_address_t*)malloc(address_size);
         uct_ib_address_pack(&pack_params, ib_addr);
@@ -138,6 +139,8 @@ public:
                         UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU);
             EXPECT_EQ(iface->config.path_mtu, unpack_params.path_mtu);
         }
+
+        EXPECT_EQ(iface->ece, unpack_params.ece);
 
         EXPECT_TRUE(!(unpack_params.flags & UCT_IB_ADDRESS_PACK_FLAG_GID_INDEX));
         EXPECT_EQ(UCT_IB_ADDRESS_INVALID_GID_INDEX, unpack_params.gid_index);
