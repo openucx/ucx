@@ -297,20 +297,6 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
     return UCS_OK;
 }
 
-uint32_t uct_ib_mlx5_devx_query_qp_max_ece(uct_ib_mlx5_qp_t *qp)
-{
-    char in[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_in)]   = {};
-    char out[UCT_IB_MLX5DV_ST_SZ_BYTES(query_qp_out)] = {};
-    ucs_status_t status;
-
-    status = uct_ib_mlx5_devx_query_qp(qp, in, sizeof(in), out, sizeof(out));
-    if (status != UCS_OK) {
-        return 0;
-    }
-
-    return UCT_IB_MLX5DV_GET(query_qp_out, out, ece);
-}
-
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state)
 {
