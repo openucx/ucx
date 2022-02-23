@@ -627,8 +627,6 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
 
 #if HAVE_DEVX
 
-uint32_t uct_ib_mlx5_devx_query_qp_max_ece(uct_ib_mlx5_qp_t *qp);
-
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
@@ -722,12 +720,6 @@ uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t
 }
 
 #else
-
-static inline
-uint32_t uct_ib_mlx5_devx_query_qp_max_ece(uct_ib_mlx5_qp_t *qp)
-{
-    return 0;
-}
 
 static inline ucs_status_t
 uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,

@@ -291,35 +291,6 @@ static void uct_rc_mlx5_iface_progress_enable(uct_iface_h tl_iface, unsigned fla
                                       iface->super.progress, flags);
 }
 
-void uct_rc_mlx5_iface_query_max_ece(uct_rc_mlx5_iface_common_t *iface,
-                                     uct_ib_mlx5_qp_t *qp)
-{
-    uct_ib_iface_t *ib_iface = &iface->super.super;
-    uct_ib_mlx5_md_t *md     = ucs_derived_of(ib_iface->super.md,
-                                              uct_ib_mlx5_md_t);
-    uct_ib_device_t *dev     = &md->super.dev;
-    uct_ibv_ece_t UCS_V_UNUSED ece;
-
-    ib_iface->ece = 0;
-
-    if (!(dev->flags & UCT_IB_DEVICE_FLAG_ECE)) {
-        return;
-    }
-
-#if HAVE_DECL_MLX5DV_CREATE_QP
-    if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
-        ib_iface->ece = uct_ib_mlx5_devx_query_qp_max_ece(qp);
-        return;
-    }
-#endif
-
-#if HAVE_RDMACM_ECE
-    if (0 == ibv_query_ece(qp->verbs.qp, &ece)) {
-        ib_iface->ece = ece.options;
-    }
-#endif
-}
-
 ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uct_ib_mlx5_txwq_t *txwq,
