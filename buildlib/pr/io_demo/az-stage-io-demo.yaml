@@ -11,6 +11,8 @@ parameters:
   default: $(roce_iface)
 - name: initial_delay
   default: 20
+- name: use_ece
+  default: 'no'
 - name: analyzer_allow_list_args
   default: ''
 
@@ -49,6 +51,10 @@ steps:
     mkdir -p $(workspace)/${{ parameters.name }}
     # set UCX environment variables
     export UCX_NET_DEVICES=$(ibdev2netdev | sed -ne 's/\(\w*\) port \([0-9]\) ==> '${{parameters.roce_iface}}' .*/\1:\2/p')
+    if [ "${{ parameters.use_ece }}" == "yes" ]; then
+    export UCX_IB_ECE_ON=y
+    export UCX_IB_ADDR_VERSION=v1
+    fi
     export UCX_TLS=${{ parameters.iodemo_tls }}
     export UCX_RNDV_THRESH=4k
     export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH

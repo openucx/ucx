@@ -14,6 +14,8 @@ parameters:
   - name: uptime
     type: number
     default: 180
+  - name: use_ece
+    default: 'no'
   - name: tests
     type: object
     default:
@@ -29,18 +31,39 @@ parameters:
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: tag_cx6_rc
+      "tag match on CX6/RC with ECE":
+        args: ""
+        duration: 600
+        interface : $(roce_iface_cx6)
+        tls: "rc_x"
+        use_ece: "yes"
+        test_name: tag_cx6_rc_ece
       "active messages on CX6/RC":
         args: "-A"
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: am_cx6_rc
+      "active messages on CX6/RC with ECE":
+        args: "-A"
+        duration: 600
+        interface: $(roce_iface_cx6)
+        tls: "rc_x"
+        use_ece: "yes"
+        test_name: am_cx6_rc_ece
       "tag match on CX6/DC":
         args: ""
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: tag_cx6_dc
+      "tag match on CX6/DC with ECE":
+        args: ""
+        duration: 600
+        interface: $(roce_iface_cx6)
+        tls: "dc_x"
+        use_ece: "yes"
+        test_name: tag_cx6_dc_ece
       "active messages on CX6/DC with data validation":
         args: "-A -q"
         duration: 600
@@ -120,6 +143,7 @@ jobs:
             test_intefrafe: ${{ test.Value.interface }}
             test_ucx_tls: ${{ test.Value.tls }}
             initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
+            test_with_ece: ${{ coalesce(test.Value.use_ece, parameters.use_ece) }}
       maxParallel: 1
 
     variables:
@@ -147,5 +171,6 @@ jobs:
           roce_iface: $(test_intefrafe)
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
+          use_ece: $(test_with_ece)
           ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
             analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
