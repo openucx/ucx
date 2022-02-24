@@ -198,7 +198,7 @@ static int ucp_wireup_check_flags(const uct_tl_resource_desc_t *resource,
 {
     const char *missing_flag_desc;
 
-    printf("flags %ld required_flags %ld\n", flags, required_flags);
+    //printf("flags %ld required_flags %ld\n", flags, required_flags);
     if (ucs_test_all_flags(flags, required_flags)) {
         return 1;
     }
@@ -355,7 +355,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                                       criteria->remote_event_flags));
 
                                       
-        printf("cap_flags %ld, crit_flags %ld\n",ae->iface_attr.cap_flags,  criteria->remote_iface_flags);
+        //printf("cap_flags %ld, crit_flags %ld\n",ae->iface_attr.cap_flags,  criteria->remote_iface_flags);
         if (!ucs_test_all_flags(ae->iface_attr.cap_flags, criteria->remote_iface_flags)) {
             printf("3: addr[%d] %s: no %s\n", addr_index,
                       ucp_find_tl_name_by_csum(context, ae->tl_name_csum),
@@ -531,7 +531,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             p += strlen(p);
         }
     }
-    printf("select.c: reached out, but found nothing\n");
+    //printf("select.c: reached out, but found nothing\n");
 
 out:
     if (p >= tls_info + 2) {

@@ -520,7 +520,7 @@ ucp_address_unpack_iface_attr(ucp_worker_t *worker,
     ucp_rsc_index_t rsc_idx;
     uct_ppn_bandwidth_t bandwidth;
     uint64_t iface_flags;
-    printf("ucp_address_unpack_iface_attr\n");
+    //printf("ucp_address_unpack_iface_attr\n");
 
     if (ucp_worker_is_unified_mode(worker)) {
         /* Address contains resources index and iface latency overhead
