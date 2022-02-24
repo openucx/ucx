@@ -854,15 +854,7 @@ ucp_am_send_req(ucp_request_t *req, size_t count,
     size_t zcopy_thresh;
     ucs_status_t status;
 
-    if (ucs_unlikely((count != 0) && (user_header_length != 0))) {
-        /*
-         * TODO: Remove when/if am_short with iovs defined in UCT
-         */
-        max_short = -1;
-    } else {
-        max_short = ucp_am_get_short_max(req, max_short);
-    }
-
+    max_short   = ucp_am_get_short_max(req, max_short);
     rndv_thresh = ucp_am_rndv_thresh(req, param, ep_config, flags, &max_short);
 
     if ((msg_config->max_iov == 1) ||
