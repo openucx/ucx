@@ -1,6 +1,8 @@
 jobs:
   - job: source_tarball
     displayName: Create UCX source tarball
+    workspace:
+      clean: all
     pool:
       name: MLNX
       demands:
@@ -23,6 +25,8 @@ jobs:
   - job: test_on_cuda_docker
     dependsOn: source_tarball
     displayName: Test Cuda Docker
+    workspace:
+      clean: all
     pool:
       name: MLNX
       demands:
@@ -99,3 +103,7 @@ jobs:
           $(workspace)/buildlib/pr/cuda/test_malloc_hook.sh
         env:
           WORKSPACE: $(workspace)
+      - bash: |
+          rm -rf $(workspace)
+        displayName: Remove artifacts
+        condition: succeeded()
