@@ -51,9 +51,8 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
     ucs_string_buffer_appendf(strb, "flags:0x%x ", req->flags);
 
     if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
-        ucp_proto_select_config_str(req->send.ep->worker,
-                                    req->send.proto_config,
-                                    req->send.state.dt_iter.length, strb);
+        ucp_proto_config_info_str(req->send.ep->worker, req->send.proto_config,
+                                  req->send.state.dt_iter.length, strb);
         return;
     }
 
@@ -80,9 +79,9 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
 #if ENABLE_DEBUG_DATA
         if (req->recv.proto_rndv_config != NULL) {
             /* Print the send protocol of the rendezvous request */
-            ucp_proto_select_config_str(req->recv.worker,
-                                        req->recv.proto_rndv_config,
-                                        req->recv.length, strb);
+            ucp_proto_config_info_str(req->recv.worker,
+                                      req->recv.proto_rndv_config,
+                                      req->recv.length, strb);
             return;
         }
 #endif

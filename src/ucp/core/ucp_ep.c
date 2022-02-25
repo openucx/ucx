@@ -635,7 +635,8 @@ ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
         key.wireup_msg_lane = 0;
     }
 
-    status = ucp_worker_get_ep_config(ep->worker, &key, 0, &ep->cfg_index);
+    status = ucp_worker_get_ep_config(ep->worker, &key, ep_init_flags,
+                                      &ep->cfg_index);
     if (status != UCS_OK) {
         return status;
     }
@@ -2889,7 +2890,7 @@ static void ucp_ep_print_info_internal(ucp_ep_h ep, const char *name,
 
     if (worker->context->config.ext.proto_enable) {
         ucs_string_buffer_init(&strb);
-        ucp_proto_select_dump(worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
+        ucp_proto_select_info(worker, ep->cfg_index, UCP_WORKER_CFG_INDEX_NULL,
                               &config->proto_select, &strb);
         ucs_string_buffer_dump(&strb, "# ", stream);
         ucs_string_buffer_cleanup(&strb);

@@ -256,6 +256,16 @@ char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
 
 
 /**
+ * Append repeat character to a string buffer.
+ *
+ * @param [inout] strb     String buffer to append characters to.
+ * @param [in]    c        Character to append.
+ * @param [in]    count    Number of times to append @a c.
+ */
+void ucs_string_buffer_appendc(ucs_string_buffer_t *strb, int c, size_t count);
+
+
+/**
  * Split the string to tokens and iterate over them. This operation can
  * overwrite some of the string with '\0' characters.
  *

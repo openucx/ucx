@@ -24,6 +24,11 @@ protected:
     }
 };
 
+UCS_TEST_F(test_string, is_empty) {
+    EXPECT_TRUE(ucs_string_is_empty(""));
+    EXPECT_FALSE(ucs_string_is_empty("aaa"));
+}
+
 UCS_TEST_F(test_string, count_char) {
     static const char *str1 = "/foo";
     static const char *str2 = "/foo/bar";
@@ -295,6 +300,20 @@ UCS_TEST_F(test_string_buffer, tokenize) {
     EXPECT_EQ(std::vector<std::string>(
                       {"nova", "noob", "crocubot", "ants", "", "rails"}),
               names);
+}
+
+UCS_TEST_F(test_string_buffer, appendc) {
+    UCS_STRING_BUFFER_ONSTACK(strb, 8);
+
+    ucs_string_buffer_appendc(&strb, '0', 0);
+    ucs_string_buffer_appendc(&strb, '1', 1);
+    ucs_string_buffer_appendc(&strb, '2', 2);
+    ucs_string_buffer_appendc(&strb, '3', 3);
+    ucs_string_buffer_appendc(&strb, '4', 4);
+    ucs_string_buffer_appendc(&strb, '5', 5);
+
+    // The string buffer should not exceed its limit (8)
+    EXPECT_EQ(std::string("1223334"), ucs_string_buffer_cstr(&strb));
 }
 
 void test_string_buffer::check_extract_mem(ucs_string_buffer_t *strb)

@@ -1805,9 +1805,10 @@ ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
  * A 'key' identifies an entry in the ep_config array. An entry holds the key and
  * additional configuration parameters and thresholds.
  */
-ucs_status_t
-ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
-                         int print_cfg, ucp_worker_cfg_index_t *cfg_index_p)
+ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
+                                      const ucp_ep_config_key_t *key,
+                                      unsigned ep_init_flags,
+                                      ucp_worker_cfg_index_t *cfg_index_p)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_context_h context = worker->context;
@@ -1845,6 +1846,13 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
     ++worker->ep_config_count;
 
+    if (ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) {
+        /* Do not initialize short protocol thresholds for internal endpoints,
+         * and do not print their configuration
+         */
+        goto out;
+    }
+
     if (context->config.ext.proto_enable) {
         if (ucp_ep_config_key_has_tag_lane(key)) {
             tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
@@ -1865,13 +1873,10 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                                         UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
                                         UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
                                         &ep_config->am_u.max_eager_short);
-    }
-
-    if (print_cfg) {
+    } else {
         ucs_info("%s", ucp_worker_print_used_tls(key, context, ep_cfg_index,
                                                  &strb));
     }
-
 
 out:
     *cfg_index_p = ep_cfg_index;

@@ -229,7 +229,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           (void*)buffer, count, datatype, contig_length, 1,
                           &req->send.state.dt_iter, &sg_count);
 
-    ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
+    ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask, 0,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 

@@ -49,21 +49,6 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_LAST]         = NULL,
 };
 
-const char *ucp_operation_names[] = {
-    [UCP_OP_ID_TAG_SEND]       = "tag_send",
-    [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
-    [UCP_OP_ID_AM_SEND]        = "am_send",
-    [UCP_OP_ID_PUT]            = "put",
-    [UCP_OP_ID_GET]            = "get",
-    [UCP_OP_ID_AMO_POST]       = "amo_post",
-    [UCP_OP_ID_AMO_FETCH]      = "amo_fetch",
-    [UCP_OP_ID_AMO_CSWAP]      = "amo_cswap",
-    [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
-    [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
-    [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
-    [UCP_OP_ID_LAST]           = NULL
-};
-
 static size_t ucp_rndv_frag_default_sizes[] = {
     [UCS_MEMORY_TYPE_HOST]         = 512 * UCS_KBYTE,
     [UCS_MEMORY_TYPE_CUDA]         = 4 * UCS_MBYTE,
@@ -416,6 +401,9 @@ static ucs_config_field_t ucp_config_table[] = {
 
   {"RCACHE_ENABLE", "try", "Use user space memory registration cache.",
    ucs_offsetof(ucp_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
+
+  {"PROTO_INFO", "n", "Enable printing protocols information.",
+   ucs_offsetof(ucp_config_t, ctx.proto_info), UCS_CONFIG_TYPE_BOOL},
 
    {NULL}
 };

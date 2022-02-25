@@ -50,12 +50,7 @@ void ucp_proto_select_init_trace_caps(
         ucp_proto_id_t proto_id, const ucp_proto_init_params_t *init_params);
 
 
-void ucp_proto_select_dump_thresholds(ucp_worker_h worker,
-                                      const ucp_proto_select_elem_t *select_elem,
-                                      ucs_string_buffer_t *strb);
-
-
-void ucp_proto_select_dump(ucp_worker_h worker,
+void ucp_proto_select_info(ucp_worker_h worker,
                            ucp_worker_cfg_index_t ep_cfg_index,
                            ucp_worker_cfg_index_t rkey_cfg_index,
                            const ucp_proto_select_t *proto_select,
@@ -67,23 +62,28 @@ void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
 
 
 void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
+                                const char **operation_names,
                                 ucs_string_buffer_t *strb);
 
 
-void ucp_proto_threshold_elem_str(ucp_worker_h worker,
-                                  const ucp_proto_threshold_elem_t *thresh_elem,
-                                  size_t min_length, size_t max_length,
-                                  ucs_string_buffer_t *strb);
+void ucp_proto_select_info_str(ucp_worker_h worker,
+                               ucp_worker_cfg_index_t rkey_cfg_index,
+                               const ucp_proto_select_param_t *select_param,
+                               const char **operation_names,
+                               ucs_string_buffer_t *strb);
 
 
-/* Print protocol configuration info to a string buffer */
-void ucp_proto_select_config_str(ucp_worker_h worker,
-                                 const ucp_proto_config_t *proto_config,
-                                 size_t msg_length, ucs_string_buffer_t *strb);
+/* Print protocol info to a string buffer */
+void ucp_proto_config_info_str(ucp_worker_h worker,
+                               const ucp_proto_config_t *proto_config,
+                               size_t msg_length, ucs_string_buffer_t *strb);
 
 
-void ucp_proto_config_str(ucp_worker_h worker,
-                          const ucp_proto_config_t *proto_config,
-                          size_t msg_length, ucs_string_buffer_t *strb);
+void ucp_proto_select_elem_trace(ucp_worker_h worker,
+                                 ucp_worker_cfg_index_t ep_cfg_index,
+                                 ucp_worker_cfg_index_t rkey_cfg_index,
+                                 const ucp_proto_select_param_t *select_param,
+                                 ucp_proto_select_elem_t *select_elem);
+
 
 #endif

@@ -204,7 +204,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
         /* Remote buffer is unknown, assume same params as local */
         remote_select_param          = *select_param;
         remote_select_param.op_id    = params->remote_op_id;
-        remote_select_param.op_flags = 0;
+        remote_select_param.op_flags = UCP_PROTO_SELECT_OP_FLAG_INTERNAL;
     } else {
         /* If we know the remote buffer parameters, these are actually the local
          * parameters for the remote protocol
@@ -212,7 +212,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
         mem_info.sys_dev = params->super.super.rkey_config_key->sys_dev;
         mem_info.type    = params->super.super.rkey_config_key->mem_type;
         ucp_proto_select_param_init(&remote_select_param, params->remote_op_id,
-                                    0, UCP_DATATYPE_CONTIG, &mem_info, 1);
+                                    0, UCP_PROTO_SELECT_OP_FLAG_INTERNAL,
+                                    UCP_DATATYPE_CONTIG, &mem_info, 1);
     }
 
     /* Initialize estimated memory registration map */
@@ -469,7 +470,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
         rkey           = NULL;
     }
 
-    ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask,
+    ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, 0,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 

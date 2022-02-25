@@ -284,6 +284,12 @@ struct ucp_proto {
 /* Global array of all registered protocols */
 extern const ucp_proto_t *ucp_protocols[];
 
+
+/* Operations names and descriptions */
+extern const char *ucp_operation_names[];
+extern const char *ucp_operation_descs[];
+
+
 /* Performance types names */
 extern const char *ucp_proto_perf_types[];
 

@@ -303,7 +303,7 @@ ucp_proto_select_init_protocols(ucp_worker_h worker,
     if (proto_init->mask == 0) {
         /* No protocol can support the given selection parameters */
         ucs_string_buffer_init(&strb);
-        ucp_proto_select_param_str(select_param, &strb);
+        ucp_proto_select_param_str(select_param, ucp_operation_names, &strb);
         ucs_debug("no protocols found for %s", ucs_string_buffer_cstr(&strb));
         ucs_string_buffer_cleanup(&strb);
         status = UCS_ERR_NO_ELEM;
@@ -453,7 +453,8 @@ ucp_proto_select_elem_init(ucp_worker_h worker,
     ucp_proto_perf_type_t perf_type;
     ucs_status_t status;
 
-    ucp_proto_select_param_str(select_param, &sel_param_strb);
+    ucp_proto_select_param_str(select_param, ucp_operation_names,
+                               &sel_param_strb);
     if (rkey_cfg_index != UCP_WORKER_CFG_INDEX_NULL) {
         ucs_string_buffer_appendf(&sel_param_strb, "->");
         ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key,
@@ -487,6 +488,8 @@ ucp_proto_select_elem_init(ucp_worker_h worker,
         goto out_free_proto_init;
     }
 
+    ucp_proto_select_elem_trace(worker, ep_cfg_index, rkey_cfg_index,
+                                select_param, select_elem);
     status = UCS_OK;
 
 out_free_proto_init:
@@ -607,7 +610,7 @@ ucp_proto_select_short_init(ucp_worker_h worker, ucp_proto_select_t *proto_selec
      */
     ucs_log_indent(1);
     ucs_for_each_submask(op_attr, op_attr_mask) {
-        ucp_proto_select_param_init(&select_param, op_id, op_attr,
+        ucp_proto_select_param_init(&select_param, op_id, op_attr, 0,
                                     UCP_DATATYPE_CONTIG, &mem_info, 1);
         thresh = ucp_proto_select_lookup(worker, proto_select, ep_cfg_index,
                                          rkey_cfg_index, &select_param, 0);
@@ -744,10 +747,10 @@ void ucp_proto_config_query(ucp_worker_h worker,
     proto_config->proto->query(&params, proto_attr);
 }
 
-void ucp_proto_select_elem_query(ucp_worker_h worker,
-                                 const ucp_proto_select_elem_t *select_elem,
-                                 size_t msg_length,
-                                 ucp_proto_query_attr_t *proto_attr)
+int ucp_proto_select_elem_query(ucp_worker_h worker,
+                                const ucp_proto_select_elem_t *select_elem,
+                                size_t msg_length,
+                                ucp_proto_query_attr_t *proto_attr)
 {
     const ucp_proto_threshold_elem_t *thresh_elem =
             ucp_proto_select_thresholds_search(select_elem, msg_length);
@@ -757,4 +760,6 @@ void ucp_proto_select_elem_query(ucp_worker_h worker,
 
     proto_attr->max_msg_length = ucs_min(proto_attr->max_msg_length,
                                          thresh_elem->max_msg_length);
+
+    return !(thresh_elem->proto_config.proto->flags & UCP_PROTO_FLAG_INVALID);
 }

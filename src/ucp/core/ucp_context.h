@@ -130,6 +130,8 @@ typedef struct ucp_context_config {
     int                                    rkey_mpool_max_md;
     /** Worker address format version */
     ucp_object_version_t                   worker_addr_version;
+    /** Print protocols information */
+    int                                    proto_info;
 } ucp_context_config_t;
 
 
@@ -413,7 +415,6 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 extern ucp_am_handler_t ucp_am_handlers[];
 extern const char      *ucp_feature_str[];
-extern const char  *ucp_operation_names[];
 
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,
