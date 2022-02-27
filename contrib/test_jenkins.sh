@@ -230,7 +230,8 @@ get_ib_devices() {
 		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
 		for port in $(seq 1 $num_ports)
 		do
-			if ibv_devinfo -d $ibdev -i $port | grep -q $state
+			if [ -e "/sys/class/infiniband/${ibdev}/ports/${port}/gids/0" ] && \
+			   ibv_devinfo -d $ibdev -i $port | grep -q $state
 			then
 				echo "$ibdev:$port"
 			fi
@@ -288,26 +289,24 @@ get_rdma_device_ip_addr() {
 		return
 	fi
 
-	iface=`ibdev2netdev | grep Up | awk '{print $5}' | head -1`
-	if [ -n "$iface" ]
-	then
-		ipaddr=$(get_ifaddr ${iface})
-	fi
+	set +x
+	ibdev2netdev | grep Up | while read line
+	do
+		ibdev=$(echo "${line}" | awk '{print $1}')
+		port=$(echo "${line}" | awk '{print $3}')
+		netif=$(echo "${line}" | awk '{print $5}')
+		node_guid=`cat /sys/class/infiniband/${ibdev}/node_guid`
 
-	if [ -z "$ipaddr" ]
-	then
-		# if there is no inet (IPv4) address, escape
-		return
-	fi
-
-	ibdev=`ibdev2netdev | grep $iface | awk '{print $1}'`
-	node_guid=`cat /sys/class/infiniband/$ibdev/node_guid`
-	if [ $node_guid == "0000:0000:0000:0000" ]
-	then
-		return
-	fi
-
-	echo $ipaddr
+		# skip devices that do not have proper gid (representors)
+		if [ -e "/sys/class/infiniband/${ibdev}/ports/${port}/gids/0" ] && \
+			[ ${node_guid} != "0000:0000:0000:0000" ]
+		then
+			get_ifaddr ${netif}
+			set -x
+			return
+		fi
+	done
+	set -x
 }
 
 get_non_rdma_ip_addr() {
