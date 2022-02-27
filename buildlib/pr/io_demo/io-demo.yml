@@ -65,6 +65,8 @@ parameters:
 jobs:
   - job: io_build
     displayName: Build io_demo
+    workspace:
+      clean: all
 
     pool:
       name: MLNX
@@ -149,3 +151,7 @@ jobs:
           initial_delay: $(initial_delay)
           ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
             analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
+      - bash: |
+          rm -rf $(workspace)
+        displayName: Remove artifacts
+        condition: succeeded()
