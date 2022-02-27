@@ -88,7 +88,7 @@ static void ucs_modules_load()
     UCS_MODULE_FRAMEWORK_LOAD(ucs, UCS_MODULE_LOAD_FLAG_GLOBAL);
 }
 
-static void UCS_F_CTOR ucs_init()
+void UCS_F_CTOR ucs_init()
 {
     ucs_status_t status;
 

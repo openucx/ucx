@@ -154,7 +154,8 @@ typedef enum {
  * Active message codes
  */
 typedef enum {
-    UCP_AM_ID_WIREUP            =  1, /* Connection establishment */
+    UCP_AM_ID_FIRST             =  1, /* First valid AM ID */
+    UCP_AM_ID_WIREUP            =  UCP_AM_ID_FIRST, /* Connection establishment */
 
     UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager TAG */
     UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
@@ -182,11 +183,11 @@ typedef enum {
     UCP_AM_ID_ATOMIC_REQ        =  20, /* Remote memory atomic request */
     UCP_AM_ID_ATOMIC_REP        =  21, /* Remote memory atomic reply */
     UCP_AM_ID_CMPL              =  22, /* Remote memory operation completion */
-    UCP_AM_ID_SINGLE            =  23, /* Single fragment user defined AM */
-    UCP_AM_ID_FIRST             =  24, /* First fragment of user defined AM */
-    UCP_AM_ID_MIDDLE            =  25, /* Middle or last fragment of user
+    UCP_AM_ID_AM_SINGLE         =  23, /* Single fragment user defined AM */
+    UCP_AM_ID_AM_FIRST          =  24, /* First fragment of user defined AM */
+    UCP_AM_ID_AM_MIDDLE         =  25, /* Middle or last fragment of user
                                           defined AM */
-    UCP_AM_ID_SINGLE_REPLY      =  26, /* Single fragment user defined AM
+    UCP_AM_ID_AM_SINGLE_REPLY   =  26, /* Single fragment user defined AM
                                           carrying remote ep for reply */
     UCP_AM_ID_LAST
 } ucp_am_id_t;

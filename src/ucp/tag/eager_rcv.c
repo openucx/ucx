@@ -549,25 +549,17 @@ static void ucp_eager_dump(ucp_worker_h worker, uct_am_trace_type_t type,
                      UCS_PTR_BYTE_OFFSET(data, header_len), length - header_len);
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_ONLY, ucp_eager_only_handler,
-              ucp_eager_dump, 0);
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_FIRST, ucp_eager_first_handler,
-              ucp_eager_dump, 0);
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_MIDDLE, ucp_eager_middle_handler,
-              ucp_eager_dump, 0);
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ONLY,
-              ucp_eager_sync_only_handler, ucp_eager_dump, 0);
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_FIRST,
-              ucp_eager_sync_first_handler, ucp_eager_dump, 0);
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ACK,
-              ucp_eager_sync_ack_handler, ucp_eager_dump, 0);
-UCP_DEFINE_AM(UCP_FEATURE_TAG, UCP_AM_ID_OFFLOAD_SYNC_ACK,
-              ucp_eager_offload_sync_ack_handler, ucp_eager_dump, 0);
-
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_ONLY);
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_FIRST);
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_MIDDLE);
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_SYNC_ONLY);
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_SYNC_FIRST);
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_EAGER_SYNC_ACK);
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_OFFLOAD_SYNC_ACK);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_ONLY,
+                         ucp_eager_only_handler, ucp_eager_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_FIRST,
+                         ucp_eager_first_handler, ucp_eager_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_MIDDLE,
+                         ucp_eager_middle_handler, ucp_eager_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ONLY,
+                        ucp_eager_sync_only_handler, ucp_eager_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_FIRST,
+                         ucp_eager_sync_first_handler, ucp_eager_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG, UCP_AM_ID_EAGER_SYNC_ACK,
+                         ucp_eager_sync_ack_handler, ucp_eager_dump, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_TAG, UCP_AM_ID_OFFLOAD_SYNC_ACK,
+                         ucp_eager_offload_sync_ack_handler, ucp_eager_dump, 0);
