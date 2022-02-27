@@ -551,7 +551,11 @@ ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
     /* Add new lane to registration map */
     ucp_md_map_t md_map;
 
-    if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
+    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        /* Do not force using the existing registration map if it's user memory
+           handle, since number of memory domains can exceed UCP_MAX_OP_MDS. */
+        md_map = 0;
+    } else if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
         md_map = req->send.state.dt.dt.contig.md_map;
     } else if (UCP_DT_IS_IOV(req->send.datatype) &&
                (req->send.state.dt.dt.iov.dt_reg != NULL)) {
