@@ -25,6 +25,7 @@
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
+#include <dlfcn.h>
 
 
 #define UCP_RSC_CONFIG_ALL    "all"
@@ -1760,27 +1761,50 @@ static void ucp_context_create_vfs(ucp_context_h context)
                             "memory_address");
 }
 
+static void
+ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    unsigned major_version, minor_version, release_number;
+    ucs_log_level_t log_level;
+    Dl_info dl_info;
+    int ret;
+
+    ucp_get_version(&major_version, &minor_version, &release_number);
+
+    if ((major_version == api_major_version) &&
+        (minor_version >= api_minor_version)) {
+        /* API version is compatible: same major, same or higher minor */
+        ucs_string_buffer_appendf(&strb, "Version %s",
+                                  ucp_get_version_string());
+        log_level = UCS_LOG_LEVEL_INFO;
+    } else {
+        ucs_string_buffer_appendf(
+                &strb,
+                "UCP API version is incompatible: required >= %d.%d, actual %s",
+                api_major_version, api_minor_version, ucp_get_version_string());
+        log_level = UCS_LOG_LEVEL_WARN;
+    }
+
+    if (ucs_log_is_enabled(log_level)) {
+        ret = dladdr(ucp_init_version, &dl_info);
+        if (ret != 0) {
+            ucs_string_buffer_appendf(&strb, " (loaded from %s)",
+                                      dl_info.dli_fname);
+        }
+        ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
+    }
+}
+
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
 {
-    unsigned major_version, minor_version, release_number;
     ucp_config_t *dfl_config = NULL;
     ucp_context_t *context;
     ucs_status_t status;
 
-    ucp_get_version(&major_version, &minor_version, &release_number);
-
-    if ((api_major_version != major_version) ||
-        ((api_major_version == major_version) &&
-         (api_minor_version > minor_version))) {
-        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d"
-                 " (release %d)", api_major_version, api_minor_version,
-                  major_version, minor_version, release_number);
-    } else {
-        ucs_info("UCP version is %d.%d (release %d)",
-                 major_version, minor_version, release_number);
-    }
+    ucp_version_check(api_major_version, api_minor_version);
 
     if (config == NULL) {
         status = ucp_config_read(NULL, NULL, &dfl_config);
