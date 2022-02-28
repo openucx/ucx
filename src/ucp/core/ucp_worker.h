@@ -350,7 +350,7 @@ typedef struct ucp_worker {
         uint64_t                     ep_failures;
     } counters;
 
-    user_allocator_props_t user_allocator;
+    uct_user_allocator_props_t user_allocator;
 } ucp_worker_t;
 
 

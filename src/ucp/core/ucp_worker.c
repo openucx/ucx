@@ -1145,7 +1145,7 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
     iface_params->cpu_mask          = worker->cpu_mask;
 
-    memcpy(&iface_params->user_allocator, &worker->user_allocator, sizeof(user_allocator_props_t));
+    memcpy(&iface_params->user_allocator, &worker->user_allocator, sizeof(uct_user_allocator_props_t));
     iface_params->user_allocator.md_index = resource->md_index;
 
     if (context->config.features & UCP_FEATURE_TAG) {
@@ -1791,7 +1791,7 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
-static ucs_status_t ucp_worker_get_desc_from_usr_cb(void* ucp_memh_p, unsigned md_index, uct_mem_h *memh) {
+static ucs_status_t ucp_worker_usr_allocator_malloc_cb(void* ucp_memh_p, unsigned md_index, uct_mem_h *memh) {
     ucs_status_t status = UCS_OK;
     static unsigned uct_memh_idx_mem[UCP_MD_INDEX_BITS] = {0};
     unsigned md_bit_idx;
@@ -2212,16 +2212,16 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
     if (params->field_mask & UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC) {
         worker->user_allocator.active = 1;
-        worker->user_allocator.ops.init_usr_mem_allocator = (uct_iface_init_usr_allocator_func_t)params->user_mem_allocator_init;
-        worker->user_allocator.ops.get_desc_from_usr = (uct_iface_get_desc_from_usr_func_t)params->user_get_descriptor;
-        worker->user_allocator.get_desc_from_usr_cb = ucp_worker_get_desc_from_usr_cb;
-        worker->user_allocator.usr_allocator = NULL;
+        worker->user_allocator.ops.init = (uct_iface_user_allocator_init_func_t)params->user_mem_allocator_init;
+        worker->user_allocator.ops.malloc = (uct_iface_user_allocator_malloc_func_t)params->user_mem_allocator_malloc;
+        worker->user_allocator.malloc_cb = ucp_worker_usr_allocator_malloc_cb;
+        worker->user_allocator.arg = NULL;
     } else {
         worker->user_allocator.active = 0;
-        worker->user_allocator.ops.init_usr_mem_allocator = NULL;
-        worker->user_allocator.ops.get_desc_from_usr = NULL;
-        worker->user_allocator.get_desc_from_usr_cb = NULL;
-        worker->user_allocator.usr_allocator = NULL;  
+        worker->user_allocator.ops.init = NULL;
+        worker->user_allocator.ops.malloc = NULL;
+        worker->user_allocator.malloc_cb = NULL;
+        worker->user_allocator.arg = NULL;  
     }
 
     worker->user_data    = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,

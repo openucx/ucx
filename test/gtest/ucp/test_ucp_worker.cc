@@ -717,7 +717,7 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
     }
 
-    static ucs_status_t mockUserInitAllocator(size_t seg_size, size_t data_offset, void **usr_allocator) {
+    static ucs_status_t mockUserInitAllocator(size_t seg_size, size_t data_offset, void **arg) {
         ucs_status_t status = UCS_OK;
         mock_mem_allocator_t *new_usr_allocator = NULL;
         int i;
@@ -740,24 +740,24 @@ public:
 
         if (new_usr_allocator != NULL) {
             
-            *usr_allocator = new_usr_allocator;
+            *arg = new_usr_allocator;
 
         } else if (i > UCP_MD_INDEX_BITS) {
             
             UCS_TEST_MESSAGE << "Error: Need more mem allocators";
-            *usr_allocator = &mock_mem_allocators[UCP_MD_INDEX_BITS];
+            *arg = &mock_mem_allocators[UCP_MD_INDEX_BITS];
 
         } else {
             
             mock_mem_allocators[i].seg_size = seg_size;
             mock_mem_allocators[i].context = usr_allocators_context;
-            *usr_allocator = &mock_mem_allocators[i];
+            *arg = &mock_mem_allocators[i];
         }
 
         return status;
     }
 
-    static ucs_status_t mockUserGetDesc(void *usr_allocator, void** desc, ucp_mem_h *memh) {
+    static ucs_status_t mockUserGetDesc(void *arg, void** desc, ucp_mem_h *memh) {
         ucp_mem_map_params_t params;
         ucs_status_t status = UCS_OK;
         void *address;
@@ -765,8 +765,8 @@ public:
         size_t seg_size;
         ucp_context_h context;
 
-        seg_size = ((mock_mem_allocator_t*)usr_allocator)->seg_size;
-        context = ((mock_mem_allocator_t*)usr_allocator)->context;
+        seg_size = ((mock_mem_allocator_t*)arg)->seg_size;
+        context = ((mock_mem_allocator_t*)arg)->context;
         //use malloc to allocate descriptor
         address = ucs_malloc(seg_size, "Mock user allocation");
         if (address == NULL) {
@@ -799,7 +799,7 @@ public:
 
         params.field_mask |= UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC;
         params.user_mem_allocator_init = (ucp_user_mem_allocator_init_func_t)mockUserInitAllocator;
-        params.user_get_descriptor = (ucp_user_get_descriptor_func_t)mockUserGetDesc;
+        params.user_mem_allocator_malloc = (ucp_user_mem_allocator_malloc_func_t)mockUserGetDesc;
 
         return params;
     }

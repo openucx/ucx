@@ -278,7 +278,7 @@ typedef struct uct_base_iface {
         size_t               max_num_eps;
     } config;
 
-    user_allocator_props_t user_allocator;
+    uct_user_allocator_props_t user_allocator;
 
     UCS_STATS_NODE_DECLARE(stats)            /* Statistics */
 } uct_base_iface_t;
@@ -460,12 +460,12 @@ typedef struct uct_iface_mpool_config {
 
 
 #define UCT_TL_EXPAND_USR_MEM_ALLOCATOR(_user_allocator_props) \
-    user_allocator_props_t *user_allocator_props = _user_allocator_props; \
+    uct_user_allocator_props_t *user_allocator_props = _user_allocator_props; \
     uct_mem_h user_allocator_memh; \
     void *ucp_memh = NULL; \
-    uct_iface_get_desc_from_usr_cb_func_t get_desc_from_user_allocator_cb = user_allocator_props->get_desc_from_usr_cb; \
-    uct_iface_get_desc_from_usr_func_t get_desc_from_user_allocator = user_allocator_props->ops.get_desc_from_usr; \
-    uct_usr_mem_allocator_h user_allocator_instance = user_allocator_props->usr_allocator; \
+    uct_iface_user_allocator_malloc_cb_func_t get_desc_from_user_allocator_cb = user_allocator_props->malloc_cb; \
+    uct_iface_user_allocator_malloc_func_t get_desc_from_user_allocator = user_allocator_props->ops.malloc; \
+    void* user_allocator_instance = user_allocator_props->arg; \
     unsigned user_allocator_md_index = user_allocator_props->md_index; \
     int user_allocator_active = user_allocator_props->active;
 

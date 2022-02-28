@@ -900,12 +900,12 @@ typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
  *
  * Opaque object representing memory allocation instance implemented by the suer
  */
-typedef struct uct_usr_mem_allocator *uct_usr_mem_allocator_h;
 
-typedef ucs_status_t (*uct_iface_init_usr_allocator_func_t)(size_t seg_size, size_t data_offset, uct_usr_mem_allocator_h* usr_allocator);
 
-typedef ucs_status_t (*uct_iface_get_desc_from_usr_func_t)(uct_usr_mem_allocator_h usr_allocator, void **desc, void **ucp_memh);
-typedef ucs_status_t (*uct_iface_get_desc_from_usr_cb_func_t)(void* ucp_memh, unsigned md_index, uct_mem_h *memh);
+typedef ucs_status_t (*uct_iface_user_allocator_init_func_t)(size_t seg_size, size_t data_offset, void** arg);
+typedef ucs_status_t (*uct_iface_user_allocator_free_func_t)(void* arg, void *desc);
+typedef ucs_status_t (*uct_iface_user_allocator_malloc_func_t)(void* arg, void **desc, void **ucp_memh);
+typedef ucs_status_t (*uct_iface_user_allocator_malloc_cb_func_t)(void* ucp_memh, unsigned md_index, uct_mem_h *memh);
 
 /**
  * @ingroup UCT_RESOURCE
@@ -914,15 +914,17 @@ typedef ucs_status_t (*uct_iface_get_desc_from_usr_cb_func_t)(void* ucp_memh, un
 typedef struct user_allocator_props {
     int active;
     unsigned md_index;
-    uct_usr_mem_allocator_h usr_allocator;
-    uct_iface_get_desc_from_usr_cb_func_t get_desc_from_usr_cb;
+    void* arg;
+    uct_iface_user_allocator_malloc_cb_func_t malloc_cb;
     struct {
         /*Init user defined memory allocator*/
-        uct_iface_init_usr_allocator_func_t init_usr_mem_allocator;   
+        uct_iface_user_allocator_init_func_t init;
+        /*Free memory descriptor*/
+        uct_iface_user_allocator_free_func_t free;   
         /*Get memory descriptor from user*/
-        uct_iface_get_desc_from_usr_func_t  get_desc_from_usr;   
+        uct_iface_user_allocator_malloc_func_t  malloc;   
     } ops;
-} user_allocator_props_t;
+} uct_user_allocator_props_t;
 
 
 #endif

@@ -460,7 +460,7 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
 
 static ucs_status_t uct_base_iface_set_usr_alloc_params(const uct_iface_params_t *params, uct_base_iface_t *iface) {
 
-    memcpy(&iface->user_allocator, &params->user_allocator, sizeof(user_allocator_props_t));
+    memcpy(&iface->user_allocator, &params->user_allocator, sizeof(uct_user_allocator_props_t));
     
     return UCS_OK;
 }

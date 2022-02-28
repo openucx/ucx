@@ -1214,17 +1214,17 @@ typedef struct ucp_worker_attr {
 *                             by this memory allocator instance.
 * @param [in]  data_offset    Data offset.
 *
-* @param [out] usr_allocator  Opaque object representing memory allocation instance implemented by the user
+* @param [out] arg  Opaque object representing memory allocation instance implemented by the user
 *
 * @return Error code as defined by @ref ucs_status_t
 */
-typedef ucs_status_t (*ucp_user_mem_allocator_init_func_t)(size_t seg_size, size_t data_offset, void **usr_allocator);
+typedef ucs_status_t (*ucp_user_mem_allocator_init_func_t)(size_t seg_size, size_t data_offset, void **arg);
 
 /**
 * @ingroup UCP_WORKER
 * @brief Get descriptor from user defined memory allocation instance 
 *
-* @param [in]   usr_allocator  Opaque object representing memory allocation instance implemented by the user
+* @param [in]   arg  Opaque object representing memory allocation instance implemented by the user
 * 
 * @param [out]  desc           Allocated descriptor.
 *
@@ -1232,7 +1232,19 @@ typedef ucs_status_t (*ucp_user_mem_allocator_init_func_t)(size_t seg_size, size
 *
 * @return Error code as defined by @ref ucs_status_t
 */
-typedef ucs_status_t (*ucp_user_get_descriptor_func_t)(void *usr_allocator, void** desc, ucp_mem_h *memh);
+typedef ucs_status_t (*ucp_user_mem_allocator_malloc_func_t)(void *arg, void** desc, ucp_mem_h *memh);
+
+/**
+* @ingroup UCP_WORKER
+* @brief Free descriptor allocated using user memory allocator
+*
+* @param [in]   arg  Opaque object representing memory allocation instance implemented by the user
+* 
+* @param [out]  desc           Allocated descriptor.
+*
+* @return Error code as defined by @ref ucs_status_t
+*/
+typedef ucs_status_t (*ucp_user_mem_allocator_free_func_t)(void *arg, void* desc);
 
 
 /**
@@ -1346,9 +1358,14 @@ typedef struct ucp_worker_params {
     ucp_user_mem_allocator_init_func_t user_mem_allocator_init;
     
     /**
-    * Get descriptor from user memory allocation instance
+    * user memory allocation allocate descriptor
     */
-    ucp_user_get_descriptor_func_t user_get_descriptor;
+    ucp_user_mem_allocator_malloc_func_t user_mem_allocator_malloc;
+    
+    /**
+    * user memory allocation free descriptor
+    */
+    ucp_user_mem_allocator_free_func_t user_mem_allocator_free;
 } ucp_worker_params_t;
 
 
