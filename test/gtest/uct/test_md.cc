@@ -38,7 +38,8 @@ extern "C" {
                    ib, \
                    ugni, \
                    sockcm, \
-                   rdmacm \
+                   rdmacm, \
+                   ofi \
                    )
 
 void* test_md::alloc_thread(void *arg)

@@ -365,6 +365,7 @@ protected:
     virtual bool has_cma() const;
     virtual bool has_ugni() const;
     virtual bool has_gpu() const;
+    virtual bool has_ofi() const;
 
     bool is_caps_supported(uint64_t required_flags);
     bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
@@ -461,7 +462,8 @@ protected:
     sysv,                    \
     xpmem,                   \
     cma,                     \
-    knem
+    knem,                    \
+    ofi \
 
 #define UCT_TEST_CUDA_MEM_TYPE_TLS \
     cuda_copy,              \

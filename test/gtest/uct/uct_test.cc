@@ -630,6 +630,10 @@ bool uct_test::has_gpu() const {
             has_transport("rocm_copy"));
 }
 
+bool uct_test::has_ofi() const {
+    return (has_transport("ofi"));
+}
+
 uct_test::entity *
 uct_test::create_entity(size_t rx_headroom, uct_error_handler_t err_handler,
                         uct_tag_unexp_eager_cb_t eager_cb,
