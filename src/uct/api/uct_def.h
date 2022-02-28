@@ -898,7 +898,7 @@ typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
  * @ingroup UCT_RESOURCE
  * @brief User allocation indentifier 
  *
- * Opaque object representing memory allocation instance implmented by the suer
+ * Opaque object representing memory allocation instance implemented by the suer
  */
 typedef struct uct_usr_mem_allocator *uct_usr_mem_allocator_h;
 

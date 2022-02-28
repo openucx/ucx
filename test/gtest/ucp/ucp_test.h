@@ -183,6 +183,9 @@ public:
     };
 
     static bool is_request_completed(void *req);
+
+    private:
+        virtual void ucp_context_init_cb(ucp_context_h m_ucph) const;
 };
 
 /**

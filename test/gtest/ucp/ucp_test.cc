@@ -667,6 +667,8 @@ ucp_test_base::entity::entity(const ucp_test_param& test_param,
                                             ucp_config);
     }
 
+    test_owner->ucp_context_init_cb(m_ucph.get());
+
     m_workers.resize(num_workers);
     for (int i = 0; i < num_workers; i++) {
         /* We could have "invalid configuration" errors only when used
@@ -1182,6 +1184,8 @@ bool ucp_test_base::is_request_completed(void *request) {
     return (request == NULL) ||
            (ucp_request_check_status(request) != UCS_INPROGRESS);
 }
+
+void ucp_test_base::ucp_context_init_cb(ucp_context_h m_ucph) const {}
 
 ucp_test::mapped_buffer::mapped_buffer(size_t size, const entity& entity,
                                        int flags, ucs_memory_type_t mem_type) :

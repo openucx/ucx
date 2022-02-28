@@ -1214,7 +1214,7 @@ typedef struct ucp_worker_attr {
 *                             by this memory allocator instance.
 * @param [in]  data_offset    Data offset.
 *
-* @param [out] usr_allocator  Opaque object representing memory allocation instance implmented by the user
+* @param [out] usr_allocator  Opaque object representing memory allocation instance implemented by the user
 *
 * @return Error code as defined by @ref ucs_status_t
 */
@@ -1224,7 +1224,7 @@ typedef ucs_status_t (*ucp_user_mem_allocator_init_func_t)(size_t seg_size, size
 * @ingroup UCP_WORKER
 * @brief Get descriptor from user defined memory allocation instance 
 *
-* @param [in]   usr_allocator  Opaque object representing memory allocation instance implmented by the user
+* @param [in]   usr_allocator  Opaque object representing memory allocation instance implemented by the user
 * 
 * @param [out]  desc           Allocated descriptor.
 *

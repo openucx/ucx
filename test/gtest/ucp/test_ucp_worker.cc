@@ -697,6 +697,266 @@ UCS_TEST_P(test_ucp_worker_request_leak, tag_send_recv)
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_request_leak, all, "all")
 
+
+typedef struct mock_mem_allocator {
+    size_t seg_size;
+    size_t data_offset;
+    ucp_context_h context;
+} mock_mem_allocator_t;
+
+class test_ucp_worker_with_user_memory_allocator : public ucp_test {
+public:
+    enum {
+        LEAK_CHECK,
+        LEAK_IGNORE
+    };
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        
+        add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
+    }
+
+    static ucs_status_t mockUserInitAllocator(size_t seg_size, size_t data_offset, void **usr_allocator) {
+        ucs_status_t status = UCS_OK;
+        mock_mem_allocator_t *new_usr_allocator = NULL;
+        int i;
+
+        if (mock_mem_allocators[UCP_MD_INDEX_BITS*2].seg_size == 0) {
+            mock_mem_allocators[UCP_MD_INDEX_BITS*2].seg_size = 8256;
+        }
+
+        for (i = 0; i < UCP_MD_INDEX_BITS*2+1; ++i) {
+            
+            if (mock_mem_allocators[i].seg_size == 0) {
+                break;
+            }
+
+            if ((mock_mem_allocators[i].seg_size == seg_size) && (mock_mem_allocators[i].context == usr_allocators_context)) {
+                new_usr_allocator = &mock_mem_allocators[i];
+                break;
+            }
+        }
+
+        if (new_usr_allocator != NULL) {
+            
+            *usr_allocator = new_usr_allocator;
+
+        } else if (i > UCP_MD_INDEX_BITS) {
+            
+            UCS_TEST_MESSAGE << "Error: Need more mem allocators";
+            *usr_allocator = &mock_mem_allocators[UCP_MD_INDEX_BITS];
+
+        } else {
+            
+            mock_mem_allocators[i].seg_size = seg_size;
+            mock_mem_allocators[i].context = usr_allocators_context;
+            *usr_allocator = &mock_mem_allocators[i];
+        }
+
+        return status;
+    }
+
+    static ucs_status_t mockUserGetDesc(void *usr_allocator, void** desc, ucp_mem_h *memh) {
+        ucp_mem_map_params_t params;
+        ucs_status_t status = UCS_OK;
+        void *address;
+        ucp_mem_h p;
+        size_t seg_size;
+        ucp_context_h context;
+
+        seg_size = ((mock_mem_allocator_t*)usr_allocator)->seg_size;
+        context = ((mock_mem_allocator_t*)usr_allocator)->context;
+        //use malloc to allocate descriptor
+        address = ucs_malloc(seg_size, "Mock user allocation");
+        if (address == NULL) {
+            status = UCS_ERR_NO_MEMORY;
+            return status;
+        }
+        memset(address, 0, 8);
+        
+        params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
+                            UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+        params.address    = address;
+        params.length     = seg_size;
+        status = ucp_mem_map(context, &params, memh);
+        p = *memh;
+        *desc = p->address;
+        add_region(seg_size, *desc, *memh, context);
+
+        return status;
+    }
+
+    /// @override
+    virtual void ucp_context_init_cb(ucp_context_h m_ucph) const {
+        usr_allocators_context = m_ucph;
+    }
+
+    /// @override
+    virtual ucp_worker_params_t get_worker_params()
+    {
+        ucp_worker_params_t params = ucp_test::get_worker_params();
+
+        params.field_mask |= UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC;
+        params.user_mem_allocator_init = (ucp_user_mem_allocator_init_func_t)mockUserInitAllocator;
+        params.user_get_descriptor = (ucp_user_get_descriptor_func_t)mockUserGetDesc;
+
+        return params;
+    }
+
+    /// @override
+    virtual void init()
+    {
+        modify_config("MAX_EAGER_LANES", "2");
+        ucp_test::init();
+        sender().connect(&receiver(), get_ep_params());
+        receiver().connect(&sender(), get_ep_params());
+    }
+
+    /// @override
+    virtual void cleanup()
+    {
+        ucp_test::cleanup();
+    }
+
+protected:
+    void set_am_data_handler(entity &e, uint16_t am_id, ucp_am_recv_callback_t cb,
+                             void *arg, unsigned flags = 0)
+    {
+        ucp_am_handler_param_t param;
+
+        /* Initialize Active Message data handler */
+        param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
+                           UCP_AM_HANDLER_PARAM_FIELD_CB |
+                           UCP_AM_HANDLER_PARAM_FIELD_ARG;
+        param.id         = am_id;
+        param.cb         = cb;
+        param.arg        = arg;
+
+        if (flags != 0) {
+            param.field_mask |= UCP_AM_HANDLER_PARAM_FIELD_FLAGS;
+            param.flags       = flags;
+        }
+
+        ASSERT_UCS_OK(ucp_worker_set_am_recv_handler(e.worker(), &param));
+    }
+
+    bool search_region(void* data) {
+
+        for (auto&& allocated_region: allocated_regions)
+        {
+            size_t seg_size;
+            void* start_region;
+            void* end_region;
+            ucp_mem_h ucp_memh;
+            ucp_context_h context;
+            std::tie(seg_size, start_region, ucp_memh, context) = allocated_region;
+            end_region = (void*)(((char*)start_region)+seg_size);
+
+            if (data >= start_region && data < end_region) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static ucs_status_t am_data_hold_cb(void *arg, const void *header,
+                                        size_t header_length, void *data,
+                                        size_t length,
+                                        const ucp_am_recv_param_t *param)
+    {
+        void **rx_data_p = reinterpret_cast<void**>(arg);
+
+        EXPECT_TRUE(param->recv_attr & UCP_AM_RECV_ATTR_FLAG_DATA);
+        EXPECT_EQ(NULL, *rx_data_p);
+
+        *rx_data_p = data;
+
+        return UCS_INPROGRESS;
+    }
+
+    void cleanup_allocated_regions() {
+        ucp_context_h context;
+        size_t seg_size;
+        void* start_region;
+        ucp_mem_h memh;
+        ucs_status_t status;
+
+        for (auto&& allocated_region: allocated_regions)
+        {
+            std::tie(seg_size, start_region, memh, context) = allocated_region;
+
+            status = ucp_mem_unmap(context, memh);
+            ASSERT_UCS_OK(status);
+            
+        }
+
+        allocated_regions.clear();
+    }
+    
+    void cleanup_mem_allocators() {
+        int i;
+        for (i = 0; i < UCP_MD_INDEX_BITS*2+1; ++i) {
+            
+            mock_mem_allocators[i].context = NULL;
+            mock_mem_allocators[i].seg_size = 0;
+            mock_mem_allocators[i].data_offset = 0;
+        }
+
+        usr_allocators_context = NULL;
+    }
+
+    static const uint16_t           TEST_AM_NBX_ID = 0;
+
+private:
+    static std::vector< std::tuple<size_t, void*, ucp_mem_h, ucp_context_h> > allocated_regions;
+    static mock_mem_allocator_t mock_mem_allocators[UCP_MD_INDEX_BITS*2+1];
+    static ucp_context_h usr_allocators_context;
+    
+    static void add_region(size_t seg_size, void* desc, ucp_mem_h ucp_memh, ucp_context_h context) {
+        allocated_regions.push_back(std::make_tuple(seg_size, desc, ucp_memh, context));
+    }
+};
+
+std::vector< std::tuple<size_t, void*, ucp_mem_h, ucp_context_h> > test_ucp_worker_with_user_memory_allocator::allocated_regions;
+mock_mem_allocator_t test_ucp_worker_with_user_memory_allocator::mock_mem_allocators[UCP_MD_INDEX_BITS*2+1] = {{0}};
+ucp_context_h test_ucp_worker_with_user_memory_allocator::usr_allocators_context = NULL;
+
+UCS_TEST_P(test_ucp_worker_with_user_memory_allocator, am_send_recv_with_usr_allocator)
+{
+    void *rx_data = NULL;
+    set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_data_hold_cb, &rx_data,
+                        UCP_AM_FLAG_PERSISTENT_DATA);
+
+    size_t length = 64;
+    std::vector<char> sbuf(length, 'd');                        
+    ucp_request_param_t param;
+    param.op_attr_mask = 0ul;
+    ucs_status_ptr_t sptr = ucp_am_send_nbx(sender().ep(), TEST_AM_NBX_ID, NULL,
+                                            0ul, sbuf.data(), sbuf.size(),
+                                            &param);
+
+    wait_for_flag(&rx_data);
+    EXPECT_TRUE(rx_data != NULL);
+    EXPECT_EQ(UCS_OK, request_wait(sptr));
+
+    ucp_recv_desc_t *rdesc = (ucp_recv_desc_t*)rx_data - 1;
+    ASSERT_TRUE((rdesc->flags & UCP_RECV_DESC_FLAG_UCT_DESC) > 0);
+    EXPECT_EQ(search_region(rx_data), true);
+
+    cleanup_allocated_regions();
+    cleanup_mem_allocators();
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_with_user_memory_allocator, rcx,    "rc_x");
+// UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_with_user_memory_allocator, rc,    "rc_v");
+// UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_with_user_memory_allocator, udx,    "ud_x");
+// UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_with_user_memory_allocator, ud,     "ud_v");
+// UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_with_user_memory_allocator, dcx,    "dc_x");
+// UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_worker_with_user_memory_allocator, tcp,    "tcp");
+
+
 class test_ucp_worker_thread_mode : public ucp_test {
 public:
     static void get_test_variants(std::vector<ucp_test_variant> &variants)

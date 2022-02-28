@@ -1791,6 +1791,41 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
+static ucs_status_t ucp_worker_get_desc_from_usr_cb(void* ucp_memh_p, unsigned md_index, uct_mem_h *memh) {
+    ucs_status_t status = UCS_OK;
+    static unsigned uct_memh_idx_mem[UCP_MD_INDEX_BITS] = {0};
+    unsigned md_bit_idx;
+    ucp_md_map_t md_map_p;
+    unsigned uct_memh_idx = 0;
+    ucp_mem_h ucp_memh = ucp_memh_p;
+
+    if (md_index >= UCP_MD_INDEX_BITS) {
+        status = UCS_ERR_NO_DEVICE;
+        return status;
+    }
+
+    md_map_p = ucp_memh->md_map;
+    if (!(md_map_p & UCS_BIT(md_index))) {
+        status = UCS_ERR_NO_RESOURCE;
+        return status;
+    }
+
+    if (!uct_memh_idx_mem[md_index]) {
+        ucs_for_each_bit(md_bit_idx, md_map_p) {
+            if (md_bit_idx == md_index) {
+                break;
+            }
+            ++uct_memh_idx;
+        }
+
+        uct_memh_idx_mem[md_index] = uct_memh_idx + 1;
+    }
+    
+    *memh = ucp_memh->uct[uct_memh_idx_mem[md_index] - 1];
+
+    return status;  
+}
+
 static void
 ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
                                 ucp_worker_cfg_index_t ep_cfg_index,
