@@ -21,6 +21,7 @@ nobase_dist_libucp_la_HEADERS = \
 	api/ucp.h
 
 noinst_HEADERS = \
+	am/eager.inl \
 	core/ucp_am.h \
 	core/ucp_context.h \
 	core/ucp_ep.h \
@@ -161,5 +162,5 @@ libucp_la_SOURCES = \
 	wireup/wireup_cm.c \
 	stream/stream_send.c \
 	stream/stream_recv.c \
-	am/eager.c
-
+	am/eager_single.c \
+	am/eager_multi.c
