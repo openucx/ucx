@@ -771,5 +771,103 @@ typedef struct ucp_ep_params {
  */
 #define UCP_ENTITY_NAME_MAX 32
 
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief The @ref ucp_transports_t and @ref ucp_transport_entry_t structures
+ *        are used when @ref ucp_ep_query is called to return an array of
+ *        transport name and device name pairs that are used by an active
+ *        endpoint.
+ *
+ *        The ucp_transport_t structure specifies the characteristics of the
+ *        ucp_transport_entry_t array.
+ *
+ *        The caller is responsible for the allocation and de-allocation
+ *        of the ucp_transport_entry_t array.
+ *
+ * Example: Implementation of a function to query the set of transport and
+ *          device name pairs used by the specified endpoint.
+ *
+ * @code{.c}
+ *   int query_transports(ucp_ep_h ep)
+ *   {
+ *     ucs_status_t status;
+ *     ucp_transport_entry_t *transport_entries;
+ *     ucp_ep_attr_t ep_attrs;
+ *
+ *     ep_attrs.field_mask = UCP_EP_ATTR_FIELD_TRANSPORTS;
+ *     ep_attrs.transports.entries = (ucp_transport_entry_t *)
+ *              malloc(10 * sizeof(ucp_transport_entry_t));
+ *     ep_attrs.transports.num_entries = 10;
+ *     ep_attrs.transports.entry_size = sizeof(ucp_transport_entry_t);
+ *     status = ucp_ep_query(ep, &ep_attrs);
+ *     if (status == UCS_OK) {
+ *         // ep_attrs.transports.num_entries = number of returned entries 
+ *         // ... process transport info ... 
+ *     }
+ *   }
+ * @endcode
+ */
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief A transport name and device name pair used by this endpoint. The
+ * caller is responsible for the allocation and deallocation of an array of
+ * these structures large enough to contain the desired number of transport
+ * and device name pairs.
+ *
+ * If new fields are added to this structure, they must be added at the end
+ * of this structure.
+ */
+typedef struct {
+    /**
+     * The name of a transport layer used by this endpoint. This '\0'-terminated
+     * string is valid until the endpoint is closed using a
+     * @ref ucp_ep_close_nbx call. 
+     */
+    const char *transport_name;
+
+    /**
+     * The name of the device used with this transport by this endpoint.
+     * This '\0'-terminated string is valid until the endpoint is closed using
+     * a @ref ucp_ep_close_nbx call.
+     */
+    const char *device_name;
+
+} ucp_transport_entry_t;
+
+
+/**
+ * @ingroup UCP_ENDPOINT
+ * @brief Structure containing an array of transport layers and device names
+ * used by an endpoint.
+ *
+ * The caller is responsible for allocation and deallocation of 
+ * this structure.
+ */
+typedef struct {
+    /**
+      * Pointer to array of transport/device name pairs used by this endpoint.
+      * The caller is responsible for the allocation and deallocation of this
+      * array.
+      */
+    ucp_transport_entry_t *entries;
+
+    /**
+     * Number of transport/device name pairs. The caller must set this to
+     * the maximum number of pairs the structure can contain. On return,
+     * this is set to the actual number of transport and device name pairs used
+     * by the endpoint.
+     */
+    unsigned              num_entries;
+
+    /**
+     * Size of a single @ref ucp_transport_entry_t object. The caller sets this
+     * to the size of the ucp_transport_entry_t they are using. UCP code must
+     * not set any fields in the ucp_transport_entry_t structure beyond this
+     * size.
+     */
+    size_t                entry_size;
+
+} ucp_transports_t;
 
 #endif

@@ -4595,7 +4595,8 @@ ucs_status_ptr_t ucp_worker_flush_nbx(ucp_worker_h worker,
 enum ucp_ep_attr_field {
     UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
     UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
-    UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2)  /**< Sockaddr the endpoint is connected to */
+    UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2), /**< Sockaddr the endpoint is connected to */
+    UCP_EP_ATTR_FIELD_TRANSPORTS      = UCS_BIT(3)  /**< Transport and device used by endpoint */
 };
 
 
@@ -4636,6 +4637,14 @@ typedef struct ucp_ep_attr {
      * UCS_ERR_NOT_CONNECTED will be returned.
      */
     struct sockaddr_storage remote_sockaddr;
+
+    /**
+     * Structure defining an array containing transport and device names used 
+     * by this endpoint. The caller is responsible for allocation and 
+     * deallocation of this array.
+     */
+    ucp_transports_t        transports;
+
 } ucp_ep_attr_t;
 
 
