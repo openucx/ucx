@@ -816,7 +816,7 @@ protected:
                                 bool rx_expected = false)
     {
         skip_loopback();
-        test_am_send_recv(0, max_am_hdr()); // warmup wireup
+        test_am_send_recv(0, 0); // warmup wireup
 
         m_am_received = false;
         std::vector<char> sbuf(size, 'd');

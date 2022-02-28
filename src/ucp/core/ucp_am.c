@@ -1004,6 +1004,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         goto out;
     }
 
+    /* TODO: move from common code to specific protocols (REPLY_EP, multi-Eager
+     * Bcopy/Zcopy,RNDV) which use remote ID */
     status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
     if (ucs_unlikely(status != UCS_OK)) {
         ret = UCS_STATUS_PTR(status);

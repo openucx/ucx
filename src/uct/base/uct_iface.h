@@ -934,9 +934,8 @@ int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid);
 
 ucs_status_t uct_ep_keepalive_init(uct_keepalive_info_t *ka, pid_t pid);
 
-ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka,
-                                    pid_t pid, unsigned flags,
-                                    uct_completion_t *comp);
+void uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka, pid_t pid,
+                            unsigned flags, uct_completion_t *comp);
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 
