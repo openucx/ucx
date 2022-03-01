@@ -19,7 +19,7 @@
  * @brief User Memory allocator initialization params.
  *
  * The structure defines the configuration of
- * the needed memory allocator.
+ * the memory allocator.
  */
 typedef struct ucs_user_mem_allocator_params {
     uint64_t field_mask;
