@@ -21,7 +21,7 @@ typedef struct ucm_bistro_patch {
     uint32_t reg13;   /* slli x31, x31, 52                          */
     uint32_t reg12;   /* addi x30, x0, ((addr>>40)&0b111111111111)  */
     uint32_t reg11;   /* slli x30, x30, 40                          */
-    uint32_t reg10;   /* or   x31, x31, 30                          */
+    uint32_t reg10;   /* or   x31, x31, X30                         */
     uint32_t reg9;    /* addi x29, x0, ((addr>>>28)&0b111111111111) */
     uint32_t reg8;    /* slli x29, x29, 28                          */
     uint32_t reg7;    /* or   x31, x31, x29                         */
