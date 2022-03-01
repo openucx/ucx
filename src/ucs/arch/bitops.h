@@ -20,6 +20,8 @@ BEGIN_C_DECLS
 #  include "ppc64/bitops.h"
 #elif defined(__aarch64__)
 #  include "aarch64/bitops.h"
+#elif defined(__riscv)
+#  include "riscv/bitops.h"
 #else
 #  error "Unsupported architecture"
 #endif

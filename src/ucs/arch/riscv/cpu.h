@@ -4,8 +4,8 @@
 * See file LICENSE for terms.
 */
 
-#ifndef UCS_ASM_RISCV64_H_
-#define UCS_ASM_RISCV64_H_
+#ifndef UCS_RISCV64_CPU_H_
+#define UCS_RISCV64_CPU_H_
 
 #include <ucs/sys/compiler.h>
 #include <ucs/arch/generic/cpu.h>
@@ -60,7 +60,7 @@ static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)
 static UCS_F_ALWAYS_INLINE void
 ucs_memcpy_nontemporal(void *dst, const void *src, size_t len)
 {
-    return memcpy(dst, src, len);
+    memcpy(dst, src, len);
 }
 
 END_C_DECLS

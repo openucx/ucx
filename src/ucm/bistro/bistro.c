@@ -62,7 +62,7 @@ ucs_status_t ucm_bistro_apply_patch(void *dst, void *patch, size_t len)
     return status;
 }
 
-#if defined(__x86_64__) || defined (__aarch64__)
+#if defined(__x86_64__) || defined (__aarch64__) || defined (__riscv)
 struct ucm_bistro_restore_point {
     void               *addr;     /* address of function to restore */
     size_t             patch_len; /* patch length */

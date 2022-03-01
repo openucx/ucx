@@ -15,6 +15,8 @@
 #  include "ppc64/global_opts.h"
 #elif defined(__aarch64__)
 #  include "aarch64/global_opts.h"
+#elif defined(__riscv)
+#  include "riscv/global_opts.h"
 #else
 #  error "Unsupported architecture"
 #endif

@@ -4,8 +4,8 @@
 * See file LICENSE for terms.
 */
 
-#ifndef UCS_X86_64_GLOBAL_OPTS_H_
-#define UCS_X86_64_GLOBAL_OPTS_H_
+#ifndef UCS_RISCV64_GLOBAL_OPTS_H_
+#define UCS_RISCV64_GLOBAL_OPTS_H_
 
 #include <stddef.h>
 

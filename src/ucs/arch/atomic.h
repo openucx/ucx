@@ -15,6 +15,8 @@
 #  include "generic/atomic.h"
 #elif defined(__aarch64__)
 #  include "generic/atomic.h"
+#elif defined(__riscv)
+#  include "riscv/atomic.h"
 #else
 #  error "Unsupported architecture"
 #endif
