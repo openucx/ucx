@@ -1182,11 +1182,10 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
-    rlim_t memlock_limit;
+    size_t memlock_limit;
 
     status = ucs_sys_get_memlock_rlimit(&memlock_limit);
-    if ((status == UCS_OK) && (memlock_limit != RLIM_INFINITY) &&
-        (memlock_limit <= (500 * UCS_MBYTE))) {
+    if ((status == UCS_OK) && (memlock_limit <= 500 * UCS_MBYTE)) {
         /* Disable the RDMA devices because of too strict locked memory limit*/
         ucs_warn("RDMA transports are disabled because max locked memory limit "
                  "(%llu kbytes) is too low. Please set max locked memory "

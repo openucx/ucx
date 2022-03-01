@@ -1548,7 +1548,7 @@ err:
     return 0ul;
 }
 
-ucs_status_t ucs_sys_get_memlock_rlimit(rlim_t *rlimit_value)
+ucs_status_t ucs_sys_get_memlock_rlimit(size_t *rlimit_value)
 {
     struct rlimit limit_info;
     int res;
@@ -1557,7 +1557,8 @@ ucs_status_t ucs_sys_get_memlock_rlimit(rlim_t *rlimit_value)
      * (ulimit -l) */
     res = getrlimit(RLIMIT_MEMLOCK, &limit_info);
     if (res == 0) {
-        *rlimit_value = limit_info.rlim_cur;
+        *rlimit_value = (limit_info.rlim_cur == RLIM_INFINITY) ?
+                        SIZE_MAX : limit_info.rlim_cur;
         return UCS_OK;
     } else {
         ucs_debug("unable to get the max locked memory limit: %m");
@@ -1567,13 +1568,13 @@ ucs_status_t ucs_sys_get_memlock_rlimit(rlim_t *rlimit_value)
 
 void ucs_sys_check_memlock_limit_append_msg(ucs_string_buffer_t *msg)
 {
-    rlim_t memlock_limit;
+    size_t memlock_limit;
     ucs_status_t status;
 
     /* Check the value of the max locked memory which is set on the system
      * (ulimit -l) */
     status = ucs_sys_get_memlock_rlimit(&memlock_limit);
-    if ((status == UCS_OK) && (memlock_limit != RLIM_INFINITY)) {
+    if ((status == UCS_OK) && (memlock_limit != SIZE_MAX)) {
         ucs_string_buffer_appendf(msg,
                                   ". Please set max locked memory "
                                   "(ulimit -l) to 'unlimited' "
