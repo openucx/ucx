@@ -655,7 +655,6 @@ enum uct_iface_params_field {
 
     /** Enables @ref uct_iface_params_t::am_align_offset */
     UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17)
-
 };
 
 /**

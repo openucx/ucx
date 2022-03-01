@@ -1314,17 +1314,23 @@ typedef struct ucp_worker_params {
     uint64_t                client_id;
 
     /**
-    * User defined memory allocation instance constructor. 
+    * User defined memory allocator instance constructor.
     */
     ucs_user_mem_allocator_init_func_t user_mem_allocator_init;
     
     /**
-    * user memory allocation allocate descriptor
+    * Release all the descriptors allocated by the specified memory allocator.
+    * This is optional parameter
+    */
+    ucs_user_mem_allocator_cleanup_func_t user_mem_allocator_cleanup;
+
+    /**
+    * user memory allocator allocate descriptor
     */
     ucs_user_mem_allocator_malloc_func_t user_mem_allocator_malloc;
     
     /**
-    * user memory allocation free descriptor
+    * user memory allocator free descriptor
     */
     ucs_user_mem_allocator_free_func_t user_mem_allocator_free;
 } ucp_worker_params_t;

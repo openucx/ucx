@@ -1136,8 +1136,7 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_ARG   |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER       |
                                       UCT_IFACE_PARAM_FIELD_ERR_HANDLER_FLAGS |
-                                      UCT_IFACE_PARAM_FIELD_CPU_MASK          ;
-                                      
+                                      UCT_IFACE_PARAM_FIELD_CPU_MASK;
     iface_params->stats_root        = UCS_STATS_RVAL(worker->stats);
     iface_params->rx_headroom       = UCP_WORKER_HEADROOM_SIZE;
     iface_params->err_handler_arg   = worker;
@@ -2220,16 +2219,20 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
             status = UCS_ERR_INVALID_PARAM;
             goto err_free;
         }
-        
+
         worker->user_allocator.ops.init = params->user_mem_allocator_init;
+        worker->user_allocator.ops.cleanup = params->user_mem_allocator_cleanup;
         worker->user_allocator.ops.malloc = params->user_mem_allocator_malloc;
+        worker->user_allocator.ops.free = params->user_mem_allocator_free;
         worker->user_allocator.malloc_cb = ucp_worker_usr_allocator_malloc_cb;
         worker->user_allocator.arg = NULL;
 
     } else {
 
         worker->user_allocator.ops.init = NULL;
+        worker->user_allocator.ops.cleanup = NULL;
         worker->user_allocator.ops.malloc = NULL;
+        worker->user_allocator.ops.free = NULL;
         worker->user_allocator.malloc_cb = NULL;
         worker->user_allocator.arg = NULL;
     }
