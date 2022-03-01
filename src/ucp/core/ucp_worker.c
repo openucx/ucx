@@ -1790,6 +1790,12 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
+    static ucs_status_t ucp_worker_usr_allocator_malloc_cb(void* ucp_memh_p, unsigned md_index, uct_mem_h *memh) {
+    ucs_status_t status = UCS_OK;
+
+    return status;
+}
+
 static void
 ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
                                 ucp_worker_cfg_index_t ep_cfg_index,
@@ -2187,6 +2193,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
         worker->user_allocator.ops.init = params->user_mem_allocator_init;
         worker->user_allocator.ops.malloc = params->user_mem_allocator_malloc;
+        worker->user_allocator.ops.free = params->user_mem_allocator_free;
         worker->user_allocator.malloc_cb = ucp_worker_usr_allocator_malloc_cb;
         worker->user_allocator.arg = NULL;
 
@@ -2194,6 +2201,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
 
         worker->user_allocator.ops.init = NULL;
         worker->user_allocator.ops.malloc = NULL;
+        worker->user_allocator.ops.free = NULL;
         worker->user_allocator.malloc_cb = NULL;
         worker->user_allocator.arg = NULL;
     }
