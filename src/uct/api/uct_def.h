@@ -924,7 +924,7 @@ typedef struct uct_user_allocator_props {
         /*Init user defined memory allocator*/
         ucs_user_mem_allocator_init_func_t init;
         /*Release all the descriptors allocated by the specified memory allocator*/
-        user_mem_allocator_cleanup cleanup;
+        ucs_user_mem_allocator_cleanup_func_t cleanup;
         /*Free memory descriptor*/
         ucs_user_mem_allocator_free_func_t free;   
         /*Get memory descriptor from user*/
