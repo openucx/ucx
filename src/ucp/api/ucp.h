@@ -17,6 +17,7 @@
 #include <ucs/config/types.h>
 #include <ucs/sys/compiler_def.h>
 #include <ucs/memory/memory_type.h>
+#include <ucs/memory/user_mem_allocator.h>
 #include <stdio.h>
 #include <sys/types.h>
 
@@ -172,7 +173,8 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_NAME         = UCS_BIT(6), /**< Worker name */
     UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7), /**< Alignment of active
                                                            messages on the receiver */
-    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8)  /**< Client id */
+    UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8),  /**< Client id */
+    UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC  = UCS_BIT(9)  /**< User Memory Allocator */
 };
 
 
@@ -1310,6 +1312,21 @@ typedef struct ucp_worker_params {
     * using @ref ucp_conn_request_query.
     */
     uint64_t                client_id;
+
+    /**
+    * User defined memory allocator instance constructor.
+    */
+    ucs_user_mem_allocator_init_func_t user_mem_allocator_init;
+
+    /**
+    * user memory allocator allocate descriptor
+    */
+    ucs_user_mem_allocator_malloc_func_t user_mem_allocator_malloc;
+
+    /**
+    * user memory allocator free descriptor
+    */
+    ucs_user_mem_allocator_free_func_t user_mem_allocator_free;
 } ucp_worker_params_t;
 
 
