@@ -262,7 +262,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
         return status;
     }
 
-    if (iface->super.user_allocator.active) {
+    if (iface->super.user_allocator.ops.init) {
         
         mem_allocator_params.seg_size = iface->config.seg_size;
         mem_allocator_params.data_offset = sizeof(uct_ib_iface_recv_desc_t);

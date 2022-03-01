@@ -560,7 +560,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
     self->rx.available = ucs_min(config->ud_common.rx_queue_len_init,
                                  config->super.rx.queue_len);
     self->rx.quota     = config->super.rx.queue_len - self->rx.available;
-    if (!self->super.super.user_allocator.active) {
+    if (!self->super.super.user_allocator.ops.malloc) {
         ucs_mpool_grow(&self->rx.mp, self->rx.available);
     }
 
@@ -606,7 +606,7 @@ err_release_stats:
 err_tx_mpool:
     ucs_mpool_cleanup(&self->tx.mp, 1);
 err_rx_mpool:
-    if (!self->super.super.user_allocator.active) {
+    if (!self->super.super.user_allocator.ops.malloc) {
         ucs_mpool_cleanup(&self->rx.mp, 1);
     }
 err_qp:
@@ -644,7 +644,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_iface_t)
     ucs_mpool_cleanup(&self->tx.mp, 0);
     /* TODO: qp to error state and cleanup all wqes */
     uct_ud_iface_free_pending_rx(self);
-    if (!self->super.super.user_allocator.active) {
+    if (!self->super.super.user_allocator.ops.malloc) {
         ucs_mpool_cleanup(&self->rx.mp, 0);
     }
     uct_ud_iface_destroy_qp(self);

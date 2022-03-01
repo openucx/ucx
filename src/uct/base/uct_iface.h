@@ -467,7 +467,7 @@ typedef struct uct_iface_mpool_config {
     ucs_user_mem_allocator_malloc_func_t get_desc_from_user_allocator = user_allocator_props->ops.malloc; \
     void* user_allocator_instance = user_allocator_props->arg; \
     unsigned user_allocator_md_index = user_allocator_props->md_index; \
-    int user_allocator_active = user_allocator_props->active;
+    int user_allocator_active = (get_desc_from_user_allocator != NULL);
 
 
 #define UCT_TL_IFACE_GET_RX_DESC_FROM_USER(_get_desc_from_usr_cb, _get_desc_from_usr, _usr_allocator, _md_index, _desc, _uct_memh, _failure) \

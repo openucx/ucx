@@ -682,7 +682,7 @@ err_cleanup_tx_ops:
 err_destroy_tx_mp:
     ucs_mpool_cleanup(&self->tx.mp, 1);
 err_destroy_rx_mp:
-    if (!self->super.super.user_allocator.active) {
+    if (!self->super.super.user_allocator.ops.malloc) {
         ucs_mpool_cleanup(&self->rx.mp, 1);
     }
 err:
@@ -745,7 +745,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_rc_iface_t)
     ops->cleanup_rx(self);
     uct_rc_iface_tx_ops_cleanup(self);
     ucs_mpool_cleanup(&self->tx.mp, 1);
-    if (!self->super.super.user_allocator.active) {
+    if (!self->super.super.user_allocator.ops.malloc) {
         ucs_mpool_cleanup(&self->rx.mp, 0); /* Cannot flush SRQ */
     }
     ucs_mpool_cleanup(&self->tx.pending_mp, 1);

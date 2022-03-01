@@ -917,7 +917,6 @@ typedef ucs_status_t (*uct_user_allocator_malloc_cb_func_t)(void* ucp_memh, unsi
  * @brief Interface for allocating descriptors based on user defined implementation 
  */
 typedef struct uct_user_allocator_props {
-    int active;
     unsigned md_index;
     void* arg;
     uct_user_allocator_malloc_cb_func_t malloc_cb;

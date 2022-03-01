@@ -1005,7 +1005,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     return;
 
 out:
-    if (!iface->super.super.user_allocator.active) {
+    if (!iface->super.super.user_allocator.ops.malloc) {
         ucs_mpool_put(skb);
     }
 }
