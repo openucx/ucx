@@ -717,6 +717,10 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
     }
 
+    static ucs_status_t mockUserAllocatorFree(void* arg, void *desc) {
+        return UCS_OK;
+    }
+
     static ucs_status_t mockUserInitAllocator(const ucs_user_mem_allocator_params_t *params, void **arg) {
         ucs_status_t status = UCS_OK;
         mock_mem_allocator_t *new_usr_allocator = NULL;
@@ -801,6 +805,7 @@ public:
         params.field_mask |= UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC;
         params.user_mem_allocator_init = (ucs_user_mem_allocator_init_func_t)mockUserInitAllocator;
         params.user_mem_allocator_malloc = (ucs_user_mem_allocator_malloc_func_t)mockUserGetDesc;
+        params.user_mem_allocator_free = (ucs_user_mem_allocator_free_func_t)mockUserAllocatorFree;
 
         return params;
     }
