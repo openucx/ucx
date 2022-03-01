@@ -2192,6 +2192,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         }
 
         worker->user_allocator.ops.init = params->user_mem_allocator_init;
+        worker->user_allocator.ops.cleanup = params->user_mem_allocator_cleanup;
         worker->user_allocator.ops.malloc = params->user_mem_allocator_malloc;
         worker->user_allocator.ops.free = params->user_mem_allocator_free;
         worker->user_allocator.malloc_cb = ucp_worker_usr_allocator_malloc_cb;
@@ -2200,6 +2201,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     } else {
 
         worker->user_allocator.ops.init = NULL;
+        worker->user_allocator.ops.cleanup = NULL;
         worker->user_allocator.ops.malloc = NULL;
         worker->user_allocator.ops.free = NULL;
         worker->user_allocator.malloc_cb = NULL;

@@ -1319,6 +1319,12 @@ typedef struct ucp_worker_params {
     ucs_user_mem_allocator_init_func_t user_mem_allocator_init;
 
     /**
+    * Release all the descriptors allocated by the specified memory allocator.
+    * This is optional parameter
+    */
+    ucs_user_mem_allocator_cleanup_func_t user_mem_allocator_cleanup;
+
+    /**
     * user memory allocator allocate descriptor
     */
     ucs_user_mem_allocator_malloc_func_t user_mem_allocator_malloc;
