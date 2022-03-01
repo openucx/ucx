@@ -1144,6 +1144,9 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
     iface_params->err_handler_flags = UCT_CB_FLAG_ASYNC;
     iface_params->cpu_mask          = worker->cpu_mask;
 
+    memcpy(&iface_params->user_allocator, &worker->user_allocator, sizeof(uct_user_allocator_props_t));
+    iface_params->user_allocator.md_index = resource->md_index;
+
     if (context->config.features & UCP_FEATURE_TAG) {
         iface_params->eager_arg     = iface_params->rndv_arg = wiface;
         iface_params->eager_cb      = ucp_tag_offload_unexp_eager;
@@ -1787,6 +1790,12 @@ static void ucp_worker_destroy_mpools(ucp_worker_h worker)
                       !(worker->flags & UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK));
 }
 
+static ucs_status_t ucp_worker_usr_allocator_malloc_cb(void* ucp_memh_p, unsigned md_index, uct_mem_h *memh) {
+    ucs_status_t status = UCS_OK;
+
+    return status;
+}
+
 static void
 ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
                                 ucp_worker_cfg_index_t ep_cfg_index,
@@ -2169,6 +2178,34 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);
     } else {
         ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 2);
+    }
+
+    if (params->field_mask & UCP_WORKER_PARAM_FIELD_USR_MEM_ALLOC) {
+
+        if (params->user_mem_allocator_init == NULL ||
+            params->user_mem_allocator_malloc == NULL ||
+            params->user_mem_allocator_free == NULL) {
+
+            ucs_error("Missing user allocator params");
+            status = UCS_ERR_INVALID_PARAM;
+            goto err_free;
+        }
+
+        worker->user_allocator.ops.init = params->user_mem_allocator_init;
+        worker->user_allocator.ops.cleanup = params->user_mem_allocator_cleanup;
+        worker->user_allocator.ops.malloc = params->user_mem_allocator_malloc;
+        worker->user_allocator.ops.free = params->user_mem_allocator_free;
+        worker->user_allocator.malloc_cb = ucp_worker_usr_allocator_malloc_cb;
+        worker->user_allocator.arg = NULL;
+
+    } else {
+
+        worker->user_allocator.ops.init = NULL;
+        worker->user_allocator.ops.cleanup = NULL;
+        worker->user_allocator.ops.malloc = NULL;
+        worker->user_allocator.ops.free = NULL;
+        worker->user_allocator.malloc_cb = NULL;
+        worker->user_allocator.arg = NULL;
     }
 
     worker->user_data    = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
