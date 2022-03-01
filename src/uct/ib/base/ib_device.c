@@ -909,7 +909,7 @@ const uct_ib_device_spec_t* uct_ib_device_spec(uct_ib_device_t *dev)
                     default settings for unknown devices */
 }
 
-static size_t uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
+static unsigned long uct_ib_device_get_ib_gid_index(uct_ib_md_t *md)
 {
     if (md->config.gid_index == UCS_ULUNITS_AUTO) {
         return UCT_IB_MD_DEFAULT_GID_INDEX;
@@ -930,8 +930,8 @@ ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
     const uct_ib_device_spec_t *dev_info;
     uint8_t required_dev_flags;
     ucs_status_t status;
+    unsigned gid_index;
     union ibv_gid gid;
-    int gid_index;
 
     if (port_num < dev->first_port || port_num >= dev->first_port + dev->num_ports) {
         return UCS_ERR_NO_DEVICE;
