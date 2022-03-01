@@ -239,7 +239,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
     size_t align_offset, alignment;
     ucs_status_t status;
     unsigned grow;
-    uct_user_mem_allocator_params_t mem_allocator_params;
+    ucs_user_mem_allocator_params_t mem_allocator_params;
 
     if (config->rx.queue_len < 1024) {
         grow = 1024;

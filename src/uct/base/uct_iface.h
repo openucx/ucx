@@ -463,8 +463,8 @@ typedef struct uct_iface_mpool_config {
     uct_user_allocator_props_t *user_allocator_props = _user_allocator_props; \
     uct_mem_h user_allocator_memh; \
     void *ucp_memh = NULL; \
-    uct_iface_user_allocator_malloc_cb_func_t get_desc_from_user_allocator_cb = user_allocator_props->malloc_cb; \
-    uct_iface_user_allocator_malloc_func_t get_desc_from_user_allocator = user_allocator_props->ops.malloc; \
+    uct_user_allocator_malloc_cb_func_t get_desc_from_user_allocator_cb = user_allocator_props->malloc_cb; \
+    ucs_user_mem_allocator_malloc_func_t get_desc_from_user_allocator = user_allocator_props->ops.malloc; \
     void* user_allocator_instance = user_allocator_props->arg; \
     unsigned user_allocator_md_index = user_allocator_props->md_index; \
     int user_allocator_active = user_allocator_props->active;

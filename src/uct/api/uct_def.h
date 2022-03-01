@@ -9,6 +9,7 @@
 
 #include <ucs/config/types.h>
 #include <ucs/type/status.h>
+#include <ucs/memory/user_mem_allocator.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -894,42 +895,40 @@ typedef ucs_status_t (*uct_tag_unexp_rndv_cb_t)(void *arg, unsigned flags,
  */
 typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
 
-/**
- * @ingroup UCT_RESOURCE
- * @brief User allocation indentifier 
- *
- * The structure defines the configuration of
- * the needed memory allocator.
- */
-typedef struct uct_user_mem_allocator_params {
-    uint64_t field_mask;
-    size_t seg_size;
-    size_t data_offset;
-} uct_user_mem_allocator_params_t;
 
-typedef ucs_status_t (*uct_iface_user_allocator_init_func_t)(const uct_user_mem_allocator_params_t* params, void** arg);
-typedef ucs_status_t (*uct_iface_user_allocator_free_func_t)(void* arg, void *desc);
-typedef ucs_status_t (*uct_iface_user_allocator_malloc_func_t)(void* arg, void **desc, void **ucp_memh);
-typedef ucs_status_t (*uct_iface_user_allocator_malloc_cb_func_t)(void* ucp_memh, unsigned md_index, uct_mem_h *memh);
+/**
+* @ingroup UCT_RESOURCE
+* @brief Callback function called after allocating descriptor using user memory allocator,
+         returns uct memory handle from the ucp memory handle.
+*
+* @param [in]   arg       Opaque object representing memory allocation instance implemented by the user
+* 
+* @param [out]  desc      Allocated descriptor.
+*
+* @param [out]  ucp_memh  UCP Memory handle 
+*
+* @return Error code as defined by @ref ucs_status_t
+*/
+typedef ucs_status_t (*uct_user_allocator_malloc_cb_func_t)(void* ucp_memh, unsigned md_index, uct_mem_h *memh);
+
 
 /**
  * @ingroup UCT_RESOURCE
  * @brief Interface for allocating descriptors based on user defined implementation 
  */
-typedef struct user_allocator_props {
+typedef struct uct_user_allocator_props {
     int active;
     unsigned md_index;
     void* arg;
-    uct_iface_user_allocator_malloc_cb_func_t malloc_cb;
+    uct_user_allocator_malloc_cb_func_t malloc_cb;
     struct {
         /*Init user defined memory allocator*/
-        uct_iface_user_allocator_init_func_t init;
+        ucs_user_mem_allocator_init_func_t init;
         /*Free memory descriptor*/
-        uct_iface_user_allocator_free_func_t free;   
+        ucs_user_mem_allocator_free_func_t free;   
         /*Get memory descriptor from user*/
-        uct_iface_user_allocator_malloc_func_t  malloc;   
+        ucs_user_mem_allocator_malloc_func_t  malloc;   
     } ops;
 } uct_user_allocator_props_t;
-
 
 #endif
