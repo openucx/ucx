@@ -1556,14 +1556,15 @@ ucs_status_t ucs_sys_get_memlock_rlimit(size_t *rlimit_value)
     /* Check the value of the max locked memory which is set on the system
      * (ulimit -l) */
     res = getrlimit(RLIMIT_MEMLOCK, &limit_info);
-    if (res == 0) {
-        *rlimit_value = (limit_info.rlim_cur == RLIM_INFINITY) ?
-                        SIZE_MAX : limit_info.rlim_cur;
-        return UCS_OK;
-    } else {
+    if (res != 0) {
         ucs_debug("unable to get the max locked memory limit: %m");
         return UCS_ERR_IO_ERROR;
     }
+
+    *rlimit_value = (limit_info.rlim_cur == RLIM_INFINITY) ?
+                            SIZE_MAX :
+                            limit_info.rlim_cur;
+    return UCS_OK;
 }
 
 void ucs_sys_check_memlock_limit_append_msg(ucs_string_buffer_t *msg)

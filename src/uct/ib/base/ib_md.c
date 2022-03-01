@@ -1184,19 +1184,6 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     int i, num_devices;
     size_t memlock_limit;
 
-    status = ucs_sys_get_memlock_rlimit(&memlock_limit);
-    if ((status == UCS_OK) && (memlock_limit <= 500 * UCS_MBYTE)) {
-        /* Disable the RDMA devices because of too strict locked memory limit*/
-        ucs_warn("RDMA transports are disabled because max locked memory limit "
-                 "(%llu kbytes) is too low. Please set max locked memory "
-                 "(ulimit -l) to 'unlimited'",
-                 (memlock_limit / UCS_KBYTE));
-
-        *resources_p     = NULL;
-        *num_resources_p = 0;
-        return UCS_OK;
-    }
-
     UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 
     /* Get device list from driver */
@@ -1224,6 +1211,21 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
                           sizeof(resources[num_resources].md_name),
                           "%s", ibv_get_device_name(device_list[i]));
         num_resources++;
+    }
+
+    if (num_resources != 0) {
+        status = ucs_sys_get_memlock_rlimit(&memlock_limit);
+        if ((status == UCS_OK) && (memlock_limit <= 500 * UCS_MBYTE)) {
+            /* Disable the RDMA devices because of too strict locked memory limit*/
+            ucs_diag("RDMA transports are disabled because max locked memory limit "
+                     "(%llu kbytes) is too low. Please set max locked memory "
+                     "(ulimit -l) to 'unlimited'",
+                     (memlock_limit / UCS_KBYTE));
+
+            *resources_p     = NULL;
+            *num_resources_p = 0;
+            return UCS_OK;
+        }
     }
 
     *resources_p     = resources;
