@@ -45,9 +45,9 @@ typedef ucs_status_t (*ucs_user_mem_allocator_init_func_t)(const ucs_user_mem_al
 * @ingroup UCS_RESOURCE
 * @brief Free descriptor allocated using user memory allocator
 *
-* @param [in]   arg   Opaque object representing memory allocation instance implemented by the user
+* @param [in]   arg  Opaque object representing memory allocation instance implemented by the user
 *
-* @param [out]  desc  Allocated descriptor.
+* @param [in]  desc  Descriptor to free.
 *
 * @return Error code as defined by @ref ucs_status_t
 */
