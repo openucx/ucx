@@ -1206,19 +1206,31 @@ typedef struct ucp_worker_attr {
     size_t                max_debug_string;
 } ucp_worker_attr_t;
 
+
+/**
+ * @ingroup UCP_WORKER
+ * @brief UCP worker attributes.
+ *
+ * The structure defines the configuration of
+ * the needed memory allocator.
+ */
+typedef struct ucp_user_mem_allocator_params {
+    uint64_t field_mask;
+    size_t seg_size;
+    size_t data_offset;
+} ucp_user_mem_allocator_params_t;
+
 /**
 * @ingroup UCP_WORKER
 * @brief User defined memory allocation instance constructor. 
 *
-* @param [in]  seg_size       Descriptors size to allocate
-*                             by this memory allocator instance.
-* @param [in]  data_offset    Data offset.
+* @param [in]  params  Memory allocator configuration.
 *
-* @param [out] arg  Opaque object representing memory allocation instance implemented by the user
+* @param [out]  arg    Opaque object representing memory allocation instance implemented by the user
 *
 * @return Error code as defined by @ref ucs_status_t
 */
-typedef ucs_status_t (*ucp_user_mem_allocator_init_func_t)(size_t seg_size, size_t data_offset, void **arg);
+typedef ucs_status_t (*ucp_user_mem_allocator_init_func_t)(const ucp_user_mem_allocator_params_t *params, void **arg);
 
 /**
 * @ingroup UCP_WORKER

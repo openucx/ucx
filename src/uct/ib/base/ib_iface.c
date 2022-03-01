@@ -239,6 +239,7 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
     size_t align_offset, alignment;
     ucs_status_t status;
     unsigned grow;
+    uct_user_mem_allocator_params_t mem_allocator_params;
 
     if (config->rx.queue_len < 1024) {
         grow = 1024;
@@ -262,8 +263,10 @@ ucs_status_t uct_ib_iface_recv_mpool_init(uct_ib_iface_t *iface,
     }
 
     if (iface->super.user_allocator.active) {
-
-        return iface->super.user_allocator.ops.init(iface->config.seg_size, sizeof(uct_ib_iface_recv_desc_t), &iface->super.user_allocator.arg);
+        
+        mem_allocator_params.seg_size = iface->config.seg_size;
+        mem_allocator_params.data_offset = sizeof(uct_ib_iface_recv_desc_t);
+        return iface->super.user_allocator.ops.init(&mem_allocator_params, &iface->super.user_allocator.arg);
 
     } else {
 

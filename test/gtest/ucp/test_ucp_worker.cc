@@ -717,10 +717,11 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM, 0, "");
     }
 
-    static ucs_status_t mockUserInitAllocator(size_t seg_size, size_t data_offset, void **arg) {
+    static ucs_status_t mockUserInitAllocator(const ucp_user_mem_allocator_params_t *params, void **arg) {
         ucs_status_t status = UCS_OK;
         mock_mem_allocator_t *new_usr_allocator = NULL;
         int i;
+        size_t seg_size = params->seg_size;
 
         if (mock_mem_allocators[UCP_MD_INDEX_BITS*2].seg_size == 0) {
             mock_mem_allocators[UCP_MD_INDEX_BITS*2].seg_size = 8256;

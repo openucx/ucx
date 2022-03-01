@@ -898,11 +898,16 @@ typedef void (*uct_async_event_cb_t)(void *arg, unsigned flags);
  * @ingroup UCT_RESOURCE
  * @brief User allocation indentifier 
  *
- * Opaque object representing memory allocation instance implemented by the suer
+ * The structure defines the configuration of
+ * the needed memory allocator.
  */
+typedef struct uct_user_mem_allocator_params {
+    uint64_t field_mask;
+    size_t seg_size;
+    size_t data_offset;
+} uct_user_mem_allocator_params_t;
 
-
-typedef ucs_status_t (*uct_iface_user_allocator_init_func_t)(size_t seg_size, size_t data_offset, void** arg);
+typedef ucs_status_t (*uct_iface_user_allocator_init_func_t)(const uct_user_mem_allocator_params_t* params, void** arg);
 typedef ucs_status_t (*uct_iface_user_allocator_free_func_t)(void* arg, void *desc);
 typedef ucs_status_t (*uct_iface_user_allocator_malloc_func_t)(void* arg, void **desc, void **ucp_memh);
 typedef ucs_status_t (*uct_iface_user_allocator_malloc_cb_func_t)(void* ucp_memh, unsigned md_index, uct_mem_h *memh);
