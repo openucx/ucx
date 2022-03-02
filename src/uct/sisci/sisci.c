@@ -56,7 +56,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
 
     printf("%d expected %zd ret_int %d  ret_node %d \n", length, sizeof(conn_req_t), request->node_id, request->interrupt);
     
-    
+
 
     do {
         SCIConnectDataInterrupt(md->sci_virtual_device, &ans_interrupt, request->node_id, 0, request->interrupt, 0, 0, &sci_error);
@@ -83,6 +83,11 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
     answer.segment_id = iface->sci_fds[i].segment_id;
 
     SCITriggerDataInterrupt(ans_interrupt, (void *) &answer, sizeof(answer), SCI_NO_FLAGS, &sci_error);
+
+    {
+        printf("SCI Trigger Interrupt: %s/n", SCIGetErrorString(sci_error));
+        return 0;
+    }    
 
     /*  set status to ready  */ 
 
