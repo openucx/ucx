@@ -554,7 +554,7 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
     for (size_t i = 0; i < SCI_MAX_EPS; i++)
     {
         
-        if(iface->fds[i].status != 1) {
+        if(iface->sci_fds[i].status != 1) {
             continue;
         }
 
