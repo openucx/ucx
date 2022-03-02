@@ -45,7 +45,7 @@ static ucs_config_field_t uct_sci_iface_config_table[] = {
 
 sci_callback_action_t conn_handler(void* arg, sci_local_interrupt_t interrupt, void* data, unsigned int length, sci_error_t sci_error) {
 
-    printf("Received interrupt callback of %d expected %zd\n", unsigned int length, sizeof(conn_req_t));
+    printf("Received interrupt callback of %d expected %zd\n", length, sizeof(conn_req_t));
 
 
     return SCI_CALLBACK_CANCEL;
@@ -217,7 +217,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     //TODO
 
     SCICreateDataInterrupt(sci_md->sci_virtual_device, self->interrupt, 0, &self->segment_id,  
-                            callback, NULL, SCI_FLAG_USE_CALLBACK, &SCI_ERROR);
+                            callback, NULL, SCI_FLAG_USE_CALLBACK, &sci_error);
 
 
     if(sci_error != SCI_ERR_OK) {
