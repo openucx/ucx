@@ -58,6 +58,7 @@ AS_IF([test "x$with_bfd" != xno],
        CPPFLAGS="$CPPFLAGS $BFD_CHECK_CPPFLAGS"
        LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS"
        LIBS="$LIBS $BFD_CHECK_LIBS"
+       BFD_CHECK_DEPLIBS="-liberty -lz -ldl"
 
        bfd_happy="yes"
        AC_CHECK_LIB(bfd, bfd_openr, [],
@@ -65,7 +66,6 @@ AS_IF([test "x$with_bfd" != xno],
                      # If cannot link with bfd, try adding known dependency libs
                      # unset the cached check result to force re-check
                      unset ac_cv_lib_bfd_bfd_openr
-                     BFD_CHECK_DEPLIBS="-liberty -lz -ldl"
                      AC_CHECK_LIB(bfd, bfd_openr,
                                   [BFD_CHECK_LIBS="$BFD_CHECK_LIBS $BFD_CHECK_DEPLIBS"
                                    LIBS="$LIBS $BFD_CHECK_DEPLIBS"],
@@ -116,6 +116,7 @@ AS_IF([test "x$with_bfd" != xno],
               AC_SUBST([BFD_CPPFLAGS], [$BFD_CHECK_CPPFLAGS])
               AC_SUBST([BFD_LIBS], [$BFD_CHECK_LIBS])
               AC_SUBST([BFD_LDFLAGS], [$BFD_CHECK_LDFLAGS])
+              AC_SUBST([BFD_DEPS], [$BFD_CHECK_DEPLIBS])
              ],
              [
                AS_IF([test "x$with_bfd" != "xyes" -a "x$with_bfd" != "xguess"],
@@ -289,4 +290,5 @@ AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])
 
 
 AC_CONFIG_FILES([src/ucs/Makefile
-                 src/ucs/signal/Makefile])
+                 src/ucs/signal/Makefile
+                 src/ucs/ucx-ucs.pc])

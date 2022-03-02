@@ -33,4 +33,5 @@ m4_include([src/ucm/cuda/configure.m4])
 m4_include([src/ucm/rocm/configure.m4])
 AC_DEFINE_UNQUOTED([ucm_MODULES], ["${ucm_modules}"], [UCM loadable modules])
 
-AC_CONFIG_FILES([src/ucm/Makefile])
+AC_CONFIG_FILES([src/ucm/Makefile
+                 src/ucm/ucx-ucm.pc])
