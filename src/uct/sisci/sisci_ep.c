@@ -65,7 +65,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     } while (sci_error != SCI_ERR_OK);
 
     printf("connected to remote interrupt!, ret_int %d\n", local_interrupt_id);
-    printf("size of answer %zd size of struct answer %zd\n", sizeof(anwser), sizeof(con_ans_t));
+    printf("size of answer %zd size of struct answer %zd\n", sizeof(answer), sizeof(con_ans_t));
     request.status = 1;
     request.interrupt = local_interrupt_id;
     request.node_id   = iface->device_addr;
