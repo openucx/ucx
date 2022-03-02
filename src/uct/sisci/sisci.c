@@ -71,7 +71,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
     for (i = 0; i < SCI_MAX_EPS; i++)
     {
         if(iface->sci_fds[i].status == 0) {
-            iface->sci_fds[i].status == 2;
+            iface->sci_fds[i].status = 2;
             break;
         }
     }
