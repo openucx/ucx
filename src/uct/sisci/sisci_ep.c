@@ -88,7 +88,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
         return UCS_ERR_NO_RESOURCE;
     }                      
 
-    SCIWaitForDataInterrupt(ans_interrupt, &answer, &ans_length, 0, &sci_error);
+    SCIWaitForDataInterrupt(ans_interrupt, &answer, &ans_length,0, 0, &sci_error);
 
     if(sci_error != SCI_ERR_OK) {
         printf("SCI Wait For Interrupt: %s\n", SCIGetErrorString(sci_error));
