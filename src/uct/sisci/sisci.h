@@ -51,13 +51,13 @@ typedef struct sci_map_holder {
     sci file desctriptor, each endpoint connects to a different region.
 */
 typedef struct sci_fd {
-    int                 status;         /* taken | available | ready |  */
-    int                 segment_id;     /* local segment id, generated during launch */
-    int                 size;           /* size */
-    int                 remote_node;
-    sci_local_segment   local_segment;  
-    sci_map_t           map;
-    void*               buf;
+    int                     status;         /* taken | available | ready |  */
+    int                     segment_id;     /* local segment id, generated during launch */
+    int                     size;           /* size */
+    int                     remote_node;
+    sci_local_segment_t     local_segment;  
+    sci_map_t               map;
+    void*                   buf;
 } sci_fd_t;
 
 typedef struct con_req {
