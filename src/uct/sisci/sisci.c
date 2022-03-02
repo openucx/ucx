@@ -546,34 +546,52 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 
 static void uct_sci_process_recv(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
-    sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer;
+    sisci_packet_t* packet; // (sisci_packet_t*) iface->recv_buffer;
     ucs_status_t status;
 
-    assert(packet->status == 1);
-
-    packet->status = 2;
-    status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->recv_buffer + sizeof(sisci_packet_t), packet->length,0);
     
 
-    //DEBUG_PRINT("invoke status %d ", status);
-    DEBUG_PRINT("invoke: %d length: %d from %d\n", status,  packet->length,  ((sisci_packet_t*) iface->recv_buffer)->am_id );
-    //printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
+    for (size_t i = 0; i < SCI_MAX_EPS; i++)
+    {
+        
+        if(iface->fds[i].status != 1) {
+            continue;
+        }
 
-    if(status == UCS_INPROGRESS) {
-        DEBUG_PRINT("UCS_IN_PROGRESS\n");
-    }
 
-    //usleep(500000);
+        packet = (sisci_packet_t*) iface->sci_fds[i].buf;
+
+        if (packet->status != 1) {
+            continue;
+        }
+
+
+        status = uct_iface_invoke_am(&iface->super, packet->am_id, iface->sci_fds[i].buf + sizeof(sisci_packet_t), packet->length,0);
     
-    if(status == UCS_OK) {
 
-        DEBUG_PRINT("status == UCS_OK, clear buffers\n");
+        //DEBUG_PRINT("invoke status %d ", status);
+        DEBUG_PRINT("invoke: %d length: %d from %d\n", status,  packet->length,  packet->am_id );
+        //printf("sizeof struct %zd sizeof struct members: %zd\n", sizeof(sisci_packet_t), sizeof(unsigned) + sizeof(uint8_t)*2);
 
-        /*packet->am_id = 0;
-        packet->status = 0;
-        packet->length = 0;*/
-        memset(iface->recv_buffer, 0 ,packet->length + SCI_PACKET_SIZE);
+        if(status == UCS_INPROGRESS) {
+            DEBUG_PRINT("UCS_IN_PROGRESS\n");
+        }
+
+        //usleep(500000);
+        
+        if(status == UCS_OK) {
+
+            DEBUG_PRINT("status == UCS_OK, clear buffers\n");
+
+            /*packet->am_id = 0;
+            packet->status = 0;
+            packet->length = 0;*/
+            memset(iface->sci_fds[i].buf, 0 ,packet->length + SCI_PACKET_SIZE);
+        }
     }
+    
+
+    
 
 
 }
