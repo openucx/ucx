@@ -35,7 +35,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     uct_sci_device_addr_t* dev_addr = (uct_sci_device_addr_t*) params->dev_addr;
     sci_remote_data_interrupt_t req_interrupt;
     sci_local_data_interrupt_t  ans_interrupt;
-    int local_interrupt_id =    ucs_generate_uuid(94);
+    unsigned int local_interrupt_id =    ucs_generate_uuid(94);
     int ans_length          = sizeof(con_ans_t);
     conn_req_t request;
     con_ans_t answer;
@@ -81,8 +81,8 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     printf("sent interrupt of %zd to %d\n", sizeof(request), segment_id);
 
 
-    SCICreateDataInterrupt(md->sci_virtual_device, &ans_interrupt, 0, local_interrupt_id,  
-                            NULL, NULL, 0, &sci_error);
+    SCICreateDataInterrupt(md->sci_virtual_device, &ans_interrupt, 0, &local_interrupt_id,  
+                            NULL, NULL, SCI_FLAG_FIXED_INTNO, &sci_error);
 
     if(sci_error != SCI_ERR_OK) {
         printf("SCI Trigger Interrupt: %s\n", SCIGetErrorString(sci_error));
