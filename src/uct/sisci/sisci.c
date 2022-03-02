@@ -108,6 +108,9 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         return UCS_ERR_UNSUPPORTED;
     }
 
+
+    
+
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sci_iface_ops, &uct_base_iface_internal_ops,
             md, worker, params,
