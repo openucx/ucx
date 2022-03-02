@@ -445,16 +445,31 @@ void ucp_ep_config_key_set_err_mode(ucp_ep_config_key_t *key,
                     UCP_ERR_HANDLING_MODE_PEER : UCP_ERR_HANDLING_MODE_NONE;
 }
 
+ucs_status_t
+ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
+                                      ucp_err_handling_mode_t err_mode)
+{
+    if (ucp_ep_config(ep)->key.err_mode != err_mode) {
+        ucs_error("ep %p: asymmetric endpoint configuration is not supported,"
+                  " error handling level mismatch (expected: %d, got: %d)",
+                  ep, ucp_ep_config(ep)->key.err_mode, err_mode);
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return UCS_OK;
+}
+
+
+/* Handles a case where the existing endpoint is incomplete */
 static ucs_status_t
 ucp_ep_adjust_params(ucp_ep_h ep, const ucp_ep_params_t *params)
 {
-    /* handle a case where the existing endpoint is incomplete */
+    ucs_status_t status;
 
     if (params->field_mask & UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE) {
-        if (ucp_ep_config(ep)->key.err_mode != params->err_mode) {
-            ucs_error("asymmetric endpoint configuration is not supported, "
-                      "error handling level mismatch");
-            return UCS_ERR_UNSUPPORTED;
+        status = ucp_ep_config_err_mode_check_mismatch(ep, params->err_mode);
+        if (status != UCS_OK) {
+            return status;
         }
     }
 

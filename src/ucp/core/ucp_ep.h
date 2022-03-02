@@ -614,6 +614,10 @@ void ucp_ep_flush_state_invalidate(ucp_ep_h ep);
 
 void ucp_ep_release_id(ucp_ep_h ep);
 
+ucs_status_t
+ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
+                                      ucp_err_handling_mode_t err_mode);
+
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);
 
