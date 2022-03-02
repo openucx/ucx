@@ -99,7 +99,6 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
 
     printf("node %d segment %d\n", answer.node_id, answer.segment_id);
 
-    return UCS_ERR_NO_RESOURCE;
     //self->remote_node_id = 
 
     do {
