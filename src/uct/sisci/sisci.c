@@ -84,14 +84,15 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
 
     SCITriggerDataInterrupt(ans_interrupt, (void *) &answer, sizeof(answer), SCI_NO_FLAGS, &sci_error);
 
-    {
+    if(sci_error != SCI_ERR_OK) {
         printf("SCI Trigger Interrupt: %s/n", SCIGetErrorString(sci_error));
-        return 0;
     }    
 
     /*  set status to ready  */ 
 
     iface->sci_fds[i].status = 1;
+
+    printf("callback ")
     return SCI_CALLBACK_CANCEL;
 }
 
