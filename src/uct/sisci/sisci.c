@@ -191,7 +191,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     for(ssize_t i = 0; i < SCI_MAX_EPS; i++) {
         int segment_id = ucs_generate_uuid(trash);
         self->sci_fds[i].status = 0;
-        self->sci_fds[i].size = send_size;
+        self->sci_fds[i].size = iface->send_size;
 
 
 
