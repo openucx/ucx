@@ -45,7 +45,7 @@ static ucs_config_field_t uct_sci_iface_config_table[] = {
 
 sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interrupt, void* data, unsigned int length, sci_error_t sci_error) {
     sci_remote_data_interrupt_t ans_interrupt;
-    sci_error_t sci_error;
+    //sci_error_t sci_error;
     con_ans_t   answer;
     conn_req_t* request = (conn_req_t*) data;
     sci_iface_t* iface = (sci_iface_t*) arg;
