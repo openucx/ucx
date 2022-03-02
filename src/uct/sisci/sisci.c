@@ -192,7 +192,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         int segment_id = ucs_generate_uuid(trash);
         self->sci_fds[i].status = 0;
         self->sci_fds[i].size = self->send_size;
-        self->sci_fds[i].segment_id ) segment_id;
+        self->sci_fds[i].segment_id = segment_id;
 
 
         SCICreateSegment(sci_md->sci_virtual_device, &self->sci_fds[i].local_segment, segment_id, self->send_size, NULL, NULL, 0, &sci_error);
