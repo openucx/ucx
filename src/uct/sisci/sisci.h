@@ -63,7 +63,7 @@ typedef struct sci_fd {
 typedef struct con_req {
     uint8_t status;
     int     node_id;
-    int     segment_id;
+    //int     segment_id;
     int     interrupt;
 } conn_req_t;
 

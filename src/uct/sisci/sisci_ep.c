@@ -33,6 +33,11 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     sci_error_t sci_error;
     uct_sci_iface_addr_t* iface_addr =  (uct_sci_iface_addr_t*) params->iface_addr;
     uct_sci_device_addr_t* dev_addr = (uct_sci_device_addr_t*) params->dev_addr;
+    sci_remote_data_interrupt_t req_interrupt;
+    sci_local_data_interrupt_t  ans_interrupt;
+    int local_interrupt_id =    ucs_generate_uuid(94);
+    conn_req_t request;
+
 
     unsigned int segment_id = 0; //(unsigned int) params->segment_id;
     unsigned int node_id = 0; //(unsigned int) params->node_id;
@@ -53,14 +58,32 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
 
     UCS_CLASS_CALL_SUPER_INIT(uct_base_ep_t, &iface->super); //segfaults without this line, probably has something to do with the stats member...
 
+    do {
+        SCIConnectDataInterrupt(md->sci_virtual_device, &req_interrupt, node_id, 0, segment_id, 0, 0, &sci_error);
+    } while {sci_error != SCI_ERR_OK};
 
+    printf("connected to remote interrupt!\n");
+    request.status = 1;
+    request.interrupt = local_interrupt_id
+    request.node_id   = iface->device_addr;
+
+    
+    SCITriggerDataInterrupt(req_interrupt, (void *) &request, sizeof(request), SCI_NO_FLAGS, &sci_error);
+    
+    if(sci_error != SCI_ERR_OK) {
+        printf("SCI Trigger Interrupt: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    printf("sent interrupt of %zd to %d\n", sizeof(request), segment_id);
+
+    sleep(4);    
     do {
     SCIConnectSegment(md->sci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 
                 ADAPTER_NO, NULL, NULL, 0, 0, &sci_error);
 
     DEBUG_PRINT("waiting to connect\n");
-  } while (sci_error != SCI_ERR_OK);
-    
+    } while (sci_error != SCI_ERR_OK);
 
     self->buf = (void *) SCIMapRemoteSegment(self->remote_segment, &self->remote_map, 0, iface->send_size, NULL, 0, &sci_error);
 
