@@ -221,7 +221,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
 
     if(sci_error != SCI_ERR_OK) {
-        printf("SCI CREATE INTERRUPT: %s \n", SCIGetErrorString(sci_error));
+        printf("SCI CREATE INTERRUPT: %s %d\n", SCIGetErrorString(sci_error), SCI_FLAG_USE_CALLBACK);
         return UCS_ERR_NO_RESOURCE;
     } 
 
