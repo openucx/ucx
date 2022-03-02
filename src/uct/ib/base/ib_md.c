@@ -1224,7 +1224,7 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
 
             *resources_p     = NULL;
             *num_resources_p = 0;
-            return UCS_OK;
+            goto out_free_device_list;
         }
     }
 
