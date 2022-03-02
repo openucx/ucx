@@ -105,7 +105,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     sci_error_t sci_error;
     ucs_status_t status;
     unsigned dma_seg_id;
-    sci_cb_interrupt_t callback = conn_handler;
+    sci_cb_data_interrupt_t callback = conn_handler;
 
     uct_sci_md_t * sci_md = ucs_derived_of(md, uct_sci_md_t);
 
