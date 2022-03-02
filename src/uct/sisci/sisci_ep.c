@@ -64,7 +64,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
 
     printf("connected to remote interrupt!\n");
     request.status = 1;
-    request.interrupt = local_interrupt_id
+    request.interrupt = local_interrupt_id;
     request.node_id   = iface->device_addr;
 
     
