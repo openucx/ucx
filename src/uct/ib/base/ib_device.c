@@ -23,7 +23,81 @@
 #include <sys/poll.h>
 #include <libgen.h>
 #include <sched.h>
+#include <float.h>
 
+
+typedef struct {
+    double     bw_gbps;       /* Link speed */
+    uint16_t   payload;       /* Payload used to data transfer */
+    uint16_t   tlp_overhead;  /* PHY + data link layer + header + CRC */
+    uint16_t   ctrl_ratio;    /* Number of TLC before ACK */
+    uint16_t   ctrl_overhead; /* Length of control TLP */
+    uint16_t   encoding;      /* Number of encoded symbol bits */
+    uint16_t   decoding;      /* Number of decoded symbol bits */
+    const char *name;         /* Name of PCI generation */
+} uct_ib_device_pci_info_t;
+
+/*
+ * - TLP (Transaction Layer Packet) overhead calculations (no ECRC):
+ *   Gen1/2:
+ *     Start   SeqNum   Hdr_64bit   LCRC   End
+ *       1   +   2    +   16      +   4  +  1  = 24
+ *
+ *   Gen3/4:
+ *     Start   SeqNum   Hdr_64bit   LCRC
+ *       4   +   2    +   16      +   4  = 26
+ *
+ * - DLLP (Data Link Layer Packet) overhead calculations:
+ *    - Control packet 8b ACK + 8b flow control
+ *    - ACK/FC ratio: 1 per 4 TLPs
+ *
+ * References:
+ * [1] https://www.xilinx.com/support/documentation/white_papers/wp350.pdf
+ * [2] https://xdevs.com/doc/Standards/PCI/PCI_Express_Base_4.0_Rev0.3_February19-2014.pdf
+ * [3] https://www.nxp.com/docs/en/application-note/AN3935.pdf
+ */
+static const uct_ib_device_pci_info_t uct_ib_device_pci_info[] = {
+    {
+        .name          = "gen1",
+        .bw_gbps       = 2.5,
+        .payload       = 256,
+        .tlp_overhead  = 24,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 8,
+        .decoding      = 10
+    },
+    {
+        .name          = "gen2",
+        .bw_gbps       = 5,
+        .payload       = 256,
+        .tlp_overhead  = 24,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 8,
+        .decoding      = 10
+    },
+    {
+        .name          = "gen3",
+        .bw_gbps       = 8,
+        .payload       = 256,
+        .tlp_overhead  = 26,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 128,
+        .decoding      = 130
+    },
+    {
+        .name          = "gen4",
+        .bw_gbps       = 16,
+        .payload       = 256,
+        .tlp_overhead  = 26,
+        .ctrl_ratio    = 4,
+        .ctrl_overhead = 16,
+        .encoding      = 128,
+        .decoding      = 130
+    },
+};
 
 /* This table is according to "Encoding for RNR NAK Timer Field"
  * in IBTA specification */
@@ -486,100 +560,202 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
     ucs_log(level, "IB Async event on %s: %s", uct_ib_device_name(dev), event_info);
 }
 
-static ucs_status_t uct_ib_device_get_path_buffer(uct_ib_device_t *dev,
-                                                  char *path_buffer)
+static ucs_status_t
+uct_ib_device_read_sysfs_file(uct_ib_device_t *dev, const char *sysfs_path,
+                              const char *file_name, char *str, size_t max,
+                              ucs_log_level_t err_level)
 {
-    char *resolved_path;
+    ssize_t nread;
 
-    resolved_path = realpath(dev->ibv_context->device->ibdev_path, path_buffer);
-    if (resolved_path == NULL) {
-        return UCS_ERR_IO_ERROR;
+    if (sysfs_path == NULL) {
+        return UCS_ERR_NO_ELEM;
     }
 
-    /* Make sure there is "/infiniband/" substring in path_buffer */
-    if (strstr(path_buffer, "/infiniband/") == NULL) {
-        return UCS_ERR_IO_ERROR;
+    nread = ucs_read_file_str(str, max, 1, "%s/%s", sysfs_path, file_name);
+    if (nread < 0) {
+        ucs_log(err_level, "%s: could not read from '%s/%s'",
+                uct_ib_device_name(dev), sysfs_path, file_name);
+        return UCS_ERR_NO_ELEM;
     }
 
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_device_get_ids_from_path(const char *path,
-                                                    uint16_t *vendor_id,
-                                                    uint16_t *device_id)
+static const char *
+uct_ib_device_get_sysfs_path(struct ibv_device *ib_device, char *path_buffer)
 {
-    ucs_status_t status;
-    long value;
-
-    status = ucs_read_file_number(&value, 1, "%s/%s", path, "vendor");
-    if (status != UCS_OK) {
-        return status;
-    }
-    *vendor_id = value;
-
-    status = ucs_read_file_number(&value, 1, "%s/%s", path, "device");
-    if (status != UCS_OK) {
-        return status;
-    }
-    *device_id = value;
-
-    return UCS_OK;
-}
-
-static void uct_ib_device_get_ids(uct_ib_device_t *dev)
-{
-    char *ids_path;
-    char path_buffer[PATH_MAX];
-    ucs_status_t status;
+    const char *detected_type = NULL;
+    char device_file_path[PATH_MAX];
+    char *sysfs_realpath;
+    struct stat st_buf;
+    char *sysfs_path;
+    int ret;
 
     /* PF: realpath name is of form /sys/devices/.../0000:03:00.0/infiniband/mlx5_0 */
     /* SF: realpath name is of form /sys/devices/.../0000:03:00.0/<UUID>/infiniband/mlx5_0 */
 
-    status = uct_ib_device_get_path_buffer(dev, path_buffer);
+    sysfs_realpath = realpath(ib_device->ibdev_path, path_buffer);
+    if (sysfs_realpath == NULL) {
+        goto out_undetected;
+    }
+
+    /* Try PF: strip 2 components */
+    sysfs_path = ucs_dirname(sysfs_realpath, 2);
+    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
+                      sysfs_path);
+    ret = stat(device_file_path, &st_buf);
+    if (ret == 0) {
+        detected_type = "PF";
+        goto out_detected;
+    }
+
+    /* Try SF: strip 3 components (one more) */
+    sysfs_path = ucs_dirname(sysfs_path, 1);
+    ucs_snprintf_safe(device_file_path, sizeof(device_file_path), "%s/device",
+                      sysfs_path);
+    ret = stat(device_file_path, &st_buf);
+    if (ret == 0) {
+        detected_type = "SF";
+        goto out_detected;
+    }
+
+out_undetected:
+    ucs_debug("%s: sysfs path undetected", ibv_get_device_name(ib_device));
+    return NULL;
+
+out_detected:
+    ucs_debug("%s: %s sysfs path is '%s'", ibv_get_device_name(ib_device),
+              detected_type, sysfs_path);
+    return sysfs_path;
+}
+
+static void
+uct_ib_device_set_sys_dev(uct_ib_device_t *dev, const char *sysfs_path)
+{
+    const char *dev_name = uct_ib_device_name(dev);
+    const char *bdf_name;
+    ucs_status_t status;
+
+    if (sysfs_path == NULL) {
+        goto out_unknown;
+    }
+
+    bdf_name = strrchr(sysfs_path, '/');
+    if (bdf_name == NULL) {
+        goto out_unknown;
+    }
+
+    ++bdf_name; /* Move past '/' separator */
+
+    status = ucs_topo_find_device_by_bdf_name(bdf_name, &dev->sys_dev);
     if (status != UCS_OK) {
-        goto not_found;
+        goto out_unknown;
     }
 
-    /* PF: strip 2 layers. */
-    ids_path = ucs_dirname(path_buffer, 2);
-    if (ids_path == NULL) {
-        goto not_found;
+    status = ucs_topo_sys_device_set_name(dev->sys_dev, dev_name);
+    ucs_assert_always(status == UCS_OK);
+
+    ucs_debug("%s: bdf_name %s sys_dev %d", dev_name, bdf_name, dev->sys_dev);
+    return;
+
+out_unknown:
+    dev->sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+    ucs_debug("%s: system device unknown", dev_name);
+}
+
+static void
+uct_ib_device_set_pci_id(uct_ib_device_t *dev, const char *sysfs_path)
+{
+    char pci_id_str[16];
+    ucs_status_t status;
+
+    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, "vendor",
+                                           pci_id_str, sizeof(pci_id_str),
+                                           UCS_LOG_LEVEL_WARN);
+    dev->pci_id.vendor = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
+
+    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, "device",
+                                           pci_id_str, sizeof(pci_id_str),
+                                           UCS_LOG_LEVEL_WARN);
+    dev->pci_id.device = (status == UCS_OK) ? strtol(pci_id_str, NULL, 0) : 0;
+
+    ucs_debug("%s: vendor_id 0x%x device_id %d", uct_ib_device_name(dev),
+              dev->pci_id.vendor, dev->pci_id.device);
+}
+
+static void
+uct_ib_device_set_pci_bw(uct_ib_device_t *dev, const char *sysfs_path)
+{
+    const char *pci_width_file_name = "current_link_width";
+    const char *pci_speed_file_name = "current_link_speed";
+    const char *dev_name            = uct_ib_device_name(dev);
+    double bw_gbps, effective_bw, link_utilization;
+    const uct_ib_device_pci_info_t *p;
+    char pci_width_str[16];
+    char pci_speed_str[16];
+    ucs_status_t status;
+    unsigned width;
+    char gts[16];
+    size_t i;
+
+    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, pci_width_file_name,
+                                           pci_width_str, sizeof(pci_width_str),
+                                           UCS_LOG_LEVEL_DEBUG);
+    if (status != UCS_OK) {
+        goto out_max_bw;
     }
 
-    status = uct_ib_device_get_ids_from_path(ids_path,
-                                             &dev->pci_id.vendor,
-                                             &dev->pci_id.device);
-    if (status == UCS_OK) {
-        ucs_debug("PF: %s vendor_id: 0x%x device_id: %d", uct_ib_device_name(dev),
-                  dev->pci_id.vendor, dev->pci_id.device);
+    status = uct_ib_device_read_sysfs_file(dev, sysfs_path, pci_speed_file_name,
+                                           pci_speed_str, sizeof(pci_speed_str),
+                                           UCS_LOG_LEVEL_DEBUG);
+    if (status != UCS_OK) {
+        goto out_max_bw;
+    }
+
+    if (sscanf(pci_width_str, "%u", &width) < 1) {
+        ucs_debug("%s: incorrect format of %s file: expected: <unsigned "
+                  "integer>, actual: %s\n",
+                  dev_name, pci_width_file_name, pci_width_str);
+        goto out_max_bw;
+    }
+
+    if ((sscanf(pci_speed_str, "%lf%s", &bw_gbps, gts) < 2) ||
+        strcasecmp("GT/s", ucs_strtrim(gts))) {
+        ucs_debug("%s: incorrect format of %s file: expected: <double> GT/s, "
+                  "actual: %s\n",
+                  dev_name, pci_speed_file_name, pci_speed_str);
+        goto out_max_bw;
+    }
+
+    for (i = 0; i < ucs_static_array_size(uct_ib_device_pci_info); i++) {
+        p = &uct_ib_device_pci_info[i];
+        if ((bw_gbps / p->bw_gbps) > 1.01) { /* floating-point compare */
+            continue;
+        }
+
+        link_utilization = (double)(p->payload * p->ctrl_ratio) /
+                           (((p->payload + p->tlp_overhead) * p->ctrl_ratio) +
+                            p->ctrl_overhead);
+        /* coverity[overflow] */
+        effective_bw     = (p->bw_gbps * 1e9 / 8.0) * width *
+                           ((double)p->encoding / p->decoding) * link_utilization;
+        ucs_trace("%s: PCIe %s %ux, effective throughput %.3f MB/s %.3f Gb/s",
+                  dev_name, p->name, width, effective_bw / UCS_MBYTE,
+                  effective_bw * 8e-9);
+        dev->pci_bw = effective_bw;
         return;
     }
 
-    /* SF: strip 3 layers (1 more layer than PF). */
-    ids_path = ucs_dirname(path_buffer, 1);
-    if (ids_path == NULL) {
-        goto not_found;
-    }
-
-    status = uct_ib_device_get_ids_from_path(ids_path,
-                                             &dev->pci_id.vendor,
-                                             &dev->pci_id.device);
-    if (status == UCS_OK) {
-        ucs_debug("SF: %s vendor_id: 0x%x device_id: %d", uct_ib_device_name(dev),
-                  dev->pci_id.vendor, dev->pci_id.device);
-        return;
-    }
-
-not_found:
-    dev->pci_id.vendor = 0;
-    dev->pci_id.device = 0;
-    ucs_warn("%s: could not read device/vendor id from sysfs, "
-             "performance may be affected", uct_ib_device_name(dev));
+out_max_bw:
+    dev->pci_bw = DBL_MAX;
+    ucs_debug("%s: pci bandwidth undetected, using maximal value", dev_name);
 }
 
 ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
                                  struct ibv_device *ibv_device)
 {
+    char path_buffer[PATH_MAX];
+    const char *sysfs_path;
     ucs_status_t status;
     uint8_t i;
     int ret;
@@ -619,7 +795,11 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         }
     }
 
-    uct_ib_device_get_ids(dev);
+    sysfs_path = uct_ib_device_get_sysfs_path(dev->ibv_context->device,
+                                              path_buffer);
+    uct_ib_device_set_sys_dev(dev, sysfs_path);
+    uct_ib_device_set_pci_id(dev, sysfs_path);
+    uct_ib_device_set_pci_bw(dev, sysfs_path);
 
     return UCS_OK;
 }
@@ -1094,52 +1274,6 @@ ucs_status_t uct_ib_modify_qp(struct ibv_qp *qp, enum ibv_qp_state state)
     return UCS_OK;
 }
 
-static ucs_sys_device_t uct_ib_device_get_sys_dev(uct_ib_device_t *dev)
-{
-    char path_buffer[PATH_MAX];
-    ucs_sys_device_t sys_dev;
-    ucs_sys_bus_id_t bus_id;
-    ucs_status_t status;
-    char *pcie_bus;
-    int num_fields;
-
-    /* realpath name is of form /sys/devices/.../0000:05:00.0/infiniband/mlx5_0
-     * and bus_id is constructed from 0000:05:00.0 */
-
-    status = uct_ib_device_get_path_buffer(dev, path_buffer);
-    if (status != UCS_OK) {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
-
-    pcie_bus = ucs_dirname(path_buffer, 2);
-    if (pcie_bus == NULL) {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
-    pcie_bus = basename(pcie_bus);
-    if (pcie_bus == NULL) {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
-
-    num_fields = sscanf(pcie_bus, "%hx:%hhx:%hhx.%hhx", &bus_id.domain,
-                        &bus_id.bus, &bus_id.slot, &bus_id.function);
-    if (num_fields != 4) {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
-
-    status = ucs_topo_find_device_by_bus_id(&bus_id, &sys_dev);
-    if (status != UCS_OK) {
-        return UCS_SYS_DEVICE_ID_UNKNOWN;
-    }
-
-    status = ucs_topo_sys_device_set_name(sys_dev, uct_ib_device_name(dev));
-    ucs_assert_always(status == UCS_OK);
-
-    ucs_debug("%s bus id %hu:%hhu:%hhu.%hhu sys_dev %d",
-              uct_ib_device_name(dev), bus_id.domain, bus_id.bus, bus_id.slot,
-              bus_id.function, sys_dev );
-    return sys_dev;
-}
-
 ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
                                        uct_tl_device_resource_t **tl_devices_p,
                                        unsigned *num_tl_devices_p)
@@ -1176,7 +1310,7 @@ ucs_status_t uct_ib_device_query_ports(uct_ib_device_t *dev, unsigned flags,
                           sizeof(tl_devices[num_tl_devices].name),
                           "%s:%d", uct_ib_device_name(dev), port_num);
         tl_devices[num_tl_devices].type       = UCT_DEVICE_TYPE_NET;
-        tl_devices[num_tl_devices].sys_device = uct_ib_device_get_sys_dev(dev);
+        tl_devices[num_tl_devices].sys_device = dev->sys_dev;
         ++num_tl_devices;
     }
 
