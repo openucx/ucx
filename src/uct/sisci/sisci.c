@@ -43,7 +43,7 @@ static ucs_config_field_t uct_sci_iface_config_table[] = {
 };*/
 
 
-sci_callback_action_t conn_handler(void* arg, sci_local_interrupt_t interrupt, void* data, unsigned int length, sci_error_t sci_error) {
+sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interrupt, void* data, unsigned int length, sci_error_t sci_error) {
 
     printf("Received interrupt callback of %d expected %zd\n", length, sizeof(conn_req_t));
 
