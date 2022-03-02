@@ -217,7 +217,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     //TODO
 
     SCICreateDataInterrupt(sci_md->sci_virtual_device, &self->interrupt, 0, &self->segment_id,  
-                            callback, NULL, SCI_FLAG_USE_CALLBACK, &sci_error);
+                            callback, NULL, 0, &sci_error);
 
 
     if(sci_error != SCI_ERR_OK) {
