@@ -544,13 +544,20 @@ void uct_sci_iface_progress_enable(uct_iface_h iface, unsigned flags) {
 }
 
 
-static void uct_sci_process_recv(uct_iface_h tl_iface) {
+/*static void uct_sci_process_recv(uct_iface_h tl_iface) {
     uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
     sisci_packet_t* packet; // (sisci_packet_t*) iface->recv_buffer;
     ucs_status_t status;
 
-    
 
+}*/
+
+unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
+    uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
+    int count = 0;
+
+    sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer; 
+    
     for (size_t i = 0; i < SCI_MAX_EPS; i++)
     {
         
@@ -588,27 +595,6 @@ static void uct_sci_process_recv(uct_iface_h tl_iface) {
             packet->length = 0;*/
             memset(iface->sci_fds[i].buf, 0 ,packet->length + SCI_PACKET_SIZE);
         }
-    }
-    
-
-    
-
-
-}
-
-unsigned uct_sci_iface_progress(uct_iface_h tl_iface) {
-    uct_sci_iface_t* iface = ucs_derived_of(tl_iface, uct_sci_iface_t);
-    int count = 0;
-
-    sisci_packet_t* packet = (sisci_packet_t*) iface->recv_buffer; 
-    
-    if (packet->status == 1)
-    {
-
-        DEBUG_PRINT("recv: AMID %d, Length %d!\n", packet->am_id, packet->length);
-        uct_sci_process_recv(tl_iface);
-        DEBUG_PRINT("after recv: AMID %d length %d\n", packet->am_id, packet->length);
-
     }
     
     //usleep(500000);
