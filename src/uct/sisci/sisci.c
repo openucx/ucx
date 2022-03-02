@@ -48,6 +48,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
     sci_error_t sci_error;
     con_ans_t   answer;
     conn_req_t* request = (conn_req_t*) data;
+    sci_iface_t* iface = (sci_iface_t*) arg;
     size_t i;
 
 
@@ -66,7 +67,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
 
     /*   Enter critical   */
 
-    for (i = 0; i < count; i++)
+    for (i = 0; i < SCI_MAX_EPS; i++)
     {
         break;
     }
