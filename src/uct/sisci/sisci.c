@@ -42,6 +42,15 @@ static ucs_config_field_t uct_sci_iface_config_table[] = {
     NULL
 };*/
 
+
+sci_callback_action_t conn_handler(void* arg, sci_local_interrupt_t interrupt, void* data, unsigned int length, sci_error_t sci_error) {
+
+    printf("Received interrupt callback of %d expected %zd\n", unsigned int length, sizeof(conn_req_t));
+
+
+    return SCI_CALLBACK_CANCEL;
+}
+
 int sci_opened = 0;
 int iface_query_printed = 0;
 
@@ -96,6 +105,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     sci_error_t sci_error;
     ucs_status_t status;
     unsigned dma_seg_id;
+    sci_cb_interrupt_t callback = conn_handler;
 
     uct_sci_md_t * sci_md = ucs_derived_of(md, uct_sci_md_t);
 
@@ -139,16 +149,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
 
         SCICreateSegment(sci_md->sci_virtual_device, &self->sci_fds[i].local_segment, segment_id, self->send_size, NULL, NULL, 0, &sci_error);
-
-        /*
-        //TODO: 
-        if(sci_error == SCI_ERR_SEGMENTID_USED) {
-            self->segment_id = ucs_generate_uuid(trash);
-            SCICreateSegment(sci_md->sci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
-        
-        }*/
-
-        
+      
         if (sci_error != SCI_ERR_OK) { 
             printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
             return UCS_ERR_NO_RESOURCE;
@@ -213,9 +214,16 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
 
     /*------------------------- INTERRUPTS --------------------------------- */
+    //TODO
+
+    SCICreateDataInterrupt(sci_md->sci_virtual_device, self->interrupt, 0, self->segment_id, self->segment_id, 
+                            callback, NULL, SCI_FLAG_USE_CALLBACK, &SCI_ERROR);
 
 
-
+    if(sci_error != SCI_ERR_OK) {
+        printf("SCI CREATE INTERRUPT: %s \n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    } 
 
     /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
     status = uct_iface_param_am_alignment(params, self->send_size, 0, 0,

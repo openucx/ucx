@@ -102,20 +102,21 @@ typedef struct uct_sci_ep_zcopy_tx {
 } uct_sci_ep_zcopy_tx_t;
 
 typedef struct uct_sci_iface {
-    uct_base_iface_t      super;
-    unsigned int          segment_id;           /* Unique identifier for the instance */
-    unsigned int          interrupt_id;
-    unsigned int          device_addr; //nodeID
-    size_t                send_size;    /* Maximum size for payload */
-    ucs_mpool_t           msg_mp;       /* Messages memory pool */
-    void*                 recv_buffer;
-    sci_local_segment_t   local_segment; 
-    sci_map_t             local_map;
-    sci_dma_queue_t       dma_queue;
-    sci_local_segment_t   dma_segment;
-    sci_map_t             dma_map;
-    sci_fd_t              sci_fds[SCI_MAX_EPS];
-    void*                 tx_map;
+    uct_base_iface_t            super;
+    unsigned int                segment_id;           /* Unique identifier for the instance */
+    unsigned int                interrupt_id;
+    unsigned int                device_addr; //nodeID
+    size_t                      send_size;    /* Maximum size for payload */
+    ucs_mpool_t                 msg_mp;       /* Messages memory pool */
+    void*                       recv_buffer;
+    sci_local_segment_t         local_segment; 
+    sci_map_t                   local_map;
+    sci_dma_queue_t             dma_queue;
+    sci_local_segment_t         dma_segment;
+    sci_map_t                   dma_map;
+    sci_fd_t                    sci_fds[SCI_MAX_EPS];
+    sci_local_data_interrupt_t  interrupt; 
+    void*                       tx_map;
 
 
 } uct_sci_iface_t;
