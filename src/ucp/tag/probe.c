@@ -36,8 +36,7 @@ UCS_PROFILE_FUNC(ucp_tag_message_h, ucp_tag_probe_nb,
     UCP_WORKER_THREAD_CS_ENTER_CONDITIONAL(worker);
 
 
-    //printf("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d\n", tag, tag_mask,
-                  rem);
+    //printf("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d\n", tag, tag_mask,rem);
     ucs_trace_req("probe_nb tag %"PRIx64"/%"PRIx64" remove=%d", tag, tag_mask,
                   rem);
 
