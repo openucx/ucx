@@ -56,6 +56,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
 
     printf("%d expected %zd ret_int %d  ret_node %d \n", length, sizeof(conn_req_t), request->node_id, request->interrupt);
     
+    
 
     do {
         SCIConnectDataInterrupt(md->sci_virtual_device, &ans_interrupt, request->node_id, 0, request->interrupt, 0, 0, &sci_error);

@@ -64,7 +64,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
         SCIConnectDataInterrupt(md->sci_virtual_device, &req_interrupt, node_id, 0, segment_id, 0, 0, &sci_error);
     } while (sci_error != SCI_ERR_OK);
 
-    printf("connected to remote interrupt!\n");
+    printf("connected to remote interrupt!, ret_int %d\n", local_interrupt_id);
     request.status = 1;
     request.interrupt = local_interrupt_id;
     request.node_id   = iface->device_addr;
