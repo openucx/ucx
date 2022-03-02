@@ -52,14 +52,12 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
     uct_sci_md_t* md = ucs_derived_of(iface->super.md, uct_sci_md_t); 
     size_t i;
 
-
-
     printf("%d expected %zd ret_int %d  ret_node %d \n", length, sizeof(conn_req_t), request->node_id, request->interrupt);
-    
 
 
     do {
-        SCIConnectDataInterrupt(md->sci_virtual_device, &ans_interrupt, request->node_id, 0, request->interrupt, 0, 0, &sci_error);
+        SCIConnectDataInterrupt(md->sci_virtual_device, &ans_interrupt, request->node_id, 0, request->interrupt, 1000, 0, &sci_error);
+        printf("waiting to connect to %d\n", request->interrupt);
     } while (sci_error != SCI_ERR_OK);
 
     printf("connected to answer request\n");
