@@ -81,7 +81,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
     answer.node_id = iface->device_addr;
     answer.segment_id = iface->sci_fds[i].segment_id;
 
-    SCITriggerDataInterrupt(req_interrupt, (void *) &answer, sizeof(answer), SCI_NO_FLAGS, &sci_error);
+    SCITriggerDataInterrupt(ans_interrupt, (void *) &answer, sizeof(answer), SCI_NO_FLAGS, &sci_error);
 
     /*  set status to ready  */ 
 

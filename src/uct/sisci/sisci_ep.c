@@ -36,6 +36,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     sci_remote_data_interrupt_t req_interrupt;
     sci_local_data_interrupt_t  ans_interrupt;
     int local_interrupt_id =    ucs_generate_uuid(94);
+    int ans_length          = sizeof(con_ans_t);
     conn_req_t request;
     con_ans_t answer;
 
