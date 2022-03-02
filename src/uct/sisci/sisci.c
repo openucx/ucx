@@ -133,7 +133,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     self->send_size = 262144; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
     
-    for(ssize_t i = 0; i < SCI_MAX_EPS) {
+    for(ssize_t i = 0; i < SCI_MAX_EPS; i++) {
         int segment_id = ucs_generate_uuid(trash);
         
 
