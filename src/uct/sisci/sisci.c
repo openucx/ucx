@@ -56,7 +56,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
 
 
     do {
-        SCIConnectDataInterrupt(md->sci_virtual_device, &req_interrupt, request->node_id, 0, request->interrupt, 0, 0, &sci_error);
+        SCIConnectDataInterrupt(md->sci_virtual_device, &ans_interrupt, request->node_id, 0, request->interrupt, 0, 0, &sci_error);
     } while (sci_error != SCI_ERR_OK);
 
     printf("connected to answer request\n");
