@@ -81,7 +81,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     printf("sent interrupt of %zd to %d\n", sizeof(request), segment_id);
 
 
-    SCICreateDataInterrupt(md->sci_virtual_device, &ans_interrupt, 0, &local_interrupt_id,  
+    SCICreateDataInterrupt(md->sci_virtual_device, &ans_interrupt, 0, local_interrupt_id,  
                             NULL, NULL, 0, &sci_error);
 
     if(sci_error != SCI_ERR_OK) {
