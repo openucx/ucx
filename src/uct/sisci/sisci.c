@@ -49,6 +49,7 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
     con_ans_t   answer;
     conn_req_t* request = (conn_req_t*) data;
     uct_sci_iface_t* iface = (uct_sci_iface_t*) arg;
+    uct_sci_md_t* md = ucs_derived_of(iface->super.md, uct_sci_md_t); 
     size_t i;
 
 
@@ -70,14 +71,14 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
     for (i = 0; i < SCI_MAX_EPS; i++)
     {
         if(iface->sci_fds[i].status == 0) {
-            iface->sci_fds[i].stats == 2;
+            iface->sci_fds[i].status == 2;
             break;
         }
     }
     /*  leave critical  */
     
 
-    answer.node_id = iface->dev_addr;
+    answer.node_id = iface->device_addr;
     answer.segment_id = iface->sci_fds[i].segment_id;
 
     SCITriggerDataInterrupt(req_interrupt, (void *) &answer, sizeof(answer), SCI_NO_FLAGS, &sci_error);
