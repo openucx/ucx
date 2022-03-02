@@ -109,7 +109,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
     }
 
 
-    
+
 
     UCS_CLASS_CALL_SUPER_INIT(
             uct_base_iface_t, &uct_sci_iface_ops, &uct_base_iface_internal_ops,
@@ -130,42 +130,53 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
 
     self->device_addr = nodeID;
     self->segment_id = 13337;
-    self->send_size = 2097152; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
-
-
-    SCICreateSegment(sci_md->sci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
-    
-    //TODO: 
-    if(sci_error == SCI_ERR_SEGMENTID_USED) {
-        self->segment_id = ucs_generate_uuid(trash);
-        SCICreateSegment(sci_md->sci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
-    }
+    self->send_size = 262144; //this is probbably arbitrary, and could be higher. 2^16 was just selected for looks
 
     
-    if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
-        return UCS_ERR_NO_RESOURCE;
+    for(ssize_t i = 0; i < SCI_MAX_EPS) {
+        int segment_id = ucs_generate_uuid(trash);
+        
+
+
+        SCICreateSegment(sci_md->sci_virtual_device, &self->sci_fds[i].local_segment, segment_id, self->send_size, NULL, NULL, 0, &sci_error);
+
+        /*
+        //TODO: 
+        if(sci_error == SCI_ERR_SEGMENTID_USED) {
+            self->segment_id = ucs_generate_uuid(trash);
+            SCICreateSegment(sci_md->sci_virtual_device, &self->local_segment, self->segment_id, self->send_size, NULL, NULL, 0, &sci_error);
+        
+        }*/
+
+        
+        if (sci_error != SCI_ERR_OK) { 
+            printf("SCI_CREATE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        SCIPrepareSegment(self->sci_fds[i].local_segment, 0, 0, &sci_error);
+        if (sci_error != SCI_ERR_OK) { 
+            printf("SCI_PREPARE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
+            return UCS_ERR_NO_RESOURCE;
+
+        }
+
+        SCISetSegmentAvailable(self->sci_fds[i].local_segment, 0, 0, &sci_error);
+        if (sci_error != SCI_ERR_OK) { 
+            printf("SCI_SET_AVAILABLE: %s\n", SCIGetErrorString(sci_error));
+            return UCS_ERR_NO_RESOURCE;
+        }
+
+        self->sci_fds[i].buf = (void*) SCIMapLocalSegment(self->sci_fds[i].local_segment, &self->sci_fds[i].map, 0, self->send_size, NULL,0, &sci_error);
+    
+        if (sci_error != SCI_ERR_OK) { 
+            printf("SCI_MAP_LOCAL_SEG: %s\n", SCIGetErrorString(sci_error));
+            return UCS_ERR_NO_RESOURCE;
+        }
+
     }
 
-    SCIPrepareSegment(self->local_segment, 0, 0, &sci_error);
-    if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_PREPARE_SEGMENT: %s\n", SCIGetErrorString(sci_error));
-        return UCS_ERR_NO_RESOURCE;
-
-    }
-
-    SCISetSegmentAvailable(self->local_segment, 0, 0, &sci_error);
-    if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_SET_AVAILABLE: %s\n", SCIGetErrorString(sci_error));
-        return UCS_ERR_NO_RESOURCE;
-    }
-
-    self->recv_buffer = (void*) SCIMapLocalSegment(self->local_segment, &self->local_map, 0, self->send_size, NULL,0, &sci_error);
-   
-    if (sci_error != SCI_ERR_OK) { 
-        printf("SCI_MAP_LOCAL_SEG: %s\n", SCIGetErrorString(sci_error));
-        return UCS_ERR_NO_RESOURCE;
-    }
+    
 
 
     /*----------------- DMA starts here ---------------*/
@@ -198,6 +209,13 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         printf("DMA map segment: %s \n", SCIGetErrorString(sci_error));
         return UCS_ERR_NO_RESOURCE;
     } 
+
+
+
+    /*------------------------- INTERRUPTS --------------------------------- */
+
+
+
 
     /*Need to find out how mpool works and how it is used by the underlying systems in ucx*/
     status = uct_iface_param_am_alignment(params, self->send_size, 0, 0,

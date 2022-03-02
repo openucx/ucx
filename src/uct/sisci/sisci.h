@@ -18,6 +18,7 @@
 #define ADAPTER_NO 0
 #define SCI_NO_FLAGS 0
 #define SCI_NO_CALLBACK 0
+#define SCI_MAX_EPS 10
 
 #define SISCI_STATUS_WRITING_DONE 1
 #define SCI_PACKET_SIZE sizeof(sisci_packet_t)
@@ -44,6 +45,34 @@ typedef struct uct_sci_device_addr {
 typedef struct sci_map_holder {
     volatile unsigned int* mapped;
 } sci_map_holder_t;
+
+
+/*
+    sci file desctriptor, each endpoint connects to a different region.
+*/
+typedef struct sci_fd {
+    int                 status;         /* taken | available | ready |  */
+    int                 segment_id;     /* local segment id, generated during launch */
+    int                 size;           /* size */
+    int                 remote_node;
+    sci_local_segment   local_segment;  
+    sci_map_t           map;
+    void*               buf;
+} sci_fd_t;
+
+typedef struct con_req {
+    uint8_t status;
+    int     node_id;
+    int     segment_id;
+    int     interrupt;
+} conn_req_t;
+
+typedef struct con_ans {
+    uint8_t status;
+    int     node_id;
+    int     segment_id;
+} con_ans_t;
+
 
 void sci_testing();
 
@@ -75,6 +104,7 @@ typedef struct uct_sci_ep_zcopy_tx {
 typedef struct uct_sci_iface {
     uct_base_iface_t      super;
     unsigned int          segment_id;           /* Unique identifier for the instance */
+    unsigned int          interrupt_id;
     unsigned int          device_addr; //nodeID
     size_t                send_size;    /* Maximum size for payload */
     ucs_mpool_t           msg_mp;       /* Messages memory pool */
@@ -84,6 +114,7 @@ typedef struct uct_sci_iface {
     sci_dma_queue_t       dma_queue;
     sci_local_segment_t   dma_segment;
     sci_map_t             dma_map;
+    sci_fd_t              sci_fds[SCI_MAX_EPS];
     void*                 tx_map;
 
 
