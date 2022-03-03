@@ -57,6 +57,7 @@ steps:
         --tasks-per-node 1 \
         --duration ${{ parameters.duration }} \
         -v \
+        --bind \
         --num-clients 1 \
         --num-servers 1 \
         --map-by slot \
