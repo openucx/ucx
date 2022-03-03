@@ -11,46 +11,48 @@
 #include <ucs/sys/compiler_def.h>
 #include <stdint.h>
 
-static UCS_F_ALWAYS_INLINE unsigned ucs_ffs32(uint32_t n)
+static unsigned ucs_ffs32(uint32_t n)
 {
-    /* bsfl */
-    uint32_t result;
-    asm("ctz %1,%0    \n\t\
-        add 1,%1,%1"
-        : "=r" (result)
-        : "r" (n));
-    return result;
+    return __builtin_ctz(n);
 }
 
 static UCS_F_ALWAYS_INLINE unsigned ucs_ffs64(uint64_t n)
 {
-    /* bsfq */
-    uint64_t result;
-    asm("ctz %1,%0    \n\t\
-        add 1,%1,%1"
-        : "=r" (result)
-        : "r" (n));
-    return result;
+    union input {
+        uint64_t value;
+	struct pvalue {
+	    uint32_t lhs;
+	    uint32_t rhs;
+	};
+    } n_sto = { .value = n };
+
+    int lhs = __builtin_ctz(n_sto.pvalue.lhs);
+    int rhs = __builtin_ctz(n_sto.pvalue.rhs);
+
+    return 0;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned __ucs_ilog2_u32(uint32_t n)
 {
     /* bsrl */
-    uint32_t result;
-    asm("clz %1,%0"
-        : "=r" (result)
-        : "r" (n));
-    return result;
+    return __builtin_clz(n);
 }
 
 static UCS_F_ALWAYS_INLINE unsigned __ucs_ilog2_u64(uint64_t n)
 {
     /* bsrq */
-    uint64_t result;
-    asm("clz %1,%0"
-        : "=r" (result)
-        : "r" (n));
-    return result;
+    union input {
+        uint64_t value;
+        struct pvalue {
+            uint32_t lhs;
+            uint32_t rhs;
+        };
+    } n_sto = { .value = n };
+
+    int lhs = __builtin_clz(n_sto.pvalue.lhs);
+    int rhs = __builtin_clz(n_sto.pvalue.rhs);
+
+    return 0;
 }
 
 #endif
