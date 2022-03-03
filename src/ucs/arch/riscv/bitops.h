@@ -20,16 +20,20 @@ static UCS_F_ALWAYS_INLINE unsigned ucs_ffs64(uint64_t n)
 {
     union input {
         uint64_t value;
-	struct pvalue {
-	    uint32_t lhs;
-	    uint32_t rhs;
-	};
-    } n_sto = { .value = n };
+        struct pvalue {
+            uint32_t rhs;
+            uint32_t lhs;
+        } pvalue;
+    } n_sto = { .value = (uint64_t) 1 << i };
 
     int lhs = __builtin_ctz(n_sto.pvalue.lhs);
     int rhs = __builtin_ctz(n_sto.pvalue.rhs);
-
-    return 0;
+    
+    int val = rhs;
+    if(rhs < 0) {
+        val = 32 + lhs;
+    }
+    return val;
 }
 
 static UCS_F_ALWAYS_INLINE unsigned __ucs_ilog2_u32(uint32_t n)
@@ -46,13 +50,16 @@ static UCS_F_ALWAYS_INLINE unsigned __ucs_ilog2_u64(uint64_t n)
         struct pvalue {
             uint32_t lhs;
             uint32_t rhs;
-        };
+	} pvalue;
     } n_sto = { .value = n };
 
     int lhs = __builtin_clz(n_sto.pvalue.lhs);
     int rhs = __builtin_clz(n_sto.pvalue.rhs);
-
-    return 0;
+    int val = lhs;
+    if(lhs == 32) {
+        val = 32+rhs;
+    }
+    return val;
 }
 
 #endif
