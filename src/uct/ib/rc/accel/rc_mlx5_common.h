@@ -726,6 +726,11 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
 
 #if HAVE_DEVX
 ucs_status_t
+uct_rc_mlx5_iface_common_devx_create_qp(uct_rc_mlx5_iface_common_t *iface,
+                                        uct_ib_mlx5_qp_t *qp,
+                                        uct_ib_mlx5_txwq_t *tx,
+                                        uct_ib_mlx5_qp_attr_t *attr);
+ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,
                                          uint32_t dest_qp_num,
@@ -734,6 +739,15 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uint8_t path_index);
 
 #else
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_rc_mlx5_iface_common_devx_create_qp(uct_rc_mlx5_iface_common_t *iface,
+                                        uct_ib_mlx5_qp_t *qp,
+                                        uct_ib_mlx5_txwq_t *tx,
+                                        uct_ib_mlx5_qp_attr_t *attr)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
 static UCS_F_MAYBE_UNUSED ucs_status_t
 uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
                                          uct_ib_mlx5_qp_t *qp,

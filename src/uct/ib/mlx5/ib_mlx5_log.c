@@ -275,6 +275,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
                                            UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
         [MLX5_OPCODE_ATOMIC_MASKED_FA] = { "MASKED_FETCH_ADD",
                                            UCT_IB_OPCODE_FLAG_HAS_RADDR|UCT_IB_OPCODE_FLAG_HAS_EXT_ATOMIC },
+        [MLX5_OPCODE_UMR]              = { "UMR", 0 }
    };
 
     struct mlx5_wqe_ctrl_seg *ctrl = wqe;
@@ -313,7 +314,7 @@ static void uct_ib_mlx5_wqe_dump(uct_ib_iface_t *iface, void *wqe, void *qstart,
         seg = qstart;
     }
 
-    if (uct_ib_mlx5_is_qp_require_av_seg(iface->config.qp_type)) {
+    if (iface && uct_ib_mlx5_is_qp_require_av_seg(iface->config.qp_type)) {
         is_eth = uct_ib_iface_is_roce(iface);
         dg_size = uct_ib_mlx5_dump_dgram(s, ends - s, seg, is_eth);
         s += strlen(s);

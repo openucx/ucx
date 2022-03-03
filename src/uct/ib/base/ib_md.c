@@ -192,7 +192,11 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
      ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
-    {NULL}
+    {"MAX_MR_DEREG_QUEUE_SIZE", "1024",
+     "Max size of memory region deregistration queue.",
+     ucs_offsetof(uct_ib_md_config_t, ext.max_mr_gc_queue), UCS_CONFIG_TYPE_UINT},
+
+     {NULL}
 };
 
 #ifdef ENABLE_STATS
@@ -1774,9 +1778,9 @@ void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
+    uct_ib_md_release_reg_method(md);
     md->ops->cleanup(md);
     uct_ib_md_release_device_config(md);
-    uct_ib_md_release_reg_method(md);
     uct_ib_device_cleanup_ah_cached(&md->dev);
     ibv_dealloc_pd(md->pd);
     uct_ib_device_cleanup(&md->dev);

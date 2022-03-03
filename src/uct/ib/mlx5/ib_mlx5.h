@@ -216,25 +216,6 @@ typedef struct uct_ib_mlx5_devx_umem {
 } uct_ib_mlx5_devx_umem_t;
 #endif
 
-/**
- * MLX5 IB memory domain.
- */
-typedef struct uct_ib_mlx5_md {
-    uct_ib_md_t              super;
-    uint32_t                 flags;
-    ucs_mpool_t              dbrec_pool;
-    ucs_recursive_spinlock_t dbrec_lock;
-#if HAVE_EXP_UMR
-    struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
-    struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
-#endif
-
-#if HAVE_DEVX
-    void                     *zero_buf;
-    uct_ib_mlx5_devx_umem_t  zero_mem;
-#endif
-} uct_ib_mlx5_md_t;
-
 
 typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST,    /* BF without flush, can be used only from
@@ -258,6 +239,9 @@ typedef struct uct_ib_mlx5_iface_config {
     uct_ib_mlx5_mmio_mode_t  mmio_mode;
     ucs_ternary_auto_value_t ar_enable;
 } uct_ib_mlx5_iface_config_t;
+
+
+typedef struct uct_ib_mlx5_md uct_ib_mlx5_md_t;
 
 
 /**
@@ -354,7 +338,29 @@ typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
     uint32_t                    uidx;
     int                         full_handshake;
+    int                         is_roce_dev;
+    uint16_t                    pkey_index;
+    uct_ib_mlx5_devx_uar_t      *uar;
 } uct_ib_mlx5_qp_attr_t;
+
+
+typedef struct uct_ib_mlx5_qp_connect_attr {
+    uint32_t              dest_qp_num;
+    struct ibv_ah_attr    *ah_attr;
+    enum ibv_mtu          path_mtu;
+    uint8_t               path_index;
+    int                   is_roce_dev;
+    uct_ib_roce_version_t roce_ver;
+    uint8_t               traffic_class;
+    uint8_t               sl;
+    uint8_t               min_rnr_timer;
+    uint8_t               timeout;
+    uint8_t               rnr_retry;
+    uint8_t               retry_cnt;
+    uint8_t               max_rd_atomic;
+    unsigned              exp_backoff;
+    unsigned              log_ack_req_freq;
+} uct_ib_mlx5_qp_connect_attr_t;
 
 
 /* MLX5 QP wrapper */
@@ -414,6 +420,33 @@ typedef struct uct_ib_mlx5_rxwq {
     volatile uint32_t           *dbrec;
     struct mlx5_wqe_data_seg    *wqes;
 } uct_ib_mlx5_rxwq_t;
+
+
+
+/**
+ * MLX5 IB memory domain.
+ */
+struct uct_ib_mlx5_md {
+    uct_ib_md_t              super;
+    uint32_t                 flags;
+    ucs_mpool_t              dbrec_pool;
+    ucs_recursive_spinlock_t dbrec_lock;
+#if HAVE_DEVX
+    struct {
+        uct_ib_mlx5_txwq_t     txwq;
+        uct_ib_mlx5_devx_uar_t *uar;
+        struct {
+            struct ibv_cq      *ibv;
+            uct_ib_mlx5_cq_t   mlx5;
+        } cq;
+        ucs_queue_head_t       md_gc;
+        unsigned               gc_count;
+    } umr; /* special stuff for creating UMR */
+
+    void                     *zero_buf;
+    uct_ib_mlx5_devx_umem_t  zero_mem;
+#endif
+};
 
 
 /* Address-vector for link-local scope */
@@ -623,7 +656,7 @@ void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
 
 #if HAVE_DEVX
 
-ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_mlx5_md_t *md,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_mlx5_qp_attr_t *attr);
@@ -634,6 +667,10 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 
 ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
                                               enum ibv_qp_state state);
+
+ucs_status_t
+uct_ib_mlx5_devx_connect_rc_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp,
+                               const uct_ib_mlx5_qp_connect_attr_t *attr);
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp);
 
@@ -718,7 +755,7 @@ uct_ib_mlx5_md_buf_free(uct_ib_mlx5_md_t *md, void *buf, uct_ib_mlx5_devx_umem_t
 #else
 
 static inline ucs_status_t
-uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+uct_ib_mlx5_devx_create_qp(uct_ib_mlx5_md_t *md,
                            uct_ib_mlx5_qp_t *qp,
                            uct_ib_mlx5_txwq_t *tx,
                            uct_ib_mlx5_qp_attr_t *attr)
@@ -735,6 +772,13 @@ uct_ib_mlx5_devx_modify_qp(uct_ib_mlx5_qp_t *qp,
 
 static inline ucs_status_t
 uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp, enum ibv_qp_state state)
+{
+    return UCS_ERR_UNSUPPORTED;
+}
+
+ucs_status_t
+uct_ib_mlx5_devx_connect_rc_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp,
+                               const uct_ib_mlx5_qp_connect_attr_t *attr)
 {
     return UCS_ERR_UNSUPPORTED;
 }

@@ -317,8 +317,9 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         attr.super.max_inl_cqe[UCT_IB_DIR_RX] = 0;
         attr.uidx           = htonl(dci_index) >> UCT_IB_UIDX_SHIFT;
         attr.full_handshake = full_handshake;
-        status = uct_ib_mlx5_devx_create_qp(ib_iface, &dci->txwq.super,
-                                            &dci->txwq, &attr);
+        status = uct_rc_mlx5_iface_common_devx_create_qp(&iface->super,
+                                                         &dci->txwq.super,
+                                                         &dci->txwq, &attr);
         if (status != UCS_OK) {
             return status;
         }

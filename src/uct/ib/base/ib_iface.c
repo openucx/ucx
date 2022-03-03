@@ -1177,6 +1177,12 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
            (iface->gid_info.roce_info.ver == UCT_IB_DEVICE_ROCE_V2);
 }
 
+uint8_t uct_ib_iface_roce_dscp(uct_ib_iface_t *iface)
+{
+    ucs_assert(uct_ib_iface_is_roce(iface));
+    return uct_ib_device_roce_dscp(iface->config.traffic_class);
+}
+
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
                                              size_t md_config_index)
 {

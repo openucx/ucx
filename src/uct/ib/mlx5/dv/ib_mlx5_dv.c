@@ -34,12 +34,11 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 #endif
 
 #if HAVE_DEVX
-ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
+ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_mlx5_md_t *md,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
                                         uct_ib_mlx5_qp_attr_t *attr)
 {
-    uct_ib_mlx5_md_t *md   = ucs_derived_of(iface->super.md, uct_ib_mlx5_md_t);
     uct_ib_device_t *dev   = &md->super.dev;
     struct mlx5dv_pd dvpd  = {};
     struct mlx5dv_cq dvscq = {};
@@ -49,33 +48,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_qp_out)]         = {};
     char in_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_in)]   = {};
     char out_2init[UCT_IB_MLX5DV_ST_SZ_BYTES(rst2init_qp_out)] = {};
-    uct_ib_mlx5_mmio_mode_t mmio_mode;
     int max_tx, max_rx, len_tx, len;
-    uct_ib_mlx5_devx_uar_t *uar;
     ucs_status_t status;
     int wqe_size;
     int dvflags;
     void *qpc;
     int ret;
-
-    uct_ib_iface_fill_attr(iface, &attr->super);
-
-    status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode,
-                                       UCT_IB_MLX5_BF_REG_SIZE, &mmio_mode);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    uar = uct_worker_tl_data_get(iface->super.worker,
-                                 UCT_IB_MLX5_DEVX_UAR_KEY,
-                                 uct_ib_mlx5_devx_uar_t,
-                                 uct_ib_mlx5_devx_uar_cmp,
-                                 uct_ib_mlx5_devx_uar_init,
-                                 md, mmio_mode);
-    if (UCS_PTR_IS_ERR(uar)) {
-        status = UCS_PTR_STATUS(uar);
-        goto err;
-    }
 
     wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
                sizeof(struct mlx5_wqe_umr_ctrl_seg) +
@@ -93,7 +71,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         status = uct_ib_mlx5_md_buf_alloc(md, len, 0, &qp->devx.wq_buf,
                                           &qp->devx.mem, "qp umem");
         if (status != UCS_OK) {
-            goto err_uar;
+            goto err;
         }
     } else {
         qp->devx.wq_buf = NULL;
@@ -129,9 +107,11 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
     }
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, dvpd.pdn);
-    UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
+    UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, attr->uar->uar->page_id);
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
-    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, !!attr->super.srq_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, (attr->super.srq_num > 0) ? 1 :
+                                         (attr->super.cap.max_recv_wr == 0) ? 3 :
+                                         0);
     UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->super.srq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, dvscq.cqn);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, dvrcq.cqn);
@@ -171,9 +151,9 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(rst2init_qp_in, in_2init, qpn, qp->qp_num);
         UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
         UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, attr->super.port);
-        if (!uct_ib_iface_is_roce(iface)) {
+        if (!attr->is_roce_dev) {
             UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.pkey_index,
-                              iface->pkey_index);
+                              attr->pkey_index);
         }
         UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
 
@@ -194,7 +174,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     if (tx != NULL) {
         ucs_assert(qp->devx.wq_buf != NULL);
-        tx->reg    = &uar->super;
+        tx->reg    = &attr->uar->super;
         tx->qstart = qp->devx.wq_buf;
         tx->qend   = UCS_PTR_BYTE_OFFSET(qp->devx.wq_buf, len_tx);
         tx->dbrec  = &qp->devx.dbrec->db[MLX5_SND_DBR];
@@ -203,7 +183,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         uct_ib_mlx5_txwq_reset(tx);
     } else {
         ucs_assert(qp->devx.wq_buf == NULL);
-        uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
+        uct_worker_tl_data_put(attr->uar, uct_ib_mlx5_devx_uar_cleanup);
     }
 
     return UCS_OK;
@@ -214,8 +194,6 @@ err_free_db:
     uct_ib_mlx5_put_dbrec(qp->devx.dbrec);
 err_free_mem:
     uct_ib_mlx5_md_buf_free(md, qp->devx.wq_buf, &qp->devx.mem);
-err_uar:
-    uct_worker_tl_data_put(uar, uct_ib_mlx5_devx_uar_cleanup);
 err:
     return status;
 }
@@ -306,6 +284,128 @@ ucs_status_t uct_ib_mlx5_devx_modify_qp_state(uct_ib_mlx5_qp_t *qp,
 
     UCT_IB_MLX5DV_SET(modify_qp_in, in, qpn, qp->qp_num);
     return uct_ib_mlx5_devx_modify_qp(qp, in, sizeof(in), out, sizeof(out));
+}
+
+ucs_status_t
+uct_ib_mlx5_devx_connect_rc_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp,
+                               const uct_ib_mlx5_qp_connect_attr_t *attr)
+{
+    uct_ib_device_t *dev = &md->super.dev;
+    struct ibv_ah_attr*ah_attr = attr->ah_attr;
+    char in_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_in)]   = {};
+    char out_2rtr[UCT_IB_MLX5DV_ST_SZ_BYTES(init2rtr_qp_out)] = {};
+    char in_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_in)]    = {};
+    char out_2rts[UCT_IB_MLX5DV_ST_SZ_BYTES(rtr2rts_qp_out)]  = {};
+    uint32_t opt_param_mask = UCT_IB_MLX5_QP_OPTPAR_RRE |
+                              UCT_IB_MLX5_QP_OPTPAR_RAE |
+                              UCT_IB_MLX5_QP_OPTPAR_RWE;
+    struct mlx5_wqe_av mlx5_av;
+    ucs_status_t status;
+    struct ibv_ah *ah;
+    void *qpc;
+
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opcode,
+                      UCT_IB_MLX5_CMD_OP_INIT2RTR_QP);
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, qpn, qp->qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(init2rtr_qp_in, in_2rtr, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, mtu, attr->path_mtu);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_msg_max, UCT_IB_MLX5_LOG_MAX_MSG_SIZE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, attr->dest_qp_num);
+
+    if (attr->is_roce_dev) {
+        status = uct_ib_device_create_ah_cached(dev, ah_attr, md->super.pd,
+                                                "RC DevX QP connect", &ah);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        uct_ib_mlx5_get_av(ah, &mlx5_av);
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rmac_47_32),
+               &mlx5_av.rmac, sizeof(mlx5_av.rmac));
+        memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+               &mlx5_av.rgid, sizeof(mlx5_av.rgid));
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit,
+                          mlx5_av.hop_limit);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.src_addr_index,
+                          ah_attr->grh.sgid_index);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.eth_prio, attr->sl);
+        if (attr->is_roce_dev && (attr->roce_ver == UCT_IB_DEVICE_ROCE_V2)) {
+            ucs_assert(ah_attr->dlid >= UCT_IB_ROCE_UDP_SRC_PORT_BASE);
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.udp_sport,
+                              ah_attr->dlid);
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.dscp,
+                              uct_ib_device_roce_dscp(attr->traffic_class));
+        }
+
+        uct_ib_mlx5_devx_set_qpc_port_affinity(md, attr->path_index, qpc,
+                                               &opt_param_mask);
+    } else {
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.grh, ah_attr->is_global);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.rlid, ah_attr->dlid);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.mlid,
+                          ah_attr->src_path_bits & 0x7f);
+        UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.sl, attr->sl);
+
+        if (ah_attr->is_global) {
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.hop_limit,
+                              ah_attr->grh.hop_limit);
+            memcpy(UCT_IB_MLX5DV_ADDR_OF(qpc, qpc, primary_address_path.rgid_rip),
+                   &ah_attr->grh.dgid,
+                   UCT_IB_MLX5DV_FLD_SZ_BYTES(qpc, primary_address_path.rgid_rip));
+            /* TODO add flow_label support */
+            UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.tclass,
+                              attr->traffic_class);
+        }
+    }
+
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.vhca_port_num, ah_attr->port_num);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_rra_max,
+                      ucs_ilog2_or0(attr->max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, atomic_mode, UCT_IB_MLX5_ATOMIC_MODE);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rre, true);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rwe, true);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
+    UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, attr->min_rnr_timer);
+
+    UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
+
+    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),
+                                        out_2rtr, sizeof(out_2rtr));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, opcode,
+                      UCT_IB_MLX5_CMD_OP_RTR2RTS_QP);
+    UCT_IB_MLX5DV_SET(rtr2rts_qp_in, in_2rts, qpn, qp->qp_num);
+
+    qpc = UCT_IB_MLX5DV_ADDR_OF(rtr2rts_qp_in, in_2rts, qpc);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_sra_max,
+                      ucs_ilog2_or0(attr->max_rd_atomic));
+    UCT_IB_MLX5DV_SET(qpc, qpc, retry_count, attr->retry_cnt);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rnr_retry, attr->rnr_retry);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.ack_timeout,
+                      attr->timeout);
+    UCT_IB_MLX5DV_SET(qpc, qpc, primary_address_path.log_rtm,
+                      attr->exp_backoff);
+    UCT_IB_MLX5DV_SET(qpc, qpc, log_ack_req_freq,
+                      attr->log_ack_req_freq);
+
+    status = uct_ib_mlx5_devx_modify_qp(qp, in_2rts, sizeof(in_2rts),
+                                        out_2rts, sizeof(out_2rts));
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    ucs_debug("connected rc devx qp 0x%x on %s:%d to lid %d(+%d) sl %d "
+              "remote_qp 0x%x mtu %zu timer %dx%d rnr %dx%d rd_atom %d",
+              qp->qp_num, uct_ib_device_name(dev), ah_attr->port_num,
+              ah_attr->dlid, ah_attr->src_path_bits, ah_attr->sl,
+              attr->dest_qp_num, uct_ib_mtu_value(attr->path_mtu),
+              attr->timeout, attr->retry_cnt, attr->min_rnr_timer,
+              attr->rnr_retry, attr->max_rd_atomic);
+    return UCS_OK;
 }
 
 void uct_ib_mlx5_devx_destroy_qp(uct_ib_mlx5_md_t *md, uct_ib_mlx5_qp_t *qp)

@@ -926,6 +926,22 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
     return UCS_ERR_INVALID_PARAM;
 }
 
+uct_ib_roce_version_t uct_ib_device_roce_version(uct_ib_device_t *dev,
+                                                 uint8_t port_num,
+                                                 unsigned gid_index)
+{
+    ucs_status_t status;
+    uct_ib_device_gid_info_t gid_info;
+
+    status = uct_ib_device_query_gid_info(dev->ibv_context,
+                                          uct_ib_device_name(dev),
+                                          port_num, gid_index, &gid_info);
+    ucs_assertv_always(status == UCS_OK, "query_gid_info failed: %s",
+                       ucs_status_string(status));
+
+    return gid_info.roce_info.ver;
+}
+
 int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       const union ibv_gid *gid,
                                       uint8_t gid_index)
@@ -951,6 +967,11 @@ int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
 
     ibv_destroy_ah(ah);
     return 1;
+}
+
+uint8_t uct_ib_device_roce_dscp(uint8_t traffic_class)
+{
+    return traffic_class >> 2;
 }
 
 ucs_status_t uct_ib_device_select_gid(uct_ib_device_t *dev, uint8_t port_num,

@@ -86,6 +86,7 @@ typedef struct uct_ib_md_ext_config {
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */
     int                      mt_reg_bind;  /**< Multi-threaded registration bind to core */
+    unsigned                 max_mr_gc_queue;
 } uct_ib_md_ext_config_t;
 
 
@@ -100,6 +101,12 @@ typedef struct uct_ib_mem {
 typedef union uct_ib_mr {
     struct ibv_mr           *ib;
 } uct_ib_mr_t;
+
+
+typedef struct uct_ib_mr_gc_entry {
+    struct ibv_mr           *ib;
+    ucs_queue_elem_t        elem;
+} uct_ib_mr_gc_entry_t;
 
 
 typedef enum {

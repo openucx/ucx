@@ -468,6 +468,8 @@ uct_ib_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
 
 int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
 
+uint8_t uct_ib_iface_roce_dscp(uct_ib_iface_t *iface);
+
 
 /**
  * Select the IB gid index and RoCE version to use for a RoCE port.
@@ -634,13 +636,6 @@ uct_ib_cq_size(uct_ib_iface_t *iface, const uct_ib_iface_init_attr_t *init_attr,
     } else {
         return init_attr->cq_len[UCT_IB_DIR_TX];
     }
-}
-
-static UCS_F_ALWAYS_INLINE unsigned
-uct_ib_iface_roce_dscp(uct_ib_iface_t *iface)
-{
-    ucs_assert(uct_ib_iface_is_roce(iface));
-    return iface->config.traffic_class >> 2;
 }
 
 #if HAVE_DECL_IBV_CREATE_CQ_EX

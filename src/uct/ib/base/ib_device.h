@@ -407,9 +407,15 @@ ucs_status_t uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *d
                                           uint8_t port_num, unsigned gid_index,
                                           uct_ib_device_gid_info_t *info);
 
+uct_ib_roce_version_t uct_ib_device_roce_version(uct_ib_device_t *dev,
+                                                 uint8_t port_num,
+                                                 unsigned gid_index);
+
 int uct_ib_device_test_roce_gid_index(uct_ib_device_t *dev, uint8_t port_num,
                                       const union ibv_gid *gid,
                                       uint8_t gid_index);
+
+uint8_t uct_ib_device_roce_dscp(uint8_t traffic_class);
 
 ucs_status_t
 uct_ib_device_async_event_register(uct_ib_device_t *dev,
