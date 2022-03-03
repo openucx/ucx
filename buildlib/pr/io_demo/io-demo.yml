@@ -23,30 +23,35 @@ parameters:
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_cx4_rc
+        analyzer: ""
       "tag match on CX6/RC":
         args: ""
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: tag_cx6_rc
+        analyzer: ""
       "active messages on CX6/RC":
         args: "-A"
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: am_cx6_rc
+        analyzer: ""
       "tag match on CX6/DC":
         args: ""
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: tag_cx6_dc
+        analyzer: ""
       "active messages on CX6/DC with data validation":
         args: "-A -q"
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_validate_cx6_dc
+        analyzer: ""
       "tag match on CX4 with user memh":
         args: "-z"
         initial_delay: 9999 # No interference
@@ -54,6 +59,7 @@ parameters:
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_umemh_cx4_rc
+        analyzer: "--no-allow-list"
       "active messages on CX6/DC with user memh":
         args: "-A -z"
         initial_delay: 9999 # No interference
@@ -61,6 +67,7 @@ parameters:
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_umemh_cx6_dc
+        analyzer: "--no-allow-list"
 
 jobs:
   - job: io_build
@@ -122,6 +129,7 @@ jobs:
             test_intefrafe: ${{ test.Value.interface }}
             test_ucx_tls: ${{ test.Value.tls }}
             initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
+            test_analyzer: ${{ test.Value.analyzer }}
       maxParallel: 1
 
     variables:
@@ -149,6 +157,7 @@ jobs:
           roce_iface: $(test_intefrafe)
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
+          test_analyzer_args: $(test_analyzer)
           ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
             analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
       - bash: |

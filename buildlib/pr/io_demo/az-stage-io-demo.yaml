@@ -13,6 +13,8 @@ parameters:
   default: 20
 - name: analyzer_allow_list_args
   default: ''
+- name: test_analyzer_args
+  default: ''
 
 steps:
 - bash: |
@@ -52,6 +54,10 @@ steps:
     export UCX_TLS=${{ parameters.iodemo_tls }}
     export UCX_RNDV_THRESH=4k
     export LD_LIBRARY_PATH=$(workspace)/install/lib:$LD_LIBRARY_PATH
+
+    IFS=, read host1 host2 <<< $(agent_hosts)
+    h2_ip=$(ssh $host2 "source ${PWD}/$(workspace)/buildlib/az-helpers.sh && get_ip ${{parameters.roce_iface}}" )
+
     $(workspace)/test/apps/iodemo/run_io_demo.sh \
         -H $(agent_hosts) \
         --tasks-per-node 1 \
@@ -69,6 +75,7 @@ steps:
             -i 0 \
             -w 16 \
             -t 60 \
+            -I ${h2_ip} \
             ${{ parameters.iodemo_args }}
   displayName: Launch with run_io_demo.sh ( ${{ parameters.name }} )
   timeoutInMinutes: 15
@@ -79,7 +86,11 @@ steps:
     analyzer_args="-d $(workspace)/${{ parameters.name }}"
     analyzer_args="$analyzer_args --duration ${{ parameters.duration }}"
     analyzer_args="$analyzer_args -t 3"
-    analyzer_args="$analyzer_args ${{ parameters.analyzer_allow_list_args }}"
+    if [[ ${{ parameters.test_analyzer_args }} == '--no-allow-list' ]]; then
+      analyzer_args="$analyzer_args ${{ parameters.test_analyzer_args }}"
+    else
+      analyzer_args="$analyzer_args ${{ parameters.analyzer_allow_list_args }}"
+    fi
     python ${analyzer} ${analyzer_args}
   displayName: Analyze for ${{ parameters.name }}
   timeoutInMinutes: 2
