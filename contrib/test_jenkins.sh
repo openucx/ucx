@@ -348,8 +348,6 @@ prepare() {
 }
 
 check_make_distcheck() {
-	echo 1..1 > make_distcheck.tap
-
 	# If the gcc version on the host is older than 4.8.5, don't run
 	# due to a compiler bug that reproduces when building with gtest
 	# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61886
@@ -396,22 +394,6 @@ slice_affinity() {
 
 	echo "${cpulist}" | head -n $((n + 1)) | tail -1
 	set -x
-}
-
-#
-# `rename` has a binary and Perl flavors. Ubuntu comes with Perl one and
-# requires different usage.
-#
-rename_files() {
-	expr=$1; shift
-	replacement=$1; shift
-	files=$*
-	if rename --version | grep 'util-linux'; then
-		rename "${expr}" "${replacement}" $files
-		return
-	fi
-
-	rename "s/\\${expr}\$/${replacement}/" "${files}"
 }
 
 run_loopback_app() {
@@ -843,7 +825,6 @@ test_malloc_hooks_mpi() {
 # Run tests with MPI library
 #
 run_mpi_tests() {
-	echo "1..2" > mpi_tests.tap
 	if module_load hpcx-gcc && mpirun --version
 	then
 		# Prevent our tests from using UCX libraries from hpcx module by prepending
@@ -866,18 +847,14 @@ run_mpi_tests() {
 				-mca coll ^hcoll,ml"
 
 		run_ucx_perftest 1
-		echo "ok 1 - ucx perftest" >> mpi_tests.tap
 
 		test_malloc_hooks_mpi
-		echo "ok 2 - malloc hooks" >> mpi_tests.tap
 
 		make_clean distclean
 
 		module unload hpcx-gcc
 	else
 		echo "==== Not running MPI tests ===="
-		echo "ok 1 - # SKIP because MPI not installed" >> mpi_tests.tap
-		echo "ok 2 - # SKIP because MPI not installed" >> mpi_tests.tap
 	fi
 }
 
@@ -1113,8 +1090,6 @@ run_gtest() {
 	export GTEST_TOTAL_SHARDS=$nworkers
 	export GTEST_RANDOM_SEED=0
 	export GTEST_SHUFFLE=1
-	export GTEST_TAP=2
-	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
 	# Run UCT tests for TCP over fastest device only
 	export GTEST_UCT_TCP_FASTEST_DEV=1
 	# Report TOP-20 longest test at the end of testing
@@ -1133,11 +1108,8 @@ run_gtest() {
 	fi
 	export GTEST_EXTRA_ARGS
 
-	mkdir -p $GTEST_REPORT_DIR
-
 	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
-	(cd test/gtest && rename_files .tap _gtest.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
 	# gtest returns with non zero exit code if there were no
@@ -1151,7 +1123,6 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
 		make -C test/gtest test
-	(cd test/gtest && rename_files .tap _mallopt_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT \
@@ -1160,7 +1131,6 @@ run_gtest() {
 		GTEST_TOTAL_SHARDS=1 \
 		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
 		make -C test/gtest test
-	(cd test/gtest && rename_files .tap _mmap_ptrs_gtest.tap malloc_hook_cplusplus.tap && mv *.tap $GTEST_REPORT_DIR)
 
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
 	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
@@ -1174,12 +1144,9 @@ run_gtest() {
 		fi
 
 		$AFFINITY $TIMEOUT_VALGRIND make -C test/gtest test_valgrind
-		(cd test/gtest && rename_files .tap _vg.tap *.tap && mv *.tap $GTEST_REPORT_DIR)
 		module unload tools/valgrind-3.12.0
 	else
 		echo "==== Not running valgrind tests with $compiler_name compiler ===="
-		echo "1..1"                                          > vg_skipped.tap
-		echo "ok 1 - # SKIP because running on $(uname -m)" >> vg_skipped.tap
 	fi
 
 	unset OMP_NUM_THREADS
@@ -1188,8 +1155,6 @@ run_gtest() {
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_RANDOM_SEED
 	unset GTEST_SHUFFLE
-	unset GTEST_TAP
-	unset GTEST_REPORT_DIR
 	unset GTEST_EXTRA_ARGS
 	unset CUDA_VISIBLE_DEVICES
 }
@@ -1206,8 +1171,6 @@ run_gtest_armclang() {
 		module unload arm-compiler/arm-hpc-compiler
 	else
 		echo "==== Not running with armclang compiler ===="
-		echo "1..1"                                          > armclang_skipped.tap
-		echo "ok 1 - # SKIP because armclang not found"     >> armclang_skipped.tap
 	fi
 }
 
@@ -1216,9 +1179,6 @@ run_gtest_armclang() {
 # Run the test suite (gtest) in release configuration
 #
 run_gtest_release() {
-
-	echo "1..1" > gtest_release.tap
-
 	../contrib/configure-release --prefix=$ucx_inst --enable-gtest
 	make_clean
 	$MAKEP
@@ -1227,8 +1187,6 @@ run_gtest_release() {
 	export GTEST_TOTAL_SHARDS=1
 	export GTEST_RANDOM_SEED=0
 	export GTEST_SHUFFLE=1
-	export GTEST_TAP=2
-	export GTEST_REPORT_DIR=$WORKSPACE/reports/tap
 	export OMP_NUM_THREADS=4
 
 	echo "==== Running unit tests (release configuration) ===="
@@ -1238,15 +1196,12 @@ run_gtest_release() {
 	#   (see GH #3827 for details)
 	env GTEST_FILTER=\*test_obj_size\*:\*test_ucp_tag_match.rndv_rts_unexp\* \
 		$AFFINITY $TIMEOUT make -C test/gtest test
-	echo "ok 1" >> gtest_release.tap
 
 	unset OMP_NUM_THREADS
 	unset GTEST_SHARD_INDEX
 	unset GTEST_TOTAL_SHARDS
 	unset GTEST_RANDOM_SEED
 	unset GTEST_SHUFFLE
-	unset GTEST_TAP
-	unset GTEST_REPORT_DIR
 }
 
 run_ucx_info() {
@@ -1256,9 +1211,6 @@ run_ucx_info() {
 }
 
 run_ucx_tl_check() {
-
-	echo "1..1" > ucx_tl_check.tap
-
 	# Test transport selection
 	../test/apps/test_ucx_tls.py -p $ucx_inst
 
@@ -1267,12 +1219,6 @@ run_ucx_tl_check() {
 		UCX_MAX_EAGER_LANES=4 \
 		UCX_MAX_RNDV_LANES=4 \
 		./src/tools/info/ucx_info -u t -e
-
-	if [ $? -ne 0 ]; then
-		echo "not ok 1" >> ucx_tl_check.tap
-	else
-		echo "ok 1" >> ucx_tl_check.tap
-	fi
 }
 
 #

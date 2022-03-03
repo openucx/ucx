@@ -12,7 +12,6 @@
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
 #include "test_helpers.h"
-#include "tap.h"
 
 
 static int ucs_gtest_random_seed = -1;
@@ -60,24 +59,12 @@ int main(int argc, char **argv) {
     // coverity[fun_call_w_exception]: uncaught exceptions cause nonzero exit anyway, so don't warn.
     ::testing::InitGoogleTest(&argc, argv);
 
-    char *str = getenv("GTEST_TAP");
-    int ret;
-
-    /* Append TAP Listener */
-    if (str) {
-        if (0 < strtol(str, NULL, 0)) {
-            testing::TestEventListeners& listeners = testing::UnitTest::GetInstance()->listeners();
-            if (1 == strtol(str, NULL, 0)) {
-                delete listeners.Release(listeners.default_result_printer());
-            }
-            listeners.Append(new tap::TapListener());
-        }
-    }
-
     parse_test_opts(argc, argv);
+
     if (ucs_gtest_random_seed == -1) {
         ucs_gtest_random_seed = time(NULL) % 32768;
     }
+
     UCS_TEST_MESSAGE << "Using random seed of " << ucs_gtest_random_seed;
     srand(ucs_gtest_random_seed);
     if (RUNNING_ON_VALGRIND) {
@@ -107,6 +94,7 @@ int main(int argc, char **argv) {
     /* set gpu context for tests that need it */
     mem_buffer::set_device_context();
 
+    int ret;
     ret = ucs::watchdog_start();
     if (ret != 0) {
         /* coverity[fun_call_w_exception] */
