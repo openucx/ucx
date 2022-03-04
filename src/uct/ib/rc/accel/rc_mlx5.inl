@@ -620,7 +620,6 @@ uct_rc_mlx5_txqp_inline_post(uct_rc_mlx5_iface_common_t *iface, int qp_type,
         break;
 
     case MLX5_OPCODE_UMR:
-    case MLX5_OPCODE_LOCAL_INVAL:
         wqe_size         = sizeof(*ctrl) + sizeof(*umr_ctrl) +
                            sizeof(*mkey_seg);
         umr_ctrl         = next_seg;

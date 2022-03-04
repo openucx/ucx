@@ -34,6 +34,26 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 #endif
 
 #if HAVE_DEVX
+
+
+enum {
+    UCT_IB_MLX5_DEVX_RQ_TYPE_REGULAR = 0x0,
+    UCT_IB_MLX5_DEVX_RQ_TYPE_XRQ     = 0x1,
+    UCT_IB_MLX5_DEVX_RQ_TYPE_NO_RQ   = 0x3
+};
+
+
+static uint32_t uct_ib_mlx5_devx_get_rq_type(const uct_ib_mlx5_qp_attr_t *attr)
+{
+    if (attr->super.srq_num > 0) {
+        return UCT_IB_MLX5_DEVX_RQ_TYPE_XRQ;
+    } else if (attr->super.cap.max_recv_wr == 0) {
+        return UCT_IB_MLX5_DEVX_RQ_TYPE_NO_RQ;
+    } else {
+        return UCT_IB_MLX5_DEVX_RQ_TYPE_REGULAR;
+    }
+}
+
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_mlx5_md_t *md,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
@@ -109,9 +129,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_mlx5_md_t *md,
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, dvpd.pdn);
     UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, attr->uar->uar->page_id);
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
-    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, (attr->super.srq_num > 0) ? 1 :
-                                         (attr->super.cap.max_recv_wr == 0) ? 3 :
-                                         0);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rq_type, uct_ib_mlx5_devx_get_rq_type(attr));
     UCT_IB_MLX5DV_SET(qpc, qpc, srqn_rmpn_xrqn, attr->super.srq_num);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_snd, dvscq.cqn);
     UCT_IB_MLX5DV_SET(qpc, qpc, cqn_rcv, dvrcq.cqn);

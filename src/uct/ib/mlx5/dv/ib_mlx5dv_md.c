@@ -107,6 +107,7 @@ static ucs_status_t uct_ib_mlx5_dereg_key(uct_ib_md_t *ib_md,
     uct_ib_mlx5_mem_t *memh = ucs_derived_of(ib_memh, uct_ib_mlx5_mem_t);
     uct_ib_mlx5_md_t  *md   = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
     struct mlx5_cqe64 *cqe;
+    uint16_t hw_ci;
     ucs_status_t status;
 
     if (memh->mrs[mr_type].super.ib == NULL) {
@@ -126,6 +127,10 @@ static ucs_status_t uct_ib_mlx5_dereg_key(uct_ib_md_t *ib_md,
         cqe = uct_ib_mlx5_poll_cq(NULL, &md->umr.cq.mlx5);
         /* TODO: handle err cqe */
     } while (cqe == NULL);
+
+    hw_ci = ntohs(cqe->wqe_counter);
+    uct_ib_mlx5_txwq_update_bb(&md->umr.txwq, hw_ci);
+    uct_ib_mlx5_update_db_cq_ci(&md->umr.cq.mlx5);
 
     status = uct_ib_mlx5_md_umr_gc_push(md, &memh->mrs[mr_type]);
     if (status != UCS_OK) {
@@ -705,8 +710,9 @@ static ucs_status_t uct_ib_mlx5_devx_md_umr_qp_create(uct_ib_mlx5_md_t *md)
                 .pd      = md->super.pd
             },
             .cap = {
-                .max_inline_data = 128,
-                .max_send_wr     = 1024,
+                .max_inline_data = ucs_roundup_pow2(sizeof(struct mlx5_wqe_umr_ctrl_seg) +
+                                                    sizeof(struct mlx5_wqe_mkey_context_seg)),
+                .max_send_wr     = 1,
                 .max_send_sge    = 1,
                 .max_recv_wr     = 0,
                 .max_recv_sge    = 0

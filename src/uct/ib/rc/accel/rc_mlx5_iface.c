@@ -298,9 +298,8 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     struct mlx5dv_qp_init_attr dv_attr = {};
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DEVX_RC_QP) {
-        attr->uidx      = 0xffffff;
-        status = uct_rc_mlx5_iface_common_devx_create_qp(iface, qp, txwq,
-                                                         attr);
+        attr->uidx = 0xffffff;
+        status = uct_rc_mlx5_iface_common_devx_create_qp(iface, qp, txwq, attr);
         if (status != UCS_OK) {
             return status;
         }
