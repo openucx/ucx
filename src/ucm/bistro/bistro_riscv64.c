@@ -76,7 +76,7 @@
  * @param[in] _reg  register number (0-31)
  * @param[in] _val  immediate value
  */
-#define ADDI(_reg, _val) (((_val) << 20)((_reg) << 7)+ (0x13))
+#define ADDI(_reg, _val) (((_val) << 20)+((_reg) << 7)+ (0x13))
 
 /**
  * @brief Branch to address stored in register
@@ -90,21 +90,21 @@ ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                               ucm_bistro_restore_point_t **rp)
 {
     ucm_bistro_patch_t patch = {
-        .reg14  = ADDI(X31, X0, (uintptr_t)(hook>>52),
+        .reg14  = ADDI(X31, (uintptr_t)hook>>52),
         .reg13  = SLLI(X31, X31, 52),
-        .reg12  = ADDI(X30, X0, ((uintptr_t)(hook>>40)&0b111111111111)),
+        .reg12  = ADDI(X30, (((uintptr_t)hook>>40)&0b111111111111)),
         .reg11  = SLLI(X30, X30, 40),
         .reg10  = OR(X31, X31, X30),
-        .reg9   = ADDI(X29, X0, ((uintptr_t)(hook>>28)&0b111111111111))
+        .reg9   = ADDI(X29, (((uintptr_t)hook>>28)&0b111111111111)),
         .reg8   = SLLI(X29, X29, 28),
         .reg7   = OR(X31, X31, X29),
-        .reg6   = ADDI(X28, X0, ((uintptr_t)(hook>>16)&0b111111111111)),
+        .reg6   = ADDI(X28, (((uintptr_t)hook>>16)&0b111111111111)),
         .reg5   = SLLI(X28, X28, 16),
         .reg4   = OR(X31, X31, X28),
-        .reg3   = ADDI(X30, X0, ((uintptr_t)(hook>>4)&0b111111111111)),
+        .reg3   = ADDI(X30, (((uintptr_t)hook>>4)&0b111111111111)),
         .reg2   = SLLI(X30, X30, 4),
         .reg1   = OR(X31, X31, X30),
-        .reg0   = ORI(X31, X31, (uintptr_t)hook&0b1111),
+        .reg0   = ORI(X31, X31, ((uintptr_t)hook)&0b1111),
         .br     = BR(X31)
     };
     ucs_status_t status;

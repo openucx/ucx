@@ -1,5 +1,6 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -16,7 +17,7 @@
 #elif defined(__aarch64__)
 #  include "generic/atomic.h"
 #elif defined(__riscv)
-#  include "riscv/atomic.h"
+#  include "generic/atomic.h"
 #else
 #  error "Unsupported architecture"
 #endif

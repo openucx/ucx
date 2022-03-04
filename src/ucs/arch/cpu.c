@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -68,6 +69,10 @@ const ucs_cpu_builtin_memcpy_t ucs_cpu_builtin_memcpy[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_ZHAOXIN] = {
         .min = UCS_MEMUNITS_INF,
         .max = UCS_MEMUNITS_INF
+    },
+     [UCS_CPU_VENDOR_GENERIC_RV64G] = {
+        .min = UCS_MEMUNITS_INF,
+        .max = UCS_MEMUNITS_INF
     }
 };
 
@@ -77,7 +82,8 @@ const size_t ucs_cpu_est_bcopy_bw[UCS_CPU_VENDOR_LAST] = {
     [UCS_CPU_VENDOR_AMD]         = 5008 * UCS_MBYTE,
     [UCS_CPU_VENDOR_GENERIC_ARM] = 5800 * UCS_MBYTE,
     [UCS_CPU_VENDOR_GENERIC_PPC] = 5800 * UCS_MBYTE,
-    [UCS_CPU_VENDOR_FUJITSU_ARM] = 12000 * UCS_MBYTE
+    [UCS_CPU_VENDOR_FUJITSU_ARM] = 12000 * UCS_MBYTE,
+    [UCS_CPU_VENDOR_GENERIC_RV64G] = 5800 * UCS_MBYTE
 };
 
 static void ucs_sysfs_get_cache_size()

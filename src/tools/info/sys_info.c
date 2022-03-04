@@ -1,6 +1,7 @@
 /**
 * Copyright (C) Mellanox Technologies Ltd. 2001-2015.  ALL RIGHTS RESERVED.
 * Copyright (C) Shanghai Zhaoxin Semiconductor Co., Ltd. 2020. ALL RIGHTS RESERVED.
+* Copyright (C) Tactical Computing Labs, LLC. 2022. ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
 */
@@ -36,17 +37,21 @@ static const char *cpu_model_names[] = {
     [UCS_CPU_MODEL_AMD_MILAN]          = "Milan",
     [UCS_CPU_MODEL_ZHAOXIN_ZHANGJIANG] = "Zhangjiang",
     [UCS_CPU_MODEL_ZHAOXIN_WUDAOKOU]   = "Wudaokou",
-    [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui"
+    [UCS_CPU_MODEL_ZHAOXIN_LUJIAZUI]   = "Lujiazui",
+    [UCS_CPU_MODEL_RV64G]              = "RV64G",
+    [UCS_CPU_MODEL_RV64IMAFDC]         = "RV64IMAFDC"
 };
 
 static const char* cpu_vendor_names[] = {
-    [UCS_CPU_VENDOR_UNKNOWN]          = "unknown",
-    [UCS_CPU_VENDOR_INTEL]            = "Intel",
-    [UCS_CPU_VENDOR_AMD]              = "AMD",
-    [UCS_CPU_VENDOR_GENERIC_ARM]      = "Generic ARM",
-    [UCS_CPU_VENDOR_GENERIC_PPC]      = "Generic PPC",
-    [UCS_CPU_VENDOR_FUJITSU_ARM]      = "Fujitsu ARM",
-    [UCS_CPU_VENDOR_ZHAOXIN]          = "Zhaoxin"
+    [UCS_CPU_VENDOR_UNKNOWN]            = "unknown",
+    [UCS_CPU_VENDOR_INTEL]              = "Intel",
+    [UCS_CPU_VENDOR_AMD]                = "AMD",
+    [UCS_CPU_VENDOR_GENERIC_ARM]        = "Generic ARM",
+    [UCS_CPU_VENDOR_GENERIC_PPC]        = "Generic PPC",
+    [UCS_CPU_VENDOR_GENERIC_RV64G]      = "Generic RV64G",
+    [UCS_CPU_VENDOR_GENERIC_RV64IMAFDC] = "Generic RV64IMAFDC",
+    [UCS_CPU_VENDOR_FUJITSU_ARM]        = "Fujitsu ARM",
+    [UCS_CPU_VENDOR_ZHAOXIN]            = "Zhaoxin"
 };
 
 static double measure_memcpy_bandwidth(size_t size)
