@@ -829,7 +829,8 @@ run_mpi_tests() {
 	then
 		# Prevent our tests from using UCX libraries from hpcx module by prepending
 		# our local library path first
-		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
+		save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
+		export LD_LIBRARY_PATH=${ucx_inst}/lib:${LD_LIBRARY_PATH}
 
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		make_clean
@@ -850,8 +851,11 @@ run_mpi_tests() {
 
 		test_malloc_hooks_mpi
 
-		make_clean distclean
+		# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
+		# from installation directory
+		export LD_LIBRARY_PATH=${save_LD_LIBRARY_PATH}
 
+		make_clean distclean
 		module unload hpcx-gcc
 	else
 		echo "==== Not running MPI tests ===="
