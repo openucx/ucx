@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.12.1-rc2 (February 14, 2022)
+## 1.12.1-rc3 (March 4, 2022)
 ### Bugfixes
 * Fixed memory hooks for Cuda 11.5
 * Fixed memory type cache merge
@@ -15,6 +15,11 @@
 * Fixed memtype cache fallback when memory hooks are not installed
 * Fixed parsing header flags of worker address
 * Fixed pipeline protocol when sending from host memory to GPU memory
+* Fixed transport progress not deactivated when all its connections are closed
+* Fixed progress loop in io_demo application
+* Fixed ROCm segfault when using internal_ops functions
+* Fixed ROCm memory hooks
+
 ### Important changes
 * If Cuda memory hooks on driver API cannot be installed, memory type cache and
   memory registration cache will be disabled. This may lead to lower performance
