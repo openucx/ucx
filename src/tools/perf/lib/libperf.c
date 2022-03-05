@@ -1261,14 +1261,13 @@ static void ucp_perf_test_cleanup_endpoints(ucx_perf_context_t *perf)
     ucp_perf_test_destroy_eps(perf);
 }
 
-static void ucp_perf_test_destroy_workers(ucx_perf_context_t *perf)
+static void
+ucp_perf_test_destroy_workers(ucx_perf_context_t *perf, unsigned count)
 {
     unsigned i;
 
-    for (i = 0; i < perf->params.thread_count; i++) {
-        if (perf->ucp.tctx[i].perf.ucp.worker != NULL) {
-            ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
-        }
+    for (i = 0; i < count; i++) {
+        ucp_worker_destroy(perf->ucp.tctx[i].perf.ucp.worker);
     }
 }
 
@@ -1602,7 +1601,8 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
         status = ucp_worker_create(perf->ucp.context, &worker_params,
                                    &perf->ucp.tctx[i].perf.ucp.worker);
         if (status != UCS_OK) {
-            goto err_free_tctx_destroy_workers;
+            ucp_perf_test_destroy_workers(perf, i);
+            goto err_free_tctx;
         }
     }
 
@@ -1612,14 +1612,14 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
         status = ucp_worker_query(perf->ucp.tctx[0].perf.ucp.worker,
                                   &worker_attr);
         if (status != UCS_OK) {
-            goto err_free_tctx_destroy_workers;
+            goto err_destroy_workers;
         }
 
         if (worker_attr.max_am_header < perf->params.ucp.am_hdr_size) {
             ucs_error("AM header size (%zu) is larger than max supported (%zu)",
                       perf->params.ucp.am_hdr_size, worker_attr.max_am_header);
             status = UCS_ERR_INVALID_PARAM;
-            goto err_free_tctx_destroy_workers;
+            goto err_destroy_workers;
         }
     }
 
@@ -1628,13 +1628,14 @@ static ucs_status_t ucp_perf_setup(ucx_perf_context_t *perf)
         if (perf->params.flags & UCX_PERF_TEST_FLAG_VERBOSE) {
             ucs_error("Failed to setup endpoints: %s", ucs_status_string(status));
         }
-        goto err_free_tctx_destroy_workers;
+        goto err_destroy_workers;
     }
 
     return UCS_OK;
 
-err_free_tctx_destroy_workers:
-    ucp_perf_test_destroy_workers(perf);
+err_destroy_workers:
+    ucp_perf_test_destroy_workers(perf, thread_count);
+err_free_tctx:
     free(perf->ucp.tctx);
 err_free_mem:
     ucp_perf_test_free_mem(perf);
@@ -1649,7 +1650,7 @@ static void ucp_perf_cleanup(ucx_perf_context_t *perf)
     ucp_perf_test_cleanup_endpoints(perf);
     ucp_perf_barrier(perf);
     ucp_perf_test_free_mem(perf);
-    ucp_perf_test_destroy_workers(perf);
+    ucp_perf_test_destroy_workers(perf, perf->params.thread_count);
     free(perf->ucp.tctx);
     ucp_cleanup(perf->ucp.context);
 }
