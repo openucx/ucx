@@ -262,7 +262,6 @@ noinst_HEADERS = \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
-	common/tap.h \
 	\
 	uct/ib/test_rc.h \
 	uct/ib/ud_base.h \
