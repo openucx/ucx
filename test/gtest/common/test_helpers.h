@@ -346,6 +346,12 @@ std::string compact_string(const std::string &str, size_t length);
 std::string exit_status_info(int exit_status);
 
 
+/*
+ * Limit test buffer size according to available memory
+ */
+size_t limit_buffer_size(size_t size = std::numeric_limits<size_t>::max());
+
+
 /**
  * Return the IP address of the given interface address.
  */

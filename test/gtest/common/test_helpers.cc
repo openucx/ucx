@@ -608,6 +608,12 @@ std::string exit_status_info(int exit_status)
     return ss.str().substr(2, std::string::npos);
 }
 
+size_t limit_buffer_size(size_t size)
+{
+    return std::min(size, std::min(ucs_get_phys_mem_size() / 16,
+                                   ucs_get_memfree_size() / 4));
+}
+
 sock_addr_storage::sock_addr_storage() :
         m_size(0), m_is_valid(false), m_is_rdmacm_netdev(false)
 {
