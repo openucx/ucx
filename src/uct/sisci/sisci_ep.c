@@ -27,8 +27,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_sci_ep_t)
 }
 
 
-static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
-{
+static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params) {
 
     sci_error_t sci_error;
     uct_sci_iface_addr_t* iface_addr =  (uct_sci_iface_addr_t*) params->iface_addr;
@@ -70,6 +69,15 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     request.interrupt = local_interrupt_id;
     request.node_id   = iface->device_addr;
 
+
+    SCICreateDataInterrupt(md->sci_virtual_device, &ans_interrupt, 0, &local_interrupt_id,  
+                            NULL, NULL, SCI_FLAG_FIXED_INTNO, &sci_error);
+
+    if(sci_error != SCI_ERR_OK) {
+        printf("SCI Trigger Interrupt: %s\n", SCIGetErrorString(sci_error));
+        return UCS_ERR_NO_RESOURCE;
+    }            
+
     
     SCITriggerDataInterrupt(req_interrupt, (void *) &request, sizeof(request), SCI_NO_FLAGS, &sci_error);
     
@@ -79,15 +87,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
     }
 
     printf("sent interrupt of %zd to %d\n", sizeof(request), segment_id);
-
-
-    SCICreateDataInterrupt(md->sci_virtual_device, &ans_interrupt, 0, &local_interrupt_id,  
-                            NULL, NULL, SCI_FLAG_FIXED_INTNO, &sci_error);
-
-    if(sci_error != SCI_ERR_OK) {
-        printf("SCI Trigger Interrupt: %s\n", SCIGetErrorString(sci_error));
-        return UCS_ERR_NO_RESOURCE;
-    }                      
+              
 
     SCIWaitForDataInterrupt(ans_interrupt, (void*) &answer, &ans_length,0, 0, &sci_error);
 
@@ -102,6 +102,17 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params)
 
     self->remote_node_id = answer.node_id;
     self->remote_segment_id = answer.segment_id;
+
+
+    /*  Clean up for connection.  */
+    SCIDisconnectSegment(req_interrupt, SCI_NO_FLAGS, &sci_error);
+    SCIRemoveDataInterrupt(ans_interrupt, SCI_NO_FLAGS, &sci_error);
+
+    if(sci_error == SCI_ERR_BUSY) {
+        printf("SCIRemoveDataInterrupt: Interrupt still being used by anoter proccess");
+    }
+
+
 
     do {
     SCIConnectSegment(md->sci_virtual_device, &self->remote_segment, self->remote_node_id, self->remote_segment_id, 

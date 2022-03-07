@@ -92,6 +92,10 @@ sci_callback_action_t conn_handler(void* arg, sci_local_data_interrupt_t interru
 
     iface->sci_fds[i].status = 1;
 
+    /* NOTE: does not return any error messages of any kind */
+    SCIDisconnectInterrupt(ans_interrupt, SCI_NO_FLAGS, &sci_error);
+
+
     printf("callback done \n");
     return SCI_CALLBACK_CANCEL;
 }
@@ -223,8 +227,6 @@ static UCS_CLASS_INIT_FUNC(uct_sci_iface_t, uct_md_h md, uct_worker_h worker,
         }
 
     }
-
-    
 
 
     /*----------------- DMA starts here ---------------*/
