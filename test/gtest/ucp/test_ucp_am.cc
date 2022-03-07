@@ -1078,6 +1078,9 @@ UCS_TEST_P(test_ucp_am_nbx_align, multi)
     test_am_send_recv(fragment_size() * 5, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
 }
 
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_align)
+
+
 class test_ucp_am_nbx_seg_size : public test_ucp_am_nbx {
 public:
     test_ucp_am_nbx_seg_size() : m_size(0ul)
