@@ -895,6 +895,7 @@ static ucs_status_t
 ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
                                  const ucp_ep_params_t *params, ucp_ep_h *ep_p)
 {
+    unsigned ep_init_flags = ucp_ep_init_flags(worker, params);
     ucp_unpacked_address_t remote_address;
     ucp_ep_match_conn_sn_t conn_sn;
     ucs_status_t status;
@@ -939,12 +940,11 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         }
 
         ucp_stream_ep_activate(ep);
-        goto out_free_address;
+        goto out_resolve_remote_id;
     }
 
     status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
-                                          &remote_address,
-                                          ucp_ep_init_flags(worker, params),
+                                          &remote_address, ep_init_flags,
                                           "from api call", &ep);
     if (status != UCS_OK) {
         goto out_free_address;
@@ -988,6 +988,16 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
 
     status = UCS_OK;
 
+out_resolve_remote_id:
+    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
+        /* If PEER_FAILURE was requested, resolve remote endpoint ID prior to
+         * communicating with a peer to make sure that remote peer's endpoint
+         * won't be changed during runtime */
+        status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
+        if (ucs_unlikely(status != UCS_OK)) {
+            goto out_free_address;
+        }
+    }
 out_free_address:
     ucs_free(remote_address.address_list);
 out:
@@ -3204,7 +3214,8 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     wireup_msg_iov[0].iov_len  = sizeof(wireup_msg);
 
     packed_len = uct_ep_am_bcopy(uct_ep, UCP_AM_ID_WIREUP,
-                                 ucp_wireup_msg_pack, wireup_msg_iov, 0);
+                                 ucp_wireup_msg_pack, wireup_msg_iov,
+                                 UCT_SEND_FLAG_PEER_CHECK);
     ucs_free(wireup_msg_iov[1].iov_base);
     return (packed_len > 0) ? UCS_OK : (ucs_status_t)packed_len;
 }
