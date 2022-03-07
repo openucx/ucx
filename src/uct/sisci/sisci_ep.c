@@ -105,7 +105,7 @@ static UCS_CLASS_INIT_FUNC(uct_sci_ep_t, const uct_ep_params_t *params) {
 
 
     /*  Clean up for connection.  */
-    SCIDisconnectSegment(req_interrupt, SCI_NO_FLAGS, &sci_error);
+    SCIDisconnectDataInterrupt(req_interrupt, SCI_NO_FLAGS, &sci_error);
     SCIRemoveDataInterrupt(ans_interrupt, SCI_NO_FLAGS, &sci_error);
 
     if(sci_error == SCI_ERR_BUSY) {
