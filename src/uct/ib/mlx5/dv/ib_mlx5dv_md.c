@@ -487,7 +487,7 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     int ret;
 
     if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_RCQP)) {
-        ucs_debug("%s: disable ODP because it's not supported for DevX QP",
+        ucs_debug("%s: disable ODP because it's not supported for DEVX QP",
                   uct_ib_device_name(&md->super.dev));
         goto no_odp;
     }

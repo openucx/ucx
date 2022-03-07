@@ -692,7 +692,7 @@ uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_MAYBE_UNUSED void
 uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
-    ucs_bug("DevX SRQ cleanup has to be done only if DevX support is enabled");
+    ucs_bug("DEVX SRQ cleanup has to be done only if DEVX support is enabled");
 }
 #endif
 
