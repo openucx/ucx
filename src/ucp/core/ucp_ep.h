@@ -600,11 +600,11 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  ucp_rsc_index_t aux_rsc_index,
                                  ucs_string_buffer_t *buf);
 
-void ucp_ep_destroy_base(ucp_ep_h ep);
+ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
+                                const char *peer_name, const char *message,
+                                ucp_ep_h *ep_p);
 
-ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
-                                  const char *peer_name, const char *message,
-                                  ucp_ep_h *ep_p);
+void ucp_ep_destroy_base(ucp_ep_h ep);
 
 void ucp_ep_delete(ucp_ep_h ep);
 

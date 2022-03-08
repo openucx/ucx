@@ -529,9 +529,9 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
                                    UCS_CONN_MATCH_QUEUE_EXP);
         if (ep == NULL) {
             /* Create a new endpoint if does not exist */
-            status = ucp_worker_create_ep(worker, ep_init_flags,
-                                          remote_address->name,
-                                          "remote-request", &ep);
+            status = ucp_ep_create_base(worker, ep_init_flags,
+                                        remote_address->name,
+                                        "remote-request", &ep);
             if (status != UCS_OK) {
                 return;
             }
@@ -735,8 +735,8 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
 
     /* If endpoint does not exist - create a temporary endpoint to send a
      * UCP_WIREUP_MSG_EP_REMOVED reply */
-    status = ucp_worker_create_ep(worker, ep_init_flags, remote_address->name,
-                                  "wireup ep_check reply", &reply_ep);
+    status = ucp_ep_create_base(worker, ep_init_flags, remote_address->name,
+                                "wireup ep_check reply", &reply_ep);
     if (status != UCS_OK) {
         ucs_error("failed to create EP: %s", ucs_status_string(status));
         return;
