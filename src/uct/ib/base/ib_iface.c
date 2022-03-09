@@ -1014,7 +1014,6 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl)
 {
-    UCS_STRING_BUFFER_ONSTACK(msg, 256);
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;

@@ -17,7 +17,6 @@
 #include <ucs/type/status.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/time/time_def.h>
-#include <ucs/datastruct/string_buffer.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/config/types.h>
 #include <ucs/config/parser.h>

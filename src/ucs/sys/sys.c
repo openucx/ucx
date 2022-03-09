@@ -26,6 +26,7 @@
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <net/if.h>
 #include <dirent.h>
 #include <sched.h>

@@ -75,7 +75,6 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                    int preferred_cpu, size_t inl)
 {
 #if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    UCS_STRING_BUFFER_ONSTACK(msg, 256);
     uct_ib_device_t *dev               = uct_ib_iface_device(iface);
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};

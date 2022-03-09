@@ -492,7 +492,6 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
                                   const uct_rc_iface_common_config_t *config,
                                   struct ibv_srq **srq_p)
 {
-    UCS_STRING_BUFFER_ONSTACK(msg, 256);
     struct ibv_srq_init_attr srq_init_attr;
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
     struct ibv_srq *srq;
