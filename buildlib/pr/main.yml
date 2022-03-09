@@ -1,7 +1,6 @@
 variables:
   DOCKER_OPT_VOLUMES: -v /hpc/local:/hpc/local -v /auto/sw_tools:/auto/sw_tools
-  DOCKER_OPT_IB: --ulimit memlock=-1:-1
-  DOCKER_OPT_IB_GPU: --gpus all --ulimit memlock=-1:-1 --device=/dev/infiniband/
+  DOCKER_OPT_GPU: --gpus all --ulimit memlock=-1:-1 --device=/dev/infiniband/
 
 resources:
   containers:
@@ -10,7 +9,7 @@ resources:
       options: $(DOCKER_OPT_VOLUMES)
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
-      options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
+      options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: fedora
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/fedora33:1
     - container: fedora34
@@ -48,97 +47,97 @@ resources:
       options: $(DOCKER_OPT_VOLUMES)
     - container: centos7_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos7
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_1
       image: nvidia/cuda:11.1.1-devel-centos7
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_2
       image: nvidia/cuda:11.2.0-devel-centos7
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_3
       image: nvidia/cuda:11.3.0-devel-centos7
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos7_cuda_11_4
       image: nvidia/cuda:11.4.0-devel-centos7
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-centos8
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_1
       image: nvidia/cuda:11.1.1-devel-centos8
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_2
       image: nvidia/cuda:11.2.0-devel-centos8
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_3
       image: nvidia/cuda:11.3.0-devel-centos8
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_4
       image: nvidia/cuda:11.4.0-devel-centos8
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_5
       image: nvidia/cuda:11.5.0-devel-centos8
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos8_cuda_11_6
       image: nvidia/cuda:11.6.0-devel-centos8
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-ubuntu18.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_1
       image: nvidia/cuda:11.1.1-devel-ubuntu18.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_2
       image: nvidia/cuda:11.2.0-devel-ubuntu18.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_3
       image: nvidia/cuda:11.3.0-devel-ubuntu18.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_4
       image: nvidia/cuda:11.4.0-devel-ubuntu18.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_5
       image: nvidia/cuda:11.5.0-devel-ubuntu18.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda_11_6
       image: nvidia/cuda:11.6.0-devel-ubuntu18.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_0
       image: nvidia/cuda:11.0.3-devel-ubuntu20.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_1
       image: nvidia/cuda:11.1.1-devel-ubuntu20.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_2
       image: nvidia/cuda:11.2.0-devel-ubuntu20.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_3
       image: nvidia/cuda:11.3.0-devel-ubuntu20.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_4
       image: nvidia/cuda:11.4.0-devel-ubuntu20.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_5
       image: nvidia/cuda:11.5.0-devel-ubuntu20.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda_11_6
       image: nvidia/cuda:11.6.0-devel-ubuntu20.04
-      options: $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_GPU)
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:1
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: centos8_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:1
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu16_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:1
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu18_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:1
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
     - container: ubuntu20_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:1
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB_GPU)
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
 
 stages:
   - stage: Codestyle

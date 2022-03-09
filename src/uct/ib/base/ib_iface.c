@@ -1018,6 +1018,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
+    char message[128];
 #if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
 
@@ -1033,12 +1034,8 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     if (cq == NULL) {
-        ucs_string_buffer_appendf(&msg, "ibv_create_cq(cqe=%d) failed: %m",
-                                  cq_size);
-        if (errno == ENOMEM) {
-            ucs_sys_check_memlock_limit_append_msg(&msg);
-        }
-        ucs_error("%s", ucs_string_buffer_cstr(&msg));
+        ucs_snprintf_safe(message, sizeof(message), "ibv_create_cq(cqe=%d)", cq_size);
+        uct_ib_mem_lock_limit_msg(message, errno);
         return UCS_ERR_IO_ERROR;
     }
 

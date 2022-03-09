@@ -887,12 +887,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        ucs_string_buffer_appendf(&msg, "ibv_create_cq() failed: %m");
-        if (errno == ENOMEM) {
-            ucs_sys_check_memlock_limit_append_msg(&msg);
-        }
-
-        ucs_error("%s", ucs_string_buffer_cstr(&msg));
+        uct_ib_mem_lock_limit_msg("ibv_create_cq()", errno);
         status = UCS_ERR_IO_ERROR;
         goto err_cq;
     }
