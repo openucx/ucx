@@ -88,8 +88,8 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (cq == NULL) {
-        ucs_snprintf_safe(message, sizeof(message),
-                          "mlx5dv_create_cq(cqe=%d)", cq_attr.cqe);
+        ucs_snprintf_safe(message, sizeof(message), "mlx5dv_create_cq(cqe=%d)",
+                          cq_attr.cqe);
         uct_ib_mem_lock_limit_msg(message, errno);
         return UCS_ERR_IO_ERROR;
     }

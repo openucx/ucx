@@ -244,7 +244,7 @@ void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno)
         if ((status == UCS_OK) && (memlock_limit != SIZE_MAX)) {
             ucs_error("%s failed: %s. Please set max locked memory "
                       "(ulimit -l) to 'unlimited' (current: %llu kbytes)",
-                      message, strerror(sys_errno), memlock_limit/UCS_KBYTE);
+                      message, strerror(sys_errno), memlock_limit / UCS_KBYTE);
             return;
         }
     }

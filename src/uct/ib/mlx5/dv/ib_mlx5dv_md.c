@@ -891,8 +891,8 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        ucs_snprintf_safe(message, sizeof(message),
-                          "%s: ibv_create_cq()", uct_ib_device_name(dev));
+        ucs_snprintf_safe(message, sizeof(message), "%s: ibv_create_cq()",
+                          uct_ib_device_name(dev));
         uct_ib_mem_lock_limit_msg(message, errno);
         status = UCS_ERR_IO_ERROR;
         goto out_dealloc_pd;

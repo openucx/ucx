@@ -1033,7 +1033,8 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     if (cq == NULL) {
-        ucs_snprintf_safe(message, sizeof(message), "ibv_create_cq(cqe=%d)", cq_size);
+        ucs_snprintf_safe(message, sizeof(message), "ibv_create_cq(cqe=%d)",
+                          cq_size);
         uct_ib_mem_lock_limit_msg(message, errno);
         return UCS_ERR_IO_ERROR;
     }
