@@ -58,3 +58,7 @@ libucm_la_SOURCES += \
 noinst_HEADERS += \
     ptmalloc286/malloc-2.8.6.h
 endif
+
+PKG_CONFIG_NAME=ucm
+
+include $(top_srcdir)/config/module-pkg-config.am

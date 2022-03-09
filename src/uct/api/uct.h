@@ -540,11 +540,19 @@ enum uct_progress_types {
  * @brief Flags for active message send operation.
  */
 enum uct_msg_flags {
-    UCT_SEND_FLAG_SIGNALED = UCS_BIT(0) /**< Trigger @ref UCT_EVENT_RECV_SIG
-                                             event on remote side. Make best
-                                             effort attempt to avoid triggering
-                                             @ref UCT_EVENT_RECV event.
-                                             Ignored if not supported by interface. */
+    UCT_SEND_FLAG_SIGNALED   = UCS_BIT(0), /**< Trigger @ref UCT_EVENT_RECV_SIG
+                                                event on remote side. Make best
+                                                effort attempt to avoid
+                                                triggering @ref UCT_EVENT_RECV
+                                                event. Ignored if not supported
+                                                by interface. */
+    UCT_SEND_FLAG_PEER_CHECK = UCS_BIT(1)  /**< Forces checking connectivity to
+                                                a peer. If the connection is
+                                                not alive, an error callback
+                                                will be invoked. If the flag is
+                                                not set, there is no guarantee
+                                                that a connectivity error could
+                                                be detected.  */
 };
 
 

@@ -29,6 +29,7 @@
 #define UCS_LOG_METADATA_FMT    "%17s:%-4u %-4s %-5s %*s"
 #define UCS_LOG_PROC_DATA_FMT   "[%s:%-5d:%s]"
 
+#define UCS_LOG_COMPACT_FMT     UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT "  "
 #define UCS_LOG_SHORT_FMT       UCS_LOG_TIME_FMT " [%s] " UCS_LOG_METADATA_FMT "%s\n"
 #define UCS_LOG_FMT             UCS_LOG_TIME_FMT " " UCS_LOG_PROC_DATA_FMT " " \
                                 UCS_LOG_METADATA_FMT "%s\n"
@@ -41,6 +42,9 @@
 
 #define UCS_LOG_PROC_DATA_ARG() \
     ucs_log_hostname, ucs_log_pid, ucs_log_get_thread_name()
+
+#define UCS_LOG_COMPACT_ARG(_tv)\
+    UCS_LOG_TIME_ARG(_tv), UCS_LOG_PROC_DATA_ARG()
 
 #define UCS_LOG_SHORT_ARG(_short_file, _line, _level, _comp_conf, _tv, \
                           _message) \
@@ -200,16 +204,39 @@ static void ucs_log_handle_file_max_size(int log_entry_len)
                            &next_token, NULL);
 }
 
-static void ucs_log_print(size_t buffer_size, const char *short_file, int line,
+void ucs_log_print_compact(const char *str)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+
+    if (RUNNING_ON_VALGRIND) {
+        VALGRIND_PRINTF(UCS_LOG_TIME_FMT " %s\n", UCS_LOG_TIME_ARG(&tv), str);
+    } else if (ucs_log_initialized) {
+        if (ucs_log_file_close) { /* non-stdout/stderr */
+            ucs_log_handle_file_max_size(strlen(str) + 1);
+        }
+
+        fprintf(ucs_log_file, UCS_LOG_COMPACT_FMT " %s\n",
+                UCS_LOG_COMPACT_ARG(&tv), str);
+    } else {
+        fprintf(stdout, UCS_LOG_COMPACT_FMT " %s\n", UCS_LOG_COMPACT_ARG(&tv),
+                str);
+    }
+}
+
+static void ucs_log_print(const char *short_file, int line,
                           ucs_log_level_t level,
                           const ucs_log_component_config_t *comp_conf,
                           const struct timeval *tv, const char *message)
 {
-    char *log_buf;
+    size_t buffer_size;
     int log_entry_len;
+    char *log_buf;
 
     if (RUNNING_ON_VALGRIND) {
-        log_buf = ucs_alloca(buffer_size + 1);
+        buffer_size = ucs_log_get_buffer_size();
+        log_buf     = ucs_alloca(buffer_size + 1);
         snprintf(log_buf, buffer_size, UCS_LOG_SHORT_FMT,
                 UCS_LOG_SHORT_ARG(short_file, line, level,
                                   comp_conf, tv, message));
@@ -285,8 +312,7 @@ ucs_log_default_handler(const char *file, unsigned line, const char *function,
 
         log_line = strtok_r(buf, "\n", &saveptr);
         while (log_line != NULL) {
-            ucs_log_print(buffer_size, short_file, line, level, comp_conf, &tv,
-                          log_line);
+            ucs_log_print(short_file, line, level, comp_conf, &tv, log_line);
             log_line = strtok_r(NULL, "\n", &saveptr);
         }
     }

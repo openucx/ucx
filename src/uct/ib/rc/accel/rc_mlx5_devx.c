@@ -356,7 +356,7 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, remote_qpn, dest_qp_num);
     if (uct_ib_iface_is_roce(&iface->super.super)) {
         status = uct_ib_iface_create_ah(&iface->super.super, ah_attr,
-                                        "RC DevX QP connect", &ah);
+                                        "RC DEVX QP connect", &ah);
         if (status != UCS_OK) {
             return status;
         }

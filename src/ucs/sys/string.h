@@ -339,6 +339,18 @@ char* ucs_string_split(char *str, const char *delim, int count, ...);
 extern const char *ucs_memunits_suffixes[];
 
 
+/**
+ * Checks if a string is empty.
+ *
+ * @param str String to check.
+ *
+ * @return Whether @str is an empty string.
+ */
+static inline int ucs_string_is_empty(const char *str)
+{
+    return *str == '\0';
+}
+
 END_C_DECLS
 
 #endif

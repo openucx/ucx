@@ -5,7 +5,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = vfs/sock . vfs/fuse
+SUBDIRS = vfs/sock . vfs/fuse signal
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 lib_LTLIBRARIES     = libucs.la
@@ -215,6 +215,10 @@ all-local: $(objdir)/$(modulesubdir)
 
 $(objdir)/$(modulesubdir): $(lib_LTLIBRARIES)
 	$(AM_V_at)$(LN_RS) -fn $(localmoduledir) $(objdir)/$(modulesubdir)
+
+PKG_CONFIG_NAME=ucs
+
+include $(top_srcdir)/config/module-pkg-config.am
 
 #TODO	stats/stats_dump.c
 #TODO	stats/stats_reader.c

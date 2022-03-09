@@ -600,11 +600,11 @@ void ucp_ep_config_lane_info_str(ucp_worker_h worker,
                                  ucp_rsc_index_t aux_rsc_index,
                                  ucs_string_buffer_t *buf);
 
-void ucp_ep_destroy_base(ucp_ep_h ep);
+ucs_status_t ucp_ep_create_base(ucp_worker_h worker, unsigned ep_init_flags,
+                                const char *peer_name, const char *message,
+                                ucp_ep_h *ep_p);
 
-ucs_status_t ucp_worker_create_ep(ucp_worker_h worker, unsigned ep_init_flags,
-                                  const char *peer_name, const char *message,
-                                  ucp_ep_h *ep_p);
+void ucp_ep_destroy_base(ucp_ep_h ep);
 
 void ucp_ep_delete(ucp_ep_h ep);
 
@@ -613,6 +613,10 @@ void ucp_ep_flush_state_reset(ucp_ep_h ep);
 void ucp_ep_flush_state_invalidate(ucp_ep_h ep);
 
 void ucp_ep_release_id(ucp_ep_h ep);
+
+ucs_status_t
+ucp_ep_config_err_mode_check_mismatch(ucp_ep_h ep,
+                                      ucp_err_handling_mode_t err_mode);
 
 ucs_status_t ucp_ep_init_create_wireup(ucp_ep_h ep, unsigned ep_init_flags,
                                        ucp_wireup_ep_t **wireup_ep);

@@ -487,7 +487,7 @@ uct_ib_mlx5_devx_check_odp(uct_ib_mlx5_md_t *md,
     int ret;
 
     if (md_config->devx_objs & UCS_BIT(UCT_IB_DEVX_OBJ_RCQP)) {
-        ucs_debug("%s: disable ODP because it's not supported for DevX QP",
+        ucs_debug("%s: disable ODP because it's not supported for DEVX QP",
                   uct_ib_device_name(&md->super.dev));
         goto no_odp;
     }
@@ -626,12 +626,14 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
     if (!mlx5dv_is_supported(ibv_device)) {
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
     }
 #endif
 
     if (md_config->devx == UCS_NO) {
-        return UCS_ERR_UNSUPPORTED;
+        status = UCS_ERR_UNSUPPORTED;
+        goto err;
     }
 
     ctx = uct_ib_mlx5_devx_open_device(ibv_device);
@@ -819,6 +821,8 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         goto err_release_dbrec;
     }
 
+    ucs_debug("%s: opened DEVX md", ibv_get_device_name(ibv_device));
+
     dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->flags  |= UCT_IB_MLX5_MD_FLAG_DEVX;
     md->flags  |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
@@ -832,6 +836,7 @@ err_free:
 err_free_context:
     ibv_close_device(ctx);
 err:
+    ucs_debug("%s: DEVX is not supported", ibv_get_device_name(ibv_device));
     return status;
 }
 
@@ -876,29 +881,31 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     struct ibv_cq *cq;
     struct ibv_qp *qp;
     int ret;
-
-    ucs_debug("checking for DC support on %s", uct_ib_device_name(dev));
+    char message[128];
 
     pd = ibv_alloc_pd(ctx);
     if (pd == NULL) {
-        ucs_error("ibv_alloc_pd() failed: %m");
-        return UCS_ERR_IO_ERROR;
+        ucs_error("%s: ibv_alloc_pd() failed: %m", uct_ib_device_name(dev));
+        status = UCS_ERR_IO_ERROR;
+        goto out;
     }
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
-        uct_ib_mem_lock_limit_msg("ibv_create_cq()", errno);
+        ucs_snprintf_safe(message, sizeof(message),
+                          "%s: ibv_create_cq()", uct_ib_device_name(dev));
+        uct_ib_mem_lock_limit_msg(message, errno);
         status = UCS_ERR_IO_ERROR;
-        goto err_cq;
+        goto out_dealloc_pd;
     }
 
     srq_attr.attr.max_sge   = 1;
     srq_attr.attr.max_wr    = 1;
     srq = ibv_create_srq(pd, &srq_attr);
     if (srq == NULL) {
-        ucs_error("ibv_create_srq() failed: %m");
+        ucs_error("%s: ibv_create_srq() failed: %m", uct_ib_device_name(dev));
         status = UCS_ERR_IO_ERROR;
-        goto err_srq;
+        goto out_destroy_cq;
     }
 
     qp_attr.send_cq              = cq;
@@ -915,8 +922,10 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     /* create DCT qp successful means DC is supported */
     qp = mlx5dv_create_qp(ctx, &qp_attr, &dv_attr);
     if (qp == NULL) {
-        ucs_debug("failed to create DCT on %s: %m", uct_ib_device_name(dev));
-        goto err_qp;
+        ucs_debug("%s: mlx5dv_create_qp(DCT) failed: %m",
+                  uct_ib_device_name(dev));
+        status = UCS_OK;
+        goto out_destroy_srq;
     }
 
     attr.qp_state        = IBV_QPS_INIT;
@@ -931,7 +940,8 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     if (ret != 0) {
         ucs_debug("failed to ibv_modify_qp(DCT, INIT) on %s: %m",
                   uct_ib_device_name(dev));
-        goto err;
+        status = UCS_OK;
+        goto out_destroy_qp;
     }
 
     /* always set global address parameters, in case the port is RoCE or SRIOV */
@@ -950,23 +960,30 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
                                    IBV_QP_AV |
                                    IBV_QP_PATH_MTU);
 
-    if (ret == 0) {
-        ucs_debug("DC is supported on %s", uct_ib_device_name(dev));
-        dev->flags |= UCT_IB_DEVICE_FLAG_DC;
-    } else {
-        ucs_debug("failed to ibv_modify_qp(DCT, RTR) on %s: %m",
+    if (ret != 0) {
+        ucs_debug("%s: failed to ibv_modify_qp(DCT, RTR): %m",
                   uct_ib_device_name(dev));
+        status = UCS_OK;
+        goto out_destroy_qp;
     }
 
-err:
+    dev->flags |= UCT_IB_DEVICE_FLAG_DC;
+    status      = UCS_OK;
+
+out_destroy_qp:
     uct_ib_destroy_qp(qp);
-err_qp:
+out_destroy_srq:
     uct_ib_destroy_srq(srq);
-err_srq:
+out_destroy_cq:
     ibv_destroy_cq(cq);
-err_cq:
+out_dealloc_pd:
     ibv_dealloc_pd(pd);
+out:
 #endif
+    if (status == UCS_OK) {
+        ucs_debug("%s: DC %s supported", uct_ib_device_name(dev),
+                  (dev->flags & UCT_IB_DEVICE_FLAG_DC) ? "is" : "is not");
+    }
     return status;
 }
 

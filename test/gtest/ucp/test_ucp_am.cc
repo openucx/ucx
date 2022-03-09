@@ -800,6 +800,19 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 
 class test_ucp_am_nbx_closed_ep : public test_ucp_am_nbx {
+public:
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_AM_SEND_FLAG_REPLY, "reply");
+    }
+
+    virtual unsigned get_send_flag()
+    {
+        return get_variant_value(1);
+    }
+
 protected:
     virtual ucp_ep_params_t get_ep_params()
     {
@@ -811,12 +824,11 @@ protected:
         return ep_params;
     }
 
-    void test_recv_on_closed_ep(size_t size, unsigned flags = 0,
-                                bool poke_rx_progress = false,
+    void test_recv_on_closed_ep(size_t size, bool poke_rx_progress = false,
                                 bool rx_expected = false)
     {
         skip_loopback();
-        test_am_send_recv(0, max_am_hdr()); // warmup wireup
+        test_am_send_recv(0, 0); // warmup wireup
 
         m_am_received = false;
         std::vector<char> sbuf(size, 'd');
@@ -824,7 +836,7 @@ protected:
 
         set_am_data_handler(receiver(), TEST_AM_NBX_ID, am_rx_check_cb, this);
 
-        ucs_status_ptr_t sreq = send_am(sdt_desc, flags);
+        ucs_status_ptr_t sreq = send_am(sdt_desc, get_send_flag());
 
         sender().progress();
         if (poke_rx_progress) {
@@ -862,36 +874,25 @@ protected:
 
 UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_short_am_on_closed_ep, "RNDV_THRESH=inf")
 {
-    // Single fragment message sent without REPLY flag is expected
-    // to be received even if remote side closes its ep
-    test_recv_on_closed_ep(8, 0, false, true);
+    // Single fragment message sent:
+    // - without REPLY flag is expected to be received even if remote side
+    //   closes its ep.
+    // - with REPLY flag is expected to be dropped on the receiver side, when
+    //   its ep is closed.
+    test_recv_on_closed_ep(8, false,
+                           !(get_send_flag() & UCP_AM_SEND_FLAG_REPLY));
 }
 
 // All the following type of AM messages are expected to be dropped on the
 // receiver side, when its ep is closed
-UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_short_reply_am_on_closed_ep, "RNDV_THRESH=inf")
-{
-    test_recv_on_closed_ep(8, UCP_AM_SEND_FLAG_REPLY);
-}
-
 UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_long_am_on_closed_ep, "RNDV_THRESH=inf")
 {
-    test_recv_on_closed_ep(64 * UCS_KBYTE, 0, true);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_long_reply_am_on_closed_ep, "RNDV_THRESH=inf")
-{
-    test_recv_on_closed_ep(64 * UCS_KBYTE, UCP_AM_SEND_FLAG_REPLY, true);
+    test_recv_on_closed_ep(64 * UCS_KBYTE, true);
 }
 
 UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_rts_am_on_closed_ep, "RNDV_THRESH=32K")
 {
-    test_recv_on_closed_ep(64 * UCS_KBYTE, 0);
-}
-
-UCS_TEST_P(test_ucp_am_nbx_closed_ep, rx_rts_reply_am_on_closed_ep, "RNDV_THRESH=32K")
-{
-    test_recv_on_closed_ep(64 * UCS_KBYTE, UCP_AM_SEND_FLAG_REPLY);
+    test_recv_on_closed_ep(64 * UCS_KBYTE);
 }
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_closed_ep)
@@ -1014,7 +1015,7 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, single_zcopy, "ZCOPY_THRESH=0")
     test_data_release(fragment_size() / 2);
 }
 
-UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_eager_data_release, multi, enable_proto())
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_bcopy, "ZCOPY_THRESH=inf")
 {
     test_data_release(fragment_size() * 2);
 }
@@ -1076,6 +1077,9 @@ UCS_TEST_P(test_ucp_am_nbx_align, multi)
 {
     test_am_send_recv(fragment_size() * 5, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
 }
+
+UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_align)
+
 
 class test_ucp_am_nbx_seg_size : public test_ucp_am_nbx {
 public:

@@ -373,7 +373,7 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
     }
 
     if (context->rcache == NULL) {
-        memh = ucs_calloc(1, sizeof(ucp_mem_h) +
+        memh = ucs_calloc(1, sizeof(*memh) +
                           (sizeof(uct_mem_h) * context->num_mds), "ucp rcache");
         if (memh == NULL) {
             return UCS_ERR_NO_MEMORY;

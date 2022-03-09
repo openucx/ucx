@@ -1,0 +1,16 @@
+# host -> host
+put_lat_HH   -t ucp_put_lat
+put_bw_HH    -t ucp_put_bw
+get_HH       -t ucp_get
+# cuda -> cuda
+put_lat_DD   -t ucp_put_lat -m cuda,cuda
+put_bw_DD    -t ucp_put_bw  -m cuda,cuda
+get_DD       -t ucp_get     -m cuda,cuda
+# host -> cuda
+put_lat_HD   -t ucp_put_lat -m host,cuda
+put_bw_HD    -t ucp_put_bw  -m host,cuda
+get_HD       -t ucp_get     -m host,cuda
+# cuda -> host
+put_lat_DH   -t ucp_put_lat -m cuda,host
+put_bw_DH    -t ucp_put_bw  -m cuda,host
+get_DH       -t ucp_get     -m cuda,host

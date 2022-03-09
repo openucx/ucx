@@ -75,3 +75,7 @@ libuct_la_SOURCES = \
 	tcp/tcp_sockcm.c \
 	tcp/tcp_listener.c \
 	tcp/tcp_sockcm_ep.c
+
+PKG_CONFIG_NAME=uct
+
+include $(top_srcdir)/config/module-pkg-config.am

@@ -314,6 +314,74 @@ to be loaded on the system.
 > **NOTE:** In some cases if the RDMA network device and the GPU are not on
 the same NUMA node, such zero-copy transfer is inefficient.
 
-
-
+---
 <br/>
+
+## Introspection
+
+### Protocol selection
+
+#### How can I tell which protocols and transports are being used for communication?
+  - Set `UCX_LOG_LEVEL=info` to print basic information about transports and devices:
+    ```console
+     $ mpirun -x UCX_LOG_LEVEL=info -np 2 --map-by node osu_bw D D
+     [1645203303.393917] [host1:42:0]     ucp_context.c:1782 UCX  INFO  UCP version is 1.13 (release 0)
+     [1645203303.485011] [host2:43:0]     ucp_context.c:1782 UCX  INFO  UCP version is 1.13 (release 0)
+     [1645203303.701062] [host1:42:0]          parser.c:1918 UCX  INFO  UCX_* env variable: UCX_LOG_LEVEL=info
+     [1645203303.758427] [host2:43:0]          parser.c:1918 UCX  INFO  UCX_* env variable: UCX_LOG_LEVEL=info
+     [1645203303.759862] [host2:43:0]      ucp_worker.c:1877 UCX  INFO  ep_cfg[2]: tag(self/memory0 knem/memory cuda_copy/cuda rc_mlx5/mlx5_0:1)
+     [1645203303.760167] [host1:42:0]      ucp_worker.c:1877 UCX  INFO  ep_cfg[2]: tag(self/memory0 knem/memory cuda_copy/cuda rc_mlx5/mlx5_0:1)
+     # MPI_Init() took 500.788 msec
+     # OSU MPI-CUDA Bandwidth Test v5.6.2
+     # Send Buffer on DEVICE (D) and Receive Buffer on DEVICE (D)
+     # Size    Bandwidth (MB/s)
+     [1645203303.805848] [host2:43:0]      ucp_worker.c:1877 UCX  INFO  ep_cfg[3]: tag(rc_mlx5/mlx5_0:1)
+     [1645203303.873362] [host1:42:a]      ucp_worker.c:1877 UCX  INFO  ep_cfg[3]: tag(rc_mlx5/mlx5_0:1)
+     ...
+     ```
+
+  - When using protocols v2, set `UCX_PROTO_INFO=y` for detailed information:
+     ```console
+     $ mpirun -x UCX_PROTO_ENABLE=y -x UCX_PROTO_INFO=y -np 2 --map-by node osu_bw D D
+     [1645027038.617078] [host1:42:0]   +---------------+---------------------------------------------------------------------------------------------------+
+     [1645027038.617101] [host1:42:0]   | mpi ep_cfg[2] | tagged message by ucp_tag_send*() from host memory                                                |
+     [1645027038.617104] [host1:42:0]   +---------------+--------------------------------------------------+------------------------------------------------+
+     [1645027038.617107] [host1:42:0]   |       0..8184 | eager short                                      | self/memory0                                   |
+     [1645027038.617110] [host1:42:0]   |    8185..9806 | eager copy-in copy-out                           | self/memory0                                   |
+     [1645027038.617112] [host1:42:0]   |     9807..inf | (?) rendezvous zero-copy flushed write to remote | 55% on knem/memory and 45% on rc_mlx5/mlx5_0:1 |
+     [1645027038.617115] [host1:42:0]   +---------------+--------------------------------------------------+------------------------------------------------+
+     [1645027038.617307] [host2:43:0]   +---------------+---------------------------------------------------------------------------------------------------+
+     [1645027038.617337] [host2:43:0]   | mpi ep_cfg[2] | tagged message by ucp_tag_send*() from host memory                                                |
+     [1645027038.617341] [host2:43:0]   +---------------+--------------------------------------------------+------------------------------------------------+
+     [1645027038.617344] [host2:43:0]   |       0..8184 | eager short                                      | self/memory0                                   |
+     [1645027038.617348] [host2:43:0]   |    8185..9806 | eager copy-in copy-out                           | self/memory0                                   |
+     [1645027038.617351] [host2:43:0]   |     9807..inf | (?) rendezvous zero-copy flushed write to remote | 55% on knem/memory and 45% on rc_mlx5/mlx5_0:1 |
+     [1645027038.617354] [host2:43:0]   +---------------+--------------------------------------------------+------------------------------------------------+
+     # MPI_Init() took 1479.255 msec
+     # OSU MPI-CUDA Bandwidth Test v5.6.2
+     # Size    Bandwidth (MB/s)
+     [1645027038.674035] [host2:43:0]   +---------------+--------------------------------------------------------------+
+     [1645027038.674043] [host2:43:0]   | mpi ep_cfg[3] | tagged message by ucp_tag_send*() from host memory           |
+     [1645027038.674047] [host2:43:0]   +---------------+-------------------------------------------+------------------+
+     [1645027038.674049] [host2:43:0]   |       0..2007 | eager short                               | rc_mlx5/mlx5_0:1 |
+     [1645027038.674052] [host2:43:0]   |    2008..8246 | eager zero-copy copy-out                  | rc_mlx5/mlx5_0:1 |
+     [1645027038.674055] [host2:43:0]   |   8247..17297 | eager zero-copy copy-out                  | rc_mlx5/mlx5_0:1 |
+     [1645027038.674058] [host2:43:0]   |    17298..inf | (?) rendezvous zero-copy read from remote | rc_mlx5/mlx5_0:1 |
+     [1645027038.674060] [host2:43:0]   +---------------+-------------------------------------------+------------------+
+     [1645027038.680982] [host2:43:0]   +---------------+------------------------------------------------------------------------------------+
+     [1645027038.680993] [host2:43:0]   | mpi ep_cfg[3] | tagged message by ucp_tag_send*() from cuda/GPU0                                   |
+     [1645027038.680996] [host2:43:0]   +---------------+-----------------------------------------------------------------+------------------+
+     [1645027038.680999] [host2:43:0]   |       0..8246 | eager zero-copy copy-out                                        | rc_mlx5/mlx5_0:1 |
+     [1645027038.681001] [host2:43:0]   |  8247..811555 | eager zero-copy copy-out                                        | rc_mlx5/mlx5_0:1 |
+     [1645027038.681004] [host2:43:0]   |   811556..inf | (?) rendezvous pipeline cuda_copy, fenced write to remote, cuda | rc_mlx5/mlx5_0:1 |
+     [1645027038.681007] [host2:43:0]   +---------------+-----------------------------------------------------------------+------------------+
+     [1645027038.693843] [host1:42:a]   +---------------+--------------------------------------------------------------+
+     [1645027038.693856] [host1:42:a]   | mpi ep_cfg[3] | tagged message by ucp_tag_send*() from host memory           |
+     [1645027038.693858] [host1:42:a]   +---------------+-------------------------------------------+------------------+
+     [1645027038.693861] [host1:42:a]   |       0..2007 | eager short                               | rc_mlx5/mlx5_0:1 |
+     [1645027038.693863] [host1:42:a]   |    2008..8246 | eager zero-copy copy-out                  | rc_mlx5/mlx5_0:1 |
+     [1645027038.693865] [host1:42:a]   |   8247..17297 | eager zero-copy copy-out                  | rc_mlx5/mlx5_0:1 |
+     [1645027038.693867] [host1:42:a]   |    17298..inf | (?) rendezvous zero-copy read from remote | rc_mlx5/mlx5_0:1 |
+     [1645027038.693869] [host1:42:a]   +---------------+-------------------------------------------+------------------+
+     ...
+     ```

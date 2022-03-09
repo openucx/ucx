@@ -40,7 +40,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-#include <signal.h>
 #include <unistd.h>
 #include <inttypes.h>
 #include <limits.h>

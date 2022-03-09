@@ -182,11 +182,8 @@ void uct_p2p_test::test_xfer_multi_mem_type(send_func_t send, size_t min_length,
     /* Trim at 4.1 GB */
     max_length = ucs_min(max_length, (size_t)(4.1 * (double)UCS_GBYTE));
 
-    /* Trim at max. phys memory */
-    max_length = ucs_min(max_length, ucs_get_phys_mem_size() / 8);
-
-    /* Trim when short of available memory */
-    max_length = ucs_min(max_length, ucs_get_memfree_size() / 4);
+    /* Trim by memory size */
+    max_length = ucs::limit_buffer_size(max_length);
 
     /* For large size, slow down if needed */
     if (max_length > UCS_MBYTE) {

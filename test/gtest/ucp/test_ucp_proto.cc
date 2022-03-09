@@ -118,7 +118,7 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     select_param.padding[1] = 0;
 
     ucs_string_buffer_init(&strb);
-    ucp_proto_select_param_str(&select_param, &strb);
+    ucp_proto_select_param_str(&select_param, ucp_operation_names, &strb);
     UCS_TEST_MESSAGE << ucs_string_buffer_cstr(&strb);
     ucs_string_buffer_cleanup(&strb);
 
@@ -126,8 +126,11 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     ucp_worker_cfg_index_t ep_cfg_index   = sender().ep()->cfg_index;
     ucp_worker_cfg_index_t rkey_cfg_index = UCP_WORKER_CFG_INDEX_NULL;
 
-    ucp_proto_select_lookup(worker, &worker->ep_config[ep_cfg_index].proto_select,
-                            ep_cfg_index, rkey_cfg_index, &select_param, 0);
+    auto select_elem = ucp_proto_select_lookup(
+            worker, &worker->ep_config[ep_cfg_index].proto_select, ep_cfg_index,
+            rkey_cfg_index, &select_param, 0);
+    EXPECT_NE(nullptr, select_elem);
+
     ucp_ep_print_info(sender().ep(), stdout);
 }
 

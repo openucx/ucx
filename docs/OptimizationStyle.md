@@ -53,7 +53,7 @@ some level of understanding of compiler optimizations.
     time it is used) - larger scopes causes spilling more variables to
     the stack.
   - Use benchmarks (such as ucx_perftest) and performance analysis 
-    tools (such as perf) to make sure changes to the fast patch do not 
+    tools (such as perf) to make sure changes to the fast path do not 
     impact latency and message rate.
 
 * Pending operation flows and large messages are not considered fast 

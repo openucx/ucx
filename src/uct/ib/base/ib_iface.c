@@ -1197,7 +1197,7 @@ ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
                                         &iface->gid_info);
 }
 
-ucs_status_t
+static void
 uct_ib_iface_init_roce_mask_info(uct_ib_iface_t *iface, size_t md_config_index)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
@@ -1233,14 +1233,12 @@ uct_ib_iface_init_roce_mask_info(uct_ib_iface_t *iface, size_t md_config_index)
     iface->addr_prefix_bits = (addr_size * 8) -
                               ucs_count_ptr_trailing_zero_bits(mask_addr,
                                                                addr_size * 8);
-
-    return UCS_OK;
+    return;
 
 mask_info_failed:
     ucs_debug("failed to detect RoCE subnet mask prefix on "UCT_IB_IFACE_FMT
               " - ignoring mask", UCT_IB_IFACE_ARG(iface));
     iface->addr_prefix_bits = 0;
-    return status;
 }
 
 static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
@@ -1259,10 +1257,7 @@ static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
 
         if ((gid_info->roce_info.ver == UCT_IB_DEVICE_ROCE_V2) &&
             rocev2_use_netmask) {
-            status = uct_ib_iface_init_roce_mask_info(iface, md_config_index);
-            if (status != UCS_OK) {
-                goto out;
-            }
+            uct_ib_iface_init_roce_mask_info(iface, md_config_index);
         } else {
             iface->addr_prefix_bits = 0;
         }

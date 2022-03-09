@@ -25,11 +25,48 @@
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <string.h>
+#include <dlfcn.h>
 
 
 #define UCP_RSC_CONFIG_ALL    "all"
 
-ucp_am_handler_t ucp_am_handlers[UCP_AM_ID_LAST] = {{0, NULL, NULL}};
+#define UCP_AM_HANDLER_FOREACH(_macro) \
+    _macro(UCP_AM_ID_WIREUP) \
+    _macro(UCP_AM_ID_EAGER_ONLY) \
+    _macro(UCP_AM_ID_EAGER_FIRST) \
+    _macro(UCP_AM_ID_EAGER_MIDDLE) \
+    _macro(UCP_AM_ID_EAGER_SYNC_ONLY) \
+    _macro(UCP_AM_ID_EAGER_SYNC_FIRST) \
+    _macro(UCP_AM_ID_EAGER_SYNC_ACK) \
+    _macro(UCP_AM_ID_RNDV_RTS) \
+    _macro(UCP_AM_ID_RNDV_ATS) \
+    _macro(UCP_AM_ID_RNDV_RTR) \
+    _macro(UCP_AM_ID_RNDV_DATA) \
+    _macro(UCP_AM_ID_OFFLOAD_SYNC_ACK) \
+    _macro(UCP_AM_ID_STREAM_DATA) \
+    _macro(UCP_AM_ID_RNDV_ATP) \
+    _macro(UCP_AM_ID_PUT) \
+    _macro(UCP_AM_ID_GET_REQ) \
+    _macro(UCP_AM_ID_GET_REP) \
+    _macro(UCP_AM_ID_ATOMIC_REQ) \
+    _macro(UCP_AM_ID_ATOMIC_REP) \
+    _macro(UCP_AM_ID_CMPL) \
+    _macro(UCP_AM_ID_AM_SINGLE) \
+    _macro(UCP_AM_ID_AM_FIRST) \
+    _macro(UCP_AM_ID_AM_MIDDLE) \
+    _macro(UCP_AM_ID_AM_SINGLE_REPLY)
+
+#define UCP_AM_HANDLER_DECL(_id) extern ucp_am_handler_t ucp_am_handler_##_id;
+
+#define UCP_AM_HANDLER_ENTRY(_id) [_id] = &ucp_am_handler_##_id,
+
+
+/* Declare all am handlers */
+UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_DECL)
+
+ucp_am_handler_t *ucp_am_handlers[UCP_AM_ID_LAST] = {
+    UCP_AM_HANDLER_FOREACH(UCP_AM_HANDLER_ENTRY)
+};
 
 static const char *ucp_atomic_modes[] = {
     [UCP_ATOMIC_MODE_CPU]    = "cpu",
@@ -47,21 +84,6 @@ static const char *ucp_rndv_modes[] = {
     [UCP_RNDV_MODE_AM]           = "am",
     [UCP_RNDV_MODE_RKEY_PTR]     = "rkey_ptr",
     [UCP_RNDV_MODE_LAST]         = NULL,
-};
-
-const char *ucp_operation_names[] = {
-    [UCP_OP_ID_TAG_SEND]       = "tag_send",
-    [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
-    [UCP_OP_ID_AM_SEND]        = "am_send",
-    [UCP_OP_ID_PUT]            = "put",
-    [UCP_OP_ID_GET]            = "get",
-    [UCP_OP_ID_AMO_POST]       = "amo_post",
-    [UCP_OP_ID_AMO_FETCH]      = "amo_fetch",
-    [UCP_OP_ID_AMO_CSWAP]      = "amo_cswap",
-    [UCP_OP_ID_RNDV_SEND]      = "rndv_send",
-    [UCP_OP_ID_RNDV_RECV]      = "rndv_recv",
-    [UCP_OP_ID_RNDV_RECV_DROP] = "rndv_recv_drop",
-    [UCP_OP_ID_LAST]           = NULL
 };
 
 static size_t ucp_rndv_frag_default_sizes[] = {
@@ -417,10 +439,12 @@ static ucs_config_field_t ucp_config_table[] = {
   {"RCACHE_ENABLE", "try", "Use user space memory registration cache.",
    ucs_offsetof(ucp_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
 
+  {"PROTO_INFO", "n", "Enable printing protocols information.",
+   ucs_offsetof(ucp_config_t, ctx.proto_info), UCS_CONFIG_TYPE_BOOL},
+
    {NULL}
 };
-UCS_CONFIG_REGISTER_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t,
-                          &ucs_config_global_list)
+UCS_CONFIG_DECLARE_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
 
 static ucp_tl_alias_t ucp_tl_aliases[] = {
@@ -1772,27 +1796,50 @@ static void ucp_context_create_vfs(ucp_context_h context)
                             "memory_address");
 }
 
+static void
+ucp_version_check(unsigned api_major_version, unsigned api_minor_version)
+{
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
+    unsigned major_version, minor_version, release_number;
+    ucs_log_level_t log_level;
+    Dl_info dl_info;
+    int ret;
+
+    ucp_get_version(&major_version, &minor_version, &release_number);
+
+    if ((major_version == api_major_version) &&
+        (minor_version >= api_minor_version)) {
+        /* API version is compatible: same major, same or higher minor */
+        ucs_string_buffer_appendf(&strb, "Version %s",
+                                  ucp_get_version_string());
+        log_level = UCS_LOG_LEVEL_INFO;
+    } else {
+        ucs_string_buffer_appendf(
+                &strb,
+                "UCP API version is incompatible: required >= %d.%d, actual %s",
+                api_major_version, api_minor_version, ucp_get_version_string());
+        log_level = UCS_LOG_LEVEL_WARN;
+    }
+
+    if (ucs_log_is_enabled(log_level)) {
+        ret = dladdr(ucp_init_version, &dl_info);
+        if (ret != 0) {
+            ucs_string_buffer_appendf(&strb, " (loaded from %s)",
+                                      dl_info.dli_fname);
+        }
+        ucs_log(log_level, "%s", ucs_string_buffer_cstr(&strb));
+    }
+}
+
 ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_version,
                               const ucp_params_t *params, const ucp_config_t *config,
                               ucp_context_h *context_p)
 {
-    unsigned major_version, minor_version, release_number;
     ucp_config_t *dfl_config = NULL;
     ucp_context_t *context;
     ucs_status_t status;
 
-    ucp_get_version(&major_version, &minor_version, &release_number);
-
-    if ((api_major_version != major_version) ||
-        ((api_major_version == major_version) &&
-         (api_minor_version > minor_version))) {
-        ucs_warn("UCP version is incompatible, required: %d.%d, actual: %d.%d"
-                 " (release %d)", api_major_version, api_minor_version,
-                  major_version, minor_version, release_number);
-    } else {
-        ucs_info("UCP version is %d.%d (release %d)",
-                 major_version, minor_version, release_number);
-    }
+    ucp_version_check(api_major_version, api_minor_version);
 
     if (config == NULL) {
         status = ucp_config_read(NULL, NULL, &dfl_config);
@@ -2105,4 +2152,14 @@ void ucp_context_get_mem_access_tls(ucp_context_h context,
             UCS_BITMAP_SET(*tl_bitmap, tl_id);
         }
     }
+}
+
+UCS_F_CTOR void ucp_global_init(void)
+{
+    UCS_CONFIG_ADD_TABLE(ucp_config_table, &ucs_config_global_list);
+}
+
+UCS_F_DTOR static void ucp_global_cleanup(void)
+{
+    UCS_CONFIG_REMOVE_TABLE(ucp_config_table);
 }

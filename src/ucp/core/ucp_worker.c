@@ -164,18 +164,22 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
 
     ucs_trace_func("iface=%p is_proxy=%d", wiface->iface, is_proxy);
 
-    for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
+    for (am_id = UCP_AM_ID_FIRST; am_id < UCP_AM_ID_LAST; ++am_id) {
         if (!(wiface->attr.cap.flags & (UCT_IFACE_FLAG_AM_SHORT |
                                         UCT_IFACE_FLAG_AM_BCOPY |
                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
             continue;
         }
 
-        if (!(context->config.features & ucp_am_handlers[am_id].features)) {
+        if (ucp_am_handlers[am_id] == NULL) {
             continue;
         }
 
-        if (!(ucp_am_handlers[am_id].flags & UCT_CB_FLAG_ASYNC) &&
+        if (!(context->config.features & ucp_am_handlers[am_id]->features)) {
+            continue;
+        }
+
+        if (!(ucp_am_handlers[am_id]->flags & UCT_CB_FLAG_ASYNC) &&
             !(wiface->attr.cap.flags & UCT_IFACE_FLAG_CB_SYNC))
         {
             /* Do not register a sync callback on interface which does not
@@ -185,20 +189,20 @@ static void ucp_worker_set_am_handlers(ucp_worker_iface_t *wiface, int is_proxy)
             continue;
         }
 
-        if (is_proxy && (ucp_am_handlers[am_id].proxy_cb != NULL)) {
+        if (is_proxy && (ucp_am_handlers[am_id]->proxy_cb != NULL)) {
             /* we care only about sync active messages, and this also makes sure
              * the counter is not accessed from another thread.
              */
-            ucs_assert(!(ucp_am_handlers[am_id].flags & UCT_CB_FLAG_ASYNC));
+            ucs_assert(!(ucp_am_handlers[am_id]->flags & UCT_CB_FLAG_ASYNC));
             status = uct_iface_set_am_handler(wiface->iface, am_id,
-                                              ucp_am_handlers[am_id].proxy_cb,
+                                              ucp_am_handlers[am_id]->proxy_cb,
                                               wiface,
-                                              ucp_am_handlers[am_id].flags);
+                                              ucp_am_handlers[am_id]->flags);
         } else {
             status = uct_iface_set_am_handler(wiface->iface, am_id,
-                                              ucp_am_handlers[am_id].cb,
+                                              ucp_am_handlers[am_id]->cb,
                                               worker,
-                                              ucp_am_handlers[am_id].flags);
+                                              ucp_am_handlers[am_id]->flags);
         }
         if (status != UCS_OK) {
             ucs_fatal("failed to set active message handler id %d: %s", am_id,
@@ -231,8 +235,12 @@ static void ucp_worker_remove_am_handlers(ucp_worker_h worker)
                                         UCT_IFACE_FLAG_AM_ZCOPY))) {
             continue;
         }
-        for (am_id = 0; am_id < UCP_AM_ID_LAST; ++am_id) {
-            if (context->config.features & ucp_am_handlers[am_id].features) {
+        for (am_id = UCP_AM_ID_FIRST; am_id < UCP_AM_ID_LAST; ++am_id) {
+            if (ucp_am_handlers[am_id] == NULL) {
+                continue;
+            }
+
+            if (context->config.features & ucp_am_handlers[am_id]->features) {
                 (void)uct_iface_set_am_handler(wiface->iface,
                                                am_id, ucp_stub_am_handler,
                                                worker, UCT_CB_FLAG_ASYNC);
@@ -248,8 +256,8 @@ static void ucp_worker_am_tracer(void *arg, uct_am_trace_type_t type,
     ucp_worker_h worker = arg;
     ucp_am_tracer_t tracer;
 
-    if (id < UCP_AM_ID_LAST) {
-        tracer = ucp_am_handlers[id].tracer;
+    if ((id < UCP_AM_ID_LAST) && (id >= UCP_AM_ID_FIRST)) {
+        tracer = ucp_am_handlers[id]->tracer;
         if (tracer != NULL) {
             tracer(worker, type, id, data, length, buffer, max);
         }
@@ -1805,9 +1813,10 @@ ucp_worker_ep_config_short_init(ucp_worker_h worker, ucp_ep_config_t *ep_config,
  * A 'key' identifies an entry in the ep_config array. An entry holds the key and
  * additional configuration parameters and thresholds.
  */
-ucs_status_t
-ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
-                         int print_cfg, ucp_worker_cfg_index_t *cfg_index_p)
+ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
+                                      const ucp_ep_config_key_t *key,
+                                      unsigned ep_init_flags,
+                                      ucp_worker_cfg_index_t *cfg_index_p)
 {
     UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_context_h context = worker->context;
@@ -1845,6 +1854,13 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
 
     ++worker->ep_config_count;
 
+    if (ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL) {
+        /* Do not initialize short protocol thresholds for internal endpoints,
+         * and do not print their configuration
+         */
+        goto out;
+    }
+
     if (context->config.ext.proto_enable) {
         if (ucp_ep_config_key_has_tag_lane(key)) {
             tag_proto_flags = UCP_PROTO_FLAG_TAG_SHORT;
@@ -1865,13 +1881,10 @@ ucp_worker_get_ep_config(ucp_worker_h worker, const ucp_ep_config_key_t *key,
                                         UCP_FEATURE_AM, UCP_OP_ID_AM_SEND,
                                         UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
                                         &ep_config->am_u.max_eager_short);
-    }
-
-    if (print_cfg) {
+    } else {
         ucs_info("%s", ucp_worker_print_used_tls(key, context, ep_cfg_index,
                                                  &strb));
     }
-
 
 out:
     *cfg_index_p = ep_cfg_index;

@@ -236,6 +236,23 @@ static inline void uct_mm_ep_update_cached_tail(uct_mm_ep_t *ep)
     ep->cached_tail = ep->fifo_ctl->tail;
 }
 
+static UCS_F_ALWAYS_INLINE void uct_mm_ep_peer_check(uct_mm_ep_t *ep,
+                                                     unsigned flags)
+{
+    if (ucs_unlikely(flags & UCT_SEND_FLAG_PEER_CHECK)) {
+        uct_ep_keepalive_check(&ep->super.super, &ep->keepalive,
+                               ep->fifo_ctl->pid, 0, NULL);
+    }
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_mm_ep_no_resources_handle(uct_mm_ep_t *ep, unsigned flags)
+{
+    UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
+    uct_mm_ep_peer_check(ep, flags);
+    return UCS_ERR_NO_RESOURCE;
+}
+
 /* A common mm active message sending function.
  * The first parameter indicates the origin of the call.
  */
@@ -243,7 +260,7 @@ static UCS_F_ALWAYS_INLINE ssize_t uct_mm_ep_am_common_send(
         uct_mm_send_op_t send_op, uct_mm_ep_t *ep, uct_mm_iface_t *iface,
         uint8_t am_id, size_t length, uint64_t header, const void *payload,
         uct_pack_callback_t pack_cb, void *arg, const uct_iov_t *iov,
-        size_t iovcnt)
+        size_t iovcnt, unsigned flags)
 {
     uct_mm_fifo_element_t *elem;
     ucs_status_t status;
@@ -261,20 +278,17 @@ retry:
     if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
         if (!ucs_arbiter_group_is_empty(&ep->arb_group)) {
             /* pending isn't empty. don't send now to prevent out-of-order sending */
-            UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES, 1);
-            return UCS_ERR_NO_RESOURCE;
+            return uct_mm_ep_no_resources_handle(ep, flags);
         } else {
-            /* pending is empty */
-            /* update the local copy of the tail to its actual value on the remote peer */
+            /* pending is empty. update the local copy of the tail to its
+             * actual value on the remote peer */
             uct_mm_ep_update_cached_tail(ep);
             if (!UCT_MM_EP_IS_ABLE_TO_SEND(head, ep->cached_tail, iface->config.fifo_size)) {
                 ucs_arbiter_group_push_head_elem_always(&ep->arb_group,
                                                         &ep->arb_elem);
                 ucs_arbiter_group_schedule_nonempty(&iface->arbiter,
                                                     &ep->arb_group);
-                UCS_STATS_UPDATE_COUNTER(ep->super.stats, UCT_EP_STAT_NO_RES,
-                                         1);
-                return UCS_ERR_NO_RESOURCE;
+                return uct_mm_ep_no_resources_handle(ep, flags);
             }
         }
     }
@@ -348,6 +362,8 @@ retry:
         uct_mm_ep_signal_remote(ep);
     }
 
+    uct_mm_ep_peer_check(ep, flags);
+
     switch (send_op) {
     case UCT_MM_SEND_AM_SHORT:
     case UCT_MM_SEND_AM_SHORT_IOV:
@@ -371,7 +387,8 @@ ucs_status_t uct_mm_ep_am_short(uct_ep_h tl_ep, uint8_t id, uint64_t header,
 
     return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT, ep,
                                                   iface, id, length, header,
-                                                  payload, NULL, NULL, NULL, 0);
+                                                  payload, NULL, NULL, NULL, 0,
+                                                  0);
 }
 
 ucs_status_t uct_mm_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
@@ -387,7 +404,7 @@ ucs_status_t uct_mm_ep_am_short_iov(uct_ep_h tl_ep, uint8_t id,
 
     return (ucs_status_t)uct_mm_ep_am_common_send(UCT_MM_SEND_AM_SHORT_IOV, ep,
                                                   iface, id, 0, 0, NULL, NULL,
-                                                  NULL, iov, iovcnt);
+                                                  NULL, iov, iovcnt, 0);
 }
 
 ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_cb,
@@ -397,7 +414,7 @@ ssize_t uct_mm_ep_am_bcopy(uct_ep_h tl_ep, uint8_t id, uct_pack_callback_t pack_
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
     return uct_mm_ep_am_common_send(UCT_MM_SEND_AM_BCOPY, ep, iface, id, 0, 0,
-                                    NULL, pack_cb, arg, NULL, 0);
+                                    NULL, pack_cb, arg, NULL, 0, flags);
 }
 
 static inline int uct_mm_ep_has_tx_resources(uct_mm_ep_t *ep)
@@ -535,6 +552,8 @@ uct_mm_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp)
 {
     uct_mm_ep_t *ep = ucs_derived_of(tl_ep, uct_mm_ep_t);
 
-    return uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->fifo_ctl->pid,
-                                  flags, comp);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+    uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->fifo_ctl->pid, flags,
+                           comp);
+    return UCS_OK;
 }

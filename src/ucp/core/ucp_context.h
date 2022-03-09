@@ -130,6 +130,8 @@ typedef struct ucp_context_config {
     int                                    rkey_mpool_max_md;
     /** Worker address format version */
     ucp_object_version_t                   worker_addr_version;
+    /** Print protocols information */
+    int                                    proto_info;
 } ucp_context_config_t;
 
 
@@ -336,22 +338,31 @@ typedef struct ucp_tl_iface_atomic_flags {
 
 
 /*
- * Define UCP active message handler.
+ * Define UCP active message handler helper macro.
  */
-#define UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags) \
-    UCS_STATIC_INIT { \
-        ucp_am_handlers[_id].features = _features; \
-        ucp_am_handlers[_id].cb       = _cb; \
-        ucp_am_handlers[_id].tracer   = _tracer; \
-        ucp_am_handlers[_id].flags    = _flags; \
+#define _UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags, _proxy) \
+    ucp_am_handler_t ucp_am_handler_##_id  = { \
+        .features = _features, \
+        .cb       = _cb, \
+        .tracer   = _tracer, \
+        .flags    = _flags, \
+        .proxy_cb = _proxy \
     }
 
 
-/**
- * Defines a proxy handler which counts received messages on ucp_worker_iface_t
- * context. It's used to determine if there is activity on a transport interface.
+/*
+ * Define UCP active message handler.
  */
-#define UCP_DEFINE_AM_PROXY(_id) \
+#define UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags) \
+    _UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags, NULL)
+
+
+/**
+ * Defines UCP active message handler with proxy handler which counts received
+ * messages on ucp_worker_iface_t context. It's used to determine if there is
+ * activity on a transport interface.
+ */
+#define UCP_DEFINE_AM_WITH_PROXY(_features, _id, _cb, _tracer, _flags) \
     \
     static ucs_status_t \
     ucp_am_##_id##_counting_proxy(void *arg, void *data, size_t length, \
@@ -359,12 +370,11 @@ typedef struct ucp_tl_iface_atomic_flags {
     { \
         ucp_worker_iface_t *wiface = arg; \
         wiface->proxy_recv_count++; \
-        return ucp_am_handlers[_id].cb(wiface->worker, data, length, flags); \
+        return _cb(wiface->worker, data, length, flags); \
     } \
     \
-    UCS_STATIC_INIT { \
-        ucp_am_handlers[_id].proxy_cb = ucp_am_##_id##_counting_proxy; \
-    }
+    _UCP_DEFINE_AM(_features, _id, _cb, _tracer, _flags, \
+                   ucp_am_##_id##_counting_proxy)
 
 
 #define UCP_CHECK_PARAM_NON_NULL(_param, _status, _action) \
@@ -411,9 +421,8 @@ typedef struct ucp_tl_iface_atomic_flags {
     ucs_assert(ucp_memory_type_detect(_context, _buffer, _length) == (_mem_type))
 
 
-extern ucp_am_handler_t ucp_am_handlers[];
-extern const char      *ucp_feature_str[];
-extern const char  *ucp_operation_names[];
+extern ucp_am_handler_t *ucp_am_handlers[];
+extern const char       *ucp_feature_str[];
 
 
 void ucp_dump_payload(ucp_context_h context, char *buffer, size_t max,

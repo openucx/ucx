@@ -504,9 +504,7 @@ public:
 protected:
     void do_keepalive()
     {
-        ucs_status_t status = uct_ep_keepalive_check(m_entity->ep(0), m_ka(),
-                                                     m_pid, 0, NULL);
-        EXPECT_UCS_OK(status);
+        uct_ep_keepalive_check(m_entity->ep(0), m_ka(), m_pid, 0, NULL);
     }
 
     pid_t                m_pid;

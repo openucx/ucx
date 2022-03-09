@@ -97,43 +97,6 @@ static size_t ucp_proto_eager_bcopy_pack_middle(void *dest, void *arg)
     return sizeof(*hdr) + ucp_proto_multi_data_pack(pack_ctx, hdr + 1);
 }
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_proto_eager_bcopy_multi_common_send_func(
-        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
-        ucp_datatype_iter_t *next_iter, ucp_am_id_t am_id_first,
-        uct_pack_callback_t pack_cb_first, size_t hdr_size_first)
-{
-    ucp_ep_t *ep                        = req->send.ep;
-    ucp_proto_multi_pack_ctx_t pack_ctx = {
-        .req       = req,
-        .next_iter = next_iter
-    };
-    uct_pack_callback_t pack_cb;
-    ssize_t packed_size;
-    ucp_am_id_t am_id;
-    size_t hdr_size;
-
-    if (req->send.state.dt_iter.offset == 0) {
-        am_id    = am_id_first;
-        pack_cb  = pack_cb_first;
-        hdr_size = hdr_size_first;
-    } else {
-        am_id    = UCP_AM_ID_EAGER_MIDDLE;
-        pack_cb  = ucp_proto_eager_bcopy_pack_middle;
-        hdr_size = sizeof(ucp_eager_middle_hdr_t);
-    }
-    pack_ctx.max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
-
-    packed_size = uct_ep_am_bcopy(ep->uct_eps[lpriv->super.lane], am_id,
-                                  pack_cb, &pack_ctx, 0);
-    if (ucs_likely(packed_size >= 0)) {
-        ucs_assert(packed_size >= hdr_size);
-        return UCS_OK;
-    } else {
-        return (ucs_status_t)packed_size;
-    }
-}
-
 static ucs_status_t
 ucp_proto_eager_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
 {
@@ -148,7 +111,9 @@ ucp_proto_eager_bcopy_multi_send_func(ucp_request_t *req,
 {
     return ucp_proto_eager_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_EAGER_FIRST,
-            ucp_proto_eager_bcopy_pack_first, sizeof(ucp_eager_first_hdr_t));
+            ucp_proto_eager_bcopy_pack_first, sizeof(ucp_eager_first_hdr_t),
+            UCP_AM_ID_EAGER_MIDDLE, ucp_proto_eager_bcopy_pack_middle,
+            sizeof(ucp_eager_middle_hdr_t));
 }
 
 static ucs_status_t
@@ -201,8 +166,9 @@ ucp_proto_eager_sync_bcopy_multi_send_func(
 {
     return ucp_proto_eager_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_EAGER_SYNC_FIRST,
-            ucp_eager_sync_bcopy_pack_first,
-            sizeof(ucp_eager_sync_first_hdr_t));
+            ucp_eager_sync_bcopy_pack_first, sizeof(ucp_eager_sync_first_hdr_t),
+            UCP_AM_ID_EAGER_MIDDLE, ucp_proto_eager_bcopy_pack_middle,
+            sizeof(ucp_eager_middle_hdr_t));
 }
 
 void ucp_proto_eager_sync_ack_handler(ucp_worker_h worker,
