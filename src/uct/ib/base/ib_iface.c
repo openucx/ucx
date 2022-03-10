@@ -1018,6 +1018,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
     struct ibv_cq *cq;
     char message[128];
+    int cq_errno;
 #if HAVE_DECL_IBV_CREATE_CQ_EX
     struct ibv_cq_init_attr_ex cq_attr = {};
 
@@ -1033,9 +1034,10 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     }
 
     if (cq == NULL) {
+        cq_errno = errno;
         ucs_snprintf_safe(message, sizeof(message), "ibv_create_cq(cqe=%d)",
                           cq_size);
-        uct_ib_mem_lock_limit_msg(message, errno);
+        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
         return UCS_ERR_IO_ERROR;
     }
 

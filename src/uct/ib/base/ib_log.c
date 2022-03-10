@@ -234,7 +234,8 @@ static void uct_ib_dump_send_wr(uct_ib_iface_t *iface, struct ibv_qp *qp,
                             data_dump, max_sge, s, ends - s);
 }
 
-void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno)
+void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno,
+                               ucs_log_level_t level)
 {
     size_t memlock_limit;
     ucs_status_t status;
@@ -242,9 +243,10 @@ void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno)
     if (sys_errno == ENOMEM) {
         status = ucs_sys_get_memlock_rlimit(&memlock_limit);
         if ((status == UCS_OK) && (memlock_limit != SIZE_MAX)) {
-            ucs_error("%s failed: %s. Please set max locked memory "
-                      "(ulimit -l) to 'unlimited' (current: %llu kbytes)",
-                      message, strerror(sys_errno), memlock_limit / UCS_KBYTE);
+            ucs_log(level,
+                    "%s failed: %s. Please set max locked memory "
+                    "(ulimit -l) to 'unlimited' (current: %llu kbytes)",
+                    message, strerror(sys_errno), memlock_limit / UCS_KBYTE);
             return;
         }
     }

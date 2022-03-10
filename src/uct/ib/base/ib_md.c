@@ -12,6 +12,7 @@
 
 #include "ib_md.h"
 #include "ib_device.h"
+#include "ib_log.h"
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
@@ -318,24 +319,14 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
     UCS_STRING_BUFFER_ONSTACK(msg, 256);
     size_t page_size;
     size_t unused;
-    size_t memlock_limit;
 
     ucs_string_buffer_appendf(&msg,
                               "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
                               ibv_reg_mr_func_name, address, length, access_flags);
 
-    if (errno == ENOMEM) {
-        /* Check the value of the max locked memory which is set on the system
-        * (ulimit -l) */
-        if ((ucs_sys_get_memlock_rlimit(&memlock_limit)) &&
-            (memlock_limit != SIZE_MAX)) {
-            ucs_string_buffer_appendf(&msg,
-                                      ". Please set max locked memory "
-                                      "(ulimit -l) to 'unlimited' "
-                                      "(current: %llu kbytes)",
-                                      memlock_limit / UCS_KBYTE);
-        }
-    } else if (err == EINVAL) {
+    uct_ib_mem_lock_limit_msg(ucs_string_buffer_cstr(&msg), err, level);
+
+    if (err == EINVAL) {
         /* Check if huge page is used */
         ucs_get_mem_page_size(address, length, &unused, &page_size);
         if (page_size != ucs_get_page_size()) {
@@ -1228,9 +1219,9 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
         if ((status == UCS_OK) && (memlock_limit <= (500 * UCS_MBYTE))) {
             /* Disable the RDMA devices because of too strict locked memory limit*/
             ucs_diag("RDMA transports are disabled because max locked memory "
-                      "limit (%llu kbytes) is too low. Please set max locked "
-                      "memory (ulimit -l) to 'unlimited'",
-                      (memlock_limit / UCS_KBYTE));
+                     "limit (%llu kbytes) is too low. Please set max locked "
+                     "memory (ulimit -l) to 'unlimited'",
+                     (memlock_limit / UCS_KBYTE));
 
             *resources_p     = NULL;
             *num_resources_p = 0;

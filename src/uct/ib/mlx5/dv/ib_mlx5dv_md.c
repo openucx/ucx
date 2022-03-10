@@ -881,6 +881,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     struct ibv_qp *qp;
     int ret;
     char message[128];
+    int cq_errno;
 
     pd = ibv_alloc_pd(ctx);
     if (pd == NULL) {
@@ -891,9 +892,10 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
 
     cq = ibv_create_cq(ctx, 1, NULL, NULL, 0);
     if (cq == NULL) {
+        cq_errno = errno;
         ucs_snprintf_safe(message, sizeof(message), "%s: ibv_create_cq()",
                           uct_ib_device_name(dev));
-        uct_ib_mem_lock_limit_msg(message, errno);
+        uct_ib_mem_lock_limit_msg(message, cq_errno, UCS_LOG_LEVEL_ERROR);
         status = UCS_ERR_IO_ERROR;
         goto out_dealloc_pd;
     }
