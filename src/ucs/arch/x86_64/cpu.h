@@ -33,7 +33,6 @@ BEGIN_C_DECLS
  * In x86_64, there is strong ordering of each processor with respect to another
  * processor, but weak ordering with respect to the bus.
  */
-#define ucs_memory_bus_fence()        asm volatile ("mfence"::: "memory")
 #define ucs_memory_bus_store_fence()  asm volatile ("sfence" ::: "memory")
 #define ucs_memory_bus_load_fence()   asm volatile ("lfence" ::: "memory")
 #define ucs_memory_bus_cacheline_wc_flush()

@@ -47,7 +47,6 @@ BEGIN_C_DECLS
  * of DSB. The barrier used for synchronization of access between write back
  * and device mapped memory (PCIe BAR).
  */
-#define ucs_memory_bus_fence()        ucs_aarch64_dmb(oshsy)
 #define ucs_memory_bus_store_fence()  ucs_aarch64_dmb(oshst)
 #define ucs_memory_bus_load_fence()   ucs_aarch64_dmb(oshld)
 
