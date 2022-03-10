@@ -365,8 +365,9 @@ void test_uct_peer_failure_multiple::init()
 {
     size_t tx_queue_len = get_tx_queue_len();
 
-    if (ucs_get_page_size() > 4096) {
-        /* NOTE: Too much receivers may cause failure of ibv_open_device */
+    if ((ucs_get_page_size() > 4096) ||
+        (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64)) {
+        /* NOTE: Too many receivers may cause failure of ibv_open_device */
         m_nreceivers = 10;
     } else {
         m_nreceivers = tx_queue_len;

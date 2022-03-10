@@ -829,7 +829,8 @@ run_mpi_tests() {
 	then
 		# Prevent our tests from using UCX libraries from hpcx module by prepending
 		# our local library path first
-		export LD_LIBRARY_PATH=${ucx_inst}/lib:$LD_LIBRARY_PATH
+		save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
+		export LD_LIBRARY_PATH=${ucx_inst}/lib:${LD_LIBRARY_PATH}
 
 		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
 		make_clean
@@ -850,8 +851,11 @@ run_mpi_tests() {
 
 		test_malloc_hooks_mpi
 
-		make_clean distclean
+		# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
+		# from installation directory
+		export LD_LIBRARY_PATH=${save_LD_LIBRARY_PATH}
 
+		make_clean distclean
 		module unload hpcx-gcc
 	else
 		echo "==== Not running MPI tests ===="
@@ -1079,7 +1083,7 @@ run_gtest_watchdog_test() {
 run_gtest() {
 	compiler_name=$1
 	shift
-	../contrib/configure-devel --prefix=$ucx_inst $@
+	../contrib/configure-devel --prefix=$ucx_inst "$@"
 	make_clean
 	$MAKEP
 
@@ -1166,8 +1170,19 @@ run_gtest_default() {
 run_gtest_armclang() {
 	if module_load arm-compiler/arm-hpc-compiler && armclang -v
 	then
-		# armclang has some old go compiler, disabling go build.
-		run_gtest "armclang" CC=armclang CXX=armclang++ --with-go=no
+		# Force using loaded gcc toolchain instead of host gcc, to avoid
+		# compatibility issues
+		ARMCLANG_CFLAGS=""
+		if [ -n ${GCC_DIR} ]; then
+			ARMCLANG_CFLAGS+=" --gcc-toolchain=${GCC_DIR}"
+		fi
+
+		# Disable go build, since armclang has some old go compiler.
+		run_gtest "armclang" \
+			CC=armclang \
+			CXX=armclang++ \
+			CFLAGS="${ARMCLANG_CFLAGS}" \
+			--without-go
 		module unload arm-compiler/arm-hpc-compiler
 	else
 		echo "==== Not running with armclang compiler ===="
