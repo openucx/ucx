@@ -316,6 +316,41 @@ static void uct_cuda_copy_event_desc_cleanup(ucs_mpool_t *mp, void *obj)
     }
 }
 
+static double uct_cuda_copy_iface_get_device_bw()
+{
+    CUdevice cu_device;
+    int major_version;
+    ucs_status_t status;
+
+    status = UCT_CUDA_FUNC_LOG_ERR(cuCtxGetDevice(&cu_device));
+    if (status != UCS_OK) {
+        /* did not find a context with the calling thread, try device 0 */
+        status = UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGet(&cu_device, 0));
+        if (status != UCS_OK) {
+            return 0;
+        }
+    }
+
+    status = UCT_CUDADRV_FUNC_LOG_ERR(
+            cuDeviceGetAttribute(&major_version,
+                                 CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+                                 cu_device));
+    if (status != UCS_OK) {
+        return 0;
+    }
+
+    switch (major_version) {
+    case UCT_CUDA_BASE_GEN_P100:
+        return 600.0 * UCS_GBYTE;
+    case UCT_CUDA_BASE_GEN_V100:
+        return 900.0 * UCS_GBYTE;
+    case UCT_CUDA_BASE_GEN_A100:
+        return 1550.0 * UCS_GBYTE;
+    default:
+        return 200.0  * UCS_GBYTE;
+    }
+}
+
 static ucs_status_t
 uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 {
@@ -323,7 +358,14 @@ uct_cuda_copy_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr)
 
     if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_BANDWIDTH) {
         perf_attr->bandwidth.dedicated = 0;
-        if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
+        if ((perf_attr->field_mask & UCT_PERF_ATTR_FIELD_REMOTE_MEMORY_TYPE)
+            && (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_LOCAL_MEMORY_TYPE)
+            && ((perf_attr->remote_memory_type == UCS_MEMORY_TYPE_CUDA) ||
+                (perf_attr->remote_memory_type == UCS_MEMORY_TYPE_CUDA_MANAGED))
+            && ((perf_attr->local_memory_type == UCS_MEMORY_TYPE_CUDA) ||
+                (perf_attr->local_memory_type == UCS_MEMORY_TYPE_CUDA_MANAGED))) {
+            perf_attr->bandwidth.shared = uct_cuda_copy_iface_get_device_bw();
+        } else if (!(perf_attr->field_mask & UCT_PERF_ATTR_FIELD_OPERATION)) {
             perf_attr->bandwidth.shared = iface->config.bandwidth;
         } else {
             switch (perf_attr->operation) {
