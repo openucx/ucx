@@ -106,6 +106,7 @@ Provides header files and examples for developing with UCX.
            %{?debug:--enable-fault-injection} \
            %{?debug:--enable-debug-data} \
            %{?debug:--enable-mt} \
+           --without-go \
            --without-java \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
