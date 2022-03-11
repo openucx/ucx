@@ -20,6 +20,7 @@
 #include <ucs/time/time.h>
 #include <inttypes.h>
 #include <float.h>
+#include <dirent.h>
 
 
 #define UCS_TOPO_MAX_SYS_DEVICES     256
@@ -136,6 +137,34 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
     }
 }
 
+uint8_t ucs_topo_get_sys_device_index(const ucs_sys_bus_id_t *bus_id)
+{
+    char target[] = "0000:00:00.0";
+    uint8_t count = 0;
+    uint8_t found = 0;
+    DIR *d;
+    struct dirent *dir;
+
+    sprintf(target, "%04hx:%02hhx:%02hhx.%hhx", bus_id->domain, bus_id->bus,
+                                          bus_id->slot, bus_id->function);
+
+    d = opendir(UCS_TOPO_SYSFS_PCI_PREFIX);
+    if (d) {
+        /* assumes that if directory contents remains the same, the ordering of
+         * entries by readdir remains the same as well */
+        while ((dir = readdir(d)) != NULL) {
+            if (!strcmp(dir->d_name, target)) {
+                found = 1;
+                break;
+            }
+            count++;
+        }
+        closedir(d);
+    }
+
+    return found ? count : UCS_SYS_DEVICE_ID_MAX;
+}
+
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
@@ -158,7 +187,8 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
                           UCS_TOPO_MAX_SYS_DEVICES);
-        *sys_dev = ucs_topo_global_ctx.num_devices;
+        /* find entry number in UCS_TOPO_SYSFS_PCI_PREFIX */
+        *sys_dev = ucs_topo_get_sys_device_index(bus_id);
         ++ucs_topo_global_ctx.num_devices;
 
         kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
@@ -203,13 +233,6 @@ ucs_topo_get_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out_unlock;
-    }
 
     ucs_strncpy_safe(link_path, UCS_TOPO_SYSFS_PCI_PREFIX, PATH_MAX);
     ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
@@ -331,12 +354,8 @@ ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
         ucs_strncpy_safe(buffer, UCS_TOPO_DEVICE_NAME_UNKNOWN, max);
     } else {
         ucs_spin_lock(&ucs_topo_global_ctx.lock);
-        if (sys_dev < ucs_topo_global_ctx.num_devices) {
-            ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
-                                buffer, max);
-        } else {
-            ucs_strncpy_safe(buffer, UCS_TOPO_DEVICE_NAME_INVALID, max);
-        }
+        ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
+                            buffer, max);
         ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     }
 
@@ -372,13 +391,6 @@ ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev, const char *name)
 {
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
     ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
                                                            "sys_dev_name");
@@ -395,11 +407,7 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
         name = UCS_TOPO_DEVICE_NAME_UNKNOWN;
     } else {
         ucs_spin_lock(&ucs_topo_global_ctx.lock);
-        if (sys_dev < ucs_topo_global_ctx.num_devices) {
-            name = ucs_topo_global_ctx.devices[sys_dev].name;
-        } else {
-            name = UCS_TOPO_DEVICE_NAME_INVALID;
-        }
+        name = ucs_topo_global_ctx.devices[sys_dev].name;
         ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     }
 
