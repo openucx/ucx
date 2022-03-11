@@ -251,7 +251,7 @@ void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno,
         }
     }
 
-    ucs_error("%s failed: %s", message, strerror(sys_errno));
+    ucs_log(level, "%s failed: %s", message, strerror(sys_errno));
 }
 
 void __uct_ib_log_post_send(const char *file, int line, const char *function,

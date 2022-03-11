@@ -31,7 +31,8 @@
 #include <float.h>
 
 
-#define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
+#define UCT_IB_MD_RCACHE_DEFAULT_ALIGN    16
+#define UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT (512 * UCS_MBYTE)
 
 typedef struct uct_ib_md_pci_info {
     double     bw_gbps; /* link speed */
@@ -321,10 +322,8 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
     size_t unused;
 
     ucs_string_buffer_appendf(&msg,
-                              "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
+                              "%s(address=%p, length=%zu, access=0x%lx)",
                               ibv_reg_mr_func_name, address, length, access_flags);
-
-    uct_ib_mem_lock_limit_msg(ucs_string_buffer_cstr(&msg), err, level);
 
     if (err == EINVAL) {
         /* Check if huge page is used */
@@ -337,7 +336,7 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
         }
     }
 
-    ucs_log(level, "%s", ucs_string_buffer_cstr(&msg));
+    uct_ib_mem_lock_limit_msg(ucs_string_buffer_cstr(&msg), err, level);
 }
 
 void *uct_ib_md_mem_handle_thread_func(void *arg)
@@ -1216,7 +1215,8 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
 
     if (num_resources != 0) {
         status = ucs_sys_get_memlock_rlimit(&memlock_limit);
-        if ((status == UCS_OK) && (memlock_limit <= (500 * UCS_MBYTE))) {
+        if ((status == UCS_OK) &&
+            (memlock_limit <= UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT)) {
             /* Disable the RDMA devices because of too strict locked memory limit*/
             ucs_diag("RDMA transports are disabled because max locked memory "
                      "limit (%llu kbytes) is too low. Please set max locked "
