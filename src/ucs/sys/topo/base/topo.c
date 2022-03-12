@@ -139,8 +139,8 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
 
 uint8_t ucs_topo_get_sys_device_index(const ucs_sys_bus_id_t *bus_id)
 {
-    char target[] = "0000:00:00.0";
     uint8_t count = 0;
+    char target[PATH_MAX];
     DIR *d;
     struct dirent *dir;
 
