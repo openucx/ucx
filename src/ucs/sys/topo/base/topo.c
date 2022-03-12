@@ -141,7 +141,6 @@ uint8_t ucs_topo_get_sys_device_index(const ucs_sys_bus_id_t *bus_id)
 {
     char target[] = "0000:00:00.0";
     uint8_t count = 0;
-    uint8_t found = 0;
     DIR *d;
     struct dirent *dir;
 
@@ -153,16 +152,20 @@ uint8_t ucs_topo_get_sys_device_index(const ucs_sys_bus_id_t *bus_id)
         /* assumes that if directory contents remains the same, the ordering of
          * entries by readdir remains the same as well */
         while ((dir = readdir(d)) != NULL) {
-            if (!strcmp(dir->d_name, target)) {
-                found = 1;
-                break;
+            if ((!strcmp(dir->d_name, ".")) ||
+                (!strcmp(dir->d_name, "..")) ) {
+                continue;
+            }
+            else if (!strcmp(dir->d_name, target)) {
+                closedir(d);
+                return count;
             }
             count++;
         }
         closedir(d);
     }
 
-    return found ? count : UCS_SYS_DEVICE_ID_MAX;
+    return UCS_SYS_DEVICE_ID_UNKNOWN;
 }
 
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
@@ -189,6 +192,10 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                           UCS_TOPO_MAX_SYS_DEVICES);
         /* find entry number in UCS_TOPO_SYSFS_PCI_PREFIX */
         *sys_dev = ucs_topo_get_sys_device_index(bus_id);
+        if (*sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) {
+            ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+            return UCS_ERR_NO_RESOURCE;
+        }
         ++ucs_topo_global_ctx.num_devices;
 
         kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
@@ -419,12 +426,12 @@ void ucs_topo_print_info(FILE *stream)
     char bdf_name[UCS_SYS_BDF_NAME_MAX];
     volatile ucs_sys_device_t sys_dev;
 
-    for (sys_dev = 0; sys_dev < ucs_topo_global_ctx.num_devices; ++sys_dev) {
-        fprintf(stream, " %d  %*s  %s\n", sys_dev, UCS_SYS_BDF_NAME_MAX,
+    kh_foreach_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, sys_dev, {
+        fprintf(stream, "%d  %*s  %s\n", sys_dev, UCS_SYS_BDF_NAME_MAX,
                 ucs_topo_sys_device_bdf_name(sys_dev, bdf_name,
                                              sizeof(bdf_name)),
                 ucs_topo_global_ctx.devices[sys_dev].name);
-    }
+    })
 }
 
 static ucs_sys_topo_method_t ucs_sys_topo_sysfs_method = {
