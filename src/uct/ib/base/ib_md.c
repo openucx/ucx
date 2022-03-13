@@ -27,21 +27,10 @@
 #include <pthread_np.h>
 #endif
 #include <sys/resource.h>
-#include <float.h>
 
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
-typedef struct uct_ib_md_pci_info {
-    double     bw_gbps; /* link speed */
-    uint16_t   payload; /* payload used to data transfer */
-    uint16_t   tlp_overhead; /* PHY + data link layer + header + *CRC* */
-    uint16_t   ctrl_ratio; /* number of TLC before ACK */
-    uint16_t   ctrl_overhead; /* length of control TLP */
-    uint16_t   encoding; /* number of encoded symbol bits */
-    uint16_t   decoding; /* number of decoded symbol bits */
-    const char *name; /* name of PCI generation */
-} uct_ib_md_pci_info_t;
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                sizeof(ucs_config_bw_spec_t),
@@ -206,68 +195,6 @@ static ucs_stats_class_t uct_ib_md_stats_class = {
     }
 };
 #endif
-
-/*
- * - TLP (Transaction Layer Packet) overhead calculations (no ECRC):
- *   Gen1/2:
- *     Start   SeqNum   Hdr_64bit   LCRC   End
- *       1   +   2    +   16      +   4  +  1  = 24
- *
- *   Gen3/4:
- *     Start   SeqNum   Hdr_64bit   LCRC
- *       4   +   2    +   16      +   4  = 26
- *
- * - DLLP (Data Link Layer Packet) overhead calculations:
- *    - Control packet 8b ACK + 8b flow control
- *    - ACK/FC ratio: 1 per 4 TLPs
- *
- * References:
- * [1] https://www.xilinx.com/support/documentation/white_papers/wp350.pdf
- * [2] https://xdevs.com/doc/Standards/PCI/PCI_Express_Base_4.0_Rev0.3_February19-2014.pdf
- * [3] https://www.nxp.com/docs/en/application-note/AN3935.pdf
- */
-static const uct_ib_md_pci_info_t uct_ib_md_pci_info[] = {
-    {
-        .name          = "gen1",
-        .bw_gbps       = 2.5,
-        .payload       = 256,
-        .tlp_overhead  = 24,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 8,
-        .decoding      = 10
-    },
-    {
-        .name          = "gen2",
-        .bw_gbps       = 5,
-        .payload       = 256,
-        .tlp_overhead  = 24,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 8,
-        .decoding      = 10
-    },
-    {
-        .name          = "gen3",
-        .bw_gbps       = 8,
-        .payload       = 256,
-        .tlp_overhead  = 26,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 128,
-        .decoding      = 130
-    },
-    {
-        .name          = "gen4",
-        .bw_gbps       = 16,
-        .payload       = 256,
-        .tlp_overhead  = 26,
-        .ctrl_ratio    = 4,
-        .ctrl_overhead = 16,
-        .encoding      = 128,
-        .decoding      = 130
-    },
-};
 
 UCS_LIST_HEAD(uct_ib_md_ops_list);
 
@@ -1472,88 +1399,25 @@ uct_ib_md_parse_subnet_prefix(const char *subnet_prefix_str,
     return UCS_OK;
 }
 
-static double uct_ib_md_read_pci_bw(struct ibv_device *ib_device)
+static void
+uct_ib_md_set_pci_bw(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 {
-    const char *pci_width_file_name = "current_link_width";
-    const char *pci_speed_file_name = "current_link_speed";
-    double bw_gbps, effective_bw, link_utilization;
-    char pci_width_str[16];
-    char pci_speed_str[16];
-    char gts[16];
-    const uct_ib_md_pci_info_t *p;
-    unsigned width;
-    ssize_t len;
-    size_t i;
-
-    len = ucs_read_file(pci_width_str, sizeof(pci_width_str) - 1, 1,
-                        UCT_IB_DEVICE_SYSFS_FMT, ib_device->name,
-                        pci_width_file_name);
-    if (len < 1) {
-        ucs_debug("failed to read file: " UCT_IB_DEVICE_SYSFS_FMT,
-                  ib_device->name, pci_width_file_name);
-        return DBL_MAX; /* failed to read file */
-    }
-    pci_width_str[len] = '\0';
-
-    len = ucs_read_file(pci_speed_str, sizeof(pci_speed_str) - 1, 1,
-                        UCT_IB_DEVICE_SYSFS_FMT, ib_device->name,
-                        pci_speed_file_name);
-    if (len < 1) {
-        ucs_debug("failed to read file: " UCT_IB_DEVICE_SYSFS_FMT,
-                  ib_device->name, pci_speed_file_name);
-        return DBL_MAX; /* failed to read file */
-    }
-    pci_speed_str[len] = '\0';
-
-    if (sscanf(pci_width_str, "%u", &width) < 1) {
-        ucs_debug("incorrect format of %s file: expected: <unsigned integer>, actual: %s\n",
-                  pci_width_file_name, pci_width_str);
-        return DBL_MAX;
-    }
-
-    if ((sscanf(pci_speed_str, "%lf%s", &bw_gbps, gts) < 2) ||
-        strcasecmp("GT/s", ucs_strtrim(gts))) {
-        ucs_debug("incorrect format of %s file: expected: <double> GT/s, actual: %s\n",
-                  pci_speed_file_name, pci_speed_str);
-        return DBL_MAX;
-    }
-
-    for (i = 0; i < ucs_static_array_size(uct_ib_md_pci_info); i++) {
-        p = &uct_ib_md_pci_info[i];
-        if ((bw_gbps / p->bw_gbps) > 1.01) { /* floating-point compare */
-            continue;
-        }
-
-        link_utilization = (double)(p->payload * p->ctrl_ratio) /
-                           (((p->payload + p->tlp_overhead) * p->ctrl_ratio) +
-                            p->ctrl_overhead);
-        /* coverity[overflow] */
-        effective_bw     = (p->bw_gbps * 1e9 / 8.0) * width *
-                           ((double)p->encoding / p->decoding) * link_utilization;
-        ucs_trace("%s: PCIe %s %ux, effective throughput %.3f MB/s %.3f Gb/s",
-                  ib_device->name, p->name, width, effective_bw / UCS_MBYTE,
-                  effective_bw * 8e-9);
-        return effective_bw;
-    }
-
-    return DBL_MAX;
-}
-
-static double uct_ib_md_pci_bw(const uct_ib_md_config_t *md_config,
-                               struct ibv_device *ib_device)
-{
+    const char *device_name = uct_ib_device_name(&md->dev);
     unsigned i;
 
     for (i = 0; i < md_config->pci_bw.count; i++) {
-        if (!strcmp(ib_device->name, md_config->pci_bw.device[i].name)) {
+        if (!strcmp(device_name, md_config->pci_bw.device[i].name)) {
             if (UCS_CONFIG_BW_IS_AUTO(md_config->pci_bw.device[i].bw)) {
                 break; /* read data from system */
             }
-            return md_config->pci_bw.device[i].bw;
+
+            md->pci_bw = md_config->pci_bw.device[i].bw;
+            return;
         }
     }
 
-    return uct_ib_md_read_pci_bw(ib_device);
+    /* Did not find a matching configuration - take from underlying device */
+    md->pci_bw = md->dev.pci_bw;
 }
 
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
@@ -1756,7 +1620,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
         md->dev.max_zcopy_log_sge = 1;
     }
 
-    md->pci_bw = uct_ib_md_pci_bw(md_config, ib_device);
+    uct_ib_md_set_pci_bw(md, md_config);
 
     return UCS_OK;
 
