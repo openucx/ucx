@@ -175,6 +175,8 @@ def test_ucx_tls_positive(tls):
     print "Using UCX_TLS=" + tls + ", found TL: " + str(found_tl)
     if tls == 'all':
         return
+    if not found_tl:
+        sys.exit(1)
     tls = tls.split(',')
     if found_tl in tls or "\\" + found_tl in tls:
         return
@@ -257,6 +259,10 @@ port = "1"
 for dev in sorted(dev_list):
     status, dev_attrs = exec_cmd("ibv_devinfo -d " + dev + " -i " + port)
     if dev_attrs.find("PORT_ACTIVE") == -1:
+        continue
+
+    if not os.path.exists("/sys/class/infiniband/%s/ports/%s/gids/0" % (dev, port)):
+        print "Skipping dummy device: ", dev
         continue
 
     driver_name = os.path.basename(os.readlink("/sys/class/infiniband/%s/device/driver" % dev))

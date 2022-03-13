@@ -71,7 +71,20 @@ function get_ip() {
 
 # Get active RDMA interfaces
 function get_rdma_interfaces() {
-    echo `ibdev2netdev | grep Up | awk '{print $5}'`
+    ibdev2netdev | grep Up | while read line
+    do
+        ibdev=$(echo "${line}" | awk '{print $1}')
+        port=$(echo "${line}" | awk '{print $3}')
+        netif=$(echo "${line}" | awk '{print $5}')
+
+        # skip devices that do not have proper gid (representors)
+        if ! [ -e "/sys/class/infiniband/${ibdev}/ports/${port}/gids/0" ]
+        then
+            continue
+        fi
+
+        echo ${netif}
+    done | sort -u
 }
 
 # Prepend each line with a timestamp
