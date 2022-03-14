@@ -115,6 +115,26 @@ make_clean() {
 }
 
 #
+# Configure and build
+#   $1 - mode (devel|release)
+#
+build() {
+	mode=$1
+	shift
+
+	config_args="--prefix=$ucx_inst --without-java"
+	if [ "X$have_cuda" == "Xyes" ]
+	then
+		config_args+="--with-iodemo-cuda"
+	fi
+
+	../contrib/configure-${mode} ${config_args} "$@"
+	make_clean
+	$MAKEP
+	$MAKEP install
+}
+
+#
 # Test if an environment module exists and load it if yes.
 # Otherwise, return error code.
 #
@@ -155,6 +175,7 @@ try_load_cuda_env() {
 		module_load $CUDA_MODULE    || have_cuda=no
 		module_load $GDRCOPY_MODULE || have_gdrcopy=no
 		num_gpus=$(nvidia-smi -L | wc -l)
+		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
 	fi
 }
 
@@ -169,14 +190,7 @@ unload_cuda_env() {
 #
 should_do_task() {
 	set +x
-	task=$1
-	ntasks=$2
-	tasks_per_worker=$(( (ntasks + nworkers - 1) / nworkers ))
-	my_tasks_begin=$((tasks_per_worker * worker))
-	my_tasks_end=$((my_tasks_begin + tasks_per_worker))
-
-	# set return value to 0 (success) iff ($my_tasks_begin <= $task < $my_tasks_end)
-	[ $task -ge $my_tasks_begin ] && [ $task -lt $my_tasks_end ]
+	[[ $((task % nworkers)) -eq ${worker} ]]
 	rc=$?
 	set -x
 	return $rc
@@ -225,6 +239,7 @@ get_my_tasks() {
 get_ib_devices() {
 	state=$1
 	device_list=$(ibv_devinfo -l | tail -n +2)
+	set +x
 	for ibdev in $device_list
 	do
 		num_ports=$(ibv_devinfo -d $ibdev| awk '/phys_port_cnt:/ {print $2}')
@@ -237,6 +252,7 @@ get_ib_devices() {
 			fi
 		done
 	done
+	set -x
 }
 
 #
@@ -344,21 +360,6 @@ prepare() {
 	./autogen.sh
 	mkdir -p build-test
 	cd build-test
-}
-
-check_make_distcheck() {
-	# If the gcc version on the host is older than 4.8.5, don't run
-	# due to a compiler bug that reproduces when building with gtest
-	# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61886
-	if (echo "4.8.5"; gcc --version | head -1 | awk '{print $3}') | sort -CV
-	then
-		echo "==== Testing make distcheck ===="
-		make_clean && make_clean distclean
-		../contrib/configure-release --prefix=$PWD/install
-		$MAKEP DISTCHECK_CONFIGURE_FLAGS="--enable-gtest" distcheck
-	else
-		log_warning "Not testing make distcheck: GCC version is too old ($(gcc --version|head -1))"
-	fi
 }
 
 #
@@ -607,22 +608,16 @@ run_io_demo() {
 	server_rdma_addr=$(get_rdma_device_ip_addr)
 	server_nonrdma_addr=$(get_non_rdma_ip_addr)
 	mem_types_list="host "
-	config_args=""
 
 	if [ "X$have_cuda" == "Xyes" ]
 	then
 		mem_types_list+="cuda cuda-managed "
-		config_args+="--with-iodemo-cuda"
 	fi
 
 	if [ -z "$server_rdma_addr" ] && [ -z "$server_nonrdma_addr" ]
 	then
 		return
 	fi
-
-	../contrib/configure-devel --prefix=$ucx_inst $config_args
-	$MAKEP
-	$MAKEP install
 
 	for mem_type in $mem_types_list
 	do
@@ -644,8 +639,6 @@ run_io_demo() {
 			run_client_server_app "./test/apps/iodemo/${test_name}" "${test_args}" "127.0.0.1" 1 0
 		fi
 	done
-
-	make_clean
 }
 
 #
@@ -831,10 +824,10 @@ run_mpi_tests() {
 		save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
 		export LD_LIBRARY_PATH=${ucx_inst}/lib:${LD_LIBRARY_PATH}
 
-		../contrib/configure-release --prefix=$ucx_inst --with-mpi # TODO check in -devel mode as well
-		make_clean
-		$MAKEP install
-		$MAKEP installcheck # check whether installation is valid (it compiles examples at least)
+		build release --disable-gtest --with-mpi
+
+		# check whether installation is valid (it compiles examples at least)
+		$MAKEP installcheck
 
 		MPIRUN="mpirun \
 				--bind-to none \
@@ -861,7 +854,7 @@ run_mpi_tests() {
 	fi
 }
 
-build_ucx_profiling() {
+build_ucx_profiling_test() {
 	# compile the profiling example code
 	gcc -o ucx_profiling ../test/apps/profiling/ucx_profiling.c \
 		-lm -lucs -I${ucx_inst}/include -L${ucx_inst}/lib -Wl,-rpath=${ucx_inst}/lib
@@ -873,13 +866,7 @@ build_ucx_profiling() {
 test_profiling() {
 	echo "==== Running profiling example  ===="
 
-	# configure release mode, application profiling should work
-	../contrib/configure-release --prefix=$ucx_inst
-	make_clean
-	$MAKEP
-	$MAKEP install
-
-	build_ucx_profiling
+	build_ucx_profiling_test
 
 	UCX_PROFILE_MODE=log UCX_PROFILE_FILE=ucx_jenkins.prof ./ucx_profiling
 
@@ -896,12 +883,7 @@ test_ucs_load() {
 		return
 	fi
 
-	../contrib/configure-release --prefix=$ucx_inst
-	make_clean
-	$MAKEP
-	$MAKEP install
-
-	build_ucx_profiling
+	build_ucx_profiling_test
 
 	# Make sure UCS library constructor does not call socket()
 	echo "==== Running UCS library loading test ===="
@@ -922,11 +904,6 @@ test_ucs_dlopen() {
 }
 
 test_ucp_dlopen() {
-	../contrib/configure-release --prefix=$ucx_inst
-	make_clean
-	$MAKEP
-	$MAKEP install
-
 	# Make sure UCP library, when opened with dlopen(), loads CMA module
 	LIB_CMA=`find ${ucx_inst} -name libuct_cma.so.0`
 	if [ -n "$LIB_CMA" ]
@@ -967,18 +944,8 @@ test_init_mt() {
 }
 
 test_memtrack() {
-	../contrib/configure-devel --prefix=$ucx_inst
-	make_clean
-	$MAKEP
-
 	echo "==== Running memtrack test ===="
 	UCX_MEMTRACK_DEST=stdout ./test/gtest/gtest --gtest_filter=test_memtrack.sanity
-}
-
-test_memtrack_limit() {
-	../contrib/configure-devel --prefix=$ucx_inst
-	make_clean
-	$MAKEP
 
 	echo "==== Running memtrack limit test ===="
 	UCX_MEMTRACK_DEST=stdout UCX_HANDLE_ERRORS=none UCX_MEMTRACK_LIMIT=512MB ./test/apps/test_memtrack_limit |& grep -C 100 'SUCCESS'
@@ -1042,7 +1009,7 @@ run_gtest_watchdog_test() {
 	expected_runtime=$3
 	expected_err_str="Connection timed out - abort testing"
 
-	make -C test/gtest
+	echo "==== Running watchdog timeout test ===="
 
 	start_time=`date +%s`
 
@@ -1075,33 +1042,36 @@ run_gtest_watchdog_test() {
 	fi
 }
 
+run_malloc_hook_gtest() {
+	# GTEST_SHARD_INDEX/GTEST_TOTAL_SHARDS should NOT be set
+
+	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
+	$AFFINITY $TIMEOUT env \
+		UCX_IB_RCACHE=n \
+		MALLOC_TRIM_THRESHOLD_=-1 \
+		MALLOC_MMAP_THRESHOLD_=-1 \
+		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
+			make -C test/gtest test
+
+	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
+	$AFFINITY $TIMEOUT env \
+		MALLOC_MMAP_THRESHOLD_=16384 \
+		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
+			make -C test/gtest test
+}
+
 #
 # Run the test suite (gtest)
 # Arguments: <compiler-name> [configure-flags]
 #
 run_gtest() {
 	compiler_name=$1
-	shift
-	../contrib/configure-devel --prefix=$ucx_inst "$@"
-	make_clean
-	$MAKEP
 
-	echo "==== Running watchdog timeout test, $compiler_name compiler ===="
-	run_gtest_watchdog_test 5 60 300
-
-	export GTEST_SHARD_INDEX=$worker
-	export GTEST_TOTAL_SHARDS=$nworkers
 	export GTEST_RANDOM_SEED=0
 	export GTEST_SHUFFLE=1
 	# Run UCT tests for TCP over fastest device only
 	export GTEST_UCT_TCP_FASTEST_DEV=1
-	# Report TOP-20 longest test at the end of testing
-	export GTEST_REPORT_LONGEST_TESTS=20
 	export OMP_NUM_THREADS=4
-
-	if [ $num_gpus -gt 0 ]; then
-		export CUDA_VISIBLE_DEVICES=$(($worker%$num_gpus))
-	fi
 
 	GTEST_EXTRA_ARGS=""
 	if [ "$JENKINS_TEST_PERF" == 1 ]
@@ -1111,30 +1081,22 @@ run_gtest() {
 	fi
 	export GTEST_EXTRA_ARGS
 
+	# Run specific tests
+	do_distributed_task 1 4 run_malloc_hook_gtest
+	do_distributed_task 2 4 run_gtest_watchdog_test 5 60 300
+	do_distributed_task 3 4 test_memtrack
+
+	# Distribute the tests among the workers
+	export GTEST_SHARD_INDEX=$worker
+	export GTEST_TOTAL_SHARDS=$nworkers
+	# Report TOP-20 longest test at the end of testing
+	export GTEST_REPORT_LONGEST_TESTS=20
+
+	# Run all tests
 	echo "==== Running unit tests, $compiler_name compiler ===="
 	$AFFINITY $TIMEOUT make -C test/gtest test
 
-	echo "==== Running malloc hooks mallopt() test, $compiler_name compiler ===="
-	# gtest returns with non zero exit code if there were no
-	# tests to run. As a workaround run a single test on every
-	# shard.
-	$AFFINITY $TIMEOUT \
-		env UCX_IB_RCACHE=n \
-		MALLOC_TRIM_THRESHOLD_=-1 \
-		MALLOC_MMAP_THRESHOLD_=-1 \
-		GTEST_SHARD_INDEX=0 \
-		GTEST_TOTAL_SHARDS=1 \
-		GTEST_FILTER=malloc_hook_cplusplus.mallopt \
-		make -C test/gtest test
-
-	echo "==== Running malloc hooks mmap_ptrs test with MMAP_THRESHOLD=16384, $compiler_name compiler ===="
-	$AFFINITY $TIMEOUT \
-		env MALLOC_MMAP_THRESHOLD_=16384 \
-		GTEST_SHARD_INDEX=0 \
-		GTEST_TOTAL_SHARDS=1 \
-		GTEST_FILTER=malloc_hook_cplusplus.mmap_ptrs \
-		make -C test/gtest test
-
+	# Run valgrind tests
 	if ! [[ $(uname -m) =~ "aarch" ]] && ! [[ $(uname -m) =~ "ppc" ]] && \
 	   ! [[ -n "${JENKINS_NO_VALGRIND}" ]]
 	then
@@ -1152,18 +1114,14 @@ run_gtest() {
 		echo "==== Not running valgrind tests with $compiler_name compiler ===="
 	fi
 
+	unset GTEST_REPORT_LONGEST_TESTS
+	unset GTEST_TOTAL_SHARDS
+	unset GTEST_SHARD_INDEX
+	unset GTEST_EXTRA_ARGS
 	unset OMP_NUM_THREADS
 	unset GTEST_UCT_TCP_FASTEST_DEV
-	unset GTEST_SHARD_INDEX
-	unset GTEST_TOTAL_SHARDS
-	unset GTEST_RANDOM_SEED
 	unset GTEST_SHUFFLE
-	unset GTEST_EXTRA_ARGS
-	unset CUDA_VISIBLE_DEVICES
-}
-
-run_gtest_default() {
-	run_gtest "default"
+	unset GTEST_RANDOM_SEED
 }
 
 run_gtest_armclang() {
@@ -1177,11 +1135,14 @@ run_gtest_armclang() {
 		fi
 
 		# Disable go build, since armclang has some old go compiler.
-		run_gtest "armclang" \
+		build devel --enable-gtest "$@" \
 			CC=armclang \
 			CXX=armclang++ \
 			CFLAGS="${ARMCLANG_CFLAGS}" \
 			--without-go
+
+		run_gtest "armclang"
+
 		module unload arm-compiler/arm-hpc-compiler
 	else
 		echo "==== Not running with armclang compiler ===="
@@ -1190,13 +1151,9 @@ run_gtest_armclang() {
 
 
 #
-# Run the test suite (gtest) in release configuration
+# Run the test suite (gtest) in release configuration with small subset of tests
 #
 run_gtest_release() {
-	../contrib/configure-release --prefix=$ucx_inst --enable-gtest
-	make_clean
-	$MAKEP
-
 	export GTEST_SHARD_INDEX=0
 	export GTEST_TOTAL_SHARDS=1
 	export GTEST_RANDOM_SEED=0
@@ -1236,6 +1193,17 @@ run_ucx_tl_check() {
 }
 
 #
+# Run release mode tests
+#
+run_release_mode_tests() {
+	build release --enable-gtest
+	test_profiling
+	test_ucs_load
+	test_ucp_dlopen
+	run_gtest_release
+}
+
+#
 # Run all tests
 #
 run_tests() {
@@ -1253,38 +1221,33 @@ run_tests() {
 	# all are running mpi tests
 	run_mpi_tests
 
-	if module_load dev/jdk && module_load dev/mvn
-	then
-		../contrib/configure-devel --prefix=$ucx_inst --with-java
-	else
-		../contrib/configure-devel --prefix=$ucx_inst
-	fi
-	$MAKEP
-	$MAKEP install
+	# build for devel tests and gtest
+	build devel --enable-gtest
 
+	# devel mode tests
+	do_distributed_task 0 4 test_unused_env_var
 	do_distributed_task 1 4 run_ucx_info
 	do_distributed_task 2 4 run_ucx_tl_check
-	do_distributed_task 1 4 run_ucp_hello
-	do_distributed_task 2 4 run_uct_hello
-	do_distributed_task 1 4 run_ucp_client_server
-	do_distributed_task 2 4 run_ucx_perftest
-	do_distributed_task 2 4 run_io_demo
-	do_distributed_task 3 4 test_profiling
-	do_distributed_task 1 4 test_ucs_dlopen
-	do_distributed_task 3 4 test_ucs_load
-	do_distributed_task 3 4 test_memtrack
-	do_distributed_task 3 4 test_memtrack_limit
-	do_distributed_task 0 4 test_unused_env_var
-	do_distributed_task 2 4 test_env_var_aliases
+	do_distributed_task 3 4 test_ucs_dlopen
+	do_distributed_task 0 4 test_env_var_aliases
 	do_distributed_task 1 4 test_malloc_hook
-	do_distributed_task 0 4 test_ucp_dlopen
-	do_distributed_task 1 4 test_init_mt
+	do_distributed_task 2 4 test_init_mt
+	do_distributed_task 3 4 run_ucp_client_server
+
+	# long devel tests
+	do_distributed_task 0 4 run_ucp_hello
+	do_distributed_task 1 4 run_uct_hello
+	do_distributed_task 2 4 run_ucx_perftest
+	do_distributed_task 3 4 run_io_demo
 
 	# all are running gtest
-	run_gtest_default
+	run_gtest "default"
+
+	# build and run gtest with armclang
 	run_gtest_armclang
 
-	do_distributed_task 1 4 run_gtest_release
+	# release mode tests
+	do_distributed_task 0 4 run_release_mode_tests
 }
 
 prepare
