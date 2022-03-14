@@ -166,7 +166,6 @@ typedef struct uct_ib_md_config {
     unsigned                 devx_objs;    /**< Objects to be created by DevX */
     ucs_on_off_auto_value_t  mr_relaxed_order; /**< Allow reorder memory accesses */
     int                      enable_gpudirect_rdma; /**< Enable GPUDirect RDMA */
-    int                      force_rdma_transport; /**< Force the RDMA transport enabling*/
 } uct_ib_md_config_t;
 
 /**
