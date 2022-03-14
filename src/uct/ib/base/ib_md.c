@@ -321,9 +321,9 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
     size_t page_size;
     size_t unused;
 
-    ucs_string_buffer_appendf(&msg,
-                              "%s(address=%p, length=%zu, access=0x%lx)",
-                              ibv_reg_mr_func_name, address, length, access_flags);
+    ucs_string_buffer_appendf(&msg, "%s(address=%p, length=%zu, access=0x%lx)",
+                              ibv_reg_mr_func_name, address, length,
+                              access_flags);
 
     if (err == EINVAL) {
         /* Check if huge page is used */
