@@ -136,7 +136,7 @@ UcxContext::~UcxContext()
     }
 }
 
-bool UcxContext::init()
+bool UcxContext::init(unsigned est_num_eps)
 {
     if (_context && _worker) {
         UCX_LOG << "context is already initialized";
@@ -147,14 +147,17 @@ bool UcxContext::init()
     ucp_params_t ucp_params;
     ucp_params.field_mask   = UCP_PARAM_FIELD_FEATURES |
                               UCP_PARAM_FIELD_REQUEST_INIT |
-                              UCP_PARAM_FIELD_REQUEST_SIZE;
+                              UCP_PARAM_FIELD_REQUEST_SIZE |
+                              UCP_PARAM_FIELD_ESTIMATED_NUM_EPS;
     ucp_params.features     = _use_am ? UCP_FEATURE_AM :
                                         UCP_FEATURE_TAG | UCP_FEATURE_STREAM;
     if (_epoll_fd != -1) {
         ucp_params.features |= UCP_FEATURE_WAKEUP;
     }
-    ucp_params.request_init = request_init;
-    ucp_params.request_size = sizeof(ucx_request);
+    ucp_params.request_init      = request_init;
+    ucp_params.request_size      = sizeof(ucx_request);
+    ucp_params.estimated_num_eps = est_num_eps;
+
     ucs_status_t status = ucp_init(&ucp_params, NULL, &_context);
     if (status != UCS_OK) {
         UCX_LOG << "ucp_init() failed: " << ucs_status_string(status);

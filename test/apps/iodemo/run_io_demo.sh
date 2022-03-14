@@ -430,9 +430,10 @@ make_scripts()
 	collect_ip_addrs
 
 	#
-	# Create list of servers' addresses
+	# Create list of servers' addresses and calculate total number of clients
 	#
 	client_connect_list=""
+	num_clients=0
 	for host in $(split_list ${host_list})
 	do
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
@@ -440,6 +441,8 @@ make_scripts()
 			port_num=$((base_port_num + i))
 			client_connect_list+=" ${ip_address_per_host[${host}]}:${port_num}"
 		done
+
+		num_clients = $((num_clients + num_clients_per_host[${host}]))
 	done
 
 	#
@@ -628,6 +631,7 @@ make_scripts()
 				    env IODEMO_ROLE=server_${i} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_server_args} -p ${port_num} \\
+				            -C ${num_clients} \\
 				            ${log_redirect} ${log_file} &
 				}
 

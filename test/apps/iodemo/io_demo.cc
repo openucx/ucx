@@ -70,6 +70,7 @@ typedef struct {
     double                   retry_interval;
     double                   client_runtime_limit;
     double                   print_interval;
+    unsigned                 est_num_clients;
     size_t                   iomsg_size;
     size_t                   min_data_size;
     size_t                   max_data_size;
@@ -1204,6 +1205,11 @@ public:
         destroy_connections();
     }
 
+    bool init()
+    {
+        return UcxContext::init(opts().est_num_clients);
+    }
+
     void run() {
         struct sockaddr_in listen_addr;
         memset(&listen_addr, 0, sizeof(listen_addr));
@@ -1621,6 +1627,11 @@ public:
         _start_time(get_time()),
         _read_callback_pool(opts().iomsg_size, "read callbacks")
     {
+    }
+
+    bool init()
+    {
+        return UcxContext::init(opts().servers.size());
     }
 
     size_t get_active_server_index(const UcxConnection *conn) {
@@ -2659,6 +2670,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->retry_interval        = 5.0;
     test_opts->client_runtime_limit  = std::numeric_limits<double>::max();
     test_opts->print_interval        = 1.0;
+    test_opts->est_num_clients       = 1; 
     test_opts->min_data_size         = 4096;
     test_opts->max_data_size         = 4096;
     test_opts->chunk_size            = std::numeric_limits<unsigned>::max();
@@ -2679,7 +2691,7 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
     test_opts->per_conn_info         = false;
 
     while ((c = getopt(argc, argv,
-                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:m:L:I:zV")) != -1) {
+                       "p:c:r:d:b:i:w:a:k:o:t:n:l:s:y:vqeADHP:C:m:L:I:zV")) != -1) {
         switch (c) {
         case 'p':
             test_opts->port_num = atoi(optarg);
@@ -2808,6 +2820,9 @@ static int parse_args(int argc, char **argv, options_t *test_opts)
             break;
         case 'P':
             test_opts->print_interval = atof(optarg);
+            break;
+        case 'C':
+            test_opts->est_num_clients = strtoul(optarg, NULL, 0);
             break;
         case 'm':
             if (!strcmp(optarg, "host")) {

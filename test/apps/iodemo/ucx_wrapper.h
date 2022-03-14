@@ -117,7 +117,7 @@ public:
 
     virtual ~UcxContext();
 
-    bool init();
+    bool init(unsigned est_num_eps);
 
     bool listen(const struct sockaddr* saddr, size_t addrlen);
 
