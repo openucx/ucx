@@ -75,7 +75,6 @@ static size_t ucp_am_bcopy_pack_args_first(void *dest, void *arg)
     ucp_am_hdr_t *hdr                    = dest;
     ucp_proto_multi_pack_ctx_t *pack_ctx = arg;
     ucp_request_t *req                   = pack_ctx->req;
-    ucp_am_first_ftr_t *first_ftr;
     size_t length, max_length;
 
     ucs_assertv(req->send.state.dt_iter.offset == 0, "offset %zu",
@@ -87,9 +86,7 @@ static size_t ucp_am_bcopy_pack_args_first(void *dest, void *arg)
                          pack_ctx->max_payload);
     length     = ucp_am_bcopy_pack_data(hdr + 1, req, max_length,
                                         pack_ctx->next_iter);
-    first_ftr  = UCS_PTR_BYTE_OFFSET(hdr + 1, length);
-
-    ucp_am_fill_first_footer(first_ftr, req);
+    ucp_am_fill_first_footer(UCS_PTR_BYTE_OFFSET(hdr + 1, length), req);
 
     return UCP_AM_FIRST_FRAG_META_LEN + length;
 }
@@ -145,4 +142,135 @@ ucp_proto_t ucp_eager_am_bcopy_multi_proto = {
     .query    = ucp_proto_multi_query,
     .progress = {ucp_proto_eager_am_bcopy_multi_progress},
     .abort    = ucp_request_complete_send
+};
+
+static ucs_status_t
+ucp_proto_am_eager_multi_zcopy_init(const ucp_proto_init_params_t *init_params)
+{
+    ucp_context_t *context               = init_params->worker->context;
+    ucp_proto_multi_init_params_t params = {
+        .super.super         = *init_params,
+        .super.latency       = 0,
+        .super.overhead      = 10e-9,
+        .super.cfg_thresh    = context->config.ext.zcopy_thresh,
+        .super.cfg_priority  = 30,
+        .super.min_length    = 0,
+        .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 2,
+        .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.min_zcopy),
+        .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t, cap.am.max_zcopy),
+        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.am.max_iov),
+        .super.hdr_size      = sizeof(ucp_am_hdr_t),
+        .super.send_op       = UCT_EP_OP_AM_ZCOPY,
+        .super.memtype_op    = UCT_EP_OP_LAST,
+        .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY,
+        .first.lane_type     = UCP_LANE_TYPE_AM,
+        .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
+        .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
+        .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
+        .max_lanes = init_params->worker->context->config.ext.max_eager_lanes
+    };
+
+    if (init_params->select_param->op_id != UCP_OP_ID_AM_SEND) {
+        return UCS_ERR_UNSUPPORTED;
+    }
+
+    return ucp_proto_multi_init(&params, params.super.super.priv,
+                                params.super.super.priv_size);
+}
+
+static UCS_F_ALWAYS_INLINE size_t ucp_proto_am_eager_multi_zcopy_add_payload(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        size_t meta_size, ucp_datatype_iter_t *next_iter, uct_iov_t *iov)
+{
+    size_t max_payload = ucp_proto_multi_max_payload(req, lpriv, meta_size);
+
+    ucs_assert(lpriv->super.max_iov > 1);
+
+    return ucp_datatype_iter_next_iov(&req->send.state.dt_iter, max_payload,
+                                      lpriv->super.md_index,
+                                      UCP_DT_MASK_CONTIG_IOV, next_iter, iov,
+                                      lpriv->super.max_iov - 1);
+}
+
+static UCS_F_ALWAYS_INLINE void
+ucp_am_fill_middle_header(ucp_am_mid_hdr_t *hdr, ucp_request_t *req)
+{
+    hdr->offset = req->send.state.dt_iter.offset;
+}
+
+static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_am_eager_multi_zcopy_send_func(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter)
+{
+    size_t user_hdr_size = req->send.msg_proto.am.header_length;
+    union {
+        ucp_am_hdr_t     first;
+        ucp_am_mid_hdr_t middle;
+    } hdr;
+    ucp_am_id_t am_id;
+    size_t footer_size, footer_offset, iov_count;
+    ucp_am_first_ftr_t *ftr;
+    uct_iov_t iov[UCP_MAX_IOV];
+
+    UCS_STATIC_ASSERT(sizeof(hdr.first) == sizeof(ucp_am_hdr_t));
+    UCS_STATIC_ASSERT(sizeof(hdr.middle) == sizeof(ucp_am_hdr_t));
+
+    if (req->send.state.dt_iter.offset == 0) {
+        am_id         = UCP_AM_ID_AM_FIRST;
+        footer_size   = sizeof(*ftr) + user_hdr_size;
+        footer_offset = 0;
+        ucp_am_fill_header(&hdr.first, req);
+        /* The method also fills middle/last fragment footer. The footer can be
+           reused by all fragments because it is immutable. */
+        ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.reg_desc + 1,
+                                  user_hdr_size);
+        ucp_am_fill_first_footer(ftr, req);
+    } else {
+        am_id         = UCP_AM_ID_AM_MIDDLE;
+        footer_size   = sizeof(ftr->super);
+        footer_offset = user_hdr_size;
+        ucp_am_fill_middle_header(&hdr.middle, req);
+    }
+
+    iov_count = ucp_proto_am_eager_multi_zcopy_add_payload(
+            req, lpriv, sizeof(ucp_am_hdr_t) + footer_size, next_iter, iov);
+    ucp_proto_eager_am_zcopy_add_footer(req, footer_offset,
+                                        lpriv->super.md_index, iov, &iov_count,
+                                        footer_size);
+
+    return uct_ep_am_zcopy(req->send.ep->uct_eps[lpriv->super.lane], am_id,
+                           &hdr, sizeof(ucp_am_hdr_t), iov, iov_count, 0,
+                           &req->send.state.uct_comp);
+}
+
+static void ucp_proto_request_am_eager_multi_zcopy_init(ucp_request_t *req)
+{
+    ucp_eager_am_zcopy_pack_user_header(req);
+    ucp_proto_msg_multi_request_init(req);
+}
+
+static ucs_status_t
+ucp_proto_am_eager_multi_zcopy_progress(uct_pending_req_t *self)
+{
+    ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
+
+    /* coverity[tainted_data_downcast] */
+    return ucp_proto_multi_zcopy_progress(
+            req, req->send.proto_config->priv,
+            ucp_proto_request_am_eager_multi_zcopy_init,
+            UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
+            ucp_proto_am_eager_multi_zcopy_send_func,
+            ucp_request_invoke_uct_completion_success,
+            ucp_proto_request_eager_am_zcopy_completion);
+}
+
+ucp_proto_t ucp_am_eager_multi_zcopy_proto = {
+    .name     = "am/egr/multi/zcopy",
+    .desc     = UCP_PROTO_ZCOPY_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_am_eager_multi_zcopy_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_am_eager_multi_zcopy_progress},
+    .abort    = ucp_proto_request_bcopy_abort
 };

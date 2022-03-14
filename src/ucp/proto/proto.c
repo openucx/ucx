@@ -56,6 +56,7 @@
     _macro(ucp_am_eager_short_proto) \
     _macro(ucp_tag_offload_eager_bcopy_single_proto) \
     _macro(ucp_eager_am_bcopy_multi_proto) \
+    _macro(ucp_am_eager_multi_zcopy_proto) \
     UCP_PROTO_AMO_FOR_EACH(_macro, post) \
     UCP_PROTO_AMO_FOR_EACH(_macro, fetch) \
     UCP_PROTO_AMO_FOR_EACH(_macro, cswap)
