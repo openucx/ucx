@@ -15,4 +15,4 @@ Description: Unified Communication X Library UCM module
 Version: @VERSION@
 Cflags: -I${includedir}
 Libs: -L${libdir} -lucm
-Libs.private: -Wl,--undefined=ucm_init
+Libs.private: -Wl,--undefined=ucm_init -ldl
