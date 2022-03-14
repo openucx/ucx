@@ -1564,6 +1564,7 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
     ucs_for_each_bit(lane, lanes_bitmap) {
         ucs_assert(lane < UCP_MAX_LANES); /* make coverity happy */
         rsc_idx = key->lanes[lane].rsc_index;
+        ucs_assert(rsc_idx != UCP_NULL_RESOURCE);
         ucs_string_buffer_appendf(strb, UCT_TL_RESOURCE_DESC_FMT " ",
                                   UCT_TL_RESOURCE_DESC_ARG(
                                           &context->tl_rscs[rsc_idx].tl_rsc));
@@ -1573,11 +1574,11 @@ static void ucp_worker_add_feature_rsc(ucp_context_h context,
     ucs_string_buffer_appendf(strb, ") ");
 }
 
-const char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
+static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                       ucp_context_h context,
-                                      ucp_worker_cfg_index_t config_idx,
-                                      ucs_string_buffer_t *strb)
+                                      ucp_worker_cfg_index_t config_idx)
 {
+    UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_lane_map_t tag_lanes_map    = 0;
     ucp_lane_map_t rma_lanes_map    = 0;
     ucp_lane_map_t amo_lanes_map    = 0;
@@ -1585,11 +1586,20 @@ const char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     ucp_lane_map_t am_lanes_map     = 0;
     int rma_emul                    = 0;
     int amo_emul                    = 0;
+    int num_valid_lanes             = 0;
     ucp_lane_index_t lane;
 
-    ucs_string_buffer_appendf(strb, "ep_cfg[%d]: ", config_idx);
+    ucs_string_buffer_appendf(&strb, "ep_cfg[%d]: ", config_idx);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
+        if (key->lanes[lane].rsc_index == UCP_NULL_RESOURCE) {
+            continue;
+        }
+
+        if (key->am_lane == lane) {
+            ++num_valid_lanes;
+        }
+
         if ((key->am_lane == lane) || (key->rkey_ptr_lane == lane) ||
             (ucp_ep_config_get_multi_lane_prio(key->am_bw_lanes, lane) >= 0)  ||
             (ucp_ep_config_get_multi_lane_prio(key->rma_bw_lanes, lane) >= 0)) {
@@ -1622,6 +1632,10 @@ const char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
         }
     }
 
+    if (num_valid_lanes == 0) {
+        return;
+    }
+
     if ((context->config.features & UCP_FEATURE_RMA) && (rma_lanes_map == 0)) {
         ucs_assert(key->am_lane != UCP_NULL_LANE);
         rma_lanes_map |= UCS_BIT(key->am_lane);
@@ -1634,17 +1648,17 @@ const char *ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
         amo_emul       = 1;
     }
 
-    ucp_worker_add_feature_rsc(context, key, tag_lanes_map, "tag", strb);
+    ucp_worker_add_feature_rsc(context, key, tag_lanes_map, "tag", &strb);
     ucp_worker_add_feature_rsc(context, key, rma_lanes_map,
-                               !rma_emul ? "rma" : "rma_am", strb);
+                               !rma_emul ? "rma" : "rma_am", &strb);
     ucp_worker_add_feature_rsc(context, key, amo_lanes_map,
-                               !amo_emul ? "amo" : "amo_am", strb);
-    ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am", strb);
-    ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream", strb);
+                               !amo_emul ? "amo" : "amo_am", &strb);
+    ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am", &strb);
+    ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream", &strb);
 
-    ucs_string_buffer_rtrim(strb, "; ");
+    ucs_string_buffer_rtrim(&strb, "; ");
 
-    return ucs_string_buffer_cstr(strb);
+    ucs_info("%s", ucs_string_buffer_cstr(&strb));
 }
 
 static ucs_status_t ucp_worker_init_mpools(ucp_worker_h worker)
@@ -1818,7 +1832,6 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                       unsigned ep_init_flags,
                                       ucp_worker_cfg_index_t *cfg_index_p)
 {
-    UCS_STRING_BUFFER_ONSTACK(strb, 256);
     ucp_context_h context = worker->context;
     ucp_worker_cfg_index_t ep_cfg_index;
     ucp_ep_config_t *ep_config;
@@ -1882,8 +1895,7 @@ ucs_status_t ucp_worker_get_ep_config(ucp_worker_h worker,
                                         UCP_PROTO_FLAG_AM_SHORT, key->am_lane,
                                         &ep_config->am_u.max_eager_short);
     } else {
-        ucs_info("%s", ucp_worker_print_used_tls(key, context, ep_cfg_index,
-                                                 &strb));
+        ucp_worker_print_used_tls(key, context, ep_cfg_index);
     }
 
 out:
