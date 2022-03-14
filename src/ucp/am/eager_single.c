@@ -14,7 +14,6 @@
 #include <ucp/proto/proto_common.inl>
 #include <ucp/proto/proto_single.h>
 #include <ucp/proto/proto_single.inl>
-#include <ucp/proto/proto_am.inl>
 
 
 static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
@@ -207,25 +206,6 @@ ucp_proto_eager_am_zcopy_single_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_single_init(&params);
 }
 
-static void ucp_proto_eager_am_zcopy_add_footer(ucp_request_t *req,
-                                                ucp_lane_index_t lane,
-                                                uct_iov_t *iov, size_t *iovcnt)
-{
-    size_t user_hdr_size = req->send.msg_proto.am.header_length;
-    ucp_mem_desc_t *user_hdr_desc;
-    ucp_md_index_t md_idx;
-
-    if (user_hdr_size == 0) {
-        return;
-    }
-
-    user_hdr_desc = req->send.msg_proto.am.reg_desc;
-    md_idx        = ucp_ep_md_index(req->send.ep, lane);
-
-    ucp_add_uct_iov_elem(iov, user_hdr_desc + 1, user_hdr_size,
-                         user_hdr_desc->memh->uct[md_idx], iovcnt);
-}
-
 static ucs_status_t
 ucp_proto_eager_am_zcopy_single_send_func(ucp_request_t *req,
                                           const ucp_proto_single_priv_t *spriv,
@@ -236,44 +216,13 @@ ucp_proto_eager_am_zcopy_single_send_func(ucp_request_t *req,
 
     ucp_am_fill_header(&hdr, req);
 
-    ucp_proto_eager_am_zcopy_add_footer(req, spriv->super.lane, iov, &iovcnt);
+    ucp_proto_eager_am_zcopy_add_footer(req, 0, spriv->super.md_index, iov,
+                                        &iovcnt,
+                                        req->send.msg_proto.am.header_length);
 
     return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],
                            UCP_AM_ID_AM_SINGLE, &hdr, sizeof(hdr), iov, iovcnt,
                            0, &req->send.state.uct_comp);
-}
-
-void ucp_proto_request_eager_am_zcopy_single_completion(uct_completion_t *self)
-{
-    ucp_request_t *req = ucs_container_of(self, ucp_request_t,
-                                          send.state.uct_comp);
-
-    if (req->send.msg_proto.am.header_length != 0) {
-        ucs_assert(req->send.msg_proto.am.reg_desc != NULL);
-        ucs_mpool_put_inline(req->send.msg_proto.am.reg_desc);
-    }
-    ucp_proto_request_zcopy_completion(self);
-}
-
-static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_am_zcopy_pack_user_header(ucp_request_t *req)
-{
-    ucp_mem_desc_t *reg_desc;
-
-    if (req->send.msg_proto.am.header_length == 0) {
-        return UCS_OK;
-    }
-
-    reg_desc = ucp_worker_mpool_get(&req->send.ep->worker->reg_mp);
-    if (ucs_unlikely(reg_desc == NULL)) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    ucs_assert(req->send.msg_proto.am.header != NULL);
-    ucp_am_pack_user_header(reg_desc + 1, req);
-    req->send.msg_proto.am.reg_desc = reg_desc;
-
-    return UCS_OK;
 }
 
 static ucs_status_t ucp_proto_request_eager_am_zcopy_single_init(
@@ -299,7 +248,7 @@ ucp_proto_eager_am_zcopy_single_progress(uct_pending_req_t *self)
             req, UCT_MD_MEM_ACCESS_LOCAL_READ,
             ucp_proto_eager_am_zcopy_single_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_proto_request_eager_am_zcopy_single_completion,
+            ucp_proto_request_eager_am_zcopy_completion,
             ucp_proto_request_eager_am_zcopy_single_init);
 }
 

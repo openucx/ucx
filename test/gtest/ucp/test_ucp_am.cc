@@ -1019,6 +1019,11 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_bcopy, "ZCOPY_THRESH=inf")
     test_data_release(fragment_size() * 2);
 }
 
+UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_zcopy, "ZCOPY_THRESH=0")
+{
+    test_data_release(UCS_MBYTE);
+}
+
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_eager_data_release)
 
 class test_ucp_am_nbx_align : public test_ucp_am_nbx {
