@@ -54,10 +54,15 @@ AS_IF([test "x$with_bfd" != xno],
        save_LIBS="$LIBS"
 
        # Check BFD properties with all flags pointing to the custom location
-       CFLAGS="$CFLAGS $BFD_CHECK_CFLAGS"
        CPPFLAGS="$CPPFLAGS $BFD_CHECK_CPPFLAGS"
-       LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS"
        LIBS="$LIBS $BFD_CHECK_LIBS"
+
+       # Link the test applications as a shared library, to fail if libbfd is
+       # not a PIC object.
+       # Do not allow undefined symbols, to ensure all references are resolved.
+       # TODO Allow static link with static libbfd
+       CFLAGS="$CFLAGS $BFD_CHECK_CFLAGS -fPIC"
+       LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS -shared -Wl,--no-undefined"
 
        bfd_happy="yes"
        AC_CHECK_LIB(bfd, bfd_openr, [],
