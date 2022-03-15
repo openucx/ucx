@@ -958,11 +958,17 @@ public:
         m_data_ptr = NULL;
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    static void get_test_variants_reply(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
-        add_variant_values(variants, test_ucp_am_base::get_test_variants, 1,
-                           "proto");
+        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+                           UCP_AM_SEND_FLAG_REPLY, "reply");
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, get_test_variants_reply, 0);
+        add_variant_values(variants, get_test_variants_reply, 1, "proto");
     }
 
     virtual unsigned enable_proto()

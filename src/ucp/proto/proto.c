@@ -34,11 +34,9 @@
     _macro(ucp_eager_zcopy_multi_proto) \
     _macro(ucp_eager_short_proto) \
     _macro(ucp_eager_bcopy_single_proto) \
-    _macro(ucp_eager_am_zcopy_single_proto) \
     _macro(ucp_eager_zcopy_single_proto) \
     _macro(ucp_tag_rndv_proto) \
     _macro(ucp_eager_tag_offload_short_proto) \
-    _macro(ucp_am_eager_bcopy_single_proto) \
     _macro(ucp_eager_sync_bcopy_single_proto) \
     _macro(ucp_tag_offload_eager_zcopy_single_proto) \
     _macro(ucp_eager_sync_zcopy_single_proto) \
@@ -53,10 +51,15 @@
     _macro(ucp_rndv_put_zcopy_proto) \
     _macro(ucp_rndv_put_mtype_proto) \
     _macro(ucp_rndv_rkey_ptr_proto) \
-    _macro(ucp_am_eager_short_proto) \
     _macro(ucp_tag_offload_eager_bcopy_single_proto) \
-    _macro(ucp_eager_am_bcopy_multi_proto) \
+    _macro(ucp_am_eager_short_proto) \
+    _macro(ucp_am_eager_single_bcopy_proto) \
+    _macro(ucp_am_eager_single_zcopy_proto) \
+    _macro(ucp_am_eager_multi_bcopy_proto) \
     _macro(ucp_am_eager_multi_zcopy_proto) \
+    _macro(ucp_am_eager_short_reply_proto) \
+    _macro(ucp_am_eager_single_bcopy_reply_proto) \
+    _macro(ucp_am_eager_single_zcopy_reply_proto) \
     UCP_PROTO_AMO_FOR_EACH(_macro, post) \
     UCP_PROTO_AMO_FOR_EACH(_macro, fetch) \
     UCP_PROTO_AMO_FOR_EACH(_macro, cswap)
@@ -81,6 +84,7 @@ const char *ucp_operation_names[] = {
     [UCP_OP_ID_TAG_SEND]       = "tag_send",
     [UCP_OP_ID_TAG_SEND_SYNC]  = "tag_send_sync",
     [UCP_OP_ID_AM_SEND]        = "am_send",
+    [UCP_OP_ID_AM_SEND_REPLY]  = "am_send_reply",
     [UCP_OP_ID_PUT]            = "put",
     [UCP_OP_ID_GET]            = "get",
     [UCP_OP_ID_AMO_POST]       = "amo_post",
@@ -96,6 +100,8 @@ const char *ucp_operation_descs[] = {
     [UCP_OP_ID_TAG_SEND]       = "tagged message by ucp_tag_send*",
     [UCP_OP_ID_TAG_SEND_SYNC]  = "synchronous tagged message by ucp_tag_send_sync*",
     [UCP_OP_ID_AM_SEND]        = "active message by ucp_am_send*",
+    [UCP_OP_ID_AM_SEND_REPLY]  = "active message by ucp_am_send* with reply "
+                                 "flag",
     [UCP_OP_ID_PUT]            = "remote memory write by ucp_put*",
     [UCP_OP_ID_GET]            = "remote memory read by ucp_get*",
     [UCP_OP_ID_AMO_POST]       = "posted atomic by ucp_atomic_op*",
