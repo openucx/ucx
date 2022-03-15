@@ -51,6 +51,7 @@ const ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .bandwidth = DBL_MAX
 };
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
+ucs_sys_device_t ucs_sys_topo_devices[UCS_SYS_DEVICE_ID_MAX];
 
 
 /* Global list of topology detectors */
@@ -196,7 +197,7 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
             ucs_spin_unlock(&ucs_topo_global_ctx.lock);
             return UCS_ERR_NO_RESOURCE;
         }
-        ++ucs_topo_global_ctx.num_devices;
+        ucs_sys_topo_devices[ucs_topo_global_ctx.num_devices++] = *sys_dev;
 
         kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
 

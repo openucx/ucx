@@ -127,6 +127,7 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
     unsigned md_index, uct_memh_index;
     char UCS_V_UNUSED buf[128];
     ucs_sys_device_t sys_dev;
+    ucs_sys_device_t actual_sys_dev;
     size_t tl_rkey_size;
     ucs_status_t status;
     void *tl_rkey_buf;
@@ -175,7 +176,8 @@ ucp_rkey_pack_common(ucp_context_h context, ucp_md_map_t md_map,
 
     /* Pack distance from sys_dev to each device in distance_dev_map */
     ucs_for_each_bit(sys_dev, sys_dev_map) {
-        ucp_rkey_pack_distance(sys_dev, sys_distance++,
+        actual_sys_dev = ucs_sys_topo_devices[sys_dev];
+        ucp_rkey_pack_distance(actual_sys_dev, sys_distance++,
                                ucs_serialize_next(&p,
                                                   ucp_rkey_packed_distance_t));
     }

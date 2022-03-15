@@ -117,6 +117,7 @@ static void print_sys_topo()
     static const int distance_width = 10;
     const char *distance_unit       = "MB/s";
     ucs_sys_device_t sys_dev1, sys_dev2;
+    ucs_sys_device_t actual_sys_dev1, actual_sys_dev2;
     ucs_sys_dev_distance_t distance;
     char distance_str[20];
     ucs_status_t status;
@@ -125,8 +126,9 @@ static void print_sys_topo()
     /* Get maximal width of device name */
     name_width = 2 + strlen(distance_unit);
     for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
-        name_width = ucs_max(
-                name_width, 2 + strlen(ucs_topo_sys_device_get_name(sys_dev1)));
+        actual_sys_dev1 = ucs_sys_topo_devices[sys_dev1];
+        name_width      = ucs_max(name_width,
+                                  2 + strlen(ucs_topo_sys_device_get_name(actual_sys_dev1)));
     }
 
     printf("#\n");
@@ -138,8 +140,9 @@ static void print_sys_topo()
     print_row_separator(distance_width, name_width, num_devices, ' ', '|');
     printf("# |%*s ", name_width - 1, distance_unit);
     for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
+        actual_sys_dev2 = ucs_sys_topo_devices[sys_dev2];
         printf("|%*s ", distance_width - 1,
-               ucs_topo_sys_device_get_name(sys_dev2));
+               ucs_topo_sys_device_get_name(actual_sys_dev2));
     }
     printf("|\n");
 
@@ -148,16 +151,19 @@ static void print_sys_topo()
 
     /* Print table content */
     for (sys_dev1 = 0; sys_dev1 < num_devices; ++sys_dev1) {
+        actual_sys_dev1 = ucs_sys_topo_devices[sys_dev1];
         print_row_separator(distance_width, name_width, num_devices, ' ', '|');
 
         printf("# |%*s ", name_width - 1,
-               ucs_topo_sys_device_get_name(sys_dev1));
+               ucs_topo_sys_device_get_name(actual_sys_dev1));
         for (sys_dev2 = 0; sys_dev2 < num_devices; ++sys_dev2) {
-            if (sys_dev1 == sys_dev2) {
+            actual_sys_dev2 = ucs_sys_topo_devices[sys_dev2];
+            if (actual_sys_dev1 == actual_sys_dev2) {
                 /* Do not print distance of device to itself */
                 strncpy(distance_str, "-", sizeof(distance_str));
             } else {
-                status = ucs_topo_get_distance(sys_dev1, sys_dev2, &distance);
+                status = ucs_topo_get_distance(actual_sys_dev1, actual_sys_dev2,
+                                               &distance);
                 if (status != UCS_OK) {
                     ucs_snprintf_safe(distance_str, sizeof(distance_str),
                                       "<error %d>", status);

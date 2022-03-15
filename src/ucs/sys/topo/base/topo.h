@@ -85,6 +85,8 @@ typedef struct {
 /* Global list of topology detection methods */
 extern ucs_list_link_t ucs_sys_topo_methods_list;
 
+extern ucs_sys_device_t ucs_sys_topo_devices[];
+
 
 /**
  * Find system device by pci bus id.
