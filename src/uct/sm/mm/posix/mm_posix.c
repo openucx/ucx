@@ -705,11 +705,5 @@ UCT_MM_TL_DEFINE(posix, &uct_posix_md_ops, uct_posix_rkey_unpack,
                  uct_posix_rkey_release, "POSIX_",
                  uct_posix_iface_config_table);
 
-UCT_TL_INIT(posix)
-{
-}
-
-UCT_TL_CLEANUP(posix)
-{
-}
+UCT_SINGLE_TL_INIT(&uct_posix_component.super, posix,,,)
 

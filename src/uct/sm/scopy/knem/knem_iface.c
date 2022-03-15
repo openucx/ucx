@@ -97,17 +97,8 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_knem_iface_t, uct_iface_t, uct_md_h,
                                  const uct_iface_config_t *);
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_knem_iface_t, uct_iface_t);
 
-UCT_COMPONENT_REGISTER_DEF(&uct_knem_component, knem);
-
-UCT_TL_REGISTER_DEF(&uct_knem_component, knem, uct_sm_base_query_tl_devices,
+UCT_TL_DEFINE_ENTRY(&uct_knem_component, knem, uct_sm_base_query_tl_devices,
                     uct_knem_iface_t, "KNEM_", uct_knem_iface_config_table,
                     uct_knem_iface_config_t);
 
-UCS_F_CTOR UCT_TL_INIT(knem)
-{
-}
-
-UCS_F_DTOR UCT_TL_CLEANUP(knem)
-{
-}
-
+UCT_SINGLE_TL_INIT(&uct_knem_component, knem, ctor,,)

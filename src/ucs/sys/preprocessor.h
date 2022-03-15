@@ -10,6 +10,9 @@
 /* Convert token to string */
 #define UCS_PP_QUOTE(x)                   # x
 
+/* Expand macro token to the macro value */
+#define UCS_PP_EXPAND(x)                  x
+
 /* Paste two expanded tokens */
 #define __UCS_TOKENPASTE_HELPER(x, y)     x ## y
 #define UCS_PP_TOKENPASTE(x, y)           __UCS_TOKENPASTE_HELPER(x, y)
