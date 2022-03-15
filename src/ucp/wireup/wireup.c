@@ -722,12 +722,14 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
      *    WIREUP_MSG phase between peers which require a direct EP ID.
      * 3. Create UCP EP with AM lane only, because WIREUP_MSGs are sent using
      *    AM lane.
+     * 4. Allow selecting auxiliary transports for AM lane.
      */
     unsigned ep_init_flags = UCP_EP_INIT_ERR_MODE_PEER_FAILURE |
                              UCP_EP_INIT_FLAG_INTERNAL |
                              UCP_EP_INIT_CONNECT_TO_IFACE_ONLY |
                              UCP_EP_INIT_CREATE_AM_LANE |
-                             UCP_EP_INIT_CREATE_AM_LANE_ONLY;
+                             UCP_EP_INIT_CREATE_AM_LANE_ONLY |
+                             UCP_EP_INIT_ALLOW_AUX_TL_RSC;
     ucs_status_t status;
     ucp_ep_h reply_ep;
     unsigned addr_indices[UCP_MAX_LANES];
