@@ -433,7 +433,7 @@ out:
 
 static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
 {
-    const unsigned count = iface->config.tx_ops_count;
+    const unsigned count = iface->config.tx_cq_len;
     uct_rc_iface_send_op_t *op;
     ucs_status_t status;
 
@@ -464,7 +464,7 @@ static ucs_status_t uct_rc_iface_tx_ops_init(uct_rc_iface_t *iface)
 
 static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
 {
-    const unsigned total_count = iface->config.tx_ops_count;
+    const unsigned total_count = iface->config.tx_cq_len;
     uct_rc_iface_send_op_t *op;
     unsigned free_count;
 
@@ -473,7 +473,7 @@ static void uct_rc_iface_tx_ops_cleanup(uct_rc_iface_t *iface)
         ++free_count;
         ucs_assert(free_count <= total_count);
     }
-    if (free_count != iface->config.tx_ops_count) {
+    if (free_count != iface->config.tx_cq_len) {
         ucs_warn("rc_iface %p: %u/%d send ops were not released", iface,
                  total_count- free_count, total_count);
     }
@@ -547,7 +547,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->config.tx_min_sge     = config->super.tx.min_sge;
     self->config.tx_min_inline  = config->super.tx.min_inline;
     self->config.tx_poll_always = config->tx.poll_always;
-    self->config.tx_ops_count   = tx_cq_size;
+    self->config.tx_cq_len      = tx_cq_size;
     self->config.min_rnr_timer  = uct_ib_to_rnr_fabric_time(config->tx.rnr_timeout);
     self->config.timeout        = uct_ib_to_qp_fabric_time(config->tx.timeout);
     self->config.rnr_retry      = uct_rc_iface_config_limit_value(
@@ -561,7 +561,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
     self->config.max_rd_atomic  = config->max_rd_atomic;
     self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
-    self->config.tx_cq_len      = tx_cq_size;
     self->tx.in_pending         = 0;
 #endif
     max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
