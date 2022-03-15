@@ -12,6 +12,7 @@
 
 #include "ib_md.h"
 #include "ib_device.h"
+#include "ib_log.h"
 
 #include <ucs/arch/atomic.h>
 #include <ucs/profile/profile.h>
@@ -29,7 +30,8 @@
 #include <sys/resource.h>
 
 
-#define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
+#define UCT_IB_MD_RCACHE_DEFAULT_ALIGN    16
+#define UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT (512 * UCS_MBYTE)
 
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
@@ -243,25 +245,14 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
 {
     ucs_log_level_t level = silent ? UCS_LOG_LEVEL_DEBUG : UCS_LOG_LEVEL_ERROR;
     UCS_STRING_BUFFER_ONSTACK(msg, 256);
-    struct rlimit limit_info;
     size_t page_size;
     size_t unused;
 
-    ucs_string_buffer_appendf(&msg,
-                              "%s(address=%p, length=%zu, access=0x%lx) failed: %m",
-                              ibv_reg_mr_func_name, address, length, access_flags);
-    if (err == ENOMEM) {
-        /* Check the value of the max locked memory which is set on the system
-        * (ulimit -l) */
-        if (!getrlimit(RLIMIT_MEMLOCK, &limit_info) &&
-            (limit_info.rlim_cur != RLIM_INFINITY)) {
-            ucs_string_buffer_appendf(&msg,
-                                      ". Please set max locked memory "
-                                      "(ulimit -l) to 'unlimited' "
-                                      "(current: %llu kbytes)",
-                                      limit_info.rlim_cur / UCS_KBYTE);
-        }
-    } else if (err == EINVAL) {
+    ucs_string_buffer_appendf(&msg, "%s(address=%p, length=%zu, access=0x%lx)",
+                              ibv_reg_mr_func_name, address, length,
+                              access_flags);
+
+    if (err == EINVAL) {
         /* Check if huge page is used */
         ucs_get_mem_page_size(address, length, &unused, &page_size);
         if (page_size != ucs_get_page_size()) {
@@ -272,7 +263,7 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
         }
     }
 
-    ucs_log(level, "%s", ucs_string_buffer_cstr(&msg));
+    uct_ib_mem_lock_limit_msg(ucs_string_buffer_cstr(&msg), err, level);
 }
 
 void *uct_ib_md_mem_handle_thread_func(void *arg)
@@ -1118,6 +1109,7 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
+    size_t memlock_limit;
 
     UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 
@@ -1146,6 +1138,23 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
                           sizeof(resources[num_resources].md_name),
                           "%s", ibv_get_device_name(device_list[i]));
         num_resources++;
+    }
+
+    if (num_resources != 0) {
+        status = ucs_sys_get_memlock_rlimit(&memlock_limit);
+        if ((status == UCS_OK) &&
+            (memlock_limit <= UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT)) {
+            /* Disable the RDMA devices because of too strict locked memory limit*/
+            ucs_diag("RDMA transports are disabled because max locked memory "
+                     "limit (%llu kbytes) is too low. Please set max locked "
+                     "memory (ulimit -l) to 'unlimited'",
+                     (memlock_limit / UCS_KBYTE));
+
+            *resources_p     = NULL;
+            *num_resources_p = 0;
+            ucs_free(resources);
+            goto out_free_device_list;
+        }
     }
 
     *resources_p     = resources;

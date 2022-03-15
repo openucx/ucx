@@ -63,6 +63,9 @@ void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
                                      uct_log_data_dump_func_t data_dump,
                                      char *buf, size_t max);
 
+void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno,
+                               ucs_log_level_t level);
+
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             uct_ib_iface_t *iface, struct ibv_qp *qp,
                             struct ibv_send_wr *wr, int max_sge,
