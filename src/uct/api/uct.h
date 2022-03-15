@@ -1133,6 +1133,9 @@ struct uct_iface_params {
      * +-------------------+
      */
     size_t                                       am_align_offset;
+
+    /*User defined memory allocator interface props*/
+    uct_user_allocator_props_t user_allocator;
 };
 
 

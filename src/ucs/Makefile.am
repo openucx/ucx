@@ -51,6 +51,7 @@ nobase_dist_libucs_la_HEADERS = \
 	memory/rcache.h \
 	memory/memory_type.h \
 	memory/memtype_cache.h \
+	memory/user_mem_allocator.h \
 	profile/profile_defs.h \
 	profile/profile_off.h \
 	profile/profile_on.h \
