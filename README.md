@@ -131,6 +131,12 @@ $ make -C test/gtest test
   OS distribution or build glibc from source using versions less than 2.25 or
   greater than 2.29.
 
+* Due to compatibility flaw when using UCX with rdma-core v22 setting
+  UCX_DC_MLX5_RX_INLINE=0 is unsupported and will make DC transport unavailable.
+  This issue is fixed in rdma-core v24 and backported to rdma-core-22.4-2.el7 rpm.
+  See [ucx issue 5749](https://github.com/openucx/ucx/issues/5749) for more
+  details.
+
 <hr>
 
 
