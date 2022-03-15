@@ -66,7 +66,7 @@ ucp_am_bcopy_pack_data(void *buffer, ucp_request_t *req, size_t length,
     return total_length;
 }
 
-static void ucp_proto_request_eager_am_zcopy_completion(uct_completion_t *self)
+static void ucp_proto_request_am_eager_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -77,7 +77,7 @@ static void ucp_proto_request_eager_am_zcopy_completion(uct_completion_t *self)
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_am_zcopy_pack_user_header(ucp_request_t *req)
+ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
 {
     ucp_mem_desc_t *reg_desc;
 

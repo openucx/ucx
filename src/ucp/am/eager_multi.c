@@ -22,8 +22,15 @@
     (sizeof(ucp_am_hdr_t) + sizeof(ucp_am_mid_ftr_t))
 
 
+static UCS_F_ALWAYS_INLINE int
+ucp_am_eager_multi_supported(const ucp_proto_init_params_t *init_params)
+{
+    return (init_params->select_param->op_id == UCP_OP_ID_AM_SEND) ||
+           (init_params->select_param->op_id == UCP_OP_ID_AM_SEND_REPLY);
+}
+
 static ucs_status_t
-ucp_proto_eager_am_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
+ucp_proto_am_eager_multi_bcopy_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_context_t *context               = init_params->worker->context;
     ucp_proto_multi_init_params_t params = {
@@ -48,7 +55,7 @@ ucp_proto_eager_am_bcopy_multi_init(const ucp_proto_init_params_t *init_params)
         .max_lanes = init_params->worker->context->config.ext.max_eager_lanes
     };
 
-    if (init_params->select_param->op_id != UCP_OP_ID_AM_SEND) {
+    if (!ucp_am_eager_multi_supported(init_params)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -123,7 +130,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_eager_am_bcopy_multi_send_func
 }
 
 static ucs_status_t
-ucp_proto_eager_am_bcopy_multi_progress(uct_pending_req_t *uct_req)
+ucp_proto_am_eager_multi_bcopy_progress(uct_pending_req_t *uct_req)
 {
     ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
 
@@ -134,13 +141,13 @@ ucp_proto_eager_am_bcopy_multi_progress(uct_pending_req_t *uct_req)
             ucp_proto_request_bcopy_complete_success);
 }
 
-ucp_proto_t ucp_eager_am_bcopy_multi_proto = {
-    .name     = "egr/am/multi/bcopy",
+ucp_proto_t ucp_am_eager_multi_bcopy_proto = {
+    .name     = "am/egr/multi/bcopy",
     .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
-    .init     = ucp_proto_eager_am_bcopy_multi_init,
+    .init     = ucp_proto_am_eager_multi_bcopy_init,
     .query    = ucp_proto_multi_query,
-    .progress = {ucp_proto_eager_am_bcopy_multi_progress},
+    .progress = {ucp_proto_am_eager_multi_bcopy_progress},
     .abort    = ucp_request_complete_send
 };
 
@@ -171,7 +178,7 @@ ucp_proto_am_eager_multi_zcopy_init(const ucp_proto_init_params_t *init_params)
         .max_lanes = init_params->worker->context->config.ext.max_eager_lanes
     };
 
-    if (init_params->select_param->op_id != UCP_OP_ID_AM_SEND) {
+    if (!ucp_am_eager_multi_supported(init_params)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -246,7 +253,7 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_proto_am_eager_multi_zcopy_send_func
 
 static void ucp_proto_request_am_eager_multi_zcopy_init(ucp_request_t *req)
 {
-    ucp_eager_am_zcopy_pack_user_header(req);
+    ucp_am_eager_zcopy_pack_user_header(req);
     ucp_proto_msg_multi_request_init(req);
 }
 
@@ -262,7 +269,7 @@ ucp_proto_am_eager_multi_zcopy_progress(uct_pending_req_t *self)
             UCT_MD_MEM_ACCESS_LOCAL_READ, UCP_DT_MASK_CONTIG_IOV,
             ucp_proto_am_eager_multi_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_proto_request_eager_am_zcopy_completion);
+            ucp_proto_request_am_eager_zcopy_completion);
 }
 
 ucp_proto_t ucp_am_eager_multi_zcopy_proto = {

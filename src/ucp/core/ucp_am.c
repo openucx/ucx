@@ -956,6 +956,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     ucp_memtype_thresh_t *max_short;
     const ucp_request_send_proto_t *proto;
     size_t contig_length;
+    ucp_operation_id_t op_id;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_AM,
                                     return UCS_STATUS_PTR(UCS_ERR_INVALID_PARAM));
@@ -970,9 +971,11 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
     if (flags & UCP_AM_SEND_FLAG_REPLY) {
         max_short = &ucp_ep_config(ep)->am_u.max_reply_eager_short;
         proto     = ucp_ep_config(ep)->am_u.reply_proto;
+        op_id     = UCP_OP_ID_AM_SEND_REPLY;
     } else {
         max_short = &ucp_ep_config(ep)->am_u.max_eager_short;
         proto     = ucp_ep_config(ep)->am_u.proto;
+        op_id     = UCP_OP_ID_AM_SEND;
     }
 
     if (ucs_likely(attr_mask == 0)) {
@@ -1022,9 +1025,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         req->send.msg_proto.am.header        = (void*)header;
         req->send.msg_proto.am.header_length = header_length;
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
-                                        UCP_WORKER_CFG_INDEX_NULL, req,
-                                        UCP_OP_ID_AM_SEND, buffer, count,
-                                        datatype, contig_length, param);
+                                        UCP_WORKER_CFG_INDEX_NULL, req, op_id,
+                                        buffer, count, datatype, contig_length,
+                                        param);
     } else {
         ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
                              count, flags, id, param);

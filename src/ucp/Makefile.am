@@ -96,6 +96,8 @@ noinst_HEADERS                += api/ucpx.h
 endif
 
 libucp_la_SOURCES = \
+	am/eager_single.c \
+	am/eager_multi.c \
 	core/ucp_context.c \
 	core/ucp_am.c \
 	core/ucp_ep.c \
@@ -143,6 +145,8 @@ libucp_la_SOURCES = \
 	rndv/rndv_rtr.c \
 	rndv/rndv_rkey_ptr.c \
 	rndv/rndv.c \
+	stream/stream_recv.c \
+	stream/stream_send.c \
 	tag/eager_multi.c \
 	tag/eager_rcv.c \
 	tag/eager_snd.c \
@@ -159,8 +163,4 @@ libucp_la_SOURCES = \
 	wireup/select.c \
 	wireup/wireup_ep.c \
 	wireup/wireup.c \
-	wireup/wireup_cm.c \
-	stream/stream_send.c \
-	stream/stream_recv.c \
-	am/eager_single.c \
-	am/eager_multi.c
+	wireup/wireup_cm.c
