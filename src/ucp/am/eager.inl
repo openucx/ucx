@@ -42,8 +42,8 @@ ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE ssize_t
-ucp_am_bcopy_pack_data(void *buffer, ucp_request_t *req, size_t length,
-                       ucp_datatype_iter_t *next_iter)
+ucp_am_eager_bcopy_pack_data(void *buffer, ucp_request_t *req, size_t length,
+                             ucp_datatype_iter_t *next_iter)
 {
     unsigned user_header_length = req->send.msg_proto.am.header_length;
     size_t total_length;
@@ -66,7 +66,7 @@ ucp_am_bcopy_pack_data(void *buffer, ucp_request_t *req, size_t length,
     return total_length;
 }
 
-static void ucp_proto_request_am_eager_zcopy_completion(uct_completion_t *self)
+static void ucp_am_eager_zcopy_completion(uct_completion_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t,
                                           send.state.uct_comp);
@@ -96,7 +96,7 @@ ucp_am_eager_zcopy_pack_user_header(ucp_request_t *req)
     return UCS_OK;
 }
 
-static UCS_F_ALWAYS_INLINE void ucp_proto_eager_am_zcopy_add_footer(
+static UCS_F_ALWAYS_INLINE void ucp_am_eager_zcopy_add_footer(
         ucp_request_t *req, size_t offset, ucp_rsc_index_t md_index,
         uct_iov_t *iov, size_t *iovcnt, size_t footer_size)
 {
