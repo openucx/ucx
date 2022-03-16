@@ -270,7 +270,7 @@ struct uct_rc_iface {
         unsigned             tx_qp_len;
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
-        unsigned             tx_ops_count;
+        unsigned             tx_cq_len;
         uint16_t             tx_moderation;
         uint8_t              tx_poll_always;
 
@@ -292,9 +292,6 @@ struct uct_rc_iface {
         uint8_t              max_rd_atomic;
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
-#if UCS_ENABLE_ASSERT
-        int                  tx_cq_len;
-#endif
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
         size_t               max_get_zcopy;
@@ -489,8 +486,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_add_cq_credits(uct_rc_iface_t *iface, uint16_t cq_credits)
 {
     iface->tx.cq_available += cq_credits;
-    ucs_assertv(iface->tx.cq_available <= iface->config.tx_cq_len,
-                "cq_available=%d tx_cq_len=%d cq_credits=%d",
+    ucs_assertv((ssize_t)iface->tx.cq_available <=
+                (ssize_t)iface->config.tx_cq_len,
+                "cq_available=%d tx_cq_len=%u cq_credits=%d",
                 iface->tx.cq_available, iface->config.tx_cq_len, cq_credits);
 }
 
