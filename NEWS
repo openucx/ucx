@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.12.1-rc3 (March 4, 2022)
+## 1.12.1-rc4 (March 16, 2022)
 ### Bugfixes
 * Fixed memory hooks for Cuda 11.5
 * Fixed memory type cache merge
@@ -19,6 +19,11 @@
 * Fixed progress loop in io_demo application
 * Fixed ROCm segfault when using internal_ops functions
 * Fixed ROCm memory hooks
+* Fixed performance regression on A64FX
+* Fixed DCT create failure with rdma-core v22
+* Fixed golang bindings build
+* Fixed .deb package build on Ubuntu 22.04
+* Fixed build on archlinux
 
 ### Important changes
 * If Cuda memory hooks on driver API cannot be installed, memory type cache and
