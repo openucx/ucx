@@ -154,8 +154,11 @@ struct uct_ib_iface_config {
     /* Number of paths to expose for the interface  */
     unsigned long           num_paths;
 
-    /* Whether to use local IP address and subnet mask for RoCE(v2) routing */
-    int                     rocev2_use_netmask;
+    /* Whether to check RoCEv2 reachability by IP address and local subnet */
+    int                     rocev2_local_subnet;
+
+    /* Length of subnet prefix for reachability check */
+    unsigned long           rocev2_subnet_pfx_len;
 
     /* Multiplier for RoCE LAG UDP source port calculation */
     unsigned                roce_path_factor;
@@ -476,7 +479,7 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
  * @param md_config_index       Gid index from the md configuration.
  */
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             size_t md_config_index);
+                                             unsigned long cfg_gid_index);
 
 
 static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)
@@ -558,7 +561,6 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
     uct_ib_device_name(uct_ib_iface_device(_iface)), \
     (_iface)->config.port_num, \
     uct_ib_iface_is_roce(_iface) ? "RoCE" : "IB"
-    
 
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \

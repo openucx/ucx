@@ -81,7 +81,7 @@ typedef struct uct_ib_md_ext_config {
         size_t               max_size;     /**< Maximal memory region size for ODP */
     } odp;
 
-    size_t                   gid_index;    /**< IB GID index to use  */
+    unsigned long            gid_index;    /**< IB GID index to use */
 
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */

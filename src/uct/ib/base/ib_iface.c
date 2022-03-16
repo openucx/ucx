@@ -179,7 +179,15 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Use the local IP address and subnet mask of each network device to route RoCEv2 packets.\n"
    "If set to 'y', only addresses within the interface's subnet will be assumed as reachable.\n"
    "If set to 'n', every remote RoCEv2 IP address is assumed to be reachable from any port.",
-   ucs_offsetof(uct_ib_iface_config_t, rocev2_use_netmask), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(uct_ib_iface_config_t, rocev2_local_subnet), UCS_CONFIG_TYPE_BOOL},
+
+  {"ROCE_SUBNET_PREFIX_LEN", "auto",
+   "Length, in bits, of the subnet prefix to be used for reachability check\n"
+   "when UCX_IB_ROCE_LOCAL_SUBNET is enabled.\n"
+   " - auto  - Detect the subnet prefix length automatically from device address\n"
+   " - inf   - Allow connections only within the same machine and same device\n"
+   " - <num> - Specify a numeric bit-length value for the subnet prefix",
+   ucs_offsetof(uct_ib_iface_config_t, rocev2_subnet_pfx_len), UCS_CONFIG_TYPE_ULUNITS},
 
   {"ROCE_PATH_FACTOR", "1",
    "Multiplier for RoCE LAG UDP source port calculation. The UDP source port\n"
@@ -1183,91 +1191,121 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface)
 }
 
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             size_t md_config_index)
+                                             unsigned long cfg_gid_index)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
     uint8_t port_num     = iface->config.port_num;
 
     ucs_assert(uct_ib_iface_is_roce(iface));
 
-    if (md_config_index == UCS_ULUNITS_AUTO) {
+    if (cfg_gid_index == UCS_ULUNITS_AUTO) {
         return uct_ib_device_select_gid(dev, port_num, &iface->gid_info);
     }
 
-    return uct_ib_device_query_gid_info(dev->ibv_context, uct_ib_device_name(dev),
-                                        port_num, md_config_index,
-                                        &iface->gid_info);
+    return uct_ib_device_query_gid_info(dev->ibv_context,
+                                        uct_ib_device_name(dev), port_num,
+                                        cfg_gid_index, &iface->gid_info);
 }
 
-static void
-uct_ib_iface_init_roce_mask_info(uct_ib_iface_t *iface, size_t md_config_index)
+static ucs_status_t
+uct_ib_iface_init_roce_addr_prefix(uct_ib_iface_t *iface,
+                                   const uct_ib_iface_config_t *config)
 {
-    uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    uint8_t port_num     = iface->config.port_num;
-
+    uct_ib_device_t *dev               = uct_ib_iface_device(iface);
+    uint8_t port_num                   = iface->config.port_num;
+    uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
+    size_t addr_size, max_prefix_bits;
     struct sockaddr_storage mask;
     char ndev_name[IFNAMSIZ];
-    ucs_status_t status;
-    size_t addr_size;
     const void *mask_addr;
+    ucs_status_t status;
 
     ucs_assert(uct_ib_iface_is_roce(iface));
+
+    if ((gid_info->roce_info.ver != UCT_IB_DEVICE_ROCE_V2) ||
+        !config->rocev2_local_subnet) {
+        iface->addr_prefix_bits = 0;
+        return UCS_OK;
+    }
+
+    status = ucs_sockaddr_inet_addr_size(gid_info->roce_info.addr_family,
+                                         &addr_size);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    max_prefix_bits = 8 * addr_size;
+    ucs_assertv(max_prefix_bits <= UINT8_MAX, "max_prefix_bits=%zu",
+                max_prefix_bits);
+
+    if (config->rocev2_subnet_pfx_len == UCS_ULUNITS_INF) {
+        /* Maximal prefix length value */
+        iface->addr_prefix_bits = max_prefix_bits;
+        return UCS_OK;
+    } else if (config->rocev2_subnet_pfx_len != UCS_ULUNITS_AUTO) {
+        /* Configured prefix length value */
+        if (config->rocev2_subnet_pfx_len > max_prefix_bits) {
+            ucs_error("invalid parameter for ROCE_SUBNET_PREFIX_LEN: "
+                      "actual %zu, expected <= %zu",
+                      config->rocev2_subnet_pfx_len, max_prefix_bits);
+            return UCS_ERR_INVALID_PARAM;
+        }
+
+        iface->addr_prefix_bits = config->rocev2_subnet_pfx_len;
+        return UCS_OK;
+    }
 
     status = uct_ib_device_get_roce_ndev_name(dev, port_num,
                                               iface->gid_info.gid_index,
                                               ndev_name, sizeof(ndev_name));
     if (status != UCS_OK) {
-        goto mask_info_failed;
+        goto out_mask_info_failed;
     }
 
     status = ucs_netif_get_addr(ndev_name, AF_UNSPEC, NULL,
                                 (struct sockaddr*)&mask);
     if (status != UCS_OK) {
-        goto mask_info_failed;
-    }
-
-    status = ucs_sockaddr_inet_addr_sizeof((struct sockaddr*)&mask, &addr_size);
-    if (status != UCS_OK) {
-        goto mask_info_failed;
+        goto out_mask_info_failed;
     }
 
     mask_addr               = ucs_sockaddr_get_inet_addr((struct sockaddr*)&mask);
-    iface->addr_prefix_bits = (addr_size * 8) -
+    iface->addr_prefix_bits = max_prefix_bits -
                               ucs_count_ptr_trailing_zero_bits(mask_addr,
-                                                               addr_size * 8);
-    return;
+                                                               max_prefix_bits);
+    return UCS_OK;
 
-mask_info_failed:
+out_mask_info_failed:
     ucs_debug("failed to detect RoCE subnet mask prefix on "UCT_IB_IFACE_FMT
               " - ignoring mask", UCT_IB_IFACE_ARG(iface));
     iface->addr_prefix_bits = 0;
+    return UCS_OK;
 }
 
-static ucs_status_t uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
-                                               size_t md_config_index,
-                                               int rocev2_use_netmask)
+static ucs_status_t
+uct_ib_iface_init_gid_info(uct_ib_iface_t *iface,
+                           const uct_ib_iface_config_t *config)
 {
+    uct_ib_md_t *md                    = uct_ib_iface_md(iface);
+    unsigned long cfg_gid_index        = md->config.gid_index;
     uct_ib_device_gid_info_t *gid_info = &iface->gid_info;
     ucs_status_t status;
 
     /* Fill the gid index and the RoCE version */
     if (uct_ib_iface_is_roce(iface)) {
-        status = uct_ib_iface_init_roce_gid_info(iface, md_config_index);
+        status = uct_ib_iface_init_roce_gid_info(iface, cfg_gid_index);
         if (status != UCS_OK) {
             goto out;
         }
 
-        if ((gid_info->roce_info.ver == UCT_IB_DEVICE_ROCE_V2) &&
-            rocev2_use_netmask) {
-            uct_ib_iface_init_roce_mask_info(iface, md_config_index);
-        } else {
-            iface->addr_prefix_bits = 0;
+        status = uct_ib_iface_init_roce_addr_prefix(iface, config);
+        if (status != UCS_OK) {
+            goto out;
         }
     } else {
-        gid_info->gid_index             = (md_config_index ==
+        gid_info->gid_index             = (cfg_gid_index ==
                                            UCS_ULUNITS_AUTO) ?
                                           UCT_IB_MD_DEFAULT_GID_INDEX :
-                                          md_config_index;
+                                          cfg_gid_index;
         gid_info->roce_info.ver         = UCT_IB_DEVICE_ROCE_ANY;
         gid_info->roce_info.addr_family = 0;
     }
@@ -1397,8 +1435,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
         goto err;
     }
 
-    status = uct_ib_iface_init_gid_info(self, ib_md->config.gid_index,
-                                        config->rocev2_use_netmask);
+    status = uct_ib_iface_init_gid_info(self, config);
     if (status != UCS_OK) {
         goto err;
     }
