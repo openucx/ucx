@@ -17,11 +17,11 @@ BEGIN_C_DECLS
 
 
 /* Upper limit on system device id */
-#define UCS_SYS_DEVICE_ID_MAX UINT8_MAX
+#define UCS_SYS_DEVICE_ID_MAX UINT16_MAX
 
 /* Indicate that the ucs_sys_device_t for the device has no real bus_id
  * e.g. virtual devices like CMA/knem */
-#define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT16_MAX
 
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
@@ -41,7 +41,7 @@ typedef struct ucs_sys_bus_id {
  * Obtained from a translation of the device bus id into a short integer
  * Refer ucs_topo_find_device_by_bus_id()
  */
-typedef uint8_t ucs_sys_device_t;
+typedef uint16_t ucs_sys_device_t;
 
 
 /*

@@ -12,10 +12,11 @@ extern "C" {
 class test_topo : public ucs::test {
 };
 
-uint8_t ucs_topo_get_bus_id(uint8_t index, ucs_sys_bus_id_t *bus_id)
+ucs_sys_device_t ucs_topo_get_bus_id(ucs_sys_device_t index,
+                                     ucs_sys_bus_id_t *bus_id)
 {
-    char bus_str[] = "0000:00:00.0";
-    uint8_t count = 0;
+    char bus_str[]         = "0000:00:00.0";
+    ucs_sys_device_t count = 0;
     int num_fields;
     DIR *d;
     struct dirent *dir;
@@ -46,7 +47,7 @@ uint8_t ucs_topo_get_bus_id(uint8_t index, ucs_sys_bus_id_t *bus_id)
 }
 
 UCS_TEST_F(test_topo, find_device_by_bus_id) {
-    uint8_t device_count = 0;
+    ucs_sys_device_t device_count = 0;
     ucs_status_t status;
     ucs_sys_device_t dev1;
     ucs_sys_device_t dev2;
