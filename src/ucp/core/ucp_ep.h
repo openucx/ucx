@@ -159,7 +159,9 @@ enum {
     UCP_EP_INIT_CONNECT_TO_IFACE_ONLY  = UCS_BIT(7),  /**< Select transports which
                                                            support CONNECT_TO_IFACE
                                                            mode only */
-    UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8)   /**< Endpoint requires an AM lane only */
+    UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8),  /**< Endpoint requires an AM lane only */
+    UCP_EP_INIT_ALLOW_AUX_TL_RSC       = UCS_BIT(9)   /**< Endpoint allows selecting of auxiliary
+                                                           transports for its configuration */
 };
 
 

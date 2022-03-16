@@ -395,7 +395,8 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                 &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
-            !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
+            !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX) &&
+            !(select_params->ep_init_flags & UCP_EP_INIT_ALLOW_AUX_TL_RSC)) {
             continue;
         }
 
