@@ -136,7 +136,6 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
     select_param->sys_dev    = mem_info->sys_dev;
     select_param->sg_count   = sg_count;
     select_param->padding[0] = 0;
-    select_param->padding[1] = 0;
 }
 
 static UCS_F_ALWAYS_INLINE int

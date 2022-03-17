@@ -221,18 +221,21 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                           UCS_TOPO_MAX_SYS_DEVICES);
 
         *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
-        ucs_sys_topo_devices[ucs_topo_global_ctx.num_devices++] = *sys_dev;
 
-        /* Set default name to abbreviated BDF */
-        name = ucs_malloc(UCS_SYS_BDF_NAME_MAX, "sys_dev_bdf_name");
-        if (name != NULL) {
-            ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
+        if (ucs_topo_global_ctx.devices[*sys_dev].name == NULL) {
+            ucs_sys_topo_devices[ucs_topo_global_ctx.num_devices++] = *sys_dev;
+
+            /* Set default name to abbreviated BDF */
+            name = ucs_malloc(UCS_SYS_BDF_NAME_MAX, "sys_dev_bdf_name");
+            if (name != NULL) {
+                ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
+            }
+
+            ucs_topo_global_ctx.devices[*sys_dev].bus_id = *bus_id;
+            ucs_topo_global_ctx.devices[*sys_dev].name   = name;
+
+            ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
         }
-
-        ucs_topo_global_ctx.devices[*sys_dev].bus_id = *bus_id;
-        ucs_topo_global_ctx.devices[*sys_dev].name   = name;
-
-        ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
 err:
@@ -447,15 +450,17 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
 
 void ucs_topo_print_info(FILE *stream)
 {
+    int i;
     char bdf_name[UCS_SYS_BDF_NAME_MAX];
-    volatile ucs_sys_device_t sys_dev;
 
-    kh_foreach_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, sys_dev, {
-        fprintf(stream, "%d  %*s  %s\n", sys_dev, UCS_SYS_BDF_NAME_MAX,
-                ucs_topo_sys_device_bdf_name(sys_dev, bdf_name,
+    for (i = 0; i < ucs_topo_global_ctx.num_devices; i++) {
+        fprintf(stream, "%d  %*s  %s\n", ucs_sys_topo_devices[i],
+                UCS_SYS_BDF_NAME_MAX,
+                ucs_topo_sys_device_bdf_name(ucs_sys_topo_devices[i],
+                                             bdf_name,
                                              sizeof(bdf_name)),
-                ucs_topo_global_ctx.devices[sys_dev].name);
-    })
+                ucs_topo_global_ctx.devices[ucs_sys_topo_devices[i]].name);
+    }
 }
 
 static ucs_sys_topo_method_t ucs_sys_topo_sysfs_method = {
@@ -465,9 +470,16 @@ static ucs_sys_topo_method_t ucs_sys_topo_sysfs_method = {
 
 void ucs_topo_init()
 {
+    int i;
+
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices = 0;
+
+    for (i = 0; i < UCS_TOPO_MAX_SYS_DEVICES;i++) {
+        ucs_topo_global_ctx.devices[i].name = NULL;
+    }
+
     ucs_list_add_tail(&ucs_sys_topo_methods_list,
                       &ucs_sys_topo_default_method.list);
     ucs_list_add_tail(&ucs_sys_topo_methods_list,
