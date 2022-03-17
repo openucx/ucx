@@ -988,11 +988,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         datatype = param->datatype;
         if (ucs_likely(UCP_DT_IS_CONTIG(datatype))) {
             contig_length = ucp_contig_dt_length(datatype, count);
-            status        = ucp_am_try_send_short(ep, id, flags, header,
-                                                  header_length, buffer,
-                                                  ucp_contig_dt_length(datatype,
-                                                                       count),
-                                                  max_short);
+            status = ucp_am_try_send_short(ep, id, flags, header, header_length,
+                                           buffer, contig_length, max_short);
             ucp_request_send_check_status(status, ret, goto out);
         } else {
             contig_length = 0ul;
@@ -1027,7 +1024,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req, op_id,
                                         buffer, count, datatype, contig_length,
-                                        param);
+                                        param, header_length);
     } else {
         ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
                              count, flags, id, param);
