@@ -90,7 +90,10 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
 
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9)
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
+
+    /** Enable @ref uct_perf_attr_t::max_inflight_eps */
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
 };
 
 
@@ -174,6 +177,16 @@ typedef struct {
      * This field is set by the UCT layer.
      */
     ucs_linear_func_t   latency;
+
+    /**
+     * Approximate maximum number of endpoints that could have outstanding
+     * operations simultaneously.
+     * Protocols that require sending to multiple destinations at the same time
+     * (such as keepalive) could benefit from using a transport that has a
+     * large number of maximum inflight endpoints.
+     * This field is set by the UCT layer.
+     */
+    size_t              max_inflight_eps;
 } uct_perf_attr_t;
 
 

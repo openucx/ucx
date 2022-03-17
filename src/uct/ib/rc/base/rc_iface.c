@@ -944,6 +944,28 @@ ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags)
     return UCS_OK;
 }
 
+ucs_status_t uct_rc_iface_estimate_perf(uct_iface_h tl_iface,
+                                        uct_perf_attr_t *perf_attr)
+{
+    uct_rc_iface_t *iface = ucs_derived_of(tl_iface, uct_rc_iface_t);
+    ucs_status_t status;
+
+    status = uct_ib_iface_estimate_perf(tl_iface, perf_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+        ucs_assertv(iface->config.tx_cq_len >= iface->config.tx_qp_len,
+                    "iface %p: tx_cq_len=%u tx_qp_len=%u", iface,
+                    iface->config.tx_cq_len, iface->config.tx_qp_len);
+        perf_attr->max_inflight_eps =
+                iface->config.tx_cq_len / iface->config.tx_qp_len;
+    }
+
+    return UCS_OK;
+}
+
 void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface)
 {
     ucs_vfs_obj_add_ro_file(iface, ucs_vfs_show_primitive,

@@ -868,6 +868,24 @@ void uct_dc_mlx5_iface_set_quota(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_iface_c
                                                            config->quota);
 }
 
+static ucs_status_t uct_dc_mlx5_iface_estimate_perf(uct_iface_h tl_iface,
+                                                    uct_perf_attr_t *perf_attr)
+{
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
+    ucs_status_t status;
+
+    status = uct_ib_iface_estimate_perf(tl_iface, perf_attr);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+        perf_attr->max_inflight_eps = iface->tx.ndci;
+    }
+
+    return UCS_OK;
+}
+
 static void uct_dc_mlx5_iface_vfs_refresh(uct_iface_h tl_iface)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
@@ -1224,7 +1242,7 @@ static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
 static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf = uct_ib_iface_estimate_perf,
+            .iface_estimate_perf = uct_dc_mlx5_iface_estimate_perf,
             .iface_vfs_refresh   = uct_dc_mlx5_iface_vfs_refresh,
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_dc_mlx5_ep_invalidate

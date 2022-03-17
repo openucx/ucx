@@ -427,6 +427,9 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
 
 ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
+ucs_status_t uct_rc_iface_estimate_perf(uct_iface_h tl_iface,
+                                        uct_perf_attr_t *perf_attr);
+
 void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface);
 
 void uct_rc_iface_vfs_refresh(uct_iface_h iface);
