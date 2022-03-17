@@ -292,7 +292,7 @@ static UCS_F_ALWAYS_INLINE int uct_ud_ep_is_last_ack_received(uct_ud_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE void
-uct_ud_ep_assert_tx_window_nonempty(uct_ud_ep_t *ep)
+uct_ud_ep_assert_tx_window_nonempty(const uct_ud_ep_t *ep)
 {
     ucs_assertv(!ucs_queue_is_empty(&ep->tx.window),
                 "ep %p: acked_psn=%u current_psn=%u", ep, ep->tx.acked_psn,
@@ -673,8 +673,9 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ep->tx.acked_psn = ack_psn;
     ucs_assertv(UCT_UD_PSN_COMPARE(ep->tx.acked_psn, <, ep->tx.psn),
-                "ep %p: acked_psn=%u must be smaller than current_psn=%u", ep,
-                ep->tx.acked_psn, ep->tx.psn);
+                "ep %p: flags=0x%x acked_psn=%u must be smaller than"
+                " current_psn=%u", ep, ep->flags, ep->tx.acked_psn,
+                ep->tx.psn);
 
     uct_ud_ep_window_release_inline(iface, ep, ack_psn, UCS_OK, is_async, 0);
     uct_ud_ep_ca_ack(ep);
@@ -1019,8 +1020,76 @@ out:
     ucs_mpool_put(skb);
 }
 
+static ucs_status_t
+uct_ud_ep_comp_skb_add(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                       uct_completion_t *comp)
+{
+    uct_ud_send_skb_t *skb;
+
+    if (comp == NULL) {
+        return UCS_INPROGRESS;
+    }
+
+    /* If the user requested a callback, allocate a dummy skb which will be
+     * released when the current sequence number is completed.
+     */
+    ucs_assert(comp->count > 0);
+
+    skb = ucs_mpool_get(&iface->tx.mp);
+    if (skb == NULL) {
+        return UCS_ERR_NO_RESOURCE;
+    }
+
+    /* Add dummy skb to the window, which would call user completion
+     * callback when getting ACK.
+     */
+    skb->flags                  = UCT_UD_SEND_SKB_FLAG_COMP;
+    skb->len                    = sizeof(skb->neth[0]);
+    skb->neth->packet_type      = 0;
+    skb->neth->psn              = (uct_ud_psn_t)(ep->tx.psn - 1);
+    uct_ud_neth_set_dest_id(skb->neth, UCT_UD_EP_NULL_ID);
+    uct_ud_comp_desc(skb)->comp = comp;
+
+    if (!ucs_queue_is_empty(&ep->tx.window)) {
+        /* If window non-empty: add to window */
+        skb->flags |= UCT_UD_SEND_SKB_FLAG_ACK_REQ;
+        ucs_queue_push(&ep->tx.window, &skb->queue);
+    } else {
+        /* Otherwise, add the skb after async completions */
+        ucs_assert(ep->tx.resend_count == 0);
+        uct_ud_iface_add_async_comp(iface, ep, skb, UCS_OK);
+    }
+
+    ucs_trace_data("added dummy flush skb %p psn %d user_comp %p", skb,
+                   skb->neth->psn, comp);
+
+    return UCS_INPROGRESS;
+}
+
+static UCS_F_ALWAYS_INLINE void uct_ud_ep_ack_req_do(uct_ud_iface_t *iface,
+                                                     uct_ud_ep_t *ep)
+{
+    /* If we didn't flush the last skb, send an ACK_REQ message.
+     * It will speed up the flush because we will not have to wait until
+     * retransmit is triggered.
+     * Also, prevent from sending more control messages like this after first
+     * time by turning on the flag on the last skb.
+     */
+
+    /* Since the function can be called from the arbiter context it is
+     * impossible to schedule a control operation. So just raise a flag and if
+     * there is no other control send ACK_REQ directly.
+     *
+     * If there is other control arbiter will take care of it.
+     */
+    ep->tx.pending.ops |= UCT_UD_EP_OP_ACK_REQ;
+    if (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_ACK_REQ)) {
+        uct_ud_ep_do_pending_ctl(ep, iface);
+    }
+}
+
 ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                    uct_completion_t *comp)
+                                    unsigned flags, uct_completion_t *comp)
 {
     uct_ud_send_skb_t *skb;
 
@@ -1046,76 +1115,32 @@ ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     if (ucs_queue_is_empty(&ep->tx.window) &&
         ucs_queue_is_empty(&iface->tx.async_comp_q)) {
-        /* No outstanding operations */
+        /* TX windows is empty and no outstanding operations */
         ucs_assert(ep->tx.resend_count == 0);
         return UCS_OK;
     }
 
-    /* Expedite acknowledgment on the last skb in the window */
-    if (uct_ud_ep_is_last_ack_received(ep)) {
-        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
-    } else {
+    if (!uct_ud_ep_is_last_ack_received(ep)) {
+        ucs_assert(!(flags & UCT_FLUSH_FLAG_CANCEL));
         uct_ud_ep_assert_tx_window_nonempty(ep);
         skb = ucs_queue_tail_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t,
                                             queue);
         if (!(skb->flags & UCT_UD_SEND_SKB_FLAG_ACK_REQ)) {
-            /* If we didn't ask for ACK on last skb, send an ACK_REQ message.
-             * It will speed up the flush because we will not have to wait until
-             * retransmit is triggered.
-             * Also, prevent from sending more control messages like this after
-             * first time by turning on the flag on the last skb.
-             */
-
-            /* Since the function can be called from the arbiter context it is
-             * impossible to schedule a control operation. So just raise a
-             * flag and if there is no other control send ACK_REQ directly.
-             *
-             * If there is other control arbiter will take care of it.
-             */
-            ep->tx.pending.ops |= UCT_UD_EP_OP_ACK_REQ;
-            if (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_ACK_REQ)) {
-                uct_ud_ep_do_pending_ctl(ep, iface);
-            }
-
+            uct_ud_ep_ack_req_do(iface, ep);
             skb->flags |= UCT_UD_SEND_SKB_FLAG_ACK_REQ;
         }
+    } else if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
+        /* Don't check ACK_REQ flag on a last SKB in case of flush(CANCEL),
+         * because a CQE of the last sent ACK_REQ could be already received,
+         * but couldn't be ACKed by a peer due to connection failure. So,
+         * sending new ACK_REQ packet could help to get a CQE which will
+         * complete SKBs in TX window, becaue "acked_psn == psn - 1" */
+        uct_ud_ep_ack_req_do(iface, ep);
+    } else {
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_ACK_REQ);
     }
 
-    /* If the user requested a callback, allocate a dummy skb which will be
-     * released when the current sequence number is completed.
-     */
-    if (comp != NULL) {
-        ucs_assert(comp->count > 0);
-
-        skb = ucs_mpool_get(&iface->tx.mp);
-        if (skb == NULL) {
-            return UCS_ERR_NO_RESOURCE;
-        }
-
-        /* Add dummy skb to the window, which would call user completion
-         * callback when getting ACK.
-         */
-        skb->flags                  = UCT_UD_SEND_SKB_FLAG_COMP;
-        skb->len                    = sizeof(skb->neth[0]);
-        skb->neth->packet_type      = 0;
-        skb->neth->psn              = (uct_ud_psn_t)(ep->tx.psn - 1);
-        uct_ud_neth_set_dest_id(skb->neth, UCT_UD_EP_NULL_ID);
-        uct_ud_comp_desc(skb)->comp = comp;
-
-        if (!ucs_queue_is_empty(&ep->tx.window)) {
-            /* If window non-empty: add to window */
-            ucs_queue_push(&ep->tx.window, &skb->queue);
-        } else {
-            /* Otherwise, add the skb after async completions */
-            ucs_assert(ep->tx.resend_count == 0);
-            uct_ud_iface_add_async_comp(iface, ep, skb, UCS_OK);
-        }
-
-        ucs_trace_data("added dummy flush skb %p psn %d user_comp %p", skb,
-                       skb->neth->psn, comp);
-    }
-
-    return UCS_INPROGRESS;
+    return uct_ud_ep_comp_skb_add(iface, ep, comp);
 }
 
 ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
@@ -1131,13 +1156,8 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
     uct_ud_enter(iface);
 
     if (ucs_unlikely(flags & UCT_FLUSH_FLAG_CANCEL)) {
-        uct_ud_ep_purge(ep, UCS_ERR_CANCELED);
-        /* FIXME make flush(CANCEL) operation truly non-blocking and wait until
-         * all of the outstanding sends are completed. Without this, zero-copy
-         * sends which are still on the QP could be reported as completed which
-         * can lead to sending corrupt data, or local access error. */
-        status = UCS_OK;
-        goto out;
+        uct_ud_ep_reset_max_psn(ep);
+        ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
     }
 
     if (ucs_unlikely(uct_ud_iface_has_pending_async_ev(iface))) {
@@ -1145,9 +1165,10 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep_h, unsigned flags,
         goto out;
     }
 
-    status = uct_ud_ep_flush_nolock(iface, ep, comp);
+    status = uct_ud_ep_flush_nolock(iface, ep, flags, comp);
     if (status == UCS_OK) {
         UCT_TL_EP_STAT_FLUSH(&ep->super);
+        ucs_assert(ucs_queue_is_empty(&ep->tx.window));
     } else if (status == UCS_INPROGRESS) {
         UCT_TL_EP_STAT_FLUSH_WAIT(&ep->super);
     }
@@ -1374,7 +1395,8 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
 
 static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    int ctl_flags = 0;
+    int ctl_flags        = 0;
+    uint32_t packet_type = ep->dest_ep_id;
     uct_ud_ctl_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
 
@@ -1385,7 +1407,20 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
         goto out;
     }
 
-    if (sizeof(uct_ud_neth_t) <= iface->config.max_inline) {
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
+        packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
+        ctl_flags   |= UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED;
+        if (ep->tx.tick >= iface->config.min_poke_time) {
+            ctl_flags |= UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED;
+        }
+    }
+
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_NACK)) {
+        packet_type |= UCT_UD_PACKET_FLAG_NACK;
+    }
+
+    if ((sizeof(uct_ud_neth_t) <= iface->config.max_inline) &&
+        !(ctl_flags & UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED)) {
         skb        = ucs_alloca(sizeof(*skb) + sizeof(uct_ud_neth_t));
         skb->flags = 0;
 #if UCS_ENABLE_ASSERT
@@ -1399,17 +1434,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     uct_ud_neth_init_data(ep, skb->neth);
     skb->flags             = UCT_UD_SEND_SKB_FLAG_CTL_ACK;
     skb->len               = sizeof(uct_ud_neth_t);
-    skb->neth->packet_type = ep->dest_ep_id;
-    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
-        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
-        if (ep->tx.tick >= iface->config.min_poke_time) {
-            ctl_flags |= UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED;
-        }
-    }
-
-    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_NACK)) {
-        skb->neth->packet_type |= UCT_UD_PACKET_FLAG_NACK;
-    }
+    skb->neth->packet_type = packet_type;
 
     if (ctl_flags & UCT_UD_IFACE_SEND_CTL_FLAG_INLINE) {
         uct_ud_iface_send_ctl(iface, ep, skb, NULL, 0, ctl_flags, 1);
@@ -1420,7 +1445,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
                                                   ctl_flags, 1);
         cdesc->self_skb   = skb;
         cdesc->resent_skb = NULL;
-        cdesc->ep         = NULL;
+        cdesc->ep         = ep;
         uct_ud_iface_add_ctl_desc(iface, cdesc);
     }
 
@@ -1713,10 +1738,11 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
     /* cancel user pending */
     uct_ud_ep_pending_purge(tl_ep, NULL, NULL);
 
-    /* schedule flush */
-    uct_ud_ep_flush(tl_ep, 0, NULL);
+    /* schedule flush(CANCEL) */
+    uct_ud_ep_flush(tl_ep, UCT_FLUSH_FLAG_CANCEL, NULL);
 
-    /* cancel user outstanding operations */
+    /* cancel user outstanding operations and possible scheduled flush(CANCEL)
+     * to not invoke user callbacks for the endpoint which was destroyed */
     uct_ud_ep_purge(ep, UCS_ERR_CANCELED);
 
     /* the EP will be destroyed by interface destroy or timeout in
