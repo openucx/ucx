@@ -1125,6 +1125,12 @@ run_gtest() {
 }
 
 run_gtest_armclang() {
+	if [[ $(hostname) =~ '-bf1' ]]
+	then
+		# Skip armclang test on SoC platform
+		return 0
+	fi
+
 	if module_load arm-compiler/arm-hpc-compiler && armclang -v
 	then
 		# Force using loaded gcc toolchain instead of host gcc, to avoid
