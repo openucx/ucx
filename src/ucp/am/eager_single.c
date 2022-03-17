@@ -17,13 +17,13 @@
 
 
 static UCS_F_ALWAYS_INLINE void
-ucp_am_fill_reply_footer(ucp_am_reply_ftr_t *ftr, ucp_request_t *req)
+ucp_am_eager_fill_reply_footer(ucp_am_reply_ftr_t *ftr, ucp_request_t *req)
 {
     ftr->ep_id = ucp_send_request_get_ep_remote_id(req);
 }
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
-ucp_eager_short_commmon_progress(uct_pending_req_t *self, int is_reply)
+ucp_am_eager_short_proto_progress_common(uct_pending_req_t *self, int is_reply)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
@@ -55,7 +55,7 @@ ucp_eager_short_commmon_progress(uct_pending_req_t *self, int is_reply)
         }
 
         am_id = UCP_AM_ID_AM_SINGLE_REPLY;
-        ucp_am_fill_reply_footer(&ftr, req);
+        ucp_am_eager_fill_reply_footer(&ftr, req);
         ucp_add_uct_iov_elem(iov, &ftr, sizeof(ftr), UCT_MEM_HANDLE_NULL,
                              &iov_cnt);
     } else {
@@ -78,8 +78,8 @@ ucp_eager_short_commmon_progress(uct_pending_req_t *self, int is_reply)
 }
 
 static ucs_status_t
-ucp_proto_eager_short_common_init(const ucp_proto_init_params_t *init_params,
-                                  size_t min_iov, ucp_operation_id_t op_id)
+ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
+                                     size_t min_iov, ucp_operation_id_t op_id)
 {
     const ucp_proto_select_param_t *select_param = init_params->select_param;
     ucp_proto_single_init_params_t params        = {
@@ -111,54 +111,56 @@ ucp_proto_eager_short_common_init(const ucp_proto_init_params_t *init_params,
 }
 
 static ucs_status_t
-ucp_proto_eager_short_init(const ucp_proto_init_params_t *init_params)
+ucp_am_eager_short_proto_init(const ucp_proto_init_params_t *init_params)
 {
     /* 3 iovs are needed to send a message. The iovs contain AM header,
        payload, user header. */
-    return ucp_proto_eager_short_common_init(init_params, 3, UCP_OP_ID_AM_SEND);
+    return ucp_am_eager_short_proto_init_common(init_params, 3,
+                                                UCP_OP_ID_AM_SEND);
 }
 
-static ucs_status_t ucp_eager_short_progress(uct_pending_req_t *self)
+static ucs_status_t ucp_am_eager_short_proto_progress(uct_pending_req_t *self)
 {
-    return ucp_eager_short_commmon_progress(self, 0);
+    return ucp_am_eager_short_proto_progress_common(self, 0);
 }
 
 ucp_proto_t ucp_am_eager_short_proto = {
     .name     = "am/egr/short",
     .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = 0,
-    .init     = ucp_proto_eager_short_init,
+    .init     = ucp_am_eager_short_proto_init,
     .query    = ucp_proto_single_query,
-    .progress = {ucp_eager_short_progress},
+    .progress = {ucp_am_eager_short_proto_progress},
     .abort    = ucp_proto_request_bcopy_abort
 };
 
 static ucs_status_t
-ucp_proto_eager_short_reply_init(const ucp_proto_init_params_t *init_params)
+ucp_am_eager_short_reply_proto_init(const ucp_proto_init_params_t *init_params)
 {
     /* 4 iovs are needed to send a message. The iovs contain AM header,
        payload, user header, reply footer. */
-    return ucp_proto_eager_short_common_init(init_params, 4,
-                                             UCP_OP_ID_AM_SEND_REPLY);
+    return ucp_am_eager_short_proto_init_common(init_params, 4,
+                                                UCP_OP_ID_AM_SEND_REPLY);
 }
 
-static ucs_status_t ucp_eager_short_reply_progress(uct_pending_req_t *self)
+static ucs_status_t
+ucp_am_eager_short_reply_proto_progress(uct_pending_req_t *self)
 {
-    return ucp_eager_short_commmon_progress(self, 1);
+    return ucp_am_eager_short_proto_progress_common(self, 1);
 }
 
 ucp_proto_t ucp_am_eager_short_reply_proto = {
     .name     = "am/egr/short/reply",
     .desc     = UCP_PROTO_SHORT_DESC,
     .flags    = 0,
-    .init     = ucp_proto_eager_short_reply_init,
+    .init     = ucp_am_eager_short_reply_proto_init,
     .query    = ucp_proto_single_query,
-    .progress = {ucp_eager_short_reply_progress},
+    .progress = {ucp_am_eager_short_reply_proto_progress},
     .abort    = ucp_proto_request_bcopy_abort
 };
 
 static UCS_F_ALWAYS_INLINE size_t
-ucp_am_eager_single_bcopy_common_pack(void *dest, void *arg, int is_reply)
+ucp_am_eager_single_bcopy_pack_common(void *dest, void *arg, int is_reply)
 {
     ucp_am_hdr_t *hdr  = dest;
     ucp_request_t *req = arg;
@@ -170,9 +172,9 @@ ucp_am_eager_single_bcopy_common_pack(void *dest, void *arg, int is_reply)
 
     ucp_am_fill_header(hdr, req);
 
-    length = ucp_am_bcopy_pack_data(hdr + 1, req,
-                                    ucp_am_send_req_total_size(req),
-                                    &next_iter);
+    length = ucp_am_eager_bcopy_pack_data(hdr + 1, req,
+                                          ucp_am_send_req_total_size(req),
+                                          &next_iter);
 
     ucs_assertv(length == ucp_am_send_req_total_size(req),
                 "length %zu total_size %zu", length,
@@ -181,7 +183,7 @@ ucp_am_eager_single_bcopy_common_pack(void *dest, void *arg, int is_reply)
     if (is_reply) {
         ftr     = UCS_PTR_BYTE_OFFSET(hdr + 1, length);
         length += sizeof(*ftr);
-        ucp_am_fill_reply_footer(ftr, req);
+        ucp_am_eager_fill_reply_footer(ftr, req);
     }
 
     return sizeof(*hdr) + length;
@@ -189,10 +191,11 @@ ucp_am_eager_single_bcopy_common_pack(void *dest, void *arg, int is_reply)
 
 static size_t ucp_am_eager_single_bcopy_pack(void *dest, void *arg)
 {
-    return ucp_am_eager_single_bcopy_common_pack(dest, arg, 0);
+    return ucp_am_eager_single_bcopy_pack_common(dest, arg, 0);
 }
 
-static ucs_status_t ucp_am_eager_single_bcopy_progress(uct_pending_req_t *self)
+static ucs_status_t
+ucp_am_eager_single_bcopy_proto_progress(uct_pending_req_t *self)
 {
     ucp_request_t                   *req = ucs_container_of(self, ucp_request_t,
                                                             send.uct);
@@ -204,7 +207,7 @@ static ucs_status_t ucp_am_eager_single_bcopy_progress(uct_pending_req_t *self)
             ucp_proto_request_bcopy_complete_success);
 }
 
-static ucs_status_t ucp_proto_am_eager_single_bcopy_common_init(
+static ucs_status_t ucp_am_eager_single_bcopy_proto_init_common(
         const ucp_proto_init_params_t *init_params, ucp_operation_id_t op_id)
 {
     ucp_context_t *context                = init_params->worker->context;
@@ -236,9 +239,9 @@ static ucs_status_t ucp_proto_am_eager_single_bcopy_common_init(
 }
 
 static ucs_status_t
-ucp_proto_am_eager_single_bcopy_init(const ucp_proto_init_params_t *init_params)
+ucp_am_eager_single_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
 {
-    return ucp_proto_am_eager_single_bcopy_common_init(init_params,
+    return ucp_am_eager_single_bcopy_proto_init_common(init_params,
                                                        UCP_OP_ID_AM_SEND);
 }
 
@@ -246,26 +249,26 @@ ucp_proto_t ucp_am_eager_single_bcopy_proto = {
     .name     = "am/egr/single/bcopy",
     .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
-    .init     = ucp_proto_am_eager_single_bcopy_init,
+    .init     = ucp_am_eager_single_bcopy_proto_init,
     .query    = ucp_proto_single_query,
-    .progress = {ucp_am_eager_single_bcopy_progress},
+    .progress = {ucp_am_eager_single_bcopy_proto_progress},
     .abort    = ucp_request_complete_send
 };
 
-static ucs_status_t ucp_proto_am_eager_single_bcopy_reply_init(
+static ucs_status_t ucp_am_eager_single_bcopy_reply_proto_init(
         const ucp_proto_init_params_t *init_params)
 {
-    return ucp_proto_am_eager_single_bcopy_common_init(init_params,
+    return ucp_am_eager_single_bcopy_proto_init_common(init_params,
                                                        UCP_OP_ID_AM_SEND_REPLY);
 }
 
 static size_t ucp_am_eager_single_bcopy_reply_pack(void *dest, void *arg)
 {
-    return ucp_am_eager_single_bcopy_common_pack(dest, arg, 1);
+    return ucp_am_eager_single_bcopy_pack_common(dest, arg, 1);
 }
 
 static ucs_status_t
-ucp_am_eager_single_bcopy_reply_progress(uct_pending_req_t *self)
+ucp_am_eager_single_bcopy_reply_proto_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
     const ucp_proto_single_priv_t *spriv = req->send.proto_config->priv;
@@ -280,13 +283,13 @@ ucp_proto_t ucp_am_eager_single_bcopy_reply_proto = {
     .name     = "am/egr/single/bcopy/reply",
     .desc     = UCP_PROTO_COPY_IN_DESC,
     .flags    = 0,
-    .init     = ucp_proto_am_eager_single_bcopy_reply_init,
+    .init     = ucp_am_eager_single_bcopy_reply_proto_init,
     .query    = ucp_proto_single_query,
-    .progress = {ucp_am_eager_single_bcopy_reply_progress},
+    .progress = {ucp_am_eager_single_bcopy_reply_proto_progress},
     .abort    = ucp_request_complete_send
 };
 
-static ucs_status_t ucp_proto_am_eager_single_zcopy_common_init(
+static ucs_status_t ucp_am_eager_single_zcopy_proto_init_common(
         const ucp_proto_init_params_t *init_params, ucp_operation_id_t op_id)
 {
     ucp_context_t *context                = init_params->worker->context;
@@ -320,54 +323,34 @@ static ucs_status_t ucp_proto_am_eager_single_zcopy_common_init(
 }
 
 static ucs_status_t
-ucp_proto_am_eager_single_zcopy_init(const ucp_proto_init_params_t *init_params)
+ucp_am_eager_single_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
 {
-    return ucp_proto_am_eager_single_zcopy_common_init(init_params,
+    return ucp_am_eager_single_zcopy_proto_init_common(init_params,
                                                        UCP_OP_ID_AM_SEND);
 }
 
-static void ucp_proto_am_eager_zcopy_add_footer(ucp_request_t *req,
-                                                ucp_lane_index_t lane,
-                                                size_t user_hdr_size,
-                                                uct_iov_t *iov, size_t *iovcnt)
-{
-    ucp_mem_desc_t *user_hdr_desc;
-    ucp_md_index_t md_idx;
-
-    if (user_hdr_size == 0) {
-        return;
-    }
-
-    user_hdr_desc = req->send.msg_proto.am.reg_desc;
-    md_idx        = ucp_ep_md_index(req->send.ep, lane);
-
-    ucp_add_uct_iov_elem(iov, user_hdr_desc + 1, user_hdr_size,
-                         user_hdr_desc->memh->uct[md_idx], iovcnt);
-}
-
 static ucs_status_t
-ucp_proto_am_eager_single_zcopy_send_func(ucp_request_t *req,
-                                          const ucp_proto_single_priv_t *spriv,
-                                          uct_iov_t *iov)
+ucp_am_eager_single_zcopy_send_func(ucp_request_t *req,
+                                    const ucp_proto_single_priv_t *spriv,
+                                    uct_iov_t *iov)
 {
     size_t iovcnt = 1;
     ucp_am_hdr_t hdr;
 
     ucp_am_fill_header(&hdr, req);
 
-    ucp_proto_am_eager_zcopy_add_footer(req, spriv->super.lane,
-                                        req->send.msg_proto.am.header_length,
-                                        iov, &iovcnt);
+    ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
+                                  req->send.msg_proto.am.header_length);
 
     return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],
                            UCP_AM_ID_AM_SINGLE, &hdr, sizeof(hdr), iov, iovcnt,
                            0, &req->send.state.uct_comp);
 }
 
-static ucs_status_t ucp_proto_request_am_eager_single_zcopy_init(
-        ucp_request_t *req, ucp_md_map_t md_map,
-        uct_completion_callback_t comp_func, unsigned uct_reg_flags,
-        unsigned dt_mask)
+static ucs_status_t
+ucp_am_eager_single_zcopy_init(ucp_request_t *req, ucp_md_map_t md_map,
+                               uct_completion_callback_t comp_func,
+                               unsigned uct_reg_flags, unsigned dt_mask)
 {
     ucs_status_t status = ucp_proto_request_zcopy_init(req, md_map, comp_func,
                                                        uct_reg_flags, dt_mask);
@@ -379,38 +362,38 @@ static ucs_status_t ucp_proto_request_am_eager_single_zcopy_init(
 }
 
 static ucs_status_t
-ucp_proto_am_eager_single_zcopy_progress(uct_pending_req_t *self)
+ucp_am_eager_single_zcopy_proto_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     return ucp_proto_zcopy_single_progress(
             req, UCT_MD_MEM_ACCESS_LOCAL_READ,
-            ucp_proto_am_eager_single_zcopy_send_func,
+            ucp_am_eager_single_zcopy_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_proto_request_am_eager_zcopy_completion,
-            ucp_proto_request_am_eager_single_zcopy_init);
+            ucp_am_eager_zcopy_completion, ucp_am_eager_single_zcopy_init);
 }
 
 ucp_proto_t ucp_am_eager_single_zcopy_proto = {
     .name     = "am/egr/single/zcopy",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_proto_am_eager_single_zcopy_init,
+    .init     = ucp_am_eager_single_zcopy_proto_init,
     .query    = ucp_proto_single_query,
-    .progress = {ucp_proto_am_eager_single_zcopy_progress},
+    .progress = {ucp_am_eager_single_zcopy_proto_progress},
     .abort    = ucp_proto_request_bcopy_abort
 };
 
-static ucs_status_t ucp_proto_am_eager_single_zcopy_reply_init(
+static ucs_status_t ucp_am_eager_single_zcopy_reply_proto_init(
         const ucp_proto_init_params_t *init_params)
 {
-    return ucp_proto_am_eager_single_zcopy_common_init(init_params,
+    return ucp_am_eager_single_zcopy_proto_init_common(init_params,
                                                        UCP_OP_ID_AM_SEND_REPLY);
 }
 
-static ucs_status_t ucp_proto_am_eager_single_zcopy_reply_send_func(
-        ucp_request_t *req, const ucp_proto_single_priv_t *spriv,
-        uct_iov_t *iov)
+static ucs_status_t
+ucp_am_eager_single_zcopy_reply_send_func(ucp_request_t *req,
+                                          const ucp_proto_single_priv_t *spriv,
+                                          uct_iov_t *iov)
 {
     size_t iovcnt = 1;
     ucp_am_hdr_t hdr;
@@ -419,14 +402,13 @@ static ucs_status_t ucp_proto_am_eager_single_zcopy_reply_send_func(
     ucp_am_fill_header(&hdr, req);
     ucs_assert(req->send.msg_proto.am.reg_desc != NULL);
 
-    ftr        = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.reg_desc + 1,
-                                     req->send.msg_proto.am.header_length);
-    ftr->ep_id = ucp_send_request_get_ep_remote_id(req);
+    ftr = UCS_PTR_BYTE_OFFSET(req->send.msg_proto.am.reg_desc + 1,
+                              req->send.msg_proto.am.header_length);
+    ucp_am_eager_fill_reply_footer(ftr, req);
 
-    ucp_proto_am_eager_zcopy_add_footer(req, spriv->super.lane,
-                                        req->send.msg_proto.am.header_length +
-                                                sizeof(*ftr),
-                                        iov, &iovcnt);
+    ucp_am_eager_zcopy_add_footer(req, 0, spriv->super.md_index, iov, &iovcnt,
+                                  req->send.msg_proto.am.header_length +
+                                          sizeof(*ftr));
 
     return uct_ep_am_zcopy(req->send.ep->uct_eps[spriv->super.lane],
                            UCP_AM_ID_AM_SINGLE_REPLY, &hdr, sizeof(hdr), iov,
@@ -434,24 +416,23 @@ static ucs_status_t ucp_proto_am_eager_single_zcopy_reply_send_func(
 }
 
 static ucs_status_t
-ucp_proto_am_eager_single_zcopy_reply_progress(uct_pending_req_t *self)
+ucp_am_eager_single_zcopy_reply_proto_progress(uct_pending_req_t *self)
 {
     ucp_request_t *req = ucs_container_of(self, ucp_request_t, send.uct);
 
     return ucp_proto_zcopy_single_progress(
             req, UCT_MD_MEM_ACCESS_LOCAL_READ,
-            ucp_proto_am_eager_single_zcopy_reply_send_func,
+            ucp_am_eager_single_zcopy_reply_send_func,
             ucp_request_invoke_uct_completion_success,
-            ucp_proto_request_am_eager_zcopy_completion,
-            ucp_proto_request_am_eager_single_zcopy_init);
+            ucp_am_eager_zcopy_completion, ucp_am_eager_single_zcopy_init);
 }
 
 ucp_proto_t ucp_am_eager_single_zcopy_reply_proto = {
     .name     = "am/egr/single/zcopy/reply",
     .desc     = UCP_PROTO_ZCOPY_DESC,
     .flags    = 0,
-    .init     = ucp_proto_am_eager_single_zcopy_reply_init,
+    .init     = ucp_am_eager_single_zcopy_reply_proto_init,
     .query    = ucp_proto_single_query,
-    .progress = {ucp_proto_am_eager_single_zcopy_reply_progress},
+    .progress = {ucp_am_eager_single_zcopy_reply_proto_progress},
     .abort    = ucp_proto_request_bcopy_abort
 };
