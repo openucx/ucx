@@ -274,7 +274,7 @@ ucs_status_ptr_t ucp_put_nbx(ucp_ep_h ep, const void *buffer, size_t count,
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,
                 rkey->cfg_index, req, UCP_OP_ID_PUT, buffer, count, datatype,
-                contig_length, param);
+                contig_length, param, 0);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {
@@ -378,7 +378,7 @@ ucs_status_ptr_t ucp_get_nbx(ucp_ep_h ep, void *buffer, size_t count,
         ret = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(worker, rkey)->proto_select,
                 rkey->cfg_index, req, UCP_OP_ID_GET, buffer, count, datatype,
-                contig_length, param);
+                contig_length, param, 0);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, rma);
         if (status != UCS_OK) {

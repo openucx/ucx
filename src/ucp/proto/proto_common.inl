@@ -214,8 +214,10 @@ static UCS_F_ALWAYS_INLINE ucs_status_ptr_t
 ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           ucp_worker_cfg_index_t rkey_cfg_index,
                           ucp_request_t *req, ucp_operation_id_t op_id,
-                          const void *buffer, size_t count, ucp_datatype_t datatype,
-                          size_t contig_length, const ucp_request_param_t *param)
+                          const void *buffer, size_t count,
+                          ucp_datatype_t datatype, size_t contig_length,
+                          const ucp_request_param_t *param,
+                          size_t header_length)
 {
     ucp_worker_h worker = ep->worker;
     ucp_proto_select_param_t sel_param;
@@ -235,7 +237,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,
                               proto_select, rkey_cfg_index, &sel_param,
-                              req->send.state.dt_iter.length);
+                              req->send.state.dt_iter.length + header_length);
     if (status != UCS_OK) {
         ucp_request_put_param(param, req);
         return UCS_STATUS_PTR(status);

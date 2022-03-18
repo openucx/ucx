@@ -292,7 +292,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_nbx,
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_TAG_SEND, buffer, count,
-                                        datatype, contig_length, param);
+                                        datatype, contig_length, param, 0);
     } else {
         ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag, 0, param);
         ret = ucp_tag_send_req(req, count, &ucp_ep_config(ep)->tag.eager,
@@ -343,7 +343,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_tag_send_sync_nbx,
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req,
                                         UCP_OP_ID_TAG_SEND_SYNC, buffer, count,
-                                        datatype, contig_length, param);
+                                        datatype, contig_length, param, 0);
     } else {
         ucp_tag_send_req_init(req, ep, buffer, datatype, count, tag,
                               UCP_REQUEST_FLAG_SYNC, param);
