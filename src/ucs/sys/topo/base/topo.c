@@ -481,9 +481,9 @@ void ucs_topo_init()
     }
 
     ucs_topo_default_distance.latency   =
-        UCS_FP8_PACK(UCS_LATENCY,
+        UCS_FP8_PACK(UCS_LAT,
                      ucs_topo_default_distance.latency * UCS_NSEC_PER_SEC);
-    ucs_topo_default_distance.bandwidth = UCS_FP8_PACK(UCS_BANDWIDTH,
+    ucs_topo_default_distance.bandwidth = UCS_FP8_PACK(UCS_BW,
                                                        ucs_topo_default_distance.bandwidth);
 
     ucs_list_add_tail(&ucs_sys_topo_methods_list,
