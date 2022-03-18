@@ -314,7 +314,7 @@ static ucs_status_t ucp_am_eager_single_zcopy_proto_init_common(
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    if ((init_params->select_param->op_id != UCP_OP_ID_AM_SEND) ||
+    if ((init_params->select_param->op_id != op_id) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }
