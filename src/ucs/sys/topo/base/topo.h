@@ -30,11 +30,11 @@ BEGIN_C_DECLS
 
 
 /* bandwidth precision as bytes/second, range: 512 MB/s to 4 TB/s */
-UCS_FP8_DECLARE_TYPE(UCS_BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+UCS_FP8_DECLARE_TYPE(UCS_BW, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
 
 
 /* latency precision as nanoseconds, range: 16 nsec to 131 usec */
-UCS_FP8_DECLARE_TYPE(UCS_LATENCY, UCS_BIT(4), UCS_BIT(17))
+UCS_FP8_DECLARE_TYPE(UCS_LAT, UCS_BIT(4), UCS_BIT(17))
 
 
 typedef struct ucs_sys_bus_id {
