@@ -9,6 +9,8 @@
 
 #include <ucs/type/status.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/sys/math.h>
+#include <ucs/type/float8.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -25,6 +27,14 @@ BEGIN_C_DECLS
 
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
+
+
+/* bandwidth precision as bytes/second, range: 512 MB/s to 4 TB/s */
+UCS_FP8_DECLARE_TYPE(UCS_BANDWIDTH, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+
+
+/* latency precision as nanoseconds, range: 16 nsec to 131 usec */
+UCS_FP8_DECLARE_TYPE(UCS_LATENCY, UCS_BIT(4), UCS_BIT(17))
 
 
 typedef struct ucs_sys_bus_id {
@@ -54,7 +64,7 @@ typedef struct ucs_sys_dev_distance {
 } ucs_sys_dev_distance_t;
 
 
-extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
+extern ucs_sys_dev_distance_t ucs_topo_default_distance;
 
 
 /*

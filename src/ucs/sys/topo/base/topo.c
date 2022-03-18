@@ -46,7 +46,7 @@ typedef struct ucs_topo_global_ctx {
 } ucs_topo_global_ctx_t;
 
 
-const ucs_sys_dev_distance_t ucs_topo_default_distance = {
+ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .latency   = 0,
     .bandwidth = DBL_MAX
 };
@@ -479,6 +479,12 @@ void ucs_topo_init()
     for (i = 0; i < UCS_TOPO_MAX_SYS_DEVICES;i++) {
         ucs_topo_global_ctx.devices[i].name = NULL;
     }
+
+    ucs_topo_default_distance.latency   =
+        UCS_FP8_PACK(UCS_LATENCY,
+                     ucs_topo_default_distance.latency * UCS_NSEC_PER_SEC);
+    ucs_topo_default_distance.bandwidth = UCS_FP8_PACK(UCS_BANDWIDTH,
+                                                       ucs_topo_default_distance.bandwidth);
 
     ucs_list_add_tail(&ucs_sys_topo_methods_list,
                       &ucs_sys_topo_default_method.list);
