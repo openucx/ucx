@@ -971,9 +971,14 @@ public:
         add_variant_values(variants, get_test_variants_reply, 1, "proto");
     }
 
-    virtual unsigned enable_proto()
+    virtual unsigned get_send_flag()
     {
         return get_variant_value(1);
+    }
+
+    virtual unsigned enable_proto()
+    {
+        return get_variant_value(2);
     }
 
     virtual ucs_status_t
@@ -995,10 +1000,12 @@ public:
     void test_data_release(size_t size)
     {
         size_t hdr_size = ucs_min(max_am_hdr(), 8);
-        test_am_send_recv(size, 0, 0, UCP_AM_FLAG_PERSISTENT_DATA);
+        test_am_send_recv(size, 0, get_send_flag(),
+                          UCP_AM_FLAG_PERSISTENT_DATA);
         ucp_am_data_release(receiver().worker(), m_data_ptr);
 
-        test_am_send_recv(size, hdr_size, 0, UCP_AM_FLAG_PERSISTENT_DATA);
+        test_am_send_recv(size, hdr_size, get_send_flag(),
+                          UCP_AM_FLAG_PERSISTENT_DATA);
         ucp_am_data_release(receiver().worker(), m_data_ptr);
     }
 
