@@ -335,6 +335,7 @@
    uar-alloc-leak
    Memcheck:Leak
    match-leak-kinds: possible
-   obj:/usr/lib64/libmlx5.so*
+   ...
+   obj:*/libmlx5*.so*
    fun:uct_rdmacm_cm_create_dummy_qp
 }
