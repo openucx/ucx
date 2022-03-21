@@ -7,7 +7,7 @@
 ##
 #
 
-## 1.12.1-rc4 (March 16, 2022)
+## 1.12.1 (March 21, 2022)
 ### Bugfixes
 * Fixed memory hooks for Cuda 11.5
 * Fixed memory type cache merge
