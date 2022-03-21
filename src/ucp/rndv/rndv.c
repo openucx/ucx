@@ -70,6 +70,7 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
     const ucp_ep_config_t *ep_config = ucp_ep_config(rndv_req->send.ep);
     ucp_context_h context            = rndv_req->send.ep->worker->context;
     int found                        = 0;
+    ucs_memory_type_t frag_mem_type  = context->config.ext.rndv_frag_mem_type;
     ucp_md_index_t md_index;
     uct_md_attr_t *md_attr;
     uint64_t mem_types;
@@ -79,8 +80,8 @@ static int ucp_rndv_is_recv_pipeline_needed(ucp_request_t *rndv_req,
          (i < UCP_MAX_LANES) &&
          (ep_config->key.rma_bw_lanes[i] != UCP_NULL_LANE); i++) {
         md_index = ep_config->md_index[ep_config->key.rma_bw_lanes[i]];
-        if (context->tl_mds[md_index].attr.cap.access_mem_types
-            & UCS_BIT(UCS_MEMORY_TYPE_HOST)) {
+        if (context->tl_mds[md_index].attr.cap.reg_mem_types &
+            UCS_BIT(frag_mem_type)) {
             found = 1;
             break;
         }
@@ -1073,7 +1074,8 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
                                 ucp_lane_map_t lanes_map, int update_get_rkey,
                                 uct_completion_callback_t comp_cb)
 {
-    ucp_worker_h worker = sreq->send.ep->worker;
+    ucp_worker_h worker             = sreq->send.ep->worker;
+    ucs_memory_type_t frag_mem_type = worker->context->config.ext.rndv_frag_mem_type;
     ucp_request_t *freq;
     ucp_mem_desc_t *mdesc;
 
@@ -1084,7 +1086,7 @@ ucp_rndv_send_frag_get_mem_type(ucp_request_t *sreq, size_t length,
         ucs_fatal("failed to allocate fragment receive request");
     }
 
-    mdesc = ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+    mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
                                UCS_SYS_DEVICE_ID_UNKNOWN);
     if (ucs_unlikely(mdesc == NULL)) {
         ucs_fatal("failed to allocate fragment memory desc");
@@ -1157,7 +1159,7 @@ ucp_rndv_recv_start_get_pipeline(ucp_worker_h worker, ucp_request_t *rndv_req,
     size_t frag_size;
 
     /* use ucp_rkey_packed_mem_type(rkey_buffer) with non-host fragments */
-    frag_mem_type = UCS_MEMORY_TYPE_HOST;
+    frag_mem_type = context->config.ext.rndv_frag_mem_type;
     frag_size     = context->config.ext.rndv_frag_size[frag_mem_type];
 
     min_zcopy                          = config->rndv.get_zcopy.min;
@@ -1224,7 +1226,8 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
                                    ucp_request_t *rreq,
                                    const ucp_rndv_rts_hdr_t *rndv_rts_hdr)
 {
-    size_t max_frag_size = worker->context->config.ext.rndv_frag_size[UCS_MEMORY_TYPE_HOST];
+    size_t max_frag_size;
+    ucs_memory_type_t frag_mem_type;
     int i, num_frags;
     size_t frag_size;
     size_t offset;
@@ -1236,8 +1239,10 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
 
     ucp_trace_req(rreq, "using rndv pipeline protocol rndv_req %p", rndv_req);
 
-    offset    = 0;
-    num_frags = ucs_div_round_up(rndv_rts_hdr->size, max_frag_size);
+    offset        = 0;
+    frag_mem_type = worker->context->config.ext.rndv_frag_mem_type;
+    max_frag_size = worker->context->config.ext.rndv_frag_size[frag_mem_type];
+    num_frags     = ucs_div_round_up(rndv_rts_hdr->size, max_frag_size);
 
     for (i = 0; i < num_frags; i++) {
         frag_size = ucs_min(max_frag_size, (rndv_rts_hdr->size - offset));
@@ -1256,7 +1261,7 @@ static void ucp_rndv_send_frag_rtr(ucp_worker_h worker, ucp_request_t *rndv_req,
         }
 
         /* allocate fragment recv buffer desc*/
-        mdesc = ucp_rndv_mpool_get(worker, UCS_MEMORY_TYPE_HOST,
+        mdesc = ucp_rndv_mpool_get(worker, frag_mem_type,
                                    UCS_SYS_DEVICE_ID_UNKNOWN);
         if (mdesc == NULL) {
             ucs_fatal("failed to allocate fragment memory buffer");
@@ -1858,8 +1863,7 @@ static ucs_status_t ucp_rndv_send_start_put_pipeline(ucp_request_t *sreq,
     min_zcopy        = config->rndv.put_zcopy.min;
     max_zcopy        = config->rndv.put_zcopy.max;
     rndv_size        = ucs_min(rndv_rtr_hdr->size, sreq->send.length);
-    frag_mem_type    = UCS_MEMORY_TYPE_HOST; /* use send.rndv.rkey->mem_type
-                                                with non-host fragments */
+    frag_mem_type    = context->config.ext.rndv_frag_mem_type;
     max_frag_size    = ucs_min(context->config.ext.rndv_frag_size[frag_mem_type],
                                max_zcopy);
     rndv_base_offset = rndv_rtr_hdr->offset;

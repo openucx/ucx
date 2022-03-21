@@ -355,6 +355,12 @@ static ucs_config_field_t ucp_config_table[] = {
    "Comma separated list of memory pool allocation granularity per memory type.",
    ucs_offsetof(ucp_config_t, rndv_frag_elems), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"RNDV_FRAG_MEM_TYPE", "host",
+   "Memory type of fragments used for RNDV pipeline protocol.\n"
+   "Allowed memory types is one of: host, cuda, rocm",
+   ucs_offsetof(ucp_config_t, ctx.rndv_frag_mem_type),
+   UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
+
   {"RNDV_PIPELINE_SEND_THRESH", "inf",
    "RNDV size threshold to enable sender side pipeline for mem type",
    ucs_offsetof(ucp_config_t, ctx.rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
