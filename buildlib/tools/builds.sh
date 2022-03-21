@@ -381,6 +381,9 @@ build_fuse() {
 # Build with static library
 #
 build_static() {
+	az_module_load dev/libnl
+	az_module_load dev/numactl
+
 	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
 	$MAKEP
 	$MAKEP install
@@ -407,6 +410,9 @@ build_static() {
 	cd -
 
 	export LD_LIBRARY_PATH=$SAVE_LD_LIBRARY_PATH
+
+	az_module_unload dev/numactl
+	az_module_unload dev/libnl
 }
 
 #
