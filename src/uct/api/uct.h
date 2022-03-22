@@ -662,7 +662,10 @@ enum uct_iface_params_field {
     UCT_IFACE_PARAM_FIELD_AM_ALIGNMENT       = UCS_BIT(16),
 
     /** Enables @ref uct_iface_params_t::am_align_offset */
-    UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17)
+    UCT_IFACE_PARAM_FIELD_AM_ALIGN_OFFSET    = UCS_BIT(17),
+
+    /** Enables @ref uct_iface_params_t::features */
+    UCT_IFACE_PARAM_FIELD_FEATURES           = UCS_BIT(18)
 };
 
 /**
@@ -880,6 +883,27 @@ enum uct_ep_connect_params_field {
     UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA_LENGTH  = UCS_BIT(1)
 };
 
+
+/**
+ * @ingroup UCT_RESOURCE
+ * @brief UCT interface configuration features
+ *
+ * The enumeration list describes the features supported by UCT. An
+ * application can request the features using @ref uct_iface_params "UCT parameters"
+ * during @ref uct_iface_open "UCT iface initialization" process.
+ */
+enum uct_iface_feature {
+    UCT_IFACE_FEATURE_AM    = UCS_BIT(0), /**< Request Active Message support */
+    UCT_IFACE_FEATURE_PUT   = UCS_BIT(1), /**< Request PUT support */
+    UCT_IFACE_FEATURE_GET   = UCS_BIT(2), /**< Request GET support */
+    UCT_IFACE_FEATURE_AMO32 = UCS_BIT(3), /**< Request 32-bit atomic
+                                               operations support */
+    UCT_IFACE_FEATURE_AMO64 = UCS_BIT(4), /**< Request 64-bit atomic
+                                               operations support */
+    UCT_IFACE_FEATURE_TAG   = UCS_BIT(5), /**< Request tag matching offload support */
+    UCT_IFACE_FEATURE_LAST  = UCS_BIT(6)  /**< Used to determine the number
+                                               of features */
+};
 
 /*
  * @ingroup UCT_RESOURCE
@@ -1133,6 +1157,12 @@ struct uct_iface_params {
      * +-------------------+
      */
     size_t                                       am_align_offset;
+
+    /**
+     * UCT @ref uct_iface_feature "features" that are used for interface
+     * initialization.
+     */
+    uint64_t                                     features;
 };
 
 
