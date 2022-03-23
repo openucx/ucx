@@ -332,7 +332,6 @@ typedef struct ucp_worker {
         uct_worker_cb_id_t           cb_id;               /* Keepalive callback id */
         ucs_time_t                   last_round;          /* Last round timestamp */
         ucs_list_link_t              *iter;               /* Last EP processed keepalive */
-        ucp_lane_map_t               lane_map;            /* Lane map used to retry after no-resources */
         unsigned                     ep_count;            /* Number of EPs processed in current time slot */
         unsigned                     iter_count;          /* Number of progress iterations to skip,
                                                            * used to minimize call of ucs_get_time */

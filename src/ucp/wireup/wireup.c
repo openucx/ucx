@@ -1061,6 +1061,7 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
     char am_lane_str[8];
     char wireup_msg_lane_str[8];
     char cm_lane_str[8];
+    char keepalive_lane_str[8];
     ucp_lane_index_t lane;
 
     if (!ucs_log_is_enabled(log_level)) {
@@ -1068,8 +1069,8 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
     }
 
     ucs_log(log_level,
-            "%s: am_lane %s wireup_msg_lane %s cm_lane %s reachable_mds "
-            "0x%" PRIx64 " ep_check_map 0x%x",
+            "%s: am_lane %s wireup_msg_lane %s cm_lane %s keepalive_lane %s"
+            " reachable_mds 0x%" PRIx64,
             title,
             ucp_wireup_get_lane_index_str(key->am_lane, am_lane_str,
                                           sizeof(am_lane_str)),
@@ -1078,7 +1079,9 @@ static void ucp_wireup_print_config(ucp_worker_h worker,
                                           sizeof(wireup_msg_lane_str)),
             ucp_wireup_get_lane_index_str(key->cm_lane, cm_lane_str,
                                           sizeof(cm_lane_str)),
-            key->reachable_md_map, key->ep_check_map);
+            ucp_wireup_get_lane_index_str(key->keepalive_lane, keepalive_lane_str,
+                                          sizeof(keepalive_lane_str)),
+            key->reachable_md_map);
 
     for (lane = 0; lane < key->num_lanes; ++lane) {
         UCS_STRING_BUFFER_ONSTACK(strb, 128);
@@ -1323,7 +1326,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     ucp_ep_config_key_set_err_mode(&key, ep_init_flags);
 
     status = ucp_wireup_select_lanes(ep, ep_init_flags, tl_bitmap,
-                                     remote_address, addr_indices, &key);
+                                     remote_address, addr_indices, &key, 1);
     if (status != UCS_OK) {
         goto out;
     }

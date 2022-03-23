@@ -111,7 +111,7 @@ public:
     }
 
     void validate_connect(uct_ud_ep_t *ep, unsigned value,
-                          double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
+                          double timeout_sec=TEST_UD_LINGER_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
         while ((ep->dest_ep_id != value) && (ucs_get_time() < timeout)) {
             progress();
@@ -130,7 +130,7 @@ public:
     }
 
     void validate_recv(uct_ud_ep_t *ep, unsigned value,
-                       double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
+                       double timeout_sec=TEST_UD_LINGER_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
         while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value - no_creq_cnt(ep)) &&
                (ucs_get_time() < timeout)) {
@@ -251,7 +251,8 @@ UCS_TEST_SKIP_COND_P(test_ud, tx_window1,
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
 
     /* wait for ack */
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    ucs_time_t timeout =
+            ucs_get_time() + ucs_time_from_sec(TEST_UD_LINGER_TIMEOUT_IN_SEC);
     while ((ucs_get_time() < timeout) &&
             uct_ud_ep_no_window(ep(m_e1))) {
         short_progress_loop();
@@ -411,7 +412,8 @@ UCS_TEST_SKIP_COND_P(test_ud, crep_drop2,
 
     /* Wait for TX win to be empty (which means that all
      * CONN packets are handled) */
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    ucs_time_t timeout =
+            ucs_get_time() + ucs_time_from_sec(TEST_UD_LINGER_TIMEOUT_IN_SEC);
     while (ucs_get_time() < timeout) {
         if(ucs_queue_is_empty(&ep(m_e1)->tx.window) &&
            ucs_queue_is_empty(&ep(m_e2)->tx.window)) {

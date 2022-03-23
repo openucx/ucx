@@ -145,7 +145,7 @@ public:
 
         void warn_existing_eps() const;
 
-        double set_ib_ud_timeout(double timeout_sec);
+        double set_ib_ud_peer_timeout(double timeout_sec);
 
         void cleanup();
 
@@ -262,7 +262,7 @@ protected:
     int wait_for_wakeup(const std::vector<entity*> &entities,
                         int poll_timeout = -1, int worker_index = 0);
     int max_connections();
-    void set_tl_small_timeouts();
+    void configure_peer_failure_settings();
 
     static bool check_reg_mem_types(const entity& e, ucs_memory_type_t mem_type);
 

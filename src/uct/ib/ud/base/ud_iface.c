@@ -486,18 +486,19 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
         return UCS_ERR_INVALID_PARAM;
     }
 
-    self->tx.unsignaled          = 0;
-    self->tx.available           = config->super.tx.queue_len;
-    self->tx.timer_sweep_count   = 0;
-    self->async.disable          = 0;
+    self->tx.unsignaled         = 0;
+    self->tx.available          = config->super.tx.queue_len;
+    self->tx.timer_sweep_count  = 0;
+    self->async.disable         = 0;
 
-    self->rx.available           = config->super.rx.queue_len;
-    self->rx.quota               = 0;
-    self->config.tx_qp_len       = config->super.tx.queue_len;
-    self->config.peer_timeout    = ucs_time_from_sec(config->peer_timeout);
-    self->config.min_poke_time   = ucs_time_from_sec(config->min_poke_time);
-    self->config.check_grh_dgid  = config->dgid_check &&
-                                   uct_ib_iface_is_roce(&self->super);
+    self->rx.available          = config->super.rx.queue_len;
+    self->rx.quota              = 0;
+    self->config.tx_qp_len      = config->super.tx.queue_len;
+    self->config.min_poke_time  = ucs_time_from_sec(config->min_poke_time);
+    self->config.check_grh_dgid = config->dgid_check &&
+                                  uct_ib_iface_is_roce(&self->super);
+    self->config.linger_timeout = ucs_time_from_sec(config->linger_timeout);
+    self->config.peer_timeout   = ucs_time_from_sec(config->peer_timeout);
 
     if ((config->max_window < UCT_UD_CA_MIN_WINDOW) ||
         (config->max_window > UCT_UD_CA_MAX_WINDOW)) {
@@ -660,7 +661,13 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      ucs_offsetof(uct_ud_iface_config_t, ud_common),
      UCS_CONFIG_TYPE_TABLE(uct_ud_iface_common_config_table)},
 
-    {"TIMEOUT", "5.0m", "Transport timeout",
+    {"LINGER_TIMEOUT", "5.0m",
+     "Keep the connection open internally for this amount of time after closing it",
+     ucs_offsetof(uct_ud_iface_config_t, linger_timeout), UCS_CONFIG_TYPE_TIME},
+
+    {"TIMEOUT", "30s",
+     "Consider the remote peer as unreachable if an acknowledgment was not received\n"
+     "after this amount of time",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
 
     {"TIMER_TICK", "10ms", "Initial timeout for retransmissions",

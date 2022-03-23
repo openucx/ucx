@@ -227,7 +227,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
     status = ucp_wireup_select_lanes(ucp_ep,
                                      wireup_ep->ep_init_flags | ep_init_flags,
                                      *tl_bitmap, &unpacked_addr, addr_indices,
-                                     key);
+                                     key, 0);
 
     ucs_free(unpacked_addr.address_list);
 free_ucp_addr:

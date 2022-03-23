@@ -401,7 +401,7 @@ int ucp_test::max_connections() {
     }
 }
 
-void ucp_test::set_tl_small_timeouts()
+void ucp_test::configure_peer_failure_settings()
 {
     /* Set small TL timeouts to reduce testing time */
     m_env.push_back(new ucs::scoped_setenv("UCX_RC_TIMEOUT",     "10ms"));
@@ -1113,7 +1113,7 @@ void ucp_test_base::entity::warn_existing_eps() const {
     }
 }
 
-double ucp_test_base::entity::set_ib_ud_timeout(double timeout_sec)
+double ucp_test_base::entity::set_ib_ud_peer_timeout(double timeout_sec)
 {
     double prev_timeout_sec = 0.;
 #if HAVE_IB
