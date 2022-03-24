@@ -407,12 +407,16 @@ build_static() {
 
 	${WORKSPACE}/buildlib/tools/check_tls.sh $EXTRA_TLS
 
+	# Set port number for hello_world applications
+	server_port=$((10000 + (1000 * EXECUTOR_NUMBER)))
+	server_port_arg="-p $server_port"
+
 	for tls in tcp $RUN_TLS; do
 		echo UCX_TLS=$tls
-		UCX_TLS=$tls ./ucp_hello_world_static &
+		UCX_TLS=$tls ./ucp_hello_world_static ${server_port_arg} &
 		# allow server to start
 		sleep 3
-		UCX_TLS=$tls ./ucp_hello_world_static -n localhost
+		UCX_TLS=$tls ./ucp_hello_world_static ${server_port_arg} -n localhost
 	done
 
 	cd -

@@ -217,6 +217,7 @@ stages:
               EXTRA_MODULES: $(extra_modules)
               EXTRA_TLS: $(extra_tls)
               RUN_TLS: $(run_tls)
+              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
 
   - stage: Distro
     dependsOn: [Static_check]
