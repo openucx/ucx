@@ -23,5 +23,5 @@ uct_info: @abs_srcdir@/uct_info.c
 uct_info_static: @abs_srcdir@/uct_info.c
 	$(CC) -o $@ $? $(UCT_CFLAGS) $(UCT_STATIC_LDFLAGS)
 
-ucp_hello_world_static: @abs_top_builddir@/examples/ucp_hello_world.c
+ucp_hello_world_static: @abs_top_srcdir@/examples/ucp_hello_world.c
 	$(CC) -o $@ $? $(UCX_CFLAGS) $(UCX_STATIC_LDFLAGS)
