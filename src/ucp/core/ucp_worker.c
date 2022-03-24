@@ -726,7 +726,9 @@ static void ucp_worker_iface_deactivate(ucp_worker_iface_t *wiface, int force)
     ucp_worker_set_am_handlers(wiface, 1);
 
     /* Prepare for next receive event */
-    ucp_worker_iface_check_events(wiface, force);
+    if (wiface->attr.cap.event_flags & UCT_IFACE_FLAG_EVENT_RECV) {
+        ucp_worker_iface_check_events(wiface, force);
+    }
 }
 
 void ucp_worker_iface_progress_ep(ucp_worker_iface_t *wiface)
