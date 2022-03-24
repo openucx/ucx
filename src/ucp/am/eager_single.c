@@ -127,7 +127,7 @@ static ucs_status_t ucp_am_eager_short_proto_progress(uct_pending_req_t *self)
 ucp_proto_t ucp_am_eager_short_proto = {
     .name     = "am/egr/short",
     .desc     = UCP_PROTO_SHORT_DESC,
-    .flags    = 0,
+    .flags    = UCP_PROTO_FLAG_AM_SHORT,
     .init     = ucp_am_eager_short_proto_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_short_proto_progress},
@@ -152,7 +152,7 @@ ucp_am_eager_short_reply_proto_progress(uct_pending_req_t *self)
 ucp_proto_t ucp_am_eager_short_reply_proto = {
     .name     = "am/egr/short/reply",
     .desc     = UCP_PROTO_SHORT_DESC,
-    .flags    = 0,
+    .flags    = UCP_PROTO_FLAG_AM_SHORT,
     .init     = ucp_am_eager_short_reply_proto_init,
     .query    = ucp_proto_single_query,
     .progress = {ucp_am_eager_short_reply_proto_progress},
