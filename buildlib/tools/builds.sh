@@ -407,6 +407,14 @@ build_static() {
 
 	${WORKSPACE}/buildlib/tools/check_tls.sh $EXTRA_TLS
 
+	for tls in tcp $RUN_TLS; do
+		echo UCX_TLS=$tls
+		UCX_TLS=$tls ./ucp_hello_world_static &
+		# allow server to start
+		sleep 3
+		UCX_TLS=$tls ./ucp_hello_world_static -n localhost
+	done
+
 	cd -
 
 	export LD_LIBRARY_PATH=$SAVE_LD_LIBRARY_PATH

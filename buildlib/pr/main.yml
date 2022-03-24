@@ -10,7 +10,7 @@ resources:
       options: $(DOCKER_OPT_VOLUMES)
     - container: centos7_ib
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:5
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB)
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB) --cap-add=CAP_SYS_PTRACE
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
       options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
@@ -179,11 +179,13 @@ stages:
               test_static: yes
               extra_modules: ""
               extra_tls: ""
+              run_tls: ""
             ubuntu1804:
               CONTAINER: ubuntu1804
               test_static: yes
               extra_modules: ""
               extra_tls: ""
+              run_tls: ""
             sles15sp2:
               CONTAINER: sles15sp2
             rhel82:
@@ -194,8 +196,9 @@ stages:
             centos7:
               CONTAINER: centos7_ib
               test_static: yes
-              extra_modules: ucx-ib
-              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
         container: $[ variables['CONTAINER'] ]
         timeoutInMinutes: 340
 
@@ -213,6 +216,7 @@ stages:
               test_static: $(test_static)
               EXTRA_MODULES: $(extra_modules)
               EXTRA_TLS: $(extra_tls)
+              RUN_TLS: $(run_tls)
 
   - stage: Distro
     dependsOn: [Static_check]

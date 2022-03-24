@@ -4,19 +4,24 @@
 # See file LICENSE for terms.
 #
 
-all: uct_info uct_info_static
+all: uct_info uct_info_static ucp_hello_world_static
 
 clean:
-	rm -rf uct_info uct_info_static
+	rm -rf uct_info uct_info_static ucp_hello_world_static
 
-UCX_CFLAGS = $(CFLAGS) $(shell pkg-config ucx-uct --cflags)
+UCX_CFLAGS = $(CFLAGS) $(shell pkg-config ucx --cflags)
+UCT_CFLAGS = $(CFLAGS) $(shell pkg-config ucx-uct --cflags)
 
-UCX_LDFLAGS = $(LDFLAGS) $(shell pkg-config ucx-uct --libs)
+UCT_LDFLAGS = $(LDFLAGS) $(shell pkg-config ucx-uct --libs)
 
-UCX_STATIC_LDFLAGS = -static $(shell pkg-config --libs --static $(EXTRA_MODULES) ucx-uct)
+UCX_STATIC_LDFLAGS = -static $(shell pkg-config --libs --static $(EXTRA_MODULES) ucx)
+UCT_STATIC_LDFLAGS = -static $(shell pkg-config --libs --static $(EXTRA_MODULES) ucx-uct)
 
 uct_info: @abs_srcdir@/uct_info.c
-	$(CC) -o $@ $? $(UCX_CFLAGS) $(UCX_LDFLAGS)
+	$(CC) -o $@ $? $(UCT_CFLAGS) $(UCT_LDFLAGS)
 
 uct_info_static: @abs_srcdir@/uct_info.c
+	$(CC) -o $@ $? $(UCT_CFLAGS) $(UCT_STATIC_LDFLAGS)
+
+ucp_hello_world_static: @abs_top_builddir@/examples/ucp_hello_world.c
 	$(CC) -o $@ $? $(UCX_CFLAGS) $(UCX_STATIC_LDFLAGS)
