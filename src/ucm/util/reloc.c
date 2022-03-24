@@ -29,7 +29,7 @@
 #include <link.h>
 #include <limits.h>
 
-#ifdef HAVE_DECL_GETAUXVAL
+#if HAVE_DECL_GETAUXVAL
 #include <sys/auxv.h>
 #endif
 
@@ -121,7 +121,7 @@ static ucs_status_t ucm_reloc_get_aux_phsize(int *phsize_p)
         return UCS_OK;
     }
 
-#ifdef HAVE_DECL_GETAUXVAL
+#if HAVE_DECL_GETAUXVAL
     phsize = getauxval(AT_PHENT);
     if (phsize > 0) {
         *phsize_p = phsize;
