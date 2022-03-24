@@ -423,13 +423,18 @@ out:
 
 static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 {
-    ucp_ep_h ep                   = arg;
-    ucp_worker_h worker           = ep->worker;
-    ucp_context_h context         = worker->context;
-    ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    void *ucp_addr                = NULL; /* Set to NULL to call ucs_free
-                                             safely */
-    unsigned ep_init_flags        = 0;
+    static const unsigned ep_init_flags_prio[] = {
+        UCP_EP_INIT_ALLOW_KA_AUX_TL, 0, UCP_EP_INIT_CREATE_AM_LANE_ONLY
+    };
+    ucp_ep_h ep                                = arg;
+    ucp_worker_h worker                        = ep->worker;
+    ucp_context_h context                      = worker->context;
+    ucp_wireup_ep_t *cm_wireup_ep              =
+            ucp_ep_get_cm_wireup_ep(ep);
+    /* Set to NULL to call ucs_free safely */
+    void *ucp_addr                             = NULL;
+    unsigned ep_init_flags;
+    unsigned i;
     ucp_tl_bitmap_t tl_bitmap;
     uct_ep_connect_params_t params;
     void *priv_data;
@@ -443,50 +448,56 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 
     ucs_queue_head_init(&tmp_pending_queue);
 
-initial_config_retry:
-    /* Cleanup the previously created UCP EP. The one that was created on the
-     * previous call to this client's resolve_cb */
-    ucp_wireup_cm_ep_cleanup(ep, &tmp_pending_queue);
+    /* To silence Coverity warning */
+    UCS_STATIC_ASSERT(ucs_static_array_size(ep_init_flags_prio) > 0);
 
-    status = ucp_cm_ep_client_initial_config_get(ep, ep_init_flags,
-                                    &cm_wireup_ep->cm_resolve_tl_bitmap, &key);
-    if (status != UCS_OK) {
-        goto try_fallback;
-    }
+    for (i = 0; i < ucs_static_array_size(ep_init_flags_prio); ++i) {
+        ep_init_flags = ep_init_flags_prio[i];
 
-    status = ucp_worker_get_ep_config(worker, &key, ep_init_flags,
-                                      &ep->cfg_index);
-    if (status != UCS_OK) {
-        goto err;
-    }
+        /* Cleanup the previously created UCP EP. The one that was created on
+         * the previous call to this client's resolve_cb */
+        ucp_wireup_cm_ep_cleanup(ep, &tmp_pending_queue);
 
-    ep->am_lane = key.am_lane;
-
-    status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    /* Replay pending requests from the tmp_pending_queue */
-    ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
-
-    can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
-                   (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
-    status       = ucp_cm_ep_priv_data_pack(
-                      ep, &tl_bitmap, can_fallback,
-                      context->config.ext.sa_client_min_hdr_version,
-                      &priv_data, &priv_data_length, ep_init_flags);
-    if (status == UCS_ERR_BUFFER_TOO_SMALL) {
-        if (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
-            /* Create endpoint configuration with AM lane only to fit CM private
-             * data length limit */
-            ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE_ONLY;
-            goto initial_config_retry;
+        status = ucp_cm_ep_client_initial_config_get(ep, ep_init_flags,
+                                        &cm_wireup_ep->cm_resolve_tl_bitmap,
+                                        &key);
+        if (status != UCS_OK) {
+            goto try_fallback;
         }
 
+        status = ucp_worker_get_ep_config(worker, &key, ep_init_flags,
+                                          &ep->cfg_index);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        ep->am_lane = key.am_lane;
+
+        status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        /* Replay pending requests from the tmp_pending_queue */
+        ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
+
+        can_fallback =
+                (i < (ucs_static_array_size(ep_init_flags_prio) - 1)) ||
+                (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
+        status       = ucp_cm_ep_priv_data_pack(
+                          ep, &tl_bitmap, can_fallback,
+                          context->config.ext.sa_client_min_hdr_version,
+                          &priv_data, &priv_data_length, ep_init_flags);
+        if (status == UCS_OK) {
+            break;
+        } else if (status != UCS_ERR_BUFFER_TOO_SMALL) {
+            goto err;
+        }
+    }
+
+    if (status == UCS_ERR_BUFFER_TOO_SMALL) {
+        ucs_assert(i == ucs_static_array_size(ep_init_flags_prio));
         goto try_fallback;
-    } else if (status != UCS_OK) {
-        goto err;
     }
 
     params.field_mask          = UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA |

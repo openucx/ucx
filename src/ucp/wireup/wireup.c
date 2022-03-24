@@ -462,6 +462,7 @@ ucp_wireup_process_pre_request(ucp_worker_h worker, ucp_ep_h ep,
 {
     unsigned ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE |
                              UCP_EP_INIT_CM_WIREUP_CLIENT |
+                             UCP_EP_INIT_ALLOW_KA_AUX_TL |
                              ucp_ep_err_mode_init_flags(msg->err_mode);
     unsigned addr_indices[UCP_MAX_LANES];
     ucs_status_t status;
@@ -505,7 +506,8 @@ ucp_wireup_process_request(ucp_worker_h worker, ucp_ep_h ep,
 {
     uint64_t remote_uuid      = remote_address->uuid;
     int send_reply            = 0;
-    unsigned ep_init_flags    = ucp_ep_err_mode_init_flags(msg->err_mode);
+    unsigned ep_init_flags    = UCP_EP_INIT_ALLOW_KA_AUX_TL |
+                                ucp_ep_err_mode_init_flags(msg->err_mode);
     ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucp_rsc_index_t lanes2remote[UCP_MAX_LANES];
     unsigned addr_indices[UCP_MAX_LANES];
@@ -729,7 +731,8 @@ ucp_wireup_send_ep_removed(ucp_worker_h worker, const ucp_wireup_msg_t *msg,
                              UCP_EP_INIT_CONNECT_TO_IFACE_ONLY |
                              UCP_EP_INIT_CREATE_AM_LANE |
                              UCP_EP_INIT_CREATE_AM_LANE_ONLY |
-                             UCP_EP_INIT_ALLOW_AUX_TL_RSC;
+                             UCP_EP_INIT_ALLOW_AM_AUX_TL |
+                             UCP_EP_INIT_ALLOW_KA_AUX_TL;
     ucs_status_t status;
     ucp_ep_h reply_ep;
     unsigned addr_indices[UCP_MAX_LANES];
