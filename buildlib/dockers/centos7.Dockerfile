@@ -28,6 +28,7 @@ RUN yum install -y \
     fuse-libs \
     lsof \
     ethtool \
+    glibc-static \
     && yum clean all
 
 ARG MOFED_OS=rhel7.6
