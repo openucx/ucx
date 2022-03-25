@@ -67,17 +67,58 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, ar_enable), UCS_CONFIG_TYPE_TERNARY_AUTO},
 
+    {"CQE_ZIPPING_ENABLE", "no",
+     "Enable CQE zipping feature. CQE zipping reduces PCI utilization by\n"
+     "merging several similar CQEs to a single CQE written by the device.",
+     ucs_offsetof(uct_ib_mlx5_iface_config_t, cqe_zipping_enable), UCS_CONFIG_TYPE_TERNARY},
+
     {NULL}
 };
 
-ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
-                                   const uct_ib_iface_init_attr_t *init_attr,
-                                   int preferred_cpu, size_t inl)
+#if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
+static ucs_status_t
+uct_ib_mlx5_set_cqe_zipping(uct_ib_mlx5_md_t* md,
+                            struct mlx5dv_cq_init_attr* dv_attr,
+                            const uct_ib_mlx5_iface_config_t* mlx5_config)
+{
+#if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE
+    if (mlx5_config->cqe_zipping_enable == UCS_NO) {
+        return UCS_OK;
+    }
+
+    if (((dv_attr->cqe_size == 64)  && (md->flags & UCT_IB_MLX5_MD_FLAG_CQE64_ZIP)) ||
+        ((dv_attr->cqe_size == 128) && (md->flags & UCT_IB_MLX5_MD_FLAG_CQE128_ZIP))) {
+        dv_attr->comp_mask          |= MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE;
+        dv_attr->cqe_comp_res_format = MLX5DV_CQE_RES_FORMAT_CSUM;
+        return UCS_OK;
+    }
+
+    if (mlx5_config->cqe_zipping_enable == UCS_YES) {
+        ucs_error("%s: CQE_ZIPPING_ENABLE option set to \"yes\", but this "
+                  "feature is unsupported by device.",
+                  uct_ib_device_name(&md->super.dev));
+        return UCS_ERR_UNSUPPORTED;
+    }
+#endif
+
+    return UCS_OK;
+}
+#endif
+
+ucs_status_t
+uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                      const uct_ib_mlx5_iface_config_t *mlx5_config,
+                      const uct_ib_iface_config_t *ib_config,
+                      const uct_ib_iface_init_attr_t *init_attr,
+                      int preferred_cpu, size_t inl)
 {
 #if HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
     uct_ib_device_t *dev               = uct_ib_iface_device(iface);
     struct ibv_cq_init_attr_ex cq_attr = {};
     struct mlx5dv_cq_init_attr dv_attr = {};
+    uct_ib_mlx5_md_t *md               = ucs_derived_of(iface->super.md,
+                                                        uct_ib_mlx5_md_t);
+    ucs_status_t status;
     struct ibv_cq *cq;
     char message[128];
     int cq_errno;
@@ -87,6 +128,12 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
     dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);
+
+    status = uct_ib_mlx5_set_cqe_zipping(md, &dv_attr, mlx5_config);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     cq = ibv_cq_ex_to_cq(mlx5dv_create_cq(dev->ibv_context, &cq_attr, &dv_attr));
     if (cq == NULL) {
         cq_errno = errno;
@@ -100,7 +147,8 @@ ucs_status_t uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     iface->config.max_inl_cqe[dir] = (inl > 0) ? (dv_attr.cqe_size / 2) : 0;
     return UCS_OK;
 #else
-    return uct_ib_verbs_create_cq(iface, dir, init_attr, preferred_cpu, inl);
+    return uct_ib_verbs_create_cq(iface, dir, ib_config, init_attr,
+                                  preferred_cpu, inl);
 #endif
 }
 
@@ -133,6 +181,8 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
 #endif
     mlx5_cq->dbrec     = dcq.dv.dbrec;
     cqe_size           = dcq.dv.cqe_size;
+    /* initializing memory is required for checking the cq_unzip.current_idx */
+    memset(&mlx5_cq->cq_unzip, 0, sizeof(uct_ib_mlx5_cq_unzip_t));
 
     /* Move buffer forward for 128b CQE, so we would get pointer to the 2nd
      * 64b when polling.
@@ -348,8 +398,105 @@ ucs_status_t uct_ib_mlx5_get_compact_av(uct_ib_iface_t *iface, int *compact_av)
 }
 #endif
 
-void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
-                                  struct mlx5_cqe64 *cqe)
+void uct_ib_mlx5_iface_cqe_unzip_init(struct mlx5_cqe64 *title_cqe,
+                                      uct_ib_mlx5_cq_t *cq)
+{
+    uct_ib_mlx5_cq_unzip_t *cq_unzip = &cq->cq_unzip;
+    struct mlx5_cqe64 *mini_cqe      = uct_ib_mlx5_get_cqe(cq, cq->cq_ci + 1);
+
+    memcpy(&cq_unzip->title, title_cqe, sizeof(cq_unzip->title));
+    memcpy(&cq_unzip->mini_arr, mini_cqe, sizeof(cq_unzip->mini_arr));
+    cq_unzip->block_size    = ntohl(title_cqe->byte_cnt);
+    cq_unzip->wqe_counter   = ntohs(title_cqe->wqe_counter);
+    cq_unzip->title_cq_idx  = cq->cq_ci;
+
+    /* Clear the title CQE format */
+    cq_unzip->title.op_own &= ~UCT_IB_MLX5_CQE_FORMAT_MASK;
+}
+
+static void
+uct_ib_mlx5_iface_cqe_unzip_fill_unique(struct mlx5_cqe64 *cqe,
+                                        uct_ib_mlx5_mini_cqe8_t *mini_cqe,
+                                        uct_ib_mlx5_cq_unzip_t *cq_unzip)
+{
+    const uint32_t net_qpn_mask = htonl(UCS_MASK(UCT_IB_QPN_ORDER));
+
+    /* TODO: Think about the checksum field unzipping
+     * The checksum field does not copied from src dst
+     * because of absence of the mlx5_cqe64::check_sum field on some systems.
+     */
+    cqe->byte_cnt = mini_cqe->byte_cnt;
+    ucs_assert(!(cqe->op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK));
+    if ((cqe->op_own >> 4) == MLX5_CQE_REQ) {
+        cqe->wqe_counter  = mini_cqe->wqe_counter;
+        cqe->sop_drop_qpn = (cqe->sop_drop_qpn & net_qpn_mask) |
+                            htonl(mini_cqe->s_wqe_opcode << UCT_IB_QPN_ORDER);
+    } else {
+        cqe->wqe_counter = htons(cq_unzip->wqe_counter + cq_unzip->current_idx);
+    }
+}
+
+struct mlx5_cqe64 *uct_ib_mlx5_iface_cqe_unzip(uct_ib_mlx5_cq_t *cq)
+{
+    uct_ib_mlx5_cq_unzip_t *cq_unzip  = &cq->cq_unzip;
+    uint8_t mini_cqe_idx              = cq_unzip->current_idx %
+                                        UCT_IB_MLX5_MINICQE_ARR_MAX_SIZE;
+    struct mlx5_cqe64 *title_cqe      = &cq_unzip->title;
+    uct_ib_mlx5_mini_cqe8_t *mini_cqe = &cq_unzip->mini_arr[mini_cqe_idx];
+    struct mlx5_cqe64 *cqe;
+    unsigned next_arr_size;
+
+    uct_ib_mlx5_iface_cqe_unzip_fill_unique(title_cqe, mini_cqe, cq_unzip);
+
+    cq_unzip->current_idx++;
+
+    if (cq_unzip->current_idx < cq_unzip->block_size) {
+        cqe = uct_ib_mlx5_get_cqe(cq, cq_unzip->title_cq_idx + 
+                                  cq_unzip->current_idx);
+
+        if (mini_cqe_idx == (UCT_IB_MLX5_MINICQE_ARR_MAX_SIZE - 1)) {
+            /* Get the next mini_cqe array */
+            next_arr_size = ucs_min(sizeof(*mini_cqe) * cq_unzip->current_idx,
+                                    sizeof(*cqe));
+            memcpy(&cq_unzip->mini_arr, cqe, next_arr_size);
+        }
+
+        /* Update opcode and CQE format in the next CQE buffer
+         * (title shouldn't be updated).
+         * CQE format is used for simplifying the zipped CQE detection
+         * during the poll
+         */
+        cqe->op_own = title_cqe->op_own | UCT_IB_MLX5_CQE_FORMAT_MASK;
+    } else {
+        cq_unzip->current_idx = 0;
+    }
+
+    return title_cqe;
+}
+
+struct mlx5_cqe64 *
+uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
+                             struct mlx5_cqe64 *cqe)
+{
+    ucs_memory_cpu_load_fence();
+
+    if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
+        ++cq->cq_ci;
+        return uct_ib_mlx5_iface_cqe_unzip(cq);
+    }
+
+    if (cqe->op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK) {
+        UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
+        ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
+        uct_ib_mlx5_check_completion_with_err(iface, cq, cqe);
+    }
+
+    return NULL; /* No CQE */
+}
+
+void uct_ib_mlx5_check_completion_with_err(uct_ib_iface_t *iface,
+                                           uct_ib_mlx5_cq_t *cq,
+                                           struct mlx5_cqe64 *cqe)
 {
     ucs_status_t status;
 
@@ -361,6 +508,7 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
         status = uct_ib_mlx5_completion_with_err(iface, (void*)cqe, NULL,
                                                  UCS_LOG_LEVEL_DEBUG);
         iface->ops->handle_failure(iface, cqe, status);
+        uct_ib_mlx5_update_db_cq_ci(cq);
         return;
     case MLX5_CQE_RESP_ERR:
         /* Local side failure - treat as fatal */
@@ -368,6 +516,7 @@ void uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
         ++cq->cq_ci;
         uct_ib_mlx5_completion_with_err(iface, (void*)cqe, NULL,
                                         UCS_LOG_LEVEL_FATAL);
+        uct_ib_mlx5_update_db_cq_ci(cq);
         return;
     default:
         /* CQE might have been updated by HW. Skip it now, and it would be handled

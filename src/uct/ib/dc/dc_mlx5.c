@@ -1203,6 +1203,20 @@ static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
     uct_dc_mlx5_ep_handle_failure(ep, cqe, status);
 }
 
+static ucs_status_t
+uct_dc_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                      const uct_ib_iface_config_t *ib_config,
+                      const uct_ib_iface_init_attr_t *init_attr,
+                      int preferred_cpu, size_t inl)
+{
+    uct_dc_mlx5_iface_config_t *dc_mlx5_config =
+            ucs_derived_of(ib_config, uct_dc_mlx5_iface_config_t);
+
+    return uct_ib_mlx5_create_cq(iface, dir,
+                                 &dc_mlx5_config->rc_mlx5_common.super,
+                                 ib_config, init_attr, preferred_cpu, inl);
+}
+
 static void uct_dc_mlx5_iface_handle_failure(uct_ib_iface_t *ib_iface,
                                              void *arg, ucs_status_t status)
 {
@@ -1229,7 +1243,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_dc_mlx5_ep_invalidate
         },
-        .create_cq      = uct_ib_mlx5_create_cq,
+        .create_cq      = uct_dc_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = uct_dc_mlx5_iface_handle_failure,
@@ -1630,6 +1644,6 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                       &ep->super.super, ep_status);
     log_lvl = uct_base_iface_failure_log_level(&ib_iface->super, status,
                                                ep_status);
-    uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe,
-                                    txwq, log_lvl);
+    uct_ib_mlx5_completion_with_err(ib_iface, (uct_ib_mlx5_err_cqe_t*)cqe, txwq,
+                                    log_lvl);
 }

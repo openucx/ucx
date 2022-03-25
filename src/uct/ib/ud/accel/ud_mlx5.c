@@ -673,6 +673,20 @@ uct_ud_mlx5_ep_create(const uct_ep_params_t* params, uct_ep_h *ep_p)
     return uct_ud_mlx5_ep_t_new(params, ep_p);
 }
 
+
+static ucs_status_t
+uct_ud_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                      const uct_ib_iface_config_t *ib_config,
+                      const uct_ib_iface_init_attr_t *init_attr,
+                      int preferred_cpu, size_t inl)
+{
+    uct_ud_mlx5_iface_config_t *ud_mlx5_config =
+            ucs_derived_of(ib_config, uct_ud_mlx5_iface_config_t);
+
+    return uct_ib_mlx5_create_cq(iface, dir, &ud_mlx5_config->mlx5_common,
+                                 ib_config, init_attr, preferred_cpu, inl);
+}
+
 static ucs_status_t uct_ud_mlx5_iface_arm_cq(uct_ib_iface_t *ib_iface,
                                              uct_ib_dir_t dir,
                                              int solicited)
@@ -761,7 +775,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_ud_ep_invalidate
         },
-        .create_cq      = uct_ib_mlx5_create_cq,
+        .create_cq      = uct_ud_mlx5_create_cq,
         .arm_cq         = uct_ud_mlx5_iface_arm_cq,
         .event_cq       = uct_ud_mlx5_iface_event_cq,
         .handle_failure = uct_ud_mlx5_iface_handle_failure,

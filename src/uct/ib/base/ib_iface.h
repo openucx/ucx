@@ -216,6 +216,7 @@ typedef struct uct_ib_qp_attr {
 
 typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
                                                       uct_ib_dir_t dir,
+                                                      const uct_ib_iface_config_t *config,
                                                       const uct_ib_iface_init_attr_t *init_attr,
                                                       int preferred_cpu,
                                                       size_t inl);
@@ -539,6 +540,7 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  int solicited_only);
 
 ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                    const uct_ib_iface_config_t *config,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl);
 
@@ -558,7 +560,6 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
     uct_ib_device_name(uct_ib_iface_device(_iface)), \
     (_iface)->config.port_num, \
     uct_ib_iface_is_roce(_iface) ? "RoCE" : "IB"
-    
 
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \

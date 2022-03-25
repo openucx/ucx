@@ -1011,6 +1011,7 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 }
 
 ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                    const uct_ib_iface_config_t *config,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl)
 {
@@ -1089,7 +1090,8 @@ uct_ib_iface_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
         env_var_added = 1;
     }
 #endif
-    status = iface->ops->create_cq(iface, dir, init_attr, preferred_cpu, inl);
+    status = iface->ops->create_cq(iface, dir, config, init_attr, preferred_cpu,
+                                   inl);
     if (status != UCS_OK) {
         goto out_unsetenv;
     }
