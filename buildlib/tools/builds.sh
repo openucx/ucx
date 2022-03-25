@@ -384,7 +384,7 @@ build_static() {
 	az_module_load dev/libnl
 	az_module_load dev/numactl
 
-	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst
+	${WORKSPACE}/contrib/configure-devel --prefix=$ucx_inst --without-java --without-go
 	$MAKEP
 	$MAKEP install
 
@@ -447,29 +447,6 @@ az_init_modules
 prepare_build
 
 [ "${long_test}" = "yes" ] && prog=5 || prog=12
-
-do_task "${prog}" build_docs
-do_task "${prog}" build_debug
-do_task "${prog}" build_prof
-do_task "${prog}" build_ugni
-do_task "${prog}" build_disable_numa
-do_task "${prog}" build_cuda
-do_task "${prog}" build_no_verbs
-do_task "${prog}" build_release_pkg
-do_task "${prog}" build_cmake_examples
-do_task "${prog}" build_fuse
-
-if [ "${long_test}" = "yes" ]
-then
-	do_task 5 check_config_h
-	do_task 5 check_inst_headers
-	do_task 10 build_icc
-	do_task 10 build_pgi
-	do_task 10 build_gcc
-	do_task 10 build_gcc_debug_opt
-	do_task 10 build_clang
-	do_task 10 build_armclang
-fi
 
 if [ "${test_static}" = "yes" ]
 then

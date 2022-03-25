@@ -144,7 +144,109 @@ resources:
       options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
 
 stages:
+  - stage: Build_test
+    jobs:
+      - job: build_source
+        pool:
+          name: MLNX
+          demands:
+            - ucx_docker -equals yes
+        strategy:
+          matrix:
+            centos7_1:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_2:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_3:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_4:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_5:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_6:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_7:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_8:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_9:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_10:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_11:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+            centos7_12:
+              CONTAINER: centos7_ib
+              test_static: yes
+              extra_modules: ucx-ib ucx-cma
+              extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
+              run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
+        container: $[ variables['CONTAINER'] ]
+        timeoutInMinutes: 340
+
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 100
+
+          - bash: |
+              ./buildlib/tools/builds.sh
+            displayName: Build
+            env:
+              BUILD_ID: "$(Build.BuildId)-$(Build.BuildNumber)"
+              long_test: $(long_test)
+              test_static: $(test_static)
+              EXTRA_MODULES: $(extra_modules)
+              EXTRA_TLS: $(extra_tls)
+              RUN_TLS: $(run_tls)
+              EXECUTOR_NUMBER: $(AZP_AGENT_ID)
+
   - stage: Codestyle
+    dependsOn: [Build_test]
     jobs:
     - template: codestyle.yml
 
