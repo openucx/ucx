@@ -817,38 +817,46 @@ test_malloc_hooks_mpi() {
 # Run tests with MPI library
 #
 run_mpi_tests() {
-	if module_load hpcx-gcc && mpirun --version
+	prev_LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+	mpi_module=hpcx-ga-gcc
+	if module_load ${mpi_module}
 	then
-		# Prevent our tests from using UCX libraries from hpcx module by prepending
-		# our local library path first
-		save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
-		export LD_LIBRARY_PATH=${ucx_inst}/lib:${LD_LIBRARY_PATH}
+		if mpirun --version
+		then
+			# Prevent our tests from using UCX libraries from hpcx module by prepending
+			# our local library path first
+			save_LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
+			export LD_LIBRARY_PATH=${ucx_inst}/lib:${MPI_HOME}/lib:${prev_LD_LIBRARY_PATH}
 
-		build release --disable-gtest --with-mpi
+			build release --disable-gtest --with-mpi
 
-		# check whether installation is valid (it compiles examples at least)
-		$MAKEP installcheck
+			# check whether installation is valid (it compiles examples at least)
+			$MAKEP installcheck
 
-		MPIRUN="mpirun \
-				--bind-to none \
-				-x UCX_ERROR_SIGNALS \
-				-x UCX_HANDLE_ERRORS \
-				-mca pml ob1 \
-				-mca btl tcp,self \
-				-mca btl_tcp_if_include lo \
-				-mca orte_allowed_exit_without_sync 1 \
-				-mca coll ^hcoll,ml"
+			MPIRUN="mpirun \
+					--bind-to none \
+					-x UCX_ERROR_SIGNALS \
+					-x UCX_HANDLE_ERRORS \
+					-mca pml ob1 \
+					-mca btl tcp,self \
+					-mca btl_tcp_if_include lo \
+					-mca orte_allowed_exit_without_sync 1 \
+					-mca coll ^hcoll,ml"
 
-		run_ucx_perftest 1
+			run_ucx_perftest 1
 
-		test_malloc_hooks_mpi
+			test_malloc_hooks_mpi
 
-		# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
-		# from installation directory
-		export LD_LIBRARY_PATH=${save_LD_LIBRARY_PATH}
+			# Restore LD_LIBRARY_PATH so subsequent tests will not take UCX libs
+			# from installation directory
+			export LD_LIBRARY_PATH=${save_LD_LIBRARY_PATH}
 
-		make_clean distclean
-		module unload hpcx-gcc
+			make_clean distclean
+		else
+			echo "==== Not running MPI tests ===="
+		fi
+
+		module unload ${mpi_module}
 	else
 		echo "==== Not running MPI tests ===="
 	fi
