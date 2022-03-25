@@ -10,7 +10,7 @@ resources:
       options: $(DOCKER_OPT_VOLUMES)
     - container: centos7_ib
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:5
-      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB) --cap-add=CAP_SYS_PTRACE
+      options: $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_IB) --cap-add=CAP_SYS_PTRACE --net host
     - container: centos7_cuda11
       image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5.4-cuda11:1
       options: --net=host $(DOCKER_OPT_VOLUMES) $(DOCKER_OPT_GPU)
