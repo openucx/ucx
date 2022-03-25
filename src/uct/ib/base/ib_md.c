@@ -1723,6 +1723,12 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     md->reg_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     if (md_config->enable_gpudirect_rdma != UCS_NO) {
         /* check if GDR driver is loaded */
+        /* TODO: This is a temporary fix for EFA. The check for
+                 GPUDirect RDMA should be done in each specific md */
+        char efa_gdr_file[PATH_MAX];
+        ucs_snprintf_safe(efa_gdr_file, PATH_MAX, UCT_IB_DEVICE_SYSFS_FMT,
+                          uct_ib_device_name(&md->dev), "gdr");
+        uct_ib_check_gpudirect_driver(md, efa_gdr_file, UCS_MEMORY_TYPE_CUDA);
         uct_ib_check_gpudirect_driver(
                 md, "/sys/kernel/mm/memory_peers/nv_mem/version",
                 UCS_MEMORY_TYPE_CUDA);
