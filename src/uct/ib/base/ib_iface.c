@@ -1411,16 +1411,20 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     uct_ib_iface_set_num_paths(self, config);
 
-    self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
-    if (self->comp_channel == NULL) {
-        ucs_error("ibv_create_comp_channel() failed: %m");
-        status = UCS_ERR_IO_ERROR;
-        goto err_cleanup;
-    }
+    if (dev->has_cq_notify) {
+        self->comp_channel = ibv_create_comp_channel(dev->ibv_context);
+        if (self->comp_channel == NULL) {
+            ucs_error("ibv_create_comp_channel() failed: %m");
+            status = UCS_ERR_IO_ERROR;
+            goto err_cleanup;
+        }
 
-    status = ucs_sys_fcntl_modfl(self->comp_channel->fd, O_NONBLOCK, 0);
-    if (status != UCS_OK) {
-        goto err_destroy_comp_channel;
+        status = ucs_sys_fcntl_modfl(self->comp_channel->fd, O_NONBLOCK, 0);
+        if (status != UCS_OK) {
+            goto err_destroy_comp_channel;
+        }
+    } else {
+        self->comp_channel = NULL;
     }
 
     status = uct_ib_iface_create_cq(self, UCT_IB_DIR_TX, init_attr,
@@ -1473,7 +1477,10 @@ err_destroy_recv_cq:
 err_destroy_send_cq:
     ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
 err_destroy_comp_channel:
-    ibv_destroy_comp_channel(self->comp_channel);
+    if (self->comp_channel) {
+        /* comp_channel will be NULL if device does not support CQ notifications */
+        ibv_destroy_comp_channel(self->comp_channel);
+    }
 err_cleanup:
     ucs_free(self->path_bits);
 err:
@@ -1494,9 +1501,12 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
         ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
     }
 
-    ret = ibv_destroy_comp_channel(self->comp_channel);
-    if (ret != 0) {
-        ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
+    if (self->comp_channel) {
+        /* comp_channel will be NULL if device does not support CQ notifications */
+        ret = ibv_destroy_comp_channel(self->comp_channel);
+        if (ret != 0) {
+            ucs_warn("ibv_destroy_comp_channel(comp_channel) returned %d: %m", ret);
+        }
     }
 
     ucs_free(self->path_bits);
