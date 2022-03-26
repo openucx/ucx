@@ -68,9 +68,9 @@ ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
 };
 #endif
 
-void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
-                                           struct mlx5_cqe64 *cqe,
-                                           int poll_flags)
+struct mlx5_cqe64 *
+uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
+                                      struct mlx5_cqe64 *cqe, int poll_flags)
 {
     uct_ib_mlx5_cq_t *cq      = &iface->cq[UCT_IB_DIR_RX];
     struct mlx5_err_cqe *ecqe = (void*)cqe;
@@ -79,11 +79,19 @@ void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
 
     ucs_memory_cpu_load_fence();
 
+    if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
+        ++cq->cq_ci;
+        return uct_ib_mlx5_iface_cqe_unzip(cq);
+    }
+
     if (((ecqe->op_own >> 4) == MLX5_CQE_RESP_ERR) &&
         (ecqe->syndrome == MLX5_CQE_SYNDROME_REMOTE_ABORTED_ERR) &&
         ((ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_ODP) ||
          (ecqe->vendor_err_synd == UCT_IB_MLX5_CQE_VENDOR_SYND_PSN)))
     {
+        UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
+        ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
+
         /* Release the aborted segment */
         wqe_ctr = ntohs(ecqe->wqe_counter);
         seg     = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
@@ -93,10 +101,13 @@ void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
                                           iface->super.super.config.rx_headroom_offset,
                                           &iface->super.super.release_desc,
                                           poll_flags);
+        uct_ib_mlx5_update_db_cq_ci(cq);
     } else {
         ucs_assert((ecqe->op_own >> 4) != MLX5_CQE_INVALID);
-        uct_ib_mlx5_check_completion(&iface->super.super, cq, cqe);
+        uct_ib_mlx5_check_completion_with_err(&iface->super.super, cq, cqe);
     }
+
+    return NULL;
 }
 
 static UCS_F_ALWAYS_INLINE void
@@ -224,6 +235,20 @@ static ucs_status_t uct_rc_mlx5_iface_query(uct_iface_h tl_iface, uct_iface_attr
     iface_attr->ep_addr_len    = sizeof(uct_rc_mlx5_ep_address_t);
     iface_attr->iface_addr_len = sizeof(uint8_t);
     return UCS_OK;
+}
+
+static ucs_status_t
+uct_rc_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                      const uct_ib_iface_config_t *ib_config,
+                      const uct_ib_iface_init_attr_t *init_attr,
+                      int preferred_cpu, size_t inl)
+{
+    uct_rc_mlx5_iface_config_t *rc_mlx5_config =
+            ucs_derived_of(ib_config, uct_rc_mlx5_iface_config_t);
+
+    return uct_ib_mlx5_create_cq(iface, dir,
+                                 &rc_mlx5_config->rc_mlx5_common.super,
+                                 ib_config, init_attr, preferred_cpu, inl);
 }
 
 static void
@@ -881,7 +906,7 @@ static uct_rc_iface_ops_t uct_rc_mlx5_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_rc_mlx5_ep_invalidate
         },
-        .create_cq      = uct_ib_mlx5_create_cq,
+        .create_cq      = uct_rc_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
         .handle_failure = uct_rc_mlx5_iface_handle_failure,

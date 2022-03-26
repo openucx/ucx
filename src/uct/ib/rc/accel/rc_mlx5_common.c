@@ -1173,7 +1173,7 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn)
 {
     const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
-    struct mlx5_cqe64 *cqe, *dest;
+    struct mlx5_cqe64 *cqe, *dest, *unzipped_cqe;
     uct_ib_mlx5_srq_seg_t *seg;
     unsigned pi, idx;
     uint8_t owner_bit;
@@ -1184,6 +1184,9 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
         if (uct_ib_mlx5_cqe_is_hw_owned(cqe->op_own, pi, mlx5_cq->cq_length)) {
             break;
+        } else if (uct_ib_mlx5_check_and_init_zipped(mlx5_cq, cqe)) {
+            unzipped_cqe = uct_ib_mlx5_iface_cqe_unzip(mlx5_cq);
+            memcpy(cqe, unzipped_cqe, sizeof(*cqe));
         }
 
         ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);
