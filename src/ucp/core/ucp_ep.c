@@ -2929,6 +2929,14 @@ static void ucp_ep_config_print(FILE *stream, ucp_worker_h worker,
                                   config->tag.rndv.am_thresh.remote);
     }
 
+    if (context->config.features & UCP_FEATURE_STREAM) {
+        ucp_ep_config_print_proto(stream, "stream_send",
+                                  config->am.max_short,
+                                  config->am.zcopy_thresh[0],
+                                  /* disable rndv */
+                                  SIZE_MAX, SIZE_MAX);
+    }
+
     if (context->config.features & UCP_FEATURE_AM) {
         ucp_ep_config_print_proto(stream, "am_send",
                                   config->am_u.max_eager_short.memtype_on,
