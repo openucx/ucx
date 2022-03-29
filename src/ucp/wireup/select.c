@@ -408,8 +408,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                 &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
 
         if ((context->tl_rscs[rsc_index].flags & UCP_TL_RSC_FLAG_AUX) &&
-            !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX) &&
-            !(select_params->ep_init_flags & UCP_EP_INIT_ALLOW_AUX_TL_RSC)) {
+            !(criteria->tl_rsc_flags & UCP_TL_RSC_FLAG_AUX)) {
             continue;
         }
 
@@ -1116,8 +1115,10 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
                        ucp_wireup_select_info_t *am_info,
                        ucp_wireup_select_context_t *select_ctx)
 {
-    ucp_worker_h worker            = select_params->ep->worker;
-    ucp_tl_bitmap_t tl_bitmap      = select_params->tl_bitmap;
+    ucp_worker_h worker       = select_params->ep->worker;
+    ucp_tl_bitmap_t tl_bitmap = select_params->tl_bitmap;
+    unsigned ep_init_flags    = ucp_wireup_ep_init_flags(select_params,
+                                                         select_ctx);
     const uct_iface_attr_t *iface_attr;
     ucp_wireup_criteria_t criteria;
     ucs_status_t status;
@@ -1134,6 +1135,9 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
         criteria.remote_iface_flags = UCP_ADDR_IFACE_FLAG_AM_SYNC;
         criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
         criteria.calc_score         = ucp_wireup_am_score_func;
+        criteria.tl_rsc_flags       =
+                (ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL) ?
+                UCP_TL_RSC_FLAG_AUX : 0;
         ucp_wireup_fill_peer_err_criteria(&criteria,
                                           ucp_wireup_ep_init_flags(select_params,
                                                                    select_ctx));
@@ -1623,7 +1627,7 @@ ucp_wireup_keepalive_score_func(const ucp_worker_iface_t *wiface,
     }
 
     return ucp_wireup_am_score_func(wiface, md_attr, remote_iface_attr) *
-           (perf_attr.max_inflight_eps / SIZE_MAX);
+           ((double)perf_attr.max_inflight_eps / (double)SIZE_MAX);
 }
 
 static ucs_status_t
@@ -1654,7 +1658,9 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     criteria.is_keepalive       = 1;
     criteria.calc_score         = ucp_wireup_keepalive_score_func;
     /* Keepalive can also use auxiliary transports */
-    criteria.tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX;
+    criteria.tl_rsc_flags       =
+            (ep_init_flags & UCP_EP_INIT_ALLOW_KA_AUX_TL) ?
+            UCP_TL_RSC_FLAG_AUX : 0;
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     status = ucp_wireup_select_transport(select_ctx, select_params, &criteria,

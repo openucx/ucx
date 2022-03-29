@@ -579,7 +579,8 @@ ucs_status_t ucp_worker_mem_type_eps_create(ucp_worker_h worker)
         status = ucp_ep_create_to_worker_addr(worker, &ucp_tl_bitmap_max,
                                               &local_address,
                                               UCP_EP_INIT_FLAG_MEM_TYPE |
-                                              UCP_EP_INIT_FLAG_INTERNAL,
+                                              UCP_EP_INIT_FLAG_INTERNAL |
+                                              UCP_EP_INIT_ALLOW_KA_AUX_TL,
                                               ep_name,
                                               &worker->mem_type_ep[mem_type]);
         if (status != UCS_OK) {
@@ -900,7 +901,8 @@ static ucs_status_t
 ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
                                  const ucp_ep_params_t *params, ucp_ep_h *ep_p)
 {
-    unsigned ep_init_flags = ucp_ep_init_flags(worker, params);
+    unsigned ep_init_flags = ucp_ep_init_flags(worker, params) |
+                             UCP_EP_INIT_ALLOW_KA_AUX_TL;
     ucp_unpacked_address_t remote_address;
     ucp_ep_match_conn_sn_t conn_sn;
     ucs_status_t status;
