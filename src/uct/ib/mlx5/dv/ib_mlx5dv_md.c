@@ -288,11 +288,6 @@ static ucs_status_t uct_ib_mlx5_devx_reg_atomic_key(uct_ib_md_t *ibmd,
 
     klm = UCT_IB_MLX5DV_ADDR_OF(create_mkey_in, in, klm_pas_mtt);
     for (i = 0; i < list_size; i++) {
-        if (i == list_size - 1) {
-            UCT_IB_MLX5DV_SET(klm, klm, byte_count, length % reg_length);
-        } else {
-            UCT_IB_MLX5DV_SET(klm, klm, byte_count, reg_length);
-        }
         UCT_IB_MLX5DV_SET(klm, klm, mkey, mr->super.ib->lkey);
         UCT_IB_MLX5DV_SET64(klm, klm, address, addr + (i * reg_length));
         klm = UCS_PTR_BYTE_OFFSET(klm, UCT_IB_MLX5DV_ST_SZ_BYTES(klm));
