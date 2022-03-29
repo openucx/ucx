@@ -196,6 +196,8 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    fc_req_size;            /* Flow control request size */
     int         qp_type;                /* IB QP type */
     int         flags;                  /* Various flags (see enum) */
+    /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
+    unsigned    max_rd_atomic;
 } uct_ib_iface_init_attr_t;
 
 
