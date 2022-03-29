@@ -250,9 +250,10 @@ ucs_conn_match_get_elem(ucs_conn_match_ctx_t *conn_match_ctx,
                 ucs_hlist_del(head, &elem->list);
             }
 
-            ucs_trace("match_ctx %p: matched %s conn_match %p by address %s "
+            ucs_trace("match_ctx %p: matched%s %s conn_match %p by address %s "
                       "conn_sn %"PRIu64,
-                      conn_match_ctx, ucs_conn_match_queue_title[conn_queue_type], elem,
+                      conn_match_ctx, delete_from_queue ? " and removed" : "",
+                      ucs_conn_match_queue_title[conn_queue_type], elem,
                       conn_match_ctx->ops.address_str(conn_match_ctx,
                                                       &peer->address, address_str,
                                                       UCS_CONN_MATCH_ADDRESS_STR_MAX),

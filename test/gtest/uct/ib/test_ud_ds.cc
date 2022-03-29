@@ -18,6 +18,19 @@ extern "C" {
 /* test ud connect data structures */
 class test_ud_ds : public uct_test {
 public:
+    static void conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
+                                    ucs_conn_match_elem_t *elem)
+    {
+        uct_ud_iface_t *iface = ucs_container_of(conn_match_ctx,
+                                                 uct_ud_iface_t,
+                                                 conn_match_ctx);
+        uct_ud_ep_t *ep       = ucs_container_of(elem, uct_ud_ep_t,
+                                                 conn_match);
+
+        uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
+                                  ep_free, &ep->super.super);
+    }
+
     virtual void init() {
         uct_test::init();
 
@@ -26,6 +39,15 @@ public:
 
         m_e2 = create_entity(0);
         m_entities.push_back(m_e2);
+
+        // overwrite purge_cb to remove and destroy UD endpoints from
+        // connection matching without checking flags set on the endpoint
+        uct_ud_iface_t *ud_iface1              =
+                reinterpret_cast<uct_ud_iface_t*>(m_e1->iface());
+        ud_iface1->conn_match_ctx.ops.purge_cb = conn_match_purge_cb;
+        uct_ud_iface_t *ud_iface2              =
+                reinterpret_cast<uct_ud_iface_t*>(m_e2->iface());
+        ud_iface2->conn_match_ctx.ops.purge_cb = conn_match_purge_cb;
 
         uct_iface_get_address(m_e1->iface(), (uct_iface_addr_t*)(void *)&if_adr1);
         uct_iface_get_address(m_e2->iface(), (uct_iface_addr_t*)(void *)&if_adr2);
@@ -48,6 +70,13 @@ public:
     void cleanup() {
         free(ib_adr2);
         free(ib_adr1);
+
+        // Remove TX/RX flags to not remove endpoints from UD's uct_ep_destroy,
+        // since an endpoints don't have valid iface addresses
+        for (auto ep : eps) {
+            ep->flags &= ~(UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX | UCT_UD_EP_FLAG_ON_CEP);
+        }
+
         uct_test::cleanup();
     }
 
@@ -57,11 +86,11 @@ public:
     void create_and_insert_ep(entity *e, uct_ib_address_t *ib_addr,
                               uct_ud_iface_addr_t *if_addr,
                               uct_ud_ep_conn_sn_t conn_sn, unsigned ep_index,
-                              bool ep_private);
+                              bool is_ep_internal);
 
     uct_ud_ep_t *get_ep(entity *e, uct_ib_address_t *ib_addr,
                         uct_ud_iface_addr_t *if_addr,
-                        uct_ud_ep_conn_sn_t conn_sn, bool ep_private);
+                        uct_ud_ep_conn_sn_t conn_sn, bool is_ep_internal);
 
     void insert_ep(entity *e, uct_ib_address_t *ib_addr,
                    uct_ud_iface_addr_t *if_addr,
@@ -82,6 +111,7 @@ protected:
     uct_ib_address_t *ib_adr1, *ib_adr2;
     uct_ud_iface_addr_t if_adr1, if_adr2;
     static unsigned N;
+    std::vector<uct_ud_ep_t*> eps;
 };
 
 unsigned test_ud_ds::N = 1000;
@@ -127,7 +157,7 @@ void test_ud_ds::test_cep_insert(entity *e, uct_ib_address_t *ib_addr,
         ASSERT_UCS_OK(status);
         EXPECT_EQ(i, conn_sn);
 
-        create_and_insert_ep(e, ib_addr, if_addr, conn_sn, i + base, 0);
+        create_and_insert_ep(e, ib_addr, if_addr, conn_sn, i + base, false);
     }
 
     /* lookup non existing ep */
@@ -145,6 +175,8 @@ void test_ud_ds::insert_ep(entity *e, uct_ib_address_t *ib_addr,
                            uct_ud_iface_addr_t *if_addr,
                            uct_ud_ep_conn_sn_t conn_sn, uct_ud_ep_t *ep)
 {
+    EXPECT_TRUE(ep->flags & (UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX));
+
     uct_ud_iface_cep_insert_ep(iface(e), ib_addr, if_addr, 0, conn_sn, ep);
     EXPECT_TRUE(ep->flags & UCT_UD_EP_FLAG_ON_CEP);
 }
@@ -152,41 +184,47 @@ void test_ud_ds::insert_ep(entity *e, uct_ib_address_t *ib_addr,
 void test_ud_ds::create_and_insert_ep(entity *e, uct_ib_address_t *ib_addr,
                                       uct_ud_iface_addr_t *if_addr,
                                       uct_ud_ep_conn_sn_t conn_sn,
-                                      unsigned ep_index, bool ep_private)
+                                      unsigned ep_index, bool is_ep_internal)
 {
     uct_ud_ep_t *check_ep;
 
     check_ep = uct_ud_iface_cep_get_ep(iface(e), ib_addr, if_addr, 0,
-                                       conn_sn, !ep_private);
+                                       conn_sn, is_ep_internal);
     EXPECT_TRUE(check_ep == NULL);
 
     e->create_ep(ep_index);
     EXPECT_EQ(ep_index, ep(e, ep_index)->ep_id);
     EXPECT_EQ((unsigned)UCT_UD_EP_NULL_ID, ep(e, ep_index)->dest_ep_id);
     ep(e, ep_index)->conn_sn    = conn_sn;
-    if (ep_private) {
-        ep(e, ep_index)->flags |= UCT_UD_EP_FLAG_PRIVATE;
+
+    ep(e, ep_index)->flags &= ~UCT_UD_EP_FLAG_CONNECT_TO_EP;
+    if (is_ep_internal) {
+        ep(e, ep_index)->flags &= ~UCT_UD_EP_FLAG_TX;
+    } else {
+        ep(e, ep_index)->flags &= ~UCT_UD_EP_FLAG_RX;
     }
 
     insert_ep(e, ib_addr, if_addr, conn_sn, ep(e, ep_index));
+
+    eps.push_back(ep(e, ep_index));
 }
 
 uct_ud_ep_t *test_ud_ds::get_ep(entity *e, uct_ib_address_t *ib_addr,
                                 uct_ud_iface_addr_t *if_addr,
-                                uct_ud_ep_conn_sn_t conn_sn, bool ep_private)
+                                uct_ud_ep_conn_sn_t conn_sn,
+                                bool is_ep_internal)
 {
     uct_ud_ep_t *check_ep;
 
     check_ep = uct_ud_iface_cep_get_ep(iface(e), ib_addr, if_addr, 0,
-                                       conn_sn, ep_private);
+                                       conn_sn, is_ep_internal);
     EXPECT_TRUE(check_ep != NULL);
     EXPECT_EQ(conn_sn, check_ep->conn_sn);
-    if (!ep_private) {
-        EXPECT_TRUE(check_ep->flags & UCT_UD_EP_FLAG_ON_CEP);
-        EXPECT_TRUE(!(check_ep->flags & UCT_UD_EP_FLAG_PRIVATE));
+    if (is_ep_internal) {
+        EXPECT_TRUE(!(check_ep->flags & UCT_UD_EP_FLAG_TX));
+        EXPECT_TRUE(check_ep->flags & UCT_UD_EP_FLAG_RX);
     } else {
-        EXPECT_TRUE(!(check_ep->flags & UCT_UD_EP_FLAG_ON_CEP));
-        EXPECT_TRUE(check_ep->flags & UCT_UD_EP_FLAG_PRIVATE);
+        EXPECT_TRUE(check_ep->flags & UCT_UD_EP_FLAG_TX);
     }
 
     return check_ep;
@@ -224,7 +262,7 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 1, conn_sn);
     ep = get_ep(m_e1, ib_adr1, &if_adr1, conn_sn, true);
-    ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
+    ep->flags |= UCT_UD_EP_FLAG_TX;
     insert_ep(m_e1, ib_adr1, &if_adr1, N, ep);
 
     /* slot N + 2 is free */
@@ -247,7 +285,7 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 4, conn_sn);
     ep = get_ep(m_e1, ib_adr1, &if_adr1, conn_sn, true);
-    ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
+    ep->flags |= UCT_UD_EP_FLAG_TX;
     insert_ep(m_e1, ib_adr1, &if_adr1, N, ep);
 
     /* slot N + 5 already occupied */
@@ -256,7 +294,7 @@ UCS_TEST_P(test_ud_ds, cep_replace) {
     ASSERT_UCS_OK(status);
     EXPECT_EQ(N + 5, conn_sn);
     ep = get_ep(m_e1, ib_adr1, &if_adr1, conn_sn, true);
-    ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
+    ep->flags |= UCT_UD_EP_FLAG_TX;
     insert_ep(m_e1, ib_adr1, &if_adr1, N, ep);
 
     /* slot N already occupied */

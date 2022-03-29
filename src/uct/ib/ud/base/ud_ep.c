@@ -241,6 +241,8 @@ static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
      * operation has to return UCS_OK */
     uct_ud_ep_reset_max_psn(ep);
     uct_ud_ep_purge_outstanding(ep);
+    uct_ud_ep_ctl_op_del(ep, ep->tx.pending.ops);
+    ucs_arbiter_group_desched(&iface->tx.pending_q, &ep->tx.pending.group);
     ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
     uct_ud_ep_window_release(ep, status, 0);
     ucs_assert(ucs_queue_is_empty(&ep->tx.window));
@@ -257,8 +259,10 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
         return 0;
     }
 
-    if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
+    if (!(ep->flags & UCT_UD_EP_FLAG_TX)) {
         ucs_assert(ucs_queue_is_empty(&ep->tx.window));
+        uct_ud_iface_cep_remove_ep(iface, ep);
+        ep->flags &= ~UCT_UD_EP_FLAG_RX;
         uct_ep_destroy(&ep->super.super);
         return 0;
     }
@@ -393,6 +397,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     ucs_wtimer_init(&self->timer, uct_ud_ep_timer);
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
+    uct_ud_ep_set_state(self, UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX |
+                              UCT_UD_EP_FLAG_CONNECT_TO_EP);
 
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("created ep ep=%p iface=%p id=%d", self, iface, self->ep_id);
@@ -454,13 +460,14 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
     uct_ud_enter(iface);
 
+    ucs_assert(!uct_ud_iface_cep_has_ep(self));
+
     ucs_callbackq_remove_if(&iface->super.super.worker->super.progress_q,
                             uct_ud_ep_remove_timeout_filter, self);
     uct_ud_ep_purge(self, UCS_ERR_CANCELED);
 
     ucs_wtimer_remove(&iface->tx.timer, &self->timer);
     uct_ud_iface_remove_ep(iface, self);
-    uct_ud_iface_cep_remove_ep(iface, self);
     ucs_frag_list_cleanup(&self->rx.ooo_pkts);
 
     ucs_arbiter_group_purge(&iface->tx.pending_q, &self->tx.pending.group,
@@ -581,10 +588,10 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
     ep = uct_ud_iface_cep_get_ep(iface, ib_addr, if_addr, path_index,
                                  conn_sn, 1);
     if (ep != NULL) {
-        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
-        ep->flags &= ~UCT_UD_EP_FLAG_PRIVATE;
-        status     = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr,
-                                                path_index, conn_sn, ep);
+        uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT |
+                                UCT_UD_EP_FLAG_TX);
+        status = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr,
+                                            path_index, conn_sn, ep);
         if (status != UCS_OK) {
             goto err_ep_disconnect;
         }
@@ -596,9 +603,14 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto out;
     }
 
+    ep->flags &= ~UCT_UD_EP_FLAG_CONNECT_TO_EP; /* by default, the endpoint is
+                                                 * considered to be p2p */
+    ep->flags &= ~UCT_UD_EP_FLAG_RX; /* remove RX flag, since the endpoint is
+                                      * created as full duplex by default */
+
     status = uct_ud_ep_connect_to_iface(ep, ib_addr, if_addr);
     if (status != UCS_OK) {
-        goto err_ep_destroy;
+        goto err_ep_free;
     }
 
     status = uct_ud_iface_cep_insert_ep(iface, ib_addr, if_addr, path_index,
@@ -611,9 +623,9 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
                                              ep_get_peer_address, ep);
 
     status = uct_ud_iface_unpack_peer_address(iface, ib_addr, if_addr,
-                                              ep->path_index, peer_address);
+                                              path_index, peer_address);
     if (status != UCS_OK) {
-        goto err_ep_disconnect;
+        goto err_cep_remove_ep;
     }
 
     skb = uct_ud_ep_prepare_creq(ep);
@@ -633,10 +645,13 @@ out:
     uct_ud_leave(iface);
     return status;
 
+err_cep_remove_ep:
+    uct_ud_iface_cep_remove_ep(iface, ep);
 err_ep_disconnect:
     uct_ud_ep_disconnect_from_iface(ep);
-err_ep_destroy:
-    uct_ep_destroy(&ep->super.super);
+err_ep_free:
+    uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
+                              ep_free, &ep->super.super);
     goto out;
 }
 
@@ -724,14 +739,17 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface,
         return NULL;
     }
 
+    ep->flags &= ~UCT_UD_EP_FLAG_CONNECT_TO_EP; /* by default, the endpoint is
+                                                 * considered to be p2p */
+    ep->flags &= ~UCT_UD_EP_FLAG_TX; /* remove TX flag, since the endpoint is
+                                      * created as full duplex by default */
+
     status = uct_ep_connect_to_ep(&ep->super.super,
                                   (void*)uct_ud_creq_ib_addr(ctl),
                                   (void*)&ctl->conn_req.ep_addr);
     if (status != UCS_OK) {
-        goto err_ep_destroy;
+        goto err_ep_free;
     }
-
-    uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_PRIVATE);
 
     status = uct_ud_iface_cep_insert_ep(iface, uct_ud_creq_ib_addr(ctl),
                                         &ctl->conn_req.ep_addr.iface_addr,
@@ -745,8 +763,9 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface,
 
 err_ep_disconnect:
     uct_ud_ep_disconnect_from_iface(ep);
-err_ep_destroy:
-    uct_ep_destroy(&ep->super.super);
+err_ep_free:
+    uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
+                              ep_free, &ep->super.super);
     return NULL;
 }
 
@@ -843,6 +862,7 @@ static void uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth)
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ)) {
         uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_NOTSENT);
     }
+    uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_RX);
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
     uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_CREQ_RCVD);
 }
@@ -977,6 +997,20 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
     }
 
     if (ucs_unlikely(!is_am)) {
+        if ((neth->packet_type & UCT_UD_PACKET_FLAG_FIN) &&
+            (ep->flags & UCT_UD_EP_FLAG_RX)) {
+            uct_ud_iface_cep_remove_ep(iface, ep);
+
+            if (!(ep->flags & UCT_UD_EP_FLAG_TX)) {
+                ep->flags &= ~UCT_UD_EP_FLAG_RX;
+                uct_ep_destroy(&ep->super.super);
+            } else {
+                ep->flags &= ~UCT_UD_EP_FLAG_RX;
+                uct_ud_iface_cep_insert_ready_ep(iface, ep);
+            }
+            goto out;
+        }
+
         if (neth->packet_type & UCT_UD_PACKET_FLAG_NACK) {
             uct_ud_ep_set_state(ep, UCT_UD_EP_FLAG_TX_NACKED);
             goto out;
@@ -1090,7 +1124,7 @@ static UCS_F_ALWAYS_INLINE void uct_ud_ep_ack_req_do(uct_ud_iface_t *iface,
      *
      * If there is other control arbiter will take care of it.
      */
-    ep->tx.pending.ops |= UCT_UD_EP_OP_ACK_REQ;
+    uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_ACK_REQ);
     if (uct_ud_ep_ctl_op_check_ex(ep, UCT_UD_EP_OP_ACK_REQ)) {
         uct_ud_ep_do_pending_ctl(ep, iface);
     }
@@ -1413,6 +1447,10 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
      */
     if (!uct_ud_ep_is_connected(ep)) {
         goto out;
+    }
+
+    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_FIN)) {
+        packet_type |= UCT_UD_PACKET_FLAG_FIN;
     }
 
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
@@ -1753,14 +1791,34 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
      * to not invoke user callbacks for the endpoint which was destroyed */
     uct_ud_ep_purge(ep, UCS_ERR_CANCELED);
 
+    if (!(ep->flags & UCT_UD_EP_FLAG_CONNECT_TO_EP) &&
+        (ep->flags & UCT_UD_EP_FLAG_TX)) {
+        /* remove the endpoint from the connection matching context if it
+         * exists there */
+        uct_ud_iface_cep_remove_ep(iface, ep);
+        ep->flags &= ~UCT_UD_EP_FLAG_TX;
+
+        uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_FIN);
+
+        if (ep->flags & UCT_UD_EP_FLAG_RX) {
+            uct_ud_iface_cep_insert_ready_ep(iface, ep);
+            /* if the endpoint is marked to be able receive data from a peer,
+             * don't schedule a timer to destroy the endpoint */
+            goto out;
+        }
+    }
+
+    ucs_assert(!uct_ud_iface_cep_has_ep(ep));
+
     /* the EP will be destroyed by interface destroy or timeout in
      * uct_ud_ep_timer
      */
     ep->close_time = ucs_twheel_get_time(&iface->tx.timer);
-    ep->flags |= UCT_UD_EP_FLAG_DISCONNECTED;
+    ep->flags     |= UCT_UD_EP_FLAG_DISCONNECTED;
     ucs_wtimer_add(&iface->tx.timer, &ep->timer,
                    UCT_UD_SLOW_TIMER_MAX_TICK(iface));
 
+out:
     uct_ud_leave(iface);
 }
 

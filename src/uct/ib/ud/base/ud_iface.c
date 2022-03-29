@@ -59,9 +59,9 @@ uct_ud_iface_cep_get_peer_address(uct_ud_iface_t *iface,
 static UCS_F_ALWAYS_INLINE ucs_conn_match_queue_type_t
 uct_ud_iface_cep_ep_queue_type(uct_ud_ep_t *ep)
 {
-    return (ep->flags & UCT_UD_EP_FLAG_PRIVATE) ?
-           UCS_CONN_MATCH_QUEUE_UNEXP :
-           UCS_CONN_MATCH_QUEUE_EXP;
+    return (ep->flags & UCT_UD_EP_FLAG_TX) ?
+           UCS_CONN_MATCH_QUEUE_EXP :
+           UCS_CONN_MATCH_QUEUE_UNEXP;
 }
 
 ucs_status_t
@@ -96,6 +96,9 @@ uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
     void *peer_address;
     int ret;
 
+    ucs_assert(ep->flags & (UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX));
+    ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
+
     queue_type   = uct_ud_iface_cep_ep_queue_type(ep);
     peer_address = ucs_alloca(iface->conn_match_ctx.address_length);
     status       = uct_ud_iface_cep_get_peer_address(iface, ib_addr, if_addr,
@@ -104,12 +107,34 @@ uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
         return status;
     }
 
-    ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
     ret = ucs_conn_match_insert(&iface->conn_match_ctx, peer_address,
                                 conn_sn, &ep->conn_match, queue_type);
     ucs_assert_always(ret == 1);
 
     ep->flags |= UCT_UD_EP_FLAG_ON_CEP;
+
+    return UCS_OK;
+}
+
+ucs_status_t
+uct_ud_iface_cep_insert_ready_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
+{
+    ucs_conn_match_queue_type_t queue_type;
+    int ret;
+
+    ucs_assert(!ucs_test_all_flags(ep->flags, UCT_UD_EP_FLAG_TX |
+                                              UCT_UD_EP_FLAG_RX));
+    ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
+
+    queue_type = uct_ud_iface_cep_ep_queue_type(ep);
+    ret        = ucs_conn_match_insert(&iface->conn_match_ctx,
+                                       uct_ud_ep_get_peer_address(&ep->conn_match),
+                                       ep->conn_sn, &ep->conn_match,
+                                       queue_type);
+    ucs_assert_always(ret == 1);
+
+    ep->flags |= UCT_UD_EP_FLAG_ON_CEP;
+
     return UCS_OK;
 }
 
@@ -118,10 +143,10 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
                                      const uct_ud_iface_addr_t *if_addr,
                                      int path_index,
                                      uct_ud_ep_conn_sn_t conn_sn,
-                                     int is_private)
+                                     int is_rx_only)
 {
     uct_ud_ep_t *ep                        = NULL;
-    ucs_conn_match_queue_type_t queue_type = is_private ?
+    ucs_conn_match_queue_type_t queue_type = is_rx_only ?
                                              UCS_CONN_MATCH_QUEUE_UNEXP :
                                              UCS_CONN_MATCH_QUEUE_ANY;
     ucs_conn_match_elem_t *conn_match;
@@ -137,7 +162,7 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
     }
 
     conn_match = ucs_conn_match_get_elem(&iface->conn_match_ctx, peer_address,
-                                         conn_sn, queue_type, is_private);
+                                         conn_sn, queue_type, is_rx_only);
     if (conn_match == NULL) {
         return NULL;
     }
@@ -145,22 +170,42 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
     ep = ucs_container_of(conn_match, uct_ud_ep_t, conn_match);
     ucs_assert(ep->flags & UCT_UD_EP_FLAG_ON_CEP);
 
-    if (is_private) {
+    if (is_rx_only) {
+        ucs_assertv((ep->flags & (UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX)) ==
+                            UCT_UD_EP_FLAG_RX,
+                    "ep %p: flags 0x%x", ep, ep->flags);
         ep->flags &= ~UCT_UD_EP_FLAG_ON_CEP;
+    } else {
+        ucs_assertv(ep->flags & (UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX),
+                    "ep %p: flags 0x%x", ep, ep->flags);
     }
 
     return ep;
 }
 
+int uct_ud_iface_cep_has_ep(uct_ud_ep_t *ep)
+{
+    int res = !!(ep->flags & (UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX)) &&
+              !(ep->flags & UCT_UD_EP_FLAG_CONNECT_TO_EP);
+
+    ucs_assertv(res == !!(ep->flags & UCT_UD_EP_FLAG_ON_CEP),
+                "res=%d on_cep=%d flags=0x%x", res,
+                !!(ep->flags & UCT_UD_EP_FLAG_ON_CEP), ep->flags);
+
+    return res;
+}
+
 void uct_ud_iface_cep_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
-    if (!(ep->flags & UCT_UD_EP_FLAG_ON_CEP)) {
+    if (!uct_ud_iface_cep_has_ep(ep)) {
         return;
     }
 
+    ucs_assert(ep->flags & UCT_UD_EP_FLAG_ON_CEP);
+    ep->flags &= ~UCT_UD_EP_FLAG_ON_CEP;
+
     ucs_conn_match_remove_elem(&iface->conn_match_ctx, &ep->conn_match,
                                uct_ud_iface_cep_ep_queue_type(ep));
-    ep->flags &= ~UCT_UD_EP_FLAG_ON_CEP;
 }
 
 static void uct_ud_iface_send_skb_init(uct_iface_h tl_iface, void *obj,
@@ -314,7 +359,8 @@ uct_ud_iface_conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
     uct_ud_ep_t *ep       = ucs_container_of(elem, uct_ud_ep_t,
                                              conn_match);
 
-    ep->flags &= ~UCT_UD_EP_FLAG_ON_CEP;
+    ucs_assert(ep->flags & UCT_UD_EP_FLAG_ON_CEP);
+    ep->flags &= ~(UCT_UD_EP_FLAG_ON_CEP | UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX);
     uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t, ep_free,
                               &ep->super.super);
 }
@@ -619,7 +665,7 @@ static void uct_ud_iface_delete_eps(uct_ud_iface_t *iface)
     int i;
 
     ucs_ptr_array_for_each(ep, i, &iface->eps) {
-        ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
+        ucs_assert(!uct_ud_iface_cep_has_ep(ep));
         uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
                                   ep_free, &ep->super.super);
     }

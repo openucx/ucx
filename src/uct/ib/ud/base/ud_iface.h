@@ -328,12 +328,17 @@ ucs_status_t uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
                                         uct_ud_ep_conn_sn_t conn_sn,
                                         uct_ud_ep_t *ep);
 
+ucs_status_t
+uct_ud_iface_cep_insert_ready_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
+
 uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
                                      const uct_ib_address_t *ib_addr,
                                      const uct_ud_iface_addr_t *if_addr,
                                      int path_index,
                                      uct_ud_ep_conn_sn_t conn_sn,
-                                     int is_private);
+                                     int is_rx_only);
+
+int uct_ud_iface_cep_has_ep(uct_ud_ep_t *ep);
 
 void uct_ud_iface_cep_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
