@@ -799,7 +799,7 @@ ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
     count = 0;
     ucs_ptr_array_for_each(ep, i, &iface->eps) {
         /* ud ep flush returns either ok or in progress */
-        status = uct_ud_ep_flush_nolock(iface, ep, NULL);
+        status = uct_ud_ep_flush_nolock(iface, ep, flags, NULL);
         if ((status == UCS_INPROGRESS) || (status == UCS_ERR_NO_RESOURCE)) {
             ++count;
         }
@@ -1070,12 +1070,11 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
 
         resent_skb->flags &= ~UCT_UD_SEND_SKB_FLAG_RESENDING;
         --cdesc->ep->tx.resend_count;
-
-        uct_ud_ep_window_release_completed(cdesc->ep, is_async);
     } else {
         ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL_ACK);
     }
 
+    uct_ud_ep_window_release_completed(cdesc->ep, is_async);
     uct_ud_skb_release(skb, 0);
 
 }

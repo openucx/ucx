@@ -301,7 +301,7 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep, unsigned flags,
                              uct_completion_t *comp);
 /* internal flush */
 ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                    uct_completion_t *comp);
+                                    unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_ud_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
