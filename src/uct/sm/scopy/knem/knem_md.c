@@ -200,11 +200,14 @@ static ucs_status_t uct_knem_mem_dereg(uct_md_h md,
     return status;
 }
 
-static ucs_status_t uct_knem_rkey_pack(uct_md_h md, uct_mem_h memh,
-                                       void *rkey_buffer)
+static ucs_status_t
+uct_knem_rkey_pack(uct_md_h md, uct_mem_h memh,
+                   const uct_md_mkey_pack_params_t *params,
+                   void *rkey_buffer)
 {
-    uct_knem_key_t *packed = (uct_knem_key_t*)rkey_buffer;
-    uct_knem_key_t *key = (uct_knem_key_t *)memh;
+    uct_knem_key_t *packed = rkey_buffer;
+    uct_knem_key_t *key    = memh;
+
     packed->cookie  = (uint64_t)key->cookie;
     packed->address = (uintptr_t)key->address;
     ucs_trace("packed rkey: cookie 0x%"PRIx64" address %"PRIxPTR,

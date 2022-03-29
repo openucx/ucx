@@ -202,6 +202,15 @@ typedef enum {
 
 
 /**
+ * @ingroup UCT_MD
+ * @brief MD memory key pack parameters field mask.
+ */
+typedef enum {
+    UCT_MD_MKEY_PACK_FIELD_FLAGS = UCS_BIT(0)  /**< flags field */
+} uct_md_mkey_pack_field_mask_t;
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief UCT endpoint attributes field mask.
  *
@@ -238,6 +247,23 @@ typedef enum {
      */
     UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0)
 } uct_md_mem_dereg_flags_t;
+
+
+typedef enum {
+    /**
+     * The flag is used indicate that remote access to a memory region
+     * associated with the remote key must fail once the memory region is
+     * deregister using @ref uct_md_mem_dereg_v2 with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set. Using
+     * @ref uct_md_mem_dereg_v2 deregistration routine with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set on an rkey that was
+     * generated without @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag will
+     * not function correctly, and may result in data corruption. In other words
+     * in order for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag must be set.
+     */
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0)
+} uct_md_mkey_pack_flags_t;
 
 
 /**
@@ -311,6 +337,22 @@ typedef struct uct_md_mem_dereg_params {
      */
     uct_completion_t             *comp;
 } uct_md_mem_dereg_params_t;
+
+
+typedef struct uct_md_mkey_pack_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_md_mkey_pack_field_mask_t. Fields not specified in this mask
+     * will be ignored. Provides ABI compatibility with respect to adding new
+     * fields.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Remote key packing flags, using bits from @ref uct_md_mkey_pack_flags_t.
+     */
+    unsigned flags;
+} uct_md_mkey_pack_params_t;
 
 
 /**
@@ -390,6 +432,26 @@ uct_iface_estimate_perf(uct_iface_h tl_iface, uct_perf_attr_t *perf_attr);
  */
 ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
                                  const uct_md_mem_dereg_params_t *params);
+
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief Pack a remote key.
+ *
+ * @param [in]  md          Handle to memory domain.
+ * @param [in]  memh        Pack a remote key for this memory handle.
+ * @param [in]  params      Operation parameters, see @ref
+ *                          uct_md_mkey_pack_params_t.
+ * @param [out] rkey_buffer Pointer to a buffer to hold the packed remote key.
+ *                          The size of this buffer has should be at least
+ *                          @ref uct_md_attr_t::rkey_packed_size, as returned by
+ *                          @ref uct_md_query.
+ * @return                  Error code.
+ */
+ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 const uct_md_mkey_pack_params_t *params,
+                                 void *rkey_buffer);
 
 
 /**

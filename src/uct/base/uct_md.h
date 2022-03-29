@@ -105,8 +105,9 @@ typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 size_t length,
                                                 uct_md_mem_attr_t *mem_attr);
 
-typedef ucs_status_t (*uct_md_mkey_pack_func_t)(uct_md_h md, uct_mem_h memh,
-                                                void *rkey_buffer);
+typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
+        uct_md_h md, uct_mem_h memh, const uct_md_mkey_pack_params_t *params,
+        void *rkey_buffer);
 
 typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
                                                     const ucs_sock_addr_t *sockaddr,

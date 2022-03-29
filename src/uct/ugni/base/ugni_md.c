@@ -117,11 +117,13 @@ static ucs_status_t uct_ugni_mem_dereg(uct_md_h md,
     return status;
 }
 
-static ucs_status_t uct_ugni_rkey_pack(uct_md_h md, uct_mem_h memh,
-                                       void *rkey_buffer)
+static ucs_status_t
+uct_ugni_rkey_pack(uct_md_h md, uct_mem_h memh,
+                   const uct_md_mkey_pack_params_t *params,
+                   void *rkey_buffer)
 {
-    gni_mem_handle_t *mem_hndl = (gni_mem_handle_t *) memh;
-    uint64_t *ptr = rkey_buffer;
+    gni_mem_handle_t *mem_hndl = memh;
+    uint64_t *ptr              = rkey_buffer;
 
     ptr[0] = UCT_UGNI_RKEY_MAGIC;
     ptr[1] = mem_hndl->qword1;

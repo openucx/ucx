@@ -608,10 +608,12 @@ static ucs_status_t uct_posix_iface_addr_pack(uct_mm_md_t *md, void *buffer)
 }
 
 static ucs_status_t
-uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh, void *rkey_buffer)
+uct_posix_md_mkey_pack(uct_md_h tl_md, uct_mem_h memh,
+                       const uct_md_mkey_pack_params_t *params,
+                       void *rkey_buffer)
 {
-    uct_mm_md_t                      *md = ucs_derived_of(tl_md, uct_mm_md_t);
-    uct_mm_seg_t                    *seg = memh;
+    uct_mm_md_t *md                      = ucs_derived_of(tl_md, uct_mm_md_t);
+    uct_mm_seg_t *seg                    = memh;
     uct_posix_packed_rkey_t *packed_rkey = rkey_buffer;
 
     packed_rkey->seg_id  = seg->seg_id;
