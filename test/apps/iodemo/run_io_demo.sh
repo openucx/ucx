@@ -95,6 +95,9 @@ init_config()
 	log_dir="$PWD"
 	iodemo_exe=""
 	iodemo_client_args=""
+	extra_env_client=""
+	extra_env_server=""
+	extra_env_all=""
 
 	# command line args will override slurm env vars
 	check_slurm_env
@@ -132,6 +135,7 @@ usage()
 	echo "  -i|--netif <n>              Network interface to use"$(show_default_value net_if)
 	echo "  -d|--duration <seconds>     How much time to run the application"$(show_default_value duration)
 	echo "  --bind                      Bind to local IP address"
+	echo "  --env <role> <key>=<value>  Environment variable for <role> (client/server/all)"
 	echo "  --port-num <number>         TCP port number to start from"$(show_default_value base_port_num)
 	echo "  --num-clients <count>       Number of clients to run"$(show_default_value num_clients)
 	echo "  --num-servers <count>       Number of servers to run"$(show_default_value num_servers)
@@ -176,6 +180,21 @@ parse_args()
 			;;
 		--bind)
 			bind_local=1
+			;;
+		--env)
+			role="$2"
+			if [ "$2" == "all" ]
+			then
+				extra_env_all="$extra_env_all $3"
+			elif [ "$2" == "client" ]
+			then
+				extra_env_client="$extra_env_client $3"
+			elif [ "$2" == "server" ]
+			then
+				extra_env_server="$extra_env_server $3"
+			fi
+			shift
+			shift
 			;;
 		--port-num)
 			base_port_num="$2"
@@ -609,6 +628,10 @@ make_scripts()
 			EOF
 		env | grep -P '^UCX_.*=|^PATH=|^LD_PRELOAD=|^LD_LIBRARY_PATH=' | \
 			xargs -L 1 echo "     export" >>${command_file}
+			for extra_env in ${extra_env_all}
+			do
+				echo "     export ${extra_env}" >>${command_file}
+			done
 		cat >>${command_file} <<-EOF
 			    cd $PWD
 			}
@@ -625,7 +648,7 @@ make_scripts()
 			cat >>${command_file} <<-EOF
 				function start_server_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=server_${i} ${cmd_prefix} \\
+				    env IODEMO_ROLE=server_${i} ${extra_env_server} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_server_args} -p ${port_num} \\
 				            ${log_redirect} ${log_file} &
@@ -649,7 +672,7 @@ make_scripts()
 			cat >>${command_file} <<-EOF
 				function start_client_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=client_${i} ${cmd_prefix} \\
+				    env IODEMO_ROLE=client_${i} ${extra_env_client} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_client_args} \\
 				            ${client_connect_list} \\
@@ -659,6 +682,10 @@ make_scripts()
 
 				EOF
 		done
+
+		show_var_verbose extra_env_all
+		show_var_verbose extra_env_client
+		show_var_verbose extra_env_server
 
 		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF

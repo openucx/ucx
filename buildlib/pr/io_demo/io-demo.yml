@@ -23,30 +23,35 @@ parameters:
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_cx4_rc
+        extra_run_args: ""
       "tag match on CX6/RC":
         args: ""
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: tag_cx6_rc
+        extra_run_args: ""
       "active messages on CX6/RC":
         args: "-A"
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
         test_name: am_cx6_rc
+        extra_run_args: ""
       "tag match on CX6/DC":
         args: ""
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: tag_cx6_dc
+        extra_run_args: ""
       "active messages on CX6/DC with data validation":
         args: "-A -q"
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_validate_cx6_dc
+        extra_run_args: ""
       "tag match on CX4 with user memh":
         args: "-z"
         initial_delay: 9999 # No interference
@@ -54,6 +59,7 @@ parameters:
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_umemh_cx4_rc
+        extra_run_args: ""
       "active messages on CX6/DC with user memh":
         args: "-A -z"
         initial_delay: 9999 # No interference
@@ -61,6 +67,15 @@ parameters:
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_umemh_cx6_dc
+        extra_run_args: ""
+      "different UCX_IB_NUM_PATH":
+        args: "-A"
+        initial_delay: 9999 # No interference
+        duration: 120
+        interface: $(roce_iface_cx6)
+        tls: "rc_x"
+        test_name: am_cx6_num_path
+        extra_run_args: "--env client UCX_IB_NUM_PATHS=1 --env server UCX_IB_NUM_PATHS=2"
 
 jobs:
   - job: io_build
@@ -121,6 +136,7 @@ jobs:
             test_time: ${{ test.Value.duration }}
             test_intefrafe: ${{ test.Value.interface }}
             test_ucx_tls: ${{ test.Value.tls }}
+            test_extra_run_args: ${{ test.Value.extra_run_args }}
             initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
       maxParallel: 1
 
@@ -149,6 +165,7 @@ jobs:
           roce_iface: $(test_intefrafe)
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
+          extra_run_args: $(test_extra_run_args)
           ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
             analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
       - bash: |

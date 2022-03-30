@@ -13,6 +13,8 @@ parameters:
   default: 20
 - name: analyzer_allow_list_args
   default: ''
+- name: extra_run_args
+  default: ''
 
 steps:
 - bash: |
@@ -63,6 +65,7 @@ steps:
         --map-by slot \
         --log-dir $(workspace)/${{ parameters.name }} \
         -i ${{ parameters.roce_iface }} \
+        ${{ parameters.extra_run_args }} \
         $(io_demo_exe) \
             -d 512:524288 \
             -P 2 \
