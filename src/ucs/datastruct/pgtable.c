@@ -614,6 +614,11 @@ void ucs_pgtable_purge(ucs_pgtable_t *pgtable, ucs_pgt_search_callback_t cb,
     ucs_status_t status;
     unsigned i;
 
+    if (num_regions == 0) {
+        ucs_debug("purge empty page table");
+        goto out;
+    }
+
     all_regions = ucs_calloc(num_regions, sizeof(*all_regions),
                              "pgt_purge_regions");
     if (all_regions == NULL) {
@@ -642,6 +647,7 @@ void ucs_pgtable_purge(ucs_pgtable_t *pgtable, ucs_pgt_search_callback_t cb,
 
     ucs_free(all_regions);
 
+out:
     /* Page table should be totally empty */
     ucs_assert(!ucs_pgt_entry_present(&pgtable->root));
     ucs_assertv(pgtable->shift       == UCS_PGT_ADDR_SHIFT, "shift=%u", pgtable->shift);
