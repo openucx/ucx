@@ -37,6 +37,9 @@ resources:
     - container: rhel82
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel8.2/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
+    - container: rhel90
+      image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/rhel9.0/builder:mofed-5.6-0.5.0.0
+      options: $(DOCKER_OPT_VOLUMES)
     - container: ubuntu2004
       image: rdmz-harbor.rdmz.labs.mlnx/swx-infra/x86_64/ubuntu20.04/builder:mofed-5.0-1.0.0.0
       options: $(DOCKER_OPT_VOLUMES)
@@ -190,6 +193,8 @@ stages:
               CONTAINER: sles15sp2
             rhel82:
               CONTAINER: rhel82
+            rhel90:
+              CONTAINER: rhel90
             fedora34:
               CONTAINER: fedora34
               long_test: yes
