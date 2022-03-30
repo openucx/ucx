@@ -315,8 +315,8 @@ uct_ud_iface_conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
                                              conn_match);
 
     ep->flags &= ~UCT_UD_EP_FLAG_ON_CEP;
-    return uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
-                                     ep_free, &ep->super.super);
+    uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t, ep_free,
+                              &ep->super.super);
 }
 
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
