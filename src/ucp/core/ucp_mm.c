@@ -374,7 +374,7 @@ ucp_memh_get_slow(ucp_context_h context, void *address, size_t length,
 
     if (context->rcache == NULL) {
         memh = ucs_calloc(1, sizeof(*memh) +
-                          (sizeof(uct_mem_h) * context->num_mds), "ucp rcache");
+                          (sizeof(uct_mem_h) * context->num_mds), "ucp_rcache");
         if (memh == NULL) {
             return UCS_ERR_NO_MEMORY;
         }
@@ -1029,7 +1029,7 @@ ucs_status_t ucp_mem_rcache_init(ucp_context_h context)
     rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
     rcache_params.alignment          = UCS_RCACHE_MIN_ALIGNMENT;
 
-    return ucs_rcache_create(&rcache_params, "ucp rcache",
+    return ucs_rcache_create(&rcache_params, "ucp_rcache",
                              ucs_stats_get_root(), &context->rcache);
 }
 
