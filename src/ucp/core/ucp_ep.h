@@ -311,6 +311,30 @@ typedef struct ucp_rndv_zcopy {
 } ucp_ep_rndv_zcopy_config_t;
 
 
+/*
+ * Element in ep peer memory hash. The element represents remote peer shared
+ * memory segement. Having it hashed helps to avoid expensive rkey unpacking
+ * and md registration procedures. Unpacking is expensive, because for shared
+ * memory segments it assumes attach/mmap calls. Registration is needed for
+ * better performance of CPU<->GPU memory transfers and is typically quite
+ * expensive on memtype ep mds, such as cuda copy.
+ */
+typedef struct {
+    /* Unpacked rkey with the only MD supporting RKEY_PTR */
+    ucp_rkey_h       rkey;
+    /* Size of the buffer corresponding to the unpacked rkey */
+    size_t           size;
+    /* MD index corresponding to memtype ep */
+    ucp_md_index_t   md_index;
+    /* Memory handle holding registration of the remote buffer on memtype
+     * ep MD */
+    uct_mem_h        uct_memh;
+} ucp_ep_peer_mem_data_t;
+
+
+KHASH_DECLARE(ucp_ep_peer_mem_hash, uint64_t, ucp_ep_peer_mem_data_t);
+
+
 struct ucp_ep_config {
 
     /* A key which uniquely defines the configuration, and all other fields of
@@ -466,14 +490,17 @@ typedef struct {
  * Endpoint extension for control data path
  */
 typedef struct {
-    ucp_rsc_index_t          cm_idx; /* CM index */
-    ucs_ptr_map_key_t        local_ep_id; /* Local EP ID */
-    ucs_ptr_map_key_t        remote_ep_id; /* Remote EP ID */
-    ucp_err_handler_cb_t     err_cb; /* Error handler */
-    ucp_request_t            *close_req; /* Close protocol request */
+    ucp_rsc_index_t               cm_idx; /* CM index */
+    ucs_ptr_map_key_t             local_ep_id; /* Local EP ID */
+    ucs_ptr_map_key_t             remote_ep_id; /* Remote EP ID */
+    ucp_err_handler_cb_t          err_cb; /* Error handler */
+    ucp_request_t                 *close_req; /* Close protocol request */
 #if UCS_ENABLE_ASSERT
-    ucs_time_t               ka_last_round; /* Time of last KA round done */
+    ucs_time_t                    ka_last_round; /* Time of last KA round done */
 #endif
+    khash_t(ucp_ep_peer_mem_hash) *peer_mem; /* Hash of remote memory segments
+                                                used by 2-stage ppln rndv proto */
+
 } ucp_ep_ext_control_t;
 
 
@@ -734,6 +761,13 @@ ucp_ep_purge_lanes(ucp_ep_h ep, uct_pending_purge_callback_t purge_cb,
 void ucp_ep_register_disconnect_progress(ucp_request_t *req);
 
 ucp_lane_index_t ucp_ep_lookup_lane(ucp_ep_h ucp_ep, uct_ep_h uct_ep);
+
+void ucp_ep_peer_mem_destroy(ucp_context_h context,
+                             ucp_ep_peer_mem_data_t *data);
+
+ucp_ep_peer_mem_data_t*
+ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
+                    size_t size, void *rkey_buf, ucp_md_index_t md_index);
 
 /**
  * @brief Do keepalive operation for a specific UCT EP.

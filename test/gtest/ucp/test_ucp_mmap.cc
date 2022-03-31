@@ -298,8 +298,8 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
 
     /* Unpack remote key buffer */
     ucp_rkey_h rkey;
-    status = ucp_ep_rkey_unpack_internal(receiver().ep(), &rkey_buffer[0],
-                                         rkey_size, &rkey);
+    status = ucp_ep_rkey_unpack_reachable(receiver().ep(), &rkey_buffer[0],
+                                          rkey_size, &rkey);
     ASSERT_UCS_OK(status);
 
     /* Check rkey configuration */
