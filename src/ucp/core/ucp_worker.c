@@ -1606,6 +1606,7 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
     ucp_lane_map_t amo_lanes_map    = 0;
     ucp_lane_map_t stream_lanes_map = 0;
     ucp_lane_map_t am_lanes_map     = 0;
+    ucp_lane_map_t ka_lanes_map     = 0;
     int rma_emul                    = 0;
     int amo_emul                    = 0;
     int num_valid_lanes             = 0;
@@ -1645,6 +1646,10 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
             stream_lanes_map |= UCS_BIT(lane);
         }
 
+        if (key->keepalive_lane == lane) {
+            ka_lanes_map |= UCS_BIT(lane);
+        }
+
         if ((ucp_ep_config_get_multi_lane_prio(key->rma_lanes, lane) >= 0)) {
             rma_lanes_map |= UCS_BIT(lane);
         }
@@ -1677,6 +1682,7 @@ static void ucp_worker_print_used_tls(const ucp_ep_config_key_t *key,
                                !amo_emul ? "amo" : "amo_am", &strb);
     ucp_worker_add_feature_rsc(context, key, am_lanes_map, "am", &strb);
     ucp_worker_add_feature_rsc(context, key, stream_lanes_map, "stream", &strb);
+    ucp_worker_add_feature_rsc(context, key, ka_lanes_map, "ka", &strb);
 
     ucs_string_buffer_rtrim(&strb, "; ");
 
