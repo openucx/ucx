@@ -252,15 +252,17 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     ucs_status_t status;
 
+    uct_ud_enter(iface);
+
     if (ep->flags & UCT_UD_EP_FLAG_DISCONNECTED) {
         uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
-        return 0;
+        goto out;
     }
 
     if (ep->flags & UCT_UD_EP_FLAG_PRIVATE) {
         ucs_assert(ucs_queue_is_empty(&ep->tx.window));
         uct_ep_destroy(&ep->super.super);
-        return 0;
+        goto out;
     }
 
     uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
@@ -274,6 +276,8 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
                   ep, UCT_UD_EP_PEER_NAME_ARG(ep));
     }
 
+out:
+    uct_ud_leave(iface);
     return 1;
 }
 
