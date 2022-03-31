@@ -12,6 +12,7 @@
 #include <ucp/core/ucp_types.h>
 #include <ucs/datastruct/linear_func.h>
 #include <ucs/datastruct/string_buffer.h>
+#include <ucs/sys/topo/base/topo.h>
 
 
 /* Maximal number of lanes per protocol */
@@ -80,11 +81,11 @@ typedef struct {
     uint8_t                 op_flags;   /* Operation flags */
     uint8_t                 dt_class;   /* Datatype */
     uint8_t                 mem_type;   /* Memory type */
-    uint8_t                 sys_dev;    /* System device */
+    ucs_sys_device_t        sys_dev;    /* System device */
     uint8_t                 sg_count;   /* Number of non-contig scatter/gather
                                            entries. If the actual number is larger
                                            than UINT8_MAX, UINT8_MAX is used. */
-    uint8_t                 padding[2]; /* Make structure size be sizeof(uint64_t) */
+    uint8_t                 padding[1]; /* Make structure size be sizeof(uint64_t) */
 } UCS_S_PACKED ucp_proto_select_param_t;
 
 

@@ -20,9 +20,10 @@
 #include <ucs/time/time.h>
 #include <inttypes.h>
 #include <float.h>
+#include <dirent.h>
 
 
-#define UCS_TOPO_MAX_SYS_DEVICES     256
+#define UCS_TOPO_MAX_SYS_DEVICES     UINT16_MAX
 #define UCS_TOPO_SYSFS_PCI_PREFIX    "/sys/bus/pci/devices/"
 #define UCS_TOPO_SYSFS_DEVICES_ROOT  "/sys/devices"
 #define UCS_TOPO_DEVICE_NAME_UNKNOWN "<unknown>"
@@ -45,11 +46,12 @@ typedef struct ucs_topo_global_ctx {
 } ucs_topo_global_ctx_t;
 
 
-const ucs_sys_dev_distance_t ucs_topo_default_distance = {
+ucs_sys_dev_distance_t ucs_topo_default_distance = {
     .latency   = 0,
     .bandwidth = DBL_MAX
 };
 static ucs_topo_global_ctx_t ucs_topo_global_ctx;
+ucs_sys_device_t ucs_sys_topo_devices[UCS_SYS_DEVICE_ID_MAX];
 
 
 /* Global list of topology detectors */
@@ -136,13 +138,72 @@ static void ucs_topo_bus_id_str(const ucs_sys_bus_id_t *bus_id, int abbreviate,
     }
 }
 
+ucs_status_t ucs_topo_init_sys_dev_hash()
+{
+    ucs_sys_device_t count = 0;
+    DIR *d;
+    struct dirent *dir;
+    int num_fields;
+    khiter_t hash_it;
+    ucs_kh_put_t kh_put_status;
+    ucs_sys_bus_id_t bus_id;
+    ucs_bus_id_bit_rep_t bus_id_bit_rep;
+
+    ucs_spin_lock(&ucs_topo_global_ctx.lock);
+    d = opendir(UCS_TOPO_SYSFS_PCI_PREFIX);
+    if (d) {
+        /* assumes that if directory contents remains the same, the ordering of
+         * entries by readdir remains the same as well */
+        while ((dir = readdir(d)) != NULL) {
+            if ((!strcmp(dir->d_name, ".")) ||
+                (!strcmp(dir->d_name, "..")) ) {
+                continue;
+            }
+            else {
+                num_fields = sscanf(dir->d_name, "%hx:%hhx:%hhx.%hhx", &bus_id.domain,
+                                    &bus_id.bus, &bus_id.slot, &bus_id.function);
+                if (num_fields != 4) {
+                    return UCS_ERR_IO_ERROR;
+                }
+
+                bus_id_bit_rep  = ucs_topo_get_bus_id_bit_repr(&bus_id);
+                hash_it = kh_put(bus_to_sys_dev,
+                                 &ucs_topo_global_ctx.bus_to_sys_dev_hash,
+                                 bus_id_bit_rep, &kh_put_status);
+                if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
+                    ucs_error("%s should not be in bus_to_sys_dev_hash",
+                              dir->d_name);
+                } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
+                           (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
+                    kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash,
+                             hash_it) = count;
+                    ucs_trace("added %s to bus_to_sys_dev_hash sys_dev = %u",
+                              dir->d_name, (unsigned)count);
+                }
+            }
+            count++;
+        }
+        closedir(d);
+    }
+
+    ucs_spin_unlock(&ucs_topo_global_ctx.lock);
+    return UCS_OK;
+}
+
 ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
                                             ucs_sys_device_t *sys_dev)
 {
+    static int initialized = 0;
+    ucs_status_t status    = UCS_OK;
     ucs_bus_id_bit_rep_t bus_id_bit_rep;
     ucs_kh_put_t kh_put_status;
     khiter_t hash_it;
     char *name;
+
+    if (!initialized) {
+        ucs_topo_init_sys_dev_hash();
+        initialized = 1;
+    }
 
     bus_id_bit_rep  = ucs_topo_get_bus_id_bit_repr(bus_id);
 
@@ -152,31 +213,34 @@ ucs_status_t ucs_topo_find_device_by_bus_id(const ucs_sys_bus_id_t *bus_id,
             &ucs_topo_global_ctx.bus_to_sys_dev_hash /*pointer to hashmap*/,
             bus_id_bit_rep /*key*/, &kh_put_status);
 
-    if (kh_put_status == UCS_KH_PUT_KEY_PRESENT) {
-        *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
-    } else if ((kh_put_status == UCS_KH_PUT_BUCKET_EMPTY) ||
-               (kh_put_status == UCS_KH_PUT_BUCKET_CLEAR)) {
+    if (kh_put_status != UCS_KH_PUT_KEY_PRESENT) {
+        status = UCS_ERR_NO_ELEM;
+        goto err;
+    } else {
         ucs_assert_always(ucs_topo_global_ctx.num_devices <
                           UCS_TOPO_MAX_SYS_DEVICES);
-        *sys_dev = ucs_topo_global_ctx.num_devices;
-        ++ucs_topo_global_ctx.num_devices;
 
-        kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it) = *sys_dev;
+        *sys_dev = kh_value(&ucs_topo_global_ctx.bus_to_sys_dev_hash, hash_it);
 
-        /* Set default name to abbreviated BDF */
-        name = ucs_malloc(UCS_SYS_BDF_NAME_MAX, "sys_dev_bdf_name");
-        if (name != NULL) {
-            ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
+        if (ucs_topo_global_ctx.devices[*sys_dev].name == NULL) {
+            ucs_sys_topo_devices[ucs_topo_global_ctx.num_devices++] = *sys_dev;
+
+            /* Set default name to abbreviated BDF */
+            name = ucs_malloc(UCS_SYS_BDF_NAME_MAX, "sys_dev_bdf_name");
+            if (name != NULL) {
+                ucs_topo_bus_id_str(bus_id, 1, name, UCS_SYS_BDF_NAME_MAX);
+            }
+
+            ucs_topo_global_ctx.devices[*sys_dev].bus_id = *bus_id;
+            ucs_topo_global_ctx.devices[*sys_dev].name   = name;
+
+            ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
         }
-
-        ucs_topo_global_ctx.devices[*sys_dev].bus_id = *bus_id;
-        ucs_topo_global_ctx.devices[*sys_dev].name   = name;
-
-        ucs_debug("added sys_dev %d for bus id %s", *sys_dev, name);
     }
 
+err:
     ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-    return UCS_OK;
+    return status;
 }
 
 ucs_status_t ucs_topo_get_device_bus_id(ucs_sys_device_t sys_dev,
@@ -203,13 +267,6 @@ ucs_topo_get_sysfs_path(ucs_sys_device_t sys_dev, char *path, size_t max)
     }
 
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
-
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        status = UCS_ERR_INVALID_PARAM;
-        goto out_unlock;
-    }
 
     ucs_strncpy_safe(link_path, UCS_TOPO_SYSFS_PCI_PREFIX, PATH_MAX);
     ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
@@ -331,12 +388,8 @@ ucs_topo_sys_device_bdf_name(ucs_sys_device_t sys_dev, char *buffer, size_t max)
         ucs_strncpy_safe(buffer, UCS_TOPO_DEVICE_NAME_UNKNOWN, max);
     } else {
         ucs_spin_lock(&ucs_topo_global_ctx.lock);
-        if (sys_dev < ucs_topo_global_ctx.num_devices) {
-            ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
-                                buffer, max);
-        } else {
-            ucs_strncpy_safe(buffer, UCS_TOPO_DEVICE_NAME_INVALID, max);
-        }
+        ucs_topo_bus_id_str(&ucs_topo_global_ctx.devices[sys_dev].bus_id, 0,
+                            buffer, max);
         ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     }
 
@@ -372,13 +425,6 @@ ucs_topo_sys_device_set_name(ucs_sys_device_t sys_dev, const char *name)
 {
     ucs_spin_lock(&ucs_topo_global_ctx.lock);
 
-    if (sys_dev >= ucs_topo_global_ctx.num_devices) {
-        ucs_error("system device %d is invalid (max: %d)", sys_dev,
-                  ucs_topo_global_ctx.num_devices);
-        ucs_spin_unlock(&ucs_topo_global_ctx.lock);
-        return UCS_ERR_INVALID_PARAM;
-    }
-
     ucs_free(ucs_topo_global_ctx.devices[sys_dev].name);
     ucs_topo_global_ctx.devices[sys_dev].name = ucs_strdup(name,
                                                            "sys_dev_name");
@@ -395,11 +441,7 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
         name = UCS_TOPO_DEVICE_NAME_UNKNOWN;
     } else {
         ucs_spin_lock(&ucs_topo_global_ctx.lock);
-        if (sys_dev < ucs_topo_global_ctx.num_devices) {
-            name = ucs_topo_global_ctx.devices[sys_dev].name;
-        } else {
-            name = UCS_TOPO_DEVICE_NAME_INVALID;
-        }
+        name = ucs_topo_global_ctx.devices[sys_dev].name;
         ucs_spin_unlock(&ucs_topo_global_ctx.lock);
     }
 
@@ -408,14 +450,16 @@ const char *ucs_topo_sys_device_get_name(ucs_sys_device_t sys_dev)
 
 void ucs_topo_print_info(FILE *stream)
 {
+    int i;
     char bdf_name[UCS_SYS_BDF_NAME_MAX];
-    volatile ucs_sys_device_t sys_dev;
 
-    for (sys_dev = 0; sys_dev < ucs_topo_global_ctx.num_devices; ++sys_dev) {
-        fprintf(stream, " %d  %*s  %s\n", sys_dev, UCS_SYS_BDF_NAME_MAX,
-                ucs_topo_sys_device_bdf_name(sys_dev, bdf_name,
+    for (i = 0; i < ucs_topo_global_ctx.num_devices; i++) {
+        fprintf(stream, "%d  %*s  %s\n", ucs_sys_topo_devices[i],
+                UCS_SYS_BDF_NAME_MAX,
+                ucs_topo_sys_device_bdf_name(ucs_sys_topo_devices[i],
+                                             bdf_name,
                                              sizeof(bdf_name)),
-                ucs_topo_global_ctx.devices[sys_dev].name);
+                ucs_topo_global_ctx.devices[ucs_sys_topo_devices[i]].name);
     }
 }
 
@@ -426,9 +470,22 @@ static ucs_sys_topo_method_t ucs_sys_topo_sysfs_method = {
 
 void ucs_topo_init()
 {
+    int i;
+
     ucs_spinlock_init(&ucs_topo_global_ctx.lock, 0);
     kh_init_inplace(bus_to_sys_dev, &ucs_topo_global_ctx.bus_to_sys_dev_hash);
     ucs_topo_global_ctx.num_devices = 0;
+
+    for (i = 0; i < UCS_TOPO_MAX_SYS_DEVICES;i++) {
+        ucs_topo_global_ctx.devices[i].name = NULL;
+    }
+
+    ucs_topo_default_distance.latency   =
+        UCS_FP8_PACK(UCS_LAT,
+                     ucs_topo_default_distance.latency * UCS_NSEC_PER_SEC);
+    ucs_topo_default_distance.bandwidth = UCS_FP8_PACK(UCS_BW,
+                                                       ucs_topo_default_distance.bandwidth);
+
     ucs_list_add_tail(&ucs_sys_topo_methods_list,
                       &ucs_sys_topo_default_method.list);
     ucs_list_add_tail(&ucs_sys_topo_methods_list,

@@ -9,6 +9,8 @@
 
 #include <ucs/type/status.h>
 #include <ucs/datastruct/list.h>
+#include <ucs/sys/math.h>
+#include <ucs/type/float8.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -17,14 +19,22 @@ BEGIN_C_DECLS
 
 
 /* Upper limit on system device id */
-#define UCS_SYS_DEVICE_ID_MAX UINT8_MAX
+#define UCS_SYS_DEVICE_ID_MAX UINT16_MAX
 
 /* Indicate that the ucs_sys_device_t for the device has no real bus_id
  * e.g. virtual devices like CMA/knem */
-#define UCS_SYS_DEVICE_ID_UNKNOWN UINT8_MAX
+#define UCS_SYS_DEVICE_ID_UNKNOWN UINT16_MAX
 
 /* Maximal size of BDF string */
 #define UCS_SYS_BDF_NAME_MAX 16
+
+
+/* bandwidth precision as bytes/second, range: 512 MB/s to 4 TB/s */
+UCS_FP8_DECLARE_TYPE(UCS_BW, 512 * UCS_MBYTE, 4 * UCS_TBYTE)
+
+
+/* latency precision as nanoseconds, range: 16 nsec to 131 usec */
+UCS_FP8_DECLARE_TYPE(UCS_LAT, UCS_BIT(4), UCS_BIT(17))
 
 
 typedef struct ucs_sys_bus_id {
@@ -41,7 +51,7 @@ typedef struct ucs_sys_bus_id {
  * Obtained from a translation of the device bus id into a short integer
  * Refer ucs_topo_find_device_by_bus_id()
  */
-typedef uint8_t ucs_sys_device_t;
+typedef uint16_t ucs_sys_device_t;
 
 
 /*
@@ -54,7 +64,7 @@ typedef struct ucs_sys_dev_distance {
 } ucs_sys_dev_distance_t;
 
 
-extern const ucs_sys_dev_distance_t ucs_topo_default_distance;
+extern ucs_sys_dev_distance_t ucs_topo_default_distance;
 
 
 /*
@@ -84,6 +94,8 @@ typedef struct {
 
 /* Global list of topology detection methods */
 extern ucs_list_link_t ucs_sys_topo_methods_list;
+
+extern ucs_sys_device_t ucs_sys_topo_devices[];
 
 
 /**

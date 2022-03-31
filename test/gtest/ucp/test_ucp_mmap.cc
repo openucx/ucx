@@ -268,6 +268,7 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
 
     /* Detect system device of the allocated memory */
     ucp_memory_info_t mem_info;
+    ucs_sys_device_t actual_sys_dev;
     ucp_memory_detect(sender().ucph(), ucp_memh_address(memh),
                       ucp_memh_length(memh), &mem_info);
     EXPECT_EQ(memh->mem_type, mem_info.type);
@@ -276,12 +277,13 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
     ucp_sys_dev_map_t sys_dev_map = UCS_MASK(ucs_topo_num_devices());
     std::vector<ucs_sys_dev_distance_t> sys_distance(ucs_topo_num_devices());
     for (unsigned i = 0; i < sys_distance.size(); ++i) {
-        if (std::string(ucs_topo_sys_device_get_name(i)).find("test") == 0) {
+        actual_sys_dev = ucs_sys_topo_devices[i];
+        if (std::string(ucs_topo_sys_device_get_name(actual_sys_dev)).find("test") == 0) {
             /* Dummy device created by test */
             continue;
         }
 
-        status = ucs_topo_get_distance(mem_info.sys_dev, i, &sys_distance[i]);
+        status = ucs_topo_get_distance(mem_info.sys_dev, actual_sys_dev, &sys_distance[i]);
         ASSERT_UCS_OK(status);
     }
 
@@ -316,10 +318,17 @@ void test_ucp_mmap::test_rkey_proto(ucp_mem_h memh)
         for (ucp_lane_index_t lane = 0; lane < ep_config->key.num_lanes;
              ++lane) {
             ucs_sys_device_t sys_dev = ep_config->key.lanes[lane].dst_sys_dev;
+            actual_sys_dev = UCS_SYS_DEVICE_ID_UNKNOWN;
+            for (unsigned i = 0; i < ucs_topo_num_devices(); ++i) {
+                if (ucs_sys_topo_devices[i] == sys_dev) {
+                    actual_sys_dev = i;
+                    break;
+                }
+            }
             expect_same_distance(rkey_config->lanes_distance[lane],
                                  (sys_dev == UCS_SYS_DEVICE_ID_UNKNOWN) ?
                                          ucs_topo_default_distance :
-                                         sys_distance[sys_dev]);
+                                         sys_distance[actual_sys_dev]);
         }
     }
 
