@@ -495,11 +495,7 @@ int main(int argc, char **argv)
     }
 
     if (g_opts.sock_path == NULL) {
-        ret = ucs_vfs_sock_get_address(&g_sockaddr);
-        if (ret < 0) {
-            vfs_error("failed to initialize socket address: %d", ret);
-            return -1;
-        }
+        ucs_vfs_sock_get_address(&g_sockaddr);
     } else {
         g_sockaddr.sun_family = AF_UNIX;
         memset(g_sockaddr.sun_path, 0, sizeof(g_sockaddr.sun_path));
