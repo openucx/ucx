@@ -395,12 +395,7 @@ static void *ucs_vfs_fuse_thread_func(void *arg)
     }
 
 again:
-    ret = ucs_vfs_sock_get_address(&un_addr);
-    if (ret < 0) {
-        ucs_warn("failed to get vfs socket path: %s", strerror(-ret));
-        goto out_close;
-    }
-
+    ucs_vfs_sock_get_address(&un_addr);
     ucs_debug("connecting vfs socket %d to daemon on '%s'", connfd,
               un_addr.sun_path);
     ret = connect(connfd, (const struct sockaddr*)&un_addr, sizeof(un_addr));
@@ -421,7 +416,7 @@ again:
                          un_addr.sun_path, ucs_status_string(status));
             }
         } else {
-            ucs_warn("failed to connect to vfs socket '%s': %m",
+            ucs_diag("failed to connect to vfs socket '%s': %m",
                      un_addr.sun_path);
         }
         goto out_close;

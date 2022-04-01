@@ -25,20 +25,25 @@ typedef struct {
 } UCS_S_PACKED ucs_vfs_msg_t;
 
 
-int ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
+void ucs_vfs_sock_get_address(struct sockaddr_un *un_addr)
 {
     struct passwd *pw;
-
-    pw = getpwuid(geteuid());
-    if (pw == NULL) {
-        return -errno;
-    }
+    uid_t euid;
 
     memset(un_addr, 0, sizeof(*un_addr));
     un_addr->sun_family = AF_UNIX;
-    snprintf(un_addr->sun_path, sizeof(un_addr->sun_path) - 1,
-             "/tmp/ucx-vfs-%s.sock", pw->pw_name);
-    return 0;
+
+    euid = geteuid();
+    pw   = getpwuid(euid);
+    if (pw != NULL) {
+        /* By name */
+        snprintf(un_addr->sun_path, sizeof(un_addr->sun_path) - 1,
+                 "/tmp/ucx-vfs-%s.sock", pw->pw_name);
+    } else {
+        /* By number */
+        snprintf(un_addr->sun_path, sizeof(un_addr->sun_path) - 1,
+                 "/tmp/ucx-vfs-%u.sock", euid);
+    }
 }
 
 int ucs_vfs_sock_setopt_passcred(int sockfd)
