@@ -106,6 +106,9 @@ typedef struct {
     /* Memory limit handled by memtrack to abort application */
     size_t                     memtrack_limit;
 
+    /* Locked memory limit threshold required for proper UCX work */
+    size_t                     memlock_limit;
+
     /* Profiling mode */
     unsigned                   profile_mode;
 

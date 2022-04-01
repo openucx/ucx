@@ -31,7 +31,6 @@
 
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN    16
-#define UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT (512 * UCS_MBYTE)
 
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
@@ -1186,7 +1185,7 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     if (num_resources != 0) {
         status = ucs_sys_get_memlock_rlimit(&memlock_limit);
         if ((status == UCS_OK) &&
-            (memlock_limit <= UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT)) {
+            (memlock_limit <= ucs_global_opts.memlock_limit)) {
             /* Disable the RDMA devices because of too strict locked memory limit*/
             ucs_diag("RDMA transports are disabled because max locked memory "
                      "limit (%llu kbytes) is too low. Please set max locked "
