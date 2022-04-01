@@ -603,10 +603,9 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto out;
     }
 
-    ep->flags &= ~UCT_UD_EP_FLAG_CONNECT_TO_EP; /* by default, the endpoint is
-                                                 * considered to be p2p */
-    ep->flags &= ~UCT_UD_EP_FLAG_RX; /* remove RX flag, since the endpoint is
-                                      * created as full duplex by default */
+    /* remove RX and CONNECT_TO_EP flags, since the endpoint is created as full
+     * duplex and p2p by default */
+    ep->flags &= ~(UCT_UD_EP_FLAG_CONNECT_TO_EP | UCT_UD_EP_FLAG_RX);
 
     status = uct_ud_ep_connect_to_iface(ep, ib_addr, if_addr);
     if (status != UCS_OK) {
@@ -739,10 +738,9 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface,
         return NULL;
     }
 
-    ep->flags &= ~UCT_UD_EP_FLAG_CONNECT_TO_EP; /* by default, the endpoint is
-                                                 * considered to be p2p */
-    ep->flags &= ~UCT_UD_EP_FLAG_TX; /* remove TX flag, since the endpoint is
-                                      * created as full duplex by default */
+    /* remove TX and CONNECT_TO_EP flags, since the endpoint is created as full
+     * duplex and p2p by default */
+    ep->flags &= ~(UCT_UD_EP_FLAG_CONNECT_TO_EP | UCT_UD_EP_FLAG_TX);
 
     status = uct_ep_connect_to_ep(&ep->super.super,
                                   (void*)uct_ud_creq_ib_addr(ctl),
