@@ -44,7 +44,7 @@ BEGIN_C_DECLS
 extern ucs_ternary_auto_value_t ucs_arch_x86_enable_rdtsc;
 
 double ucs_arch_get_clocks_per_sec();
-double ucs_x86_init_tsc_freq();
+void ucs_x86_init_tsc_freq();
 
 ucs_cpu_model_t ucs_arch_get_cpu_model() UCS_F_NOOPTIMIZE;
 ucs_cpu_flag_t ucs_arch_get_cpu_flag() UCS_F_NOOPTIMIZE;
@@ -53,28 +53,31 @@ void ucs_cpu_init();
 ucs_status_t ucs_arch_get_cache_size(size_t *cache_sizes);
 void ucs_x86_memcpy_sse_movntdqa(void *dst, const void *src, size_t len);
 
-static inline int ucs_arch_x86_rdtsc_enabled()
+static UCS_F_ALWAYS_INLINE int ucs_arch_x86_rdtsc_enabled()
 {
-    double UCS_V_UNUSED dummy_freq;
-
     if (ucs_unlikely(ucs_arch_x86_enable_rdtsc == UCS_TRY)) {
-        dummy_freq = ucs_x86_init_tsc_freq();
+        ucs_x86_init_tsc_freq();
         ucs_assert(ucs_arch_x86_enable_rdtsc != UCS_TRY);
     }
 
     return ucs_arch_x86_enable_rdtsc;
 }
 
-static inline uint64_t ucs_arch_read_hres_clock()
+static UCS_F_ALWAYS_INLINE uint64_t ucs_arch_x86_read_tsc()
 {
     uint32_t low, high;
 
+    asm volatile("rdtsc" : "=a"(low), "=d"(high));
+    return ((uint64_t)high << 32) | (uint64_t)low;
+}
+
+static UCS_F_ALWAYS_INLINE uint64_t ucs_arch_read_hres_clock()
+{
     if (ucs_unlikely(ucs_arch_x86_rdtsc_enabled() == UCS_NO)) {
         return ucs_arch_generic_read_hres_clock();
     }
 
-    asm volatile ("rdtsc" : "=a" (low), "=d" (high));
-    return ((uint64_t)high << 32) | (uint64_t)low;
+    return ucs_arch_x86_read_tsc();
 }
 
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
