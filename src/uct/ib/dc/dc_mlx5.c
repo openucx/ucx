@@ -1325,7 +1325,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
 {
     uct_dc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_dc_mlx5_iface_config_t);
-    uct_ib_mlx5_md_t *md = ucs_derived_of(tl_md, uct_ib_mlx5_md_t);
+    uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
+                                                        uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
     ucs_status_t status;
     unsigned tx_cq_size;
@@ -1339,10 +1340,11 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         return UCS_ERR_INVALID_PARAM;
     }
 
-    init_attr.qp_type     = UCT_IB_QPT_DCI;
-    init_attr.flags       = UCT_IB_CQ_IGNORE_OVERRUN |
-                            UCT_IB_TX_OPS_PER_PATH;
-    init_attr.fc_req_size = sizeof(uct_dc_fc_request_t);
+    init_attr.qp_type       = UCT_IB_QPT_DCI;
+    init_attr.flags         = UCT_IB_CQ_IGNORE_OVERRUN |
+                              UCT_IB_TX_OPS_PER_PATH;
+    init_attr.fc_req_size   = sizeof(uct_dc_fc_request_t);
+    init_attr.max_rd_atomic = md->max_rd_atomic_dc;
 
     if (md->flags & UCT_IB_MLX5_MD_FLAG_DC_TM) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;

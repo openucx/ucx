@@ -271,6 +271,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_rc_verbs_iface_config_t *config =
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
     uct_ib_iface_config_t *ib_config    = &config->super.super.super;
+    uct_ib_md_t *ib_md                  = ucs_derived_of(tl_md, uct_ib_md_t);
     uct_ib_iface_init_attr_t init_attr  = {};
     uct_ib_qp_attr_t attr               = {};
     const char *dev_name;
@@ -278,12 +279,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
-    init_attr.fc_req_size            = sizeof(uct_rc_pending_req_t);
-    init_attr.rx_hdr_len             = sizeof(uct_rc_hdr_t);
-    init_attr.qp_type                = IBV_QPT_RC;
-    init_attr.cq_len[UCT_IB_DIR_RX]  = ib_config->rx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_TX]  = config->super.tx_cq_len;
-    init_attr.seg_size               = ib_config->seg_size;
+    init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
+    init_attr.rx_hdr_len            = sizeof(uct_rc_hdr_t);
+    init_attr.qp_type               = IBV_QPT_RC;
+    init_attr.cq_len[UCT_IB_DIR_RX] = ib_config->rx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
+    init_attr.seg_size              = ib_config->seg_size;
+    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
