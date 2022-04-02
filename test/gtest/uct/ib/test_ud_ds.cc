@@ -40,7 +40,7 @@ public:
         m_e2 = create_entity(0);
         m_entities.push_back(m_e2);
 
-        // overwrite purge_cb to remove and destroy UD endpoints from
+        // Overwrite purge_cb to remove and destroy UD endpoints from
         // connection matching without checking flags set on the endpoint
         uct_ud_iface_t *ud_iface1              =
                 reinterpret_cast<uct_ud_iface_t*>(m_e1->iface());
@@ -74,7 +74,7 @@ public:
         // Remove TX/RX flags to not remove endpoints from UD's uct_ep_destroy,
         // since an endpoints don't have valid iface addresses
         for (auto ep : eps) {
-            ep->flags &= ~(UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX | UCT_UD_EP_FLAG_ON_CEP);
+            ep->flags &= ~(UCT_UD_EP_FLAG_CAPS | UCT_UD_EP_FLAG_ON_CEP);
         }
 
         uct_test::cleanup();

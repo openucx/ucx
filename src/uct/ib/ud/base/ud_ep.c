@@ -397,8 +397,8 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     ucs_wtimer_init(&self->timer, uct_ud_ep_timer);
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
-    uct_ud_ep_set_state(self, UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX |
-                              UCT_UD_EP_FLAG_CONNECT_TO_EP);
+    uct_ud_ep_set_state(self,
+                        UCT_UD_EP_FLAG_CAPS | UCT_UD_EP_FLAG_CONNECT_TO_EP);
 
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("created ep ep=%p iface=%p id=%d", self, iface, self->ep_id);
@@ -603,8 +603,8 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto out;
     }
 
-    /* remove RX and CONNECT_TO_EP flags, since the endpoint is created as full
-     * duplex and p2p by default */
+    /* Remove RX and CONNECT_TO_EP flags, since the endpoint is created as full
+     * duplex and p2p by default, but this endpoint should be TX-only */
     ep->flags &= ~(UCT_UD_EP_FLAG_CONNECT_TO_EP | UCT_UD_EP_FLAG_RX);
 
     status = uct_ud_ep_connect_to_iface(ep, ib_addr, if_addr);
@@ -738,8 +738,8 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface,
         return NULL;
     }
 
-    /* remove TX and CONNECT_TO_EP flags, since the endpoint is created as full
-     * duplex and p2p by default */
+    /* Remove TX and CONNECT_TO_EP flags, since the endpoint is created as full
+     * duplex and p2p by default, but this endpoint should be RX-only */
     ep->flags &= ~(UCT_UD_EP_FLAG_CONNECT_TO_EP | UCT_UD_EP_FLAG_TX);
 
     status = uct_ep_connect_to_ep(&ep->super.super,
@@ -1800,8 +1800,7 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
 
         if (ep->flags & UCT_UD_EP_FLAG_RX) {
             uct_ud_iface_cep_insert_ready_ep(iface, ep);
-            /* if the endpoint is marked to be able receive data from a peer,
-             * don't schedule a timer to destroy the endpoint */
+            /* Don't destroy ep if it has RX capability */
             goto out;
         }
     }

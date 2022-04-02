@@ -192,8 +192,8 @@ enum {
 /* TODO: optimize endpoint memory footprint */
 enum {
     UCT_UD_EP_FLAG_DISCONNECTED      = UCS_BIT(0),  /* EP was disconnected */
-    UCT_UD_EP_FLAG_TX                = UCS_BIT(1),  /* EP was created as internal */
-    UCT_UD_EP_FLAG_RX                = UCS_BIT(2),  /* EP was created as internal */
+    UCT_UD_EP_FLAG_TX                = UCS_BIT(1),  /* EP was created to send data to a peer */
+    UCT_UD_EP_FLAG_RX                = UCS_BIT(2),  /* EP was created to receive data from a peer */
     UCT_UD_EP_FLAG_HAS_PENDING       = UCS_BIT(3),  /* EP has some pending requests */
     UCT_UD_EP_FLAG_CONNECTED         = UCS_BIT(4),  /* EP was connected to the peer */
     UCT_UD_EP_FLAG_CONNECT_TO_EP     = UCS_BIT(5),  /* EP was connected to peer's EP */
@@ -211,12 +211,15 @@ enum {
 #if UCS_ENABLE_ASSERT
     UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(12), /* Endpoint is currently executing the
                                                        pending queue */
-    UCT_UD_EP_FLAG_ON_CEP            = UCS_BIT(13)
+    UCT_UD_EP_FLAG_ON_CEP            = UCS_BIT(13),
 #else
     UCT_UD_EP_FLAG_IN_PENDING        = 0,
-    UCT_UD_EP_FLAG_ON_CEP            = 0
+    UCT_UD_EP_FLAG_ON_CEP            = 0,
 #endif
+
+    UCT_UD_EP_FLAG_CAPS              = UCT_UD_EP_FLAG_TX | UCT_UD_EP_FLAG_RX
 };
+
 
 typedef struct uct_ud_peer_name {
     char name[16];
