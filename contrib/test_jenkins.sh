@@ -1,4 +1,4 @@
-#!/bin/bash -eExl
+#!/bin/bash -eEx
 #
 # Testing script for OpenUCX, to run from Jenkins CI
 #
@@ -1139,30 +1139,35 @@ run_gtest_armclang() {
 		return 0
 	fi
 
-	if module_load arm-compiler/arm-hpc-compiler && armclang -v
+	if module_load arm-compiler/arm-hpc-compiler
 	then
-		# Force using loaded gcc toolchain instead of host gcc, to avoid
-		# compatibility issues
-		ARMCLANG_CFLAGS=""
-		if [ -n ${GCC_DIR} ]; then
-			ARMCLANG_CFLAGS+=" --gcc-toolchain=${GCC_DIR}"
+		if armclang -v
+		then
+			# Force using loaded gcc toolchain instead of host gcc, to avoid
+			# compatibility issues
+			ARMCLANG_CFLAGS=""
+			if [ -n ${GCC_DIR} ]; then
+				ARMCLANG_CFLAGS+=" --gcc-toolchain=${GCC_DIR}"
+			fi
+
+			# Disable go build, since armclang has some old go compiler.
+			build devel --enable-gtest "$@" \
+				CC=armclang \
+				CXX=armclang++ \
+				CFLAGS="${ARMCLANG_CFLAGS}" \
+				--without-go
+
+			run_gtest "armclang"
+		else
+			echo "==== Not running with armclang compiler ===="
+			log_warning "armclang compiler is unusable"
 		fi
-
-		# Disable go build, since armclang has some old go compiler.
-		build devel --enable-gtest "$@" \
-			CC=armclang \
-			CXX=armclang++ \
-			CFLAGS="${ARMCLANG_CFLAGS}" \
-			--without-go
-
-		run_gtest "armclang"
 
 		module unload arm-compiler/arm-hpc-compiler
 	else
 		echo "==== Not running with armclang compiler ===="
 	fi
 }
-
 
 #
 # Run the test suite (gtest) in release configuration with small subset of tests
