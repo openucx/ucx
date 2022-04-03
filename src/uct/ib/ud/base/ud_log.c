@@ -38,8 +38,6 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
         p += strlen(p);
         uct_iface_dump_am(iface, type, am_id, neth + 1,
                           length - sizeof(*neth), p, endp - p);
-    } else if (neth->packet_type & UCT_UD_PACKET_FLAG_FIN) {
-        snprintf(p, endp - p, " FIN");
     } else if (neth->packet_type & UCT_UD_PACKET_FLAG_NACK) {
         snprintf(p, endp - p, " NACK");
     } else if (neth->packet_type & UCT_UD_PACKET_FLAG_PUT) {
@@ -62,6 +60,10 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
             snprintf(p, endp - p, " CREP from %s:%d src_ep_id %d",
                      ctlh->peer.name, ctlh->peer.pid,
                      ctlh->conn_rep.src_ep_id);
+            break;
+        case UCT_UD_PACKET_FIN:
+            snprintf(p, endp - p, " FIN from %s:%d", ctlh->peer.name,
+                     ctlh->peer.pid);
             break;
         default:
             snprintf(p, endp - p, " <unknown control packet %d> from %s:%d",

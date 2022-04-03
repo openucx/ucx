@@ -27,8 +27,7 @@ public:
         uct_ud_ep_t *ep       = ucs_container_of(elem, uct_ud_ep_t,
                                                  conn_match);
 
-        uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
-                                  ep_free, &ep->super.super);
+        uct_ud_ep_free(iface, ep);
     }
 
     virtual void init() {
@@ -42,10 +41,10 @@ public:
 
         // Overwrite purge_cb to remove and destroy UD endpoints from
         // connection matching without checking flags set on the endpoint
-        uct_ud_iface_t *ud_iface1              =
+        auto ud_iface1                         =
                 reinterpret_cast<uct_ud_iface_t*>(m_e1->iface());
         ud_iface1->conn_match_ctx.ops.purge_cb = conn_match_purge_cb;
-        uct_ud_iface_t *ud_iface2              =
+        auto ud_iface2                         =
                 reinterpret_cast<uct_ud_iface_t*>(m_e2->iface());
         ud_iface2->conn_match_ctx.ops.purge_cb = conn_match_purge_cb;
 
@@ -74,7 +73,7 @@ public:
         // Remove TX/RX flags to not remove endpoints from UD's uct_ep_destroy,
         // since an endpoints don't have valid iface addresses
         for (auto ep : eps) {
-            ep->flags &= ~(UCT_UD_EP_FLAG_CAPS | UCT_UD_EP_FLAG_ON_CEP);
+            ep->flags &= ~(UCT_UD_EP_FLAG_TX_RX | UCT_UD_EP_FLAG_ON_CEP);
         }
 
         uct_test::cleanup();
@@ -205,7 +204,6 @@ void test_ud_ds::create_and_insert_ep(entity *e, uct_ib_address_t *ib_addr,
     }
 
     insert_ep(e, ib_addr, if_addr, conn_sn, ep(e, ep_index));
-
     eps.push_back(ep(e, ep_index));
 }
 
@@ -221,7 +219,7 @@ uct_ud_ep_t *test_ud_ds::get_ep(entity *e, uct_ib_address_t *ib_addr,
     EXPECT_TRUE(check_ep != NULL);
     EXPECT_EQ(conn_sn, check_ep->conn_sn);
     if (is_ep_internal) {
-        EXPECT_TRUE(!(check_ep->flags & UCT_UD_EP_FLAG_TX));
+        EXPECT_FALSE(check_ep->flags & UCT_UD_EP_FLAG_TX);
         EXPECT_TRUE(check_ep->flags & UCT_UD_EP_FLAG_RX);
     } else {
         EXPECT_TRUE(check_ep->flags & UCT_UD_EP_FLAG_TX);
