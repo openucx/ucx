@@ -248,22 +248,26 @@ static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
     ucs_assert(ucs_queue_is_empty(&ep->tx.window));
 }
 
+/* Returns 1 if an endpoint was destroyed to indicate that any other action is
+ * not required, otherwise - 0 */
 static int uct_ud_ep_handle_peer_disconnect(uct_ud_ep_t *ep)
 {
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface,
                                            uct_ud_iface_t);
 
-    if (ep->flags & UCT_UD_EP_FLAG_RX) {
-        uct_ud_iface_cep_remove_ep(iface, ep);
-        ep->flags &= ~UCT_UD_EP_FLAG_RX;
-
-        if (!(ep->flags & UCT_UD_EP_FLAG_TX)) {
-            uct_ep_destroy(&ep->super.super);
-            return 1;
-        }
-
-        uct_ud_iface_cep_insert_ready_ep(iface, ep);
+    if (!(ep->flags & UCT_UD_EP_FLAG_RX)) {
+        return 0;
     }
+
+    uct_ud_iface_cep_remove_ep(iface, ep);
+    ep->flags &= ~UCT_UD_EP_FLAG_RX;
+
+    if (!(ep->flags & UCT_UD_EP_FLAG_TX)) {
+        uct_ep_destroy(&ep->super.super);
+        return 1;
+    }
+
+    uct_ud_iface_cep_insert_ready_ep(iface, ep);
 
     return 0;
 }
@@ -585,7 +589,6 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_ctl(uct_ud_ep_t *ep,
     uct_ud_peer_name(ucs_unaligned_ptr(&ctl->peer));
 
     *ctl_p = ctl;
-
     return skb;
 }
 
