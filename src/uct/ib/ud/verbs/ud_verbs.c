@@ -43,13 +43,14 @@ static ucs_config_field_t uct_ud_verbs_iface_config_table[] = {
 };
 
 
-UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, const uct_ep_params_t *params)
+UCS_CLASS_INIT_FUNC(uct_ud_verbs_ep_t, const uct_ep_params_t *params,
+                    uint16_t flags)
 {
     uct_ud_verbs_iface_t *iface = ucs_derived_of(params->iface,
                                                  uct_ud_verbs_iface_t);
 
     ucs_trace_func("");
-    UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super, params);
+    UCS_CLASS_CALL_SUPER_INIT(uct_ud_ep_t, &iface->super, params, flags);
     self->peer_address.ah = NULL;
     return UCS_OK;
 }
@@ -61,7 +62,7 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_verbs_ep_t)
 
 UCS_CLASS_DEFINE(uct_ud_verbs_ep_t, uct_ud_ep_t);
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_ud_verbs_ep_t, uct_ep_t,
-                                 const uct_ep_params_t *);
+                                 const uct_ep_params_t *, uint16_t);
 UCS_CLASS_DEFINE_DELETE_FUNC(uct_ud_verbs_ep_t, uct_ep_t);
 
 static inline void
@@ -545,7 +546,10 @@ uct_ud_verbs_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
         return uct_ud_ep_create_connected_common(params, ep_p);
     }
 
-    return uct_ud_verbs_ep_t_new(params, ep_p);
+    return uct_ud_verbs_ep_t_new(params,
+                                 UCT_UD_EP_FLAG_CONNECT_TO_EP |
+                                 UCT_UD_EP_FLAG_TX_RX,
+                                 ep_p);
 }
 
 static void uct_ud_verbs_iface_destroy_qp(uct_ud_iface_t *ud_iface)
@@ -570,6 +574,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     },
     .async_progress          = uct_ud_verbs_iface_async_progress,
     .send_ctl                = uct_ud_verbs_ep_send_ctl,
+    .ep_create               = uct_ud_verbs_ep_t_new,
     .ep_free                 = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
     .create_qp               = uct_ib_iface_create_qp,
     .destroy_qp              = uct_ud_verbs_iface_destroy_qp,

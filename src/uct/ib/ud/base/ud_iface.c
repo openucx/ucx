@@ -171,10 +171,10 @@ uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
 
     if (is_rx_only) {
         ucs_assertv((ep->flags & UCT_UD_EP_FLAG_TX_RX) == UCT_UD_EP_FLAG_RX,
-                    "ep %p flags 0x%x", ep, ep->flags);
+                    "ep=%p flags=0x%x", ep, ep->flags);
         ep->flags &= ~UCT_UD_EP_FLAG_ON_CEP;
     } else {
-        ucs_assertv(ep->flags & UCT_UD_EP_FLAG_TX_RX, "ep %p flags 0x%x", ep,
+        ucs_assertv(ep->flags & UCT_UD_EP_FLAG_TX_RX, "ep=%p flags=0x%x", ep,
                     ep->flags);
     }
 

@@ -282,7 +282,8 @@ struct uct_ud_ep {
 #endif
 
 
-UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*, const uct_ep_params_t*)
+UCS_CLASS_DECLARE(uct_ud_ep_t, uct_ud_iface_t*, const uct_ep_params_t*,
+                  uint16_t flags)
 
 /**
  * UD pending request private data
@@ -331,8 +332,6 @@ void uct_ud_ep_pending_purge(uct_ep_h ep, uct_pending_purge_callback_t cb,
 void uct_ud_ep_disconnect(uct_ep_h ep);
 
 void uct_ud_ep_window_release_completed(uct_ud_ep_t *ep, int is_async);
-
-uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
 
 ucs_arbiter_cb_result_t
 uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,

@@ -106,6 +106,8 @@ typedef struct uct_ud_iface_ops {
     uint16_t                  (*send_ctl)(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
                                           const uct_ud_iov_t *iov, uint16_t iovcnt,
                                           int flags, int max_log_sge);
+    ucs_status_t              (*ep_create)(const uct_ep_params_t* params,
+                                           uint16_t flags, uct_ep_h *ep_p);
     void                      (*ep_free)(uct_ep_h ep);
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);

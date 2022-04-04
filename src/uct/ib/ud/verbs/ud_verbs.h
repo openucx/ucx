@@ -41,9 +41,6 @@ typedef struct {
 } uct_ud_verbs_iface_t;
 
 
-UCS_CLASS_DECLARE(uct_ud_verbs_ep_t, const uct_ep_params_t *)
-
-
 ucs_status_t uct_ud_verbs_qp_max_send_sge(uct_ud_verbs_iface_t *iface,
                                           size_t *max_send_sge);
 
