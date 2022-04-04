@@ -1505,10 +1505,6 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
         goto out;
     }
 
-    if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_FIN)) {
-        packet_type |= UCT_UD_PACKET_FLAG_CTL;
-    }
-
     if (uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_ACK_REQ)) {
         packet_type |= UCT_UD_PACKET_FLAG_ACK_REQ;
         ctl_flags   |= UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED;
@@ -1554,8 +1550,6 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 out:
     uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CTL_ACK);
 }
-
-
 
 static void uct_ud_ep_do_pending_ctl(uct_ud_ep_t *ep, uct_ud_iface_t *iface)
 {
