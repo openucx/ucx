@@ -1323,8 +1323,7 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_fin(uct_ud_ep_t *ep)
 
     neth->packet_type       = ep->dest_ep_id | UCT_UD_PACKET_FLAG_CTL;
     fin                     = (uct_ud_ctl_hdr_t*)(neth + 1);
-    fin->type               = UCT_UD_PACKET_CREP;
-    fin->conn_rep.src_ep_id = ep->ep_id;
+    fin->type               = UCT_UD_PACKET_FIN;
 
     uct_ud_peer_name(ucs_unaligned_ptr(&fin->peer));
 
