@@ -307,8 +307,6 @@ void uct_dc_mlx5_iface_init_version(uct_dc_mlx5_iface_t *iface, uct_md_h md);
 ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
                                            uct_dc_dci_t *dci);
 
-void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface, int max);
-
 ucs_status_t uct_dc_mlx5_iface_keepalive_init(uct_dc_mlx5_iface_t *iface);
 
 void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
@@ -316,10 +314,6 @@ void uct_dc_mlx5_iface_set_ep_failed(uct_dc_mlx5_iface_t *iface,
                                      struct mlx5_cqe64 *cqe,
                                      uct_ib_mlx5_txwq_t *txwq,
                                      ucs_status_t ep_status);
-
-ucs_status_t
-uct_dc_mlx5_iface_create_dcis(uct_dc_mlx5_iface_t *iface,
-                              const uct_dc_mlx5_iface_config_t *config);
 
 void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 
