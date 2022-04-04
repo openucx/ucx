@@ -44,7 +44,7 @@ ucs_global_opts_t ucs_global_opts = {
     .tuning_path           = "",
     .memtrack_dest         = "",
     .memtrack_limit        = UCS_MEMUNITS_INF,
-    .memlock_limit         = 500 * UCS_MBYTE,
+    .memlock_limit         = 512 * UCS_MBYTE,
     .stats_trigger         = "exit",
     .profile_mode          = 0,
     .profile_file          = "",
@@ -167,12 +167,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   ucs_offsetof(ucs_global_opts_t, memtrack_limit), UCS_CONFIG_TYPE_MEMUNITS},
 
  {"MEMLOCK_LIMIT", "512m",
-  "Locked memory limit threshold required for proper UCX work.\n"
-  "The default value guarantees the proper work of all dependent UCX parts\n"
-  "in most cases. But in some cases the proper work can be guaranteed\n"
-  "by more or less strict limit threshold.\n"
-  "Please change the limit threshold only if you cannot change \n"
-  "system locked memory limit (ulimit -S -l unlimited).",
+  "The system limit for maximum amount of locked memory must not be smaller\n"
+  "than this value. Otherwise some UCX transports may not function properly.\n"
+  "Please change this threshold only if you cannot change system locked memory\n"
+  "limit (ulimit -S -l unlimited).",
   ucs_offsetof(ucs_global_opts_t, memlock_limit), UCS_CONFIG_TYPE_MEMUNITS},
 
  {"RCACHE_CHECK_PFN", "0",
