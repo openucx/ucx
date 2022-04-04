@@ -147,7 +147,7 @@ typedef enum uct_rc_fence_mode {
 /* Common configuration used for rc verbs, rcx and dc transports */
 typedef struct uct_rc_iface_common_config {
     uct_ib_iface_config_t    super;
-    unsigned                 max_rd_atomic;
+    unsigned long            max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
 

@@ -616,6 +616,7 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     struct ibv_context *ctx;
     uct_ib_device_t *dev;
     uct_ib_mlx5_md_t *md;
+    unsigned max_rd_atomic_dc;
     void *cap;
     int ret;
 
@@ -693,6 +694,12 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     } else {
         dev->lag_level = UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, num_lag_ports);
     }
+
+    max_rd_atomic_dc = 1 << UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                                              log_max_ra_req_dc);
+    ucs_assertv(max_rd_atomic_dc < UINT8_MAX, "max_rd_atomic_dc=%u",
+                max_rd_atomic_dc);
+    md->max_rd_atomic_dc = max_rd_atomic_dc;
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, dct) &&
          (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, lag_dct) || (lag_state == 0))) {

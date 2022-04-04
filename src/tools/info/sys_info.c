@@ -179,6 +179,25 @@ static void print_sys_topo()
     printf("#\n");
 }
 
+static double measure_timer_accuracy()
+{
+    double elapsed, elapsed_accurate;
+    ucs_time_t time0, time1;
+    double sec0, sec1;
+
+    sec0  = ucs_get_accurate_time();
+    time0 = ucs_get_time();
+    usleep(100000);
+    sec1  = ucs_get_accurate_time();
+    time1 = ucs_get_time();
+
+    elapsed          = ucs_time_to_sec(time1 - time0);
+    elapsed_accurate = sec1 - sec0;
+
+    return ucs_min(elapsed, elapsed_accurate) /
+           ucs_max(elapsed, elapsed_accurate);
+}
+
 void print_sys_info(int print_opts)
 {
     size_t size;
@@ -186,6 +205,7 @@ void print_sys_info(int print_opts)
     if (print_opts & PRINT_SYS_INFO) {
         printf("# Timer frequency: %.3f MHz\n",
                ucs_get_cpu_clocks_per_sec() / 1e6);
+        printf("# Timer accuracy: %.3f %%\n", measure_timer_accuracy() * 100);
         printf("# CPU vendor: %s\n",
                cpu_vendor_names[ucs_arch_get_cpu_vendor()]);
         printf("# CPU model: %s\n", cpu_model_names[ucs_arch_get_cpu_model()]);

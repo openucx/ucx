@@ -240,6 +240,8 @@ typedef struct uct_ib_mlx5_md {
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;
 #endif
+    /* The maximum number of outstanding RDMA Read/Atomic operations per DC QP. */
+    uint8_t                  max_rd_atomic_dc;
 } uct_ib_mlx5_md_t;
 
 

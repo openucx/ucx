@@ -861,6 +861,8 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_iface_t,
     init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
     init_attr.qp_type               = IBV_QPT_RC;
+    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&md->super.dev,
+                                                   max_qp_rd_atom);
 
     if (IBV_DEVICE_TM_FLAGS(&md->super.dev)) {
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;

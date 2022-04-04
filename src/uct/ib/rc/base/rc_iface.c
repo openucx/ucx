@@ -32,9 +32,10 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    ucs_offsetof(uct_rc_iface_common_config_t, super),
    UCS_CONFIG_TYPE_TABLE(uct_ib_iface_config_table)},
 
-  {"MAX_RD_ATOMIC", "16",
-   "Maximal number of outstanding read or atomic replies",
-   ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic), UCS_CONFIG_TYPE_UINT},
+  {"MAX_RD_ATOMIC", "auto",
+   "Maximal number of outstanding read or atomic replies. Auto means using the\n"
+   "maximum value supported by the hardware.",
+   ucs_offsetof(uct_rc_iface_common_config_t, max_rd_atomic), UCS_CONFIG_TYPE_ULUNITS},
 
   {"TIMEOUT", "1.0s",
    "Transport timeout",
@@ -524,6 +525,35 @@ static int uct_rc_iface_config_limit_value(const char *name,
      }
 }
 
+static ucs_status_t
+uct_rc_iface_init_max_rd_atomic(uct_rc_iface_t *iface,
+                                const uct_rc_iface_common_config_t *config,
+                                const uct_ib_iface_init_attr_t *init_attr)
+{
+    char max_rd_atomic_str[16];
+
+    if (config->max_rd_atomic == UCS_ULUNITS_AUTO) {
+        iface->config.max_rd_atomic = init_attr->max_rd_atomic;
+    } else if (config->max_rd_atomic <= init_attr->max_rd_atomic) {
+        iface->config.max_rd_atomic = config->max_rd_atomic;
+    } else {
+        if (config->max_rd_atomic == UCS_ULUNITS_INF){
+            ucs_snprintf_safe(max_rd_atomic_str, sizeof(max_rd_atomic_str),
+                              "inf");
+        } else {
+            ucs_snprintf_safe(max_rd_atomic_str, sizeof(max_rd_atomic_str),
+                              "%lu", config->max_rd_atomic);
+        }
+
+        ucs_error("invalid max_rd_atomic value: %s, can be up to %u",
+                  max_rd_atomic_str, init_attr->max_rd_atomic);
+
+        return UCS_ERR_INVALID_PARAM;
+    }
+
+    return UCS_OK;
+}
+
 UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                     uct_rc_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
@@ -558,12 +588,16 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                                      "RETRY_COUNT",
                                                      config->tx.retry_count,
                                                      UCT_RC_QP_MAX_RETRY_COUNT);
-    self->config.max_rd_atomic  = config->max_rd_atomic;
     self->config.ooo_rw         = config->ooo_rw;
 #if UCS_ENABLE_ASSERT
     self->tx.in_pending         = 0;
 #endif
     max_ib_msg_size             = uct_ib_iface_port_attr(&self->super)->max_msg_sz;
+
+    status = uct_rc_iface_init_max_rd_atomic(self, config, init_attr);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     if (config->tx.max_get_zcopy == UCS_MEMUNITS_AUTO) {
         self->config.max_get_zcopy = max_ib_msg_size;
