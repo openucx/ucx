@@ -122,7 +122,7 @@ uct_ud_iface_cep_insert_ready_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     ucs_conn_match_queue_type_t queue_type;
     int ret;
 
-    ucs_assert(!ucs_test_all_flags(ep->flags, UCT_UD_EP_FLAG_TX_RX));
+    ucs_assert(ep->flags & UCT_UD_EP_FLAG_TX_RX);
     ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_ON_CEP));
 
     queue_type = uct_ud_iface_cep_ep_queue_type(ep);

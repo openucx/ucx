@@ -290,6 +290,7 @@ static unsigned uct_ud_ep_deferred_timeout_handler(void *arg)
         goto out;
     }
 
+    ucs_assert(ep->flags & UCT_UD_EP_FLAG_TX);
     uct_ud_ep_purge(ep, UCS_ERR_ENDPOINT_TIMEOUT);
 
     status = uct_iface_handle_ep_err(&iface->super.super.super,
