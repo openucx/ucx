@@ -30,9 +30,7 @@
 #include <sys/resource.h>
 
 
-#define UCT_IB_MD_RCACHE_DEFAULT_ALIGN    16
-#define UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT (512 * UCS_MBYTE)
-
+#define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                sizeof(ucs_config_bw_spec_t),
@@ -1152,7 +1150,6 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
     struct ibv_device **device_list;
     ucs_status_t status;
     int i, num_devices;
-    size_t memlock_limit;
 
     UCS_MODULE_FRAMEWORK_LOAD(uct_ib, 0);
 
@@ -1181,23 +1178,6 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
                           sizeof(resources[num_resources].md_name),
                           "%s", ibv_get_device_name(device_list[i]));
         num_resources++;
-    }
-
-    if (num_resources != 0) {
-        status = ucs_sys_get_memlock_rlimit(&memlock_limit);
-        if ((status == UCS_OK) &&
-            (memlock_limit <= UCT_IB_MD_REQUIRED_MEMLOCK_LIMIIT)) {
-            /* Disable the RDMA devices because of too strict locked memory limit*/
-            ucs_warn("RDMA transports are disabled because max locked memory "
-                     "limit (%llu kbytes) is too low. Please set max locked "
-                     "memory (ulimit -l) to 'unlimited'",
-                     (memlock_limit / UCS_KBYTE));
-
-            *resources_p     = NULL;
-            *num_resources_p = 0;
-            ucs_free(resources);
-            goto out_free_device_list;
-        }
     }
 
     *resources_p     = resources;
