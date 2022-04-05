@@ -396,6 +396,7 @@ typedef struct uct_ib_mlx5_qp_attr {
     uct_ib_mlx5_mmio_mode_t     mmio_mode;
     uint32_t                    uidx;
     int                         full_handshake;
+    int                         rdma_wr_disabled;
 } uct_ib_mlx5_qp_attr_t;
 
 
@@ -678,12 +679,6 @@ ucs_status_t uct_ib_mlx5_devx_uar_init(uct_ib_mlx5_devx_uar_t *uar,
                                        uct_ib_mlx5_mmio_mode_t mmio_mode);
 
 void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
-
-/**
- * Check whether the interface uses AR.
- */
-int uct_ib_mlx5_iface_has_ar(uct_ib_iface_t *iface);
-
 
 void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
                                       int hw_ci_updated);

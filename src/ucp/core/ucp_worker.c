@@ -803,6 +803,76 @@ static void ucp_worker_uct_iface_close(ucp_worker_iface_t *wiface)
     }
 }
 
+static uint64_t ucp_worker_get_uct_features(ucp_context_h context)
+{
+    uint64_t features = 0;
+
+    if (context->config.features & UCP_FEATURE_TAG) {
+        features |= UCT_IFACE_FEATURE_TAG;
+    }
+
+    if (context->config.features &
+        (UCP_FEATURE_AM | UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
+         UCP_FEATURE_RMA | UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64)) {
+        features |= UCT_IFACE_FEATURE_AM;
+    }
+
+    if (context->config.features & UCP_FEATURE_RMA) {
+        features |= UCT_IFACE_FEATURE_PUT | UCT_IFACE_FEATURE_GET;
+    }
+
+    if (context->config.features & UCP_FEATURE_AMO32) {
+        features |= UCT_IFACE_FEATURE_AMO32;
+    }
+
+    if (context->config.features & UCP_FEATURE_AMO64) {
+        features |= UCT_IFACE_FEATURE_AMO64;
+    }
+
+    if (context->num_mem_type_detect_mds > 0) {
+        features |= UCT_IFACE_FEATURE_GET | UCT_IFACE_FEATURE_PUT;
+    }
+
+    if ((context->config.ext.rndv_mode == UCP_RNDV_MODE_AUTO) ||
+        (context->config.ext.rndv_mode == UCP_RNDV_MODE_GET_ZCOPY)) {
+        features |= UCT_IFACE_FEATURE_GET;
+    }
+
+    if (context->config.ext.rndv_mode == UCP_RNDV_MODE_PUT_ZCOPY) {
+        features |= UCT_IFACE_FEATURE_PUT;
+    }
+
+    return features;
+}
+
+static uint64_t ucp_worker_get_exclude_caps(ucp_worker_h worker)
+{
+    uint64_t features     = ucp_worker_get_uct_features(worker->context);
+    uint64_t exclude_caps = 0;
+
+
+    if (!(features & UCT_IFACE_FEATURE_TAG)) {
+        exclude_caps |= UCT_IFACE_FLAG_TAG_EAGER_SHORT |
+                        UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
+                        UCT_IFACE_FLAG_TAG_EAGER_ZCOPY |
+                        UCT_IFACE_FLAG_TAG_RNDV_ZCOPY;
+    }
+
+    if (!(features & UCT_IFACE_FEATURE_PUT)) {
+        exclude_caps |= UCT_IFACE_FLAG_PUT_SHORT |
+                        UCT_IFACE_FLAG_PUT_BCOPY |
+                        UCT_IFACE_FLAG_PUT_ZCOPY;
+    }
+
+    if (!(features & UCT_IFACE_FEATURE_GET)) {
+        exclude_caps |= UCT_IFACE_FLAG_GET_SHORT |
+                        UCT_IFACE_FLAG_GET_BCOPY |
+                        UCT_IFACE_FLAG_GET_ZCOPY;
+    }
+
+    return exclude_caps;
+}
+
 /* Check if the transport support at least one keepalive mechanism */
 static int ucp_worker_iface_support_keepalive(ucp_worker_iface_t *wiface)
 {
@@ -824,18 +894,19 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
     ucp_context_h ctx = worker->context;
     ucp_rsc_index_t rsc_index;
     ucp_worker_iface_t *if_iter;
-    uint64_t test_flags;
+    uint64_t test_flags, exclude_caps;
     double latency_iter, latency_cur, bw_cur;
 
     ucs_assert(wiface != NULL);
 
-    latency_cur = ucp_tl_iface_latency(ctx, &wiface->attr.latency);
-    bw_cur      = ucp_tl_iface_bandwidth(ctx, &wiface->attr.bandwidth);
+    latency_cur  = ucp_tl_iface_latency(ctx, &wiface->attr.latency);
+    bw_cur       = ucp_tl_iface_bandwidth(ctx, &wiface->attr.bandwidth);
+    exclude_caps = ucp_worker_get_exclude_caps(worker);
 
     test_flags = wiface->attr.cap.flags & ~(UCT_IFACE_FLAG_CONNECT_TO_IFACE |
                                             UCT_IFACE_FLAG_CONNECT_TO_EP |
                                             UCT_IFACE_FLAG_EP_CHECK |
-                                            UCT_IFACE_FLAG_EP_KEEPALIVE);
+                                            UCT_IFACE_FLAG_EP_KEEPALIVE | exclude_caps);
 
     for (rsc_index = 0; rsc_index < ctx->num_tls; ++rsc_index) {
         if_iter = worker->ifaces[rsc_index];
@@ -1202,6 +1273,9 @@ ucs_status_t ucp_worker_iface_open(ucp_worker_h worker, ucp_rsc_index_t tl_id,
         iface_params->am_align_offset = sizeof(ucp_am_hdr_t);
         iface_params->am_alignment    = worker->am.alignment;
     }
+
+    iface_params->field_mask |= UCT_IFACE_PARAM_FIELD_FEATURES;
+    iface_params->features    = ucp_worker_get_uct_features(worker->context);
 
     /* Open UCT interface */
     status = uct_iface_open(md, worker->uct, iface_params, iface_config,
