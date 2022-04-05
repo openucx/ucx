@@ -36,6 +36,22 @@ typedef struct uct_ib_iface          uct_ib_iface_t;
 
 
 /**
+ * IB port active speed.
+ */
+enum {
+    UCT_IB_SPEED_SDR     = 1,
+    UCT_IB_SPEED_DDR     = 2,
+    UCT_IB_SPEED_QDR     = 4,
+    UCT_IB_SPEED_FDR10   = 8,
+    UCT_IB_SPEED_FDR     = 16,
+    UCT_IB_SPEED_EDR     = 32,
+    UCT_IB_SPEED_HDR     = 64,
+    UCT_IB_SPEED_NDR     = 128,
+    UCT_IB_SPEED_LAST
+};
+
+
+/**
  * IB port/path MTU.
  */
 typedef enum uct_ib_mtu {
