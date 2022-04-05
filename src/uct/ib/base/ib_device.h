@@ -87,7 +87,7 @@ enum {
     UCT_IB_DEVICE_FLAG_AV       = UCS_BIT(8),   /* Device supports compact AV */
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
-    UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9),
+    UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9)
 };
 
 
@@ -226,6 +226,7 @@ typedef struct uct_ib_device {
     uint8_t                     pci_cswap_arg_sizes;
     uint8_t                     atomic_align;
     uint8_t                     lag_level;
+    uint64_t                    mr_access_flags;
     /* AH hash */
     khash_t(uct_ib_ah)          ah_hash;
     ucs_recursive_spinlock_t    ah_lock;
