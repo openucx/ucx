@@ -1113,7 +1113,7 @@ void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
         resent_skb->flags &= ~UCT_UD_SEND_SKB_FLAG_RESENDING;
         --cdesc->ep->tx.resend_count;
     } else {
-        ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL_ACK);
+        ucs_assert(skb->flags & UCT_UD_SEND_SKB_FLAG_CTL);
     }
 
     uct_ud_ep_window_release_completed(cdesc->ep, is_async);
