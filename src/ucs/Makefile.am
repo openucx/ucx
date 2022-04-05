@@ -109,6 +109,7 @@ noinst_HEADERS = \
 	debug/memtrack_int.h \
 	memory/numa.h \
 	memory/rcache_int.h \
+	memory/rcache.inl \
 	profile/profile.h \
 	stats/stats.h \
 	sys/checker.h \
