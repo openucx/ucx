@@ -263,6 +263,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
             ucs_fatal("invalid atomic length: %u", atomicreqh->length);
         }
 
+        ucp_request_send_state_init(req, ucp_dt_make_contig(1),
+                                    atomicreqh->length);
+
         req->flags                           = 0;
         req->send.ep                         = ep;
         req->send.atomic_reply.remote_req_id = atomicreqh->req.req_id;
