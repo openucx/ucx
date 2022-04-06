@@ -124,7 +124,7 @@ void ucs_init_ucm_opts()
     ucm_set_global_opts(&ucm_opts);
 }
 
-void ucs_opts_cleanup()
+void ucs_cleanup_ucm_opts()
 {
     UCS_CONFIG_REMOVE_TABLE(ucm_global_config_table);
 }
