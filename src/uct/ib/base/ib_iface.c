@@ -1181,6 +1181,11 @@ static void uct_ib_iface_set_num_paths(uct_ib_iface_t *iface,
             ucs_assert(iface->path_bits_count > 0);
             iface->num_paths = iface->path_bits_count;
         }
+
+        if ((iface->num_paths == 1) &&
+            (uct_ib_iface_port_attr(iface)->active_speed == UCT_IB_SPEED_NDR)) {
+            iface->num_paths = 2;
+        }
     } else {
         iface->num_paths = config->num_paths;
     }
@@ -1672,17 +1677,17 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
         ucs_diag("unknown active_speed on " UCT_IB_IFACE_FMT ": %d, fallback to SDR",
                  UCT_IB_IFACE_ARG(iface), active_speed);
         /* Fall through */
-    case 1: /* SDR */
+    case UCT_IB_SPEED_SDR:
         iface_attr->latency.c = 5000e-9;
         signal_rate           = 2.5e9;
         encoding              = 8.0/10.0;
         break;
-    case 2: /* DDR */
+    case UCT_IB_SPEED_DDR:
         iface_attr->latency.c = 2500e-9;
         signal_rate           = 5.0e9;
         encoding              = 8.0/10.0;
         break;
-    case 4:
+    case UCT_IB_SPEED_QDR:
         iface_attr->latency.c = 1300e-9;
         if (uct_ib_iface_is_roce(iface)) {
             /* 10/40g Eth  */
@@ -1694,27 +1699,27 @@ ucs_status_t uct_ib_iface_query(uct_ib_iface_t *iface, size_t xport_hdr_len,
             encoding          = 8.0/10.0;
         }
         break;
-    case 8: /* FDR10 */
+    case UCT_IB_SPEED_FDR10:
         iface_attr->latency.c = 700e-9;
         signal_rate           = 10.3125e9;
         encoding              = 64.0/66.0;
         break;
-    case 16: /* FDR */
+    case UCT_IB_SPEED_FDR:
         iface_attr->latency.c = 700e-9;
         signal_rate           = 14.0625e9;
         encoding              = 64.0/66.0;
         break;
-    case 32: /* EDR / 100g Eth */
+    case UCT_IB_SPEED_EDR:
         iface_attr->latency.c = 600e-9;
         signal_rate           = 25.78125e9;
         encoding              = 64.0/66.0;
         break;
-    case 64: /* HDR / HDR100 / 50g Eth */
+    case UCT_IB_SPEED_HDR:
         iface_attr->latency.c = 600e-9;
         signal_rate           = 25.78125e9 * 2;
         encoding              = 64.0/66.0;
         break;
-    case 128: /* NDR */
+    case UCT_IB_SPEED_NDR:
         iface_attr->latency.c = 600e-9;
         signal_rate           = 100e9;
         encoding              = 64.0/66.0;
