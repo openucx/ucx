@@ -7,12 +7,9 @@
 #ifndef UCT_IB_MLX5_DV_H_
 #define UCT_IB_MLX5_DV_H_
 
-#ifndef UCT_IB_MLX5_H_
-#  error "Never include <uct/ib/mlx5/ib_mlx5_dv.h> directly; use <uct/ib/mlx5/ib_mlx5.h> instead."
-#endif
-
 #include <ucs/type/status.h>
 #include <infiniband/verbs.h>
+#include <infiniband/mlx5dv.h>
 
 typedef struct {
     struct mlx5dv_obj  dv;

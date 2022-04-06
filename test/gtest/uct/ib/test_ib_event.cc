@@ -12,10 +12,9 @@
 
 extern "C" {
 #include <uct/ib/base/ib_device.h>
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #include <uct/ib/rc/accel/rc_mlx5.h>
-#include <uct/ib/mlx5/exp/ib_exp.h>
 #endif
 #include <uct/ib/rc/verbs/rc_verbs.h>
 }
@@ -130,7 +129,7 @@ class uct_ep_test_event : public uct_test_event_base {
 protected:
     void init_qp(entity &e) {
         if (GetParam()->tl_name == "rc_mlx5") {
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_DV
             m_qp.reset(new mlx5_qp(e));
 #else
             ucs_fatal("no mlx5 compile time support");
@@ -141,7 +140,7 @@ protected:
     }
 
 private:
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_DV
     class mlx5_qp : public qp {
     public:
         mlx5_qp(entity &e) : qp(e) {}
@@ -289,7 +288,7 @@ public:
 
     void init_qp(entity &e) {
         if (GetParam()->tl_name == "rc_mlx5") {
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_DV
             m_qp.reset(new mlx5_qp(e));
 #else
             ucs_fatal("no mlx5 compile time support");
@@ -332,7 +331,7 @@ protected:
     ucs::auto_ptr<entity> m_e;
 
 private:
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_DV
     class mlx5_qp : public qp {
     public:
         mlx5_qp(entity &e) : qp(e), m_txwq(), m_iface(), m_md() {
@@ -344,7 +343,6 @@ private:
             uct_rc_mlx5_iface_fill_attr(m_iface, &attr,
                                         m_iface->super.config.tx_qp_len,
                                         &m_iface->rx.srq);
-            uct_ib_exp_qp_fill_attr(&m_iface->super.super, &attr.super);
             status = uct_rc_mlx5_iface_create_qp(m_iface, &m_txwq.super,
                                                  &m_txwq, &attr);
             ASSERT_UCS_OK(status);

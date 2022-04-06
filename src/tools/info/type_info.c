@@ -44,7 +44,7 @@
 #  include <uct/ib/rc/base/rc_iface.h>
 #  include <uct/ib/rc/base/rc_ep.h>
 #  include <uct/ib/rc/verbs/rc_verbs.h>
-#  ifdef HAVE_MLX5_HW
+#  ifdef HAVE_MLX5_DV
 #    include <uct/ib/rc/accel/rc_mlx5.h>
 #  endif
 #endif
@@ -191,7 +191,7 @@ void print_type_info(const char * tl_name)
             PRINT_SIZE(uct_rc_verbs_iface_t);
         }
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
         if (tl_name == NULL || !strcasecmp(tl_name, "rc_mlx5")) {
             PRINT_SIZE(uct_rc_mlx5_am_short_hdr_t);
             PRINT_SIZE(uct_rc_mlx5_ep_t);

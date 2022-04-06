@@ -5,7 +5,7 @@
 */
 
 #include <uct/ib/test_ib.h>
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
 }
