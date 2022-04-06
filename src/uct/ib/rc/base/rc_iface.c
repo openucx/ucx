@@ -131,10 +131,8 @@ static ucs_stats_class_t uct_rc_iface_stats_class = {
     .num_counters  = UCT_RC_IFACE_STAT_LAST,
     .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
-        [UCT_RC_IFACE_STAT_RX_COMPLETION] = "rx_completion",
-        [UCT_RC_IFACE_STAT_TX_COMPLETION] = "tx_completion",
-        [UCT_RC_IFACE_STAT_NO_CQE]        = "no_cqe",
-        [UCT_RC_IFACE_STAT_NO_READS]      = "no_reads"
+        [UCT_RC_IFACE_STAT_NO_CQE]   = "no_cqe",
+        [UCT_RC_IFACE_STAT_NO_READS] = "no_reads"
     }
 };
 
@@ -638,7 +636,7 @@ UCS_CLASS_INIT_FUNC(uct_rc_iface_t, uct_iface_ops_t *tl_ops,
                                         uct_rc_ep_atomic_handler_64_be0;
 
     status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_rc_iface_stats_class,
-                                  self->super.super.stats, "-%p", self);
+                                  self->super.stats, "-%p", self);
     if (status != UCS_OK) {
         goto err_cleanup_tx_ops;
     }

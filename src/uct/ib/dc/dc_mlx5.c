@@ -232,7 +232,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
     if (cqe == NULL) {
         return 0;
     }
-    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats, UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
 
     ucs_memory_cpu_load_fence();
 

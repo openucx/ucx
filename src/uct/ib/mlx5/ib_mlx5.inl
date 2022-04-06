@@ -594,3 +594,17 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
 
     return UCS_OK;
 }
+
+
+static void UCS_F_ALWAYS_INLINE
+uct_ib_mlx5_update_cqe_zipping_stats(uct_ib_iface_t *iface,
+                                     uct_ib_mlx5_cq_t *cq)
+{
+    if ((cq->cq_unzip.title.op_own >> 4) == MLX5_CQE_REQ) {
+        UCS_STATS_UPDATE_COUNTER(iface->stats,
+                                 UCT_IB_IFACE_STAT_TX_COMPLETION_ZIPPED, 1);
+    } else {
+        UCS_STATS_UPDATE_COUNTER(iface->stats,
+                                 UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED, 1);
+    }
+}

@@ -58,7 +58,7 @@ static uct_iface_ops_t uct_rc_mlx5_iface_tl_ops;
 
 #ifdef ENABLE_STATS
 ucs_stats_class_t uct_rc_mlx5_iface_stats_class = {
-    .name          = "mlx5",
+    .name          = "rc_mlx5_iface",
     .num_counters  = UCT_RC_MLX5_IFACE_STAT_LAST,
     .class_id      = UCS_STATS_CLASS_ID_INVALID,
     .counter_names = {
@@ -81,6 +81,7 @@ uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
 
     if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
         ++cq->cq_ci;
+        uct_ib_mlx5_update_cqe_zipping_stats(&iface->super.super, cq);
         return uct_ib_mlx5_iface_cqe_unzip(cq);
     }
 
@@ -148,8 +149,8 @@ uct_rc_mlx5_iface_poll_tx(uct_rc_mlx5_iface_common_t *iface)
         return 0;
     }
 
-    UCS_STATS_UPDATE_COUNTER(iface->super.stats,
-                             UCT_RC_IFACE_STAT_TX_COMPLETION, 1);
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
 
     ucs_memory_cpu_load_fence();
 
