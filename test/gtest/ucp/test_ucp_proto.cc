@@ -114,8 +114,7 @@ UCS_TEST_P(test_ucp_proto, dump_protocols) {
     select_param.mem_type   = UCS_MEMORY_TYPE_HOST;
     select_param.sys_dev    = UCS_SYS_DEVICE_ID_UNKNOWN;
     select_param.sg_count   = 1;
-    select_param.padding[0] = 0;
-    select_param.padding[1] = 0;
+    select_param.padding    = 0;
 
     ucs_string_buffer_init(&strb);
     ucp_proto_select_param_str(&select_param, ucp_operation_names, &strb);

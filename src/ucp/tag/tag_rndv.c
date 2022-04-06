@@ -13,6 +13,7 @@
 
 #include <ucp/proto/proto_single.inl>
 #include <ucp/rndv/proto_rndv.inl>
+#include <ucp/rndv/rndv.inl>
 
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
@@ -23,12 +24,8 @@ void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
     rreq->recv.tag.info.sender_tag = ucp_tag_hdr_from_rts(rts_hdr)->tag;
     rreq->recv.tag.info.length     = rts_hdr->size;
 
-    if (worker->context->config.ext.proto_enable) {
-        ucp_proto_rndv_receive_start(worker, rreq, rts_hdr, rts_hdr + 1,
-                                     hdr_length - sizeof(*rts_hdr));
-    } else {
-        ucp_rndv_receive(worker, rreq, rts_hdr, rts_hdr + 1);
-    }
+    ucp_rndv_receive_start(worker, rreq, rts_hdr, rts_hdr + 1,
+                           hdr_length - sizeof(*rts_hdr));
 }
 
 ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
@@ -149,42 +146,22 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
                             NULL);
 }
 
-static void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
-                                     ucp_proto_query_attr_t *attr)
+ucs_status_t ucp_tag_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
-    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
-    ucp_proto_query_attr_t remote_attr;
-
-    ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
-                                params->msg_length, &remote_attr);
-
-    attr->is_estimation  = 1;
-    attr->max_msg_length = SIZE_MAX;
-
-    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
-                      remote_attr.desc);
-    ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
-}
-
-static void ucp_tag_rndv_proto_abort(ucp_request_t *request,
-                                     ucs_status_t status)
-{
-    if (request->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-        ucp_send_request_id_release(request);
-        ucp_datatype_iter_mem_dereg(request->send.ep->worker->context,
-                                    &request->send.state.dt_iter,
-                                    UCP_DT_MASK_ALL);
+    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_TAG_SEND);
+    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
+        return UCS_ERR_UNSUPPORTED;
     }
 
-    ucp_request_complete_send(request, status);
+    return ucp_proto_rndv_rts_init(init_params);
 }
 
 ucp_proto_t ucp_tag_rndv_proto = {
     .name     = "tag/rndv",
     .desc     = NULL,
     .flags    = 0,
-    .init     = ucp_proto_rndv_rts_init,
+    .init     = ucp_tag_rndv_rts_init,
     .query    = ucp_proto_rndv_rts_query,
     .progress = {ucp_tag_rndv_rts_progress},
-    .abort    = ucp_tag_rndv_proto_abort
+    .abort    = ucp_proto_rndv_rts_abort
 };

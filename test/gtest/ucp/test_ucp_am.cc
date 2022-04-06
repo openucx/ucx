@@ -1289,6 +1289,27 @@ public:
         modify_config("RNDV_THRESH", "128");
     }
 
+    virtual void init()
+    {
+        test_ucp_am_nbx::init();
+
+        if (enable_proto()) {
+            modify_config("PROTO_ENABLE", "y");
+        }
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
+    {
+        add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 0);
+        add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 1,
+                           "proto");
+    }
+
+    virtual unsigned enable_proto()
+    {
+        return get_variant_value(1);
+    }
+
     ucs_status_t am_data_handler(const void *header, size_t header_length,
                                  void *data, size_t length,
                                  const ucp_am_recv_param_t *rx_param)
@@ -1503,6 +1524,11 @@ public:
         destroy_dt(m_rx_dt);
 
         test_ucp_am_nbx::cleanup();
+    }
+
+    virtual unsigned enable_proto()
+    {
+        return 0;
     }
 };
 

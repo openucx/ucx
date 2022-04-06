@@ -105,16 +105,4 @@ void ucp_rndv_receive(ucp_worker_h worker, ucp_request_t *rreq,
 ucs_status_t ucp_rndv_send_handle_status_from_pending(ucp_request_t *sreq,
                                                       ucs_status_t status);
 
-static UCS_F_ALWAYS_INLINE int
-ucp_rndv_rts_is_am(const ucp_rndv_rts_hdr_t *rts_hdr)
-{
-    return rts_hdr->opcode == UCP_RNDV_RTS_AM;
-}
-
-static UCS_F_ALWAYS_INLINE int
-ucp_rndv_rts_is_tag(const ucp_rndv_rts_hdr_t *rts_hdr)
-{
-    return rts_hdr->opcode == UCP_RNDV_RTS_TAG_OK;
-}
-
 #endif

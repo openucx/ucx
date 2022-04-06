@@ -218,7 +218,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_atomic_op_nbx,
         status_p = ucp_proto_request_send_op(
                 ep, &ucp_rkey_config(ep->worker, rkey)->proto_select,
                 rkey->cfg_index, req, op_id, buffer, 1, param->datatype,
-                op_size, param, 0);
+                op_size, param, 0, 0);
     } else {
         status = UCP_RKEY_RESOLVE(rkey, ep, amo);
         if (status != UCS_OK) {

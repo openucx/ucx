@@ -217,7 +217,7 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           const void *buffer, size_t count,
                           ucp_datatype_t datatype, size_t contig_length,
                           const ucp_request_param_t *param,
-                          size_t header_length)
+                          size_t header_length, uint16_t op_flags)
 {
     ucp_worker_h worker = ep->worker;
     ucp_proto_select_param_t sel_param;
@@ -231,8 +231,8 @@ ucp_proto_request_send_op(ucp_ep_h ep, ucp_proto_select_t *proto_select,
                           (void*)buffer, count, datatype, contig_length, 1,
                           &req->send.state.dt_iter, &sg_count);
 
-    ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask, 0,
-                                req->send.state.dt_iter.dt_class,
+    ucp_proto_select_param_init(&sel_param, op_id, param->op_attr_mask,
+                                op_flags, req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 
     status = UCS_PROFILE_CALL(ucp_proto_request_lookup_proto, worker, ep, req,

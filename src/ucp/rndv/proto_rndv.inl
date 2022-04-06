@@ -299,7 +299,13 @@ ucp_proto_rndv_recv_complete_status(ucp_request_t *req, ucs_status_t status)
 
     ucs_assert(!ucp_proto_rndv_request_is_ppln_frag(req));
 
-    ucp_request_complete_tag_recv(rreq, status);
+    if (rreq->flags & UCP_REQUEST_FLAG_RECV_AM) {
+        ucp_request_complete_am_recv(rreq, status);
+    } else {
+        ucs_assert(rreq->flags & UCP_REQUEST_FLAG_RECV_TAG);
+        ucp_request_complete_tag_recv(rreq, status);
+    }
+
     ucp_request_put(req);
     return UCS_OK;
 }

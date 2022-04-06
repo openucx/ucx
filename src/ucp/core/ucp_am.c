@@ -15,7 +15,7 @@
 #include <ucp/core/ucp_ep.inl>
 #include <ucp/core/ucp_worker.h>
 #include <ucp/core/ucp_context.h>
-#include <ucp/rndv/rndv.h>
+#include <ucp/rndv/rndv.inl>
 #include <ucp/proto/proto_am.inl>
 #include <ucp/proto/proto_common.inl>
 #include <ucp/dt/dt.h>
@@ -940,6 +940,17 @@ ucp_am_try_send_short(ucp_ep_h ep, uint16_t id, uint32_t flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
+static UCS_F_ALWAYS_INLINE uint16_t ucp_am_send_nbx_get_op_flag(uint32_t flags)
+{
+    if (flags & UCP_AM_SEND_FLAG_EAGER) {
+        return UCP_PROTO_SELECT_OP_FLAG_AM_EAGER;
+    } else if (flags & UCP_AM_SEND_FLAG_RNDV) {
+        return UCP_PROTO_SELECT_OP_FLAG_AM_RNDV;
+    }
+
+    return 0;
+}
+
 UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
                  (ep, id, header, header_length, buffer, count, param),
                  ucp_ep_h ep, unsigned id, const void *header,
@@ -1024,7 +1035,8 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_send_nbx,
         ret = ucp_proto_request_send_op(ep, &ucp_ep_config(ep)->proto_select,
                                         UCP_WORKER_CFG_INDEX_NULL, req, op_id,
                                         buffer, count, datatype, contig_length,
-                                        param, header_length);
+                                        param, header_length,
+                                        ucp_am_send_nbx_get_op_flag(flags));
     } else {
         ucp_am_send_req_init(req, ep, header, header_length, buffer, datatype,
                              count, flags, id, param);
@@ -1070,7 +1082,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
     ucs_memory_type_t mem_type;
     ucp_rndv_rts_hdr_t *rts;
     ucs_status_t status;
-    size_t recv_length;
+    size_t recv_length, rkey_length;
 
     /* Sanity check if the descriptor has been released */
     if (ENABLE_PARAMS_CHECK &&
@@ -1138,7 +1150,9 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
                     "rx buffer too small %zu, need %zu", req->recv.length,
                     rts->size);
 
-        ucp_rndv_receive(worker, req, rts, rts + 1);
+        rkey_length = desc->length - sizeof(*rts) -
+                      ucp_am_hdr_from_rts(rts)->header_length;
+        ucp_rndv_receive_start(worker, req, rts, rts + 1, rkey_length);
         ret = req + 1;
         goto out;
     }

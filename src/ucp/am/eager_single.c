@@ -8,6 +8,7 @@
 #endif
 
 #include "eager.inl"
+#include "ucp_am.inl"
 
 #include <ucp/core/ucp_request.h>
 #include <ucp/core/ucp_am.h>
@@ -102,7 +103,8 @@ ucp_am_eager_short_proto_init_common(const ucp_proto_init_params_t *init_params,
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_SHORT
     };
 
-    if ((init_params->select_param->op_id != op_id) ||
+    if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
         !ucp_proto_is_short_supported(select_param)) {
         return UCS_ERR_UNSUPPORTED;
     }
@@ -231,7 +233,8 @@ static ucs_status_t ucp_am_eager_single_bcopy_proto_init_common(
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_BCOPY
     };
 
-    if (init_params->select_param->op_id != op_id) {
+    if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -314,7 +317,8 @@ static ucs_status_t ucp_am_eager_single_zcopy_proto_init_common(
         .tl_cap_flags        = UCT_IFACE_FLAG_AM_ZCOPY
     };
 
-    if ((init_params->select_param->op_id != op_id) ||
+    if (!ucp_am_check_init_params(init_params, UCS_BIT(op_id),
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV) ||
         (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
         return UCS_ERR_UNSUPPORTED;
     }

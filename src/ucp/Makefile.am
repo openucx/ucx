@@ -22,6 +22,7 @@ nobase_dist_libucp_la_HEADERS = \
 
 noinst_HEADERS = \
 	am/eager.inl \
+	am/ucp_am.inl \
 	core/ucp_am.h \
 	core/ucp_context.h \
 	core/ucp_ep.h \
@@ -67,6 +68,7 @@ noinst_HEADERS = \
 	rndv/proto_rndv.inl \
 	rndv/rndv_mtype.inl \
 	rndv/rndv.h \
+	rndv/rndv.inl \
 	tag/eager.h \
 	tag/proto_eager.inl \
 	tag/tag_rndv.h \
@@ -98,6 +100,7 @@ endif
 libucp_la_SOURCES = \
 	am/eager_single.c \
 	am/eager_multi.c \
+	am/rndv.c \
 	core/ucp_context.c \
 	core/ucp_am.c \
 	core/ucp_ep.c \

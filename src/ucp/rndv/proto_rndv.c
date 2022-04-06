@@ -311,13 +311,35 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .mem_info.sys_dev    = init_params->select_param->sys_dev
     };
 
-    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_TAG_SEND);
+    return ucp_proto_rndv_ctrl_init(&params);
+}
 
-    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
-        return UCS_ERR_UNSUPPORTED;
+void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
+                              ucp_proto_query_attr_t *attr)
+{
+    const ucp_proto_rndv_ctrl_priv_t *rpriv = params->priv;
+    ucp_proto_query_attr_t remote_attr;
+
+    ucp_proto_select_elem_query(params->worker, &rpriv->remote_proto,
+                                params->msg_length, &remote_attr);
+
+    attr->is_estimation  = 1;
+    attr->max_msg_length = SIZE_MAX;
+
+    ucs_snprintf_safe(attr->desc, sizeof(attr->desc), "rendezvous %s",
+                      remote_attr.desc);
+    ucs_strncpy_safe(attr->config, remote_attr.config, sizeof(attr->config));
+}
+
+void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status)
+{
+    if (req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
+        ucp_send_request_id_release(req);
+        ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
+                                    &req->send.state.dt_iter, UCP_DT_MASK_ALL);
     }
 
-    return ucp_proto_rndv_ctrl_init(&params);
+    ucp_request_complete_send(req, status);
 }
 
 static ucs_status_t
