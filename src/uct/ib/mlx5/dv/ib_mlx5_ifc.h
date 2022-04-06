@@ -1243,7 +1243,7 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         st[0x8];
     uint8_t         reserved_at_10[0x3];
     uint8_t         pm_state[0x2];
-    uint8_t         reserved_at_15[0x1];
+    uint8_t         rdma_wr_disabled[0x1];
     uint8_t         req_e2e_credit_mode[0x2];
     uint8_t         offload_type[0x4];
     uint8_t         end_padding_mode[0x2];

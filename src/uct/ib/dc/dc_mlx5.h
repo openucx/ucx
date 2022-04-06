@@ -50,6 +50,23 @@ struct ibv_ravh {
         _txwq = &(_iface)->tx.dcis[_dci].txwq; \
     }
 
+/**
+ * Set iface config flag for enabling full handshake on DCI/DCT,
+ * according to user configuration. Fail if the user requests to
+ * force full-handlshake, while the HW does not support it.
+ */
+#define UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(_self, _config, _config_name, \
+                                               _flag_name, _status, _err) \
+    if (!((_self)->version_flag & UCT_IB_DEVICE_FLAG_DC_V2) && \
+        ((_config)->_config_name##_full_handshake == UCS_YES)) { \
+        _status = UCS_ERR_UNSUPPORTED; \
+        goto _err; \
+    } \
+    if ((_config)->_config_name##_full_handshake != UCS_NO) { \
+        (_self)->flags |= UCT_DC_MLX5_IFACE_FLAG_##_flag_name##_FULL_HANDSHAKE; \
+    }
+
+
 typedef struct uct_dc_mlx5_ep     uct_dc_mlx5_ep_t;
 typedef struct uct_dc_mlx5_iface  uct_dc_mlx5_iface_t;
 
@@ -77,7 +94,16 @@ typedef enum {
     UCT_DC_MLX5_IFACE_FLAG_FC_EP_FAILED             = UCS_BIT(3),
 
     /** Ignore DCI allocation reorder */
-    UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER      = UCS_BIT(4)
+    UCT_DC_MLX5_IFACE_IGNORE_DCI_WAITQ_REORDER      = UCS_BIT(4),
+
+    /** Enable full handshake for DCI */
+    UCT_DC_MLX5_IFACE_FLAG_DCI_FULL_HANDSHAKE       = UCS_BIT(5),
+
+    /** Enable full handshake for DCT */
+    UCT_DC_MLX5_IFACE_FLAG_DCT_FULL_HANDSHAKE       = UCS_BIT(6),
+
+    /** Disable PUT capability (RDMA_WRITE) */
+    UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT              = UCS_BIT(7)
 } uct_dc_mlx5_iface_flags_t;
 
 
@@ -134,9 +160,9 @@ typedef struct uct_dc_mlx5_iface_config {
     uct_ud_iface_common_config_t        ud_common;
     int                                 ndci;
     int                                 tx_policy;
-    ucs_on_off_auto_value_t             dci_full_handshake;
-    ucs_on_off_auto_value_t             dci_ka_full_handshake;
-    ucs_on_off_auto_value_t             dct_full_handshake;
+    ucs_ternary_auto_value_t            dci_full_handshake;
+    ucs_ternary_auto_value_t            dci_ka_full_handshake;
+    ucs_ternary_auto_value_t            dct_full_handshake;
     unsigned                            quota;
     unsigned                            rand_seed;
     ucs_time_t                          fc_hard_req_timeout;
@@ -319,8 +345,7 @@ void uct_dc_mlx5_iface_reset_dci(uct_dc_mlx5_iface_t *iface, uint8_t dci_index);
 
 #if HAVE_DEVX
 
-ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface,
-                                               int full_handshake);
+ucs_status_t uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface);
 
 ucs_status_t uct_dc_mlx5_iface_devx_set_srq_dc_params(uct_dc_mlx5_iface_t *iface);
 
@@ -330,8 +355,8 @@ ucs_status_t uct_dc_mlx5_iface_devx_dci_connect(uct_dc_mlx5_iface_t *iface,
 
 #else
 
-static UCS_F_MAYBE_UNUSED ucs_status_t uct_dc_mlx5_iface_devx_create_dct(
-        uct_dc_mlx5_iface_t *iface, int full_handshake)
+static UCS_F_MAYBE_UNUSED ucs_status_t
+uct_dc_mlx5_iface_devx_create_dct(uct_dc_mlx5_iface_t *iface)
 {
     return UCS_ERR_UNSUPPORTED;
 }
