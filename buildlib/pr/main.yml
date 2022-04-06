@@ -201,7 +201,7 @@ stages:
             centos7:
               CONTAINER: centos7_ib
               test_static: yes
-              extra_modules: ucx-ib ucx-cma
+              extra_modules: ucx-ib ucx-cma ucx-rdmacm
               extra_tls: dc_mlx5 rc_mlx5 ud_mlx5 rc_verbs ud_verbs cma
               run_tls: ib rc rc_v rc_x dc dc_x ud ud_v ud_x shm sm
         container: $[ variables['CONTAINER'] ]
