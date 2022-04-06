@@ -324,13 +324,16 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
         attr.super.max_inl_cqe[UCT_IB_DIR_RX] = 0;
         attr.uidx             = htonl(dci_index) >> UCT_IB_UIDX_SHIFT;
         attr.full_handshake   = full_handshake;
-        attr.rdma_wr_disabled = iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT;
+        attr.rdma_wr_disabled = (iface->flags & UCT_DC_MLX5_IFACE_FLAG_DISABLE_PUT) &&
+                                (md->flags & UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED);
         status = uct_ib_mlx5_devx_create_qp(ib_iface, &dci->txwq.super,
                                             &dci->txwq, &attr);
         if (status != UCS_OK) {
             return status;
         }
 
+        ucs_debug("created DevX DCI 0x%x, rdma_wr_disabled=%d", dci->txwq.super.qp_num,
+                  attr.rdma_wr_disabled);
         goto init_qp;
     }
 

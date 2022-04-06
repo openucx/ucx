@@ -272,7 +272,8 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    rc[0x1];
 
     uint8_t    uar_4k[0x1];
-    uint8_t    reserved_at_241[0x9];
+    uint8_t    dci_no_rdma_wr_optimized_performance[0x1];
+    uint8_t    reserved_at_242[0x8];
     uint8_t    uar_sz[0x6];
     uint8_t    reserved_at_250[0x8];
     uint8_t    log_pg_sz[0x8];

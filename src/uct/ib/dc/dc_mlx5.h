@@ -57,7 +57,7 @@ struct ibv_ravh {
  */
 #define UCT_DC_MLX5_CHECK_FORCE_FULL_HANDSHAKE(_self, _config, _config_name, \
                                                _flag_name, _status, _err) \
-    if (!((_self)->version_flag & UCT_IB_DEVICE_FLAG_DC_V2) && \
+    if (!((_self)->version_flag & UCT_DC_MLX5_IFACE_ADDR_DC_V2) && \
         ((_config)->_config_name##_full_handshake == UCS_YES)) { \
         _status = UCS_ERR_UNSUPPORTED; \
         goto _err; \
