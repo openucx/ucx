@@ -1062,9 +1062,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
 
     ucs_debug("%s: opened DEVX md", ibv_get_device_name(ibv_device));
 
-    dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
-    md->flags  |= UCT_IB_MLX5_MD_FLAG_DEVX;
-    md->flags  |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
+    dev->flags     |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
+    md->flags      |= UCT_IB_MLX5_MD_FLAG_DEVX;
+    md->flags      |= UCT_IB_MLX5_MD_FLAGS_DEVX_OBJS(md_config->devx_objs);
+    md->super.name  = UCT_IB_MD_NAME(mlx5);
 
     if (ucs_test_all_flags(md->flags, UCT_IB_MLX5_MD_FLAG_KSM |
                                       UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS)) {
@@ -1307,7 +1308,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
+    dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
+    md->super.name = UCT_IB_MD_NAME(mlx5);
 
     /* cppcheck-suppress autoVariables */
     *p_md = &md->super;

@@ -1777,7 +1777,8 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         goto err_dev_cfg;
     }
 
-    md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
+    md->dev.flags = uct_ib_device_spec(&md->dev)->flags;
+    md->name      = UCT_IB_MD_NAME(verbs);
 
     *p_md = md;
     return UCS_OK;
