@@ -483,6 +483,9 @@ uct_ud_mlx5_iface_poll_rx(uct_ud_mlx5_iface_t *iface, int is_async)
         goto out;
     }
 
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_RX_COMPLETION, 1);
+
     ucs_memory_cpu_load_fence();
 
     ucs_assert(0 == (cqe->op_own &
@@ -533,6 +536,9 @@ uct_ud_mlx5_iface_poll_tx(uct_ud_mlx5_iface_t *iface, int is_async)
     if (cqe == NULL) {
         return 0;
     }
+
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
 
     ucs_memory_cpu_load_fence();
 
@@ -672,7 +678,6 @@ uct_ud_mlx5_ep_create(const uct_ep_params_t* params, uct_ep_h *ep_p)
 
     return uct_ud_mlx5_ep_t_new(params, ep_p);
 }
-
 
 static ucs_status_t
 uct_ud_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,

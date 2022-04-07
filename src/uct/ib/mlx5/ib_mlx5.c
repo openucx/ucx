@@ -482,6 +482,7 @@ uct_ib_mlx5_check_completion(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq,
 
     if (uct_ib_mlx5_check_and_init_zipped(cq, cqe)) {
         ++cq->cq_ci;
+        uct_ib_mlx5_update_cqe_zipping_stats(iface, cq);
         return uct_ib_mlx5_iface_cqe_unzip(cq);
     }
 

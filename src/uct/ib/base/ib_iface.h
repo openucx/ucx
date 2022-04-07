@@ -97,6 +97,13 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
 };
 
+enum {
+    UCT_IB_IFACE_STAT_RX_COMPLETION,
+    UCT_IB_IFACE_STAT_TX_COMPLETION,
+    UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED,
+    UCT_IB_IFACE_STAT_TX_COMPLETION_ZIPPED,
+    UCT_IB_IFACE_STAT_LAST
+};
 
 typedef struct uct_ib_address_pack_params {
     /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
@@ -302,6 +309,7 @@ struct uct_ib_iface {
     } config;
 
     uct_ib_iface_ops_t        *ops;
+    UCS_STATS_NODE_DECLARE(stats)
 };
 
 

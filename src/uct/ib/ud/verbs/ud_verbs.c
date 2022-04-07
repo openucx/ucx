@@ -375,6 +375,9 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
         return 0;
     }
 
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
+
     num_completed = wc.wr_id + 1;
     ucs_assertv(num_completed <= UCT_UD_TX_MODERATION, "num_compeleted=%u",
                 num_completed);
@@ -400,6 +403,9 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
         num_wcs = 0;
         goto out;
     }
+
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
         if (!uct_ud_iface_check_grh(&iface->super, packet,

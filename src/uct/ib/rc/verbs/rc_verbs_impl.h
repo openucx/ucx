@@ -110,7 +110,8 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }
     iface->super.rx.srq.available += num_wcs;
-    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
     uct_rc_verbs_iface_post_recv_common(iface, 0);

@@ -219,6 +219,20 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
   {NULL}
 };
 
+#ifdef ENABLE_STATS
+static ucs_stats_class_t uct_ib_iface_stats_class = {
+    .name          = "ib_iface",
+    .num_counters  = UCT_IB_IFACE_STAT_LAST,
+    .class_id      = UCS_STATS_CLASS_ID_INVALID,
+    .counter_names = {
+        [UCT_IB_IFACE_STAT_RX_COMPLETION]        = "rx_completion",
+        [UCT_IB_IFACE_STAT_TX_COMPLETION]        = "tx_completion",
+        [UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED] = "rx_completion_zipped",
+        [UCT_IB_IFACE_STAT_TX_COMPLETION_ZIPPED] = "tx_completion_zipped"
+    }
+};
+#endif /* ENABLE_STATS */
+
 int uct_ib_iface_is_roce(uct_ib_iface_t *iface)
 {
     return uct_ib_device_is_port_roce(uct_ib_iface_device(iface),
@@ -1473,10 +1487,16 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
         goto err_destroy_comp_channel;
     }
 
+    status = UCS_STATS_NODE_ALLOC(&self->stats, &uct_ib_iface_stats_class,
+                                  self->super.stats, "-%p", self);
+    if (status != UCS_OK) {
+        goto err_destroy_comp_channel;
+    }
+
     status = uct_ib_iface_create_cq(self, UCT_IB_DIR_TX, init_attr,
                                     config, preferred_cpu);
     if (status != UCS_OK) {
-        goto err_destroy_comp_channel;
+        goto err_destroy_stats;
     }
 
     status = uct_ib_iface_set_moderation(self->cq[UCT_IB_DIR_TX],
@@ -1522,6 +1542,8 @@ err_destroy_recv_cq:
     ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
 err_destroy_send_cq:
     ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
+err_destroy_stats:
+    UCS_STATS_NODE_FREE(self->stats);
 err_destroy_comp_channel:
     ibv_destroy_comp_channel(self->comp_channel);
 err_cleanup:
@@ -1543,6 +1565,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ib_iface_t)
     if (ret != 0) {
         ucs_warn("ibv_destroy_cq(send_cq) returned %d: %m", ret);
     }
+
+    UCS_STATS_NODE_FREE(self->stats);
 
     ret = ibv_destroy_comp_channel(self->comp_channel);
     if (ret != 0) {
