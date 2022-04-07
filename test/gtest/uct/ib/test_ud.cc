@@ -139,18 +139,42 @@ public:
         EXPECT_EQ(value - no_creq_cnt(ep), ucs_frag_list_sn(&ep->rx.ooo_pkts));
     }
 
-    void validate_flush() {
+    typedef struct {
+        struct {
+            uct_ud_psn_t tx_psn;
+            uct_ud_psn_t tx_acked_psn;
+        } sender;
+
+        struct {
+            uct_ud_psn_t       tx_psn;
+            uct_ud_psn_t       rx_acked_psn;
+            ucs_frag_list_sn_t frag_list_sn;
+        } receiver;
+    } test_ud_flush_state_t;
+
+    void save_state_prior_flush(test_ud_flush_state_t &flush_state) {
+        flush_state.sender.tx_psn       = ep(m_e1)->tx.psn;
+        flush_state.sender.tx_acked_psn = ep(m_e1)->tx.acked_psn;
+
+        flush_state.receiver.tx_psn       = ep(m_e2)->tx.psn;
+        flush_state.receiver.rx_acked_psn = ep(m_e2)->rx.acked_psn;
+        flush_state.receiver.frag_list_sn = ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts);
+    }
+
+    void validate_flush(const test_ud_flush_state_t &flush_state) {
         /* 1 packets transmitted, 1 packets received */
-        EXPECT_EQ(2, ep(m_e1)->tx.psn);
-        EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+        EXPECT_EQ(flush_state.sender.tx_psn + 1, ep(m_e1)->tx.psn);
+        EXPECT_EQ(flush_state.receiver.frag_list_sn + 1,
+                  ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 
         /* no data transmitted back */
-        EXPECT_EQ(1, ep(m_e2)->tx.psn);
+        EXPECT_EQ(flush_state.receiver.tx_psn, ep(m_e2)->tx.psn);
 
         /* one packet was acked */
-        EXPECT_EQ(0U, ucs_queue_length(&ep(m_e1)->tx.window));
-        EXPECT_EQ(1, ep(m_e1)->tx.acked_psn);
-        EXPECT_EQ(1, ep(m_e2)->rx.acked_psn);
+        EXPECT_EQ(0lu, ucs_queue_length(&ep(m_e1)->tx.window));
+        EXPECT_EQ(flush_state.sender.tx_acked_psn + 1, ep(m_e1)->tx.acked_psn);
+        EXPECT_EQ(flush_state.receiver.rx_acked_psn + 1,
+                  ep(m_e2)->rx.acked_psn);
     }
 
     void check_connection() {
@@ -268,19 +292,27 @@ UCS_TEST_SKIP_COND_P(test_ud, tx_window1,
 UCS_TEST_SKIP_COND_P(test_ud, flush_ep,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     connect();
+
+    test_ud_flush_state_t flush_state;
+    save_state_prior_flush(flush_state);
+
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(ep_flush_b(m_e1));
 
-    validate_flush();
+    validate_flush(flush_state);
 }
 
 UCS_TEST_SKIP_COND_P(test_ud, flush_iface,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
     connect();
+
+    test_ud_flush_state_t flush_state;
+    save_state_prior_flush(flush_state);
+
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(iface_flush_b(m_e1));
 
-    validate_flush();
+    validate_flush(flush_state);
 }
 
 #if UCT_UD_EP_DEBUG_HOOKS
@@ -716,14 +748,14 @@ UCS_TEST_SKIP_COND_P(test_ud, connect_iface_seq,
     m_e1->connect_to_iface(0, *m_e2);
     validate_connect(ep(m_e1), 0U);
     EXPECT_EQ(2, ep(m_e1)->tx.psn);
-    /* one becase of crep */
+    /* one becasue of crep */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e1)->rx.ooo_pkts));
 
     /* now side two connects. existing ep will be reused */
     m_e2->connect_to_iface(0, *m_e1);
     validate_connect(ep(m_e2), 0U);
-    EXPECT_EQ(2, ep(m_e2)->tx.psn);
-    /* one becase creq sets initial psn */
+    EXPECT_EQ(3, ep(m_e2)->tx.psn);
+    /* one because creq sets initial psn */
     EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 
     check_connection();
@@ -812,6 +844,10 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
     uct_ep_params_t ep_params;
 
     connect();
+
+    test_ud_flush_state_t flush_state;
+    save_state_prior_flush(flush_state);
+
     EXPECT_UCS_OK(tx(m_e1));
     short_progress_loop();
 
@@ -819,7 +855,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
     uct_ep_destroy(m_e1->ep(0));
     /* ep destroy should try to flush outstanding packets */
     short_progress_loop();
-    validate_flush();
+    validate_flush(flush_state);
 
     /* next created ep must not reuse old id */
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
@@ -836,16 +872,25 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
 
 UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    connect();
+    m_e1->connect_to_iface(0, *m_e2);
+    m_e2->connect_to_iface(0, *m_e1);
+
+    /* Progress to connect peers */
+    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
     /* m_e2::ep[0] has to be revoked at the end of the testing */
     uct_ep_destroy(m_e2->ep(0));
+    /* Progress to send/receive FIN pakcet on a receiver's side */
+    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
+
+    test_ud_flush_state_t flush_state;
+    save_state_prior_flush(flush_state);
 
     /* destroyed ep must still accept data */
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(ep_flush_b(m_e1));
 
-    validate_flush();
+    validate_flush(flush_state);
 
     /* revoke m_e2::ep[0] as it was destroyed manually */
     m_e2->revoke_ep(0);

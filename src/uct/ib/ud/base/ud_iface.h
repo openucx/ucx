@@ -73,10 +73,10 @@ typedef ucs_status_t (*uct_ud_iface_hook_t)(uct_ud_iface_t *iface, uct_ud_neth_t
     uct_ud_iface_hook_t _name;
 
 
-#define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _len) \
+#define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _exit_action) \
     if ((_iface)->rx.hook(_iface, _neth) != UCS_OK) { \
         ucs_trace_data("RX: dropping packet"); \
-        return; \
+        _exit_action; \
     }
 
 
@@ -94,7 +94,7 @@ static inline ucs_status_t uct_ud_iface_null_hook(uct_ud_iface_t *iface,
 #else
 
 #define UCT_UD_IFACE_HOOK_DECLARE(_name)
-#define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _len)
+#define UCT_UD_IFACE_HOOK_CALL_RX(_iface, _neth, _exit_action)
 #define UCT_UD_IFACE_HOOK_INIT(_iface)
 
 #endif
@@ -227,6 +227,7 @@ struct uct_ud_ctl_hdr {
             uct_ud_ep_addr_t    ep_addr;
             uct_ud_ep_conn_sn_t conn_sn;
             uint8_t             path_index;
+            uint32_t            dest_ep_id;
         } conn_req;
         struct {
             uint32_t            src_ep_id;

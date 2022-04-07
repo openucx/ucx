@@ -132,12 +132,12 @@ enum {
     UCT_UD_SEND_SKB_FLAG_RESENDING  = UCS_BIT(3), /* An active control skb refers to this skb */
 
 #if UCS_ENABLE_ASSERT
-    UCT_UD_SEND_SKB_FLAG_CTL        = UCS_BIT(5), /* This is a control-ack skb */
-    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = UCS_BIT(6), /* This is a control-resend skb */
-    UCT_UD_SEND_SKB_FLAG_INVALID    = UCS_BIT(8)  /* skb is released */
+    UCT_UD_SEND_SKB_FLAG_CTL_ACK    = UCS_BIT(5), /* This is a control-ack skb */
+    UCT_UD_SEND_SKB_FLAG_CTL_RESEND = UCS_BIT(6), /* This is a control-resend rsb */
+    UCT_UD_SEND_SKB_FLAG_INVALID    = UCS_BIT(7)  /* skb is released */
 
 #else
-    UCT_UD_SEND_SKB_FLAG_CTL        = 0,
+    UCT_UD_SEND_SKB_FLAG_CTL_ACK    = 0,
     UCT_UD_SEND_SKB_FLAG_CTL_RESEND = 0,
     UCT_UD_SEND_SKB_FLAG_INVALID    = 0
 #endif
@@ -253,7 +253,7 @@ static inline void uct_ud_neth_set_am_id(uct_ud_neth_t *neth, uint8_t id)
 
 static inline uct_ud_ctl_desc_t *uct_ud_ctl_desc(uct_ud_send_skb_t *skb)
 {
-    ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_CTL |
+    ucs_assert(skb->flags & (UCT_UD_SEND_SKB_FLAG_CTL_ACK |
                              UCT_UD_SEND_SKB_FLAG_CTL_RESEND));
     ucs_assert(!(skb->flags & UCT_UD_SEND_SKB_FLAG_INVALID));
     return (uct_ud_ctl_desc_t*)((char*)skb->neth + skb->len);

@@ -49,10 +49,10 @@ typedef ucs_status_t (*uct_ud_ep_hook_t)(uct_ud_ep_t *ep, uct_ud_neth_t *neth);
 
 #define UCT_UD_EP_HOOK_DECLARE(name) uct_ud_ep_hook_t name;
 
-#define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len) \
-    if ((ep)->rx.rx_hook(ep, neth) != UCS_OK) { \
+#define UCT_UD_EP_HOOK_CALL_RX(_ep, _neth, _exit_action) \
+    if ((_ep)->rx.rx_hook(_ep, _neth) != UCS_OK) { \
         ucs_trace_data("RX: dropping packet"); \
-        return; \
+        _exit_action; \
     }
 
 #define UCT_UD_EP_HOOK_CALL_TX(ep, neth) (ep)->tx.tx_hook(ep, neth);
@@ -73,7 +73,7 @@ do { \
 #else
 
 #define UCT_UD_EP_HOOK_DECLARE(name)
-#define UCT_UD_EP_HOOK_CALL_RX(ep, neth, len)
+#define UCT_UD_EP_HOOK_CALL_RX(_ep, _neth, _exit_action)
 #define UCT_UD_EP_HOOK_CALL_TX(ep, neth)
 #define UCT_UD_EP_HOOK_CALL_TIMER(ep)
 #define UCT_UD_EP_HOOK_INIT(ep)
