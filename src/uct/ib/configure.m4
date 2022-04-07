@@ -75,7 +75,10 @@ AC_ARG_WITH([dm],
 #
 # DEVX Support
 #
-AC_ARG_WITH([devx], [], [], [with_devx=check])
+AC_ARG_WITH([devx],
+            [AC_HELP_STRING([--with-devx], [Compile with DEVX support])],
+            [],
+            [with_devx=check])
 
 #
 # Check basic IB support: User wanted at least one IB transport, and we found
@@ -222,7 +225,6 @@ AS_IF([test "x$with_ib" = "xyes"],
 
                AS_IF([test "x$with_devx" != xno], [
                     AC_CHECK_DECL(MLX5DV_CONTEXT_FLAGS_DEVX, [
-                         AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
                          have_devx=yes
                     ], [
                          AS_IF([test "x$with_devx" != xcheck],
@@ -444,7 +446,6 @@ AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" = xyes])
-AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
 AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
 AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
 
@@ -453,3 +454,7 @@ m4_include([src/uct/ib/rdmacm/configure.m4])
 AC_DEFINE_UNQUOTED([uct_ib_MODULES], ["${uct_ib_modules}"], [IB loadable modules])
 AC_CONFIG_FILES([src/uct/ib/Makefile
                  src/uct/ib/ucx-ib.pc])
+AS_IF([test -n "$have_devx" -a \( "x$with_mlx5_dv" = xyes -o "x$with_mlx5_hw" = xyes \) ],
+      [AC_DEFINE([HAVE_DEVX], [1], [DEVX support])
+       AM_CONDITIONAL([HAVE_DEVX], [true])],
+      [AM_CONDITIONAL([HAVE_DEVX], [false])])
