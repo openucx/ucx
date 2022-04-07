@@ -1302,7 +1302,6 @@ uct_ib_md_parse_reg_methods(uct_ib_md_t *md,
             }
             rcache_params.context            = md;
             rcache_params.ops                = &uct_ib_rcache_ops;
-            rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
 
             status = ucs_rcache_create(&rcache_params, uct_ib_device_name(&md->dev),
                                        UCS_STATS_RVAL(md->stats), &md->rcache);

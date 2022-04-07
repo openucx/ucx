@@ -378,7 +378,6 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
         rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
         rcache_params.context            = knem_md;
         rcache_params.ops                = &uct_knem_rcache_ops;
-        rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
         status = ucs_rcache_create(&rcache_params, "knem", ucs_stats_get_root(),
                                    &knem_md->rcache);
         if (status == UCS_OK) {
