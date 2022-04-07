@@ -1,4 +1,9 @@
 #!/bin/sh
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
 
 # check_tls.sh [extra-tls-to-check]
 

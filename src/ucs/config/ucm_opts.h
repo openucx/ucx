@@ -12,7 +12,7 @@
 BEGIN_C_DECLS
 
 void ucs_init_ucm_opts();
-void ucs_opts_cleanup();
+void ucs_cleanup_ucm_opts();
 
 END_C_DECLS
 
