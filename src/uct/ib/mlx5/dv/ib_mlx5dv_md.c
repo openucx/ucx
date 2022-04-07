@@ -1062,7 +1062,8 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    md->super.ops = &uct_ib_mlx5_md_ops;
+    md->super.ops        = &uct_ib_mlx5_md_ops;
+    md->max_rd_atomic_dc = IBV_DEV_ATTR(dev, max_qp_rd_atom);
 
     uct_ib_mlx5_parse_relaxed_order(md, md_config);
     status = uct_ib_md_open_common(&md->super, ibv_device, md_config);
