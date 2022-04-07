@@ -752,6 +752,11 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
     }
 
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
+                          dci_no_rdma_wr_optimized_performance)) {
+        md->flags |= UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED;
+    }
+
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap,
                           ib_striding_wq_cq_first_indication)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG;
     }

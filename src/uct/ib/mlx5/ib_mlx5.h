@@ -164,29 +164,31 @@ struct mlx5_grh_av {
 
 enum {
     /* Device supports KSM */
-    UCT_IB_MLX5_MD_FLAG_KSM              = UCS_BIT(0),
+    UCT_IB_MLX5_MD_FLAG_KSM                  = UCS_BIT(0),
     /* Device supports DEVX */
-    UCT_IB_MLX5_MD_FLAG_DEVX             = UCS_BIT(1),
+    UCT_IB_MLX5_MD_FLAG_DEVX                 = UCS_BIT(1),
     /* Device supports TM DC */
-    UCT_IB_MLX5_MD_FLAG_DC_TM            = UCS_BIT(2),
+    UCT_IB_MLX5_MD_FLAG_DC_TM                = UCS_BIT(2),
     /* Device supports MP RQ */
-    UCT_IB_MLX5_MD_FLAG_MP_RQ            = UCS_BIT(3),
+    UCT_IB_MLX5_MD_FLAG_MP_RQ                = UCS_BIT(3),
     /* Device supports creation of indirect MR with atomics access rights */
-    UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS = UCS_BIT(4),
+    UCT_IB_MLX5_MD_FLAG_INDIRECT_ATOMICS     = UCS_BIT(4),
     /* Device supports RMP to create SRQ for AM */
-    UCT_IB_MLX5_MD_FLAG_RMP              = UCS_BIT(5),
+    UCT_IB_MLX5_MD_FLAG_RMP                  = UCS_BIT(5),
     /* Device supports querying bitmask of OOO (AR) states per SL */
-    UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK      = UCS_BIT(6),
+    UCT_IB_MLX5_MD_FLAG_OOO_SL_MASK          = UCS_BIT(6),
     /* Device has LAG */
-    UCT_IB_MLX5_MD_FLAG_LAG              = UCS_BIT(7),
+    UCT_IB_MLX5_MD_FLAG_LAG                  = UCS_BIT(7),
     /* Device supports CQE V1 */
-    UCT_IB_MLX5_MD_FLAG_CQE_V1           = UCS_BIT(8),
+    UCT_IB_MLX5_MD_FLAG_CQE_V1               = UCS_BIT(8),
     /* Device supports first fragment indication for MP XRQ */
-    UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG = UCS_BIT(9),
+    UCT_IB_MLX5_MD_FLAG_MP_XRQ_FIRST_MSG     = UCS_BIT(9),
     /* Device supports 64B CQE zipping */
-    UCT_IB_MLX5_MD_FLAG_CQE64_ZIP        = UCS_BIT(10),
+    UCT_IB_MLX5_MD_FLAG_CQE64_ZIP            = UCS_BIT(10),
     /* Device supports 128B CQE zipping */
-    UCT_IB_MLX5_MD_FLAG_CQE128_ZIP       = UCS_BIT(11),
+    UCT_IB_MLX5_MD_FLAG_CQE128_ZIP           = UCS_BIT(11),
+    /* Device performance is optimized when RDMA_WRITE is not used */
+    UCT_IB_MLX5_MD_FLAG_NO_RDMA_WR_OPTIMIZED = UCS_BIT(12),
 
     /* Object to be created by DevX */
     UCT_IB_MLX5_MD_FLAG_DEVX_OBJS_SHIFT  = 16,
