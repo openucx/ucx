@@ -34,7 +34,6 @@ struct ucs_async_context {
     };
 
     ucs_async_mode_t  mode;          /* Event delivery mode */
-    volatile uint32_t num_handlers;  /* Number of event and timer handlers */
     ucs_mpmc_queue_t  missed;        /* Miss queue */
     ucs_time_t        last_wakeup;   /* time of the last wakeup */
 };
