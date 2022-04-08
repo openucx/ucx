@@ -1855,6 +1855,7 @@ void uct_ud_ep_disconnect(uct_ep_h tl_ep)
          * exists there */
         uct_ud_iface_cep_remove_ep(iface, ep);
         ep->flags &= ~UCT_UD_EP_FLAG_TX;
+        uct_ud_ep_ctl_op_del(ep, UCT_UD_EP_OP_CREQ);
 
         if (uct_ud_ep_is_connected(ep)) {
             uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_FIN);
