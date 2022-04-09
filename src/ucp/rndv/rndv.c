@@ -666,8 +666,9 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
     ucp_md_index_t dst_md_index;
     ucp_rsc_index_t rsc_index;
     uct_iface_attr_t *iface_attr;
-    double max_lane_bw, lane_bw;
-    int i;
+    double max_lane_bw, lane_bw, max_ratio;
+    size_t chunk_count;
+    int i, lanes_count;
 
     ucs_assert((proto == UCP_REQUEST_SEND_PROTO_RNDV_GET) ||
                (proto == UCP_REQUEST_SEND_PROTO_RNDV_PUT));
@@ -723,23 +724,41 @@ static void ucp_rndv_req_init_zcopy_lane_map(ucp_request_t *rndv_req,
         }
     }
 
-    if (ucs_popcount(lane_map) > 1) {
-        /* remove lanes if bandwidth is too less compare to best lane */
-        ucs_for_each_bit(lane_idx, lane_map) {
-            ucs_assert(lane_idx < UCP_MAX_LANES);
-            lane       = lanes[lane_idx];
-            rsc_index  = ep_config->key.lanes[lane].rsc_index;
-            iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
-            lane_bw    = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+    if (ucs_is_pow2_or_zero(lane_map)) {
+        goto out; /* No multi-rail */
+    }
 
-            if ((lane_bw / max_lane_bw) <
-                (1. / context->config.ext.multi_lane_max_ratio)) {
-                lane_map                                &= ~UCS_BIT(lane_idx);
-                rndv_req->send.rndv.rkey_index[lane_idx] = UCP_NULL_RESOURCE;
-            }
+    chunk_count = ucs_max(rndv_req->send.length /
+                              context->config.ext.min_rndv_chunk_size,
+                          1);
+    lanes_count = 0;
+    max_ratio   = 1. / context->config.ext.multi_lane_max_ratio;
+
+    /* 1. Remove lanes if bandwidth is too small compared to the best lane.
+     * 2. If there are more lanes than chunks of the minimum size, we have to
+     * exclude some lanes, so that there will be no more than 1 lane per
+     * chunk.
+     */
+    ucs_for_each_bit(lane_idx, lane_map) {
+        ucs_assert(lane_idx < UCP_MAX_LANES);
+        lane       = lanes[lane_idx];
+        rsc_index  = ep_config->key.lanes[lane].rsc_index;
+        iface_attr = ucp_worker_iface_get_attr(ep->worker, rsc_index);
+        lane_bw    = ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth);
+        ++lanes_count;
+
+        if (((lane_bw / max_lane_bw) < max_ratio) ||
+            (lanes_count > chunk_count)) {
+            lane_map                                &= ~UCS_BIT(lane_idx);
+            rndv_req->send.rndv.rkey_index[lane_idx] = UCP_NULL_RESOURCE;
         }
     }
 
+    ucs_assertv(ucs_popcount(lane_map) <= chunk_count,
+                "lanes_count=%u chunk_count=%zu", ucs_popcount(lane_map),
+                chunk_count);
+
+out:
     ucp_rndv_req_init_lanes(rndv_req, lane_map, ucs_popcount(lane_map));
 }
 

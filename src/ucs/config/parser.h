@@ -159,6 +159,9 @@ int ucs_config_sscanf_ulong(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_ulong(char *buf, size_t max, const void *src, const void *arg);
 ucs_status_t ucs_config_clone_ulong(const void *src, void *dest, const void *arg);
 
+int ucs_config_sscanf_pos_double(const char *buf, void *dest, const void *arg);
+int ucs_config_sprintf_pos_double(char *buf, size_t max, const void *src,
+                                  const void *arg);
 int ucs_config_sscanf_double(const char *buf, void *dest, const void *arg);
 int ucs_config_sprintf_double(char *buf, size_t max, const void *src, const void *arg);
 ucs_status_t ucs_config_clone_double(const void *src, void *dest, const void *arg);
@@ -274,6 +277,11 @@ void ucs_config_help_generic(char *buf, size_t max, const void *arg);
                                     ucs_config_clone_double,     ucs_config_release_nop, \
                                     ucs_config_help_generic,     "floating point number"}
 
+#define UCS_CONFIG_TYPE_POS_DOUBLE {ucs_config_sscanf_pos_double, ucs_config_sprintf_pos_double, \
+                                    ucs_config_clone_double,      ucs_config_release_nop, \
+                                    ucs_config_help_generic, \
+                                    "positive floating point number or \"auto\""}
+
 #define UCS_CONFIG_TYPE_HEX        {ucs_config_sscanf_hex,       ucs_config_sprintf_hex, \
                                     ucs_config_clone_uint,       ucs_config_release_nop, \
                                     ucs_config_help_generic, \
@@ -376,10 +384,11 @@ UCS_CONFIG_DECLARE_ARRAY(string)
 
 
 /**
- * Helpers for Bandwidth units (see UCS_CONFIG_TYPE_BW)
+ * Helpers for positive double and bandwidth units (see UCS_CONFIG_TYPE_BW)
  */
-#define UCS_CONFIG_BW_AUTO            ((double)-2)
-#define UCS_CONFIG_BW_IS_AUTO(_value) ((ssize_t)(_value) == UCS_CONFIG_BW_AUTO)
+#define UCS_CONFIG_DBL_AUTO            ((double)-2)
+#define UCS_CONFIG_DBL_IS_AUTO(_value) ((ssize_t)(_value) == \
+                                        UCS_CONFIG_DBL_AUTO)
 
 
 /**

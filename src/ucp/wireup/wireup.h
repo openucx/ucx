@@ -52,13 +52,16 @@ typedef struct {
      *
      * @param [in]  wiface       UCP worker iface.
      * @param [in]  md_attr      Local MD attributes.
-     * @param [in]  remote_info  Remote peer attributes.
+     * @param [in]  remote_addr  Remote address info and attributes.
+     * @param [in]  arg          Custom argument.
      *
      * @return Transport score, the higher the better.
      */
     double      (*calc_score)(const ucp_worker_iface_t *wiface,
                               const uct_md_attr_t *md_attr,
-                              const ucp_address_iface_attr_t *remote_iface_attr);
+                              const ucp_address_entry_t *remote_addr,
+                              void *arg);
+    void        *arg; /* Custom argument of @a calc_score function */
     uint8_t     tl_rsc_flags; /* Flags that describe TL specifics */
 
     ucp_tl_iface_atomic_flags_t local_atomic_flags;
@@ -104,7 +107,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
 
 double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_t *md_attr,
-                                 const ucp_address_iface_attr_t *remote_iface_attr);
+                                 const ucp_address_entry_t *remote_addr,
+                                 void *arg);
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg);
 
