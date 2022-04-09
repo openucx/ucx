@@ -239,8 +239,6 @@ static uct_ib_md_ops_entry_t *uct_ib_ops[] = {
     &UCT_IB_MD_OPS_NAME(verbs)
 };
 
-UCS_LIST_HEAD(uct_ib_md_ops_list);
-
 typedef struct uct_ib_verbs_mem {
     uct_ib_mem_t        super;
     uct_ib_mr_t         mrs[];
