@@ -609,17 +609,6 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep)
 
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
 
-    /* CREQ should not be sent if CREP for the counter CREQ is scheduled
-     * (or sent already) if no TX and RX capabilities are added on the
-     * endpoint */
-    ucs_assertv_always((!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREP) &&
-                        !(ep->flags & UCT_UD_EP_FLAG_CREP_SENT)) ||
-                       ucs_test_all_flags(ep->flags, UCT_UD_EP_FLAG_TX_RX),
-                       "iface=%p ep=%p conn_sn=%d rx_psn=%u ep_flags=0x%x "
-                       "ctl_ops=0x%x rx_creq_count=%d",
-                       iface, ep, ep->conn_sn, ep->rx.ooo_pkts.head_sn,
-                       ep->flags, ep->tx.pending.ops, ep->rx_creq_count);
-
     skb = uct_ud_ep_prepare_ctl(iface, ep, UCT_UD_PACKET_CREQ,
                                 iface->super.addr_size, UCT_UD_EP_NULL_ID,
                                 &creq);
@@ -1329,17 +1318,6 @@ static uct_ud_send_skb_t *uct_ud_ep_prepare_crep(uct_ud_ep_t *ep)
 
     ucs_assert_always(ep->dest_ep_id != UCT_UD_EP_NULL_ID);
     ucs_assert_always(ep->ep_id != UCT_UD_EP_NULL_ID);
-
-    /* Check that CREQ is neither scheduled nor waiting for CREP ack if no TX
-     * and RX capabilities are added on the endpoint */
-    ucs_assertv_always((!uct_ud_ep_ctl_op_check(ep, UCT_UD_EP_OP_CREQ) &&
-                        uct_ud_ep_is_last_ack_received(ep)) ||
-                       ucs_test_all_flags(ep->flags, UCT_UD_EP_FLAG_TX_RX),
-                       "iface=%p ep=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u "
-                       "ep_flags=0x%x ctl_ops=0x%x rx_creq_count=%d",
-                       iface, ep, ep->conn_sn, ep->ep_id, ep->dest_ep_id,
-                       ep->rx.ooo_pkts.head_sn, ep->flags, ep->tx.pending.ops,
-                       ep->rx_creq_count);
 
     skb = uct_ud_ep_prepare_ctl(iface, ep, UCT_UD_PACKET_CREP, 0,
                                 ep->dest_ep_id | UCT_UD_PACKET_FLAG_ACK_REQ,
