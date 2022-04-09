@@ -8,7 +8,7 @@
 #  include "config.h"
 #endif
 
-#include "rndv.h"
+#include "rndv.inl"
 #include "proto_rndv.inl"
 
 /* TODO: Avoid dependency on tag (or other API) specifics, since this is common

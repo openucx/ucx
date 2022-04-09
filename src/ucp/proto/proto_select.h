@@ -31,6 +31,11 @@
 #define UCP_PROTO_SELECT_OP_FLAG_INTERNAL (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
 
 
+/* Select eager/rendezvous protocol for Active Message sends */
+#define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 2)
+#define UCP_PROTO_SELECT_OP_FLAG_AM_RNDV  (UCP_PROTO_SELECT_OP_FLAGS_BASE << 3)
+
+
 /** Maximal length of ucp_proto_select_param_str() */
 #define UCP_PROTO_SELECT_PARAM_STR_MAX 128
 

@@ -97,6 +97,13 @@ ucs_status_t
 ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params);
 
 
+void ucp_proto_rndv_rts_query(const ucp_proto_query_params_t *params,
+                              ucp_proto_query_attr_t *attr);
+
+
+void ucp_proto_rndv_rts_abort(ucp_request_t *req, ucs_status_t status);
+
+
 ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
                                      ucp_proto_rndv_ack_priv_t *apriv);
 

@@ -6,6 +6,8 @@
 #ifndef AM_EAGER_INL_
 #define AM_EAGER_INL_
 
+#include "ucp_am.inl"
+
 #include <ucp/core/ucp_am.h>
 #include <ucp/core/ucp_request.h>
 #include <ucp/dt/datatype_iter.h>
@@ -15,30 +17,10 @@
 #include <ucs/datastruct/mpool.inl>
 
 
-static UCS_F_ALWAYS_INLINE void
-ucp_am_fill_header(ucp_am_hdr_t *hdr, ucp_request_t *req)
-{
-    hdr->am_id         = req->send.msg_proto.am.am_id;
-    hdr->flags         = req->send.msg_proto.am.flags;
-    hdr->header_length = req->send.msg_proto.am.header_length;
-}
-
 static UCS_F_ALWAYS_INLINE size_t ucp_am_send_req_total_size(ucp_request_t *req)
 {
     return req->send.state.dt_iter.length +
            req->send.msg_proto.am.header_length;
-}
-
-static UCS_F_ALWAYS_INLINE void
-ucp_am_pack_user_header(void *buffer, ucp_request_t *req)
-{
-    ucp_dt_state_t hdr_state;
-
-    hdr_state.offset = 0ul;
-
-    ucp_dt_pack(req->send.ep->worker, ucp_dt_make_contig(1),
-                UCS_MEMORY_TYPE_HOST, buffer, req->send.msg_proto.am.header,
-                &hdr_state, req->send.msg_proto.am.header_length);
 }
 
 static UCS_F_ALWAYS_INLINE ssize_t

@@ -77,14 +77,15 @@ enum {
  */
 typedef struct {
     uint8_t                 op_id;      /* Operation ID */
-    uint8_t                 op_flags;   /* Operation flags */
+    uint16_t                op_flags;   /* Operation flags */
     uint8_t                 dt_class;   /* Datatype */
     uint8_t                 mem_type;   /* Memory type */
     uint8_t                 sys_dev;    /* System device */
     uint8_t                 sg_count;   /* Number of non-contig scatter/gather
                                            entries. If the actual number is larger
                                            than UINT8_MAX, UINT8_MAX is used. */
-    uint8_t                 padding[2]; /* Make structure size be sizeof(uint64_t) */
+    uint8_t                 padding;    /* Make structure size be
+                                           sizeof(uint64_t) */
 } UCS_S_PACKED ucp_proto_select_param_t;
 
 

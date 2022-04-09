@@ -8,6 +8,7 @@
 #endif
 
 #include "eager.inl"
+#include "ucp_am.inl"
 
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_common.inl>
@@ -21,13 +22,6 @@
 #define UCP_AM_MID_FRAG_META_LEN \
     (sizeof(ucp_am_hdr_t) + sizeof(ucp_am_mid_ftr_t))
 
-
-static UCS_F_ALWAYS_INLINE int
-ucp_am_eager_multi_supported(const ucp_proto_init_params_t *init_params)
-{
-    return (init_params->select_param->op_id == UCP_OP_ID_AM_SEND) ||
-           (init_params->select_param->op_id == UCP_OP_ID_AM_SEND_REPLY);
-}
 
 static ucs_status_t
 ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
@@ -52,10 +46,11 @@ ucp_am_eager_multi_bcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_BCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_BCOPY,
-        .max_lanes = init_params->worker->context->config.ext.max_eager_lanes
+        .max_lanes           = context->config.ext.max_eager_lanes
     };
 
-    if (!ucp_am_eager_multi_supported(init_params)) {
+    if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return UCS_ERR_UNSUPPORTED;
     }
 
@@ -175,10 +170,11 @@ ucp_am_eager_multi_zcopy_proto_init(const ucp_proto_init_params_t *init_params)
         .first.tl_cap_flags  = UCT_IFACE_FLAG_AM_ZCOPY,
         .middle.lane_type    = UCP_LANE_TYPE_AM_BW,
         .middle.tl_cap_flags = UCT_IFACE_FLAG_AM_ZCOPY,
-        .max_lanes = init_params->worker->context->config.ext.max_eager_lanes
+        .max_lanes           = context->config.ext.max_eager_lanes
     };
 
-    if (!ucp_am_eager_multi_supported(init_params)) {
+    if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_RNDV)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

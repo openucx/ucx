@@ -340,12 +340,6 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
         return UCS_ERR_UNSUPPORTED;
     }
 
-    if (params->rkey_config_key != NULL) {
-        /* This ATS-only protocol will not take care of releasing the remote, so
-           disqualify if remote key is present */
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     /* Support only 0-length messages */
     *params->priv_size                 = sizeof(ucp_proto_rndv_ack_priv_t);
     params->caps->cfg_thresh           = 0;
@@ -360,12 +354,23 @@ ucp_proto_rndv_ats_init(const ucp_proto_init_params_t *params)
     return ucp_proto_rndv_ack_init(params, params->priv);
 }
 
+ucs_status_t ucp_proto_rndv_ats_proto_progress(uct_pending_req_t *uct_req)
+{
+    ucp_request_t *req = ucs_container_of(uct_req, ucp_request_t, send.uct);
+
+    if (req->send.rndv.rkey != NULL) {
+        ucp_proto_rndv_rkey_destroy(req);
+    }
+
+    return ucp_proto_rndv_ats_progress(uct_req);
+}
+
 ucp_proto_t ucp_rndv_ats_proto = {
     .name     = "rndv/ats",
     .desc     = "no data fetch",
     .flags    = 0,
     .init     = ucp_proto_rndv_ats_init,
     .query    = ucp_proto_default_query,
-    .progress = {ucp_proto_rndv_ats_progress},
+    .progress = {ucp_proto_rndv_ats_proto_progress},
     .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };

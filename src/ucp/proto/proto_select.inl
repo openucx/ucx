@@ -116,7 +116,7 @@ ucp_proto_select_lookup(ucp_worker_h worker, ucp_proto_select_t *proto_select,
 static UCS_F_ALWAYS_INLINE void
 ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
                             ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                            uint8_t op_flags, ucp_dt_class_t dt_class,
+                            uint16_t op_flags, ucp_dt_class_t dt_class,
                             const ucp_memory_info_t *mem_info, uint8_t sg_count)
 {
     if (dt_class == UCP_DATATYPE_CONTIG) {
@@ -135,8 +135,7 @@ ucp_proto_select_param_init(ucp_proto_select_param_t *select_param,
     select_param->mem_type   = mem_info->type;
     select_param->sys_dev    = mem_info->sys_dev;
     select_param->sg_count   = sg_count;
-    select_param->padding[0] = 0;
-    select_param->padding[1] = 0;
+    select_param->padding    = 0;
 }
 
 static UCS_F_ALWAYS_INLINE int
