@@ -1476,7 +1476,7 @@ uct_ib_md_set_pci_bw(uct_ib_md_t *md, const uct_ib_md_config_t *md_config)
 
     for (i = 0; i < md_config->pci_bw.count; i++) {
         if (!strcmp(device_name, md_config->pci_bw.device[i].name)) {
-            if (UCS_CONFIG_BW_IS_AUTO(md_config->pci_bw.device[i].bw)) {
+            if (UCS_CONFIG_DBL_IS_AUTO(md_config->pci_bw.device[i].bw)) {
                 break; /* read data from system */
             }
 
