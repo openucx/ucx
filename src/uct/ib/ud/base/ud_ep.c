@@ -1017,14 +1017,16 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ucs_trace_func("");
 
     switch (ctl->type) {
+    case UCT_UD_PACKET_CREQ:
+        break;
+    case UCT_UD_PACKET_CREP:
+        uct_ud_ep_rx_crep(iface, ep, neth, ctl);
+        break;
     case UCT_UD_PACKET_FIN:
         /* Got FIN packet which means that the endpoint won't be used to
          * to data anymore */
         ucs_assert(!(ep->flags & UCT_UD_EP_FLAG_CONNECT_TO_EP));
         uct_ud_ep_handle_peer_disconnect(ep);
-        break;
-    case UCT_UD_PACKET_CREP:
-        uct_ud_ep_rx_crep(iface, ep, neth, ctl);
         break;
     default:
         ucs_fatal("unexpected control packet type - %d", ctl->type);
@@ -1088,10 +1090,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         if ((size_t)byte_len == sizeof(*neth)) {
             goto out;
         }
-
-        if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
-            uct_ud_ep_rx_ctl(iface, ep, neth);
-        }
     }
 
 frag_list_insert:
@@ -1110,6 +1108,11 @@ frag_list_insert:
         if (neth->packet_type & UCT_UD_PACKET_FLAG_PUT) {
             /* TODO: remove once ucp implements put */
             uct_ud_ep_rx_put(neth, byte_len);
+        } else if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
+            uct_ud_ep_rx_ctl(iface, ep, neth);
+        } else {
+            ucs_fatal("ep=%p: unexpected non-AM packet: 0%x", ep,
+                      neth->packet_type);
         }
 
         goto out;
