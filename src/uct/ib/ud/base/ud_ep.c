@@ -267,6 +267,8 @@ static int uct_ud_ep_handle_peer_disconnect(uct_ud_ep_t *ep)
         return 1;
     }
 
+    /* Insert the endpoint to CEP after getting FIN or detecting error to make
+     * sure that the endpoint is in CEP when it has TX/RX */
     uct_ud_iface_cep_insert_ready_ep(iface, ep);
     return 0;
 }
@@ -705,6 +707,9 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         if (status != UCS_OK) {
             goto err_ep_disconnect;
         }
+
+        /* Peer's endpoint should have RX capability, sending CREQ ensures it
+         */
         goto out_send_creq_and_set_ep;
     }
 
@@ -1086,12 +1091,6 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
 
         if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
             uct_ud_ep_rx_ctl(iface, ep, neth);
-        } else if (neth->packet_type & UCT_UD_PACKET_FLAG_PUT) {
-            /* TODO: remove once ucp implements put */
-            uct_ud_ep_rx_put(neth, byte_len);
-        } else {
-            ucs_fatal("ep=%p: unexpected non-AM packet: 0%x", ep,
-                      neth->packet_type);
         }
     }
 
@@ -1108,6 +1107,11 @@ frag_list_insert:
     }
 
     if (ucs_unlikely(!is_am)) {
+        if (neth->packet_type & UCT_UD_PACKET_FLAG_PUT) {
+            /* TODO: remove once ucp implements put */
+            uct_ud_ep_rx_put(neth, byte_len);
+        }
+
         goto out;
     }
 
