@@ -319,9 +319,34 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
     return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
 }
 
+static ucs_status_t
+uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
+{
+    if (ENABLE_PARAMS_CHECK) {
+        return ((md != NULL) && (memh != NULL) && (rkey_buffer != NULL)) ?
+               UCS_OK : UCS_ERR_INVALID_PARAM;
+    } else {
+        return UCS_OK;
+    }
+}
+
+ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 const uct_md_mkey_pack_params_t *params,
+                                 void *rkey_buffer)
+{
+    ucs_status_t status = uct_md_mkey_pack_params_check(md, memh, rkey_buffer);
+
+    return (status == UCS_OK) ?
+           md->ops->mkey_pack(md, memh, params, rkey_buffer) : status;
+}
+
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
-    return md->ops->mkey_pack(md, memh, rkey_buffer);
+    uct_md_mkey_pack_params_t params = {
+        .field_mask = 0
+    };
+
+    return uct_md_mkey_pack_v2(md, memh, &params, rkey_buffer);
 }
 
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,

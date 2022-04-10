@@ -870,11 +870,13 @@ uct_ib_mem_advise(uct_md_h uct_md, uct_mem_h memh, void *addr,
     return UCS_OK;
 }
 
-static ucs_status_t uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
-                                     void *rkey_buffer)
+static ucs_status_t
+uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
+                 const uct_md_mkey_pack_params_t *params,
+                 void *rkey_buffer)
 {
-    uct_ib_md_t *md         = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_mem_t *memh      = uct_memh;
+    uct_ib_md_t *md    = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_mem_t *memh = uct_memh;
     uint32_t atomic_rkey;
     ucs_status_t status;
 

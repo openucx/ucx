@@ -59,11 +59,13 @@ static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
-                                           void *rkey_buffer)
+static ucs_status_t
+uct_gdr_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
+                       const uct_md_mkey_pack_params_t *params,
+                       void *rkey_buffer)
 {
-    uct_gdr_copy_key_t *packed      = (uct_gdr_copy_key_t *)rkey_buffer;
-    uct_gdr_copy_mem_t *mem_hndl    = (uct_gdr_copy_mem_t *)memh;
+    uct_gdr_copy_key_t *packed   = rkey_buffer;
+    uct_gdr_copy_mem_t *mem_hndl = memh;
 
     packed->vaddr   = mem_hndl->info.va;
     packed->bar_ptr = mem_hndl->bar_ptr;

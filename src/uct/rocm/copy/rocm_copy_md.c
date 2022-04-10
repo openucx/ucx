@@ -50,11 +50,13 @@ static ucs_status_t uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     return UCS_OK;
 }
 
-static ucs_status_t uct_rocm_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
-                                            void *rkey_buffer)
+static ucs_status_t
+uct_rocm_copy_mkey_pack(uct_md_h uct_md, uct_mem_h memh,
+                        const uct_md_mkey_pack_params_t *params,
+                        void *rkey_buffer)
 {
-    uct_rocm_copy_key_t *packed   = (uct_rocm_copy_key_t *)rkey_buffer;
-    uct_rocm_copy_mem_t *mem_hndl = (uct_rocm_copy_mem_t *)memh;
+    uct_rocm_copy_key_t *packed   = rkey_buffer;
+    uct_rocm_copy_mem_t *mem_hndl = memh;
 
     packed->vaddr   = (uint64_t) mem_hndl->vaddr;
     packed->dev_ptr = mem_hndl->dev_ptr;
