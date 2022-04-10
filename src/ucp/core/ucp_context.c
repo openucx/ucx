@@ -215,7 +215,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_send_nbr_thresh), UCS_CONFIG_TYPE_MEMUNITS},
 
   {"RNDV_THRESH_FALLBACK", "inf",
-   "Message size to start using the rendezvous protocol in case the calculated threshold "
+   "Message size to start using the rendezvous protocol in case the calculated threshold\n"
    "is zero or negative",
    ucs_offsetof(ucp_config_t, ctx.rndv_thresh_fallback), UCS_CONFIG_TYPE_MEMUNITS},
 
@@ -225,7 +225,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
 
   {"MULTI_LANE_MAX_RATIO", "4",
-   "Maximal allowed ratio between slowest and fastest lane in a multi-lane "
+   "Maximal allowed ratio between slowest and fastest lane in a multi-lane\n"
    "protocol. Lanes slower than the specified ratio will not be used.",
    ucs_offsetof(ucp_config_t, ctx.multi_lane_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
 
