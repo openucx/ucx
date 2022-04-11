@@ -115,6 +115,44 @@ It allows customization of the various parameters. An environment variable
 has precedence over the value defined in `ucx.conf`.
 The file can be created using `ucx_info -Cf`.
 
+#### Build user application with UCX
+
+UCX supports metainformation subsystem based on pkg-config tool. In order to
+build the application with UCX development libraries.  For example, this is how
+pkg-config can be incorporated in a Makefile-based build:
+```
+program: program.c
+        cc program.c $(pkg-config --cflags --libs ucx)
+```
+When linking with static UCX libraries, need to list explicitly all required
+transport modules.  For example, in order to support only cma and knem
+transports, can use this method:
+```
+program: program.c
+        cc -static program.c $(pkg-config --cflags --libs --static ucx-cma ucx-knem ucx)
+```
+Currently, the following transport modules can be used with pkg-config:
+| Package name  |  Provided transport service |
+|-----------|-----------|
+| ucx-cma | Shared memory using [Linux Cross-Memory Attach](https://lwn.net/Articles/405284/) |
+| ucx-knem | Shared memory using [High-Performance Intra-Node MPI Communication](https://knem.gitlabpages.inria.fr) |
+| ucx-xpmem | Shared memory using [XPMEM](https://github.com/hjelmn/xpmem) |
+| ucx-ib | [Infiniband](https://developer.nvidia.com/networking) based network transport |
+| ucx-rdmacm | Connection manager based on [RDMACM](https://github.com/ofiwg/librdmacm) |
+
+TCP, basic shared memory, and self transports are built-in into UCT and don't
+need additional compilation actions.
+
+##### IMPORTANT NOTE:
+The package ucx-ib requires static libraries for `libnl` and `numactl`,
+as a dependency of `rdma-core`. Most Linux distributions do not provide these
+static libraries by default, so they need to be built and installed manually.
+They can be downloaded from the following locations:
+<table>
+<tr><td>libnl</td><td>https://www.infradead.org/~tgr/libnl</td><td>(tested on version 3.2.25)</td></tr>
+<tr><td>numactl</td><td>https://github.com/numactl/numactl</td><td>(tested on version 2.0.14)</td></tr>
+</table>
+
 
 <br/>
 
