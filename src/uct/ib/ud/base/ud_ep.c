@@ -1025,6 +1025,17 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     }
 }
 
+static UCS_F_NOINLINE void
+uct_ud_ep_process_unexp_packet(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
+                               uct_ud_neth_t *neth, unsigned length)
+{
+    char buf[256] = {0};
+
+    uct_ud_dump_packet(&iface->super.super, UCT_AM_TRACE_TYPE_RECV, neth,
+                       length, length, buf, sizeof(buf) - 1);
+    ucs_fatal("ep=%p: unexpected non-AM packet: [%s]", ep, buf);
+}
+
 void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned byte_len,
                           uct_ud_recv_skb_t *skb, int is_async)
 {
@@ -1103,8 +1114,7 @@ frag_list_insert:
         } else if (neth->packet_type & UCT_UD_PACKET_FLAG_CTL) {
             uct_ud_ep_rx_ctl(iface, ep, neth);
         } else {
-            ucs_fatal("ep=%p: unexpected non-AM packet: 0%x", ep,
-                      neth->packet_type);
+            uct_ud_ep_process_unexp_packet(iface, ep, neth, byte_len);
         }
 
         goto out;

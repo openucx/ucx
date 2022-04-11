@@ -46,7 +46,7 @@ typedef struct uct_ud_iface_peer uct_ud_iface_peer_t;
 
 enum {
     UCT_UD_PACKET_ACK_REQ_SHIFT   = 25,
-    UCT_UD_PACKET_AM_ID_SHIFT     = 27,
+    UCT_UD_PACKET_AM_ID_SHIFT     = 29,
     UCT_UD_PACKET_DEST_ID_SHIFT   = 24,
     UCT_UD_PACKET_PUT_SHIFT       = 28,
 };
