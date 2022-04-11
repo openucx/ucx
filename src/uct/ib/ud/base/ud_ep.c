@@ -917,25 +917,17 @@ static uct_ud_ep_t* uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth
                 return NULL;
             }
 
-            ep->rx.ooo_pkts.head_sn = neth->psn;
             uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
             uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
         }
     } else if (ep->dest_ep_id == UCT_UD_EP_NULL_ID) {
         /* simultaneous CREQ */
         uct_ud_ep_set_dest_ep_id(ep, uct_ib_unpack_uint24(ctl->conn_req.ep_addr.ep_id));
-        ep->rx.ooo_pkts.head_sn = neth->psn;
         uct_ud_peer_copy(&ep->peer, ucs_unaligned_ptr(&ctl->peer));
         ucs_debug("simultaneous CREQ ep=%p"
                   "(iface=%p conn_sn=%d ep_id=%d, dest_ep_id=%d rx_psn=%u)",
                   ep, iface, ep->conn_sn, ep->ep_id,
                   ep->dest_ep_id, ep->rx.ooo_pkts.head_sn);
-        if (UCT_UD_PSN_COMPARE(ep->tx.psn, >, UCT_UD_INITIAL_PSN)) {
-            /* our own creq was sent, treat incoming creq as ack and remove our
-             * own from tx window
-             */
-            uct_ud_ep_process_ack(iface, ep, UCT_UD_INITIAL_PSN, 0);
-        }
         uct_ud_ep_ctl_op_add(iface, ep, UCT_UD_EP_OP_CREP);
     }
 
@@ -985,7 +977,7 @@ static uct_ud_ep_t* uct_ud_ep_rx_creq(uct_ud_iface_t *iface, uct_ud_neth_t *neth
 
 static void uct_ud_ep_rx_crep(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                               uct_ud_neth_t *neth, uct_ud_ctl_hdr_t *ctl)
-{   
+{
     if (uct_ud_ep_is_connected(ep)) {
         ucs_assertv_always(ep->dest_ep_id == ctl->conn_rep.src_ep_id,
                            "ep=%p [id=%d dest_ep_id=%d flags=0x%x] crep "
@@ -1036,9 +1028,9 @@ static void uct_ud_ep_rx_ctl(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned byte_len,
                           uct_ud_recv_skb_t *skb, int is_async)
 {
+    uct_ud_ep_t *ep = NULL;
     uint32_t dest_id;
     uint32_t is_am, am_id;
-    uct_ud_ep_t *ep = 0; /* todo: check why gcc complaints about uninitialized var */
     ucs_frag_list_ooo_type_t ooo_type;
 
     UCT_UD_IFACE_HOOK_CALL_RX(iface, neth, goto out);
@@ -1061,7 +1053,7 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
          * flush/barrier. So it is possible to get packet for the ep that has
          * already been destroyed
          */
-        ucs_trace("RX: failed to find ep %d, dropping packet", dest_id);
+        ucs_trace("RX: dropping packet dest_id=%u, ep=%p", dest_id, ep);
         goto out;
     }
 
