@@ -18,26 +18,49 @@
 class test_ib_md : public test_md
 {
 protected:
-    void ib_md_umr_check(void *rkey_buffer,
-                         bool amo_access,
-                         size_t size = 8192);
+    void init() override;
+    const uct_ib_md_t &ib_md() const;
+    void ib_md_umr_check(void *rkey_buffer, bool amo_access,
+                         size_t size = 8192, bool aligned = false);
     bool has_ksm() const;
-    bool check_umr(uct_ib_md_t *ib_md) const;
+    bool check_umr() const;
+
+private:
+#ifdef HAVE_DEVX
+    uint32_t m_mlx5_flags = 0;
+#endif
 };
 
+void test_ib_md::init() {
+    test_md::init();
+
+#ifdef HAVE_DEVX
+    /* Save mlx5 IB md flags because failed atomic registration will modify it */
+    if (ib_md().dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
+        m_mlx5_flags = ucs_derived_of(md(), uct_ib_mlx5_md_t)->flags;
+    }
+#endif
+}
+
+const uct_ib_md_t &test_ib_md::ib_md() const {
+    return *ucs_derived_of(md(), uct_ib_md_t);
+}
 
 /*
  * Test that ib md does not create umr region if
  * UCT_MD_MEM_ACCESS_REMOTE_ATOMIC is not set
  */
-
-void test_ib_md::ib_md_umr_check(void *rkey_buffer,
-                                 bool amo_access,
-                                 size_t size)
+void test_ib_md::ib_md_umr_check(void *rkey_buffer, bool amo_access,
+                                 size_t size, bool aligned)
 {
     ucs_status_t status;
     size_t alloc_size;
     void *buffer;
+    int ret;
+
+    if (amo_access && (IBV_DEV_ATTR(&ib_md().dev, vendor_part_id) < 4123)) { /* <CX6 */
+        UCS_TEST_SKIP_R("HW does not support atomic indirect MR");
+    }
 
     if (ucs_get_phys_mem_size() < size * 8) {
         UCS_TEST_SKIP_R("not enough physical memory");
@@ -48,8 +71,13 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 
     buffer     = NULL;
     alloc_size = size;
-    status     = ucs_mmap_alloc(&alloc_size, &buffer, 0, "test_umr");
-    ASSERT_UCS_OK(status);
+    if (aligned) {
+        ret = ucs_posix_memalign(&buffer, alloc_size, alloc_size, "test_umr");
+        ASSERT_TRUE(ret == 0);
+    } else {
+        status = ucs_mmap_alloc(&alloc_size, &buffer, 0, "test_umr");
+        ASSERT_UCS_OK(status);
+    }
 
     uct_mem_h memh;
     status = uct_md_mem_reg(md(), buffer, size,
@@ -78,9 +106,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     EXPECT_UCS_OK(status);
 
 #ifdef HAVE_MLX5_HW
-    uct_ib_md_t *ib_md = (uct_ib_md_t *)md();
-
-    if ((amo_access && check_umr(ib_md)) || ib_md->relaxed_order) {
+    if ((amo_access && check_umr()) || ib_md().relaxed_order) {
         EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
         EXPECT_NE(UCT_IB_INVALID_MKEY, ib_memh->atomic_rkey);
     } else {
@@ -92,27 +118,30 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     status = uct_md_mem_dereg(md(), memh);
     EXPECT_UCS_OK(status);
 
-    ucs_mmap_free(buffer, alloc_size);
+    if (aligned) {
+        ucs_free(buffer);
+    } else {
+        ucs_mmap_free(buffer, alloc_size);
+    }
 }
 
 bool test_ib_md::has_ksm() const {
 #if HAVE_DEVX
-    return (ucs_derived_of(md(), uct_ib_md_t)->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) &&
-           (ucs_derived_of(md(), uct_ib_mlx5_md_t)->flags & UCT_IB_MLX5_MD_FLAG_KSM);
+    return m_mlx5_flags & UCT_IB_MLX5_MD_FLAG_KSM;
 #elif defined(HAVE_EXP_UMR_KSM)
-    return ucs_derived_of(md(), uct_ib_md_t)->dev.dev_attr.exp_device_cap_flags &
+    return ib_md().dev.dev_attr.exp_device_cap_flags &
            IBV_EXP_DEVICE_UMR_FIXED_SIZE;
 #else
     return false;
 #endif
 }
 
-bool test_ib_md::check_umr(uct_ib_md_t *ib_md) const {
+bool test_ib_md::check_umr() const {
 #if HAVE_DEVX
     return has_ksm();
 #elif HAVE_EXP_UMR
-    if (ib_md->dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
-        uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(ib_md, uct_ib_mlx5_md_t);
+    if (ib_md().dev.flags & UCT_IB_DEVICE_FLAG_MLX5_PRM) {
+        uct_ib_mlx5_md_t *mlx5_md = ucs_derived_of(&ib_md(), uct_ib_mlx5_md_t);
         return mlx5_md->umr_qp != NULL;
     }
     return false;
@@ -164,5 +193,10 @@ UCS_TEST_P(test_ib_md, umr_noninline_klm, "MAX_INLINE_KLM_LIST=1") {
     ib_md_umr_check(&rkey_buffer[0], has_ksm(), UCT_IB_MD_MAX_MR_SIZE + 0x1000);
 }
 #endif
+
+UCS_TEST_P(test_ib_md, aligned) {
+    std::string rkey_buffer(md_attr().rkey_packed_size, '\0');
+    ib_md_umr_check(&rkey_buffer[0], true, UCT_IB_MD_MAX_MR_SIZE, true);
+}
 
 _UCT_MD_INSTANTIATE_TEST_CASE(test_ib_md, ib)
