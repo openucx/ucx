@@ -97,8 +97,12 @@ build_release_pkg() {
 
 	# check that UCX version is present in spec file
 	cd ${WORKSPACE}
-	# extract version from configure.ac and convert to MAJOR.MINOR.PATCH representation
-	version=$(grep -P "define\S+ucx_ver" configure.ac | awk '{print $2}' | sed 's,),,' | xargs echo | tr ' ' '.')
+	# extract version from configure.ac and convert to (MAJOR).(MINOR).(PATCH)(EXTRA) representation
+	major_ver=$(grep -P "define\S+ucx_ver_major" configure.ac | awk '{print $2}' | sed 's/)//')
+	minor_ver=$(grep -P "define\S+ucx_ver_minor" configure.ac | awk '{print $2}' | sed 's/)//')
+	patch_ver=$(grep -P "define\S+ucx_ver_patch" configure.ac | awk '{print $2}' | sed 's/)//')
+	extra_ver=$(grep -P "define\S+ucx_ver_extra" configure.ac | awk '{print $2}' | sed 's/)//')
+	version=${major_ver}.${minor_ver}.${patch_ver}${extra_ver}
 	if ! grep -q "$version" ucx.spec.in; then
 		azure_log_error "Current UCX version ($version) is not present in ucx.spec.in changelog"
 		exit 1
