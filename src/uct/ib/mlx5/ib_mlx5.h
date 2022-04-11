@@ -222,6 +222,38 @@ typedef struct uct_ib_mlx5_devx_umem {
     struct mlx5dv_devx_umem  *mem;
     size_t                   size;
 } uct_ib_mlx5_devx_umem_t;
+
+
+/**
+ * LRU cache entry of indirect rkeys
+ */
+typedef struct uct_ib_mlx5_mem_lru_entry {
+    /**
+     * Entry in the linked list
+     */
+    ucs_list_link_t        list;
+
+    /**
+     * Pointer to MR object
+     */
+    struct mlx5dv_devx_obj *indirect_mr;
+
+    /**
+     * RKey value, also used as a key in hash
+     */
+    uint32_t               rkey;
+
+    /**
+     * Whether the associated indirect_mr is created only to prevent reusing the
+     * same key (true) or it's referenced by an existing memory handler (false).
+     * If true, we need to destroy the indirect_mr when removed from LRU.
+     */
+    uint8_t                is_dummy;
+} uct_ib_mlx5_mem_lru_entry_t;
+
+
+KHASH_MAP_INIT_INT(rkeys, uct_ib_mlx5_mem_lru_entry_t*);
+
 #endif
 
 
@@ -241,6 +273,14 @@ typedef struct uct_ib_mlx5_md {
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;
+
+    struct {
+        ucs_list_link_t      list;
+        khash_t(rkeys)       hash;
+        size_t               count;
+    } lru_rkeys;
+
+    uint8_t                  mkey_tag;
 #endif
     /* The maximum number of outstanding RDMA Read/Atomic operations per DC QP. */
     uint8_t                  max_rd_atomic_dc;

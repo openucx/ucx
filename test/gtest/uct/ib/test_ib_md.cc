@@ -82,10 +82,10 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
 
     if ((amo_access && check_umr(ib_md)) || ib_md->relaxed_order) {
         EXPECT_TRUE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
-        EXPECT_TRUE(ib_memh->atomic_rkey != 0);
+        EXPECT_NE(UCT_IB_INVALID_MKEY, ib_memh->atomic_rkey);
     } else {
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
-        EXPECT_TRUE(ib_memh->atomic_rkey == 0);
+        EXPECT_EQ(UCT_IB_INVALID_MKEY, ib_memh->atomic_rkey);
     }
 #endif
 

@@ -334,10 +334,14 @@ ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
                                  const uct_md_mkey_pack_params_t *params,
                                  void *rkey_buffer)
 {
-    ucs_status_t status = uct_md_mkey_pack_params_check(md, memh, rkey_buffer);
+    ucs_status_t status;
 
-    return (status == UCS_OK) ?
-           md->ops->mkey_pack(md, memh, params, rkey_buffer) : status;
+    status = uct_md_mkey_pack_params_check(md, memh, rkey_buffer);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return md->ops->mkey_pack(md, memh, params, rkey_buffer);
 }
 
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)

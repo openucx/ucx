@@ -227,6 +227,7 @@ static ucs_status_t uct_knem_rkey_unpack(uct_component_t *component,
         ucs_error("Failed to allocate memory for uct_knem_key_t");
         return UCS_ERR_NO_MEMORY;
     }
+
     key->cookie = packed->cookie;
     key->address = packed->address;
     *handle_p = NULL;

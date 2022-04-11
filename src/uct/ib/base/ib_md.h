@@ -51,7 +51,7 @@ enum {
     UCT_IB_MEM_MULTITHREADED         = UCS_BIT(3), /**< The memory region registration
                                                         handled by chunks in parallel
                                                         threads */
-    UCT_IB_MEM_FLAG_RELAXED_ORDERING = UCS_BIT(4), /**< The memory region will issue
+    UCT_IB_MEM_FLAG_RELAXED_ORDERING = UCS_BIT(4)  /**< The memory region will issue
                                                         PCIe writes with relaxed order
                                                         attribute */
 };
@@ -86,6 +86,10 @@ typedef struct uct_ib_md_ext_config {
     size_t                   min_mt_reg;   /**< Multi-threaded registration threshold */
     size_t                   mt_reg_chunk; /**< Multi-threaded registration chunk */
     int                      mt_reg_bind;  /**< Multi-threaded registration bind to core */
+    unsigned                 max_idle_rkey_count; /**< Maximal number of
+                                                       invalidated memory keys
+                                                       that are kept idle before
+                                                       reuse*/
 } uct_ib_md_ext_config_t;
 
 
@@ -93,6 +97,7 @@ typedef struct uct_ib_mem {
     uint32_t                lkey;
     uint32_t                rkey;
     uint32_t                atomic_rkey;
+    uint32_t                indirect_rkey;
     uint32_t                flags;
 } uct_ib_mem_t;
 
@@ -136,6 +141,7 @@ typedef struct uct_ib_md {
     int                      fork_init;
     size_t                   memh_struct_size;
     uint64_t                 reg_mem_types;
+    uint64_t                 cap_flags;
 } uct_ib_md_t;
 
 
@@ -240,6 +246,22 @@ typedef ucs_status_t (*uct_ib_md_dereg_key_func_t)(struct uct_ib_md *md,
 typedef ucs_status_t (*uct_ib_md_reg_atomic_key_func_t)(struct uct_ib_md *md,
                                                         uct_ib_mem_t *memh);
 
+
+/**
+ * Memory domain method to register indirect memory key which supports
+ * @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE.
+ *
+ * @param [in]  md      Memory domain.
+ *
+ * @param [in]  memh    Memory region handle registered for regular ops.
+ *                      Method should initialize indirect_rkey
+ *
+ * @return UCS_OK on success or error code in case of failure.
+ */
+typedef ucs_status_t (*uct_ib_md_reg_indirect_key_func_t)(struct uct_ib_md *md,
+                                                          uct_ib_mem_t *memh);
+
+
 /**
  * Memory domain method to release resources registered for atomic ops.
  *
@@ -324,6 +346,7 @@ typedef struct uct_ib_md_ops {
     uct_ib_md_open_func_t                open;
     uct_ib_md_cleanup_func_t             cleanup;
     uct_ib_md_reg_key_func_t             reg_key;
+    uct_ib_md_reg_indirect_key_func_t    reg_indirect_key;
     uct_ib_md_dereg_key_func_t           dereg_key;
     uct_ib_md_reg_atomic_key_func_t      reg_atomic_key;
     uct_ib_md_dereg_atomic_key_func_t    dereg_atomic_key;
@@ -383,8 +406,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_ib_md_pack_rkey(uint32_t rkey, uint32_t atomic_rkey, void *rkey_buffer)
 {
     uint64_t *rkey_p = (uint64_t*)rkey_buffer;
+
     *rkey_p = (((uint64_t)atomic_rkey) << 32) | rkey;
-     ucs_trace("packed rkey: direct 0x%x indirect 0x%x", rkey, atomic_rkey);
+    ucs_trace("packed rkey: direct 0x%x indirect 0x%x", rkey, atomic_rkey);
 }
 
 
@@ -398,7 +422,7 @@ static inline uint32_t uct_ib_resolve_atomic_rkey(uct_rkey_t uct_rkey,
                                                   uint64_t *remote_addr_p)
 {
     uint32_t atomic_rkey = uct_ib_md_indirect_rkey(uct_rkey);
-    if (atomic_rkey == UCT_IB_INVALID_RKEY) {
+    if (atomic_rkey == UCT_IB_INVALID_MKEY) {
         return uct_ib_md_direct_rkey(uct_rkey);
     } else {
         *remote_addr_p += atomic_mr_offset;

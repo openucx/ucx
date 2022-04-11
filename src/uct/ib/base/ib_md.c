@@ -32,6 +32,11 @@
 
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
+#define UCT_IB_MD_MEM_DEREG_CHECK_PARAMS(_ib_md, _params) \
+    UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, \
+                                  (_ib_md)->cap_flags & UCT_MD_FLAG_INVALIDATE)
+
+
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,
                                sizeof(ucs_config_bw_spec_t),
                                UCS_CONFIG_TYPE_BW_SPEC);
@@ -181,6 +186,10 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Enable relaxed ordering for PCIe transactions to improve performance on some systems.",
      ucs_offsetof(uct_ib_md_config_t, mr_relaxed_order), UCS_CONFIG_TYPE_ON_OFF_AUTO},
 
+    {"MAX_IDLE_RKEY_COUNT", "16",
+     "Maximal number of invalidated memory keys that are kept idle before reuse.",
+     ucs_offsetof(uct_ib_md_config_t, ext.max_idle_rkey_count), UCS_CONFIG_TYPE_UINT},
+
     {NULL}
 };
 
@@ -260,13 +269,9 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
-    md_attr->cap.max_alloc = ULONG_MAX; /* TODO query device */
-    md_attr->cap.max_reg   = ULONG_MAX; /* TODO query device */
-    md_attr->cap.flags     = UCT_MD_FLAG_REG       |
-                             UCT_MD_FLAG_NEED_MEMH |
-                             UCT_MD_FLAG_NEED_RKEY |
-                             UCT_MD_FLAG_ADVISE    |
-                             UCT_MD_FLAG_INVALIDATE;
+    md_attr->cap.max_alloc        = ULONG_MAX; /* TODO query device */
+    md_attr->cap.max_reg          = ULONG_MAX; /* TODO query device */
+    md_attr->cap.flags            = md->cap_flags;
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
@@ -547,13 +552,14 @@ static ucs_status_t uct_ib_memh_dereg_key(uct_ib_md_t *md, uct_ib_mem_t *memh,
     }
 }
 
+
 static ucs_status_t uct_ib_memh_dereg(uct_ib_md_t *md, uct_ib_mem_t *memh)
 {
     ucs_status_t s, status = UCS_OK;
 
     if (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
-        s = md->ops->dereg_atomic_key(md, memh);
         memh->flags &= ~UCT_IB_MEM_FLAG_ATOMIC_MR;
+        s = md->ops->dereg_atomic_key(md, memh);
         if (s != UCS_OK) {
             status = s;
         }
@@ -698,7 +704,11 @@ static ucs_status_t uct_ib_mem_set_numa_policy(uct_ib_md_t *md, void *address,
 static void uct_ib_mem_init(uct_ib_mem_t *memh, unsigned uct_flags,
                             uint64_t access_flags)
 {
-    memh->flags = 0;
+    memh->lkey          = UCT_IB_INVALID_MKEY;
+    memh->rkey          = UCT_IB_INVALID_MKEY;
+    memh->atomic_rkey   = UCT_IB_INVALID_MKEY;
+    memh->indirect_rkey = UCT_IB_INVALID_MKEY;
+    memh->flags         = 0;
 
     /* coverity[dead_error_condition] */
     if (access_flags & IBV_ACCESS_ON_DEMAND) {
@@ -788,7 +798,7 @@ static ucs_status_t uct_ib_mem_dereg(uct_md_h uct_md,
     uct_ib_mem_t *ib_memh;
     ucs_status_t status;
 
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
+    UCT_IB_MD_MEM_DEREG_CHECK_PARAMS(md, params);
 
     ib_memh = params->memh;
     status  = uct_ib_memh_dereg(md, ib_memh);
@@ -875,16 +885,19 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                  const uct_md_mkey_pack_params_t *params,
                  void *rkey_buffer)
 {
-    uct_ib_md_t *md    = ucs_derived_of(uct_md, uct_ib_md_t);
-    uct_ib_mem_t *memh = uct_memh;
+    uct_ib_md_t *md     = ucs_derived_of(uct_md, uct_ib_md_t);
+    uct_ib_mem_t *memh  = uct_memh;
+    unsigned flags      = UCS_PARAM_VALUE(UCT_MD_MKEY_PACK_FIELD, params, flags,
+                                          FLAGS, 0);
     uint32_t atomic_rkey;
+    uint32_t rkey;
     ucs_status_t status;
 
     /* create umr only if a user requested atomic access to the
      * memory region and the hardware supports it.
      */
-    if (((memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC) ||
-         (memh->flags & UCT_IB_MEM_FLAG_RELAXED_ORDERING)) &&
+    if ((memh->flags & (UCT_IB_MEM_ACCESS_REMOTE_ATOMIC |
+                        UCT_IB_MEM_FLAG_RELAXED_ORDERING)) &&
         !(memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) &&
         (memh != md->global_odp))
     {
@@ -892,21 +905,38 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         UCS_PROFILE_CODE("reg atomic key") {
             status = md->ops->reg_atomic_key(md, memh);
         }
+
         if (status == UCS_OK) {
             memh->flags |= UCT_IB_MEM_FLAG_ATOMIC_MR;
             ucs_trace("created atomic key 0x%x for 0x%x", memh->atomic_rkey,
                       memh->lkey);
-        } else if (status != UCS_ERR_UNSUPPORTED) {
+        } else if (status == UCS_ERR_UNSUPPORTED) {
+            /* ignore for atomic MR */
+        } else {
             return status;
         }
     }
+
     if (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) {
         atomic_rkey = memh->atomic_rkey;
     } else {
-        atomic_rkey = UCT_IB_INVALID_RKEY;
+        atomic_rkey = UCT_IB_INVALID_MKEY;
     }
 
-    uct_ib_md_pack_rkey(memh->rkey, atomic_rkey, rkey_buffer);
+    if (flags & UCT_MD_MKEY_PACK_FLAG_INVALIDATE) {
+        if (memh->indirect_rkey == UCT_IB_INVALID_MKEY) {
+            status = md->ops->reg_indirect_key(md, memh);
+            if (status != UCS_OK) {
+                return status;
+            }
+        }
+
+        rkey = memh->indirect_rkey;
+    } else {
+        rkey = memh->rkey;
+    }
+
+    uct_ib_md_pack_rkey(rkey, atomic_rkey, rkey_buffer);
     return UCS_OK;
 }
 
@@ -981,7 +1011,7 @@ uct_ib_mem_rcache_dereg(uct_md_h uct_md,
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
     uct_ib_rcache_region_t *region;
 
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 1);
+    UCT_IB_MD_MEM_DEREG_CHECK_PARAMS(md, params);
 
     region = uct_ib_rcache_region_from_memh(params->memh);
     if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0) &
@@ -1040,7 +1070,7 @@ static void uct_ib_rcache_dump_region_cb(void *context, ucs_rcache_t *rcache,
     snprintf(buf, max, "lkey 0x%x rkey 0x%x atomic_rkey 0x%x",
              memh->lkey, memh->rkey,
              (memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR) ? memh->atomic_rkey :
-                             UCT_IB_INVALID_RKEY
+                             UCT_IB_INVALID_MKEY
              );
 }
 
@@ -1093,7 +1123,7 @@ uct_ib_mem_global_odp_dereg(uct_md_h uct_md,
     uct_ib_mem_t *ib_memh;
     ucs_status_t status;
 
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(params, 0);
+    UCT_IB_MD_MEM_DEREG_CHECK_PARAMS(md, params);
 
     if (params->memh == md->global_odp) {
         return UCS_OK;
@@ -1577,6 +1607,11 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
 
     md->super.ops       = &uct_ib_md_ops;
     md->super.component = &uct_ib_component;
+    md->config          = md_config->ext;
+    md->cap_flags       = UCT_MD_FLAG_REG |
+                          UCT_MD_FLAG_NEED_MEMH |
+                          UCT_MD_FLAG_NEED_RKEY |
+                          UCT_MD_FLAG_ADVISE;
 
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
         md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
@@ -1669,9 +1704,11 @@ void uct_ib_md_close(uct_md_h uct_md)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
+    /* Must be done before md->ops->cleanup, since it can call functions from
+     * md->ops */
+    uct_ib_md_release_reg_method(md);
     md->ops->cleanup(md);
     uct_ib_md_release_device_config(md);
-    uct_ib_md_release_reg_method(md);
     uct_ib_device_cleanup_ah_cached(&md->dev);
     ibv_dealloc_pd(md->pd);
     uct_ib_device_cleanup(&md->dev);
@@ -1705,8 +1742,6 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         status = UCS_ERR_IO_ERROR;
         goto err;
     }
-
-    md->config = md_config->ext;
 
     status = uct_ib_device_query(dev, ibv_device);
     if (status != UCS_OK) {
@@ -1743,6 +1778,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
     }
 
     md->dev.flags  = uct_ib_device_spec(&md->dev)->flags;
+
     *p_md = md;
     return UCS_OK;
 
@@ -1768,6 +1804,7 @@ static uct_ib_md_ops_t uct_ib_verbs_md_ops = {
     .open                = uct_ib_verbs_md_open,
     .cleanup             = (uct_ib_md_cleanup_func_t)ucs_empty_function,
     .reg_key             = uct_ib_verbs_reg_key,
+    .reg_indirect_key    = (uct_ib_md_reg_indirect_key_func_t)ucs_empty_function_return_unsupported,
     .dereg_key           = uct_ib_verbs_dereg_key,
     .reg_atomic_key      = uct_ib_verbs_reg_atomic_key,
     .dereg_atomic_key    = (uct_ib_md_dereg_atomic_key_func_t)ucs_empty_function_return_success,

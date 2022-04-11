@@ -2361,6 +2361,7 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
     config->tag.eager.zcopy_auto_thresh = 0;
     config->am.zcopy_auto_thresh        = 0;
     config->p2p_lanes                   = 0;
+    config->uct_rkey_pack_flags         = 0;
     if (context->config.ext.bcopy_thresh == UCS_MEMUNITS_AUTO) {
         config->bcopy_thresh = 0;
     } else {
@@ -2404,6 +2405,8 @@ ucs_status_t ucp_ep_config_init(ucp_worker_h worker, ucp_ep_config_t *config,
             config->md_index[lane] = context->tl_rscs[rsc_index].md_index;
             if (ucp_ep_config_connect_p2p(worker, &config->key, rsc_index)) {
                 config->p2p_lanes |= UCS_BIT(lane);
+            } else if (config->key.err_mode == UCP_ERR_HANDLING_MODE_PEER) {
+                config->uct_rkey_pack_flags |= UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
             }
         } else {
             config->md_index[lane] = UCP_NULL_RESOURCE;
