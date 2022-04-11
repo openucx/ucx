@@ -5,52 +5,27 @@ trigger:
   tags:
     include:
       - v*
-pr:
-  - master
-  - v*.*.x
 
 resources:
   containers:
-    - container: centos7_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7-mofed5-cuda11:2
-    - container: centos8_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos8-mofed5-cuda11:2
-    - container: ubuntu16_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu16.04-mofed5-cuda11:3
-    - container: ubuntu18_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu18.04-mofed5-cuda11:3
-    - container: ubuntu20_cuda11
-      image: rdmz-harbor.rdmz.labs.mlnx/ucx/ubuntu20.04-mofed5-cuda11:3
+    - container: centos7
+      image: rdmz-harbor.rdmz.labs.mlnx/ucx/centos7:4
+
 
 stages:
-  - stage: Prepare
-    jobs:
-      - job: CheckRelease
-        pool:
-          name: MLNX
-          demands:
-          - ucx_docker -equals yes
-        steps:
-          - checkout: self
-            fetchDepth: 100
-            clean: true
-
-          - bash: |
-              set -eE
-              source ./buildlib/az-helpers.sh
-              set -x
-              check_release_build $(Build.Reason) $(Build.SourceVersion) "AZP/RELEASE: "
-            name: Result
-            displayName: Check build condition
-
   # Create an empty draft to avoid race condition in distro releases
-  - stage: GitHubDraft
-    condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
-    dependsOn: Prepare
+  - stage: GitHubRelease
+    variables:
+      ${{ if eq(variables['Build.Reason'], 'ResourceTrigger') }}:
+        artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/heads/', '') }}-centos7-mofed5.tar.bz2
+      ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
+        artifact_name: ucx-${{ replace(variables['Build.SourceBranch'], 'refs/tags/', '') }}-centos7-mofed5.tar.bz2
+      ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+        artifact_name: ucx-pr$(System.PullRequest.PullRequestNumber)-centos7-mofed5.tar.bz2
     jobs:
-      - job: DraftRelease
-        displayName: Create draft release
-        container: centos7_cuda11
+      - job: Release
+        displayName: Create release
+        container: centos7
         pool:
           name: MLNX
           demands:
@@ -68,37 +43,29 @@ stages:
             set -eE
             gcc --version
             ./contrib/configure-release --with-java=no
-            ./contrib/buildrpm.sh -s -t -b
-          displayName: Build tarball
+          displayName: Configure
 
-        - task: GithubRelease@0
-          condition: eq(variables['Build.Reason'], 'IndividualCI')
-          displayName: Create/edit GitHub Draft Release
-          inputs:
-            githubConnection: release
-            repositoryName: openucx/ucx
-            action: edit
-            tag: $(Build.SourceBranchName)
-            isDraft: true
-            addChangeLog: false
-            releaseNotesSource: file
-            releaseNotesFile: NEWS
-            assetUploadMode: replace
-            assets: |
-              ./ucx-*.tar.gz
-              ./rpm-dist/ucx-*.src.rpm
+        - bash: |
+            set -eEx
+            cd pkg-build
+            ../contrib/buildrpm.sh -s -t -b --noclean
+            cd rpm-dist/`uname -m`
+            tar -cjf "../../../${AZ_ARTIFACT_NAME}" *.rpm
+            cd ../../..
+            tar -tjf "${AZ_ARTIFACT_NAME}"
+          displayName: Build RPM package
+          env:
+            AZ_ARTIFACT_NAME: $(artifact_name)
 
-  - stage: Build
-    displayName: Build binary packages
-    dependsOn:
-      - Prepare
-      - GitHubDraft
-    condition: eq(dependencies.Prepare.outputs['CheckRelease.Result.Launch'], 'True')
-    jobs:
-      - template: az-distro-release.yml
-      - template: jucx/jucx-publish.yml
-        parameters:
-          ${{ if eq(variables['Build.Reason'], 'IndividualCI') }}:
-            target: publish-release
-          ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
-            target: package
+          - task: GithubRelease@0
+            condition: eq(variables['Build.Reason'], 'IndividualCI')
+            displayName: Upload artifacts
+            inputs:
+              githubConnection: release
+              repositoryName: mellanox/ucx
+              action: edit
+              tag: $(Build.SourceBranchName)
+              isDraft: true
+              addChangeLog: false
+              assetUploadMode: replace
+              assets: "./$(artifact_name)"
