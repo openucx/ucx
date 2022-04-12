@@ -160,8 +160,8 @@ enum {
                                                            support CONNECT_TO_IFACE
                                                            mode only */
     UCP_EP_INIT_CREATE_AM_LANE_ONLY    = UCS_BIT(8),  /**< Endpoint requires an AM lane only */
-    UCP_EP_INIT_ALLOW_KA_AUX_TL        = UCS_BIT(9),  /**< Endpoint allows selecting of auxiliary
-                                                           transports for keepalive lane */
+    UCP_EP_INIT_KA_FROM_EXIST_LANES    = UCS_BIT(9),  /**< Use only existing lanes to create
+                                                           keepalive lane */
     UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10)  /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
 };

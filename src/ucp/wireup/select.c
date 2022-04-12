@@ -88,6 +88,7 @@ typedef struct {
                                                           * found during selection */
     ucp_lane_index_t          num_lanes;                 /* Number of active lanes */
     unsigned                  ucp_ep_init_flags;         /* Endpoint init extra flags */
+    ucp_tl_bitmap_t           tl_bitmap;                 /* TL bitmap of selected resources */
 } ucp_wireup_select_context_t;
 
 static const char *ucp_wireup_md_flags[] = {
@@ -644,6 +645,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
          lane_type_iter < UCP_LANE_TYPE_LAST;
          ++lane_type_iter) {
         lane_desc->score[lane_type_iter] = 0.0;
+    }
+
+    if (select_info->rsc_index != UCP_NULL_RESOURCE) {
+        UCS_BITMAP_SET(select_ctx->tl_bitmap, select_info->rsc_index);
     }
 
 out_update_score:
@@ -1647,14 +1652,21 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_info_t select_info = {0};
     unsigned ep_init_flags               = ucp_wireup_ep_init_flags(
                                                    select_params, select_ctx);
+    const ucp_tl_bitmap_t *tl_bitmap;
     ucp_wireup_criteria_t criteria;
     ucs_status_t status;
 
     if ((err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
         !ucp_worker_keepalive_is_enabled(worker) ||
-        (select_params->ep_init_flags & (UCP_EP_INIT_CREATE_AM_LANE_ONLY |
-                                         UCP_EP_INIT_FLAG_INTERNAL))) {
+        (ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL)) {
         return UCS_OK;
+    }
+
+    if (ep_init_flags & (UCP_EP_INIT_CREATE_AM_LANE_ONLY |
+                         UCP_EP_INIT_KA_FROM_EXIST_LANES)) {
+        tl_bitmap = &select_ctx->tl_bitmap;
+    } else {
+        tl_bitmap = &select_params->tl_bitmap;
     }
 
     ucp_wireup_criteria_init(&criteria);
@@ -1665,15 +1677,12 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     criteria.is_keepalive       = 1;
     criteria.calc_score         = ucp_wireup_keepalive_score_func;
     /* Keepalive can also use auxiliary transports */
-    criteria.tl_rsc_flags       =
-            (ep_init_flags & UCP_EP_INIT_ALLOW_KA_AUX_TL) ?
-            UCP_TL_RSC_FLAG_AUX : 0;
+    criteria.tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX;
     ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
 
     status = ucp_wireup_select_transport(select_ctx, select_params, &criteria,
-                                         ucp_tl_bitmap_max, UINT64_MAX,
-                                         UINT64_MAX, UINT64_MAX, 0,
-                                         &select_info);
+                                         *tl_bitmap, UINT64_MAX, UINT64_MAX,
+                                         UINT64_MAX, 0, &select_info);
     if (status == UCS_OK) {
         return ucp_wireup_add_lane(select_params, &select_info,
                                    UCP_LANE_TYPE_KEEPALIVE, /* show error */ 1,
@@ -1681,6 +1690,15 @@ ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
     }
 
     return status;
+}
+
+static void
+ucp_wireup_select_context_init(ucp_wireup_select_context_t *select_ctx)
+{
+    memset(&select_ctx->lane_descs, 0, sizeof(select_ctx->lane_descs));
+    select_ctx->num_lanes         = 0;
+    select_ctx->ucp_ep_init_flags = 0;
+    UCS_BITMAP_CLEAR(&select_ctx->tl_bitmap);
 }
 
 static UCS_F_NOINLINE ucs_status_t
@@ -1691,7 +1709,7 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_info_t am_info;
     ucs_status_t status;
 
-    memset(select_ctx, 0, sizeof(*select_ctx));
+    ucp_wireup_select_context_init(select_ctx);
 
     status = ucp_wireup_add_cm_lane(select_params, select_ctx);
     if (status != UCS_OK) {

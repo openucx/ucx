@@ -424,7 +424,7 @@ out:
 static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 {
     static const unsigned ep_init_flags_prio[] = {
-        UCP_EP_INIT_ALLOW_KA_AUX_TL, 0, UCP_EP_INIT_CREATE_AM_LANE_ONLY
+        0, UCP_EP_INIT_KA_FROM_EXIST_LANES, UCP_EP_INIT_CREATE_AM_LANE_ONLY
     };
     ucp_ep_h ep                                = arg;
     ucp_worker_h worker                        = ep->worker;
