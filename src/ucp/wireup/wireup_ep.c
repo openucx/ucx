@@ -260,14 +260,18 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
                                 ucp_ep_h);
 
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
-                           ucp_rsc_index_t rsc_index)
+                           ucp_rsc_index_t rsc_index, int is_p2p)
 {
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
     wireup_ep->aux_ep        = uct_ep;
     wireup_ep->aux_rsc_index = rsc_index;
+
+    if (is_p2p) {
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_AUX_P2P;
+    }
 }
 
-ucs_status_t
+static ucs_status_t
 ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
                           const ucp_unpacked_address_t *remote_address)
 {
@@ -306,7 +310,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
         return status;
     }
 
-    ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index);
+    ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index, 0);
 
     ucp_worker_iface_progress_ep(wiface);
 
@@ -351,10 +355,10 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
-static ucs_status_t
-ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                       ucp_rsc_index_t rsc_idx, unsigned flags,
-                       uct_completion_t *comp)
+static ucs_status_t ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                           ucp_rsc_index_t rsc_idx, int is_p2p,
+                                           unsigned flags,
+                                           uct_completion_t *comp)
 {
     ucp_worker_h worker = ucp_ep->worker;
     ucp_worker_iface_t *wiface;
@@ -362,14 +366,15 @@ ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucs_assert(rsc_idx != UCP_NULL_RESOURCE);
 
     wiface = ucp_worker_iface(worker, rsc_idx);
-    if (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) {
-        return ucp_ep_do_uct_ep_keepalive(ucp_ep, uct_ep, rsc_idx, flags,
-                                          comp);
+    if (ucp_ep_is_am_keepalive(ucp_ep, rsc_idx, is_p2p)) {
+        return ucp_ep_do_uct_ep_am_keepalive(ucp_ep, uct_ep, rsc_idx);
+    } else if (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) {
+        return uct_ep_check(uct_ep, flags, comp);
     }
 
-    /* if EP_CHECK is not supported by UCT transport, it has to support a
-     * built-in keepalive mechanism to be able to detect peer failure during
-     * wireup
+    /* If EP_CHECK is not supported by UCT transport and AM-based keepalive is
+     * not required, it has to support a built-in keepalive mechanism to be
+     * able to detect peer failure during wireup
      */
     ucs_assert(wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE);
     return UCS_OK;
@@ -388,6 +393,8 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
     if (wireup_ep->aux_ep != NULL) {
         return ucp_wireup_ep_do_check(ucp_ep, wireup_ep->aux_ep,
                                       wireup_ep->aux_rsc_index,
+                                      wireup_ep->flags &
+                                              UCP_WIREUP_EP_FLAG_AUX_P2P,
                                       flags, comp);
     }
 
