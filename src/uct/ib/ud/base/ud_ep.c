@@ -1494,7 +1494,7 @@ static void uct_ud_ep_send_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     uct_ud_ctl_desc_t *cdesc;
     uct_ud_send_skb_t *skb;
 
-    /* Do not send ACK if not connected yet. It may happen if CREQ and CREP
+    /* Do not send ACKs if not connected yet. It may happen if CREQ and CREP
      * from peer are lost. Need to wait for CREP resend from peer.
      */
     if (!uct_ud_ep_is_connected(ep)) {

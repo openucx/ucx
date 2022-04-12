@@ -46,21 +46,21 @@ typedef struct uct_ud_iface_peer uct_ud_iface_peer_t;
 
 enum {
     UCT_UD_PACKET_ACK_REQ_SHIFT   = 25,
-    UCT_UD_PACKET_AM_ID_SHIFT     = 29,
-    UCT_UD_PACKET_DEST_ID_SHIFT   = 24,
-    UCT_UD_PACKET_PUT_SHIFT       = 28,
+    UCT_UD_PACKET_AM_ID_SHIFT     = 27,
+    UCT_UD_PACKET_DEST_ID_SHIFT   = 24
 };
 
 enum {
     UCT_UD_PACKET_FLAG_AM      = UCS_BIT(24),
     UCT_UD_PACKET_FLAG_ACK_REQ = UCS_BIT(25),
-    UCT_UD_PACKET_FLAG_ECN     = UCS_BIT(26),
+    /* 26th flag is vacant */
     UCT_UD_PACKET_FLAG_NACK    = UCS_BIT(27),
+    /* The following flags are not packed with AM flag. In case of AM these
+     * bits are used by AM ID */
     UCT_UD_PACKET_FLAG_PUT     = UCS_BIT(28),
     UCT_UD_PACKET_FLAG_CTL     = UCS_BIT(29),
 
-    UCT_UD_PACKET_AM_ID_MASK     = UCS_MASK(UCT_UD_PACKET_AM_ID_SHIFT),
-    UCT_UD_PACKET_DEST_ID_MASK   = UCS_MASK(UCT_UD_PACKET_DEST_ID_SHIFT),
+    UCT_UD_PACKET_DEST_ID_MASK = UCS_MASK(UCT_UD_PACKET_DEST_ID_SHIFT),
 };
 
 enum {
