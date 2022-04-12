@@ -46,7 +46,7 @@
 #define UCT_IB_PKEY_DEFAULT               0xffff /* Default PKEY */
 #define UCT_IB_DEV_MAX_PORTS              2
 #define UCT_IB_FABRIC_TIME_MAX            32
-#define UCT_IB_INVALID_RKEY               0xffffffffu
+#define UCT_IB_INVALID_MKEY               0xffffffffu
 #define UCT_IB_KEY                        0x1ee7a330
 #define UCT_IB_LINK_LOCAL_PREFIX          be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX          be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */

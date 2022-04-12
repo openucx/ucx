@@ -347,6 +347,9 @@ struct ucp_ep_config {
      */
     ucp_lane_map_t          p2p_lanes;
 
+    /* Flags which has to be used @ref uct_md_mkey_pack_v2 */
+    unsigned                uct_rkey_pack_flags;
+
     /* Configuration for each lane that provides RMA */
     ucp_ep_rma_config_t     rma[UCP_MAX_LANES];
 

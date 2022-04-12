@@ -644,7 +644,7 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
     memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
 
     /* Create "packed" rkey to pass it in the callback */
-    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, packed_rkey);
+    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_MKEY, packed_rkey);
 
     /* Do not pass flags to cb, because rkey is allocated on stack */
     status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0, tag,

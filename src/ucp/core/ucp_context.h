@@ -211,10 +211,30 @@ typedef struct ucp_tl_cmpt {
  * Memory domain.
  */
 typedef struct ucp_tl_md {
-    uct_md_h                      md;         /* Memory domain handle */
-    ucp_rsc_index_t               cmpt_index; /* Index of owning component */
-    uct_md_resource_desc_t        rsc;        /* Memory domain resource */
-    uct_md_attr_t                 attr;       /* Memory domain attributes */
+    /**
+     * Memory domain handle
+     */
+    uct_md_h               md;
+
+    /**
+     * Index of owning component
+     */
+    ucp_rsc_index_t        cmpt_index;
+
+    /**
+     * Memory domain resource
+     */
+    uct_md_resource_desc_t rsc;
+
+    /**
+     * Memory domain attributes
+     */
+    uct_md_attr_t          attr;
+
+    /**
+     * Flags mask parameter for @ref uct_md_mkey_pack_v2
+     */
+    unsigned               pack_flags_mask;
 } ucp_tl_md_t;
 
 
