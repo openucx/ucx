@@ -514,6 +514,17 @@ enum ucp_dt_type {
 
 
 /**
+ * @ingroup UCP_DATATYPE
+ * @brief UCP datatype attributes field mask.
+ *
+ * The enumeration allows querying a specific field in @ref ucp_datatype_attr_t.
+ */
+enum ucp_datatype_attr_field {
+    UCP_DATATYPE_ATTR_FIELD_PACKED_SIZE = UCS_BIT(0) /**< packed datatype size */
+};
+
+
+/**
  * @ingroup UCP_MEM
  * @brief UCP memory mapping flags.
  *
@@ -958,6 +969,27 @@ typedef struct ucp_generic_dt_ops {
      */
     void (*finish)(void *state);
 } ucp_generic_dt_ops_t;
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief UCP datatype attributes
+ *
+ * This structure provides attributes that can be queried for a UCP datatype.
+ */
+typedef struct ucp_datatype_attr {
+    /**
+     * Mask of valid fields in this structure, using bits from @ref
+     * ucp_datatype_attr_field. Fields not specified in this mask will be
+     * ignored. Provides ABI compatibility with respect to adding new fields.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Packed size of a single element of the given datatype.
+     */
+    size_t   packed_size;
+} ucp_datatype_attr_t;
 
 
 /**
@@ -4496,6 +4528,29 @@ ucs_status_t ucp_dt_create_generic(const ucp_generic_dt_ops_t *ops, void *contex
  * @param [in]  datatype     Datatype object to destroy.
  */
 void ucp_dt_destroy(ucp_datatype_t datatype);
+
+
+/**
+ * @ingroup UCP_DATATYPE
+ * @brief Query attributes of a datatype.
+ *
+ * This routine fetches information about the attributes of a datatype.
+ * When @ref UCP_DATATYPE_ATTR_FIELD_PACKED_SIZE is set in @a field_mask of @a attr,
+ * the field @a packed_size is set to the packed size (bytes) of the datatype.
+ *
+ * @note The size of a generic datatype is available only after it has been used
+ *       in a communication operation. If it is queried before,
+ *       @ref UCS_ERR_UNSUPPORTED will be returned.
+ *
+ * @note The size of IOV data cannot be determined from the UCP datatype. If an
+ *       IOV @a datatype is passed, @ref UCS_ERR_INVALID_PARAM will be returned.
+ *
+ * @param [in]  datatype     Datatype object to query.
+ * @param [out] attr         Filled with attributes of the datatype.
+ *
+ * @return Error code as defined by @ref ucs_status_t
+ */
+ucs_status_t ucp_dt_query(ucp_datatype_t datatype, ucp_datatype_attr_t *attr);
 
 
 /**
