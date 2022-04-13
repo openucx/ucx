@@ -252,7 +252,8 @@ uct_dc_mlx5_poll_tx(uct_dc_mlx5_iface_t *iface)
                    iface, dci_index, txqp, hw_ci);
 
     uct_rc_mlx5_txqp_process_tx_cqe(txqp, cqe, hw_ci);
-    uct_dc_mlx5_update_tx_res(iface, txwq, txqp, hw_ci);
+    uct_rc_mlx5_common_iface_txwq_update_tx_res(&iface->super.super, txwq,
+                                                txqp, hw_ci);
 
     /**
      * Note: DCI is released after handling completion callbacks,

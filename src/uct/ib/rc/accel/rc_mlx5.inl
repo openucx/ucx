@@ -919,6 +919,30 @@ static UCS_F_ALWAYS_INLINE void uct_rc_mlx5_common_txqp_bcopy_post(
     uct_rc_txqp_add_send_op(txqp, &desc->super);
 }
 
+static UCS_F_ALWAYS_INLINE uint16_t
+uct_rc_mlx5_common_iface_txwq_update_tx_res(uct_rc_iface_t *rc_iface,
+                                            uct_ib_mlx5_txwq_t *txwq,
+                                            uct_rc_txqp_t *txqp,
+                                            uint16_t hw_ci)
+{
+    uint16_t bb_num = uct_ib_mlx5_txwq_update_bb(txwq, hw_ci) -
+                      uct_rc_txqp_available(txqp);
+
+    /* Must always have positive number of released resources. The first
+     * completion will report bb_num=1 (because prev_sw_pi is initialized to -1)
+     * and all the rest report the amount of BBs the previous WQE has consumed.
+     */
+    ucs_assertv(bb_num > 0, "hw_ci=%d prev_sw_pi=%d available=%d bb_num=%d",
+                hw_ci, txwq->prev_sw_pi, txqp->available, bb_num);
+
+    uct_rc_txqp_available_add(txqp, bb_num);
+    ucs_assert(uct_rc_txqp_available(txqp) <= txwq->bb_max);
+
+    uct_rc_iface_update_reads(rc_iface);
+
+    return bb_num;
+}
+
 #if IBV_HW_TM
 static UCS_F_ALWAYS_INLINE void
 uct_rc_mlx5_set_tm_seg(uct_ib_mlx5_txwq_t *txwq,
