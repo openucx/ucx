@@ -1310,9 +1310,10 @@ uct_dc_mlx5_iface_dci_do_common_pending_tx(uct_dc_mlx5_ep_t *ep,
      * arbiter group for which flush(CANCEL) was done */
     ucs_assert(!(ep->flags & UCT_DC_MLX5_EP_FLAG_FLUSH_CANCEL));
 
-    ucs_assertv(!uct_dc_mlx5_iface_dci_ep_can_send(ep),
-                "pending callback returned error, but send resources are"
-                " available");
+    ucs_assertv(!uct_dc_mlx5_iface_dci_ep_can_send(ep) ||
+                (ep == iface->tx.fc_ep),
+                "ep=%p: pending callback returned error, but send resources"
+                " are available and it is not fc_ep=%p", ep, iface->tx.fc_ep);
     return UCS_ARBITER_CB_RESULT_DESCHED_GROUP;
 }
 
