@@ -322,9 +322,8 @@ ucs_status_t uct_dc_mlx5_iface_init_fc_ep(uct_dc_mlx5_iface_t *iface);
 
 ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self);
 
-ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
-                                          uct_rc_hdr_t *hdr, unsigned length,
-                                          uint32_t imm_data, uint16_t lid, unsigned flags);
+const char *
+uct_dc_mlx5_fc_req_str(uct_dc_fc_request_t *dc_req, char *buf, size_t max);
 
 void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 

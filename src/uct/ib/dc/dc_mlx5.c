@@ -1149,9 +1149,25 @@ ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
     return status;
 }
 
-ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
-                                          uct_rc_hdr_t *hdr, unsigned length,
-                                          uint32_t imm_data, uint16_t lid, unsigned flags)
+const char *
+uct_dc_mlx5_fc_req_str(uct_dc_fc_request_t *fc_req, char *buf, size_t max)
+{
+    char gid_str[32];
+
+    ucs_snprintf_zero(buf, max,
+                      "FC_PURE_GRANT seq %" PRIu64 " dct_num 0x%x"
+                      " lid %d gid %s",
+                      fc_req->sender.payload.seq, fc_req->dct_num, fc_req->lid,
+                      uct_ib_gid_str(ucs_unaligned_ptr(
+                                             &fc_req->sender.payload.gid),
+                                     gid_str, sizeof(gid_str)));
+    return buf;
+}
+
+static ucs_status_t
+uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
+                             uct_rc_hdr_t *hdr, unsigned length,
+                             uint32_t imm_data, uint16_t lid, unsigned flags)
 {
     uct_dc_mlx5_iface_t *iface = ucs_derived_of(rc_iface, uct_dc_mlx5_iface_t);
     uint8_t fc_hdr             = uct_rc_fc_get_fc_hdr(hdr->am_id);
@@ -1164,6 +1180,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
     ucs_arbiter_t *waitq;
     ucs_arbiter_group_t *group;
     uint8_t pool_index;
+    char buf[128];
 
     ucs_assert(rc_iface->config.fc_enabled);
 
@@ -1173,7 +1190,7 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
 
         dc_req = ucs_mpool_get(&iface->super.super.tx.pending_mp);
         if (ucs_unlikely(dc_req == NULL)) {
-            ucs_error("Failed to allocate FC request");
+            ucs_error("fc_ep=%p: failed to allocate FC request", ep);
             return UCS_ERR_NO_MEMORY;
         }
 
@@ -1186,10 +1203,10 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         status = uct_dc_mlx5_iface_fc_grant(&dc_req->super.super);
         if (status == UCS_ERR_NO_RESOURCE){
             uct_dc_mlx5_ep_do_pending_fc(ep, dc_req);
-        } else {
-            ucs_assertv_always(status == UCS_OK,
-                               "Failed to send FC grant msg: %s",
-                               ucs_status_string(status));
+        } else if (status != UCS_OK) {
+            ucs_diag("fc_ep %p: failed to send %s: %s", ep,
+                     uct_dc_mlx5_fc_req_str(dc_req, buf, sizeof(buf)),
+                     ucs_status_string(status));
         }
     } else if (fc_hdr == UCT_RC_EP_FC_PURE_GRANT) {
         sender = (uct_dc_fc_sender_data_t *)(hdr + 1);
