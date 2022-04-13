@@ -1376,7 +1376,6 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
                                                 uct_dc_mlx5_iface_t);
     int is_only                = ucs_arbiter_elem_is_only(elem);
     ucs_arbiter_cb_result_t res;
-    uint8_t dci;
 
     res = uct_dc_mlx5_iface_dci_do_common_pending_tx(ep, elem);
     if ((res != UCS_ARBITER_CB_RESULT_REMOVE_ELEM) || !is_only) {
@@ -1387,12 +1386,7 @@ uct_dc_mlx5_iface_dci_do_dcs_pending_tx(ucs_arbiter_t *arbiter,
      * and the dci has no outstanding operations. For example pending
      * callback did not send anything. (uct_ep_flush or just return ok)
      */
-    dci = ep->dci;
-    if (!uct_dc_mlx5_iface_dci_detach(iface, ep)) {
-        return res;
-    }
-
-    uct_dc_mlx5_iface_dci_schedule_release(iface, dci);
+    uct_dc_mlx5_iface_dci_detach(iface, ep);
     return res;
 }
 
@@ -1486,29 +1480,15 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
     ucs_arbiter_t *waitq;
     ucs_arbiter_group_t *group;
     uint8_t pool_index;
-    uint8_t dci;
-
-    if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-        ucs_arbiter_group_purge(uct_dc_mlx5_iface_tx_waitq(iface),
-                                uct_dc_mlx5_ep_rand_arb_group(iface, ep),
-                                uct_dc_mlx5_ep_arbiter_purge_cb, &args);
-        return;
-    }
 
     uct_dc_mlx5_get_arbiter_params(iface, ep, &waitq, &group, &pool_index);
     ucs_arbiter_group_purge(waitq, group, uct_dc_mlx5_ep_arbiter_purge_cb,
                             &args);
 
-    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        return;
+    if ((ep->dci != UCT_DC_MLX5_EP_NO_DCI) &&
+        !uct_dc_mlx5_iface_is_dci_rand(iface)) {
+        uct_dc_mlx5_iface_dci_detach(iface, ep);
     }
-
-    dci = ep->dci;
-    if (!uct_dc_mlx5_iface_dci_detach(iface, ep)) {
-        return;
-    }
-
-    uct_dc_mlx5_iface_dci_schedule_release(iface, dci);
 }
 
 ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
