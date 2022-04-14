@@ -54,6 +54,7 @@ typedef struct uct_md_rcache_config {
     unsigned long max_regions;    /**< Maximal number of rcache regions */
     size_t        max_size;       /**< Maximal size of mapped memory */
     size_t        max_unreleased; /**< Threshold for triggering a cleanup */
+    int           purge_on_fork;  /**< Enable/disable rcache purge on fork */
 } uct_md_rcache_config_t;
 
 

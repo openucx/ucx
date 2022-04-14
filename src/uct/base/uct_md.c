@@ -57,6 +57,10 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
      ucs_offsetof(uct_md_rcache_config_t, max_unreleased),
      UCS_CONFIG_TYPE_MEMUNITS},
 
+    {"RCACHE_PURGE_ON_FORK", "y",
+     "Purge registration cache upon fork",
+     ucs_offsetof(uct_md_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -523,6 +527,8 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
     rcache_params->max_unreleased     = rcache_config->max_unreleased;
+    rcache_params->flags              = !rcache_config->purge_on_fork ? 0 :
+                                        UCS_RCACHE_FLAG_PURGE_ON_FORK;
 }
 
 double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config)
