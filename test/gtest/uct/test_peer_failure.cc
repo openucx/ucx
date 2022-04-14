@@ -583,19 +583,30 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
     ASSERT_UCS_OK(status);
     flush();
 
-    /* allow keepalive requests to complete */
+    /* Allow keepalive requests to complete */
     short_progress_loop();
 
-    /* we are still alive */
+    /* We are still alive */
     EXPECT_EQ(0, m_err_count);
 
     kill_receiver();
 
-    status = uct_ep_check(ep0(), 0, NULL);
-    ASSERT_UCS_OK(status);
-    flush();
+    unsigned retries = 1;
+    do {
+        status = uct_ep_check(ep0(), 0, NULL);
+        ASSERT_UCS_OK(status);
+        flush();
 
-    wait_for_flag(&m_err_count);
+        wait_for_flag(&m_err_count);
+        if (m_err_count != 0) {
+            break;
+        }
+
+        /* Progress to make sure all HW objects (e.g. DCT) are fully
+         * destroyed */
+        short_progress_loop();
+    } while (retries++ < 2);
+
     EXPECT_EQ(1, m_err_count);
 }
 
