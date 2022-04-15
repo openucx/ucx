@@ -1112,6 +1112,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                           UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
                                           UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
 
+    ucp_listener->conn_reqs++;
     conn_request = conn_req_args->conn_request;
     remote_data  = conn_req_args->remote_data;
 
@@ -1185,6 +1186,7 @@ err_free_remote_dev_addr:
 err_free_ucp_conn_request:
     ucs_free(ucp_conn_request);
 err_reject:
+    ucp_listener->conn_reqs--;
     status = uct_listener_reject(listener, conn_request);
     if (status != UCS_OK) {
         /* coverity[pass_freed_arg] */
@@ -1199,6 +1201,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                   ucp_conn_request_h conn_request,
                                   ucp_ep_h *ep_p)
 {
+    ucp_listener_h listener = conn_request->listener;
     ucp_tl_bitmap_t tl_bitmap;
     ucp_ep_h ep;
     ucs_status_t status;
@@ -1274,6 +1277,9 @@ out_free_request:
     ucs_free(conn_request->remote_dev_addr);
     ucs_free(conn_request);
 out:
+    UCS_ASYNC_BLOCK(&worker->async);
+    listener->conn_reqs--;
+    UCS_ASYNC_UNBLOCK(&worker->async);
     if (status == UCS_OK) {
         *ep_p = ep;
     }

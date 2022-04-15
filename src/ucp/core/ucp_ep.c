@@ -906,6 +906,9 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
     status = ucp_conn_request_unpack_sa_data(conn_request, &ep_init_flags,
                                              &worker_addr);
     if (status != UCS_OK) {
+        UCS_ASYNC_BLOCK(&worker->async);
+        conn_request->listener->conn_reqs--;
+        UCS_ASYNC_UNBLOCK(&worker->async);
         return status;
     }
 

@@ -368,6 +368,12 @@ void ucp_listener_destroy(ucp_listener_h listener)
                             listener);
     UCS_ASYNC_UNBLOCK(&listener->worker->async);
 
+    if (listener->conn_reqs != 0) {
+        ucs_warn("destroying listener %p with "
+                 "%d unprocessed connection requests",
+                 listener, listener->conn_reqs);
+    }
+
     ucp_listener_free_uct_listeners(listener);
     ucs_free(listener);
 }
@@ -382,6 +388,7 @@ ucs_status_t ucp_listener_reject(ucp_listener_h listener,
     UCS_ASYNC_BLOCK(&worker->async);
     uct_listener_reject(conn_request->uct_listener, conn_request->uct_req);
     ucs_free(conn_request->remote_dev_addr);
+    listener->conn_reqs--;
     UCS_ASYNC_UNBLOCK(&worker->async);
 
     ucs_free(conn_request);
