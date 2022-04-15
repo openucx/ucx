@@ -149,7 +149,6 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.so
 %{_libdir}/pkgconfig/ucx.pc
 %{_libdir}/pkgconfig/ucx-uct.pc
 %{_libdir}/pkgconfig/ucx-ucs.pc
-%{_libdir}/pkgconfig/ucx-ucm.pc
 %{_libdir}/cmake/ucx/*.cmake
 %{_datadir}/ucx/examples
 

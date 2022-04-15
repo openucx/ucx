@@ -16,4 +16,4 @@ Version: @VERSION@
 Cflags: -I${includedir}
 Libs: -L${libdir} -lucp
 Libs.private: -Wl,--undefined=ucp_global_init
-Requires: @PACKAGE@-uct, @PACKAGE@-ucs, @PACKAGE@-ucm
+Requires: @PACKAGE@-uct, @PACKAGE@-ucs
