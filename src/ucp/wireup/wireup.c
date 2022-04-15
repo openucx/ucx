@@ -1252,9 +1252,11 @@ ucp_wireup_check_config_intersect(ucp_ep_h ep, ucp_ep_config_key_t *new_key,
          * messages exchange */
         new_key->wireup_msg_lane = new_key->cm_lane;
         reuse_lane               = old_key->wireup_msg_lane;
-        ucp_wireup_ep_set_aux(cm_wireup_ep,
-                              ucp_wireup_ep_extract_next_ep(ep->uct_eps[reuse_lane]),
-                              old_key->lanes[reuse_lane].rsc_index);
+        ucp_wireup_ep_set_aux(
+                cm_wireup_ep,
+                ucp_wireup_ep_extract_next_ep(ep->uct_eps[reuse_lane]),
+                old_key->lanes[reuse_lane].rsc_index,
+                ucp_ep_config(ep)->p2p_lanes & UCS_BIT(reuse_lane));
         ucp_wireup_ep_pending_queue_purge(ep->uct_eps[reuse_lane],
                                           ucp_request_purge_enqueue_cb,
                                           replay_pending_queue);

@@ -3175,13 +3175,17 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     ucs_trace("ep %p: do keepalive on lane[%d]=%p ep->flags=0x%x", ep, lane,
               ep->uct_eps[lane], ep->flags);
 
-    status = ucp_ep_do_uct_ep_keepalive(ep, ep->uct_eps[lane], rsc_index, 0,
-                                        NULL);
-    if (status == UCS_ERR_NO_RESOURCE) {
-        return 0;
+    if (ucp_ep_is_am_keepalive(ep, rsc_index,
+                               ucp_ep_config(ep)->p2p_lanes & UCS_BIT(lane))) {
+        status = ucp_ep_do_uct_ep_am_keepalive(ep, ep->uct_eps[lane],
+                                               rsc_index);
+    } else {
+        status = uct_ep_check(ep->uct_eps[lane], 0, NULL);
     }
 
-    if (status != UCS_OK) {
+    if (status == UCS_ERR_NO_RESOURCE) {
+        return 0;
+    } else if (status != UCS_OK) {
         ucs_diag("worker %p: keepalive failed on ep %p lane[%d]=%p: %s",
                  worker, ep, lane, ep->uct_eps[lane],
                  ucs_status_string(status));

@@ -3241,27 +3241,21 @@ void ucp_ep_invoke_err_cb(ucp_ep_h ep, ucs_status_t status)
     ucp_ep_ext_control(ep)->err_cb(ucp_ep_ext_gen(ep)->user_data, ep, status);
 }
 
-static UCS_F_ALWAYS_INLINE int
-ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_idx)
+int ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_index, int is_p2p)
 {
-    ucp_worker_iface_t *wiface;
-
-    if (!(ep->flags & UCP_EP_FLAG_REMOTE_ID) ||
-        (rsc_idx == UCP_NULL_RESOURCE)) {
-        /* if remote ID isn't defined or rsc index is NULL (i.e. it is CM lane),
-         * don't do AM keepalive */
-        return 0;
-    }
-
-    wiface = ucp_worker_iface(ep->worker, rsc_idx);
-    return ucs_test_all_flags(wiface->attr.cap.flags,
-                              UCT_IFACE_FLAG_CONNECT_TO_IFACE |
-                              UCT_IFACE_FLAG_AM_BCOPY);
+    return /* Not a CM lane */
+            (rsc_index != UCP_NULL_RESOURCE) &&
+            /* Have a remote endpoint ID to send in the keepalive active message */
+            (ep->flags & UCP_EP_FLAG_REMOTE_ID) &&
+            /* Transport is not connected as point-to-point */
+            !is_p2p &&
+            /* Transport supports active messages */
+            (ucp_worker_iface(ep->worker, rsc_index)->flags &
+             UCT_IFACE_FLAG_AM_BCOPY);
 }
 
-ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                                        ucp_rsc_index_t rsc_idx, unsigned flags,
-                                        uct_completion_t *comp)
+ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                           ucp_rsc_index_t rsc_idx)
 {
     ucp_tl_bitmap_t tl_bitmap = UCS_BITMAP_ZERO;
     ucs_status_t status;
@@ -3270,10 +3264,6 @@ ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucp_wireup_msg_t wireup_msg;
 
     ucs_assert(!(ucp_ep->flags & UCP_EP_FLAG_FAILED));
-
-    if (!ucp_ep_is_am_keepalive(ucp_ep, rsc_idx)) {
-        return uct_ep_check(uct_ep, flags, comp);
-    }
 
     UCS_BITMAP_SET(tl_bitmap, rsc_idx);
 

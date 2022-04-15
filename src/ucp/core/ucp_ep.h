@@ -773,19 +773,28 @@ ucp_ep_peer_mem_get(ucp_context_h context, ucp_ep_h ep, uint64_t address,
                     size_t size, void *rkey_buf, ucp_md_index_t md_index);
 
 /**
- * @brief Do keepalive operation for a specific UCT EP.
+ * @brief Indicates AM-based keepalive necessity.
+ * 
+ * @param [in] ep      UCP endpoint to check.
+ * @param [in] rsc_idx Resource index to check.
+ * @param [in] is_p2p  Flag that indicates whether UCT EP was created as p2p
+ *                     (i.e. CONNECT_TO_EP) or not.
+ *
+ * @return Whether AM-based keepalive is required or not.
+ */
+int ucp_ep_is_am_keepalive(ucp_ep_h ep, ucp_rsc_index_t rsc_idx, int is_p2p);
+
+/**
+ * @brief Do AM-based keepalive operation for a specific UCT EP.
  *
  * @param [in] ucp_ep  UCP Endpoint object to operate keepalive.
  * @param [in] uct_ep  UCT Endpoint object to do keepalive on.
  * @param [in] rsc_idx Resource index to check.
- * @param [in] flags   Flags for keepalive operation.
- * @param [in] comp    Pointer to keepalive completion object.
  *
  * @return Status of keepalive operation.
  */
-ucs_status_t ucp_ep_do_uct_ep_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                                        ucp_rsc_index_t rsc_idx, unsigned flags,
-                                        uct_completion_t *comp);
+ucs_status_t ucp_ep_do_uct_ep_am_keepalive(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                           ucp_rsc_index_t rsc_idx);
 
 
 /**
