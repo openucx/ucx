@@ -710,8 +710,9 @@ static ucs_status_t uct_ib_mlx5_exp_md_open(struct ibv_device *ibv_device,
         goto err_free;
     }
 
-    dev->flags |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
-    *p_md = &md->super;
+    dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
+    md->super.name = UCT_IB_MD_NAME(mlx5);
+    *p_md          = &md->super;
     return UCS_OK;
 
 err_free:

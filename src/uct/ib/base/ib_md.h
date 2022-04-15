@@ -29,6 +29,8 @@
 #define UCT_IB_MEM_DEREG          0
 #define UCT_IB_CONFIG_PREFIX      "IB_"
 
+#define UCT_IB_MD_NAME(_x)        "ib_" UCS_PP_QUOTE(_x)
+
 
 /**
  * IB MD statistics counters
@@ -142,6 +144,7 @@ typedef struct uct_ib_md {
     size_t                   memh_struct_size;
     uint64_t                 reg_mem_types;
     uint64_t                 cap_flags;
+    char                     *name;
 } uct_ib_md_t;
 
 
@@ -489,4 +492,5 @@ ucs_status_t uct_ib_reg_key_impl(uct_ib_md_t *md, void *address,
                                  size_t length, uint64_t access_flags,
                                  uct_ib_mem_t *memh, uct_ib_mr_t *mrs,
                                  uct_ib_mr_type_t mr_type, int silent);
+
 #endif

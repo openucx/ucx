@@ -979,6 +979,10 @@ uct_rc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
     uct_ib_md_t *ib_md = ucs_derived_of(md, uct_ib_md_t);
     int flags;
 
+    if (strcmp(ib_md->name, UCT_IB_MD_NAME(mlx5))) {
+        return UCS_ERR_NO_DEVICE;
+    }
+
     flags = UCT_IB_DEVICE_FLAG_MLX5_PRM |
             (ib_md->config.eth_pause ? 0 : UCT_IB_DEVICE_FLAG_LINK_IB);
     return uct_ib_device_query_ports(&ib_md->dev, flags, tl_devices_p,
