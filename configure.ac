@@ -9,7 +9,7 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 13) # Minor version. Increased for each release.
+define([ucx_ver_minor], 14) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
 define([ucx_ver_extra], "") # Extra version string. Empty for a general release.
 

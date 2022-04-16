@@ -349,6 +349,8 @@ library internals, protocol objects, transports status, and more.
 %endif
 
 %changelog
+* Sat Apr 16 2022 Yossi Itigin <yosefe@mellanox.com> 1.14.0-1
+- Bump version to 1.14.0
 * Wed Nov 10 2021 Yossi Itigin <yosefe@mellanox.com> 1.13.0-1
 - Bump version to 1.13.0
 * Wed Jun 9 2021 Yossi Itigin <yosefe@mellanox.com> 1.12.0-1
