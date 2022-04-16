@@ -16,4 +16,4 @@ Version: @VERSION@
 Cflags: -I${includedir}
 Libs: -L${libdir} -luct
 Libs.private: -Wl,--undefined=uct_init
-Requires: @PACKAGE@-ucs, @PACKAGE@-ucm
+Requires: @PACKAGE@-ucs
