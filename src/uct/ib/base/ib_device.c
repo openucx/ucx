@@ -282,21 +282,41 @@ uct_ib_device_async_event_schedule_callback(uct_ib_device_t *dev,
 }
 
 static void
+uct_ib_device_async_event_dispatch_nolock(uct_ib_device_t *dev,
+                                          const uct_ib_async_event_t *event)
+{
+    khiter_t iter = kh_get(uct_ib_async_event, &dev->async_events_hash, *event);
+    uct_ib_async_event_val_t *entry;
+
+    if (iter == kh_end(&dev->async_events_hash)) {
+        return;
+    }
+
+    entry        = &kh_value(&dev->async_events_hash, iter);
+    entry->fired = 1;
+    if (entry->wait_ctx != NULL) {
+        uct_ib_device_async_event_schedule_callback(dev, entry->wait_ctx);
+    }
+}
+
+static void
 uct_ib_device_async_event_dispatch(uct_ib_device_t *dev,
                                    const uct_ib_async_event_t *event)
 {
-    uct_ib_async_event_val_t *entry;
-    khiter_t iter;
+    ucs_spin_lock(&dev->async_event_lock);
+    uct_ib_device_async_event_dispatch_nolock(dev, event);
+    ucs_spin_unlock(&dev->async_event_lock);
+}
+
+static void
+uct_ib_device_async_event_dispatch_fatal(uct_ib_device_t *dev)
+{
+    uct_ib_async_event_t event;
 
     ucs_spin_lock(&dev->async_event_lock);
-    iter = kh_get(uct_ib_async_event, &dev->async_events_hash, *event);
-    if (iter != kh_end(&dev->async_events_hash)) {
-        entry = &kh_value(&dev->async_events_hash, iter);
-        entry->fired = 1;
-        if (entry->wait_ctx != NULL) {
-            uct_ib_device_async_event_schedule_callback(dev, entry->wait_ctx);
-        }
-    }
+    dev->flags |= UCT_IB_DEVICE_FAILED;
+    kh_foreach_key(&dev->async_events_hash, event,
+                   uct_ib_device_async_event_dispatch_nolock(dev, &event));
     ucs_spin_unlock(&dev->async_event_lock);
 }
 
@@ -506,9 +526,10 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
         level = UCS_LOG_LEVEL_DEBUG;
         break;
     case IBV_EVENT_DEVICE_FATAL:
+        uct_ib_device_async_event_dispatch_fatal(dev);
         snprintf(event_info, sizeof(event_info), "%s on port %d",
                  ibv_event_type_str(event->event_type), event->port_num);
-        level = UCS_LOG_LEVEL_ERROR;
+        level = UCS_LOG_LEVEL_DIAG;
         break;
     case IBV_EVENT_PORT_ACTIVE:
     case IBV_EVENT_PORT_ERR:

@@ -692,6 +692,13 @@ static ucs_status_t uct_ud_mlx5_iface_arm_cq(uct_ib_iface_t *ib_iface,
                                              int solicited)
 {
     uct_ud_mlx5_iface_t *iface = ucs_derived_of(ib_iface, uct_ud_mlx5_iface_t);
+    uct_ib_mlx5_md_t *ib_md    = ucs_derived_of(ib_iface->super.md,
+                                                uct_ib_mlx5_md_t);
+
+    if (ucs_unlikely(ib_md->super.dev.flags & UCT_IB_DEVICE_FAILED)) {
+        return UCS_OK;
+    }
+
 #if HAVE_DECL_MLX5DV_INIT_OBJ
     return uct_ib_mlx5dv_arm_cq(&iface->cq[dir], solicited);
 #else
