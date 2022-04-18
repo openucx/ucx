@@ -1528,6 +1528,12 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
         }
     }
 
+    if (!ucp_ep_is_lane_p2p(ep, lane)) {
+        /* If lane is CONNECT_TO_IFACE, mark it as remote connected to ensure
+         * doing keepalive */
+        ucp_wireup_ep_remote_connected(ep->uct_eps[lane], 0);
+    }
+
     goto out_unlock;
 
 err_destroy_wireup_ep:
