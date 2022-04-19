@@ -463,6 +463,26 @@ static UCS_F_ALWAYS_INLINE uint32_t uct_ib_memh_get_lkey(uct_mem_h memh)
 }
 
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+uct_ib_md_mem_dereg_params_invalidate_check(
+        const uct_md_mem_dereg_params_t *params)
+{
+    uct_ib_mem_t *ib_memh;
+    unsigned flags;
+
+    if (ENABLE_PARAMS_CHECK) {
+        ib_memh = (uct_ib_mem_t*)UCT_MD_MEM_DEREG_FIELD_VALUE(params, memh,
+                                                              FIELD_MEMH, NULL);
+        flags   = UCT_MD_MEM_DEREG_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+        if ((flags & UCT_MD_MEM_DEREG_FLAG_INVALIDATE) &&
+            (ib_memh->indirect_rkey == UCT_IB_INVALID_MKEY)) {
+            return UCS_ERR_INVALID_PARAM;
+        }
+    }
+
+    return UCS_OK;
+}
+
 ucs_status_t uct_ib_md_open(uct_component_t *component, const char *md_name,
                             const uct_md_config_t *uct_md_config, uct_md_h *md_p);
 
