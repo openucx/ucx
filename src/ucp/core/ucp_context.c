@@ -398,7 +398,7 @@ static ucs_config_field_t ucp_config_table[] = {
    ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
 
   {"KEEPALIVE_INTERVAL", "20s",
-   "Time interval between keepalive rounds.",
+   "Time interval between keepalive rounds. Must be non-zero value.",
    ucs_offsetof(ucp_config_t, ctx.keepalive_interval),
    UCS_CONFIG_TYPE_TIME_UNITS},
 
@@ -1754,6 +1754,12 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
 
     if (context->config.ext.keepalive_num_eps == 0) {
         ucs_error("UCX_KEEPALIVE_NUM_EPS value must be greater than 0");
+        status = UCS_ERR_INVALID_PARAM;
+        goto err_free_alloc_methods;
+    }
+
+    if (context->config.ext.keepalive_interval == 0) {
+        ucs_error("UCX_KEEPALIVE_INTERVAL value must be greater than 0");
         status = UCS_ERR_INVALID_PARAM;
         goto err_free_alloc_methods;
     }
