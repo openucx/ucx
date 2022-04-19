@@ -20,7 +20,7 @@
 #define UCP_PROTO_RNDV_PUT_DESC "write to remote"
 
 
-enum {
+typedef enum {
     /* Initial stage for put zcopy is sending the data */
     UCP_PROTO_RNDV_PUT_ZCOPY_STAGE_SEND = UCP_PROTO_STAGE_START,
 
@@ -38,7 +38,7 @@ enum {
 
     /* Memtype only: send the fragment to the remote side */
     UCP_PROTO_RNDV_PUT_MTYPE_STAGE_SEND
-};
+} ucp_proto_rndv_put_stage_t;
 
 typedef struct ucp_proto_rndv_put_priv {
     uct_completion_callback_t  put_comp_cb;

@@ -523,6 +523,21 @@ ADD_COMPILER_FLAGS_IF_SUPPORTED([[-Wno-missing-field-initializers],
                                 [AC_LANG_SOURCE([[int main(int argc, char **argv){return 0;}]])])
 
 
+
+ADD_COMPILER_FLAG_IF_SUPPORTED([-Wenum-conversion],
+                               [-Wenum-conversion],
+                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                               [AS_MESSAGE([compiling with enum conversion warning])],
+                               [AS_MESSAGE([compiling without enum conversion warning])])
+
+
+
+ADD_COMPILER_FLAG_IF_SUPPORTED([-Wenum-compare],
+                               [-Wenum-compare],
+                               [AC_LANG_SOURCE([[int main(int argc, char** argv){return 0;}]])],
+                               [AS_MESSAGE([compiling with enum compare warning])],
+                               [AS_MESSAGE([compiling without enum compare warning])])
+
 #
 # Set C++ optimization/debug flags to be the same as for C
 #

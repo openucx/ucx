@@ -51,7 +51,7 @@ enum {
     UCT_UD_PACKET_PUT_SHIFT       = 28,
 };
 
-enum {
+typedef enum {
     UCT_UD_PACKET_FLAG_AM      = UCS_BIT(24),
     UCT_UD_PACKET_FLAG_ACK_REQ = UCS_BIT(25),
     UCT_UD_PACKET_FLAG_ECN     = UCS_BIT(26),
@@ -61,7 +61,7 @@ enum {
 
     UCT_UD_PACKET_AM_ID_MASK     = UCS_MASK(UCT_UD_PACKET_AM_ID_SHIFT),
     UCT_UD_PACKET_DEST_ID_MASK   = UCS_MASK(UCT_UD_PACKET_DEST_ID_SHIFT),
-};
+} uct_ud_packet_flags_t;
 
 enum {
     UCT_UD_PACKET_CREQ = 1,

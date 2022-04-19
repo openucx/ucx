@@ -732,7 +732,7 @@ public:
         EXPECT_EQ(m_test_addr, attr.local_sockaddr);
     }
 
-    void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
+    void one_sided_disconnect(entity &e, ucp_ep_close_mode_t mode) {
         void *req           = e.disconnect_nb(0, 0, mode);
         ucs_time_t deadline = ucs::get_deadline();
         scoped_log_handler slh(detect_error_logger);
@@ -745,7 +745,7 @@ public:
         e.close_ep_req_free(req);
     }
 
-    void concurrent_disconnect(enum ucp_ep_close_mode mode) {
+    void concurrent_disconnect(ucp_ep_close_mode_t mode) {
         ASSERT_EQ(2ul, entities().size());
         ASSERT_EQ(1, sender().get_num_workers());
         ASSERT_EQ(1, sender().get_num_eps());

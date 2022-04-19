@@ -164,7 +164,7 @@ do { \
  * are executed in time of progress along with
  * pending requests added by uct user.
  */
-enum {
+typedef enum {
     UCT_UD_EP_OP_NONE       = 0,
     UCT_UD_EP_OP_ACK        = UCS_BIT(0),  /* ack data */
     UCT_UD_EP_OP_ACK_REQ    = UCS_BIT(1),  /* request ack of sent packets */
@@ -172,7 +172,7 @@ enum {
     UCT_UD_EP_OP_CREP       = UCS_BIT(3),  /* send connection reply */
     UCT_UD_EP_OP_CREQ       = UCS_BIT(4),  /* send connection request */
     UCT_UD_EP_OP_NACK       = UCS_BIT(5),  /* send NACK */
-};
+} uct_ud_ep_ctl_ops_t;
 
 #define UCT_UD_EP_OP_CTL_LOW_PRIO (UCT_UD_EP_OP_ACK_REQ|UCT_UD_EP_OP_ACK)
 #define UCT_UD_EP_OP_CTL_HI_PRIO  (UCT_UD_EP_OP_CREQ|UCT_UD_EP_OP_CREP|UCT_UD_EP_OP_RESEND)

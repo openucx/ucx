@@ -82,7 +82,7 @@ typedef union uct_tcp_ep_cm_id {
 /**
  * TCP EP flags
  */
-enum {
+typedef enum {
     /* EP is connected to a peer to send data. This EP is managed
      * by a user and TCP mustn't free this EP even if connection
      * is broken. */
@@ -112,7 +112,7 @@ enum {
     UCT_TCP_EP_FLAG_ON_PTR_MAP         = UCS_BIT(9),
     /* EP has some operations done without flush */
     UCT_TCP_EP_FLAG_NEED_FLUSH         = UCS_BIT(10)
-};
+} uct_tcp_ep_flags_t;
 
 
 /**

@@ -40,11 +40,11 @@ enum {
 
 
 /* flags for uct_ud_iface_send_ctl() */
-enum {
+typedef enum {
     UCT_UD_IFACE_SEND_CTL_FLAG_INLINE    = UCS_BIT(0),
     UCT_UD_IFACE_SEND_CTL_FLAG_SOLICITED = UCS_BIT(1),
     UCT_UD_IFACE_SEND_CTL_FLAG_SIGNALED  = UCS_BIT(2)
-};
+} uct_ud_iface_send_ctl_flags_t;
 
 
 /* TODO: maybe tx_moderation can be defined at compile-time since tx completions are used only to know how much space is there in tx qp */

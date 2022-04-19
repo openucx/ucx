@@ -22,7 +22,7 @@
 /**
  * Wireup message types
  */
-enum {
+typedef enum {
     UCP_WIREUP_MSG_PRE_REQUEST,
     UCP_WIREUP_MSG_REQUEST,
     UCP_WIREUP_MSG_REPLY,
@@ -30,7 +30,7 @@ enum {
     UCP_WIREUP_MSG_EP_CHECK,
     UCP_WIREUP_MSG_EP_REMOVED,
     UCP_WIREUP_MSG_LAST
-};
+} ucp_wireup_msg_type_t;
 
 
 /**

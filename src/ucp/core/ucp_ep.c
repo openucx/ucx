@@ -898,7 +898,7 @@ ucs_status_t ucp_ep_create_server_accept(ucp_worker_h worker,
 {
     ucp_unpacked_address_t remote_addr;
     unsigned ep_init_flags;
-    uint64_t addr_flags;
+    ucp_address_pack_flags_t addr_flags;
     ucs_status_t status;
     const void *worker_addr;
     unsigned i;

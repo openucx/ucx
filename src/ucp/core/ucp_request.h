@@ -33,7 +33,7 @@
 /**
  * Request flags
  */
-enum {
+typedef enum {
     UCP_REQUEST_FLAG_COMPLETED             = UCS_BIT(0),
     UCP_REQUEST_FLAG_RELEASED              = UCS_BIT(1),
     UCP_REQUEST_FLAG_PROTO_SEND            = UCS_BIT(2),
@@ -61,25 +61,25 @@ enum {
     UCP_REQUEST_DEBUG_FLAG_EXTERNAL        = 0,
     UCP_REQUEST_FLAG_SUPER_VALID           = 0
 #endif
-};
+} ucp_request_flags_t;
 
 
 /**
  * Protocols enumerator to work with send request state
  */
-enum {
+typedef enum {
     UCP_REQUEST_SEND_PROTO_BCOPY_AM = 0,
     UCP_REQUEST_SEND_PROTO_ZCOPY_AM,
     UCP_REQUEST_SEND_PROTO_RNDV_GET,
     UCP_REQUEST_SEND_PROTO_RNDV_PUT,
     UCP_REQUEST_SEND_PROTO_RMA
-};
+} ucp_request_send_proto_type_t;
 
 
 /**
  * Receive descriptor flags.
  */
-enum {
+typedef enum {
     UCP_RECV_DESC_FLAG_UCT_DESC         = UCS_BIT(0), /* Descriptor allocated by UCT */
     UCP_RECV_DESC_FLAG_EAGER            = UCS_BIT(1), /* Eager tag message */
     UCP_RECV_DESC_FLAG_EAGER_ONLY       = UCS_BIT(2), /* Eager tag message with single fragment */
@@ -106,16 +106,16 @@ enum {
                                                          initialized yet. */
     UCP_RECV_DESC_FLAG_RELEASED         = UCS_BIT(10) /* Indicates that the descriptor was
                                                          released and cannot be used. */
-};
+} ucp_recv_desc_flags_t;
 
 
 /**
  * Receive descriptor list pointers
  */
-enum {
+typedef enum {
     UCP_RDESC_HASH_LIST = 0,
     UCP_RDESC_ALL_LIST  = 1
-};
+} ucp_rdesc_ptr_t;
 
 
 /**

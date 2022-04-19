@@ -17,8 +17,17 @@
 #define UCP_ADDRESS_IFACE_SEG_SIZE_FACTOR 64
 
 
-/* Which iface flags would be packed in the address */
-enum {
+typedef enum {
+    UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(0),
+    UCP_ADDR_IFACE_FLAG_AM_SYNC          = UCS_BIT(1),
+    UCP_ADDR_IFACE_FLAG_CB_ASYNC         = UCS_BIT(2),
+    UCP_ADDR_IFACE_FLAG_PUT              = UCS_BIT(3),
+    UCP_ADDR_IFACE_FLAG_GET              = UCS_BIT(4),
+    UCP_ADDR_IFACE_FLAG_TAG_EAGER        = UCS_BIT(5),
+    UCP_ADDR_IFACE_FLAG_TAG_RNDV         = UCS_BIT(6),
+    UCP_ADDR_IFACE_FLAG_EVENT_RECV       = UCS_BIT(7),
+    UCP_ADDR_IFACE_FLAG_ATOMIC32         = UCS_BIT(8),
+    UCP_ADDR_IFACE_FLAG_ATOMIC64         = UCS_BIT(9),
     UCP_ADDRESS_IFACE_FLAGS =
          UCT_IFACE_FLAG_CONNECT_TO_IFACE |
          UCT_IFACE_FLAG_CB_SYNC |
@@ -33,30 +42,16 @@ enum {
          UCT_IFACE_FLAG_TAG_EAGER_BCOPY |
          UCT_IFACE_FLAG_TAG_RNDV_ZCOPY  |
          UCT_IFACE_FLAG_PENDING
-};
-
-
-enum {
-    UCP_ADDR_IFACE_FLAG_CONNECT_TO_IFACE = UCS_BIT(0),
-    UCP_ADDR_IFACE_FLAG_AM_SYNC          = UCS_BIT(1),
-    UCP_ADDR_IFACE_FLAG_CB_ASYNC         = UCS_BIT(2),
-    UCP_ADDR_IFACE_FLAG_PUT              = UCS_BIT(3),
-    UCP_ADDR_IFACE_FLAG_GET              = UCS_BIT(4),
-    UCP_ADDR_IFACE_FLAG_TAG_EAGER        = UCS_BIT(5),
-    UCP_ADDR_IFACE_FLAG_TAG_RNDV         = UCS_BIT(6),
-    UCP_ADDR_IFACE_FLAG_EVENT_RECV       = UCS_BIT(7),
-    UCP_ADDR_IFACE_FLAG_ATOMIC32         = UCS_BIT(8),
-    UCP_ADDR_IFACE_FLAG_ATOMIC64         = UCS_BIT(9)
-};
+} ucp_address_iface_flags_t;
 
 
 /* Which iface event flags would be packed in the address */
-enum {
+typedef enum {
     UCP_ADDRESS_IFACE_EVENT_FLAGS = UCT_IFACE_FLAG_EVENT_RECV
-};
+} ucp_address_iface_event_flags_t;
 
 
-enum {
+typedef enum {
     /* Add worker UUID */
     UCP_ADDRESS_PACK_FLAG_WORKER_UUID = UCS_BIT(0),
 
@@ -98,7 +93,7 @@ enum {
 
     /* Suppress debug tracing */
     UCP_ADDRESS_PACK_FLAG_NO_TRACE    = UCS_BIT(16)
-};
+} ucp_address_pack_flags_t;
 
 
 /**
@@ -201,7 +196,7 @@ struct ucp_unpacked_address {
  */
 ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
                               const ucp_tl_bitmap_t *tl_bitmap,
-                              unsigned pack_flags,
+                              ucp_address_pack_flags_t pack_flags,
                               ucp_object_version_t addr_version,
                               const ucp_lane_index_t *lanes2remote,
                               size_t *size_p, void **buffer_p);
@@ -224,7 +219,7 @@ ucs_status_t ucp_address_pack(ucp_worker_h worker, ucp_ep_h ep,
  *       by ucs_free().
  */
 ucs_status_t ucp_address_unpack(ucp_worker_h worker, const void *buffer,
-                                unsigned unpack_flags,
+                                ucp_address_pack_flags_t unpack_flags,
                                 ucp_unpacked_address_t *unpacked_address);
 
 

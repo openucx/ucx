@@ -14,7 +14,7 @@
 #include <arpa/inet.h>
 
 
-enum {
+typedef enum {
     PRINT_VERSION        = UCS_BIT(0),
     PRINT_SYS_INFO       = UCS_BIT(1),
     PRINT_BUILD_CONFIG   = UCS_BIT(2),
@@ -26,7 +26,7 @@ enum {
     PRINT_MEM_MAP        = UCS_BIT(8),
     PRINT_SYS_TOPO       = UCS_BIT(9),
     PRINT_MEMCPY_BW      = UCS_BIT(10)
-};
+} ucx_info_modes_t;
 
 
 typedef enum {

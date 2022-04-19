@@ -199,12 +199,12 @@ typedef struct {
 #define UCP_ADDRESS_DEFAULT_WORKER_UUID     0
 #define UCP_ADDRESS_DEFAULT_CLIENT_ID       0
 
-enum {
+typedef enum {
     UCP_ADDRESS_HEADER_FLAG_DEBUG_INFO  = UCS_BIT(0),  /* Address has debug info */
     UCP_ADDRESS_HEADER_FLAG_WORKER_UUID = UCS_BIT(1),  /* Worker unique id */
     UCP_ADDRESS_HEADER_FLAG_CLIENT_ID   = UCS_BIT(2),  /* Worker client id */
     UCP_ADDRESS_HEADER_FLAG_AM_ONLY     = UCS_BIT(3)   /* Only AM lane info */
-};
+} ucp_address_header_flags_t;
 
 static size_t ucp_address_iface_attr_size(ucp_worker_t *worker, uint64_t flags,
                                           ucp_object_version_t addr_version)

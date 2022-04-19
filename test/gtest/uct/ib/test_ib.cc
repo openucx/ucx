@@ -914,8 +914,8 @@ size_t test_uct_event_ib::bcopy_pack_count = 0;
 UCS_TEST_SKIP_COND_P(test_uct_event_ib, tx_cq,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY |
                                  UCT_IFACE_FLAG_CB_SYNC) ||
-                     !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                       UCT_IFACE_FLAG_EVENT_RECV))
+                     !check_event_caps((uct_iface_event_flags_t)(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                       UCT_IFACE_FLAG_EVENT_RECV)))
 {
     ucs_status_t status;
 
@@ -950,8 +950,8 @@ UCS_TEST_SKIP_COND_P(test_uct_event_ib, txrx_cq,
                      !check_caps(UCT_IFACE_FLAG_PUT_BCOPY |
                                  UCT_IFACE_FLAG_CB_SYNC   |
                                  UCT_IFACE_FLAG_AM_SHORT) ||
-                     !check_event_caps(UCT_IFACE_FLAG_EVENT_SEND_COMP |
-                                       UCT_IFACE_FLAG_EVENT_RECV))
+                     !check_event_caps((uct_iface_event_flags_t)(UCT_IFACE_FLAG_EVENT_SEND_COMP |
+                                       UCT_IFACE_FLAG_EVENT_RECV)))
 {
     const size_t msg_count = 1;
     ucs_status_t status;

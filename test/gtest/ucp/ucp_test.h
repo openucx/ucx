@@ -100,12 +100,12 @@ public:
         void fence(int worker_index = 0) const;
 
         void* disconnect_nb(int worker_index = 0, int ep_index = 0,
-                            enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+                            ucp_ep_close_mode_t mode = UCP_EP_CLOSE_MODE_FLUSH);
 
         void close_ep_req_free(void *close_req);
 
         void close_all_eps(const ucp_test &test, int worker_idx,
-                           enum ucp_ep_close_mode mode = UCP_EP_CLOSE_MODE_FLUSH);
+                           ucp_ep_close_mode_t mode = UCP_EP_CLOSE_MODE_FLUSH);
 
         void destroy_worker(int worker_index = 0);
 

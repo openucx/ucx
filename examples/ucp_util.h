@@ -19,7 +19,7 @@
  * @param [in]  flags   Close UCP endpoint mode. Please see
  *                      @a ucp_ep_close_flags_t for details.
  */
-static void ep_close(ucp_worker_h ucp_worker, ucp_ep_h ep, uint64_t flags)
+static void ep_close(ucp_worker_h ucp_worker, ucp_ep_h ep, ucp_ep_close_flags_t flags)
 {
     ucp_request_param_t param;
     ucs_status_t status;

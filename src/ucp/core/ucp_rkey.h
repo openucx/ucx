@@ -15,10 +15,10 @@
 /**
  * Rkey proto index
  */
-enum {
+typedef enum {
     UCP_RKEY_BASIC_PROTO,
     UCP_RKEY_SW_PROTO
-};
+} ucp_rkey_proto_t;
 
 
 typedef uint8_t ucp_rkey_proto_index_t;
@@ -37,10 +37,10 @@ typedef struct ucp_tl_rkey {
 /**
  * Rkey flags
  */
-enum {
+typedef enum {
     UCP_RKEY_DESC_FLAG_POOL       = UCS_BIT(0)  /* Descriptor was allocated from pool
                                                    and must be returned to pool, not free */
-};
+} ucp_rkey_flags_t;
 
 
 /**
