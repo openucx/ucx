@@ -4593,9 +4593,11 @@ ucs_status_ptr_t ucp_worker_flush_nbx(ucp_worker_h worker,
  * present. It is used to enable backward compatibility support.
  */
 enum ucp_ep_attr_field {
-    UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
-    UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
-    UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2)  /**< Sockaddr the endpoint is connected to */
+    UCP_EP_ATTR_FIELD_NAME              = UCS_BIT(0), /**< UCP endpoint name */
+    UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR    = UCS_BIT(1), /**< Sockaddr used by the endpoint */
+    UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR   = UCS_BIT(2), /**< Sockaddr the endpoint is connected to */
+    UCP_EP_ATTR_FIELD_DEBUG_STRING      = UCS_BIT(3), /**< Available debug info in string format */
+    UCP_EP_ATTR_FIELD_DEBUG_STRING_SIZE = UCS_BIT(4)  /**< Debug string buffer size */
 };
 
 
@@ -4636,6 +4638,22 @@ typedef struct ucp_ep_attr {
      * UCS_ERR_NOT_CONNECTED will be returned.
      */
     struct sockaddr_storage remote_sockaddr;
+
+     /**
+      * Available debug info in string format which fits into
+      * @ref ucp_ep_attr_t::debug_string_size.
+      * @note Available debug info and its format depends on compile time flags
+      *       and configuration, available hardware in run time and more, also
+      *       it can be changed in future releases for optimization or debugging
+      *       purposes.
+      */
+    char                    *debug_string;
+
+    /**
+     * Size of debug string buffer @ref ucp_ep_attr_t::debug_string including
+     * null-terminator.
+     */
+    size_t                  debug_string_size;
 } ucp_ep_attr_t;
 
 

@@ -718,9 +718,14 @@ public:
                               m_test_addr.get_port());
         EXPECT_EQ(m_test_addr, attr.remote_sockaddr);
 
+        std::vector<char> debug_info(UCS_KBYTE);
         memset(&attr, 0, sizeof(attr));
-        attr.field_mask = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR |
-                          UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR;
+        attr.field_mask        = UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  |
+                                 UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR |
+                                 UCP_EP_ATTR_FIELD_DEBUG_STRING    |
+                                 UCP_EP_ATTR_FIELD_DEBUG_STRING_SIZE;
+        attr.debug_string      = &debug_info[0];
+        attr.debug_string_size = debug_info.size();
         status = ucp_ep_query(sender().ep(), &attr);
         ASSERT_UCS_OK(status);
 
@@ -730,6 +735,10 @@ public:
         ucs_sockaddr_set_port((struct sockaddr*)&attr.local_sockaddr,
                               m_test_addr.get_port());
         EXPECT_EQ(m_test_addr, attr.local_sockaddr);
+
+        std::string debug_str(attr.debug_string);
+        EXPECT_LT(debug_str.length(), attr.debug_string_size);
+        UCS_TEST_MESSAGE << "EP debug string: \"" << debug_str << "\"";
     }
 
     void one_sided_disconnect(entity &e, enum ucp_ep_close_mode mode) {
