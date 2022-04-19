@@ -2636,6 +2636,20 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
     }
 }
 
+static int
+ucp_worker_dt_invalidate_remove_filter(const ucs_callbackq_elem_t *elem,
+                                       void *arg)
+{
+    ucs_assert(arg == NULL);
+
+    if (elem->cb == ucp_request_dt_invalidate_progress) {
+        elem->cb(elem->arg);
+        return 1;
+    }
+
+    return 0;
+}
+
 void ucp_worker_destroy(ucp_worker_h worker)
 {
     ucs_debug("destroy worker %p", worker);
@@ -2646,6 +2660,9 @@ void ucp_worker_destroy(ucp_worker_h worker)
     ucp_worker_destroy_eps(worker, &worker->all_eps, "all");
     ucp_worker_destroy_eps(worker, &worker->internal_eps, "internal");
     ucp_am_cleanup(worker);
+    ucs_callbackq_remove_if(&worker->uct->progress_q,
+                            ucp_worker_dt_invalidate_remove_filter, NULL);
+
     /* Put ucp_worker_remove_am_handlers after ucp_worker_discard_uct_ep_cleanup
      * to make sure iface->am[] always cleared.
      * ucp_worker_discard_uct_ep_cleanup might trigger ucp_worker_iface_deactivate

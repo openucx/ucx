@@ -543,4 +543,6 @@ void ucp_request_purge_enqueue_cb(uct_pending_req_t *self, void *arg);
 
 ucs_status_t ucp_request_progress_wrapper(uct_pending_req_t *self);
 
+unsigned ucp_request_dt_invalidate_progress(void *arg);
+
 #endif

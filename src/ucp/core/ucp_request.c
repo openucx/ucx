@@ -313,7 +313,7 @@ int ucp_request_pending_add(ucp_request_t *req)
               ucs_status_string(status));
 }
 
-static unsigned ucp_request_dt_invalidate_progress(void *arg)
+unsigned ucp_request_dt_invalidate_progress(void *arg)
 {
     ucp_request_t *req = arg;
 
