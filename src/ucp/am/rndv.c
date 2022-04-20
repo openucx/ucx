@@ -52,8 +52,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_rndv_proto_progress, (self),
 ucs_status_t ucp_am_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
     if (!ucp_am_check_init_params(init_params, UCP_AM_OP_ID_MASK_ALL,
-                                  UCP_PROTO_SELECT_OP_FLAG_AM_EAGER) ||
-        (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG)) {
+                                  UCP_PROTO_SELECT_OP_FLAG_AM_EAGER)) {
         return UCS_ERR_UNSUPPORTED;
     }
 

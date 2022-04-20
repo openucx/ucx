@@ -1287,12 +1287,6 @@ public:
     {
         m_status = UCS_OK;
         modify_config("RNDV_THRESH", "128");
-    }
-
-    virtual void init()
-    {
-        test_ucp_am_nbx::init();
-
         if (enable_proto()) {
             modify_config("PROTO_ENABLE", "y");
         }
@@ -1303,11 +1297,6 @@ public:
         add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 0);
         add_variant_values(variants, test_ucp_am_nbx::get_test_variants, 1,
                            "proto");
-    }
-
-    virtual unsigned enable_proto()
-    {
-        return get_variant_value(1);
     }
 
     ucs_status_t am_data_handler(const void *header, size_t header_length,
@@ -1372,6 +1361,12 @@ public:
     }
 
     ucs_status_t m_status;
+
+private:
+    unsigned enable_proto()
+    {
+        return get_variant_value(1);
+    }
 };
 
 UCS_TEST_P(test_ucp_am_nbx_rndv, rndv_auto, "RNDV_SCHEME=auto")
@@ -1501,11 +1496,19 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_rndv)
 
 class test_ucp_am_nbx_rndv_dts : public test_ucp_am_nbx_rndv {
 public:
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
+    static void get_test_variants_dts(std::vector<ucp_test_variant> &variants)
+    {
+        /* coverity[overrun-buffer-val] */
+        add_variant_values(variants, test_ucp_am_nbx_rndv::get_test_variants,
+                           test_ucp_am_nbx_dts::dts_bitmap,
+                           ucp_datatype_class_names);
+    }
+
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         /* push variant for the receive type, on top of existing dts variants */
         /* coverity[overrun-buffer-val] */
-        add_variant_values(variants, test_ucp_am_nbx_dts::get_test_dts,
+        add_variant_values(variants, get_test_variants_dts,
                            test_ucp_am_nbx_dts::dts_bitmap,
                            ucp_datatype_class_names);
     }
@@ -1514,8 +1517,8 @@ public:
     {
         test_ucp_am_nbx::init();
 
-        m_dt    = make_dt(get_variant_value(1));
-        m_rx_dt = make_dt(get_variant_value(2));
+        m_dt    = make_dt(get_variant_value(2));
+        m_rx_dt = make_dt(get_variant_value(3));
     }
 
     void cleanup()
@@ -1524,11 +1527,6 @@ public:
         destroy_dt(m_rx_dt);
 
         test_ucp_am_nbx::cleanup();
-    }
-
-    virtual unsigned enable_proto()
-    {
-        return 0;
     }
 };
 
