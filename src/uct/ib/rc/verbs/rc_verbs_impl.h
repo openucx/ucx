@@ -65,7 +65,8 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
         status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
                                      length - sizeof(*hdr), UCT_CB_PARAM_FLAG_DESC);
     }
-    if (ucs_likely(status == UCS_OK)) {
+
+    if (ucs_likely(status != UCS_INPROGRESS)) {
         ucs_mpool_put_inline(desc);
     } else {
         udesc = (char*)desc + iface->super.config.rx_headroom_offset;

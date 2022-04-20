@@ -70,8 +70,7 @@ static UCS_F_NOINLINE void
 uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
                                 uct_ib_mlx5_srq_seg_t *seg,
                                 struct mlx5_cqe64 *cqe, uint16_t wqe_ctr,
-                                ucs_status_t status, unsigned offset,
-                                uct_recv_desc_t *release_desc)
+                                unsigned offset, uct_recv_desc_t *release_desc)
 {
     void *udesc;
     int stride_idx;
@@ -116,9 +115,9 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
      * But it respects srq size when srq topology is a linked-list. */
     wqe_index = wqe_ctr & srq->mask;
 
-    if (ucs_unlikely(status != UCS_OK)) {
-        uct_rc_mlx5_iface_hold_srq_desc(iface, seg, cqe, wqe_ctr, status,
-                                        offset, release_desc);
+    if (ucs_unlikely(status == UCS_INPROGRESS)) {
+        uct_rc_mlx5_iface_hold_srq_desc(iface, seg, cqe, wqe_ctr, offset,
+                                        release_desc);
     }
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
@@ -1264,6 +1263,10 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
                                  uint16_t wqe_ctr, int poll_flags)
 {
     uct_ib_mlx5_srq_seg_t *seg;
+
+    ucs_assertv(!UCS_STATUS_IS_ERR(status), "iface=%p: %p or %p returned: %s",
+                iface, iface->tm.eager_unexp.cb, iface->tm.rndv_unexp.cb,
+                ucs_status_string(status));
 
     seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
 
