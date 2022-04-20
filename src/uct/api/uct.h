@@ -443,18 +443,21 @@ typedef enum uct_atomic_op {
  * supported by UCT iface event.
  * @{
    */
+
+typedef enum {
         /* Event types */
-#define UCT_IFACE_FLAG_EVENT_SEND_COMP UCS_BIT(0) /**< Event notification of send completion is
+    UCT_IFACE_FLAG_EVENT_SEND_COMP = UCS_BIT(0), /**< Event notification of send completion is
                                                        supported */
-#define UCT_IFACE_FLAG_EVENT_RECV      UCS_BIT(1) /**< Event notification of tag and active message
+    UCT_IFACE_FLAG_EVENT_RECV      = UCS_BIT(1), /**< Event notification of tag and active message
                                                        receive is supported */
-#define UCT_IFACE_FLAG_EVENT_RECV_SIG  UCS_BIT(2) /**< Event notification of signaled tag and active
+    UCT_IFACE_FLAG_EVENT_RECV_SIG  = UCS_BIT(2), /**< Event notification of signaled tag and active
                                                        message is supported */
         /* Event notification mechanisms */
-#define UCT_IFACE_FLAG_EVENT_FD        UCS_BIT(3) /**< Event notification through File Descriptor
+    UCT_IFACE_FLAG_EVENT_FD        = UCS_BIT(3), /**< Event notification through File Descriptor
                                                        is supported */
-#define UCT_IFACE_FLAG_EVENT_ASYNC_CB  UCS_BIT(4) /**< Event notification through asynchronous
+    UCT_IFACE_FLAG_EVENT_ASYNC_CB  = UCS_BIT(4), /**< Event notification through asynchronous
                                                        callback invocation is supported */
+} uct_iface_event_flags_t;
 /**
  * @}
  */

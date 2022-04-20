@@ -61,11 +61,13 @@ struct ucx_context {
     int             completed;
 };
 
-enum ucp_test_mode_t {
+typedef enum {
     TEST_MODE_PROBE,
     TEST_MODE_WAIT,
     TEST_MODE_EVENTFD
-} ucp_test_mode = TEST_MODE_PROBE;
+} ucp_test_mode_t;
+
+ucp_test_mode_t ucp_test_mode = TEST_MODE_PROBE;
 
 typedef enum {
     FAILURE_MODE_NONE,
@@ -215,7 +217,7 @@ err:
 
 static void ep_close_err_mode(ucp_worker_h ucp_worker, ucp_ep_h ucp_ep)
 {
-    uint64_t ep_close_flags;
+    ucp_ep_close_flags_t ep_close_flags;
 
     if (err_handling_opt.ucp_err_mode == UCP_ERR_HANDLING_MODE_PEER) {
         ep_close_flags = UCP_EP_CLOSE_FLAG_FORCE;

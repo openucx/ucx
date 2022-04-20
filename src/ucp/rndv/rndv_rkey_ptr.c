@@ -11,10 +11,10 @@
 #include "proto_rndv.inl"
 
 
-enum {
+typedef enum {
     UCP_PROTO_RNDV_RKEY_PTR_STAGE_FETCH = UCP_PROTO_STAGE_START,
     UCP_PROTO_RNDV_RKEY_PTR_STAGE_ATS
-};
+} ucp_proto_rndv_ptr_stage_t;
 
 
 typedef struct {

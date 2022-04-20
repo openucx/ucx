@@ -132,18 +132,18 @@ enum {
 /**
  * UCP endpoint statistics counters
  */
-enum {
+typedef enum {
     UCP_EP_STAT_TAG_TX_EAGER,
     UCP_EP_STAT_TAG_TX_EAGER_SYNC,
     UCP_EP_STAT_TAG_TX_RNDV,
     UCP_EP_STAT_LAST
-};
+} ucp_ep_stat_coutner_t;
 
 
 /**
  * Endpoint init flags
  */
-enum {
+typedef enum {
     UCP_EP_INIT_FLAG_MEM_TYPE          = UCS_BIT(0),  /**< Endpoint for local mem type transfers */
     UCP_EP_INIT_CREATE_AM_LANE         = UCS_BIT(1),  /**< Endpoint requires an AM lane */
     UCP_EP_INIT_CM_WIREUP_CLIENT       = UCS_BIT(2),  /**< Endpoint wireup protocol is based on CM,
@@ -164,7 +164,7 @@ enum {
                                                            keepalive lane */
     UCP_EP_INIT_ALLOW_AM_AUX_TL        = UCS_BIT(10)  /**< Endpoint allows selecting of auxiliary
                                                            transports for AM lane */
-};
+} ucp_ep_init_flags_t;
 
 
 #define UCP_EP_STAT_TAG_OP(_ep, _op) \
@@ -545,23 +545,23 @@ typedef struct {
 } ucp_ep_ext_proto_t;
 
 
-enum {
+typedef enum {
     UCP_WIREUP_SA_DATA_CM_ADDR   = UCS_BIT(1)  /* Sockaddr client data contains address
                                                   for CM based wireup: there is only
                                                   iface and ep address of transport
                                                   lanes, remote device address is
                                                   provided by CM and has to be added to
                                                   unpacked UCP address locally. */
-};
+} ucp_wireup_sa_addr_mode;
 
 
 /* Sockaddr data flags that are packed to the header field in
  * ucp_wireup_sockaddr_data_base_t structure.
  */
-enum {
+typedef enum {
     /* Indicates support of UCP_ERR_HANDLING_MODE_PEER error mode. */
     UCP_SA_DATA_FLAG_ERR_MODE_PEER = UCS_BIT(0)
-};
+} ucp_sa_data_flags_t;
 
 
 /* Basic sockaddr data. Version 1 uses some additional fields which are not

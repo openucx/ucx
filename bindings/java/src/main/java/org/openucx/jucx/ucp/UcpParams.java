@@ -24,7 +24,7 @@ import java.util.Map;
 public class UcpParams extends UcxParams {
 
     /**
-     * UCP ucp_feature "features" that are used for library
+     * UCP ucp_features_t "features" that are used for library
      * initialization. It is recommended for applications only to request
      * the features that are required for an optimal functionality
      * This field must be specified.

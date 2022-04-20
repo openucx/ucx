@@ -1274,7 +1274,7 @@ void UcxConnection::handle_connection_error(ucs_status_t status)
     }
 }
 
-void UcxConnection::ep_close(enum ucp_ep_close_mode mode)
+void UcxConnection::ep_close(ucp_ep_close_mode_t mode)
 {
     static const char *mode_str[] = {"force", "flush"};
     if (_ep == NULL) {

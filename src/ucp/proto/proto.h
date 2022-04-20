@@ -51,25 +51,25 @@ typedef uint64_t ucp_proto_id_mask_t;
 
 
 /* Protocol stage ID */
-enum {
+typedef enum {
     /* Initial stage. All protocols start from this stage. */
     UCP_PROTO_STAGE_START = 0,
 
     /* Stage ID must be lower than this value */
     UCP_PROTO_STAGE_LAST  = 8
-};
+} ucp_proto_stage_id_t;
 
 
 /**
  * Protocol flags for internal usage, to allow searching for specific protocols
  */
-enum {
+typedef enum {
     UCP_PROTO_FLAG_AM_SHORT  = UCS_BIT(0), /* The protocol uses only uct_ep_am_short() */
     UCP_PROTO_FLAG_PUT_SHORT = UCS_BIT(1), /* The protocol uses only uct_ep_put_short() */
     UCP_PROTO_FLAG_TAG_SHORT = UCS_BIT(2), /* The protocol uses only
                                               uct_ep_tag_eager_short() */
     UCP_PROTO_FLAG_INVALID   = UCS_BIT(3)  /* The protocol is a placeholder */
-};
+} ucp_proto_flags_t;
 
 
 /**

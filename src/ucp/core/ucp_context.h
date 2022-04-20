@@ -28,14 +28,14 @@
 #include <ucs/type/param.h>
 
 
-enum {
+typedef enum {
     /* The flag indicates that the resource may be used for auxiliary
      * wireup communications only */
     UCP_TL_RSC_FLAG_AUX      = UCS_BIT(0),
     /* The flag indicates that the resource may be used for client-server
      * connection establishment with a sockaddr */
     UCP_TL_RSC_FLAG_SOCKADDR = UCS_BIT(1)
-};
+} ucp_tl_rsc_flags_t;
 
 
 typedef struct ucp_context_config {

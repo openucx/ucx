@@ -20,12 +20,12 @@
     })
 
 
-enum {
+typedef enum {
     UCP_AM_CB_PRIV_FIRST_FLAG = UCS_BIT(15),
 
     /* Indicates that cb was set with ucp_worker_set_am_recv_handler */
     UCP_AM_CB_PRIV_FLAG_NBX   = UCP_AM_CB_PRIV_FIRST_FLAG
-};
+} ucp_am_cb_priv_flags_t;
 
 
 /**

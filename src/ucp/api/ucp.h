@@ -116,7 +116,7 @@ BEGIN_C_DECLS
  * The enumeration allows specifying which fields in @ref ucp_params_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_params_field {
+typedef enum {
     UCP_PARAM_FIELD_FEATURES          = UCS_BIT(0), /**< features */
     UCP_PARAM_FIELD_REQUEST_SIZE      = UCS_BIT(1), /**< request_size */
     UCP_PARAM_FIELD_REQUEST_INIT      = UCS_BIT(2), /**< request_init */
@@ -126,7 +126,7 @@ enum ucp_params_field {
     UCP_PARAM_FIELD_ESTIMATED_NUM_EPS = UCS_BIT(6), /**< estimated_num_eps */
     UCP_PARAM_FIELD_ESTIMATED_NUM_PPN = UCS_BIT(7), /**< estimated_num_ppn */
     UCP_PARAM_FIELD_NAME              = UCS_BIT(8)  /**< name */
-};
+} ucp_params_fields_t;
 
 
 /**
@@ -137,7 +137,7 @@ enum ucp_params_field {
  * application can request the features using @ref ucp_params_t "UCP parameters"
  * during @ref ucp_init "UCP initialization" process.
  */
-enum ucp_feature {
+typedef enum {
     UCP_FEATURE_TAG          = UCS_BIT(0),  /**< Request tag matching
                                                  support */
     UCP_FEATURE_RMA          = UCS_BIT(1),  /**< Request remote memory
@@ -151,7 +151,7 @@ enum ucp_feature {
     UCP_FEATURE_STREAM       = UCS_BIT(5),  /**< Request stream support */
     UCP_FEATURE_AM           = UCS_BIT(6)   /**< Request Active Message
                                                  support */
-};
+} ucp_features_t;
 
 
 /**
@@ -161,7 +161,7 @@ enum ucp_feature {
  * The enumeration allows specifying which fields in @ref ucp_worker_params_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_worker_params_field {
+typedef enum {
     UCP_WORKER_PARAM_FIELD_THREAD_MODE  = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_PARAM_FIELD_CPU_MASK     = UCS_BIT(1), /**< Worker's CPU bitmap */
     UCP_WORKER_PARAM_FIELD_EVENTS       = UCS_BIT(2), /**< Worker's events bitmap */
@@ -173,7 +173,7 @@ enum ucp_worker_params_field {
     UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT = UCS_BIT(7), /**< Alignment of active
                                                            messages on the receiver */
     UCP_WORKER_PARAM_FIELD_CLIENT_ID    = UCS_BIT(8)  /**< Client id */
-};
+} ucp_worker_params_fields_t;
 
 
 /**
@@ -196,7 +196,7 @@ typedef enum {
  * The enumeration allows specifying which fields in @ref ucp_listener_params_t
  * are present. It is used to enable backward compatibility support.
  */
-enum ucp_listener_params_field {
+typedef enum {
     /**
      * Sock address and length.
      */
@@ -210,7 +210,7 @@ enum ucp_listener_params_field {
     /**< User's callback and argument for handling the incoming connection
      *   request. */
     UCP_LISTENER_PARAM_FIELD_CONN_HANDLER        = UCS_BIT(2)
-};
+} ucp_listener_params_field_t;
 
 
 /**
@@ -237,7 +237,7 @@ typedef enum {
  * The enumeration allows specifying which fields in @ref ucp_ep_params_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_ep_params_field {
+typedef enum {
     UCP_EP_PARAM_FIELD_REMOTE_ADDRESS    = UCS_BIT(0), /**< Address of remote
                                                             peer */
     UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE = UCS_BIT(1), /**< Error handling mode.
@@ -251,7 +251,7 @@ enum ucp_ep_params_field {
     UCP_EP_PARAM_FIELD_CONN_REQUEST      = UCS_BIT(6),
     UCP_EP_PARAM_FIELD_NAME              = UCS_BIT(7), /**< Endpoint name */
     UCP_EP_PARAM_FIELD_LOCAL_SOCK_ADDR   = UCS_BIT(8)  /**< Local socket Address */
-};
+} ucp_ep_params_fields_t;
 
 
 /**
@@ -261,7 +261,7 @@ enum ucp_ep_params_field {
  * The enumeration list describes the endpoint's parameters flags supported by
  * @ref ucp_ep_create() function.
  */
-enum ucp_ep_params_flags_field {
+typedef enum {
     UCP_EP_PARAMS_FLAGS_CLIENT_SERVER  = UCS_BIT(0),  /**< Using a client-server
                                                            connection establishment
                                                            mechanism.
@@ -287,7 +287,7 @@ enum ucp_ep_params_flags_field {
                                                            can be obtained from
                                                            @ref ucp_conn_request_h using
                                                            @ref ucp_conn_request_query */
-};
+} ucp_ep_params_flags_fields_t;
 
 
 /**
@@ -327,7 +327,7 @@ typedef enum {
  *
  * The enumeration is used to specify the behavior of @ref ucp_ep_close_nb.
  */
-enum ucp_ep_close_mode {
+typedef enum {
     UCP_EP_CLOSE_MODE_FORCE         = 0, /**< @ref ucp_ep_close_nb releases
                                               the endpoint without any
                                               confirmation from the peer. All
@@ -344,7 +344,7 @@ enum ucp_ep_close_mode {
     UCP_EP_CLOSE_MODE_FLUSH         = 1  /**< @ref ucp_ep_close_nb schedules
                                               flushes on all outstanding
                                               operations. */
-};
+} ucp_ep_close_mode_t;
 
 
 /**
@@ -355,10 +355,10 @@ enum ucp_ep_close_mode {
  * present and operation flags are used. It is used to enable backward
  * compatibility support.
  */
-typedef enum ucp_ep_perf_param_field {
+typedef enum {
     /** Enables @ref ucp_ep_evaluate_perf_param_t::message_size */
     UCP_EP_PERF_PARAM_FIELD_MESSAGE_SIZE       = UCS_BIT(0)
-} ucp_ep_perf_param_field_t;
+} ucp_ep_perf_param_fields_t;
 
 
 /**
@@ -369,10 +369,10 @@ typedef enum ucp_ep_perf_param_field {
  * present and operation flags are used. It is used to enable backward
  * compatibility support.
  */
-typedef enum ucp_ep_perf_attr_field {
+typedef enum {
     /** Enables @ref ucp_ep_evaluate_perf_attr_t::estimated_time */
     UCP_EP_PERF_ATTR_FIELD_ESTIMATED_TIME = UCS_BIT(0)
-} ucp_ep_perf_attr_field_t;
+} ucp_ep_perf_attr_fields_t;
 
 
 /**
@@ -382,7 +382,7 @@ typedef enum ucp_ep_perf_attr_field {
  * The enumeration allows specifying which fields in @ref ucp_mem_map_params_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_mem_map_params_field {
+typedef enum {
     UCP_MEM_MAP_PARAM_FIELD_ADDRESS     = UCS_BIT(0), /**< Address of the memory that
                                                            will be used in the
                                                            @ref ucp_mem_map routine. */
@@ -393,7 +393,7 @@ enum ucp_mem_map_params_field {
     UCP_MEM_MAP_PARAM_FIELD_FLAGS       = UCS_BIT(2), /**< Allocation flags. */
     UCP_MEM_MAP_PARAM_FIELD_PROT        = UCS_BIT(3), /**< Memory protection mode. */
     UCP_MEM_MAP_PARAM_FIELD_MEMORY_TYPE = UCS_BIT(4)  /**< Memory type. */
-};
+} ucp_mem_map_params_fields_t;
 
 /**
  * @ingroup UCP_MEM
@@ -402,11 +402,11 @@ enum ucp_mem_map_params_field {
  * The enumeration allows specifying which fields in @ref ucp_mem_advise_params_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_mem_advise_params_field {
+typedef enum {
     UCP_MEM_ADVISE_PARAM_FIELD_ADDRESS = UCS_BIT(0), /**< Address of the memory */
     UCP_MEM_ADVISE_PARAM_FIELD_LENGTH  = UCS_BIT(1), /**< The size of memory */
     UCP_MEM_ADVISE_PARAM_FIELD_ADVICE  = UCS_BIT(2)  /**< Advice on memory usage */
-};
+} ucp_mem_advise_params_field_t;
 
 
 /**
@@ -416,10 +416,10 @@ enum ucp_mem_advise_params_field {
  * The enumeration allows specifying which fields in @ref ucp_lib_attr_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_lib_attr_field {
+typedef enum {
     /**< UCP library maximum supported thread level flag */
     UCP_LIB_ATTR_FIELD_MAX_THREAD_LEVEL = UCS_BIT(0)
-};
+} ucp_lib_attr_fields_t;
 
 
 /**
@@ -429,12 +429,12 @@ enum ucp_lib_attr_field {
  * The enumeration allows specifying which fields in @ref ucp_context_attr_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_context_attr_field {
+typedef enum {
     UCP_ATTR_FIELD_REQUEST_SIZE = UCS_BIT(0), /**< UCP request size */
     UCP_ATTR_FIELD_THREAD_MODE  = UCS_BIT(1), /**< UCP context thread flag */
     UCP_ATTR_FIELD_MEMORY_TYPES = UCS_BIT(2), /**< UCP supported memory types */
     UCP_ATTR_FIELD_NAME         = UCS_BIT(3)  /**< UCP context name */
-};
+} ucp_context_attr_fields_t;
 
 
 /**
@@ -444,7 +444,7 @@ enum ucp_context_attr_field {
  * The enumeration allows specifying which fields in @ref ucp_worker_attr_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_worker_attr_field {
+typedef enum {
     UCP_WORKER_ATTR_FIELD_THREAD_MODE     = UCS_BIT(0), /**< UCP thread mode */
     UCP_WORKER_ATTR_FIELD_ADDRESS         = UCS_BIT(1), /**< UCP address */
     UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS   = UCS_BIT(2), /**< UCP address flags */
@@ -453,7 +453,7 @@ enum ucp_worker_attr_field {
     UCP_WORKER_ATTR_FIELD_NAME            = UCS_BIT(4), /**< UCP worker name */
     UCP_WORKER_ATTR_FIELD_MAX_INFO_STRING = UCS_BIT(5)  /**< Maximum size of
                                                              info string */
-};
+} ucp_worker_attr_fields_t;
 
 
 /**
@@ -464,9 +464,9 @@ enum ucp_worker_attr_field {
  * @ref ucp_worker_address_attr_t are present. It is used to enable backward
  * compatibility support.
  */
-enum ucp_worker_address_attr_field {
+typedef enum {
     UCP_WORKER_ADDRESS_ATTR_FIELD_UID = UCS_BIT(0) /**< Unique id of the worker */
-};
+} ucp_worker_address_attr_fields_t;
 
 
 /**
@@ -476,9 +476,9 @@ enum ucp_worker_address_attr_field {
  * The enumeration allows specifying which fields in @ref ucp_listener_attr_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_listener_attr_field {
+typedef enum {
     UCP_LISTENER_ATTR_FIELD_SOCKADDR = UCS_BIT(0) /**< Sockaddr used for listening */
-};
+} ucp_listener_attr_fields_t;
 
 
 /**
@@ -488,10 +488,10 @@ enum ucp_listener_attr_field {
  * The enumeration allows specifying which fields in @ref ucp_conn_request_attr_t
  * are present. It is used to enable backward compatibility support.
  */
-enum ucp_conn_request_attr_field {
+typedef enum {
     UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ADDR = UCS_BIT(0), /**< Client's address */
     UCP_CONN_REQUEST_ATTR_FIELD_CLIENT_ID   = UCS_BIT(1)  /**< Remote client id */
-};
+} ucp_conn_request_attr_fields_t;
 
 
 /**
@@ -500,7 +500,7 @@ enum ucp_conn_request_attr_field {
  *
  * The enumeration list describes the datatypes supported by UCP.
  */
-enum ucp_dt_type {
+typedef enum {
     UCP_DATATYPE_CONTIG  = 0,      /**< Contiguous datatype */
     UCP_DATATYPE_STRIDED = 1,      /**< Strided datatype */
     UCP_DATATYPE_IOV     = 2,      /**< Scatter-gather list with multiple pointers */
@@ -510,7 +510,7 @@ enum ucp_dt_type {
                                         the datatype classification */
     UCP_DATATYPE_CLASS_MASK = UCS_MASK(UCP_DATATYPE_SHIFT) /**< Data-type class
                                                                 mask */
-};
+} ucp_dt_class_t;
 
 
 /**
@@ -520,7 +520,7 @@ enum ucp_dt_type {
  * The enumeration list describes the memory mapping flags supported by @ref
  * ucp_mem_map() function.
  */
-enum {
+typedef enum {
     UCP_MEM_MAP_NONBLOCK = UCS_BIT(0), /**< Complete the mapping faster, possibly by
                                             not populating the pages in the mapping
                                             up-front, and mapping them later when
@@ -534,7 +534,7 @@ enum {
                                             place the mapping at exactly that
                                             address. The address must be a multiple
                                             of the page size. */
-};
+} ucp_mem_map_flags_t;
 
 
 /**
@@ -544,12 +544,12 @@ enum {
  * The enumeration list describes the memory mapping protections supported by the @ref
  * ucp_mem_map() function.
  */
-enum {
+typedef enum {
     UCP_MEM_MAP_PROT_LOCAL_READ   = UCS_BIT(0),  /**< Enable local read access. */
     UCP_MEM_MAP_PROT_LOCAL_WRITE  = UCS_BIT(1),  /**< Enable local write access. */
     UCP_MEM_MAP_PROT_REMOTE_READ  = UCS_BIT(8),  /**< Enable remote read access. */
     UCP_MEM_MAP_PROT_REMOTE_WRITE = UCS_BIT(9)   /**< Enable remote write access. */
-};
+} ucp_mem_map_prot_modes_t;
 
 
 /**
@@ -558,7 +558,7 @@ enum {
  *
  * Flags that indicate how to handle UCP Active Messages.
  */
-enum ucp_am_cb_flags {
+typedef enum {
     /**
      * Indicates that the entire message will be handled in one callback.
      */
@@ -571,7 +571,7 @@ enum ucp_am_cb_flags {
      * @ref ucp_am_data_release is called.
      */
     UCP_AM_FLAG_PERSISTENT_DATA = UCS_BIT(1)
-};
+} ucp_am_cb_flags_t;
 
 
 /**
@@ -581,7 +581,7 @@ enum ucp_am_cb_flags {
  * Flags dictate the behavior of @ref ucp_am_send_nb and @ref ucp_am_send_nbx
  * routines.
  */
-enum ucp_send_am_flags {
+typedef enum {
     UCP_AM_SEND_FLAG_REPLY = UCS_BIT(0),             /**< Force relevant reply
                                                           endpoint to be passed to
                                                           the data callback on the
@@ -592,7 +592,7 @@ enum ucp_send_am_flags {
                                                           rendezvous protocol for
                                                           AM sends. */
     UCP_AM_SEND_REPLY      = UCP_AM_SEND_FLAG_REPLY  /**< Backward compatibility. */
-};
+} ucp_send_am_flags_t;
 
 
 /**
@@ -605,9 +605,9 @@ enum ucp_send_am_flags {
  * and the user has to call @ref ucp_am_data_release when data is
  * no longer needed.
  */
-enum ucp_cb_param_flags {
+typedef enum {
     UCP_CB_PARAM_FLAG_DATA = UCS_BIT(0)
-};
+} ucp_cb_param_flags_t;
 
 
 /**
@@ -774,7 +774,7 @@ typedef enum {
  * The enumeration allows specifying which fields in @ref ucp_am_handler_param_t
  * are present. It is used to enable backward compatibility support.
  */
-enum ucp_am_handler_param_field {
+typedef enum {
     /**
      * Indicates that @ref ucp_am_handler_param_t.id field is valid.
      */
@@ -791,7 +791,7 @@ enum ucp_am_handler_param_field {
      * Indicates that @ref ucp_am_handler_param_t.arg field is valid.
      */
     UCP_AM_HANDLER_PARAM_FIELD_ARG     = UCS_BIT(3)
-};
+} ucp_am_handler_param_fields_t;
 
 
 /**
@@ -967,7 +967,7 @@ typedef struct ucp_generic_dt_ops {
  * The structure defines the parameters that are used for
  * UCP library tuning during UCP library @ref ucp_init "initialization".
  *
- * @note UCP library implementation uses the @ref ucp_feature "features"
+ * @note UCP library implementation uses the @ref ucp_features_t "features"
  * parameter to optimize the library functionality that minimize memory
  * footprint. For example, if the application does not require send/receive
  * semantics UCP library may avoid allocation of expensive resources associated with
@@ -975,14 +975,14 @@ typedef struct ucp_generic_dt_ops {
  */
 typedef struct ucp_params {
     /**
-     * Mask of valid fields in this structure, using bits from @ref ucp_params_field.
+     * Mask of valid fields in this structure, using bits from @ref ucp_params_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                           field_mask;
 
     /**
-     * UCP @ref ucp_feature "features" that are used for library
+     * UCP @ref ucp_features_t "features" that are used for library
      * initialization. It is recommended for applications only to request
      * the features that are required for an optimal functionality
      * This field must be specified.
@@ -1087,7 +1087,7 @@ typedef struct ucp_params {
 typedef struct ucp_lib_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_lib_attr_field.
+     * @ref ucp_lib_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1114,7 +1114,7 @@ typedef struct ucp_lib_attr {
 typedef struct ucp_context_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_context_attr_field.
+     * @ref ucp_context_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1156,7 +1156,7 @@ typedef struct ucp_context_attr {
 typedef struct ucp_worker_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_worker_attr_field.
+     * @ref ucp_worker_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1215,7 +1215,7 @@ typedef struct ucp_worker_attr {
  */
 typedef struct ucp_worker_params {
     /**
-     * Mask of valid fields in this structure, using bits from @ref ucp_worker_params_field.
+     * Mask of valid fields in this structure, using bits from @ref ucp_worker_params_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1322,7 +1322,7 @@ typedef struct ucp_worker_params {
 typedef struct ucp_worker_address_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_worker_address_attr_field.
+     * @ref ucp_worker_address_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1345,7 +1345,7 @@ typedef struct ucp_worker_address_attr {
 typedef struct {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_ep_perf_param_field_t.
+     * @ref ucp_ep_perf_param_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1369,7 +1369,7 @@ typedef struct {
 typedef struct {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_ep_perf_attr_field_t.
+     * @ref ucp_ep_perf_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1393,7 +1393,7 @@ typedef struct {
 typedef struct ucp_listener_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_listener_attr_field.
+     * @ref ucp_listener_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1417,7 +1417,7 @@ typedef struct ucp_listener_attr {
 typedef struct ucp_conn_request_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_conn_request_attr_field.
+     * @ref ucp_conn_request_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1447,7 +1447,7 @@ typedef struct ucp_conn_request_attr {
 typedef struct ucp_listener_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_listener_params_field.
+     * @ref ucp_listener_params_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1525,7 +1525,7 @@ typedef struct ucp_stream_poll_ep {
 typedef struct ucp_mem_map_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_mem_map_params_field.
+     * @ref ucp_mem_map_params_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -1788,7 +1788,7 @@ typedef struct ucp_am_handler_param {
     unsigned                 id;
 
     /**
-     * Handler flags as defined by @ref ucp_am_cb_flags.
+     * Handler flags as defined by @ref ucp_am_cb_flags_t.
      */
     uint32_t                 flags;
 
@@ -2252,7 +2252,7 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
  * file descriptor obtained per worker (this function) and the second is the
  * @ref ucp_worker_wait function for waiting on the next event internally.
  *
- * @note UCP @ref ucp_feature "features" have to be triggered
+ * @note UCP @ref ucp_features_t "features" have to be triggered
  *   with @ref UCP_FEATURE_WAKEUP to select proper transport
  *
  * @param [in]  worker    Worker of notified events.
@@ -2284,7 +2284,7 @@ ucs_status_t ucp_worker_get_efd(ucp_worker_h worker, int *fd);
  * notification and may not progress some of the requests as it would when
  * calling @ref ucp_worker_progress (which is not invoked in that duration).
  *
- * @note UCP @ref ucp_feature "features" have to be triggered
+ * @note UCP @ref ucp_features_t "features" have to be triggered
  *   with @ref UCP_FEATURE_WAKEUP to select proper transport
  *
  * @param [in]  worker    Worker to wait for events on.
@@ -2375,7 +2375,7 @@ void ucp_worker_wait_mem(ucp_worker_h worker, void *address);
  * }
  * @endcode
  *
- * @note UCP @ref ucp_feature "features" have to be triggered
+ * @note UCP @ref ucp_features_t "features" have to be triggered
  *   with @ref UCP_FEATURE_WAKEUP to select proper transport
  *
  * @param [in]  worker    Worker of notified events.
@@ -2542,7 +2542,7 @@ ucs_status_t ucp_ep_create(ucp_worker_h worker, const ucp_ep_params_t *params,
  * process depends on the selected @a mode.
  *
  * @param [in]  ep      Handle to the endpoint to close.
- * @param [in]  mode    One from @ref ucp_ep_close_mode value.
+ * @param [in]  mode    One from @ref ucp_ep_close_mode_t value.
  *
  * @return UCS_OK           - The endpoint is closed successfully.
  * @return UCS_PTR_IS_ERR(_ptr) - The closure failed and an error code indicates
@@ -2886,7 +2886,7 @@ typedef enum ucp_mem_advice {
 typedef struct ucp_mem_advise_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_mem_advise_params_field. All fields are mandatory.
+     * @ref ucp_mem_advise_params_fields_t. All fields are mandatory.
      * Provides ABI compatibility with respect to adding new fields.
      */
     uint64_t                field_mask;
@@ -3083,7 +3083,7 @@ void ucp_rkey_destroy(ucp_rkey_h rkey);
  */
 ucs_status_t ucp_worker_set_am_handler(ucp_worker_h worker, uint16_t id,
                                        ucp_am_callback_t cb, void *arg,
-                                       uint32_t flags);
+                                       ucp_am_cb_flags_t flags);
 
 
 /**
@@ -3126,7 +3126,7 @@ ucs_status_t ucp_worker_set_am_recv_handler(ucp_worker_h worker,
  * @param [in]  datatype    Datatype descriptor for the elements in the buffer.
  * @param [in]  cb          Callback that is invoked upon completion of the
  *                          data transfer if it is not completed immediately.
- * @param [in]  flags       Operation flags as defined by @ref ucp_send_am_flags.
+ * @param [in]  flags       Operation flags as defined by @ref ucp_send_am_flags_t.
  *
  * @return NULL             Active Message was sent immediately.
  * @return UCS_PTR_IS_ERR(_ptr) Error sending Active Message.
@@ -3156,7 +3156,7 @@ ucs_status_ptr_t ucp_am_send_nb(ucp_ep_h ep, uint16_t id,
  *       it completes immediately.
  * @note This operation supports specific flags, which can be passed
  *       in @a param by @ref ucp_request_param_t.flags. The exact set of flags
- *       is defined by @ref ucp_send_am_flags.
+ *       is defined by @ref ucp_send_am_flags_t.
  *
  * @param [in]  ep            UCP endpoint where the Active Message will be run.
  * @param [in]  id            Active Message id. Specifies which registered
@@ -4592,11 +4592,11 @@ ucs_status_ptr_t ucp_worker_flush_nbx(ucp_worker_h worker,
  * The enumeration allows specifying which fields in @ref ucp_ep_attr_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_ep_attr_field {
+typedef enum {
     UCP_EP_ATTR_FIELD_NAME            = UCS_BIT(0), /**< UCP endpoint name */
     UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR  = UCS_BIT(1), /**< Sockaddr used by the endpoint */
     UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR = UCS_BIT(2)  /**< Sockaddr the endpoint is connected to */
-};
+} ucp_ep_attr_fields_t;
 
 
 /**
@@ -4609,7 +4609,7 @@ enum ucp_ep_attr_field {
 typedef struct ucp_ep_attr {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_ep_attr_field.
+     * @ref ucp_ep_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */

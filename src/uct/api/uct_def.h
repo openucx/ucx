@@ -63,11 +63,11 @@ enum uct_am_trace_type {
  * the data is the first fragment of the message. The latter value means that
  * more fragments of the message yet to be delivered.
  */
-enum uct_cb_param_flags {
+typedef enum {
     UCT_CB_PARAM_FLAG_DESC  = UCS_BIT(0),
     UCT_CB_PARAM_FLAG_FIRST = UCS_BIT(1),
     UCT_CB_PARAM_FLAG_MORE  = UCS_BIT(2)
-};
+} uct_cb_param_flags_t;
 
 /**
  * @addtogroup UCT_RESOURCE

@@ -389,7 +389,7 @@ private:
 
     void request_completed(ucx_request *r);
 
-    void ep_close(enum ucp_ep_close_mode mode);
+    void ep_close(ucp_ep_close_mode_t mode);
 
     bool process_request(const char *what, ucs_status_ptr_t ptr_status,
                          UcxCallback* callback);

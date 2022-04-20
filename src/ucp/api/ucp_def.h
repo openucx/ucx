@@ -184,7 +184,7 @@ typedef struct ucp_listener              *ucp_listener_h;
  */
 typedef struct ucp_mem_attr {
    /**
-     * Mask of valid fields in this structure, using bits from @ref ucp_mem_attr_field.
+     * Mask of valid fields in this structure, using bits from @ref ucp_mem_attr_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -214,11 +214,11 @@ typedef struct ucp_mem_attr {
  * The enumeration allows specifying which fields in @ref ucp_mem_attr_t are
  * present. It is used to enable backward compatibility support.
  */
-enum ucp_mem_attr_field {
+typedef enum {
     UCP_MEM_ATTR_FIELD_ADDRESS  = UCS_BIT(0), /**< Virtual address */
     UCP_MEM_ATTR_FIELD_LENGTH   = UCS_BIT(1), /**< The size of memory region */
     UCP_MEM_ATTR_FIELD_MEM_TYPE = UCS_BIT(2)  /**< Type of allocated or registered memory */
-};
+} ucp_mem_attr_fields_t;
 
 
 /**
@@ -273,7 +273,7 @@ typedef struct ucp_recv_desc             *ucp_tag_message_h;
  * @brief UCP Datatype Identifier
  *
  * UCP datatype identifier is a 64bit object used for datatype identification.
- * Predefined UCP identifiers are defined by @ref ucp_dt_type.
+ * Predefined UCP identifiers are defined by @ref ucp_dt_class_t.
  */
 typedef uint64_t                         ucp_datatype_t;
 
@@ -683,7 +683,7 @@ typedef ucs_status_t (*ucp_am_recv_callback_t)(void *arg, const void *header,
 typedef struct ucp_ep_params {
     /**
      * Mask of valid fields in this structure, using bits from
-     * @ref ucp_ep_params_field.
+     * @ref ucp_ep_params_fields_t.
      * Fields not specified in this mask will be ignored.
      * Provides ABI compatibility with respect to adding new fields.
      */
@@ -715,7 +715,7 @@ typedef struct ucp_ep_params {
     void                    *user_data;
 
     /**
-     * Endpoint flags from @ref ucp_ep_params_flags_field.
+     * Endpoint flags from @ref ucp_ep_params_flags_fields_t.
      * This value is optional.
      * If it's not set (along with its corresponding bit in the field_mask -
      * @ref UCP_EP_PARAM_FIELD_FLAGS), the @ref ucp_ep_create() routine will

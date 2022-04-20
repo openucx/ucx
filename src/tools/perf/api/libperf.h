@@ -75,7 +75,7 @@ typedef enum {
 } ucx_perf_wait_mode_t;
 
 
-enum ucx_perf_test_flags {
+typedef enum {
     UCX_PERF_TEST_FLAG_VALIDATE         = UCS_BIT(1), /* Validate data. Affects performance. */
     UCX_PERF_TEST_FLAG_ONE_SIDED        = UCS_BIT(2), /* For tests which involves only one side,
                                                          the responder should not call progress(). */
@@ -89,7 +89,7 @@ enum ucx_perf_test_flags {
     UCX_PERF_TEST_FLAG_ERR_HANDLING     = UCS_BIT(11), /* Create UCP eps with error handling support */
     UCX_PERF_TEST_FLAG_LOOPBACK         = UCS_BIT(12), /* Use loopback connection */
     UCX_PERF_TEST_FLAG_PREREG           = UCS_BIT(13) /* Pass pre-registered memory handle */
-};
+} ucx_perf_test_flags_t;
 
 
 enum {
@@ -182,7 +182,7 @@ typedef struct ucx_perf_params {
     ucx_perf_wait_mode_t   wait_mode;       /* How to wait */
     ucs_memory_type_t      send_mem_type;   /* Send memory type */
     ucs_memory_type_t      recv_mem_type;   /* Recv memory type */
-    unsigned               flags;           /* See ucx_perf_test_flags. */
+    unsigned               flags;           /* See ucx_perf_test_flags_t. */
 
     size_t                 *msg_size_list;  /* Test message sizes list. The size
                                                of the array is in msg_size_cnt */

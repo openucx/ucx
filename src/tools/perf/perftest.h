@@ -23,7 +23,7 @@
 #define TEST_PARAMS_ARGS        "t:n:s:W:O:w:D:i:H:oSCIqM:r:E:T:d:x:A:BUem:R:lz"
 #define TEST_ID_UNDEFINED       -1
 
-enum {
+typedef enum {
     TEST_FLAG_PRINT_RESULTS    = UCS_BIT(0),
     TEST_FLAG_PRINT_TEST       = UCS_BIT(1),
     TEST_FLAG_SET_AFFINITY     = UCS_BIT(8),
@@ -31,7 +31,7 @@ enum {
     TEST_FLAG_PRINT_FINAL      = UCS_BIT(10),
     TEST_FLAG_PRINT_CSV        = UCS_BIT(11),
     TEST_FLAG_PRINT_EXTRA_INFO = UCS_BIT(12)
-};
+} test_flags_t;
 
 typedef struct sock_rte_group {
     int                          sendfd;

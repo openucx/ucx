@@ -214,7 +214,7 @@ void ucp_test::disconnect(entity& e) {
     }
 
     for (int i = 0; i < e.get_num_workers(); i++) {
-        enum ucp_ep_close_mode close_mode;
+        ucp_ep_close_mode_t close_mode;
 
         if (has_failed_entity) {
             close_mode = UCP_EP_CLOSE_MODE_FORCE;
@@ -870,7 +870,7 @@ void ucp_test_base::entity::fence(int worker_index) const {
 }
 
 void *ucp_test_base::entity::disconnect_nb(int worker_index, int ep_index,
-                                           enum ucp_ep_close_mode mode) {
+                                           ucp_ep_close_mode_t mode) {
     ucp_ep_h ep = revoke_ep(worker_index, ep_index);
     if (ep == NULL) {
         return NULL;
@@ -906,7 +906,7 @@ void ucp_test_base::entity::close_ep_req_free(void *close_req) {
 }
 
 void ucp_test_base::entity::close_all_eps(const ucp_test &test, int worker_idx,
-                                          enum ucp_ep_close_mode mode) {
+                                          ucp_ep_close_mode_t mode) {
     for (int j = 0; j < get_num_eps(worker_idx); j++) {
         disconnect_nb(worker_idx, j, mode);
     }

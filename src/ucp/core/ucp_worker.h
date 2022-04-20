@@ -75,7 +75,7 @@
 /**
  * UCP worker flags
  */
-enum {
+typedef enum {
     /** Internal worker flags start from this bit index, to co-exist with user
      * flags specified when worker is created */
     UCP_WORKER_INTERNAL_FLAGS_SHIFT = 32,
@@ -102,13 +102,13 @@ enum {
     /** Indicates that AM mpool was initialized on this worker */
     UCP_WORKER_FLAG_AM_MPOOL_INITIALIZED =
             UCS_BIT(UCP_WORKER_INTERNAL_FLAGS_SHIFT + 4)
-};
+} ucp_worker_internal_flags_t;
 
 
 /**
  * UCP iface flags
  */
-enum {
+typedef enum {
     UCP_WORKER_IFACE_FLAG_OFFLOAD_ACTIVATED = UCS_BIT(0), /**< UCP iface receives tag
                                                                offload messages */
     UCP_WORKER_IFACE_FLAG_ON_ARM_LIST       = UCS_BIT(1), /**< UCP iface is an element
@@ -118,13 +118,13 @@ enum {
     UCP_WORKER_IFACE_FLAG_UNUSED            = UCS_BIT(2)  /**< There is another UCP iface
                                                                with the same caps, but
                                                                with better performance */
-};
+} ucp_worker_iface_flags_t;
 
 
 /**
  * UCP worker statistics counters
  */
-enum {
+typedef enum {
     /* Total number of received eager messages */
     UCP_WORKER_STAT_TAG_RX_EAGER_MSG,
     UCP_WORKER_STAT_TAG_RX_EAGER_SYNC_MSG,
@@ -144,13 +144,13 @@ enum {
     UCP_WORKER_STAT_TAG_RX_RNDV_RKEY_PTR,
 
     UCP_WORKER_STAT_LAST
-};
+} ucp_worker_stat_counter_t;
 
 
 /**
  * UCP worker tag offload statistics counters
  */
-enum {
+typedef enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_POSTED,
     UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED,
     UCP_WORKER_STAT_TAG_OFFLOAD_MATCHED_SW_RNDV,
@@ -165,7 +165,7 @@ enum {
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_RNDV,
     UCP_WORKER_STAT_TAG_OFFLOAD_RX_UNEXP_SW_RNDV,
     UCP_WORKER_STAT_TAG_OFFLOAD_LAST
-};
+} ucp_worker_stat_counter;
 
 
 #define UCP_WORKER_STAT_EAGER_MSG(_worker, _flags) \

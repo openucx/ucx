@@ -17,7 +17,7 @@
 
 static UCS_F_ALWAYS_INLINE int
 ucp_datatype_iter_is_class(const ucp_datatype_iter_t *dt_iter,
-                           enum ucp_dt_type dt_class, unsigned dt_mask)
+                           ucp_dt_class_t dt_class, unsigned dt_mask)
 {
     /* The following branch could be eliminated by the compiler if dt_mask and
      * the tested dt_class are constants, and dt_mask does not contain dt_class.

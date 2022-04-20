@@ -498,7 +498,7 @@ void uct_test::check_caps_skip(uint64_t required_flags, uint64_t invalid_flags) 
     }
 }
 
-bool uct_test::check_event_caps(uint64_t required_flags, uint64_t invalid_flags) {
+bool uct_test::check_event_caps(uct_iface_event_flags_t required_flags, uct_iface_event_flags_t invalid_flags) {
     FOR_EACH_ENTITY(iter) {
         if (!(*iter)->check_event_caps(required_flags, invalid_flags)) {
             return false;
@@ -1039,10 +1039,10 @@ bool uct_test::entity::check_caps(uint64_t required_flags,
             !(iface_flags & invalid_flags));
 }
 
-bool uct_test::entity::check_event_caps(uint64_t required_flags,
-                                        uint64_t invalid_flags)
+bool uct_test::entity::check_event_caps(uct_iface_event_flags_t required_flags,
+                                        uct_iface_event_flags_t invalid_flags)
 {
-    uint64_t iface_event_flags = iface_attr().cap.event_flags;
+    uct_iface_event_flags_t iface_event_flags = (uct_iface_event_flags_t)iface_attr().cap.event_flags;
     return (ucs_test_all_flags(iface_event_flags, required_flags) &&
             !(iface_event_flags & invalid_flags) &&
             /* iface has to support either event fd or event async

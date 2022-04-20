@@ -17,12 +17,6 @@
 
 
 /**
- * Datatype classification
- */
-typedef enum ucp_dt_type          ucp_dt_class_t;
-
-
-/**
  * Memory registration state of a buffer/operation
  */
 typedef struct ucp_dt_reg {

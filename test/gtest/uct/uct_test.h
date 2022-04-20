@@ -153,7 +153,7 @@ protected:
 
         bool is_caps_supported(uint64_t required_flags);
         bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
-        bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+        bool check_event_caps(uct_iface_event_flags_t required_flags, uct_iface_event_flags_t invalid_flags = (uct_iface_event_flags_t)0);
         bool check_atomics(uint64_t required_ops, atomic_mode mode);
 
         uct_md_h md() const;
@@ -368,7 +368,7 @@ protected:
     bool is_caps_supported(uint64_t required_flags);
     bool check_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
     void check_caps_skip(uint64_t required_flags, uint64_t invalid_flags = 0);
-    bool check_event_caps(uint64_t required_flags, uint64_t invalid_flags = 0);
+    bool check_event_caps(uct_iface_event_flags_t required_flags, uct_iface_event_flags_t invalid_flags = (uct_iface_event_flags_t)0);
     bool check_atomics(uint64_t required_ops, atomic_mode mode);
     const entity& ent(unsigned index) const;
     unsigned progress() const;
