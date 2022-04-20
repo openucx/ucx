@@ -8,7 +8,7 @@
 #include <uct/api/uct.h>
 #include <ucs/time/time.h>
 #include <uct/ib/base/ib_md.h>
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
 
@@ -67,7 +67,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
         EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_ACCESS_REMOTE_ATOMIC);
     }
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
     EXPECT_FALSE(ib_memh->flags & UCT_IB_MEM_FLAG_ATOMIC_MR);
 #endif
 
@@ -77,7 +77,7 @@ void test_ib_md::ib_md_umr_check(void *rkey_buffer,
     status = uct_md_mkey_pack(md(), memh, rkey_buffer);
     EXPECT_UCS_OK(status);
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
     uct_ib_md_t *ib_md = (uct_ib_md_t *)md();
 
     if ((amo_access && check_umr(ib_md)) || ib_md->relaxed_order) {

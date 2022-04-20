@@ -917,7 +917,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
 }
@@ -927,7 +927,7 @@ class test_ud_iface_attrs : public test_uct_iface_attrs {
 public:
     attr_map_t get_num_iov() {
         attr_map_t iov_map;
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
         if (has_transport("ud_mlx5")) {
             // For am zcopy just small constant number of iovs is allowed
             // (to preserve some inline space for AM zcopy header)

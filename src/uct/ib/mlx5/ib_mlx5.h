@@ -32,14 +32,9 @@
 #  endif
 #endif
 
-#if HAVE_INFINIBAND_MLX5DV_H
-#  include <infiniband/mlx5dv.h>
-#else
-#  include <infiniband/mlx5_hw.h>
-#  include <uct/ib/mlx5/exp/ib_mlx5_hw.h>
-#endif
 #include <uct/ib/mlx5/dv/ib_mlx5_dv.h>
 
+#include <infiniband/mlx5dv.h>
 #include <netinet/in.h>
 #include <endian.h>
 #include <string.h>

@@ -14,7 +14,6 @@
 #endif
 
 #include <uct/ib/mlx5/ib_mlx5_log.h>
-#include <uct/ib/mlx5/exp/ib_exp.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <ucs/arch/cpu.h>
@@ -935,7 +934,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
     /* Need to create QP before super constructor to get QP number */
     uct_rc_mlx5_iface_fill_attr(iface, &attr, iface->super.config.tx_qp_len,
                                 &iface->rx.srq);
-    uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
     status = uct_rc_mlx5_iface_create_qp(iface, &self->tx.wq.super, &self->tx.wq, &attr);
     if (status != UCS_OK) {
         return status;
@@ -965,7 +963,6 @@ UCS_CLASS_INIT_FUNC(uct_rc_mlx5_ep_t, const uct_ep_params_t *params)
          * such a QP to be initialized with zero send queue length. */
         memset(&attr, 0, sizeof(attr));
         uct_rc_mlx5_iface_fill_attr(iface, &attr, 0, &iface->rx.srq);
-        uct_ib_exp_qp_fill_attr(&iface->super.super, &attr.super);
         status = uct_rc_mlx5_iface_create_qp(iface, &self->tm_qp, NULL, &attr);
         if (status != UCS_OK) {
             goto err_unreg;

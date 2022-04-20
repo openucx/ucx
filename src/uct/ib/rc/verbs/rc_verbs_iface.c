@@ -12,7 +12,6 @@
 #include "rc_verbs_impl.h"
 
 #include <uct/api/uct.h>
-#include <uct/ib/mlx5/exp/ib_exp.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
@@ -354,7 +353,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     }
 
     /* Create a dummy QP in order to find out max_inline */
-    uct_ib_exp_qp_fill_attr(&self->super.super, &attr);
     status = uct_rc_iface_qp_create(&self->super, &qp, &attr,
                                     self->super.config.tx_qp_len,
                                     self->srq);
