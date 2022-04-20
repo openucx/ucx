@@ -1485,15 +1485,8 @@ ucs_status_t ucp_wireup_connect_remote(ucp_ep_h ep, ucp_lane_index_t lane)
         goto out_unlock;
     }
 
-    if (ucp_proxy_ep_test(ep->uct_eps[lane])) {
-        /* signaling ep is not needed now since we will send wireup request
-         * with signaling flag
-         */
-        uct_ep = ucp_proxy_ep_extract(ep->uct_eps[lane]);
-        uct_ep_destroy(ep->uct_eps[lane]);
-    } else {
-        uct_ep = ep->uct_eps[lane];
-    }
+    
+    uct_ep = ep->uct_eps[lane];
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_REMOTE_CONNECTED));
 
