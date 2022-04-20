@@ -543,10 +543,9 @@ uct_tcp_cm_verify_req_connected_ep(uct_tcp_ep_t *ep,
 }
 
 static unsigned
-uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
+uct_tcp_cm_handle_conn_req(uct_tcp_ep_t *ep,
                            const uct_tcp_cm_conn_req_pkt_t *cm_req_pkt)
 {
-    uct_tcp_ep_t *ep        = *ep_p;
     uct_tcp_iface_t *iface  = ucs_derived_of(ep->super.super.iface,
                                              uct_tcp_iface_t);
     unsigned progress_count = 0;
@@ -612,7 +611,7 @@ uct_tcp_cm_handle_conn_req(uct_tcp_ep_t **ep_p,
         uct_tcp_ep_replace_ep(peer_ep, ep);
         uct_tcp_cm_change_conn_state(peer_ep,
                                      UCT_TCP_EP_CONN_STATE_CONNECTED);
-        goto out_destroy_ep;
+        goto out;
     }
 
 accept_conn:
@@ -639,9 +638,9 @@ send_ack:
 
 out_destroy_ep:
     if (!(ep->flags & UCT_TCP_EP_FLAG_CTX_TYPE_TX)) {
-        uct_tcp_ep_destroy_internal(&ep->super.super);
-        *ep_p = NULL;
+        uct_tcp_ep_set_failed(ep);
     }
+out:
     return progress_count;
 }
 
@@ -658,26 +657,23 @@ static void uct_tcp_cm_handle_conn_ack(uct_tcp_ep_t *ep,
     }
 }
 
-static void uct_tcp_cm_handle_conn_fin(uct_tcp_ep_t **ep_p)
+static void uct_tcp_cm_handle_conn_fin(uct_tcp_ep_t *ep)
 {
-    uct_tcp_ep_t *ep = *ep_p;
-
     if ((ep->flags & UCT_TCP_EP_CTX_CAPS) == UCT_TCP_EP_FLAG_CTX_TYPE_RX) {
-        uct_tcp_ep_destroy_internal(&ep->super.super);
-        *ep_p = NULL;
+        uct_tcp_ep_set_failed(ep);
     } else {
         uct_tcp_ep_remove_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
     }
 }
 
-unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep_p, void *pkt, uint32_t length)
+unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t *ep, void *pkt, uint32_t length)
 {
     uct_tcp_iface_t UCS_V_UNUSED *iface =
-            ucs_derived_of((*ep_p)->super.super.iface, uct_tcp_iface_t);
+            ucs_derived_of(ep->super.super.iface, uct_tcp_iface_t);
     uct_tcp_cm_conn_event_t cm_event;
     uct_tcp_cm_conn_req_pkt_t *cm_req_pkt;
 
-    ucs_assertv(length >= sizeof(cm_event), "ep=%p", *ep_p);
+    ucs_assertv(length >= sizeof(cm_event), "ep=%p", ep);
 
     cm_event = *((uct_tcp_cm_conn_event_t*)pkt);
 
@@ -687,22 +683,22 @@ unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep_p, void *pkt, uint32_t len
          * EP doesn't contain the peer address */
         ucs_assertv(length ==
                      (sizeof(*cm_req_pkt) + iface->config.sockaddr_len),
-                    "ep=%p length=%u", *ep_p, length);
+                    "ep=%p length=%u", ep, length);
         cm_req_pkt = (uct_tcp_cm_conn_req_pkt_t*)pkt;
-        return uct_tcp_cm_handle_conn_req(ep_p, cm_req_pkt);
+        return uct_tcp_cm_handle_conn_req(ep, cm_req_pkt);
     case UCT_TCP_CM_CONN_ACK_WITH_REQ:
-        uct_tcp_ep_add_ctx_cap(*ep_p, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
+        uct_tcp_ep_add_ctx_cap(ep, UCT_TCP_EP_FLAG_CTX_TYPE_RX);
         /* fall through */
     case UCT_TCP_CM_CONN_ACK:
-        uct_tcp_cm_handle_conn_ack(*ep_p, cm_event,
+        uct_tcp_cm_handle_conn_ack(ep, cm_event,
                                    UCT_TCP_EP_CONN_STATE_CONNECTED);
         return 0;
     case UCT_TCP_CM_CONN_FIN:
-        uct_tcp_cm_handle_conn_fin(ep_p);
+        uct_tcp_cm_handle_conn_fin(ep);
         return 0;
     }
 
-    ucs_error("tcp_ep %p: unknown CM event received %d", *ep_p, cm_event);
+    ucs_error("tcp_ep %p: unknown CM event received %d", ep, cm_event);
     return 0;
 }
 

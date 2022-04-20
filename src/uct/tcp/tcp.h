@@ -614,7 +614,7 @@ ucs_status_t uct_tcp_cm_send_event(uct_tcp_ep_t *ep,
                                    uct_tcp_cm_conn_event_t event,
                                    int log_error);
 
-unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t **ep_p, void *pkt, uint32_t length);
+unsigned uct_tcp_cm_handle_conn_pkt(uct_tcp_ep_t *ep, void *pkt, uint32_t length);
 
 unsigned uct_tcp_cm_conn_progress(void *arg);
 

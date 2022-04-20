@@ -514,17 +514,6 @@ void uct_tcp_ep_set_failed(uct_tcp_ep_t *ep)
     }
 }
 
-static inline void uct_tcp_ep_ctx_move(uct_tcp_ep_ctx_t *to_ctx,
-                                       uct_tcp_ep_ctx_t *from_ctx)
-{
-    if (!uct_tcp_ep_ctx_buf_need_progress(from_ctx)) {
-        return;
-    }
-
-    memcpy(to_ctx, from_ctx, sizeof(*to_ctx));
-    memset(from_ctx, 0, sizeof(*from_ctx));
-}
-
 static int uct_tcp_ep_time_seconds(ucs_time_t time_val, int auto_val,
                                    int max_val)
 {
@@ -639,6 +628,7 @@ void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
                                               uct_tcp_iface_t);
     int events               = from_ep->events;
     uct_worker_cb_id_t cb_id = UCS_CALLBACKQ_ID_NULL;
+    ucs_status_t status;
 
     uct_tcp_ep_mod_events(from_ep, 0, from_ep->events);
     to_ep->fd   = from_ep->fd;
@@ -647,8 +637,29 @@ void uct_tcp_ep_replace_ep(uct_tcp_ep_t *to_ep, uct_tcp_ep_t *from_ep)
 
     to_ep->conn_retries++;
 
-    uct_tcp_ep_ctx_move(&to_ep->tx, &from_ep->tx);
-    uct_tcp_ep_ctx_move(&to_ep->rx, &from_ep->rx);
+    if (uct_tcp_ep_ctx_buf_need_progress(&from_ep->tx)) {
+        /* Not entire TX buffer from the replaced EP was handled, move the
+         * entire TX to the replacing EP for futher handling */
+        memcpy(&to_ep->tx, &from_ep->tx, sizeof(to_ep->tx));
+        memset(&from_ep->tx, 0, sizeof(from_ep->tx));
+    }
+
+    if (uct_tcp_ep_ctx_buf_need_progress(&from_ep->rx)) {
+        /* Not entire RX buffer from the replaced EP was handled, copy the
+         * remaining part to the replacing EP for futher handling.
+         * Don't fully move RX, because it could be under handling in a receive
+         * progressing */
+        status = uct_tcp_ep_ctx_buf_alloc(to_ep, &to_ep->rx, &iface->rx_mpool);
+        ucs_assertv_always(status == UCS_OK, "%s",
+                           ucs_status_string(status));
+        to_ep->rx.put_sn   = from_ep->rx.put_sn;
+        to_ep->rx.length   = from_ep->rx.length - from_ep->rx.offset;
+        to_ep->rx.offset   = 0;
+        from_ep->rx.length = from_ep->rx.offset;
+        memcpy(to_ep->rx.buf,
+               UCS_PTR_BYTE_OFFSET(from_ep->rx.buf, from_ep->rx.offset),
+               to_ep->rx.length);
+    }
 
     ucs_queue_splice(&to_ep->pending_q, &from_ep->pending_q);
     ucs_queue_splice(&to_ep->put_comp_q, &from_ep->put_comp_q);
@@ -1438,11 +1449,7 @@ static unsigned uct_tcp_ep_progress_am_rx(uct_tcp_ep_t *ep)
             handled++;
         } else {
             ucs_assert(hdr->am_id == UCT_TCP_EP_CM_AM_ID);
-            handled += 1 + uct_tcp_cm_handle_conn_pkt(&ep, hdr + 1, hdr->length);
-            /* coverity[check_after_deref] */
-            if (ep == NULL) {
-                goto out;
-            }
+            handled += 1 + uct_tcp_cm_handle_conn_pkt(ep, hdr + 1, hdr->length);
         }
 
         ucs_assert(ep != NULL);
