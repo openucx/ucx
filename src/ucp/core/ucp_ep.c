@@ -1464,10 +1464,6 @@ void ucp_ep_cleanup_lanes(ucp_ep_h ep)
         ucs_debug("ep %p: pending & destroy uct_ep[%d]=%p", ep, lane, uct_ep);
         uct_ep_pending_purge(uct_ep, ucp_destroyed_ep_pending_purge, ep);
         ucp_ep_unprogress_uct_ep(ep, uct_ep, ucp_ep_get_rsc_index(ep, lane));
-
-        /* coverity wrongly resolves ucp_failed_tl_ep's no-op EP destroy
-         * function to 'ucp_proxy_ep_destroy' */
-        /* coverity[incorrect_free] */
         uct_ep_destroy(uct_ep);
     }
 }
