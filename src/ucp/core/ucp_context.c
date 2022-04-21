@@ -407,6 +407,13 @@ static ucs_config_field_t ucp_config_table[] = {
    "(inf - check all endpoints on every round, must be greater than 0)",
    ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
 
+  {"RESOLVE_REMOTE_EP_ID", "n",
+   "Defines whether resolving remote endpoint ID is required or not when\n"
+   "creating a local endpoint. 'auto' means resolving remote endpint ID only\n"
+   "in case of error handling and keepalive enabled.",
+   ucs_offsetof(ucp_config_t, ctx.resolve_remote_ep_id),
+   UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
   {"PROTO_INDIRECT_ID", "auto",
    "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
    "A value of 'auto' means to enable only if error handling is enabled on the\n"
