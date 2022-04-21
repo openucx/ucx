@@ -736,7 +736,9 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         break;
     case RDMA_CM_EVENT_ROUTE_RESOLVED:
         /* Client side event */
+        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_handle_event_route_resolved(event);
+        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
         break;
     case RDMA_CM_EVENT_CONNECT_REQUEST:
         /* Server side event */
@@ -773,7 +775,9 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         /* client and server error events */
     case RDMA_CM_EVENT_REJECTED:
     case RDMA_CM_EVENT_CONNECT_ERROR:
+        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_handle_error_event(event);
+        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
         break;
     default:
         ucs_warn("unexpected RDMACM event: %s", rdma_event_str(event->event));
