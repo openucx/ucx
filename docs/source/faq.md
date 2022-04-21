@@ -117,19 +117,19 @@ The file can be created using `ucx_info -Cf`.
 
 #### Build user application with UCX
 
-UCX supports metainformation subsystem based on pkg-config tool. In order to
-build the application with UCX development libraries.  For example, this is how
+In order to build the application with UCX development libraries, UCX supports a
+metainformation subsystem based on the pkg-config tool. For example, this is how
 pkg-config can be incorporated in a Makefile-based build:
 ```
 program: program.c
-        cc program.c $(pkg-config --cflags --libs ucx)
+        $(CC) program.c $(shell pkg-config --cflags --libs ucx)
 ```
-When linking with static UCX libraries, need to list explicitly all required
-transport modules.  For example, in order to support only cma and knem
-transports, can use this method:
+When linking with static UCX libraries, the user must to list all required
+transport modules explicitly.  For example, in order to support only cma and
+knem transports, the user have to use:
 ```
 program: program.c
-        cc -static program.c $(pkg-config --cflags --libs --static ucx-cma ucx-knem ucx)
+        $(CC) -static program.c $(shell pkg-config --cflags --libs --static ucx-cma ucx-knem ucx)
 ```
 Currently, the following transport modules can be used with pkg-config:
 | Package name  |  Provided transport service |
@@ -140,7 +140,7 @@ Currently, the following transport modules can be used with pkg-config:
 | ucx-ib | [Infiniband](https://developer.nvidia.com/networking) based network transport |
 | ucx-rdmacm | Connection manager based on [RDMACM](https://github.com/ofiwg/librdmacm) |
 
-TCP, basic shared memory, and self transports are built-in into UCT and don't
+TCP, basic shared memory, and self transports are built into UCT and don't
 need additional compilation actions.
 
 ##### IMPORTANT NOTE:
