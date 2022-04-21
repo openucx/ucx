@@ -805,9 +805,7 @@ static void uct_rdmacm_cm_event_handler(int fd, ucs_event_set_types_t events,
             return;
         }
 
-        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_process_event(cm, event);
-        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
     }
 }
 
@@ -941,7 +939,7 @@ UCS_CLASS_INIT_FUNC(uct_rdmacm_cm_t, uct_component_h component,
     status = ucs_async_set_event_handler(worker_priv->async->mode,
                                          self->ev_ch->fd, UCS_EVENT_SET_EVREAD,
                                          uct_rdmacm_cm_event_handler, self,
-                                         worker_priv->async);
+                                         NULL);
     if (status != UCS_OK) {
         goto err_destroy_ev_ch;
     }
