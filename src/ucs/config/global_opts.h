@@ -76,9 +76,6 @@ typedef struct {
     /* Issue warning about UCX_ env vars which were not used by config parser */
     int                        warn_unused_env_vars;
 
-    /* Max. events per context, will be removed in the future */
-    unsigned                   async_max_events;
-
     /** Memtype cache */
     ucs_ternary_auto_value_t   enable_memtype_cache;
 

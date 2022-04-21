@@ -16,6 +16,7 @@
 #include <ucs/sys/checker.h>
 #include <ucs/sys/stubs.h>
 #include <ucs/sys/event_set.h>
+#include <ucs/sys/math.h>
 
 
 #define UCS_ASYNC_EPOLL_MAX_EVENTS      16

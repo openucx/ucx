@@ -38,7 +38,6 @@ ucs_global_opts_t ucs_global_opts = {
     .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
     .warn_unused_env_vars  = 1,
     .enable_memtype_cache  = UCS_TRY,
-    .async_max_events      = 64,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
     .tuning_path           = "",
@@ -152,9 +151,10 @@ static ucs_config_field_t ucs_global_opts_table[] = {
    "Enable memory type (cuda/rocm) cache",
    ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_TERNARY},
 
- {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
-  "Maximal number of events which can be handled from one context",
-  ucs_offsetof(ucs_global_opts_t, async_max_events), UCS_CONFIG_TYPE_UINT},
+ {"ASYNC_MAX_EVENTS", "1024",
+  "The configuration parameter is deprecated.\n"
+  "Now unlimited number of events can be handled from one context.",
+  UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
  {"ASYNC_SIGNO", "SIGALRM",
   "Signal number used for async signaling.",

@@ -14,6 +14,7 @@
 #include <ucs/debug/debug_int.h>
 #include <ucs/datastruct/khash.h>
 #include <ucs/sys/stubs.h>
+#include <ucs/sys/math.h>
 
 
 #define UCS_ASYNC_TIMER_ID_MIN          1000000u
@@ -339,7 +340,7 @@ ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t
 
     ucs_trace_func("async=%p", async);
 
-    status = ucs_mpmc_queue_init(&async->missed, ucs_global_opts.async_max_events);
+    status = ucs_mpmc_queue_init(&async->missed);
     if (status != UCS_OK) {
         goto err;
     }
@@ -349,9 +350,8 @@ ucs_status_t ucs_async_context_init(ucs_async_context_t *async, ucs_async_mode_t
         goto err_free_miss_fds;
     }
 
-    async->mode         = mode;
-    async->num_handlers = 0;
-    async->last_wakeup  = ucs_get_time();
+    async->mode        = mode;
+    async->last_wakeup = ucs_get_time();
     return UCS_OK;
 
 err_free_miss_fds:
@@ -392,17 +392,14 @@ void ucs_async_context_cleanup(ucs_async_context_t *async)
 
     ucs_trace_func("async=%p", async);
 
-    if (async->num_handlers > 0) {
-        pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
-        kh_foreach_value(&ucs_async_global_context.handlers, handler, {
-            if (async == handler->async) {
-                ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" not released",
-                         async, UCS_ASYNC_HANDLER_ARG(handler));
-            }
-        });
-        ucs_warn("releasing async context with %d handlers", async->num_handlers);
-        pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
-    }
+    pthread_rwlock_rdlock(&ucs_async_global_context.handlers_lock);
+    kh_foreach_value(&ucs_async_global_context.handlers, handler, {
+        if (async == handler->async) {
+            ucs_warn("async %p handler "UCS_ASYNC_HANDLER_FMT" not released",
+                     async, UCS_ASYNC_HANDLER_ARG(handler));
+        }
+    });
+    pthread_rwlock_unlock(&ucs_async_global_context.handlers_lock);
 
     ucs_async_method_call(async->mode, context_cleanup, async);
     ucs_mpmc_queue_cleanup(&async->missed);
@@ -436,18 +433,10 @@ ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
         goto err;
     }
 
-    /* Limit amount of handlers per context */
-    if (async != NULL) {
-        if (ucs_atomic_fadd32(&async->num_handlers, 1) >= ucs_global_opts.async_max_events) {
-            status = UCS_ERR_EXCEEDS_LIMIT;
-            goto err_dec_num_handlers;
-        }
-    }
-
     handler = ucs_malloc(sizeof *handler, "async handler");
     if (handler == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_dec_num_handlers;
+        goto err;
     }
 
     handler->mode     = mode;
@@ -471,10 +460,6 @@ ucs_async_alloc_handler(int min_id, int max_id, ucs_async_mode_t mode,
 
 err_free:
     ucs_free(handler);
-err_dec_num_handlers:
-    if (async != NULL) {
-        ucs_atomic_add32(&async->num_handlers, (uint32_t)-1);
-    }
 err:
     return status;
 }
@@ -570,10 +555,6 @@ ucs_status_t ucs_async_remove_handler(int id, int is_sync)
     if (status != UCS_OK) {
         ucs_warn("failed to remove async handler " UCS_ASYNC_HANDLER_FMT " : %s",
                  UCS_ASYNC_HANDLER_ARG(handler), ucs_status_string(status));
-    }
-
-    if (handler->async != NULL) {
-        ucs_atomic_add32(&handler->async->num_handlers, (uint32_t)-1);
     }
 
     if (is_sync) {
