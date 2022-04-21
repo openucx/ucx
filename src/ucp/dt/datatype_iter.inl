@@ -503,7 +503,11 @@ ucp_datatype_iter_mem_reg(ucp_context_h context, ucp_datatype_iter_t *dt_iter,
                             (ucs_memory_type_t)dt_iter->mem_info.type, md_map,
                             uct_flags, &dt_iter->type.contig.memh);
     } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_IOV, dt_mask)) {
-        return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map, uct_flags);
+        return ucp_datatype_iter_iov_mem_reg(context, dt_iter, md_map,
+                                             uct_flags);
+    } else if (ucp_datatype_iter_is_class(dt_iter, UCP_DATATYPE_GENERIC,
+                                          dt_mask)) {
+        return UCS_OK;
     } else {
         ucs_error("datatype %s does not support registration",
                   ucp_datatype_class_names[dt_iter->dt_class]);

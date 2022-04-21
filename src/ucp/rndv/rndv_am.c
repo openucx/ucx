@@ -77,9 +77,6 @@ ucp_proto_rndv_am_bcopy_complete(ucp_request_t *req)
     if (req->send.rndv.rkey != NULL) {
         ucp_proto_rndv_rkey_destroy(req);
     }
-    ucp_datatype_iter_mem_dereg(req->send.ep->worker->context,
-                                &req->send.state.dt_iter,
-                                UCS_BIT(UCP_DATATYPE_CONTIG));
     return ucp_proto_request_bcopy_complete_success(req);
 }
 

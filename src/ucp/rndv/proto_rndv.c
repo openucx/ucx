@@ -657,7 +657,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         ucs_assert(rtr->offset == 0);
 
         ucp_datatype_iter_mem_dereg(worker->context, &req->send.state.dt_iter,
-                                    UCS_BIT(UCP_DATATYPE_CONTIG));
+                                    UCP_DT_MASK_ALL);
         ucp_send_request_id_release(req);
         req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
