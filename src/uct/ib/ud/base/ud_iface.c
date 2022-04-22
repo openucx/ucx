@@ -116,7 +116,7 @@ uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
     return UCS_OK;
 }
 
-ucs_status_t
+void
 uct_ud_iface_cep_insert_ready_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
 {
     ucs_conn_match_queue_type_t queue_type;
@@ -133,8 +133,6 @@ uct_ud_iface_cep_insert_ready_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     ucs_assert_always(ret == 1);
 
     ep->flags |= UCT_UD_EP_FLAG_ON_CEP;
-
-    return UCS_OK;
 }
 
 uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,
@@ -357,9 +355,11 @@ uct_ud_iface_conn_match_purge_cb(ucs_conn_match_ctx_t *conn_match_ctx,
                                              conn_match);
 
     ucs_assert(ep->flags & UCT_UD_EP_FLAG_ON_CEP);
+
+    /* Remove flags which indicate that an endpoint is in CEP to avoid removing
+     * it one more time from endpoint's destructor */
     ep->flags &= ~(UCT_UD_EP_FLAG_ON_CEP | UCT_UD_EP_FLAG_TX_RX);
-    uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t, ep_free,
-                              &ep->super.super);
+    uct_ud_ep_free(iface, ep);
 }
 
 ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)

@@ -331,7 +331,7 @@ ucs_status_t uct_ud_iface_cep_insert_ep(uct_ud_iface_t *iface,
                                         uct_ud_ep_conn_sn_t conn_sn,
                                         uct_ud_ep_t *ep);
 
-ucs_status_t
+void
 uct_ud_iface_cep_insert_ready_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 uct_ud_ep_t *uct_ud_iface_cep_get_ep(uct_ud_iface_t *iface,

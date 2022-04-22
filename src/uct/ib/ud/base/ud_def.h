@@ -53,7 +53,7 @@ enum {
 enum {
     UCT_UD_PACKET_FLAG_AM      = UCS_BIT(24),
     UCT_UD_PACKET_FLAG_ACK_REQ = UCS_BIT(25),
-    /* 26th flag is vacant */
+    UCT_UD_PACKET_FLAG_ECN     = UCS_BIT(26),
     UCT_UD_PACKET_FLAG_NACK    = UCS_BIT(27),
     /* The following flags are not packed with AM flag. In case of AM these
      * bits are used by AM ID */
