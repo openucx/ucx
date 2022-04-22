@@ -963,6 +963,7 @@ static ucs_status_t
 ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
                                  const ucp_ep_params_t *params, ucp_ep_h *ep_p)
 {
+    ucp_context_h context  = worker->context;
     unsigned ep_init_flags = ucp_ep_init_flags(worker, params);
     ucp_unpacked_address_t remote_address;
     ucp_ep_match_conn_sn_t conn_sn;
@@ -1037,7 +1038,7 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
         ucp_ep_update_remote_id(ep, ucp_ep_local_id(ep));
     } else if (!ucp_ep_match_insert(worker, ep, remote_address.uuid, conn_sn,
                                     UCS_CONN_MATCH_QUEUE_EXP)) {
-        if (worker->context->config.features & UCP_FEATURE_STREAM) {
+        if (context->config.features & UCP_FEATURE_STREAM) {
             status = UCS_ERR_EXCEEDS_LIMIT;
             ucs_error("worker %p: failed to create the endpoint without"
                       "connection matching and Stream API support", worker);
@@ -1057,8 +1058,12 @@ ucp_ep_create_api_to_worker_addr(ucp_worker_h worker,
     status = UCS_OK;
 
 out_resolve_remote_id:
-    if (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) {
-        /* If PEER_FAILURE was requested, resolve remote endpoint ID prior to
+    if ((context->config.ext.resolve_remote_ep_id == UCS_CONFIG_ON) ||
+        ((context->config.ext.resolve_remote_ep_id == UCS_CONFIG_AUTO) &&
+         (ep_init_flags & UCP_EP_INIT_ERR_MODE_PEER_FAILURE) &&
+         ucp_worker_keepalive_is_enabled(worker))) {
+        /* If resolving remote ID forced by configuration or PEER_FAILURE
+         * and keepalive were requested, resolve remote endpoint ID prior to
          * communicating with a peer to make sure that remote peer's endpoint
          * won't be changed during runtime */
         status = ucp_ep_resolve_remote_id(ep, ep->am_lane);
