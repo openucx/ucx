@@ -139,18 +139,18 @@ public:
         EXPECT_EQ(value - no_creq_cnt(ep), ucs_frag_list_sn(&ep->rx.ooo_pkts));
     }
 
-    void validate_flush() {
+    void validate_flush(unsigned base_psn = 1u) {
         /* 1 packets transmitted, 1 packets received */
-        EXPECT_EQ(2, ep(m_e1)->tx.psn);
-        EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+        EXPECT_EQ(base_psn + 1, ep(m_e1)->tx.psn);
+        EXPECT_EQ(base_psn, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 
         /* no data transmitted back */
-        EXPECT_EQ(1, ep(m_e2)->tx.psn);
+        EXPECT_EQ(base_psn, ep(m_e2)->tx.psn);
 
         /* one packet was acked */
         EXPECT_EQ(0U, ucs_queue_length(&ep(m_e1)->tx.window));
-        EXPECT_EQ(1, ep(m_e1)->tx.acked_psn);
-        EXPECT_EQ(1, ep(m_e2)->rx.acked_psn);
+        EXPECT_EQ(base_psn, ep(m_e1)->tx.acked_psn);
+        EXPECT_EQ(base_psn, ep(m_e2)->rx.acked_psn);
     }
 
     void check_connection() {
@@ -836,7 +836,8 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
 
 UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    connect();
+    connect_to_iface(0);
+    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
     /* m_e2::ep[0] has to be revoked at the end of the testing */
     uct_ep_destroy(m_e2->ep(0));
@@ -845,7 +846,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(ep_flush_b(m_e1));
 
-    validate_flush();
+    validate_flush(3);
 
     /* revoke m_e2::ep[0] as it was destroyed manually */
     m_e2->revoke_ep(0);

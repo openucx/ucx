@@ -543,17 +543,6 @@ uct_ud_verbs_iface_peer_address_str(const uct_ud_iface_t *iface,
     return str;
 }
 
-static ucs_status_t
-uct_ud_verbs_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
-{
-    if (ucs_test_all_flags(params->field_mask, UCT_EP_PARAM_FIELD_DEV_ADDR |
-                                               UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
-        return uct_ud_ep_create_connected_common(params, ep_p);
-    }
-
-    return uct_ud_verbs_ep_t_new(params, ep_p);
-}
-
 static void uct_ud_verbs_iface_destroy_qp(uct_ud_iface_t *ud_iface)
 {
     uct_ib_destroy_qp(ud_iface->qp);
@@ -576,6 +565,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     },
     .async_progress          = uct_ud_verbs_iface_async_progress,
     .send_ctl                = uct_ud_verbs_ep_send_ctl,
+    .ep_new                  = uct_ud_verbs_ep_t_new,
     .ep_free                 = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
     .create_qp               = uct_ib_iface_create_qp,
     .destroy_qp              = uct_ud_verbs_iface_destroy_qp,
@@ -596,7 +586,7 @@ static uct_iface_ops_t uct_ud_verbs_iface_tl_ops = {
     .ep_flush                 = uct_ud_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_check                 = uct_ud_ep_check,
-    .ep_create                = uct_ud_verbs_ep_create,
+    .ep_create                = uct_ud_ep_create,
     .ep_destroy               = uct_ud_ep_disconnect,
     .ep_get_address           = uct_ud_ep_get_address,
     .ep_connect_to_ep         = uct_ud_ep_connect_to_ep,

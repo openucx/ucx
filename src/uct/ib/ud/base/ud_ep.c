@@ -241,6 +241,8 @@ static void uct_ud_ep_purge(uct_ud_ep_t *ep, ucs_status_t status)
      * operation has to return UCS_OK */
     uct_ud_ep_reset_max_psn(ep);
     uct_ud_ep_purge_outstanding(ep);
+    uct_ud_ep_ctl_op_del(ep, ep->tx.pending.ops);
+    ucs_arbiter_group_desched(&iface->tx.pending_q, &ep->tx.pending.group);
     ep->tx.acked_psn = (uct_ud_psn_t)(ep->tx.psn - 1);
     uct_ud_ep_window_release(ep, status, 0);
     ucs_assert(ucs_queue_is_empty(&ep->tx.window));
@@ -533,9 +535,34 @@ static ucs_status_t uct_ud_ep_disconnect_from_iface(uct_ud_ep_t *ep)
     return UCS_OK;
 }
 
-static ucs_status_t uct_ud_ep_create(uct_ud_iface_t *iface, int path_index,
-                                     uct_ud_ep_conn_sn_t conn_sn,
-                                     uct_ud_ep_t **new_ep_p)
+ucs_status_t uct_ud_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
+{
+    uct_ud_iface_t *iface;
+    ucs_status_t status;
+
+    ucs_assert(params->field_mask & UCT_EP_PARAM_FIELD_IFACE);
+
+    if (ucs_test_all_flags(params->field_mask, UCT_EP_PARAM_FIELD_DEV_ADDR |
+                                               UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
+        return uct_ud_ep_create_connected_common(params, ep_p);
+    }
+
+    iface  = ucs_derived_of(params->iface, uct_ud_iface_t);
+    status = uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
+                                       ep_new, params, ep_p);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    uct_ud_ep_set_state(ucs_derived_of(*ep_p, uct_ud_ep_t),
+                        UCT_UD_EP_FLAG_CONNECT_TO_EP);
+    return UCS_OK;
+}
+
+static ucs_status_t uct_ud_ep_create_to_iface(uct_ud_iface_t *iface,
+                                              int path_index,
+                                              uct_ud_ep_conn_sn_t conn_sn,
+                                              uct_ud_ep_t **new_ep_p)
 {
     uct_ep_params_t params = {
         .field_mask = UCT_EP_PARAM_FIELD_IFACE |
@@ -546,7 +573,8 @@ static ucs_status_t uct_ud_ep_create(uct_ud_iface_t *iface, int path_index,
     uct_ep_h new_ep_h;
     ucs_status_t status;
 
-    status = uct_ep_create(&params, &new_ep_h);
+    status = uct_iface_invoke_ops_func(&iface->super, uct_ud_iface_ops_t,
+                                       ep_new, &params, &new_ep_h);
     if (status != UCS_OK) {
         return status;
     }
@@ -595,7 +623,7 @@ ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *ep_params,
         goto out_set_ep;
     }
 
-    status = uct_ud_ep_create(iface, path_index, conn_sn, &ep);
+    status = uct_ud_ep_create_to_iface(iface, path_index, conn_sn, &ep);
     if (status != UCS_OK) {
         goto out;
     }
@@ -722,8 +750,8 @@ static uct_ud_ep_t *uct_ud_ep_create_passive(uct_ud_iface_t *iface,
     ucs_status_t status;
 
     /* create new endpoint */
-    status = uct_ud_ep_create(iface, ctl->conn_req.path_index,
-                              ctl->conn_req.conn_sn, &ep);
+    status = uct_ud_ep_create_to_iface(iface, ctl->conn_req.path_index,
+                                       ctl->conn_req.conn_sn, &ep);
     if (status != UCS_OK) {
         return NULL;
     }
@@ -954,18 +982,20 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         /* must be connection request packet */
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
-    } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
-                            (ep->ep_id != dest_id)))
-    {
-        /* Drop the packet because it is
-         * allowed to do disconnect without flush/barrier. So it
-         * is possible to get packet for the ep that has been destroyed
-         */
-        ucs_trace("RX: failed to find ep %d, dropping packet", dest_id);
+    } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep))) {
+        ucs_trace("iface %p: dropping packet with dest_id %u", iface, dest_id);
+        goto out;
+    } else if (ucs_unlikely(ucs_test_all_flags(
+                                    ep->flags,
+                                    UCT_UD_EP_FLAG_DISCONNECTED |
+                                    UCT_UD_EP_FLAG_CONNECT_TO_EP))) {
+        ucs_trace("ep %p: dropping packet, point-to-point ep was disconencted",
+                  ep);
         goto out;
     }
 
-    ucs_assert(ep->ep_id != UCT_UD_EP_NULL_ID);
+    ucs_assertv(ep->ep_id == dest_id, "ep=%p ep_id=%u dest_id=%u", ep,
+                ep->ep_id, dest_id);
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, byte_len);
 
     uct_ud_ep_process_ack(iface, ep, neth->ack_psn, is_async);
