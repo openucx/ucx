@@ -83,10 +83,32 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     uint64_t general_obj_types_caps;
     ucs_status_t status;
     void *cap;
-    int ret;
 #endif
+    struct ibv_port_attr port_attr;
+    struct ibv_device_attr dev_attr;
+    int ret;
+    int i;
 
     ctx->num_dummy_qps = 0;
+
+    ret = ibv_query_device(verbs, &dev_attr);
+    if (ret != 0) {
+        ucs_error("ibv_query_device(%s) failed: %m", dev_name);
+        return UCS_ERR_IO_ERROR;
+    }
+
+    ctx->is_eth = 0;
+    for (i = 0; i < dev_attr.phys_port_count; ++i) {
+        ret = ibv_query_port(verbs, i + 1, &port_attr);
+        if (ret != 0) {
+            ucs_error("ibv_query_port (%s) failed: %m", dev_name);
+            return UCS_ERR_IO_ERROR;
+        }
+
+        if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
+            ctx->is_eth |= UCS_BIT(i);
+        }
+    }
 
 #if HAVE_DECL_MLX5DV_IS_SUPPORTED
     if (cm->config.reserved_qpn == UCS_NO) {
@@ -402,15 +424,15 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
                                                  uct_device_addr_t **dev_addr_p,
                                                  size_t *dev_addr_len_p)
 {
+    uct_rdmacm_cm_device_context_t *ctx;
     uct_ib_address_pack_params_t params;
-    struct ibv_port_attr port_attr;
     uct_ib_address_t *dev_addr;
     struct ibv_qp_attr qp_attr;
     size_t addr_length;
     int qp_attr_mask;
-    char dev_name[UCT_DEVICE_NAME_MAX];
     char ah_attr_str[128];
     uct_ib_roce_version_info_t roce_info;
+    ucs_status_t status;
     int ret;
 
     params.flags = 0;
@@ -428,11 +450,9 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
         return UCS_ERR_CONNECTION_RESET;
     }
 
-    ret = ibv_query_port(cm_id->pd->context, cm_id->port_num, &port_attr);
-    if (ret) {
-        uct_rdmacm_cm_id_to_dev_name(cm_id, dev_name);
-        ucs_error("ibv_query_port (%s) failed: %m", dev_name);
-        return UCS_ERR_IO_ERROR;
+    status = uct_rdmacm_cm_get_device_context(cm, cm_id->pd->context, &ctx);
+    if (status != UCS_OK) {
+        return status;
     }
 
     if (qp_attr.ah_attr.is_global) {
@@ -448,7 +468,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
     params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     params.path_mtu = qp_attr.path_mtu;
 
-    if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
+    if (ctx->is_eth & UCS_BIT(cm_id->port_num - 1)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
 
@@ -736,9 +756,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         break;
     case RDMA_CM_EVENT_ROUTE_RESOLVED:
         /* Client side event */
-        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_handle_event_route_resolved(event);
-        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
         break;
     case RDMA_CM_EVENT_CONNECT_REQUEST:
         /* Server side event */
@@ -775,9 +793,7 @@ uct_rdmacm_cm_process_event(uct_rdmacm_cm_t *cm, struct rdma_cm_event *event)
         /* client and server error events */
     case RDMA_CM_EVENT_REJECTED:
     case RDMA_CM_EVENT_CONNECT_ERROR:
-        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_handle_error_event(event);
-        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
         break;
     default:
         ucs_warn("unexpected RDMACM event: %s", rdma_event_str(event->event));
@@ -809,7 +825,9 @@ static void uct_rdmacm_cm_event_handler(int fd, ucs_event_set_types_t events,
             return;
         }
 
+        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
         uct_rdmacm_cm_process_event(cm, event);
+        UCS_ASYNC_UNBLOCK(uct_rdmacm_cm_get_async(cm));
     }
 }
 
