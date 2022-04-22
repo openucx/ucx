@@ -54,7 +54,7 @@ enum {
 enum {
     UCT_UD_PACKET_FLAG_AM      = UCS_BIT(24),
     UCT_UD_PACKET_FLAG_ACK_REQ = UCS_BIT(25),
-    UCT_UD_PACKET_FLAG_ECN     = UCS_BIT(26),
+    /* 26th flag is vacant */
     UCT_UD_PACKET_FLAG_NACK    = UCS_BIT(27),
     UCT_UD_PACKET_FLAG_PUT     = UCS_BIT(28),
     UCT_UD_PACKET_FLAG_CTL     = UCS_BIT(29),
@@ -72,7 +72,6 @@ enum {
 network header layout
 
 A - ack request
-E - explicit congestion notification (ecn)
 N - negative acknowledgement
 P - put emulation (will be disabled in the future)
 C - control packet extended header
@@ -82,7 +81,7 @@ Active message packet header
  3         2 2 2 2             1 1
  1         6 5 4 3             6 5                             0
 +---------------------------------------------------------------+
-| am_id   |E|A|1|            dest_ep_id (24 bit)                |
+| am_id     |A|1|            dest_ep_id (24 bit)                |
 +---------------------------------------------------------------+
 |       ack_psn (16 bit)        |           psn (16 bit)        |
 +---------------------------------------------------------------+
@@ -103,7 +102,6 @@ Control packet header
     union {
         struct { // am false
             uint8_t ack_req:1;
-            uint8_t ecn:1;
             uint8_t nack:1;
             uint8_t put:1;
             uint8_t ctl:1;
@@ -111,7 +109,6 @@ Control packet header
         } ctl;
         struct { // am true
             uint8_t ack_req:1;
-            uint8_t ecn:1;
             uint8_t am_id:5;
         } am;
     };

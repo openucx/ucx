@@ -26,10 +26,9 @@ void uct_ud_dump_packet(uct_base_iface_t *iface, uct_am_trace_type_t type,
     p    = buffer;
     endp = buffer + max;
 
-    snprintf(p, endp - p, " dst %d psn %u apsn %u %c%c",
+    snprintf(p, endp - p, " dst %d psn %u apsn %u %c",
              uct_ud_neth_get_dest_id(neth), neth->psn, neth->ack_psn,
-             (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) ? 'r' : '-',
-             (neth->packet_type & UCT_UD_PACKET_FLAG_ECN)     ? 'e' : '-');
+             (neth->packet_type & UCT_UD_PACKET_FLAG_ACK_REQ) ? 'r' : '-');
     p += strlen(p);
 
     if (neth->packet_type & UCT_UD_PACKET_FLAG_AM) {

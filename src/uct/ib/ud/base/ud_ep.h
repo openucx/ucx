@@ -132,9 +132,6 @@ do { \
  * Todo:
  *
  * Consider trigerring window decrease before resend timeout:
- * - on ECN (explicit congestion notification) from receiver. ECN can
- *   be based on some heuristic. For example on number of rx completions
- *   that receiver picked from CQ.
  * - upon receiving a 'duplicate ack' packet
  *
  * Consider using other algorithm (ex BIC/CUBIC)
