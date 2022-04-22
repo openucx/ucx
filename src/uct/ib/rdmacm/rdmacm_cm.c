@@ -98,7 +98,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
     }
 
     ctx->is_eth = 0;
-    for (i = 0; i < dev_attr.phys_port_count; ++i) {
+    for (i = 0; i < dev_attr.phys_port_cnt; ++i) {
         ret = ibv_query_port(verbs, i + 1, &port_attr);
         if (ret != 0) {
             ucs_error("ibv_query_port (%s) failed: %m", dev_name);
