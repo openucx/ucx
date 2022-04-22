@@ -158,8 +158,8 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
                                                     sizeof(*rndv_rts_hdr));
         packed_rkey_size      = ucp_rkey_pack_uct(
                 worker->context, sreq->send.state.dt.dt.contig.md_map,
-                sreq->send.state.dt.dt.contig.memh, &mem_info,
-                ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, 0, NULL,
+                sreq->send.state.dt.dt.contig.memh, &mem_info, 0,
+                ucp_ep_config(sreq->send.ep)->uct_rkey_pack_flags, NULL,
                 rkey_buf);
         if (packed_rkey_size < 0) {
             ucs_fatal("failed to pack rendezvous remote key: %s",
@@ -168,6 +168,7 @@ size_t ucp_rndv_rts_pack(ucp_request_t *sreq, ucp_rndv_rts_hdr_t *rndv_rts_hdr,
 
         ucs_assert(packed_rkey_size <=
                    ucp_ep_config(sreq->send.ep)->rndv.rkey_size);
+        sreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
     } else {
         rndv_rts_hdr->address = 0;
         packed_rkey_size      = 0;
@@ -198,15 +199,15 @@ static size_t ucp_rndv_rtr_pack(void *dest, void *arg)
         mem_info.type         = rreq->recv.mem_type;
         mem_info.sys_dev      = UCS_SYS_DEVICE_ID_UNKNOWN;
 
-        packed_rkey_size = ucp_rkey_pack_uct(ep->worker->context,
-                                             rreq->recv.state.dt.contig.md_map,
-                                             rreq->recv.state.dt.contig.memh,
-                                             &mem_info,
-                                             ucp_ep_config(ep)->uct_rkey_pack_flags,
-                                             0, NULL, rndv_rtr_hdr + 1);
+        packed_rkey_size = ucp_rkey_pack_uct(
+                ep->worker->context, rreq->recv.state.dt.contig.md_map,
+                rreq->recv.state.dt.contig.memh, &mem_info, 0,
+                ucp_ep_config(ep)->uct_rkey_pack_flags, NULL, rndv_rtr_hdr + 1);
         if (packed_rkey_size < 0) {
             return packed_rkey_size;
         }
+
+        rreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
     } else {
         rndv_rtr_hdr->address = 0;
         rndv_rtr_hdr->size    = 0;
@@ -266,8 +267,6 @@ ucp_rndv_reg_send_buffer(ucp_request_t *sreq, const ucp_request_param_t *param)
         if (status != UCS_OK) {
             return status;
         }
-
-        sreq->flags |= UCP_REQUEST_FLAG_RKEY_INUSE;
     }
 
     return UCS_OK;
