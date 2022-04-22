@@ -398,6 +398,10 @@ UCS_CLASS_INIT_FUNC(uct_ud_ep_t, uct_ud_iface_t *iface,
     ucs_arbiter_group_init(&self->tx.pending.group);
     ucs_arbiter_elem_init(&self->tx.pending.elem);
 
+    if (!(params->field_mask & UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
+        uct_ud_ep_set_state(self, UCT_UD_EP_FLAG_CONNECT_TO_EP);
+    }
+
     UCT_UD_EP_HOOK_INIT(self);
     ucs_debug("created ep ep=%p iface=%p id=%d", self, iface, self->ep_id);
 
@@ -954,18 +958,19 @@ void uct_ud_ep_process_rx(uct_ud_iface_t *iface, uct_ud_neth_t *neth, unsigned b
         /* must be connection request packet */
         uct_ud_ep_rx_creq(iface, neth);
         goto out;
-    } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep) ||
-                            (ep->ep_id != dest_id)))
-    {
-        /* Drop the packet because it is
-         * allowed to do disconnect without flush/barrier. So it
-         * is possible to get packet for the ep that has been destroyed
-         */
-        ucs_trace("RX: failed to find ep %d, dropping packet", dest_id);
+    } else if (ucs_unlikely(!ucs_ptr_array_lookup(&iface->eps, dest_id, ep))) {
+        ucs_trace("iface=%p: dropping packet dest_id=%u", iface, dest_id);
         goto out;
+    } else if (ucs_unlikely(ucs_test_all_flags(
+                                    ep->flags,
+                                    UCT_UD_EP_FLAG_DISCONNECTED |
+                                    UCT_UD_EP_FLAG_CONNECT_TO_EP))) {
+        ucs_trace("ep %p: dropping packet, point-to-point ep was disconencted",
+                  ep);
     }
 
-    ucs_assert(ep->ep_id != UCT_UD_EP_NULL_ID);
+    ucs_assertv(ep->ep_id == dest_id, "ep=%p ep_id=%u dest_id=%u", ep,
+                ep->ep_id, dest_id);
     UCT_UD_EP_HOOK_CALL_RX(ep, neth, byte_len);
 
     uct_ud_ep_process_ack(iface, ep, neth->ack_psn, is_async);
