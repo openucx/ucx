@@ -232,7 +232,6 @@ static uct_tl_t *uct_ib_tls[] = {
 
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(devx);
 extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(dv);
-extern uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(exp);
 static uct_ib_md_ops_entry_t UCT_IB_MD_OPS_NAME(verbs);
 
 static uct_ib_md_ops_entry_t *uct_ib_ops[] = {
