@@ -1182,14 +1182,25 @@ static ucs_status_t uct_ib_query_md_resources(uct_component_t *component,
 
     /* Get device list from driver */
     device_list = ibv_get_device_list(&num_devices);
-    if (device_list == NULL) {
-        ucs_debug("Failed to get IB device list, assuming no devices are present");
+    if ((device_list == NULL) || (num_devices == 0)) {
         *resources_p     = NULL;
         *num_resources_p = 0;
+
+        if (device_list != NULL) {
+            ucs_debug("no devices are found");
+            status = UCS_OK;
+            goto out_free_device_list;
+        } else if (errno == ENOSYS) {
+            ucs_debug("failed to get ib device list: no kernel support for "
+                      "rdma");
+        } else {
+            ucs_debug("failed to get ib device list: %m");
+        }
+
         return UCS_OK;
     }
 
-    resources = ucs_calloc(num_devices, sizeof(*resources), "ib resources");
+    resources = ucs_calloc(num_devices, sizeof(*resources), "ib_resources");
     if (resources == NULL) {
         status = UCS_ERR_NO_MEMORY;
         goto out_free_device_list;
