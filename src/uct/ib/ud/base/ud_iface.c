@@ -828,18 +828,6 @@ void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep)
     }
 }
 
-void uct_ud_iface_replace_ep(uct_ud_iface_t *iface,
-                             uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
-{
-    void *p;
-    ucs_assert_always(old_ep != new_ep);
-    ucs_assert_always(old_ep->ep_id != new_ep->ep_id);
-    p = ucs_ptr_array_replace(&iface->eps, old_ep->ep_id, new_ep);
-    ucs_assert_always(p == (void *)old_ep);
-    ucs_trace("replace_ep: old(%p) id=%d new(%p) id=%d", old_ep, old_ep->ep_id, new_ep, new_ep->ep_id);
-    ucs_ptr_array_remove(&iface->eps, new_ep->ep_id);
-}
-
 uct_ud_send_skb_t *uct_ud_iface_ctl_skb_get(uct_ud_iface_t *iface)
 {
     uct_ud_send_skb_t *skb;
