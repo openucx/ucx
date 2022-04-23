@@ -801,6 +801,11 @@ UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 class test_ucp_am_nbx_closed_ep : public test_ucp_am_nbx {
 public:
+    test_ucp_am_nbx_closed_ep()
+    {
+        modify_config("RESOLVE_REMOTE_EP_ID", "auto");
+    }
+
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
