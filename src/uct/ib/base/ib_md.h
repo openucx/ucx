@@ -72,9 +72,6 @@ typedef struct uct_ib_md_ext_config {
     int                      prefer_nearest_device; /**< Give priority for near
                                                          device */
     int                      enable_indirect_atomic; /** Enable indirect atomic */
-#ifdef HAVE_EXP_UMR
-    unsigned                 max_inline_klm_list; /* Maximal length of inline KLM list */
-#endif
 
     struct {
         ucs_numa_policy_t    numa_policy;  /**< NUMA policy flags for ODP */

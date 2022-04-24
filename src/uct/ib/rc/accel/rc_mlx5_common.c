@@ -749,8 +749,8 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
         goto failed_mr;
     }
 
-    UCT_IB_MLX5_DV_DM(obj).in  = data->dm;
-    UCT_IB_MLX5_DV_DM(obj).out = &dvdm;
+    obj.dv.dm.in  = data->dm;
+    obj.dv.dm.out = &dvdm;
     uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_DM);
     data->start_va = dvdm.buf;
 
@@ -863,32 +863,6 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_init_rx_tm_common(iface, config, rndv_hdr_len);
 
     ucs_assert(iface->tm.mp.num_strides == 1); /* MP XRQ is supported with DEVX only */
-#if HAVE_DECL_IBV_EXP_CREATE_SRQ
-    /* Create TM-capable XRQ */
-    srq_attr->base.attr.max_sge   = 1;
-    srq_attr->base.attr.max_wr    = ucs_max(UCT_IB_MLX5_XRQ_MIN_UWQ_POST,
-                                            config->super.rx.queue_len);
-    srq_attr->base.attr.srq_limit = 0;
-    srq_attr->base.srq_context    = iface;
-    srq_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
-    srq_attr->pd                  = md->pd;
-    srq_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
-    srq_attr->tm_cap.max_num_tags = iface->tm.num_tags;
-
-    uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
-    srq_attr->tm_cap.max_ops      = iface->tm.cmd_qp_len;
-    srq_attr->comp_mask          |= IBV_EXP_CREATE_SRQ_CQ |
-                                    IBV_EXP_CREATE_SRQ_TM;
-
-    iface->rx.srq.verbs.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_attr);
-    if (iface->rx.srq.verbs.srq == NULL) {
-        ucs_error("ibv_exp_create_srq(device=%s) failed: %m",
-                  uct_ib_device_name(&md->dev));
-        return UCS_ERR_IO_ERROR;
-    }
-
-    iface->super.rx.srq.quota = srq_attr->base.attr.max_wr;
-#elif HAVE_DECL_IBV_CREATE_SRQ_EX
     srq_attr->attr.max_sge        = 1;
     srq_attr->attr.max_wr         = ucs_max(UCT_IB_MLX5_XRQ_MIN_UWQ_POST,
                                             config->super.rx.queue_len);
@@ -914,7 +888,6 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     }
 
     iface->super.rx.srq.quota = srq_attr->attr.max_wr;
-#endif
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,

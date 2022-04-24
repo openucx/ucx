@@ -575,21 +575,13 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
         return status;
     }
 
-#if HAVE_DECL_IBV_EXP_CREATE_QP
-    attr->super.ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
-    attr->super.ibv.pd              = uct_ib_iface_md(iface)->pd;
-#elif HAVE_DECL_IBV_CREATE_QP_EX
+#if HAVE_DECL_IBV_CREATE_QP_EX
     attr->super.ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
     if (qp->verbs.rd->pd != NULL) {
         attr->super.ibv.pd          = qp->verbs.rd->pd;
     } else {
         attr->super.ibv.pd          = uct_ib_iface_md(iface)->pd;
     }
-#endif
-
-#ifdef HAVE_IBV_EXP_RES_DOMAIN
-    attr->super.ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
-    attr->super.ibv.res_domain      = qp->verbs.rd->ibv_domain;
 #endif
 
     return UCS_OK;

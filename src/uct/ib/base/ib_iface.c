@@ -97,24 +97,6 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Number of SG entries to reserve in the send WQE.",
    ucs_offsetof(uct_ib_iface_config_t, tx.min_sge), UCS_CONFIG_TYPE_UINT},
 
-#if HAVE_DECL_IBV_EXP_CQ_MODERATION
-  {"TX_EVENT_MOD_COUNT", "0",
-   "Number of send completions for which an event would be generated (0 - disabled).",
-   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_count), UCS_CONFIG_TYPE_UINT},
-
-  {"TX_EVENT_MOD_PERIOD", "0us",
-   "Time period to generate send event (0 - disabled).",
-   ucs_offsetof(uct_ib_iface_config_t, tx.cq_moderation_period), UCS_CONFIG_TYPE_TIME},
-
-  {"RX_EVENT_MOD_COUNT", "0",
-   "Number of received messages for which an event would be generated (0 - disabled).",
-   ucs_offsetof(uct_ib_iface_config_t, rx.cq_moderation_count), UCS_CONFIG_TYPE_UINT},
-
-  {"RX_EVENT_MOD_PERIOD", "0us",
-   "Time period to generate receive event (0 - disabled).",
-   ucs_offsetof(uct_ib_iface_config_t, rx.cq_moderation_period), UCS_CONFIG_TYPE_TIME},
-#endif /* HAVE_DECL_IBV_EXP_CQ_MODERATION */
-
   UCT_IFACE_MPOOL_CONFIG_FIELDS("TX_", -1, 1024, "send",
                                 ucs_offsetof(uct_ib_iface_config_t, tx.mp),
       "\nAttention: Setting this param with value != -1 is a dangerous thing\n"
@@ -204,12 +186,6 @@ ucs_config_field_t uct_ib_iface_config_table[] = {
    "Which pkey value to use. Should be between 0 and 0x7fff.\n"
    "\"auto\" option selects a first valid pkey value with full membership.",
    ucs_offsetof(uct_ib_iface_config_t, pkey), UCS_CONFIG_TYPE_HEX},
-
-#ifdef HAVE_IBV_EXP_RES_DOMAIN
-  {"RESOURCE_DOMAIN", "y",
-   "Enable multiple resource domains (experimental).",
-   ucs_offsetof(uct_ib_iface_config_t, enable_res_domain), UCS_CONFIG_TYPE_BOOL},
-#endif
 
   {"PATH_MTU", "default",
    "Path MTU. \"default\" will select the best MTU for the device.",
@@ -962,12 +938,7 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
     attr->ibv.qp_type             = (enum ibv_qp_type)attr->qp_type;
     attr->ibv.sq_sig_all          = attr->sq_sig_all;
 
-#if HAVE_DECL_IBV_EXP_CREATE_QP
-    if (!(attr->ibv.comp_mask & IBV_EXP_QP_INIT_ATTR_PD)) {
-        attr->ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
-        attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
-    }
-#elif HAVE_DECL_IBV_CREATE_QP_EX
+#if HAVE_DECL_IBV_CREATE_QP_EX
     if (!(attr->ibv.comp_mask & IBV_QP_INIT_ATTR_PD)) {
         attr->ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
         attr->ibv.pd              = uct_ib_iface_md(iface)->pd;
@@ -979,15 +950,6 @@ void uct_ib_iface_fill_attr(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr)
     if (attr->qp_type == IBV_QPT_UD) {
         return;
     }
-
-    /* MOFED requires this to enable IB spec atomic */
-#if HAVE_DECL_IBV_EXP_ATOMIC_HCA_REPLY_BE
-    if (uct_ib_iface_device(iface)->dev_attr.exp_atomic_cap ==
-                                     IBV_EXP_ATOMIC_HCA_REPLY_BE) {
-        attr->ibv.comp_mask       |= IBV_EXP_QP_INIT_ATTR_CREATE_FLAGS;
-        attr->ibv.exp_create_flags = IBV_EXP_QP_CREATE_ATOMIC_BE_REPLY;
-    }
-#endif
 }
 
 ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
@@ -999,9 +961,7 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_attr(iface, attr);
 
-#if HAVE_DECL_IBV_EXP_CREATE_QP
-    qp = ibv_exp_create_qp(dev->ibv_context, &attr->ibv);
-#elif HAVE_DECL_IBV_CREATE_QP_EX
+#if HAVE_DECL_IBV_CREATE_QP_EX
     qp = ibv_create_qp_ex(dev->ibv_context, &attr->ibv);
 #else
     qp = ibv_create_qp(uct_ib_iface_md(iface)->pd, &attr->ibv);
@@ -1066,113 +1026,6 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
 
     iface->cq[dir]                 = cq;
     iface->config.max_inl_cqe[dir] = inl;
-    return UCS_OK;
-}
-
-static ucs_status_t
-uct_ib_iface_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
-                       const uct_ib_iface_init_attr_t *init_attr,
-                       const uct_ib_iface_config_t *config,
-                       int preferred_cpu)
-{
-    ucs_status_t status;
-    size_t inl                          = config->inl[dir];
-#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    uct_ib_device_t *dev                = uct_ib_iface_device(iface);
-    static const char *cqe_size_env_var = "MLX5_CQE_SIZE";
-    size_t cqe_size                     = 64;
-    int env_var_added                   = 0;
-    const char *cqe_size_env_value;
-    size_t cqe_size_min;
-    char cqe_size_buf[32];
-    int ret;
-
-    cqe_size_min       = (inl > 32) ? 128 : 64;
-    cqe_size_env_value = getenv(cqe_size_env_var);
-
-    if (cqe_size_env_value != NULL) {
-        cqe_size = atol(cqe_size_env_value);
-        if (cqe_size < cqe_size_min) {
-            ucs_error("%s is set to %zu, but at least %zu is required (inl: %zu)",
-                      cqe_size_env_var, cqe_size, cqe_size_min, inl);
-            return UCS_ERR_INVALID_PARAM;
-        }
-    } else {
-        cqe_size = uct_ib_get_cqe_size(cqe_size_min);
-        snprintf(cqe_size_buf, sizeof(cqe_size_buf),"%zu", cqe_size);
-        ucs_debug("%s: setting %s=%s", uct_ib_device_name(dev), cqe_size_env_var,
-                  cqe_size_buf);
-        ret = ibv_exp_setenv(dev->ibv_context, cqe_size_env_var, cqe_size_buf, 1);
-        if (ret) {
-            ucs_error("ibv_exp_setenv(%s=%s) failed: %m", cqe_size_env_var,
-                      cqe_size_buf);
-            return UCS_ERR_INVALID_PARAM;
-        }
-
-        env_var_added = 1;
-    }
-#endif
-    status = iface->ops->create_cq(iface, dir, config, init_attr, preferred_cpu,
-                                   inl);
-    if (status != UCS_OK) {
-        goto out_unsetenv;
-    }
-
-    status = UCS_OK;
-
-out_unsetenv:
-#if HAVE_DECL_IBV_EXP_SETENV && !HAVE_DECL_MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE
-    iface->config.max_inl_cqe[dir] = (inl > 0) ? (cqe_size / 2) : 0;
-    if (env_var_added) {
-        /* if we created a new environment variable, remove it */
-        ret = ibv_exp_unsetenv(dev->ibv_context, cqe_size_env_var);
-        if (ret) {
-            ucs_warn("unsetenv(%s) failed: %m", cqe_size_env_var);
-        }
-    }
-#endif
-    return status;
-}
-
-
-static ucs_status_t uct_ib_iface_set_moderation(struct ibv_cq *cq,
-                                                unsigned count, double period_usec)
-{
-#if HAVE_DECL_IBV_EXP_CQ_MODERATION
-    unsigned period = (unsigned)(period_usec * UCS_USEC_PER_SEC);
-
-    if (count > UINT16_MAX) {
-        ucs_error("CQ moderation count is too high: %u, max value: %u", count, UINT16_MAX);
-        return UCS_ERR_INVALID_PARAM;
-    } else if (count == 0) {
-        /* in case if count value is 0 (unchanged default value) - set it to maximum
-         * possible value */
-        count = UINT16_MAX;
-    }
-
-    if (period > UINT16_MAX) {
-        ucs_error("CQ moderation period is too high: %u, max value: %uus", period, UINT16_MAX);
-        return UCS_ERR_INVALID_PARAM;
-    } else if (period == 0) {
-        /* in case if count value is 0 (unchanged default value) - set it to maximum
-         * possible value, the same behavior as counter */
-        period = UINT16_MAX;
-    }
-
-    if ((count < UINT16_MAX) || (period < UINT16_MAX)) {
-        struct ibv_exp_cq_attr cq_attr = {
-            .comp_mask            = IBV_EXP_CQ_ATTR_MODERATION,
-            .moderation.cq_count  = (uint16_t)(count),
-            .moderation.cq_period = (uint16_t)(period),
-            .cq_cap_flags         = 0
-        };
-        if (ibv_exp_modify_cq(cq, &cq_attr, IBV_EXP_CQ_MODERATION)) {
-            ucs_error("ibv_exp_modify_cq(count=%d, period=%d) failed: %m", count, period);
-            return UCS_ERR_IO_ERROR;
-        }
-    }
-#endif /* HAVE_DECL_IBV_EXP_CQ_MODERATION */
-
     return UCS_OK;
 }
 
@@ -1442,7 +1295,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     self->config.sl                 = UCT_IB_SL_NUM;
     self->config.hop_limit          = config->hop_limit;
     self->release_desc.cb           = uct_ib_iface_release_desc;
-    self->config.enable_res_domain  = config->enable_res_domain;
     self->config.qp_type            = init_attr->qp_type;
     uct_ib_iface_set_path_mtu(self, config);
 
@@ -1493,30 +1345,16 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
         goto err_destroy_comp_channel;
     }
 
-    status = uct_ib_iface_create_cq(self, UCT_IB_DIR_TX, init_attr,
-                                    config, preferred_cpu);
+    status = self->ops->create_cq(self, UCT_IB_DIR_TX, config, init_attr,
+                                  preferred_cpu, config->inl[UCT_IB_DIR_TX]);
     if (status != UCS_OK) {
         goto err_destroy_stats;
     }
 
-    status = uct_ib_iface_set_moderation(self->cq[UCT_IB_DIR_TX],
-                                         config->tx.cq_moderation_count,
-                                         config->tx.cq_moderation_period);
+    status = self->ops->create_cq(self, UCT_IB_DIR_RX, config, init_attr,
+                                  preferred_cpu, config->inl[UCT_IB_DIR_RX]);
     if (status != UCS_OK) {
         goto err_destroy_send_cq;
-    }
-
-    status = uct_ib_iface_create_cq(self, UCT_IB_DIR_RX, init_attr,
-                                    config, preferred_cpu);
-    if (status != UCS_OK) {
-        goto err_destroy_send_cq;
-    }
-
-    status = uct_ib_iface_set_moderation(self->cq[UCT_IB_DIR_RX],
-                                         config->rx.cq_moderation_count,
-                                         config->rx.cq_moderation_period);
-    if (status != UCS_OK) {
-        goto err_destroy_recv_cq;
     }
 
     /* Address scope and size */
@@ -1538,8 +1376,6 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
 
     return UCS_OK;
 
-err_destroy_recv_cq:
-    ibv_destroy_cq(self->cq[UCT_IB_DIR_RX]);
 err_destroy_send_cq:
     ibv_destroy_cq(self->cq[UCT_IB_DIR_TX]);
 err_destroy_stats:

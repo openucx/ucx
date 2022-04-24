@@ -365,8 +365,6 @@ ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
                                      uint8_t *p_port_num);
 
-size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev);
-
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 
 ucs_status_t
