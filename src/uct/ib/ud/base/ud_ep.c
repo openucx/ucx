@@ -481,15 +481,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_ud_ep_t)
 
 UCS_CLASS_DEFINE(uct_ud_ep_t, uct_base_ep_t);
 
-void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep)
-{
-    uct_ep_t *ep_h = &old_ep->super.super;
-    uct_iface_t *iface_h = ep_h->iface;
-
-    uct_ud_iface_replace_ep(ucs_derived_of(iface_h, uct_ud_iface_t), old_ep, new_ep);
-    memcpy(new_ep, old_ep, sizeof(uct_ud_ep_t));
-}
-
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr)
 {
     uct_ud_ep_t *ep = ucs_derived_of(tl_ep, uct_ud_ep_t);
