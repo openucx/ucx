@@ -53,6 +53,19 @@ UCS_TEST_F(test_rcache_basic, create_fail) {
     }
 }
 
+UCS_TEST_F(test_rcache_basic, create_destroy) {
+    static const ucs_rcache_ops_t ops = {NULL, NULL, NULL};
+    ucs_rcache_params_t params        = get_default_rcache_params(this, &ops);
+
+    ucs_rcache_t *rcache;
+    ucs_status_t status = ucs_rcache_create(&params, "test",
+                                            ucs_stats_get_root(), &rcache);
+    EXPECT_EQ(UCS_OK, status);
+    if (status == UCS_OK) {
+        ucs_rcache_destroy(rcache);
+    }
+}
+
 
 class test_rcache : public ucs::test {
 protected:

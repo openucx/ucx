@@ -112,7 +112,7 @@ UCS_TEST_F(test_memtrack, sanity) {
     }
     ucs_free(a);
 
-    for (i = 0; i < 101; i++) {
+    for (i = 1; i < 101; i++) {
         a = ucs_malloc(i, ALLOC_NAME);
         ucs_free(a);
     }
@@ -262,4 +262,47 @@ UCS_TEST_F(test_memtrack, custom) {
     free(ptr);
 
     test_total(1, ALLOC_SIZE);
+}
+
+
+class test_memtrack_log : public ucs::test {
+public:
+    static ucs_log_func_rc_t
+    zero_size_log_handler(const char *file, unsigned line, const char *function,
+                          ucs_log_level_t level,
+                          const ucs_log_component_config_t *comp_conf,
+                          const char *message, va_list ap)
+    {
+        std::string log_str = format_message(message, ap);
+        if ((level == UCS_LOG_LEVEL_WARN) &&
+            (log_str.find("allocated zero-size block") != std::string::npos)) {
+            UCS_TEST_MESSAGE << log_str;
+            ++log_count;
+            return UCS_LOG_FUNC_RC_STOP;
+        }
+
+        return UCS_LOG_FUNC_RC_CONTINUE;
+    }
+
+    static size_t log_count;
+};
+
+size_t test_memtrack_log::log_count = 0;
+
+UCS_TEST_F(test_memtrack_log, zero_size) {
+    scoped_log_handler slh(zero_size_log_handler);
+
+    int count_before = log_count;
+    void *ptr        = ucs_calloc(1, 0, "test");
+    EXPECT_EQ(log_count - count_before, 1);
+
+    ucs_free(ptr);
+
+    count_before = log_count;
+    ptr          = ucs_malloc(0, "test");
+    EXPECT_EQ(log_count - count_before, 1);
+
+    count_before = log_count;
+    ucs_realloc(ptr, 0, "test");
+    EXPECT_EQ(log_count - count_before, 1);
 }
