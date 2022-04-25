@@ -799,13 +799,8 @@ UCS_TEST_P(test_ucp_am_nbx, rx_am_mpools,
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx)
 
 
-class test_ucp_am_nbx_closed_ep : public test_ucp_am_nbx {
+class test_ucp_am_nbx_reply : public test_ucp_am_nbx {
 public:
-    test_ucp_am_nbx_closed_ep()
-    {
-        modify_config("RESOLVE_REMOTE_EP_ID", "auto");
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
         add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
@@ -813,9 +808,19 @@ public:
                            UCP_AM_SEND_FLAG_REPLY, "reply");
     }
 
+protected:
     virtual unsigned get_send_flag()
     {
         return get_variant_value(1);
+    }
+};
+
+
+class test_ucp_am_nbx_closed_ep : public test_ucp_am_nbx_reply {
+public:
+    test_ucp_am_nbx_closed_ep()
+    {
+        modify_config("RESOLVE_REMOTE_EP_ID", "auto");
     }
 
 protected:
@@ -951,7 +956,7 @@ UCS_TEST_P(test_ucp_am_nbx_eager_memtype, basic)
 UCP_INSTANTIATE_TEST_CASE_GPU_AWARE(test_ucp_am_nbx_eager_memtype)
 
 
-class test_ucp_am_nbx_eager_data_release : public test_ucp_am_nbx {
+class test_ucp_am_nbx_eager_data_release : public test_ucp_am_nbx_reply {
 public:
     test_ucp_am_nbx_eager_data_release()
     {
@@ -963,27 +968,12 @@ public:
         m_data_ptr = NULL;
     }
 
-    static void get_test_variants_reply(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
-        add_variant_values(variants, test_ucp_am_base::get_test_variants,
-                           UCP_AM_SEND_FLAG_REPLY, "reply");
-    }
-
     static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_values(variants, get_test_variants_reply, 0);
-        add_variant_values(variants, get_test_variants_reply, 1, "proto");
-    }
-
-    virtual unsigned get_send_flag()
-    {
-        return get_variant_value(1);
-    }
-
-    virtual unsigned enable_proto()
-    {
-        return get_variant_value(2);
+        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
+                           0);
+        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
+                           1, "proto");
     }
 
     virtual ucs_status_t
@@ -1015,6 +1005,11 @@ public:
     }
 
 private:
+    unsigned enable_proto()
+    {
+        return get_variant_value(2);
+    }
+
     void *m_data_ptr;
 };
 
@@ -1045,7 +1040,7 @@ UCS_TEST_P(test_ucp_am_nbx_eager_data_release, multi_zcopy, "ZCOPY_THRESH=0")
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_eager_data_release)
 
-class test_ucp_am_nbx_align : public test_ucp_am_nbx {
+class test_ucp_am_nbx_align : public test_ucp_am_nbx_reply {
 public:
     test_ucp_am_nbx_align()
     {
@@ -1058,18 +1053,6 @@ public:
         params.field_mask         |= UCP_WORKER_PARAM_FIELD_AM_ALIGNMENT;
         params.am_alignment        = m_alignment;
         return params;
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
-        add_variant_values(variants, test_ucp_am_base::get_test_variants,
-                           UCP_AM_SEND_FLAG_REPLY, "reply");
-    }
-
-    virtual unsigned get_send_flag()
-    {
-        return get_variant_value(1);
     }
 
     virtual ucs_status_t
@@ -1104,7 +1087,7 @@ UCS_TEST_P(test_ucp_am_nbx_align, multi)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_align)
 
 
-class test_ucp_am_nbx_seg_size : public test_ucp_am_nbx {
+class test_ucp_am_nbx_seg_size : public test_ucp_am_nbx_reply {
 public:
     test_ucp_am_nbx_seg_size() : m_size(0ul)
     {
@@ -1130,13 +1113,6 @@ public:
         ent->connect(&receiver(), get_ep_params());
     }
 
-    static void get_test_variants(std::vector<ucp_test_variant> &variants)
-    {
-        add_variant_values(variants, test_ucp_am_base::get_test_variants, 0);
-        add_variant_values(variants, test_ucp_am_base::get_test_variants,
-                           UCP_AM_SEND_FLAG_REPLY, "reply");
-    }
-
 protected:
     size_t seg_size()
     {
@@ -1151,7 +1127,6 @@ protected:
 
 private:
     size_t m_size;
-
 };
 
 UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_seg_size, single, has_transport("self"))
@@ -1167,7 +1142,7 @@ UCS_TEST_SKIP_COND_P(test_ucp_am_nbx_seg_size, multi, has_transport("self"))
 UCP_INSTANTIATE_TEST_CASE(test_ucp_am_nbx_seg_size)
 
 
-class test_ucp_am_nbx_dts : public test_ucp_am_nbx {
+class test_ucp_am_nbx_dts : public test_ucp_am_nbx_reply {
 public:
     static const uint64_t dts_bitmap = UCS_BIT(UCP_DATATYPE_CONTIG) |
                                        UCS_BIT(UCP_DATATYPE_IOV) |
@@ -1178,15 +1153,14 @@ public:
         ucp_ep_params_t ep_params = test_ucp_am_nbx::get_ep_params();
 
         ep_params.field_mask |= UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
-        ep_params.err_mode    = static_cast<ucp_err_handling_mode_t>(
-                                                          get_variant_value(3));
+        ep_params.err_mode    = get_err_mode();
         return ep_params;
     }
 
-    static void get_test_dts(std::vector<ucp_test_variant>& variants)
+    static void get_test_dts(std::vector<ucp_test_variant> &variants)
     {
         /* coverity[overrun-buffer-val] */
-        add_variant_values(variants, test_ucp_am_base::get_test_variants,
+        add_variant_values(variants, test_ucp_am_nbx_reply::get_test_variants,
                            dts_bitmap, ucp_datatype_class_names);
     }
 
@@ -1198,18 +1172,11 @@ public:
                            ucp_datatype_class_names);
     }
 
-    static void get_test_dts_reply(std::vector<ucp_test_variant>& variants)
+    static void get_test_variants(std::vector<ucp_test_variant> &variants)
     {
-        add_variant_values(variants, base_test_generator, 0);
         add_variant_values(variants, base_test_generator,
-                           UCP_AM_SEND_FLAG_REPLY, "reply");
-    }
-
-    static void get_test_variants(std::vector<ucp_test_variant>& variants)
-    {
-        add_variant_values(variants, get_test_dts_reply,
                            UCP_ERR_HANDLING_MODE_NONE);
-        add_variant_values(variants, get_test_dts_reply,
+        add_variant_values(variants, base_test_generator,
                            UCP_ERR_HANDLING_MODE_PEER, "errh");
     }
 
@@ -1217,8 +1184,8 @@ public:
     {
         test_ucp_am_nbx::init();
 
-        m_dt    = make_dt(get_variant_value(1));
-        m_rx_dt = make_dt(get_variant_value(2));
+        m_dt    = make_dt(get_variant_value(2));
+        m_rx_dt = make_dt(get_variant_value(3));
     }
 
     void cleanup()
@@ -1226,11 +1193,6 @@ public:
         destroy_dt(m_dt);
         destroy_dt(m_rx_dt);
         test_ucp_am_nbx::cleanup();
-    }
-
-    virtual unsigned get_send_flag()
-    {
-        return get_variant_value(3);
     }
 
     virtual ucs_status_t
@@ -1241,6 +1203,12 @@ public:
 
         return test_ucp_am_nbx::am_data_handler(header, header_length, data,
                                                 length, rx_param);
+    }
+
+private:
+    ucp_err_handling_mode_t get_err_mode() const
+    {
+        return static_cast<ucp_err_handling_mode_t>(get_variant_value(4));
     }
 };
 
