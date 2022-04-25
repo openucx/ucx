@@ -587,8 +587,7 @@ ucs_status_t ucp_mem_type_reg_buffers(ucp_worker_h worker, void *remote_addr,
     cmpt   = context->tl_cmpts[tl_md->cmpt_index].cmpt;
 
     status = ucp_mem_rereg_mds(context, UCS_BIT(md_index), remote_addr, length,
-                               UCT_MD_MEM_ACCESS_ALL |
-                               UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                               UCT_MD_MEM_ACCESS_ALL,
                                NULL, mem_type, NULL, memh, md_map);
     if (status != UCS_OK) {
         goto out;
