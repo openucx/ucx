@@ -303,6 +303,10 @@ UCS_TEST_F(test_memtrack_log, zero_size) {
     EXPECT_EQ(log_count - count_before, 1);
 
     count_before = log_count;
-    ucs_realloc(ptr, 0, "test");
+    void *tmp    = ucs_realloc(ptr, 0, "test");
     EXPECT_EQ(log_count - count_before, 1);
+
+    if (tmp != NULL) {
+        ucs_free(tmp);
+    }
 }
