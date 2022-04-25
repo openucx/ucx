@@ -945,6 +945,10 @@ static ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
         dev->flags |= UCT_IB_DEVICE_FLAG_AV;
     }
 
+    if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, ece)) {
+        md->super.ece_enable = 1;
+    }
+
     if (UCT_IB_MLX5DV_GET(cmd_hca_cap, cap, fixed_buffer_size)) {
         md->flags |= UCT_IB_MLX5_MD_FLAG_KSM;
     }
@@ -1316,6 +1320,11 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
 
     dev->flags    |= UCT_IB_DEVICE_FLAG_MLX5_PRM;
     md->super.name = UCT_IB_MD_NAME(mlx5);
+
+    status = uct_ib_md_ece_check(&md->super);
+    if (status != UCS_OK) {
+        goto err_free;
+    }
 
     /* cppcheck-suppress autoVariables */
     *p_md = &md->super;

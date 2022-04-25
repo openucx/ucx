@@ -62,6 +62,8 @@
 #define UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX  UCT_IB_DEVICE_SYSFS_PFX "/ports/%d/gid_attrs"
 #define UCT_IB_DEVICE_SYSFS_GID_TYPE_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/types/%d"
 #define UCT_IB_DEVICE_SYSFS_GID_NDEV_FMT  UCT_IB_DEVICE_SYSFS_GID_ATTR_PFX "/ndevs/%d"
+#define UCT_IB_DEVICE_ECE_DEFAULT         0x0         /* default ECE */
+#define UCT_IB_DEVICE_ECE_MAX             0xffffffffU /* max ECE */
 
 
 enum {
@@ -264,6 +266,18 @@ extern const double uct_ib_qp_rnr_time_ms[];
  */
 ucs_status_t uct_ib_device_port_check(uct_ib_device_t *dev, uint8_t port_num,
                                       unsigned flags);
+
+
+/**
+ * Helper function to set ECE to qp.
+ *
+ * @param dev              IB device use to create qp.
+ * @param qp               The qp to be set with ECE.
+ * @param ece_val          The ece value to be set to qp.
+ */
+ucs_status_t
+uct_ib_device_set_ece(uct_ib_device_t *dev, struct ibv_qp *qp,
+                      uint32_t ece_val);
 
 
 /*

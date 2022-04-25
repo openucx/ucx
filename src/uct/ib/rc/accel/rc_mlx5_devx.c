@@ -411,6 +411,10 @@ uct_rc_mlx5_iface_common_devx_connect_qp(uct_rc_mlx5_iface_common_t *iface,
     UCT_IB_MLX5DV_SET(qpc, qpc, rae, true);
     UCT_IB_MLX5DV_SET(qpc, qpc, min_rnr_nak, iface->super.config.min_rnr_timer);
 
+    if (md->super.ece_enable) {
+        UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, ece, iface->super.config.ece);
+    }
+
     UCT_IB_MLX5DV_SET(init2rtr_qp_in, in_2rtr, opt_param_mask, opt_param_mask);
 
     status = uct_ib_mlx5_devx_modify_qp(qp, in_2rtr, sizeof(in_2rtr),

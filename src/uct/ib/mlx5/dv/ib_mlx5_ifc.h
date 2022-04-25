@@ -106,7 +106,10 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    reserved_at_90[0xb];
     uint8_t    log_max_qp[0x5];
 
-    uint8_t    reserved_at_a0[0xb];
+    uint8_t    reserved_at_a0[0x3];
+    uint8_t    ece[0x1];
+
+    uint8_t    reserved_at_a4[0x7];
     uint8_t    log_max_srq[0x5];
     uint8_t    reserved_at_b0[0x10];
 
@@ -854,6 +857,10 @@ struct uct_ib_mlx5_dctc_bits {
     uint8_t         dscp[0x6];
 
     uint8_t         reserved_at_1c0[0x40];
+
+    uint8_t         ece[0x20];
+
+    uint8_t         reserved_at_220[0x160];
 };
 
 struct uct_ib_mlx5_create_dct_out_bits {
@@ -865,7 +872,7 @@ struct uct_ib_mlx5_create_dct_out_bits {
     uint8_t         reserved_at_40[0x8];
     uint8_t         dctn[0x18];
 
-    uint8_t         reserved_at_60[0x20];
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_create_dct_in_bits {
@@ -1400,7 +1407,7 @@ struct uct_ib_mlx5_create_qp_in_bits {
 
     uint8_t         opt_param_mask[0x20];
 
-    uint8_t         reserved_at_a0[0x20];
+    uint8_t         ece[0x20];
 
     struct uct_ib_mlx5_qpc_bits qpc;
 
@@ -1420,7 +1427,9 @@ struct uct_ib_mlx5_init2rtr_qp_out_bits {
 
     uint8_t         syndrome[0x20];
 
-    uint8_t         reserved_at_40[0x40];
+    uint8_t         reserved_at_40[0x20];
+
+    uint8_t         ece[0x20];
 };
 
 struct uct_ib_mlx5_init2rtr_qp_in_bits {
@@ -1437,7 +1446,7 @@ struct uct_ib_mlx5_init2rtr_qp_in_bits {
 
     uint8_t         opt_param_mask[0x20];
 
-    uint8_t         reserved_at_a0[0x20];
+    uint8_t         ece[0x20];
 
     struct uct_ib_mlx5_qpc_bits qpc;
 
