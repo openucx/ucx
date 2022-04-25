@@ -142,6 +142,29 @@ static inline int ucs_async_is_blocked(const ucs_async_context_t *async)
 
 
 /**
+ * Try to block the async handler. If its currently locked by other thread
+ * avoid CPU consuming wait and execute _quit.
+ *
+ * @param _async Event context to block events for.
+ * @param _quit  Quit command.
+ */
+#define UCS_ASYNC_TRY_BLOCK(_async, _quit) \
+    do { \
+        if ((_async)->mode == UCS_ASYNC_MODE_THREAD_SPINLOCK) { \
+            if (!ucs_recursive_spin_trylock(&(_async)->thread.spinlock)) { \
+                _quit; \
+            } \
+        } else if ((_async)->mode == UCS_ASYNC_MODE_THREAD_MUTEX) { \
+            ucs_recursive_mutex_block(&(_async)->thread.mutex); \
+        } else if ((_async)->mode == UCS_ASYNC_MODE_SIGNAL) { \
+            UCS_ASYNC_SIGNAL_BLOCK(_async); \
+        } else { \
+            ++(_async)->poll_block; \
+        } \
+    } while(0)
+
+
+/**
  * Unblock asynchronous event delivery, and invoke pending callbacks.
  *
  * @param _async Event context to unblock events for.

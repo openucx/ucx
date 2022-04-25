@@ -813,7 +813,7 @@ static void uct_rdmacm_cm_event_handler(int fd, ucs_event_set_types_t events,
     int                  ret;
 
     do {
-        UCS_ASYNC_BLOCK(uct_rdmacm_cm_get_async(cm));
+        UCS_ASYNC_TRY_BLOCK(uct_rdmacm_cm_get_async(cm), return);
 
         /* Fetch an event */
         ret = rdma_get_cm_event(cm->ev_ch, &event);
