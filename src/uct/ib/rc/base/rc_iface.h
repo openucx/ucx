@@ -148,6 +148,7 @@ typedef struct uct_rc_iface_common_config {
     unsigned long            max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
+    unsigned long            ece;
 
     struct {
         double               timeout;
@@ -290,6 +291,7 @@ struct uct_rc_iface {
         uint8_t              ooo_rw;
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
+        uint32_t             ece;
         size_t               max_get_zcopy;
 
         /* Atomic callbacks */

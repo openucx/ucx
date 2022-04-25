@@ -150,6 +150,11 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         UCT_IB_MLX5DV_SET(create_qp_in, in, wq_umem_id, qp->devx.mem.mem->umem_id);
     }
 
+    if (md->super.ece_enable) {
+        UCT_IB_MLX5DV_SET(create_qp_in, in, ece,
+                          UCT_IB_MLX5_DEVX_ECE_TRIG_RESP);
+    }
+
     qp->devx.obj = mlx5dv_devx_obj_create(dev->ibv_context, in, sizeof(in),
                                           out, sizeof(out));
     if (!qp->devx.obj) {

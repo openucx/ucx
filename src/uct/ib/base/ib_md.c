@@ -1711,6 +1711,52 @@ void uct_ib_md_close(uct_md_h uct_md)
     ucs_free(md);
 }
 
+ucs_status_t uct_ib_md_ece_check(uct_ib_md_t *md)
+{
+    ucs_status_t status  = UCS_OK;
+#if HAVE_DECL_IBV_SET_ECE
+    uct_ib_device_t *dev = &md->dev;
+    struct ibv_pd *pd    = md->pd;
+    struct ibv_ece ece   = {};
+    struct ibv_qp *dummy_qp;
+    struct ibv_cq *cq;
+    struct ibv_qp_init_attr qp_init_attr;
+
+    cq = ibv_create_cq(dev->ibv_context, 1, NULL, NULL, 0);
+    if (cq == NULL) {
+        status = UCS_ERR_IO_ERROR;
+        goto out;
+    }
+
+    memset(&qp_init_attr, 0, sizeof(qp_init_attr));
+    qp_init_attr.send_cq          = cq;
+    qp_init_attr.recv_cq          = cq;
+    qp_init_attr.qp_type          = IBV_QPT_RC;
+    qp_init_attr.cap.max_send_wr  = 1;
+    qp_init_attr.cap.max_recv_wr  = 1;
+    qp_init_attr.cap.max_send_sge = 1;
+    qp_init_attr.cap.max_recv_sge = 1;
+
+    dummy_qp = ibv_create_qp(pd, &qp_init_attr);
+    if (dummy_qp == NULL) {
+        status = UCS_ERR_IO_ERROR;
+        goto free_cq;
+    }
+
+    /* ibv_set_ece check whether ECE is supported */
+    if ((ibv_query_ece(dummy_qp, &ece) == 0) &&
+        (ibv_set_ece(dummy_qp, &ece) == 0)) {
+        md->ece_enable = 1;
+    }
+
+    ibv_destroy_qp(dummy_qp);
+free_cq:
+    ibv_destroy_cq(cq);
+out:
+#endif
+    return status;
+}
+
 static uct_ib_md_ops_t uct_ib_verbs_md_ops;
 
 static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
@@ -1773,6 +1819,11 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
 
     md->dev.flags = uct_ib_device_spec(&md->dev)->flags;
     md->name      = UCT_IB_MD_NAME(verbs);
+
+    status = uct_ib_md_ece_check(md);
+    if (status != UCS_OK) {
+        goto err_dev_cfg;
+    }
 
     *p_md = md;
     return UCS_OK;
