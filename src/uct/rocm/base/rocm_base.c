@@ -14,12 +14,12 @@
 #include <pthread.h>
 
 
-#define MAX_AGENTS 16
+#define MAX_AGENTS 63
 static struct agents {
-    hsa_agent_t agents[MAX_AGENTS];
     int num;
-    hsa_agent_t gpu_agents[MAX_AGENTS];
+    hsa_agent_t agents[MAX_AGENTS];
     int num_gpu;
+    hsa_agent_t gpu_agents[MAX_AGENTS];
 } uct_rocm_base_agents;
 
 int uct_rocm_base_get_gpu_agents(hsa_agent_t **agents)
