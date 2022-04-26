@@ -376,16 +376,13 @@ static inline int uct_dc_mlx5_iface_dci_ep_can_send(uct_dc_mlx5_ep_t *ep)
 }
 
 static UCS_F_ALWAYS_INLINE
-void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface, uct_dc_mlx5_ep_t *ep)
+void uct_dc_mlx5_iface_schedule_dci_alloc(uct_dc_mlx5_iface_t *iface,
+                                          uct_dc_mlx5_ep_t *ep)
 {
-    ucs_arbiter_t *waitq;
+    ucs_arbiter_t *waitq =
+            uct_dc_mlx5_iface_dci_waitq(iface, uct_dc_mlx5_ep_pool_index(ep));
 
-    /* If FC window is empty the group will be scheduled when
-     * grant is received */
-    if (uct_rc_fc_has_resources(&iface->super.super, &ep->fc)) {
-        waitq = uct_dc_mlx5_iface_dci_waitq(iface, uct_dc_mlx5_ep_pool_index(ep));
-        ucs_arbiter_group_schedule(waitq, &ep->arb_group);
-    }
+    ucs_arbiter_group_schedule(waitq, &ep->arb_group);
 }
 
 static UCS_F_ALWAYS_INLINE uint8_t
