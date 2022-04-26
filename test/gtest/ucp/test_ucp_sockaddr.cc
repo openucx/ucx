@@ -653,7 +653,7 @@ public:
     {
         {
             scoped_log_handler slh(detect_error_logger);
-            client_ep_connect(specify_src_addr);
+            client_ep_connect(0, specify_src_addr);
             if (!wait_for_server_ep(wakeup)) {
                 UCS_TEST_SKIP_R("cannot connect to server");
             }
