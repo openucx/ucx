@@ -86,10 +86,9 @@ unsigned ucp_cm_client_try_next_cm_progress(void *arg)
         ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
     }
 
-    ucs_debug("client switching from %s to %s in attempt to connect to the"
-              " server",
-              ucp_context_cm_name(context, cm_idx - 1),
-              ucp_context_cm_name(context, cm_idx));
+    ucs_diag("ep %p: client switching from %s to %s in attempt to connect to"
+             " the server", ucp_ep, ucp_context_cm_name(context, cm_idx - 1),
+             ucp_context_cm_name(context, cm_idx));
 
     status = ucp_ep_client_cm_create_uct_ep(ucp_ep);
     if (status != UCS_OK) {
@@ -286,7 +285,8 @@ ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
 
 static ucs_status_t
 ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
-                         int can_fallback, ucp_object_version_t sa_data_version,
+                         ucs_log_level_t log_level,
+                         ucp_object_version_t sa_data_version,
                          void **data_buf_p, size_t *data_buf_length_p,
                          unsigned ep_init_flags)
 {
@@ -297,7 +297,6 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     ucp_wireup_sockaddr_data_base_t *sa_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
-    ucs_log_level_t log_level;
     void *worker_addr_p;
     size_t ucp_addr_size, sa_data_length;
 
@@ -324,7 +323,6 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     sa_data_length = ucp_cm_priv_data_length(ucp_addr_size, sa_data_version);
     cm_idx         = ucp_ep_ext_control(ep)->cm_idx;
     if (worker->cms[cm_idx].attr.max_conn_priv < sa_data_length) {
-        log_level = can_fallback ?  UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
         ucs_log(log_level,
                 "CM private data buffer is too small to pack UCP endpoint"
                 " info, ep %p service data version %u, size %lu, address "
@@ -442,7 +440,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_ep_config_key_t key;
     ucs_queue_head_t tmp_pending_queue;
     ucs_status_t status;
-    int can_fallback;
+    ucs_log_level_t fallback_log_level;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
@@ -481,13 +479,22 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
         /* Replay pending requests from the tmp_pending_queue */
         ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
 
-        can_fallback =
-                (i < (ucs_static_array_size(ep_init_flags_prio) - 1)) ||
-                (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
-        status       = ucp_cm_ep_priv_data_pack(
-                          ep, &tl_bitmap, can_fallback,
-                          context->config.ext.sa_client_min_hdr_version,
-                          &priv_data, &priv_data_length, ep_init_flags);
+        if (i < (ucs_static_array_size(ep_init_flags_prio) - 1)) {
+            /* Can use another variant of endpoint's initialization flags for
+             * fallback */
+            fallback_log_level = UCS_LOG_LEVEL_DEBUG;
+        } else if (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE) {
+            /* Can use another CM for fallback */
+            fallback_log_level = UCS_LOG_LEVEL_DIAG;
+        } else {
+            /* No options for fallback */
+            fallback_log_level = UCS_LOG_LEVEL_ERROR;
+        }
+    
+        status = ucp_cm_ep_priv_data_pack(
+                ep, &tl_bitmap, fallback_log_level,
+                context->config.ext.sa_client_min_hdr_version, &priv_data,
+                &priv_data_length, ep_init_flags);
         if (status == UCS_OK) {
             break;
         } else if (status != UCS_ERR_BUFFER_TOO_SMALL) {
