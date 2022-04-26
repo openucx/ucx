@@ -33,8 +33,16 @@
 #define UCT_IB_MD_RCACHE_DEFAULT_ALIGN 16
 
 #define UCT_IB_MD_MEM_DEREG_CHECK_PARAMS(_ib_md, _params) \
-    UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, \
-                                  (_ib_md)->cap_flags & UCT_MD_FLAG_INVALIDATE)
+    do { \
+        ucs_status_t _status; \
+        \
+        UCT_MD_MEM_DEREG_CHECK_PARAMS( \
+                _params, (_ib_md)->cap_flags & UCT_MD_FLAG_INVALIDATE); \
+        _status = uct_ib_md_mem_dereg_params_invalidate_check(_params); \
+        if (_status != UCS_OK) { \
+            return _status; \
+        } \
+    } while (0)
 
 
 static UCS_CONFIG_DEFINE_ARRAY(pci_bw,

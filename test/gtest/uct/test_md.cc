@@ -770,6 +770,16 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
                             UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+
+        std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
+        uct_md_mkey_pack_params_t pack_params;
+        pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+        pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
+        status = uct_md_mkey_pack_v2(md(), memh, &pack_params, rkey.data());
+        EXPECT_UCS_OK(status);
+
+        status = uct_md_mem_dereg_v2(md(), &params);
     }
 
     EXPECT_UCS_OK(status);
