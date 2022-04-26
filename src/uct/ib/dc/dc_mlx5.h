@@ -277,6 +277,12 @@ struct uct_dc_mlx5_iface {
         /* Timeout for sending FC_HARD_REQ when FC window is empty */
         ucs_time_t                fc_hard_req_timeout;
 
+        /* Next time when FC_HARD_REQ operations should be resent */
+        ucs_time_t                fc_hard_req_resend_time;
+
+        /* Callback ID of FC_HARD_REQ resend operation */
+        uct_worker_cb_id_t        fc_hard_req_progress_cb_id;
+
         /* Seed used for random dci allocation */
         unsigned                  rand_seed;
 
@@ -325,6 +331,8 @@ ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self);
 ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                                           uct_rc_hdr_t *hdr, unsigned length,
                                           uint32_t imm_data, uint16_t lid, unsigned flags);
+
+void uct_dc_mlx5_fc_entry_iter_del(uct_dc_mlx5_iface_t *iface, khiter_t it);
 
 void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface);
 

@@ -1157,7 +1157,7 @@ static void uct_dc_mlx5_ep_fc_cleanup(uct_dc_mlx5_ep_t *ep)
 
     it = kh_get(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, (uint64_t)ep);
     if (it != kh_end(&iface->tx.fc_hash)) {
-        kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
+        uct_dc_mlx5_fc_entry_iter_del(iface, it);
     }
 }
 
@@ -1492,6 +1492,28 @@ void uct_dc_mlx5_ep_pending_purge(uct_ep_h tl_ep,
     }
 }
 
+unsigned uct_dc_mlx5_ep_fc_hard_req_progress(void *arg)
+{
+    uct_dc_mlx5_iface_t *iface = arg;
+    ucs_time_t now             = ucs_get_time();
+    uint64_t ep_key;
+    uct_dc_mlx5_ep_t *ep;
+
+    if (ucs_likely(now < iface->tx.fc_hard_req_resend_time)) {
+        return 0;
+    }
+
+    /* Go over all endpoints that are waiting for FC window being restored and
+     * resend FC_HARD_REQ packet to make sure a peer will resend FC_PURE_GRANT
+     * packet in case of failure on the remote FC endpoint */
+    kh_foreach_key(&iface->tx.fc_hash, ep_key, {
+        ep = (uct_dc_mlx5_ep_t*)ep_key;
+        uct_dc_mlx5_ep_schedule(iface, ep);
+    })
+
+    return 1;
+}
+
 ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
                                      uct_dc_mlx5_ep_t *ep)
 {
@@ -1544,6 +1566,12 @@ ucs_status_t uct_dc_mlx5_ep_check_fc(uct_dc_mlx5_iface_t *iface,
 
         goto out;
     }
+
+    uct_worker_progress_register_safe(
+            &iface->super.super.super.super.worker->super,
+            uct_dc_mlx5_ep_fc_hard_req_progress, iface,
+            UCS_CALLBACKQ_FLAG_FAST,
+            &iface->tx.fc_hard_req_progress_cb_id);
 
 out_set_status:
     status = ucs_likely(ep->fc.fc_wnd > 0) ? UCS_OK : UCS_ERR_NO_RESOURCE;
