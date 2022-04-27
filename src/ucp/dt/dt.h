@@ -63,35 +63,31 @@ typedef struct {
 /**
  * This type describes a datatype packing function, used to pack into
  * a contiguous buffer.
- * 
+ *
  * @param [in]  worker   UCP worker
  * @param [out] dest     Pack into this buffer
  * @param [in]  src      Source data to pack
  * @param [in]  length   Length of the data to pack
  * @param [in]  mem_type Memory type of the source data
- * 
- * @return Error code as defined by @ref ucs_status_t
  */
-typedef ucs_status_t (*ucp_dt_pack_func_t)(ucp_worker_h worker, void *dest,
-                                           const void *src, size_t length,
-                                           ucs_memory_type_t mem_type);
+typedef void (*ucp_dt_pack_func_t)(ucp_worker_h worker, void *dest,
+                                   const void *src, size_t length,
+                                   ucs_memory_type_t mem_type);
 
 
 /**
  * This type describes a datatype unpacking function, used to unpack from
  * a contiguous buffer.
- * 
+ *
  * @param [in]  worker   UCP worker
  * @param [out] dest     Unpack into this buffer
  * @param [in]  src      Source buffer to unpack
  * @param [in]  length   Length of the data to unpack
  * @param [in]  mem_type Memory type of the dest data
- * 
- * @return Error code as defined by @ref ucs_status_t
  */
-typedef ucs_status_t (*ucp_dt_unpack_func_t)(ucp_worker_h worker, void *dest,
-                                             const void *src, size_t length,
-                                             ucs_memory_type_t mem_type);
+typedef void (*ucp_dt_unpack_func_t)(ucp_worker_h worker, void *dest,
+                                     const void *src, size_t length,
+                                     ucs_memory_type_t mem_type);
 
 
 extern const char *ucp_datatype_class_names[];
@@ -100,21 +96,19 @@ size_t ucp_dt_pack(ucp_worker_h worker, ucp_datatype_t datatype,
                    ucs_memory_type_t mem_type, void *dest, const void *src,
                    ucp_dt_state_t *state, size_t length);
 
-ucs_status_t ucp_mem_type_pack(ucp_worker_h worker, void *dest,
-                               const void *src, size_t length,
-                               ucs_memory_type_t mem_type);
+void ucp_mem_type_pack(ucp_worker_h worker, void *dest, const void *src,
+                       size_t length, ucs_memory_type_t mem_type);
 
-ucs_status_t ucp_mem_type_unpack(ucp_worker_h worker, void *buffer,
-                                 const void *recv_data, size_t recv_length,
-                                 ucs_memory_type_t mem_type);
+void ucp_mem_type_unpack(ucp_worker_h worker, void *buffer,
+                         const void *recv_data, size_t recv_length,
+                         ucs_memory_type_t mem_type);
 
 
-static UCS_F_ALWAYS_INLINE ucs_status_t
+static UCS_F_ALWAYS_INLINE void
 ucp_memcpy_pack_unpack(ucp_worker_h worker, void *buffer, const void *data,
                        size_t length, ucs_memory_type_t mem_type)
 {
     UCS_PROFILE_CALL(ucs_memcpy_relaxed, buffer, data, length);
-    return UCS_OK;
 }
 
 
