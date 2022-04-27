@@ -815,8 +815,7 @@ typedef struct ucp_ep_params {
  * these structures large enough to contain the desired number of transport
  * and device name pairs.
  *
- * If new fields are added to this structure, they must be added at the end
- * of this structure.
+ * Any new fields must be added to the end of this structure.
  */
 typedef struct {
     /**
