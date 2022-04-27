@@ -25,23 +25,8 @@
 
 #include "rcache.h"
 #include "rcache_int.h"
+#include "rcache.inl"
 
-#define ucs_rcache_region_log(_level, _message, ...) \
-    do { \
-        if (ucs_log_is_enabled(_level)) { \
-            __ucs_rcache_region_log(__FILE__, __LINE__, __FUNCTION__, (_level), \
-                                    _message, ## __VA_ARGS__); \
-        } \
-    } while (0)
-
-#define ucs_rcache_region_error(_message, ...) \
-    ucs_rcache_region_log(UCS_LOG_LEVEL_ERROR, _message, ## __VA_ARGS__)
-#define ucs_rcache_region_warn(_message, ...)  \
-    ucs_rcache_region_log(UCS_LOG_LEVEL_WARN, _message,  ## __VA_ARGS__)
-#define ucs_rcache_region_debug(_message, ...) \
-    ucs_rcache_region_log(UCS_LOG_LEVEL_DEBUG, _message, ##  __VA_ARGS__)
-#define ucs_rcache_region_trace(_message, ...) \
-    ucs_rcache_region_log(UCS_LOG_LEVEL_TRACE, _message, ## __VA_ARGS__)
 
 #define ucs_rcache_region_pfn(_region) \
     ((_region)->priv)
@@ -130,16 +115,9 @@ static ucs_rcache_global_context_t ucs_rcache_global_context = {
     .pipe = UCS_ASYNC_PIPE_INITIALIZER
 };
 
-
-static void __ucs_rcache_region_log(const char *file, int line, const char *function,
-                                    ucs_log_level_t level, ucs_rcache_t *rcache,
-                                    ucs_rcache_region_t *region, const char *fmt,
-                                    ...) UCS_F_PRINTF(7, 8);
-
-static void __ucs_rcache_region_log(const char *file, int line, const char *function,
-                                    ucs_log_level_t level, ucs_rcache_t *rcache,
-                                    ucs_rcache_region_t *region, const char *fmt,
-                                    ...)
+void ucs_rcache_region_log(const char *file, int line, const char *function,
+                           ucs_log_level_t level, ucs_rcache_t *rcache,
+                           ucs_rcache_region_t *region, const char *fmt, ...)
 {
     char message[128];
     char region_desc[128];
@@ -157,7 +135,7 @@ static void __ucs_rcache_region_log(const char *file, int line, const char *func
     }
 
     ucs_log_dispatch(file, line, function, level, &ucs_global_opts.log_component,
-                     "%s: %s region " UCS_PGT_REGION_FMT " %c%c "UCS_RCACHE_PROT_FMT" ref %u %s",
+                     "%s: %s region " UCS_PGT_REGION_FMT " %c%c " UCS_RCACHE_PROT_FMT " ref %u %s",
                      rcache->name, message,
                      UCS_PGT_REGION_ARG(&region->super),
                      (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) ? 'g' : '-',
@@ -335,32 +313,6 @@ static void ucs_rcache_find_regions(ucs_rcache_t *rcache, ucs_pgt_addr_t from,
                              ucs_rcache_region_collect_callback, list);
 }
 
-/* LRU spinlock must be held */
-static inline void
-ucs_rcache_region_lru_add(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
-{
-    if (region->lru_flags & UCS_RCACHE_LRU_FLAG_IN_LRU) {
-        return;
-    }
-
-    ucs_rcache_region_trace(rcache, region, "lru add");
-    ucs_list_add_tail(&rcache->lru.list, &region->lru_list);
-    region->lru_flags |= UCS_RCACHE_LRU_FLAG_IN_LRU;
-}
-
-/* LRU spinlock must be held */
-static inline void
-ucs_rcache_region_lru_remove(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
-{
-    if (!(region->lru_flags & UCS_RCACHE_LRU_FLAG_IN_LRU)) {
-        return;
-    }
-
-    ucs_rcache_region_trace(rcache, region, "lru remove");
-    ucs_list_del(&region->lru_list);
-    region->lru_flags &= ~UCS_RCACHE_LRU_FLAG_IN_LRU;
-}
-
 static void
 ucs_rcache_region_lru_get(ucs_rcache_t *rcache, ucs_rcache_region_t *region)
 {
@@ -397,8 +349,8 @@ ucs_rcache_distribution_get_bin(ucs_rcache_t *rcache, size_t region_size)
 }
 
 /* Lock must be held in write mode */
-static void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
-                                            ucs_rcache_region_t *region)
+void ucs_mem_region_destroy_internal(ucs_rcache_t *rcache,
+                                     ucs_rcache_region_t *region)
 {
     ucs_rcache_comp_entry_t *comp;
     size_t region_size;
@@ -736,12 +688,6 @@ static void ucs_rcache_lru_evict(ucs_rcache_t *rcache)
     }
 }
 
-static inline int ucs_rcache_region_test(ucs_rcache_region_t *region, int prot)
-{
-    return (region->flags & UCS_RCACHE_REGION_FLAG_REGISTERED) &&
-           ucs_test_all_flags(region->prot, prot);
-}
-
 /* Lock must be held */
 static ucs_status_t
 ucs_rcache_check_overlap(ucs_rcache_t *rcache, ucs_pgt_addr_t *start,
@@ -863,7 +809,7 @@ static ucs_status_t ucs_rcache_fill_pfn(ucs_rcache_region_t *region)
     return status;
 }
 
-static ucs_status_t
+ucs_status_t
 ucs_rcache_create_region(ucs_rcache_t *rcache, void *address, size_t length,
                          int prot, void *arg, ucs_rcache_region_t **region_p)
 {
