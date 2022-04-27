@@ -286,13 +286,18 @@ static inline int ucp_mem_map_is_allocate(const ucp_mem_map_params_t *params)
            (params->flags & UCP_MEM_MAP_ALLOCATE);
 }
 
-void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map)
+static void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh,
+                           ucp_md_map_t md_map)
 {
     ucp_md_index_t md_index;
     ucs_status_t status;
 
     /* Unregister from all memory domains */
     ucs_for_each_bit(md_index, md_map) {
+        ucs_assertv(md_index != memh->alloc_md_index,
+                    "memh %p: md_index %u alloc_md_index %u", memh, md_index,
+                    memh->alloc_md_index);
+
         ucs_trace("de-registering memh[%d]=%p", md_index, memh->uct[md_index]);
         ucs_assert(context->tl_mds[md_index].attr.cap.flags & UCT_MD_FLAG_REG);
         status = uct_md_mem_dereg(context->tl_mds[md_index].md,
@@ -304,6 +309,33 @@ void ucp_memh_dereg(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map)
         }
 
         memh->uct[md_index] = NULL;
+    }
+}
+
+void ucp_memh_unmap(ucp_context_h context, ucp_mem_h memh, ucp_md_map_t md_map)
+{
+    uct_allocated_memory_t mem;
+    ucs_status_t status;
+
+    mem.address = ucp_memh_address(memh);
+    mem.length  = ucp_memh_length(memh);
+    mem.method  = memh->alloc_method;
+
+    if (mem.method == UCT_ALLOC_METHOD_MD) {
+        ucs_assert(memh->alloc_md_index != UCP_NULL_RESOURCE);
+        mem.md   = context->tl_mds[memh->alloc_md_index].md;
+        mem.memh = memh->uct[memh->alloc_md_index];
+        md_map  &= ~UCS_BIT(memh->alloc_md_index);
+    }
+
+    ucp_memh_dereg(context, memh, md_map);
+
+    /* If the memory was also allocated, release it */
+    if (memh->alloc_method != UCT_ALLOC_METHOD_LAST) {
+        status = uct_mem_free(&mem);
+        if (status != UCS_OK) {
+            ucs_warn("failed to free: %s", ucs_status_string(status));
+        }
     }
 }
 
@@ -959,32 +991,9 @@ static ucs_status_t ucp_mem_rcache_mem_reg_cb(void *context, ucs_rcache_t *rcach
 static void ucp_mem_rcache_mem_dereg_cb(void *ctx, ucs_rcache_t *rcache,
                                         ucs_rcache_region_t *rregion)
 {
-    ucp_mem_h memh        = ucs_derived_of(rregion, ucp_mem_t);
-    ucp_md_map_t md_map   = memh->md_map;
-    ucp_context_h context = ctx;
-    uct_allocated_memory_t mem;
-    ucs_status_t status;
+    ucp_mem_h memh = ucs_derived_of(rregion, ucp_mem_t);
 
-    mem.address = ucp_memh_address(memh);
-    mem.length  = ucp_memh_length(memh);
-    mem.method  = memh->alloc_method;
-
-    if (mem.method == UCT_ALLOC_METHOD_MD) {
-        ucs_assert(memh->alloc_md_index != UCP_NULL_RESOURCE);
-        mem.md   = context->tl_mds[memh->alloc_md_index].md;
-        mem.memh = memh->uct[memh->alloc_md_index];
-        md_map  &= ~UCS_BIT(memh->alloc_md_index);
-    }
-
-    ucp_memh_dereg(context, memh, md_map);
-
-    /* If the memory was also allocated, release it */
-    if (memh->alloc_method != UCT_ALLOC_METHOD_LAST) {
-        status = uct_mem_free(&mem);
-        if (status != UCS_OK) {
-            ucs_warn("failed to free: %s", ucs_status_string(status));
-        }
-    }
+    ucp_memh_unmap((ucp_context_h)ctx, memh, memh->md_map);
 }
 
 static void ucp_mem_rcache_dump_region_cb(void *rcontext, ucs_rcache_t *rcache,
