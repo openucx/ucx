@@ -1149,6 +1149,16 @@ ucs_status_t uct_dc_mlx5_iface_fc_grant(uct_pending_req_t *self)
     return status;
 }
 
+void uct_dc_mlx5_fc_entry_iter_del(uct_dc_mlx5_iface_t *iface, khiter_t it)
+{
+    kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
+    if (kh_size(&iface->tx.fc_hash) == 0) {
+        uct_worker_progress_unregister_safe(
+                &iface->super.super.super.super.worker->super,
+                &iface->tx.fc_hard_req_progress_cb_id);
+    }
+}
+
 ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_num,
                                           uct_rc_hdr_t *hdr, unsigned length,
                                           uint32_t imm_data, uint16_t lid, unsigned flags)
@@ -1209,8 +1219,8 @@ ucs_status_t uct_dc_mlx5_iface_fc_handler(uct_rc_iface_t *rc_iface, unsigned qp_
         /* Peer granted resources, so update wnd */
         uct_rc_fc_restore_wnd(rc_iface, &ep->fc);
 
-        /* Remove entry for flush to complete */
-        kh_del(uct_dc_mlx5_fc_hash, &iface->tx.fc_hash, it);
+        /* Remove FC entry to complete */
+        uct_dc_mlx5_fc_entry_iter_del(iface, it);
 
         UCS_STATS_UPDATE_COUNTER(ep->fc.stats, UCT_RC_FC_STAT_RX_PURE_GRANT, 1);
 
@@ -1408,6 +1418,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     self->tx.policy                        = (uct_dc_tx_policy_t)config->tx_policy;
     self->tx.fc_seq                        = 0;
     self->tx.fc_hard_req_timeout           = config->fc_hard_req_timeout;
+    self->tx.fc_hard_req_resend_time       = ucs_get_time();
+    self->tx.fc_hard_req_progress_cb_id    = UCS_CALLBACKQ_ID_NULL;
     self->tx.dci_release_prog_id           = UCS_CALLBACKQ_ID_NULL;
     self->keepalive_dci                    = -1;
     self->tx.num_dci_pools                 = 1;
