@@ -18,7 +18,7 @@ Group: System Environment/Libraries
 
 License: BSD
 URL: http://www.openucx.org
-Source: https://github.com/openucx/%{name}/releases/download/v@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@/ucx-@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@.tar.gz
+Source: https://github.com/openucx/%{name}/releases/download/v@VERSION@/ucx-@VERSION@.tar.gz
 
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Prefix: %{_prefix}

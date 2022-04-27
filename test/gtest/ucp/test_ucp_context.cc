@@ -107,11 +107,13 @@ UCS_TEST_P(test_ucp_version, version_string) {
 
     ucp_get_version(&major_version, &minor_version, &release_number);
 
-    char buffer[256];
-    snprintf(buffer, sizeof(buffer), "%d.%d.%d", major_version, minor_version,
-             release_number);
+    std::string string_version     = std::to_string(major_version) + '.' +
+                                     std::to_string(minor_version) + '.' +
+                                     std::to_string(release_number);
+    std::string ucp_string_version = ucp_get_version_string();
 
-    EXPECT_EQ(std::string(buffer), std::string(ucp_get_version_string()));
+    EXPECT_EQ(string_version,
+              ucp_string_version.substr(0, string_version.length()));
 }
 
 UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_version, all, "all")
