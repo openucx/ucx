@@ -15,6 +15,7 @@
 #if HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
+#include <uct/ib/base/ib_device.h>
 
 #include <rdma/rdma_cma.h>
 
