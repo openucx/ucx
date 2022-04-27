@@ -142,7 +142,7 @@ static inline int ucs_async_is_blocked(const ucs_async_context_t *async)
 
 
 /**
- * Try to block the async handler. If its currently locked by other thread
+ * Try to block the async handler. If it is currently locked by other thread
  * avoid CPU consuming wait and execute _quit.
  *
  * @param _async Event context to block events for.

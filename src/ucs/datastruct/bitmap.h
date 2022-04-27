@@ -563,6 +563,7 @@ ucs_bitmap_ffs(const ucs_bitmap_word_t *bitmap_words, size_t num_words,
 }
 
 
+_UCS_BITMAP_DECLARE_TYPE(2)
 _UCS_BITMAP_DECLARE_TYPE(64)
 _UCS_BITMAP_DECLARE_TYPE(128)
 _UCS_BITMAP_DECLARE_TYPE(256)

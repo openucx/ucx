@@ -97,7 +97,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
         return UCS_ERR_IO_ERROR;
     }
 
-    ctx->is_eth = 0;
+    UCS_BITMAP_CLEAR(&ctx->is_eth);
     for (i = 0; i < dev_attr.phys_port_cnt; ++i) {
         ret = ibv_query_port(verbs, i + 1, &port_attr);
         if (ret != 0) {
@@ -106,7 +106,7 @@ uct_rdmacm_cm_device_context_init(uct_rdmacm_cm_device_context_t *ctx,
         }
 
         if (IBV_PORT_IS_LINK_LAYER_ETHERNET(&port_attr)) {
-            ctx->is_eth |= UCS_BIT(i);
+            UCS_BITMAP_SET(ctx->is_eth, 1);
         }
     }
 
@@ -468,7 +468,7 @@ static ucs_status_t uct_rdmacm_cm_id_to_dev_addr(uct_rdmacm_cm_t *cm,
     params.flags   |= UCT_IB_ADDRESS_PACK_FLAG_PATH_MTU;
     params.path_mtu = qp_attr.path_mtu;
 
-    if (ctx->is_eth & UCS_BIT(cm_id->port_num - 1)) {
+    if (UCS_BITMAP_GET(ctx->is_eth, 1)) {
         /* Ethernet address */
         ucs_assert(qp_attr.ah_attr.is_global);
 

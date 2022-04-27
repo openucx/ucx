@@ -71,13 +71,13 @@ typedef struct uct_rdmacm_cm_reserved_qpn_blk {
 
 
 typedef struct uct_rdmacm_cm_device_context {
-    int             use_reserved_qpn;
-    ucs_spinlock_t  lock;                         /** Avoid competed condition on the qpn resource for multi-threads */
-    ucs_list_link_t blk_list;
-    uint32_t        log_reserved_qpn_granularity;
-    uint32_t        num_dummy_qps;
-    struct ibv_cq   *cq;
-    uint8_t         is_eth;
+    int                                use_reserved_qpn;
+    ucs_spinlock_t                     lock;                         /** Avoid competed condition on the qpn resource for multi-threads */
+    ucs_list_link_t                    blk_list;
+    uint32_t                           log_reserved_qpn_granularity;
+    uint32_t                           num_dummy_qps;
+    struct ibv_cq                      *cq;
+    ucs_bitmap_t(UCT_IB_DEV_MAX_PORTS) is_eth;
 } uct_rdmacm_cm_device_context_t;
 
 
