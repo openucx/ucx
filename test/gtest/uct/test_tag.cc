@@ -758,7 +758,9 @@ UCS_TEST_SKIP_COND_P(test_tag, sw_rndv_unexpected,
 UCT_TAG_INSTANTIATE_TEST_CASE(test_tag)
 
 
-#if defined (ENABLE_STATS) && IBV_HW_TM
+#if defined (HAVE_MLX5_DV) && IBV_HW_TM
+
+#if defined (ENABLE_STATS)
 extern "C" {
 #include <uct/api/uct.h>
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
@@ -925,8 +927,6 @@ UCT_TAG_INSTANTIATE_TEST_CASE(test_tag_stats)
 
 #endif
 
-
-#if IBV_HW_TM
 
 extern "C" {
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
