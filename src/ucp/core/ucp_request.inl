@@ -248,7 +248,7 @@ ucp_request_complete_tag_recv(ucp_request_t *req, ucs_status_t status)
 }
 
 static UCS_F_ALWAYS_INLINE void
-ucp_request_complete_stream_recv(ucp_request_t *req, ucp_ep_ext_proto_t* ep_ext,
+ucp_request_complete_stream_recv(ucp_request_t *req, ucp_ep_ext_t *ep_ext,
                                  ucs_status_t status)
 {
     /* dequeue request before complete */
@@ -1014,8 +1014,7 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_alloc(ucp_request_t *req)
     ucp_request_ptr_map_status_check(status, "put", ep, req);
 
     if (status == UCS_OK) {
-        ucs_hlist_add_tail(&ucp_ep_ext_gen(ep)->proto_reqs,
-                           &req->send.list);
+        ucs_hlist_add_tail(&ep->ext->proto_reqs, &req->send.list);
     }
 }
 
@@ -1042,7 +1041,7 @@ static UCS_F_ALWAYS_INLINE void ucp_send_request_id_release(ucp_request_t *req)
     ucp_request_ptr_map_status_check(status, "delete", ep, req);
 
     if (status == UCS_OK) {
-        ucs_hlist_del(&ucp_ep_ext_gen(ep)->proto_reqs, &req->send.list);
+        ucs_hlist_del(&ep->ext->proto_reqs, &req->send.list);
     }
 
     ucp_request_id_reset(req);
@@ -1073,8 +1072,8 @@ ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
         ucp_request_id_reset(*req_p);
 
         if (status == UCS_OK) {
-            ucs_hlist_del(&ucp_ep_ext_gen((*req_p)->send.ep)->proto_reqs,
-                                          &(*req_p)->send.list);
+            ucs_hlist_del(&((*req_p)->send.ep->ext->proto_reqs),
+                          &(*req_p)->send.list);
         }
     }
 

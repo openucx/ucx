@@ -1360,7 +1360,7 @@ ucs_status_t ucp_wireup_init_lanes(ucp_ep_h ep, unsigned ep_init_flags,
         goto out;
     }
 
-    cm_idx = ucp_ep_ext_control(ep)->cm_idx;
+    cm_idx = ep->ext->cm_idx;
 
     if ((ep->cfg_index != UCP_WORKER_CFG_INDEX_NULL) &&
         /* reconfiguration is allowed for CM flow */

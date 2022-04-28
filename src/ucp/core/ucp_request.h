@@ -443,11 +443,11 @@ struct ucp_request {
         } recv;
 
         struct {
-            ucp_worker_h            worker;     /* Worker to flush */
-            ucp_send_nbx_callback_t cb;         /* Completion callback */
-            uct_worker_cb_id_t      prog_id;    /* Progress callback ID */
-            int                     comp_count; /* Countdown to request completion */
-            ucp_ep_ext_gen_t        *next_ep;   /* Next endpoint to flush */
+            ucp_worker_h            worker;       /* Worker to flush */
+            ucp_send_nbx_callback_t cb;           /* Completion callback */
+            uct_worker_cb_id_t      prog_id;      /* Progress callback ID */
+            int                     comp_count;   /* Countdown to request completion */
+            ucp_ep_ext_t            *next_ep_ext; /* Extension of the next endpoint to flush */
         } flush_worker;
     };
 };
