@@ -439,6 +439,60 @@ struct ucp_ep_config {
 
 
 /**
+ * Status of protocol-level remote completions
+ */
+typedef struct {
+    ucs_hlist_head_t reqs; /* Queue of flush requests which
+                              are waiting for remote completion */
+    uint32_t         send_sn; /* Sequence number of sent operations */
+    uint32_t         cmpl_sn; /* Sequence number of completions */
+} ucp_ep_flush_state_t;
+
+
+/**
+ * Endpoint extension
+ */
+typedef struct ucp_ep_ext {
+    ucp_ep_h                      ep;            /* Back pointer to endpoint */
+    void                          *user_data;    /* User data associated with ep */
+    ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
+    ucp_rsc_index_t               cm_idx;        /* CM index */
+    ucs_ptr_map_key_t             local_ep_id;   /* Local EP ID */
+    ucs_ptr_map_key_t             remote_ep_id;  /* Remote EP ID */
+    ucp_err_handler_cb_t          err_cb;        /* Error handler */
+    ucp_request_t                 *close_req;    /* Close protocol request */
+    khash_t(ucp_ep_peer_mem_hash) *peer_mem;     /* Hash of remote memory segments
+                                                    used by 2-stage ppln rndv proto */
+    /* List of requests which are waiting for remote completion */
+    ucs_hlist_head_t              proto_reqs;
+#if UCS_ENABLE_ASSERT
+    ucs_time_t                    ka_last_round; /* Time of last KA round done */
+#endif
+
+    /* Endpoint match context and remote completion status are mutually exclusive,
+     * since remote completions are counted only after the endpoint is already
+     * matched to a remote peer.
+     */
+    union {
+        ucp_ep_match_elem_t       ep_match;      /* Matching with remote endpoints */
+        ucp_ep_flush_state_t      flush_state;   /* Remote completion status */
+    };
+
+    struct {
+        ucs_list_link_t           ready_list;     /* List entry in worker's EP list */
+        ucs_queue_head_t          match_q;        /* Queue of receive data or requests,
+                                                     depends on UCP_EP_FLAG_STREAM_HAS_DATA */
+    } stream;
+
+    struct {
+        ucs_list_link_t           started_ams;
+        ucs_queue_head_t          mid_rdesc_q;    /* Queue of middle fragments, which
+                                                     arrived before the first one */
+    } am;
+} ucp_ep_ext_t;
+
+
+/**
  * Protocol layer endpoint, represents a connection to a remote worker
  */
 typedef struct ucp_ep {
@@ -453,6 +507,7 @@ typedef struct ucp_ep {
 
     /* TODO allocate ep dynamically according to number of lanes */
     uct_ep_h                      uct_eps[UCP_MAX_LANES]; /* Transports for every lane */
+    ucp_ep_ext_t                  *ext;                   /* Endpoint extension */
 
 #if ENABLE_DEBUG_DATA
     char                          peer_name[UCP_WORKER_ADDRESS_NAME_MAX];
@@ -474,75 +529,7 @@ typedef struct ucp_ep {
 #endif
 
     UCS_STATS_NODE_DECLARE(stats)
-
 } ucp_ep_t;
-
-
-/**
- * Status of protocol-level remote completions
- */
-typedef struct {
-    ucs_hlist_head_t reqs; /* Queue of flush requests which
-                              are waiting for remote completion */
-    uint32_t         send_sn; /* Sequence number of sent operations */
-    uint32_t         cmpl_sn; /* Sequence number of completions */
-} ucp_ep_flush_state_t;
-
-
-/**
- * Endpoint extension for control data path
- */
-typedef struct {
-    ucp_rsc_index_t               cm_idx; /* CM index */
-    ucs_ptr_map_key_t             local_ep_id; /* Local EP ID */
-    ucs_ptr_map_key_t             remote_ep_id; /* Remote EP ID */
-    ucp_err_handler_cb_t          err_cb; /* Error handler */
-    ucp_request_t                 *close_req; /* Close protocol request */
-#if UCS_ENABLE_ASSERT
-    ucs_time_t                    ka_last_round; /* Time of last KA round done */
-#endif
-    khash_t(ucp_ep_peer_mem_hash) *peer_mem; /* Hash of remote memory segments
-                                                used by 2-stage ppln rndv proto */
-
-} ucp_ep_ext_control_t;
-
-
-/**
- * Endpoint extension for generic non fast-path data
- */
-typedef struct {
-    void                          *user_data;    /* User data associated with ep */
-    ucs_list_link_t               ep_list;       /* List entry in worker's all eps list */
-    /* Endpoint match context and remote completion status are mutually exclusive,
-     * since remote completions are counted only after the endpoint is already
-     * matched to a remote peer.
-     */
-    union {
-        ucp_ep_match_elem_t       ep_match;      /* Matching with remote endpoints */
-        ucp_ep_flush_state_t      flush_state;   /* Remote completion status */
-    };
-    ucp_ep_ext_control_t          *control_ext;  /* Control data path extension */
-    /* List of requests which are waiting for remote completion */
-    ucs_hlist_head_t              proto_reqs;
-} ucp_ep_ext_gen_t;
-
-
-/**
- * Endpoint extension for specific protocols
- */
-typedef struct {
-    struct {
-        ucs_list_link_t           ready_list;    /* List entry in worker's EP list */
-        ucs_queue_head_t          match_q;       /* Queue of receive data or requests,
-                                                    depends on UCP_EP_FLAG_STREAM_HAS_DATA */
-    } stream;
-
-    struct {
-        ucs_list_link_t           started_ams;
-        ucs_queue_head_t          mid_rdesc_q; /* queue of middle fragments, which
-                                                  arrived before the first one */
-    } am;
-} ucp_ep_ext_proto_t;
 
 
 enum {

@@ -480,13 +480,13 @@ ucp_worker_iface_handle_uct_ep_failure(ucp_ep_h ucp_ep, ucp_lane_index_t lane,
 static ucp_ep_h ucp_worker_find_lane(ucs_list_link_t *ep_list, uct_ep_h uct_ep,
                                      ucp_lane_index_t *lane_p)
 {
-    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_ext_t *ep_ext;
     ucp_ep_h ucp_ep;
     ucp_lane_index_t lane;
 
     /* TODO: need to optimize uct_ep -> ucp_ep lookup */
     ucs_list_for_each(ep_ext, ep_list, ep_list) {
-        ucp_ep = ucp_ep_from_ext_gen(ep_ext);
+        ucp_ep = ep_ext->ep;
         lane   = ucp_ep_lookup_lane(ucp_ep, uct_ep);
         if (lane != UCP_NULL_LANE) {
             *lane_p = lane;
@@ -2293,13 +2293,7 @@ ucs_status_t ucp_worker_create(ucp_context_h context,
     }
 
     /* Initialize endpoint allocator */
-    UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_gen_t) <= sizeof(ucp_ep_t));
-    if (context->config.features & (UCP_FEATURE_STREAM | UCP_FEATURE_AM)) {
-        UCS_STATIC_ASSERT(sizeof(ucp_ep_ext_proto_t) <= sizeof(ucp_ep_t));
-        ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 3);
-    } else {
-        ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 2);
-    }
+    ucs_strided_alloc_init(&worker->ep_alloc, sizeof(ucp_ep_t), 1);
 
     worker->user_data    = UCP_PARAM_VALUE(WORKER, params, user_data, USER_DATA,
                                            NULL);
@@ -2640,12 +2634,12 @@ static void ucp_worker_destroy_eps(ucp_worker_h worker,
                                    ucs_list_link_t *ep_list,
                                    const char *ep_type_name)
 {
-    ucp_ep_ext_gen_t *ep_ext, *tmp;
+    ucp_ep_ext_t *ep_ext, *tmp;
     ucp_ep_h ep;
 
     ucs_debug("worker %p: destroy %s endpoints", worker, ep_type_name);
     ucs_list_for_each_safe(ep_ext, tmp, ep_list, ep_list) {
-        ep = ucp_ep_from_ext_gen(ep_ext);
+        ep = ep_ext->ep;
         /* Cleanup pending operations on the UCP EP before destroying it, since
          * ucp_ep_destroy_internal() expects the pending queues of the UCT EPs
          * will be empty before they are destroyed */
@@ -2813,9 +2807,8 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
                                ucp_stream_poll_ep_t *poll_eps,
                                size_t max_eps, unsigned flags)
 {
-    ssize_t            count = 0;
-    ucp_ep_ext_proto_t *ep_ext;
-    ucp_ep_h           ep;
+    ssize_t count = 0;
+    ucp_ep_ext_t *ep_ext;
 
     UCP_CONTEXT_CHECK_FEATURE_FLAGS(worker->context, UCP_FEATURE_STREAM,
                                     return UCS_ERR_INVALID_PARAM);
@@ -2824,9 +2817,8 @@ ssize_t ucp_stream_worker_poll(ucp_worker_h worker,
 
     while ((count < max_eps) && !ucs_list_is_empty(&worker->stream_ready_eps)) {
         ep_ext                    = ucp_stream_worker_dequeue_ep_head(worker);
-        ep                        = ucp_ep_from_ext_proto(ep_ext);
-        poll_eps[count].ep        = ep;
-        poll_eps[count].user_data = ucp_ep_ext_gen(ep)->user_data;
+        poll_eps[count].ep        = ep_ext->ep;
+        poll_eps[count].user_data = ep_ext->user_data;
         ++count;
     }
 
@@ -3175,8 +3167,7 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
         goto out_done;
     }
 
-    ep = ucp_ep_from_ext_gen(ucs_container_of(worker->keepalive.iter,
-                                              ucp_ep_ext_gen_t, ep_list));
+    ep = ucs_container_of(worker->keepalive.iter, ucp_ep_ext_t, ep_list)->ep;
     if ((ep->cfg_index == UCP_WORKER_CFG_INDEX_NULL) ||
         (ep->flags & UCP_EP_FLAG_FAILED) ||
         (ucp_ep_config(ep)->key.keepalive_lane == UCP_NULL_LANE)) {
@@ -3215,16 +3206,16 @@ static int ucp_worker_do_ep_keepalive(ucp_worker_h worker, ucs_time_t now)
     }
 
 #if UCS_ENABLE_ASSERT
-    ucs_assertv((now - ucp_ep_ext_control(ep)->ka_last_round) >=
+    ucs_assertv((now - ep->ext->ka_last_round) >=
                         worker->context->config.ext.keepalive_interval,
                 "ep %p: now=<%lf sec> ka_last_round=<%lf sec>"
                 "(diff=<%lf sec>) ka_interval=<%lf sec>",
                 ep, ucs_time_to_sec(now),
-                ucs_time_to_sec(ucp_ep_ext_control(ep)->ka_last_round),
-                ucs_time_to_sec(now - ucp_ep_ext_control(ep)->ka_last_round),
+                ucs_time_to_sec(ep->ext->ka_last_round),
+                ucs_time_to_sec(now - ep->ext->ka_last_round),
                 ucs_time_to_sec(
                         worker->context->config.ext.keepalive_interval));
-    ucp_ep_ext_control(ep)->ka_last_round = now;
+    ep->ext->ka_last_round = now;
 #endif
 
 out_done:
@@ -3333,11 +3324,11 @@ void ucp_worker_keepalive_remove_ep(ucp_ep_h ep)
 
     ucs_assert(!(ep->flags & UCP_EP_FLAG_INTERNAL));
 
-    if (worker->keepalive.iter == &ucp_ep_ext_gen(ep)->ep_list) {
+    if (worker->keepalive.iter == &ep->ext->ep_list) {
         ucs_debug("worker %p: removed keepalive current ep %p, moving to next",
                   worker, ep);
         worker->keepalive.iter = worker->keepalive.iter->next;
-        ucs_assert(worker->keepalive.iter != &ucp_ep_ext_gen(ep)->ep_list);
+        ucs_assert(worker->keepalive.iter != &ep->ext->ep_list);
 
         if (worker->keepalive.iter == &worker->all_eps) {
             ucs_debug("worker %p: all_eps was reached after %p was removed -"
@@ -3462,11 +3453,11 @@ ucs_status_t ucp_worker_discard_uct_ep(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
 void ucp_worker_vfs_refresh(void *obj)
 {
     ucp_worker_h worker = obj;
-    ucp_ep_ext_gen_t *ep_ext;
+    ucp_ep_ext_t *ep_ext;
 
     UCS_ASYNC_BLOCK(&worker->async);
     ucs_list_for_each(ep_ext, &worker->all_eps, ep_list) {
-        ucp_ep_vfs_init(ucp_ep_from_ext_gen(ep_ext));
+        ucp_ep_vfs_init(ep_ext->ep);
     }
     UCS_ASYNC_UNBLOCK(&worker->async);
 }

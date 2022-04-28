@@ -54,7 +54,7 @@ void ucp_am_cleanup(ucp_worker_h worker)
 
 void ucp_am_ep_init(ucp_ep_h ep)
 {
-    ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
+    ucp_ep_ext_t *ep_ext = ep->ext;
 
     if (ep->worker->context->config.features & UCP_FEATURE_AM) {
         ucs_list_head_init(&ep_ext->am.started_ams);
@@ -64,7 +64,7 @@ void ucp_am_ep_init(ucp_ep_h ep)
 
 void ucp_am_ep_cleanup(ucp_ep_h ep)
 {
-    ucp_ep_ext_proto_t *ep_ext = ucp_ep_ext_proto(ep);
+    ucp_ep_ext_t *ep_ext = ep->ext;
     ucp_recv_desc_t *rdesc, *tmp_rdesc;
     ucs_queue_iter_t iter;
     size_t UCS_V_UNUSED count;
@@ -1343,7 +1343,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_handler,
 }
 
 static UCS_F_ALWAYS_INLINE ucp_recv_desc_t *
-ucp_am_find_first_rdesc(ucp_worker_h worker, ucp_ep_ext_proto_t *ep_ext,
+ucp_am_find_first_rdesc(ucp_worker_h worker, ucp_ep_ext_t *ep_ext,
                         uint64_t msg_id)
 {
     ucp_recv_desc_t *rdesc;
@@ -1458,12 +1458,12 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
     ucp_am_hdr_t *hdr      = am_data;
     size_t user_hdr_length = hdr->header_length;
     ucp_recv_desc_t *mid_rdesc, *first_rdesc;
-    ucp_ep_ext_proto_t *ep_ext;
     ucp_am_mid_hdr_t *mid_hdr;
     ucp_am_mid_ftr_t *mid_ftr;
     ucp_am_first_ftr_t *first_ftr;
     ucs_queue_iter_t iter;
     ucp_ep_h ep;
+    ucp_ep_ext_t *ep_ext;
     size_t total_length, padding;
     uint64_t recv_flags;
     void *user_hdr;
@@ -1472,6 +1472,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
 
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, first_ftr->super.ep_id,
                                   return UCS_OK, "AM first fragment");
+    ep_ext = ep->ext;
 
     total_length = first_ftr->total_size + user_hdr_length +
                    UCP_AM_FIRST_FRAG_META_LEN;
@@ -1485,8 +1486,6 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_first_handler,
                                      am_flags, recv_flags,
                                      "am_long_first_handler");
     }
-
-    ep_ext = ucp_ep_ext_proto(ep);
 
     /* This is the first fragment, other fragments (if arrived) should be on
      * ep_ext->am.mid_rdesc_q queue */
@@ -1576,7 +1575,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
     ucp_am_mid_hdr_t *mid_hdr  = am_data;
     ucp_recv_desc_t *mid_rdesc = NULL, *first_rdesc = NULL;
     ucp_am_mid_ftr_t *mid_ftr;
-    ucp_ep_ext_proto_t *ep_ext;
+    ucp_ep_ext_t *ep_ext;
     ucp_ep_h ep;
     ucs_status_t status;
 
@@ -1588,7 +1587,7 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_am_long_middle_handler,
     UCP_WORKER_GET_VALID_EP_BY_ID(&ep, worker, mid_ftr->ep_id, return UCS_OK,
                                   "AM middle fragment");
 
-    ep_ext      = ucp_ep_ext_proto(ep);
+    ep_ext      = ep->ext;
     first_rdesc = ucp_am_find_first_rdesc(worker, ep_ext, mid_ftr->msg_id);
     if (first_rdesc != NULL) {
         /* First fragment already arrived, just copy the data */
