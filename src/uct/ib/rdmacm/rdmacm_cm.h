@@ -77,6 +77,7 @@ typedef struct uct_rdmacm_cm_device_context {
     uint32_t        log_reserved_qpn_granularity;
     uint32_t        num_dummy_qps;
     struct ibv_cq   *cq;
+    uint8_t         eth_ports;
 } uct_rdmacm_cm_device_context_t;
 
 
