@@ -592,26 +592,6 @@ static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
     }
 }
 
-#ifdef HAVE_DC_EXP
-static uint64_t
-uct_dc_mlx5_iface_ooo_flag(uct_dc_mlx5_iface_t *iface, uint64_t flag,
-                           char *str, uint32_t qp_num)
-{
-#if HAVE_DECL_IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT && HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-    uct_ib_device_t *dev = uct_ib_iface_device(&iface->super.super.super);
-
-    if (iface->super.super.config.ooo_rw &&
-        UCX_IB_DEV_IS_OOO_SUPPORTED(dev, dc)) {
-        ucs_debug("enabling out-of-order support on %s%.0x dev %s",
-                  str, qp_num, uct_ib_device_name(dev));
-        return flag;
-    }
-
-#endif
-    return 0;
-}
-#endif
-
 static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_common_config_t *rc_config)
@@ -638,21 +618,6 @@ uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                 goto err_free_srq;
             }
         } else {
-#ifdef HAVE_STRUCT_IBV_EXP_CREATE_SRQ_ATTR_DC_OFFLOAD_PARAMS
-            struct ibv_exp_srq_dc_offload_params dc_op = {};
-
-            dc_op.timeout    = rc_iface->config.timeout;
-            dc_op.path_mtu   = rc_iface->super.config.path_mtu;
-            dc_op.pkey_index = rc_iface->super.pkey_index;
-            dc_op.sl         = rc_iface->super.config.sl;
-            dc_op.dct_key    = UCT_IB_KEY;
-            dc_op.ooo_caps   = uct_dc_mlx5_iface_ooo_flag(iface,
-                    IBV_EXP_OOO_SUPPORT_RW_DATA_PLACEMENT,
-                    "TM XRQ", 0);
-
-            srq_attr.comp_mask         = IBV_EXP_CREATE_SRQ_DC_OFFLOAD_PARAMS;
-            srq_attr.dc_offload_params = &dc_op;
-#endif
             status = uct_rc_mlx5_init_rx_tm(&iface->super, &config->super,
                                             &srq_attr, UCT_DC_RNDV_HDR_LEN);
             if (status != UCS_OK) {
@@ -699,113 +664,6 @@ void uct_dc_mlx5_cleanup_rx(uct_rc_iface_t *rc_iface)
 
     uct_rc_mlx5_destroy_srq(md, &iface->super.rx.srq);
 }
-
-#ifdef HAVE_DC_EXP
-ucs_status_t
-uct_dc_mlx5_iface_create_dct(uct_dc_mlx5_iface_t *iface,
-                             const uct_dc_mlx5_iface_config_t *config)
-{
-    struct ibv_exp_dct_init_attr init_attr;
-
-    memset(&init_attr, 0, sizeof(init_attr));
-
-    init_attr.pd               = uct_ib_iface_md(&iface->super.super.super)->pd;
-    init_attr.cq               = iface->super.super.super.cq[UCT_IB_DIR_RX];
-    init_attr.srq              = iface->super.rx.srq.verbs.srq;
-    init_attr.dc_key           = UCT_IB_KEY;
-    init_attr.port             = iface->super.super.super.config.port_num;
-    init_attr.mtu              = iface->super.super.super.config.path_mtu;
-    init_attr.access_flags     = IBV_EXP_ACCESS_REMOTE_WRITE |
-                                 IBV_EXP_ACCESS_REMOTE_READ |
-                                 IBV_EXP_ACCESS_REMOTE_ATOMIC;
-    init_attr.min_rnr_timer    = iface->super.super.config.min_rnr_timer;
-    init_attr.tclass           = iface->super.super.super.config.traffic_class;
-    init_attr.hop_limit        = iface->super.super.super.config.hop_limit;
-    init_attr.gid_index        = iface->super.super.super.gid_info.gid_index;
-    init_attr.inline_size      = iface->super.super.super.config.max_inl_cqe[UCT_IB_DIR_RX];
-    init_attr.pkey_index       = iface->super.super.super.pkey_index;
-    init_attr.create_flags    |= uct_dc_mlx5_iface_ooo_flag(iface,
-                                                            IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT,
-                                                            "DCT", 0);
-    iface->rx.dct.verbs.dct = ibv_exp_create_dct(uct_ib_iface_device(&iface->super.super.super)->ibv_context,
-                                                 &init_attr);
-    if (iface->rx.dct.verbs.dct == NULL) {
-        ucs_error("failed to create DC target: %m");
-        return UCS_ERR_INVALID_PARAM;
-    }
-
-    iface->rx.dct.qp_num = iface->rx.dct.verbs.dct->dct_num;
-    return UCS_OK;
-}
-
-/* take dc qp to rts state */
-ucs_status_t uct_dc_mlx5_iface_dci_connect(uct_dc_mlx5_iface_t *iface,
-                                           uct_dc_dci_t *dci)
-{
-    struct ibv_exp_qp_attr attr;
-    long attr_mask;
-    uint64_t ooo_qp_flag;
-
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state        = IBV_QPS_INIT;
-    attr.pkey_index      = iface->super.super.super.pkey_index;
-    attr.port_num        = iface->super.super.super.config.port_num;
-    attr.dct_key         = UCT_IB_KEY;
-    attr_mask            = IBV_EXP_QP_STATE      |
-                           IBV_EXP_QP_PKEY_INDEX |
-                           IBV_EXP_QP_PORT       |
-                           IBV_EXP_QP_DC_KEY;
-
-    if (ibv_exp_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("ibv_exp_modify_qp(DCI, INIT) failed : %m");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    /* Move QP to the RTR state */
-    ooo_qp_flag = uct_dc_mlx5_iface_ooo_flag(iface,
-                                             IBV_EXP_QP_OOO_RW_DATA_PLACEMENT,
-                                             "DCI QP 0x", dci->txwq.super.qp_num);
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state                   = IBV_QPS_RTR;
-    attr.path_mtu                   = iface->super.super.super.config.path_mtu;
-    attr.ah_attr.is_global          = iface->super.super.super.config.force_global_addr;
-    attr.ah_attr.sl                 = iface->super.super.super.config.sl;
-    attr_mask                       = IBV_EXP_QP_STATE     |
-                                      IBV_EXP_QP_PATH_MTU  |
-                                      IBV_EXP_QP_AV        |
-                                      ooo_qp_flag;
-
-    if (ibv_exp_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("ibv_exp_modify_qp(DCI, RTR) failed : %m");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    /* Move QP to the RTS state */
-    memset(&attr, 0, sizeof(attr));
-    attr.qp_state       = IBV_QPS_RTS;
-    attr.timeout        = iface->super.super.config.timeout;
-    attr.rnr_retry      = iface->super.super.config.rnr_retry;
-    attr.retry_cnt      = iface->super.super.config.retry_cnt;
-    attr.max_rd_atomic  = iface->super.super.config.max_rd_atomic;
-    attr_mask           = IBV_EXP_QP_STATE      |
-                          IBV_EXP_QP_TIMEOUT    |
-                          IBV_EXP_QP_RETRY_CNT  |
-                          IBV_EXP_QP_RNR_RETRY  |
-                          IBV_EXP_QP_MAX_QP_RD_ATOMIC;
-
-    if (ibv_exp_modify_qp(dci->txwq.super.verbs.qp, &attr, attr_mask)) {
-        ucs_error("ibv_exp_modify_qp(DCI, RTS) failed : %m");
-        return UCS_ERR_IO_ERROR;
-    }
-
-    return UCS_OK;
-}
-
-void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
-{
-    ibv_exp_destroy_dct(iface->rx.dct.verbs.dct);
-}
-#endif
 
 static void uct_dc_mlx5_iface_dci_pool_destroy(uct_dc_mlx5_dci_pool_t *dci_pool)
 {

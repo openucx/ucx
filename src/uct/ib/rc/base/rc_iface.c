@@ -68,12 +68,6 @@ ucs_config_field_t uct_rc_iface_common_config_table[] = {
    "refers to the percentage of the FC_WND_SIZE value. (must be > 0 and < 1)",
    ucs_offsetof(uct_rc_iface_common_config_t, fc.hard_thresh), UCS_CONFIG_TYPE_DOUBLE},
 
-#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-  {"OOO_RW", "n",
-   "Enable out-of-order RDMA data placement",
-   ucs_offsetof(uct_rc_iface_common_config_t, ooo_rw), UCS_CONFIG_TYPE_BOOL},
-#endif
-
   {"FENCE", "auto",
    "IB fence type when API fence requested:\n"
    "  none   - fence is a no-op\n"
@@ -838,12 +832,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                      struct ibv_ah_attr *ah_attr,
                                      enum ibv_mtu path_mtu)
 {
-#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-    struct ibv_exp_qp_attr qp_attr;
-    uct_ib_device_t *dev;
-#else
     struct ibv_qp_attr qp_attr;
-#endif
     long qp_attr_mask;
     int ret;
 
@@ -866,17 +855,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                     IBV_QP_MAX_DEST_RD_ATOMIC |
                                     IBV_QP_MIN_RNR_TIMER;
 
-#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-    dev = uct_ib_iface_device(&iface->super);
-    if (iface->config.ooo_rw && UCX_IB_DEV_IS_OOO_SUPPORTED(dev, rc)) {
-        ucs_debug("enabling out-of-order on RC QP %x dev %s",
-                  qp->qp_num, uct_ib_device_name(dev));
-        qp_attr_mask |= IBV_EXP_QP_OOO_RW_DATA_PLACEMENT;
-    }
-    ret = ibv_exp_modify_qp(qp, &qp_attr, qp_attr_mask);
-#else
     ret = ibv_modify_qp(qp, &qp_attr, qp_attr_mask);
-#endif
     if (ret) {
         ucs_error("error modifying QP to RTR: %m");
         return UCS_ERR_IO_ERROR;
@@ -895,11 +874,7 @@ ucs_status_t uct_rc_iface_qp_connect(uct_rc_iface_t *iface, struct ibv_qp *qp,
                                     IBV_QP_SQ_PSN             |
                                     IBV_QP_MAX_QP_RD_ATOMIC;
 
-#if HAVE_DECL_IBV_EXP_QP_OOO_RW_DATA_PLACEMENT
-    ret = ibv_exp_modify_qp(qp, &qp_attr, qp_attr_mask);
-#else
     ret = ibv_modify_qp(qp, &qp_attr, qp_attr_mask);
-#endif
     if (ret) {
         ucs_error("error modifying QP to RTS: %m");
         return UCS_ERR_IO_ERROR;

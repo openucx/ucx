@@ -19,11 +19,6 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
     int ret;
 
     ret = mlx5dv_init_obj(&obj->dv, type);
-#ifdef HAVE_IBV_EXP_DM
-    if (!ret && (type & MLX5DV_OBJ_DM)) {
-        ret = uct_ib_mlx5_get_dm_info(obj->dv_dm.in, obj->dv_dm.out);
-    }
-#endif
     if (ret != 0) {
         ucs_error("DV failed to get mlx5 information. Type %lx.", type);
         return UCS_ERR_NO_DEVICE;

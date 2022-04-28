@@ -155,13 +155,6 @@ static ucs_config_field_t uct_ib_md_config_table[] = {
      "Use GPU Direct RDMA for HCA to access GPU pages directly\n",
      ucs_offsetof(uct_ib_md_config_t, enable_gpudirect_rdma), UCS_CONFIG_TYPE_TERNARY},
 
-#ifdef HAVE_EXP_UMR
-    {"MAX_INLINE_KLM_LIST", "inf",
-     "When posting a UMR, KLM lists shorter or equal to this value will be posted as inline.\n"
-     "The actual maximal length is also limited by device capabilities.",
-     ucs_offsetof(uct_ib_md_config_t, ext.max_inline_klm_list), UCS_CONFIG_TYPE_UINT},
-#endif
-
     {"PCI_BW", "",
      "Maximum effective data transfer rate of PCI bus connected to HCA\n",
      ucs_offsetof(uct_ib_md_config_t, pci_bw), UCS_CONFIG_TYPE_ARRAY(pci_bw)},
@@ -296,9 +289,8 @@ static void uct_ib_md_print_mem_reg_err_msg(void *address, size_t length,
     size_t page_size;
     size_t unused;
 
-    ucs_string_buffer_appendf(&msg, "%s(address=%p, length=%zu, access=0x%lx)",
-                              ibv_reg_mr_func_name, address, length,
-                              access_flags);
+    ucs_string_buffer_appendf(&msg, "ibv_reg_ms(address=%p, length=%zu, access=0x%lx)",
+                              address, length, access_flags);
 
     if (err == EINVAL) {
         /* Check if huge page is used */
@@ -325,10 +317,8 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     while (ctx->len) {
         size = ucs_min(ctx->len, ctx->chunk);
         if (ctx->access != UCT_IB_MEM_DEREG) {
-            ctx->mr[mr_idx] = UCS_PROFILE_NAMED_CALL(ibv_reg_mr_func_name,
-                                                     ibv_reg_mr, ctx->pd,
-                                                     ctx->addr, size,
-                                                     ctx->access);
+            ctx->mr[mr_idx] = UCS_PROFILE_CALL(ibv_reg_mr, ctx->pd, ctx->addr,
+                                               size, ctx->access);
             if (ctx->mr[mr_idx] == NULL) {
                 uct_ib_md_print_mem_reg_err_msg(ctx->addr, size, ctx->access,
                                                 errno, ctx->silent);
@@ -486,17 +476,7 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
 {
     ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
     struct ibv_mr *mr;
-#if HAVE_DECL_IBV_EXP_REG_MR
-    struct ibv_exp_reg_mr_in in = {};
-
-    in.pd         = pd;
-    in.addr       = addr;
-    in.length     = length;
-    in.exp_access = access_flags;
-    mr = UCS_PROFILE_CALL(ibv_exp_reg_mr, &in);
-#else
     mr = UCS_PROFILE_CALL(ibv_reg_mr, pd, addr, length, access_flags);
-#endif
     if (mr == NULL) {
         uct_ib_md_print_mem_reg_err_msg(addr, length, access_flags,
                                         errno, silent);
@@ -1628,7 +1608,7 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
                           UCT_MD_FLAG_ADVISE;
 
     if (md->config.odp.max_size == UCS_MEMUNITS_AUTO) {
-        md->config.odp.max_size = uct_ib_device_odp_max_size(&md->dev);
+        md->config.odp.max_size = 0;
     }
 
     /* Create statistics */
@@ -1644,11 +1624,6 @@ ucs_status_t uct_ib_md_open_common(uct_ib_md_t *md,
     if (status != UCS_OK) {
         goto err_release_stats;
     }
-
-#if HAVE_DECL_IBV_EXP_SETENV
-    ibv_exp_setenv(md->dev.ibv_context, "MLX_QP_ALLOC_TYPE", "ANON", 0);
-    ibv_exp_setenv(md->dev.ibv_context, "MLX_CQ_ALLOC_TYPE", "ANON", 0);
-#endif
 
     if (strlen(md_config->subnet_prefix) > 0) {
         status = uct_ib_md_parse_subnet_prefix(md_config->subnet_prefix,
@@ -1766,7 +1741,7 @@ static ucs_status_t uct_ib_verbs_md_open(struct ibv_device *ibv_device,
         md->dev.flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
-    if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
+    if (IBV_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
     }
 

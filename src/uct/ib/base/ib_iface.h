@@ -75,9 +75,7 @@ typedef enum {
 
 enum {
     UCT_IB_QPT_UNKNOWN,
-#ifdef HAVE_DC_EXP
-    UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
-#elif HAVE_DC_DV
+#if HAVE_DC_DV
     UCT_IB_QPT_DCI = IBV_QPT_DRIVER,
 #else
     UCT_IB_QPT_DCI = UCT_IB_QPT_UNKNOWN,
@@ -192,9 +190,6 @@ struct uct_ib_iface_config {
     /* IB PKEY to use */
     unsigned                pkey;
 
-    /* Multiple resource domains */
-    int                     enable_res_domain;
-
     /* Path MTU size */
     uct_ib_mtu_t            path_mtu;
 };
@@ -232,9 +227,7 @@ typedef struct uct_ib_qp_attr {
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
     unsigned                    max_inl_cqe[UCT_IB_DIR_NUM];
-#if HAVE_DECL_IBV_EXP_CREATE_QP
-    struct ibv_exp_qp_init_attr ibv;
-#elif HAVE_DECL_IBV_CREATE_QP_EX
+#if HAVE_DECL_IBV_CREATE_QP_EX
     struct ibv_qp_init_attr_ex  ibv;
 #else
     struct ibv_qp_init_attr     ibv;
@@ -302,7 +295,6 @@ struct uct_ib_iface {
         uint8_t               sl;
         uint8_t               traffic_class;
         uint8_t               hop_limit;
-        uint8_t               enable_res_domain;   /* Disable multiple resource domains */
         uint8_t               qp_type;
         uint8_t               force_global_addr;
         enum ibv_mtu          path_mtu;

@@ -239,15 +239,10 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
-       AC_CHECK_DECLS([IBV_EXP_QPT_DC_INI],
-                [have_dc_exp=yes], [], [[#include <infiniband/verbs.h>]])
-
-       AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \) -a "x$with_mlx5_dv" = "xyes"], [
+       AS_IF([test "x$with_dc" != xno -a "x$have_dc_dv" = xyes -a "x$with_mlx5_dv" = "xyes"], [
            AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
            AS_IF([test -n "$have_dc_dv"],
-                 [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])], [
-           AS_IF([test -n "$have_dc_exp"],
-                 [AC_DEFINE([HAVE_DC_EXP], 1, [DC EXP support])])])],
+                 [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])])],
            [with_dc=no])
 
        AS_IF([test "x$with_rc" != xno],
@@ -258,18 +253,10 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        # XRQ with Tag Matching support
        AS_IF([test "x$with_ib_hw_tm" != xno], [
-            AC_CHECK_MEMBER([struct ibv_exp_tmh.tag], [with_ib_hw_tm=exp], [],
-                            [[#include <infiniband/verbs_exp.h>]])
             AS_IF([test "x$with_mlx5_dv" = "xyes"], [
-                AC_CHECK_HEADERS([infiniband/tm_types.h])
                 AC_CHECK_MEMBER([struct ibv_tmh.tag], [with_ib_hw_tm=upstream], [],
                                 [[#include <infiniband/tm_types.h>]])])])
 
-       AS_IF([test "x$with_ib_hw_tm" = xexp],
-           [AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params], [
-            AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
-                      ], [], [#include <infiniband/verbs_exp.h>])
-           ])
        AS_IF([test "x$with_ib_hw_tm" = xupstream],
            [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
             AC_CHECK_MEMBERS([struct ibv_tm_caps.flags], [], [],
@@ -310,7 +297,6 @@ AM_CONDITIONAL([HAVE_IB],      [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC],   [test "x$with_rc" != xno])
 AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
-AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" = xyes])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])

@@ -464,17 +464,6 @@ static void uct_ib_async_event_handler(int fd, ucs_event_set_types_t events,
     case IBV_EVENT_CLIENT_REREGISTER:
         event.port_num = ibevent.element.port_num;
         break;
-#ifdef HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
-    case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
-    case IBV_EXP_EVENT_DCT_ACCESS_ERR:
-    case IBV_EXP_EVENT_DCT_REQ_ERR:
-        if (ibevent.element.dct) {
-            event.dct_num = ibevent.element.dct->dct_num;
-        } else {
-            event.dct_num = 0;
-        }
-        break;
-#endif
     default:
         break;
     };
@@ -548,28 +537,6 @@ void uct_ib_handle_async_event(uct_ib_device_t *dev, uct_ib_async_event_t *event
                  ibv_event_type_str(event->event_type), event->port_num);
         level = UCS_LOG_LEVEL_WARN;
         break;
-#ifdef HAVE_STRUCT_IBV_ASYNC_EVENT_ELEMENT_DCT
-    case IBV_EXP_EVENT_DCT_KEY_VIOLATION:
-        snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                 "DCT key violation", event->dct_num);
-        level = UCS_LOG_LEVEL_ERROR;
-        break;
-    case IBV_EXP_EVENT_DCT_ACCESS_ERR:
-        if (event->dct_num) {
-            snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                     "DCT access error", event->dct_num);
-        } else {
-            snprintf(event_info, sizeof(event_info), "%s on DCTN UNKNOWN",
-                     "DCT access error");
-        }
-        level = UCS_LOG_LEVEL_ERROR;
-        break;
-    case IBV_EXP_EVENT_DCT_REQ_ERR:
-        snprintf(event_info, sizeof(event_info), "%s on DCTN 0x%x",
-                 "DCT requester error", event->dct_num);
-        level = UCS_LOG_LEVEL_ERROR;
-        break;
-#endif
     default:
         snprintf(event_info, sizeof(event_info), "%s (%d)",
                  ibv_event_type_str(event->event_type), event->event_type);
@@ -1066,36 +1033,8 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
                              uint8_t port_num, unsigned gid_index,
                              uct_ib_device_gid_info_t *info)
 {
-    int ret;
-
-#if HAVE_DECL_IBV_EXP_QUERY_GID_ATTR
-    struct ibv_exp_gid_attr attr;
-
-    attr.comp_mask = IBV_EXP_QUERY_GID_ATTR_TYPE | IBV_EXP_QUERY_GID_ATTR_GID;
-    ret = ibv_exp_query_gid_attr(ctx, port_num, gid_index, &attr);
-    if (ret == 0) {
-        info->gid                  = attr.gid;
-        info->gid_index            = gid_index;
-        info->roce_info.addr_family =
-                        uct_ib_device_get_addr_family(&info->gid, gid_index);
-        switch (attr.type) {
-        case IBV_EXP_IB_ROCE_V1_GID_TYPE:
-            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1;
-            return UCS_OK;
-        case IBV_EXP_ROCE_V1_5_GID_TYPE:
-            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V1_5;
-            return UCS_OK;
-        case IBV_EXP_ROCE_V2_GID_TYPE:
-            info->roce_info.ver = UCT_IB_DEVICE_ROCE_V2;
-            return UCS_OK;
-        default:
-            ucs_error("Invalid GID[%d] type on %s:%d: %d",
-                      gid_index, dev_name, port_num, attr.type);
-            return UCS_ERR_IO_ERROR;
-        }
-    }
-#else
     char buf[16];
+    int ret;
 
     ret = ibv_query_gid(ctx, port_num, gid_index, &info->gid);
     if (ret == 0) {
@@ -1121,7 +1060,7 @@ uct_ib_device_query_gid_info(struct ibv_context *ctx, const char *dev_name,
         info->gid_index            = gid_index;
         return UCS_OK;
     }
-#endif
+
     ucs_error("ibv_query_gid(dev=%s port=%d index=%d) failed: %m",
               dev_name, port_num, gid_index);
     return UCS_ERR_INVALID_PARAM;
@@ -1430,43 +1369,6 @@ ucs_status_t uct_ib_device_query_gid(uct_ib_device_t *dev, uint8_t port_num,
 
     *gid = gid_info.gid;
     return UCS_OK;
-}
-
-size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev)
-{
-#ifdef HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS
-    const struct ibv_exp_device_attr *dev_attr = &dev->dev_attr;
-    uint32_t required_ud_odp_caps = IBV_EXP_ODP_SUPPORT_SEND;
-    uint32_t required_rc_odp_caps = IBV_EXP_ODP_SUPPORT_SEND |
-                                    IBV_EXP_ODP_SUPPORT_WRITE |
-                                    IBV_EXP_ODP_SUPPORT_READ;
-
-    if (RUNNING_ON_VALGRIND ||
-        !IBV_EXP_HAVE_ODP(dev_attr) ||
-        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(dev_attr, rc), required_rc_odp_caps) ||
-        !ucs_test_all_flags(IBV_EXP_ODP_CAPS(dev_attr, ud), required_ud_odp_caps))
-    {
-        return 0;
-    }
-
-    if (IBV_DEVICE_HAS_DC(dev)
-#  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS_PER_TRANSPORT_CAPS_DC_ODP_CAPS
-        && !ucs_test_all_flags(IBV_EXP_ODP_CAPS(dev_attr, dc), required_rc_odp_caps)
-#  endif
-        )
-    {
-        return 0;
-    }
-
-#  if HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE
-    return dev_attr->odp_mr_max_size;
-#  else
-    return 1ul << 28; /* Limit ODP to 256 MB by default */
-#  endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_MR_MAX_SIZE */
-
-#else
-    return 0;
-#endif /* HAVE_STRUCT_IBV_EXP_DEVICE_ATTR_ODP_CAPS */
 }
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status)

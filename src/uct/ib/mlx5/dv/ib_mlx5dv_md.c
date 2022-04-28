@@ -1285,7 +1285,7 @@ static ucs_status_t uct_ib_mlx5dv_md_open(struct ibv_device *ibv_device,
         dev->flags |= UCT_IB_DEVICE_FLAG_ODP_IMPLICIT;
     }
 
-    if (IBV_EXP_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
+    if (IBV_HAVE_ATOMIC_HCA(&dev->dev_attr)) {
         dev->atomic_arg_sizes = sizeof(uint64_t);
 
 #if HAVE_STRUCT_IBV_DEVICE_ATTR_EX_PCI_ATOMIC_CAPS

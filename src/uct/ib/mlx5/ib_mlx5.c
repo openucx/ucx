@@ -158,7 +158,7 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     struct mlx5_cqe64 *cqe;
     unsigned cqe_size;
     ucs_status_t status;
-    int ret, i;
+    int i;
 
     obj.dv.cq.in = cq;
     obj.dv.cq.out = &dcq.dv;
@@ -189,12 +189,6 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
     mlx5_cq->cq_buf = UCS_PTR_BYTE_OFFSET(mlx5_cq->cq_buf,
                                           cqe_size - sizeof(struct mlx5_cqe64));
 
-    ret = ibv_exp_cq_ignore_overrun(cq);
-    if (ret != 0) {
-        ucs_error("Failed to modify send CQ to ignore overrun: %s", strerror(ret));
-        return UCS_ERR_UNSUPPORTED;
-    }
-
     mlx5_cq->cqe_size_log = ucs_ilog2(cqe_size);
     ucs_assert_always((1ul << mlx5_cq->cqe_size_log) == cqe_size);
 
@@ -207,7 +201,6 @@ ucs_status_t uct_ib_mlx5_get_cq(struct ibv_cq *cq, uct_ib_mlx5_cq_t *mlx5_cq)
         cqe->op_own |= MLX5_CQE_OWNER_MASK;
     }
 
-
     return UCS_OK;
 }
 
@@ -215,45 +208,13 @@ static int
 uct_ib_mlx5_res_domain_cmp(uct_ib_mlx5_res_domain_t *res_domain,
                            uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#ifdef HAVE_IBV_EXP_RES_DOMAIN
-    return res_domain->ibv_domain->context == md->dev.ibv_context;
-#elif HAVE_DECL_IBV_ALLOC_TD
     return res_domain->pd->context == md->dev.ibv_context;
-#else
-    return 1;
-#endif
 }
 
 static ucs_status_t
 uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
                             uct_ib_md_t *md, uct_priv_worker_t *worker)
 {
-#ifdef HAVE_IBV_EXP_RES_DOMAIN
-    struct ibv_exp_res_domain_init_attr attr;
-
-    attr.comp_mask    = IBV_EXP_RES_DOMAIN_THREAD_MODEL |
-                        IBV_EXP_RES_DOMAIN_MSG_MODEL;
-    attr.msg_model    = IBV_EXP_MSG_LOW_LATENCY;
-
-    switch (worker->thread_mode) {
-    case UCS_THREAD_MODE_SINGLE:
-        attr.thread_model = IBV_EXP_THREAD_SINGLE;
-        break;
-    case UCS_THREAD_MODE_SERIALIZED:
-        attr.thread_model = IBV_EXP_THREAD_UNSAFE;
-        break;
-    default:
-        attr.thread_model = IBV_EXP_THREAD_SAFE;
-        break;
-    }
-
-    res_domain->ibv_domain = ibv_exp_create_res_domain(md->dev.ibv_context, &attr);
-    if (res_domain->ibv_domain == NULL) {
-        ucs_error("ibv_exp_create_res_domain() on %s failed: %m",
-                  uct_ib_device_name(&md->dev));
-        return UCS_ERR_IO_ERROR;
-    }
-#elif HAVE_DECL_IBV_ALLOC_TD
     struct ibv_parent_domain_init_attr attr;
     struct ibv_td_init_attr td_attr;
 
@@ -281,23 +242,12 @@ uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
         ibv_dealloc_td(res_domain->td);
         return UCS_ERR_IO_ERROR;
     }
-#endif
+
     return UCS_OK;
 }
 
 static void uct_ib_mlx5_res_domain_cleanup(uct_ib_mlx5_res_domain_t *res_domain)
 {
-#ifdef HAVE_IBV_EXP_RES_DOMAIN
-    struct ibv_exp_destroy_res_domain_attr attr;
-    int ret;
-
-    attr.comp_mask = 0;
-    ret = ibv_exp_destroy_res_domain(res_domain->ibv_domain->context,
-                                     res_domain->ibv_domain, &attr);
-    if (ret != 0) {
-        ucs_warn("ibv_exp_destroy_res_domain() failed: %m");
-    }
-#elif HAVE_DECL_IBV_ALLOC_TD
     int ret;
 
     if (res_domain->td != NULL) {
@@ -312,7 +262,6 @@ static void uct_ib_mlx5_res_domain_cleanup(uct_ib_mlx5_res_domain_t *res_domain)
             ucs_warn("ibv_dealloc_td() failed: %m");
         }
     }
-#endif
 }
 
 ucs_status_t uct_ib_mlx5_iface_get_res_domain(uct_ib_iface_t *iface,
@@ -942,15 +891,9 @@ ucs_status_t uct_ib_mlx5_md_get_atomic_mr_id(uct_ib_md_t *ibmd, uint8_t *mr_id)
 {
     uct_ib_mlx5_md_t *md = ucs_derived_of(ibmd, uct_ib_mlx5_md_t);
 
-#if HAVE_EXP_UMR
-    if ((md->umr_qp == NULL) || (md->umr_cq == NULL)) {
-        goto unsupported;
-    }
-#else
     if (!(md->flags & UCT_IB_MLX5_MD_FLAG_DEVX)) {
         goto unsupported;
     }
-#endif
 
     /* Generate atomic UMR id. We want umrs for same virtual addresses to have
      * different ids across processes.

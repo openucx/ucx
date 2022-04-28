@@ -260,11 +260,6 @@ typedef struct uct_ib_mlx5_md {
     uint32_t                 flags;
     ucs_mpool_t              dbrec_pool;
     ucs_recursive_spinlock_t dbrec_lock;
-#if HAVE_EXP_UMR
-    struct ibv_qp            *umr_qp;   /* special QP for creating UMR */
-    struct ibv_cq            *umr_cq;   /* special CQ for creating UMR */
-#endif
-
 #if HAVE_DEVX
     void                     *zero_buf;
     uct_ib_mlx5_devx_umem_t  zero_mem;
@@ -419,12 +414,8 @@ typedef struct uct_ib_mlx5_devx_uar {
 /* resource domain */
 typedef struct uct_ib_mlx5_res_domain {
     uct_worker_tl_data_t        super;
-#ifdef HAVE_IBV_EXP_RES_DOMAIN
-    struct ibv_exp_res_domain   *ibv_domain;
-#elif HAVE_DECL_IBV_ALLOC_TD
     struct ibv_td               *td;
     struct ibv_pd               *pd;
-#endif
 } uct_ib_mlx5_res_domain_t;
 
 
@@ -443,12 +434,7 @@ typedef struct uct_ib_mlx5_qp {
     uint32_t                           qp_num;
     union {
         struct {
-            union {
-                struct ibv_qp          *qp;
-#ifdef HAVE_DC_EXP
-                struct ibv_exp_dct     *dct;
-#endif
-            };
+            struct ibv_qp              *qp;
             uct_ib_mlx5_res_domain_t   *rd;
         } verbs;
 #if HAVE_DEVX
