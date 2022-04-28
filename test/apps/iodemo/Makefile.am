@@ -27,6 +27,7 @@ io_demo_CXXFLAGS = \
 io_demo_CPPFLAGS = $(BASE_CPPFLAGS) $(io_demo_CUDA_CPPFLAGS)
 
 io_demo_LDADD    = \
+	$(top_builddir)/src/ucm/libucm.la \
 	$(top_builddir)/src/ucs/libucs.la \
 	$(top_builddir)/src/uct/libuct.la \
 	$(top_builddir)/src/ucp/libucp.la \
