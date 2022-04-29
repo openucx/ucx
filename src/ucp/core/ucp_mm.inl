@@ -67,7 +67,7 @@ ucp_memh_put(ucp_context_h context, ucp_mem_h memh, int invalidate)
     }
 
     if (ucs_unlikely(context->rcache == NULL)) {
-        ucp_memh_dereg(context, memh, memh->md_map);
+        ucp_memh_unmap(context, memh, memh->md_map);
         ucs_free(memh);
         return;
     }
