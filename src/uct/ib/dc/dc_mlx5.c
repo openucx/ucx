@@ -16,6 +16,7 @@
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
 #include <uct/ib/mlx5/ib_mlx5_log.h>
+#include <ucs/profile/profile.h>
 #include <ucs/vfs/base/vfs_cb.h>
 #include <ucs/vfs/base/vfs_obj.h>
 #include <uct/base/uct_md.h>
@@ -351,7 +352,8 @@ static ucs_status_t uct_dc_mlx5_iface_create_dci(uct_dc_mlx5_iface_t *iface,
     dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
     uct_rc_mlx5_common_fill_dv_qp_attr(&iface->super, &attr.super.ibv, &dv_attr,
                                        UCS_BIT(UCT_IB_DIR_TX));
-    qp = mlx5dv_create_qp(dev->ibv_context, &attr.super.ibv, &dv_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
+                                 &attr.super.ibv, &dv_attr);
     if (qp == NULL) {
         ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT", DCI): failed: %m",
                   UCT_IB_IFACE_ARG(ib_iface));

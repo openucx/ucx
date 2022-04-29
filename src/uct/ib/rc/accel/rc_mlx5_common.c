@@ -14,6 +14,7 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/profile/profile.h>
 
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
@@ -341,7 +342,7 @@ uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.srq                 = iface->rx.srq.verbs.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
-    qp = ibv_create_qp(md->pd, &qp_init_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, md->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create TM control QP: %m");
         goto err_rd;

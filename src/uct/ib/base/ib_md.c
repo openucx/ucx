@@ -317,8 +317,9 @@ void *uct_ib_md_mem_handle_thread_func(void *arg)
     while (ctx->len) {
         size = ucs_min(ctx->len, ctx->chunk);
         if (ctx->access != UCT_IB_MEM_DEREG) {
-            ctx->mr[mr_idx] = UCS_PROFILE_CALL(ibv_reg_mr, ctx->pd, ctx->addr,
-                                               size, ctx->access);
+            ctx->mr[mr_idx] = UCS_PROFILE_CALL_ALWAYS(ibv_reg_mr, ctx->pd,
+                                                      ctx->addr, size,
+                                                      ctx->access);
             if (ctx->mr[mr_idx] == NULL) {
                 uct_ib_md_print_mem_reg_err_msg(ctx->addr, size, ctx->access,
                                                 errno, ctx->silent);
@@ -451,11 +452,10 @@ static ucs_status_t uct_ib_md_reg_mr(uct_ib_md_t *md, void *address,
     ucs_status_t status;
 
     if (length >= md->config.min_mt_reg) {
-        UCS_PROFILE_CODE("reg ksm") {
-            status = md->ops->reg_multithreaded(md, address, length,
-                                                access_flags, memh, mr_type,
-                                                silent);
-        }
+        status = UCS_PROFILE_NAMED_CALL_ALWAYS("reg_multithreaded",
+                                               md->ops->reg_multithreaded, md,
+                                               address, length, access_flags,
+                                               memh, mr_type, silent);
 
         if (status != UCS_ERR_UNSUPPORTED) {
             if (status == UCS_OK) {
@@ -476,7 +476,8 @@ ucs_status_t uct_ib_reg_mr(struct ibv_pd *pd, void *addr, size_t length,
 {
     ucs_time_t UCS_V_UNUSED start_time = ucs_get_time();
     struct ibv_mr *mr;
-    mr = UCS_PROFILE_CALL(ibv_reg_mr, pd, addr, length, access_flags);
+
+    mr = UCS_PROFILE_CALL_ALWAYS(ibv_reg_mr, pd, addr, length, access_flags);
     if (mr == NULL) {
         uct_ib_md_print_mem_reg_err_msg(addr, length, access_flags,
                                         errno, silent);
@@ -886,9 +887,9 @@ uct_ib_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
         (memh != md->global_odp))
     {
         /* create UMR on-demand */
-        UCS_PROFILE_CODE("reg atomic key") {
-            status = md->ops->reg_atomic_key(md, memh);
-        }
+        status = UCS_PROFILE_NAMED_CALL_ALWAYS("reg atomic key",
+                                               md->ops->reg_atomic_key, md,
+                                               memh);
 
         if (status == UCS_OK) {
             memh->flags |= UCT_IB_MEM_FLAG_ATOMIC_MR;

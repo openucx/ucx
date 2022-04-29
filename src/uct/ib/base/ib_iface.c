@@ -17,6 +17,7 @@
 #include <uct/base/uct_md.h>
 #include <ucs/arch/bitops.h>
 #include <ucs/arch/cpu.h>
+#include <ucs/profile/profile.h>
 #include <ucs/type/class.h>
 #include <ucs/type/cpu_set.h>
 #include <ucs/type/serialize.h>
@@ -962,9 +963,11 @@ ucs_status_t uct_ib_iface_create_qp(uct_ib_iface_t *iface,
     uct_ib_iface_fill_attr(iface, attr);
 
 #if HAVE_DECL_IBV_CREATE_QP_EX
-    qp = ibv_create_qp_ex(dev->ibv_context, &attr->ibv);
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp_ex, dev->ibv_context,
+                                 &attr->ibv);
 #else
-    qp = ibv_create_qp(uct_ib_iface_md(iface)->pd, &attr->ibv);
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, uct_ib_iface_md(iface)->pd,
+                                 &attr->ibv);
 #endif
     if (qp == NULL) {
         ucs_error("iface=%p: failed to create %s QP "

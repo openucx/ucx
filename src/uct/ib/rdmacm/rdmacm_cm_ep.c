@@ -13,6 +13,7 @@
 #include <ucs/arch/bitops.h>
 #include <ucs/sys/sock.h>
 #include <ucs/async/async.h>
+#include <ucs/profile/profile.h>
 
 
 const char* uct_rdmacm_cm_ep_str(uct_rdmacm_cm_ep_t *cep, char *str,
@@ -341,7 +342,7 @@ uct_rdmacm_cm_create_dummy_qp(uct_rdmacm_cm_device_context_t *ctx,
     qp_init_attr.cap.max_send_sge = 1;
     qp_init_attr.cap.max_recv_sge = 1;
 
-    qp = ibv_create_qp(cep->id->pd, &qp_init_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, cep->id->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create a dummy ud qp. %m");
         return UCS_ERR_IO_ERROR;

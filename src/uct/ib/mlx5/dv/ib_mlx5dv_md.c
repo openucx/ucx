@@ -193,9 +193,11 @@ static ucs_status_t uct_ib_mlx5_devx_reg_ksm(uct_ib_mlx5_md_t *md,
     UCT_IB_MLX5DV_SET64(mkc, mkc, len, length);
     UCT_IB_MLX5DV_SET(create_mkey_in, in, translations_octword_actual_size, list_size);
 
-    mr = mlx5dv_devx_obj_create(md->super.dev.ibv_context, in,
-                                uct_ib_mlx5_calc_mkey_inlen(list_size),
-                                out, sizeof(out));
+    mr = UCS_PROFILE_NAMED_CALL_ALWAYS("devx_create_mkey",
+                                       mlx5dv_devx_obj_create,
+                                       md->super.dev.ibv_context, in,
+                                       uct_ib_mlx5_calc_mkey_inlen(list_size),
+                                       out, sizeof(out));
     if (mr == NULL) {
         ucs_debug("mlx5dv_devx_obj_create(CREATE_MKEY, mode=KSM) failed, syndrome %x: %m",
                   UCT_IB_MLX5DV_GET(create_mkey_out, out, syndrome));
@@ -1169,7 +1171,7 @@ static ucs_status_t uct_ib_mlx5dv_check_dc(uct_ib_device_t *dev)
     dv_attr.dc_init_attr.dct_access_key = UCT_IB_KEY;
 
     /* create DCT qp successful means DC is supported */
-    qp = mlx5dv_create_qp(ctx, &qp_attr, &dv_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, ctx, &qp_attr, &dv_attr);
     if (qp == NULL) {
         ucs_debug("%s: mlx5dv_create_qp(DCT) failed: %m",
                   uct_ib_device_name(dev));
