@@ -246,14 +246,14 @@ uct_ib_mlx5_devx_reg_ksm_data_contig(uct_ib_mlx5_md_t *md, uct_ib_mlx5_mr_t *mr,
                                      off_t off, struct mlx5dv_devx_obj **mr_p,
                                      uint32_t *mkey)
 {
-    intptr_t addr           = (intptr_t)mr->super.ib->addr &
-                              ~(UCT_IB_MD_MAX_MR_SIZE - 1);
+    intptr_t addr = (intptr_t)mr->super.ib->addr & ~(UCT_IB_MD_MAX_MR_SIZE - 1);
     /* FW requires indirect atomic MR addr and length to be aligned
      * to max supported atomic argument size */
-    size_t length           = ucs_align_up(mr->super.ib->length +
-                              (intptr_t)mr->super.ib->addr - addr,
-                              md->super.dev.atomic_align);
-    int list_size           = ucs_div_round_up(length, UCT_IB_MD_MAX_MR_SIZE);
+    size_t length = ucs_align_up(mr->super.ib->length +
+                                 (intptr_t)mr->super.ib->addr - addr,
+                                 md->super.dev.atomic_align);
+    /* add off to workaround CREATE_MKEY range check issue */
+    int list_size = ucs_div_round_up(length + off, UCT_IB_MD_MAX_MR_SIZE);
     int i;
     char *in;
     void *klm;
