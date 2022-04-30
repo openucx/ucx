@@ -72,6 +72,7 @@ BEGIN_C_DECLS
 /**
  * Record a scope-begin profiling event.
  *
+
  * @param _ctx  Profiling context.
  */
 #define UCS_PROFILE_CTX_SCOPE_BEGIN(_ctx) \
@@ -330,6 +331,26 @@ BEGIN_C_DECLS
 #define UCS_PROFILE_REQUEST_FREE(_req) \
     UCS_PROFILE_CTX_RECORD(ucs_profile_default_ctx, UCS_PROFILE_TYPE_REQUEST_FREE, \
                            "", 0, (uintptr_t)(_req));
+
+
+#define UCS_PROFILE_RANGE_START(_name, _color, _id) \
+    ucs_profile_range_start(_name, _color, &_id);
+
+
+#define UCS_PROFILE_RANGE_STOP(_id) \
+    ucs_profile_range_stop(_id);
+
+
+#define UCS_PROFILE_RANGE_PUSH(_name, _color) \
+    ucs_profile_range_push(_name, _color);
+
+
+#define UCS_PROFILE_RANGE_POP() \
+    ucs_profile_range_pop();
+
+
+#define UCS_PROFILE_RANGE_ADD_MARKER(_name) \
+    ucs_profile_range_add_marker(_name);
 
 
 /*

@@ -47,6 +47,7 @@ typedef struct ucs_profile_thread_context {
         ucs_profile_thread_location_t *locations;    /**< Statistics per location */
         int                           stack_top;     /**< Index of stack top */
         ucs_time_t                    stack[UCS_PROFILE_STACK_MAX]; /**< Timestamps for each nested scope */
+        uint64_t                      range_id[UCS_PROFILE_STACK_MAX]; /**< range_ids for each nested scope */
     } accum;
 } ucs_profile_thread_context_t;
 
@@ -513,8 +514,11 @@ void ucs_profile_record(ucs_profile_context_t *ctx, ucs_profile_type_t type,
         switch (type) {
         case UCS_PROFILE_TYPE_SCOPE_BEGIN:
             thread_ctx->accum.stack[++thread_ctx->accum.stack_top] = current_time;
+            ucs_profile_range_start(name, UCS_PROFILE_COLOR_ORANGE,
+                                    &thread_ctx->accum.range_id[thread_ctx->accum.stack_top]);
             break;
         case UCS_PROFILE_TYPE_SCOPE_END:
+            ucs_profile_range_stop(thread_ctx->accum.range_id[thread_ctx->accum.stack_top]);
             loc->total_time += current_time -
                                thread_ctx->accum.stack[thread_ctx->accum.stack_top];
             --thread_ctx->accum.stack_top;

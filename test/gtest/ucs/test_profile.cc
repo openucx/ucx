@@ -341,11 +341,13 @@ void test_profile::do_test(unsigned int_mode, const std::string& str_mode)
                 break;
             };
 
-            test_nesting(loc, nesting, "profile_test_func1", 0);
-            test_nesting(loc, nesting, "code", 1);
+            /* Test nesting expects SCOPE_BEGIN to have name association
+             * unlike previously where SCOPE_END had the name association */
+            test_nesting(loc, nesting, "profile_test_func1", 1);
+            test_nesting(loc, nesting, "code", 2);
             test_nesting(loc, nesting, "sample", 2);
-            test_nesting(loc, nesting, "profile_test_func2", 0);
-            test_nesting(loc, nesting, "sum", 1);
+            test_nesting(loc, nesting, "profile_test_func2", 1);
+            test_nesting(loc, nesting, "sum", 2);
         }
 
         ptr = records + thread_hdr->num_records;
@@ -365,6 +367,21 @@ UCS_TEST_P(test_profile, log) {
 UCS_TEST_P(test_profile, log_accum) {
     do_test(UCS_BIT(UCS_PROFILE_MODE_LOG) | UCS_BIT(UCS_PROFILE_MODE_ACCUM),
             "log,accum");
+}
+
+UCS_TEST_P(test_profile, test_range) {
+    ucs_profile_color_t color = UCS_PROFILE_COLOR_RED;
+    uint64_t id;
+
+    UCS_PROFILE_RANGE_START("sum_start_stop", color, id);
+    sum(1, 2);
+    UCS_PROFILE_RANGE_STOP(id);
+
+    UCS_PROFILE_RANGE_ADD_MARKER("sum_marker");
+
+    UCS_PROFILE_RANGE_PUSH("sum_push_pop", color);
+    sum(1, 2);
+    UCS_PROFILE_RANGE_POP();
 }
 
 INSTANTIATE_TEST_SUITE_P(st, test_profile, ::testing::Values(1));

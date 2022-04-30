@@ -27,5 +27,10 @@
 #define UCS_PROFILE_REQUEST_EVENT(...)                      UCS_EMPTY_STATEMENT
 #define UCS_PROFILE_REQUEST_EVENT_CHECK_STATUS(...)         UCS_EMPTY_STATEMENT
 #define UCS_PROFILE_REQUEST_FREE(...)                       UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_RANGE_START(...)                        UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_RANGE_STOP(...)                         UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_RANGE_PUSH(...)                         UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_RANGE_POP(...)                          UCS_EMPTY_STATEMENT
+#define UCS_PROFILE_RANGE_ADD_MARKER(...)                   UCS_EMPTY_STATEMENT
 
 #endif

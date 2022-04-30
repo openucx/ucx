@@ -1,4 +1,5 @@
 /**
+* Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 * Copyright (C) Mellanox Technologies Ltd. 2001-2018.  ALL RIGHTS RESERVED.
 *
 * See file LICENSE for terms.
@@ -11,6 +12,11 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/time/time_def.h>
 #include <limits.h>
+#ifdef HAVE_NVTX
+#include <nvtx3/nvToolsExt.h>
+#include <ucs/datastruct/khash.h>
+#include <ucs/profile/profile.h>
+#endif
 
 BEGIN_C_DECLS
 
@@ -28,6 +34,22 @@ enum {
     UCS_PROFILE_MODE_LOG,   /**< Record all events */
     UCS_PROFILE_MODE_LAST
 };
+
+
+/**
+ * Profile range colors
+ */
+typedef enum {
+    UCS_PROFILE_COLOR_GREEN      = 0xff00ff00,
+    UCS_PROFILE_COLOR_BLUE       = 0xff0000ff,
+    UCS_PROFILE_COLOR_YELLOW     = 0xffffff00,
+    UCS_PROFILE_COLOR_PURPLE     = 0xffff00ff,
+    UCS_PROFILE_COLOR_CYAN       = 0xff00ffff,
+    UCS_PROFILE_COLOR_RED        = 0xffff0000,
+    UCS_PROFILE_COLOR_WHITE      = 0xffffffff,
+    UCS_PROFILE_COLOR_DARK_GREEN = 0xff006600,
+    UCS_PROFILE_COLOR_ORANGE     = 0xffffa500
+} ucs_profile_color_t;
 
 
 /**
@@ -151,6 +173,124 @@ void ucs_profile_cleanup(ucs_profile_context_t *ctx);
  * @param [in] ctx       Profile context.
  */
 void ucs_profile_dump(ucs_profile_context_t *ctx);
+
+
+#ifdef HAVE_NVTX
+
+/*
+ * Start a range trace on an arbitrary event in a potentially nested fashion.
+ * A range tracing can be started in a function and potentially end in an
+ * another function or a recursive invocation of the same function.
+ *
+ * @param [in]     name        String name for the range.
+ * @param [in]     color       Color for the range.
+ * @param [inout]  id          Unique ID returned to stop tracing the event
+ *
+ * @return ID to be used to stop tracing a range
+ */
+static inline void ucs_profile_range_start(const char *name,
+                                           ucs_profile_color_t color,
+		                                   uint64_t *id)
+{
+    nvtxEventAttributes_t attrib = {0};
+
+    attrib.version       = NVTX_VERSION;
+    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    attrib.colorType     = NVTX_COLOR_ARGB;
+    attrib.color         = color;
+    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
+    attrib.message.ascii = name;
+
+    *id = (uint64_t)nvtxRangeStartEx(&attrib);
+}
+
+
+/*
+ * Stop range trace.
+ *
+ * @param [in]     id          id that was returned from range start.
+ *
+ */
+static inline void ucs_profile_range_stop(uint64_t id)
+{
+    nvtxRangeEnd(id);
+}
+
+
+/*
+ * Add a marker on trace profiles.
+ *
+ * @param [in]     name        String name for the marker.
+ *
+ */
+static inline void ucs_profile_range_add_marker(const char *name)
+{
+    nvtxMarkA(name);
+}
+
+
+/*
+ * Start a range trace in a non-nested fashion. Range tracing must start and end
+ * in the same function.
+ *
+ * @param [in]     name        String name for the marker.
+ * @param [in]     color       Color for the range.
+ *
+ */
+static inline void ucs_profile_range_push(const char *name,
+                                          ucs_profile_color_t color)
+{
+    nvtxEventAttributes_t attrib = {0};
+
+    attrib.version       = NVTX_VERSION;
+    attrib.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
+    attrib.colorType     = NVTX_COLOR_ARGB;
+    attrib.color         = color;
+    attrib.messageType   = NVTX_MESSAGE_TYPE_ASCII;
+    attrib.message.ascii = name;
+
+    nvtxRangePushEx(&attrib);
+}
+
+
+/*
+ * Stop a range trace in a non-nested fashion.
+ *
+ */
+static inline void ucs_profile_range_pop()
+{
+    nvtxRangePop();
+}
+
+
+#else
+static inline void ucs_profile_range_start(const char *name,
+                                           ucs_profile_color_t color,
+		                                   uint64_t *id)
+{
+}
+
+
+static inline void ucs_profile_range_stop(uint64_t id)
+{
+}
+
+
+static inline void ucs_profile_range_add_marker(const char *name)
+{
+}
+
+
+static inline void ucs_profile_range_push(const char *name,
+                                          ucs_profile_color_t color)
+{
+}
+
+
+static inline void ucs_profile_range_pop()
+{
+}
+#endif
 
 
 END_C_DECLS
