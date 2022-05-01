@@ -430,7 +430,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
         size_t                           mp_num_strides;
     } tm;
     unsigned                             exp_backoff;
-    uint8_t                              log_ack_req_freq;
+    unsigned                             log_ack_req_freq;
     UCS_CONFIG_STRING_ARRAY_FIELD(types) srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
