@@ -17,6 +17,7 @@
 #include <uct/base/uct_md.h>
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
+#include <ucs/profile/profile.h>
 
 #include "rc_mlx5.inl"
 
@@ -349,7 +350,8 @@ ucs_status_t uct_rc_mlx5_iface_create_qp(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_common_fill_dv_qp_attr(iface, &attr->super.ibv, &dv_attr,
                                        UCS_BIT(UCT_IB_DIR_TX) |
                                        UCS_BIT(UCT_IB_DIR_RX));
-    qp->verbs.qp = mlx5dv_create_qp(dev->ibv_context, &attr->super.ibv, &dv_attr);
+    qp->verbs.qp = UCS_PROFILE_CALL_ALWAYS(mlx5dv_create_qp, dev->ibv_context,
+                                           &attr->super.ibv, &dv_attr);
     if (qp->verbs.qp == NULL) {
         ucs_error("mlx5dv_create_qp("UCT_IB_IFACE_FMT"): failed: %m",
                   UCT_IB_IFACE_ARG(ib_iface));

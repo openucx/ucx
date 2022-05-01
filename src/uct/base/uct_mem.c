@@ -440,8 +440,9 @@ static inline uct_iface_mp_priv_t* uct_iface_mp_priv(ucs_mpool_t *mp)
     return (uct_iface_mp_priv_t*)ucs_mpool_priv(mp);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
-                 ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_iface_mp_chunk_alloc,
+                        (mp, size_p, chunk_p), ucs_mpool_t *mp, size_t *size_p,
+                        void **chunk_p)
 {
     uct_base_iface_t *iface = uct_iface_mp_priv(mp)->iface;
     uct_iface_mp_chunk_hdr_t *hdr;
@@ -469,8 +470,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC_VOID(uct_iface_mp_chunk_release, (mp, chunk),
-                      ucs_mpool_t *mp, void *chunk)
+UCS_PROFILE_FUNC_VOID_ALWAYS(uct_iface_mp_chunk_release, (mp, chunk),
+                             ucs_mpool_t *mp, void *chunk)
 {
     uct_base_iface_t *iface = uct_iface_mp_priv(mp)->iface;
     uct_iface_mp_chunk_hdr_t *hdr;
