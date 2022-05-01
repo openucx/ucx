@@ -639,16 +639,16 @@ uct_rc_mlx5_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
 
 #if IBV_HW_TM
     if (UCT_RC_MLX5_TM_ENABLED(iface)) {
+        uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->tm_qp);
         /* Using uct_ib_mlx5_iface_put_res_domain and not
          * uct_ib_mlx5_qp_mmio_cleanup: in case of devx, we don't have uar,
          * and uct_ib_mlx5_qp_mmio_cleanup would try to release uar */
         uct_ib_mlx5_iface_put_res_domain(&cleanup_ctx->tm_qp);
-        uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->tm_qp);
     }
 #endif
 
-    uct_ib_mlx5_qp_mmio_cleanup(&cleanup_ctx->qp, cleanup_ctx->reg);
     uct_ib_mlx5_destroy_qp(md, &cleanup_ctx->qp);
+    uct_ib_mlx5_qp_mmio_cleanup(&cleanup_ctx->qp, cleanup_ctx->reg);
 }
 
 static uint8_t uct_rc_mlx5_iface_get_address_type(uct_iface_h tl_iface)

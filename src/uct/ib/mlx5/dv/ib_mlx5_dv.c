@@ -55,7 +55,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
-    status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode,
+    status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode, 0,
                                        UCT_IB_MLX5_BF_REG_SIZE, &mmio_mode);
     if (status != UCS_OK) {
         goto err;

@@ -751,8 +751,8 @@ static void uct_ud_mlx5_iface_destroy_qp(uct_ud_iface_t *ud_iface)
                                                 uct_ib_mlx5_md_t);
     uct_ib_mlx5_qp_t *qp       = &iface->tx.wq.super;
 
-    uct_ib_mlx5_qp_mmio_cleanup(qp, iface->tx.wq.reg);
     uct_ib_mlx5_destroy_qp(ib_md, qp);
+    uct_ib_mlx5_qp_mmio_cleanup(qp, iface->tx.wq.reg);
 }
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_mlx5_iface_t)(uct_iface_t*);

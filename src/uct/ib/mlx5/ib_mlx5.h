@@ -283,6 +283,8 @@ typedef enum {
     UCT_IB_MLX5_MMIO_MODE_BF_POST_MT, /* BF with order, can be used by multiple
                                          serialized threads */
     UCT_IB_MLX5_MMIO_MODE_DB,         /* 8-byte doorbell (with the mandatory flush) */
+    UCT_IB_MLX5_MMIO_MODE_DB_LOCK,    /* 8-byte doorbell with locking, can be
+                                         used by multiple concurrent threads */
     UCT_IB_MLX5_MMIO_MODE_AUTO,       /* Auto-select according to driver/HW capabilities
                                          and multi-thread support level */
     UCT_IB_MLX5_MMIO_MODE_LAST
@@ -399,6 +401,7 @@ typedef struct uct_ib_mlx5_mmio_reg {
         uintptr_t               uint;
     } addr;
     uct_ib_mlx5_mmio_mode_t     mode;
+    ucs_spinlock_t              db_lock;
 } uct_ib_mlx5_mmio_reg_t;
 
 
@@ -643,7 +646,7 @@ void uct_ib_mlx5_check_completion_with_err(uct_ib_iface_t *iface,
 ucs_status_t
 uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
                           uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
-                          unsigned bf_size,
+                          int need_lock, unsigned bf_size,
                           uct_ib_mlx5_mmio_mode_t *mmio_mode);
 
 /**
