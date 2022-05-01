@@ -2148,6 +2148,13 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_with_rma_atomic)
 
 class test_ucp_sockaddr_protocols : public test_ucp_sockaddr {
 public:
+    test_ucp_sockaddr_protocols()
+    {
+        /* To allow selecting MM transports when testing shm_ib/shm_tcp
+         * variants */
+        m_env.push_back(new ucs::scoped_setenv("UCX_MM_ERROR_HANDLING", "y"));
+    }
+
     virtual ~test_ucp_sockaddr_protocols() { }
 
     static void get_test_variants(std::vector<ucp_test_variant>& variants) {
@@ -2156,9 +2163,8 @@ public:
          * worker for atomic operations */
         uint64_t features = UCP_FEATURE_TAG | UCP_FEATURE_STREAM |
                             UCP_FEATURE_RMA | UCP_FEATURE_AM;
-
-        add_variant_with_value(variants, features, TEST_MODIFIER_MT,
-                               "mt", MULTI_THREAD_WORKER);
+        test_ucp_sockaddr::get_test_variants_cm_mode(variants, features,
+                                                     0, "all_features");
     }
 
     virtual void init() {
@@ -2666,8 +2672,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols, am_rndv_64k, "RNDV_THRESH=0")
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, udx, "ud_x") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rc, "rc_v") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, rcx, "rc_x") \
-    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, ib, "ib") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_ib, "shm,ib") \
     UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, tcp, "tcp") \
+    UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(_test_case, shm_tcp, "shm,tcp") \
     UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all")
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols)

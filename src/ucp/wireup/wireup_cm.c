@@ -44,10 +44,10 @@ unsigned
 ucp_cm_ep_init_flags(const ucp_ep_params_t *params)
 {
     if (params->field_mask & UCP_EP_PARAM_FIELD_SOCK_ADDR) {
-        return UCP_EP_INIT_CM_WIREUP_CLIENT | UCP_EP_INIT_CM_PHASE;
+        return UCP_EP_INIT_CM_PHASE_CLIENT;
     }
     if (params->field_mask & UCP_EP_PARAM_FIELD_CONN_REQUEST) {
-        return UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
+        return UCP_EP_INIT_CM_PHASE_SERVER;
     }
 
     return 0;
@@ -451,7 +451,7 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     UCS_STATIC_ASSERT(ucs_static_array_size(ep_init_flags_prio) > 0);
 
     for (i = 0; i < ucs_static_array_size(ep_init_flags_prio); ++i) {
-        ep_init_flags = ep_init_flags_prio[i];
+        ep_init_flags = UCP_EP_INIT_CM_PHASE_CLIENT | ep_init_flags_prio[i];
 
         /* Cleanup the previously created UCP EP. The one that was created on
          * the previous call to this client's resolve_cb */
@@ -1212,7 +1212,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
     ucp_wireup_sockaddr_data_base_t *sa_data;
     ucp_object_version_t sa_data_version;
 
-    ep_init_flags |= UCP_EP_INIT_CM_WIREUP_SERVER | UCP_EP_INIT_CM_PHASE;
+    ep_init_flags |= UCP_EP_INIT_CM_PHASE_SERVER;
 
     ucp_context_dev_tl_bitmap(worker->context, conn_request->dev_name,
                               &tl_bitmap);
