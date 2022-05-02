@@ -302,8 +302,12 @@ private:
     typedef std::pair<void*, void*> range;
 
     bool is_ptr_in_range(void *ptr, size_t size, const std::vector<range> &ranges) {
-        for (std::vector<range>::const_iterator iter = ranges.begin(); iter != ranges.end(); ++iter) {
-            if ((ptr >= iter->first) && ((char*)ptr < iter->second)) {
+        uintptr_t p = (uintptr_t)ptr;
+        for (std::vector<range>::const_iterator iter = ranges.begin();
+             iter != ranges.end(); ++iter) {
+            uintptr_t begin = (uintptr_t)iter->first;
+            uintptr_t end   = (uintptr_t)iter->second;
+            if ((p >= begin) && (p < end)) {
                 return true;
             }
         }
