@@ -132,7 +132,7 @@ ucp_tag_recv_common(ucp_worker_h worker, void *buffer, size_t count,
                                             &req->recv.state);
     req->recv.mem_type      = ucp_request_get_memory_type(worker->context, buffer,
                                                          req->recv.length, param);
-
+    req->recv.op_attr       = param->op_attr_mask;
     req->recv.tag.tag       = tag;
     req->recv.tag.tag_mask  = tag_mask;
     if (param->op_attr_mask & UCP_OP_ATTR_FIELD_CALLBACK) {

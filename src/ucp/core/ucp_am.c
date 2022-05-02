@@ -1129,6 +1129,7 @@ UCS_PROFILE_FUNC(ucs_status_ptr_t, ucp_am_recv_data_nbx,
         req->recv.length   = ucp_dt_length(datatype, count, buffer,
                                            &req->recv.state);
         req->recv.mem_type = mem_type;
+        req->recv.op_attr  = param->op_attr_mask;
         req->recv.am.desc  = desc;
         rts                = data_desc;
 
