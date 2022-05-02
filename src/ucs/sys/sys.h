@@ -635,6 +635,12 @@ unsigned long ucs_sys_get_proc_create_time(pid_t pid);
  */
 ucs_status_t ucs_sys_get_memlock_rlimit(size_t *rlimit_value);
 
+/*
+ * Get effective max locked memory limit (unlimited for privileged user).
+ *
+ * @param [out] rlimit_value If successful, set to the current limit value.
+ */
+ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value);
 
 /*
  * Check if library is built dynamically (.so module)

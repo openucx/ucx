@@ -767,23 +767,42 @@ ucs_status_t ucs_sys_get_proc_cap(uint32_t *effective)
 #endif
 }
 
-static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
+static ucs_status_t ucs_sys_get_memlock_privilege(int *lock_priv)
 {
 #if HAVE_SYS_CAPABILITY_H
-    ucs_status_t status;
     uint32_t ecap;
+    ucs_status_t status;
 
     UCS_STATIC_ASSERT(CAP_IPC_LOCK < 32);
     status = ucs_sys_get_proc_cap(&ecap);
-    if ((status == UCS_OK) && !(ecap & UCS_BIT(CAP_IPC_LOCK))) {
-        /* detected missing CAP_IPC_LOCK */
-        snprintf(buf, max, ", CAP_IPC_LOCK privilege is needed for SHM_HUGETLB");
+    if(status != UCS_OK) {
+        return status;
+    }
+
+    *lock_priv = 0;
+    if (ecap & UCS_BIT(CAP_IPC_LOCK)) {
+        *lock_priv = 1;
+    }
+
+    return UCS_OK;
+#else
+    return NOT_SUPPORTED;
+#endif
+}
+
+static void ucs_sysv_shmget_error_check_EPERM(int flags, char *buf, size_t max)
+{
+    int lock_priv;
+    if(ucs_sys_get_memlock_privilege(&lock_priv) != UCS_OK) {
+        snprintf(buf, max,
+                ", please check for CAP_IPC_LOCK privilege for using SHM_HUGETLB");
         return;
     }
-#endif
 
-    snprintf(buf, max,
-             ", please check for CAP_IPC_LOCK privilege for using SHM_HUGETLB");
+    if(lock_priv == 0) {
+        /* detected missing CAP_IPC_LOCK */
+        snprintf(buf, max, ", CAP_IPC_LOCK privilege is needed for SHM_HUGETLB");
+    }
 }
 
 static void ucs_sysv_shmget_format_error(size_t alloc_size, int flags,
@@ -1565,6 +1584,30 @@ ucs_status_t ucs_sys_get_memlock_rlimit(size_t *rlimit_value)
     *rlimit_value = (limit_info.rlim_cur == RLIM_INFINITY) ?
                             SIZE_MAX :
                             limit_info.rlim_cur;
+
+    return UCS_OK;
+}
+
+ucs_status_t ucs_sys_get_effective_memlock_rlimit(size_t *rlimit_value)
+{
+    int lock_priv;
+
+    /* get system wide rlimit value */
+    ucs_status_t status = ucs_sys_get_memlock_rlimit(rlimit_value);
+    if(status != UCS_OK) {
+        return status;
+    }
+
+    status = ucs_sys_get_memlock_privilege(&lock_priv);
+    if(status != UCS_OK) {
+        return status;
+    }
+
+    /* overwrite system wide value for priviledged users */
+    if(lock_priv) {
+        *rlimit_value = SIZE_MAX;
+    }
+
     return UCS_OK;
 }
 
