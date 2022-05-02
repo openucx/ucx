@@ -252,8 +252,13 @@ uct_self_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
     }
 
     for (i = 0; i < self_md->num_devices; i++) {
-        ucs_snprintf_zero(devices[i].name, sizeof(devices->name), "%s%d",
-                          UCT_SM_DEVICE_NAME, i);
+        if (self_md->num_devices > 1) {
+            ucs_snprintf_zero(devices[i].name, sizeof(devices->name), "%s%d",
+                              UCT_SM_DEVICE_NAME, i);
+        } else {
+            ucs_strncpy_zero(devices[i].name, UCT_SM_DEVICE_NAME,
+                             sizeof(devices->name));
+        }
         devices[i].type       = UCT_DEVICE_TYPE_SELF;
         devices[i].sys_device = UCS_SYS_DEVICE_ID_UNKNOWN;
     }
