@@ -186,6 +186,7 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ucp_memory_info_t mem_info;
     ucs_status_t status;
     double ctrl_latency;
+    uint16_t op_flags;
 
     ucs_assert(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
     ucs_assert(!(params->super.flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG));
@@ -199,12 +200,16 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
         return UCS_ERR_NO_ELEM;
     }
 
+    op_flags = UCP_PROTO_SELECT_OP_FLAG_INTERNAL |
+               (select_param->op_flags &
+                ucp_proto_select_op_attr_to_flags(UCP_OP_ATTR_FLAG_MULTI_SEND));
+
     /* Construct select parameter for the remote protocol */
     if (params->super.super.rkey_config_key == NULL) {
         /* Remote buffer is unknown, assume same params as local */
         remote_select_param          = *select_param;
         remote_select_param.op_id    = params->remote_op_id;
-        remote_select_param.op_flags = UCP_PROTO_SELECT_OP_FLAG_INTERNAL;
+        remote_select_param.op_flags = op_flags;
     } else {
         /* If we know the remote buffer parameters, these are actually the local
          * parameters for the remote protocol
@@ -462,8 +467,9 @@ void ucp_proto_rndv_bulk_query(const ucp_proto_query_params_t *params,
 static ucs_status_t
 ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
                           ucp_operation_id_t op_id, uint32_t op_attr_mask,
-                          size_t length, const void *rkey_buffer,
-                          size_t rkey_length, uint8_t sg_count)
+                          uint16_t op_flags, size_t length,
+                          const void *rkey_buffer, size_t rkey_length,
+                          uint8_t sg_count)
 {
     ucp_ep_h ep = req->send.ep;
     ucp_worker_cfg_index_t rkey_cfg_index;
@@ -492,7 +498,7 @@ ucp_proto_rndv_send_reply(ucp_worker_h worker, ucp_request_t *req,
         rkey           = NULL;
     }
 
-    ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, 0,
+    ucp_proto_select_param_init(&sel_param, op_id, op_attr_mask, op_flags,
                                 req->send.state.dt_iter.dt_class,
                                 &req->send.state.dt_iter.mem_info, sg_count);
 
@@ -575,7 +581,8 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
                                     &sg_count);
     }
 
-    status = ucp_proto_rndv_send_reply(worker, req, op_id, 0, rts->size,
+    status = ucp_proto_rndv_send_reply(worker, req, op_id,
+                                       recv_req->recv.op_attr, 0, rts->size,
                                        rkey_buffer, rkey_length, sg_count);
     if (status != UCS_OK) {
         ucp_datatype_iter_cleanup(&req->send.state.dt_iter, UCP_DT_MASK_ALL);
@@ -592,8 +599,9 @@ void ucp_proto_rndv_receive_start(ucp_worker_h worker, ucp_request_t *recv_req,
 
 static ucs_status_t
 ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
-                          uint32_t op_attr_mask, const ucp_rndv_rtr_hdr_t *rtr,
-                          size_t header_length, uint8_t sg_count)
+                          uint32_t op_attr_mask, uint32_t op_flags,
+                          const ucp_rndv_rtr_hdr_t *rtr, size_t header_length,
+                          uint8_t sg_count)
 {
     ucs_status_t status;
     size_t rkey_length;
@@ -608,8 +616,8 @@ ucp_proto_rndv_send_start(ucp_worker_h worker, ucp_request_t *req,
 
     ucs_assert(rtr->size == req->send.state.dt_iter.length);
     status = ucp_proto_rndv_send_reply(worker, req, UCP_OP_ID_RNDV_SEND,
-                                       op_attr_mask, rtr->size, rtr + 1,
-                                       rkey_length, sg_count);
+                                       op_attr_mask, op_flags, rtr->size,
+                                       rtr + 1, rkey_length, sg_count);
     if (status != UCS_OK) {
         return status;
     }
@@ -641,6 +649,7 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     const ucp_rndv_rtr_hdr_t *rtr = data;
     ucp_request_t *req, *freq;
     ucs_status_t status;
+    uint32_t op_flags;
     uint8_t sg_count;
 
     UCP_SEND_REQUEST_GET_BY_ID(&req, worker, rtr->sreq_id, 0, return UCS_OK,
@@ -652,6 +661,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
     /* RTR covers the whole send request - use the send request directly */
     ucs_assert(req->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED);
 
+    op_flags = req->send.proto_config->select_param.op_flags;
+
     if (rtr->size == req->send.state.dt_iter.length) {
         /* RTR covers the whole send request - use the send request directly */
         ucs_assert(rtr->offset == 0);
@@ -662,8 +673,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
         req->flags &= ~UCP_REQUEST_FLAG_PROTO_INITIALIZED;
 
         sg_count = req->send.proto_config->select_param.sg_count;
-        status   = ucp_proto_rndv_send_start(worker, req, 0, rtr, length,
-                                             sg_count);
+        status   = ucp_proto_rndv_send_start(worker, req, 0, op_flags, rtr,
+                                             length, sg_count);
         if (status != UCS_OK) {
             goto err_request_fail;
         }
@@ -688,8 +699,8 @@ ucp_proto_rndv_handle_rtr(void *arg, void *data, size_t length, unsigned flags)
          * TODO can rndv/ppln be selected here (and not just single frag)?
          */
         status = ucp_proto_rndv_send_start(worker, freq,
-                                           UCP_OP_ATTR_FLAG_MULTI_SEND, rtr,
-                                           length, sg_count);
+                                           UCP_OP_ATTR_FLAG_MULTI_SEND,
+                                           op_flags, rtr, length, sg_count);
         if (status != UCS_OK) {
             goto err_put_freq;
         }
