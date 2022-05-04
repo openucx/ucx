@@ -528,8 +528,15 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
          */
         ucs_memory_cpu_wc_fence();
     } else {
-        ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB);
-        *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
+        if (wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB) {
+            *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
+        } else {
+            ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB_LOCK);
+            ucs_spin_lock(&wq->reg->db_lock);
+            *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
+            ucs_spin_unlock(&wq->reg->db_lock);
+        }
+
         ucs_memory_bus_store_fence();
         src = UCS_PTR_BYTE_OFFSET(src, num_bb * MLX5_SEND_WQE_BB);
         src = uct_ib_mlx5_txwq_wrap_any(wq, src);

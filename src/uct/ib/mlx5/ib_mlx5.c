@@ -26,6 +26,7 @@ static const char *uct_ib_mlx5_mmio_modes[] = {
     [UCT_IB_MLX5_MMIO_MODE_BF_POST]    = "bf_post",
     [UCT_IB_MLX5_MMIO_MODE_BF_POST_MT] = "bf_post_mt",
     [UCT_IB_MLX5_MMIO_MODE_DB]         = "db",
+    [UCT_IB_MLX5_MMIO_MODE_DB_LOCK]    = "db_lock",
     [UCT_IB_MLX5_MMIO_MODE_AUTO]       = "auto",
     [UCT_IB_MLX5_MMIO_MODE_LAST]       = NULL
 };
@@ -47,6 +48,7 @@ ucs_config_field_t uct_ib_mlx5_iface_config_table[] = {
      "              by multiple threads.\n"
      " db         - Doorbell mode, write only 8 bytes to MMIO register, followed by a memory\n"
      "              store fence, which makes sure the doorbell goes out on the bus.\n"
+     " db_lock    - Doorbell mode, write only 8 bytes to MMIO register, guarded by spin lock.\n"
      " auto       - Select best according to worker thread mode.",
      ucs_offsetof(uct_ib_mlx5_iface_config_t, mmio_mode),
      UCS_CONFIG_TYPE_ENUM(uct_ib_mlx5_mmio_modes)},
@@ -217,17 +219,13 @@ uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
 {
     struct ibv_parent_domain_init_attr attr;
     struct ibv_td_init_attr td_attr;
+    ucs_status_t status;
 
-    if (worker->thread_mode == UCS_THREAD_MODE_MULTI) {
-        td_attr.comp_mask = 0;
-        res_domain->td = ibv_alloc_td(md->dev.ibv_context, &td_attr);
-        if (res_domain->td == NULL) {
-            ucs_error("ibv_alloc_td() on %s failed: %m",
-                      uct_ib_device_name(&md->dev));
-            return UCS_ERR_IO_ERROR;
-        }
-    } else {
-        res_domain->td = NULL;
+    td_attr.comp_mask = 0;
+    res_domain->td = ibv_alloc_td(md->dev.ibv_context, &td_attr);
+    if (res_domain->td == NULL) {
+        ucs_debug("ibv_alloc_td() on %s failed: %m",
+                  uct_ib_device_name(&md->dev));
         res_domain->pd = md->pd;
         return UCS_OK;
     }
@@ -239,11 +237,15 @@ uct_ib_mlx5_res_domain_init(uct_ib_mlx5_res_domain_t *res_domain,
     if (res_domain->pd == NULL) {
         ucs_error("ibv_alloc_parent_domain() on %s failed: %m",
                   uct_ib_device_name(&md->dev));
-        ibv_dealloc_td(res_domain->td);
-        return UCS_ERR_IO_ERROR;
+        status = UCS_ERR_IO_ERROR;
+        goto err_td;
     }
 
     return UCS_OK;
+
+err_td:
+    ibv_dealloc_td(res_domain->td);
+    return status;
 }
 
 static void uct_ib_mlx5_res_domain_cleanup(uct_ib_mlx5_res_domain_t *res_domain)
@@ -486,11 +488,15 @@ static ucs_status_t uct_ib_mlx5_mmio_init(uct_ib_mlx5_mmio_reg_t *reg,
 {
     reg->addr.uint = addr;
     reg->mode      = mmio_mode;
+
+    ucs_spinlock_init(&reg->db_lock, 0);
+
     return UCS_OK;
 }
 
 static void uct_ib_mlx5_mmio_cleanup(uct_ib_mlx5_mmio_reg_t *reg)
 {
+    ucs_spinlock_destroy(&reg->db_lock);
 }
 
 int uct_ib_mlx5_devx_uar_cmp(uct_ib_mlx5_devx_uar_t *uar,
@@ -607,13 +613,15 @@ void uct_ib_mlx5_txwq_vfs_populate(uct_ib_mlx5_txwq_t *txwq, void *parent_obj)
 ucs_status_t
 uct_ib_mlx5_get_mmio_mode(uct_priv_worker_t *worker,
                           uct_ib_mlx5_mmio_mode_t cfg_mmio_mode,
-                          unsigned bf_size,
+                          int need_lock, unsigned bf_size,
                           uct_ib_mlx5_mmio_mode_t *mmio_mode)
 {
     ucs_assert(cfg_mmio_mode < UCT_IB_MLX5_MMIO_MODE_LAST);
 
     if (cfg_mmio_mode != UCT_IB_MLX5_MMIO_MODE_AUTO) {
         *mmio_mode = cfg_mmio_mode;
+    } else if (need_lock) {
+        *mmio_mode = UCT_IB_MLX5_MMIO_MODE_DB_LOCK;
     } else if (bf_size > 0) {
         if (worker->thread_mode == UCS_THREAD_MODE_SINGLE) {
             *mmio_mode = UCT_IB_MLX5_MMIO_MODE_BF_POST;
@@ -659,6 +667,7 @@ ucs_status_t uct_ib_mlx5_txwq_init(uct_priv_worker_t *worker,
     }
 
     status = uct_ib_mlx5_get_mmio_mode(worker, cfg_mmio_mode,
+                                       txwq->super.verbs.rd->td == NULL,
                                        qp_info.dv.bf.size, &mmio_mode);
     if (status != UCS_OK) {
         return status;

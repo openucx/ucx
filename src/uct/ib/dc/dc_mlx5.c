@@ -580,20 +580,6 @@ void uct_dc_mlx5_destroy_dct(uct_dc_mlx5_iface_t *iface)
 }
 #endif
 
-static void uct_dc_mlx5_iface_cleanup_dcis(uct_dc_mlx5_iface_t *iface)
-{
-    int num_dcis = uct_dc_mlx5_iface_total_ndci(iface);
-    int i;
-
-    for (i = 0; i < num_dcis; i++) {
-        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
-            ucs_arbiter_group_cleanup(&iface->tx.dcis[i].arb_group);
-        }
-        uct_ib_mlx5_qp_mmio_cleanup(&iface->tx.dcis[i].txwq.super,
-                                    iface->tx.dcis[i].txwq.reg);
-    }
-}
-
 static ucs_status_t
 uct_dc_mlx5_init_rx(uct_rc_iface_t *rc_iface,
                     const uct_rc_iface_common_config_t *rc_config)
@@ -688,6 +674,12 @@ static void uct_dc_mlx5_iface_dcis_destroy(uct_dc_mlx5_iface_t *iface,
         uct_rc_txqp_cleanup(&iface->super.super,
                             &iface->tx.dcis[dci_index].txqp);
         uct_ib_mlx5_destroy_qp(md, &iface->tx.dcis[dci_index].txwq.super);
+
+        if (uct_dc_mlx5_iface_is_dci_rand(iface)) {
+            ucs_arbiter_group_cleanup(&iface->tx.dcis[dci_index].arb_group);
+        }
+        uct_ib_mlx5_qp_mmio_cleanup(&iface->tx.dcis[dci_index].txwq.super,
+                                    iface->tx.dcis[dci_index].txwq.reg);
     }
 
     for (pool_index = 0; pool_index < num_dci_pools; pool_index++) {
@@ -1378,7 +1370,6 @@ static UCS_CLASS_CLEANUP_FUNC(uct_dc_mlx5_iface_t)
     ucs_trace_func("");
     uct_base_iface_progress_disable(&self->super.super.super.super.super,
                                     UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-    uct_dc_mlx5_iface_cleanup_dcis(self);
 
     uct_dc_mlx5_destroy_dct(self);
     kh_destroy_inplace(uct_dc_mlx5_fc_hash, &self->tx.fc_hash);
