@@ -13,7 +13,6 @@
 
 #include <uct/base/uct_md.h>
 #include <ucs/stats/stats.h>
-#include <ucs/memory/rcache.h>
 
 #define UCT_IB_MD_MAX_MR_SIZE        0x80000000UL
 #define UCT_IB_MD_PACKED_RKEY_SIZE   sizeof(uint64_t)
@@ -136,7 +135,6 @@ typedef enum {
  */
 typedef struct uct_ib_md {
     uct_md_t                 super;
-    ucs_rcache_t             *rcache;   /**< Registration cache (can be NULL) */
     struct ibv_pd            *pd;       /**< IB memory domain */
     uct_ib_device_t          dev;       /**< IB device */
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost */
@@ -180,12 +178,7 @@ typedef struct uct_ib_md_packed_mkey {
 typedef struct uct_ib_md_config {
     uct_md_config_t          super;
 
-    /** List of registration methods in order of preference */
-    UCS_CONFIG_STRING_ARRAY_FIELD(rmtd) reg_methods;
-
-    uct_md_rcache_config_t   rcache;       /**< Registration cache config */
-    ucs_linear_func_t        uc_reg_cost;  /**< Memory registration cost estimation
-                                                without using the cache */
+    ucs_linear_func_t        reg_cost;     /**< Memory registration cost estimation */
     unsigned                 fork_init;    /**< Use ibv_fork_init() */
     int                      async_events; /**< Whether async events should be delivered */
 
@@ -424,15 +417,6 @@ typedef struct uct_ib_md_ops {
     uct_ib_md_reg_exported_key_func_t    reg_exported_key;
     uct_ib_md_import_key_func_t          import_exported_key;
 } uct_ib_md_ops_t;
-
-
-/**
- * IB memory region in the registration cache.
- */
-typedef struct uct_ib_rcache_region {
-    ucs_rcache_region_t  super;
-    uct_ib_mem_t         memh;      /**<  mr exposed to the user as the memh */
-} uct_ib_rcache_region_t;
 
 
 /**
