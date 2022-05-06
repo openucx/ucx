@@ -325,6 +325,7 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
     uct_ud_iface_t *iface = ucs_derived_of(ep->super.super.iface, uct_ud_iface_t);
     ucs_time_t now, last_send, diff;
     ucs_status_t status;
+    uct_ud_send_skb_t *skb;
 
     UCT_UD_EP_HOOK_CALL_TIMER(ep);
 
@@ -368,7 +369,9 @@ static void uct_ud_ep_timer(ucs_wtimer_t *self)
         }
     }
 
-    diff = now - ep->tx.send_time;
+    skb  = ucs_queue_head_elem_non_empty(&ep->tx.window, uct_ud_send_skb_t,
+                                         queue);
+    diff = now - skb->send_time;
     if (diff > iface->config.peer_timeout) {
         ucs_debug("ep %p: timeout of %.2f sec, config::peer_timeout - %.2f sec",
                   ep, ucs_time_to_sec(diff),
@@ -720,8 +723,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
 
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
-    ep->tx.tick      = iface->tx.tick;
-    ep->tx.send_time = uct_ud_iface_get_time(iface);
+    ep->tx.tick = iface->tx.tick;
 }
 
 static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
@@ -1086,7 +1088,7 @@ uct_ud_ep_comp_skb_add(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     if (!ucs_queue_is_empty(&ep->tx.window)) {
         /* If window non-empty: add to window */
         skb->flags |= UCT_UD_SEND_SKB_FLAG_ACK_REQ;
-        ucs_queue_push(&ep->tx.window, &skb->queue);
+        uct_ud_ep_tx_skb_add(ep, skb, ucs_get_time());
     } else {
         /* Otherwise, add the skb after async completions */
         ucs_assert(ep->tx.resend_count == 0);
@@ -1363,7 +1365,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     skb->flags         = UCT_UD_SEND_SKB_FLAG_CTL_RESEND;
     sent_skb->flags   |= UCT_UD_SEND_SKB_FLAG_RESENDING;
     ep->resend.psn     = sent_skb->neth->psn;
-    ep->tx.resend_time = uct_ud_iface_get_time(iface);
+    ep->tx.resend_time = ucs_get_time();
 
     if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
         /* copy neth + am header part */

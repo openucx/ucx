@@ -149,6 +149,7 @@ enum {
  */
 typedef struct uct_ud_send_skb {
     ucs_queue_elem_t        queue;      /* in send window */
+    ucs_time_t              send_time;  /* time of sending */
     uint32_t                lkey;
     uint16_t                len;        /* data size */
     uint16_t                flags;

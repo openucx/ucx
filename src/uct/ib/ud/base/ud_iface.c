@@ -339,7 +339,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
                         UCT_UD_IFACE_CEP_CONN_SN_MAX, &conn_match_ops);
 
     status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
-                             uct_ud_iface_get_time(iface));
+                             ucs_get_time());
     if (status != UCS_OK) {
         goto err;
     }
@@ -665,7 +665,7 @@ ucs_config_field_t uct_ud_iface_config_table[] = {
      "Keep the connection open internally for this amount of time after closing it",
      ucs_offsetof(uct_ud_iface_config_t, linger_timeout), UCS_CONFIG_TYPE_TIME},
 
-    {"TIMEOUT", "30s",
+    {"TIMEOUT", "20s",
      "Consider the remote peer as unreachable if an acknowledgment was not received\n"
      "after this amount of time",
      ucs_offsetof(uct_ud_iface_config_t, peer_timeout), UCS_CONFIG_TYPE_TIME},
