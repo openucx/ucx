@@ -158,8 +158,9 @@ static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
                              uct_ud_send_skb_t *skb)
 {
-    ucs_time_t now = uct_ud_iface_get_time(iface);
-    iface->tx.skb  = ucs_mpool_get(&iface->tx.mp);
+    ucs_time_t now = ucs_get_time();
+
+    iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
 
     ucs_queue_push(&ep->tx.window, &skb->queue);

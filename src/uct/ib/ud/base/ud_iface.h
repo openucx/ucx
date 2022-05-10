@@ -445,21 +445,6 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present,
 }
 
 
-/* get time of the last async wakeup */
-static UCS_F_ALWAYS_INLINE ucs_time_t
-uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
-{
-    return iface->super.super.worker->async->last_wakeup;
-}
-
-
-static UCS_F_ALWAYS_INLINE ucs_time_t
-uct_ud_iface_get_time(uct_ud_iface_t *iface)
-{
-    return ucs_get_time();
-}
-
-
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_twheel_sweep(uct_ud_iface_t *iface)
 {
@@ -471,7 +456,7 @@ uct_ud_iface_twheel_sweep(uct_ud_iface_t *iface)
         return;
     }
 
-    ucs_twheel_sweep(&iface->tx.timer, uct_ud_iface_get_time(iface));
+    ucs_twheel_sweep(&iface->tx.timer, ucs_get_time());
 }
 
 
