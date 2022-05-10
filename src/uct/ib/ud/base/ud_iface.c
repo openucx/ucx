@@ -339,7 +339,7 @@ ucs_status_t uct_ud_iface_complete_init(uct_ud_iface_t *iface)
                         UCT_UD_IFACE_CEP_CONN_SN_MAX, &conn_match_ops);
 
     status = ucs_twheel_init(&iface->tx.timer, iface->tx.tick / 4,
-                             uct_ud_iface_get_time(iface));
+                             ucs_get_time());
     if (status != UCS_OK) {
         goto err;
     }

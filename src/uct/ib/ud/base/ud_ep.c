@@ -721,7 +721,7 @@ uct_ud_ep_process_ack(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     ucs_arbiter_group_schedule(&iface->tx.pending_q, &ep->tx.pending.group);
 
     ep->tx.tick      = iface->tx.tick;
-    ep->tx.send_time = uct_ud_iface_get_time(iface);
+    ep->tx.send_time = ucs_get_time();
 }
 
 static inline void uct_ud_ep_rx_put(uct_ud_neth_t *neth, unsigned byte_len)
@@ -1363,7 +1363,7 @@ static void uct_ud_ep_resend(uct_ud_ep_t *ep)
     skb->flags         = UCT_UD_SEND_SKB_FLAG_CTL_RESEND;
     sent_skb->flags   |= UCT_UD_SEND_SKB_FLAG_RESENDING;
     ep->resend.psn     = sent_skb->neth->psn;
-    ep->tx.resend_time = uct_ud_iface_get_time(iface);
+    ep->tx.resend_time = ucs_get_time();
 
     if (sent_skb->flags & UCT_UD_SEND_SKB_FLAG_ZCOPY) {
         /* copy neth + am header part */
