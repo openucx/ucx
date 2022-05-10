@@ -542,6 +542,7 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
     }
 
+protected:
     void kill_receiver()
     {
         /* Hack: for SHM-based transports we can't really terminate
@@ -566,37 +567,62 @@ public:
         test_uct_peer_failure::kill_receiver();
     }
 
+    void test_ep_check(bool post_am)
+    {
+        ucs_status_t status;
+
+        scoped_log_handler slh(wrap_errors_logger);
+        flush();
+        EXPECT_EQ(0, m_err_count);
+
+        for (unsigned i = 0; i < 8; ++i) {
+            status = uct_ep_check(ep0(), 0, NULL);
+            ASSERT_UCS_OK(status);
+            flush();
+            /* Allow keepalive request to complete */
+            short_progress_loop();
+        }
+
+        /* We are still alive */
+        EXPECT_EQ(0, m_err_count);
+
+        kill_receiver();
+
+        status = uct_ep_check(ep0(), 0, NULL);
+        ASSERT_UCS_OK(status);
+
+        if (post_am) {
+            /* Post AM operation to check that an error could be detected by
+             * EP_CHECK when an endpoint has an in-flight AM operation */
+            const uint64_t send_data = 0;
+            status = uct_ep_am_short(ep0(), 0, 0, &send_data, sizeof(send_data));
+            if (m_err_count == 0) {
+                ASSERT_UCS_OK(status);
+            }
+        }
+
+        flush();
+
+        wait_for_flag(&m_err_count);
+        EXPECT_EQ(1, m_err_count);
+    }
+
 protected:
     ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
+
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
                      !check_caps(UCT_IFACE_FLAG_EP_CHECK))
 {
-    ucs_status_t status;
+    test_ep_check(false);
+}
 
-    scoped_log_handler slh(wrap_errors_logger);
-    flush();
-    EXPECT_EQ(0, m_err_count);
-
-    status = uct_ep_check(ep0(), 0, NULL);
-    ASSERT_UCS_OK(status);
-    flush();
-
-    /* allow keepalive requests to complete */
-    short_progress_loop();
-
-    /* we are still alive */
-    EXPECT_EQ(0, m_err_count);
-
-    kill_receiver();
-
-    status = uct_ep_check(ep0(), 0, NULL);
-    ASSERT_UCS_OK(status);
-    flush();
-
-    wait_for_flag(&m_err_count);
-    EXPECT_EQ(1, m_err_count);
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed_post_am,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK |
+                                 UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_ep_check(true);
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)

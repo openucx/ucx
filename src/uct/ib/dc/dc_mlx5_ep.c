@@ -1558,13 +1558,13 @@ out:
     return status;
 }
 
-void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep, void *arg,
+void uct_dc_mlx5_ep_handle_failure(uct_dc_mlx5_ep_t *ep,
+                                   struct mlx5_cqe64 *cqe,
                                    ucs_status_t ep_status)
 {
-    struct mlx5_cqe64 *cqe     = arg;
-    uct_iface_h tl_iface       = ep->super.super.iface;
+    uct_dc_mlx5_iface_t *iface = ucs_derived_of(ep->super.super.iface,
+                                                uct_dc_mlx5_iface_t);
     uint8_t dci_index          = ep->dci;
-    uct_dc_mlx5_iface_t *iface = ucs_derived_of(tl_iface, uct_dc_mlx5_iface_t);
     uint16_t pi                = ntohs(cqe->wqe_counter);
     uint8_t pool_index;
     UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
