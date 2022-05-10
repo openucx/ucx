@@ -3420,6 +3420,73 @@ void ucp_ep_reqs_purge(ucp_ep_h ucp_ep, ucs_status_t status)
     }
 }
 
+static ucs_status_t ucp_ep_query_transport(ucp_ep_h ep, ucp_ep_attr_t *attr)
+{
+    ucp_worker_h worker     = ep->worker;
+    ucp_ep_config_t *config = ucp_ep_config(ep);
+    const uct_tl_resource_desc_t *rsc;
+    ucp_transport_entry_t *transport_entry;
+    size_t device_limit;
+    size_t transport_limit;
+    ucp_lane_index_t lane_index;
+    ucp_rsc_index_t cm_idx;
+    ucp_rsc_index_t rsc_index;
+
+    /* Compute field end offsets for each field in the ucp_transport_entry_t
+     * structure. */
+    transport_limit = ucs_offsetof(ucp_transport_entry_t, transport_name) +
+                      sizeof(transport_entry->transport_name);
+    device_limit    = ucs_offsetof(ucp_transport_entry_t, device_name) +
+                      sizeof(transport_entry->device_name);
+
+    for (lane_index = 0; lane_index < ucs_min(attr->transports.num_entries,
+                                              config->key.num_lanes);
+         lane_index++) {
+        /* Since the caller may be using a different size ucp_transport_entry_t
+         * structure definition than this code, array indexing cannot be used
+         * when accesing array elements. The array element's offset must be computed
+         * as 'lane_index' * attr->transports.entry_size and that offset added to the
+         * array's base address. */
+        transport_entry =
+                UCS_PTR_BYTE_OFFSET(attr->transports.entries,
+                                    lane_index * attr->transports.entry_size);
+
+        /* Each field updated in the following block must have its ending offset
+         * compared to attr->transports.entry_size before the field is 
+         * updated. If the field's ending offset is greater than the 
+         * attr->transports.entry_size value, the field cannot be updated because
+         * that will cause a storage overlay.
+         */
+        if (lane_index == config->key.cm_lane) {
+            cm_idx = ucp_ep_ext_control(ep)->cm_idx;
+            if (transport_limit <= attr->transports.entry_size) {
+                if (cm_idx == UCP_NULL_RESOURCE) {
+                    transport_entry->transport_name = "<unknown>";
+                } else {
+                    transport_entry->transport_name =
+                            ucp_context_cm_name(worker->context, cm_idx);
+                }
+            }
+            if (device_limit <= attr->transports.entry_size) {
+                transport_entry->device_name = "";
+            }
+        } else {
+            rsc_index = config->key.lanes[lane_index].rsc_index;
+            rsc       = &worker->context->tl_rscs[rsc_index].tl_rsc;
+            if (transport_limit <= attr->transports.entry_size) {
+                transport_entry->transport_name = rsc->tl_name;
+            }
+            if (device_limit <= attr->transports.entry_size) {
+                transport_entry->device_name = rsc->dev_name;
+            }
+        }
+    }
+
+    /* Set the number of transport/device name pairs that actually exist */
+    attr->transports.num_entries = lane_index;
+    return UCS_OK;
+}
+
 ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
     uct_ep_h uct_cm_ep = ucp_ep_get_cm_uct_ep(ep);
@@ -3467,6 +3534,8 @@ ucs_status_t ucp_ep_query_sockaddr(ucp_ep_h ep, ucp_ep_attr_t *attr)
 
 ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 {
+    ucs_status_t status;
+
     if (attr->field_mask & UCP_EP_ATTR_FIELD_NAME) {
 #if ENABLE_DEBUG_DATA
         ucs_strncpy_safe(attr->name, ep->name, UCP_ENTITY_NAME_MAX);
@@ -3477,7 +3546,17 @@ ucs_status_t ucp_ep_query(ucp_ep_h ep, ucp_ep_attr_t *attr)
 
     if (attr->field_mask &
         (UCP_EP_ATTR_FIELD_LOCAL_SOCKADDR | UCP_EP_ATTR_FIELD_REMOTE_SOCKADDR)) {
-        return ucp_ep_query_sockaddr(ep, attr);
+        status = ucp_ep_query_sockaddr(ep, attr);
+        if (status != UCS_OK) {
+            return status;
+        }
+    }
+
+    if (attr->field_mask & UCP_EP_ATTR_FIELD_TRANSPORTS) {
+        status = ucp_ep_query_transport(ep, attr);
+        if (status != UCS_OK) {
+            return status;
+        }
     }
 
     return UCS_OK;
