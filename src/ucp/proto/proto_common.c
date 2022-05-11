@@ -526,7 +526,7 @@ ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
                              ucp_md_map_t reg_md_map)
 {
     ucp_context_h context      = params->super.worker->context;
-    ucs_linear_func_t reg_cost = ucs_linear_func_make(0, 0);
+    ucs_linear_func_t reg_cost = UCS_LINEAR_FUNC_ZERO;
     const uct_md_attr_t *md_attr;
     ucp_md_index_t md_index;
 

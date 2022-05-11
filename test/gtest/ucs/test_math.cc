@@ -271,6 +271,7 @@ UCS_TEST_F(test_math, linear_func) {
     EXPECT_FALSE(ucs_linear_func_is_equal(tmp_func1, tmp_func2, 1e-20));
     EXPECT_TRUE (ucs_linear_func_is_equal(tmp_func1, tmp_func1, 1e-20));
     EXPECT_TRUE (ucs_linear_func_is_equal(tmp_func2, tmp_func2, 1e-20));
+    EXPECT_TRUE(ucs_linear_func_is_zero(ucs_linear_func_make(0, 0), 1e-20));
 
     /* Compose */
     ucs_linear_func_t compose_func = ucs_linear_func_compose(func[0], func[1]);

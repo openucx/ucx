@@ -310,7 +310,7 @@ ucs_status_t ucp_proto_rndv_rts_init(const ucp_proto_init_params_t *init_params)
         .super.memtype_op    = UCT_EP_OP_LAST,
         .super.flags         = UCP_PROTO_COMMON_INIT_FLAG_RESPONSE,
         .remote_op_id        = UCP_OP_ID_RNDV_RECV,
-        .unpack_time         = ucs_linear_func_make(0, 0),
+        .unpack_time         = UCS_LINEAR_FUNC_ZERO,
         .perf_bias           = context->config.ext.rndv_perf_diff / 100.0,
         .mem_info.type       = init_params->select_param->mem_type,
         .mem_info.sys_dev    = init_params->select_param->sys_dev

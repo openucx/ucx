@@ -208,7 +208,7 @@ ucp_proto_rndv_rtr_init(const ucp_proto_init_params_t *init_params)
     }
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, SIZE_MAX,
-                                            ucs_linear_func_make(0, 0),
+                                            UCS_LINEAR_FUNC_ZERO,
                                             init_params->select_param->mem_type,
                                             init_params->select_param->sys_dev);
     if (status != UCS_OK) {

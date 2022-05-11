@@ -45,7 +45,7 @@ static ucs_status_t uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_rocm_copy_key_t);
-    md_attr->reg_cost             = ucs_linear_func_make(0, 0);
+    md_attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
@@ -344,7 +344,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
     md->super.ops       = &md_ops;
     md->super.component = &uct_rocm_copy_component;
     md->rcache          = NULL;
-    md->reg_cost        = ucs_linear_func_make(0, 0);
+    md->reg_cost        = UCS_LINEAR_FUNC_ZERO;
 
     if (md_config->enable_rcache != UCS_NO) {
         rcache_params.region_struct_size = sizeof(uct_rocm_copy_rcache_region_t);
@@ -358,7 +358,7 @@ uct_rocm_copy_md_open(uct_component_h component, const char *md_name,
         status = ucs_rcache_create(&rcache_params, "rocm_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
             md->super.ops = &md_rcache_ops;
-            md->reg_cost  = ucs_linear_func_make(0, 0);
+            md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
         } else {
             ucs_assert(md->rcache == NULL);
             if (md_config->enable_rcache == UCS_YES) {
