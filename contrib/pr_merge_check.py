@@ -71,14 +71,15 @@ class PRChecker(object):
         """
         Set self.approved_commit to the hash of the latest approved PR commit.
         """
+        if self.approved_commit:
+            return;
         page = 1
-        self.approved_commit = None
         while True:
             data = self.github_api_call(req="/reviews", page=page)
             if not data:
                 break
             for d in data:
-                if d[u'state'] == u'APPROVED' and \
+                if d[u'state'] in [u'APPROVED', u'DISMISSED'] and \
                         d[u'user'][u'login'] == self.approving_user:
                     self.approved_commit = str(d[u'commit_id'])
             page += 1
@@ -125,6 +126,9 @@ class PRChecker(object):
                           metavar="USER",
                           default = getpass.getuser(),
                           help="GitHub user name of approving user [default: %default]")
+        parser.add_option("--approved-commit", action="store", dest="approved_commit",
+                          metavar="COMMIT", default=None,
+                          help="Approved git commit hash")
         parser.add_option("--temp-dir", action="store", dest="temp_dir",
                           metavar="PATH",
                           default="/tmp/%s" % getpass.getuser(),
@@ -154,6 +158,7 @@ class PRChecker(object):
         self.depth = options.depth
         self.remote_name = options.remote
         self.verbose = options.verbose
+        self.approved_commit = options.approved_commit
 
     def print_diff(self, diff):
         if shutil.which("ydiff"):
