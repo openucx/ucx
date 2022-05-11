@@ -1392,11 +1392,6 @@ struct uct_md_attr {
 };
 
 
-
-#define UCT_DMABUF_FD_INVALID -1 /**< File descriptor is unusable for sharing memory regions
-                                      across devices */
-
-
 /**
  * @ingroup UCT_MD
  * @brief UCT MD memory attributes field mask
@@ -1481,7 +1476,7 @@ typedef struct uct_md_mem_attr {
      * by dmabuf_fd) backing the memory region being queried. This offset may
      * not be used if UCT_DMABUF_FD_INVALID is retured as dmabuf_fd.
      */
-    uint64_t          dmabuf_offset;
+    size_t            dmabuf_offset;
 } uct_md_mem_attr_t;
 
 
