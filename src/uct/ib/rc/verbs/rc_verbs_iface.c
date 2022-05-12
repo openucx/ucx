@@ -581,6 +581,6 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,
-                    uct_rc_verbs_iface_t, "RC_VERBS_",
+                    UCS_CLASS_NEW_FUNC_NAME(uct_rc_verbs_iface_t), "RC_VERBS_",
                     uct_rc_verbs_iface_config_table,
                     uct_rc_verbs_iface_config_t);

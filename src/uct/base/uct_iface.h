@@ -371,18 +371,18 @@ typedef struct uct_iface_local_addr_ns {
  * @param _component      Component to add the transport to
  * @param _name           Name of the transport (should be a token, not a string)
  * @param _query_devices  Function to query the list of available devices
- * @param _iface_class    Struct type defining the uct_iface class
+ * @param _iface_open     Function to open iface
  * @param _cfg_prefix     Prefix for configuration variables
  * @param _cfg_table      Transport configuration table
  * @param _cfg_struct     Struct type defining transport configuration
  */
-#define UCT_TL_DEFINE(_component, _name, _query_devices, _iface_class, \
+#define UCT_TL_DEFINE(_component, _name, _query_devices, _iface_open, \
                       _cfg_prefix, _cfg_table, _cfg_struct) \
     \
     uct_tl_t uct_##_name##_tl = { \
         .name               = #_name, \
         .query_devices      = _query_devices, \
-        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
+        .iface_open         = _iface_open, \
         .config = { \
             .name           = #_name" transport", \
             .prefix         = _cfg_prefix, \
@@ -458,18 +458,18 @@ typedef struct uct_iface_local_addr_ns {
  * @param _component      Component to add the transport to
  * @param _name           Name of the transport (should be a token, not a string)
  * @param _query_devices  Function to query the list of available devices
- * @param _iface_class    Struct type defining the uct_iface class
+ * @param _iface_open     Function to open iface
  * @param _cfg_prefix     Prefix for configuration variables
  * @param _cfg_table      Transport configuration table
  * @param _cfg_struct     Struct type defining transport configuration
  */
-#define UCT_TL_DEFINE_ENTRY(_component, _name, _query_devices, _iface_class, \
+#define UCT_TL_DEFINE_ENTRY(_component, _name, _query_devices, _iface_open, \
                             _cfg_prefix, _cfg_table, _cfg_struct) \
     \
     uct_tl_t UCT_TL_NAME(_name) = { \
         .name               = #_name, \
         .query_devices      = _query_devices, \
-        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
+        .iface_open         = _iface_open, \
         .config = { \
             .name           = #_name" transport", \
             .prefix         = _cfg_prefix, \

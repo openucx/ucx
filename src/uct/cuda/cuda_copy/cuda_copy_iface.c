@@ -488,5 +488,5 @@ static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_copy_iface_t, uct_iface_t);
 
 
 UCT_TL_DEFINE(&uct_cuda_copy_component, cuda_copy, uct_cuda_base_query_devices,
-              uct_cuda_copy_iface_t, "CUDA_COPY_",
+              UCS_CLASS_NEW_FUNC_NAME(uct_cuda_copy_iface_t), "CUDA_COPY_",
               uct_cuda_copy_iface_config_table, uct_cuda_copy_iface_config_t);

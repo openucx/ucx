@@ -1233,7 +1233,8 @@ static uct_iface_ops_t uct_dc_mlx5_iface_tl_ops = {
 
 static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h worker,
                            const uct_iface_params_t *params,
-                           const uct_iface_config_t *tl_config)
+                           const uct_iface_config_t *tl_config,
+                           unsigned per_dci_cq_len)
 {
     uct_dc_mlx5_iface_config_t *config = ucs_derived_of(tl_config,
                                                         uct_dc_mlx5_iface_config_t);
@@ -1261,9 +1262,8 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len *
-                                      UCT_IB_MLX5_MAX_BB *
-                                      (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
+    init_attr.cq_len[UCT_IB_DIR_TX] =
+            per_dci_cq_len * (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
@@ -1385,9 +1385,44 @@ UCS_CLASS_DEFINE(uct_dc_mlx5_iface_t, uct_rc_mlx5_iface_common_t);
 
 static UCS_CLASS_DEFINE_NEW_FUNC(uct_dc_mlx5_iface_t, uct_iface_t, uct_md_h,
                                  uct_worker_h, const uct_iface_params_t*,
-                                 const uct_iface_config_t*);
+                                 const uct_iface_config_t*, unsigned);
 
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_dc_mlx5_iface_t, uct_iface_t);
+
+static ucs_status_t
+uct_dc_mlx5_iface_open(uct_md_h md, uct_worker_h worker,
+                       const uct_iface_params_t *params,
+                       const uct_iface_config_t *tl_config,
+                       uct_iface_h *iface_p)
+{
+    uct_dc_mlx5_iface_config_t *config =
+            ucs_derived_of(tl_config, uct_dc_mlx5_iface_config_t);
+    unsigned per_dci_cq_len            =
+            config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
+    uct_dc_mlx5_iface_t *iface;
+    ucs_status_t status;
+
+    for (;;) {
+        status = UCS_CLASS_NEW_FUNC_NAME(uct_dc_mlx5_iface_t)(md, worker,
+                                                              params,
+                                                              tl_config,
+                                                              per_dci_cq_len,
+                                                              iface_p);
+        if (status != UCS_OK) {
+            return status;
+        }
+
+        iface = ucs_derived_of(*iface_p, uct_dc_mlx5_iface_t);
+        if (per_dci_cq_len >= iface->tx.bb_max) {
+            break;
+        }
+
+        per_dci_cq_len = iface->tx.bb_max;
+        uct_iface_close(*iface_p);
+    }
+
+    return UCS_OK;
+}
 
 static ucs_status_t
 uct_dc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_p,
@@ -1407,7 +1442,7 @@ uct_dc_mlx5_query_tl_devices(uct_md_h md, uct_tl_device_resource_t **tl_devices_
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, dc_mlx5, uct_dc_mlx5_query_tl_devices,
-                    uct_dc_mlx5_iface_t, "DC_MLX5_",
+                    uct_dc_mlx5_iface_open, "DC_MLX5_",
                     uct_dc_mlx5_iface_config_table, uct_dc_mlx5_iface_config_t);
 
 static void

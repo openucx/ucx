@@ -926,5 +926,5 @@ uct_ud_mlx5_query_tl_devices(uct_md_h md,
 }
 
 UCT_TL_DEFINE_ENTRY(&uct_ib_component, ud_mlx5, uct_ud_mlx5_query_tl_devices,
-                    uct_ud_mlx5_iface_t, "UD_MLX5_",
+                    UCS_CLASS_NEW_FUNC_NAME(uct_ud_mlx5_iface_t), "UD_MLX5_",
                     uct_ud_mlx5_iface_config_table, uct_ud_mlx5_iface_config_t);

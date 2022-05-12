@@ -256,5 +256,5 @@ static UCS_CLASS_DEFINE_NEW_FUNC(uct_rocm_ipc_iface_t, uct_iface_t, uct_md_h,
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_rocm_ipc_iface_t, uct_iface_t);
 
 UCT_TL_DEFINE(&uct_rocm_ipc_component, rocm_ipc, uct_rocm_base_query_devices,
-              uct_rocm_ipc_iface_t, "ROCM_IPC_",
+              UCS_CLASS_NEW_FUNC_NAME(uct_rocm_ipc_iface_t), "ROCM_IPC_",
               uct_rocm_ipc_iface_config_table, uct_rocm_ipc_iface_config_t);

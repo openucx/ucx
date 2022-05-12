@@ -206,5 +206,5 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_gdr_copy_iface_t, uct_iface_t, uct_md_h, uct_worke
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_gdr_copy_iface_t, uct_iface_t);
 
 UCT_TL_DEFINE(&uct_gdr_copy_component, gdr_copy, uct_cuda_base_query_devices,
-              uct_gdr_copy_iface_t, "GDR_COPY_",
+              UCS_CLASS_NEW_FUNC_NAME(uct_gdr_copy_iface_t), "GDR_COPY_",
               uct_gdr_copy_iface_config_table, uct_gdr_copy_iface_config_t);

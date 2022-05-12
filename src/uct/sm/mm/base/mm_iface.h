@@ -239,8 +239,9 @@ typedef struct uct_mm_iface {
     UCT_MM_COMPONENT_DEFINE(_name, _md_ops, _rkey_unpack, _rkey_release, \
                             _cfg_prefix) \
     UCT_TL_DEFINE_ENTRY(&UCT_COMPONENT_NAME(_name).super, _name, \
-                        uct_sm_base_query_tl_devices, uct_mm_iface_t, \
-                        _cfg_prefix, _cfg_table, uct_mm_iface_config_t)
+                        uct_sm_base_query_tl_devices, \
+                        UCS_CLASS_NEW_FUNC_NAME(uct_mm_iface_t), _cfg_prefix, \
+                        _cfg_table, uct_mm_iface_config_t)
 
 
 extern ucs_config_field_t uct_mm_iface_config_table[];

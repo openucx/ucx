@@ -567,5 +567,6 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_cuda_ipc_iface_t, uct_iface_t, uct_md_h, uct_worke
 static UCS_CLASS_DEFINE_DELETE_FUNC(uct_cuda_ipc_iface_t, uct_iface_t);
 
 UCT_TL_DEFINE(&uct_cuda_ipc_component.super, cuda_ipc,
-              uct_cuda_ipc_query_devices, uct_cuda_ipc_iface_t, "CUDA_IPC_",
+              uct_cuda_ipc_query_devices,
+              UCS_CLASS_NEW_FUNC_NAME(uct_cuda_ipc_iface_t), "CUDA_IPC_",
               uct_cuda_ipc_iface_config_table, uct_cuda_ipc_iface_config_t);

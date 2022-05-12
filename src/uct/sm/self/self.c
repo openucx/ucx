@@ -477,7 +477,7 @@ static uct_component_t uct_self_component = {
 };
 
 UCT_TL_DEFINE_ENTRY(&uct_self_component, self, uct_self_query_tl_devices,
-                    uct_self_iface_t, "SELF_", uct_self_iface_config_table,
-                    uct_self_iface_config_t);
+                    UCS_CLASS_NEW_FUNC_NAME(uct_self_iface_t), "SELF_",
+                    uct_self_iface_config_table, uct_self_iface_config_t);
 
 UCT_SINGLE_TL_INIT(&uct_self_component, self,,,)

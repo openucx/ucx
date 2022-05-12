@@ -377,5 +377,5 @@ UCS_CLASS_DEFINE_NEW_FUNC(uct_ugni_rdma_iface_t, uct_iface_t, uct_md_h,
                           const uct_iface_config_t*);
 
 UCT_TL_DEFINE(&uct_ugni_component, ugni_rdma, uct_ugni_query_devices,
-              uct_ugni_rdma_iface_t, "UGNI_RDMA_",
+              UCS_CLASS_NEW_FUNC_NAME(uct_ugni_rdma_iface_t), "UGNI_RDMA_",
               uct_ugni_rdma_iface_config_table, uct_ugni_rdma_iface_config_t);
