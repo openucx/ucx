@@ -1171,7 +1171,7 @@ ucp_worker_get_sys_device_distance(ucp_context_h context,
     for (i = 0; i < context->num_tls; i++) {
         md_index = context->tl_rscs[i].md_index;
         if (strcmp(context->tl_mds[md_index].rsc.md_name,
-                   context->config.selection_cmp)) {
+                   context->config.ext.select_distance_md)) {
             continue;
         }
 
