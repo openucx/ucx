@@ -550,6 +550,18 @@ static void uct_ud_verbs_iface_destroy_qp(uct_ud_iface_t *ud_iface)
 
 static void UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_iface_t)(uct_iface_t*);
 
+static unsigned
+uct_ud_verbs_get_cq_len(const uct_ib_iface_t *ib_iface,
+                        const uct_ib_iface_config_t *ib_config,
+                        uct_ib_dir_t dir)
+{
+    if (dir == UCT_IB_DIR_TX) {
+        return ib_config->tx.queue_len;
+    } else {
+        return ib_config->rx.queue_len;
+    }
+}
+
 static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .super = {
         .super = {
@@ -558,6 +570,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_ud_ep_invalidate
         },
+        .get_cq_len     =  uct_ud_verbs_get_cq_len,
         .create_cq      = uct_ib_verbs_create_cq,
         .arm_cq         = uct_ib_iface_arm_cq,
         .event_cq       = (uct_ib_iface_event_cq_func_t)ucs_empty_function,
@@ -669,9 +682,6 @@ static UCS_CLASS_INIT_FUNC(uct_ud_verbs_iface_t, uct_md_h md, uct_worker_h worke
     ucs_status_t status;
 
     ucs_trace_func("");
-
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.rx.queue_len;
 
     UCS_CLASS_CALL_SUPER_INIT(uct_ud_iface_t, &uct_ud_verbs_iface_ops, &uct_ud_verbs_iface_tl_ops, md,
                               worker, params, config, &init_attr);

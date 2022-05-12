@@ -197,12 +197,7 @@ struct uct_ib_iface_config {
 
 enum {
     UCT_IB_CQ_IGNORE_OVERRUN         = UCS_BIT(0),
-    UCT_IB_TM_SUPPORTED              = UCS_BIT(1),
-
-    /* Indicates that TX cq len in uct_ib_iface_init_attr_t is specified per
-     * each IB path. Therefore IB interface constructor would need to multiply
-     * TX CQ len by the number of IB paths (when it is properly initialized). */
-    UCT_IB_TX_OPS_PER_PATH           = UCS_BIT(2)
+    UCT_IB_TM_SUPPORTED              = UCS_BIT(1)
 };
 
 
@@ -235,6 +230,11 @@ typedef struct uct_ib_qp_attr {
 } uct_ib_qp_attr_t;
 
 
+typedef unsigned 
+(*uct_ib_iface_get_cq_len_func_t)(const uct_ib_iface_t *iface,
+                                  const uct_ib_iface_config_t *config,
+                                  uct_ib_dir_t dir);
+
 typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
                                                       uct_ib_dir_t dir,
                                                       const uct_ib_iface_config_t *config,
@@ -258,6 +258,7 @@ typedef ucs_status_t (*uct_ib_iface_set_ep_failed_func_t)(uct_ib_iface_t *iface,
 
 struct uct_ib_iface_ops {
     uct_iface_internal_ops_t           super;
+    uct_ib_iface_get_cq_len_func_t     get_cq_len;
     uct_ib_iface_create_cq_func_t      create_cq;
     uct_ib_iface_arm_cq_func_t         arm_cq;
     uct_ib_iface_event_cq_func_t       event_cq;
@@ -315,7 +316,7 @@ typedef struct uct_ib_fence_info {
 UCS_CLASS_DECLARE(uct_ib_iface_t, uct_iface_ops_t*, uct_ib_iface_ops_t*,
                   uct_md_h, uct_worker_h, const uct_iface_params_t*,
                   const uct_ib_iface_config_t*,
-                  const uct_ib_iface_init_attr_t*);
+                  uct_ib_iface_init_attr_t*);
 
 /*
  * The offset to the payload is the maximum between user-requested headroom
@@ -646,13 +647,11 @@ uct_ib_fence_info_init(uct_ib_fence_info_t* fence)
 }
 
 static UCS_F_ALWAYS_INLINE unsigned
-uct_ib_cq_size(uct_ib_iface_t *iface, const uct_ib_iface_init_attr_t *init_attr,
+uct_ib_cq_size(const uct_ib_iface_init_attr_t *init_attr,
                uct_ib_dir_t dir)
 {
     if (dir == UCT_IB_DIR_RX) {
         return init_attr->cq_len[UCT_IB_DIR_RX];
-    } else if (init_attr->flags & UCT_IB_TX_OPS_PER_PATH) {
-        return init_attr->cq_len[UCT_IB_DIR_TX] * iface->num_paths;
     } else {
         return init_attr->cq_len[UCT_IB_DIR_TX];
     }

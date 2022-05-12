@@ -668,6 +668,18 @@ uct_ud_mlx5_iface_peer_address_str(const uct_ud_iface_t *iface,
     return str;
 }
 
+static unsigned
+uct_ud_mlx5_get_cq_len(const uct_ib_iface_t *ib_iface,
+                       const uct_ib_iface_config_t *ib_config,
+                       uct_ib_dir_t dir)
+{
+    if (dir == UCT_IB_DIR_TX) {
+        return ib_config->tx.queue_len * UCT_IB_MLX5_MAX_BB;
+    } else {
+        return ib_config->rx.queue_len;
+    }
+}
+
 static ucs_status_t
 uct_ud_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                       const uct_ib_iface_config_t *ib_config,
@@ -776,6 +788,7 @@ static uct_ud_iface_ops_t uct_ud_mlx5_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_ud_ep_invalidate
         },
+        .get_cq_len     = uct_ud_mlx5_get_cq_len,
         .create_cq      = uct_ud_mlx5_create_cq,
         .arm_cq         = uct_ud_mlx5_iface_arm_cq,
         .event_cq       = uct_ud_mlx5_iface_event_cq,
@@ -836,10 +849,7 @@ static UCS_CLASS_INIT_FUNC(uct_ud_mlx5_iface_t,
 
     ucs_trace_func("");
 
-    init_attr.flags                 = UCT_IB_CQ_IGNORE_OVERRUN;
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len * UCT_IB_MLX5_MAX_BB;
-    init_attr.cq_len[UCT_IB_DIR_RX] = config->super.super.rx.queue_len;
-
+    init_attr.flags        = UCT_IB_CQ_IGNORE_OVERRUN;
     self->tx.mmio_mode     = config->mlx5_common.mmio_mode;
     self->tx.wq.super.type = UCT_IB_MLX5_OBJ_TYPE_LAST;
 

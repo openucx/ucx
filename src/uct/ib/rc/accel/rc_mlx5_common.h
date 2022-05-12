@@ -725,6 +725,10 @@ ucs_status_t uct_rc_mlx5_devx_iface_subscribe_event(uct_rc_mlx5_iface_common_t *
                                                     enum ibv_event_type event_type,
                                                     unsigned event_data);
 
+unsigned
+uct_rc_mlx5_common_get_rx_cq_len(uct_rc_mlx5_iface_common_t *iface,
+                                 uct_rc_iface_common_config_t *config);
+
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_qp_attr_t *qp_attr,
                                  unsigned max_send_wr,

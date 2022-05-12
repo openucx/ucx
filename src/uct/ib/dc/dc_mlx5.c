@@ -1133,6 +1133,29 @@ static void uct_dc_mlx5_dci_handle_failure(uct_dc_mlx5_iface_t *iface,
     uct_dc_mlx5_ep_handle_failure(ep, cqe, status);
 }
 
+static unsigned
+uct_dc_mlx5_get_cq_len(const uct_ib_iface_t *ib_iface,
+                       const uct_ib_iface_config_t *ib_config,
+                       uct_ib_dir_t dir)
+{
+    uct_dc_mlx5_iface_t *iface         =
+            ucs_derived_of(ib_iface, uct_dc_mlx5_iface_t);
+    uct_dc_mlx5_iface_config_t *config =
+            ucs_derived_of(ib_config, uct_dc_mlx5_iface_config_t);
+    size_t wqe_size                    =
+            uct_ib_mlx5_devx_wqe_size(iface->super.super.config.tx_min_sge,
+                                      iface->super.super.config.tx_min_inline);
+
+    if (dir == UCT_IB_DIR_TX) {
+        return (ucs_roundup_pow2_or0(config->super.super.tx.queue_len *
+                                     wqe_size) / MLX5_SEND_WQE_BB -
+                2 * UCT_IB_MLX5_MAX_BB) *
+               (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
+    } else {
+        return uct_rc_mlx5_common_get_rx_cq_len(&iface->super, &config->super);
+    }
+}
+
 static ucs_status_t
 uct_dc_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                       const uct_ib_iface_config_t *ib_config,
@@ -1173,6 +1196,7 @@ static uct_rc_iface_ops_t uct_dc_mlx5_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = uct_dc_mlx5_ep_invalidate
         },
+        .get_cq_len     = uct_dc_mlx5_get_cq_len,
         .create_cq      = uct_dc_mlx5_create_cq,
         .arm_cq         = uct_rc_mlx5_iface_common_arm_cq,
         .event_cq       = uct_rc_mlx5_iface_common_event_cq,
@@ -1240,8 +1264,10 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uct_ib_mlx5_md_t *md               = ucs_derived_of(tl_md,
                                                         uct_ib_mlx5_md_t);
     uct_ib_iface_init_attr_t init_attr = {};
+    uint8_t num_dcis                   = config->ndci +
+                                         UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
     ucs_status_t status;
-    unsigned tx_cq_size;
+    unsigned dci_cq_len;
 
     ucs_trace_func("");
 
@@ -1252,8 +1278,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     }
 
     init_attr.qp_type       = UCT_IB_QPT_DCI;
-    init_attr.flags         = UCT_IB_CQ_IGNORE_OVERRUN |
-                              UCT_IB_TX_OPS_PER_PATH;
+    init_attr.flags         = UCT_IB_CQ_IGNORE_OVERRUN;
     init_attr.fc_req_size   = sizeof(uct_dc_fc_request_t);
     init_attr.max_rd_atomic = md->max_rd_atomic_dc;
 
@@ -1261,20 +1286,17 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         init_attr.flags  |= UCT_IB_TM_SUPPORTED;
     }
 
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.super.tx.queue_len *
-                                      UCT_IB_MLX5_MAX_BB *
-                                      (config->ndci + UCT_DC_MLX5_KEEPALIVE_NUM_DCIS);
     /* TODO check caps instead */
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_mlx5_iface_common_t,
                               &uct_dc_mlx5_iface_tl_ops, &uct_dc_mlx5_iface_ops,
                               tl_md, worker, params, &config->super,
                               &config->rc_mlx5_common, &init_attr);
 
-    tx_cq_size = uct_ib_cq_size(&self->super.super.super, &init_attr,
-                                UCT_IB_DIR_TX);
+    dci_cq_len = uct_ib_cq_size(&init_attr, UCT_IB_DIR_TX) / num_dcis;
 
     /* driver will round up num cqes to pow of 2 if needed */
-    if (ucs_roundup_pow2(tx_cq_size) > UCT_DC_MLX5_MAX_TX_CQ_LEN) {
+    if (ucs_roundup_pow2(init_attr.cq_len[UCT_IB_DIR_TX]) >
+        UCT_DC_MLX5_MAX_TX_CQ_LEN) {
         ucs_error("Can't allocate TX resources, try to decrease dcis number (%d)"
                   " or tx qp length (%d)",
                   config->ndci, config->super.super.tx.queue_len);
@@ -1333,10 +1355,13 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
         goto err_destroy_dct;
     }
 
+    ucs_assertv(dci_cq_len == self->tx.bb_max,
+                "dci_cq_len %u bb_max %u", dci_cq_len, self->tx.bb_max);
+
     ucs_debug("dc iface %p: using '%s' policy with %d dcis and %d cqes, dct 0x%x",
               self, uct_dc_tx_policy_names[self->tx.policy], self->tx.ndci,
-              tx_cq_size, UCT_RC_MLX5_TM_ENABLED(&self->super) ?
-              0 : self->rx.dct.qp_num);
+              init_attr.cq_len[UCT_IB_DIR_TX],
+              UCT_RC_MLX5_TM_ENABLED(&self->super) ? 0 : self->rx.dct.qp_num);
 
     /* mlx5 init part */
     status = uct_ud_mlx5_iface_common_init(&self->super.super.super,

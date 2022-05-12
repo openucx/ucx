@@ -1001,7 +1001,7 @@ ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
                                     int preferred_cpu, size_t inl)
 {
     uct_ib_device_t *dev = uct_ib_iface_device(iface);
-    unsigned cq_size     = uct_ib_cq_size(iface, init_attr, dir);
+    unsigned cq_size     = uct_ib_cq_size(init_attr, dir);
     struct ibv_cq *cq;
     char message[128];
     int cq_errno;
@@ -1238,7 +1238,7 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
                     uct_ib_iface_ops_t *ops, uct_md_h md, uct_worker_h worker,
                     const uct_iface_params_t *params,
                     const uct_ib_iface_config_t *config,
-                    const uct_ib_iface_init_attr_t *init_attr)
+                    uct_ib_iface_init_attr_t *init_attr)
 {
     uct_ib_md_t *ib_md   = ucs_derived_of(md, uct_ib_md_t);
     uct_ib_device_t *dev = &ib_md->dev;
@@ -1347,6 +1347,11 @@ UCS_CLASS_INIT_FUNC(uct_ib_iface_t, uct_iface_ops_t *tl_ops,
     if (status != UCS_OK) {
         goto err_destroy_comp_channel;
     }
+
+    init_attr->cq_len[UCT_IB_DIR_TX] = self->ops->get_cq_len(self, config,
+                                                             UCT_IB_DIR_TX);
+    init_attr->cq_len[UCT_IB_DIR_RX] = self->ops->get_cq_len(self, config,
+                                                             UCT_IB_DIR_RX);
 
     status = self->ops->create_cq(self, UCT_IB_DIR_TX, config, init_attr,
                                   preferred_cpu, config->inl[UCT_IB_DIR_TX]);

@@ -263,6 +263,21 @@ uct_rc_verbs_iface_qp_cleanup(uct_rc_iface_qp_cleanup_ctx_t *rc_cleanup_ctx)
     uct_ib_destroy_qp(cleanup_ctx->qp);
 }
 
+static unsigned
+uct_rc_verbs_get_cq_len(const uct_ib_iface_t *ib_iface,
+                        const uct_ib_iface_config_t *ib_config,
+                        uct_ib_dir_t dir)
+{
+    uct_rc_verbs_iface_config_t *config =
+                    ucs_derived_of(ib_config, uct_rc_verbs_iface_config_t);
+
+    if (dir == UCT_IB_DIR_TX) {
+        return config->super.tx_cq_len;
+    } else {
+        return ib_config->rx.queue_len;
+    }
+}
+
 static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
                            uct_worker_h worker, const uct_iface_params_t *params,
                            const uct_iface_config_t *tl_config)
@@ -278,13 +293,11 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
-    init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
-    init_attr.rx_hdr_len            = sizeof(uct_rc_hdr_t);
-    init_attr.qp_type               = IBV_QPT_RC;
-    init_attr.cq_len[UCT_IB_DIR_RX] = ib_config->rx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
-    init_attr.seg_size              = ib_config->seg_size;
-    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
+    init_attr.fc_req_size   = sizeof(uct_rc_pending_req_t);
+    init_attr.rx_hdr_len    = sizeof(uct_rc_hdr_t);
+    init_attr.qp_type       = IBV_QPT_RC;
+    init_attr.seg_size      = ib_config->seg_size;
+    init_attr.max_rd_atomic = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
@@ -497,7 +510,7 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
     .iface_get_address        = ucs_empty_function_return_success,
     .iface_get_device_address = uct_ib_iface_get_device_address,
     .iface_is_reachable       = uct_ib_iface_is_reachable,
-    };
+};
 
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
@@ -507,6 +520,7 @@ static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
             .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
             .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
         },
+        .get_cq_len     = uct_rc_verbs_get_cq_len,
         .create_cq      = uct_ib_verbs_create_cq,
         .arm_cq         = uct_ib_iface_arm_cq,
         .event_cq       = (uct_ib_iface_event_cq_func_t)ucs_empty_function,

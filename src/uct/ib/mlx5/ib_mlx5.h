@@ -709,6 +709,7 @@ void uct_ib_mlx5_devx_uar_cleanup(uct_ib_mlx5_devx_uar_t *uar);
 void uct_ib_mlx5_txwq_validate_always(uct_ib_mlx5_txwq_t *wq, uint16_t num_bb,
                                       int hw_ci_updated);
 
+size_t uct_ib_mlx5_devx_wqe_size(size_t tx_min_sge, size_t tx_min_inline);
 
 /**
  * DEVX QP API

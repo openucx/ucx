@@ -28,7 +28,19 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
 }
 #endif
 
+size_t uct_ib_mlx5_devx_wqe_size(size_t tx_min_sge, size_t tx_min_inline)
+{
+    return sizeof(struct mlx5_wqe_ctrl_seg) +
+           sizeof(struct mlx5_wqe_umr_ctrl_seg) +
+           sizeof(struct mlx5_wqe_mkey_context_seg) +
+           ucs_max(sizeof(struct mlx5_wqe_umr_klm_seg), 64) +
+           ucs_max(tx_min_sge * sizeof(struct mlx5_wqe_data_seg),
+                   ucs_align_up(sizeof(struct mlx5_wqe_inl_data_seg) +
+                                tx_min_inline, 16));
+}
+
 #if HAVE_DEVX
+
 ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
                                         uct_ib_mlx5_qp_t *qp,
                                         uct_ib_mlx5_txwq_t *tx,
@@ -72,17 +84,12 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err;
     }
 
-    wqe_size = sizeof(struct mlx5_wqe_ctrl_seg) +
-               sizeof(struct mlx5_wqe_umr_ctrl_seg) +
-               sizeof(struct mlx5_wqe_mkey_context_seg) +
-               ucs_max(sizeof(struct mlx5_wqe_umr_klm_seg), 64) +
-               ucs_max(attr->super.cap.max_send_sge * sizeof(struct mlx5_wqe_data_seg),
-                       ucs_align_up(sizeof(struct mlx5_wqe_inl_data_seg) +
-                                    attr->super.cap.max_inline_data, 16));
-    len_tx = ucs_roundup_pow2_or0(attr->super.cap.max_send_wr * wqe_size);
-    max_tx = len_tx / MLX5_SEND_WQE_BB;
-    max_rx = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
-    len    = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
+    wqe_size = uct_ib_mlx5_devx_wqe_size(attr->super.cap.max_send_sge,
+                                         attr->super.cap.max_inline_data);
+    len_tx   = ucs_roundup_pow2_or0(attr->super.cap.max_send_wr * wqe_size);
+    max_tx   = len_tx / MLX5_SEND_WQE_BB;
+    max_rx   = ucs_roundup_pow2_or0(attr->super.cap.max_recv_wr);
+    len      = len_tx + max_rx * UCT_IB_MLX5_MAX_BB * UCT_IB_MLX5_WQE_SEG_SIZE;
 
     if (tx != NULL) {
         status = uct_ib_mlx5_md_buf_alloc(md, len, 0, &qp->devx.wq_buf,

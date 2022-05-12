@@ -125,7 +125,7 @@ uct_ib_mlx5_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
     int cq_errno;
 
     uct_ib_fill_cq_attr(&cq_attr, init_attr, iface, preferred_cpu,
-                        uct_ib_cq_size(iface, init_attr, dir));
+                        uct_ib_cq_size(init_attr, dir));
 
     dv_attr.comp_mask = MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE;
     dv_attr.cqe_size  = uct_ib_get_cqe_size(inl > 32 ? 128 : 64);

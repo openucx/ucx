@@ -524,6 +524,15 @@ void uct_rc_mlx5_iface_common_tag_cleanup(uct_rc_mlx5_iface_common_t *iface)
     ucs_mpool_cleanup(&iface->tm.mp.tx_mp, 1);
 }
 
+unsigned uct_rc_mlx5_common_get_rx_cq_len(uct_rc_mlx5_iface_common_t *iface,
+                                          uct_rc_iface_common_config_t *config)
+{
+    return iface->tm.enabled ?
+           (config->super.rx.queue_len + iface->tm.num_tags * 3 +
+            config->super.rx.queue_len / IBV_DEVICE_MAX_UNEXP_COUNT) :
+           config->super.rx.queue_len;
+}
+
 void uct_rc_mlx5_iface_fill_attr(uct_rc_mlx5_iface_common_t *iface,
                                  uct_ib_mlx5_qp_attr_t *qp_attr,
                                  unsigned max_send_wr,
