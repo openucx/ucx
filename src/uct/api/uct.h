@@ -1380,6 +1380,7 @@ struct uct_md_attr {
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
         uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
         uint64_t             access_mem_types; /**< Memory types that Memory Domain can access */
+        uint64_t             dmabuf_mem_types; /**< Memory types for which MD can provide DMABUF fd */
     } cap;
 
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost estimation

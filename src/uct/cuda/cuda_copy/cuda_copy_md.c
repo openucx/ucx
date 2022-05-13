@@ -55,6 +55,7 @@ static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
     md_attr->cap.detect_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA) |
                                     UCS_BIT(UCS_MEMORY_TYPE_CUDA_MANAGED);
+    md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cap.max_alloc        = SIZE_MAX;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = 0;
