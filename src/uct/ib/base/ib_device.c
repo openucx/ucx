@@ -761,7 +761,7 @@ ucs_status_t uct_ib_device_query(uct_ib_device_t *dev,
         break;
     case IBV_NODE_CA:
     default:
-        dev->first_port = 1;
+        dev->first_port = UCT_IB_FIRST_PORT;
         dev->num_ports  = IBV_DEV_ATTR(dev, phys_port_cnt);
         break;
     }

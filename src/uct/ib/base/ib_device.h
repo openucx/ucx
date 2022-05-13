@@ -44,6 +44,7 @@
 #define UCT_IB_PKEY_PARTITION_MASK        0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK       0x8000 /* Full/send-only member */
 #define UCT_IB_PKEY_DEFAULT               0xffff /* Default PKEY */
+#define UCT_IB_FIRST_PORT                 1
 #define UCT_IB_DEV_MAX_PORTS              2
 #define UCT_IB_FABRIC_TIME_MAX            32
 #define UCT_IB_INVALID_MKEY               0xffffffffu
