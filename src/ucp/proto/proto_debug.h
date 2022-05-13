@@ -6,6 +6,7 @@
 #ifndef UCP_PROTO_DEBUG_H_
 #define UCP_PROTO_DEBUG_H_
 
+#include "proto_common.h"
 #include "proto_select.h"
 
 
@@ -39,6 +40,16 @@
 #define UCP_PROTO_PERF_FUNC_TYPES_ARG(_perf_func) \
     UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_SINGLE])), \
     UCP_PROTO_PERF_FUNC_ARG((&(_perf_func)[UCP_PROTO_PERF_TYPE_MULTI]))
+
+
+/*
+ * Protocol performance node types
+ */
+typedef enum {
+    UCP_PROTO_PERF_NODE_TYPE_DATA,   /* Data node */
+    UCP_PROTO_PERF_NODE_TYPE_SELECT, /* Select one of children */
+    UCP_PROTO_PERF_NODE_TYPE_COMPOSE /* Compose new value from the children */
+} ucp_proto_perf_node_type_t;
 
 
 void ucp_proto_select_perf_str(const ucs_linear_func_t *perf, char *time_str,
@@ -77,6 +88,57 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
 void ucp_proto_config_info_str(ucp_worker_h worker,
                                const ucp_proto_config_t *proto_config,
                                size_t msg_length, ucs_string_buffer_t *strb);
+
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
+                        const char *desc_fmt, va_list ap);
+
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...);
+
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new_select(const char *name, unsigned selected_child,
+                               const char *desc_fmt, ...);
+
+
+ucp_proto_perf_node_t *
+ucp_proto_perf_node_new_compose(const char *name, const char *desc_fmt, ...);
+
+
+void ucp_proto_perf_node_ref(ucp_proto_perf_node_t *perf_node);
+
+
+void ucp_proto_perf_node_deref(ucp_proto_perf_node_t **perf_node_p);
+
+
+void ucp_proto_perf_node_own_child(ucp_proto_perf_node_t *perf_node,
+                                   ucp_proto_perf_node_t **child_perf_node_p);
+
+
+void ucp_proto_perf_node_add_child(ucp_proto_perf_node_t *perf_node,
+                                   ucp_proto_perf_node_t *child_perf_node);
+
+
+void ucp_proto_perf_node_add_data(ucp_proto_perf_node_t *perf_node,
+                                  const char *name,
+                                  const ucs_linear_func_t value);
+
+
+void ucp_proto_perf_node_add_scalar(ucp_proto_perf_node_t *perf_node,
+                                    const char *name, double value);
+
+
+void ucp_proto_perf_node_add_bandwidth(ucp_proto_perf_node_t *perf_node,
+                                       const char *name, double value);
+
+
+const char *ucp_proto_perf_node_name(ucp_proto_perf_node_t *perf_node);
+
+
+const char *ucp_proto_perf_node_desc(ucp_proto_perf_node_t *perf_node);
 
 
 void ucp_proto_select_elem_trace(ucp_worker_h worker,

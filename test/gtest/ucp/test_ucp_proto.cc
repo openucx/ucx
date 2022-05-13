@@ -14,6 +14,7 @@ extern "C" {
 #include <ucp/dt/datatype_iter.inl>
 #include <ucp/proto/proto.h>
 #include <ucp/proto/proto_debug.h>
+#include <ucs/datastruct/linear_func.h>
 #include <ucp/proto/proto_select.inl>
 #include <ucp/core/ucp_worker.inl>
 }
@@ -207,3 +208,71 @@ UCS_TEST_P(test_ucp_proto, dt_iter_mem_reg)
 UCP_INSTANTIATE_TEST_CASE(test_ucp_proto)
 UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_proto, shm_ipc,
                                         "shm,cuda_ipc,rocm_ipc")
+
+class test_perf_node : public test_ucp_proto {
+};
+
+UCS_TEST_P(test_perf_node, basic)
+{
+    static const std::string nullstr = "(null)";
+
+    EXPECT_EQ(nullstr, ucp_proto_perf_node_name(NULL));
+    EXPECT_EQ(nullstr, ucp_proto_perf_node_desc(NULL));
+
+    ucp_proto_perf_node_t *n1 = ucp_proto_perf_node_new_compose("n1", "node%d",
+                                                                1);
+    ASSERT_NE(nullptr, n1);
+    EXPECT_EQ(std::string("n1"), ucp_proto_perf_node_name(n1));
+    EXPECT_EQ(std::string("node1"), ucp_proto_perf_node_desc(n1));
+
+    ucp_proto_perf_node_t *n2 = ucp_proto_perf_node_new_select("n2", 0,
+                                                               "node%d", 2);
+    ASSERT_NE(nullptr, n2);
+    EXPECT_EQ(std::string("n2"), ucp_proto_perf_node_name(n2));
+    EXPECT_EQ(std::string("node2"), ucp_proto_perf_node_desc(n2));
+
+    ucp_proto_perf_node_t *n3 = ucp_proto_perf_node_new_data("n3", "node%d", 3);
+    ASSERT_NE(nullptr, n3);
+    EXPECT_EQ(std::string("n3"), ucp_proto_perf_node_name(n3));
+    EXPECT_EQ(std::string("node3"), ucp_proto_perf_node_desc(n3));
+
+    ucp_proto_perf_node_add_data(n3, "zero", UCS_LINEAR_FUNC_ZERO);
+    ucp_proto_perf_node_add_data(n3, "one", ucs_linear_func_make(0, 1));
+    ucp_proto_perf_node_add_scalar(n3, "lat", 1e-6);
+    ucp_proto_perf_node_add_bandwidth(n3, "bw", UCS_MBYTE);
+
+    /* NULL child is ignored */
+    ucp_proto_perf_node_add_child(n1, NULL);
+    ucp_proto_perf_node_add_child(n2, NULL);
+    ucp_proto_perf_node_add_child(n3, NULL);
+
+    ucp_proto_perf_node_t *tmp = NULL;
+    ucp_proto_perf_node_own_child(n3, &tmp);
+
+    /* NULL parent is ignored */
+    ucp_proto_perf_node_add_child(NULL, n1);
+    ucp_proto_perf_node_add_child(NULL, n2);
+    ucp_proto_perf_node_add_child(NULL, n3);
+    ucp_proto_perf_node_add_child(NULL, NULL);
+
+    /* NULL owner should remove extra ref */
+    ucp_proto_perf_node_t *n2_ref = n2;
+    ucp_proto_perf_node_ref(n2_ref);
+    ucp_proto_perf_node_own_child(NULL, &n2_ref);
+    EXPECT_NE(nullptr, n2_ref); /* n2 still not released */
+
+    /* NULL node is ignored */
+    ucp_proto_perf_node_add_data(NULL, "ignored", UCS_LINEAR_FUNC_ZERO);
+    ucp_proto_perf_node_add_scalar(NULL, "ignored", 1.0);
+
+    /* n1 -> n2 -> n3 */
+    ucp_proto_perf_node_own_child(n2, &n3); /* Dropped extra ref to n3 */
+    ucp_proto_perf_node_add_child(n1, n2);  /* Have 2 references to n2 */
+
+    ucp_proto_perf_node_deref(&n2); /* n3 should still be alive */
+    EXPECT_EQ(std::string("node3"), ucp_proto_perf_node_desc(n3));
+
+    ucp_proto_perf_node_deref(&n1); /* Release n1,n2,n3 */
+}
+
+UCP_INSTANTIATE_TEST_CASE_TLS(test_perf_node, all, "all")
