@@ -113,6 +113,264 @@ const char *ucp_object_versions[] = {
 static UCS_CONFIG_DEFINE_ARRAY(memunit_sizes, sizeof(size_t),
                                UCS_CONFIG_TYPE_MEMUNITS);
 
+static ucs_config_field_t ucp_context_config_table[] = {
+  {"SELECT_DISTANCE_MD", "cuda_cpy",
+   "MD whose distance is queried when evaluating transport selection score",
+   ucs_offsetof(ucp_context_config_t, select_distance_md), UCS_CONFIG_TYPE_STRING},
+
+  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
+   "Memory types which have whole allocations registered.\n"
+   "Allowed memory types: cuda, rocm, rocm-managed",
+   ucs_offsetof(ucp_context_config_t, reg_whole_alloc_bitmap),
+   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
+
+  {"RNDV_MEMTYPE_DIRECT_SIZE", "inf",
+   "Maximum size for mem type direct in rendezvous protocol\n",
+   ucs_offsetof(ucp_context_config_t, rndv_memtype_direct_size),
+   UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"BCOPY_THRESH", "auto",
+   "Threshold for switching from short to bcopy protocol",
+   ucs_offsetof(ucp_context_config_t, bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_THRESH", UCS_VALUE_AUTO_STR,
+   "Threshold for switching from eager to rendezvous protocol",
+   ucs_offsetof(ucp_context_config_t, rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_SEND_NBR_THRESH", "256k",
+   "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
+   "Relevant only if UCX_RNDV_THRESH is set to \"auto\".",
+   ucs_offsetof(ucp_context_config_t, rndv_send_nbr_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_THRESH_FALLBACK", "inf",
+   "Message size to start using the rendezvous protocol in case the calculated threshold\n"
+   "is zero or negative",
+   ucs_offsetof(ucp_context_config_t, rndv_thresh_fallback), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_PERF_DIFF", "1",
+   "The percentage allowed for performance difference between rendezvous and "
+   "the eager_zcopy protocol",
+   ucs_offsetof(ucp_context_config_t, rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
+
+  {"MULTI_LANE_MAX_RATIO", "4",
+   "Maximal allowed ratio between slowest and fastest lane in a multi-lane\n"
+   "protocol. Lanes slower than the specified ratio will not be used.",
+   ucs_offsetof(ucp_context_config_t, multi_lane_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
+
+  {"MAX_EAGER_LANES", NULL, "",
+   ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_EAGER_RAILS", "1",
+   "Maximal number of devices on which an eager operation may be executed in parallel",
+   ucs_offsetof(ucp_context_config_t, max_eager_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_RNDV_LANES", NULL,"",
+   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_RNDV_RAILS", "2",
+   "Maximal number of devices on which a rendezvous operation may be executed in parallel",
+   ucs_offsetof(ucp_context_config_t, max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
+
+  {"RNDV_SCHEME", "auto",
+   "Communication scheme in RNDV protocol.\n"
+   " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
+   " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
+   " rkey_ptr  - use rket_ptr in RNDV protocol.\n"
+   " auto      - runtime automatically chooses optimal scheme to use.",
+   ucs_offsetof(ucp_context_config_t, rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
+
+  {"RKEY_PTR_SEG_SIZE", "512k",
+   "Segment size that is used to perform data transfer when doing RKEY PTR progress",
+   ucs_offsetof(ucp_context_config_t, rkey_ptr_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"ZCOPY_THRESH", "auto",
+   "Threshold for switching from buffer copy to zero copy protocol",
+   ucs_offsetof(ucp_context_config_t, zcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"BCOPY_BW", "auto",
+   "Estimation of buffer copy bandwidth",
+   ucs_offsetof(ucp_context_config_t, bcopy_bw), UCS_CONFIG_TYPE_BW},
+
+  {"ATOMIC_MODE", "guess",
+   "Atomic operations synchronization mode.\n"
+   " cpu    - atomic operations are consistent with respect to the CPU.\n"
+   " device - atomic operations are performed on one of the transport devices,\n"
+   "          and there is guarantee of consistency with respect to the CPU."
+   " guess  - atomic operations mode is configured based on underlying\n"
+   "          transport capabilities. If one of active transports supports\n"
+   "          the DEVICE atomic mode, the DEVICE mode is selected.\n"
+   "          Otherwise the CPU mode is selected.",
+   ucs_offsetof(ucp_context_config_t, atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
+
+  {"ADDRESS_DEBUG_INFO",
+#if ENABLE_DEBUG_DATA
+   "y",
+#else
+   "n",
+#endif
+   "Add debugging information to worker address.",
+   ucs_offsetof(ucp_context_config_t, address_debug_info), UCS_CONFIG_TYPE_BOOL},
+
+  {"MAX_WORKER_NAME", NULL, "",
+   ucs_offsetof(ucp_context_config_t, max_worker_address_name),
+   UCS_CONFIG_TYPE_UINT},
+
+  {"MAX_WORKER_ADDRESS_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_ADDRESS_NAME_MAX),
+   "Maximal length of worker address name. Sent to remote peer as part of\n"
+   "worker address if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
+   ucs_offsetof(ucp_context_config_t, max_worker_address_name),
+   UCS_CONFIG_TYPE_UINT},
+
+  {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
+   "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
+   "y      - Use mutex for multithreading support in UCP.",
+   ucs_offsetof(ucp_context_config_t, use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
+
+  {"ADAPTIVE_PROGRESS", "y",
+   "Enable adaptive progress mechanism, which turns on polling only on active\n"
+   "transport interfaces.",
+   ucs_offsetof(ucp_context_config_t, adaptive_progress), UCS_CONFIG_TYPE_BOOL},
+
+  {"SEG_SIZE", "8192",
+   "Size of a segment in the worker preregistered memory pool.",
+   ucs_offsetof(ucp_context_config_t, seg_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TM_THRESH", "1024", /* TODO: calculate automatically */
+   "Threshold for using tag matching offload capabilities.\n"
+   "Smaller buffers will not be posted to the transport.",
+   ucs_offsetof(ucp_context_config_t, tm_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TM_MAX_BB_SIZE", "1024", /* TODO: calculate automatically */
+   "Maximal size for posting \"bounce buffer\" (UCX internal preregistered memory) for\n"
+   "tag offload receives. When message arrives, it is copied into the user buffer (similar\n"
+   "to eager protocol). The size values has to be equal or less than segment size.\n"
+   "Also the value has to be bigger than UCX_TM_THRESH to take an effect." ,
+   ucs_offsetof(ucp_context_config_t, tm_max_bb_size), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TM_FORCE_THRESH", "8192", /* TODO: calculate automatically */
+   "Threshold for forcing tag matching offload mode. Every tag receive operation\n"
+   "with buffer bigger than this threshold would force offloading of all uncompleted\n"
+   "non-offloaded receive operations to the transport (e. g. operations with\n"
+   "buffers below the UCX_TM_THRESH value). Offloading may be unsuccessful in certain\n"
+   "cases (non-contig buffer, or sender wildcard).",
+   ucs_offsetof(ucp_context_config_t, tm_force_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"TM_SW_RNDV", "n",
+   "Use software rendezvous protocol with tag offload. If enabled, tag offload\n"
+   "mode will be used for messages sent with eager protocol only.",
+   ucs_offsetof(ucp_context_config_t, tm_sw_rndv), UCS_CONFIG_TYPE_BOOL},
+
+  {"NUM_EPS", "auto",
+   "An optimization hint of how many endpoints would be created on this context.\n"
+   "Does not affect semantics, but only transport selection criteria and the\n"
+   "resulting performance.\n"
+   " If set to a value different from \"auto\" it will override the value passed\n"
+   "to ucp_init()",
+   ucs_offsetof(ucp_context_config_t, estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"NUM_PPN", "auto",
+   "An optimization hint for the number of processes expected to be launched\n"
+   "on a single node. Does not affect semantics, only transport selection criteria\n"
+   "and the resulting performance.",
+   ucs_offsetof(ucp_context_config_t, estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"RNDV_FRAG_MEM_TYPE", "host",
+   "Memory type of fragments used for RNDV pipeline protocol.\n"
+   "Allowed memory types is one of: host, cuda, rocm",
+   ucs_offsetof(ucp_context_config_t, rndv_frag_mem_type),
+   UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
+
+  {"RNDV_PIPELINE_SEND_THRESH", "inf",
+   "RNDV size threshold to enable sender side pipeline for mem type",
+   ucs_offsetof(ucp_context_config_t, rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
+
+  {"RNDV_PIPELINE_SHM_ENABLE", "y",
+   "Use two stage pipeline rendezvous protocol for intra-node GPU to GPU transfers",
+   ucs_offsetof(ucp_context_config_t, rndv_shm_ppln_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"FLUSH_WORKER_EPS", "y",
+   "Enable flushing the worker by flushing its endpoints. Allows completing\n"
+   "the flush operation in a bounded time even if there are new requests on\n"
+   "another thread, or incoming active messages, but consumes more resources.",
+   ucs_offsetof(ucp_context_config_t, flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
+
+  {"UNIFIED_MODE", "n",
+   "Enable various optimizations intended for homogeneous environment.\n"
+   "Enabling this mode implies that the local transport resources/devices\n"
+   "of all entities which connect to each other are the same.",
+   ucs_offsetof(ucp_context_config_t, unified_mode), UCS_CONFIG_TYPE_BOOL},
+
+  {"CM_USE_ALL_DEVICES", "y",
+   "When creating client/server endpoints, use all available devices.\n"
+   "If disabled, use only the one device on which the connection\n"
+   "establishment is done",
+   ucs_offsetof(ucp_context_config_t, cm_use_all_devices), UCS_CONFIG_TYPE_BOOL},
+
+  {"LISTENER_BACKLOG", "auto",
+   "'auto' means that each transport would use its maximal allowed value.\n"
+   "If a value larger than what a transport supports is set, the backlog value\n"
+   "would be cut to that maximal value.",
+   ucs_offsetof(ucp_context_config_t, listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
+
+  {"PROTO_ENABLE", "n",
+   "Experimental: enable new protocol selection logic",
+   ucs_offsetof(ucp_context_config_t, proto_enable), UCS_CONFIG_TYPE_BOOL},
+
+  {"KEEPALIVE_INTERVAL", "20s",
+   "Time interval between keepalive rounds. Must be non-zero value.",
+   ucs_offsetof(ucp_context_config_t, keepalive_interval),
+   UCS_CONFIG_TYPE_TIME_UNITS},
+
+  {"KEEPALIVE_NUM_EPS", "128",
+   "Maximal number of endpoints to check on every keepalive round\n"
+   "(inf - check all endpoints on every round, must be greater than 0)",
+   ucs_offsetof(ucp_context_config_t, keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
+
+  {"RESOLVE_REMOTE_EP_ID", "n",
+   "Defines whether resolving remote endpoint ID is required or not when\n"
+   "creating a local endpoint. 'auto' means resolving remote endpint ID only\n"
+   "in case of error handling and keepalive enabled.",
+   ucs_offsetof(ucp_context_config_t, resolve_remote_ep_id),
+   UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+  {"PROTO_INDIRECT_ID", "auto",
+   "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
+   "A value of 'auto' means to enable only if error handling is enabled on the\n"
+   "endpoint.",
+   ucs_offsetof(ucp_context_config_t, proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
+
+  {"RNDV_PUT_FORCE_FLUSH", "n",
+   "When using rendezvous put protocol, force using a flush operation to ensure\n"
+   "remote data delivery before sending ATP message.\n"
+   "If flush mode is not forced, and the underlying transport supports both active\n"
+   "messages and put operations, the protocol will do {put,fence,ATP} on the same\n"
+   "lane without waiting for remote completion.",
+   ucs_offsetof(ucp_context_config_t, rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
+
+  {"SA_DATA_VERSION", "v1",
+   "Defines the minimal header version the client will use for establishing\n"
+   "client/server connection",
+   ucs_offsetof(ucp_context_config_t, sa_client_min_hdr_version),
+   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
+
+  {"RKEY_MPOOL_MAX_MD", "2",
+   "Maximum number of UCP rkey MDs which can be unpacked into memory pool\n"
+   "element. UCP rkeys containing larger number of MDs will be unpacked to\n"
+   "dynamically allocated memory.",
+   ucs_offsetof(ucp_context_config_t, rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
+
+  {"ADDRESS_VERSION", "v1",
+   "Defines UCP worker address format obtained with ucp_worker_get_address() or\n"
+   "ucp_worker_query() routines.",
+   ucs_offsetof(ucp_context_config_t, worker_addr_version),
+   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
+
+  {"PROTO_INFO", "n", "Enable printing protocols information.",
+   ucs_offsetof(ucp_context_config_t, proto_info), UCS_CONFIG_TYPE_BOOL},
+
+  {NULL}
+};
+
 static ucs_config_field_t ucp_config_table[] = {
   {"NET_DEVICES", UCP_RSC_CONFIG_ALL,
    "Specifies which network device(s) to use. The order is not meaningful.\n"
@@ -172,6 +430,15 @@ static ucs_config_field_t ucp_config_table[] = {
    "name, or a wildcard - '*' - which is equivalent to all UCT components.",
    ucs_offsetof(ucp_config_t, alloc_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
 
+  {"RNDV_FRAG_SIZE", "host:512K,cuda:4M",
+   "Comma-separated list of memory types and associated fragment sizes.\n"
+   "The memory types in the list is used for rendezvous bounce buffers.",
+   ucs_offsetof(ucp_config_t, rndv_frag_sizes), UCS_CONFIG_TYPE_STRING_ARRAY},
+
+  {"RNDV_FRAG_ALLOC_COUNT", "host:128,cuda:128",
+   "Comma separated list of memory pool allocation granularity per memory type.",
+   ucs_offsetof(ucp_config_t, rndv_frag_elems), UCS_CONFIG_TYPE_STRING_ARRAY},
+
   {"SOCKADDR_TLS_PRIORITY", "rdmacm,tcp,sockcm",
    "Priority of sockaddr transports for client/server connection establishment.\n"
    "The '*' wildcard expands to all the available sockaddr transports.",
@@ -182,263 +449,9 @@ static ucs_config_field_t ucp_config_table[] = {
    "specify the transport for client/server connection establishment.",
    UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
-  {"SELECT_DISTANCE_MD", "cuda_cpy",
-   "MD whose distance is queried when evaluating transport selection score",
-   ucs_offsetof(ucp_config_t, selection_cmp), UCS_CONFIG_TYPE_STRING},
-
-  {"MEMTYPE_REG_WHOLE_ALLOC_TYPES", "cuda",
-   "Memory types which have whole allocations registered.\n"
-   "Allowed memory types: cuda, rocm, rocm-managed",
-   ucs_offsetof(ucp_config_t, ctx.reg_whole_alloc_bitmap),
-   UCS_CONFIG_TYPE_BITMAP(ucs_memory_type_names)},
-
-  {"RNDV_MEMTYPE_DIRECT_SIZE", "inf",
-   "Maximum size for mem type direct in rendezvous protocol\n",
-   ucs_offsetof(ucp_config_t, ctx.rndv_memtype_direct_size),
-   UCS_CONFIG_TYPE_MEMUNITS},
-
   {"WARN_INVALID_CONFIG", "y",
    "Issue a warning in case of invalid device and/or transport configuration.",
    ucs_offsetof(ucp_config_t, warn_invalid_config), UCS_CONFIG_TYPE_BOOL},
-
-  {"BCOPY_THRESH", "auto",
-   "Threshold for switching from short to bcopy protocol",
-   ucs_offsetof(ucp_config_t, ctx.bcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"RNDV_THRESH", UCS_VALUE_AUTO_STR,
-   "Threshold for switching from eager to rendezvous protocol",
-   ucs_offsetof(ucp_config_t, ctx.rndv_thresh), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"RNDV_SEND_NBR_THRESH", "256k",
-   "Threshold for switching from eager to rendezvous protocol in ucp_tag_send_nbr().\n"
-   "Relevant only if UCX_RNDV_THRESH is set to \"auto\".",
-   ucs_offsetof(ucp_config_t, ctx.rndv_send_nbr_thresh), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"RNDV_THRESH_FALLBACK", "inf",
-   "Message size to start using the rendezvous protocol in case the calculated threshold\n"
-   "is zero or negative",
-   ucs_offsetof(ucp_config_t, ctx.rndv_thresh_fallback), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"RNDV_PERF_DIFF", "1",
-   "The percentage allowed for performance difference between rendezvous and "
-   "the eager_zcopy protocol",
-   ucs_offsetof(ucp_config_t, ctx.rndv_perf_diff), UCS_CONFIG_TYPE_DOUBLE},
-
-  {"MULTI_LANE_MAX_RATIO", "4",
-   "Maximal allowed ratio between slowest and fastest lane in a multi-lane\n"
-   "protocol. Lanes slower than the specified ratio will not be used.",
-   ucs_offsetof(ucp_config_t, ctx.multi_lane_max_ratio), UCS_CONFIG_TYPE_DOUBLE},
-
-  {"MAX_EAGER_LANES", NULL, "",
-   ucs_offsetof(ucp_config_t, ctx.max_eager_lanes), UCS_CONFIG_TYPE_UINT},
-
-  {"MAX_EAGER_RAILS", "1",
-   "Maximal number of devices on which an eager operation may be executed in parallel",
-   ucs_offsetof(ucp_config_t, ctx.max_eager_lanes), UCS_CONFIG_TYPE_UINT},
-
-  {"MAX_RNDV_LANES", NULL,"",
-   ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
-
-  {"MAX_RNDV_RAILS", "2",
-   "Maximal number of devices on which a rendezvous operation may be executed in parallel",
-   ucs_offsetof(ucp_config_t, ctx.max_rndv_lanes), UCS_CONFIG_TYPE_UINT},
-
-  {"RNDV_SCHEME", "auto",
-   "Communication scheme in RNDV protocol.\n"
-   " get_zcopy - use get_zcopy scheme in RNDV protocol.\n"
-   " put_zcopy - use put_zcopy scheme in RNDV protocol.\n"
-   " rkey_ptr  - use rket_ptr in RNDV protocol.\n"
-   " auto      - runtime automatically chooses optimal scheme to use.",
-   ucs_offsetof(ucp_config_t, ctx.rndv_mode), UCS_CONFIG_TYPE_ENUM(ucp_rndv_modes)},
-
-  {"RKEY_PTR_SEG_SIZE", "512k",
-   "Segment size that is used to perform data transfer when doing RKEY PTR progress",
-   ucs_offsetof(ucp_config_t, ctx.rkey_ptr_seg_size), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"ZCOPY_THRESH", "auto",
-   "Threshold for switching from buffer copy to zero copy protocol",
-   ucs_offsetof(ucp_config_t, ctx.zcopy_thresh), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"BCOPY_BW", "auto",
-   "Estimation of buffer copy bandwidth",
-   ucs_offsetof(ucp_config_t, ctx.bcopy_bw), UCS_CONFIG_TYPE_BW},
-
-  {"ATOMIC_MODE", "guess",
-   "Atomic operations synchronization mode.\n"
-   " cpu    - atomic operations are consistent with respect to the CPU.\n"
-   " device - atomic operations are performed on one of the transport devices,\n"
-   "          and there is guarantee of consistency with respect to the CPU."
-   " guess  - atomic operations mode is configured based on underlying\n"
-   "          transport capabilities. If one of active transports supports\n"
-   "          the DEVICE atomic mode, the DEVICE mode is selected.\n"
-   "          Otherwise the CPU mode is selected.",
-   ucs_offsetof(ucp_config_t, ctx.atomic_mode), UCS_CONFIG_TYPE_ENUM(ucp_atomic_modes)},
-
-  {"ADDRESS_DEBUG_INFO",
-#if ENABLE_DEBUG_DATA
-   "y",
-#else
-   "n",
-#endif
-   "Add debugging information to worker address.",
-   ucs_offsetof(ucp_config_t, ctx.address_debug_info), UCS_CONFIG_TYPE_BOOL},
-
-  {"MAX_WORKER_NAME", NULL, "",
-   ucs_offsetof(ucp_config_t, ctx.max_worker_address_name),
-   UCS_CONFIG_TYPE_UINT},
-
-  {"MAX_WORKER_ADDRESS_NAME", UCS_PP_MAKE_STRING(UCP_WORKER_ADDRESS_NAME_MAX),
-   "Maximal length of worker address name. Sent to remote peer as part of\n"
-   "worker address if UCX_ADDRESS_DEBUG_INFO is set to 'yes'",
-   ucs_offsetof(ucp_config_t, ctx.max_worker_address_name),
-   UCS_CONFIG_TYPE_UINT},
-
-  {"USE_MT_MUTEX", "n", "Use mutex for multithreading support in UCP.\n"
-   "n      - Not use mutex for multithreading support in UCP (use spinlock by default).\n"
-   "y      - Use mutex for multithreading support in UCP.",
-   ucs_offsetof(ucp_config_t, ctx.use_mt_mutex), UCS_CONFIG_TYPE_BOOL},
-
-  {"ADAPTIVE_PROGRESS", "y",
-   "Enable adaptive progress mechanism, which turns on polling only on active\n"
-   "transport interfaces.",
-   ucs_offsetof(ucp_config_t, ctx.adaptive_progress), UCS_CONFIG_TYPE_BOOL},
-
-  {"SEG_SIZE", "8192",
-   "Size of a segment in the worker preregistered memory pool.",
-   ucs_offsetof(ucp_config_t, ctx.seg_size), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"TM_THRESH", "1024", /* TODO: calculate automatically */
-   "Threshold for using tag matching offload capabilities.\n"
-   "Smaller buffers will not be posted to the transport.",
-   ucs_offsetof(ucp_config_t, ctx.tm_thresh), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"TM_MAX_BB_SIZE", "1024", /* TODO: calculate automatically */
-   "Maximal size for posting \"bounce buffer\" (UCX internal preregistered memory) for\n"
-   "tag offload receives. When message arrives, it is copied into the user buffer (similar\n"
-   "to eager protocol). The size values has to be equal or less than segment size.\n"
-   "Also the value has to be bigger than UCX_TM_THRESH to take an effect." ,
-   ucs_offsetof(ucp_config_t, ctx.tm_max_bb_size), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"TM_FORCE_THRESH", "8192", /* TODO: calculate automatically */
-   "Threshold for forcing tag matching offload mode. Every tag receive operation\n"
-   "with buffer bigger than this threshold would force offloading of all uncompleted\n"
-   "non-offloaded receive operations to the transport (e. g. operations with\n"
-   "buffers below the UCX_TM_THRESH value). Offloading may be unsuccessful in certain\n"
-   "cases (non-contig buffer, or sender wildcard).",
-   ucs_offsetof(ucp_config_t, ctx.tm_force_thresh), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"TM_SW_RNDV", "n",
-   "Use software rendezvous protocol with tag offload. If enabled, tag offload\n"
-   "mode will be used for messages sent with eager protocol only.",
-   ucs_offsetof(ucp_config_t, ctx.tm_sw_rndv), UCS_CONFIG_TYPE_BOOL},
-
-  {"NUM_EPS", "auto",
-   "An optimization hint of how many endpoints would be created on this context.\n"
-   "Does not affect semantics, but only transport selection criteria and the\n"
-   "resulting performance.\n"
-   " If set to a value different from \"auto\" it will override the value passed\n"
-   "to ucp_init()",
-   ucs_offsetof(ucp_config_t, ctx.estimated_num_eps), UCS_CONFIG_TYPE_ULUNITS},
-
-  {"NUM_PPN", "auto",
-   "An optimization hint for the number of processes expected to be launched\n"
-   "on a single node. Does not affect semantics, only transport selection criteria\n"
-   "and the resulting performance.",
-   ucs_offsetof(ucp_config_t, ctx.estimated_num_ppn), UCS_CONFIG_TYPE_ULUNITS},
-
-  {"RNDV_FRAG_SIZE", "host:512K,cuda:4M",
-   "Comma-separated list of memory types and associated fragment sizes.\n"
-   "The memory types in the list is used for rendezvous bounce buffers.",
-   ucs_offsetof(ucp_config_t, rndv_frag_sizes), UCS_CONFIG_TYPE_STRING_ARRAY},
-
-  {"RNDV_FRAG_ALLOC_COUNT", "host:128,cuda:128",
-   "Comma separated list of memory pool allocation granularity per memory type.",
-   ucs_offsetof(ucp_config_t, rndv_frag_elems), UCS_CONFIG_TYPE_STRING_ARRAY},
-
-  {"RNDV_FRAG_MEM_TYPE", "host",
-   "Memory type of fragments used for RNDV pipeline protocol.\n"
-   "Allowed memory types is one of: host, cuda, rocm",
-   ucs_offsetof(ucp_config_t, ctx.rndv_frag_mem_type),
-   UCS_CONFIG_TYPE_ENUM(ucs_memory_type_names)},
-
-  {"RNDV_PIPELINE_SEND_THRESH", "inf",
-   "RNDV size threshold to enable sender side pipeline for mem type",
-   ucs_offsetof(ucp_config_t, ctx.rndv_pipeline_send_thresh), UCS_CONFIG_TYPE_MEMUNITS},
-
-  {"RNDV_PIPELINE_SHM_ENABLE", "y",
-   "Use two stage pipeline rendezvous protocol for intra-node GPU to GPU transfers",
-   ucs_offsetof(ucp_config_t, ctx.rndv_shm_ppln_enable), UCS_CONFIG_TYPE_BOOL},
-
-  {"FLUSH_WORKER_EPS", "y",
-   "Enable flushing the worker by flushing its endpoints. Allows completing\n"
-   "the flush operation in a bounded time even if there are new requests on\n"
-   "another thread, or incoming active messages, but consumes more resources.",
-   ucs_offsetof(ucp_config_t, ctx.flush_worker_eps), UCS_CONFIG_TYPE_BOOL},
-
-  {"UNIFIED_MODE", "n",
-   "Enable various optimizations intended for homogeneous environment.\n"
-   "Enabling this mode implies that the local transport resources/devices\n"
-   "of all entities which connect to each other are the same.",
-   ucs_offsetof(ucp_config_t, ctx.unified_mode), UCS_CONFIG_TYPE_BOOL},
-
-  {"CM_USE_ALL_DEVICES", "y",
-   "When creating client/server endpoints, use all available devices.\n"
-   "If disabled, use only the one device on which the connection\n"
-   "establishment is done",
-   ucs_offsetof(ucp_config_t, ctx.cm_use_all_devices), UCS_CONFIG_TYPE_BOOL},
-
-  {"LISTENER_BACKLOG", "auto",
-   "'auto' means that each transport would use its maximal allowed value.\n"
-   "If a value larger than what a transport supports is set, the backlog value\n"
-   "would be cut to that maximal value.",
-   ucs_offsetof(ucp_config_t, ctx.listener_backlog), UCS_CONFIG_TYPE_ULUNITS},
-
-  {"PROTO_ENABLE", "n",
-   "Experimental: enable new protocol selection logic",
-   ucs_offsetof(ucp_config_t, ctx.proto_enable), UCS_CONFIG_TYPE_BOOL},
-
-  {"KEEPALIVE_INTERVAL", "20s",
-   "Time interval between keepalive rounds. Must be non-zero value.",
-   ucs_offsetof(ucp_config_t, ctx.keepalive_interval),
-   UCS_CONFIG_TYPE_TIME_UNITS},
-
-  {"KEEPALIVE_NUM_EPS", "128",
-   "Maximal number of endpoints to check on every keepalive round\n"
-   "(inf - check all endpoints on every round, must be greater than 0)",
-   ucs_offsetof(ucp_config_t, ctx.keepalive_num_eps), UCS_CONFIG_TYPE_UINT},
-
-  {"RESOLVE_REMOTE_EP_ID", "n",
-   "Defines whether resolving remote endpoint ID is required or not when\n"
-   "creating a local endpoint. 'auto' means resolving remote endpint ID only\n"
-   "in case of error handling and keepalive enabled.",
-   ucs_offsetof(ucp_config_t, ctx.resolve_remote_ep_id),
-   UCS_CONFIG_TYPE_ON_OFF_AUTO},
-
-  {"PROTO_INDIRECT_ID", "auto",
-   "Enable indirect IDs to object pointers (endpoint, request) in wire protocols.\n"
-   "A value of 'auto' means to enable only if error handling is enabled on the\n"
-   "endpoint.",
-   ucs_offsetof(ucp_config_t, ctx.proto_indirect_id), UCS_CONFIG_TYPE_ON_OFF_AUTO},
-
-  {"RNDV_PUT_FORCE_FLUSH", "n",
-   "When using rendezvous put protocol, force using a flush operation to ensure\n"
-   "remote data delivery before sending ATP message.\n"
-   "If flush mode is not forced, and the underlying transport supports both active\n"
-   "messages and put operations, the protocol will do {put,fence,ATP} on the same\n"
-   "lane without waiting for remote completion.",
-   ucs_offsetof(ucp_config_t, ctx.rndv_put_force_flush), UCS_CONFIG_TYPE_BOOL},
-
-  {"SA_DATA_VERSION", "v1",
-   "Defines the minimal header version the client will use for establishing\n"
-   "client/server connection",
-   ucs_offsetof(ucp_config_t, ctx.sa_client_min_hdr_version),
-   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
-
-  {"RKEY_MPOOL_MAX_MD", "2",
-   "Maximum number of UCP rkey MDs which can be unpacked into memory pool\n"
-   "element. UCP rkeys containing larger number of MDs will be unpacked to\n"
-   "dynamically allocated memory.",
-   ucs_offsetof(ucp_config_t, ctx.rkey_mpool_max_md), UCS_CONFIG_TYPE_INT},
 
   {"RX_MPOOL_SIZES", "64,1kb",
    "List of worker mpool sizes separated by comma. The values must be power of 2\n"
@@ -447,19 +460,14 @@ static ucs_config_field_t ucp_config_table[] = {
    "pool sizes, note that the data may be stored with some header.",
    ucs_offsetof(ucp_config_t, mpool_sizes), UCS_CONFIG_TYPE_ARRAY(memunit_sizes)},
 
-  {"ADDRESS_VERSION", "v1",
-   "Defines UCP worker address format obtained with ucp_worker_get_address() or\n"
-   "ucp_worker_query() routines.",
-   ucs_offsetof(ucp_config_t, ctx.worker_addr_version),
-   UCS_CONFIG_TYPE_ENUM(ucp_object_versions)},
-
   {"RCACHE_ENABLE", "try", "Use user space memory registration cache.",
    ucs_offsetof(ucp_config_t, enable_rcache), UCS_CONFIG_TYPE_TERNARY},
 
-  {"PROTO_INFO", "n", "Enable printing protocols information.",
-   ucs_offsetof(ucp_config_t, ctx.proto_info), UCS_CONFIG_TYPE_BOOL},
+  {"", "", NULL,
+   ucs_offsetof(ucp_config_t, ctx),
+   UCS_CONFIG_TYPE_TABLE(ucp_context_config_table)},
 
-   {NULL}
+  {NULL}
 };
 UCS_CONFIG_DECLARE_TABLE(ucp_config_table, "UCP context", NULL, ucp_config_t)
 
@@ -1615,7 +1623,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
                      config->ctx.use_mt_mutex ? UCP_MT_TYPE_MUTEX
                                               : UCP_MT_TYPE_SPINLOCK);
 
-    context->config.ext = config->ctx;
+    status = ucs_config_parser_clone_opts(&config->ctx, &context->config.ext,
+                                          ucp_context_config_table);
+    if (status != UCS_OK) {
+        goto err;
+    }
 
     if (context->config.ext.estimated_num_eps != UCS_ULUNITS_AUTO) {
         /* num_eps was set via the env variable. Override current value */
@@ -1653,24 +1665,11 @@ static ucs_status_t ucp_fill_config(ucp_context_h context,
         }
     }
 
-    /* always init MT lock in context even though it is disabled by user,
-     * because we need to use context lock to protect ucp_mem_ and ucp_rkey_
-     * routines */
-    UCP_THREAD_LOCK_INIT(&context->mt_lock);
-
-    /* save comparison MD for iface_attr adjustment */
-    context->config.selection_cmp = ucs_strdup(config->selection_cmp,
-                                               "selection cmp");
-    if (context->config.selection_cmp == NULL) {
-        status = UCS_ERR_NO_MEMORY;
-        goto err;
-    }
-
-    /* save environment prefix to later notify user for unused variables */
+    /* Save environment prefix to later notify user for unused variables */
     context->config.env_prefix = ucs_strdup(config->env_prefix, "ucp config");
     if (context->config.env_prefix == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_free_selection_cmp;
+        goto err_free_config_ext;
     }
 
     /* Get allocation alignment from configuration, make sure it's valid */
@@ -1798,20 +1797,21 @@ err_free_alloc_methods:
     ucs_free(context->config.alloc_methods);
 err_free_env_prefix:
     ucs_free(context->config.env_prefix);
-err_free_selection_cmp:
-    ucs_free(context->config.selection_cmp);
+err_free_config_ext:
+    ucs_config_parser_release_opts(&context->config.ext,
+                                   ucp_context_config_table);
 err:
-    UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
     return status;
 }
 
 static void ucp_free_config(ucp_context_h context)
 {
+    ucs_free(context->config.am_mpools.sizes);
+    ucp_cached_key_list_release(&context->cached_key_list);
     ucs_free(context->config.alloc_methods);
     ucs_free(context->config.env_prefix);
-    ucs_free(context->config.selection_cmp);
-    ucp_cached_key_list_release(&context->cached_key_list);
-    ucs_free(context->config.am_mpools.sizes);
+    ucs_config_parser_release_opts(&context->config.ext,
+                                   ucp_context_config_table);
 }
 
 static void ucp_context_create_vfs(ucp_context_h context)
@@ -1878,7 +1878,7 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
     context = ucs_calloc(1, sizeof(*context), "ucp context");
     if (context == NULL) {
         status = UCS_ERR_NO_MEMORY;
-        goto err_release_config;
+        goto err_release_dfl_config;
     }
 
     ucs_list_head_init(&context->cached_key_list);
@@ -1888,10 +1888,15 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
         goto err_free_ctx;
     }
 
+    /* always init MT lock in context even though it is disabled by user,
+     * because we need to use context lock to protect ucp_mem_ and ucp_rkey_
+     * routines */
+    UCP_THREAD_LOCK_INIT(&context->mt_lock);
+
     /* fill resources we should use */
     status = ucp_fill_resources(context, config);
     if (status != UCS_OK) {
-        goto err_free_config;
+        goto err_thread_lock_finalize;
     }
 
     if (config->enable_rcache != UCS_NO) {
@@ -1926,11 +1931,12 @@ ucs_status_t ucp_init_version(unsigned api_major_version, unsigned api_minor_ver
 
 err_free_res:
     ucp_free_resources(context);
-err_free_config:
+err_thread_lock_finalize:
+    UCP_THREAD_LOCK_FINALIZE(&context->mt_lock);
     ucp_free_config(context);
 err_free_ctx:
     ucs_free(context);
-err_release_config:
+err_release_dfl_config:
     if (dfl_config != NULL) {
         ucp_config_release(dfl_config);
     }

@@ -139,6 +139,8 @@ typedef struct ucp_context_config {
     ucp_object_version_t                   worker_addr_version;
     /** Print protocols information */
     int                                    proto_info;
+    /** MD to compare for transport selection scores */
+    char                                   *select_distance_md;
 } ucp_context_config_t;
 
 
@@ -164,18 +166,16 @@ struct ucp_config {
     UCS_CONFIG_STRING_ARRAY_FIELD(cm_tls)  sockaddr_cm_tls;
     /** Warn on invalid configuration */
     int                                    warn_invalid_config;
-    /** This config environment prefix */
-    char                                   *env_prefix;
-    /** MD to compare for transport selection scores */
-    char                                   *selection_cmp;
-    /** Configuration saved directly in the context */
-    ucp_context_config_t                   ctx;
-    /** Save ucx configurations not listed in ucp_config_table **/
-    ucs_list_link_t                        cached_key_list;
     /** Array of worker memory pool sizes */
     UCS_CONFIG_ARRAY_FIELD(size_t, memunits) mpool_sizes;
     /** Memory registration cache */
     ucs_ternary_auto_value_t               enable_rcache;
+    /** Configuration saved directly in the context */
+    ucp_context_config_t                   ctx;
+    /** Save ucx configurations not listed in ucp_config_table **/
+    ucs_list_link_t                        cached_key_list;
+    /** This config environment prefix */
+    char                                   *env_prefix;
 };
 
 
@@ -318,8 +318,6 @@ typedef struct ucp_context {
         /* Config environment prefix used to create the context */
         char                      *env_prefix;
 
-        /* MD to compare for transport selection scores */
-        char                      *selection_cmp;
         struct {
            unsigned               count;
            size_t                 *sizes;
