@@ -1417,18 +1417,17 @@ uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,
                                          ucs_status_t ep_status)
 {
     uint16_t hw_ci = ntohs(cqe->wqe_counter);
-    uct_rc_txqp_t *txqp;
-    uct_ib_mlx5_txwq_t *txwq;
     uct_dc_mlx5_ep_t *ep;
     uct_rc_iface_send_op_t *op;
     ucs_queue_elem_t *elem;
+    UCT_DC_MLX5_TXQP_DECL(txqp, txwq);
 
     ucs_assert(dci_index == iface->keepalive_dci);
     UCT_DC_MLX5_IFACE_TXQP_DCI_GET(iface, dci_index, txqp, txwq);
 
     elem = ucs_queue_pull(&txqp->outstanding);
     if (elem == NULL) {
-        /* outstanding list is empty, just exit */
+        /* Outstanding list is empty, just exit */
         goto reset_dci;
     }
 
@@ -1438,15 +1437,7 @@ uct_dc_mlx5_dci_keepalive_handle_failure(uct_dc_mlx5_iface_t *iface,
     }
 
     ep = ucs_derived_of(op->ep, uct_dc_mlx5_ep_t);
-
-    if (ep->dci == UCT_DC_MLX5_EP_NO_DCI) {
-        ucs_assert(ep != iface->tx.fc_ep);
-        uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
-    } else {
-        /* ep has another dci assigned to post operations, which should be
-         * restarted too */
-        uct_dc_mlx5_ep_handle_failure(ep, cqe, ep_status);
-    }
+    uct_dc_mlx5_iface_set_ep_failed(iface, ep, cqe, txwq, ep_status);
 
 put_op:
     ucs_mpool_put(op);
