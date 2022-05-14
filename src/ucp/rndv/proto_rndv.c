@@ -269,9 +269,10 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
             continue;
         }
 
-        ucs_trace("%s: max %zu remote-op %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+        ucs_trace("%s: max %zu remote-op %s %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
                   params->super.super.proto_name, remote_range->max_length,
                   ucp_operation_names[params->remote_op_id],
+                  ucp_proto_perf_node_name(remote_range->node),
                   UCP_PROTO_PERF_FUNC_TYPES_ARG(remote_range->perf));
         remote_perf = *remote_range;
 

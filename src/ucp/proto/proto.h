@@ -34,6 +34,10 @@
 #define UCP_PROTO_ID_INVALID        ((ucp_proto_id_t)-1)
 
 
+/* Threshold for considering two performance values as equal */
+#define UCP_PROTO_PERF_EPSILON     1e-15
+
+
 /* Maximal length of protocol description string */
 #define UCP_PROTO_DESC_STR_MAX      64
 
@@ -124,12 +128,15 @@ typedef enum {
  */
 typedef struct {
     /* Maximal payload size for this range */
-    size_t            max_length;
+    size_t                max_length;
 
     /* Estimated time in seconds, as a function of message size in bytes, to
      * complete the operation. See @ref ucp_proto_perf_type_t for details
      */
-    ucs_linear_func_t perf[UCP_PROTO_PERF_TYPE_LAST];
+    ucs_linear_func_t     perf[UCP_PROTO_PERF_TYPE_LAST];
+
+    /* Performance data tree */
+    ucp_proto_perf_node_t *node;
 } ucp_proto_perf_range_t;
 
 

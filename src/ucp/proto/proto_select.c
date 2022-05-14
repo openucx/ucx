@@ -20,10 +20,6 @@
 #include <ucs/datastruct/array.inl>
 
 
-/* Threshold for considering two performance values as equal */
-#define UCP_PROTO_PERF_EPSILON     1e-15
-
-
 /* Parameters structure for initializing protocols for a selection parameter */
 typedef struct {
     const ucp_proto_select_param_t *select_param; /* Protocol selection parameter */
@@ -178,7 +174,6 @@ static ucs_status_t ucp_proto_thresholds_next_range(
     }
     ucs_assert(valid_proto_mask != 0);
 
-    ucs_trace("  %-20s %-20s %-18s", "PROTOCOL", "TIME (ns/KB)", "BANDWIDTH (MB/s)");
     ucs_for_each_bit(proto_id, valid_proto_mask) {
         ucp_proto_select_perf_str(&proto_perf[proto_id], time_str,
                                   sizeof(time_str), bw_str, sizeof(bw_str));
@@ -317,6 +312,30 @@ err:
     return status;
 }
 
+static void
+ucp_proto_select_perf_ranges_cleanup(ucp_proto_perf_range_t *perf_ranges,
+                                     unsigned num_ranges)
+{
+    ucp_proto_perf_range_t *range;
+
+    ucs_carray_for_each(range, perf_ranges, num_ranges) {
+        ucp_proto_perf_node_deref(&range->node);
+    }
+}
+
+static void
+ucp_proto_select_cleanup_protocols(ucp_proto_select_init_protocols_t *proto_init)
+{
+    ucp_proto_id_t proto_id;
+    ucp_proto_caps_t *caps;
+
+    ucs_for_each_bit(proto_id, proto_init->mask) {
+        caps = &proto_init->caps[proto_id];
+        ucp_proto_select_perf_ranges_cleanup(caps->ranges, caps->num_ranges);
+    }
+    ucs_free(proto_init->priv_buf);
+}
+
 static int ucp_proto_select_thresholds_is_last_proto(
         const ucs_array_t(ucp_proto_thresh) *thresholds,
         ucp_proto_id_t proto_id)
@@ -392,6 +411,8 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
         ucs_assert(caps_range != NULL); /* for cppcheck */
 
         range->max_length = envelope_elem->max_length;
+        range->node       = NULL;
+
         ucp_proto_perf_copy(range->perf, caps_range->perf);
 
         ucs_memunits_range_str(range_start, envelope_elem->max_length,
@@ -479,6 +500,8 @@ err_cleanup_envelope:
 err_cleanup_perf_list:
     ucs_array_cleanup_dynamic(&perf_list);
 err:
+    ucp_proto_select_perf_ranges_cleanup(ucs_array_begin(&perf_ranges),
+                                         ucs_array_length(&perf_ranges));
     ucs_array_cleanup_dynamic(&perf_ranges);
     ucs_array_cleanup_dynamic(&thresholds);
     return status;
@@ -528,7 +551,7 @@ ucp_proto_select_elem_init(ucp_worker_h worker,
     status = UCS_OK;
 
 out_cleanup_proto_init:
-    ucs_free(proto_init->priv_buf);
+    ucp_proto_select_cleanup_protocols(proto_init);
 out_free_proto_init:
     ucs_free(proto_init);
 out:
@@ -539,7 +562,13 @@ out:
 static void
 ucp_proto_select_elem_cleanup(ucp_proto_select_elem_t *select_elem)
 {
-    ucs_free((void*)select_elem->perf_ranges);
+    ucp_proto_perf_range_t *range;
+
+    range = select_elem->perf_ranges;
+    do {
+        ucp_proto_perf_node_deref(&range->node);
+    } while ((range++)->max_length < SIZE_MAX);
+    ucs_free(select_elem->perf_ranges);
     ucs_free((void*)select_elem->thresholds);
     ucs_free(select_elem->priv_buf);
 }
