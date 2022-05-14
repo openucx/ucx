@@ -1267,7 +1267,7 @@ static UCS_CLASS_INIT_FUNC(uct_dc_mlx5_iface_t, uct_md_h tl_md, uct_worker_h wor
     uint8_t num_dcis                   = config->ndci +
                                          UCT_DC_MLX5_KEEPALIVE_NUM_DCIS;
     ucs_status_t status;
-    unsigned dci_cq_len;
+    unsigned UCS_V_UNUSED dci_cq_len;
 
     ucs_trace_func("");
 
