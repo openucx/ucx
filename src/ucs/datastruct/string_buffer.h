@@ -95,6 +95,18 @@ typedef struct ucs_string_buffer {
 
 
 /**
+ * Callback function for @ref ucs_string_buffer_translate
+ *
+ * @param [in]  ch  Input character from the string
+ *
+ * @return Character to put in the string insted of the input character. If '\0'
+ *         is returned, it will cause the removal of the source character from
+ *         the string buffer without any replacement.
+ */
+typedef char (*ucs_string_buffer_translate_cb_t)(char ch);
+
+
+/**
  * Initialize a string buffer
  *
  * @param [out] strb   String buffer to initialize.
@@ -263,6 +275,17 @@ char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
  * @param [in]    count    Number of times to append @a c.
  */
 void ucs_string_buffer_appendc(ucs_string_buffer_t *strb, int c, size_t count);
+
+
+/**
+ * Translate string characters one by one: call @a cb for each character in
+ * the string, and replace it by the return value of the callback.
+ *
+ * @param [inout] strb    String buffer to translate.
+ * @param [in]    cb      Callback function to translate characters.
+ */
+void ucs_string_buffer_translate(ucs_string_buffer_t *strb,
+                                 ucs_string_buffer_translate_cb_t cb);
 
 
 /**

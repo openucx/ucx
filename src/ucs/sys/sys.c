@@ -392,6 +392,27 @@ ucs_open_output_stream(const char *config_str, ucs_log_level_t err_log_level,
     return UCS_OK;
 }
 
+FILE *ucs_open_file(const char *mode, ucs_log_level_t err_log_level,
+                    const char *filename_fmt, ...)
+{
+    char filename[MAXPATHLEN];
+    va_list ap;
+    FILE *fp;
+
+    va_start(ap, filename_fmt);
+    ucs_vsnprintf_safe(filename, MAXPATHLEN, filename_fmt, ap);
+    va_end(ap);
+
+    fp = fopen(filename, mode);
+    if (fp == NULL) {
+        ucs_log(err_log_level, "failed to open '%s' mode '%s': %m", filename,
+                mode);
+        return NULL;
+    }
+
+    return fp;
+}
+
 static ssize_t ucs_read_file_vararg(char *buffer, size_t max, int silent,
                                     const char *filename_fmt, va_list ap)
 {

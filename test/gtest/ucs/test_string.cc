@@ -159,6 +159,7 @@ class test_string_buffer : public ucs::test {
 protected:
     void test_fixed(ucs_string_buffer_t *strb, size_t capacity);
     void check_extract_mem(ucs_string_buffer_t *strb);
+    static char make_lowercase_remove_underscores(char ch);
 };
 
 UCS_TEST_F(test_string_buffer, appendf) {
@@ -335,6 +336,29 @@ UCS_TEST_F(test_string_buffer, extract_mem) {
 
     ucs_string_buffer_init(&strb);
     check_extract_mem(&strb);
+}
+
+char test_string_buffer::make_lowercase_remove_underscores(char ch)
+{
+    if (isupper(ch)) {
+        return tolower(ch);
+    } else if (ch == '_') {
+        return '\0';
+    } else {
+        return ch;
+    }
+}
+
+UCS_TEST_F(test_string_buffer, ucs_string_buffer_translate) {
+    ucs_string_buffer_t strb = UCS_STRING_BUFFER_INITIALIZER;
+
+    ucs_string_buffer_appendf(&strb, "Camel_Case_With_Underscores1234");
+
+    ucs_string_buffer_translate(&strb, make_lowercase_remove_underscores);
+    EXPECT_EQ(std::string("camelcasewithunderscores1234"),
+              ucs_string_buffer_cstr(&strb));
+
+    ucs_string_buffer_cleanup(&strb);
 }
 
 class test_string_set : public ucs::test {

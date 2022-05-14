@@ -85,7 +85,7 @@ typedef struct {
     const ucp_proto_threshold_elem_t *thresholds;
 
     /* Estimated performance for the selected protocols */
-    const ucp_proto_perf_range_t     *perf_ranges;
+    ucp_proto_perf_range_t           *perf_ranges;
 
     /* Private configuration area for the selected protocols */
     void                             *priv_buf;

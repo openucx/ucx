@@ -48,6 +48,7 @@ void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
                                   frag_range->max_length);
 
     ppln_range->max_length = max_length;
+    ppln_range->node       = NULL;
 
     /* Apply the pipelining effect when sending multiple fragments */
     ppln_range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
@@ -198,8 +199,10 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
         perf_elem->c = multi_perf->c;
         perf_elem->m = multi_perf->m + (multi_perf->c / frag_size);
 
-        ucs_trace("stage[%zu]" UCP_PROTO_PERF_FUNC_TYPES_FMT
-                  UCP_PROTO_PERF_FUNC_FMT(perf_elem), stage_elem - stages,
+        ucs_trace("stage[%zu] %s" UCP_PROTO_PERF_FUNC_TYPES_FMT
+                  UCP_PROTO_PERF_FUNC_FMT(perf_elem),
+                  stage_elem - stages,
+                  ucp_proto_perf_node_name((*stage_elem)->node),
                   UCP_PROTO_PERF_FUNC_TYPES_ARG((*stage_elem)->perf),
                   UCP_PROTO_PERF_FUNC_ARG(perf_elem));
     }
@@ -214,6 +217,7 @@ ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
     ucs_array_for_each(elem, &concave) {
         range             = &caps->ranges[caps->num_ranges++];
         range->max_length = elem->max_length;
+        range->node       = NULL;
 
         /* "single" performance estimation is sum of "stages" with the bias */
         range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
