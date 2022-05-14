@@ -91,11 +91,6 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
 
 
 ucp_proto_perf_node_t *
-ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
-                        const char *desc_fmt, va_list ap);
-
-
-ucp_proto_perf_node_t *
 ucp_proto_perf_node_new_data(const char *name, const char *desc_fmt, ...);
 
 

@@ -130,6 +130,12 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 
 
+void ucp_proto_select_caps_reset(ucp_proto_caps_t *caps);
+
+
+void ucp_proto_select_caps_cleanup(ucp_proto_caps_t *caps);
+
+
 ucp_proto_select_elem_t *
 ucp_proto_select_lookup_slow(ucp_worker_h worker,
                              ucp_proto_select_t *proto_select,
