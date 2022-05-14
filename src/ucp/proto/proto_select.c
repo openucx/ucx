@@ -323,15 +323,27 @@ ucp_proto_select_perf_ranges_cleanup(ucp_proto_perf_range_t *perf_ranges,
     }
 }
 
+void ucp_proto_select_caps_reset(ucp_proto_caps_t *caps)
+{
+    caps->cfg_thresh   = UCS_MEMUNITS_AUTO;
+    caps->cfg_priority = 0;
+    caps->min_length   = 0;
+    caps->num_ranges   = 0;
+}
+
+void ucp_proto_select_caps_cleanup(ucp_proto_caps_t *caps)
+{
+    ucp_proto_select_perf_ranges_cleanup(caps->ranges, caps->num_ranges);
+    ucp_proto_select_caps_reset(caps);
+}
+
 static void
 ucp_proto_select_cleanup_protocols(ucp_proto_select_init_protocols_t *proto_init)
 {
     ucp_proto_id_t proto_id;
-    ucp_proto_caps_t *caps;
 
     ucs_for_each_bit(proto_id, proto_init->mask) {
-        caps = &proto_init->caps[proto_id];
-        ucp_proto_select_perf_ranges_cleanup(caps->ranges, caps->num_ranges);
+        ucp_proto_select_caps_cleanup(&proto_init->caps[proto_id]);
     }
     ucs_free(proto_init->priv_buf);
 }
@@ -355,6 +367,18 @@ static const void *ucp_proto_select_init_priv_buf(
     return UCS_PTR_BYTE_OFFSET(proto_init->priv_buf, priv_offset);
 }
 
+static const char *ucp_proto_select_node_name(ucp_proto_perf_type_t perf_type)
+{
+    switch (perf_type) {
+    case UCP_PROTO_PERF_TYPE_SINGLE:
+        return "best single-frag";
+    case UCP_PROTO_PERF_TYPE_MULTI:
+        return "best multi-frag";
+    default:
+        ucs_fatal("invalid performance type %d", perf_type);
+    }
+}
+
 static ucs_status_t ucp_proto_select_elem_add_envelope(
         const ucp_proto_select_init_protocols_t *proto_init,
         ucp_worker_cfg_index_t ep_cfg_index,
@@ -363,23 +387,29 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
         ucs_array_t(ucp_proto_thresh) *thresholds,
         ucs_array_t(ucp_proto_ranges) *perf_ranges)
 {
+    const ucp_proto_perf_range_t *caps_range, *child_range;
     ucp_proto_perf_envelope_elem_t *envelope_elem;
-    const ucp_proto_perf_range_t *caps_range;
     ucp_proto_threshold_elem_t *thresh_elem;
+    const char *node_name, *proto_name;
     ucp_proto_config_t *proto_config;
+    ucp_proto_perf_type_t perf_type;
     ucp_proto_perf_range_t *range;
     ucp_proto_id_t proto_id;
     const void *proto_priv;
     size_t range_start;
     char range_str[64];
 
+    perf_type = ucp_proto_select_param_perf_type(proto_init->select_param);
+    node_name = ucp_proto_select_node_name(perf_type);
+
     range_start = msg_length;
     ucs_array_for_each(envelope_elem, envelope) {
         proto_id   = ucs_idx2bitmap(proto_mask, envelope_elem->index);
         proto_priv = ucp_proto_select_init_priv_buf(proto_init, proto_id);
+        proto_name = ucp_proto_id_field(proto_id, name);
 
         ucs_trace("%zu..%zu: %s", range_start, envelope_elem->max_length,
-                  ucp_proto_id_field(proto_id, name));
+                  proto_name);
 
         if (ucp_proto_select_thresholds_is_last_proto(thresholds, proto_id)) {
             /* If the last element used the same protocol - extend it */
@@ -411,12 +441,21 @@ static ucs_status_t ucp_proto_select_elem_add_envelope(
         ucs_assert(caps_range != NULL); /* for cppcheck */
 
         range->max_length = envelope_elem->max_length;
-        range->node       = NULL;
-
         ucp_proto_perf_copy(range->perf, caps_range->perf);
 
         ucs_memunits_range_str(range_start, envelope_elem->max_length,
                                range_str, sizeof(range_str));
+
+        range->node = ucp_proto_perf_node_new_select(node_name,
+                                                     envelope_elem->index,
+                                                     "%s %s", proto_name,
+                                                     range_str);
+        /* Add all candidates as children */
+        ucs_for_each_bit(proto_id, proto_mask) {
+            child_range = ucp_proto_caps_range_find(&proto_init->caps[proto_id],
+                                                    range_start);
+            ucp_proto_perf_node_add_child(range->node, child_range->node);
+        }
 
         range_start = envelope_elem->max_length + 1;
     }

@@ -11,6 +11,7 @@
 #include "proto_rndv.inl"
 #include "rndv_mtype.inl"
 
+#include <ucp/proto/proto_debug.h>
 #include <ucp/proto/proto_single.inl>
 
 
@@ -335,6 +336,7 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
 {
     ucp_proto_rndv_rtr_priv_t *rpriv = init_params->priv;
     const uint64_t rndv_modes        = UCS_BIT(UCP_RNDV_MODE_PUT_PIPELINE);
+    ucp_proto_perf_node_t *unpack_perf_node;
     ucs_linear_func_t unpack_time;
     ucp_md_map_t md_map;
     ucs_status_t status;
@@ -352,10 +354,12 @@ ucp_proto_rndv_rtr_mtype_init(const ucp_proto_init_params_t *init_params)
     status = ucp_proto_common_buffer_copy_time(
             init_params->worker, "rtr_mtype", UCS_MEMORY_TYPE_HOST,
             init_params->select_param->mem_type, UCT_EP_OP_PUT_ZCOPY,
-            &unpack_time);
+            &unpack_time, &unpack_perf_node);
     if (status != UCS_OK) {
         return status;
     }
+
+    ucp_proto_perf_node_deref(&unpack_perf_node);
 
     status = ucp_proto_rndv_rtr_common_init(init_params, rndv_modes, frag_size,
                                             unpack_time, UCS_MEMORY_TYPE_HOST,

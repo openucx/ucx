@@ -147,7 +147,9 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_init_params_t *params,
                          double *receive_time)
 {
     ucp_context_t *context = params->worker->context;
+    ucp_worker_iface_t *wiface;
     uct_perf_attr_t perf_attr;
+    ucp_rsc_index_t rsc_index;
     ucs_status_t status;
 
     if (lane == UCP_NULL_LANE) {
@@ -155,11 +157,16 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_init_params_t *params,
         return UCS_OK;
     }
 
-    status = ucp_proto_common_lane_perf_attr(params, lane, UCT_EP_OP_AM_BCOPY,
-            UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
-            UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
-            UCT_PERF_ATTR_FIELD_RECV_OVERHEAD | UCT_PERF_ATTR_FIELD_LATENCY,
-            &perf_attr);
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_OPERATION |
+                           UCT_PERF_ATTR_FIELD_SEND_PRE_OVERHEAD |
+                           UCT_PERF_ATTR_FIELD_SEND_POST_OVERHEAD |
+                           UCT_PERF_ATTR_FIELD_RECV_OVERHEAD |
+                           UCT_PERF_ATTR_FIELD_LATENCY;
+    perf_attr.operation  = UCT_EP_OP_AM_BCOPY;
+
+    rsc_index = params->ep_config_key->lanes[lane].rsc_index;
+    wiface    = ucp_worker_iface(params->worker, rsc_index);
+    status    = uct_iface_estimate_perf(wiface->iface, &perf_attr);
     if (status != UCS_OK) {
         return status;
     }
@@ -167,6 +174,7 @@ ucp_proto_rndv_ctrl_perf(const ucp_proto_init_params_t *params,
     *send_time    = perf_attr.send_pre_overhead + perf_attr.send_post_overhead;
     *receive_time = perf_attr.recv_overhead +
                     ucp_tl_iface_latency(context, &perf_attr.latency);
+
     return UCS_OK;
 }
 
@@ -181,7 +189,9 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     const ucp_proto_select_param_t *select_param;
     ucp_proto_select_param_t remote_select_param;
     const ucp_proto_perf_range_t *remote_range;
+    ucp_proto_perf_node_t *memreg_perf_node;
     double send_time, receive_time;
+    ucs_linear_func_t memreg_time;
     ucp_memory_info_t mem_info;
     ucs_status_t status;
     double ctrl_latency;
@@ -250,13 +260,18 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
         return status;
     }
 
+    ucp_proto_common_memreg_time(&params->super, rpriv->md_map, &memreg_time,
+                                 &memreg_perf_node);
+    ucp_proto_perf_node_deref(&memreg_perf_node);
+
     ctrl_latency = send_time + receive_time + params->super.overhead * 2;
     ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
               UCP_PROTO_TIME_ARG(ctrl_latency));
+    ctrl_perf.node                             = NULL;
     ctrl_perf.perf[UCP_PROTO_PERF_TYPE_SINGLE] =
     ctrl_perf.perf[UCP_PROTO_PERF_TYPE_MULTI]  = ucs_linear_func_add3(
-            ucp_proto_common_memreg_time(&params->super, rpriv->md_map),
-            ucs_linear_func_make(ctrl_latency, 0.0), params->unpack_time);
+            memreg_time, ucs_linear_func_make(ctrl_latency, 0.0),
+            params->unpack_time);
 
     /* Set rendezvous protocol properties */
     ucp_proto_common_init_base_caps(&params->super, min_length);
@@ -274,7 +289,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
                   ucp_operation_names[params->remote_op_id],
                   ucp_proto_perf_node_name(remote_range->node),
                   UCP_PROTO_PERF_FUNC_TYPES_ARG(remote_range->perf));
-        remote_perf = *remote_range;
+        remote_perf      = *remote_range;
+        remote_perf.node = NULL;
 
         parallel_stages[0] = &ctrl_perf;
         parallel_stages[1] = &remote_perf;
@@ -423,6 +439,7 @@ ucp_proto_rndv_bulk_init(const ucp_proto_multi_init_params_t *init_params,
     /* Add ack latency */
     status = ucp_proto_rndv_ack_init(&init_params->super.super, &rpriv->super);
     if (status != UCS_OK) {
+        ucp_proto_select_caps_cleanup(init_params->super.super.caps);
         return status;
     }
 

@@ -204,16 +204,10 @@ size_t ucp_proto_common_get_iface_attr_field(const uct_iface_attr_t *iface_attr,
 
 
 ucs_status_t
-ucp_proto_common_lane_perf_attr(const ucp_proto_init_params_t *params,
-                                ucp_lane_index_t lane, uct_ep_operation_t op,
-                                uint64_t uct_field_mask,
-                                uct_perf_attr_t* perf_attr);
-
-
-ucs_status_t
 ucp_proto_common_get_lane_perf(const ucp_proto_common_init_params_t *params,
                                ucp_lane_index_t lane,
-                               ucp_proto_common_tl_perf_t *perf);
+                               ucp_proto_common_tl_perf_t *perf,
+                               ucp_proto_perf_node_t **perf_node_p);
 
 
 /* @return number of lanes found */
@@ -259,13 +253,17 @@ void ucp_proto_common_zcopy_adjust_min_frag_always(ucp_request_t *req,
 
 void ucp_proto_request_abort(ucp_request_t *req, ucs_status_t status);
 
+
 void ucp_proto_request_bcopy_abort(ucp_request_t *request, ucs_status_t status);
+
 
 void ucp_proto_request_zcopy_abort(ucp_request_t *request, ucs_status_t status);
 
-ucs_linear_func_t
-ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
-                             ucp_md_map_t reg_md_map);
+
+void ucp_proto_common_memreg_time(const ucp_proto_common_init_params_t *params,
+                                  ucp_md_map_t reg_md_map,
+                                  ucs_linear_func_t *memreg_time,
+                                  ucp_proto_perf_node_t **perf_node_p);
 
 
 ucs_status_t
@@ -273,6 +271,7 @@ ucp_proto_common_buffer_copy_time(ucp_worker_h worker, const char *title,
                                   ucs_memory_type_t local_mem_type,
                                   ucs_memory_type_t remote_mem_type,
                                   uct_ep_operation_t memtype_op,
-                                  ucs_linear_func_t *copy_time);
+                                  ucs_linear_func_t *copy_time,
+                                  ucp_proto_perf_node_t **perf_node_p);
 
 #endif

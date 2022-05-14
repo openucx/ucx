@@ -426,9 +426,9 @@ void ucp_proto_select_info_str(ucp_worker_h worker,
     ucp_rkey_config_dump_brief(&worker->rkey_config[rkey_cfg_index].key, strb);
 }
 
-ucp_proto_perf_node_t *ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type,
-                                               const char *name,
-                                               const char *desc_fmt, va_list ap)
+static ucp_proto_perf_node_t *
+ucp_proto_perf_node_new(ucp_proto_perf_node_type_t type, const char *name,
+                        const char *desc_fmt, va_list ap)
 {
     ucp_proto_perf_node_t *perf_node;
 
@@ -596,8 +596,10 @@ void ucp_proto_perf_node_add_scalar(ucp_proto_perf_node_t *perf_node,
 void ucp_proto_perf_node_add_bandwidth(ucp_proto_perf_node_t *perf_node,
                                        const char *name, double value)
 {
-    ucp_proto_perf_node_add_data(perf_node, name,
-                                 ucs_linear_func_make(0, 1.0 / value));
+    if (value > UCP_PROTO_PERF_EPSILON) {
+        ucp_proto_perf_node_add_data(perf_node, name,
+                                     ucs_linear_func_make(0, 1.0 / value));
+    }
 }
 
 const char *ucp_proto_perf_node_name(ucp_proto_perf_node_t *perf_node)
