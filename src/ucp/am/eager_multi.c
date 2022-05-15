@@ -77,17 +77,15 @@ static size_t ucp_am_eager_multi_bcopy_pack_args_first(void *dest, void *arg)
     ucp_am_hdr_t *hdr                    = dest;
     ucp_proto_multi_pack_ctx_t *pack_ctx = arg;
     ucp_request_t *req                   = pack_ctx->req;
-    size_t length, max_length;
+    size_t length;
 
     ucs_assertv(req->send.state.dt_iter.offset == 0, "offset %zu",
                 req->send.state.dt_iter.offset);
 
     ucp_am_fill_header(hdr, req);
 
-    max_length = ucs_min(ucp_am_send_req_total_size(req),
-                         pack_ctx->max_payload);
-    length     = ucp_am_eager_bcopy_pack_data(hdr + 1, req, max_length,
-                                              pack_ctx->next_iter);
+    length = ucp_am_eager_bcopy_pack(hdr + 1, req, pack_ctx->max_payload,
+                                     pack_ctx->next_iter);
     ucp_am_eager_fill_first_footer(UCS_PTR_BYTE_OFFSET(hdr + 1, length), req);
 
     return UCP_AM_FIRST_FRAG_META_LEN + length;
@@ -117,10 +115,12 @@ static UCS_F_ALWAYS_INLINE ucs_status_t ucp_am_eager_multi_bcopy_send_func(
         ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
         ucp_datatype_iter_t *next_iter)
 {
+    size_t user_hdr_size = req->send.msg_proto.am.header_length;
+
     return ucp_proto_eager_bcopy_multi_common_send_func(
             req, lpriv, next_iter, UCP_AM_ID_AM_FIRST,
             ucp_am_eager_multi_bcopy_pack_args_first,
-            UCP_AM_FIRST_FRAG_META_LEN, UCP_AM_ID_AM_MIDDLE,
+            UCP_AM_FIRST_FRAG_META_LEN + user_hdr_size, UCP_AM_ID_AM_MIDDLE,
             ucp_am_eager_multi_bcopy_pack_args_mid, UCP_AM_MID_FRAG_META_LEN);
 }
 

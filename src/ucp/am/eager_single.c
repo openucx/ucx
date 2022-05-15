@@ -174,9 +174,9 @@ ucp_am_eager_single_bcopy_pack_common(void *dest, void *arg, int is_reply)
 
     ucp_am_fill_header(hdr, req);
 
-    length = ucp_am_eager_bcopy_pack_data(hdr + 1, req,
-                                          ucp_am_send_req_total_size(req),
-                                          &next_iter);
+    length = ucp_am_eager_bcopy_pack(hdr + 1, req,
+                                     req->send.state.dt_iter.length,
+                                     &next_iter);
 
     ucs_assertv(length == ucp_am_send_req_total_size(req),
                 "length %zu total_size %zu", length,

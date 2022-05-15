@@ -24,20 +24,16 @@ static UCS_F_ALWAYS_INLINE size_t ucp_am_send_req_total_size(ucp_request_t *req)
 }
 
 static UCS_F_ALWAYS_INLINE ssize_t
-ucp_am_eager_bcopy_pack_data(void *buffer, ucp_request_t *req, size_t length,
-                             ucp_datatype_iter_t *next_iter)
+ucp_am_eager_bcopy_pack(void *buffer, ucp_request_t *req, size_t length,
+                        ucp_datatype_iter_t *next_iter)
 {
     unsigned user_header_length = req->send.msg_proto.am.header_length;
     size_t total_length;
     void *user_hdr;
 
-    ucs_assertv((req->send.state.dt_iter.length == 0) ||
-                (length > user_header_length),
-                "length %zu user_header length %u", length, user_header_length);
-
-    total_length = ucp_datatype_iter_next_pack(
-            &req->send.state.dt_iter, req->send.ep->worker,
-            length - user_header_length, next_iter, buffer);
+    total_length = ucp_datatype_iter_next_pack(&req->send.state.dt_iter,
+                                               req->send.ep->worker,
+                                               length, next_iter, buffer);
     if (user_header_length != 0) {
         /* Pack user header to the end of message/fragment */
         user_hdr = UCS_PTR_BYTE_OFFSET(buffer, total_length);
