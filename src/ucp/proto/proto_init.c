@@ -25,7 +25,8 @@
 #define UCP_PROTO_MSGLEN_EPSILON   0.5
 
 UCS_ARRAY_IMPL(ucp_proto_perf_envelope, unsigned,
-               ucp_proto_perf_envelope_elem_t,);
+               ucp_proto_perf_envelope_elem_t, static);
+UCS_ARRAY_IMPL(ucp_proto_perf_list, unsigned, ucs_linear_func_t, )
 
 
 void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
@@ -57,8 +58,6 @@ void ucp_proto_common_add_ppln_range(const ucp_proto_init_params_t *init_params,
     ppln_range->perf[UCP_PROTO_PERF_TYPE_MULTI] =
             frag_range->perf[UCP_PROTO_PERF_TYPE_MULTI];
 
-    ppln_range->name = "ppln";
-
     ucs_trace("frag-size: %zd" UCP_PROTO_TIME_FMT(frag_overhead),
               frag_range->max_length, UCP_PROTO_TIME_ARG(frag_overhead));
 }
@@ -74,102 +73,62 @@ void ucp_proto_common_init_base_caps(
     caps->num_ranges   = 0;
 }
 
-void ucp_proto_perf_envelope_append(ucp_proto_perf_envelope_t *list,
-                                    const char *name,
-                                    const ucp_proto_perf_range_t *range,
-                                    size_t frag_size, ucs_linear_func_t bias)
-{
-    ucs_linear_func_t base, frag_overhead;
-    ucp_proto_perf_envelope_elem_t *elem;
-
-    elem                   = ucs_array_append_fixed(ucp_proto_perf_envelope,
-                                                    list);
-    elem->id               = 0;
-    elem->range.super.name = name;
-    elem->range.super.perf[UCP_PROTO_PERF_TYPE_SINGLE]
-        = range->perf[UCP_PROTO_PERF_TYPE_SINGLE];
-
-    base = range->perf[UCP_PROTO_PERF_TYPE_MULTI];
-    /* account for the overhead of each fragment of a multi-fragment message */
-    frag_overhead = ucs_linear_func_make(base.c,
-            base.m + (base.c / frag_size));
-
-    elem->range.super.perf[UCP_PROTO_PERF_TYPE_MULTI]
-        = ucs_linear_func_compose(bias, frag_overhead);
-    ucs_trace("%s"
-            UCP_PROTO_PERF_FUNC_FMT(single)
-            UCP_PROTO_PERF_FUNC_FMT(base)
-            UCP_PROTO_PERF_FUNC_FMT(frag_overhead)
-            UCP_PROTO_PERF_FUNC_FMT(multi), name,
-            UCP_PROTO_PERF_FUNC_ARG(
-                &elem->range.super.perf[UCP_PROTO_PERF_TYPE_SINGLE]),
-            UCP_PROTO_PERF_FUNC_ARG(&base),
-            UCP_PROTO_PERF_FUNC_ARG(&frag_overhead),
-            UCP_PROTO_PERF_FUNC_ARG(
-                &elem->range.super.perf[UCP_PROTO_PERF_TYPE_MULTI]));
-}
-
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucp_proto_perf_envelope_t *list,
-                             ucp_proto_perf_envelope_t *envelope_list,
-                             size_t min_length, size_t max_length,
-                             ucp_proto_perf_type_t perf_type, int convex)
+ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
+                             size_t range_start, size_t range_end, int convex,
+                             ucp_proto_perf_envelope_t *envelope_list)
 {
-    size_t start = min_length;
+    const ucs_linear_func_t *perf_list_ptr = ucs_array_begin(perf_list);
+    const unsigned perf_list_length        = ucs_array_length(perf_list);
+    size_t start                           = range_start;
     char num_str[64];
     struct {
-        int                                  idx;
-        double                               result;
-        const ucp_proto_perf_envelope_elem_t *elem;
+        unsigned index;
+        double   result;
     } curr, best;
     ucp_proto_perf_envelope_elem_t *new_elem;
-    ucp_proto_perf_type_t tmp_perf_type;
     ucs_status_t status;
     size_t midpoint;
-    double x_intersect;
+    double x_sample, x_intersect;
     uint64_t mask;
 
-    ucs_assert(ucs_array_length(list) < 64);
-    mask = UCS_MASK(ucs_array_length(list));
+    ucs_assert_always(perf_list_length < 64);
+    mask = UCS_MASK(perf_list_length);
 
     do {
         ucs_assert(mask != 0);
 
         /* Find best trend at the 'start' point */
-        best.idx    = -1;
+        best.index  = UINT_MAX;
         best.result = DBL_MAX;
-        best.elem   = NULL;
-        ucs_for_each_bit(curr.idx, mask) {
-            curr.elem   = &ucs_array_elem(list, curr.idx);
-            curr.result = ucs_linear_func_apply(
-                    curr.elem->range.super.perf[perf_type],
-                    start + UCP_PROTO_MSGLEN_EPSILON);
+        ucs_for_each_bit(curr.index, mask) {
+            x_sample    = start + UCP_PROTO_MSGLEN_EPSILON;
+            curr.result = ucs_linear_func_apply(perf_list_ptr[curr.index],
+                                                x_sample);
             ucs_assert(curr.result != DBL_MAX);
-            if ((best.elem == NULL) ||
+            if ((best.index == UINT_MAX) ||
                 ((curr.result < best.result) == convex)) {
                 best = curr;
             }
         }
 
         /* Since mask != 0, we should find at least one trend */
-        ucs_assert(best.elem != NULL);
-        ucs_trace("at %s: selected %s",
+        ucs_assert(best.index != UINT_MAX);
+        ucs_trace("at %s: selected stage[%d]",
                   ucs_memunits_to_str(start, num_str, sizeof(num_str)),
-                  best.elem->range.super.name);
+                  best.index);
         ucs_log_indent(1);
 
         /* Find first (smallest) intersection point between the current best
          * trend and any other trend. This would be the point where that
          * other trend becomes the best one.
          */
-        midpoint = max_length;
-        mask    &= ~UCS_BIT(best.idx);
-        ucs_for_each_bit(curr.idx, mask) {
-            curr.elem = &ucs_array_elem(list, curr.idx);
-            status = ucs_linear_func_intersect(
-                    curr.elem->range.super.perf[perf_type],
-                    best.elem->range.super.perf[perf_type],
-                    &x_intersect);
+        midpoint = range_end;
+        mask    &= ~UCS_BIT(best.index);
+        ucs_for_each_bit(curr.index, mask) {
+            status = ucs_linear_func_intersect(perf_list_ptr[curr.index],
+                                               perf_list_ptr[best.index],
+                                               &x_intersect);
             if ((status == UCS_OK) && (x_intersect > start)) {
                 /* We care only if the intersection is after 'start', since
                  * otherwise 'best' is better than 'curr' at
@@ -178,80 +137,109 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_envelope_t *list,
                 midpoint = ucs_min(ucs_double_to_sizet(x_intersect, SIZE_MAX),
                                    midpoint);
                 ucs_memunits_to_str(midpoint, num_str, sizeof(num_str));
-                ucs_trace("intersects with %s at %.2f, midpoint is %s",
-                          curr.elem->range.super.name, x_intersect, num_str);
+                ucs_trace("intersects with stage[%d] at %.2f, midpoint is %s",
+                          curr.index, x_intersect, num_str);
             } else {
-                ucs_trace("intersects with %s out of range",
-                          curr.elem->range.super.name);
+                ucs_trace("intersects with stage[%d] out of range", curr.index);
             }
         }
         ucs_log_indent(-1);
 
-        status = ucs_array_append(ucp_proto_perf_envelope, envelope_list);
-        if (status != UCS_OK) {
-            return status;
-        }
-
-        new_elem                          = ucs_array_last(envelope_list);
-        new_elem->id                      = best.elem->id;
-        new_elem->range.cfg_thresh        = best.elem->range.cfg_thresh;
-        new_elem->range.super.name        = best.elem->range.super.name;
-        new_elem->range.super.max_length  = midpoint;
-        for (tmp_perf_type = 0; tmp_perf_type < UCP_PROTO_PERF_TYPE_LAST;
-             tmp_perf_type++) {
-            new_elem->range.super.perf[tmp_perf_type]
-                = best.elem->range.super.perf[tmp_perf_type];
-        }
+        new_elem             = ucs_array_append(ucp_proto_perf_envelope,
+                                                envelope_list,
+                                                return UCS_ERR_NO_MEMORY);
+        new_elem->index      = best.index;
+        new_elem->max_length = midpoint;
 
         start = midpoint + 1;
-    } while (midpoint < max_length);
+    } while (midpoint < range_end);
 
     return UCS_OK;
 }
 
-ucs_status_t ucp_proto_common_add_perf_ranges(
-        const ucp_proto_common_init_params_t *params,
-        size_t min_length, size_t max_length,
-        const ucp_proto_perf_envelope_t *parallel_stage_list)
+ucs_status_t
+ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
+                               size_t range_start, size_t range_end,
+                               size_t frag_size, double bias,
+                               const ucp_proto_perf_range_t **stages,
+                               unsigned num_stages)
 {
-    ucs_linear_func_t sum_perf = UCS_LINEAR_FUNC_ZERO;
-    ucp_proto_caps_t *caps     = params->super.caps;
-    ucp_proto_perf_range_t *range;
+    ucp_proto_caps_t *caps      = params->caps;
+    ucs_linear_func_t bias_func = ucs_linear_func_make(0.0, 1.0 - bias);
+    UCS_ARRAY_DEFINE_ONSTACK(stage_list, ucp_proto_perf_list, 4);
     UCS_ARRAY_DEFINE_ONSTACK(concave, ucp_proto_perf_envelope, 4);
+    const ucs_linear_func_t *single_perf, *multi_perf;
+    const ucp_proto_perf_range_t **stage_elem;
     ucp_proto_perf_envelope_elem_t *elem;
+    ucp_proto_perf_range_t *range;
+    ucs_linear_func_t *perf_elem;
+    ucs_linear_func_t sum_perf;
+    char frag_size_str[64];
     ucs_status_t status;
-    char num_str[64];
+    char range_str[64];
 
-    ucs_trace("range[%d..] %s", caps->num_ranges,
-              ucs_memunits_range_str(min_length, max_length, num_str,
-                                     sizeof(num_str)));
+    ucs_memunits_to_str(frag_size, frag_size_str, sizeof(frag_size_str));
+    ucs_trace("%s frag %s bias %.0f%%",
+              ucs_memunits_range_str(range_start, range_end, range_str,
+                                     sizeof(range_str)),
+              frag_size_str, bias * 100.0);
 
-    /* Single-fragment is adding overheads and transfer time */
-    ucs_array_for_each(elem, parallel_stage_list) {
-        ucs_linear_func_add_inplace(&sum_perf,
-                elem->range.super.perf[UCP_PROTO_PERF_TYPE_SINGLE]);
+    ucs_log_indent(1);
+    sum_perf = UCS_LINEAR_FUNC_ZERO;
+    ucs_carray_for_each(stage_elem, stages, num_stages) {
+        /* Single-fragment is adding overheads and transfer time */
+        single_perf = &(*stage_elem)->perf[UCP_PROTO_PERF_TYPE_SINGLE];
+        ucs_linear_func_add_inplace(&sum_perf, *single_perf);
+
+        /* account for the overhead of each fragment of a multi-fragment message */
+        multi_perf   = &(*stage_elem)->perf[UCP_PROTO_PERF_TYPE_MULTI];
+        perf_elem    = ucs_array_append(ucp_proto_perf_list, &stage_list,
+                                        status = UCS_ERR_NO_MEMORY; goto out);
+        perf_elem->c = multi_perf->c;
+        perf_elem->m = multi_perf->m + (multi_perf->c / frag_size);
+
+        ucs_trace("stage[%zu]" UCP_PROTO_PERF_FUNC_TYPES_FMT
+                  UCP_PROTO_PERF_FUNC_FMT(perf_elem), stage_elem - stages,
+                  UCP_PROTO_PERF_FUNC_TYPES_ARG((*stage_elem)->perf),
+                  UCP_PROTO_PERF_FUNC_ARG(perf_elem));
     }
 
     /* Multi-fragment is pipelining overheads and network transfer */
-    status = ucp_proto_perf_envelope_make(parallel_stage_list, &concave,
-                                          min_length, max_length,
-                                          UCP_PROTO_PERF_TYPE_MULTI, 0);
+    status = ucp_proto_perf_envelope_make(&stage_list, range_start, range_end,
+                                          0, &concave);
     if (status != UCS_OK) {
-        return status;
+        goto out;
     }
 
     ucs_array_for_each(elem, &concave) {
-        range = &caps->ranges[caps->num_ranges++];
-        range->name                             = elem->range.super.name;
-        range->max_length                       = elem->range.super.max_length;
-        /* "single" perfomance estimation is sum of "stages" */
-        range->perf[UCP_PROTO_PERF_TYPE_SINGLE] = sum_perf;
-        /* "multiple" perfomance estimation is concave envelope of "stages" */
-        range->perf[UCP_PROTO_PERF_TYPE_MULTI]
-            = elem->range.super.perf[UCP_PROTO_PERF_TYPE_MULTI];
-    }
+        range             = &caps->ranges[caps->num_ranges++];
+        range->max_length = elem->max_length;
 
-    return UCS_OK;
+        /* "single" performance estimation is sum of "stages" with the bias */
+        range->perf[UCP_PROTO_PERF_TYPE_SINGLE] =
+                ucs_linear_func_compose(bias_func, sum_perf);
+
+        /* "multiple" performance estimation is concave envelope of "stages" */
+        multi_perf = &ucs_array_elem(&stage_list, elem->index);
+        range->perf[UCP_PROTO_PERF_TYPE_MULTI] =
+                ucs_linear_func_compose(bias_func, *multi_perf);
+
+        ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+                  caps->num_ranges,
+                  ucs_memunits_range_str(range_start, range->max_length,
+                                         range_str, sizeof(range_str)),
+                  UCP_PROTO_PERF_FUNC_TYPES_ARG(range->perf));
+
+        range_start = range->max_length + 1;
+    }
+    ucs_assertv(range_start == (range_end + 1), "range_start=%zu range_end=%zu",
+                range_start, range_end);
+
+    status = UCS_OK;
+
+out:
+    ucs_log_indent(-1);
+    return status;
 }
 
 ucs_status_t
@@ -259,10 +247,11 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
                            const ucp_proto_common_tl_perf_t *perf,
                            ucp_md_map_t reg_md_map)
 {
-    UCS_ARRAY_DEFINE_ONSTACK(list, ucp_proto_perf_envelope, 4);
     const ucp_proto_select_param_t *select_param = params->super.select_param;
+    ucp_proto_caps_t *caps                       = params->super.caps;
     ucp_proto_perf_range_t send_perf, xfer_perf, recv_perf;
     ucs_linear_func_t send_overhead, xfer_time, recv_overhead;
+    const ucp_proto_perf_range_t *parallel_stages[3];
     ucs_memory_type_t recv_mem_type;
     uint32_t op_attr_mask;
     ucs_status_t status;
@@ -377,15 +366,14 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
 
     /* Initialize capabilities */
     ucp_proto_common_init_base_caps(params, perf->min_length);
-    ucp_proto_perf_envelope_append(&list, "send", &send_perf, frag_size,
-                                   ucs_linear_func_make(0, 1));
-    ucp_proto_perf_envelope_append(&list, "xfer", &xfer_perf, frag_size,
-                                   ucs_linear_func_make(0, 1));
-    ucp_proto_perf_envelope_append(&list, "recv", &recv_perf, frag_size,
-                                   ucs_linear_func_make(0, 1));
+
+    parallel_stages[0] = &send_perf;
+    parallel_stages[1] = &xfer_perf;
+    parallel_stages[2] = &recv_perf;
 
     /* Add ranges representing sending single fragment */
-    status = ucp_proto_common_add_perf_ranges(params, 0, frag_size, &list);
+    status = ucp_proto_init_parallel_stages(&params->super, 0, frag_size,
+                                            frag_size, 0.0, parallel_stages, 3);
     if (status != UCS_OK) {
         return status;
     }
@@ -394,10 +382,9 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
        not the max length and the protocol supports fragmentation */
     if ((frag_size < params->max_length) &&
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SINGLE_FRAG)) {
-        ucp_proto_common_add_ppln_range(
-                &params->super,
-                &params->super.caps->ranges[params->super.caps->num_ranges - 1],
-                params->max_length);
+        ucp_proto_common_add_ppln_range(&params->super,
+                                        &caps->ranges[caps->num_ranges - 1],
+                                        params->max_length);
     }
 
     return UCS_OK;

@@ -76,7 +76,7 @@ const ucp_proto_t *ucp_protocols[] = {
     UCP_PROTO_FOR_EACH(UCP_PROTO_ENTRY)
 };
 
-const char *ucp_proto_perf_types[] = {
+const char *ucp_proto_perf_type_names[] = {
     [UCP_PROTO_PERF_TYPE_SINGLE] = "single",
     [UCP_PROTO_PERF_TYPE_MULTI]  = "multi"
 };

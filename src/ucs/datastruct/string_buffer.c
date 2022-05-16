@@ -35,6 +35,9 @@ void ucs_string_buffer_init_fixed(ucs_string_buffer_t *strb, char *buffer,
                                   size_t capacity)
 {
     ucs_array_init_fixed(&strb->str, buffer, capacity);
+    if (capacity > 0) {
+        ucs_array_elem(&strb->str, 0) = '\0';
+    }
 }
 
 void ucs_string_buffer_cleanup(ucs_string_buffer_t *strb)

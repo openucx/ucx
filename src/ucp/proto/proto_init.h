@@ -16,18 +16,19 @@
 
 /* Element of list of trends to select next best one */
 typedef struct {
-    uint64_t                 id;
-    ucp_proto_select_range_t range;
+    size_t   max_length;  /* Maximal message size */
+    unsigned index;       /* Selected index of the input array */
 } ucp_proto_perf_envelope_elem_t;
 
 
 UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_envelope, unsigned,
                        ucp_proto_perf_envelope_elem_t);
-UCS_ARRAY_DECLARE_FUNCS(ucp_proto_perf_envelope, unsigned,
-                        ucp_proto_perf_envelope_elem_t,);
-
-
 typedef ucs_array_t(ucp_proto_perf_envelope) ucp_proto_perf_envelope_t;
+
+
+UCS_ARRAY_DECLARE_TYPE(ucp_proto_perf_list, unsigned, ucs_linear_func_t);
+UCS_ARRAY_DECLARE_FUNCS(ucp_proto_perf_list, unsigned, ucs_linear_func_t, );
+typedef ucs_array_t(ucp_proto_perf_list) ucp_proto_perf_list_t;
 
 
 /**
@@ -44,32 +45,42 @@ void ucp_proto_common_init_base_caps(
 
 
 /*
- * Accepts list of operations that happen in parallel and create a ranges
- * on min..max which represents their overall performance.
- */
-ucs_status_t ucp_proto_common_add_perf_ranges(
-        const ucp_proto_common_init_params_t *params,
-        size_t min_length, size_t max_length,
-        const ucp_proto_perf_envelope_t *parallel_statge_list);
-
-
-void ucp_proto_perf_envelope_append(ucp_proto_perf_envelope_t *list,
-                                    const char *name,
-                                    const ucp_proto_perf_range_t *range,
-                                    size_t frag_size, ucs_linear_func_t bias);
-
-
-/*
- * Accepts a list of performance functions for a given range
- * (min_length..max_length), and appends the convex (or concave)
- * envelope segments of these functions to the 'envelope_list'. The envelope
- * is the minimal (or maximal) function at each point in that range.
+ * Accepts a list of performance functions for a given range and appends the
+ * convex or concave envelope of these functions to an output list.
+ *
+ * @param [in] perf_list       List of performance functions.
+ * @param [in] range_start     Range interval start.
+ * @param [in] range_end       Range interval end.
+ * @param [in] convex          Whether to select convex (maximal) or concave
+ *                             (minimal) function from 'perf_list'.
+ * @param [out] envelope_list  The resulting envelope list. Each entry in this
+ *                             array holds the original index in 'perf_list' to
+ *                             which it corresponds.
  */
 ucs_status_t
-ucp_proto_perf_envelope_make(const ucp_proto_perf_envelope_t *list,
-                             ucp_proto_perf_envelope_t *envelope_list,
-                             size_t min_length, size_t max_length,
-                             ucp_proto_perf_type_t perf_type, int convex);
+ucp_proto_perf_envelope_make(const ucp_proto_perf_list_t *perf_list,
+                             size_t range_start, size_t range_end, int convex,
+                             ucp_proto_perf_envelope_t *envelope_list);
+
+
+/**
+ * Initialize the performance of a protocol that consists of several parallel
+ * stages. The performance estimations are added to params->caps.
+ *
+ * @param [in] params        Protocol initialization parameters.
+ * @param [in] range_start   Range interval start.
+ * @param [in] range_end     Range interval end.
+ * @param [in] frag_size     Size of protocol's fragments.
+ * @param [in] bias          Performance bias (0 - no bias).
+ * @param [in] stages        Array of parallel stages performance ranges.
+ * @param [in] num_stages    Number of parallel stages in the protocol.
+ */
+ucs_status_t
+ucp_proto_init_parallel_stages(const ucp_proto_init_params_t *params,
+                               size_t range_start, size_t range_end,
+                               size_t frag_size, double bias,
+                               const ucp_proto_perf_range_t **stages,
+                               unsigned num_stages);
 
 
 ucs_status_t

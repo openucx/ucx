@@ -175,13 +175,12 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
 {
     ucp_context_h context             = params->super.super.worker->context;
     ucp_proto_rndv_ctrl_priv_t *rpriv = params->super.super.priv;
-    UCS_ARRAY_DEFINE_ONSTACK(list, ucp_proto_perf_envelope, 2);
+    const ucp_proto_perf_range_t *parallel_stages[2];
     size_t min_length, max_length, range_max_length;
+    ucp_proto_perf_range_t ctrl_perf, remote_perf;
     const ucp_proto_select_param_t *select_param;
-    const ucp_proto_select_range_t *remote_range;
     ucp_proto_select_param_t remote_select_param;
-    ucp_proto_perf_range_t send_perf;
-    ucs_linear_func_t rndv_bias;
+    const ucp_proto_perf_range_t *remote_range;
     double send_time, receive_time;
     ucp_memory_info_t mem_info;
     ucs_status_t status;
@@ -254,8 +253,8 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
     ctrl_latency = send_time + receive_time + params->super.overhead * 2;
     ucs_trace("rndv" UCP_PROTO_TIME_FMT(ctrl_latency),
               UCP_PROTO_TIME_ARG(ctrl_latency));
-    send_perf.perf[UCP_PROTO_PERF_TYPE_SINGLE] =
-    send_perf.perf[UCP_PROTO_PERF_TYPE_MULTI]  = ucs_linear_func_add3(
+    ctrl_perf.perf[UCP_PROTO_PERF_TYPE_SINGLE] =
+    ctrl_perf.perf[UCP_PROTO_PERF_TYPE_MULTI]  = ucs_linear_func_add3(
             ucp_proto_common_memreg_time(&params->super, rpriv->md_map),
             ucs_linear_func_make(ctrl_latency, 0.0), params->unpack_time);
 
@@ -264,28 +263,30 @@ ucp_proto_rndv_ctrl_init(const ucp_proto_rndv_ctrl_init_params_t *params)
 
     /* Copy performance ranges from the remote protocol, and add overheads */
     remote_range = rpriv->remote_proto.perf_ranges;
-    rndv_bias    = ucs_linear_func_make(0, 1.0 - params->perf_bias);
-
-    ucp_proto_perf_envelope_append(&list, "ctrl", &send_perf, SIZE_MAX,
-                                   rndv_bias);
     do {
-        range_max_length = ucs_min(remote_range->super.max_length, max_length);
+        range_max_length = ucs_min(remote_range->max_length, max_length);
         if (range_max_length < params->super.super.caps->min_length) {
             continue;
         }
 
-        ucp_proto_perf_envelope_append(&list, remote_range->super.name,
-                                       &remote_range->super, SIZE_MAX,
-                                       rndv_bias);
-        status = ucp_proto_common_add_perf_ranges(&params->super, min_length,
-                                                  range_max_length, &list);
+        ucs_trace("%s: max %zu remote-op %s" UCP_PROTO_PERF_FUNC_TYPES_FMT,
+                  params->super.super.proto_name, remote_range->max_length,
+                  ucp_operation_names[params->remote_op_id],
+                  UCP_PROTO_PERF_FUNC_TYPES_ARG(remote_range->perf));
+        remote_perf = *remote_range;
+
+        parallel_stages[0] = &ctrl_perf;
+        parallel_stages[1] = &remote_perf;
+        status = ucp_proto_init_parallel_stages(&params->super.super,
+                                                min_length, range_max_length,
+                                                SIZE_MAX, params->perf_bias,
+                                                parallel_stages, 2);
         if (status != UCS_OK) {
             return status;
         }
 
         min_length = range_max_length - 1;
-        ucs_array_set_length(&list, 1);
-    } while ((remote_range++)->super.max_length < max_length);
+    } while ((remote_range++)->max_length < max_length);
 
     return UCS_OK;
 }
@@ -397,7 +398,7 @@ ucs_status_t ucp_proto_rndv_ack_init(const ucp_proto_init_params_t *init_params,
                                         ack_perf[perf_type]);
             ucs_trace("range[%d] %s" UCP_PROTO_PERF_FUNC_FMT(ack)
                       UCP_PROTO_PERF_FUNC_FMT(total),
-                      i, ucp_proto_perf_types[perf_type],
+                      i, ucp_proto_perf_type_names[perf_type],
                       UCP_PROTO_PERF_FUNC_ARG(&ack_perf[perf_type]),
                       UCP_PROTO_PERF_FUNC_ARG(&caps->ranges[i].perf[perf_type]));
         }

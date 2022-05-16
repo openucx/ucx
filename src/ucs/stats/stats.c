@@ -480,17 +480,13 @@ static size_t ucs_stats_agrgt_sum_clsid_alloc(ucs_stats_node_t *node)
     uint32_t counter_index;
     size_t *offset;
     ucs_stats_aggrgt_counter_name_t *counter_name;
-    ucs_status_t status;
 
     /* Get current array length and update it in the node structure */
     node->cls->class_id = ucs_array_length(&ucs_stats_context.aggrt_class_offsets);
 
-    status = ucs_array_append(aggrt_class_offsets, &ucs_stats_context.aggrt_class_offsets);
-    if (status != UCS_OK) {
-        return status;
-    }
-
-    offset = ucs_array_last(&ucs_stats_context.aggrt_class_offsets);
+    offset = ucs_array_append(aggrt_class_offsets,
+                              &ucs_stats_context.aggrt_class_offsets,
+                              return UCS_ERR_NO_MEMORY);
 
     /* Initialize entry */
     *offset = ucs_array_length(&ucs_stats_context.aggrgt_counter_names);
@@ -498,14 +494,10 @@ static size_t ucs_stats_agrgt_sum_clsid_alloc(ucs_stats_node_t *node)
     ucs_for_each_bit(counter_index, filter_node->counters_bitmask) {
         ucs_list_for_each(temp_node, &filter_node->type_list_head,
                           type_list) {
-            status = ucs_array_append(aggrgt_counter_names,
-                                      &ucs_stats_context.aggrgt_counter_names);
-            if (status != UCS_OK) {
-                return status;
-            }
-
-            counter_name = ucs_array_last(&ucs_stats_context.aggrgt_counter_names);
-
+            counter_name =
+                    ucs_array_append(aggrgt_counter_names,
+                                     &ucs_stats_context.aggrgt_counter_names,
+                                     return UCS_ERR_NO_MEMORY);
             counter_name->counter_name = node->cls->counter_names[counter_index];
             counter_name->class_name   = node->cls->name;
         }

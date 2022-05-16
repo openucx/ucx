@@ -200,26 +200,37 @@ BEGIN_C_DECLS
 /*
  * Add an element to the end of the array.
  *
- * @param _name     Array name
- * @param _array    Array to add element to
+ * @param _name            Array name
+ * @param _array           Array to add element to
+ * @param _failed_actions  Actions to perform if the append operation failed
  *
- * @return UCS_OK if added, UCS_ERR_NO_MEMORY if cannot grow the array
+ * @return If successful returns a pointer to the added element, otherwise NULL.
  */
-#define ucs_array_append(_name, _array) \
-   UCS_ARRAY_IDENTIFIER(_name, _append)(_array)
+#define ucs_array_append(_name, _array, _failed_actions) \
+    ({ \
+        ucs_status_t __status = UCS_ARRAY_IDENTIFIER(_name, _append)(_array); \
+        UCS_ARRAY_IDENTIFIER(_name, _value_type_t) * __elem; \
+        \
+        if (__status != UCS_OK) { \
+            _failed_actions; \
+            __elem = NULL; \
+        } else { \
+            __elem = ucs_array_last(_array); \
+        } \
+        \
+        __elem; \
+    })
 
 
-/*
+/**
  * Add an element to the end of the array assuming it has enough space.
  *
  * @param _name     Array name
  * @param _array    Array to add element to
  */
 #define ucs_array_append_fixed(_name, _array) \
-    ({ \
-        ucs_assert_always(ucs_array_append(_name, _array) == UCS_OK); \
-        ucs_array_last(_array); \
-    })
+    ucs_array_append(_name, _array, \
+                     ucs_fatal("failed to grow array %s", #_name))
 
 
 /**
@@ -273,7 +284,10 @@ BEGIN_C_DECLS
  * @return Pointer to last array element
  */
 #define ucs_array_last(_array) \
-    ((_array)->buffer + ucs_array_length(_array) - 1)
+    ({ \
+        ucs_assert(ucs_array_length(_array) > 0); \
+        (_array)->buffer + ucs_array_length(_array) - 1; \
+    })
 
 
 /**
@@ -305,6 +319,7 @@ BEGIN_C_DECLS
         ucs_array_length(_array) = (_new_length); \
     }
 
+
 /**
  * Extract array contents and reset the array
  */
@@ -326,7 +341,8 @@ BEGIN_C_DECLS
  * @param _array   Array to iterate over
  */
 #define ucs_array_for_each(_elem, _array) \
-    for (_elem = ucs_array_begin(_array); _elem < ucs_array_end(_array); ++_elem)
+    ucs_carray_for_each(_elem, ucs_array_begin(_array), \
+                        ucs_array_length(_array))
 
 
 /* Internal flag to distinguish between fixed/dynamic array */

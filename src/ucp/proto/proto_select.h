@@ -40,12 +40,6 @@
 #define UCP_PROTO_SELECT_PARAM_STR_MAX 128
 
 
-typedef struct {
-    ucp_proto_perf_range_t super;
-    size_t                 cfg_thresh; /* Configured protocol threshold */
-} ucp_proto_select_range_t;
-
-
 /**
  * Protocol and its private configuration
  */
@@ -55,6 +49,9 @@ typedef struct {
 
     /* Protocol private configuration space */
     const void               *priv;
+
+    /* Configured protocol threshold */
+    size_t                   cfg_thresh;
 
     /* Endpoint configuration index this protocol was selected on */
     ucp_worker_cfg_index_t   ep_cfg_index;
@@ -88,7 +85,7 @@ typedef struct {
     const ucp_proto_threshold_elem_t *thresholds;
 
     /* Estimated performance for the selected protocols */
-    const ucp_proto_select_range_t   *perf_ranges;
+    const ucp_proto_perf_range_t     *perf_ranges;
 
     /* Private configuration area for the selected protocols */
     void                             *priv_buf;

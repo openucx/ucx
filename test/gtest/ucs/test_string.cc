@@ -243,6 +243,7 @@ UCS_TEST_F(test_string_buffer, fixed_init) {
     char buf[17];
 
     ucs_string_buffer_init_fixed(&strb, buf, sizeof(buf));
+    EXPECT_EQ(std::string(""), ucs_string_buffer_cstr(&strb));
     test_fixed(&strb, sizeof(buf));
 }
 
