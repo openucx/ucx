@@ -163,6 +163,10 @@ uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
     iface->tx.skb = ucs_mpool_get(&iface->tx.mp);
     ep->tx.psn++;
 
+    if (ucs_queue_is_empty(&ep->tx.window)) {
+        ep->tx.send_time = now;
+    }
+
     ucs_queue_push(&ep->tx.window, &skb->queue);
     ep->tx.tick = iface->tx.tick;
 
@@ -170,8 +174,6 @@ uct_ud_iface_complete_tx_skb(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
         ucs_wtimer_add(&iface->tx.timer, &ep->timer,
                        now - ucs_twheel_get_time(&iface->tx.timer) + ep->tx.tick);
     }
-
-    ep->tx.send_time = now;
 }
 
 static UCS_F_ALWAYS_INLINE void
