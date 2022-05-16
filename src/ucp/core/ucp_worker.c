@@ -887,6 +887,22 @@ static int ucp_worker_iface_support_keepalive(ucp_worker_iface_t *wiface)
                               UCT_IFACE_FLAG_EP_KEEPALIVE);
 }
 
+/* Compare 'compare_attr' atomic capabilities to 'test_attr',
+ * and decide if it contains all of 'test_attr' capabilities */
+static int
+ucp_worker_iface_compare_atomic_caps(const uct_iface_attr_t *compare_attr,
+                                                const uct_iface_attr_t *test_attr)
+{
+    return ucs_test_all_flags(compare_attr->cap.atomic32.op_flags,
+                              test_attr->cap.atomic32.op_flags) &&
+           ucs_test_all_flags(compare_attr->cap.atomic32.fop_flags,
+                              test_attr->cap.atomic32.fop_flags) &&
+           ucs_test_all_flags(compare_attr->cap.atomic64.op_flags,
+                              test_attr->cap.atomic64.op_flags) &&
+           ucs_test_all_flags(compare_attr->cap.atomic64.fop_flags,
+                              test_attr->cap.atomic64.fop_flags);
+}
+
 static int ucp_worker_iface_find_better(ucp_worker_h worker,
                                         ucp_worker_iface_t *wiface,
                                         ucp_rsc_index_t *better_index)
@@ -924,17 +940,20 @@ static int ucp_worker_iface_find_better(ucp_worker_h worker,
         if (/* 1. Supports all capabilities of the target iface (at least),
              *    except ...CONNECT_TO... and KEEPALIVE-related caps. */
             ucs_test_all_flags(if_iter->attr.cap.flags, test_flags) &&
-            /* 2. Has the same or better performance characteristics */
+            /* 2. Supports all atomic capabilities of the target iface (at least) */
+            ucp_worker_iface_compare_atomic_caps(&if_iter->attr,
+                                                 &wiface->attr) &&
+            /* 3. Has the same or better performance characteristics */
             (if_iter->attr.overhead <= wiface->attr.overhead) &&
             (ucp_tl_iface_bandwidth(ctx, &if_iter->attr.bandwidth) >= bw_cur) &&
             /* swap latencies in args list since less is better */
-            (ucp_score_prio_cmp(latency_cur,  if_iter->attr.priority,
+            (ucp_score_prio_cmp(latency_cur, if_iter->attr.priority,
                                 latency_iter, wiface->attr.priority) >= 0) &&
-            /* 3. The found transport is scalable enough or both
+            /* 4. The found transport is scalable enough or both
              *    transports are unscalable */
             (ucp_is_scalable_transport(ctx, if_iter->attr.max_num_eps) ||
              !ucp_is_scalable_transport(ctx, wiface->attr.max_num_eps)) &&
-            /* 4. The found transport supports at least one keepalive mechanism
+            /* 5. The found transport supports at least one keepalive mechanism
              *    or both transports don't support them
              */
             (ucp_worker_iface_support_keepalive(if_iter) ||
