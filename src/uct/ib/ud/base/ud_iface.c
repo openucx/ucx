@@ -18,6 +18,8 @@
 #include <ucs/debug/log.h>
 #include <ucs/type/class.h>
 #include <ucs/datastruct/queue.h>
+#include <ucs/vfs/base/vfs_obj.h>
+#include <ucs/vfs/base/vfs_cb.h>
 #include <sys/poll.h>
 
 
@@ -493,6 +495,7 @@ UCS_CLASS_INIT_FUNC(uct_ud_iface_t, uct_ud_iface_ops_t *ops,
 
     self->rx.available          = config->super.rx.queue_len;
     self->rx.quota              = 0;
+    self->config.rx_qp_len      = config->super.rx.queue_len;
     self->config.tx_qp_len      = config->super.tx.queue_len;
     self->config.min_poke_time  = ucs_time_from_sec(config->min_poke_time);
     self->config.check_grh_dgid = config->dgid_check &&
@@ -1039,6 +1042,27 @@ void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags)
     uct_ud_leave(iface);
 
     uct_base_iface_progress_disable(tl_iface, flags);
+}
+
+void uct_ud_iface_vfs_refresh(uct_iface_h iface)
+{
+    uct_ud_iface_t *ud_iface = ucs_derived_of(iface, uct_ud_iface_t);
+
+    ucs_vfs_obj_add_ro_file(ud_iface, ucs_vfs_show_primitive,
+                            &ud_iface->rx.available, UCS_VFS_TYPE_INT,
+                            "rx_available");
+
+    ucs_vfs_obj_add_ro_file(ud_iface, ucs_vfs_show_primitive,
+                            &ud_iface->tx.available, UCS_VFS_TYPE_SHORT,
+                            "tx_available");
+
+    ucs_vfs_obj_add_ro_file(ud_iface, ucs_vfs_show_primitive,
+                            &ud_iface->config.rx_qp_len, UCS_VFS_TYPE_INT,
+                            "rx_qp_len");
+
+    ucs_vfs_obj_add_ro_file(ud_iface, ucs_vfs_show_primitive,
+                            &ud_iface->config.tx_qp_len, UCS_VFS_TYPE_INT,
+                            "tx_qp_len");
 }
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
