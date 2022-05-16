@@ -132,13 +132,15 @@ program: program.c
         $(CC) -static program.c $(shell pkg-config --cflags --libs --static ucx-cma ucx-knem ucx)
 ```
 Currently, the following transport modules can be used with pkg-config:
-| Package name  |  Provided transport service |
-|-----------|-----------|
-| ucx-cma | Shared memory using [Linux Cross-Memory Attach](https://lwn.net/Articles/405284/) |
-| ucx-knem | Shared memory using [High-Performance Intra-Node MPI Communication](https://knem.gitlabpages.inria.fr) |
-| ucx-xpmem | Shared memory using [XPMEM](https://github.com/hjelmn/xpmem) |
-| ucx-ib | [Infiniband](https://developer.nvidia.com/networking) based network transport |
-| ucx-rdmacm | Connection manager based on [RDMACM](https://github.com/ofiwg/librdmacm) |
+<table>
+<tr><th>Package name</th><th>Provided transport service</th></tr>
+<tr><td>ucx-cma</td><td>Shared memory using <a href="https://lwn.net/Articles/405284">Linux Cross-Memory Attach</a></td></tr>
+<tr><td>ucx-knem</td><td>Shared memory using <a href="https://knem.gitlabpages.inria.fr">High-Performance Intra-Node MPI Communication</a></td></tr>
+<tr><td>ucx-xpmem</td><td>Shared memory using <a href="https://github.com/hjelmn/xpmem">XPMEM</a></td></tr>
+<tr><td>ucx-ib</td><td><a href="https://developer.nvidia.com/networking">Infiniband</a> based network transport</td></tr>
+<tr><td>ucx-rdmacm</td><td>Connection manager based on <a href="https://github.com/ofiwg/librdmacm">RDMACM</a></td></tr>
+</table>
+<br/>
 
 TCP, basic shared memory, and self transports are built into UCT and don't
 need additional compilation actions.
@@ -152,8 +154,6 @@ They can be downloaded from the following locations:
 <tr><td>libnl</td><td>https://www.infradead.org/~tgr/libnl</td><td>(tested on version 3.2.25)</td></tr>
 <tr><td>numactl</td><td>https://github.com/numactl/numactl</td><td>(tested on version 2.0.14)</td></tr>
 </table>
-
-
 <br/>
 
 ---
@@ -217,6 +217,7 @@ In addition to the built-in transports it's possible to use aliases which specif
 <tr><td>tcp</td><td>TCP over SOCK_STREAM sockets</td></tr>
 <tr><td>self</td><td>Loopback transport to communicate within the same process</td></tr>
 </table>
+<br/>
  
 For example:
 - `UCX_TLS=rc` will select RC, UD for bootstrap, and prefer accelerated transports
