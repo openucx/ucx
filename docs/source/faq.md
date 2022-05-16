@@ -310,8 +310,21 @@ Currently UCX supports NVIDIA GPUs by Cuda library, and AMD GPUs by ROCm library
 
 #### Which UCX APIs support GPU memory?
 
-Currently only UCX tagged APIs (ucp_tag_send_XX/ucp_tag_recv_XX) and stream APIs 
-(ucp_stream_send/ucp_stream_recv_XX) support GPU memory.
+Currently only UCX tagged APIs, stream APIs, and active messages APIs fully
+support GPU memory. Remote memory access APIs, including atomic operations,
+have an incomplete support for GPU memory; the full support is planned for
+future releases.
+
+<table>
+<tr><th>API</th><th>GPU memory support level</th></tr>
+<tr><td>Tag (ucp_tag_send_XX/ucp_tag_recv_XX)</td><td>Full support</td></tr>
+<tr><td>Stream (ucp_stream_send/ucp_stream_recv_XX)</td><td>Full support</td></tr>
+<tr><td>Active messages (ucp_am_send_XX/ucp_am_recv_data_XX)</td><td>Full support</td></tr>
+<tr><td>Remote memory access (ucp_put_XX/ucp_get_XX)</td><td>Partial support</td></tr>
+<tr><td>Atomic operations (ucp_atomic_XX)</td><td>Partial support</td></tr>
+</table>
+<br/>
+
 
 #### How to run UCX with GPU support?
 
@@ -333,12 +346,9 @@ to load CUDA or ROCm modules due to missing library paths or version mismatch.
 Please run `ucx_info -d | grep cuda` or `ucx_info -d | grep rocm` to check for
 UCX GPU support.
 
-#### What are the current limitations of using GPU memory?
-
-* **Static compilation** - programs which are statically compiled with Cuda libraries
-  must disable memory detection cache by setting `UCX_MEMTYPE_CACHE=n`. The reason
-  is that memory allocation hooks do not work with static compilation. Disabling this
-  cache could have a negative effect on performance, especially for small messages.
+In some cases, the internal memory type cache can misdetect GPU memory as host
+memory, also leading to invalid memory access. This cache can be disabled by
+setting `UCX_MEMTYPE_CACHE=n`.
 
 <br/>
 
