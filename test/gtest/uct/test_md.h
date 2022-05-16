@@ -50,7 +50,7 @@ protected:
         return m_md;
     }
 
-    const uct_md_attr_t& md_attr() const {
+    const uct_md_attr_v2_t& md_attr() const {
         return m_md_attr;
     }
 
@@ -70,7 +70,7 @@ protected:
 private:
     ucs::handle<uct_md_config_t*> m_md_config;
     ucs::handle<uct_md_h>         m_md;
-    uct_md_attr_t                 m_md_attr;
+    uct_md_attr_v2_t              m_md_attr;
     test_md_comp_t                m_comp;
 };
 

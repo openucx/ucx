@@ -210,7 +210,7 @@ uct_cma_md_open(uct_component_t *component, const char *md_name,
     return UCS_OK;
 }
 
-ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
+ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_cma_md_t *md = ucs_derived_of(uct_md, uct_cma_md_t);
 
@@ -220,6 +220,7 @@ ucs_status_t uct_cma_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.dmabuf_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->reg_cost             = ucs_linear_func_make(9e-9, 0);

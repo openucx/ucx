@@ -14,6 +14,7 @@
 #include "uct_iface.h"
 
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/debug/log.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/memory/rcache.h>
@@ -345,6 +346,34 @@ ucs_status_t uct_rkey_release(uct_component_h component,
 }
 
 ucs_status_t uct_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+{
+    ucs_status_t status;
+    uct_md_attr_v2_t md_attr_v2;
+
+    status = md->ops->query(md, &md_attr_v2);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    md_attr->cap.max_alloc        = md_attr_v2.cap.max_alloc;
+    md_attr->cap.max_reg          = md_attr_v2.cap.max_reg;
+    md_attr->cap.flags            = md_attr_v2.cap.flags;
+    md_attr->cap.reg_mem_types    = md_attr_v2.cap.reg_mem_types;
+    md_attr->cap.detect_mem_types = md_attr_v2.cap.detect_mem_types;
+    md_attr->cap.alloc_mem_types  = md_attr_v2.cap.alloc_mem_types;
+    md_attr->cap.access_mem_types = md_attr_v2.cap.access_mem_types;
+    md_attr->reg_cost             = md_attr_v2.reg_cost;
+    md_attr->rkey_packed_size     = md_attr_v2.rkey_packed_size;
+
+    memcpy(&md_attr->local_cpus, &md_attr_v2.local_cpus, sizeof(ucs_cpu_set_t));
+
+    /* Component name + data */
+    memcpy(md_attr->component_name, md->component->name, UCT_COMPONENT_NAME_MAX);
+
+    return UCS_OK;
+}
+
+ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     ucs_status_t status;
 

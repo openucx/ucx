@@ -12,6 +12,7 @@
 #include <ucs/config/types.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/status.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 /* Memory mapper segment unique id, used for both FIFO and bcopy descriptors.
@@ -198,7 +199,7 @@ ucs_status_t uct_mm_query_md_resources(uct_component_t *component,
 
 ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p);
 
-void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, uint64_t max_alloc);
+void uct_mm_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr, uint64_t max_alloc);
 
 ucs_status_t uct_mm_rkey_ptr(uct_component_t *component, uct_rkey_t rkey,
                              void *handle, uint64_t raddr, void **laddr_p);

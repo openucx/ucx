@@ -75,6 +75,9 @@ typedef void (*uct_md_close_func_t)(uct_md_h md);
 typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
                                             uct_md_attr_t *md_attr);
 
+typedef ucs_status_t (*uct_md_query_func_v2_t)(uct_md_h md,
+                                               uct_md_attr_v2_t *md_attr);
+
 typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
                                                 size_t *length_p,
                                                 void **address_p,
@@ -123,7 +126,7 @@ typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
  */
 struct uct_md_ops {
     uct_md_close_func_t                  close;
-    uct_md_query_func_t                  query;
+    uct_md_query_func_v2_t               query;
     uct_md_mem_alloc_func_t              mem_alloc;
     uct_md_mem_free_func_t               mem_free;
     uct_md_mem_advise_func_t             mem_advise;

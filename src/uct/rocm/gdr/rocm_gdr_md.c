@@ -17,6 +17,7 @@
 #include <ucs/sys/sys.h>
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/type/class.h>
+#include <uct/api/v2/uct_v2.h>
 
 #include <hsa_ext_amd.h>
 
@@ -28,7 +29,7 @@ static ucs_config_field_t uct_rocm_gdr_md_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_rocm_gdr_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_rocm_gdr_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG |
                                     UCT_MD_FLAG_NEED_RKEY;
@@ -36,6 +37,7 @@ static ucs_status_t uct_rocm_gdr_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_ROCM);
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.dmabuf_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_rocm_gdr_key_t);

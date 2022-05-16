@@ -20,6 +20,7 @@
 #include <ucs/profile/profile.h>
 #include <ucm/api/ucm.h>
 #include <uct/cuda/base/cuda_iface.h>
+#include <uct/api/v2/uct_v2.h>
 
 #define UCT_GDR_COPY_MD_RCACHE_DEFAULT_ALIGN 65536
 
@@ -43,7 +44,7 @@ static ucs_config_field_t uct_gdr_copy_md_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG |
                                     UCT_MD_FLAG_NEED_RKEY;
@@ -51,6 +52,7 @@ static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_CUDA);
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.dmabuf_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_gdr_copy_key_t);

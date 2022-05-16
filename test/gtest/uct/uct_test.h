@@ -14,6 +14,7 @@
 
 #include <poll.h>
 #include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/sys/sys.h>
 #include <ucs/async/async.h>
 #include <ucs/async/pipe.h>

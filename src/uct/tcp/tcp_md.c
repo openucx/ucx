@@ -10,6 +10,7 @@
 #include "tcp.h"
 #include "tcp_sockcm.h"
 #include <uct/base/uct_md.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 static ucs_config_field_t uct_tcp_md_config_table[] = {
@@ -23,7 +24,7 @@ static ucs_config_field_t uct_tcp_md_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
+static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
     attr->cap.flags               = UCT_MD_FLAG_REG |
@@ -33,6 +34,7 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_t *attr)
     attr->cap.alloc_mem_types     = 0;
     attr->cap.access_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.detect_mem_types    = 0;
+    attr->cap.dmabuf_mem_types    = 0;
     attr->cap.max_reg             = ULONG_MAX;
     attr->rkey_packed_size        = 0;
     attr->reg_cost                = ucs_linear_func_make(0, 0);

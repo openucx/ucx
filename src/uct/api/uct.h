@@ -1380,7 +1380,6 @@ struct uct_md_attr {
         uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
         uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
         uint64_t             access_mem_types; /**< Memory types that Memory Domain can access */
-        uint64_t             dmabuf_mem_types; /**< Memory types for which MD can provide DMABUF fd */
     } cap;
 
     ucs_linear_func_t        reg_cost;  /**< Memory registration cost estimation
@@ -1401,22 +1400,26 @@ struct uct_md_attr {
  * are present.
  */
 typedef enum uct_md_mem_attr_field {
-    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE     = UCS_BIT(0), /**< Indicate if memory type
-                                                          is populated. E.g. CPU/GPU */
-    UCT_MD_MEM_ATTR_FIELD_SYS_DEV      = UCS_BIT(1), /**< Indicate if details of
-                                                          system device backing
-                                                          the pointer are populated.
-                                                          E.g. NUMA/GPU */
-    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS = UCS_BIT(2), /**< Request base address of the
-                                                          allocation to which the buffer
-                                                          belongs. */
-    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH = UCS_BIT(3), /**< Request the whole length of the
-                                                          allocation to which the buffer
-                                                          belongs. */
-    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD    = UCS_BIT(4)  /**< Request a cross-device dmabuf file
-                                                          descriptor that represents a memory
-                                                          region, and can be used to register
-                                                          the region with another memory domain */
+    UCT_MD_MEM_ATTR_FIELD_MEM_TYPE      = UCS_BIT(0), /**< Indicate if memory type
+                                                           is populated. E.g. CPU/GPU */
+    UCT_MD_MEM_ATTR_FIELD_SYS_DEV       = UCS_BIT(1), /**< Indicate if details of
+                                                           system device backing
+                                                           the pointer are populated.
+                                                           E.g. NUMA/GPU */
+    UCT_MD_MEM_ATTR_FIELD_BASE_ADDRESS  = UCS_BIT(2), /**< Request base address of the
+                                                           allocation to which the buffer
+                                                           belongs. */
+    UCT_MD_MEM_ATTR_FIELD_ALLOC_LENGTH  = UCS_BIT(3), /**< Request the whole length of the
+                                                           allocation to which the buffer
+                                                           belongs. */
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_FD     = UCS_BIT(4), /**< Request a cross-device dmabuf file
+                                                           descriptor that represents a memory
+                                                           region, and can be used to register
+                                                           the region with another memory domain */
+    UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET = UCS_BIT(5)  /**< Request a cross-device dmabuf file
+                                                           descriptor that represents a memory
+                                                           region, and can be used to register
+                                                           the region with another memory domain */
 } uct_md_mem_attr_field_t;
 
 

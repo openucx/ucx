@@ -13,6 +13,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 #define UCT_MM_SYSV_PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)
@@ -40,7 +41,7 @@ static ucs_config_field_t uct_sysv_iface_config_table[] = {
   {NULL}
 };
 
-static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_sysv_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, ULONG_MAX);
     md_attr->rkey_packed_size = sizeof(uct_sysv_packed_rkey_t);

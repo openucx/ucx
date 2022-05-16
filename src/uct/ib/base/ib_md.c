@@ -22,6 +22,7 @@
 #include <ucm/api/ucm.h>
 #include <ucs/datastruct/string_buffer.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <uct/api/v2/uct_v2.h>
 #include <pthread.h>
 #ifdef HAVE_PTHREAD_NP_H
 #include <pthread_np.h>
@@ -288,7 +289,7 @@ typedef struct {
 } uct_ib_md_mem_reg_thread_t;
 
 
-static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_ib_md_t *md = ucs_derived_of(uct_md, uct_ib_md_t);
 
@@ -303,6 +304,7 @@ static ucs_status_t uct_ib_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.dmabuf_mem_types = 0;
     md_attr->cap.reg_mem_types    = md->reg_mem_types;
     md_attr->rkey_packed_size     = UCT_IB_MD_PACKED_RKEY_SIZE;
     md_attr->reg_cost             = md->reg_cost;
@@ -1092,7 +1094,7 @@ static ucs_rcache_ops_t uct_ib_rcache_ops = {
     .dump_region = uct_ib_rcache_dump_region_cb
 };
 
-static ucs_status_t uct_ib_md_odp_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_ib_md_odp_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     ucs_status_t status;
 

@@ -380,6 +380,48 @@ ucs_status_t uct_md_mem_dereg_v2(uct_md_h md,
 
 
 /**
+ * @ingroup UCT_MD
+ * @brief  Memory domain attributes.
+ *
+ * This structure defines the attributes of a Memory Domain which includes
+ * maximum memory that can be allocated, credentials required for accessing the memory,
+ * CPU mask indicating the proximity of CPUs, and bitmaps indicating the types
+ * of memory (CPU/CUDA/ROCM) that can be detected, allocated, accessed, and
+ * memory types for which dmabuf attributes can be returned.
+ */
+typedef struct {
+    struct {
+        uint64_t             max_alloc;        /**< Maximal allocation size */
+        size_t               max_reg;          /**< Maximal registration size */
+        uint64_t             flags;            /**< UCT_MD_FLAG_xx */
+        uint64_t             reg_mem_types;    /**< Bitmap of memory types that Memory Domain can be registered with */
+        uint64_t             detect_mem_types; /**< Bitmap of memory types that Memory Domain can detect if address belongs to it */
+        uint64_t             alloc_mem_types;  /**< Bitmap of memory types that Memory Domain can allocate memory on */
+        uint64_t             access_mem_types; /**< Memory types that Memory Domain can access */
+        uint64_t             dmabuf_mem_types; /**< Memory types for which MD can provide DMABUF fd */
+    } cap;
+
+    ucs_linear_func_t        reg_cost;         /**< Memory registration cost estimation
+                                                    (time,seconds) as a linear function
+                                                    of the buffer size. */
+
+    char                     component_name[UCT_COMPONENT_NAME_MAX]; /**< Component name */
+    size_t                   rkey_packed_size; /**< Size of buffer needed for packed rkey */
+    ucs_cpu_set_t            local_cpus;       /**< Mask of CPUs near the resource */
+} uct_md_attr_v2_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief Query for memory domain attributes.
+ *
+ * @param [in]  md       Memory domain to query.
+ * @param [out] md_attr  Filled with memory domain attributes.
+ */
+ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
+
+
+/**
  * @ingroup UCT_RESOURCE
  * @brief Get ep's attributes.
  *

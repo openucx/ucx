@@ -19,6 +19,7 @@
 #include <ucs/debug/memtrack_int.h>
 #include <ucm/api/ucm.h>
 #include <ucs/type/class.h>
+#include <uct/api/v2/uct_v2.h>
 
 #include <hsa_ext_amd.h>
 
@@ -34,7 +35,7 @@ static ucs_config_field_t uct_rocm_copy_md_config_table[] = {
     {NULL}
 };
 
-static ucs_status_t uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_rocm_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     md_attr->cap.flags            = UCT_MD_FLAG_REG | UCT_MD_FLAG_NEED_RKEY;
     md_attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST) |

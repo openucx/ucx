@@ -91,7 +91,7 @@ void test_md::init()
                            GetParam().component, GetParam().md_name.c_str(),
                            m_md_config);
 
-    ucs_status_t status = uct_md_query(m_md, &m_md_attr);
+    ucs_status_t status = uct_md_query_v2(m_md, &m_md_attr);
     ASSERT_UCS_OK(status);
 
     check_skip_test();
@@ -326,6 +326,7 @@ UCS_TEST_P(test_md, mem_type_detect_mds) {
 
         if (alloc_mem_type & md_attr().cap.dmabuf_mem_types) {
             mem_attr.field_mask |= UCT_MD_MEM_ATTR_FIELD_DMABUF_FD;
+            mem_attr.field_mask |= UCT_MD_MEM_ATTR_FIELD_DMABUF_OFFSET;
         }
 
         for (unsigned i = 0; i < 300; i++) {

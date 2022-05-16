@@ -12,6 +12,7 @@
 #include <uct/base/uct_iov.inl>
 #include <uct/sm/base/sm_ep.h>
 #include <uct/sm/base/sm_iface.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/type/class.h>
 #include <ucs/sys/string.h>
 #include <ucs/arch/cpu.h>
@@ -382,13 +383,14 @@ static uct_iface_ops_t uct_self_iface_ops = {
 UCT_TL_DEFINE(&uct_self_component, self, uct_self_query_tl_devices, uct_self_iface_t,
               "SELF_", uct_self_iface_config_table, uct_self_iface_config_t);
 
-static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_t *attr)
+static ucs_status_t uct_self_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
 {
     /* Dummy memory registration provided. No real memory handling exists */
     attr->cap.flags            = UCT_MD_FLAG_REG |
                                  UCT_MD_FLAG_NEED_RKEY; /* TODO ignore rkey in rma/amo ops */
     attr->cap.reg_mem_types    = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.detect_mem_types = 0;
+    attr->cap.dmabuf_mem_types = 0;
     attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     attr->cap.max_alloc        = 0;
     attr->cap.max_reg          = ULONG_MAX;

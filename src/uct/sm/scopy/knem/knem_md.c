@@ -16,6 +16,7 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/sys.h>
 #include <ucm/api/ucm.h>
+#include <uct/api/v2/uct_v2.h>
 #include <ucs/vfs/base/vfs_obj.h>
 
 
@@ -36,7 +37,7 @@ static ucs_config_field_t uct_knem_md_config_table[] = {
     {NULL}
 };
 
-ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
+ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
 {
     uct_knem_md_t *md = ucs_derived_of(uct_md, uct_knem_md_t);
 
@@ -47,6 +48,7 @@ ucs_status_t uct_knem_md_query(uct_md_h uct_md, uct_md_attr_t *md_attr)
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.dmabuf_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->reg_cost             = md->reg_cost;

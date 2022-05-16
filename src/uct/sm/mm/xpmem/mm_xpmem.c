@@ -19,6 +19,7 @@
 #include <ucs/type/spinlock.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/debug/log.h>
+#include <uct/api/v2/uct_v2.h>
 
 
 /* XPMEM memory domain configuration */
@@ -120,7 +121,7 @@ static ucs_status_t uct_xpmem_query(int *attach_shm_file_p)
     return UCS_OK;
 }
 
-static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_xpmem_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     uct_mm_md_query(md, md_attr, 0);
 

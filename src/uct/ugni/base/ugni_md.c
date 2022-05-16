@@ -11,6 +11,7 @@
 #include "ugni_device.h"
 #include "ugni_iface.h"
 #include "ugni_md.h"
+#include <uct/api/v2/uct_v2.h>
 
 /* Forward declarations */
 
@@ -33,7 +34,7 @@ uct_ugni_query_md_resources(uct_component_h component,
                                            num_resources_p);
 }
 
-static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
+static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr)
 {
     md_attr->rkey_packed_size     = 3 * sizeof(uint64_t);
     md_attr->cap.flags            = UCT_MD_FLAG_REG       |
@@ -43,6 +44,7 @@ static ucs_status_t uct_ugni_md_query(uct_md_h md, uct_md_attr_t *md_attr)
     md_attr->cap.alloc_mem_types  = 0;
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.dmabuf_mem_types = 0;
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->reg_cost             = ucs_linear_func_make(1000.0e-9, 0.007e-9);

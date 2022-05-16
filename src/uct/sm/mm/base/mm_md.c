@@ -67,7 +67,7 @@ ucs_status_t uct_mm_seg_new(void *address, size_t length, uct_mm_seg_t **seg_p)
     return UCS_OK;
 }
 
-void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, uint64_t max_alloc)
+void uct_mm_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr, uint64_t max_alloc)
 {
     memset(md_attr, 0, sizeof(*md_attr));
 
@@ -78,6 +78,7 @@ void uct_mm_md_query(uct_md_h md, uct_md_attr_t *md_attr, uint64_t max_alloc)
     md_attr->cap.alloc_mem_types  = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.access_mem_types = UCS_BIT(UCS_MEMORY_TYPE_HOST);
     md_attr->cap.detect_mem_types = 0;
+    md_attr->cap.dmabuf_mem_types = 0;
 
     if (max_alloc > 0) {
         md_attr->cap.flags       |= UCT_MD_FLAG_ALLOC | UCT_MD_FLAG_FIXED;
