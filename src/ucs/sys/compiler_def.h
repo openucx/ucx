@@ -209,4 +209,10 @@
 #define ucs_same_type(_type1, _type2) \
     __builtin_types_compatible_p(_type1, _type2)
 
+/*
+ * Iterate over all elements of a C-array
+ */
+#define ucs_carray_for_each(_elem, _array, _length) \
+    for ((_elem) = (_array); (_elem) < ((_array) + (_length)); ++(_elem))
+
 #endif /* UCS_COMPILER_DEF_H */

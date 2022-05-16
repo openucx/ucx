@@ -44,13 +44,13 @@ ucp_proto_select_thresholds_search(const ucp_proto_select_elem_t *select_elem,
     return ucp_proto_thresholds_search_slow(thresholds + 3, msg_length);
 }
 
-static UCS_F_ALWAYS_INLINE const ucp_proto_select_range_t *
+static UCS_F_ALWAYS_INLINE const ucp_proto_perf_range_t *
 ucp_proto_perf_range_search(const ucp_proto_select_elem_t *select_elem,
                             size_t msg_length)
 {
-    const ucp_proto_select_range_t *range;
+    const ucp_proto_perf_range_t *range;
 
-    for (range = select_elem->perf_ranges; range->super.max_length < msg_length;
+    for (range = select_elem->perf_ranges; range->max_length < msg_length;
          ++range)
         ;
     return range;

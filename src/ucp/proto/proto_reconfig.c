@@ -80,7 +80,6 @@ ucp_proto_reconfig_init(const ucp_proto_init_params_t *init_params)
     init_params->caps->min_length           = 0;
     init_params->caps->num_ranges           = 1;
     init_params->caps->ranges[0].max_length = SIZE_MAX;
-    init_params->caps->ranges[0].name       = "reconfig";
     for (perf_type = 0; perf_type < UCP_PROTO_PERF_TYPE_LAST; ++perf_type) {
         init_params->caps->ranges[0].perf[perf_type] =
                 ucs_linear_func_make(INFINITY, 0);

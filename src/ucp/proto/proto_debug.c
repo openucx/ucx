@@ -152,7 +152,6 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
     ucp_proto_query_attr_t proto_attr;
     ucp_proto_info_row_t *row_elem;
     size_t range_start, range_end;
-    ucs_status_t status;
     int proto_valid;
 
     ucp_proto_select_param_dump(worker, ep_cfg_index, rkey_cfg_index,
@@ -175,12 +174,8 @@ ucp_proto_select_elem_info(ucp_worker_h worker,
             continue;
         }
 
-        status = ucs_array_append(ucp_proto_info_table, &table);
-        if (status != UCS_OK) {
-            break;
-        }
+        row_elem = ucs_array_append(ucp_proto_info_table, &table, break);
 
-        row_elem = ucs_array_last(&table);
         ucs_snprintf_safe(row_elem->desc, sizeof(row_elem->desc), "%s%s",
                           proto_attr.is_estimation ? "(?) " : "",
                           proto_attr.desc);
@@ -318,7 +313,7 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
 {
     const ucp_proto_select_elem_t *select_elem;
     ucp_worker_cfg_index_t new_key_cfg_index;
-    const ucp_proto_select_range_t *range;
+    const ucp_proto_perf_range_t *range;
     ucp_proto_query_attr_t proto_attr;
     ucp_proto_select_t *proto_select;
     double bandwidth;
@@ -356,7 +351,7 @@ void ucp_proto_config_info_str(ucp_worker_h worker,
     /* Find the relevant performance range */
     range     = ucp_proto_perf_range_search(select_elem, msg_length);
     bandwidth = ucp_proto_select_calc_bandwidth(&proto_config->select_param,
-                                                &range->super, msg_length);
+                                                range, msg_length);
     ucs_string_buffer_appendf(strb, " %.1f MB/s %.2f us", bandwidth / UCS_MBYTE,
                               msg_length / bandwidth * UCS_USEC_PER_SEC);
 }

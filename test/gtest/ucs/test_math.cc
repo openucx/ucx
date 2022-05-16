@@ -208,6 +208,19 @@ UCS_TEST_F(test_math, for_each_submask) {
     }
 }
 
+UCS_TEST_F(test_math, bitmap_idx)
+{
+    EXPECT_EQ(2, ucs_bitmap2idx(0xF0, 6));
+    EXPECT_EQ(0, ucs_bitmap2idx(0xF0, 4));
+    EXPECT_EQ(0, ucs_bitmap2idx(0xFF, 0));
+    EXPECT_EQ(63, ucs_bitmap2idx(UINT64_MAX, 63));
+
+    EXPECT_EQ(5, ucs_idx2bitmap(0xF0, 1));
+    EXPECT_EQ(0, ucs_idx2bitmap(0xFF, 0));
+    EXPECT_EQ(5, ucs_idx2bitmap(0xFF, 5));
+    EXPECT_EQ(63, ucs_idx2bitmap(UINT64_MAX, 63));
+}
+
 UCS_TEST_F(test_math, linear_func) {
     ucs_linear_func_t func[3];
     double x, y[3];

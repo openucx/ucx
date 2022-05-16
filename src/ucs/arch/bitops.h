@@ -123,10 +123,29 @@ BEGIN_C_DECLS
 #define ucs_count_leading_zero_bits(_n) \
     ((sizeof(_n) <= 4) ? __builtin_clz((uint32_t)(_n)) : __builtin_clzl(_n))
 
-/* Returns the number of 1-bits by _idx mask */
-#define ucs_bitmap2idx(_map, _idx) \
-    ucs_popcount((_map) & (UCS_MASK(_idx)))
+/* Returns the number of bits lower than 'bit_index' that are set in 'mask'
+ * For example: ucs_idx2bitmap(mask=0xF0, idx=6) returns 2
+ */
+static inline unsigned ucs_bitmap2idx(uint64_t mask, unsigned bit_index)
+{
+    return ucs_popcount(mask & UCS_MASK(bit_index));
+}
 
+/* Returns the bit index of the 'idx'-th set bit in 'mask'
+ * For example: ucs_idx2bitmap(mask=0xF0, idx=1) returns 5
+ */
+static inline unsigned ucs_idx2bitmap(uint64_t mask, int idx)
+{
+    unsigned bit_index = 0;
+
+    while ((mask != 0) && (idx >= 0)) {
+        bit_index = ucs_count_trailing_zero_bits(mask);
+        mask     &= ~UCS_BIT(bit_index);
+        --idx;
+    }
+
+    return bit_index;
+}
 
 /**
  * Count how many bits at the end of the buffer are equal to zero.
