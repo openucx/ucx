@@ -18,14 +18,12 @@ parameters:
     type: object
     default:
       "tag match on CX4":
-        args: ""
         duration: 600
         interface: $(roce_iface_cx4)
         tls: "rc_x"
         test_name: tag_cx4_rc
         extra_run_args: ""
       "tag match on CX6/RC":
-        args: ""
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "rc_x"
@@ -39,7 +37,6 @@ parameters:
         test_name: am_cx6_rc
         extra_run_args: ""
       "tag match on CX6/DC":
-        args: ""
         duration: 600
         interface: $(roce_iface_cx6)
         tls: "dc_x"
@@ -54,7 +51,7 @@ parameters:
         extra_run_args: ""
       "tag match on CX4 with user memh":
         args: "-z"
-        initial_delay: 9999 # No interference
+        interference: 'No'
         duration: 120
         interface: $(roce_iface_cx4)
         tls: "rc_x"
@@ -62,15 +59,22 @@ parameters:
         extra_run_args: ""
       "active messages on CX6/DC with user memh":
         args: "-A -z"
-        initial_delay: 9999 # No interference
+        interference: 'No'
         duration: 120
         interface: $(roce_iface_cx6)
         tls: "dc_x"
         test_name: am_umemh_cx6_dc
         extra_run_args: ""
+      "Multi HCAs: tag match on CX4 and CX6 RC ":
+        interference: 'No'
+        duration: 60
+        interface: $(roce_iface_cx4) $(roce_iface_cx6)
+        tls: "rc_x"
+        test_name: multy_cx6_cx4_rc
+        extra_run_args: ""
       "different UCX_IB_NUM_PATH":
         args: "-A"
-        initial_delay: 9999 # No interference
+        interference: 'No'
         duration: 120
         interface: $(roce_iface_cx6)
         tls: "rc_x"
@@ -99,7 +103,7 @@ jobs:
       - bash: |
           set -eEx
           ./autogen.sh
-          ./contrib/configure-release --prefix=$(Build.Repository.LocalPath)/install
+          ./contrib/configure-devel --prefix=$(Build.Repository.LocalPath)/install
           make -j`nproc`
           make install
         displayName: Build
@@ -138,6 +142,7 @@ jobs:
             test_ucx_tls: ${{ test.Value.tls }}
             test_extra_run_args: ${{ test.Value.extra_run_args }}
             initial_delay: ${{ coalesce(test.Value.initial_delay, parameters.initial_delay) }}
+            test_interference: ${{ test.Value.interference }}
       maxParallel: 1
 
     variables:
@@ -165,6 +170,7 @@ jobs:
           roce_iface: $(test_intefrafe)
           iodemo_tls: $(test_ucx_tls)
           initial_delay: $(initial_delay)
+          interference: $(test_interference)
           extra_run_args: $(test_extra_run_args)
           ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
             analyzer_allow_list_args: '--allow_list $(System.PullRequest.TargetBranch)'
