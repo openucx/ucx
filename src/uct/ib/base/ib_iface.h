@@ -514,9 +514,15 @@ static inline void* uct_ib_iface_recv_desc_hdr(uct_ib_iface_t *iface,
     return (void*)((char *)desc + iface->config.rx_hdr_offset);
 }
 
+static inline void* uct_ib_iface_recv_desc_payload(uct_ib_iface_t *iface,
+                                               uct_ib_iface_recv_desc_t *desc)
+{
+    return (void*)((char *)desc + iface->config.rx_payload_offset);
+}
+
 typedef struct uct_ib_recv_wr {
     struct ibv_recv_wr ibwr;
-    struct ibv_sge     sg;
+    struct ibv_sge     sg[2];
 } uct_ib_recv_wr_t;
 
 /**

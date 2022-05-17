@@ -499,7 +499,7 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
     struct ibv_pd *pd = uct_ib_iface_md(&iface->super)->pd;
     struct ibv_srq *srq;
 
-    srq_init_attr.attr.max_sge   = 1;
+    srq_init_attr.attr.max_sge   = 2;
     srq_init_attr.attr.max_wr    = config->super.rx.queue_len;
     srq_init_attr.attr.srq_limit = 0;
     srq_init_attr.srq_context    = iface;
@@ -815,7 +815,7 @@ void uct_rc_iface_fill_attr(uct_rc_iface_t *iface, uct_ib_qp_attr_t *attr,
     attr->cap.max_send_wr            = max_send_wr;
     attr->cap.max_recv_wr            = 0;
     attr->cap.max_send_sge           = iface->config.tx_min_sge;
-    attr->cap.max_recv_sge           = 1;
+    attr->cap.max_recv_sge           = 2;
     attr->cap.max_inline_data        = iface->config.tx_min_inline;
     attr->qp_type                    = iface->super.config.qp_type;
     attr->sq_sig_all                 = !iface->config.tx_moderation;
