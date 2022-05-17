@@ -1301,11 +1301,15 @@ ucx_perf_do_warmup(ucx_perf_context_t *perf, const ucx_perf_params_t *params)
         if (params->thread_count == 1) {
             status = ucx_perf_test_exchange_status(perf, stop_status);
         } else {
+#if _OPENMP
 #pragma omp barrier
 #pragma omp single copyprivate(status)
+#endif
             /* Synchronize on whether to continue or stop the warmup phase */
             status = ucx_perf_test_exchange_status(perf, stop_status);
+#if _OPENMP
 #pragma omp barrier
+#endif
         }
 
         if (status != UCS_INPROGRESS) {

@@ -100,12 +100,9 @@ static inline uint64_t ucs_arch_read_hres_clock()
 #define ucs_arch_wait_mem ucs_arch_generic_wait_mem
 
 static inline void ucs_arch_clear_cache(void * start, void * end) {
-    ucs_acquire_barrier();
     ucs_rv64_dcache_flush(start, end);
+    ucs_rv64_dmb();
     ucs_rv64_icache_flush(start, end);
-    ucs_release_barrier();
-    asm volatile("" ::: "memory");
-    __builtin_prefetch(start, 0, 3);
 }
 
 static inline void *ucs_memcpy_relaxed(void *dst, const void *src, size_t len)

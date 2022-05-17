@@ -42,15 +42,18 @@
   *
   * @param[in] _reg  register number (0-31), @param[out] _reg register number (0-31), @param[imm] 12 bit immmediate value
   */
- #define JALR(_regs, _regd, _imm) (((_imm) << 20) | ((_regs) << 15) | (0b000 << 12) | ((_regd) << 7) | (0x67))
+ #define JALR(_regd, _regs, _imm) (((_imm) << 20) | ((_regs) << 15) | (0b000 << 12) | ((_regd) << 7) | (0x67))
 
  /**
   * @brief ADDI - Add 12 bit immediate to source register, save to destination register 
   *
   * @param[in] _reg  register number (0-31), @param[out] _reg register number (0-31), @param[imm] 12 bit immmediate value
   */
- #define ADDI(_regs, _regd, _imm) (((_imm) << 20) | ((_regs) << 15) | (0b000 << 12) | ((_regd) << 7) | (0x13))
- #define ADD(_regs_a, _regs_b, _regd) ((_regs_b << 20) | (_regs_a << 15) | (0b000 << 12) | ((_regd) << 7) | (0x33))
+ #define ADDI(_regd, _regs, _imm) (((_imm) << 20) | ((_regs) << 15) | (0b000 << 12) | ((_regd) << 7) | (0x13))
+ #define ADD(_regd, _regs_a, _regs_b) ((_regs_b << 20) | (_regs_a << 15) | (0b000 << 12) | ((_regd) << 7) | (0x33))
+
+ #define ADDIW(_regd, _regs, _imm) (((_imm) << 20) | ((_regs) << 15) | (0b000 << 12) | ((_regd) << 7) | (0b0011011))
+ #define ADDW(_regd, _regs_a, _regs_b) ((0b0000000 << 25) | (_regs_b << 20) | (_regs_a << 15) | (0b000 << 12) | ((_regd) << 7) | (0b0111011))
 
  /**
   * @brief LUI - load upper 20 bit immediate to destination register
@@ -64,7 +67,10 @@
   *
   * @param[in] _reg  register number (0-31), @param[out] _reg register number (0-31), @param[imm] 12 bit immmediate value
   */
- #define SLLI(_regs, _regd, _imm) (((_imm) << 20) | ((_regs) << 15) | (0b001 << 12) | ((_regd) << 7) | (0x13))
+ #define SLLI(_regd, _regs, _imm) (((_imm) << 20) | ((_regs) << 15) | (0b001 << 12) | ((_regd) << 7) | (0x13))
+ #define OR(_regd, _regs_a, _regs_b) ((_regs_b << 20) | (_regs_a << 15) | (0b110 << 12) | ((_regd) << 7) | (0x33))
+
+ #define SLLIW(_regd, _regs, _imm) ((0b0000000 << 25) | ((_imm) << 20) | ((_regs) << 15) | (0b001 << 12) | ((_regd) << 7) | (0b0011011))
 
 ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
                               void **orig_func_p,
@@ -73,13 +79,16 @@ ucs_status_t ucm_bistro_patch(void *func_ptr, void *hook, const char *symbol,
     ucs_status_t status;
     uintptr_t hookp = (uintptr_t)hook;
 
+    uint32_t hookp_upper = (uint32_t)(hookp >> 32) + ((uint32_t)(hookp >> 31) & 1);
+    uint32_t hookp_lower = (uint32_t) hookp;
+
     ucm_bistro_patch_t patch = {
-        .rega = LUI  (X31, ((0xFFFFF << 12) & ( ((hookp) >> 32) + 1 ) ) >> 12),
-        .regb = ADDI (X31, X31, ((0xFFF)    & ( ((hookp) >> 32) + 1 ) )      ),
-        .regc = LUI  (X30, ((0xFFFFF << 12) & ( (((hookp)) + 1)     ) ) >> 12),
-        .regd = SLLI (X31, X31, 32),
-        .rege = ADD  (X30, X31, X31),
-        .regf = JALR (X31, X0, ((0xFFF)     & ( ((hookp)) + 1)))
+      .rega = LUI(X31, ((hookp_upper >> 12) + ((hookp_upper >> 11) & 1)) & 0xFFFFF),
+      .regb = ADDI(X31, X31, hookp_upper & 0xFFF),
+      .regc = SLLI(X31, X31, 32),
+      .regd = LUI(X30, ((hookp_lower >> 12) + ((hookp_lower >> 11) & 1)) & 0xFFFFF),
+      .rege = ADD(X31, X31, X30),
+      .regf = JALR(X0 , X31, hookp_lower & 0xFFF),
     };
 
     if (orig_func_p != NULL) {
