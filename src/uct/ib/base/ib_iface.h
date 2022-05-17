@@ -137,10 +137,6 @@ struct uct_ib_iface_config {
         size_t              min_inline;      /* Inline space to reserve for sends */
         unsigned            min_sge;         /* How many SG entries to support */
         uct_iface_mpool_config_t mp;
-
-        /* Event moderation parameters */
-        unsigned            cq_moderation_count;
-        double              cq_moderation_period;
     } tx;
 
     struct {
@@ -148,10 +144,6 @@ struct uct_ib_iface_config {
         unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         uct_iface_mpool_config_t mp;
-
-        /* Event moderation parameters */
-        unsigned            cq_moderation_count;
-        double              cq_moderation_period;
     } rx;
 
     /* Inline space to reserve in CQ */
