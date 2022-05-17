@@ -134,6 +134,14 @@ size_t ucs_log_get_buffer_size();
 
 
 /**
+ * Print a compact log line (without file/line prefixes) to the log stream.
+ *
+ * @param [in] str   Log line to print.
+ */
+void ucs_log_print_compact(const char *str);
+
+
+/**
  * Default log handler, which prints the message to the output configured in
  * UCS global options. See @ref ucs_log_func_t.
  */

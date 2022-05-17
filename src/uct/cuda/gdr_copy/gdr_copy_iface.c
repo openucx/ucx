@@ -139,6 +139,10 @@ uct_gdr_copy_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->latency = UCT_GDR_COPY_IFACE_LATENCY;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+        perf_attr->max_inflight_eps = SIZE_MAX;
+    }
+
     return UCS_OK;
 }
 
@@ -166,7 +170,8 @@ static uct_iface_ops_t uct_gdr_copy_iface_ops = {
 static uct_iface_internal_ops_t uct_gdr_copy_iface_internal_ops = {
     .iface_estimate_perf = uct_gdr_copy_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_gdr_copy_iface_t, uct_md_h md, uct_worker_h worker,

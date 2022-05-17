@@ -37,7 +37,7 @@ static ucs_status_t uct_tcp_md_query(uct_md_h md, uct_md_attr_v2_t *attr)
     attr->cap.dmabuf_mem_types    = 0;
     attr->cap.max_reg             = ULONG_MAX;
     attr->rkey_packed_size        = 0;
-    attr->reg_cost                = ucs_linear_func_make(0, 0);
+    attr->reg_cost                = UCS_LINEAR_FUNC_ZERO;
     memset(&attr->local_cpus, 0xff, sizeof(attr->local_cpus));
     return UCS_OK;
 }
@@ -154,4 +154,3 @@ uct_component_t uct_tcp_component = {
     .flags              = UCT_COMPONENT_FLAG_CM,
     .md_vfs_init        = (uct_component_md_vfs_init_func_t)ucs_empty_function
 };
-UCT_COMPONENT_REGISTER(&uct_tcp_component)

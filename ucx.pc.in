@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
 prefix = @prefix@
 exec_prefix = @exec_prefix@
 bindir = @exec_prefix@/bin
@@ -8,4 +14,6 @@ Name: @PACKAGE@
 Description: Unified Communication X Library
 Version: @VERSION@
 Cflags: -I${includedir}
-Libs: -L${libdir} -lucs -luct -lucp
+Libs: -L${libdir} -lucp
+Libs.private: -Wl,--undefined=ucp_global_init
+Requires: @PACKAGE@-uct, @PACKAGE@-ucs

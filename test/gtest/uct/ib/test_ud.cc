@@ -111,7 +111,7 @@ public:
     }
 
     void validate_connect(uct_ud_ep_t *ep, unsigned value,
-                          double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
+                          double timeout_sec=TEST_UD_LINGER_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
         while ((ep->dest_ep_id != value) && (ucs_get_time() < timeout)) {
             progress();
@@ -130,7 +130,7 @@ public:
     }
 
     void validate_recv(uct_ud_ep_t *ep, unsigned value,
-                       double timeout_sec=TEST_UD_TIMEOUT_IN_SEC) {
+                       double timeout_sec=TEST_UD_LINGER_TIMEOUT_IN_SEC) {
         ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(timeout_sec);
         while ((ucs_frag_list_sn(&ep->rx.ooo_pkts) < value - no_creq_cnt(ep)) &&
                (ucs_get_time() < timeout)) {
@@ -139,18 +139,18 @@ public:
         EXPECT_EQ(value - no_creq_cnt(ep), ucs_frag_list_sn(&ep->rx.ooo_pkts));
     }
 
-    void validate_flush() {
+    void validate_flush(unsigned base_psn = 1u) {
         /* 1 packets transmitted, 1 packets received */
-        EXPECT_EQ(2, ep(m_e1)->tx.psn);
-        EXPECT_EQ(1, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
+        EXPECT_EQ(base_psn + 1, ep(m_e1)->tx.psn);
+        EXPECT_EQ(base_psn, ucs_frag_list_sn(&ep(m_e2)->rx.ooo_pkts));
 
         /* no data transmitted back */
-        EXPECT_EQ(1, ep(m_e2)->tx.psn);
+        EXPECT_EQ(base_psn, ep(m_e2)->tx.psn);
 
         /* one packet was acked */
         EXPECT_EQ(0U, ucs_queue_length(&ep(m_e1)->tx.window));
-        EXPECT_EQ(1, ep(m_e1)->tx.acked_psn);
-        EXPECT_EQ(1, ep(m_e2)->rx.acked_psn);
+        EXPECT_EQ(base_psn, ep(m_e1)->tx.acked_psn);
+        EXPECT_EQ(base_psn, ep(m_e2)->rx.acked_psn);
     }
 
     void check_connection() {
@@ -251,7 +251,8 @@ UCS_TEST_SKIP_COND_P(test_ud, tx_window1,
     EXPECT_EQ(UCS_ERR_NO_RESOURCE, tx(m_e1));
 
     /* wait for ack */
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    ucs_time_t timeout =
+            ucs_get_time() + ucs_time_from_sec(TEST_UD_LINGER_TIMEOUT_IN_SEC);
     while ((ucs_get_time() < timeout) &&
             uct_ud_ep_no_window(ep(m_e1))) {
         short_progress_loop();
@@ -411,7 +412,8 @@ UCS_TEST_SKIP_COND_P(test_ud, crep_drop2,
 
     /* Wait for TX win to be empty (which means that all
      * CONN packets are handled) */
-    ucs_time_t timeout = ucs_get_time() + ucs_time_from_sec(TEST_UD_TIMEOUT_IN_SEC);
+    ucs_time_t timeout =
+            ucs_get_time() + ucs_time_from_sec(TEST_UD_LINGER_TIMEOUT_IN_SEC);
     while (ucs_get_time() < timeout) {
         if(ucs_queue_is_empty(&ep(m_e1)->tx.window) &&
            ucs_queue_is_empty(&ep(m_e2)->tx.window)) {
@@ -834,7 +836,8 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_flush,
 
 UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
                      !check_caps(UCT_IFACE_FLAG_AM_SHORT)) {
-    connect();
+    connect_to_iface(0);
+    short_progress_loop(TEST_UD_PROGRESS_TIMEOUT);
 
     /* m_e2::ep[0] has to be revoked at the end of the testing */
     uct_ep_destroy(m_e2->ep(0));
@@ -843,7 +846,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ep_destroy_passive,
     EXPECT_UCS_OK(tx(m_e1));
     EXPECT_UCS_OK(ep_flush_b(m_e1));
 
-    validate_flush();
+    validate_flush(3);
 
     /* revoke m_e2::ep[0] as it was destroyed manually */
     m_e2->revoke_ep(0);
@@ -915,7 +918,7 @@ UCS_TEST_SKIP_COND_P(test_ud, ctls_loss,
 
 UCT_INSTANTIATE_UD_TEST_CASE(test_ud)
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/mlx5/ib_mlx5.h>
 }
@@ -925,7 +928,7 @@ class test_ud_iface_attrs : public test_uct_iface_attrs {
 public:
     attr_map_t get_num_iov() {
         attr_map_t iov_map;
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
         if (has_transport("ud_mlx5")) {
             // For am zcopy just small constant number of iovs is allowed
             // (to preserve some inline space for AM zcopy header)

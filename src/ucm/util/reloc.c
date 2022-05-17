@@ -29,6 +29,11 @@
 #include <link.h>
 #include <limits.h>
 
+#if HAVE_DECL_GETAUXVAL
+#include <sys/auxv.h>
+#endif
+
+
 /* Ensure this macro is defined (from <link.h>) - otherwise, cppcheck might
    fail with an "unknown macro" warning */
 #ifndef ElfW
@@ -115,6 +120,14 @@ static ucs_status_t ucm_reloc_get_aux_phsize(int *phsize_p)
         *phsize_p = phsize;
         return UCS_OK;
     }
+
+#if HAVE_DECL_GETAUXVAL
+    phsize = getauxval(AT_PHENT);
+    if (phsize > 0) {
+        *phsize_p = phsize;
+        return UCS_OK;
+    }
+#endif
 
     fd = open(proc_auxv_filename, O_RDONLY);
     if (fd < 0) {

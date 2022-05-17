@@ -1,0 +1,27 @@
+#
+# Copyright (C) 2022, NVIDIA CORPORATION & AFFILIATES. ALL RIGHTS RESERVED.
+#
+# See file LICENSE for terms.
+#
+
+all: uct_info uct_info_static ucp_hello_world_static
+
+clean:
+	rm -rf uct_info uct_info_static ucp_hello_world_static
+
+UCX_CFLAGS = $(CFLAGS) $(shell pkg-config ucx --cflags)
+UCT_CFLAGS = $(CFLAGS) $(shell pkg-config ucx-uct --cflags)
+
+UCT_LDFLAGS = $(LDFLAGS) $(shell pkg-config ucx-uct --libs)
+
+UCX_STATIC_LDFLAGS = -static $(shell pkg-config --libs --static $(EXTRA_MODULES) ucx)
+UCT_STATIC_LDFLAGS = -static $(shell pkg-config --libs --static $(EXTRA_MODULES) ucx-uct)
+
+uct_info: @abs_srcdir@/uct_info.c
+	$(CC) -o $@ $? $(UCT_CFLAGS) $(UCT_LDFLAGS)
+
+uct_info_static: @abs_srcdir@/uct_info.c
+	$(CC) -o $@ $? $(UCT_CFLAGS) $(UCT_STATIC_LDFLAGS)
+
+ucp_hello_world_static: @abs_top_srcdir@/examples/ucp_hello_world.c
+	$(CC) -o $@ $? $(UCX_CFLAGS) $(UCX_STATIC_LDFLAGS)

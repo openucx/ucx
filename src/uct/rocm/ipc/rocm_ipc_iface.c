@@ -47,18 +47,10 @@ static double uct_rocm_ipc_iface_get_bw()
     return bw;
 }
 
-static uint64_t uct_rocm_ipc_iface_node_guid(uct_base_iface_t *iface)
-{
-    return ucs_machine_guid() *
-           ucs_string_to_id(iface->md->component->name);
-}
-
 ucs_status_t uct_rocm_ipc_iface_get_device_address(uct_iface_t *tl_iface,
                                                    uct_device_addr_t *addr)
 {
-    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-
-    *(uint64_t*)addr = uct_rocm_ipc_iface_node_guid(iface);
+    *(uint64_t*)addr = ucs_get_system_id();
     return UCS_OK;
 }
 
@@ -73,10 +65,8 @@ static int uct_rocm_ipc_iface_is_reachable(const uct_iface_h tl_iface,
                                            const uct_device_addr_t *dev_addr,
                                            const uct_iface_addr_t *iface_addr)
 {
-    uct_rocm_ipc_iface_t  *iface = ucs_derived_of(tl_iface, uct_rocm_ipc_iface_t);
-
-    return ((uct_rocm_ipc_iface_node_guid(&iface->super) ==
-            *((const uint64_t *)dev_addr)) && ((getpid() != *(pid_t *)iface_addr)));
+    return (ucs_get_system_id() == *((const uint64_t*)dev_addr)) &&
+           (getpid() != *(pid_t*)iface_addr);
 }
 
 static ucs_status_t uct_rocm_ipc_iface_query(uct_iface_h tl_iface,
@@ -225,8 +215,9 @@ static UCS_CLASS_INIT_FUNC(uct_rocm_ipc_iface_t, uct_md_h md, uct_worker_h worke
 {
     ucs_status_t status;
 
-    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, NULL,
-                              md, worker, params,
+    UCS_CLASS_CALL_SUPER_INIT(uct_base_iface_t, &uct_rocm_ipc_iface_ops, 
+                              &uct_base_iface_internal_ops,
+			      md, worker, params,
                               tl_config UCS_STATS_ARG(params->stats_root)
                               UCS_STATS_ARG(UCT_ROCM_IPC_TL_NAME));
 

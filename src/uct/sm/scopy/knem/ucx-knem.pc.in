@@ -1,5 +1,15 @@
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+libdir = @libdir@/ucx
+
 Name: @PACKAGE@-knem
 Description: Unified Communication X Library KNEM module
-Version: @MAJOR_VERSION@.@MINOR_VERSION@
+Version: @VERSION@
 Libs:
-Libs.private:
+Libs.private: -L${libdir} -luct_knem -Wl,--undefined=uct_knem_init

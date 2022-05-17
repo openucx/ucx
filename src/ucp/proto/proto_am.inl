@@ -205,8 +205,7 @@ void ucp_dt_iov_copy_uct(ucp_context_h context, uct_iov_t *iov, size_t *iovcnt,
     case UCP_DATATYPE_CONTIG:
         if (md_flags & UCT_MD_FLAG_NEED_MEMH) {
             if (mdesc) {
-                memh_index  = ucs_bitmap2idx(mdesc->memh->md_map, md_index);
-                iov[0].memh = mdesc->memh->uct[memh_index];
+                iov[0].memh = mdesc->memh->uct[md_index];
             } else {
                 memh_index  = ucs_bitmap2idx(state->dt.contig.md_map, md_index);
                 iov[0].memh = state->dt.contig.memh[memh_index];
@@ -259,8 +258,7 @@ ucs_status_t ucp_am_zcopy_common(ucp_request_t *req, const void *hdr,
 
         buffer = UCS_PTR_BYTE_OFFSET(user_hdr_desc + 1, user_hdr_offset);
         ucp_add_uct_iov_elem(iov, buffer, user_hdr_size,
-                             ucp_memh2uct(user_hdr_desc->memh, md_idx),
-                             &iov_count);
+                             user_hdr_desc->memh->uct[md_idx], &iov_count);
     }
 
     return uct_ep_am_zcopy(ep->uct_eps[req->send.lane], am_id, (void*)hdr,

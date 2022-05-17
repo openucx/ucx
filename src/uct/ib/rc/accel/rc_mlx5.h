@@ -63,9 +63,9 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_NEW_FUNC(uct_rc_mlx5_ep_t, uct_ep_t, const uct_ep_params_t *);
 UCS_CLASS_DECLARE_DELETE_FUNC(uct_rc_mlx5_ep_t, uct_ep_t);
 
-void uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
-                                           struct mlx5_cqe64 *cqe,
-                                           int poll_flags);
+struct mlx5_cqe64 *
+uct_rc_mlx5_iface_check_rx_completion(uct_rc_mlx5_iface_common_t *iface,
+                                      struct mlx5_cqe64 *cqe, int poll_flags);
 
 ucs_status_t uct_rc_mlx5_ep_put_short(uct_ep_h tl_ep, const void *buffer, unsigned length,
                                       uint64_t remote_addr, uct_rkey_t rkey);
@@ -133,6 +133,8 @@ void uct_rc_mlx5_ep_post_check(uct_ep_h tl_ep);
 void uct_rc_mlx5_ep_vfs_populate(uct_rc_ep_t *rc_ep);
 
 ucs_status_t uct_rc_mlx5_ep_flush(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
+
+ucs_status_t uct_rc_mlx5_ep_invalidate(uct_ep_h tl_ep, unsigned flags);
 
 ucs_status_t uct_rc_mlx5_ep_fc_ctrl(uct_ep_t *tl_ep, unsigned op,
                                     uct_rc_pending_req_t *req);

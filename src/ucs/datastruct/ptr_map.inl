@@ -65,6 +65,7 @@ ucs_ptr_hash_get(ucs_ptr_hash_t *hash, ucs_ptr_map_key_t key, int extract,
 
     iter = kh_get(ucs_ptr_map_impl, hash, key);
     if (ucs_unlikely(iter == kh_end(hash))) {
+        *ptr_p = NULL; /* To suppress compiler warning */
         return UCS_ERR_NO_ELEM;
     }
 

@@ -505,7 +505,7 @@ public:
                 /* Wait until getting ACK from responder */
                 sn = get_recv_sn(recv_sn, recv_mem_type, recv_allocator);
                 ucs_assertv(UCS_CIRCULAR_COMPARE8(send_sn - 1, >=, sn),
-                            "recv_sn=%d iters=%" PRIu64, sn,
+                            "send_sn=%d sn=%d iters=%" PRIu64, send_sn, sn,
                             m_perf.current.iters);
 
                 while (UCS_CIRCULAR_COMPARE8(send_sn, >, sn + fc_window)) {
@@ -668,14 +668,12 @@ public:
 
         ucx_perf_test_start_clock(&m_perf);
 
-        if (m_perf.params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) {
-            send_stream_req_uni(flow_control, send_window,
-                                direction_to_responder, recv_sn, recv_mem_type,
-                                recv_allocator, length, peer_index);
-            recv_stream_req_uni(flow_control, send_window,
-                                direction_to_responder, recv_sn, recv_mem_type,
-                                recv_allocator, length, peer_index);
-        } else if (my_index == 1) {
+        if ((m_perf.params.flags & UCX_PERF_TEST_FLAG_LOOPBACK) ||
+            (my_index == 1)) {
+            /* The receiver side should not be active during loopback streaming
+             * test: for active messages, the callback is already called as part
+             * of send side progress and stores the recv sn to m_last_recvd_sn.
+             */
             send_stream_req_uni(flow_control, send_window,
                                 direction_to_responder, recv_sn, recv_mem_type,
                                 recv_allocator, length, peer_index);

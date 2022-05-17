@@ -56,6 +56,7 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 0,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.max_short),
@@ -79,15 +80,15 @@ ucp_proto_put_offload_short_init(const ucp_proto_init_params_t *init_params)
     return ucp_proto_single_init(&params);
 }
 
-static ucp_proto_t ucp_put_offload_short_proto = {
-    .name       = "put/offload/short",
-    .flags      = UCP_PROTO_FLAG_PUT_SHORT,
-    .init       = ucp_proto_put_offload_short_init,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_put_offload_short_progress},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+ucp_proto_t ucp_put_offload_short_proto = {
+    .name     = "put/offload/short",
+    .desc     = UCP_PROTO_SHORT_DESC,
+    .flags    = UCP_PROTO_FLAG_PUT_SHORT,
+    .init     = ucp_proto_put_offload_short_init,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_proto_put_offload_short_progress},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_put_offload_short_proto);
 
 static size_t ucp_proto_put_offload_bcopy_pack(void *dest, void *arg)
 {
@@ -152,6 +153,7 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 20,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.max_bcopy),
@@ -174,15 +176,15 @@ ucp_proto_put_offload_bcopy_init(const ucp_proto_init_params_t *init_params)
                                 init_params->priv_size);
 }
 
-static ucp_proto_t ucp_put_offload_bcopy_proto = {
-    .name       = "put/offload/bcopy",
-    .flags      = 0,
-    .init       = ucp_proto_put_offload_bcopy_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_put_offload_bcopy_progress},
-    .abort      = ucp_proto_request_bcopy_abort
+ucp_proto_t ucp_put_offload_bcopy_proto = {
+    .name     = "put/offload/bcopy",
+    .desc     = UCP_PROTO_COPY_IN_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_put_offload_bcopy_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_put_offload_bcopy_progress},
+    .abort    = ucp_proto_request_bcopy_abort
 };
-UCP_PROTO_REGISTER(&ucp_put_offload_bcopy_proto);
 
 static UCS_F_ALWAYS_INLINE ucs_status_t
 ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
@@ -195,7 +197,7 @@ ucp_proto_put_offload_zcopy_send_func(ucp_request_t *req,
 
     ucp_datatype_iter_next_iov(&req->send.state.dt_iter,
                                ucp_proto_multi_max_payload(req, lpriv, 0),
-                               lpriv->super.memh_index, UCP_DT_MASK_CONTIG_IOV,
+                               lpriv->super.md_index, UCP_DT_MASK_CONTIG_IOV,
                                next_iter, &iov, 1);
     return uct_ep_put_zcopy(req->send.ep->uct_eps[lpriv->super.lane], &iov, 1,
                             req->send.rma.remote_addr +
@@ -229,11 +231,12 @@ ucp_proto_put_offload_zcopy_init(const ucp_proto_init_params_t *init_params)
         .super.cfg_priority  = 30,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 1,
         .super.min_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.min_zcopy),
         .super.max_frag_offs = ucs_offsetof(uct_iface_attr_t,
                                             cap.put.max_zcopy),
-        .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
+        .super.max_iov_offs  = ucs_offsetof(uct_iface_attr_t, cap.put.max_iov),
         .super.hdr_size      = 0,
         .super.send_op       = UCT_EP_OP_PUT_ZCOPY,
         .super.memtype_op    = UCT_EP_OP_LAST,
@@ -260,12 +263,12 @@ static void ucp_put_offload_zcopy_abort(ucp_request_t *request,
     ucp_invoke_uct_completion(&request->send.state.uct_comp, status);
 }
 
-static ucp_proto_t ucp_put_offload_zcopy_proto = {
-    .name       = "put/offload/zcopy",
-    .flags      = 0,
-    .init       = ucp_proto_put_offload_zcopy_init,
-    .config_str = ucp_proto_multi_config_str,
-    .progress   = {ucp_proto_put_offload_zcopy_progress},
-    .abort      = ucp_put_offload_zcopy_abort
+ucp_proto_t ucp_put_offload_zcopy_proto = {
+    .name     = "put/offload/zcopy",
+    .desc     = UCP_PROTO_ZCOPY_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_put_offload_zcopy_init,
+    .query    = ucp_proto_multi_query,
+    .progress = {ucp_proto_put_offload_zcopy_progress},
+    .abort    = ucp_put_offload_zcopy_abort
 };
-UCP_PROTO_REGISTER(&ucp_put_offload_zcopy_proto);

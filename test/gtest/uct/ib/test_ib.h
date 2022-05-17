@@ -38,7 +38,7 @@ public:
     test_uct_ib_with_specific_port();
     void init();
     void cleanup();
-    virtual void check_port_attr() = 0;
+    virtual void check_port_attr() {};
 
 protected:
     std::string m_dev_name;

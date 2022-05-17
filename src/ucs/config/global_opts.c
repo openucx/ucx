@@ -37,8 +37,7 @@ ucs_global_opts_t ucs_global_opts = {
     .debug_signo           = SIGHUP,
     .log_level_trigger     = UCS_LOG_LEVEL_FATAL,
     .warn_unused_env_vars  = 1,
-    .enable_memtype_cache  = 1,
-    .async_max_events      = 64,
+    .enable_memtype_cache  = UCS_TRY,
     .async_signo           = SIGALRM,
     .stats_dest            = "",
     .tuning_path           = "",
@@ -49,13 +48,16 @@ ucs_global_opts_t ucs_global_opts = {
     .profile_file          = "",
     .stats_filter          = { NULL, 0 },
     .stats_format          = UCS_STATS_FULL,
+    .topo_prio             = { NULL, 0 },
     .vfs_enable            = 1,
     .vfs_thread_affinity   = 0,
     .rcache_check_pfn      = 0,
     .module_dir            = UCX_MODULE_DIR, /* defined in Makefile.am */
     .module_log_level      = UCS_LOG_LEVEL_TRACE,
     .modules               = { {NULL, 0}, UCS_CONFIG_ALLOW_LIST_ALLOW_ALL },
-    .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER
+    .arch                  = UCS_ARCH_GLOBAL_OPTS_INITALIZER,
+    .rcache_stat_min       = 0,
+    .rcache_stat_max       = 0
 };
 
 static const char *ucs_handle_error_modes[] = {
@@ -145,13 +147,14 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   "configuration parser.",
   ucs_offsetof(ucs_global_opts_t, warn_unused_env_vars), UCS_CONFIG_TYPE_BOOL},
 
-  {"MEMTYPE_CACHE", "y",
+  {"MEMTYPE_CACHE", "try",
    "Enable memory type (cuda/rocm) cache",
-   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_BOOL},
+   ucs_offsetof(ucs_global_opts_t, enable_memtype_cache), UCS_CONFIG_TYPE_TERNARY},
 
- {"ASYNC_MAX_EVENTS", "1024", /* TODO remove this; resize mpmc */
-  "Maximal number of events which can be handled from one context",
-  ucs_offsetof(ucs_global_opts_t, async_max_events), UCS_CONFIG_TYPE_UINT},
+ {"ASYNC_MAX_EVENTS", "1024",
+  "The configuration parameter is deprecated.\n"
+  "Now unlimited number of events can be handled from one context.",
+  UCS_CONFIG_DEPRECATED_FIELD_OFFSET, UCS_CONFIG_TYPE_DEPRECATED},
 
  {"ASYNC_SIGNO", "SIGALRM",
   "Signal number used for async signaling.",
@@ -183,11 +186,16 @@ static ucs_config_field_t ucs_global_opts_table[] = {
   " ^cu*  - do not load modules that begin with 'cu'",
   ucs_offsetof(ucs_global_opts_t, modules), UCS_CONFIG_TYPE_ALLOW_LIST},
 
+ {"TOPO_PRIO", "sysfs,default",
+  "Comma-separated list of methods of detecting system topology.\n"
+  "The list order decides the priority of methods used.",
+  ucs_offsetof(ucs_global_opts_t, topo_prio), UCS_CONFIG_TYPE_STRING_ARRAY},
+
  {NULL}
 };
 
-UCS_CONFIG_REGISTER_TABLE(ucs_global_opts_table, "UCS global", NULL,
-                          ucs_global_opts_t, &ucs_config_global_list)
+UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_table, "UCS global", NULL,
+                         ucs_global_opts_t)
 
 
 static ucs_config_field_t ucs_global_opts_read_only_table[] = {
@@ -285,6 +293,18 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
   "Maximal size of profiling log. New records will replace old records.",
   ucs_offsetof(ucs_global_opts_t, profile_log_size), UCS_CONFIG_TYPE_MEMUNITS},
 
+ {"RCACHE_STAT_MIN", "4k",
+  "Registration cache minimum region size, for power-of-2 size distribution "
+  "statistics.\nStatistics about smaller regions will be attributed to this "
+  "specified minimal size.\nRounded up to the next power-of-2 value.",
+  ucs_offsetof(ucs_global_opts_t, rcache_stat_min), UCS_CONFIG_TYPE_MEMUNITS},
+
+ {"RCACHE_STAT_MAX", "1m",
+  "Registration cache maximum region size, for power-of-2 size distribution "
+  "statistics.\nStatistics about larger regions will be attributed to 'max' "
+  "bucket.\nRounded up to the next power-of-2 value.",
+  ucs_offsetof(ucs_global_opts_t, rcache_stat_max), UCS_CONFIG_TYPE_MEMUNITS},
+
  {"", "", NULL,
   ucs_offsetof(ucs_global_opts_t, arch),
   UCS_CONFIG_TYPE_TABLE(ucs_arch_global_opts_table)},
@@ -292,30 +312,10 @@ static ucs_config_field_t ucs_global_opts_read_only_table[] = {
  {NULL}
 };
 
-UCS_CONFIG_REGISTER_TABLE(ucs_global_opts_read_only_table,
-                          "UCS global (runtime read-only)", NULL,
-                          ucs_global_opts_t, &ucs_config_global_list)
+UCS_CONFIG_DECLARE_TABLE(ucs_global_opts_read_only_table,
+                         "UCS global (runtime read-only)", NULL,
+                         ucs_global_opts_t)
 
-
-void ucs_global_opts_init()
-{
-    ucs_status_t status;
-
-    status = ucs_config_parser_fill_opts(&ucs_global_opts,
-                                         ucs_global_opts_read_only_table,
-                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
-    if (status != UCS_OK) {
-        ucs_fatal("failed to parse global runtime read-only configuration -"
-                  " aborting");
-    }
-
-    status = ucs_config_parser_fill_opts(&ucs_global_opts,
-                                         ucs_global_opts_table,
-                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
-    if (status != UCS_OK) {
-        ucs_fatal("failed to parse global configuration - aborting");
-    }
-}
 
 ucs_status_t ucs_global_opts_set_value(const char *name, const char *value)
 {
@@ -416,15 +416,41 @@ static ucs_status_t ucs_vfs_write_log_level(void *obj, const char *buffer,
     return UCS_OK;
 }
 
-/**
- * VFS nodes representing global options are removed in UCS_STATIC_CLEANUP of
- * vfs_obj.c file. Because removing elements using ucs_vfs_obj_remove in
- * UCS_STATIC_CLEANUP in global_opts.c could happen after execution of
- * UCS_STATIC_CLEANUP of vfs_obj.c file.
- */
-UCS_STATIC_INIT
+void ucs_global_opts_init()
 {
+    ucs_status_t status;
+
+    UCS_CONFIG_ADD_TABLE(ucs_global_opts_table,  &ucs_config_global_list);
+    UCS_CONFIG_ADD_TABLE(ucs_global_opts_read_only_table,
+                         &ucs_config_global_list);
+
+    status = ucs_config_parser_fill_opts(&ucs_global_opts,
+                                         ucs_global_opts_read_only_table,
+                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
+    if (status != UCS_OK) {
+        ucs_fatal("failed to parse global runtime read-only configuration");
+    }
+
+    status = ucs_config_parser_fill_opts(&ucs_global_opts,
+                                         ucs_global_opts_table,
+                                         UCS_DEFAULT_ENV_PREFIX, NULL, 1);
+    if (status != UCS_OK) {
+        ucs_fatal("failed to parse global configuration");
+    }
+
+    /**
+     * VFS nodes representing global options are removed in UCS_STATIC_CLEANUP
+     * of vfs_obj.c file. Because removing elements using ucs_vfs_obj_remove
+     * in UCS_STATIC_CLEANUP in global_opts.c could happen after execution of
+     * UCS_STATIC_CLEANUP of vfs_obj.c file.
+     */
     ucs_vfs_obj_add_dir(NULL, &ucs_global_opts, "ucs/global_opts");
     ucs_vfs_obj_add_rw_file(&ucs_global_opts, ucs_vfs_read_log_level,
                             ucs_vfs_write_log_level, NULL, 0, "log_level");
+}
+
+void ucs_global_opts_cleanup()
+{
+    UCS_CONFIG_REMOVE_TABLE(ucs_global_opts_read_only_table);
+    UCS_CONFIG_REMOVE_TABLE(ucs_global_opts_table);
 }

@@ -20,12 +20,15 @@
 #include <ucs/debug/log.h>
 #include <ucs/sys/string.h>
 #include <ucs/sys/math.h>
+#include <ucs/sys/sys.h>
 #include <string.h>
 #include <limits.h>
 #include <dlfcn.h>
 #include <link.h>
 #include <libgen.h>
 
+
+#ifdef UCX_SHARED_LIB
 
 #define UCS_MODULE_PATH_MEMTRACK_NAME   "module_path"
 #define UCS_MODULE_SRCH_PATH_MAX        2
@@ -259,10 +262,12 @@ static void ucs_module_load_one(const char *framework, const char *module_name,
 
     /* coverity[leaked_storage] : a loaded module is never unloaded */
 }
+#endif /* UCX_SHARED_LIB */
 
 void ucs_load_modules(const char *framework, const char *modules,
                       ucs_init_once_t *init_once, unsigned flags)
 {
+#ifdef UCX_SHARED_LIB
     char *modules_str;
     char *saveptr;
     char *module_name;
@@ -270,6 +275,8 @@ void ucs_load_modules(const char *framework, const char *modules,
     ucs_module_loader_init_paths();
 
     UCS_INIT_ONCE(init_once) {
+        ucs_assert(ucs_sys_is_dynamic_lib());
+
         ucs_module_debug("loading modules for %s", framework);
         modules_str = ucs_strdup(modules, "modules_list");
         if (modules_str != NULL) {
@@ -284,4 +291,5 @@ void ucs_load_modules(const char *framework, const char *modules,
             ucs_error("failed to allocate module names list");
         }
     }
+#endif /* UCX_SHARED_LIB */
 }

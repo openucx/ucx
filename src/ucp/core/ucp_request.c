@@ -14,7 +14,7 @@
 #include "ucp_request.inl"
 
 #include <ucp/proto/proto_am.h>
-#include <ucp/proto/proto_select.h>
+#include <ucp/proto/proto_debug.h>
 #include <ucp/tag/tag_rndv.h>
 
 #include <ucs/datastruct/mpool.inl>
@@ -51,9 +51,8 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
     ucs_string_buffer_appendf(strb, "flags:0x%x ", req->flags);
 
     if (req->flags & UCP_REQUEST_FLAG_PROTO_SEND) {
-        ucp_proto_select_config_str(req->send.ep->worker,
-                                    req->send.proto_config,
-                                    req->send.state.dt_iter.length, strb);
+        ucp_proto_config_info_str(req->send.ep->worker, req->send.proto_config,
+                                  req->send.state.dt_iter.length, strb);
         return;
     }
 
@@ -80,9 +79,9 @@ ucp_request_str(ucp_request_t *req, ucs_string_buffer_t *strb, int recurse)
 #if ENABLE_DEBUG_DATA
         if (req->recv.proto_rndv_config != NULL) {
             /* Print the send protocol of the rendezvous request */
-            ucp_proto_select_config_str(req->recv.worker,
-                                        req->recv.proto_rndv_config,
-                                        req->recv.length, strb);
+            ucp_proto_config_info_str(req->recv.worker,
+                                      req->recv.proto_rndv_config,
+                                      req->recv.length, strb);
             return;
         }
 #endif
@@ -677,22 +676,11 @@ void ucp_request_send_state_ff(ucp_request_t *req, ucs_status_t status)
     if (req->send.uct.func == ucp_proto_progress_am_single) {
         req->send.proto.comp_cb(req);
     } else if (req->send.uct.func == ucp_wireup_msg_progress) {
-        /* Sending EP_REMOVED/EP_CHECK/ACK WIREUP_MSGs could be scheduled on
-         * UCT endpoint which is not a WIREUP_EP. Other WIREUP MSGs should not
-         * be returned from 'uct_ep_pending_purge()', since they are released
-         * by WIREUP endpoint's purge function
-         */
-        ucs_assertv((req->send.wireup.type == UCP_WIREUP_MSG_EP_REMOVED) ||
-                    (req->send.wireup.type == UCP_WIREUP_MSG_EP_CHECK) ||
-                    (req->send.wireup.type == UCP_WIREUP_MSG_ACK),
-                    "req %p ep %p: got %s message", req, req->send.ep,
-                    ucp_wireup_msg_str(req->send.wireup.type));
         ucs_free(req->send.buffer);
         ucp_request_mem_free(req);
     } else if (req->send.state.uct_comp.func == ucp_ep_flush_completion) {
         ucp_ep_flush_request_ff(req, status);
-    } else if (req->send.state.uct_comp.func ==
-               ucp_worker_discard_uct_ep_flush_comp) {
+    } else if (req->send.uct.func == ucp_worker_discard_uct_ep_pending_cb) {
         /* Discard operations with flush(LOCAL) could be started (e.g. closing
          * unneeded UCT EPs from intersection procedure), convert them to
          * flush(CANCEL) to avoid flushing failed UCT EPs

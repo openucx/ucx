@@ -331,3 +331,11 @@
    obj:*libmlx5*
    fun:ibv_poll_cq
 }
+{
+   uar-alloc-leak
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   obj:*/libmlx5*.so*
+   fun:uct_rdmacm_cm_create_dummy_qp
+}

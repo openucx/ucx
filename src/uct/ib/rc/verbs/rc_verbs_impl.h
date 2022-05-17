@@ -65,7 +65,8 @@ uct_rc_verbs_iface_handle_am(uct_rc_iface_t *iface, uct_rc_hdr_t *hdr,
         status = uct_iface_invoke_am(&iface->super.super, hdr->am_id, hdr + 1,
                                      length - sizeof(*hdr), UCT_CB_PARAM_FLAG_DESC);
     }
-    if (ucs_likely(status == UCS_OK)) {
+
+    if (ucs_likely(status != UCS_INPROGRESS)) {
         ucs_mpool_put_inline(desc);
     } else {
         udesc = (char*)desc + iface->super.config.rx_headroom_offset;
@@ -110,7 +111,8 @@ uct_rc_verbs_iface_poll_rx_common(uct_rc_verbs_iface_t *iface)
                                      wc[i].byte_len, wc[i].imm_data, wc[i].slid);
     }
     iface->super.rx.srq.available += num_wcs;
-    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, num_wcs);
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
 out:
     uct_rc_verbs_iface_post_recv_common(iface, 0);

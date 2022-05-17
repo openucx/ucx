@@ -20,6 +20,18 @@ uct_ib_mlx5_cqe_is_hw_owned(uint8_t op_own, unsigned cqe_index, unsigned mask)
     return (op_own & MLX5_CQE_OWNER_MASK) == !(cqe_index & mask);
 }
 
+/**
+ * Checks that cqe_format is equal to 3 (cqe is a part of compression block)
+ * or opcode contains information about error.
+ */
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_cqe_is_error_or_zipped(uint8_t op_own)
+{
+    static const uint8_t mask = UCT_IB_MLX5_CQE_FORMAT_MASK |
+                                UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK;
+    return (op_own & mask) >= UCT_IB_MLX5_CQE_FORMAT_MASK;
+}
+
 static UCS_F_ALWAYS_INLINE int
 uct_ib_mlx5_cqe_stride_index(struct mlx5_cqe64* cqe)
 {
@@ -72,6 +84,20 @@ uct_ib_mlx5_update_db_cq_ci(uct_ib_mlx5_cq_t *cq)
 }
 
 
+static UCS_F_ALWAYS_INLINE int
+uct_ib_mlx5_check_and_init_zipped(uct_ib_mlx5_cq_t *cq, struct mlx5_cqe64 *cqe)
+{
+    if (cq->cq_unzip.current_idx > 0) {
+        return 1;
+    } else if ((cqe->op_own & UCT_IB_MLX5_CQE_FORMAT_MASK) == UCT_IB_MLX5_CQE_FORMAT_MASK) {
+        /* First zipped CQE in the sequence */
+        uct_ib_mlx5_iface_cqe_unzip_init(cqe, cq);
+        return 1;
+    }
+    return 0;
+}
+
+
 static UCS_F_ALWAYS_INLINE struct mlx5_cqe64*
 uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 {
@@ -85,12 +111,8 @@ uct_ib_mlx5_poll_cq(uct_ib_iface_t *iface, uct_ib_mlx5_cq_t *cq)
 
     if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, cqe_index, cq->cq_length))) {
         return NULL;
-    } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
-        UCS_STATIC_ASSERT(MLX5_CQE_INVALID & (UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK >> 4));
-        ucs_assert((op_own >> 4) != MLX5_CQE_INVALID);
-        uct_ib_mlx5_check_completion(iface, cq, cqe);
-        uct_ib_mlx5_update_db_cq_ci(cq);
-        return NULL; /* No CQE */
+    } else if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(op_own))) {
+        return uct_ib_mlx5_check_completion(iface, cq, cqe);
     }
 
     cq->cq_ci = cqe_index + 1;
@@ -506,8 +528,15 @@ uct_ib_mlx5_post_send(uct_ib_mlx5_txwq_t *wq, struct mlx5_wqe_ctrl_seg *ctrl,
          */
         ucs_memory_cpu_wc_fence();
     } else {
-        ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB);
-        *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
+        if (wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB) {
+            *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
+        } else {
+            ucs_assert(wq->reg->mode == UCT_IB_MLX5_MMIO_MODE_DB_LOCK);
+            ucs_spin_lock(&wq->reg->db_lock);
+            *(volatile uint64_t*)dst = *(volatile uint64_t*)src;
+            ucs_spin_unlock(&wq->reg->db_lock);
+        }
+
         ucs_memory_bus_store_fence();
         src = UCS_PTR_BYTE_OFFSET(src, num_bb * MLX5_SEND_WQE_BB);
         src = uct_ib_mlx5_txwq_wrap_any(wq, src);
@@ -553,10 +582,7 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
         return status;
     }
 
-#if HAVE_DECL_IBV_EXP_CREATE_QP
-    attr->super.ibv.comp_mask       = IBV_EXP_QP_INIT_ATTR_PD;
-    attr->super.ibv.pd              = uct_ib_iface_md(iface)->pd;
-#elif HAVE_DECL_IBV_CREATE_QP_EX
+#if HAVE_DECL_IBV_CREATE_QP_EX
     attr->super.ibv.comp_mask       = IBV_QP_INIT_ATTR_PD;
     if (qp->verbs.rd->pd != NULL) {
         attr->super.ibv.pd          = qp->verbs.rd->pd;
@@ -565,10 +591,19 @@ uct_ib_mlx5_iface_fill_attr(uct_ib_iface_t *iface,
     }
 #endif
 
-#ifdef HAVE_IBV_EXP_RES_DOMAIN
-    attr->super.ibv.comp_mask      |= IBV_EXP_QP_INIT_ATTR_RES_DOMAIN;
-    attr->super.ibv.res_domain      = qp->verbs.rd->ibv_domain;
-#endif
-
     return UCS_OK;
+}
+
+
+static void UCS_F_ALWAYS_INLINE
+uct_ib_mlx5_update_cqe_zipping_stats(uct_ib_iface_t *iface,
+                                     uct_ib_mlx5_cq_t *cq)
+{
+    if ((cq->cq_unzip.title.op_own >> 4) == MLX5_CQE_REQ) {
+        UCS_STATS_UPDATE_COUNTER(iface->stats,
+                                 UCT_IB_IFACE_STAT_TX_COMPLETION_ZIPPED, 1);
+    } else {
+        UCS_STATS_UPDATE_COUNTER(iface->stats,
+                                 UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED, 1);
+    }
 }

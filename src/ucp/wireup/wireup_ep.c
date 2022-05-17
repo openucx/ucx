@@ -260,14 +260,18 @@ UCS_CLASS_DEFINE_NAMED_NEW_FUNC(ucp_wireup_ep_create, ucp_wireup_ep_t, uct_ep_t,
                                 ucp_ep_h);
 
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
-                           ucp_rsc_index_t rsc_index)
+                           ucp_rsc_index_t rsc_index, int is_p2p)
 {
     ucs_assert(!ucp_wireup_ep_test(uct_ep));
     wireup_ep->aux_ep        = uct_ep;
     wireup_ep->aux_rsc_index = rsc_index;
+
+    if (is_p2p) {
+        wireup_ep->flags |= UCP_WIREUP_EP_FLAG_AUX_P2P;
+    }
 }
 
-ucs_status_t
+static ucs_status_t
 ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
                           const ucp_unpacked_address_t *remote_address)
 {
@@ -306,7 +310,7 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
         return status;
     }
 
-    ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index);
+    ucp_wireup_ep_set_aux(wireup_ep, uct_ep, select_info.rsc_index, 0);
 
     ucp_worker_iface_progress_ep(wiface);
 
@@ -318,36 +322,23 @@ ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
     return UCS_OK;
 }
 
-static void ucp_wireup_ep_aux_ep_discarded(void *request, ucs_status_t status,
-                                           void *user_data)
-{
-    ucp_worker_iface_t *wiface = (ucp_worker_iface_t*)user_data;
-
-    /* Make Coverity happy */
-    ucs_assert(user_data != NULL);
-
-    ucp_worker_iface_unprogress_ep(wiface);
-}
-
 void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   unsigned ep_flush_flags,
                                   uct_pending_purge_callback_t purge_cb,
                                   void *purge_arg)
 {
     ucp_ep_h ucp_ep     = wireup_ep->super.ucp_ep;
-    ucp_worker_h worker = ucp_ep->worker;
     uct_ep_h aux_ep     = wireup_ep->aux_ep;
-    ucp_worker_iface_t *wiface;
 
     if (aux_ep == NULL) {
         return;
     }
 
-    wiface = ucp_worker_iface(worker, wireup_ep->aux_rsc_index);
     ucp_wireup_ep_disown(&wireup_ep->super.super, aux_ep);
-    ucp_worker_discard_uct_ep(ucp_ep, aux_ep, ep_flush_flags, purge_cb,
-                              purge_arg, ucp_wireup_ep_aux_ep_discarded,
-                              wiface);
+    ucp_worker_discard_uct_ep(ucp_ep, aux_ep, wireup_ep->aux_rsc_index,
+                              ep_flush_flags, purge_cb, purge_arg,
+                              (ucp_send_nbx_callback_t)ucs_empty_function,
+                              NULL);
 }
 
 static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
@@ -364,10 +355,10 @@ static ucs_status_t ucp_wireup_ep_flush(uct_ep_h uct_ep, unsigned flags,
     return UCS_ERR_NO_RESOURCE;
 }
 
-static ucs_status_t
-ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
-                       ucp_rsc_index_t rsc_idx, unsigned flags,
-                       uct_completion_t *comp)
+static ucs_status_t ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
+                                           ucp_rsc_index_t rsc_idx, int is_p2p,
+                                           unsigned flags,
+                                           uct_completion_t *comp)
 {
     ucp_worker_h worker = ucp_ep->worker;
     ucp_worker_iface_t *wiface;
@@ -375,14 +366,15 @@ ucp_wireup_ep_do_check(ucp_ep_h ucp_ep, uct_ep_h uct_ep,
     ucs_assert(rsc_idx != UCP_NULL_RESOURCE);
 
     wiface = ucp_worker_iface(worker, rsc_idx);
-    if (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) {
-        return ucp_ep_do_uct_ep_keepalive(ucp_ep, uct_ep, rsc_idx, flags,
-                                          comp);
+    if (ucp_ep_is_am_keepalive(ucp_ep, rsc_idx, is_p2p)) {
+        return ucp_ep_do_uct_ep_am_keepalive(ucp_ep, uct_ep, rsc_idx);
+    } else if (wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_CHECK) {
+        return uct_ep_check(uct_ep, flags, comp);
     }
 
-    /* if EP_CHECK is not supported by UCT transport, it has to support a
-     * built-in keepalive mechanism to be able to detect peer failure during
-     * wireup
+    /* If EP_CHECK is not supported by UCT transport and AM-based keepalive is
+     * not required, it has to support a built-in keepalive mechanism to be
+     * able to detect peer failure during wireup
      */
     ucs_assert(wiface->attr.cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE);
     return UCS_OK;
@@ -401,6 +393,8 @@ static ucs_status_t ucp_wireup_ep_check(uct_ep_h uct_ep, unsigned flags,
     if (wireup_ep->aux_ep != NULL) {
         return ucp_wireup_ep_do_check(ucp_ep, wireup_ep->aux_ep,
                                       wireup_ep->aux_rsc_index,
+                                      wireup_ep->flags &
+                                              UCP_WIREUP_EP_FLAG_AUX_P2P,
                                       flags, comp);
     }
 
@@ -470,7 +464,6 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
 {
     ucp_ep_h ucp_ep     = self->super.ucp_ep;
     ucp_worker_h worker = ucp_ep->worker;
-    ucs_queue_head_t tmp_pending_queue;
 
     ucs_assert(ucs_queue_is_empty(&self->pending_q));
     ucs_assert(self->pending_count == 0);
@@ -478,18 +471,24 @@ static UCS_CLASS_CLEANUP_FUNC(ucp_wireup_ep_t)
     ucs_debug("ep %p: destroy wireup ep %p", ucp_ep, self);
 
     uct_worker_progress_unregister_safe(worker->uct, &self->progress_id);
+
     if (self->aux_ep != NULL) {
-        ucs_queue_head_init(&tmp_pending_queue);
-        /* Discard AUX UCT EP to purge all outstanding/pending operations.
-         * Normally, WIREUP EP should complete all outstanding operations prior
-         * destroying WIREUP EP - so, doing flush(CANCEL) won't take any affect,
-         * but it will make sure that no completions will be received if some
-         * error was detected */
-        ucp_wireup_ep_discard_aux_ep(self, UCT_FLUSH_FLAG_CANCEL,
-                                     ucp_request_purge_enqueue_cb,
-                                     &tmp_pending_queue);
+        /* No pending operations should be scheduled */
+        uct_ep_pending_purge(self->aux_ep, ucp_destroyed_ep_pending_purge,
+                             ucp_ep);
+        ucp_ep_unprogress_uct_ep(ucp_ep, self->aux_ep, self->aux_rsc_index);
+        uct_ep_destroy(self->aux_ep);
         self->aux_ep = NULL;
-        ucp_wireup_replay_pending_requests(ucp_ep, &tmp_pending_queue);
+    }
+
+    if (self->super.is_owner && (self->super.uct_ep != NULL)) {
+        /* No pending operations should be scheduled */
+        uct_ep_pending_purge(self->super.uct_ep,
+                             ucp_destroyed_ep_pending_purge, ucp_ep);
+        ucp_ep_unprogress_uct_ep(ucp_ep, self->super.uct_ep,
+                                 self->super.rsc_index);
+        uct_ep_destroy(self->super.uct_ep);
+        ucp_proxy_ep_set_uct_ep(&self->super, NULL, 0, UCP_NULL_RESOURCE);
     }
 
     UCS_ASYNC_BLOCK(&worker->async);
@@ -539,7 +538,7 @@ ucs_status_t ucp_wireup_ep_connect(uct_ep_h uct_ep, unsigned ep_init_flags,
         goto err;
     }
 
-    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
+    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1, rsc_index);
 
     ucs_debug("ep %p: wireup_ep %p created next_ep %p to %s "
               "using " UCT_TL_RESOURCE_DESC_FMT,
@@ -572,7 +571,8 @@ int ucp_wireup_ep_has_next_ep(ucp_wireup_ep_t *wireup_ep)
     return wireup_ep->super.uct_ep != NULL;
 }
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
+                               ucp_rsc_index_t rsc_index)
 {
     ucp_wireup_ep_t *wireup_ep = ucp_wireup_ep(uct_ep);
 
@@ -580,7 +580,7 @@ void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep)
     ucs_assert(wireup_ep->super.uct_ep == NULL);
     ucs_assert(!ucp_wireup_ep_test(next_ep));
     wireup_ep->flags |= UCP_WIREUP_EP_FLAG_LOCAL_CONNECTED;
-    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1);
+    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, next_ep, 1, rsc_index);
     ucs_debug("ep %p: wireup_ep %p set next_ep %p", wireup_ep->super.ucp_ep,
               wireup_ep, wireup_ep->super.uct_ep);
 }
@@ -592,7 +592,7 @@ uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep)
 
     ucs_assert_always(wireup_ep != NULL);
     next_ep = wireup_ep->super.uct_ep;
-    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, NULL, 0);
+    ucp_proxy_ep_set_uct_ep(&wireup_ep->super, NULL, 0, UCP_NULL_RESOURCE);
     return next_ep;
 }
 

@@ -1,0 +1,19 @@
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @exec_prefix@/bin
+libdir = @libdir@
+includedir = @includedir@
+
+Name: @PACKAGE@-uct
+Description: Unified Communication X Library UCT module
+Version: @VERSION@
+Cflags: -I${includedir}
+Libs: -L${libdir} -luct
+Libs.private: -Wl,--undefined=uct_init
+Requires: @PACKAGE@-ucs

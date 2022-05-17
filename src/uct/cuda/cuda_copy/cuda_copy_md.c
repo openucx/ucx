@@ -61,13 +61,15 @@ static ucs_status_t uct_cuda_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_att
     md_attr->cap.max_alloc        = SIZE_MAX;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = 0;
-    md_attr->reg_cost             = ucs_linear_func_make(0, 0);
+    md_attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
-                                            void *rkey_buffer)
+static ucs_status_t
+uct_cuda_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
+                        const uct_md_mkey_pack_params_t *params,
+                        void *rkey_buffer)
 {
     return UCS_OK;
 }

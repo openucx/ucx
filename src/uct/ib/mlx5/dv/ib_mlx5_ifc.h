@@ -272,7 +272,8 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    rc[0x1];
 
     uint8_t    uar_4k[0x1];
-    uint8_t    reserved_at_241[0x9];
+    uint8_t    dci_no_rdma_wr_optimized_performance[0x1];
+    uint8_t    reserved_at_242[0x8];
     uint8_t    uar_sz[0x6];
     uint8_t    reserved_at_250[0x8];
     uint8_t    log_pg_sz[0x8];
@@ -386,9 +387,11 @@ struct uct_ib_mlx5_cmd_hca_cap_bits {
     uint8_t    num_of_uars_per_page[0x20];
     uint8_t    reserved_at_540[0x40];
 
-    uint8_t    reserved_at_580[0x3d];
+    uint8_t    reserved_at_580[0x3b];
+    uint8_t    enhanced_cqe_compression[0x1];
+    uint8_t    mini_cqe_resp_stride_index[0x1];
     uint8_t    cqe_128_always[0x1];
-    uint8_t    cqe_compression_128[0x1];
+    uint8_t    cqe_compression_128b[0x1];
     uint8_t    cqe_compression[0x1];
 
     uint8_t    cqe_compression_timeout[0x10];
@@ -1241,7 +1244,7 @@ struct uct_ib_mlx5_qpc_bits {
     uint8_t         st[0x8];
     uint8_t         reserved_at_10[0x3];
     uint8_t         pm_state[0x2];
-    uint8_t         reserved_at_15[0x1];
+    uint8_t         rdma_wr_disabled[0x1];
     uint8_t         req_e2e_credit_mode[0x2];
     uint8_t         offload_type[0x4];
     uint8_t         end_padding_mode[0x2];

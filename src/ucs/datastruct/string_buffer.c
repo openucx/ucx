@@ -52,6 +52,12 @@ size_t ucs_string_buffer_length(ucs_string_buffer_t *strb)
     return ucs_array_length(&strb->str);
 }
 
+static void ucs_string_buffer_add_null_terminator(ucs_string_buffer_t *strb)
+{
+    ucs_assert(ucs_array_available_length(&strb->str) >= 1);
+    *ucs_array_end(&strb->str) = '\0';
+}
+
 void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
 {
     ucs_status_t status;
@@ -77,7 +83,7 @@ void ucs_string_buffer_appendf(ucs_string_buffer_t *strb, const char *fmt, ...)
              * the string will contain only what could fit in.
              */
             ucs_array_length(&strb->str) = ucs_array_capacity(&strb->str) - 1;
-            *ucs_array_end(&strb->str)   = '\0';
+            ucs_string_buffer_add_null_terminator(strb);
             goto out;
         }
 
@@ -146,7 +152,12 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
 {
     char *ptr = ucs_array_end(&strb->str);
 
-    while (ucs_array_length(&strb->str) > 0) {
+    if (ucs_array_is_empty(&strb->str)) {
+        /* If the string is empty, do not write '\0' terminator */
+        return;
+    }
+
+    do {
         --ptr;
         if (((charset == NULL) && !isspace(*ptr)) ||
             ((charset != NULL) && (strchr(charset, *ptr) == NULL))) {
@@ -155,10 +166,9 @@ void ucs_string_buffer_rtrim(ucs_string_buffer_t *strb, const char *charset)
         }
 
         ucs_array_set_length(&strb->str, ucs_array_length(&strb->str) - 1);
-    }
+    } while (!ucs_array_is_empty(&strb->str));
 
-    /* mark the new end of string */
-    *(ptr + 1) = '\0';
+    ucs_string_buffer_add_null_terminator(strb);
 }
 
 const char *ucs_string_buffer_cstr(const ucs_string_buffer_t *strb)
@@ -219,4 +229,42 @@ char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb)
     }
 
     return c_str;
+}
+
+char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
+                                   const char *delimiters)
+{
+    char *next_token;
+
+    /* The token must be either NULL or inside the string buffer array */
+    ucs_assert((token == NULL) || ((token >= ucs_array_begin(&strb->str)) &&
+                                   (token < ucs_array_end(&strb->str))));
+
+    next_token = (token == NULL) ? ucs_array_begin(&strb->str) :
+                                   (token + strlen(token) + 1);
+    if (next_token >= ucs_array_end(&strb->str)) {
+        /* No more tokens */
+        return NULL;
+    }
+
+    return strsep(&next_token, delimiters);
+}
+
+void ucs_string_buffer_appendc(ucs_string_buffer_t *strb, int c, size_t count)
+{
+    size_t length = ucs_array_length(&strb->str);
+    size_t append_length;
+
+    (void)ucs_array_reserve(string_buffer, &strb->str, length + count + 1);
+
+    if (ucs_array_available_length(&strb->str) < 1) {
+        /* No room to add anything */
+        return;
+    }
+
+    append_length = ucs_min(count, ucs_array_available_length(&strb->str) - 1);
+    memset(ucs_array_end(&strb->str), c, append_length);
+    ucs_array_set_length(&strb->str, length + append_length);
+
+    ucs_string_buffer_add_null_terminator(strb);
 }

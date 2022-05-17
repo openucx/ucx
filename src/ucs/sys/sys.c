@@ -1549,4 +1549,31 @@ err:
     return 0ul;
 }
 
+ucs_status_t ucs_sys_get_memlock_rlimit(size_t *rlimit_value)
+{
+    struct rlimit limit_info;
+    int res;
+
+    /* Check the value of the max locked memory which is set on the system
+     * (ulimit -l) */
+    res = getrlimit(RLIMIT_MEMLOCK, &limit_info);
+    if (res != 0) {
+        ucs_debug("unable to get the max locked memory limit: %m");
+        return UCS_ERR_IO_ERROR;
+    }
+
+    *rlimit_value = (limit_info.rlim_cur == RLIM_INFINITY) ?
+                            SIZE_MAX :
+                            limit_info.rlim_cur;
+    return UCS_OK;
+}
+
+int ucs_sys_is_dynamic_lib(void)
+{
+#ifdef UCX_SHARED_LIB
+    return 1;
+#else
+    return 0;
+#endif
+}
 

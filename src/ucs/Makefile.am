@@ -5,7 +5,7 @@
 # See file LICENSE for terms.
 #
 
-SUBDIRS = vfs/sock . vfs/fuse
+SUBDIRS = vfs/sock . vfs/fuse signal
 
 AUTOMAKE_OPTIONS    = nostdinc # avoid collision with built-in debug.h
 lib_LTLIBRARIES     = libucs.la
@@ -62,7 +62,7 @@ nobase_dist_libucs_la_HEADERS = \
 	sys/preprocessor.h \
 	sys/string.h \
 	sys/sock.h \
-	sys/topo.h \
+	sys/topo/base/topo.h \
 	sys/stubs.h \
 	sys/uid.h \
 	time/time_def.h \
@@ -89,6 +89,7 @@ noinst_HEADERS = \
 	arch/ppc64/cpu.h \
 	arch/x86_64/cpu.h \
 	arch/cpu.h \
+	config/ucm_opts.h \
 	datastruct/arbiter.h \
 	datastruct/bitmap.h \
 	datastruct/frag_list.h \
@@ -108,6 +109,7 @@ noinst_HEADERS = \
 	debug/memtrack_int.h \
 	memory/numa.h \
 	memory/rcache_int.h \
+	memory/rcache.inl \
 	profile/profile.h \
 	stats/stats.h \
 	sys/checker.h \
@@ -168,6 +170,7 @@ libucs_la_SOURCES = \
 	memory/memtype_cache.c \
 	memory/numa.c \
 	memory/rcache.c \
+	memory/rcache_vfs.c \
 	profile/profile.c \
 	stats/stats.c \
 	sys/event_set.c \
@@ -179,7 +182,7 @@ libucs_la_SOURCES = \
 	sys/iovec.c \
 	sys/lib.c \
 	sys/sock.c \
-	sys/topo.c \
+	sys/topo/base/topo.c \
 	sys/stubs.c \
 	sys/uid.c \
 	time/time.c \
@@ -213,6 +216,10 @@ all-local: $(objdir)/$(modulesubdir)
 
 $(objdir)/$(modulesubdir): $(lib_LTLIBRARIES)
 	$(AM_V_at)$(LN_RS) -fn $(localmoduledir) $(objdir)/$(modulesubdir)
+
+PKG_CONFIG_NAME=ucs
+
+include $(top_srcdir)/config/module-pkg-config.am
 
 #TODO	stats/stats_dump.c
 #TODO	stats/stats_reader.c

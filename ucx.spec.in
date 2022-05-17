@@ -18,7 +18,7 @@ Group: System Environment/Libraries
 
 License: BSD
 URL: http://www.openucx.org
-Source: https://github.com/openucx/%{name}/releases/download/v@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@/ucx-@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@.tar.gz
+Source: https://github.com/openucx/%{name}/releases/download/v@VERSION@/ucx-@VERSION@.tar.gz
 
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Prefix: %{_prefix}
@@ -106,6 +106,7 @@ Provides header files and examples for developing with UCX.
            %{?debug:--enable-fault-injection} \
            %{?debug:--enable-debug-data} \
            %{?debug:--enable-mt} \
+           --without-go \
            --without-java \
            %_enable_arg cma cma \
            %_with_arg cuda cuda \
@@ -123,10 +124,9 @@ make %{?_smp_mflags} V=1
 %install
 make DESTDIR=%{buildroot} install
 rm -f %{buildroot}%{_libdir}/*.la
-rm -f %{buildroot}%{_libdir}/*.a
+rm -f %{buildroot}%{_libdir}/libucs_signal.a
 rm -f %{buildroot}%{_libdir}/ucx/*.la
 rm -f %{buildroot}%{_libdir}/ucx/lib*.so
-rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 
 %files
 %{_libdir}/lib*.so.*
@@ -146,7 +146,9 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 %files devel
 %{_includedir}/uc*
 %{_libdir}/lib*.so
-%{_libdir}/pkgconfig/ucx*.pc
+%{_libdir}/pkgconfig/ucx.pc
+%{_libdir}/pkgconfig/ucx-uct.pc
+%{_libdir}/pkgconfig/ucx-ucs.pc
 %{_libdir}/cmake/ucx/*.cmake
 %{_datadir}/ucx/examples
 
@@ -154,6 +156,36 @@ rm -f %{buildroot}%{_libdir}/ucx/lib*.a
 /sbin/ldconfig
 
 %postun -p /sbin/ldconfig
+
+%package static
+Requires: %{name}%{?_isa} = %{version}-%{release}
+Summary: Static libraries required for developing with UCX
+Group: Development/Libraries
+
+%description static
+Provides static libraries required for developing with UCX.
+
+%files static
+%{_libdir}/lib*.a
+%{_libdir}/ucx/lib*.a
+%if %{with cma}
+%{_libdir}/pkgconfig/ucx-cma.pc
+%endif
+%if %{with knem}
+%{_libdir}/pkgconfig/ucx-knem.pc
+%endif
+%if %{with xpmem}
+%{_libdir}/pkgconfig/ucx-xpmem.pc
+%endif
+%if %{with ib}
+%{_libdir}/pkgconfig/ucx-ib.pc
+%endif
+%if %{with rdmacm}
+%{_libdir}/pkgconfig/ucx-rdmacm.pc
+%endif
+%if %{with vfs}
+%{_libdir}/pkgconfig/ucx-fuse.pc
+%endif
 
 %if %{with cma}
 %package cma
@@ -317,6 +349,8 @@ library internals, protocol objects, transports status, and more.
 %endif
 
 %changelog
+* Sat Apr 16 2022 Yossi Itigin <yosefe@mellanox.com> 1.14.0-1
+- Bump version to 1.14.0
 * Wed Nov 10 2021 Yossi Itigin <yosefe@mellanox.com> 1.13.0-1
 - Bump version to 1.13.0
 * Wed Jun 9 2021 Yossi Itigin <yosefe@mellanox.com> 1.12.0-1

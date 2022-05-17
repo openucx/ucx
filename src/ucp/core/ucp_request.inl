@@ -551,7 +551,11 @@ ucp_send_request_add_reg_lane(ucp_request_t *req, ucp_lane_index_t lane)
     /* Add new lane to registration map */
     ucp_md_map_t md_map;
 
-    if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
+    if (req->flags & UCP_REQUEST_FLAG_USER_MEMH) {
+        /* Do not force using the existing registration map if it's user memory
+           handle, since number of memory domains can exceed UCP_MAX_OP_MDS. */
+        md_map = 0;
+    } else if (ucs_likely(UCP_DT_IS_CONTIG(req->send.datatype))) {
         md_map = req->send.state.dt.dt.contig.md_map;
     } else if (UCP_DT_IS_IOV(req->send.datatype) &&
                (req->send.state.dt.dt.iov.dt_reg != NULL)) {
@@ -598,24 +602,22 @@ static UCS_F_ALWAYS_INLINE void
 ucp_request_init_dt_reg_from_memh(ucp_request_t *req, ucp_md_map_t md_map,
                                   ucp_mem_h memh, ucp_dt_reg_t *dt_reg)
 {
-    ucp_md_index_t md_index, src_memh_index, dst_memh_index;
+    ucp_md_index_t md_index, memh_index;
 
     ucs_assertv(dt_reg->md_map == 0, "md_map=0x%" PRIx64, dt_reg->md_map);
     ucs_assert((dt_reg == &req->send.state.dt.dt.contig) ||
                (dt_reg == &req->recv.state.dt.contig));
 
-    req->flags    |= UCP_REQUEST_FLAG_USER_MEMH;
-    src_memh_index = 0;
-    dst_memh_index = 0;
+    req->flags |= UCP_REQUEST_FLAG_USER_MEMH;
+    memh_index  = 0;
     ucs_for_each_bit(md_index, memh->md_map) {
         if (md_map & UCS_BIT(md_index)) {
-            dt_reg->memh[dst_memh_index++] = memh->uct[src_memh_index];
-            dt_reg->md_map                |= UCS_BIT(md_index);
-            if (dst_memh_index >= UCP_MAX_OP_MDS) {
+            dt_reg->memh[memh_index++] = memh->uct[md_index];
+            dt_reg->md_map            |= UCS_BIT(md_index);
+            if (memh_index >= UCP_MAX_OP_MDS) {
                 break;
             }
         }
-        ++src_memh_index;
     }
 }
 
@@ -636,14 +638,16 @@ ucp_request_is_user_memh_valid(ucp_request_t *req,
     }
 
     if (ENABLE_PARAMS_CHECK &&
-        ((param->memh == NULL) || (buffer < param->memh->address) ||
+        ((param->memh == NULL) || (buffer < ucp_memh_address(param->memh)) ||
          (UCS_PTR_BYTE_OFFSET(buffer, length) >
-          UCS_PTR_BYTE_OFFSET(param->memh->address, param->memh->length)) ||
+          UCS_PTR_BYTE_OFFSET(ucp_memh_address(param->memh),
+                              ucp_memh_length(param->memh))) ||
          (param->memh->mem_type != mem_type))) {
         ucs_error("req %p: mismatched memory handle [buffer %p length %zu %s]"
                   " memh %p [address %p length %zu %s]",
                   req, buffer, length, ucs_memory_type_names[mem_type],
-                  param->memh, param->memh->address, param->memh->length,
+                  param->memh, ucp_memh_address(param->memh),
+                  ucp_memh_length(param->memh),
                   ucs_memory_type_names[param->memh->mem_type]);
         *status_p = UCS_ERR_INVALID_PARAM;
         return 0;
@@ -815,6 +819,7 @@ ucp_recv_desc_init(ucp_worker_h worker, void *data, size_t length,
         rdesc = (ucp_recv_desc_t*)ucs_mpool_set_get_inline(&worker->am_mps,
                                                            length);
         if (rdesc == NULL) {
+            *rdesc_p = NULL; /* To suppress compiler warning */
             ucs_error("ucp recv descriptor is not allocated");
             return UCS_ERR_NO_MEMORY;
         }
@@ -1054,6 +1059,7 @@ ucp_send_request_get_by_id(ucp_worker_h worker, ucs_ptr_map_key_t id,
 
     status = UCS_PTR_MAP_GET(request, &worker->request_map, id, extract, &ptr);
     if (ucs_unlikely((status != UCS_OK) && (status != UCS_ERR_NO_PROGRESS))) {
+        *req_p = NULL; /* To suppress compiler warning */
         return status;
     }
 

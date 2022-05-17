@@ -58,7 +58,8 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
 {
     uct_rocm_ipc_ep_t *ep = ucs_derived_of(tl_ep, uct_rocm_ipc_ep_t);
     hsa_status_t status;
-    hsa_agent_t local_agent;
+    hsa_agent_t local_agent, remote_agent;
+    hsa_agent_t dst_agent, src_agent;
     size_t size = uct_iov_get_length(iov);
     ucs_status_t ret = UCS_OK;
     void *base_addr, *local_addr = iov->buffer;
@@ -66,6 +67,10 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
     void *remote_base_addr, *remote_copy_addr;
     void *dst_addr, *src_addr;
     uct_rocm_ipc_signal_desc_t *rocm_ipc_signal;
+    void *tmp_base_ptr;
+    size_t tmp_base_size;
+    hsa_agent_t *gpu_agents;
+    int num_gpu;
 
     /* no data to deliver */
     if (!size)
@@ -94,22 +99,46 @@ ucs_status_t uct_rocm_ipc_ep_zcopy(uct_ep_h tl_ep,
 
     remote_copy_addr = UCS_PTR_BYTE_OFFSET(remote_base_addr,
                                            remote_addr - key->address);
-    if (is_put) {
-        dst_addr = remote_copy_addr;
-        src_addr = local_addr;
+
+    memset(&remote_agent, 0, sizeof(hsa_agent_t));
+    status = uct_rocm_base_get_ptr_info(remote_copy_addr, size, &tmp_base_ptr,
+                                        &tmp_base_size, &remote_agent);
+    if (status != HSA_STATUS_SUCCESS) {
+        return UCS_ERR_INVALID_ADDR;
     }
-    else {
-        dst_addr = local_addr;
-        src_addr = remote_copy_addr;
+
+    if (remote_agent.handle == 0) {
+        /* No access to remote agent, e.g. because of limited visability of devices to
+         * this process. Using local_agent as a backup plan. */
+        remote_agent = local_agent;
+    } else {
+        num_gpu = uct_rocm_base_get_gpu_agents(&gpu_agents);
+        status  = hsa_amd_agents_allow_access(num_gpu, gpu_agents, NULL,
+                                              base_addr);
+        if (status != HSA_STATUS_SUCCESS) {
+            ucs_error("failed to enable direct access for mem addr %p agent "
+		      "%lu\n",
+                      (void*)remote_addr, remote_agent.handle);
+            return UCS_ERR_INVALID_ADDR;
+        }
+    }
+    if (is_put) {
+        dst_addr  = remote_copy_addr;
+        dst_agent = remote_agent;
+        src_addr  = local_addr;
+        src_agent = local_agent;
+    } else {
+        dst_addr  = local_addr;
+        dst_agent = local_agent;
+        src_addr  = remote_copy_addr;
+        src_agent = remote_agent;
     }
 
     rocm_ipc_signal = ucs_mpool_get(&iface->signal_pool);
     hsa_signal_store_screlease(rocm_ipc_signal->signal, 1);
 
-    status = hsa_amd_memory_async_copy(dst_addr, local_agent,
-                                       src_addr, local_agent,
-                                       size, 0, NULL,
-                                       rocm_ipc_signal->signal);
+    status = hsa_amd_memory_async_copy(dst_addr, dst_agent, src_addr, src_agent,
+                                       size, 0, NULL, rocm_ipc_signal->signal);
 
     if (status != HSA_STATUS_SUCCESS) {
         ucs_error("copy error");

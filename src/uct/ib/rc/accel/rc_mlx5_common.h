@@ -23,17 +23,7 @@
 #endif
 
 #if IBV_HW_TM
-#  if HAVE_INFINIBAND_TM_TYPES_H
-#    include <infiniband/tm_types.h>
-#  else
-#    define ibv_tmh                         ibv_exp_tmh
-#    define ibv_rvh                         ibv_exp_tmh_rvh
-#    define IBV_TM_CAP_RC                   IBV_EXP_TM_CAP_RC
-#    define IBV_TMH_EAGER                   IBV_EXP_TMH_EAGER
-#    define IBV_TMH_RNDV                    IBV_EXP_TMH_RNDV
-#    define IBV_TMH_FIN                     IBV_EXP_TMH_FIN
-#    define IBV_TMH_NO_TAG                  IBV_EXP_TMH_NO_TAG
-#  endif
+#  include <infiniband/tm_types.h>
 #  define IBV_DEVICE_TM_CAPS(_dev, _field)  ((_dev)->dev_attr.tm_caps._field)
 #else
 #  define IBV_TM_CAP_RC                     0
@@ -47,10 +37,6 @@
 #endif
 
 #define IBV_DEVICE_MAX_UNEXP_COUNT          UCS_BIT(14)
-
-#if HAVE_DECL_IBV_EXP_CREATE_SRQ
-#  define ibv_srq_init_attr_ex              ibv_exp_create_srq_attr
-#endif
 
 #define UCT_RC_MLX5_OPCODE_FLAG_RAW         0x100
 #define UCT_RC_MLX5_OPCODE_FLAG_TM          0x200
@@ -444,7 +430,7 @@ typedef struct uct_rc_mlx5_iface_common_config {
         size_t                           mp_num_strides;
     } tm;
     unsigned                             exp_backoff;
-    uint8_t                              log_ack_req_freq;
+    unsigned                             log_ack_req_freq;
     UCS_CONFIG_STRING_ARRAY_FIELD(types) srq_topo;
 } uct_rc_mlx5_iface_common_config_t;
 
@@ -487,23 +473,6 @@ UCS_CLASS_DECLARE(uct_rc_mlx5_iface_common_t, uct_iface_ops_t*,
    } else { \
        _res_op = UCS_PP_TOKENPASTE(_op, _imm_suffix); \
        uct_rc_mlx5_tag_imm_data_pack(&(_ib_imm), &(_app_ctx), _imm_data); \
-   }
-
-#define UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, _hdr) \
-   { \
-       UCT_RC_IFACE_GET_TX_DESC(_iface, _mp, _desc) \
-       _hdr = _desc + 1; \
-       uct_rc_mlx5_fill_tmh(_hdr, _tag, _app_ctx, IBV_EXP_TMH_EAGER); \
-       _hdr += sizeof(struct ibv_tmh); \
-   }
-
-#define UCT_RC_MLX5_GET_TM_BCOPY_DESC(_iface, _mp, _desc, _tag, _app_ctx, \
-                                      _pack_cb, _arg, _length) \
-   { \
-       void *hdr; \
-       UCT_RC_MLX5_GET_TX_TM_DESC(_iface, _mp, _desc, _tag, _app_ctx, hdr) \
-       (_desc)->super.handler = (uct_rc_send_handler_t)ucs_mpool_put; \
-       _length = _pack_cb(hdr, _arg); \
    }
 
 
@@ -692,7 +661,7 @@ uct_rc_mlx5_devx_init_rx(uct_rc_mlx5_iface_common_t *iface,
 static UCS_F_MAYBE_UNUSED void
 uct_rc_mlx5_devx_cleanup_srq(uct_ib_mlx5_md_t *md, uct_ib_mlx5_srq_t *srq)
 {
-    ucs_bug("DevX SRQ cleanup has to be done only if DevX support is enabled");
+    ucs_bug("DEVX SRQ cleanup has to be done only if DEVX support is enabled");
 }
 #endif
 

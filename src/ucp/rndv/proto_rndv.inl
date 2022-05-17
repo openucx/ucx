@@ -48,8 +48,8 @@ ucp_proto_rndv_rts_request_init(ucp_request_t *req)
     status = ucp_datatype_iter_mem_reg(ep->worker->context,
                                        &req->send.state.dt_iter, rpriv->md_map,
                                        UCT_MD_MEM_ACCESS_RMA |
-                                       UCT_MD_MEM_FLAG_HIDE_ERRORS,
-                                       UCS_BIT(UCP_DATATYPE_CONTIG));
+                                               UCT_MD_MEM_FLAG_HIDE_ERRORS,
+                                       UCP_DT_MASK_ALL);
     if (status != UCS_OK) {
         return status;
     }
@@ -95,16 +95,15 @@ static UCS_F_ALWAYS_INLINE size_t ucp_proto_rndv_rts_pack(
     rts->sreq.req_id = ucp_send_request_get_id(req);
     rts->sreq.ep_id  = ucp_send_request_get_ep_remote_id(req);
     rts->size        = req->send.state.dt_iter.length;
+    rpriv            = req->send.proto_config->priv;
 
-    if ((rts->size == 0) ||
-        (req->send.state.dt_iter.type.contig.reg.md_map == 0)) {
+    if ((rts->size == 0) || (rpriv->md_map == 0)) {
         rts->address = 0;
         rkey_size    = 0;
     } else {
-        rpriv        = req->send.proto_config->priv;
         rts->address = (uintptr_t)req->send.state.dt_iter.type.contig.buffer;
         rkey_size    = UCS_PROFILE_CALL(ucp_proto_request_pack_rkey, req,
-                                        rpriv->sys_dev_map,
+                                        rpriv->md_map, rpriv->sys_dev_map,
                                         rpriv->sys_dev_distance, rkey_buffer);
     }
 
@@ -300,7 +299,13 @@ ucp_proto_rndv_recv_complete_status(ucp_request_t *req, ucs_status_t status)
 
     ucs_assert(!ucp_proto_rndv_request_is_ppln_frag(req));
 
-    ucp_request_complete_tag_recv(rreq, status);
+    if (rreq->flags & UCP_REQUEST_FLAG_RECV_AM) {
+        ucp_request_complete_am_recv(rreq, status);
+    } else {
+        ucs_assert(rreq->flags & UCP_REQUEST_FLAG_RECV_TAG);
+        ucp_request_complete_tag_recv(rreq, status);
+    }
+
     ucp_request_put(req);
     return UCS_OK;
 }

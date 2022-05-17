@@ -334,14 +334,52 @@ ucs_status_t uct_mem_free(const uct_allocated_memory_t *mem)
     }
 }
 
+static int uct_iface_is_allowed_alloc_method(uct_base_iface_t *iface,
+                                             uct_alloc_method_t method)
+{
+    unsigned i;
+
+    for (i = 0; i < iface->config.num_alloc_methods; i++) {
+        if (iface->config.alloc_methods[i] == method) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned flags,
                                  const char *name, uct_allocated_memory_t *mem)
 {
-    uct_base_iface_t *iface = ucs_derived_of(tl_iface, uct_base_iface_t);
-    void *address           = NULL;
+    static uct_alloc_method_t method_md = UCT_ALLOC_METHOD_MD;
+    uct_base_iface_t *iface             = ucs_derived_of(tl_iface,
+                                                         uct_base_iface_t);
+    void *address                       = NULL;
     uct_md_attr_t md_attr;
     ucs_status_t status;
     uct_mem_alloc_params_t params;
+    unsigned num_alloc_methods;
+    uct_alloc_method_t *alloc_methods;
+
+    status = uct_md_query(iface->md, &md_attr);
+    if (status != UCS_OK) {
+        goto err;
+    }
+
+    if (!(md_attr.cap.flags & UCT_MD_FLAG_REG) &&
+        uct_iface_is_allowed_alloc_method(iface, UCT_ALLOC_METHOD_MD)) {
+        /* If MD does not support registration, allow only the MD method */
+        alloc_methods     = &method_md;
+        num_alloc_methods = 1;
+    } else if (!(md_attr.cap.flags & UCT_MD_FLAG_REG)) {
+        /* If MD does not support registration and MD method is not in list
+         * return error */
+        status = UCS_ERR_NO_MEMORY;
+        goto err;
+    } else {
+        alloc_methods     = iface->config.alloc_methods;
+        num_alloc_methods = iface->config.num_alloc_methods;
+    }
 
     params.field_mask      = UCT_MEM_ALLOC_PARAM_FIELD_FLAGS    |
                              UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
@@ -355,21 +393,14 @@ ucs_status_t uct_iface_mem_alloc(uct_iface_h tl_iface, size_t length, unsigned f
     params.mds.mds         = &iface->md;
     params.mds.count       = 1;
 
-    status = uct_mem_alloc(length, iface->config.alloc_methods,
-                           iface->config.num_alloc_methods, &params, mem);
+    status = uct_mem_alloc(length, alloc_methods, num_alloc_methods, &params,
+                           mem);
     if (status != UCS_OK) {
         goto err;
     }
 
     /* If the memory was not allocated using MD, register it */
     if (mem->method != UCT_ALLOC_METHOD_MD) {
-
-        status = uct_md_query(iface->md, &md_attr);
-        if (status != UCS_OK) {
-            goto err_free;
-        }
-
-        /* If MD does not support registration, allow only the MD method */
         if ((md_attr.cap.flags & UCT_MD_FLAG_REG) &&
             (md_attr.cap.reg_mem_types & UCS_BIT(mem->mem_type))) {
             status = uct_md_mem_reg(iface->md, mem->address, mem->length, flags,
@@ -409,8 +440,9 @@ static inline uct_iface_mp_priv_t* uct_iface_mp_priv(ucs_mpool_t *mp)
     return (uct_iface_mp_priv_t*)ucs_mpool_priv(mp);
 }
 
-UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
-                 ucs_mpool_t *mp, size_t *size_p, void **chunk_p)
+UCS_PROFILE_FUNC_ALWAYS(ucs_status_t, uct_iface_mp_chunk_alloc,
+                        (mp, size_p, chunk_p), ucs_mpool_t *mp, size_t *size_p,
+                        void **chunk_p)
 {
     uct_base_iface_t *iface = uct_iface_mp_priv(mp)->iface;
     uct_iface_mp_chunk_hdr_t *hdr;
@@ -438,8 +470,8 @@ UCS_PROFILE_FUNC(ucs_status_t, uct_iface_mp_chunk_alloc, (mp, size_p, chunk_p),
     return UCS_OK;
 }
 
-UCS_PROFILE_FUNC_VOID(uct_iface_mp_chunk_release, (mp, chunk),
-                      ucs_mpool_t *mp, void *chunk)
+UCS_PROFILE_FUNC_VOID_ALWAYS(uct_iface_mp_chunk_release, (mp, chunk),
+                             ucs_mpool_t *mp, void *chunk)
 {
     uct_base_iface_t *iface = uct_iface_mp_priv(mp)->iface;
     uct_iface_mp_chunk_hdr_t *hdr;

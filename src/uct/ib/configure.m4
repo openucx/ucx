@@ -132,58 +132,11 @@ AS_IF([test "x$with_ib" = "xyes"],
        LDFLAGS="$IBVERBS_LDFLAGS $LDFLAGS"
        CFLAGS="$IBVERBS_CFLAGS $CFLAGS"
        CPPFLAGS="$IBVERBS_CPPFLAGS $CPPFLAGS"
-       AC_CHECK_HEADER([infiniband/verbs_exp.h],
-           [AC_DEFINE([HAVE_VERBS_EXP_H], 1, [IB experimental verbs])
-           verbs_exp=yes],
-           [verbs_exp=no])
-
-       AC_CHECK_MEMBERS([struct ibv_exp_device_attr.exp_device_cap_flags,
-                         struct ibv_exp_device_attr.odp_caps,
-                         struct ibv_exp_device_attr.odp_caps.per_transport_caps.dc_odp_caps,
-                         struct ibv_exp_device_attr.odp_mr_max_size,
-                         struct ibv_exp_qp_init_attr.max_inl_recv,
-                         struct ibv_async_event.element.dct],
-                        [], [], [[#include <infiniband/verbs_exp.h>]])
 
        AC_CHECK_DECLS([IBV_CREATE_CQ_ATTR_IGNORE_OVERRUN],
                       [have_cq_io=yes], [], [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_DECLS([IBV_EXP_CQ_IGNORE_OVERRUN],
-                      [have_cq_io=yes], [], [[#include <infiniband/verbs_exp.h>]])
-
        AS_IF([test "x$with_mlx5_dv" != xno], [
-               AC_MSG_NOTICE([Checking for legacy bare-metal support])
-               AC_CHECK_HEADERS([infiniband/mlx5_hw.h],
-                               [with_mlx5_hw=yes
-                                mlx5_include=mlx5_hw.h
-                       AC_CHECK_DECLS([
-                           ibv_mlx5_exp_get_qp_info,
-                           ibv_mlx5_exp_get_cq_info,
-                           ibv_mlx5_exp_get_srq_info,
-                           ibv_mlx5_exp_update_cq_ci,
-                           MLX5_WQE_CTRL_SOLICITED],
-                                  [], [], [[#include <infiniband/mlx5_hw.h>]])
-                       AC_CHECK_MEMBERS([struct mlx5_srq.cmd_qp],
-                                  [], [with_ib_hw_tm=no],
-                                      [[#include <infiniband/mlx5_hw.h>]])
-                       AC_CHECK_MEMBERS([struct mlx5_ah.ibv_ah],
-                                  [has_get_av=yes], [],
-                                      [[#include <infiniband/mlx5_hw.h>]])
-                       AC_CHECK_MEMBERS([struct ibv_mlx5_qp_info.bf.need_lock],
-                               [],
-                               [AC_MSG_WARN([Cannot use mlx5 QP because it assumes dedicated BF])
-                                AC_MSG_WARN([Please upgrade MellanoxOFED to 3.0 or above])
-                                with_mlx5_hw=no],
-                               [[#include <infiniband/mlx5_hw.h>]])
-                       AC_CHECK_DECLS([
-                           IBV_EXP_QP_INIT_ATTR_RES_DOMAIN,
-                           IBV_EXP_RES_DOMAIN_THREAD_MODEL,
-                           ibv_exp_create_res_domain,
-                           ibv_exp_destroy_res_domain],
-                                [AC_DEFINE([HAVE_IBV_EXP_RES_DOMAIN], 1, [IB resource domain])
-                                 has_res_domain=yes], [], [[#include <infiniband/verbs_exp.h>]])
-                               ], [with_mlx5_hw=no])
-
               AC_MSG_NOTICE([Checking for DV bare-metal support])
 
               AC_CHECK_LIB([mlx5-rdmav2], [mlx5dv_query_device],
@@ -194,8 +147,7 @@ AS_IF([test "x$with_ib" = "xyes"],
 
               AS_IF([test "x$with_mlx5_dv" != xno], [
                        AC_CHECK_HEADERS([infiniband/mlx5dv.h],
-                               [with_mlx5_hw=yes
-                                with_mlx5_dv=yes
+                               [with_mlx5_dv=yes
                                 mlx5_include=mlx5dv.h], [], [ ])])
 
               AS_IF([test "x$with_mlx5_dv" = "xyes" -a "x$have_cq_io" = "xyes" ], [
@@ -204,6 +156,7 @@ AS_IF([test "x$with_ib" = "xyes"],
                            mlx5dv_create_qp,
                            mlx5dv_is_supported,
                            mlx5dv_devx_subscribe_devx_event,
+                           MLX5DV_CQ_INIT_ATTR_MASK_COMPRESSED_CQE,
                            MLX5DV_CQ_INIT_ATTR_MASK_CQE_SIZE,
                            MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE,
                            MLX5DV_UAR_ALLOC_TYPE_BF,
@@ -228,11 +181,10 @@ AS_IF([test "x$with_ib" = "xyes"],
                     ], [[#include <infiniband/mlx5dv.h>]])])])
 
        AS_IF([test "x$has_res_domain" = "xyes" -a "x$have_cq_io" = "xyes" ], [], [
-               with_mlx5_hw=no])
+               with_mlx5_dv=no])
 
-       AS_IF([test "x$with_mlx5_hw" = "xyes"],
-             [AC_MSG_NOTICE([Compiling with mlx5 bare-metal support])
-              AC_DEFINE([HAVE_MLX5_HW], 1, [mlx5 bare-metal support])
+       AS_IF([test "x$with_mlx5_dv" = "xyes"],
+             [AC_DEFINE([HAVE_MLX5_DV], 1, [mlx5 DV support])
               AS_IF([test "x$has_get_av" = "xyes"],
                  [AC_DEFINE([HAVE_MLX5_HW_UD], 1, [mlx5 UD bare-metal support])])])
 
@@ -253,86 +205,14 @@ AS_IF([test "x$with_ib" = "xyes"],
                           [have upstream ibv_query_device_ex])])],
                           [], [[#include <infiniband/verbs.h>]])
 
-       AC_CHECK_DECLS([IBV_EXP_ACCESS_ALLOCATE_MR,
-                       IBV_EXP_ACCESS_ON_DEMAND,
-                       IBV_EXP_DEVICE_MR_ALLOCATE,
-                       IBV_EXP_WR_NOP,
-                       IBV_EXP_DEVICE_DC_TRANSPORT,
-                       IBV_EXP_ATOMIC_HCA_REPLY_BE,
-                       IBV_EXP_PREFETCH_WRITE_ACCESS,
-                       IBV_EXP_QP_OOO_RW_DATA_PLACEMENT,
-                       IBV_EXP_DCT_OOO_RW_DATA_PLACEMENT,
-                       IBV_EXP_CQ_MODERATION,
-                       IBV_EXP_DEVICE_ATTR_PCI_ATOMIC_CAPS,
-                       ibv_exp_reg_mr,
-                       ibv_exp_create_qp,
-                       ibv_exp_prefetch_mr,
-                       ibv_exp_create_srq,
-                       ibv_exp_setenv,
-                       ibv_exp_query_gid_attr,
-                       ibv_exp_query_device],
-                      [], [], [[#include <infiniband/verbs_exp.h>]])
-
-       AC_CHECK_DECLS([ibv_exp_post_send,
-                       IBV_EXP_WR_EXT_MASKED_ATOMIC_CMP_AND_SWP,
-                       IBV_EXP_WR_EXT_MASKED_ATOMIC_FETCH_AND_ADD,
-                       IBV_EXP_QP_INIT_ATTR_ATOMICS_ARG,
-                       IBV_EXP_SEND_EXT_ATOMIC_INLINE],
-                      [],
-                      [have_ext_atomics=no],
-                      [[#include <infiniband/verbs_exp.h>]])
-
-       AC_CHECK_DECLS(IBV_EXP_DEVICE_ATTR_RESERVED_2, [], [],
-                      [[#include <infiniband/verbs_exp.h>]])
-
-       # UMR support
-       AC_CHECK_DECLS(IBV_EXP_MR_INDIRECT_KLMS,
-                     [AC_DEFINE([HAVE_EXP_UMR], 1, [IB UMR support])],
-                     [],
-                     [[#include <infiniband/verbs.h>]])
-
-       AC_CHECK_DECLS(IBV_EXP_QP_CREATE_UMR,
-                     [AC_DEFINE([HAVE_IBV_EXP_QP_CREATE_UMR], 1, [IB QP Create UMR support])],
-                     [],
-                     [[#include <infiniband/verbs.h>]])
-
-       AC_CHECK_MEMBERS([struct ibv_exp_qp_init_attr.umr_caps],
-                        [AC_DEFINE([HAVE_IBV_EXP_QP_CREATE_UMR_CAPS], 1, [Support UMR max caps v2])],
-                        [],
-                        [[#include <infiniband/verbs.h>]])
-
-       AC_CHECK_DECLS(IBV_EXP_MR_FIXED_BUFFER_SIZE,
-                     [AC_DEFINE([HAVE_EXP_UMR_KSM], 1, [IB UMR KSM support])],
-                     [],
-                     [[#include <infiniband/verbs.h>]])
-
        AC_CHECK_MEMBERS([struct ibv_device_attr_ex.pci_atomic_caps],
                         [], [], [[#include <infiniband/verbs.h>]])
-
-       # Extended atomics
-       AS_IF([test "x$have_ext_atomics" != xno],
-             [AC_DEFINE([HAVE_IB_EXT_ATOMICS], 1, [IB extended atomics support])],
-             [AC_MSG_WARN([Compiling without extended atomics support])])
-
-       # Check for driver which exposes masked atomics endianity per size
-       AC_CHECK_MEMBER(struct ibv_exp_masked_atomic_params.masked_log_atomic_arg_sizes_network_endianness,
-                       [AC_DEFINE([HAVE_MASKED_ATOMICS_ENDIANNESS], 1, [have masked atomic endianness])],
-                       [], [[#include <infiniband/verbs_exp.h>]])
-
-       AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [], [],
-                      [[#include <infiniband/verbs.h>]])
-
-       AC_CHECK_DECLS(IBV_EXP_ACCESS_ON_DEMAND, [with_odp=yes], [],
-                      [[#include <infiniband/verbs_exp.h>]])
 
        AC_CHECK_DECLS(IBV_ACCESS_ON_DEMAND, [with_odp=yes], [],
                       [[#include <infiniband/verbs.h>]])
 
        AS_IF([test "x$with_odp" = "xyes" ], [
            AC_DEFINE([HAVE_ODP], 1, [ODP support])
-
-           AC_CHECK_DECLS(IBV_EXP_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
-                          [[#include <infiniband/verbs_exp.h>]])
 
            AC_CHECK_DECLS(IBV_ODP_SUPPORT_IMPLICIT, [with_odp_i=yes], [],
                           [[#include <infiniband/verbs.h>]])
@@ -343,9 +223,6 @@ AS_IF([test "x$with_ib" = "xyes"],
        AC_CHECK_DECLS([IBV_ACCESS_RELAXED_ORDERING,
                        IBV_QPF_GRH_REQUIRED],
                       [], [], [[#include <infiniband/verbs.h>]])
-
-       AC_CHECK_DECLS(ibv_exp_prefetch_mr, [with_prefetch=yes], [],
-                      [[#include <infiniband/verbs_exp.h>]])
 
        AC_CHECK_DECLS(ibv_advise_mr, [with_prefetch=yes], [],
                       [[#include <infiniband/verbs.h>]])
@@ -362,15 +239,10 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        AC_DEFINE([HAVE_IB], 1, [IB support])
 
-       AC_CHECK_DECLS([IBV_EXP_QPT_DC_INI],
-                [have_dc_exp=yes], [], [[#include <infiniband/verbs.h>]])
-
-       AS_IF([test "x$with_dc" != xno -a \( "x$have_dc_exp" = xyes -o "x$have_dc_dv" = xyes \) -a "x$with_mlx5_hw" = "xyes"], [
+       AS_IF([test "x$with_dc" != xno -a "x$have_dc_dv" = xyes -a "x$with_mlx5_dv" = "xyes"], [
            AC_DEFINE([HAVE_TL_DC], 1, [DC transport support])
            AS_IF([test -n "$have_dc_dv"],
-                 [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])], [
-           AS_IF([test -n "$have_dc_exp"],
-                 [AC_DEFINE([HAVE_DC_EXP], 1, [DC EXP support])])])],
+                 [AC_DEFINE([HAVE_DC_DV], 1, [DC DV support])])],
            [with_dc=no])
 
        AS_IF([test "x$with_rc" != xno],
@@ -381,18 +253,10 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        # XRQ with Tag Matching support
        AS_IF([test "x$with_ib_hw_tm" != xno], [
-            AC_CHECK_MEMBER([struct ibv_exp_tmh.tag], [with_ib_hw_tm=exp], [],
-                            [[#include <infiniband/verbs_exp.h>]])
             AS_IF([test "x$with_mlx5_dv" = "xyes"], [
-                AC_CHECK_HEADERS([infiniband/tm_types.h])
                 AC_CHECK_MEMBER([struct ibv_tmh.tag], [with_ib_hw_tm=upstream], [],
                                 [[#include <infiniband/tm_types.h>]])])])
 
-       AS_IF([test "x$with_ib_hw_tm" = xexp],
-           [AC_CHECK_MEMBERS([struct ibv_exp_create_srq_attr.dc_offload_params], [
-            AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
-                      ], [], [#include <infiniband/verbs_exp.h>])
-           ])
        AS_IF([test "x$with_ib_hw_tm" = xupstream],
            [AC_DEFINE([IBV_HW_TM], 1, [IB Tag Matching support])
             AC_CHECK_MEMBERS([struct ibv_tm_caps.flags], [], [],
@@ -400,10 +264,6 @@ AS_IF([test "x$with_ib" = "xyes"],
 
        # Device Memory support
        AS_IF([test "x$with_dm" != xno], [
-           AC_CHECK_DECLS([ibv_exp_alloc_dm],
-               [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])
-                AC_DEFINE([HAVE_IBV_EXP_DM], 1, [Device Memory support (EXP)])],
-               [], [[#include <infiniband/verbs_exp.h>]])
            AC_CHECK_DECLS([ibv_alloc_dm],
                [AC_DEFINE([HAVE_IBV_DM], 1, [Device Memory support])],
                [], [[#include <infiniband/verbs.h>]])])
@@ -427,7 +287,6 @@ AS_IF([test "x$with_ib" = "xyes"],
         with_dc=no
         with_rc=no
         with_ud=no
-        with_mlx5_hw=no
         with_mlx5_dv=no
     ])
 
@@ -438,13 +297,10 @@ AM_CONDITIONAL([HAVE_IB],      [test "x$with_ib" != xno])
 AM_CONDITIONAL([HAVE_TL_RC],   [test "x$with_rc" != xno])
 AM_CONDITIONAL([HAVE_TL_DC],   [test "x$with_dc" != xno])
 AM_CONDITIONAL([HAVE_DC_DV],   [test -n "$have_dc_dv"])
-AM_CONDITIONAL([HAVE_DC_EXP],  [test -n "$have_dc_exp"])
 AM_CONDITIONAL([HAVE_TL_UD],   [test "x$with_ud" != xno])
-AM_CONDITIONAL([HAVE_MLX5_HW], [test "x$with_mlx5_hw" != xno])
 AM_CONDITIONAL([HAVE_MLX5_DV], [test "x$with_mlx5_dv" = xyes])
 AM_CONDITIONAL([HAVE_DEVX],    [test -n "$have_devx"])
-AM_CONDITIONAL([HAVE_EXP],     [test "x$verbs_exp" != xno])
-AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_hw" != xno -a "x$has_get_av" != xno])
+AM_CONDITIONAL([HAVE_MLX5_HW_UD], [test "x$with_mlx5_dv" != xno -a "x$has_get_av" != xno])
 
 uct_ib_modules=""
 m4_include([src/uct/ib/rdmacm/configure.m4])

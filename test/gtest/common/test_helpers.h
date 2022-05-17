@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <dirent.h>
 #include <stdint.h>
+#include <ifaddrs.h>
 
 
 #ifndef UINT16_MAX
@@ -304,9 +305,15 @@ void safe_usleep(double usec);
 
 
 /**
- * Check if the given interface has an IPv4 or an IPv6 address.
+ * Check if the given network interface has an IPv4 or an IPv6 address.
  */
 bool is_inet_addr(const struct sockaddr* ifa_addr);
+
+
+/**
+ * Check if the given network interface should be used for testing.
+ */
+bool is_interface_usable(struct ifaddrs *ifa);
 
 
 /**
@@ -337,6 +344,12 @@ std::string compact_string(const std::string &str, size_t length);
  * Converts exit status from waitpid()/system() to a status string
  */
 std::string exit_status_info(int exit_status);
+
+
+/*
+ * Limit test buffer size according to available memory
+ */
+size_t limit_buffer_size(size_t size = std::numeric_limits<size_t>::max());
 
 
 /**

@@ -88,8 +88,6 @@
 
 
 enum {
-    UCT_RC_IFACE_STAT_RX_COMPLETION,
-    UCT_RC_IFACE_STAT_TX_COMPLETION,
     UCT_RC_IFACE_STAT_NO_CQE,
     UCT_RC_IFACE_STAT_NO_READS,
     UCT_RC_IFACE_STAT_LAST
@@ -147,7 +145,7 @@ typedef enum uct_rc_fence_mode {
 /* Common configuration used for rc verbs, rcx and dc transports */
 typedef struct uct_rc_iface_common_config {
     uct_ib_iface_config_t    super;
-    unsigned                 max_rd_atomic;
+    unsigned long            max_rd_atomic;
     int                      ooo_rw; /* Enable out-of-order RDMA data placement */
     int                      fence_mode;
 
@@ -176,8 +174,6 @@ struct uct_rc_iface_config {
     unsigned                       tx_cq_moderation; /* How many TX messages are
                                                         batched to one CQE */
     unsigned                       tx_cq_len;
-    unsigned                       log_ack_req_freq; /* Log of requests ack
-                                                        frequency on DevX */
 };
 
 
@@ -270,7 +266,7 @@ struct uct_rc_iface {
         unsigned             tx_qp_len;
         unsigned             tx_min_sge;
         unsigned             tx_min_inline;
-        unsigned             tx_ops_count;
+        unsigned             tx_cq_len;
         uint16_t             tx_moderation;
         uint8_t              tx_poll_always;
 
@@ -292,9 +288,6 @@ struct uct_rc_iface {
         uint8_t              max_rd_atomic;
         /* Enable out-of-order RDMA data placement */
         uint8_t              ooo_rw;
-#if UCS_ENABLE_ASSERT
-        int                  tx_cq_len;
-#endif
         uct_rc_fence_mode_t  fence_mode;
         unsigned             exp_backoff;
         size_t               max_get_zcopy;
@@ -430,6 +423,9 @@ ucs_status_t uct_rc_iface_init_rx(uct_rc_iface_t *iface,
 
 ucs_status_t uct_rc_iface_fence(uct_iface_h tl_iface, unsigned flags);
 
+ucs_status_t uct_rc_iface_estimate_perf(uct_iface_h tl_iface,
+                                        uct_perf_attr_t *perf_attr);
+
 void uct_rc_iface_vfs_populate(uct_rc_iface_t *iface);
 
 void uct_rc_iface_vfs_refresh(uct_iface_h iface);
@@ -489,16 +485,17 @@ static UCS_F_ALWAYS_INLINE void
 uct_rc_iface_add_cq_credits(uct_rc_iface_t *iface, uint16_t cq_credits)
 {
     iface->tx.cq_available += cq_credits;
-    ucs_assertv(iface->tx.cq_available <= iface->config.tx_cq_len,
-                "cq_available=%d tx_cq_len=%d cq_credits=%d",
+    ucs_assertv((ssize_t)iface->tx.cq_available <=
+                (ssize_t)iface->config.tx_cq_len,
+                "cq_available=%d tx_cq_len=%u cq_credits=%d",
                 iface->tx.cq_available, iface->config.tx_cq_len, cq_credits);
 }
 
 static UCS_F_ALWAYS_INLINE uct_rc_iface_send_op_t*
 uct_rc_iface_get_send_op(uct_rc_iface_t *iface)
 {
-    uct_rc_iface_send_op_t *op;
-    op = iface->tx.free_ops;
+    uct_rc_iface_send_op_t *op = iface->tx.free_ops;
+
     iface->tx.free_ops = op->next;
     return op;
 }
@@ -508,7 +505,8 @@ uct_rc_iface_put_send_op(uct_rc_iface_send_op_t *op)
 {
     uct_rc_iface_t *iface = op->iface;
 
-    ucs_assert(op->flags & UCT_RC_IFACE_SEND_OP_FLAG_IFACE);
+    ucs_assertv(op->flags == UCT_RC_IFACE_SEND_OP_FLAG_IFACE,
+                "op %p flags 0x%x", op, op->flags);
 
     op->next = iface->tx.free_ops;
     iface->tx.free_ops = op;

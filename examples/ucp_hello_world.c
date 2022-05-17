@@ -350,17 +350,12 @@ err:
     return ret;
 }
 
-static void flush_callback(void *request, ucs_status_t status, void *user_data)
-{
-}
-
 static ucs_status_t flush_ep(ucp_worker_h worker, ucp_ep_h ep)
 {
     ucp_request_param_t param;
     void *request;
 
-    param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK;
-    param.cb.send      = flush_callback;
+    param.op_attr_mask = 0;
     request            = ucp_ep_flush_nbx(ep, &param);
     if (request == NULL) {
         return UCS_OK;

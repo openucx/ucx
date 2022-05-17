@@ -8,9 +8,10 @@
 #  include "config.h"
 #endif
 
+#include "proto_init.h"
+#include "proto_debug.h"
 #include "proto_common.inl"
 #include "proto_multi.inl"
-#include "proto_init.h"
 
 #include <ucs/debug/assert.h>
 #include <ucs/debug/log.h>
@@ -203,16 +204,49 @@ ucs_status_t ucp_proto_multi_init(const ucp_proto_multi_init_params_t *params,
     return ucp_proto_common_init_caps(&params->super, &perf, reg_md_map);
 }
 
-void ucp_proto_multi_config_str(size_t min_length, size_t max_length,
-                                const void *priv, ucs_string_buffer_t *strb)
+static const ucp_ep_config_key_lane_t *
+ucp_proto_multi_ep_lane_cfg(const ucp_proto_query_params_t *params,
+                            ucp_lane_index_t lane_index)
 {
-    const ucp_proto_multi_priv_t *mpriv = priv;
+    const ucp_proto_multi_priv_t *mpriv = params->priv;
+    const ucp_proto_multi_lane_priv_t *lpriv;
+
+    ucs_assert(lane_index < mpriv->num_lanes);
+    lpriv = &mpriv->lanes[lane_index];
+
+    ucs_assert(lpriv->super.lane < UCP_MAX_LANES);
+    return &params->ep_config_key->lanes[lpriv->super.lane];
+}
+
+void ucp_proto_multi_query_config(const ucp_proto_query_params_t *params,
+                                  ucp_proto_query_attr_t *attr)
+{
+    UCS_STRING_BUFFER_FIXED(strb, attr->config, sizeof(attr->config));
+    const ucp_proto_multi_priv_t *mpriv = params->priv;
+    const ucp_ep_config_key_lane_t *cfg_lane, *cfg_lane0;
     const ucp_proto_multi_lane_priv_t *lpriv;
     size_t percent, remaining;
-    char frag_size_buf[64];
+    int same_rsc, same_path;
     ucp_lane_index_t i;
 
     ucs_assert(mpriv->num_lanes <= UCP_MAX_LANES);
+    ucs_assert(mpriv->num_lanes >= 1);
+
+    same_rsc  = 1;
+    same_path = 1;
+    cfg_lane0 = ucp_proto_multi_ep_lane_cfg(params, 0);
+    for (i = 1; i < mpriv->num_lanes; ++i) {
+        cfg_lane  = ucp_proto_multi_ep_lane_cfg(params, i);
+        same_rsc  = same_rsc && (cfg_lane->rsc_index == cfg_lane0->rsc_index);
+        same_path = same_path &&
+                    (cfg_lane->path_index == cfg_lane0->path_index);
+    }
+
+    if (same_rsc) {
+        ucp_proto_common_lane_priv_str(params, &mpriv->lanes[0].super, 1,
+                                       same_path, &strb);
+        ucs_string_buffer_appendf(&strb, " ");
+    }
 
     remaining = 100;
     for (i = 0; i < mpriv->num_lanes; ++i) {
@@ -222,21 +256,28 @@ void ucp_proto_multi_config_str(size_t min_length, size_t max_length,
         remaining -= percent;
 
         if (percent != 100) {
-            ucs_string_buffer_appendf(strb, "%zu%%*", percent);
+            ucs_string_buffer_appendf(&strb, "%zu%% on ", percent);
         }
 
-        ucp_proto_common_lane_priv_str(&lpriv->super, strb);
+        ucp_proto_common_lane_priv_str(params, &lpriv->super, !same_rsc,
+                                       !(same_rsc && same_path), &strb);
 
-        /* Print fragment size if it's small enough. For large fragments we can
-           skip the print because it has little effect on performance */
-        if (lpriv->max_frag < (64 * UCS_KBYTE)) {
-            ucs_memunits_to_str(lpriv->max_frag, frag_size_buf,
-                                sizeof(frag_size_buf));
-            ucs_string_buffer_appendf(strb, "<=%s", frag_size_buf);
-        }
-
-        if ((i + 1) < mpriv->num_lanes) {
-            ucs_string_buffer_appendf(strb, "|");
+        /* Print a string like "30% on A, 40% on B, and 30% on C" */
+        if (i != (mpriv->num_lanes - 1)) {
+            if (i == (mpriv->num_lanes - 2)) {
+                ucs_string_buffer_appendf(&strb, " and ");
+            } else {
+                ucs_string_buffer_appendf(&strb, ", ");
+            }
         }
     }
+
+    ucs_string_buffer_rtrim(&strb, NULL);
+}
+
+void ucp_proto_multi_query(const ucp_proto_query_params_t *params,
+                           ucp_proto_query_attr_t *attr)
+{
+    ucp_proto_default_query(params, attr);
+    ucp_proto_multi_query_config(params, attr);
 }

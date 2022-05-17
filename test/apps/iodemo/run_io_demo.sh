@@ -81,19 +81,23 @@ check_slurm_env()
 init_config()
 {
 	verbose=0
-	iodemo_exe=""
-	iodemo_client_args=""
+	net_ifs="bond0"
+	duration=30
+	bind_local=0
+	base_port_num=20000
 	num_clients=1
 	num_servers=1
-	map_by="node"
-	base_port_num=20000
 	tasks_per_node=1
-	net_if="bond0"
-	duration=30
+	map_by="node"
 	client_wait_time=2
 	launcher="pdsh -b -w"
 	dry_run=0
 	log_dir="$PWD"
+	iodemo_exe=""
+	iodemo_client_args=""
+	extra_env_client=""
+	extra_env_server=""
+	extra_env_all=""
 
 	# command line args will override slurm env vars
 	check_slurm_env
@@ -104,12 +108,10 @@ show_config()
 {
 	echo "Launch configuration:"
 	for key in \
-			host_list tasks_per_node map_by \
-			num_clients num_servers \
-			iodemo_exe iodemo_client_args \
-			net_if base_port_num \
-			duration client_wait_time \
-			launcher dry_run log_dir
+			host_list net_ifs duration bind_local base_port_num \
+			num_clients num_servers tasks_per_node map_by \
+			client_wait_time launcher dry_run log_dir \
+			iodemo_exe iodemo_client_args
 	do
 		show_var ${key}
 	done
@@ -130,8 +132,11 @@ usage()
 	echo "  -h|--help                   Show this help message"
 	echo "  -v|--verbose                Turn on verbosity"
 	echo "  -H|--hostlist <h1>,<h2>,..  List of host names to run on"$(show_default_value host_list)
-	echo "  -i|--netif <n>              Network interface to use"$(show_default_value net_if)
+	echo "  -i|--netif <n1,n2>          Comma-separated list of network interfaces to use"$(show_default_value net_ifs)
 	echo "  -d|--duration <seconds>     How much time to run the application"$(show_default_value duration)
+	echo "  --bind                      Bind to local IP address"
+	echo "  --env <role> <key>=<value>  Environment variable for <role> (client/server/all)"
+	echo "  --port-num <number>         TCP port number to start from"$(show_default_value base_port_num)
 	echo "  --num-clients <count>       Number of clients to run"$(show_default_value num_clients)
 	echo "  --num-servers <count>       Number of servers to run"$(show_default_value num_servers)
 	echo "  --tasks-per-node <count>    Maximal number of tasks per node"$(show_default_value tasks_per_node)
@@ -166,15 +171,33 @@ parse_args()
 			shift
 			;;
 		-i|--netif)
-			net_if="$2"
-			shift
-			;;
-		--log-dir)
-			log_dir="$2"
+			net_ifs="$2"
 			shift
 			;;
 		-d|--duration)
 			duration="$2"
+			shift
+			;;
+		--bind)
+			bind_local=1
+			;;
+		--env)
+			role="$2"
+			if [ "$2" == "all" ]
+			then
+				extra_env_all="$extra_env_all $3"
+			elif [ "$2" == "client" ]
+			then
+				extra_env_client="$extra_env_client $3"
+			elif [ "$2" == "server" ]
+			then
+				extra_env_server="$extra_env_server $3"
+			fi
+			shift
+			shift
+			;;
+		--port-num)
+			base_port_num="$2"
 			shift
 			;;
 		--num-clients)
@@ -203,6 +226,10 @@ parse_args()
 			;;
 		--dry-run)
 			dry_run=1
+			;;
+		--log-dir)
+			log_dir="$2"
+			shift
 			;;
 		[^-]*)
 			iodemo_exe="$key"
@@ -263,23 +290,26 @@ set_ssh_options()
 
 collect_ip_addrs()
 {
-	# convert the output of 'ip' to 'host:ip' list
-	host_ips=$(eval ${launcher} ${host_list} ip -4 -o address show ${net_if} |
-			   sed -ne 's/^\(\S*\): .* inet \([0-9\.]*\).*$/\1:\2/p')
-	if [ $(echo ${host_ips} | wc -w) -ne $(split_list ${host_list} | wc -w) ]
-	then
-		error "failed to collect host IP addresses for ${net_if}"
-	fi
-
-	# map the ips to hosts according to host order in the list
-	for host_ip in ${host_ips}
+	for net_if in $(split_list ${net_ifs})
 	do
-		host=$(echo ${host_ip} | cut -d: -f1)
-		addr=$(echo ${host_ip} | cut -d: -f2)
-		if [ -n "${host}" ] && [ -n "${addr}" ]
+		# convert the output of 'ip' to 'host:ip' list
+		host_ips=$(eval ${launcher} ${host_list} ip -4 -o address show ${net_if} |
+				   sed -ne 's/^\(\S*\): .* inet \([0-9\.]*\).*$/\1:\2/p')
+		if [ $(echo ${host_ips} | wc -w) -ne $(split_list ${host_list} | wc -w) ]
 		then
-			ip_address_per_host[${host}]=${addr}
+			error "failed to collect host IP addresses for ${net_if}"
 		fi
+
+		# map the ips to hosts according to host order in the list
+		for host_ip in ${host_ips}
+		do
+			host=$(echo ${host_ip} | cut -d: -f1)
+			addr=$(echo ${host_ip} | cut -d: -f2)
+			if [ -n "${host}" ] && [ -n "${addr}" ]
+			then
+				ip_address_per_host[${host}${net_if}]=${addr}
+			fi
+		done
 	done
 }
 
@@ -429,8 +459,11 @@ make_scripts()
 	do
 		for ((i=0;i<${num_servers_per_host[${host}]};++i))
 		do
-			port_num=$((base_port_num + i))
-			client_connect_list+=" ${ip_address_per_host[${host}]}:${port_num}"
+			for net_if in $(split_list ${net_ifs})
+			do
+				port_num=$((base_port_num + i))
+				client_connect_list+=" ${ip_address_per_host[${host}${net_if}]}:${port_num}"
+			done
 		done
 	done
 
@@ -601,6 +634,10 @@ make_scripts()
 			EOF
 		env | grep -P '^UCX_.*=|^PATH=|^LD_PRELOAD=|^LD_LIBRARY_PATH=' | \
 			xargs -L 1 echo "     export" >>${command_file}
+			for extra_env in ${extra_env_all}
+			do
+				echo "     export ${extra_env}" >>${command_file}
+			done
 		cat >>${command_file} <<-EOF
 			    cd $PWD
 			}
@@ -617,7 +654,7 @@ make_scripts()
 			cat >>${command_file} <<-EOF
 				function start_server_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=server_${i} ${cmd_prefix} \\
+				    env IODEMO_ROLE=server_${i} ${extra_env_server} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
 				            ${iodemo_server_args} -p ${port_num} \\
 				            ${log_redirect} ${log_file} &
@@ -631,18 +668,34 @@ make_scripts()
 		for ((i=0;i<num_clients_per_host[${host}];++i))
 		do
 			log_file=${log_dir}/$(printf "iodemo_%s_client_%02d.log" ${host} $i)
+			if [ ${bind_local} -eq 1 ]
+			then
+				client_bind=""
+				for net_if in $(split_list ${net_ifs})
+				do
+					client_bind="${client_bind} -I ${ip_address_per_host[${host}${net_if}]}"
+				done
+			else
+				client_bind=""
+			fi
 			is_verbose && echo ${log_file}
 			cat >>${command_file} <<-EOF
 				function start_client_${i}() {
 				    mkdir -p ${log_dir}
-				    env IODEMO_ROLE=client_${i} ${cmd_prefix} \\
+				    env IODEMO_ROLE=client_${i} ${extra_env_client} ${cmd_prefix} \\
 				        ${iodemo_exe} \\
-				            ${iodemo_client_args} ${client_connect_list} \\
+				            ${iodemo_client_args} \\
+				            ${client_connect_list} \\
+				            ${client_bind} \\
 				            ${log_redirect} ${log_file} &
 				}
 
 				EOF
 		done
+
+		show_var_verbose extra_env_all
+		show_var_verbose extra_env_client
+		show_var_verbose extra_env_server
 
 		# 'run_all' will start all servers, then clients, then wait for finish
 		cat >>${command_file} <<-EOF

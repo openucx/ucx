@@ -15,11 +15,35 @@
 #include <ucs/sys/module.h>
 #include <ucs/sys/string.h>
 #include <ucs/vfs/base/vfs_obj.h>
+#include <uct/tcp/tcp.h>
+#include <uct/sm/self/self.h>
+#include <uct/sm/mm/base/mm_iface.h>
 #include <limits.h>
 #include <string.h>
 
 
 UCS_LIST_HEAD(uct_components_list);
+
+UCT_TL_DECL(self)
+UCT_TL_DECL(tcp)
+UCT_TL_DECL(posix)
+UCT_TL_DECL(sysv)
+
+void UCS_F_CTOR uct_init()
+{
+    uct_self_init();
+    uct_tcp_init();
+    uct_sysv_init();
+    uct_posix_init();
+}
+
+void UCS_F_DTOR uct_cleanup()
+{
+    uct_posix_cleanup();
+    uct_sysv_cleanup();
+    uct_tcp_cleanup();
+    uct_self_cleanup();
+}
 
 ucs_status_t uct_query_components(uct_component_h **components_p,
                                   unsigned *num_components_p)
@@ -144,4 +168,18 @@ err_free_bundle:
     ucs_free(config_bundle);
 err:
     return status;
+}
+
+void uct_component_register(uct_component_t *component)
+{
+    ucs_list_add_tail(&uct_components_list, &component->list);
+    ucs_list_add_tail(&ucs_config_global_list, &component->md_config.list);
+    ucs_list_add_tail(&ucs_config_global_list, &component->cm_config.list);
+}
+
+void uct_component_unregister(uct_component_t *component)
+{
+    /* TODO: add ucs_list_del(uct_components_list) */
+    ucs_list_del(&component->md_config.list);
+    ucs_list_del(&component->cm_config.list);
 }

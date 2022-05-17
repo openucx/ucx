@@ -793,7 +793,7 @@ UCT_INSTANTIATE_RC_TEST_CASE(test_rc_flow_control_stats)
 
 #endif
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
 extern "C" {
 #include <uct/ib/rc/accel/rc_mlx5_common.h>
 }
@@ -806,7 +806,7 @@ test_uct_iface_attrs::attr_map_t test_rc_iface_attrs::get_num_iov() {
         EXPECT_TRUE(has_transport("rc_verbs"));
         m_e->connect(0, *m_e, 0);
         uct_rc_verbs_ep_t *ep = ucs_derived_of(m_e->ep(0), uct_rc_verbs_ep_t);
-        uint32_t max_sge;
+        uint32_t max_sge = 0; // for gcc 10 -Og
         ASSERT_UCS_OK(uct_ib_qp_max_send_sge(ep->qp, &max_sge));
 
         attr_map_t iov_map;
@@ -821,7 +821,7 @@ test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
 {
     attr_map_t iov_map;
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
     // For RMA iovs can use all WQE space, remaining from control and
     // remote address segments (and AV if relevant)
     size_t rma_iov = (UCT_IB_MLX5_MAX_SEND_WQE_SIZE -
@@ -847,7 +847,7 @@ test_rc_iface_attrs::get_num_iov_mlx5_common(size_t av_size)
                          sizeof(struct mlx5_wqe_data_seg);
     }
 #endif // IBV_HW_TM
-#endif // HAVE_MLX5_HW
+#endif // HAVE_MLX5_DV
 
     return iov_map;
 }
@@ -908,7 +908,7 @@ UCS_TEST_SKIP_COND_P(test_rc_keepalive, pending,
     status = uct_ep_check(ep0(), 0, NULL);
     ASSERT_UCS_OK(status);
 
-    kill_receiver();
+    inject_error();
 
     enable_entity(m_sender);
 
@@ -924,7 +924,7 @@ UCS_TEST_SKIP_COND_P(test_rc_keepalive, pending,
 UCT_INSTANTIATE_RC_TEST_CASE(test_rc_keepalive)
 
 
-#ifdef HAVE_MLX5_HW
+#ifdef HAVE_MLX5_DV
 
 class test_rc_srq : public test_rc {
 public:

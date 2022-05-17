@@ -224,6 +224,10 @@ if HAVE_TL_DC
 gtest_SOURCES += \
 	uct/ib/test_dc.cc
 endif
+if HAVE_MLX5_DV
+gtest_SOURCES += \
+	uct/ib/test_cqe_zipping.cc
+endif
 if HAVE_RDMACM
 gtest_SOURCES += \
 	uct/ib/test_sockaddr.cc
@@ -262,7 +266,6 @@ noinst_HEADERS = \
 	common/test.h \
 	common/test_helpers.h \
 	common/test_perf.h \
-	common/tap.h \
 	\
 	uct/ib/test_rc.h \
 	uct/ib/ud_base.h \

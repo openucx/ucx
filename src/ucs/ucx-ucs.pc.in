@@ -1,0 +1,18 @@
+#
+# Copyright (c) 2022, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#
+# See file LICENSE for terms.
+#
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @exec_prefix@/bin
+libdir = @libdir@
+includedir = @includedir@
+
+Name: @PACKAGE@-ucs
+Description: Unified Communication X Library UCS module
+Version: @VERSION@
+Cflags: -I${includedir}
+Libs: -L${libdir} -lucs -lucm
+Libs.private: -Wl,--undefined=ucs_init @BFD_LIBS@ @BFD_LDFLAGS@ @BFD_DEPS@ -ldl -lrt -lm -pthread

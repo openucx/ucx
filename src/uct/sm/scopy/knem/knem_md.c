@@ -202,11 +202,14 @@ static ucs_status_t uct_knem_mem_dereg(uct_md_h md,
     return status;
 }
 
-static ucs_status_t uct_knem_rkey_pack(uct_md_h md, uct_mem_h memh,
-                                       void *rkey_buffer)
+static ucs_status_t
+uct_knem_rkey_pack(uct_md_h md, uct_mem_h memh,
+                   const uct_md_mkey_pack_params_t *params,
+                   void *rkey_buffer)
 {
-    uct_knem_key_t *packed = (uct_knem_key_t*)rkey_buffer;
-    uct_knem_key_t *key = (uct_knem_key_t *)memh;
+    uct_knem_key_t *packed = rkey_buffer;
+    uct_knem_key_t *key    = memh;
+
     packed->cookie  = (uint64_t)key->cookie;
     packed->address = (uintptr_t)key->address;
     ucs_trace("packed rkey: cookie 0x%"PRIx64" address %"PRIxPTR,
@@ -226,6 +229,7 @@ static ucs_status_t uct_knem_rkey_unpack(uct_component_t *component,
         ucs_error("Failed to allocate memory for uct_knem_key_t");
         return UCS_ERR_NO_MEMORY;
     }
+
     key->cookie = packed->cookie;
     key->address = packed->address;
     *handle_p = NULL;
@@ -376,7 +380,6 @@ uct_knem_md_open(uct_component_t *component, const char *md_name,
         rcache_params.ucm_events         = UCM_EVENT_VM_UNMAPPED;
         rcache_params.context            = knem_md;
         rcache_params.ops                = &uct_knem_rcache_ops;
-        rcache_params.flags              = UCS_RCACHE_FLAG_PURGE_ON_FORK;
         status = ucs_rcache_create(&rcache_params, "knem", ucs_stats_get_root(),
                                    &knem_md->rcache);
         if (status == UCS_OK) {
@@ -429,4 +432,3 @@ uct_component_t uct_knem_component = {
     .flags              = 0,
     .md_vfs_init        = uct_knem_md_vfs_init
 };
-UCT_COMPONENT_REGISTER(&uct_knem_component);

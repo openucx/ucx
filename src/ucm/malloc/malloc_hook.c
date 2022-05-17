@@ -54,15 +54,7 @@
 /* Maximal size for mmap threshold - 32mb */
 #define UCM_DEFAULT_MMAP_THRESHOLD_MAX (4ul * 1024 * 1024 * sizeof(long))
 
-/* Take out 12 LSB's, since they are the page-offset on most systems */
-#define ucm_mmap_addr_hash(_addr) \
-    (khint32_t)((_addr >> 12) ^ (_addr & UCS_MASK(12)))
-
-#define ucm_mmap_ptr_hash(_p)          ucm_mmap_addr_hash((uintptr_t)(_p))
-#define ucm_mmap_ptr_equal(_p1, _p2)   ((_p1) == (_p2))
-
-KHASH_INIT(mmap_ptrs, void*, char, 0, ucm_mmap_ptr_hash, ucm_mmap_ptr_equal)
-
+KHASH_MAP_INIT_INT64(mmap_pages, size_t);
 
 /* Pointer to memory release function */
 typedef void (*ucm_release_func_t)(void *ptr);
@@ -98,17 +90,21 @@ typedef struct ucm_malloc_hook_state {
     void                     *heap_start;
     void                     *heap_end;
 
-    /* Save the pointers that we have allocated with mmap, so when they are
-     * released we would know they are ours, despite the fact they are not in the
-     * heap address range. */
-    khash_t(mmap_ptrs)      ptrs;
+    /* Save the page address that we have allocated with mmap, so when they are
+     * released we would know they are ours, despite the fact they are not in
+     * the heap address range. The hash maps the page address to the number of
+     * allocations starting in this page.
+     * Saving page address is more compact and will prevent Valgrind from
+     * considering these blocks as "reachable" for leak checks purpose.
+     */
+    khash_t(mmap_pages)      mmap_pages;
 
     /**
      * Save the environment strings we've allocated
      */
-    pthread_mutex_t         env_lock;
-    char                    **env_strs;
-    unsigned                num_env_strs;
+    pthread_mutex_t          env_lock;
+    char                     **env_strs;
+    unsigned                 num_env_strs;
 } ucm_malloc_hook_state_t;
 
 
@@ -124,7 +120,7 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
     .free             = NULL,
     .heap_start       = (void*)-1,
     .heap_end         = (void*)-1,
-    .ptrs             = KHASH_STATIC_INITIALIZER,
+    .mmap_pages       = KHASH_STATIC_INITIALIZER,
     .env_lock         = PTHREAD_MUTEX_INITIALIZER,
     .env_strs         = NULL,
     .num_env_strs     = 0
@@ -132,38 +128,56 @@ static ucm_malloc_hook_state_t ucm_malloc_hook_state = {
 
 int ucm_dlmallopt_get(int); /* implemented in ptmalloc */
 
+static int64_t ucm_malloc_page_address(void *ptr)
+{
+    return ucs_align_down_pow2((uintptr_t)ptr, ucm_get_page_size());
+}
+
 static void ucm_malloc_mmaped_ptr_add(void *ptr)
 {
-    int hash_extra_status;
-    khiter_t hash_it;
+    khiter_t khiter;
+    int khret;
 
     ucs_recursive_spin_lock(&ucm_malloc_hook_state.lock);
 
-    hash_it = kh_put(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr,
-                     &hash_extra_status);
-    ucm_assert_always(hash_extra_status >= 0);
-    ucm_assert_always(hash_it != kh_end(&ucm_malloc_hook_state.ptrs));
+    khiter = kh_put(mmap_pages, &ucm_malloc_hook_state.mmap_pages,
+                    ucm_malloc_page_address(ptr), &khret);
+    if (khret == UCS_KH_PUT_KEY_PRESENT) {
+        ++kh_value(&ucm_malloc_hook_state.mmap_pages, khiter);
+    } else if ((khret == UCS_KH_PUT_BUCKET_EMPTY) ||
+               (khret == UCS_KH_PUT_BUCKET_CLEAR)) {
+        kh_value(&ucm_malloc_hook_state.mmap_pages, khiter) = 1;
+    } else {
+        ucm_fatal("kh_put failed: %d", khret);
+    }
 
     ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
 }
 
 static int ucm_malloc_mmaped_ptr_remove_if_exists(void *ptr)
 {
-    khiter_t hash_it;
-    int found;
+    khiter_t khiter;
+    size_t *count;
 
     ucs_recursive_spin_lock(&ucm_malloc_hook_state.lock);
 
-    hash_it = kh_get(mmap_ptrs, &ucm_malloc_hook_state.ptrs, ptr);
-    if (hash_it == kh_end(&ucm_malloc_hook_state.ptrs)) {
-        found = 0;
-    } else {
-        found = 1;
-        kh_del(mmap_ptrs, &ucm_malloc_hook_state.ptrs, hash_it);
+    khiter = kh_get(mmap_pages, &ucm_malloc_hook_state.mmap_pages,
+                    ucm_malloc_page_address(ptr));
+    if (khiter == kh_end(&ucm_malloc_hook_state.mmap_pages)) {
+        ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
+        return 0;
+    }
+
+    /* Decrement the hash value that counts page allocations */
+    count = &kh_value(&ucm_malloc_hook_state.mmap_pages, khiter);
+    ucm_assert(*count > 0);
+    if (--*count == 0) {
+        /* Remove hash entry if all its allocations were released */
+        kh_del(mmap_pages, &ucm_malloc_hook_state.mmap_pages, khiter);
     }
 
     ucs_recursive_spin_unlock(&ucm_malloc_hook_state.lock);
-    return found;
+    return 1;
 }
 
 static int ucm_malloc_is_address_in_heap(void *ptr)

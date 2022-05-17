@@ -9,9 +9,9 @@
 AC_PREREQ([2.63])
 
 define([ucx_ver_major], 1)  # Major version. Usually does not change.
-define([ucx_ver_minor], 13) # Minor version. Increased for each release.
+define([ucx_ver_minor], 14) # Minor version. Increased for each release.
 define([ucx_ver_patch], 0)  # Patch version. Increased for a bugfix release.
-define([ucx_ver_extra], "") # Extra version string. Empty for a general release.
+define([ucx_ver_extra], )   # Extra version string. Empty for a general release.
 
 define([ts], esyscmd([sh -c "date +%Y%m%d%H%M%S"]))
 
@@ -87,6 +87,12 @@ AC_C_RESTRICT
 AC_FUNC_STRERROR_R
 
 AC_PATH_TOOL([PKG_CONFIG], [pkg-config], [pkg-config])
+
+
+#
+# Define SHARED_LIB preprocessor macro when building a shared library
+#
+lt_prog_compiler_pic="$lt_prog_compiler_pic -DUCX_SHARED_LIB"
 
 
 #
@@ -179,15 +185,12 @@ AS_IF([test "x$with_docs_only" = xyes],
      AM_CONDITIONAL([HAVE_STATS], [false])
      AM_CONDITIONAL([HAVE_TUNING], [false])
      AM_CONDITIONAL([HAVE_IB], [false])
-     AM_CONDITIONAL([HAVE_MLX5_HW], [false])
      AM_CONDITIONAL([HAVE_MLX5_HW_UD], [false])
      AM_CONDITIONAL([HAVE_MLX5_DV], [false])
      AM_CONDITIONAL([HAVE_DEVX], [false])
-     AM_CONDITIONAL([HAVE_EXP], [false])
      AM_CONDITIONAL([HAVE_TL_RC], [false])
      AM_CONDITIONAL([HAVE_TL_DC], [false])
      AM_CONDITIONAL([HAVE_DC_DV], [false])
-     AM_CONDITIONAL([HAVE_DC_EXP], [false])
      AM_CONDITIONAL([HAVE_TL_UD], [false])
      AM_CONDITIONAL([HAVE_CRAY_UGNI], [false])
      AM_CONDITIONAL([HAVE_CUDA], [false])
@@ -237,6 +240,8 @@ AS_IF([test "x$with_docs_only" = xyes],
      m4_include([src/uct/configure.m4])
      m4_include([src/tools/perf/configure.m4])
      m4_include([test/gtest/configure.m4])
+     m4_include([test/apps/iodemo/configure.m4])
+     m4_include([test/apps/uct_info/configure.m4])
 
 
      #

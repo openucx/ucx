@@ -196,20 +196,21 @@ enum {
     UCT_UD_EP_FLAG_CONNECTED         = UCS_BIT(3),  /* EP was connected to the peer */
     UCT_UD_EP_FLAG_ON_CEP            = UCS_BIT(4),  /* EP was inserted to connection
                                                        matching context */
+    UCT_UD_EP_FLAG_CONNECT_TO_EP     = UCS_BIT(5),  /* EP was connected to peer's EP */
 
     /* debug flags */
-    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(5),  /* CREQ message was received */
-    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(6),  /* CREP message was received */
-    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(7),  /* CREQ message was sent */
-    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(8),  /* CREP message was sent */
-    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(9),  /* CREQ message is NOT sent, because
+    UCT_UD_EP_FLAG_CREQ_RCVD         = UCS_BIT(6),  /* CREQ message was received */
+    UCT_UD_EP_FLAG_CREP_RCVD         = UCS_BIT(7),  /* CREP message was received */
+    UCT_UD_EP_FLAG_CREQ_SENT         = UCS_BIT(8),  /* CREQ message was sent */
+    UCT_UD_EP_FLAG_CREP_SENT         = UCS_BIT(9),  /* CREP message was sent */
+    UCT_UD_EP_FLAG_CREQ_NOTSENT      = UCS_BIT(10),  /* CREQ message is NOT sent, because
                                                        connection establishment process
                                                        is driven by remote side. */
-    UCT_UD_EP_FLAG_TX_NACKED         = UCS_BIT(10), /* Last psn was acked with NACK */
+    UCT_UD_EP_FLAG_TX_NACKED         = UCS_BIT(11), /* Last psn was acked with NACK */
 
     /* Endpoint is currently executing the pending queue */
 #if UCS_ENABLE_ASSERT
-    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(11)
+    UCT_UD_EP_FLAG_IN_PENDING        = UCS_BIT(12)
 #else
     UCT_UD_EP_FLAG_IN_PENDING        = 0
 #endif
@@ -301,11 +302,13 @@ ucs_status_t uct_ud_ep_flush(uct_ep_h ep, unsigned flags,
                              uct_completion_t *comp);
 /* internal flush */
 ucs_status_t uct_ud_ep_flush_nolock(uct_ud_iface_t *iface, uct_ud_ep_t *ep,
-                                    uct_completion_t *comp);
+                                    unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_ud_ep_check(uct_ep_h tl_ep, unsigned flags, uct_completion_t *comp);
 
 ucs_status_t uct_ud_ep_get_address(uct_ep_h tl_ep, uct_ep_addr_t *addr);
+
+ucs_status_t uct_ud_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p);
 
 ucs_status_t uct_ud_ep_create_connected_common(const uct_ep_params_t *params,
                                                uct_ep_h *new_ep_p);
@@ -329,8 +332,6 @@ uct_ud_send_skb_t *uct_ud_ep_prepare_creq(uct_ud_ep_t *ep);
 ucs_arbiter_cb_result_t
 uct_ud_ep_do_pending(ucs_arbiter_t *arbiter, ucs_arbiter_group_t *group,
                      ucs_arbiter_elem_t *elem, void *arg);
-
-void uct_ud_ep_clone(uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
 static UCS_F_ALWAYS_INLINE void
 uct_ud_neth_set_type_am(uct_ud_ep_t *ep, uct_ud_neth_t *neth, uint8_t id)
@@ -435,3 +436,5 @@ uct_ud_neth_ack_req(uct_ud_ep_t *ep, uct_ud_neth_t *neth)
 }
 
 #endif
+
+ucs_status_t uct_ud_ep_invalidate(uct_ep_h tl_ep, unsigned flags);

@@ -119,13 +119,22 @@ typedef struct ucs_config_bw_spec {
     }
 
 #define UCS_CONFIG_REGISTER_TABLE(_table, _name, _prefix, _type, _list) \
+    UCS_CONFIG_DECLARE_TABLE(_table, _name, _prefix, _type) \
+    UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry, _list);
+
+#define UCS_CONFIG_DECLARE_TABLE(_table, _name, _prefix, _type) \
     static ucs_config_global_list_entry_t _table##_config_entry = { \
         .table  = _table, \
         .name   = _name, \
         .prefix = _prefix, \
         .size   = sizeof(_type) \
-    }; \
-    UCS_CONFIG_REGISTER_TABLE_ENTRY(&_table##_config_entry, _list);
+    };
+
+#define UCS_CONFIG_ADD_TABLE(_table, _list) \
+    ucs_list_add_tail(_list, &(_table##_config_entry).list)
+
+#define UCS_CONFIG_REMOVE_TABLE(_table) \
+    ucs_list_del(&(_table##_config_entry).list)
 
 extern ucs_list_link_t ucs_config_global_list;
 

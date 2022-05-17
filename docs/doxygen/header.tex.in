@@ -10,6 +10,7 @@
 \usepackage{makeidx}
 \usepackage{multicol}
 \usepackage{multirow}
+\usepackage{ifthen} % workaround doxygen 2019
 \PassOptionsToPackage{warn}{textcomp}
 \usepackage{textcomp}
 \usepackage[nointegrals]{wasysym}

@@ -142,6 +142,9 @@ typedef ucs_status_t (*uct_component_rkey_release_func_t)(
 typedef void (*uct_component_md_vfs_init_func_t)(uct_md_h md);
 
 
+extern ucs_list_link_t uct_components_list;
+
+
 /**
  * Defines a UCT component
  */
@@ -164,6 +167,9 @@ struct uct_component {
 };
 
 
+#define UCT_COMPONENT_NAME(_name) uct_##_name##_component
+
+
 /**
  * Register a component for usage, so it will be returned from
  * @ref uct_query_components.
@@ -171,7 +177,6 @@ struct uct_component {
  * @param [in] _component  Pointer to a global component structure to register.
  */
 #define UCT_COMPONENT_REGISTER(_component) \
-    extern ucs_list_link_t uct_components_list; \
     UCS_STATIC_INIT { \
         ucs_list_add_tail(&uct_components_list, &(_component)->list); \
     } \
@@ -190,5 +195,9 @@ ucs_status_t uct_config_read(uct_config_bundle_t **bundle,
                              ucs_config_field_t *config_table,
                              size_t config_size, const char *env_prefix,
                              const char *cfg_prefix);
+
+void uct_component_register(uct_component_t *component);
+
+void uct_component_unregister(uct_component_t *component);
 
 #endif

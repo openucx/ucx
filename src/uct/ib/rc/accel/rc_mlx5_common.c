@@ -14,6 +14,7 @@
 #include <uct/api/uct.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <ucs/arch/bitops.h>
+#include <ucs/profile/profile.h>
 
 
 ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
@@ -42,7 +43,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.seg_size),
    UCS_CONFIG_TYPE_MEMUNITS},
 
-  {"TM_MP_SRQ_ENABLE", "no",
+  {"TM_MP_SRQ_ENABLE", "try",
    "Enable multi-packet SRQ support. Relevant for hardware tag-matching only.",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, tm.mp_enable),
    UCS_CONFIG_TYPE_TERNARY},
@@ -76,7 +77,7 @@ ucs_config_field_t uct_rc_mlx5_common_config_table[] = {
    UCS_CONFIG_TYPE_STRING_ARRAY},
 
   {"LOG_ACK_REQ_FREQ", "8",
-   "Log of the ack frequency for requests, when using DevX. Valid values are: 0-"
+   "Log of the ack frequency for requests, when using DEVX. Valid values are: 0-"
     UCS_PP_MAKE_STRING(UCT_RC_MLX5_MAX_LOG_ACK_REQ_FREQ) ".",
    ucs_offsetof(uct_rc_mlx5_iface_common_config_t, log_ack_req_freq),
    UCS_CONFIG_TYPE_UINT},
@@ -341,7 +342,7 @@ uct_rc_mlx5_verbs_create_cmd_qp(uct_rc_mlx5_iface_common_t *iface)
     qp_init_attr.srq                 = iface->rx.srq.verbs.srq;
     qp_init_attr.cap.max_send_wr     = iface->tm.cmd_qp_len;
 
-    qp = ibv_create_qp(md->pd, &qp_init_attr);
+    qp = UCS_PROFILE_CALL_ALWAYS(ibv_create_qp, md->pd, &qp_init_attr);
     if (qp == NULL) {
         ucs_error("failed to create TM control QP: %m");
         goto err_rd;
@@ -644,7 +645,7 @@ void uct_rc_mlx5_handle_unexp_rndv(uct_rc_mlx5_iface_common_t *iface,
     memcpy((char*)rndv_usr_hdr - priv->length, &priv->data, priv->length);
 
     /* Create "packed" rkey to pass it in the callback */
-    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_RKEY, packed_rkey);
+    uct_ib_md_pack_rkey(ntohl(rvh->rkey), UCT_IB_INVALID_MKEY, packed_rkey);
 
     /* Do not pass flags to cb, because rkey is allocated on stack */
     status = iface->tm.rndv_unexp.cb(iface->tm.rndv_unexp.arg, 0, tag,
@@ -749,8 +750,8 @@ uct_rc_mlx5_iface_common_dm_tl_init(uct_mlx5_dm_data_t *data,
         goto failed_mr;
     }
 
-    UCT_IB_MLX5_DV_DM(obj).in  = data->dm;
-    UCT_IB_MLX5_DV_DM(obj).out = &dvdm;
+    obj.dv.dm.in  = data->dm;
+    obj.dv.dm.out = &dvdm;
     uct_ib_mlx5dv_init_obj(&obj, MLX5DV_OBJ_DM);
     data->start_va = dvdm.buf;
 
@@ -863,32 +864,6 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     uct_rc_mlx5_init_rx_tm_common(iface, config, rndv_hdr_len);
 
     ucs_assert(iface->tm.mp.num_strides == 1); /* MP XRQ is supported with DEVX only */
-#if HAVE_DECL_IBV_EXP_CREATE_SRQ
-    /* Create TM-capable XRQ */
-    srq_attr->base.attr.max_sge   = 1;
-    srq_attr->base.attr.max_wr    = ucs_max(UCT_IB_MLX5_XRQ_MIN_UWQ_POST,
-                                            config->super.rx.queue_len);
-    srq_attr->base.attr.srq_limit = 0;
-    srq_attr->base.srq_context    = iface;
-    srq_attr->srq_type            = IBV_EXP_SRQT_TAG_MATCHING;
-    srq_attr->pd                  = md->pd;
-    srq_attr->cq                  = iface->super.super.cq[UCT_IB_DIR_RX];
-    srq_attr->tm_cap.max_num_tags = iface->tm.num_tags;
-
-    uct_rc_mlx5_iface_tm_set_cmd_qp_len(iface);
-    srq_attr->tm_cap.max_ops      = iface->tm.cmd_qp_len;
-    srq_attr->comp_mask          |= IBV_EXP_CREATE_SRQ_CQ |
-                                    IBV_EXP_CREATE_SRQ_TM;
-
-    iface->rx.srq.verbs.srq = ibv_exp_create_srq(md->dev.ibv_context, srq_attr);
-    if (iface->rx.srq.verbs.srq == NULL) {
-        ucs_error("ibv_exp_create_srq(device=%s) failed: %m",
-                  uct_ib_device_name(&md->dev));
-        return UCS_ERR_IO_ERROR;
-    }
-
-    iface->super.rx.srq.quota = srq_attr->base.attr.max_wr;
-#elif HAVE_DECL_IBV_CREATE_SRQ_EX
     srq_attr->attr.max_sge        = 1;
     srq_attr->attr.max_wr         = ucs_max(UCT_IB_MLX5_XRQ_MIN_UWQ_POST,
                                             config->super.rx.queue_len);
@@ -914,7 +889,6 @@ ucs_status_t uct_rc_mlx5_init_rx_tm(uct_rc_mlx5_iface_common_t *iface,
     }
 
     iface->super.rx.srq.quota = srq_attr->attr.max_wr;
-#endif
 
     status = uct_ib_mlx5_verbs_srq_init(&iface->rx.srq, iface->rx.srq.verbs.srq,
                                         iface->super.super.config.seg_size,
@@ -1027,13 +1001,11 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
                                         unsigned scat2cqe_dir_mask)
 {
 #if HAVE_DECL_MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE
-    dv_attr->comp_mask   |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
-    dv_attr->create_flags = 0;
-
     if ((scat2cqe_dir_mask & UCS_BIT(UCT_IB_DIR_RX)) &&
         (iface->super.super.config.max_inl_cqe[UCT_IB_DIR_RX] == 0)) {
         /* make sure responder scatter2cqe is disabled */
         dv_attr->create_flags |= MLX5DV_QP_CREATE_DISABLE_SCATTER_TO_CQE;
+        dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
     }
 #endif
 
@@ -1052,6 +1024,7 @@ void uct_rc_mlx5_common_fill_dv_qp_attr(uct_rc_mlx5_iface_common_t *iface,
              * unless it was already disabled on responder side (otherwise
              * mlx5 driver check fails) */
             dv_attr->create_flags |= MLX5DV_QP_CREATE_ALLOW_SCATTER_TO_CQE;
+            dv_attr->comp_mask    |= MLX5DV_QP_INIT_ATTR_MASK_QP_CREATE_FLAGS;
         }
 #endif
     }
@@ -1174,7 +1147,7 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
                                    uct_ib_mlx5_srq_t *srq, uint32_t qpn)
 {
     const size_t cqe_sz       = 1ul << mlx5_cq->cqe_size_log;
-    struct mlx5_cqe64 *cqe, *dest;
+    struct mlx5_cqe64 *cqe, *dest, *unzipped_cqe;
     uct_ib_mlx5_srq_seg_t *seg;
     unsigned pi, idx;
     uint8_t owner_bit;
@@ -1185,6 +1158,9 @@ int uct_rc_mlx5_iface_commom_clean(uct_ib_mlx5_cq_t *mlx5_cq,
         cqe = uct_ib_mlx5_get_cqe(mlx5_cq, pi);
         if (uct_ib_mlx5_cqe_is_hw_owned(cqe->op_own, pi, mlx5_cq->cq_length)) {
             break;
+        } else if (uct_ib_mlx5_check_and_init_zipped(mlx5_cq, cqe)) {
+            unzipped_cqe = uct_ib_mlx5_iface_cqe_unzip(mlx5_cq);
+            memcpy(cqe, unzipped_cqe, sizeof(*cqe));
         }
 
         ucs_assert((cqe->op_own >> 4) != MLX5_CQE_INVALID);

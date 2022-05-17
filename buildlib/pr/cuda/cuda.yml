@@ -1,0 +1,109 @@
+jobs:
+  - job: source_tarball
+    displayName: Create UCX source tarball
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands:
+        - ucx_docker -equals yes
+    container: centos7
+
+    steps:
+      - checkout: self
+        clean: true
+        fetchDepth: 100
+      - bash: |
+          set -eEx
+          ./autogen.sh
+        displayName: Autogen ucx
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.Repository.LocalPath)'
+          artifactName: ucx_src_$(Build.BuildId)
+
+  - job: test_on_cuda_docker
+    dependsOn: source_tarball
+    displayName: Test Cuda Docker
+    workspace:
+      clean: all
+    pool:
+      name: MLNX
+      demands:
+        - ucx_gpu_test -equals yes
+    strategy:
+      matrix:
+        centos7_cuda_11_0:
+          CONTAINER: centos7_cuda_11_0
+        centos7_cuda_11_1:
+          CONTAINER: centos7_cuda_11_1
+        centos7_cuda_11_2:
+          CONTAINER: centos7_cuda_11_2
+        centos7_cuda_11_3:
+          CONTAINER: centos7_cuda_11_3
+        centos7_cuda_11_4:
+          CONTAINER: centos7_cuda_11_4
+        centos8_cuda_11_0:
+          CONTAINER: centos8_cuda_11_0
+        centos8_cuda_11_1:
+          CONTAINER: centos8_cuda_11_1
+        centos8_cuda_11_2:
+          CONTAINER: centos8_cuda_11_2
+        centos8_cuda_11_3:
+          CONTAINER: centos8_cuda_11_3
+        centos8_cuda_11_4:
+          CONTAINER: centos8_cuda_11_4
+        centos8_cuda_11_5:
+          CONTAINER: centos8_cuda_11_5
+        centos8_cuda_11_6:
+          CONTAINER: centos8_cuda_11_6
+        ubuntu18_cuda_11_0:
+          CONTAINER: ubuntu18_cuda_11_0
+        ubuntu18_cuda_11_1:
+          CONTAINER: ubuntu18_cuda_11_1
+        ubuntu18_cuda_11_2:
+          CONTAINER: ubuntu18_cuda_11_2
+        ubuntu18_cuda_11_3:
+          CONTAINER: ubuntu18_cuda_11_3
+        ubuntu18_cuda_11_4:
+          CONTAINER: ubuntu18_cuda_11_4
+        ubuntu18_cuda_11_5:
+          CONTAINER: ubuntu18_cuda_11_5
+        ubuntu18_cuda_11_6:
+          CONTAINER: ubuntu18_cuda_11_6
+        ubuntu20_cuda_11_0:
+          CONTAINER: ubuntu20_cuda_11_0
+        ubuntu20_cuda_11_1:
+          CONTAINER: ubuntu20_cuda_11_1
+        ubuntu20_cuda_11_2:
+          CONTAINER: ubuntu20_cuda_11_2
+        ubuntu20_cuda_11_3:
+          CONTAINER: ubuntu20_cuda_11_3
+        ubuntu20_cuda_11_4:
+          CONTAINER: ubuntu20_cuda_11_4
+        ubuntu20_cuda_11_5:
+          CONTAINER: ubuntu20_cuda_11_5
+        ubuntu20_cuda_11_6:
+          CONTAINER: ubuntu20_cuda_11_6
+
+    container: $[ variables['CONTAINER'] ]
+    timeoutInMinutes: 35
+    variables:
+      workspace: $(System.DefaultWorkingDirectory)/ucx_src_$(Build.BuildId)
+    steps:
+      - checkout: none
+      - task: DownloadBuildArtifacts@0
+        displayName: 'Download Build Artifacts'
+        inputs:
+          artifactName: ucx_src_$(Build.BuildId)
+          downloadPath: $(System.DefaultWorkingDirectory)
+      - bash: chmod u+rwx $(workspace) -R
+      - bash: |
+          set -xeE
+          $(workspace)/buildlib/pr/cuda/test_malloc_hook.sh
+        env:
+          WORKSPACE: $(workspace)
+      - bash: |
+          rm -rf $(workspace)
+        displayName: Remove artifacts
+        condition: succeeded()

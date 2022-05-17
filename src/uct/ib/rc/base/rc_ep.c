@@ -470,9 +470,6 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
 
     ucs_queue_for_each_extract(op, &txqp->outstanding, queue,
                                UCS_CIRCULAR_COMPARE16(op->sn, <=, sn)) {
-        op->status = status;
-        op->flags |= UCT_RC_IFACE_SEND_OP_STATUS;
-
         if (op->handler != (uct_rc_send_handler_t)ucs_mpool_put) {
             /* Allow clean flush cancel op from destroy flow */
             if (warn &&
@@ -520,6 +517,8 @@ void uct_rc_txqp_purge_outstanding(uct_rc_iface_t *iface, uct_rc_txqp_t *txqp,
             desc = ucs_derived_of(op, uct_rc_iface_send_desc_t);
             ucs_mpool_put(desc);
         } else {
+            op->status = status;
+            op->flags |= UCT_RC_IFACE_SEND_OP_STATUS;
             op->handler(op, NULL);
         }
     }

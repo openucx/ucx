@@ -17,8 +17,8 @@
       if (status != UCS_OK) { \
           return 0; \
       } \
-      UCS_STATS_UPDATE_COUNTER((_iface)->stats, \
-                               UCT_RC_IFACE_STAT_TX_COMPLETION, _num_wcs); \
+      UCS_STATS_UPDATE_COUNTER((_iface)->super.stats, \
+                               UCT_IB_IFACE_STAT_TX_COMPLETION, _num_wcs); \
       for (_i = 0; _i < _num_wcs; ++_i)
 
 

@@ -431,44 +431,6 @@ UCS_TEST_P(test_async, global_timer) {
     expect_count_GE(gt, COUNT);
 }
 
-UCS_TEST_P(test_async, max_events, "ASYNC_MAX_EVENTS=4") {
-    ucs_status_t status;
-    ucs_async_context_t async;
-
-    status = ucs_async_context_init(&async, GetParam());
-    ASSERT_UCS_OK(status);
-
-    /* 4 timers should be OK */
-    std::vector<int> timers;
-    for (unsigned count = 0; count < 4; ++count) {
-        int timer_id;
-        status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
-                                     (ucs_async_event_cb_t)ucs_empty_function,
-                                     NULL, &async, &timer_id);
-        ASSERT_UCS_OK(status);
-        timers.push_back(timer_id);
-    }
-
-    /* 5th timer should fail */
-    int timer_id;
-    status = ucs_async_add_timer(GetParam(), ucs_time_from_sec(1.0),
-                                 (ucs_async_event_cb_t)ucs_empty_function,
-                                 NULL, &async, &timer_id);
-    EXPECT_EQ(UCS_ERR_EXCEEDS_LIMIT, status);
-
-    if (status == UCS_OK) {
-        timers.push_back(timer_id);
-    }
-
-    /* Release timers */
-    for (std::vector<int>::iterator iter = timers.begin(); iter != timers.end(); ++iter) {
-        status = ucs_async_remove_handler(*iter, 1);
-        ASSERT_UCS_OK(status);
-    }
-
-    ucs_async_context_cleanup(&async);
-}
-
 UCS_TEST_P(test_async, many_timers) {
     const int max_iters  = ucs_max(200, 4010 / ucs::test_time_multiplier());
     const int max_timers = ucs_max(10, 250 / ucs::test_time_multiplier());

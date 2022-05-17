@@ -74,6 +74,7 @@ typedef struct ucp_ep_config          ucp_ep_config_t;
 typedef struct ucp_ep_config_key      ucp_ep_config_key_t;
 typedef struct ucp_rkey_config_key    ucp_rkey_config_key_t;
 typedef struct ucp_proto              ucp_proto_t;
+typedef struct ucp_mem_desc           ucp_mem_desc_t;
 
 
 /**
@@ -132,6 +133,7 @@ typedef enum {
     UCP_OP_ID_TAG_SEND,
     UCP_OP_ID_TAG_SEND_SYNC,
     UCP_OP_ID_AM_SEND,
+    UCP_OP_ID_AM_SEND_REPLY,
     UCP_OP_ID_PUT,
     UCP_OP_ID_GET,
     UCP_OP_ID_AMO_POST,
@@ -154,7 +156,8 @@ typedef enum {
  * Active message codes
  */
 typedef enum {
-    UCP_AM_ID_WIREUP            =  1, /* Connection establishment */
+    UCP_AM_ID_FIRST             =  1, /* First valid AM ID */
+    UCP_AM_ID_WIREUP            =  UCP_AM_ID_FIRST, /* Connection establishment */
 
     UCP_AM_ID_EAGER_ONLY        =  2, /* Single packet eager TAG */
     UCP_AM_ID_EAGER_FIRST       =  3, /* First eager fragment */
@@ -182,11 +185,11 @@ typedef enum {
     UCP_AM_ID_ATOMIC_REQ        =  20, /* Remote memory atomic request */
     UCP_AM_ID_ATOMIC_REP        =  21, /* Remote memory atomic reply */
     UCP_AM_ID_CMPL              =  22, /* Remote memory operation completion */
-    UCP_AM_ID_SINGLE            =  23, /* Single fragment user defined AM */
-    UCP_AM_ID_FIRST             =  24, /* First fragment of user defined AM */
-    UCP_AM_ID_MIDDLE            =  25, /* Middle or last fragment of user
+    UCP_AM_ID_AM_SINGLE         =  23, /* Single fragment user defined AM */
+    UCP_AM_ID_AM_FIRST          =  24, /* First fragment of user defined AM */
+    UCP_AM_ID_AM_MIDDLE         =  25, /* Middle or last fragment of user
                                           defined AM */
-    UCP_AM_ID_SINGLE_REPLY      =  26, /* Single fragment user defined AM
+    UCP_AM_ID_AM_SINGLE_REPLY   =  26, /* Single fragment user defined AM
                                           carrying remote ep for reply */
     UCP_AM_ID_LAST
 } ucp_am_id_t;

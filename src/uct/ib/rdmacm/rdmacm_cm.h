@@ -12,7 +12,7 @@
 #include <ucs/sys/string.h>
 #include <ucs/type/spinlock.h>
 #include <ucs/datastruct/bitmap.h>
-#if HAVE_MLX5_HW
+#if HAVE_MLX5_DV
 #include <uct/ib/mlx5/ib_mlx5.h>
 #endif
 
@@ -77,6 +77,7 @@ typedef struct uct_rdmacm_cm_device_context {
     uint32_t        log_reserved_qpn_granularity;
     uint32_t        num_dummy_qps;
     struct ibv_cq   *cq;
+    uint8_t         eth_ports;
 } uct_rdmacm_cm_device_context_t;
 
 

@@ -375,6 +375,9 @@ uct_ud_verbs_iface_poll_tx(uct_ud_verbs_iface_t *iface, int is_async)
         return 0;
     }
 
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_TX_COMPLETION, 1);
+
     num_completed = wc.wr_id + 1;
     ucs_assertv(num_completed <= UCT_UD_TX_MODERATION, "num_compeleted=%u",
                 num_completed);
@@ -400,6 +403,9 @@ uct_ud_verbs_iface_poll_rx(uct_ud_verbs_iface_t *iface, int is_async)
         num_wcs = 0;
         goto out;
     }
+
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_RX_COMPLETION, num_wcs);
 
     UCT_IB_IFACE_VERBS_FOREACH_RXWQE(&iface->super.super, i, packet, wc, num_wcs) {
         if (!uct_ud_iface_check_grh(&iface->super, packet,
@@ -537,17 +543,6 @@ uct_ud_verbs_iface_peer_address_str(const uct_ud_iface_t *iface,
     return str;
 }
 
-static ucs_status_t
-uct_ud_verbs_ep_create(const uct_ep_params_t *params, uct_ep_h *ep_p)
-{
-    if (ucs_test_all_flags(params->field_mask, UCT_EP_PARAM_FIELD_DEV_ADDR |
-                                               UCT_EP_PARAM_FIELD_IFACE_ADDR)) {
-        return uct_ud_ep_create_connected_common(params, ep_p);
-    }
-
-    return uct_ud_verbs_ep_t_new(params, ep_p);
-}
-
 static void uct_ud_verbs_iface_destroy_qp(uct_ud_iface_t *ud_iface)
 {
     uct_ib_destroy_qp(ud_iface->qp);
@@ -559,8 +554,9 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     .super = {
         .super = {
             .iface_estimate_perf = uct_ib_iface_estimate_perf,
-            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+            .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)uct_ud_iface_vfs_refresh,
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate       = uct_ud_ep_invalidate
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .arm_cq         = uct_ib_iface_arm_cq,
@@ -569,6 +565,7 @@ static uct_ud_iface_ops_t uct_ud_verbs_iface_ops = {
     },
     .async_progress          = uct_ud_verbs_iface_async_progress,
     .send_ctl                = uct_ud_verbs_ep_send_ctl,
+    .ep_new                  = uct_ud_verbs_ep_t_new,
     .ep_free                 = UCS_CLASS_DELETE_FUNC_NAME(uct_ud_verbs_ep_t),
     .create_qp               = uct_ib_iface_create_qp,
     .destroy_qp              = uct_ud_verbs_iface_destroy_qp,
@@ -589,7 +586,7 @@ static uct_iface_ops_t uct_ud_verbs_iface_tl_ops = {
     .ep_flush                 = uct_ud_ep_flush,
     .ep_fence                 = uct_base_ep_fence,
     .ep_check                 = uct_ud_ep_check,
-    .ep_create                = uct_ud_verbs_ep_create,
+    .ep_create                = uct_ud_ep_create,
     .ep_destroy               = uct_ud_ep_disconnect,
     .ep_get_address           = uct_ud_ep_get_address,
     .ep_connect_to_ep         = uct_ud_ep_connect_to_ep,
@@ -742,6 +739,6 @@ uct_ud_verbs_query_tl_devices(uct_md_h md,
                                      num_tl_devices_p);
 }
 
-UCT_TL_DEFINE(&uct_ib_component, ud_verbs, uct_ud_verbs_query_tl_devices,
-              uct_ud_verbs_iface_t,  "UD_VERBS_",
-              uct_ud_verbs_iface_config_table, uct_ud_iface_config_t);
+UCT_TL_DEFINE_ENTRY(&uct_ib_component, ud_verbs, uct_ud_verbs_query_tl_devices,
+                    uct_ud_verbs_iface_t, "UD_VERBS_",
+                    uct_ud_verbs_iface_config_table, uct_ud_iface_config_t);

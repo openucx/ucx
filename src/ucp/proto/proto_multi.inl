@@ -241,4 +241,43 @@ ucp_proto_multi_lane_map_progress(ucp_request_t *req, ucp_lane_map_t *lane_map,
     return UCS_OK;
 }
 
+static UCS_F_ALWAYS_INLINE ucs_status_t
+ucp_proto_eager_bcopy_multi_common_send_func(
+        ucp_request_t *req, const ucp_proto_multi_lane_priv_t *lpriv,
+        ucp_datatype_iter_t *next_iter, ucp_am_id_t am_id_first,
+        uct_pack_callback_t pack_cb_first, size_t hdr_size_first,
+        ucp_am_id_t am_id_middle, uct_pack_callback_t pack_cb_middle,
+        size_t hdr_size_middle)
+{
+    ucp_ep_t *ep                        = req->send.ep;
+    ucp_proto_multi_pack_ctx_t pack_ctx = {
+        .req       = req,
+        .next_iter = next_iter
+    };
+    uct_pack_callback_t pack_cb;
+    ssize_t packed_size;
+    ucp_am_id_t am_id;
+    size_t hdr_size;
+
+    if (req->send.state.dt_iter.offset == 0) {
+        am_id    = am_id_first;
+        pack_cb  = pack_cb_first;
+        hdr_size = hdr_size_first;
+    } else {
+        am_id    = am_id_middle;
+        pack_cb  = pack_cb_middle;
+        hdr_size = hdr_size_middle;
+    }
+    pack_ctx.max_payload = ucp_proto_multi_max_payload(req, lpriv, hdr_size);
+
+    packed_size = uct_ep_am_bcopy(ep->uct_eps[lpriv->super.lane], am_id,
+                                  pack_cb, &pack_ctx, 0);
+    if (ucs_likely(packed_size >= 0)) {
+        ucs_assert(packed_size >= hdr_size);
+        return UCS_OK;
+    } else {
+        return (ucs_status_t)packed_size;
+    }
+}
+
 #endif

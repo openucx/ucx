@@ -12,7 +12,6 @@
 #include "rc_verbs_impl.h"
 
 #include <uct/api/uct.h>
-#include <uct/ib/mlx5/exp/ib_exp.h>
 #include <uct/ib/rc/base/rc_iface.h>
 #include <uct/ib/base/ib_device.h>
 #include <uct/ib/base/ib_log.h>
@@ -271,6 +270,7 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     uct_rc_verbs_iface_config_t *config =
                     ucs_derived_of(tl_config, uct_rc_verbs_iface_config_t);
     uct_ib_iface_config_t *ib_config    = &config->super.super.super;
+    uct_ib_md_t *ib_md                  = ucs_derived_of(tl_md, uct_ib_md_t);
     uct_ib_iface_init_attr_t init_attr  = {};
     uct_ib_qp_attr_t attr               = {};
     const char *dev_name;
@@ -278,12 +278,13 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     struct ibv_qp *qp;
     uct_rc_hdr_t *hdr;
 
-    init_attr.fc_req_size            = sizeof(uct_rc_pending_req_t);
-    init_attr.rx_hdr_len             = sizeof(uct_rc_hdr_t);
-    init_attr.qp_type                = IBV_QPT_RC;
-    init_attr.cq_len[UCT_IB_DIR_RX]  = ib_config->rx.queue_len;
-    init_attr.cq_len[UCT_IB_DIR_TX]  = config->super.tx_cq_len;
-    init_attr.seg_size               = ib_config->seg_size;
+    init_attr.fc_req_size           = sizeof(uct_rc_pending_req_t);
+    init_attr.rx_hdr_len            = sizeof(uct_rc_hdr_t);
+    init_attr.qp_type               = IBV_QPT_RC;
+    init_attr.cq_len[UCT_IB_DIR_RX] = ib_config->rx.queue_len;
+    init_attr.cq_len[UCT_IB_DIR_TX] = config->super.tx_cq_len;
+    init_attr.seg_size              = ib_config->seg_size;
+    init_attr.max_rd_atomic         = IBV_DEV_ATTR(&ib_md->dev, max_qp_rd_atom);
 
     UCS_CLASS_CALL_SUPER_INIT(uct_rc_iface_t, &uct_rc_verbs_iface_tl_ops,
                               &uct_rc_verbs_iface_ops, tl_md, worker, params,
@@ -352,7 +353,6 @@ static UCS_CLASS_INIT_FUNC(uct_rc_verbs_iface_t, uct_md_h tl_md,
     }
 
     /* Create a dummy QP in order to find out max_inline */
-    uct_ib_exp_qp_fill_attr(&self->super.super, &attr);
     status = uct_rc_iface_qp_create(&self->super, &qp, &attr,
                                     self->super.config.tx_qp_len,
                                     self->srq);
@@ -502,9 +502,10 @@ static uct_iface_ops_t uct_rc_verbs_iface_tl_ops = {
 static uct_rc_iface_ops_t uct_rc_verbs_iface_ops = {
     .super = {
         .super = {
-            .iface_estimate_perf = uct_ib_iface_estimate_perf,
+            .iface_estimate_perf = uct_rc_iface_estimate_perf,
             .iface_vfs_refresh   = uct_rc_iface_vfs_refresh,
-            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+            .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+            .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
         },
         .create_cq      = uct_ib_verbs_create_cq,
         .arm_cq         = uct_ib_iface_arm_cq,
@@ -579,6 +580,7 @@ uct_rc_verbs_query_tl_devices(uct_md_h md,
                                      num_tl_devices_p);
 }
 
-UCT_TL_DEFINE(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,
-              uct_rc_verbs_iface_t, "RC_VERBS_", uct_rc_verbs_iface_config_table,
-              uct_rc_verbs_iface_config_t);
+UCT_TL_DEFINE_ENTRY(&uct_ib_component, rc_verbs, uct_rc_verbs_query_tl_devices,
+                    uct_rc_verbs_iface_t, "RC_VERBS_",
+                    uct_rc_verbs_iface_config_table,
+                    uct_rc_verbs_iface_config_t);

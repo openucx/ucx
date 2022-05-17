@@ -10,7 +10,6 @@
 
 #include <common/test_helpers.h>
 #include <ucs/sys/sys.h>
-#include <ifaddrs.h>
 #include <atomic>
 #include <memory>
 
@@ -29,10 +28,10 @@ extern "C" {
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, all, "all") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, shm, "shm") \
         UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_ud, "dc_x,ud_v,ud_x,mm") \
-        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, no_ud_ud_x, "dc_x,mm") \
+        UCP_INSTANTIATE_TEST_CASE_TLS(_test_case, dc_no_ud_ud_x, "dc_mlx5,mm") \
         /* dc_ud case is for testing handling of a large worker address on
          * UCT_IFACE_FLAG_CONNECT_TO_IFACE transports (dc_x) */
-        /* no_ud_ud_x case is for testing handling a large worker address
+        /* dc_no_ud_ud_x case is for testing handling a large worker address
          * but with the lack of ud/ud_x transports, which would return an error
          * and skipped */
 
@@ -183,21 +182,16 @@ public:
         ASSERT_EQ(ret, 0);
 
         for (struct ifaddrs *ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
-            if (ucs_netif_flags_is_active(ifa->ifa_flags) &&
-                ucs::is_inet_addr(ifa->ifa_addr))
-            {
-                if (is_skip_interface(ifa)) {
-                    continue;
-                }
-
-                saddrs.push_back(ucs::sock_addr_storage());
-                status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
-                ASSERT_UCS_OK(status);
-                saddrs.back().set_sock_addr(*ifa->ifa_addr, size,
-                                            ucs::is_rdmacm_netdev(
-                                                    ifa->ifa_name));
-                saddrs.back().set_port(0); /* listen on any port then update */
+            if (is_skip_interface(ifa) || !ucs::is_interface_usable(ifa)) {
+                continue;
             }
+
+            saddrs.push_back(ucs::sock_addr_storage());
+            status = ucs_sockaddr_sizeof(ifa->ifa_addr, &size);
+            ASSERT_UCS_OK(status);
+            saddrs.back().set_sock_addr(*ifa->ifa_addr, size,
+                                        ucs::is_rdmacm_netdev(ifa->ifa_name));
+            saddrs.back().set_port(0); /* listen on any port then update */
         }
 
         freeifaddrs(ifaddrs);
@@ -206,7 +200,7 @@ public:
             UCS_TEST_SKIP_R("No interface for testing");
         }
 
-        static const std::string dc_tls[] = { "dc", "dc_x", "ib" };
+        static const std::string dc_tls[] = { "dc", "dc_x", "dc_mlx5", "ib" };
 
         bool has_dc = has_any_transport(
             std::vector<std::string>(dc_tls,
@@ -659,7 +653,7 @@ public:
     {
         {
             scoped_log_handler slh(detect_error_logger);
-            client_ep_connect(specify_src_addr);
+            client_ep_connect(0, specify_src_addr);
             if (!wait_for_server_ep(wakeup)) {
                 UCS_TEST_SKIP_R("cannot connect to server");
             }
@@ -895,6 +889,17 @@ protected:
         return false;
     }
 
+    static ucs_status_t ep_pending_add(uct_ep_h ep, uct_pending_req_t *req,
+                                       unsigned flags)
+    {
+        if (req->func == ucp_worker_discard_uct_ep_pending_cb) {
+            return UCS_ERR_BUSY;
+        }
+
+        auto ops = m_sender_uct_ops.find(ep->iface);
+        return ops->second.ep_pending_add(ep, req, flags);
+    }
+
     void do_force_close_during_rndv(bool fail_send_ep)
     {
         constexpr size_t length = 4 * UCS_KBYTE;
@@ -917,8 +922,6 @@ protected:
         ASSERT_NE((void*)NULL, message);
         ASSERT_EQ(UCS_INPROGRESS, ucp_request_check_status(sreq));
 
-        std::map<uct_iface_h, uct_iface_ops_t> sender_uct_ops;
-
         // Prevent destroying UCT endpoints from discarding to not detect error
         // by the receiver earlier than data could invalidate by the sender
         for (auto lane = 0; lane < ucp_ep_num_lanes(ep); ++lane) {
@@ -927,14 +930,13 @@ protected:
             }
 
             uct_iface_h uct_iface = ep->uct_eps[lane]->iface;
-            auto res = sender_uct_ops.emplace(uct_iface, uct_iface->ops);
+            auto res              = m_sender_uct_ops.emplace(uct_iface,
+                                                             uct_iface->ops);
             if (res.second) {
-                uct_iface->ops.ep_flush =
+                uct_iface->ops.ep_flush       =
                         reinterpret_cast<uct_ep_flush_func_t>(
                                 ucs_empty_function_return_no_resource);
-                uct_iface->ops.ep_pending_add =
-                        reinterpret_cast<uct_ep_pending_add_func_t>(
-                                ucs_empty_function_return_busy);
+                uct_iface->ops.ep_pending_add = ep_pending_add;
             }
         }
 
@@ -950,11 +952,13 @@ protected:
         request_progress(sreq, { &sender() }, 0.5);
 
         // Restore UCT endpoint's flush function to the original one to allow
-        // complation of descarding
-        for (auto &elem : sender_uct_ops) {
+        // completion of discarding
+        for (auto &elem : m_sender_uct_ops) {
             elem.first->ops.ep_flush       = elem.second.ep_flush;
             elem.first->ops.ep_pending_add = elem.second.ep_pending_add;
         }
+
+        m_sender_uct_ops.clear();
 
         mem_buffer recv_buffer(length, UCS_MEMORY_TYPE_HOST);
         recv_buffer.pattern_fill(2, length);
@@ -980,9 +984,12 @@ protected:
 
 protected:
     static unsigned m_err_count;
+    static std::map<uct_iface_h, uct_iface_ops_t> m_sender_uct_ops;
 };
 
-unsigned test_ucp_sockaddr::m_err_count = 0;
+unsigned test_ucp_sockaddr::m_err_count                                    = 0;
+std::map<uct_iface_h, uct_iface_ops_t> test_ucp_sockaddr::m_sender_uct_ops = {};
+
 
 UCS_TEST_P(test_ucp_sockaddr, listen) {
     listen_and_communicate(false, 0);
@@ -1917,7 +1924,7 @@ UCP_INSTANTIATE_ALL_TEST_CASE(test_ucp_sockaddr_check_lanes)
 class test_ucp_sockaddr_destroy_ep_on_err : public test_ucp_sockaddr {
 public:
     test_ucp_sockaddr_destroy_ep_on_err() {
-        set_tl_small_timeouts();
+        configure_peer_failure_settings();
     }
 
     virtual ucp_ep_params_t get_server_ep_params() {
@@ -2762,7 +2769,7 @@ public:
 
 protected:
     test_ucp_sockaddr_protocols_err() {
-        set_tl_small_timeouts();
+        configure_peer_failure_settings();
     }
 
     void test_tag_send_recv(size_t size, bool is_exp,
@@ -2834,6 +2841,9 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err, tag_rndv_unexp_put_scheme,
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sockaddr_protocols_err,
+                                        rc_no_ud, "rc_mlx5,rc_verbs")
+
 
 class test_ucp_sockaddr_protocols_err_sender
       : public test_ucp_sockaddr_protocols {
@@ -2852,7 +2862,7 @@ protected:
     }
 
     test_ucp_sockaddr_protocols_err_sender() {
-        set_tl_small_timeouts();
+        configure_peer_failure_settings();
         m_env.push_back(new ucs::scoped_setenv("UCX_IB_REG_METHODS",
                                                "rcache,odp,direct"));
     }
@@ -2989,3 +2999,5 @@ UCS_TEST_P(test_ucp_sockaddr_protocols_err_sender,
 }
 
 UCP_INSTANTIATE_CM_TEST_CASE(test_ucp_sockaddr_protocols_err_sender)
+UCP_INSTANTIATE_TEST_CASE_TLS_GPU_AWARE(test_ucp_sockaddr_protocols_err_sender,
+                                        rc_no_ud, "rc_mlx5,rc_verbs")

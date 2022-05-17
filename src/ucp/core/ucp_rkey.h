@@ -10,7 +10,6 @@
 #include "ucp_types.h"
 
 #include <ucp/core/ucp_context.h>
-#include <ucp/proto/proto_select.h>
 
 
 /**
@@ -182,12 +181,20 @@ void ucp_rkey_packed_copy(ucp_context_h context, ucp_md_map_t md_map,
 ssize_t
 ucp_rkey_pack_uct(ucp_context_h context, ucp_md_map_t md_map,
                   const uct_mem_h *memh, const ucp_memory_info_t *mem_info,
-                  ucp_sys_dev_map_t sys_dev_map,
+                  ucp_sys_dev_map_t sys_dev_map, unsigned uct_flags,
                   const ucs_sys_dev_distance_t *sys_distance, void *buffer);
 
 
-ucs_status_t ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer,
-                                         size_t length, ucp_rkey_h *rkey_p);
+ssize_t
+ucp_rkey_pack_memh(ucp_context_h context, ucp_md_map_t md_map,
+                   const ucp_mem_h memh, const ucp_memory_info_t *mem_info,
+                   ucp_sys_dev_map_t sys_dev_map,
+                   const ucs_sys_dev_distance_t *sys_distance, void *buffer);
+
+
+ucs_status_t
+ucp_ep_rkey_unpack_internal(ucp_ep_h ep, const void *buffer, size_t length,
+                            ucp_md_map_t unpack_md_map, ucp_rkey_h *rkey_p);
 
 
 void ucp_rkey_dump_packed(const void *buffer, size_t length,

@@ -19,11 +19,6 @@ ucs_status_t uct_ib_mlx5dv_init_obj(uct_ib_mlx5dv_t *obj, uint64_t type)
     int ret;
 
     ret = mlx5dv_init_obj(&obj->dv, type);
-#ifdef HAVE_IBV_EXP_DM
-    if (!ret && (type & MLX5DV_OBJ_DM)) {
-        ret = uct_ib_mlx5_get_dm_info(obj->dv_dm.in, obj->dv_dm.out);
-    }
-#endif
     if (ret != 0) {
         ucs_error("DV failed to get mlx5 information. Type %lx.", type);
         return UCS_ERR_NO_DEVICE;
@@ -60,7 +55,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
 
     uct_ib_iface_fill_attr(iface, &attr->super);
 
-    status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode,
+    status = uct_ib_mlx5_get_mmio_mode(iface->super.worker, attr->mmio_mode, 0,
                                        UCT_IB_MLX5_BF_REG_SIZE, &mmio_mode);
     if (status != UCS_OK) {
         goto err;
@@ -128,6 +123,7 @@ ucs_status_t uct_ib_mlx5_devx_create_qp(uct_ib_iface_t *iface,
         goto err_free_db;
     }
     UCT_IB_MLX5DV_SET(qpc, qpc, pm_state, UCT_IB_MLX5_QPC_PM_STATE_MIGRATED);
+    UCT_IB_MLX5DV_SET(qpc, qpc, rdma_wr_disabled, !!attr->rdma_wr_disabled);
     UCT_IB_MLX5DV_SET(qpc, qpc, pd, dvpd.pdn);
     UCT_IB_MLX5DV_SET(qpc, qpc, uar_page, uar->uar->page_id);
     ucs_assert((attr->super.srq == NULL) || (attr->super.srq_num != 0));
@@ -267,7 +263,7 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
         if (ret) {
             ucs_error("mlx5dv_devx_qp_query(%x) failed, syndrome %x: %m",
                       UCT_IB_MLX5_CMD_OP_QUERY_QP,
-                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+                      UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
             return UCS_ERR_IO_ERROR;
         }
         break;
@@ -276,7 +272,7 @@ uct_ib_mlx5_devx_query_qp(uct_ib_mlx5_qp_t *qp, void *in, size_t inlen,
         if (ret) {
             ucs_error("mlx5dv_devx_obj_query(%x) failed, syndrome %x: %m",
                       UCT_IB_MLX5_CMD_OP_QUERY_QP,
-                      UCT_IB_MLX5DV_GET(modify_qp_out, out, syndrome));
+                      UCT_IB_MLX5DV_GET(query_qp_out, out, syndrome));
             return UCS_ERR_IO_ERROR;
         }
         break;

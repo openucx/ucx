@@ -21,8 +21,8 @@
 
 
 typedef struct ucs_profile_global_location {
-    ucs_profile_location_t       super;      /*< Location info */
-    volatile int                 *loc_id_p;  /*< Back-pointer to location index */
+    ucs_profile_location_t        super; /*< Location info */
+    volatile ucs_profile_loc_id_t *loc_id_p; /*< Back-pointer to location index */
 } ucs_profile_global_location_t;
 
 
@@ -360,6 +360,20 @@ static void ucs_profile_thread_key_destr(void *data)
     ucs_profile_thread_finalize(ctx);
 }
 
+static ucs_profile_loc_id_t
+ucs_profile_location_id(ucs_profile_context_t *ctx,
+                        ucs_profile_global_location_t *loc)
+{
+    size_t raw_loc_id = (loc - ctx->locations) + 1; /* Array index plus 1 */
+    ucs_profile_loc_id_t loc_id;
+
+    loc_id = raw_loc_id;
+    ucs_assertv_always(loc_id == raw_loc_id,
+                       "profile location id overflow loc_id=%d raw_loc_id=%zd",
+                       loc_id, raw_loc_id);
+    return loc_id;
+}
+
 /*
  * Register a profiling location - should be called once per location in the
  * code, before the first record of each such location is made.
@@ -378,7 +392,8 @@ static void ucs_profile_thread_key_destr(void *data)
 static UCS_F_NOINLINE int
 ucs_profile_get_location(ucs_profile_context_t *ctx, ucs_profile_type_t type,
                          const char *name, const char *file, int line,
-                         const char *function, volatile int *loc_id_p)
+                         const char *function,
+                         volatile ucs_profile_loc_id_t *loc_id_p)
 {
     ucs_profile_global_location_t *loc, *new_locations;
     int loc_id;
@@ -393,12 +408,12 @@ ucs_profile_get_location(ucs_profile_context_t *ctx, ucs_profile_type_t type,
 
     /* Check if profiling is disabled */
     if (!ctx->profile_mode) {
-        *loc_id_p = loc_id = 0;
+        *loc_id_p = loc_id = UCS_PROFILE_LOC_ID_DISABLED;
         goto out_unlock;
     }
 
     /* Location ID must be uninitialized */
-    ucs_assert(*loc_id_p == -1);
+    ucs_assert(*loc_id_p == UCS_PROFILE_LOC_ID_UNKNOWN);
 
     ucs_profile_ctx_for_each_location(ctx, loc) {
         if ((type == loc->super.type) && (line == loc->super.line) &&
@@ -419,7 +434,7 @@ ucs_profile_get_location(ucs_profile_context_t *ctx, ucs_profile_type_t type,
                                     "profile_locations");
         if (new_locations == NULL) {
             ucs_warn("failed to expand locations array");
-            *loc_id_p = loc_id = 0;
+            *loc_id_p = loc_id = UCS_PROFILE_LOC_ID_DISABLED;
             goto out_unlock;
         }
 
@@ -436,7 +451,7 @@ ucs_profile_get_location(ucs_profile_context_t *ctx, ucs_profile_type_t type,
     loc->loc_id_p   = loc_id_p;
 
 out_found:
-    *loc_id_p = loc_id = (loc - ctx->locations) + 1;
+    *loc_id_p = loc_id = ucs_profile_location_id(ctx, loc);
     ucs_memory_cpu_store_fence();
 out_unlock:
     pthread_mutex_unlock(&ctx->mutex);
@@ -472,27 +487,27 @@ static void ucs_profile_thread_expand_locations(ucs_profile_context_t *ctx,
 void ucs_profile_record(ucs_profile_context_t *ctx, ucs_profile_type_t type,
                         const char *name, uint32_t param32, uint64_t param64,
                         const char *file, int line, const char *function,
-                        volatile int *loc_id_p)
+                        volatile ucs_profile_loc_id_t *loc_id_p)
 {
     ucs_profile_thread_location_t *loc;
     ucs_profile_thread_context_t *thread_ctx;
+    ucs_profile_loc_id_t loc_id;
     ucs_profile_record_t *rec;
     ucs_time_t current_time;
-    int loc_id;
 
     /* If the location id is -1 or 0, need to re-read it with lock held */
     loc_id = *loc_id_p;
     if (ucs_unlikely(loc_id <= 0)) {
         loc_id = ucs_profile_get_location(ctx, type, name, file, line,
                                           function, loc_id_p);
-        if (loc_id == 0) {
+        if (loc_id == UCS_PROFILE_LOC_ID_DISABLED) {
             return;
         }
     }
 
     ucs_memory_cpu_load_fence();
 
-    ucs_assert(*loc_id_p            != 0);
+    ucs_assert(*loc_id_p != UCS_PROFILE_LOC_ID_DISABLED);
     ucs_assert(ctx->profile_mode != 0);
 
     /* Get thread-specific profiling context */

@@ -36,6 +36,22 @@ typedef struct uct_ib_iface          uct_ib_iface_t;
 
 
 /**
+ * IB port active speed.
+ */
+enum {
+    UCT_IB_SPEED_SDR     = 1,
+    UCT_IB_SPEED_DDR     = 2,
+    UCT_IB_SPEED_QDR     = 4,
+    UCT_IB_SPEED_FDR10   = 8,
+    UCT_IB_SPEED_FDR     = 16,
+    UCT_IB_SPEED_EDR     = 32,
+    UCT_IB_SPEED_HDR     = 64,
+    UCT_IB_SPEED_NDR     = 128,
+    UCT_IB_SPEED_LAST
+};
+
+
+/**
  * IB port/path MTU.
  */
 typedef enum uct_ib_mtu {
@@ -59,9 +75,7 @@ typedef enum {
 
 enum {
     UCT_IB_QPT_UNKNOWN,
-#ifdef HAVE_DC_EXP
-    UCT_IB_QPT_DCI = IBV_EXP_QPT_DC_INI,
-#elif HAVE_DC_DV
+#if HAVE_DC_DV
     UCT_IB_QPT_DCI = IBV_QPT_DRIVER,
 #else
     UCT_IB_QPT_DCI = UCT_IB_QPT_UNKNOWN,
@@ -81,6 +95,13 @@ enum {
     UCT_IB_ADDRESS_PACK_FLAG_PKEY          = UCS_BIT(5)
 };
 
+enum {
+    UCT_IB_IFACE_STAT_RX_COMPLETION,
+    UCT_IB_IFACE_STAT_TX_COMPLETION,
+    UCT_IB_IFACE_STAT_RX_COMPLETION_ZIPPED,
+    UCT_IB_IFACE_STAT_TX_COMPLETION_ZIPPED,
+    UCT_IB_IFACE_STAT_LAST
+};
 
 typedef struct uct_ib_address_pack_params {
     /* Packing flags, UCT_IB_ADDRESS_PACK_FLAG_xx. */
@@ -116,10 +137,6 @@ struct uct_ib_iface_config {
         size_t              min_inline;      /* Inline space to reserve for sends */
         unsigned            min_sge;         /* How many SG entries to support */
         uct_iface_mpool_config_t mp;
-
-        /* Event moderation parameters */
-        unsigned            cq_moderation_count;
-        double              cq_moderation_period;
     } tx;
 
     struct {
@@ -127,10 +144,6 @@ struct uct_ib_iface_config {
         unsigned            max_batch;       /* How many buffers can be batched to one post receive */
         unsigned            max_poll;        /* How many wcs can be picked when polling rx cq */
         uct_iface_mpool_config_t mp;
-
-        /* Event moderation parameters */
-        unsigned            cq_moderation_count;
-        double              cq_moderation_period;
     } rx;
 
     /* Inline space to reserve in CQ */
@@ -154,8 +167,11 @@ struct uct_ib_iface_config {
     /* Number of paths to expose for the interface  */
     unsigned long           num_paths;
 
-    /* Whether to use local IP address and subnet mask for RoCE(v2) routing */
-    int                     rocev2_use_netmask;
+    /* Whether to check RoCEv2 reachability by IP address and local subnet */
+    int                     rocev2_local_subnet;
+
+    /* Length of subnet prefix for reachability check */
+    unsigned long           rocev2_subnet_pfx_len;
 
     /* Multiplier for RoCE LAG UDP source port calculation */
     unsigned                roce_path_factor;
@@ -165,9 +181,6 @@ struct uct_ib_iface_config {
 
     /* IB PKEY to use */
     unsigned                pkey;
-
-    /* Multiple resource domains */
-    int                     enable_res_domain;
 
     /* Path MTU size */
     uct_ib_mtu_t            path_mtu;
@@ -193,6 +206,8 @@ typedef struct uct_ib_iface_init_attr {
     unsigned    fc_req_size;            /* Flow control request size */
     int         qp_type;                /* IB QP type */
     int         flags;                  /* Various flags (see enum) */
+    /* The maximum number of outstanding RDMA Read/Atomic operations per QP */
+    unsigned    max_rd_atomic;
 } uct_ib_iface_init_attr_t;
 
 
@@ -204,9 +219,7 @@ typedef struct uct_ib_qp_attr {
     uint32_t                    srq_num;
     unsigned                    sq_sig_all;
     unsigned                    max_inl_cqe[UCT_IB_DIR_NUM];
-#if HAVE_DECL_IBV_EXP_CREATE_QP
-    struct ibv_exp_qp_init_attr ibv;
-#elif HAVE_DECL_IBV_CREATE_QP_EX
+#if HAVE_DECL_IBV_CREATE_QP_EX
     struct ibv_qp_init_attr_ex  ibv;
 #else
     struct ibv_qp_init_attr     ibv;
@@ -216,6 +229,7 @@ typedef struct uct_ib_qp_attr {
 
 typedef ucs_status_t (*uct_ib_iface_create_cq_func_t)(uct_ib_iface_t *iface,
                                                       uct_ib_dir_t dir,
+                                                      const uct_ib_iface_config_t *config,
                                                       const uct_ib_iface_init_attr_t *init_attr,
                                                       int preferred_cpu,
                                                       size_t inl);
@@ -273,13 +287,13 @@ struct uct_ib_iface {
         uint8_t               sl;
         uint8_t               traffic_class;
         uint8_t               hop_limit;
-        uint8_t               enable_res_domain;   /* Disable multiple resource domains */
         uint8_t               qp_type;
         uint8_t               force_global_addr;
         enum ibv_mtu          path_mtu;
     } config;
 
     uct_ib_iface_ops_t        *ops;
+    UCS_STATS_NODE_DECLARE(stats)
 };
 
 
@@ -476,7 +490,7 @@ int uct_ib_iface_is_roce_v2(uct_ib_iface_t *iface);
  * @param md_config_index       Gid index from the md configuration.
  */
 ucs_status_t uct_ib_iface_init_roce_gid_info(uct_ib_iface_t *iface,
-                                             size_t md_config_index);
+                                             unsigned long cfg_gid_index);
 
 
 static inline uct_ib_md_t* uct_ib_iface_md(uct_ib_iface_t *iface)
@@ -539,6 +553,7 @@ ucs_status_t uct_ib_iface_arm_cq(uct_ib_iface_t *iface,
                                  int solicited_only);
 
 ucs_status_t uct_ib_verbs_create_cq(uct_ib_iface_t *iface, uct_ib_dir_t dir,
+                                    const uct_ib_iface_config_t *config,
                                     const uct_ib_iface_init_attr_t *init_attr,
                                     int preferred_cpu, size_t inl);
 
@@ -558,7 +573,6 @@ uint8_t uct_ib_iface_config_select_sl(const uct_ib_iface_config_t *ib_config);
     uct_ib_device_name(uct_ib_iface_device(_iface)), \
     (_iface)->config.port_num, \
     uct_ib_iface_is_roce(_iface) ? "RoCE" : "IB"
-    
 
 
 #define UCT_IB_IFACE_VERBS_COMPLETION_ERR(_type, _iface, _i,  _wc) \

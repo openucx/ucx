@@ -5,11 +5,11 @@
  * See file LICENSE for terms.
  */
 
-#include "tcp.h"
-
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
+
+#include "tcp.h"
 
 #include <ucs/sys/string.h>
 #include <linux/sockios.h>

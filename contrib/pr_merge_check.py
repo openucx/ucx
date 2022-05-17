@@ -71,14 +71,15 @@ class PRChecker(object):
         """
         Set self.approved_commit to the hash of the latest approved PR commit.
         """
+        if self.approved_commit:
+            return;
         page = 1
-        self.approved_commit = None
         while True:
             data = self.github_api_call(req="/reviews", page=page)
             if not data:
                 break
             for d in data:
-                if d[u'state'] == u'APPROVED' and \
+                if d[u'state'] in [u'APPROVED', u'DISMISSED'] and \
                         d[u'user'][u'login'] == self.approving_user:
                     self.approved_commit = str(d[u'commit_id'])
             page += 1
@@ -113,7 +114,8 @@ class PRChecker(object):
         self.repo.git.merge(self.base_commit, m='Merge %s' % commit)
         if self.verbose:
             print(" - merge of %s to %s is %s" %
-                  (commit[:7], self.base_commit, str(self.repo.head.commit)[:7]))
+                  (commit[:7], self.base_commit[:7],
+                   str(self.repo.head.commit)[:7]))
         return self.repo.head.commit
 
     def parse_args(self, argv):
@@ -124,6 +126,9 @@ class PRChecker(object):
                           metavar="USER",
                           default = getpass.getuser(),
                           help="GitHub user name of approving user [default: %default]")
+        parser.add_option("--approved-commit", action="store", dest="approved_commit",
+                          metavar="COMMIT", default=None,
+                          help="Approved git commit hash")
         parser.add_option("--temp-dir", action="store", dest="temp_dir",
                           metavar="PATH",
                           default="/tmp/%s" % getpass.getuser(),
@@ -153,6 +158,7 @@ class PRChecker(object):
         self.depth = options.depth
         self.remote_name = options.remote
         self.verbose = options.verbose
+        self.approved_commit = options.approved_commit
 
     def print_diff(self, diff):
         if shutil.which("ydiff"):
@@ -171,7 +177,8 @@ class PRChecker(object):
 
         if self.verbose:
             print("comparing %s and %s when merged to %s" %
-                  (self.approved_commit[:7], self.head_commit[:7], self.target_branch))
+                  (self.approved_commit[:7], self.head_commit[:7],
+                   self.base_commit[:7]))
 
         merge_approved = self.merge(self.approved_commit)
         merge_head = self.merge(self.head_commit)
@@ -182,9 +189,10 @@ class PRChecker(object):
             return 0
 
         self.print_diff(diff)
+        self.remove_temp_dir()
         return 1
 
 
 if __name__ == "__main__":
-    checker = PRChecker()
-    sys.exit(checker.main(sys.argv))
+    rc = PRChecker().main(sys.argv)
+    sys.exit(rc)

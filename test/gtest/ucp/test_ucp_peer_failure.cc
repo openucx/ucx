@@ -78,13 +78,15 @@ protected:
 };
 
 UCP_INSTANTIATE_TEST_CASE(test_ucp_peer_failure)
+// DC without UD auxiliary
+UCP_INSTANTIATE_TEST_CASE_TLS(test_ucp_peer_failure, dc_mlx5, "dc_mlx5")
 
 
 test_ucp_peer_failure::test_ucp_peer_failure() :
     m_am_rx_count(0), m_err_count(0), m_err_status(UCS_OK)
 {
     ucs::fill_random(m_sbuf);
-    set_tl_small_timeouts();
+    configure_peer_failure_settings();
 }
 
 void test_ucp_peer_failure::get_test_variants(
@@ -345,7 +347,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
     /* Since UCT/UD EP has a SW implementation of reliablity on which peer
      * failure mechanism is based, we should set small UCT/UD EP timeout
      * for UCT/UD EPs for sender's UCP EP to reduce testing time */
-    double prev_ib_ud_timeout = sender().set_ib_ud_timeout(3.);
+    double prev_ib_ud_peer_timeout = sender().set_ib_ud_peer_timeout(3.);
 
     {
         scoped_log_handler slh(wrap_errors_logger);
@@ -360,20 +362,17 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
         EXPECT_NE(UCS_OK, m_err_status);
 
         if (UCS_PTR_IS_PTR(sreq)) {
-            /* The request may either succeed or fail, even though the data is
-             * not * delivered - depends on when the error is detected on sender
-             * side and if zcopy/bcopy protocol is used. In any case, the
-             * request must complete, and all resources have to be released.
-             */
-            ucs_status_t status = ucp_request_check_status(sreq);
-            EXPECT_NE(UCS_INPROGRESS, status);
+            ucs_status_t status;
+            /* If rendezvous protocol is used, the m_err_count is increased
+             * on the receiver side, so the send request may not complete
+             * immediately */
+            status = request_wait(sreq);
             if (request_must_fail) {
                 EXPECT_TRUE((m_err_status == status) ||
                             (UCS_ERR_CANCELED == status));
             } else {
                 EXPECT_TRUE((m_err_status == status) || (UCS_OK == status));
             }
-            ucp_request_release(sreq);
         }
 
         /* Additional sends must fail */
@@ -413,7 +412,7 @@ void test_ucp_peer_failure::do_test(size_t msg_size, int pre_msg_count,
 
     /* Since we won't test peer failure anymore, reset UCT/UD EP timeout to the
      * default value to avoid possible UD EP timeout errors under high load */
-    sender().set_ib_ud_timeout(prev_ib_ud_timeout);
+    sender().set_ib_ud_peer_timeout(prev_ib_ud_peer_timeout);
 
     /* Check workability of stable pair */
     smoke_test(true);
@@ -488,6 +487,21 @@ public:
         add_variant_with_value(variants, UCP_FEATURE_AM | UCP_FEATURE_WAKEUP,
                                TEST_AM | WAKEUP, "am_wakeup");
     }
+
+    void wakeup_drain_check_no_events(const std::vector<entity*> &entities)
+    {
+        ucs_time_t deadline = ucs::get_deadline();
+        int ret;
+
+        /* Read all possible wakeup events to make sure that no more events
+         * arrive */
+        do {
+            progress(entities);
+            ret = wait_for_wakeup(entities, 0);
+        } while ((ret > 0) && (ucs_get_time() < deadline));
+
+        EXPECT_EQ(ret, 0);
+    }
 };
 
 UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
@@ -502,12 +516,13 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     smoke_test(true); /* allow wireup to complete */
     smoke_test(false);
 
-    if (ucp_ep_config(stable_sender())->key.ep_check_map == 0) {
+    if (ucp_ep_config(stable_sender())->key.keepalive_lane == UCP_NULL_LANE) {
         UCS_TEST_SKIP_R("Unsupported");
     }
 
     /* ensure both pair have ep_check map */
-    ASSERT_NE(0, ucp_ep_config(failing_sender())->key.ep_check_map);
+    ASSERT_NE(UCP_NULL_LANE,
+              ucp_ep_config(failing_sender())->key.keepalive_lane);
 
     /* aux (ud) transport doesn't support keepalive feature and
      * we are assuming that wireup/connect procedure is done */
@@ -517,14 +532,16 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     /* flush all outstanding ops to allow keepalive to run */
     flush_worker(sender());
     if (get_variant_value() & WAKEUP) {
-        wait_for_wakeup({ &sender(), &failing_receiver() },
-                        100, true);
+        check_events({ &sender(), &failing_receiver() }, true);
+
+        /* make sure no remaining events are returned from poll() */
+        wakeup_drain_check_no_events({ &sender(), &failing_receiver() });
     }
 
     /* kill EPs & ifaces */
     failing_receiver().close_all_eps(*this, 0, UCP_EP_CLOSE_MODE_FORCE);
     if (get_variant_value() & WAKEUP) {
-        wait_for_wakeup({ &sender() });
+        wakeup_drain_check_no_events({ &sender() });
     }
     wait_for_flag(&m_err_count);
 
@@ -535,6 +552,15 @@ UCS_TEST_P(test_ucp_peer_failure_keepalive, kill_receiver,
     }
 
     EXPECT_NE(0, m_err_count);
+
+    ucp_ep_h ep = sender().revoke_ep(0, FAILING_EP_INDEX);
+    void *creq = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FORCE);
+    request_wait(creq);
+
+    /* make sure no remaining events are returned from poll() */
+    if (get_variant_value() & WAKEUP) {
+        wakeup_drain_check_no_events({ &sender() });
+    }
 
     /* check if stable receiver is still works */
     m_err_count = 0;

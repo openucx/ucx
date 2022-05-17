@@ -14,5 +14,5 @@ void ucp_get_version(unsigned *major_version, unsigned *minor_version,
 
 const char *ucp_get_version_string()
 {
-	return "@MAJOR_VERSION@.@MINOR_VERSION@.@PATCH_VERSION@";
+	return "@VERSION@";
 }

@@ -88,8 +88,15 @@ enum {
     UCP_RECV_DESC_FLAG_EAGER_LAST       = UCS_BIT(5), /* Last fragment of eager tag message.
                                                          Used by tag offload protocol. */
     UCP_RECV_DESC_FLAG_RNDV             = UCS_BIT(6), /* Rendezvous request */
-    UCP_RECV_DESC_FLAG_RECV_STARTED     = UCS_BIT(7), /* Receive operation on this descriptor
-                                                         was initiated by ucp_am_recv_data_nbx */
+    UCP_RECV_DESC_FLAG_RECV_STARTED     = UCS_BIT(7), /* Used in two different flows:
+                                                         1) AM: receive operation on this
+                                                            descriptor was initiated by
+                                                            ucp_am_recv_data_nbx
+                                                         2) TAG offload eager: multi fragment
+                                                            eager message is being received, but
+                                                            not all fragments received yet. Once
+                                                            all fragments arrive, this flag is cleared.
+                                                            Note: it is set for the first fragment only. */
     UCP_RECV_DESC_FLAG_MALLOC           = UCS_BIT(8), /* Descriptor was allocated with malloc
                                                          and must be freed, not returned to the
                                                          memory pool or UCT */
@@ -319,6 +326,8 @@ struct ucp_request {
                     /* Progress ID, if it's UCS_CALLBACKQ_ID_NULL, no operations
                      * are in-progress */
                     uct_worker_cb_id_t cb_id;
+                    /* Index of UCT EP to be flushed and destroyed */
+                    ucp_rsc_index_t    rsc_index;
                 } discard_uct_ep;
 
                 struct {
@@ -369,6 +378,7 @@ struct ucp_request {
             ucp_datatype_t        datatype; /* Receive type */
             size_t                length;   /* Total length, in bytes */
             ucs_memory_type_t     mem_type; /* Memory type */
+            uint32_t              op_attr;  /* Operation attributes */
             ucp_dt_state_t        state;
             ucp_worker_t          *worker;
             uct_tag_context_t     uct_ctx;  /* Transport offload context */

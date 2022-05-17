@@ -13,7 +13,7 @@ jobs:
         demands: ${{ parameters.demands }}
       displayName: coverity ${{ mode }} on ${{ parameters.container }}
       container: ${{ parameters.container }}
-      timeoutInMinutes: 45
+      timeoutInMinutes: 90
       steps:
         - checkout: self
           clean: true

@@ -11,7 +11,7 @@
 #include <ucs/sys/compiler_def.h>
 #include <ucs/memory/memory_type.h>
 #include <uct/api/uct.h>
-#include <ucs/sys/topo.h>
+#include <ucs/sys/topo/base/topo.h>
 
 #include <stdint.h>
 
@@ -90,7 +90,10 @@ enum uct_perf_attr_field {
     UCT_PERF_ATTR_FIELD_BANDWIDTH          = UCS_BIT(8),
 
     /** Enables @ref uct_perf_attr_t::latency */
-    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9)
+    UCT_PERF_ATTR_FIELD_LATENCY            = UCS_BIT(9),
+
+    /** Enable @ref uct_perf_attr_t::max_inflight_eps */
+    UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS   = UCS_BIT(10)
 };
 
 
@@ -174,6 +177,16 @@ typedef struct {
      * This field is set by the UCT layer.
      */
     ucs_linear_func_t   latency;
+
+    /**
+     * Approximate maximum number of endpoints that could have outstanding
+     * operations simultaneously.
+     * Protocols that require sending to multiple destinations at the same time
+     * (such as keepalive) could benefit from using a transport that has a
+     * large number of maximum inflight endpoints.
+     * This field is set by the UCT layer.
+     */
+    size_t              max_inflight_eps;
 } uct_perf_attr_t;
 
 
@@ -186,6 +199,15 @@ typedef enum {
     UCT_MD_MEM_DEREG_FIELD_FLAGS      = UCS_BIT(1), /**< flags field */
     UCT_MD_MEM_DEREG_FIELD_COMPLETION = UCS_BIT(2)  /**< comp field */
 } uct_md_mem_dereg_field_mask_t;
+
+
+/**
+ * @ingroup UCT_MD
+ * @brief MD memory key pack parameters field mask.
+ */
+typedef enum {
+    UCT_MD_MKEY_PACK_FIELD_FLAGS = UCS_BIT(0)  /**< flags field */
+} uct_md_mkey_pack_field_mask_t;
 
 
 /**
@@ -225,6 +247,23 @@ typedef enum {
      */
     UCT_MD_MEM_DEREG_FLAG_INVALIDATE = UCS_BIT(0)
 } uct_md_mem_dereg_flags_t;
+
+
+typedef enum {
+    /**
+     * The flag is used indicate that remote access to a memory region
+     * associated with the remote key must fail once the memory region is
+     * deregister using @ref uct_md_mem_dereg_v2 with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set. Using
+     * @ref uct_md_mem_dereg_v2 deregistration routine with
+     * @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag set on an rkey that was
+     * generated without @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag will
+     * not function correctly, and may result in data corruption. In other words
+     * in order for @ref UCT_MD_MEM_DEREG_FLAG_INVALIDATE flag to function
+     * the @ref UCT_MD_MKEY_PACK_FLAG_INVALIDATE flag must be set.
+     */
+    UCT_MD_MKEY_PACK_FLAG_INVALIDATE = UCS_BIT(0)
+} uct_md_mkey_pack_flags_t;
 
 
 /**
@@ -298,6 +337,22 @@ typedef struct uct_md_mem_dereg_params {
      */
     uct_completion_t             *comp;
 } uct_md_mem_dereg_params_t;
+
+
+typedef struct uct_md_mkey_pack_params {
+    /**
+     * Mask of valid fields in this structure, using bits from
+     * @ref uct_md_mkey_pack_field_mask_t. Fields not specified in this mask
+     * will be ignored. Provides ABI compatibility with respect to adding new
+     * fields.
+     */
+    uint64_t field_mask;
+
+    /**
+     * Remote key packing flags, using bits from @ref uct_md_mkey_pack_flags_t.
+     */
+    unsigned flags;
+} uct_md_mkey_pack_params_t;
 
 
 /**
@@ -419,6 +474,26 @@ typedef struct {
  * @param [out] md_attr  Filled with memory domain attributes.
  */
 ucs_status_t uct_md_query_v2(uct_md_h md, uct_md_attr_v2_t *md_attr);
+
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief Pack a remote key.
+ *
+ * @param [in]  md          Handle to memory domain.
+ * @param [in]  memh        Pack a remote key for this memory handle.
+ * @param [in]  params      Operation parameters, see @ref
+ *                          uct_md_mkey_pack_params_t.
+ * @param [out] rkey_buffer Pointer to a buffer to hold the packed remote key.
+ *                          The size of this buffer has should be at least
+ *                          @ref uct_md_attr_t::rkey_packed_size, as returned by
+ *                          @ref uct_md_query.
+ * @return                  Error code.
+ */
+ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 const uct_md_mkey_pack_params_t *params,
+                                 void *rkey_buffer);
 
 
 /**

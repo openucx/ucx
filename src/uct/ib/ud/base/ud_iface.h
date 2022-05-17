@@ -52,6 +52,7 @@ enum {
 typedef struct uct_ud_iface_config {
     uct_ib_iface_config_t         super;
     uct_ud_iface_common_config_t  ud_common;
+    double                        linger_timeout;
     double                        peer_timeout;
     double                        min_poke_time;
     double                        timer_tick;
@@ -105,6 +106,8 @@ typedef struct uct_ud_iface_ops {
     uint16_t                  (*send_ctl)(uct_ud_ep_t *ud_ep, uct_ud_send_skb_t *skb,
                                           const uct_ud_iov_t *iov, uint16_t iovcnt,
                                           int flags, int max_log_sge);
+    ucs_status_t              (*ep_new)(const uct_ep_params_t* params,
+                                        uct_ep_h *ep_p);
     void                      (*ep_free)(uct_ep_h ep);
     ucs_status_t              (*create_qp)(uct_ib_iface_t *iface, uct_ib_qp_attr_t *attr,
                                            struct ibv_qp **qp_p);
@@ -180,9 +183,11 @@ struct uct_ud_iface {
         unsigned               timer_sweep_count;
     } tx;
     struct {
+        ucs_time_t           linger_timeout;
         ucs_time_t           peer_timeout;
         ucs_time_t           min_poke_time;
         unsigned             tx_qp_len;
+        unsigned             rx_qp_len;
         unsigned             max_inline;
         int                  check_grh_dgid;
         unsigned             max_window;
@@ -248,8 +253,6 @@ ucs_status_t uct_ud_iface_get_address(uct_iface_h tl_iface, uct_iface_addr_t *ad
 void uct_ud_iface_add_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
 
 void uct_ud_iface_remove_ep(uct_ud_iface_t *iface, uct_ud_ep_t *ep);
-
-void uct_ud_iface_replace_ep(uct_ud_iface_t *iface, uct_ud_ep_t *old_ep, uct_ud_ep_t *new_ep);
 
 ucs_status_t uct_ud_iface_flush(uct_iface_h tl_iface, unsigned flags,
                                 uct_completion_t *comp);
@@ -345,6 +348,8 @@ void uct_ud_iface_progress_disable(uct_iface_h tl_iface, unsigned flags);
 
 void uct_ud_iface_ctl_skb_complete(uct_ud_iface_t *iface,
                                    uct_ud_ctl_desc_t *cdesc, int is_async);
+
+void uct_ud_iface_vfs_refresh(uct_iface_h iface);
 
 void uct_ud_iface_send_completion(uct_ud_iface_t *iface, uint16_t sn,
                                   int is_async);
@@ -443,21 +448,6 @@ uct_ud_iface_check_grh(uct_ud_iface_t *iface, void *packet, int is_grh_present,
 }
 
 
-/* get time of the last async wakeup */
-static UCS_F_ALWAYS_INLINE ucs_time_t
-uct_ud_iface_get_async_time(uct_ud_iface_t *iface)
-{
-    return iface->super.super.worker->async->last_wakeup;
-}
-
-
-static UCS_F_ALWAYS_INLINE ucs_time_t
-uct_ud_iface_get_time(uct_ud_iface_t *iface)
-{
-    return ucs_get_time();
-}
-
-
 static UCS_F_ALWAYS_INLINE void
 uct_ud_iface_twheel_sweep(uct_ud_iface_t *iface)
 {
@@ -469,7 +459,7 @@ uct_ud_iface_twheel_sweep(uct_ud_iface_t *iface)
         return;
     }
 
-    ucs_twheel_sweep(&iface->tx.timer, uct_ud_iface_get_time(iface));
+    ucs_twheel_sweep(&iface->tx.timer, ucs_get_time());
 }
 
 

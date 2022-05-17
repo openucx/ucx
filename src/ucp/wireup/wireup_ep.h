@@ -29,7 +29,10 @@ enum {
     UCP_WIREUP_EP_FLAG_REMOTE_CONNECTED = UCS_BIT(2),
 
     /* Send client id */
-    UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3)
+    UCP_WIREUP_EP_FLAG_SEND_CLIENT_ID   = UCS_BIT(3),
+
+    /* Indicates that aux_ep is CONNECT_TO_EP */
+    UCP_WIREUP_EP_FLAG_AUX_P2P          = UCS_BIT(4)
 };
 
 
@@ -97,11 +100,7 @@ void ucp_wireup_ep_pending_queue_purge(uct_ep_h uct_ep,
                                        void *arg);
 
 void ucp_wireup_ep_set_aux(ucp_wireup_ep_t *wireup_ep, uct_ep_h uct_ep,
-                           ucp_rsc_index_t rsc_index);
-
-ucs_status_t
-ucp_wireup_ep_connect_aux(ucp_wireup_ep_t *wireup_ep, unsigned ep_init_flags,
-                          const ucp_unpacked_address_t *remote_address);
+                           ucp_rsc_index_t rsc_index, int is_p2p);
 
 void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
                                   unsigned ep_flush_flags,
@@ -110,7 +109,8 @@ void ucp_wireup_ep_discard_aux_ep(ucp_wireup_ep_t *wireup_ep,
 
 int ucp_wireup_ep_has_next_ep(ucp_wireup_ep_t *wireup_ep);
 
-void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep);
+void ucp_wireup_ep_set_next_ep(uct_ep_h uct_ep, uct_ep_h next_ep,
+                               ucp_rsc_index_t rsc_index);
 
 uct_ep_h ucp_wireup_ep_extract_next_ep(uct_ep_h uct_ep);
 

@@ -14,6 +14,7 @@
 
 #include <ucs/arch/cpu.h>
 #include <ucs/debug/log.h>
+#include <ucs/time/time.h>
 #include <ucs/sys/math.h>
 #include <ucs/sys/sys.h>
 #include <ucs/sys/string.h>
@@ -107,6 +108,7 @@ typedef struct ucs_x86_cpu_cache_size_codes {
 
 
 ucs_ternary_auto_value_t ucs_arch_x86_enable_rdtsc = UCS_TRY;
+static double ucs_arch_x86_tsc_freq                = 0.0;
 
 static const ucs_x86_cpu_cache_info_t x86_cpu_cache[] = {
     [UCS_CPU_CACHE_L1d] = {.level = 1, .type = X86_CPU_CACHE_TYPE_DATA},
@@ -233,7 +235,7 @@ warn:
     return 0;
 }
 
-double ucs_x86_tsc_freq_from_cpu_model()
+static double ucs_arch_x86_tsc_freq_from_cpu_model()
 {
     char buf[256];
     char model[256];
@@ -283,42 +285,84 @@ double ucs_x86_tsc_freq_from_cpu_model()
     return max_ghz * 1e9;
 }
 
-double ucs_x86_init_tsc_freq()
+static double ucs_arch_x86_tsc_freq_measure()
 {
-    double result;
+    static const double accuracy = 1e-5; /* 5 digits after decimal point */
+    static const double max_time = 1e-3; /* 1ms */
+    uint64_t tsc, tsc_start, tsc_end, min_tsc_diff;
+    double elapsed, curr_freq, avg_freq;
+    struct timeval tv_start, tv_end;
+    unsigned i;
 
-    if (!ucs_x86_invariant_tsc()) {
-        goto err_disable_rdtsc;
+    /* Start the timer when the time difference between consecutive measures
+       of TSC value is the smallest. This removes the effect of initialization
+       and random context switches. */
+    min_tsc_diff     = UINT64_MAX;
+    tsc_start        = 0;
+    tv_start.tv_sec  = 0;
+    tv_start.tv_usec = 0;
+    for (i = 0; i < 10; ++i) {
+        tsc = ucs_arch_x86_read_tsc();
+        gettimeofday(&tv_end, NULL);
+        tsc_end = ucs_arch_x86_read_tsc();
+        if ((tsc_end - tsc) < min_tsc_diff) {
+            tv_start     = tv_end;
+            tsc_start    = tsc_end;
+            min_tsc_diff = tsc_end - tsc;
+        }
     }
 
-    ucs_arch_x86_enable_rdtsc = UCS_YES;
+    /* Calculate the frequency and stop when the difference between current
+       iteration and the geometric average of previous iterations is below
+       the required accuracy threshold */
+    avg_freq  = 0.0;
+    curr_freq = 1.0;
+    do {
+        gettimeofday(&tv_end, NULL);
+        tsc_end = ucs_arch_x86_read_tsc();
+        elapsed = ((tv_end.tv_usec - tv_start.tv_usec) /
+                   (double)UCS_USEC_PER_SEC) +
+                  (tv_end.tv_sec - tv_start.tv_sec);
+        if ((tv_start.tv_sec != tv_end.tv_sec) ||
+            (tv_start.tv_usec != tv_end.tv_usec)) {
+            curr_freq = (tsc_end - tsc_start) / elapsed;
+            avg_freq  = (avg_freq + curr_freq) / 2;
+        }
+    } while ((fabs(curr_freq - avg_freq) >
+              (ucs_max(curr_freq, avg_freq) * accuracy)) &&
+             (elapsed < max_time));
 
-    result = ucs_x86_tsc_freq_from_cpu_model();
-    if (result <= 0.0) {
-        result = ucs_get_cpuinfo_clock_freq("cpu MHz", 1e6);
+    ucs_trace("tsc measure start %lu.%06lu %lu (diff %lu) end %lu.%06lu %lu",
+              tv_start.tv_sec, tv_start.tv_usec, tsc_start, min_tsc_diff,
+              tv_end.tv_sec, tv_end.tv_usec, tsc_end);
+    ucs_debug("measured tsc frequency %.3f MHz after %.2f ms", curr_freq * 1e-6,
+              elapsed * UCS_MSEC_PER_SEC);
+
+    return curr_freq;
+}
+
+void ucs_x86_init_tsc_freq()
+{
+    double freq;
+
+    if (ucs_x86_invariant_tsc()) {
+        freq = ucs_arch_x86_tsc_freq_from_cpu_model();
+        if (freq <= 0.0) {
+            freq = ucs_arch_x86_tsc_freq_measure();
+        }
+
+        ucs_arch_x86_enable_rdtsc = UCS_YES;
+        ucs_arch_x86_tsc_freq     = freq;
+    } else {
+        ucs_arch_x86_enable_rdtsc = UCS_NO;
     }
-
-    if (result > 0.0) {
-        return result;
-    }
-
-err_disable_rdtsc:
-    ucs_arch_x86_enable_rdtsc = UCS_NO;
-    return -1;
 }
 
 double ucs_arch_get_clocks_per_sec()
 {
-    double freq;
-
-    /* Init rdtsc state ucs_arch_x86_enable_rdtsc */
-    freq = ucs_x86_init_tsc_freq();
-    if (ucs_arch_x86_enable_rdtsc == UCS_YES) {
-        /* using rdtsc */
-        return freq;
-    }
-
-    return ucs_arch_generic_get_clocks_per_sec();
+    return (ucs_arch_x86_rdtsc_enabled() == UCS_YES) ?
+                   ucs_arch_x86_tsc_freq :
+                   ucs_arch_generic_get_clocks_per_sec();
 }
 
 ucs_cpu_model_t ucs_arch_get_cpu_model()

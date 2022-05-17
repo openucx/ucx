@@ -128,6 +128,7 @@ ucs_status_t uct_cma_ep_check(const uct_ep_h tl_ep, unsigned flags,
 {
     uct_cma_ep_t *ep = ucs_derived_of(tl_ep, uct_cma_ep_t);
 
-    return uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->remote_pid, flags,
-                                  comp);
+    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
+    uct_ep_keepalive_check(tl_ep, &ep->keepalive, ep->remote_pid, flags, comp);
+    return UCS_OK;
 }

@@ -40,6 +40,7 @@ static void usage() {
     printf("                    'a' : atomic operations\n");
     printf("                    'r' : remote memory access\n");
     printf("                    't' : tag matching \n");
+    printf("                    's' : stream \n");
     printf("                    'm' : active messages \n");
     printf("                  Modifiers to use in combination with above features:\n");
     printf("                    'w' : wakeup\n");
@@ -164,6 +165,9 @@ int main(int argc, char **argv)
                     break;
                 case 't':
                     ucp_features |= UCP_FEATURE_TAG;
+                    break;
+                case 's':
+                    ucp_features |= UCP_FEATURE_STREAM;
                     break;
                 case 'm':
                     ucp_features |= UCP_FEATURE_AM;

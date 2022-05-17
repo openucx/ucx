@@ -14,8 +14,6 @@ extern "C" {
 #include <pthread.h>
 #include <fstream>
 
-#ifdef HAVE_PROFILING
-
 class scoped_profile {
 public:
     scoped_profile(ucs::test_base& test, const std::string &file_name,
@@ -109,23 +107,25 @@ const int test_profile::MIN_LINE = __LINE__;
 
 static void *test_request = &test_request;
 
-UCS_PROFILE_FUNC_VOID(profile_test_func1, ())
+UCS_PROFILE_FUNC_VOID_ALWAYS(profile_test_func1, ())
 {
     UCS_PROFILE_REQUEST_NEW(test_request, "allocate", 10);
-    UCS_PROFILE_REQUEST_EVENT(test_request, "work", 0);
+    UCS_PROFILE_REQUEST_EVENT_ALWAYS(test_request, "work", 0);
     UCS_PROFILE_REQUEST_FREE(test_request);
-    UCS_PROFILE_CODE("code") {
-        UCS_PROFILE_SAMPLE("sample");
-    }
+    UCS_PROFILE_CODE_ALWAYS("code", { UCS_PROFILE_SAMPLE_ALWAYS("sample"); });
 }
 
-UCS_PROFILE_FUNC(int, profile_test_func2, (a, b), int a, int b)
+UCS_PROFILE_FUNC_ALWAYS(int, profile_test_func2, (a, b), int a, int b)
 {
-    return UCS_PROFILE_CALL(sum, a, b);
+    return UCS_PROFILE_CALL_ALWAYS(sum, a, b);
 }
 
 const int test_profile::MAX_LINE           = __LINE__;
-const unsigned test_profile::NUM_LOCAITONS = 12u;
+#ifdef HAVE_PROFILING
+const unsigned test_profile::NUM_LOCAITONS = 12; /* With request alloc/free */
+#else
+const unsigned test_profile::NUM_LOCAITONS = 10; /* Without request alloc/free */
+#endif
 const char* test_profile::PROFILE_FILENAME = "test.prof";
 
 test_profile::test_profile()
@@ -232,7 +232,9 @@ void test_profile::test_locations(const ucs_profile_location_t *locations,
     EXPECT_NE(loc_names.end(), loc_names.find("code"));
     EXPECT_NE(loc_names.end(), loc_names.find("sample"));
     EXPECT_NE(loc_names.end(), loc_names.find("sum"));
+#ifdef HAVE_PROFILING
     EXPECT_NE(loc_names.end(), loc_names.find("allocate"));
+#endif
     EXPECT_NE(loc_names.end(), loc_names.find("work"));
 
     *ptr = locations + num_locations;
@@ -404,9 +406,7 @@ UCS_TEST_SKIP_COND_P(test_profile_perf, overhead, RUNNING_ON_VALGRIND) {
 
             t = ucs_get_time();
             for (volatile int j = 0; j < COUNT;) {
-                UCS_PROFILE_CODE("test") {
-                    ++j;
-                }
+                UCS_PROFILE_CODE_ALWAYS("test", ++j);
             }
             if (i > WARMUP_ITERS) {
                 time_profile_on += ucs_get_time() - t;
@@ -431,5 +431,3 @@ UCS_TEST_SKIP_COND_P(test_profile_perf, overhead, RUNNING_ON_VALGRIND) {
 }
 
 INSTANTIATE_TEST_SUITE_P(st, test_profile_perf, ::testing::Values(1));
-
-#endif

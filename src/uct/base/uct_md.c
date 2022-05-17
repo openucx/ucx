@@ -58,6 +58,10 @@ ucs_config_field_t uct_md_config_rcache_table[] = {
      ucs_offsetof(uct_md_rcache_config_t, max_unreleased),
      UCS_CONFIG_TYPE_MEMUNITS},
 
+    {"RCACHE_PURGE_ON_FORK", "y",
+     "Purge registration cache upon fork",
+     ucs_offsetof(uct_md_rcache_config_t, purge_on_fork), UCS_CONFIG_TYPE_BOOL},
+
     {NULL}
 };
 
@@ -320,9 +324,38 @@ ucs_status_t uct_config_modify(void *config, const char *name, const char *value
     return ucs_config_parser_set_value(bundle->data, bundle->table, name, value);
 }
 
+static ucs_status_t
+uct_md_mkey_pack_params_check(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
+{
+    if (ENABLE_PARAMS_CHECK) {
+        return ((md != NULL) && (memh != NULL) && (rkey_buffer != NULL)) ?
+               UCS_OK : UCS_ERR_INVALID_PARAM;
+    } else {
+        return UCS_OK;
+    }
+}
+
+ucs_status_t uct_md_mkey_pack_v2(uct_md_h md, uct_mem_h memh,
+                                 const uct_md_mkey_pack_params_t *params,
+                                 void *rkey_buffer)
+{
+    ucs_status_t status;
+
+    status = uct_md_mkey_pack_params_check(md, memh, rkey_buffer);
+    if (status != UCS_OK) {
+        return status;
+    }
+
+    return md->ops->mkey_pack(md, memh, params, rkey_buffer);
+}
+
 ucs_status_t uct_md_mkey_pack(uct_md_h md, uct_mem_h memh, void *rkey_buffer)
 {
-    return md->ops->mkey_pack(md, memh, rkey_buffer);
+    uct_md_mkey_pack_params_t params = {
+        .field_mask = 0
+    };
+
+    return uct_md_mkey_pack_v2(md, memh, &params, rkey_buffer);
 }
 
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
@@ -523,6 +556,8 @@ void uct_md_set_rcache_params(ucs_rcache_params_t *rcache_params,
     rcache_params->max_regions        = rcache_config->max_regions;
     rcache_params->max_size           = rcache_config->max_size;
     rcache_params->max_unreleased     = rcache_config->max_unreleased;
+    rcache_params->flags              = !rcache_config->purge_on_fork ? 0 :
+                                        UCS_RCACHE_FLAG_PURGE_ON_FORK;
 }
 
 double uct_md_rcache_overhead(const uct_md_rcache_config_t *rcache_config)

@@ -23,12 +23,6 @@
 #include <ucs/vfs/base/vfs_obj.h>
 
 
-typedef struct uct_base_ep_error_handle_info {
-    uct_ep_h     ep;
-    ucs_status_t status;
-} uct_base_ep_error_handle_info_t;
-
-
 const char *uct_ep_operation_names[] = {
     [UCT_EP_OP_AM_SHORT]     = "am_short",
     [UCT_EP_OP_AM_BCOPY]     = "am_bcopy",
@@ -455,13 +449,18 @@ uct_base_iface_estimate_perf(uct_iface_h iface, uct_perf_attr_t *perf_attr)
         perf_attr->latency = iface_attr.latency;
     }
 
+    if (perf_attr->field_mask & UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS) {
+        perf_attr->max_inflight_eps = SIZE_MAX;
+    }
+
     return UCS_OK;
 }
 
 uct_iface_internal_ops_t uct_base_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
-    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported
+    .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
 };
 
 UCS_CLASS_INIT_FUNC(uct_iface_t, uct_iface_ops_t *ops)
@@ -511,6 +510,7 @@ UCS_CLASS_INIT_FUNC(uct_base_iface_t, uct_iface_ops_t *ops,
     ucs_assert(internal_ops->iface_estimate_perf != NULL);
     ucs_assert(internal_ops->iface_vfs_refresh != NULL);
     ucs_assert(internal_ops->ep_query != NULL);
+    ucs_assert(internal_ops->ep_invalidate != NULL);
 
     self->md                = md;
     self->internal_ops      = internal_ops;
@@ -631,6 +631,13 @@ ucs_status_t uct_ep_query(uct_ep_h ep, uct_ep_attr_t *ep_attr)
     return iface->internal_ops->ep_query(ep, ep_attr);
 }
 
+ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags)
+{
+    const uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
+
+    return iface->internal_ops->ep_invalidate(ep, flags);
+}
+
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface)
 {
     ep->iface = iface;
@@ -648,27 +655,25 @@ UCS_CLASS_CLEANUP_FUNC(uct_ep_t)
 
 UCS_CLASS_DEFINE(uct_ep_t, void);
 
-static unsigned uct_iface_ep_error_handle_progress(void *arg)
+static unsigned uct_iface_ep_conn_reset_handle_progress(void *arg)
 {
-    uct_base_ep_error_handle_info_t *err_info = arg;
-    uct_base_iface_t *iface;
+    uct_ep_h ep             = arg;
+    uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
 
-    iface = ucs_derived_of(err_info->ep->iface, uct_base_iface_t);
-    iface->err_handler(iface->err_handler_arg, err_info->ep, err_info->status);
-    ucs_free(err_info);
+    iface->err_handler(iface->err_handler_arg, ep, UCS_ERR_CONNECTION_RESET);
+
     return 1;
 }
 
 static int
-uct_iface_ep_error_handle_progress_remove(const ucs_callbackq_elem_t *elem,
-                                          void *arg)
+uct_iface_ep_conn_reset_handle_progress_remove(
+        const ucs_callbackq_elem_t *elem, void *arg)
 {
-    uct_base_ep_error_handle_info_t *err_info = elem->arg;
-    uct_base_ep_t *ep                         = arg;
+    uct_base_ep_t *err_ep = elem->arg;
+    uct_base_ep_t *ep     = arg;
 
-    if ((elem->cb == uct_iface_ep_error_handle_progress) &&
-        (err_info->ep == &ep->super)) {
-        ucs_free(err_info);
+    if ((elem->cb == uct_iface_ep_conn_reset_handle_progress) &&
+        (ep == err_ep)) {
         return 1;
     }
 
@@ -689,7 +694,8 @@ static UCS_CLASS_CLEANUP_FUNC(uct_base_ep_t)
                                              uct_base_iface_t);
 
     ucs_callbackq_remove_if(&iface->worker->super.progress_q,
-                            uct_iface_ep_error_handle_progress_remove, self);
+                            uct_iface_ep_conn_reset_handle_progress_remove,
+                            self);
     UCS_STATS_NODE_FREE(self->stats);
 }
 
@@ -787,27 +793,18 @@ ucs_status_t uct_base_ep_am_short_iov(uct_ep_h ep, uint8_t id, const uct_iov_t *
     return status;
 }
 
-static ucs_status_t uct_iface_schedule_ep_err(uct_ep_h ep, ucs_status_t status)
+static void uct_iface_schedule_ep_err(uct_ep_h ep)
 {
     uct_base_iface_t *iface = ucs_derived_of(ep->iface, uct_base_iface_t);
-    uct_base_ep_error_handle_info_t *err_info;
 
     if (iface->err_handler == NULL) {
-        ucs_diag("ep %p: unhandled error %s", ep, ucs_status_string(status));
-        return UCS_OK;
+        ucs_diag("ep %p: unhandled error", ep);
+        return;
     }
 
-    err_info = ucs_malloc(sizeof(*err_info), "uct_base_ep_err");
-    if (err_info == NULL) {
-        return UCS_ERR_NO_MEMORY;
-    }
-
-    err_info->ep     = ep;
-    err_info->status = status;
     ucs_callbackq_add_safe(&iface->worker->super.progress_q,
-                           uct_iface_ep_error_handle_progress, err_info,
+                           uct_iface_ep_conn_reset_handle_progress, ep,
                            UCS_CALLBACKQ_FLAG_ONESHOT);
-    return UCS_OK;
 }
 
 ucs_status_t uct_ep_keepalive_init(uct_keepalive_info_t *ka, pid_t pid)
@@ -821,13 +818,10 @@ ucs_status_t uct_ep_keepalive_init(uct_keepalive_info_t *ka, pid_t pid)
     return UCS_OK;
 }
 
-ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka,
-                                    pid_t pid, unsigned flags,
-                                    uct_completion_t *comp)
+void uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka, pid_t pid,
+                            unsigned flags, uct_completion_t *comp)
 {
     unsigned long start_time;
-
-    UCT_EP_KEEPALIVE_CHECK_PARAM(flags, comp);
 
     ucs_assert(ka->start_time != 0);
 
@@ -835,10 +829,8 @@ ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka,
     if (ka->start_time != start_time) {
         ucs_diag("ka failed for pid %d start time %lu != %lu", pid,
                  ka->start_time, start_time);
-        return uct_iface_schedule_ep_err(ep, UCS_ERR_ENDPOINT_TIMEOUT);
+        uct_iface_schedule_ep_err(ep);
     }
-
-    return UCS_OK;
 }
 
 void uct_iface_get_local_address(uct_iface_local_addr_ns_t *addr_ns,
@@ -875,4 +867,16 @@ int uct_iface_local_is_reachable(uct_iface_local_addr_ns_t *addr_ns,
     /* We are in non-root PID namespace - return 1 if ID of namespaces are the
      * same */
     return addr_ns->sys_ns == my_addr.sys_ns;
+}
+
+void uct_tl_register(uct_component_t *component, uct_tl_t *tl)
+{
+    ucs_list_add_tail(&ucs_config_global_list, &tl->config.list);
+    ucs_list_add_tail(&component->tl_list, &tl->list);
+}
+
+void uct_tl_unregister(uct_tl_t *tl)
+{
+    ucs_list_del(&tl->config.list);
+    /* TODO: add list_del from ucs_config_global_list */
 }

@@ -7,26 +7,28 @@
 #ifndef UCS_MPMC_H
 #define UCS_MPMC_H
 
-#include <ucs/type/status.h>
-#include <ucs/sys/math.h>
+#include "queue.h"
 
-#define UCS_MPMC_VALID_SHIFT        63
-#define UCS_MPMC_VALUE_MAX          UCS_BIT(UCS_MPMC_VALID_SHIFT)
+#include <ucs/type/status.h>
+#include <ucs/type/spinlock.h>
 
 /**
  * A Multi-producer-multi-consumer thread-safe queue.
  * Every push/pull is a single atomic operation in "good" scenario.
- * The queue can contain small integers up to UCS_MPMC_VALUE_MAX.
- *
- * TODO make the queue resizeable.
  */
 typedef struct ucs_mpmc_queue {
-    uint32_t           length;      /* Array size. Rounded to power of 2. */
-    int                shift;
-    volatile uint32_t  producer;    /* Producer index */
-    volatile uint32_t  consumer;    /* Consumer index */
-    uint64_t           *queue;      /* Array of data */
+    ucs_spinlock_t     lock;        /* Protects 'queue' */
+    ucs_queue_head_t   queue;       /* Queue of data */
 } ucs_mpmc_queue_t;
+
+
+/**
+ * MPMC queue element type.
+ */
+typedef struct ucs_mpmc_elem {
+    ucs_queue_elem_t super;
+    uint64_t         value;
+} ucs_mpmc_elem_t;
 
 
 /**
@@ -34,7 +36,7 @@ typedef struct ucs_mpmc_queue {
  *
  * @param length   Queue length.
  */
-ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc, uint32_t length);
+ucs_status_t ucs_mpmc_queue_init(ucs_mpmc_queue_t *mpmc);
 
 
 /**
@@ -47,7 +49,7 @@ void ucs_mpmc_queue_cleanup(ucs_mpmc_queue_t *mpmc);
  * Atomically push a value to the queue.
  *
  * @param value Value to push.
- * @return UCS_ERR_EXCEEDS_LIMIT if the queue is full.
+ * @return UCS_ERR_NO_MEMORY if it fails to allocate the MPMC queue element.
  */
 ucs_status_t ucs_mpmc_queue_push(ucs_mpmc_queue_t *mpmc, uint64_t value);
 
@@ -67,7 +69,7 @@ ucs_status_t ucs_mpmc_queue_pull(ucs_mpmc_queue_t *mpmc, uint64_t *value_p);
  */
 static inline int ucs_mpmc_queue_is_empty(ucs_mpmc_queue_t *mpmc)
 {
-    return mpmc->producer == mpmc->consumer;
+    return ucs_queue_is_empty(&mpmc->queue);
 }
 
 #endif

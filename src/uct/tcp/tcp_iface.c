@@ -943,6 +943,8 @@ int uct_tcp_keepalive_is_enabled(uct_tcp_iface_t *iface)
 #endif /* UCT_TCP_EP_KEEPALIVE */
 }
 
-UCT_TL_DEFINE(&uct_tcp_component, tcp, uct_tcp_query_devices, uct_tcp_iface_t,
-              UCT_TCP_CONFIG_PREFIX, uct_tcp_iface_config_table,
-              uct_tcp_iface_config_t);
+UCT_TL_DEFINE_ENTRY(&uct_tcp_component, tcp, uct_tcp_query_devices,
+                    uct_tcp_iface_t, UCT_TCP_CONFIG_PREFIX,
+                    uct_tcp_iface_config_table, uct_tcp_iface_config_t);
+
+UCT_SINGLE_TL_INIT(&uct_tcp_component, tcp,,,)

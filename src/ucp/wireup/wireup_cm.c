@@ -86,10 +86,9 @@ unsigned ucp_cm_client_try_next_cm_progress(void *arg)
         ucp_wireup_ep_destroy_next_ep(cm_wireup_ep);
     }
 
-    ucs_debug("client switching from %s to %s in attempt to connect to the"
-              " server",
-              ucp_context_cm_name(context, cm_idx - 1),
-              ucp_context_cm_name(context, cm_idx));
+    ucs_diag("ep %p: client switching from %s to %s in attempt to connect to"
+             " the server", ucp_ep, ucp_context_cm_name(context, cm_idx - 1),
+             ucp_context_cm_name(context, cm_idx));
 
     status = ucp_ep_client_cm_create_uct_ep(ucp_ep);
     if (status != UCS_OK) {
@@ -227,7 +226,7 @@ ucp_cm_ep_client_initial_config_get(ucp_ep_h ucp_ep, unsigned ep_init_flags,
     status = ucp_wireup_select_lanes(ucp_ep,
                                      wireup_ep->ep_init_flags | ep_init_flags,
                                      *tl_bitmap, &unpacked_addr, addr_indices,
-                                     key);
+                                     key, 0);
 
     ucs_free(unpacked_addr.address_list);
 free_ucp_addr:
@@ -286,7 +285,8 @@ ucp_cm_ep_sa_data_pack(ucp_ep_h ep, ucp_wireup_sockaddr_data_base_t *sa_data,
 
 static ucs_status_t
 ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
-                         int can_fallback, ucp_object_version_t sa_data_version,
+                         ucs_log_level_t log_level,
+                         ucp_object_version_t sa_data_version,
                          void **data_buf_p, size_t *data_buf_length_p,
                          unsigned ep_init_flags)
 {
@@ -297,7 +297,6 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     ucp_wireup_sockaddr_data_base_t *sa_data;
     ucp_rsc_index_t cm_idx;
     ucs_status_t status;
-    ucs_log_level_t log_level;
     void *worker_addr_p;
     size_t ucp_addr_size, sa_data_length;
 
@@ -324,7 +323,6 @@ ucp_cm_ep_priv_data_pack(ucp_ep_h ep, const ucp_tl_bitmap_t *tl_bitmap,
     sa_data_length = ucp_cm_priv_data_length(ucp_addr_size, sa_data_version);
     cm_idx         = ucp_ep_ext_control(ep)->cm_idx;
     if (worker->cms[cm_idx].attr.max_conn_priv < sa_data_length) {
-        log_level = can_fallback ?  UCS_LOG_LEVEL_DIAG : UCS_LOG_LEVEL_ERROR;
         ucs_log(log_level,
                 "CM private data buffer is too small to pack UCP endpoint"
                 " info, ep %p service data version %u, size %lu, address "
@@ -358,26 +356,21 @@ static void
 ucp_wireup_cm_ep_cleanup(ucp_ep_t *ucp_ep, ucs_queue_head_t *queue)
 {
     ucp_lane_index_t lane_idx;
-    uct_ep_h uct_ep;
 
     for (lane_idx = 0; lane_idx < ucp_ep_num_lanes(ucp_ep); ++lane_idx) {
         if (lane_idx == ucp_ep_get_cm_lane(ucp_ep)) {
             continue;
         }
 
-        /* Transfer the pending queues content from the previously configured
-         * UCP EP to a temporary queue for further replaying */
-        uct_ep_pending_purge(ucp_ep->uct_eps[lane_idx],
-                             ucp_request_purge_enqueue_cb, &queue);
-
-        if (ucp_ep_config(ucp_ep)->p2p_lanes & UCS_BIT(lane_idx)) {
-            uct_ep = ucp_wireup_extract_lane(ucp_ep, lane_idx);
-            /* Destroy the transport ep */
-            uct_ep_destroy(uct_ep);
-        }
-
-        /* Destroy the wireup ep */
-        uct_ep_destroy(ucp_ep->uct_eps[lane_idx]);
+        /* During discarding transfer the pending queues content from the
+         * previously configured UCP EP to a temporary queue for further
+         * replaying */
+        ucp_worker_discard_uct_ep(ucp_ep, ucp_ep->uct_eps[lane_idx],
+                                  ucp_ep_get_rsc_index(ucp_ep, lane_idx),
+                                  UCT_FLUSH_FLAG_CANCEL,
+                                  ucp_request_purge_enqueue_cb, &queue,
+                                  (ucp_send_nbx_callback_t)ucs_empty_function,
+                                  NULL);
         ucp_ep->uct_eps[lane_idx] = NULL;
     }
 }
@@ -428,13 +421,18 @@ out:
 
 static unsigned ucp_cm_client_uct_connect_progress(void *arg)
 {
-    ucp_ep_h ep                   = arg;
-    ucp_worker_h worker           = ep->worker;
-    ucp_context_h context         = worker->context;
-    ucp_wireup_ep_t *cm_wireup_ep = ucp_ep_get_cm_wireup_ep(ep);
-    void *ucp_addr                = NULL; /* Set to NULL to call ucs_free
-                                             safely */
-    unsigned ep_init_flags        = 0;
+    static const unsigned ep_init_flags_prio[] = {
+        0, UCP_EP_INIT_KA_FROM_EXIST_LANES, UCP_EP_INIT_CREATE_AM_LANE_ONLY
+    };
+    ucp_ep_h ep                                = arg;
+    ucp_worker_h worker                        = ep->worker;
+    ucp_context_h context                      = worker->context;
+    ucp_wireup_ep_t *cm_wireup_ep              =
+            ucp_ep_get_cm_wireup_ep(ep);
+    /* Set to NULL to call ucs_free safely */
+    void *ucp_addr                             = NULL;
+    unsigned ep_init_flags;
+    unsigned i;
     ucp_tl_bitmap_t tl_bitmap;
     uct_ep_connect_params_t params;
     void *priv_data;
@@ -442,55 +440,71 @@ static unsigned ucp_cm_client_uct_connect_progress(void *arg)
     ucp_ep_config_key_t key;
     ucs_queue_head_t tmp_pending_queue;
     ucs_status_t status;
-    int can_fallback;
+    ucs_log_level_t fallback_log_level;
 
     UCS_ASYNC_BLOCK(&worker->async);
 
     ucs_queue_head_init(&tmp_pending_queue);
 
-initial_config_retry:
-    /* Cleanup the previously created UCP EP. The one that was created on the
-     * previous call to this client's resolve_cb */
-    ucp_wireup_cm_ep_cleanup(ep, &tmp_pending_queue);
+    /* To silence Coverity warning */
+    UCS_STATIC_ASSERT(ucs_static_array_size(ep_init_flags_prio) > 0);
 
-    status = ucp_cm_ep_client_initial_config_get(ep, ep_init_flags,
-                                    &cm_wireup_ep->cm_resolve_tl_bitmap, &key);
-    if (status != UCS_OK) {
-        goto try_fallback;
-    }
+    for (i = 0; i < ucs_static_array_size(ep_init_flags_prio); ++i) {
+        ep_init_flags = ep_init_flags_prio[i];
 
-    status = ucp_worker_get_ep_config(worker, &key, 0, &ep->cfg_index);
-    if (status != UCS_OK) {
-        goto err;
-    }
+        /* Cleanup the previously created UCP EP. The one that was created on
+         * the previous call to this client's resolve_cb */
+        ucp_wireup_cm_ep_cleanup(ep, &tmp_pending_queue);
 
-    ep->am_lane = key.am_lane;
-
-    status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
-    if (status != UCS_OK) {
-        goto err;
-    }
-
-    /* Replay pending requests from the tmp_pending_queue */
-    ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
-
-    can_fallback = (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) ||
-                   (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE);
-    status       = ucp_cm_ep_priv_data_pack(
-                      ep, &tl_bitmap, can_fallback,
-                      context->config.ext.sa_client_min_hdr_version,
-                      &priv_data, &priv_data_length, ep_init_flags);
-    if (status == UCS_ERR_BUFFER_TOO_SMALL) {
-        if (ep_init_flags != UCP_EP_INIT_CREATE_AM_LANE_ONLY) {
-            /* Create endpoint configuration with AM lane only to fit CM private
-             * data length limit */
-            ep_init_flags = UCP_EP_INIT_CREATE_AM_LANE_ONLY;
-            goto initial_config_retry;
+        status = ucp_cm_ep_client_initial_config_get(ep, ep_init_flags,
+                                        &cm_wireup_ep->cm_resolve_tl_bitmap,
+                                        &key);
+        if (status != UCS_OK) {
+            goto try_fallback;
         }
 
+        status = ucp_worker_get_ep_config(worker, &key, ep_init_flags,
+                                          &ep->cfg_index);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        ep->am_lane = key.am_lane;
+
+        status = ucp_cm_ep_init_lanes(ep, &tl_bitmap);
+        if (status != UCS_OK) {
+            goto err;
+        }
+
+        /* Replay pending requests from the tmp_pending_queue */
+        ucp_wireup_replay_pending_requests(ep, &tmp_pending_queue);
+
+        if (i < (ucs_static_array_size(ep_init_flags_prio) - 1)) {
+            /* Can use another variant of endpoint's initialization flags for
+             * fallback */
+            fallback_log_level = UCS_LOG_LEVEL_DEBUG;
+        } else if (ucp_cm_client_get_next_cm_idx(ep) != UCP_NULL_RESOURCE) {
+            /* Can use another CM for fallback */
+            fallback_log_level = UCS_LOG_LEVEL_DIAG;
+        } else {
+            /* No options for fallback */
+            fallback_log_level = UCS_LOG_LEVEL_ERROR;
+        }
+    
+        status = ucp_cm_ep_priv_data_pack(
+                ep, &tl_bitmap, fallback_log_level,
+                context->config.ext.sa_client_min_hdr_version, &priv_data,
+                &priv_data_length, ep_init_flags);
+        if (status == UCS_OK) {
+            break;
+        } else if (status != UCS_ERR_BUFFER_TOO_SMALL) {
+            goto err;
+        }
+    }
+
+    if (status == UCS_ERR_BUFFER_TOO_SMALL) {
+        ucs_assert(i == ucs_static_array_size(ep_init_flags_prio));
         goto try_fallback;
-    } else if (status != UCS_OK) {
-        goto err;
     }
 
     params.field_mask          = UCT_EP_CONNECT_PARAM_FIELD_PRIVATE_DATA |
@@ -987,7 +1001,7 @@ ucs_status_t ucp_ep_client_cm_create_uct_ep(ucp_ep_h ucp_ep)
         return status;
     }
 
-    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep);
+    ucp_wireup_ep_set_next_ep(&wireup_ep->super.super, cm_ep, UCP_NULL_RESOURCE);
     ucs_trace("created cm_ep %p, wireup_ep %p, uct_ep %p, wireup_ep_from_uct_ep %p",
               cm_ep, wireup_ep, &wireup_ep->super.super, ucp_wireup_ep(&wireup_ep->super.super));
     return status;
@@ -1105,6 +1119,7 @@ void ucp_cm_server_conn_request_cb(uct_listener_h listener, void *arg,
                                           UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_DEV_NAME     |
                                           UCT_CM_LISTENER_CONN_REQUEST_ARGS_FIELD_CLIENT_ADDR)));
 
+    ucp_listener->conn_reqs++;
     conn_request = conn_req_args->conn_request;
     remote_data  = conn_req_args->remote_data;
 
@@ -1178,6 +1193,7 @@ err_free_remote_dev_addr:
 err_free_ucp_conn_request:
     ucs_free(ucp_conn_request);
 err_reject:
+    ucp_listener->conn_reqs--;
     status = uct_listener_reject(listener, conn_request);
     if (status != UCS_OK) {
         /* coverity[pass_freed_arg] */
@@ -1192,6 +1208,7 @@ ucp_ep_cm_server_create_connected(ucp_worker_h worker, unsigned ep_init_flags,
                                   ucp_conn_request_h conn_request,
                                   ucp_ep_h *ep_p)
 {
+    ucp_listener_h listener = conn_request->listener;
     ucp_tl_bitmap_t tl_bitmap;
     ucp_ep_h ep;
     ucs_status_t status;
@@ -1267,6 +1284,9 @@ out_free_request:
     ucs_free(conn_request->remote_dev_addr);
     ucs_free(conn_request);
 out:
+    UCS_ASYNC_BLOCK(&worker->async);
+    listener->conn_reqs--;
+    UCS_ASYNC_UNBLOCK(&worker->async);
     if (status == UCS_OK) {
         *ep_p = ep;
     }
@@ -1424,7 +1444,7 @@ ucs_status_t ucp_ep_cm_connect_server_lane(ucp_ep_h ep,
         goto err;
     }
 
-    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep);
+    ucp_wireup_ep_set_next_ep(ep->uct_eps[lane], uct_ep, UCP_NULL_RESOURCE);
     ucp_ep_update_flags(ep, UCP_EP_FLAG_LOCAL_CONNECTED, 0);
     return UCS_OK;
 

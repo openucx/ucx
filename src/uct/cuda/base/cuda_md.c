@@ -163,6 +163,9 @@ uct_cuda_base_query_attributes(uct_cuda_copy_md_t *md, const void *address,
         return UCS_ERR_INVALID_ADDR;
     }
 
+    ucs_trace("query address %p: 0x%llx..0x%llx length %zu", address,
+              base_address, base_address + alloc_length, alloc_length);
+
     if (md->config.alloc_whole_reg == UCS_CONFIG_AUTO) {
         total_bytes = uct_cuda_base_get_total_device_mem(cuda_device);
         if (alloc_length > (total_bytes * md->config.max_reg_ratio)) {
@@ -241,7 +244,8 @@ ucs_status_t uct_cuda_base_mem_query(uct_md_h tl_md, const void *address,
         }
 
         ucs_memtype_cache_update(addr_mem_info.base_address,
-                                 addr_mem_info.alloc_length, &addr_mem_info);
+                                 addr_mem_info.alloc_length, addr_mem_info.type,
+                                 addr_mem_info.sys_dev);
     } else {
         addr_mem_info = default_mem_info;
     }

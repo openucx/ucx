@@ -44,9 +44,10 @@
 #define UCT_IB_PKEY_PARTITION_MASK        0x7fff /* IB partition number mask */
 #define UCT_IB_PKEY_MEMBERSHIP_MASK       0x8000 /* Full/send-only member */
 #define UCT_IB_PKEY_DEFAULT               0xffff /* Default PKEY */
+#define UCT_IB_FIRST_PORT                 1
 #define UCT_IB_DEV_MAX_PORTS              2
 #define UCT_IB_FABRIC_TIME_MAX            32
-#define UCT_IB_INVALID_RKEY               0xffffffffu
+#define UCT_IB_INVALID_MKEY               0xffffffffu
 #define UCT_IB_KEY                        0x1ee7a330
 #define UCT_IB_LINK_LOCAL_PREFIX          be64toh(0xfe80000000000000ul) /* IBTA 4.1.1 12a */
 #define UCT_IB_SITE_LOCAL_PREFIX          be64toh(0xfec0000000000000ul) /* IBTA 4.1.1 12b */
@@ -88,6 +89,7 @@ enum {
     UCT_IB_DEVICE_FLAG_DC       = UCT_IB_DEVICE_FLAG_DC_V1 |
                                   UCT_IB_DEVICE_FLAG_DC_V2, /* Device supports DC */
     UCT_IB_DEVICE_FLAG_ODP_IMPLICIT = UCS_BIT(9),
+    UCT_IB_DEVICE_FAILED        = UCS_BIT(10)   /* Got fatal error */
 };
 
 
@@ -214,7 +216,9 @@ typedef struct uct_ib_device {
     int                         max_zcopy_log_sge; /* Maximum sges log for zcopy am */
     UCS_STATS_NODE_DECLARE(stats)
     struct ibv_port_attr        port_attr[UCT_IB_DEV_MAX_PORTS]; /* Cached port attributes */
-    uct_ib_pci_id_t             pci_id;
+    uct_ib_pci_id_t             pci_id;          /* PCI identifiers */
+    ucs_sys_device_t            sys_dev;         /* System device id */
+    double                      pci_bw;          /* Supported PCI bandwidth */
     unsigned                    flags;
     uint8_t                     atomic_arg_sizes;
     uint8_t                     atomic_arg_sizes_be;
@@ -361,8 +365,6 @@ ucs_status_t uct_ib_device_mtu(const char *dev_name, uct_md_h md, int *p_mtu);
 ucs_status_t uct_ib_device_find_port(uct_ib_device_t *dev,
                                      const char *resource_dev_name,
                                      uint8_t *p_port_num);
-
-size_t uct_ib_device_odp_max_size(uct_ib_device_t *dev);
 
 const char *uct_ib_wc_status_str(enum ibv_wc_status wc_status);
 

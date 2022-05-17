@@ -26,6 +26,16 @@
 #define UCP_PROTO_SELECT_OP_FLAG_PPLN_FRAG (UCP_PROTO_SELECT_OP_FLAGS_BASE << 0)
 
 
+/* Select a protocol as part of performance estimation of another protocol,
+   rather for actually sending a request */
+#define UCP_PROTO_SELECT_OP_FLAG_INTERNAL (UCP_PROTO_SELECT_OP_FLAGS_BASE << 1)
+
+
+/* Select eager/rendezvous protocol for Active Message sends */
+#define UCP_PROTO_SELECT_OP_FLAG_AM_EAGER (UCP_PROTO_SELECT_OP_FLAGS_BASE << 2)
+#define UCP_PROTO_SELECT_OP_FLAG_AM_RNDV  (UCP_PROTO_SELECT_OP_FLAGS_BASE << 3)
+
+
 /** Maximal length of ucp_proto_select_param_str() */
 #define UCP_PROTO_SELECT_PARAM_STR_MAX 128
 
@@ -123,21 +133,6 @@ ucs_status_t ucp_proto_select_init(ucp_proto_select_t *proto_select);
 void ucp_proto_select_cleanup(ucp_proto_select_t *proto_select);
 
 
-void ucp_proto_select_dump(ucp_worker_h worker,
-                           ucp_worker_cfg_index_t ep_cfg_index,
-                           ucp_worker_cfg_index_t rkey_cfg_index,
-                           const ucp_proto_select_t *proto_select,
-                           ucs_string_buffer_t *strb);
-
-
-void ucp_proto_select_dump_short(const ucp_proto_select_short_t *select_short,
-                                 const char *name, ucs_string_buffer_t *strb);
-
-
-void ucp_proto_select_param_str(const ucp_proto_select_param_t *select_param,
-                                ucs_string_buffer_t *strb);
-
-
 ucp_proto_select_elem_t *
 ucp_proto_select_lookup_slow(ucp_worker_h worker,
                              ucp_proto_select_t *proto_select,
@@ -168,11 +163,6 @@ int ucp_proto_select_get_valid_range(
         size_t *max_length_p);
 
 
-void ucp_proto_threshold_elem_str(const ucp_proto_threshold_elem_t *thresh_elem,
-                                  size_t min_length, size_t max_length,
-                                  ucs_string_buffer_t *strb);
-
-
 /* Get the protocol selection hash for the endpoint or remote key config */
 ucp_proto_select_t *
 ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
@@ -180,9 +170,15 @@ ucp_proto_select_get(ucp_worker_h worker, ucp_worker_cfg_index_t ep_cfg_index,
                      ucp_worker_cfg_index_t *new_rkey_cfg_index);
 
 
-/* Print protocol configuration info to a string buffer */
-void ucp_proto_select_config_str(ucp_worker_h worker,
-                                 const ucp_proto_config_t *proto_config,
-                                 size_t msg_length, ucs_string_buffer_t *strb);
+void ucp_proto_config_query(ucp_worker_h worker,
+                            const ucp_proto_config_t *proto_config,
+                            size_t msg_length,
+                            ucp_proto_query_attr_t *proto_attr);
+
+
+int ucp_proto_select_elem_query(ucp_worker_h worker,
+                                const ucp_proto_select_elem_t *select_elem,
+                                size_t msg_length,
+                                ucp_proto_query_attr_t *proto_attr);
 
 #endif

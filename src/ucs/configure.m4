@@ -54,10 +54,16 @@ AS_IF([test "x$with_bfd" != xno],
        save_LIBS="$LIBS"
 
        # Check BFD properties with all flags pointing to the custom location
-       CFLAGS="$CFLAGS $BFD_CHECK_CFLAGS"
        CPPFLAGS="$CPPFLAGS $BFD_CHECK_CPPFLAGS"
-       LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS"
        LIBS="$LIBS $BFD_CHECK_LIBS"
+       BFD_CHECK_DEPLIBS="-liberty -lz -ldl"
+
+       # Link the test applications as a shared library, to fail if libbfd is
+       # not a PIC object.
+       # Do not allow undefined symbols, to ensure all references are resolved.
+       # TODO Allow static link with static libbfd
+       CFLAGS="$CFLAGS $BFD_CHECK_CFLAGS -fPIC"
+       LDFLAGS="$LDFLAGS $BFD_CHECK_LDFLAGS -shared -Wl,--no-undefined"
 
        bfd_happy="yes"
        AC_CHECK_LIB(bfd, bfd_openr, [],
@@ -65,7 +71,6 @@ AS_IF([test "x$with_bfd" != xno],
                      # If cannot link with bfd, try adding known dependency libs
                      # unset the cached check result to force re-check
                      unset ac_cv_lib_bfd_bfd_openr
-                     BFD_CHECK_DEPLIBS="-liberty -lz -ldl"
                      AC_CHECK_LIB(bfd, bfd_openr,
                                   [BFD_CHECK_LIBS="$BFD_CHECK_LIBS $BFD_CHECK_DEPLIBS"
                                    LIBS="$LIBS $BFD_CHECK_DEPLIBS"],
@@ -116,6 +121,7 @@ AS_IF([test "x$with_bfd" != xno],
               AC_SUBST([BFD_CPPFLAGS], [$BFD_CHECK_CPPFLAGS])
               AC_SUBST([BFD_LIBS], [$BFD_CHECK_LIBS])
               AC_SUBST([BFD_LDFLAGS], [$BFD_CHECK_LDFLAGS])
+              AC_SUBST([BFD_DEPS], [$BFD_CHECK_DEPLIBS])
              ],
              [
                AS_IF([test "x$with_bfd" != "xyes" -a "x$with_bfd" != "xguess"],
@@ -130,20 +136,6 @@ AS_IF([test "x$with_bfd" != xno],
       [bfd_happy="no"
        AC_MSG_WARN([BFD support was explicitly disabled])]
 )
-
-
-#
-# Disable overriding sigaction
-#
-AC_ARG_ENABLE([sigaction-override],
-    AS_HELP_STRING([--disable-sigaction-override],
-                   [Disable sigaction,signal function overriding, default: NO]),
-    [],
-    [enable_sigaction_override=yes])
-
-AS_IF([test "x$enable_sigaction_override" = xyes],
-      AC_DEFINE([ENABLE_SIGACTION_OVERRIDE], [1], [Enable sigaction,signal function overriding])
-    )
 
 
 #
@@ -302,4 +294,6 @@ AC_CHECK_FUNCS([__clear_cache], [], [])
 AC_CHECK_FUNCS([__aarch64_sync_cache_range], [], [])
 
 
-AC_CONFIG_FILES([src/ucs/Makefile])
+AC_CONFIG_FILES([src/ucs/Makefile
+                 src/ucs/signal/Makefile
+                 src/ucs/ucx-ucs.pc])

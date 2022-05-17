@@ -55,7 +55,10 @@ ucs_status_t test_uct_peer_failure::am_dummy_handler(void *arg, void *data,
                                                      size_t length,
                                                      unsigned flags)
 {
-    reinterpret_cast<test_uct_peer_failure*>(arg)->m_am_count++;
+    test_uct_peer_failure* test = reinterpret_cast<test_uct_peer_failure*>(arg);
+    uint64_t index              = *reinterpret_cast<uint64_t*>(data);
+
+    test->m_am_count[index]++;
     return UCS_OK;
 }
 
@@ -109,8 +112,21 @@ ucs_status_t test_uct_peer_failure::err_cb(void *arg, uct_ep_h ep,
     }
 }
 
-void test_uct_peer_failure::kill_receiver()
+void test_uct_peer_failure::inject_error(unsigned idx)
 {
+    uct_ep_h ep         = m_sender->ep(idx);
+    ucs_status_t status = uct_ep_invalidate(ep, 0);
+
+    if (status == UCS_ERR_UNSUPPORTED) {
+        kill_receiver(idx);
+    } else {
+        ASSERT_UCS_OK(status);
+    }
+}
+
+void test_uct_peer_failure::kill_receiver(unsigned idx)
+{
+    /* TODO: add mapping sender idx -> receiver */
     ucs_assert(!m_receivers.empty());
     m_entities.remove(m_receivers.front());
     ucs_assert(m_entities.size() == m_receivers.size());
@@ -127,8 +143,10 @@ void test_uct_peer_failure::new_receiver()
     m_sender->connect(m_receivers.size() - 1, *m_receivers.back(), 0);
 
     if (m_sender->iface_attr().cap.flags & UCT_IFACE_FLAG_AM_SHORT) {
+        m_am_count.push_back(0);
         /* Make sure that TL is up and has resources */
-        am_handler_setter(this)(m_receivers.back());
+        uct_iface_set_am_handler(m_receivers.back()->iface(), 0,
+                                 am_dummy_handler, this, 0);
         send_recv_am(m_receivers.size() - 1);
     }
 }
@@ -136,8 +154,9 @@ void test_uct_peer_failure::new_receiver()
 void test_uct_peer_failure::set_am_handlers()
 {
     check_caps_skip(UCT_IFACE_FLAG_CB_SYNC);
-    std::for_each(m_receivers.begin(), m_receivers.end(),
-                  am_handler_setter(this));
+    for (auto e : m_receivers) {
+        uct_iface_set_am_handler(e->iface(), 0, am_dummy_handler, this, 0);
+    }
 }
 
 ucs_status_t test_uct_peer_failure::send_am(int index)
@@ -154,7 +173,8 @@ ucs_status_t test_uct_peer_failure::send_am(int index)
             return it->second;
         }
 
-        status = uct_ep_am_short(m_sender->ep(index), 0, 0, NULL, 0);
+        status = uct_ep_am_short(m_sender->ep(index), 0, uint64_t(index), NULL,
+                                 0);
     } while (status == UCS_ERR_NO_RESOURCE);
 
     return status;
@@ -162,14 +182,14 @@ ucs_status_t test_uct_peer_failure::send_am(int index)
 
 void test_uct_peer_failure::send_recv_am(int index, ucs_status_t exp_status)
 {
-    m_am_count = 0;
+    m_am_count[index] = 0;
 
     ucs_status_t status = send_am(index);
     EXPECT_EQ(exp_status, status);
 
     if (exp_status == UCS_OK) {
-        wait_for_flag(&m_am_count);
-        EXPECT_EQ(m_am_count, 1ul);
+        wait_for_flag(&m_am_count[index]);
+        EXPECT_EQ(m_am_count[index], 1ul);
     }
 }
 
@@ -241,19 +261,6 @@ void test_uct_peer_failure::fill_resources(bool expect_error,
     }
 }
 
-test_uct_peer_failure::am_handler_setter::am_handler_setter(test_uct_peer_failure *test) :
-    m_test(test)
-{
-}
-
-void
-test_uct_peer_failure::am_handler_setter::operator() (test_uct_peer_failure::entity *e)
-{
-    uct_iface_set_am_handler(e->iface(), 0,
-                             am_dummy_handler,
-                             reinterpret_cast<void*>(m_test), 0);
-}
-
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
                      !check_caps(UCT_IFACE_FLAG_PUT_SHORT |
                                  m_required_caps))
@@ -261,7 +268,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, peer_failure,
     {
         scoped_log_handler slh(wrap_errors_logger);
 
-        kill_receiver();
+        inject_error();
         EXPECT_EQ(UCS_OK, uct_ep_put_short(ep0(), NULL, 0, 0, 0));
 
         flush();
@@ -287,7 +294,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, purge_failed_peer,
         ucs_status_t status;
 
         fill_resources(false, loop_end_limit);
-        kill_receiver();
+        inject_error();
 
         do {
             status = add_pending(ep0(), reqs[0]);
@@ -325,7 +332,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure, two_pairs_send,
     /* kill the 1st receiver while sending on 2nd pair */
     {
         scoped_log_handler slh(wrap_errors_logger);
-        kill_receiver();
+        inject_error();
         send_am(0);
         send_recv_am(1);
         flush();
@@ -358,8 +365,9 @@ void test_uct_peer_failure_multiple::init()
 {
     size_t tx_queue_len = get_tx_queue_len();
 
-    if (ucs_get_page_size() > 4096) {
-        /* NOTE: Too much receivers may cause failure of ibv_open_device */
+    if ((ucs_get_page_size() > 4096) ||
+        (ucs_arch_get_cpu_model() == UCS_CPU_MODEL_ARM_AARCH64)) {
+        /* NOTE: Too many receivers may cause failure of ibv_open_device */
         m_nreceivers = 10;
     } else {
         m_nreceivers = tx_queue_len;
@@ -431,7 +439,7 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
             for (size_t i = 0; i < m_tx_window; ++i) {
                 EXPECT_UCS_OK(send_am(idx));
             }
-            kill_receiver();
+            inject_error(idx);
         }
         flush(timeout);
 
@@ -447,13 +455,14 @@ UCS_TEST_SKIP_COND_P(test_uct_peer_failure_multiple, test,
         flush(timeout);
     }
 
-    m_am_count = 0;
-    EXPECT_UCS_OK(send_am(m_nreceivers - 1));
+    int idx = m_nreceivers - 1;
+    m_am_count[idx] = 0;
+    EXPECT_UCS_OK(send_am(idx));
     ucs_debug("flushing");
-    flush_ep(m_nreceivers - 1);
+    flush_ep(idx);
     ucs_debug("flushed");
-    wait_for_flag(&m_am_count);
-    EXPECT_EQ(m_am_count, 1ul);
+    wait_for_flag(&m_am_count[idx]);
+    EXPECT_EQ(m_am_count[idx], 1ul);
 }
 
 UCT_INSTANTIATE_TEST_CASE(test_uct_peer_failure_multiple)
@@ -496,9 +505,7 @@ public:
 protected:
     void do_keepalive()
     {
-        ucs_status_t status = uct_ep_keepalive_check(m_entity->ep(0), m_ka(),
-                                                     m_pid, 0, NULL);
-        EXPECT_UCS_OK(status);
+        uct_ep_keepalive_check(m_entity->ep(0), m_ka(), m_pid, 0, NULL);
     }
 
     pid_t                m_pid;
@@ -535,6 +542,7 @@ public:
         m_env.push_back(new ucs::scoped_setenv("UCX_TCP_KEEPIDLE", "inf"));
     }
 
+protected:
     void kill_receiver()
     {
         /* Hack: for SHM-based transports we can't really terminate
@@ -555,40 +563,66 @@ public:
             ep->keepalive.start_time--;
         }
 
+        /* kill real receiver since DC uses shared KA DCI */
         test_uct_peer_failure::kill_receiver();
+    }
+
+    void test_ep_check(bool post_am)
+    {
+        ucs_status_t status;
+
+        scoped_log_handler slh(wrap_errors_logger);
+        flush();
+        EXPECT_EQ(0, m_err_count);
+
+        for (unsigned i = 0; i < 8; ++i) {
+            status = uct_ep_check(ep0(), 0, NULL);
+            ASSERT_UCS_OK(status);
+            flush();
+            /* Allow keepalive request to complete */
+            short_progress_loop();
+        }
+
+        /* We are still alive */
+        EXPECT_EQ(0, m_err_count);
+
+        kill_receiver();
+
+        status = uct_ep_check(ep0(), 0, NULL);
+        ASSERT_UCS_OK(status);
+
+        if (post_am) {
+            /* Post AM operation to check that an error could be detected by
+             * EP_CHECK when an endpoint has an in-flight AM operation */
+            const uint64_t send_data = 0;
+            status = uct_ep_am_short(ep0(), 0, 0, &send_data, sizeof(send_data));
+            if (m_err_count == 0) {
+                ASSERT_UCS_OK(status);
+            }
+        }
+
+        flush();
+
+        wait_for_flag(&m_err_count);
+        EXPECT_EQ(1, m_err_count);
     }
 
 protected:
     ucs::ptr_vector<ucs::scoped_setenv> m_env;
 };
 
+
 UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed,
                      !check_caps(UCT_IFACE_FLAG_EP_CHECK))
 {
-    ucs_status_t status;
+    test_ep_check(false);
+}
 
-    scoped_log_handler slh(wrap_errors_logger);
-    flush();
-    EXPECT_EQ(0, m_err_count);
-
-    status = uct_ep_check(ep0(), 0, NULL);
-    ASSERT_UCS_OK(status);
-    flush();
-
-    /* allow keepalive requests to complete */
-    short_progress_loop();
-
-    /* we are still alive */
-    EXPECT_EQ(0, m_err_count);
-
-    kill_receiver();
-
-    status = uct_ep_check(ep0(), 0, NULL);
-    ASSERT_UCS_OK(status);
-    flush();
-
-    wait_for_flag(&m_err_count);
-    EXPECT_EQ(1, m_err_count);
+UCS_TEST_SKIP_COND_P(test_uct_peer_failure_keepalive, killed_post_am,
+                     !check_caps(UCT_IFACE_FLAG_EP_CHECK |
+                                 UCT_IFACE_FLAG_AM_SHORT))
+{
+    test_ep_check(true);
 }
 
 UCT_INSTANTIATE_NO_SELF_TEST_CASE(test_uct_peer_failure_keepalive)

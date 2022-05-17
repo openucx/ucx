@@ -24,7 +24,8 @@
     do { \
         cudaError_t cerr = _code; \
         if (cerr != cudaSuccess) { \
-            UCS_TEST_ABORT(#_code << " failed with code " << cerr \
+            UCS_TEST_ABORT(#_code << " failed: " \
+                    << cudaGetErrorString(cerr) \
                     << _details); \
         } \
     } while (0)
@@ -305,7 +306,7 @@ void mem_buffer::memset(void *buffer, size_t length, int c,
     case UCS_MEMORY_TYPE_CUDA:
     case UCS_MEMORY_TYPE_CUDA_MANAGED:
         CUDA_CALL(cudaMemset(buffer, c, length),
-                  ": ptr=" << buffer << " value=" << c << "count=" << length);
+                  ": ptr=" << buffer << " value=" << c << " count=" << length);
         CUDA_CALL(cudaDeviceSynchronize(), "");
         break;
 #endif
@@ -362,7 +363,7 @@ void mem_buffer::copy_between(void *dst, const void *src, size_t length,
 #if HAVE_CUDA
     } else if (check_mem_types(dst_mem_type, src_mem_type, cuda_mem_types)) {
         CUDA_CALL(cudaMemcpy(dst, src, length, cudaMemcpyDefault),
-                  ": dst=" << dst << " src=" << src << "length=" << length);
+                  ": dst=" << dst << " src=" << src << " length=" << length);
         CUDA_CALL(cudaDeviceSynchronize(), "");
 #endif
 #if HAVE_ROCM

@@ -88,6 +88,7 @@ typedef struct {
                                                           * found during selection */
     ucp_lane_index_t          num_lanes;                 /* Number of active lanes */
     unsigned                  ucp_ep_init_flags;         /* Endpoint init extra flags */
+    ucp_tl_bitmap_t           tl_bitmap;                 /* TL bitmap of selected resources */
 } ucp_wireup_select_context_t;
 
 static const char *ucp_wireup_md_flags[] = {
@@ -148,11 +149,6 @@ static ucp_wireup_atomic_flag_t ucp_wireup_atomic_desc[] = {
      [UCT_ATOMIC_OP_CSWAP] = {.name = "cswap", .fetch = ""}
 };
 
-
-static double ucp_wireup_aux_score_func(ucp_context_h context,
-                                        const uct_md_attr_t *md_attr,
-                                        const uct_iface_attr_t *iface_attr,
-                                        const ucp_address_iface_attr_t *remote_iface_attr);
 
 static const char *
 ucp_wireup_get_missing_flag_desc(uint64_t flags, uint64_t required_flags,
@@ -243,31 +239,47 @@ static int ucp_wireup_check_amo_flags(const uct_tl_resource_desc_t *resource,
 
 static int
 ucp_wireup_check_keepalive(const ucp_wireup_select_params_t *select_params,
-                           const uct_tl_resource_desc_t *resource,
-                           uint64_t flags, uint64_t required_flags,
-                           const char *title, const char **flag_descs,
+                           ucp_rsc_index_t rsc_index, uint64_t flags,
+                           uint64_t required_flags, const char *title,
+                           int is_keepalive, const char **flag_descs,
                            char *reason, size_t max)
 {
-    ucp_worker_h worker = select_params->ep->worker;
+    ucp_worker_h worker                    = select_params->ep->worker;
+    ucp_context_h context                  = worker->context;
+    const uct_tl_resource_desc_t *resource = &context->tl_rscs[rsc_index].tl_rsc;
     char title_keepalive[128];
     char title_ep_check[128];
+    char title_am_based[128];
+
+    if (!is_keepalive) {
+        /* Keepalive is not needed */
+        return 1;
+    }
 
     ucs_snprintf_safe(title_keepalive, sizeof(title_keepalive),
                       "%s with keepalive", title);
     ucs_snprintf_safe(title_ep_check, sizeof(title_ep_check),
                       "%s with ep_check", title);
-    return /* if error handling and keepalive were requested, UCT iface has to
-            * support peer failure (i.e. UCT_IFACE_FLAG_ERRHANDLE_PEER_FAILURE)
-            * and either built-in keepalive (i.e. UCT_IFACE_FLAG_EP_KEEPALIVE)
-            * or EP checking (i.e. UCT_IFACE_FLAG_EP_CHECK) */
-            !ucp_worker_keepalive_is_enabled(worker) ||
-            !(select_params->ep_init_flags &
-              UCP_EP_INIT_ERR_MODE_PEER_FAILURE) ||
-            ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_KEEPALIVE,
+    ucs_snprintf_safe(title_am_based, sizeof(title_am_based),
+                      "%s with am-based keepalive", title);
+
+    return /* Either built-in keepalive (i.e. UCT_IFACE_FLAG_EP_KEEPALIVE) or
+            * EP checking (i.e. UCT_IFACE_FLAG_EP_CHECK) with CONNECT_TO_EP or
+            * CONNECT_TO_IFACE and AM_BCOPY for AM-based keepalive */
+            ucp_wireup_check_flags(resource, flags,
+                                   UCT_IFACE_FLAG_EP_KEEPALIVE |
+                                   UCT_IFACE_FLAG_CONNECT_TO_EP,
                                    title_keepalive, ucp_wireup_iface_flags,
                                    reason, max) ||
-            ucp_wireup_check_flags(resource, flags, UCT_IFACE_FLAG_EP_CHECK,
+            ucp_wireup_check_flags(resource, flags,
+                                   UCT_IFACE_FLAG_EP_CHECK |
+                                   UCT_IFACE_FLAG_CONNECT_TO_EP,
                                    title_ep_check, ucp_wireup_iface_flags,
+                                   reason, max) ||
+            ucp_wireup_check_flags(resource, flags,
+                                   UCT_IFACE_FLAG_CONNECT_TO_IFACE |
+                                   UCT_IFACE_FLAG_AM_BCOPY,
+                                   title_am_based, ucp_wireup_iface_flags,
                                    reason, max);
 }
 
@@ -314,6 +326,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     unsigned addr_index;
     uct_tl_resource_desc_t *resource;
     const ucp_address_entry_t *ae;
+    ucp_worker_iface_t *wiface;
     ucp_rsc_index_t rsc_index;
     ucp_lane_index_t lane;
     char tls_info[256];
@@ -390,6 +403,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
     UCS_BITMAP_FOR_EACH_BIT(tl_bitmap, rsc_index) {
         local_md_flags = criteria->local_md_flags;
         resource       = &context->tl_rscs[rsc_index].tl_rsc;
+        wiface         = ucp_worker_iface(worker, rsc_index);
         iface_attr     = ucp_worker_iface_get_attr(worker, rsc_index);
         md_attr        =
                 &context->tl_mds[context->tl_rscs[rsc_index].md_index].attr;
@@ -420,10 +434,13 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
             !ucp_wireup_check_flags(resource, iface_attr->cap.flags,
                                     local_iface_flags, criteria->title,
                                     ucp_wireup_iface_flags, p, endp - p) ||
-            !ucp_wireup_check_keepalive(select_params, resource,
+            !ucp_wireup_check_keepalive(select_params, rsc_index,
                                         iface_attr->cap.flags,
-                                        criteria->local_iface_flags, criteria->title,
-                                        ucp_wireup_iface_flags, p, endp - p) ||
+                                        criteria->local_iface_flags,
+                                        criteria->title,
+                                        criteria->is_keepalive,
+                                        ucp_wireup_iface_flags, p,
+                                        endp - p) ||
             !ucp_wireup_check_flags(resource, iface_attr->cap.event_flags,
                                     criteria->local_event_flags, criteria->title,
                                     ucp_wireup_event_flags, p, endp - p) ||
@@ -493,7 +510,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_select_transport(
                 continue;
             }
 
-            score        = criteria->calc_score(context, md_attr, iface_attr,
+            score        = criteria->calc_score(wiface, md_attr,
                                                 &ae->iface_attr);
             priority     = iface_attr->priority + ae->iface_attr.priority;
 
@@ -567,11 +584,12 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         const ucp_wireup_select_info_t *select_info,
         ucp_md_index_t dst_md_index, ucs_sys_device_t dst_sys_dev,
         ucp_lane_type_t lane_type, unsigned seg_size,
-        ucp_wireup_select_context_t *select_ctx)
+        ucp_wireup_select_context_t *select_ctx, int show_error)
 {
     ucp_wireup_lane_desc_t *lane_desc;
     ucp_lane_type_t lane_type_iter;
     ucp_lane_index_t lane;
+    ucs_log_level_t log_level;
 
     /* Add a new lane, but try to reuse already added lanes which are selected
      * on the same transport resources.
@@ -606,9 +624,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
     }
 
     if (select_ctx->num_lanes >= UCP_MAX_LANES) {
-        ucs_error("cannot add %s lane - reached limit (%d)",
-                  ucp_lane_type_info[lane_type].short_name,
-                  select_ctx->num_lanes);
+        log_level = show_error ? UCS_LOG_LEVEL_ERROR : UCS_LOG_LEVEL_DEBUG;
+        ucs_log(log_level, "cannot add %s lane - reached limit (%d)",
+                ucp_lane_type_info[lane_type].short_name,
+                select_ctx->num_lanes);
         return UCS_ERR_EXCEEDS_LIMIT;
     }
 
@@ -628,6 +647,10 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_lane_desc(
         lane_desc->score[lane_type_iter] = 0.0;
     }
 
+    if (select_info->rsc_index != UCP_NULL_RESOURCE) {
+        UCS_BITMAP_SET(select_ctx->tl_bitmap, select_info->rsc_index);
+    }
+
 out_update_score:
     lane_desc->score[lane_type] = select_info->score;
     lane_desc->lane_types      |= UCS_BIT(lane_type);
@@ -638,7 +661,7 @@ out:
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
                     const ucp_wireup_select_info_t *select_info,
-                    ucp_lane_type_t lane_type,
+                    ucp_lane_type_t lane_type, int show_error,
                     ucp_wireup_select_context_t *select_ctx)
 {
     ucp_address_entry_t *addr_list = select_params->address->address_list;
@@ -647,7 +670,8 @@ ucp_wireup_add_lane(const ucp_wireup_select_params_t *select_params,
     return ucp_wireup_add_lane_desc(select_info, addr_list[addr_index].md_index,
                                     addr_list[addr_index].sys_dev, lane_type,
                                     addr_list[addr_index].iface_attr.seg_size,
-                                    select_ctx);
+                                    select_ctx,
+                                    select_params->show_error && show_error);
 }
 
 static int ucp_wireup_compare_score(const void *elem1, const void *elem2,
@@ -740,7 +764,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
     if (status == UCS_OK) {
         /* Add to the list of lanes */
         status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
-                                     select_ctx);
+                                     !select_params->allow_am, select_ctx);
         if (status == UCS_OK) {
             /* Remove all occurrences of the remote md from the address list,
              * to avoid selecting the same remote md again. */
@@ -786,7 +810,7 @@ static UCS_F_NOINLINE ucs_status_t ucp_wireup_add_memaccess_lanes(
 
         /* Add lane description and remove all occurrences of the remote md. */
         status = ucp_wireup_add_lane(select_params, &select_info, lane_type,
-                                     select_ctx);
+                                    /* do not show error */ 0, select_ctx);
         if (status != UCS_OK) {
             break;
         }
@@ -803,16 +827,19 @@ static uint64_t ucp_ep_get_context_features(const ucp_ep_h ep)
     return ep->worker->context->config.features;
 }
 
-static double ucp_wireup_rma_score_func(ucp_context_h context,
+static double ucp_wireup_rma_score_func(const ucp_worker_iface_t *wiface,
                                         const uct_md_attr_t *md_attr,
-                                        const uct_iface_attr_t *iface_attr,
                                         const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best for 4k messages */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                   iface_attr->overhead +
-                   (4096.0 / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                                     remote_iface_attr->bandwidth)));
+    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
+                                               &wiface->attr,
+                                               remote_iface_attr) +
+                   wiface->attr.overhead +
+                   (4096.0 /
+                    ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
+                                                   &wiface->attr.bandwidth),
+                            remote_iface_attr->bandwidth)));
 }
 
 static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
@@ -823,6 +850,17 @@ static void ucp_wireup_fill_peer_err_criteria(ucp_wireup_criteria_t *criteria,
         /* transport selection procedure will check additionally for KA or EP check
          * support */
     }
+}
+
+static double ucp_wireup_aux_score_func(const ucp_worker_iface_t *wiface,
+                                        const uct_md_attr_t *md_attr,
+                                        const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    /* best end-to-end latency and larger bcopy size */
+    return (1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
+                                                &wiface->attr,
+                                                remote_iface_attr) +
+            wiface->attr.overhead + remote_iface_attr->overhead));
 }
 
 static void ucp_wireup_fill_aux_criteria(ucp_wireup_criteria_t *criteria,
@@ -857,6 +895,7 @@ static void ucp_wireup_criteria_init(ucp_wireup_criteria_t *criteria)
     criteria->remote_event_flags = 0;
     criteria->alloc_mem_types    = 0;
     criteria->reg_mem_types      = 0;
+    criteria->is_keepalive       = 0;
     criteria->calc_score         = NULL;
     criteria->tl_rsc_flags       = 0;
     memset(&criteria->remote_atomic_flags, 0,
@@ -896,7 +935,7 @@ ucp_wireup_add_cm_lane(const ucp_wireup_select_params_t *select_params,
     /* server is not a proxy because it can create all lanes connected */
     return ucp_wireup_add_lane_desc(&select_info, UCP_NULL_RESOURCE,
                                     UCS_SYS_DEVICE_ID_UNKNOWN, UCP_LANE_TYPE_CM,
-                                    UINT_MAX, select_ctx);
+                                    UINT_MAX, select_ctx, 1);
 }
 
 static ucs_status_t
@@ -946,14 +985,15 @@ ucp_wireup_add_rma_lanes(const ucp_wireup_select_params_t *select_params,
     return UCS_OK;
 }
 
-double ucp_wireup_amo_score_func(ucp_context_h context,
+double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_t *md_attr,
-                                 const uct_iface_attr_t *iface_attr,
                                  const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best one-sided latency */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                   iface_attr->overhead);
+    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
+                                               &wiface->attr,
+                                               remote_iface_attr) +
+                   wiface->attr.overhead);
 }
 
 static ucs_status_t
@@ -999,29 +1039,31 @@ ucp_wireup_add_amo_lanes(const ucp_wireup_select_params_t *select_params,
                                           UCP_LANE_TYPE_AMO, select_ctx);
 }
 
-static double ucp_wireup_am_score_func(ucp_context_h context,
+static double ucp_wireup_am_score_func(const ucp_worker_iface_t *wiface,
                                        const uct_md_attr_t *md_attr,
-                                       const uct_iface_attr_t *iface_attr,
                                        const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best end-to-end latency */
-    return 1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                   iface_attr->overhead + remote_iface_attr->overhead);
+    return 1e-3 / (ucp_wireup_tl_iface_latency(wiface->worker->context,
+                                               &wiface->attr,
+                                               remote_iface_attr) +
+                   wiface->attr.overhead + remote_iface_attr->overhead);
 }
 
-static double ucp_wireup_rma_bw_score_func(ucp_context_h context,
+static double ucp_wireup_rma_bw_score_func(const ucp_worker_iface_t *wiface,
                                            const uct_md_attr_t *md_attr,
-                                           const uct_iface_attr_t *iface_attr,
                                            const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* highest bandwidth with lowest overhead - test a message size of 256KB,
      * a size which is likely to be used for high-bw memory access protocol, for
      * how long it would take to transfer it with a certain transport. */
     return 1 / ((UCP_WIREUP_RMA_BW_TEST_MSG_SIZE /
-                ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
+                ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
+                                               &wiface->attr.bandwidth),
                         remote_iface_attr->bandwidth)) +
-                ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-                iface_attr->overhead +
+                ucp_wireup_tl_iface_latency(wiface->worker->context,
+                                            &wiface->attr, remote_iface_attr) +
+                wiface->attr.overhead +
                 ucs_linear_func_apply(md_attr->reg_cost,
                                       UCP_WIREUP_RMA_BW_TEST_MSG_SIZE));
 }
@@ -1081,8 +1123,10 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
                        ucp_wireup_select_info_t *am_info,
                        ucp_wireup_select_context_t *select_ctx)
 {
-    ucp_worker_h worker            = select_params->ep->worker;
-    ucp_tl_bitmap_t tl_bitmap      = select_params->tl_bitmap;
+    ucp_worker_h worker       = select_params->ep->worker;
+    ucp_tl_bitmap_t tl_bitmap = select_params->tl_bitmap;
+    unsigned ep_init_flags    = ucp_wireup_ep_init_flags(select_params,
+                                                         select_ctx);
     const uct_iface_attr_t *iface_attr;
     ucp_wireup_criteria_t criteria;
     ucs_status_t status;
@@ -1099,6 +1143,9 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
         criteria.remote_iface_flags = UCP_ADDR_IFACE_FLAG_AM_SYNC;
         criteria.local_iface_flags  = UCT_IFACE_FLAG_AM_BCOPY;
         criteria.calc_score         = ucp_wireup_am_score_func;
+        criteria.tl_rsc_flags       =
+                (ep_init_flags & UCP_EP_INIT_ALLOW_AM_AUX_TL) ?
+                UCP_TL_RSC_FLAG_AUX : 0;
         ucp_wireup_fill_peer_err_criteria(&criteria,
                                           ucp_wireup_ep_init_flags(select_params,
                                                                    select_ctx));
@@ -1127,21 +1174,24 @@ ucp_wireup_add_am_lane(const ucp_wireup_select_params_t *select_params,
         }
 
         return ucp_wireup_add_lane(select_params, am_info, UCP_LANE_TYPE_AM,
-                                   select_ctx);
+                                   /* show error */ 1, select_ctx);
     }
 }
 
-static double ucp_wireup_am_bw_score_func(ucp_context_h context,
+static double ucp_wireup_am_bw_score_func(const ucp_worker_iface_t *wiface,
                                           const uct_md_attr_t *md_attr,
-                                          const uct_iface_attr_t *iface_attr,
                                           const ucp_address_iface_attr_t *remote_iface_attr)
 {
     /* best single MTU bandwidth */
-    double size = iface_attr->cap.am.max_bcopy;
-    double t    = (size / ucs_min(ucp_tl_iface_bandwidth(context, &iface_attr->bandwidth),
-                                  remote_iface_attr->bandwidth)) +
-                  iface_attr->overhead + remote_iface_attr->overhead +
-                  ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr);
+    double size = wiface->attr.cap.am.max_bcopy;
+    double t    = (size /
+                   ucs_min(ucp_tl_iface_bandwidth(wiface->worker->context,
+                                                  &wiface->attr.bandwidth),
+                   remote_iface_attr->bandwidth)) +
+                  wiface->attr.overhead + remote_iface_attr->overhead +
+                  ucp_wireup_tl_iface_latency(wiface->worker->context,
+                                              &wiface->attr,
+                                              remote_iface_attr);
 
     return size / t * 1e-5;
 }
@@ -1167,6 +1217,7 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_md_map_t md_map;
     ucp_rsc_index_t rsc_index;
     unsigned addr_index;
+    int show_error;
 
     num_lanes         = 0;
     md_map            = bw_info->md_map;
@@ -1191,8 +1242,10 @@ ucp_wireup_add_bw_lanes(const ucp_wireup_select_params_t *select_params,
             addr_index       = sinfo.addr_index;
             dev_index        = context->tl_rscs[rsc_index].dev_index;
             sinfo.path_index = local_dev_count[dev_index];
+            show_error       = (num_lanes == 0);
             status = ucp_wireup_add_lane(select_params, &sinfo,
-                                         bw_info->lane_type, select_ctx);
+                                         bw_info->lane_type, show_error,
+                                         select_ctx);
             if (status != UCS_OK) {
                 break;
             }
@@ -1489,7 +1542,8 @@ ucp_wireup_add_tag_lane(const ucp_wireup_select_params_t *select_params,
         (ucp_score_cmp(select_info.score,
                        am_info->score) >= 0)) {
         return ucp_wireup_add_lane(select_params, &select_info,
-                                   UCP_LANE_TYPE_TAG, select_ctx);
+                                   UCP_LANE_TYPE_TAG, /* show error */ 1,
+                                   select_ctx);
     }
 
     return UCS_OK;
@@ -1565,6 +1619,88 @@ ucp_wireup_select_params_init(ucp_wireup_select_params_t *select_params,
     select_params->show_error    = show_error;
 }
 
+static double
+ucp_wireup_keepalive_score_func(const ucp_worker_iface_t *wiface,
+                                const uct_md_attr_t *md_attr,
+                                const ucp_address_iface_attr_t *remote_iface_attr)
+{
+    uct_perf_attr_t perf_attr;
+    ucs_status_t status;
+
+    perf_attr.field_mask = UCT_PERF_ATTR_FIELD_MAX_INFLIGHT_EPS;
+    status               = uct_iface_estimate_perf(wiface->iface, &perf_attr);
+    if (status != UCS_OK) {
+        ucs_warn(UCT_TL_RESOURCE_DESC_FMT
+                 ": getting perf estimations failed: %s",
+                 UCT_TL_RESOURCE_DESC_ARG(&wiface->worker->context->tl_rscs[
+                                                  wiface->rsc_index].tl_rsc),
+                 ucs_status_string(status));
+        return 0;
+    }
+
+    return ucp_wireup_am_score_func(wiface, md_attr, remote_iface_attr) *
+           ((double)perf_attr.max_inflight_eps / (double)SIZE_MAX);
+}
+
+static ucs_status_t
+ucp_wireup_add_keepalive_lane(const ucp_wireup_select_params_t *select_params,
+                              ucp_err_handling_mode_t err_mode,
+                              ucp_wireup_select_context_t *select_ctx)
+{
+    ucp_ep_h ep                          = select_params->ep;
+    ucp_worker_h worker                  = ep->worker;
+    ucp_wireup_select_info_t select_info = {0};
+    unsigned ep_init_flags               = ucp_wireup_ep_init_flags(
+                                                   select_params, select_ctx);
+    const ucp_tl_bitmap_t *tl_bitmap;
+    ucp_wireup_criteria_t criteria;
+    ucs_status_t status;
+
+    if ((err_mode == UCP_ERR_HANDLING_MODE_NONE) ||
+        !ucp_worker_keepalive_is_enabled(worker) ||
+        (ep_init_flags & UCP_EP_INIT_FLAG_INTERNAL)) {
+        return UCS_OK;
+    }
+
+    if (ep_init_flags & (UCP_EP_INIT_CREATE_AM_LANE_ONLY |
+                         UCP_EP_INIT_KA_FROM_EXIST_LANES)) {
+        tl_bitmap = &select_ctx->tl_bitmap;
+    } else {
+        tl_bitmap = &select_params->tl_bitmap;
+    }
+
+    ucp_wireup_criteria_init(&criteria);
+    criteria.title              = "keepalive";
+    criteria.local_md_flags     = 0;
+    criteria.remote_iface_flags = 0;
+    criteria.local_iface_flags  = 0;
+    criteria.is_keepalive       = 1;
+    criteria.calc_score         = ucp_wireup_keepalive_score_func;
+    /* Keepalive can also use auxiliary transports */
+    criteria.tl_rsc_flags       = UCP_TL_RSC_FLAG_AUX;
+    ucp_wireup_fill_peer_err_criteria(&criteria, ep_init_flags);
+
+    status = ucp_wireup_select_transport(select_ctx, select_params, &criteria,
+                                         *tl_bitmap, UINT64_MAX, UINT64_MAX,
+                                         UINT64_MAX, 0, &select_info);
+    if (status == UCS_OK) {
+        return ucp_wireup_add_lane(select_params, &select_info,
+                                   UCP_LANE_TYPE_KEEPALIVE, /* show error */ 1,
+                                   select_ctx);
+    }
+
+    return status;
+}
+
+static void
+ucp_wireup_select_context_init(ucp_wireup_select_context_t *select_ctx)
+{
+    memset(&select_ctx->lane_descs, 0, sizeof(select_ctx->lane_descs));
+    select_ctx->num_lanes         = 0;
+    select_ctx->ucp_ep_init_flags = 0;
+    UCS_BITMAP_CLEAR(&select_ctx->tl_bitmap);
+}
+
 static UCS_F_NOINLINE ucs_status_t
 ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
                         ucp_err_handling_mode_t err_mode,
@@ -1573,7 +1709,7 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
     ucp_wireup_select_info_t am_info;
     ucs_status_t status;
 
-    memset(select_ctx, 0, sizeof(*select_ctx));
+    ucp_wireup_select_context_init(select_ctx);
 
     status = ucp_wireup_add_cm_lane(select_params, select_ctx);
     if (status != UCS_OK) {
@@ -1615,8 +1751,14 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
         return status;
     }
 
+    status = ucp_wireup_add_keepalive_lane(select_params, err_mode,
+                                           select_ctx);
+    if (status != UCS_OK) {
+        return status;
+    }
+
     /* User should not create endpoints unless requested communication features */
-    if (select_ctx->num_lanes == 0) {
+    if (select_params->show_error && (select_ctx->num_lanes == 0)) {
         ucs_error("No transports selected to %s (features: 0x%"PRIx64")",
                   select_params->address->name,
                   ucp_ep_get_context_features(select_params->ep));
@@ -1626,74 +1768,18 @@ ucp_wireup_search_lanes(const ucp_wireup_select_params_t *select_params,
     return UCS_OK;
 }
 
-static void ucp_wireup_init_keepalive_map(ucp_worker_h worker,
-                                          ucp_ep_config_key_t *key)
+static int
+ucp_wireup_is_built_in_keepalive(
+        const ucp_worker_h worker, ucp_lane_index_t lane,
+        const ucp_wireup_select_params_t *select_params,
+        const ucp_ep_config_key_t *key)
 {
-    ucp_context_h context  = worker->context;
-    int shm_added_ep_check = 0;
-    uct_tl_resource_desc_t *resource;
-    ucp_lane_index_t lane;
-    ucp_rsc_index_t rsc_index;
-    ucp_rsc_index_t dev_index;
-    uct_iface_attr_t *iface_attr;
-    uint64_t dev_map_used;
-
-    key->ep_check_map = 0;
-    if (key->err_mode == UCP_ERR_HANDLING_MODE_NONE) {
-        return;
-    }
-
-    dev_map_used = 0;
-
-    /* find all devices with built-in keepalive support */
-    for (lane = 0; lane < key->num_lanes; ++lane) {
-        rsc_index = key->lanes[lane].rsc_index;
-        if (rsc_index == UCP_NULL_RESOURCE) {
-            continue;
-        }
-
-        dev_index = context->tl_rscs[rsc_index].dev_index;
-        ucs_assert(dev_index < (sizeof(dev_map_used) * 8));
-        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-        if (iface_attr->cap.flags & UCT_IFACE_FLAG_EP_KEEPALIVE) {
-            dev_map_used |= UCS_BIT(dev_index);
-        }
-    }
-
-    /* send ep_check on devices without built-in keepalive */
-    for (lane = 0; lane < key->num_lanes; ++lane) {
-        /* add lanes to ep_check map */
-        rsc_index = key->lanes[lane].rsc_index;
-        if (rsc_index == UCP_NULL_RESOURCE) {
-            continue;
-        }
-
-        resource  = &context->tl_rscs[rsc_index].tl_rsc;
-        dev_index = context->tl_rscs[rsc_index].dev_index;
-        ucs_assert(dev_index < (sizeof(dev_map_used) * 8));
-
-        iface_attr = ucp_worker_iface_get_attr(worker, rsc_index);
-        if (!(UCS_BIT(dev_index) & dev_map_used) &&
-             /* TODO: convert to assert to make sure iface supports
-              * both err handling & ep_check */
-            (iface_attr->cap.flags & UCT_IFACE_FLAG_EP_CHECK)) {
-            ucs_assert(!(key->ep_check_map & UCS_BIT(lane)));
-
-            if (resource->dev_type & UCT_DEVICE_TYPE_SHM) {
-                if (shm_added_ep_check) {
-                    /* Skip, if SHM device was already added to EP check map -
-                     * add only one SHM device in order to simplify checking of
-                     * errors because they do same check for a peer existence */
-                    continue;
-                }
-
-                shm_added_ep_check = 1;
-            }
-
-            key->ep_check_map |= UCS_BIT(lane);
-            dev_map_used      |= UCS_BIT(dev_index);
-        }
-    }
+    ucp_rsc_index_t rsc_index = key->lanes[lane].rsc_index;
+    return (ucp_worker_iface_get_attr(worker, rsc_index)->cap.flags &
+                    UCT_IFACE_FLAG_EP_KEEPALIVE) &&
+            ucp_wireup_connect_p2p(worker, rsc_index,
+                                   ucp_ep_init_flags_has_cm(
+                                           select_params->ep_init_flags));
 }
 
 static UCS_F_NOINLINE void
@@ -1757,6 +1843,12 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
             ucs_assert(key->tag_lane == UCP_NULL_LANE);
             key->tag_lane = lane;
         }
+        if (select_ctx->lane_descs[lane].lane_types &
+                    UCS_BIT(UCP_LANE_TYPE_KEEPALIVE) &&
+            !ucp_wireup_is_built_in_keepalive(ep->worker, lane, select_params, key)) {
+            ucs_assert(key->keepalive_lane == UCP_NULL_LANE);
+            key->keepalive_lane = lane;
+        }
     }
 
     /* Sort AM, RMA and AMO lanes according to score */
@@ -1809,15 +1901,14 @@ ucp_wireup_construct_lanes(const ucp_wireup_select_params_t *select_params,
     /* use AM lane first for eager AM transport to simplify processing single/middle
      * msg packets */
     key->am_bw_lanes[0] = key->am_lane;
-
-    ucp_wireup_init_keepalive_map(worker, key);
 }
 
 ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                         ucp_tl_bitmap_t tl_bitmap,
                         const ucp_unpacked_address_t *remote_address,
-                        unsigned *addr_indices, ucp_ep_config_key_t *key)
+                        unsigned *addr_indices, ucp_ep_config_key_t *key,
+                        int show_error)
 {
     ucp_worker_h worker                = ep->worker;
     ucp_tl_bitmap_t scalable_tl_bitmap = worker->scalable_tl_bitmap;
@@ -1842,7 +1933,7 @@ ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
     }
 
     ucp_wireup_select_params_init(&select_params, ep, ep_init_flags,
-                                  remote_address, tl_bitmap, 1);
+                                  remote_address, tl_bitmap, show_error);
     status = ucp_wireup_search_lanes(&select_params, key->err_mode,
                                      &select_ctx);
     if (status != UCS_OK) {
@@ -1860,16 +1951,6 @@ out:
                (key->num_lanes == 2));
 
     return UCS_OK;
-}
-
-static double ucp_wireup_aux_score_func(ucp_context_h context,
-                                        const uct_md_attr_t *md_attr,
-                                        const uct_iface_attr_t *iface_attr,
-                                        const ucp_address_iface_attr_t *remote_iface_attr)
-{
-    /* best end-to-end latency and larger bcopy size */
-    return (1e-3 / (ucp_wireup_tl_iface_latency(context, iface_attr, remote_iface_attr) +
-            iface_attr->overhead + remote_iface_attr->overhead));
 }
 
 ucs_status_t

@@ -263,6 +263,9 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_atomic_req_handler, (arg, data, length, am_fl
             ucs_fatal("invalid atomic length: %u", atomicreqh->length);
         }
 
+        ucp_request_send_state_init(req, ucp_dt_make_contig(1),
+                                    atomicreqh->length);
+
         req->flags                           = 0;
         req->send.ep                         = ep;
         req->send.atomic_reply.remote_req_id = atomicreqh->req.req_id;
@@ -326,12 +329,10 @@ static void ucp_amo_sw_dump_packet(ucp_worker_h worker, uct_am_trace_type_t type
                      length - header_len);
 }
 
-UCP_DEFINE_AM(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REQ, ucp_atomic_req_handler,
-              ucp_amo_sw_dump_packet, 0);
+UCP_DEFINE_AM_WITH_PROXY(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REQ,
+                         ucp_atomic_req_handler, ucp_amo_sw_dump_packet, 0);
 UCP_DEFINE_AM(UCP_FEATURE_AMO, UCP_AM_ID_ATOMIC_REP, ucp_atomic_rep_handler,
               ucp_amo_sw_dump_packet, 0);
-
-UCP_DEFINE_AM_PROXY(UCP_AM_ID_ATOMIC_REQ);
 
 static size_t ucp_proto_amo_sw_post_pack_cb(void *dest, void *arg)
 {
@@ -384,6 +385,7 @@ ucp_proto_amo_sw_init(const ucp_proto_init_params_t *init_params, unsigned flags
         .super.cfg_priority  = 20,
         .super.min_length    = 0,
         .super.max_length    = SIZE_MAX,
+        .super.min_iov       = 0,
         .super.min_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_frag_offs = UCP_PROTO_COMMON_OFFSET_INVALID,
         .super.max_iov_offs  = UCP_PROTO_COMMON_OFFSET_INVALID,
@@ -415,15 +417,15 @@ ucp_proto_amo_sw_init_post(const ucp_proto_init_params_t *init_params)
     return ucp_proto_amo_sw_init(init_params, 0);
 }
 
-static ucp_proto_t ucp_get_amo_post_proto = {
-    .name       = "amo/post/sw",
-    .flags      = 0,
-    .init       = ucp_proto_amo_sw_init_post,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_amo_sw_progress_post},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+ucp_proto_t ucp_get_amo_post_proto = {
+    .name     = "amo/post/sw",
+    .desc     = UCP_PROTO_RMA_EMULATION_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_amo_sw_init_post,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_proto_amo_sw_progress_post},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_get_amo_post_proto);
 
 static ucs_status_t ucp_proto_amo_sw_progress_fetch(uct_pending_req_t *self)
 {
@@ -443,12 +445,12 @@ ucp_proto_amo_sw_init_fetch(const ucp_proto_init_params_t *init_params)
                                  UCP_PROTO_COMMON_INIT_FLAG_RESPONSE);
 }
 
-static ucp_proto_t ucp_get_amo_fetch_proto = {
-    .name       = "amo/fetch/sw",
-    .flags      = 0,
-    .init       = ucp_proto_amo_sw_init_fetch,
-    .config_str = ucp_proto_single_config_str,
-    .progress   = {ucp_proto_amo_sw_progress_fetch},
-    .abort      = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
+ucp_proto_t ucp_get_amo_fetch_proto = {
+    .name     = "amo/fetch/sw",
+    .desc     = UCP_PROTO_RMA_EMULATION_DESC,
+    .flags    = 0,
+    .init     = ucp_proto_amo_sw_init_fetch,
+    .query    = ucp_proto_single_query,
+    .progress = {ucp_proto_amo_sw_progress_fetch},
+    .abort    = (ucp_request_abort_func_t)ucs_empty_function_do_assert_void
 };
-UCP_PROTO_REGISTER(&ucp_get_amo_fetch_proto);

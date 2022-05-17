@@ -42,18 +42,20 @@ static ucs_status_t uct_cuda_ipc_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_cuda_ipc_key_t);
-    md_attr->reg_cost             = ucs_linear_func_make(0, 0);
+    md_attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
 
-static ucs_status_t uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
-                                           void *rkey_buffer)
+static ucs_status_t
+uct_cuda_ipc_mkey_pack(uct_md_h md, uct_mem_h memh,
+                       const uct_md_mkey_pack_params_t *params,
+                       void *rkey_buffer)
 {
-    uct_cuda_ipc_key_t *packed   = (uct_cuda_ipc_key_t *) rkey_buffer;
-    uct_cuda_ipc_key_t *mem_hndl = (uct_cuda_ipc_key_t *) memh;
+    uct_cuda_ipc_key_t *packed   = rkey_buffer;
+    uct_cuda_ipc_key_t *mem_hndl = memh;
 
-    *packed          = *mem_hndl;
+    *packed = *mem_hndl;
 
     return UCT_CUDADRV_FUNC_LOG_ERR(cuDeviceGetUuid(&packed->uuid,
                                                     mem_hndl->dev_num));

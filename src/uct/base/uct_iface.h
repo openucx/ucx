@@ -239,11 +239,16 @@ typedef void (*uct_iface_vfs_refresh_func_t)(uct_iface_h iface);
 typedef ucs_status_t (*uct_ep_query_func_t)(uct_ep_h ep, uct_ep_attr_t *ep_attr);
 
 
+/* Invalidate the ep to emulate transport level error */
+typedef ucs_status_t (*uct_ep_invalidate_func_t)(uct_ep_h ep, unsigned flags);
+
+
 /* Internal operations, not exposed by the external API */
 typedef struct uct_iface_internal_ops {
     uct_iface_estimate_perf_func_t iface_estimate_perf;
     uct_iface_vfs_refresh_func_t   iface_vfs_refresh;
     uct_ep_query_func_t            ep_query;
+    uct_ep_invalidate_func_t       ep_invalidate;
 } uct_iface_internal_ops_t;
 
 
@@ -389,6 +394,89 @@ typedef struct uct_iface_local_addr_ns {
     UCS_STATIC_INIT { \
         ucs_list_add_tail(&(_component)->tl_list, &(uct_##_name##_tl).list); \
     }
+
+
+/**
+ * Declare TL constructor and destructor
+ *
+ * @param [in] _name   TL name
+ */
+#define UCT_TL_DECL(_name) \
+    void uct_##_name##_init(void); \
+    void uct_##_name##_cleanup(void);
+
+
+/* Helper macro to provide ctor/dtor scope */
+#define _UCT_IFACE_CTOR_
+#define _UCT_IFACE_DTOR_
+#define _UCT_IFACE_CTOR_ctor UCS_F_CTOR
+#define _UCT_IFACE_DTOR_ctor UCS_F_DTOR
+
+
+/**
+ * Register/unregister TL
+ *
+ * @param [in] _name          Component and TL name
+ * @param [in] _scope         Scope for functions, must be ctor or empty
+ * @param [in] _init_code     Initialization code
+ * @param [in] _cleanup_code  Cleanup code
+ */
+#define UCT_TL_INIT(_component, _name, _scope, _init_code, _cleanup_code) \
+    UCS_PP_EXPAND(_UCT_IFACE_CTOR_##_scope) void uct_##_name##_init(void) \
+    { \
+        _init_code; \
+        uct_tl_register(_component, &UCT_TL_NAME(_name)); \
+    } \
+    UCS_PP_EXPAND(_UCT_IFACE_DTOR_##_scope) void uct_##_name##_cleanup(void) \
+    { \
+        uct_tl_unregister(&UCT_TL_NAME(_name)); \
+        _cleanup_code; \
+    }
+
+
+/**
+ * Register/unregister component and TL
+ *
+ * @param [in] _name          Component and TL name
+ * @param [in] _scope         Scope for functions, must be ctor or empty
+ * @param [in] _init_code     Initialization code
+ * @param [in] _cleanup_code  Cleanup code
+ */
+#define UCT_SINGLE_TL_INIT(_component, _name, _scope, _init_code, \
+                           _cleanup_code) \
+    UCT_TL_INIT(_component, _name, _scope, \
+                {_init_code; uct_component_register(_component);}, \
+                {uct_component_unregister(_component); _cleanup_code;})
+
+
+#define UCT_TL_NAME(_name) uct_##_name##_tl
+
+
+/**
+ * Transport registration routines
+ *
+ * @param _component      Component to add the transport to
+ * @param _name           Name of the transport (should be a token, not a string)
+ * @param _query_devices  Function to query the list of available devices
+ * @param _iface_class    Struct type defining the uct_iface class
+ * @param _cfg_prefix     Prefix for configuration variables
+ * @param _cfg_table      Transport configuration table
+ * @param _cfg_struct     Struct type defining transport configuration
+ */
+#define UCT_TL_DEFINE_ENTRY(_component, _name, _query_devices, _iface_class, \
+                            _cfg_prefix, _cfg_table, _cfg_struct) \
+    \
+    uct_tl_t UCT_TL_NAME(_name) = { \
+        .name               = #_name, \
+        .query_devices      = _query_devices, \
+        .iface_open         = UCS_CLASS_NEW_FUNC_NAME(_iface_class), \
+        .config = { \
+            .name           = #_name" transport", \
+            .prefix         = _cfg_prefix, \
+            .table          = _cfg_table, \
+            .size           = sizeof(_cfg_struct), \
+         } \
+    };
 
 
 /**
@@ -850,9 +938,8 @@ int uct_ep_get_process_proc_dir(char *buffer, size_t max_len, pid_t pid);
 
 ucs_status_t uct_ep_keepalive_init(uct_keepalive_info_t *ka, pid_t pid);
 
-ucs_status_t uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka,
-                                    pid_t pid, unsigned flags,
-                                    uct_completion_t *comp);
+void uct_ep_keepalive_check(uct_ep_h ep, uct_keepalive_info_t *ka, pid_t pid,
+                            unsigned flags, uct_completion_t *comp);
 
 void uct_ep_set_iface(uct_ep_h ep, uct_iface_t *iface);
 
@@ -860,6 +947,11 @@ ucs_status_t uct_base_ep_stats_reset(uct_base_ep_t *ep, uct_base_iface_t *iface)
 
 void uct_iface_vfs_refresh(void *obj);
 
+ucs_status_t uct_ep_invalidate(uct_ep_h ep, unsigned flags);
+
+void uct_tl_register(uct_component_t *component, uct_tl_t *tl);
+
+void uct_tl_unregister(uct_tl_t *tl);
 
 static UCS_F_ALWAYS_INLINE int uct_ep_op_is_zcopy(uct_ep_operation_t op)
 {

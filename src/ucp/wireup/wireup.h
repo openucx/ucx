@@ -45,20 +45,19 @@ typedef struct {
     uint64_t    remote_event_flags; /* Required remote event flags */
     uint64_t    alloc_mem_types;    /* Mandatory memory types for allocation */
     uint64_t    reg_mem_types;      /* Mandatory memory types for registration */
+    int         is_keepalive;       /* Required support of keepalive mechanism */
 
     /**
      * Calculates score of a potential transport.
      *
-     * @param [in]  context      UCP context.
+     * @param [in]  wiface       UCP worker iface.
      * @param [in]  md_attr      Local MD attributes.
-     * @param [in]  iface_attr   Local interface attributes.
      * @param [in]  remote_info  Remote peer attributes.
      *
      * @return Transport score, the higher the better.
      */
-    double      (*calc_score)(ucp_context_h context,
+    double      (*calc_score)(const ucp_worker_iface_t *wiface,
                               const uct_md_attr_t *md_attr,
-                              const uct_iface_attr_t *iface_attr,
                               const ucp_address_iface_attr_t *remote_iface_attr);
     uint8_t     tl_rsc_flags; /* Flags that describe TL specifics */
 
@@ -103,9 +102,8 @@ ucp_wireup_select_aux_transport(ucp_ep_h ep, unsigned ep_init_flags,
                                 const ucp_unpacked_address_t *remote_address,
                                 ucp_wireup_select_info_t *select_info);
 
-double ucp_wireup_amo_score_func(ucp_context_h context,
+double ucp_wireup_amo_score_func(const ucp_worker_iface_t *wiface,
                                  const uct_md_attr_t *md_attr,
-                                 const uct_iface_attr_t *iface_attr,
                                  const ucp_address_iface_attr_t *remote_iface_attr);
 
 size_t ucp_wireup_msg_pack(void *dest, void *arg);
@@ -136,7 +134,8 @@ ucs_status_t
 ucp_wireup_select_lanes(ucp_ep_h ep, unsigned ep_init_flags,
                         ucp_tl_bitmap_t tl_bitmap,
                         const ucp_unpacked_address_t *remote_address,
-                        unsigned *addr_indices, ucp_ep_config_key_t *key);
+                        unsigned *addr_indices, ucp_ep_config_key_t *key,
+                        int show_error);
 
 void ucp_wireup_replay_pending_requests(ucp_ep_h ucp_ep,
                                         ucs_queue_head_t *tmp_pending_queue);

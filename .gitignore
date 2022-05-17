@@ -27,6 +27,7 @@ config.log
 config.status
 libtool
 stamp-h1
+native_headers.stamp
 src/uct/api/version.h
 autom4te.cache
 depcomp
@@ -99,4 +100,6 @@ test/apps/test_cuda_hook_static
 test/apps/test_ucp_config
 test/apps/test_memtrack_limit
 test/apps/profiling/ucx_profiling
+test/apps/uct_info/uct_info
+test/apps/uct_info/uct_info_static
 cmake/*.cmake

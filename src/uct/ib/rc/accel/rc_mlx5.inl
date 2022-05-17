@@ -70,8 +70,7 @@ static UCS_F_NOINLINE void
 uct_rc_mlx5_iface_hold_srq_desc(uct_rc_mlx5_iface_common_t *iface,
                                 uct_ib_mlx5_srq_seg_t *seg,
                                 struct mlx5_cqe64 *cqe, uint16_t wqe_ctr,
-                                ucs_status_t status, unsigned offset,
-                                uct_recv_desc_t *release_desc)
+                                unsigned offset, uct_recv_desc_t *release_desc)
 {
     void *udesc;
     int stride_idx;
@@ -116,9 +115,9 @@ uct_rc_mlx5_iface_release_srq_seg(uct_rc_mlx5_iface_common_t *iface,
      * But it respects srq size when srq topology is a linked-list. */
     wqe_index = wqe_ctr & srq->mask;
 
-    if (ucs_unlikely(status != UCS_OK)) {
-        uct_rc_mlx5_iface_hold_srq_desc(iface, seg, cqe, wqe_ctr, status,
-                                        offset, release_desc);
+    if (ucs_unlikely(status == UCS_INPROGRESS)) {
+        uct_rc_mlx5_iface_hold_srq_desc(iface, seg, cqe, wqe_ctr, offset,
+                                        release_desc);
     }
 
     if (UCT_RC_MLX5_MP_ENABLED(iface)) {
@@ -279,10 +278,8 @@ uct_rc_mlx5_iface_poll_rx_cq(uct_rc_mlx5_iface_common_t *iface, int poll_flags)
 
     if (ucs_unlikely(uct_ib_mlx5_cqe_is_hw_owned(op_own, idx, cq->cq_length))) {
         return NULL;
-    } else if (ucs_unlikely(op_own & UCT_IB_MLX5_CQE_OP_OWN_ERR_MASK)) {
-        uct_rc_mlx5_iface_check_rx_completion(iface, cqe, poll_flags);
-        uct_ib_mlx5_update_db_cq_ci(cq);
-        return NULL;
+    } else if (ucs_unlikely(uct_ib_mlx5_cqe_is_error_or_zipped(op_own))) {
+        return uct_rc_mlx5_iface_check_rx_completion(iface, cqe, poll_flags);
     }
 
     cq->cq_ci = idx + 1;
@@ -1267,6 +1264,10 @@ uct_rc_mlx5_iface_unexp_consumed(uct_rc_mlx5_iface_common_t *iface,
 {
     uct_ib_mlx5_srq_seg_t *seg;
 
+    ucs_assertv(!UCS_STATUS_IS_ERR(status), "iface=%p: %p or %p returned: %s",
+                iface, iface->tm.eager_unexp.cb, iface->tm.rndv_unexp.cb,
+                ucs_status_string(status));
+
     seg = uct_ib_mlx5_srq_get_wqe(&iface->rx.srq, wqe_ctr);
 
     uct_rc_mlx5_iface_release_srq_seg(iface, seg, cqe, wqe_ctr,
@@ -1445,7 +1446,8 @@ uct_rc_mlx5_iface_common_poll_rx(uct_rc_mlx5_iface_common_t *iface,
     }
 
     ucs_memory_cpu_load_fence();
-    UCS_STATS_UPDATE_COUNTER(iface->super.stats, UCT_RC_IFACE_STAT_RX_COMPLETION, 1);
+    UCS_STATS_UPDATE_COUNTER(iface->super.super.stats,
+                             UCT_IB_IFACE_STAT_RX_COMPLETION, 1);
 
     byte_len = ntohl(cqe->byte_cnt) & UCT_IB_MLX5_MP_RQ_BYTE_CNT_MASK;
     count    = 1;

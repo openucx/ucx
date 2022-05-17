@@ -19,16 +19,16 @@ jobs:
             worker_id: ${{ wid }}
     ${{ if parameters.container }}:
       container: ${{ parameters.container }}
+    workspace:
+      clean: all
     steps:
-      # address permissions issue when some files created as read-only
-      - bash: chmod u+rwx ./ -R
-
       - checkout: self
         clean: true
         fetchDepth: 100
 
       - bash: |
           source ./buildlib/az-helpers.sh
+          az_init_modules
           ./contrib/test_jenkins.sh
         displayName: Run ./contrib/test_jenkins.sh
         env:

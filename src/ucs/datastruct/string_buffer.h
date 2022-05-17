@@ -80,8 +80,9 @@ UCS_ARRAY_DECLARE_TYPE(string_buffer, size_t, char)
 
 
 #define UCS_STRING_BUFFER_ONSTACK(_var, _capacity) \
-    UCS_STRING_BUFFER_FIXED(_var, UCS_ARRAY_ALLOC_ONSTACK(string_buffer, _capacity), \
-                            _capacity) \
+    UCS_STRING_BUFFER_FIXED(_var, \
+                            UCS_ARRAY_ALLOC_ONSTACK(string_buffer, _capacity), \
+                            _capacity)
 
 
 /**
@@ -236,6 +237,47 @@ void ucs_string_buffer_dump(const ucs_string_buffer_t *strb,
  * @return C-style string representing the data in the buffer.
  */
 char *ucs_string_buffer_extract_mem(ucs_string_buffer_t *strb);
+
+
+/**
+ * Get the next token from the string. This operation can overwrite some of the
+ * string with '\0' characters, to separate the tokens.
+ *
+ * @param [in]  strb        String buffer to get next token from.
+ * @param [in]  token       Pointer to the current token, or NULL to start
+ *                          from the beginning.
+ * @param [in]  delimiters  Set of characters that separate between tokens.
+ *
+ * @return Pointer to the next token, after the given @a token, or NULL if no
+ *         more tokens are found.
+ */
+char *ucs_string_buffer_next_token(ucs_string_buffer_t *strb, char *token,
+                                   const char *delimiters);
+
+
+/**
+ * Append repeat character to a string buffer.
+ *
+ * @param [inout] strb     String buffer to append characters to.
+ * @param [in]    c        Character to append.
+ * @param [in]    count    Number of times to append @a c.
+ */
+void ucs_string_buffer_appendc(ucs_string_buffer_t *strb, int c, size_t count);
+
+
+/**
+ * Split the string to tokens and iterate over them. This operation can
+ * overwrite some of the string with '\0' characters.
+ *
+ * @param _tok    A variable of type 'char *' which will be assigned to the
+ *                current token.
+ * @param _strb   String to iterate over.
+ * @param _delim  Set of characters that separate between tokens.
+ */
+#define ucs_string_buffer_for_each_token(_tok, _strb, _delim) \
+    for (_tok = ucs_string_buffer_next_token(_strb, NULL, _delim); \
+         _tok != NULL; \
+         _tok = ucs_string_buffer_next_token(_strb, _tok, _delim))
 
 END_C_DECLS
 

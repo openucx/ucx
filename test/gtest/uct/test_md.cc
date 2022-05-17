@@ -635,50 +635,72 @@ UCS_TEST_P(test_md, sockaddr_accessibility) {
     ASSERT_TRUE(getifaddrs(&ifaddr) != -1);
     /* go through a linked list of available interfaces */
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ucs::is_inet_addr(ifa->ifa_addr) &&
-            ucs_netif_flags_is_active(ifa->ifa_flags)) {
-            sock_addr.addr = ifa->ifa_addr;
-
-            UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with "
-                             << ucs::sockaddr_to_str(ifa->ifa_addr);
-            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                       UCT_SOCKADDR_ACC_LOCAL));
-            ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
-                                                       UCT_SOCKADDR_ACC_REMOTE));
+        if (!ucs::is_interface_usable(ifa)) {
+            continue;
         }
+
+        sock_addr.addr = ifa->ifa_addr;
+        UCS_TEST_MESSAGE << "Testing " << ifa->ifa_name << " with "
+                         << ucs::sockaddr_to_str(ifa->ifa_addr);
+        ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                   UCT_SOCKADDR_ACC_LOCAL));
+        ASSERT_FALSE(uct_md_is_sockaddr_accessible(md(), &sock_addr,
+                                                   UCT_SOCKADDR_ACC_REMOTE));
     }
     freeifaddrs(ifaddr);
 }
 
 /* This test registers region N times and later deregs it N/2 times and
- * invalidates N/2 times - mix multiple dereg and invalidate calls */
+ * invalidates N/2 times - mix multiple dereg and invalidate calls.
+ * Guarantee that all packed keys are unique. */
 UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
 {
     static const size_t size = 1 * UCS_MBYTE;
+    const int limit          = 2000 / ucs::test_time_multiplier();
     std::vector<uct_mem_h> memhs;
+    std::set<uint64_t> keys_set;
     uct_mem_h memh;
     void *ptr;
     size_t mem_reg_count; /* how many mem_reg operations to apply */
     size_t iter;
     ucs_status_t status;
-    uct_md_mem_dereg_params_t params;
+    uct_md_mem_dereg_params_t dereg_params;
+    uct_md_mkey_pack_params_t pack_params;
+    uint64_t key;
 
     if (GetParam().md_name == "cuda_ipc") {
         UCS_TEST_SKIP_R("test not needed with cuda-ipc");
     }
 
-    params.field_mask  = UCT_MD_MEM_DEREG_FIELD_FLAGS |
-                         UCT_MD_MEM_DEREG_FIELD_MEMH |
-                         UCT_MD_MEM_DEREG_FIELD_COMPLETION;
-    comp().comp.func   = dereg_cb;
-    comp().comp.status = UCS_OK;
-    comp().self        = this;
-    params.comp        = &comp().comp;
-    ptr                = malloc(size);
-    for (mem_reg_count = 1; mem_reg_count < 100; mem_reg_count++) {
+    comp().comp.func         = dereg_cb;
+    comp().comp.status       = UCS_OK;
+    comp().self              = this;
+
+    dereg_params.field_mask  = UCT_MD_MEM_DEREG_FIELD_FLAGS |
+                               UCT_MD_MEM_DEREG_FIELD_MEMH |
+                               UCT_MD_MEM_DEREG_FIELD_COMPLETION;
+    dereg_params.comp        = &comp().comp;
+
+    ptr                      = malloc(size);
+
+    for (mem_reg_count = 1; mem_reg_count < limit; mem_reg_count++) {
         comp().comp.count = (mem_reg_count + 1) / 2;
         m_comp_count = 0;
-        for (iter = 0; iter < mem_reg_count; iter++) {
+
+        status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL, &memh);
+        ASSERT_UCS_OK(status);
+        memhs.push_back(memh);
+
+        pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+        pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
+        status = uct_md_mkey_pack_v2(md(), memh, &pack_params, &key);
+        ASSERT_UCS_OK(status);
+
+        bool is_unique = keys_set.insert(key).second;
+        ASSERT_TRUE(is_unique) << keys_set.size()
+                               << "-th key is not unique";
+
+        for (iter = 1; iter < mem_reg_count; iter++) {
             status = uct_md_mem_reg(md(), ptr, size, UCT_MD_MEM_ACCESS_ALL,
                                     &memh);
             ASSERT_UCS_OK(status);
@@ -690,13 +712,13 @@ UCS_TEST_SKIP_COND_P(test_md, invalidate, !check_caps(UCT_MD_FLAG_INVALIDATE))
             ASSERT_EQ(0, m_comp_count);
             memh = memhs.back();
             if ((iter & 1) == 0) { /* on even iteration invalidate handle */
-                params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
+                dereg_params.flags = UCT_MD_MEM_DEREG_FLAG_INVALIDATE;
             } else {
-                params.flags = 0;
+                dereg_params.flags = 0;
             }
 
-            params.memh = memh;
-            status      = uct_md_mem_dereg_v2(md(), &params);
+            dereg_params.memh = memh;
+            status            = uct_md_mem_dereg_v2(md(), &dereg_params);
             ASSERT_UCS_OK(status);
             memhs.pop_back();
         }
@@ -758,6 +780,16 @@ UCS_TEST_SKIP_COND_P(test_md, dereg_bad_arg,
                             UCT_MD_MEM_DEREG_FIELD_COMPLETION |
                             UCT_MD_MEM_DEREG_FIELD_FLAGS;
         status            = uct_md_mem_dereg_v2(md(), &params);
+        ASSERT_UCS_STATUS_EQ(UCS_ERR_INVALID_PARAM, status);
+
+        std::vector<uint8_t> rkey(md_attr().rkey_packed_size);
+        uct_md_mkey_pack_params_t pack_params;
+        pack_params.field_mask = UCT_MD_MKEY_PACK_FIELD_FLAGS;
+        pack_params.flags      = UCT_MD_MKEY_PACK_FLAG_INVALIDATE;
+        status = uct_md_mkey_pack_v2(md(), memh, &pack_params, rkey.data());
+        EXPECT_UCS_OK(status);
+
+        status = uct_md_mem_dereg_v2(md(), &params);
     }
 
     EXPECT_UCS_OK(status);

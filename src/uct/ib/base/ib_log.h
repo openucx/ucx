@@ -63,6 +63,9 @@ void uct_ib_log_dump_recv_completion(uct_ib_iface_t *iface, uint32_t local_qp,
                                      uct_log_data_dump_func_t data_dump,
                                      char *buf, size_t max);
 
+void uct_ib_mem_lock_limit_msg(const char *message, int sys_errno,
+                               ucs_log_level_t level);
+
 void __uct_ib_log_post_send(const char *file, int line, const char *function,
                             uct_ib_iface_t *iface, struct ibv_qp *qp,
                             struct ibv_send_wr *wr, int max_sge,
@@ -73,13 +76,6 @@ void __uct_ib_log_recv_completion(const char *file, int line, const char *functi
                                   uint32_t r_qp, uint16_t slid, void *data,
                                   size_t length,
                                   uct_log_data_dump_func_t packet_dump_cb);
-
-#if HAVE_DECL_IBV_EXP_POST_SEND
-void __uct_ib_log_exp_post_send(const char *file, int line, const char *function,
-                                uct_ib_iface_t *iface, struct ibv_qp *qp,
-                                struct ibv_exp_send_wr *wr, int max_sge,
-                                uct_log_data_dump_func_t packet_dump_cb);
-#endif
 
 
 #define uct_ib_log_post_send(_iface, _qp, _wr, _max_sge, _dump_cb) \
@@ -94,12 +90,6 @@ void __uct_ib_log_exp_post_send(const char *file, int line, const char *function
         __uct_ib_log_recv_completion(__FILE__, __LINE__, __FUNCTION__, \
                                      _iface, (_wc)->qp_num, (_wc)->src_qp, (_wc)->slid, \
                                      _data, _length, _dump_cb, ## __VA_ARGS__); \
-    }
-
-#define uct_ib_log_exp_post_send(_iface, _qp, _wr, _max_sge,_dump_cb) \
-    if (ucs_log_is_enabled(UCS_LOG_LEVEL_TRACE_DATA)) { \
-        __uct_ib_log_exp_post_send(__FILE__, __LINE__, __FUNCTION__, \
-                                   _iface, _qp, _wr, _max_sge, _dump_cb); \
     }
 
 #endif

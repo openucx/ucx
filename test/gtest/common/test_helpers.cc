@@ -434,8 +434,33 @@ void safe_usleep(double usec) {
 }
 
 bool is_inet_addr(const struct sockaddr* ifa_addr) {
-    return (ifa_addr->sa_family == AF_INET) ||
-           (ifa_addr->sa_family == AF_INET6);
+    if (ifa_addr->sa_family == AF_INET6) {
+        /* Skip IPv6 link-local and loopback address, that could not be used for
+           connection establishment */
+        auto saddr6 = (const struct sockaddr_in6*)ifa_addr;
+        return !IN6_IS_ADDR_LOOPBACK(&saddr6->sin6_addr) &&
+               !IN6_IS_ADDR_LINKLOCAL(&saddr6->sin6_addr);
+    } else {
+        return ifa_addr->sa_family == AF_INET;
+    }
+}
+
+static bool netif_has_sysfs_file(const char *ifa_name, const char *file_name)
+{
+    char path[PATH_MAX];
+    ucs_snprintf_safe(path, sizeof(path), "/sys/class/net/%s/%s", ifa_name,
+                      file_name);
+
+    struct stat st;
+    return stat(path, &st) >= 0;
+}
+
+bool is_interface_usable(struct ifaddrs *ifa)
+{
+    return ucs_netif_flags_is_active(ifa->ifa_flags) &&
+           ucs::is_inet_addr(ifa->ifa_addr) &&
+           !netif_has_sysfs_file(ifa->ifa_name, "bridge") &&
+           !netif_has_sysfs_file(ifa->ifa_name, "brport");
 }
 
 static std::vector<std::string> read_dir(const std::string& path)
@@ -588,6 +613,12 @@ std::string exit_status_info(int exit_status)
     }
 
     return ss.str().substr(2, std::string::npos);
+}
+
+size_t limit_buffer_size(size_t size)
+{
+    return std::min(size, std::min(ucs_get_phys_mem_size() / 16,
+                                   ucs_get_memfree_size() / 4));
 }
 
 sock_addr_storage::sock_addr_storage() :

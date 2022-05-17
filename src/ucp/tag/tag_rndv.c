@@ -13,6 +13,7 @@
 
 #include <ucp/proto/proto_single.inl>
 #include <ucp/rndv/proto_rndv.inl>
+#include <ucp/rndv/rndv.inl>
 
 
 void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
@@ -23,12 +24,8 @@ void ucp_tag_rndv_matched(ucp_worker_h worker, ucp_request_t *rreq,
     rreq->recv.tag.info.sender_tag = ucp_tag_hdr_from_rts(rts_hdr)->tag;
     rreq->recv.tag.info.length     = rts_hdr->size;
 
-    if (worker->context->config.ext.proto_enable) {
-        ucp_proto_rndv_receive_start(worker, rreq, rts_hdr, rts_hdr + 1,
-                                     hdr_length - sizeof(*rts_hdr));
-    } else {
-        ucp_rndv_receive(worker, rreq, rts_hdr, rts_hdr + 1);
-    }
+    ucp_rndv_receive_start(worker, rreq, rts_hdr, rts_hdr + 1,
+                           hdr_length - sizeof(*rts_hdr));
 }
 
 ucs_status_t ucp_tag_rndv_process_rts(ucp_worker_h worker,
@@ -149,25 +146,22 @@ UCS_PROFILE_FUNC(ucs_status_t, ucp_tag_rndv_rts_progress, (self),
                             NULL);
 }
 
-static void ucp_tag_rndv_proto_abort(ucp_request_t *request,
-                                     ucs_status_t status)
+ucs_status_t ucp_tag_rndv_rts_init(const ucp_proto_init_params_t *init_params)
 {
-    if (request->flags & UCP_REQUEST_FLAG_PROTO_INITIALIZED) {
-        ucp_send_request_id_release(request);
-        ucp_datatype_iter_mem_dereg(request->send.ep->worker->context,
-                                    &request->send.state.dt_iter,
-                                    UCP_DT_MASK_ALL);
+    UCP_RMA_PROTO_INIT_CHECK(init_params, UCP_OP_ID_TAG_SEND);
+    if (init_params->select_param->dt_class != UCP_DATATYPE_CONTIG) {
+        return UCS_ERR_UNSUPPORTED;
     }
 
-    ucp_request_complete_send(request, status);
+    return ucp_proto_rndv_rts_init(init_params);
 }
 
-static ucp_proto_t ucp_tag_rndv_proto = {
-    .name       = "tag/rndv",
-    .flags      = 0,
-    .init       = ucp_proto_rndv_rts_init,
-    .config_str = ucp_proto_rndv_ctrl_config_str,
-    .progress   = {ucp_tag_rndv_rts_progress},
-    .abort      = ucp_tag_rndv_proto_abort
+ucp_proto_t ucp_tag_rndv_proto = {
+    .name     = "tag/rndv",
+    .desc     = NULL,
+    .flags    = 0,
+    .init     = ucp_tag_rndv_rts_init,
+    .query    = ucp_proto_rndv_rts_query,
+    .progress = {ucp_tag_rndv_rts_progress},
+    .abort    = ucp_proto_rndv_rts_abort
 };
-UCP_PROTO_REGISTER(&ucp_tag_rndv_proto);

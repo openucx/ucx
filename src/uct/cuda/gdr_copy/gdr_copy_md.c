@@ -56,16 +56,18 @@ static ucs_status_t uct_gdr_copy_md_query(uct_md_h md, uct_md_attr_v2_t *md_attr
     md_attr->cap.max_alloc        = 0;
     md_attr->cap.max_reg          = ULONG_MAX;
     md_attr->rkey_packed_size     = sizeof(uct_gdr_copy_key_t);
-    md_attr->reg_cost             = ucs_linear_func_make(0, 0);
+    md_attr->reg_cost             = UCS_LINEAR_FUNC_ZERO;
     memset(&md_attr->local_cpus, 0xff, sizeof(md_attr->local_cpus));
     return UCS_OK;
 }
 
-static ucs_status_t uct_gdr_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
-                                           void *rkey_buffer)
+static ucs_status_t
+uct_gdr_copy_mkey_pack(uct_md_h md, uct_mem_h memh,
+                       const uct_md_mkey_pack_params_t *params,
+                       void *rkey_buffer)
 {
-    uct_gdr_copy_key_t *packed      = (uct_gdr_copy_key_t *)rkey_buffer;
-    uct_gdr_copy_mem_t *mem_hndl    = (uct_gdr_copy_mem_t *)memh;
+    uct_gdr_copy_key_t *packed   = rkey_buffer;
+    uct_gdr_copy_mem_t *mem_hndl = memh;
 
     packed->vaddr   = mem_hndl->info.va;
     packed->bar_ptr = mem_hndl->bar_ptr;
@@ -418,7 +420,7 @@ uct_gdr_copy_md_open(uct_component_t *component, const char *md_name,
         status = ucs_rcache_create(&rcache_params, "gdr_copy", NULL, &md->rcache);
         if (status == UCS_OK) {
             md->super.ops = &md_rcache_ops;
-            md->reg_cost  = ucs_linear_func_make(0, 0);
+            md->reg_cost  = UCS_LINEAR_FUNC_ZERO;
         } else {
             ucs_assert(md->rcache == NULL);
             if (md_config->enable_rcache == UCS_YES) {

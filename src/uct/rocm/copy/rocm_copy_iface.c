@@ -134,6 +134,7 @@ static uct_iface_internal_ops_t uct_rocm_copy_iface_internal_ops = {
     .iface_estimate_perf = uct_base_iface_estimate_perf,
     .iface_vfs_refresh   = (uct_iface_vfs_refresh_func_t)ucs_empty_function,
     .ep_query            = (uct_ep_query_func_t)ucs_empty_function_return_unsupported,
+    .ep_invalidate       = (uct_ep_invalidate_func_t)ucs_empty_function_return_unsupported
 };
 
 static UCS_CLASS_INIT_FUNC(uct_rocm_copy_iface_t, uct_md_h md, uct_worker_h worker,

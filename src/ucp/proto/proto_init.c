@@ -9,6 +9,7 @@
 #endif
 
 #include "proto_init.h"
+#include "proto_debug.h"
 #include "proto_select.inl"
 
 #include <ucs/datastruct/array.inl>
@@ -198,7 +199,7 @@ ucp_proto_perf_envelope_make(const ucp_proto_perf_envelope_t *list,
         new_elem->range.super.max_length  = midpoint;
         for (tmp_perf_type = 0; tmp_perf_type < UCP_PROTO_PERF_TYPE_LAST;
              tmp_perf_type++) {
-            new_elem->range.super.perf[tmp_perf_type] 
+            new_elem->range.super.perf[tmp_perf_type]
                 = best.elem->range.super.perf[tmp_perf_type];
         }
 
@@ -213,7 +214,7 @@ ucs_status_t ucp_proto_common_add_perf_ranges(
         size_t min_length, size_t max_length,
         const ucp_proto_perf_envelope_t *parallel_stage_list)
 {
-    ucs_linear_func_t sum_perf = ucs_linear_func_make(0, 0);
+    ucs_linear_func_t sum_perf = UCS_LINEAR_FUNC_ZERO;
     ucp_proto_caps_t *caps     = params->super.caps;
     ucp_proto_perf_range_t *range;
     UCS_ARRAY_DEFINE_ONSTACK(concave, ucp_proto_perf_envelope, 4);
@@ -286,7 +287,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
     if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY) {
         send_overhead = ucp_proto_common_memreg_time(params, reg_md_map);
     } else if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RKEY_PTR) {
-        send_overhead = ucs_linear_func_make(0, 0);
+        send_overhead = UCS_LINEAR_FUNC_ZERO;
     } else {
         ucs_assert(reg_md_map == 0);
         status = ucp_proto_common_buffer_copy_time(
@@ -309,7 +310,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
         !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_SEND_ZCOPY)) {
         /* If we care only about time to start sending the message, ignore
            the transport time */
-        xfer_time = ucs_linear_func_make(0, 0);
+        xfer_time = UCS_LINEAR_FUNC_ZERO;
     } else {
         xfer_time = ucs_linear_func_make(0, 1.0 / perf->bandwidth);
     }
@@ -338,7 +339,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
         /* Count only send completion time without waiting for a response */
         ((op_attr_mask & UCP_OP_ATTR_FLAG_FAST_CMPL) &&
          !(params->flags & UCP_PROTO_COMMON_INIT_FLAG_RESPONSE))) {
-        recv_overhead = ucs_linear_func_make(0, 0);
+        recv_overhead = UCS_LINEAR_FUNC_ZERO;
     } else {
         if (params->flags & UCP_PROTO_COMMON_INIT_FLAG_RECV_ZCOPY) {
             /* Receiver has to register its buffer */
@@ -352,7 +353,7 @@ ucp_proto_common_init_caps(const ucp_proto_common_init_params_t *params,
             }
 
             /* Receiver has to copy data */
-            recv_overhead = ucs_linear_func_make(0, 0); /* silence cppcheck */
+            recv_overhead = UCS_LINEAR_FUNC_ZERO; /* silence cppcheck */
             ucp_proto_common_buffer_copy_time(params->super.worker, "recv-copy",
                                               UCS_MEMORY_TYPE_HOST,
                                               recv_mem_type,
